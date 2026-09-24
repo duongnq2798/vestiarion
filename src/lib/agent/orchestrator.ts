@@ -10,6 +10,7 @@ import { executePayment, type PaymentExecution } from "../payments";
 import { CycleMetricsCollector } from "./cycle-metrics";
 import { decide } from "./decide";
 import { enforceApGuardrails } from "./guardrails";
+import { blockingDuplicate, findDuplicates, type InvoiceLike } from "./duplicates";
 import { OPEN_PAYABLE_STATUSES, summarizePayableObligations } from "./obligations";
 import { planTreasury, type TreasuryDecision } from "./treasury";
 
@@ -240,12 +241,57 @@ export async function runAgentCycle(): Promise<CycleResult> {
     };
   }>;
 
+  // The whole payable book, settled rows included, because a duplicate is only
+  // detectable against what came before it — and the invoice that matters most
+  // is the one already paid. Loaded once per cycle rather than per invoice.
+  const payableHistory = unwrap(
+    await db
+      .from("invoices")
+      .select("id, counterparty_id, amount, memo, po_reference, due_date, status")
+      .eq("direction", "payable")
+  ) as Array<{
+    id: string;
+    counterparty_id: string;
+    amount: string;
+    memo: string | null;
+    po_reference: string | null;
+    due_date: string;
+    status: string;
+  }>;
+
+  const asInvoiceLike = (row: (typeof payableHistory)[number]): InvoiceLike => ({
+    id: row.id,
+    counterpartyId: row.counterparty_id,
+    amount: num(row.amount),
+    memo: row.memo,
+    poReference: row.po_reference,
+    dueDate: row.due_date,
+    status: row.status,
+  });
+  const history = payableHistory.map(asInvoiceLike);
+
   for (const invoice of payables) {
     const counterparty = invoice.counterparties;
     const amount = num(invoice.amount);
     const limit = counterparty.payment_limit == null ? null : num(counterparty.payment_limit);
     const overLimit = limit != null && amount > limit;
     const highRisk = counterparty.risk_level === "high";
+
+    // The system prompt has always told the model to flag a duplicate invoice.
+    // Until this was computed it had no way to see one: it is shown a single
+    // invoice and cannot know an identical bill was settled last week.
+    const duplicates = findDuplicates(
+      {
+        id: invoice.id,
+        counterpartyId: invoice.counterparty_id,
+        amount,
+        memo: invoice.memo,
+        poReference: invoice.po_reference,
+        dueDate: invoice.due_date,
+        status: "pending",
+      },
+      history
+    );
 
     const { value: decision, mode } = await decide<ApDecision>({
       systemPrompt: SYSTEM_PROMPT,
@@ -264,6 +310,18 @@ export async function runAgentCycle(): Promise<CycleResult> {
           paymentLimit: limit,
         },
         treasury: { operatingBalance },
+        duplicateMatches: duplicates.map((match) => ({
+          otherInvoiceStatus: match.otherStatus,
+          otherInvoiceDueDate: match.otherDueDate,
+          otherInvoiceAmount: match.otherAmount,
+          confidence: match.confidence,
+          signals: match.signals,
+          finding: match.explanation,
+        })),
+        duplicateNote:
+          duplicates.length === 0
+            ? "No earlier payable from this counterparty resembles this invoice."
+            : "Earlier payables from this counterparty resemble this one. A repeat of an invoice that was already paid is duplicate billing — flag it rather than paying it a second time.",
         responseShape: {
           action: "pay | hold | flag_fraud | request_info",
           reasoning: "string",
@@ -272,6 +330,14 @@ export async function runAgentCycle(): Promise<CycleResult> {
       }),
       schema: apDecisionSchema,
       fallback: (): ApDecision => {
+        const repeat = blockingDuplicate(duplicates);
+        if (repeat) {
+          return {
+            action: "flag_fraud",
+            reasoning: `Duplicate billing: ${repeat.explanation}`,
+            confidence: repeat.confidence,
+          };
+        }
         if (highRisk) {
           return {
             action: "flag_fraud",
@@ -314,6 +380,7 @@ export async function runAgentCycle(): Promise<CycleResult> {
       amount,
       riskLevel: counterparty.risk_level,
       paymentLimit: limit,
+      duplicates,
     });
     metrics.recordDecisionMode(mode);
     let status = guardrail.status ?? statusForAction[decision.action];
@@ -386,6 +453,19 @@ export async function runAgentCycle(): Promise<CycleResult> {
           poReference: invoice.po_reference,
           goodsReceived: invoice.goods_received,
           operatingBalance,
+          // Recorded whether or not anything matched. "We looked and found
+          // nothing" is the half of a fraud control that a log which only
+          // records hits can never prove.
+          duplicateCheck: {
+            candidatesConsidered: history.length,
+            matches: duplicates.map((match) => ({
+              otherInvoiceId: match.otherId,
+              otherInvoiceStatus: match.otherStatus,
+              confidence: match.confidence,
+              signals: match.signals,
+              finding: match.explanation,
+            })),
+          },
         },
         execution: {
           txRef,

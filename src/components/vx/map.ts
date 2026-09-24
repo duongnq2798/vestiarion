@@ -1,7 +1,42 @@
 import type { LedgerEntry } from "@/lib/ledger";
 import type { CounterpartyRow, InvoiceRow, MilestoneRow, TreasuryActionRow } from "@/lib/queries";
-import type { Decision, Outcome } from "./types";
+import type { Decision, Evidence, Outcome } from "./types";
 import { fmt } from "./Primitives";
+
+/**
+ * Renders the duplicate-billing check as evidence in its own right — including
+ * when it found nothing. "Checked 8 earlier invoices, no repeat" is the half of
+ * a fraud control that a display which only shows hits can never prove, and it
+ * is the half a reviewer needs in order to trust the other one.
+ *
+ * Returns null only for invoices decided before the check existed, where
+ * claiming either result would be an invention.
+ */
+function duplicateEvidence(observed: Record<string, unknown> | undefined): Evidence | null {
+  const check = record(observed?.duplicateCheck);
+  if (!check) return null;
+
+  const matches = Array.isArray(check.matches) ? check.matches : [];
+  const considered = numberValue(check.candidatesConsidered) ?? 0;
+  if (matches.length === 0) {
+    return {
+      label: "Duplicate check",
+      value: `clear against ${considered} earlier invoice${considered === 1 ? "" : "s"}`,
+      state: "ok",
+    };
+  }
+
+  const strongest = record(matches[0]);
+  const confidence = numberValue(strongest?.confidence);
+  const settled = stringValue(strongest?.otherInvoiceStatus) === "paid";
+  return {
+    label: "Duplicate check",
+    value: `${matches.length} match${matches.length === 1 ? "" : "es"}${
+      confidence == null ? "" : ` at ${(confidence * 100).toFixed(0)}%`
+    }${settled ? " against an invoice already paid" : ""}`,
+    state: "missing",
+  };
+}
 
 function record(value: unknown): Record<string, unknown> | undefined {
   return value != null && typeof value === "object" && !Array.isArray(value)
@@ -56,7 +91,8 @@ export function invoiceDecision(invoice: InvoiceRow, counterparty: CounterpartyR
       { label: "Risk", value: risk, state: risk === "high" ? "missing" : "neutral" },
       { label: "Limit", value: counterparty?.payment_limit == null ? "none" : `${fmt(counterparty.payment_limit)} USDC`, state: counterparty?.payment_limit != null && invoice.amount > counterparty.payment_limit ? "missing" : "neutral" },
       { label: "Due", value: new Date(invoice.due_date).toLocaleDateString("en-US"), state: "neutral" },
-    ],
+      duplicateEvidence(observed),
+    ].filter((item): item is Evidence => item !== null),
     guardrail: guardrailBlocked ? { rule, attempted: invoice.amount, limit, note: risk === "high" ? "risk tier high" : "amount above screened limit" } : null,
     decisionMode: stringValue(entry?.detail.decisionMode),
     txHash: invoice.tx_ref?.startsWith("0x") ? invoice.tx_ref : null,
