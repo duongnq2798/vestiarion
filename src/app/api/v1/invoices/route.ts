@@ -60,6 +60,9 @@ export async function GET(request: Request) {
   if (rawCursor && !cursor) {
     return apiError("invalid_request", "cursor is not a cursor this API issued.");
   }
+  if (cursor && (typeof cursor.k !== "string" || !cursor.id)) {
+    return apiError("invalid_request", "cursor is not valid for this endpoint.");
+  }
 
   // Rejected rather than ignored: a filter that silently does nothing returns
   // a plausible wrong answer, and a caller with a typo would never find out.
@@ -85,7 +88,11 @@ export async function GET(request: Request) {
         .order("id", { ascending: false })
         .limit(limitResult.limit + 1);
 
-      if (cursor) query = query.lt("created_at", String(cursor.k));
+      if (cursor) {
+        query = query.or(
+          `created_at.lt.${cursor.k},and(created_at.eq.${cursor.k},id.lt.${cursor.id})`
+        );
+      }
       if (direction) query = query.eq("direction", direction);
       if (status) query = query.eq("status", status);
       if (counterpartyId) query = query.eq("counterparty_id", counterpartyId);
