@@ -90,6 +90,18 @@ function DetailsTable({ summary, headers, rows }: {
   );
 }
 
+/**
+ * Shows a dollar figure at the precision it was measured to. A chain fee on Arc
+ * is a fraction of a cent, and USDC carries six decimals, so rounding to two
+ * would turn every real reading into "$0.00" — a measured number displayed as
+ * nothing is indistinguishable from no measurement at all.
+ */
+function usdLabel(value: number): string {
+  if (value === 0) return "$0";
+  const decimals = Math.abs(value) < 0.01 ? 6 : 2;
+  return `$${value.toFixed(decimals)}`;
+}
+
 function MetricPlot({ values, label, unit, color, valueLabel }: {
   values: number[];
   label: string;
@@ -102,24 +114,34 @@ function MetricPlot({ values, label, unit, color, valueLabel }: {
   }
   const width = 360;
   const height = 150;
-  const left = 38;
   const right = 12;
   const top = 20;
   const bottom = 28;
   const min = Math.min(...values);
   const max = Math.max(...values);
-  const padding = min === max ? Math.max(Math.abs(min) * 0.12, 1) : 0;
-  const x = scaleLinear()
-    .domain([0, Math.max(values.length - 1, 1)])
-    .range([left, width - right]);
+  // Pad relative to the data, never by a fixed amount. This floor used to be
+  // `1`, which is a whole dollar — so a real fee series sitting at $0.0032 was
+  // plotted on an axis running -$1.00 to $2.00 and rendered as a flat line at
+  // zero. The measurement was right and the frame hid it.
+  const padding = min === max ? Math.max(Math.abs(min) * 0.12, Number.MIN_VALUE) : 0;
   const y = scaleLinear()
     .domain([Math.min(0, min - padding), max + padding])
     .nice(3)
     .range([height - bottom, top]);
+  const ticks = y.ticks(3);
+  // The gutter has to fit the labels the data actually produces. A fee reading
+  // to six decimals is a much wider string than "$2.00", and a fixed 38px
+  // gutter clipped the first character off every tick.
+  const left = Math.min(
+    96,
+    Math.max(38, ...ticks.map((tick) => valueLabel(tick).length * 5.2 + 9))
+  );
+  const x = scaleLinear()
+    .domain([0, Math.max(values.length - 1, 1)])
+    .range([left, width - right]);
   const path = values.length > 1
     ? d3Line<number>().x((_value, index) => x(index)).y((value) => y(value)).curve(curveMonotoneX)(values)
     : null;
-  const ticks = y.ticks(3);
   return (
     <div className="min-w-0 rounded-xl border border-line bg-ground/35 p-3">
       <div className="flex items-baseline justify-between gap-2 px-1">
@@ -171,7 +193,9 @@ function TransferChart({ transfers }: { transfers: TransferTelemetry[] }) {
       provenance={<Provenance modes={transfers.map((transfer) => transfer.providerMode)} detail="Transfers" />}
     >
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        <MetricPlot values={transfers.map((transfer) => transfer.feeUsd)} label="Transfer fee" unit="USD" color="var(--color-proof)" valueLabel={(value) => `$${fmt(value)}`} />
+        {/* Arc fees land around $0.003, so two decimal places would print
+            every real reading — and every axis tick — as "$0.00". */}
+        <MetricPlot values={transfers.map((transfer) => transfer.feeUsd)} label="Transfer fee" unit="USD" color="var(--color-proof)" valueLabel={usdLabel} />
         <MetricPlot values={settled.map((transfer) => transfer.settledInMs as number)} label="Settlement time" unit="milliseconds" color="var(--color-agent)" valueLabel={(value) => `${Math.round(value)}ms`} />
       </div>
       <DetailsTable
@@ -181,7 +205,7 @@ function TransferChart({ transfers }: { transfers: TransferTelemetry[] }) {
           when(transfer.executedAt),
           transfer.targetType,
           transfer.providerMode === "live" ? "LIVE" : "SIMULATED",
-          `$${fmt(transfer.feeUsd)}`,
+          usdLabel(transfer.feeUsd),
           transfer.feeSource.replaceAll("_", " "),
           transfer.settledInMs == null ? "pending / unavailable" : `${Math.round(transfer.settledInMs)} ms`,
           <span key={transfer.id} title={transfer.txRef}>{transfer.txRef.slice(0, 12)}…</span>,

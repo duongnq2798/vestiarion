@@ -11,6 +11,7 @@ import type {
   TransferResult,
 } from "./types";
 import { ARC_FEE_USD } from "./types";
+import { fetchArcFeeUsd } from "./arcFees";
 
 interface AccountRow {
   id: string;
@@ -29,6 +30,27 @@ function reportedFeeUsd(value: string | undefined): number | null {
   if (!value) return null;
   const fee = Number(value);
   return Number.isFinite(fee) && fee >= 0 ? fee : null;
+}
+
+/**
+ * Circle's `networkFeeInUSD` is empty on Arc testnet — confirmed by
+ * re-fetching settled transactions long after confirmation — so the chain
+ * itself is the only place a real fee can be read. Circle first, Arc second,
+ * estimate last, and the caller records which of the three it got.
+ */
+async function resolveFee(
+  circleReported: string | undefined,
+  txHash: string | undefined
+): Promise<{ feeUsd: number; feeSource: TransferResult["feeSource"] }> {
+  const fromCircle = reportedFeeUsd(circleReported);
+  if (fromCircle != null) return { feeUsd: fromCircle, feeSource: "chain_reported" };
+
+  if (txHash) {
+    const fromChain = await fetchArcFeeUsd(txHash);
+    if (fromChain != null) return { feeUsd: fromChain, feeSource: "chain_reported" };
+  }
+
+  return { feeUsd: ARC_FEE_USD, feeSource: "provider_estimate" };
 }
 
 /**
@@ -130,11 +152,9 @@ export class LiveProvider implements ChainProvider {
       const state = transaction?.state;
       txHash = transaction?.txHash;
       status = state === "CONFIRMED" || state === "COMPLETE" ? "confirmed" : "pending";
-      const reportedFee = reportedFeeUsd(transaction?.networkFeeInUSD);
-      if (reportedFee != null) {
-        feeUsd = reportedFee;
-        feeSource = "chain_reported";
-      }
+      const resolved = await resolveFee(transaction?.networkFeeInUSD, txHash);
+      feeUsd = resolved.feeUsd;
+      feeSource = resolved.feeSource;
       settledInMs = transaction ? measuredSettlementMs(transaction) : null;
       if (status === "confirmed" && settledInMs == null) settledInMs = Date.now() - started;
     } catch (err) {
@@ -165,15 +185,17 @@ export class LiveProvider implements ChainProvider {
     const confirmed = transaction.state === "CONFIRMED" || transaction.state === "COMPLETE";
     const failed = ["CANCELLED", "DENIED", "FAILED", "STUCK"].includes(transaction.state);
     const txHash = transaction.txHash ?? null;
-    const reportedFee = reportedFeeUsd(transaction.networkFeeInUSD);
+    // Reconciliation is also the backfill path: a transfer that settled before
+    // its receipt was readable gets its real fee on the next pass.
+    const fee = await resolveFee(transaction.networkFeeInUSD, txHash ?? undefined);
     return {
       providerTxId,
       txHash,
       txRef: txHash ?? providerTxId,
       chain: transaction.blockchain,
       status: confirmed ? "confirmed" : failed ? "failed" : "pending",
-      feeUsd: reportedFee ?? ARC_FEE_USD,
-      feeSource: reportedFee == null ? "provider_estimate" : "chain_reported",
+      feeUsd: fee.feeUsd,
+      feeSource: fee.feeSource,
       providerMode: "live",
       settledInMs: measuredSettlementMs(transaction) ?? (confirmed ? Date.now() - started : null),
     };

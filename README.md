@@ -126,8 +126,10 @@ npm run dev
 
 Open `/console`, unlock controls with `AGENT_API_TOKEN`, and add counterparties and invoices through
 the product. Each **Run day** click advances the demo clock and runs the full decision loop. Out of
-the box, payments are simulated against Arc's real fee and latency profile ($0.01, <500ms) and
-decisions come from the rule-based heuristic.
+the box, payments are simulated against Arc's measured fee and latency profile ($0.0032, 2–5s) and
+decisions come from the rule-based heuristic. Those two figures are not quoted from a docs page:
+they were read back off Arc testnet from the receipts of real transfers this agent executed — see
+[What we measured](#what-we-measured).
 
 `npm run seed` is a destructive, opt-in demo command. It deletes the current business records and
 loads the fictional Northstar Studio fixture. It is not part of normal setup, and there is no seed
@@ -160,13 +162,55 @@ because the public faucet grants 20 testnet USDC every two hours and a demo deno
 thousands would never settle. The business narrative is the same; the decimal point moves.
 
 One consequence is worth knowing before you demo: **in live mode the agent declines to sweep into
-USYC**, and it is right to. Moving ~30 testnet USDC at 4.5% APY for the three days until the next
-invoice is due earns about $0.011, against $0.02 in sweep-and-redeem fees on Arc. The agent works
-that out and holds — not as a threshold someone tuned, but as the arithmetic in `planTreasury`,
-which is why the same policy flips to sweeping the moment the numbers justify it. Run in simulate
-mode (`SEED_SCALE=1`, no Circle keys) to see exactly that: the identical book scaled up 1000x
-sweeps 13,900 USDC. An agent that sweeps regardless of whether sweeping pays is the cron job this
-project exists to not be.
+USYC**, and it is right to. Here is a decision it actually recorded, at testnet scale:
+
+```
+operating balance    23.44    USDC
+required buffer      12.989249 USDC   (obligations due within 7 days, +15%)
+idle above buffer    10.450751 USDC
+expected hold days    1               (next obligation is due today)
+projected yield       0.001288 USD
+round-trip cost       0.00638  USD    (two transfers, at the measured Arc fee)
+```
+
+It holds, because sweeping would destroy about half a cent. That is not a threshold someone
+tuned — it is the arithmetic in `planTreasury`, which is why the same policy flips to sweeping
+the moment the numbers justify it. Run in simulate mode (`SEED_SCALE=1`, no Circle keys) to see
+exactly that: the identical book scaled up 1000x sweeps 13,900 USDC. An agent that sweeps
+regardless of whether sweeping pays is the cron job this project exists to not be.
+
+The round-trip cost in that table used to read `0.02`, because the fee was a hardcoded `$0.01`
+nobody had checked. Measuring it lowered the bar for sweeping by a factor of three — the agent
+had been declining trades that were, in fact, worth making.
+
+## What we measured
+
+Everything on the landing page is queried from the database at request time, and every figure
+below was produced by this agent executing real transfers on Arc testnet. None of it is quoted
+from a documentation page, and simulated rows are excluded from every median the app reports.
+
+| Figure | Measured | Source |
+| --- | --- | --- |
+| Transfer fee | **$0.003186** median, 4 samples | Arc receipt: `gasUsed × effectiveGasPrice` |
+| Settlement time | **2.5 s** median, 4 samples | Circle's create → first-confirm timestamps |
+
+Reading the fee is exact rather than approximate because of something specific to this chain:
+**Arc's native gas token is USDC, at 18 decimals.** So `gasUsed × effectiveGasPrice / 1e18` is
+the cost in dollars directly — no price oracle, no conversion, no question of when the quote was
+taken. `src/lib/circle/arcFees.ts` does that against `rpc.testnet.arc.network`, and the
+reconciliation pass backfills any transfer that settled before its receipt was readable.
+
+This mattered more than a nicer number on a page. Circle's own `networkFeeInUSD` comes back empty
+for Arc testnet — confirmed by re-fetching settled transactions long after confirmation — so the
+app had no chain-reported fee at all and fell back to a hardcoded `$0.01`. That estimate was
+roughly **3× the real cost**, and `planTreasury` prices a sweep-and-redeem round trip at twice the
+fee, so the agent had been holding cash whose yield would comfortably have covered the real cost
+of moving it. The simulator was wrong in the same direction: it generated 320–470 ms settlements
+under a comment claiming it reproduced "Arc's real latency profile", against a measured 2–5 s.
+
+Both constants are now calibrated from observation and carry the readings that set them
+(`src/lib/circle/types.ts`). The lesson is the one the whole project is built around: figures you
+assert about your own system drift, and figures you read do not.
 
 ## Going live on Arc testnet
 

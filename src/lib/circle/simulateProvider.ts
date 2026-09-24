@@ -7,7 +7,7 @@ import type {
   TransferParams,
   TransferResult,
 } from "./types";
-import { ARC_FEE_USD } from "./types";
+import { ARC_FEE_USD, ARC_SETTLEMENT_MS_MAX, ARC_SETTLEMENT_MS_MIN } from "./types";
 
 interface AccountRow {
   id: string;
@@ -19,10 +19,15 @@ interface AccountRow {
 
 /**
  * Deterministic stand-in for Arc + Circle's stack. It mutates the same
- * `accounts` rows the rest of the app reads and applies Arc's real fee and
- * latency profile (~$0.01, <500ms) so the demo's numbers are honest. It
- * requires no Circle credentials; `LiveProvider` replaces it automatically
- * once they are configured.
+ * `accounts` rows the rest of the app reads and applies Arc's fee and latency
+ * profile — both now calibrated from real Arc-testnet executions read back off
+ * the chain, rather than from the round numbers this file used to assert. See
+ * the constants in `./types.ts` for the measurements and what they replaced.
+ *
+ * It requires no Circle credentials; `LiveProvider` replaces it automatically
+ * once they are configured. Simulated rows are labelled `simulated_profile`
+ * and are excluded from every median the app reports, so a calibrated
+ * simulator improves the demo without ever being mistaken for evidence.
  */
 export class SimulateProvider implements ChainProvider {
   readonly mode = "simulate" as const;
@@ -60,7 +65,9 @@ export class SimulateProvider implements ChainProvider {
       feeUsd: ARC_FEE_USD,
       feeSource: "simulated_profile",
       providerMode: "simulate",
-      settledInMs: 320 + Math.floor(Math.random() * 150),
+      settledInMs:
+        ARC_SETTLEMENT_MS_MIN +
+        Math.floor(Math.random() * (ARC_SETTLEMENT_MS_MAX - ARC_SETTLEMENT_MS_MIN + 1)),
     };
   }
 
