@@ -21,17 +21,33 @@ jobs:
           node-version: 24
           cache: npm
 
-      # Step logs need a GitHub login to read. The job summary does not, so
-      # every step tees into one file and a failure publishes the tail of it —
-      # a red run that cannot be diagnosed without credentials is a run that
-      # gets ignored.
+      # Step logs need a GitHub login to read, and so do job summaries.
+      # Annotations do not, so every step tees into one file and a failure
+      # publishes the head of it as annotations — a red run that cannot be
+      # diagnosed without credentials is a run that gets ignored.
       - name: Environment
         run: |
           set -o pipefail
           { node --version; npm --version; uname -a; } 2>&1 | tee -a verify.log
 
+      # "npm ci" cannot be used here, and the reason is worth recording.
+      #
+      # It requires the lockfile to list every platform-conditional optional
+      # dependency for the platform it runs on. A lock generated on Windows
+      # cannot satisfy that on Linux: npm prunes optional packages it cannot
+      # build locally, so the runner failed with EUSAGE over bufferutil and
+      # @emnapi — packages this project never calls, and which no amount of
+      # "--os=linux" resolving can pin from a Windows machine.
+      #
+      # "npm install" honours the lock for everything it does list. The
+      # guarantee actually worth having — that the lock still describes
+      # package.json — is checked explicitly below, and that check is
+      # platform-independent.
+      - name: Check the lockfile describes package.json
+        run: set -o pipefail && npm run check:lock 2>&1 | tee -a verify.log
+
       - name: Install
-        run: set -o pipefail && npm ci 2>&1 | tee -a verify.log
+        run: set -o pipefail && npm install --no-audit --no-fund 2>&1 | tee -a verify.log
 
       - name: Typecheck
         run: set -o pipefail && npm run typecheck 2>&1 | tee -a verify.log
@@ -41,7 +57,7 @@ jobs:
 
       # No secrets are needed. Everything under test is pure: the ledger's
       # hash chain, risk tiering, the treasury policy, provider selection.
-      # Anything that needs Supabase or Circle is exercised by `npm run cycle`
+      # Anything that needs Supabase or Circle is exercised by "npm run cycle"
       # against a real project, not here.
       - name: Test
         run: set -o pipefail && npm run test 2>&1 | tee -a verify.log
@@ -56,19 +72,15 @@ jobs:
       - name: Explain the failure
         if: failure()
         run: |
-          # Annotations are the only part of a run readable without a GitHub
-          # login; step logs and job summaries both require one. A red build
-          # nobody outside the repo can diagnose is a red build that gets
-          # ignored, so the cause goes here as well as in the summary.
           if [ -s verify.log ]; then
-            # The head, not the tail. npm prints its whole help text after a
-            # usage error, so the last 25 lines are a flag list and the actual
-            # message is at the top — which cost a round trip to learn.
+            # The head, not the tail. npm prints its entire help text after a
+            # usage error, so the last lines are a flag list and the actual
+            # message sits at the top — which cost a round trip to learn.
             head -n 30 verify.log | while IFS= read -r line; do
               printf '::error::%s\n' "$line"
             done
           else
-            echo "::error title=CI failed early::No step produced output. The job failed before or during checkout, setup-node, or npm ci."
+            echo "::error title=CI failed early::No step produced output. The job failed before or during checkout or setup-node."
           fi
           {
             echo "## CI failed"
