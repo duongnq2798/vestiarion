@@ -148,6 +148,13 @@ export async function runAgentCycle(): Promise<CycleResult> {
   // worth re-checking; screening once at onboarding is the failure RFB5 names.
   const sweep = await runComplianceSweep();
 
+  if (!sweep.complete) {
+    lines.push({
+      domain: "compliance",
+      message: `Screening incomplete for ${sweep.failures.length} counterparty${sweep.failures.length === 1 ? "" : "ies"}; previous verdicts retained`,
+    });
+  }
+
   for (const outcome of sweep.screened) {
     if (outcome.firstScreen) {
       lines.push({

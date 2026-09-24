@@ -15,3 +15,9 @@ Reset recovery: `seedDatabase` deletes business rows before inserting fixtures. 
 Application rollback: stop all cycle runners first, then revert the Phase 2 commit. Do not drop `payment_intents` until every `submitting` or `pending` row has been reconciled with Circle; otherwise the durable duplicate-payment guard is lost.
 
 Database rollback after reconciliation: retain the table as an audit record if possible. If removal is required, revoke and drop `claim_payment_intent(text)`, then drop `payment_intents`. Existing invoice and milestone settlement fields remain compatible with the earlier application.
+
+## Phase 3 — OpenSanctions screening
+
+Application rollback: unset `OPENSANCTIONS_API_URL` to return immediately to the labelled bundled provider, or revert the Phase 3 commit. Existing live verdicts and their tiered limits remain until the bundled provider screens them again; review high-risk rows before changing providers.
+
+Database rollback: the added evidence columns are backward-compatible and should normally remain. Dropping them discards raw match scores, matched entity ids, and explicit failed-check records, so export `compliance_checks` first if removal is unavoidable.

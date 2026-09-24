@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { getChainProvider } from "@/lib/circle";
 import { stats } from "@/lib/queries";
+import { screeningMode } from "@/lib/compliance";
 import { Label } from "./Primitives";
 import { ProvenanceBar, type ProvenanceLeg } from "./Provenance";
 
@@ -29,7 +30,7 @@ export async function ProductShell({
   const legs: ProvenanceLeg[] = [
     { label: "Payments", detail: "Arc testnet", live: provider.mode === "live" },
     { label: "Yield", detail: "USYC reserve", live: provider.earnMode === "live" },
-    { label: "Screening", detail: "sanctions list", live: false },
+    { label: "Screening", detail: screeningMode() === "live" ? "OpenSanctions" : "bundled list", live: screeningMode() === "live" },
   ];
 
   return (

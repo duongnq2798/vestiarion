@@ -19,6 +19,7 @@ export default async function CompliancePage() {
     stats(),
   ]);
   const lastSweep = entries.find((entry) => entry.action === "compliance_sweep");
+  const lastSweepComplete = lastSweep?.detail.complete !== false;
   const riskChanges = entries.filter((entry) => entry.action === "risk_level_changed").slice(0, 5);
 
   return (
@@ -30,11 +31,12 @@ export default async function CompliancePage() {
       />
 
       {lastSweep && (
-        <section className="hatch mb-6 rounded-lg border border-dashed border-line-strong px-4 py-3" aria-label="Latest screening sweep">
+        <section className={`hatch mb-6 rounded-lg border border-dashed px-4 py-3 ${lastSweepComplete ? "border-line-strong" : "border-refused-line bg-refused-wash"}`} aria-label="Latest screening sweep">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <Label>Latest continuous screening sweep</Label>
               <p className="mt-1 text-sm text-ink">{lastSweep.summary}</p>
+              {!lastSweepComplete && <p className="mt-1 text-xs text-refused">Incomplete — no failed lookup was treated as clear, and every previous verdict remains in force.</p>}
             </div>
             <a href={`/audit#seq-${lastSweep.seq}`} className="font-mono text-xs text-agent hover:underline">audit #{String(lastSweep.seq).padStart(4, "0")} →</a>
           </div>

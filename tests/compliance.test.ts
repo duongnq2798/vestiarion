@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  classifyOpenSanctionsCandidate,
   isScreeningDue,
   paymentLimitForRisk,
   planScreening,
@@ -38,28 +39,115 @@ function rescreen(start: CounterpartyScreeningRow, times: number) {
 }
 
 describe("screenName", () => {
-  it("flags a watchlisted shell entity as high risk", () => {
-    expect(screenName("Zenith Trading LLC").riskLevel).toBe("high");
+  it("flags a watchlisted shell entity as high risk", async () => {
+    expect((await screenName("Zenith Trading LLC")).riskLevel).toBe("high");
   });
 
-  it("matches regardless of case and surrounding text", () => {
-    expect(screenName("ZENITH TRADING (HK) Limited").riskLevel).toBe("high");
+  it("matches regardless of case and surrounding text", async () => {
+    expect((await screenName("ZENITH TRADING (HK) Limited")).riskLevel).toBe("high");
   });
 
-  it("returns the medium tier for a thin-file counterparty", () => {
-    expect(screenName("Wardrobe Holdings Ltd").riskLevel).toBe("medium");
+  it("returns the medium tier for a thin-file counterparty", async () => {
+    expect((await screenName("Wardrobe Holdings Ltd")).riskLevel).toBe("medium");
   });
 
-  it("clears a counterparty with no match", () => {
-    const result = screenName("Vercel Inc");
+  it("clears a counterparty with no match", async () => {
+    const result = await screenName("Vercel Inc");
     expect(result.riskLevel).toBe("clear");
     expect(result.source).toBe("simulated-sanctions-list");
   });
 
-  it("always names its source, so the ledger records where a verdict came from", () => {
+  it("always names its source, so the ledger records where a verdict came from", async () => {
     for (const name of ["Vercel Inc", "Zenith Trading LLC", "Wardrobe Holdings Ltd"]) {
-      expect(screenName(name).source).toBeTruthy();
+      expect((await screenName(name)).source).toBeTruthy();
     }
+  });
+});
+
+describe("OpenSanctions tier mapping", () => {
+  const candidate = (score: number, topics: string[]) => ({
+    id: "NK-test",
+    caption: "Matched Entity",
+    score,
+    target: true,
+    properties: { topics },
+  });
+
+  it("maps a strong sanctions identity match to high", () => {
+    expect(classifyOpenSanctionsCandidate(candidate(0.91, ["sanction"]))).toMatchObject({
+      riskLevel: "high",
+      rawScore: 0.91,
+      matchedEntityId: "NK-test",
+      screeningMode: "live",
+    });
+  });
+
+  it("keeps a weaker sanctions match at medium for review", () => {
+    expect(classifyOpenSanctionsCandidate(candidate(0.75, ["sanction.linked"])).riskLevel).toBe("medium");
+  });
+
+  it("maps a PEP or other non-sanctions hit to medium", () => {
+    expect(classifyOpenSanctionsCandidate(candidate(0.96, ["role.pep"]))).toMatchObject({
+      riskLevel: "medium",
+      matchedTopics: ["role.pep"],
+    });
+  });
+
+  it("maps no candidate to clear without inventing a score", () => {
+    expect(classifyOpenSanctionsCandidate(undefined)).toMatchObject({
+      riskLevel: "clear",
+      rawScore: null,
+      matchedEntityId: null,
+    });
+  });
+});
+
+describe("screenName with OpenSanctions", () => {
+  const originalUrl = process.env.OPENSANCTIONS_API_URL;
+  const originalKey = process.env.OPENSANCTIONS_API_KEY;
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    if (originalUrl === undefined) delete process.env.OPENSANCTIONS_API_URL;
+    else process.env.OPENSANCTIONS_API_URL = originalUrl;
+    if (originalKey === undefined) delete process.env.OPENSANCTIONS_API_KEY;
+    else process.env.OPENSANCTIONS_API_KEY = originalKey;
+  });
+
+  it("sends name and jurisdiction to the match endpoint and records raw evidence", async () => {
+    process.env.OPENSANCTIONS_API_URL = "https://yente.internal/";
+    process.env.OPENSANCTIONS_API_KEY = "secret-key";
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      responses: {
+        counterparty: {
+          status: 200,
+          results: [{
+            id: "NK-live",
+            caption: "Acme Match",
+            score: 0.93,
+            target: true,
+            properties: { topics: ["sanction"], jurisdiction: ["gb"] },
+          }],
+        },
+      },
+    }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await screenName("Acme Limited", "gb");
+    expect(result).toMatchObject({ riskLevel: "high", rawScore: 0.93, matchedEntityId: "NK-live" });
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("https://yente.internal/match/default");
+    expect(init.headers).toMatchObject({ Authorization: "ApiKey secret-key" });
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      queries: { counterparty: { properties: { name: ["Acme Limited"], jurisdiction: ["gb"] } } },
+    });
+  });
+
+  it("throws on an unavailable provider instead of returning clear", async () => {
+    process.env.OPENSANCTIONS_API_URL = "https://yente.internal";
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("unavailable", { status: 503 })));
+    await expect(screenName("Acme Limited")).rejects.toThrow("HTTP 503");
   });
 });
 
@@ -222,14 +310,24 @@ describe("isScreeningDue", () => {
 
 describe("rescreenIntervalMs", () => {
   const original = process.env.COMPLIANCE_RESCREEN_HOURS;
+  const originalUrl = process.env.OPENSANCTIONS_API_URL;
   afterEach(() => {
     if (original === undefined) delete process.env.COMPLIANCE_RESCREEN_HOURS;
     else process.env.COMPLIANCE_RESCREEN_HOURS = original;
+    if (originalUrl === undefined) delete process.env.OPENSANCTIONS_API_URL;
+    else process.env.OPENSANCTIONS_API_URL = originalUrl;
   });
 
   it("defaults to every cycle", () => {
     delete process.env.COMPLIANCE_RESCREEN_HOURS;
+    delete process.env.OPENSANCTIONS_API_URL;
     expect(rescreenIntervalMs()).toBe(0);
+  });
+
+  it("defaults live screening to a 24-hour cadence", () => {
+    delete process.env.COMPLIANCE_RESCREEN_HOURS;
+    process.env.OPENSANCTIONS_API_URL = "https://yente.internal";
+    expect(rescreenIntervalMs()).toBe(24 * 3_600_000);
   });
 
   it("reads hours from the environment", () => {
