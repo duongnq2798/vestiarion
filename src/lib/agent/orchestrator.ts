@@ -11,7 +11,12 @@ import { CycleMetricsCollector } from "./cycle-metrics";
 import { CycleJournal, messageOf, type CycleStage } from "./journal";
 import { decide } from "./decide";
 import { enforceApGuardrails } from "./guardrails";
-import { blockingDuplicate, findDuplicates, type InvoiceLike } from "./duplicates";
+import {
+  blockingDuplicate,
+  duplicateMatchContext,
+  findDuplicates,
+  type InvoiceLike,
+} from "./duplicates";
 import { followUpConfig, planFollowUp, type DecisionFacts } from "./follow-up";
 import { OPEN_PAYABLE_STATUSES, summarizePayableObligations } from "./obligations";
 import { planTreasury, type TreasuryDecision } from "./treasury";
@@ -525,6 +530,9 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     // The system prompt has always told the model to flag a duplicate invoice.
     // Until this was computed it had no way to see one: it is shown a single
     // invoice and cannot know an identical bill was settled last week.
+    // Detection stays uncapped because guardrails must see every match. Only
+    // the evidence presented to the model is truncated; payment refusal must
+    // never depend on how many other invoices happened to resemble this one.
     const duplicates = findDuplicates(
       {
         id: invoice.id,
@@ -535,8 +543,10 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
         dueDate: invoice.due_date,
         status: "pending",
       },
-      history
+      history,
+      { limit: Number.POSITIVE_INFINITY }
     );
+    const duplicateContext = duplicateMatchContext(duplicates);
 
     const { value: decision, mode, reference, agreedWithReference } = await decide<ApDecision>({
       systemPrompt: SYSTEM_PROMPT,
@@ -555,7 +565,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           paymentLimit: limit,
         },
         treasury: { operatingBalance },
-        duplicateMatches: duplicates.map((match) => ({
+        duplicateMatches: duplicateContext.matches.map((match) => ({
           otherInvoiceStatus: match.otherStatus,
           otherInvoiceDueDate: match.otherDueDate,
           otherInvoiceAmount: match.otherAmount,
@@ -563,10 +573,11 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           signals: match.signals,
           finding: match.explanation,
         })),
+        duplicateMatchesTotal: duplicateContext.total,
         duplicateNote:
           duplicates.length === 0
             ? "No earlier payable from this counterparty resembles this invoice."
-            : "Earlier payables from this counterparty resemble this one. A repeat of an invoice that was already paid is duplicate billing — flag it rather than paying it a second time.",
+            : `${duplicateContext.total} earlier payable(s) from this counterparty resemble this one; the ${duplicateContext.matches.length} strongest are shown. A repeat of an invoice that was already paid is duplicate billing — flag it rather than paying it a second time.`,
         responseShape: {
           action: "pay | hold | flag_fraud | request_info",
           reasoning: "string",
@@ -705,7 +716,9 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           // records hits can never prove.
           duplicateCheck: {
             candidatesConsidered: history.length,
-            matches: duplicates.map((match) => ({
+            matchesTotal: duplicateContext.total,
+            matchesShown: duplicateContext.matches.length,
+            matches: duplicateContext.matches.map((match) => ({
               otherInvoiceId: match.otherId,
               otherInvoiceStatus: match.otherStatus,
               confidence: match.confidence,

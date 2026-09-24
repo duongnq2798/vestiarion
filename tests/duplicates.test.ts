@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   blockingDuplicate,
   DUPLICATE_BLOCK_CONFIDENCE,
+  DUPLICATE_MATCHES_IN_CONTEXT,
+  duplicateMatchContext,
   findDuplicates,
   scoreDuplicate,
   type InvoiceLike,
@@ -155,6 +157,36 @@ describe("findDuplicates", () => {
   it("ignores invoices belonging to other counterparties", () => {
     expect(findDuplicates(inv(), candidates).map((m) => m.otherId)).not.toContain("unrelated");
   });
+
+  it("caps the context at the strongest matches", () => {
+    const crowdedBook = [
+      paid({ id: "weak", amount: 260 }),
+      ...Array.from({ length: DUPLICATE_MATCHES_IN_CONTEXT }, (_, index) =>
+        paid({ id: `strong-${index}` })
+      ),
+    ];
+
+    const matches = findDuplicates(inv(), crowdedBook);
+
+    expect(matches).toHaveLength(DUPLICATE_MATCHES_IN_CONTEXT);
+    expect(matches.every((match) => match.confidence === 0.95)).toBe(true);
+    expect(matches.map((match) => match.otherId)).not.toContain("weak");
+  });
+
+  it("reports the true total when only a sample is shown", () => {
+    const allMatches = findDuplicates(
+      inv(),
+      Array.from({ length: DUPLICATE_MATCHES_IN_CONTEXT + 3 }, (_, index) =>
+        paid({ id: `match-${index}` })
+      ),
+      { limit: Number.POSITIVE_INFINITY }
+    );
+
+    expect(duplicateMatchContext(allMatches)).toMatchObject({
+      total: DUPLICATE_MATCHES_IN_CONTEXT + 3,
+      matches: { length: DUPLICATE_MATCHES_IN_CONTEXT },
+    });
+  });
 });
 
 describe("blockingDuplicate", () => {
@@ -177,5 +209,16 @@ describe("blockingDuplicate", () => {
 
   it("returns null when there is nothing to block on", () => {
     expect(blockingDuplicate([])).toBeNull();
+  });
+
+  it("still blocks on a match excluded from the presentation cap", () => {
+    const candidates = [paid({ id: "settled-repeat" })];
+    const shownToModel = findDuplicates(inv(), candidates, { limit: 0 });
+    const fullDetectionSet = findDuplicates(inv(), candidates, {
+      limit: Number.POSITIVE_INFINITY,
+    });
+
+    expect(shownToModel).toEqual([]);
+    expect(blockingDuplicate(fullDetectionSet)?.otherId).toBe("settled-repeat");
   });
 });

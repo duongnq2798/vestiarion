@@ -64,6 +64,14 @@ export const DUPLICATE_BLOCK_CONFIDENCE = 0.9;
 /** At or above this, the match is put in front of the model as evidence. */
 export const DUPLICATE_REPORT_CONFIDENCE = 0.45;
 
+/** Strongest duplicate candidates included in one model decision context. */
+export const DUPLICATE_MATCHES_IN_CONTEXT = 5;
+
+export interface FindDuplicatesOptions {
+  /** Use Number.POSITIVE_INFINITY when the caller needs the complete set. */
+  limit?: number;
+}
+
 /**
  * A monthly charge falls somewhere near here. Two invoices this far apart are
  * evidence *against* duplication, however alike they otherwise look — which is
@@ -206,15 +214,32 @@ export function scoreDuplicate(
   };
 }
 
-/** Every reportable match for one invoice, strongest first. */
+function applyMatchLimit(matches: DuplicateMatch[], limit: number): DuplicateMatch[] {
+  if (limit === Number.POSITIVE_INFINITY) return matches;
+  return matches.slice(0, Math.max(0, Math.floor(limit)));
+}
+
+/** Reportable matches for one invoice, strongest first and capped by default. */
 export function findDuplicates(
   invoice: InvoiceLike,
-  candidates: InvoiceLike[]
+  candidates: InvoiceLike[],
+  { limit = DUPLICATE_MATCHES_IN_CONTEXT }: FindDuplicatesOptions = {}
 ): DuplicateMatch[] {
-  return candidates
+  const matches = candidates
     .map((candidate) => scoreDuplicate(invoice, candidate))
     .filter((match): match is DuplicateMatch => match !== null)
     .sort((a, b) => b.confidence - a.confidence);
+  return applyMatchLimit(matches, limit);
+}
+
+export function duplicateMatchContext(
+  allMatches: DuplicateMatch[],
+  limit = DUPLICATE_MATCHES_IN_CONTEXT
+): { matches: DuplicateMatch[]; total: number } {
+  return {
+    matches: applyMatchLimit(allMatches, limit),
+    total: allMatches.length,
+  };
 }
 
 /**
