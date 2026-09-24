@@ -8,6 +8,7 @@ import { refreshGitHubMilestones } from "../milestone-verification";
 import { seedScale } from "../seed";
 import { executePayment, type PaymentExecution } from "../payments";
 import { CycleMetricsCollector } from "./cycle-metrics";
+import { CycleJournal, messageOf } from "./journal";
 import { decide } from "./decide";
 import { enforceApGuardrails } from "./guardrails";
 import { blockingDuplicate, findDuplicates, type InvoiceLike } from "./duplicates";
@@ -97,11 +98,38 @@ function payoutAddress(address: string | null, counterpartyId: string): string {
   return address ?? `sim:${counterpartyId}`;
 }
 
+interface CycleContext {
+  db: ReturnType<typeof supabase>;
+  provider: ReturnType<typeof getChainProvider>;
+  lines: CycleLogLine[];
+  metrics: CycleMetricsCollector;
+  journal: CycleJournal;
+  startedAt: string;
+  clockMode: CycleClockMode;
+  day: number;
+  cycleRunId: string;
+}
+
+/**
+ * Opens the cycle's record before doing anything, and closes it whichever way
+ * the cycle ends.
+ *
+ * The body commits as it goes — screening verdicts, reopened invoices,
+ * executed payments, ledger entries — and it has to, because it makes external
+ * calls to Circle and Arc in between. So there is no transaction to roll back
+ * to, and rolling one back over money that genuinely moved would be worse than
+ * having no record. What is available is the same discipline `payment_intents`
+ * uses on the payment leg: state the intent first, record the outcome after.
+ *
+ * Before this, a cycle that died partway left no trace that it had run at all,
+ * while everything it had already written stayed committed.
+ */
 export async function runAgentCycle(): Promise<CycleResult> {
   const db = supabase();
   const provider = getChainProvider();
   const lines: CycleLogLine[] = [];
   const metrics = new CycleMetricsCollector();
+  const journal = new CycleJournal();
   const startedAt = new Date().toISOString();
   const clockMode = cycleClockMode();
 
@@ -110,6 +138,70 @@ export async function runAgentCycle(): Promise<CycleResult> {
     : unwrap(
         await db.from("sim_clock").select("current_day").eq("id", 1).single<{ current_day: number }>()
       ).current_day;
+
+  const run = unwrap(
+    await db
+      .from("cycle_runs")
+      .insert({
+        started_at: startedAt,
+        status: "running",
+        clock_mode: clockMode,
+        sim_day: clockMode === "simulate" ? day : null,
+        chain_mode: provider.mode,
+        screening_mode: complianceScreeningMode(),
+      })
+      .select("id")
+      .single<{ id: string }>()
+  );
+
+  const ctx: CycleContext = {
+    db, provider, lines, metrics, journal, startedAt, clockMode, day, cycleRunId: run.id,
+  };
+
+  try {
+    const result = await executeCycle(ctx);
+    journal.finish();
+    return result;
+  } catch (err) {
+    journal.fail(err);
+    // Best effort: if the database is what failed, this will fail too, and the
+    // row stays `running` — which still says more than the nothing it said
+    // before. The original error is what the operator needs, so it is never
+    // masked by a failure to record it.
+    try {
+      const finishedAt = new Date().toISOString();
+      const snapshot = metrics.snapshot();
+      await db
+        .from("cycle_runs")
+        .update({
+          status: "failed",
+          finished_at: finishedAt,
+          duration_ms: Math.max(0, Date.parse(finishedAt) - Date.parse(startedAt)),
+          failed_stage: journal.failedStage(),
+          error_message: messageOf(err),
+          stages: journal.stages(),
+          decision_count: snapshot.decisionCount,
+          paid_count: snapshot.paidCount,
+          held_count: snapshot.heldCount,
+          flagged_count: snapshot.flaggedCount,
+          awaiting_info_count: snapshot.awaitingInfoCount,
+          released_count: snapshot.releasedCount,
+          model_decision_count: snapshot.modelDecisionCount,
+          heuristic_decision_count: snapshot.heuristicDecisionCount,
+          guardrail_override_count: snapshot.guardrailOverrideCount,
+          reference_disagreement_count: snapshot.referenceDisagreementCount,
+        })
+        .eq("id", run.id);
+    } catch (recordingError) {
+      console.error("[agent] could not record the failed cycle:", recordingError);
+    }
+    throw err;
+  }
+}
+
+async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
+  const { db, provider, lines, metrics, journal, startedAt, clockMode, day, cycleRunId } = ctx;
+  journal.enter("reconcile");
 
   // ------------------------------------------------------------ 0. reconcile
   // In live mode the chain is the source of truth for cash. Reading the
@@ -159,6 +251,7 @@ export async function runAgentCycle(): Promise<CycleResult> {
     }
   }
 
+  journal.enter("compliance");
   // ---------------------------------------------------------------- 1. compliance
   // The whole counterparty book, every cycle — not only the ones still marked
   // unscreened. The vendor that screened clear last week is precisely the one
@@ -205,6 +298,7 @@ export async function runAgentCycle(): Promise<CycleResult> {
     });
   }
 
+  journal.enter("follow_up");
   // ------------------------------------------------------- 1b. follow up
   // Runs after screening and before AP on purpose: a risk tier that moved this
   // cycle should reach a frozen invoice immediately, not next time.
@@ -335,6 +429,7 @@ export async function runAgentCycle(): Promise<CycleResult> {
   // it stood when the cycle began.
   let operatingBalance = num(operating?.balance);
 
+  journal.enter("ap");
   // ----------------------------------------------------------------------- 2. AP
   const payables = unwrap(
     await db
@@ -607,6 +702,7 @@ export async function runAgentCycle(): Promise<CycleResult> {
     });
   }
 
+  journal.enter("contractors");
   // --------------------------------------------------------------- 3. contractors
   const milestones = unwrap(
     await db
@@ -760,6 +856,7 @@ export async function runAgentCycle(): Promise<CycleResult> {
     });
   }
 
+  journal.enter("treasury");
   // ------------------------------------------------------------------ 4. treasury
   const freshAccounts = unwrap(await db.from("accounts").select("*")) as Array<{
     id: string;
@@ -933,6 +1030,7 @@ export async function runAgentCycle(): Promise<CycleResult> {
     });
   }
 
+  journal.enter("forecast");
   // ------------------------------------------------------------------ 5. forecast
   const receivables = unwrap(
     await db.from("invoices").select("amount").eq("direction", "receivable").in("status", ["pending", "matched"])
@@ -963,13 +1061,16 @@ export async function runAgentCycle(): Promise<CycleResult> {
 
   const finishedAt = new Date().toISOString();
   const cycleMetrics = metrics.snapshot();
+  journal.finish();
+  // Closes the row opened before the cycle began, rather than creating one. A
+  // run that never reaches here stays recorded as failed, or as `running` if
+  // the database itself was what went down.
   const cycleRun = unwrap(
-    await db.from("cycle_runs").insert({
-      started_at: startedAt,
+    await db.from("cycle_runs").update({
+      status: "completed",
       finished_at: finishedAt,
       duration_ms: Math.max(0, Date.parse(finishedAt) - Date.parse(startedAt)),
-      clock_mode: clockMode,
-      sim_day: clockMode === "simulate" ? day : null,
+      stages: journal.stages(),
       decision_count: cycleMetrics.decisionCount,
       paid_count: cycleMetrics.paidCount,
       held_count: cycleMetrics.heldCount,
@@ -982,7 +1083,7 @@ export async function runAgentCycle(): Promise<CycleResult> {
       reference_disagreement_count: cycleMetrics.referenceDisagreementCount,
       chain_mode: provider.mode,
       screening_mode: complianceScreeningMode(),
-    }).select("id").single<{ id: string }>()
+    }).eq("id", cycleRunId).select("id").single<{ id: string }>()
   );
   const accountBalances = Object.fromEntries(finalAccounts.map((account) => [account.id, {
     name: account.name,

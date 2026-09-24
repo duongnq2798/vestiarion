@@ -110,6 +110,17 @@ function usdLabel(value: number): string {
  * they mean opposite things: one was never measured, the other was measured and
  * passed. The distinction is the whole reason the column is nullable.
  */
+/**
+ * How a cycle ended. A run that fell over at the AP stage produced real counts
+ * for the stages before it and none after, so reading its bar as a quiet cycle
+ * would understate the book and hide the failure in the same glance.
+ */
+function cycleResult(run: CycleRunTelemetry): string {
+  if (run.status === "running") return "still running";
+  if (run.status === "failed") return `failed at ${run.failedStage ?? "an unnamed stage"}`;
+  return "completed";
+}
+
 function policyDeparture(run: CycleRunTelemetry): string {
   if (run.referenceDisagreementCount == null) return "not compared";
   if (run.modelDecisionCount === 0) return "model not consulted";
@@ -319,7 +330,7 @@ function OutcomeChart({ runs }: { runs: CycleRunTelemetry[] }) {
   const totals = runs.map((run) => outcomes.reduce((sum, outcome) => sum + outcome.value(run), 0));
   const width = scaleLinear().domain([0, Math.max(...totals, 1)]).range([0, 100]);
   return (
-    <ChartCard title="Decision outcomes per cycle" description="Each horizontal bar is one completed cycle; segments are observed outcomes, not a fitted trend." provenance={<Provenance modes={runs.map((run) => run.chainMode)} detail="Cycles" />}>
+    <ChartCard title="Decision outcomes per cycle" description="Each horizontal bar is one cycle; segments are observed outcomes, not a fitted trend. A cycle that failed partway is marked as such, because its counts are real but stop where it stopped." provenance={<Provenance modes={runs.map((run) => run.chainMode)} detail="Cycles" />}>
       <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-ink-2">
         {outcomes.map((outcome) => <span key={outcome.key}><span className="mr-1.5 inline-block size-2 rounded-sm" style={{ background: outcome.color }} />{outcome.label}</span>)}
       </div>
@@ -329,16 +340,16 @@ function OutcomeChart({ runs }: { runs: CycleRunTelemetry[] }) {
           return <li key={run.id} className="grid grid-cols-[3.5rem_minmax(0,1fr)_2rem] items-center gap-2 text-xs">
             <span className="font-mono text-ink-3">#{index + 1}</span>
             <div className="flex h-5 min-w-0 overflow-hidden rounded-sm bg-raised" aria-label={`${total} outcomes`}>
-              {total === 0 ? <span className="m-auto text-[0.625rem] text-ink-3">no outcomes</span> : outcomes.map((outcome) => {
+              {total === 0 ? <span className={`m-auto text-[0.625rem] ${run.status === "failed" ? "text-refusal" : "text-ink-3"}`}>{run.status === "failed" ? `failed at ${run.failedStage ?? "an unnamed stage"}` : run.status === "running" ? "still running" : "no outcomes"}</span> : outcomes.map((outcome) => {
                 const value = outcome.value(run);
                 return value > 0 ? <span key={outcome.key} title={`${outcome.label}: ${value}`} style={{ width: `${width(value)}%`, background: outcome.color }} /> : null;
               })}
             </div>
-            <span className="text-right tabular-nums text-ink-2">{total}</span>
+            <span className="text-right tabular-nums text-ink-2">{total}{run.status === "failed" && total > 0 && <span className="ml-1 text-refusal" title={`Partial: the cycle failed at ${run.failedStage ?? "an unnamed stage"}`}>&#9670;</span>}</span>
           </li>;
         })}
       </ol>
-      <DetailsTable summary="Decision outcome table" headers={["Finished", "Paid", "Released", "Held", "Flagged", "Awaiting", "Guardrail overrides"]} rows={runs.map((run) => [when(run.finishedAt), run.paidCount, run.releasedCount, run.heldCount, run.flaggedCount, run.awaitingInfoCount, run.guardrailOverrideCount])} />
+      <DetailsTable summary="Decision outcome table" headers={["Finished", "Result", "Paid", "Released", "Held", "Flagged", "Awaiting", "Guardrail overrides"]} rows={runs.map((run) => [when(run.finishedAt), cycleResult(run), run.paidCount, run.releasedCount, run.heldCount, run.flaggedCount, run.awaitingInfoCount, run.guardrailOverrideCount])} />
     </ChartCard>
   );
 }

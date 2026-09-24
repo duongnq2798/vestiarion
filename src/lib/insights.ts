@@ -36,6 +36,14 @@ export interface CycleRunTelemetry {
    * would claim perfect agreement over decisions never compared.
    */
   referenceDisagreementCount: number | null;
+  /**
+   * A cycle that failed partway is not a quiet cycle, and must not read as one.
+   * Its counts are real but partial: they cover the stages that ran before it
+   * stopped, and nothing after.
+   */
+  status: "running" | "completed" | "failed";
+  failedStage: string | null;
+  errorMessage: string | null;
   chainMode: "live" | "simulate";
   screeningMode: "live" | "simulate";
 }
@@ -155,6 +163,9 @@ async function listCycleRuns(): Promise<CycleRunTelemetry[]> {
     guardrailOverrideCount: num(row.guardrail_override_count),
     referenceDisagreementCount:
       row.reference_disagreement_count == null ? null : num(row.reference_disagreement_count),
+    status: (row.status as CycleRunTelemetry["status"]) ?? "completed",
+    failedStage: row.failed_stage == null ? null : String(row.failed_stage),
+    errorMessage: row.error_message == null ? null : String(row.error_message),
     chainMode: row.chain_mode as CycleRunTelemetry["chainMode"],
     screeningMode: row.screening_mode as CycleRunTelemetry["screeningMode"],
   }));
