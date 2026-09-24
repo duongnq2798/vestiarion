@@ -11,7 +11,15 @@ import { listCounterparties, listInvoices, stats } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
-export default async function InvoicesPage({ searchParams }: PageProps<"/invoices">) {
+type InvoiceSearchParams = Promise<{
+  status?: string | string[];
+}>;
+
+type InvoicePageProps = {
+  searchParams: InvoiceSearchParams;
+};
+
+export default async function InvoicesPage({ searchParams }: InvoicePageProps) {
   const query = await searchParams;
   const [invoices, counterparties, headEntries, dashboardStats, canMutate] = await Promise.all([
     listInvoices(),

@@ -10,7 +10,17 @@ import { stats } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
-export default async function AuditPage({ searchParams }: PageProps<"/audit">) {
+type AuditSearchParams = Promise<{
+  domain?: string | string[];
+  before?: string | string[];
+  since?: string | string[];
+}>;
+
+type AuditPageProps = {
+  searchParams: AuditSearchParams;
+};
+
+export default async function AuditPage({ searchParams }: AuditPageProps) {
   const query = await searchParams;
   const domainValue = typeof query.domain === "string" ? query.domain : undefined;
   const domain = DOMAINS.includes(domainValue as Domain) ? (domainValue as Domain) : undefined;

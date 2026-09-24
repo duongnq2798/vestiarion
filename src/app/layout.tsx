@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import type { ReactNode } from "react";
 import { Geist, Geist_Mono, Newsreader } from "next/font/google";
 import "./globals.css";
 
@@ -25,7 +26,11 @@ export const metadata: Metadata = {
     "An autonomous treasury agent that screens, pays, allocates, and signs every decision into a verifiable audit chain.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+type RootLayoutProps = {
+  children: ReactNode;
+};
+
+export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang="en" className={`${sans.variable} ${mono.variable} ${serif.variable}`}>
       <body>{children}</body>
