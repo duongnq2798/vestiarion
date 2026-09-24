@@ -8,6 +8,10 @@ import {
   parseLimit,
   STATUS_FOR,
 } from "@/lib/api/contract";
+import {
+  counterpartyFilterError,
+  mapCounterparty,
+} from "@/lib/api/counterparties";
 
 describe("cursors", () => {
   it("round-trips a sequence position", () => {
@@ -138,5 +142,36 @@ describe("error codes", () => {
       unavailable: 503,
       internal: 500,
     });
+  });
+});
+
+describe("counterparty read payload", () => {
+  it("rejects an unknown enumerated filter and lists the accepted values", () => {
+    expect(counterpartyFilterError("riskLevel", "low")).toBe(
+      "riskLevel must be one of unscreened, clear, medium, high."
+    );
+  });
+
+  it("preserves a null performance score instead of inventing zero", () => {
+    const payload = mapCounterparty({
+      id: "cp-1",
+      name: "New supplier",
+      role: "vendor",
+      address: null,
+      chain: "ARC-TESTNET",
+      jurisdiction: null,
+      risk_level: "unscreened",
+      risk_notes: null,
+      baseline_payment_limit: "2.00",
+      payment_limit: "0.50",
+      last_screened_at: null,
+      performance_score: null,
+      performance_inputs: null,
+      created_at: "2026-09-25T00:00:00.000Z",
+    });
+
+    expect(payload.performanceScore).toBeNull();
+    expect(payload.performanceInputs).toBeNull();
+    expect(payload).toMatchObject({ baselinePaymentLimit: 2, paymentLimit: 0.5 });
   });
 });
