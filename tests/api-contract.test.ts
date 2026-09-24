@@ -13,6 +13,7 @@ import {
   mapCounterparty,
 } from "@/lib/api/counterparties";
 import { mapMilestone, milestoneStatusError } from "@/lib/api/milestones";
+import { mapTreasuryPayload } from "@/lib/api/treasury";
 
 describe("cursors", () => {
   it("round-trips a sequence position", () => {
@@ -207,5 +208,35 @@ describe("milestone read payload", () => {
 
     expect(payload.txHash).toBeNull();
     expect(payload.agentReasoning).toBe("Verified work can be released.");
+  });
+});
+
+describe("treasury read payload", () => {
+  it("does not invent obligations or a forecast before a cycle has measured them", () => {
+    const payload = mapTreasuryPayload(
+      [
+        {
+          id: "reserve-1",
+          name: "USYC Reserve",
+          kind: "reserve",
+          chain: "ARC-TESTNET",
+          token: "USYC",
+          address: null,
+          balance: "450.250000",
+          apy: "0.0450",
+        },
+      ],
+      null,
+      null,
+      []
+    );
+
+    expect(payload.reservePosition).toBe(450.25);
+    expect(payload.obligations).toEqual({
+      asOf: null,
+      dueWithin7Days: null,
+      dueWithin14Days: null,
+    });
+    expect(payload.latestForecast).toBeNull();
   });
 });
