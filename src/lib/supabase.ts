@@ -1,29 +1,24 @@
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { currentContext } from "./context";
 
 /**
- * Server-side Supabase client. Uses the service role key, so it bypasses RLS
- * — never import this from a client component. Browser roles have no table
- * access; server-rendered dashboard reads use this client exclusively.
+ * The service-role Supabase client for whichever business the current work
+ * belongs to. It bypasses row-level security, so it must never be imported
+ * from a client component; browser roles have no table access at all, and
+ * server-rendered dashboard reads go through here exclusively.
+ *
+ * This used to be a module-level cached client built from `process.env`, which
+ * meant a process could only ever talk to one database: the first caller
+ * decided, and every later one silently inherited that choice. The client now
+ * comes from the scope the work is running in, so two configurations can run
+ * concurrently without seeing each other. See `./context.ts`.
+ *
+ * The signature is unchanged on purpose — every existing call site keeps
+ * working, and a single-tenant deployment still resolves its configuration
+ * from the environment exactly as before.
  */
-
-let cached: SupabaseClient | undefined;
-
 export function supabase(): SupabaseClient {
-  if (cached) return cached;
-
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!url || !serviceKey) {
-    throw new Error(
-      "Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env.local — see README.md."
-    );
-  }
-
-  cached = createClient(url, serviceKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-  return cached;
+  return currentContext().db;
 }
 
 /** Throws with the Postgres error message attached, rather than a bare `null`. */

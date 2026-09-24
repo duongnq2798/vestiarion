@@ -12,6 +12,7 @@ import type {
 } from "./types";
 import { ARC_FEE_USD } from "./types";
 import { fetchArcFeeUsd } from "./arcFees";
+import type { ChainConfig } from "../config";
 
 interface AccountRow {
   id: string;
@@ -39,6 +40,7 @@ function reportedFeeUsd(value: string | undefined): number | null {
  * estimate last, and the caller records which of the three it got.
  */
 async function resolveFee(
+  rpcUrl: string | undefined,
   circleReported: string | undefined,
   txHash: string | undefined
 ): Promise<{ feeUsd: number; feeSource: TransferResult["feeSource"] }> {
@@ -46,7 +48,7 @@ async function resolveFee(
   if (fromCircle != null) return { feeUsd: fromCircle, feeSource: "chain_reported" };
 
   if (txHash) {
-    const fromChain = await fetchArcFeeUsd(txHash);
+    const fromChain = await fetchArcFeeUsd(txHash, { url: rpcUrl });
     if (fromChain != null) return { feeUsd: fromChain, feeSource: "chain_reported" };
   }
 
@@ -70,14 +72,23 @@ export class LiveProvider implements ChainProvider {
   private client: CircleDeveloperControlledWalletsClient;
   private usdcTokenId?: string;
 
-  constructor() {
-    const apiKey = process.env.CIRCLE_API_KEY;
-    const entitySecret = process.env.CIRCLE_ENTITY_SECRET;
-    if (!apiKey || !entitySecret) {
-      throw new Error("LiveProvider requires CIRCLE_API_KEY and CIRCLE_ENTITY_SECRET");
+  private readonly arcRpcUrl?: string;
+
+  /**
+   * Takes its credentials rather than reading them. Two businesses with two
+   * sets of Circle wallets can then exist in one process, which a constructor
+   * that consulted `process.env` made impossible.
+   */
+  constructor(chain: ChainConfig) {
+    if (!chain.circleApiKey || !chain.circleEntitySecret) {
+      throw new Error("LiveProvider requires a Circle API key and entity secret");
     }
-    this.client = initiateDeveloperControlledWalletsClient({ apiKey, entitySecret });
-    this.usdcTokenId = process.env.CIRCLE_USDC_TOKEN_ID || undefined;
+    this.client = initiateDeveloperControlledWalletsClient({
+      apiKey: chain.circleApiKey,
+      entitySecret: chain.circleEntitySecret,
+    });
+    this.usdcTokenId = chain.usdcTokenId;
+    this.arcRpcUrl = chain.arcRpcUrl;
   }
 
   private async account(accountId: string): Promise<AccountRow & { walletId: string }> {
@@ -152,7 +163,7 @@ export class LiveProvider implements ChainProvider {
       const state = transaction?.state;
       txHash = transaction?.txHash;
       status = state === "CONFIRMED" || state === "COMPLETE" ? "confirmed" : "pending";
-      const resolved = await resolveFee(transaction?.networkFeeInUSD, txHash);
+      const resolved = await resolveFee(this.arcRpcUrl, transaction?.networkFeeInUSD, txHash);
       feeUsd = resolved.feeUsd;
       feeSource = resolved.feeSource;
       settledInMs = transaction ? measuredSettlementMs(transaction) : null;
@@ -187,7 +198,7 @@ export class LiveProvider implements ChainProvider {
     const txHash = transaction.txHash ?? null;
     // Reconciliation is also the backfill path: a transfer that settled before
     // its receipt was readable gets its real fee on the next pass.
-    const fee = await resolveFee(transaction.networkFeeInUSD, txHash ?? undefined);
+    const fee = await resolveFee(this.arcRpcUrl, transaction.networkFeeInUSD, txHash ?? undefined);
     return {
       providerTxId,
       txHash,

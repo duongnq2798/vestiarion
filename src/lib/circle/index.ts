@@ -8,6 +8,8 @@ import type {
 } from "./types";
 import { SimulateProvider } from "./simulateProvider";
 import { LiveProvider } from "./liveProvider";
+import { currentConfig } from "../context";
+import type { VestiarionConfig } from "../config";
 
 /**
  * Payments settle on Arc testnet through Circle's Developer-Controlled
@@ -52,19 +54,33 @@ class HybridProvider implements ChainProvider {
   }
 }
 
-let cached: ChainProvider | undefined;
+/**
+ * One provider per configuration, not one per process.
+ *
+ * This was a module-level `cached` built from `process.env`, so the first
+ * caller decided which Circle credentials the whole process used and everyone
+ * after inherited them. Keyed by the context's config object instead, two
+ * businesses can hold two sets of Circle wallets in the same process — which
+ * is the point of the exercise.
+ *
+ * A `WeakMap` because the key is the config the context already holds: when a
+ * context goes away, so does its provider, with no cache to invalidate.
+ */
+const providers = new WeakMap<VestiarionConfig, ChainProvider>();
 
 export function getChainProvider(): ChainProvider {
-  if (cached) return cached;
+  const config = currentConfig();
+  const existing = providers.get(config);
+  if (existing) return existing;
 
-  const hasCredentials =
-    !!process.env.CIRCLE_API_KEY && !!process.env.CIRCLE_ENTITY_SECRET;
+  const { circleApiKey, circleEntitySecret } = config.chain;
+  const provider: ChainProvider =
+    circleApiKey && circleEntitySecret
+      ? new HybridProvider(new LiveProvider(config.chain), new SimulateProvider())
+      : new SimulateProvider();
 
-  cached = hasCredentials
-    ? new HybridProvider(new LiveProvider(), new SimulateProvider())
-    : new SimulateProvider();
-
-  return cached;
+  providers.set(config, provider);
+  return provider;
 }
 
 export type {
