@@ -2,8 +2,8 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 /**
  * Server-side Supabase client. Uses the service role key, so it bypasses RLS
- * — never import this from a client component. Read-only public access for
- * the dashboard is granted by the `*_public_read` policies in the migration.
+ * — never import this from a client component. Browser roles have no table
+ * access; server-rendered dashboard reads use this client exclusively.
  */
 
 let cached: SupabaseClient | undefined;
