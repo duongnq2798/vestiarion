@@ -74,6 +74,8 @@ supabase/migrations/      Postgres schema. Money is numeric(20,6), never a
                            lock so concurrent cycles cannot fork it.
 src/lib/supabase.ts       Server-side client (service role; never imported
                            from a client component)
+src/lib/insights.ts       Typed, server-only query boundary for measured
+                           transfer, cycle, balance, and screening history
 src/lib/ledger.ts         Hash-chained, Ed25519-signed append-only audit log
 src/lib/compliance.ts     Continuous counterparty screening + risk tiering
 src/lib/circle/           ChainProvider interface, three implementations:
@@ -99,6 +101,7 @@ tests/                    Vitest. Every money path that can be tested without
 scripts/                  seed, bootstrap:circle, and three doctors that tell
                            you exactly which parts are live
 src/app/                  Dashboard, AP/AR, Contractors, Compliance, Audit Log
+                           and database-backed Insights
 ```
 
 ## Running it
@@ -250,6 +253,12 @@ after instrumentation the configured project therefore reports **0 instrumented 
 snapshots, and 0 measured payment intents**. A payment-capable validation run was rejected by the
 execution safety gate, so there is no measurement period or resulting benchmark to claim yet;
 the first permitted agent cycle will populate these tables.
+
+`/insights` reads only those persisted rows through `src/lib/insights.ts`. It does not
+ship a sample series: transfer and cycle charts render an explicit empty receipt until
+the first instrumented run. Screening history is drawn from `compliance_checks`; because
+older checks do not carry a sweep id, the UI transparently groups consecutive checks
+within two minutes as an observed batch rather than claiming a stronger association.
 
 ## Tests
 

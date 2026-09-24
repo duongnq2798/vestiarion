@@ -51,3 +51,9 @@ Application rollback: stop scheduled cycles first, then revert the Phase 7 commi
 Database rollback: export `payment_intents`, `cycle_runs`, and `cycle_snapshots` before removing anything. Reconcile all in-flight payment intents before changing that table. If removal is unavoidable, drop the append-only trigger and trigger function, then drop `cycle_snapshots` before `cycle_runs`; remove the new payment-intent columns only after the export. Never backfill fee or settlement fields from a typical-cost profile and present those estimates as measurements.
 
 Measurement boundary: Phase 7 deliberately does not backfill earlier cycles or transfers. At rollout, the configured database contained 0 instrumented cycles, 0 snapshots, and 0 payment-intent measurements. The payment-capable validation cycle was not run after the environment safety gate rejected it, so the baseline period and measured duration are both zero rather than invented.
+
+## Phase 8 — measured charts
+
+Application rollback: revert the Phase 8 commit. This removes only the Insights route, its navigation entry, and its read-only query layer; it does not alter or delete telemetry. The Phase 7 writer remains active so history continues to accumulate while the UI is rolled back.
+
+Data rollback: none. Phase 8 adds no migration and writes no rows. Its transfer, balance, outcome, decision-mode, and screening visuals are projections of existing database records. Empty states are a supported state, not a condition to repair with fixture data.

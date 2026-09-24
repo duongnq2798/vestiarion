@@ -9,6 +9,7 @@ import { ProvenanceBar, type ProvenanceLeg } from "./Provenance";
 
 const NAV = [
   { key: "treasury", href: "/", label: "Treasury" },
+  { key: "insights", href: "/insights", label: "Insights" },
   { key: "invoices", href: "/invoices", label: "AP / AR" },
   { key: "counterparties", href: "/counterparties", label: "Counterparties" },
   { key: "contractors", href: "/contractors", label: "Contractors" },
