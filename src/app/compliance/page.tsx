@@ -23,11 +23,11 @@ export default async function CompliancePage() {
   const riskChanges = entries.filter((entry) => entry.action === "risk_level_changed").slice(0, 5);
 
   return (
-    <ProductShell active="compliance" day={dashboardStats.day}>
+    <ProductShell active="compliance" day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt}>
       <PageHead
         title="Compliance"
         sub="Continuous screening changes payment authority by tier. A hit reduces a limit; it does not silently turn the counterparty into a yes/no ban."
-        right={<AgentControls nextDay={dashboardStats.day + 1} headSeq={entries[0]?.seq ?? 0} />}
+        right={<AgentControls nextDay={dashboardStats.day + 1} headSeq={entries[0]?.seq ?? 0} clockMode={dashboardStats.clockMode} />}
       />
 
       {lastSweep && (

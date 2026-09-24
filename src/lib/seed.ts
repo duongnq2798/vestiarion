@@ -247,6 +247,10 @@ export async function seedDatabase() {
       verification_source: "deliverable:github-pr#482",
       verified: true,
       status: "verified",
+      verification_method: "seed",
+      verification_status: "verified",
+      verified_at: new Date().toISOString(),
+      verification_detail: { fixture: true },
     },
     {
       contractor_id: cp("Diego"),
@@ -255,6 +259,10 @@ export async function seedDatabase() {
       verification_source: "timesheet:kimai",
       verified: true,
       status: "verified",
+      verification_method: "seed",
+      verification_status: "verified",
+      verified_at: new Date().toISOString(),
+      verification_detail: { fixture: true },
     },
     {
       contractor_id: cp("Priya"),
@@ -263,6 +271,9 @@ export async function seedDatabase() {
       verification_source: "timesheet:kimai",
       verified: false,
       status: "pending",
+      verification_method: "seed",
+      verification_status: "unverified",
+      verification_detail: { fixture: true },
     },
   ]);
   if (milestones.error) throw new Error(milestones.error.message);

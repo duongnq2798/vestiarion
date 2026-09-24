@@ -2,7 +2,9 @@ import { z } from "zod";
 import { supabase, unwrap } from "../supabase";
 import { appendLedgerEntry } from "../ledger";
 import { getChainProvider } from "../circle";
+import { cycleClockMode, type CycleClockMode } from "../clock";
 import { runComplianceSweep } from "../compliance";
+import { refreshGitHubMilestones } from "../milestone-verification";
 import { seedScale } from "../seed";
 import { executePayment } from "../payments";
 import { decide } from "./decide";
@@ -49,6 +51,9 @@ export interface CycleResult {
   day: number;
   lines: CycleLogLine[];
   mode: string;
+  clockMode: CycleClockMode;
+  startedAt: string;
+  finishedAt: string;
 }
 
 const num = (v: unknown) => (typeof v === "number" ? v : Number(v ?? 0));
@@ -91,8 +96,14 @@ export async function runAgentCycle(): Promise<CycleResult> {
   const db = supabase();
   const provider = getChainProvider();
   const lines: CycleLogLine[] = [];
+  const startedAt = new Date().toISOString();
+  const clockMode = cycleClockMode();
 
-  const day = unwrap(await db.rpc("advance_sim_day").single<number>());
+  const day = clockMode === "simulate"
+    ? unwrap(await db.rpc("advance_sim_day").single<number>())
+    : unwrap(
+        await db.from("sim_clock").select("current_day").eq("id", 1).single<{ current_day: number }>()
+      ).current_day;
 
   // ------------------------------------------------------------ 0. reconcile
   // In live mode the chain is the source of truth for cash. Reading the
@@ -174,6 +185,17 @@ export async function runAgentCycle(): Promise<CycleResult> {
     lines.push({
       domain: "compliance",
       message: `Re-screened ${unchanged} counterpart${unchanged === 1 ? "y" : "ies"}, no change`,
+    });
+  }
+
+  // GitHub-backed evidence is refreshed before contractor decisions, so a
+  // PR merged since the previous run can release in this same cycle. Missing
+  // credentials or API failures retain the previous verdict and are labelled.
+  const milestoneVerification = await refreshGitHubMilestones();
+  if (milestoneVerification.checked > 0) {
+    lines.push({
+      domain: "contractor",
+      message: `Checked ${milestoneVerification.checked} GitHub milestone${milestoneVerification.checked === 1 ? "" : "s"}: ${milestoneVerification.verified} merged, ${milestoneVerification.unavailable} unavailable, ${milestoneVerification.failed} failed`,
     });
   }
 
@@ -703,13 +725,16 @@ export async function runAgentCycle(): Promise<CycleResult> {
   });
   if (forecast.error) throw new Error(forecast.error.message);
 
+  const finishedAt = new Date().toISOString();
   await appendLedgerEntry({
     actor: "system",
     domain: "system",
     action: "cycle_complete",
-    summary: `Agent cycle ${day} complete: ${lines.length} decisions logged`,
-    detail: { day, decisionCount: lines.length, chainMode: provider.mode },
+    summary: clockMode === "simulate"
+      ? `Agent cycle ${day} complete: ${lines.length} decisions logged`
+      : `Agent cycle complete at ${finishedAt}: ${lines.length} decisions logged`,
+    detail: { day, clockMode, startedAt, finishedAt, decisionCount: lines.length, chainMode: provider.mode },
   });
 
-  return { day, lines, mode: provider.mode };
+  return { day, lines, mode: provider.mode, clockMode, startedAt, finishedAt };
 }

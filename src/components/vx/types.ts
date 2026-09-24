@@ -5,6 +5,7 @@ export type RiskTier = "unscreened" | "clear" | "medium" | "high";
 export interface Evidence {
   label: string;
   value: string;
+  href?: string;
   state?: "ok" | "missing" | "neutral";
 }
 

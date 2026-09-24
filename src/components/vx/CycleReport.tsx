@@ -1,18 +1,20 @@
 import type { LedgerEntry } from "@/lib/ledger";
+import type { CycleClockMode } from "@/lib/clock";
 import { entryOutcome, pad } from "./AuditLedger";
 import { DOMAIN_CODE, DomainGlyph, OutcomeGlyph } from "./Glyphs";
 import { Label } from "./Primitives";
 
-export function CycleReport({ entries, day, since }: { entries: LedgerEntry[]; day: number; since: number }) {
+export function CycleReport({ entries, day, since, clockMode, completedAt }: { entries: LedgerEntry[]; day: number; since: number; clockMode: CycleClockMode; completedAt: string | null }) {
   const rows = entries.filter((entry) => entry.seq > since).sort((a, b) => a.seq - b.seq);
   if (rows.length === 0) return null;
   const decisions = rows.filter((entry) => entry.domain !== "system");
+  const cycleName = clockMode === "simulate" ? `Day ${day}` : completedAt ? new Date(completedAt).toLocaleString() : "Wall-clock cycle";
   return (
-    <section aria-label={`Day ${day} cycle`} className="mb-6 rounded-lg border border-agent-line bg-surface p-4 sm:p-5">
+    <section aria-label={`${cycleName} cycle`} className="mb-6 rounded-lg border border-agent-line bg-surface p-4 sm:p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <Label className="text-agent">Cycle complete</Label>
-          <h2 className="mt-1 text-xl font-semibold tracking-tight text-ink">Day {day}: the agent made {decisions.length} decisions</h2>
+          <h2 className="mt-1 text-xl font-semibold tracking-tight text-ink">{cycleName}: the agent made {decisions.length} decisions</h2>
         </div>
         <a href={`/audit?since=${since}#seq-${rows.at(-1)!.seq}`} className="text-[0.8125rem] text-agent hover:underline">#{pad(rows[0].seq)}–#{pad(rows.at(-1)!.seq)} in the audit log →</a>
       </div>

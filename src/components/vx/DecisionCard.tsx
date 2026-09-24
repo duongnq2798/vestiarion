@@ -115,7 +115,11 @@ function EvidenceRow({ items }: { items: Evidence[] }) {
           {item.state === "ok" && <CheckGlyph className="size-3 text-ink-2" />}
           {item.state === "missing" && <CrossGlyph className="size-3" />}
           <span className="text-ink-3">{item.label}</span>
-          <span className="font-mono text-ink">{item.value}</span>
+          {item.href ? (
+            <a href={item.href} target="_blank" rel="noreferrer" className="font-mono text-agent hover:underline">{item.value} ↗</a>
+          ) : (
+            <span className="font-mono text-ink">{item.value}</span>
+          )}
         </li>
       ))}
     </ul>

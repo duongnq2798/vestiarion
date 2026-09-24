@@ -27,8 +27,9 @@ the interface:
    invoice) plus a risk check, and the agent decides to **pay**, **hold** (over limit), **request
    info** (no PO match), or **flag as fraud** (high-risk counterparty) — with its reasoning
    attached to the line item.
-3. **Contractor payments (RFB3)** — verified milestones are released the same day instead of
-   waiting for a Net-30 cycle, because at ~$0.01/tx on Arc, paying often costs nothing.
+3. **Contractor payments (RFB3)** — a GitHub PR URL can be checked for an actual merge before a
+   milestone is released. Human verification remains available and is recorded as a human ledger
+   action. Verified milestones are released the same day instead of waiting for Net-30.
 4. **Treasury (RFB1)** — idle operating cash above a 7-day obligation buffer is swept into a
    USYC-yielding reserve; the agent redeems back out ahead of due dates rather than after. The
    sweep only happens when it pays for itself: a sweep and the redemption that must follow it are
@@ -138,7 +139,7 @@ Two independent upgrades from there, in either order:
 | `npm run db:migrate` | Applies `supabase/migrations/*.sql` |
 | `npm run seed` | **Destructive demo only:** replaces business data with fictional fixtures |
 | `npm run bootstrap:circle` | Creates Arc-testnet wallets for accounts and counterparties |
-| `npm run cycle` | Runs one agent cycle headlessly — point cron at this |
+| `npm run cycle` | Runs one agent cycle headlessly using the configured clock mode |
 | `npm run status` | Balances, wallets, open invoices, ledger height |
 | `npm run circle:doctor` / `agent:doctor` | Reports exactly which parts are live |
 | `npm run arc:proof` | Standalone: two wallets, a faucet check, one real transfer |
@@ -208,6 +209,21 @@ Everything the agent reasons about lives in five tables (`accounts`, `counterpar
 - Run `npm run bootstrap:circle` once real accounts exist, fund the operating wallet, and call
   `POST /api/agent/tick` on a schedule (cron, GitHub Action, whatever you have) instead of a
   button click.
+
+### Running on a real clock
+
+Production uses wall-clock mode by default; `CYCLE_CLOCK_MODE=simulate` is an explicit demo opt-in
+that advances the numbered day counter. Every page shows the real timestamp of the latest completed
+cycle. The included `.github/workflows/agent-cycle.yml` calls the protected endpoint every six
+hours. Configure repository secrets `VESTIARION_URL` (the deployment origin) and
+`AGENT_API_TOKEN` (the same server secret used by the app). GitHub Actions schedules can be delayed,
+so the ledger timestamp—not the nominal cron minute—is the source of truth for when a cycle ran.
+
+For automatic contractor evidence, put a full `https://github.com/<owner>/<repo>/pull/<number>` URL
+in `verification_source` and configure a read-only `GITHUB_TOKEN`. A merged response verifies the
+milestone; an unmerged response does not. Missing credentials and API failures are displayed as
+unavailable or failed while retaining the prior verdict. A control-session holder can instead add
+a manual verification note, which is written to the signed ledger with `actor: human`.
 
 ## Tests
 

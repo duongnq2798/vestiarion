@@ -22,11 +22,11 @@ export default async function AuditPage({ searchParams }: PageProps<"/audit">) {
   const publicKey = ledgerPublicKeyPem();
 
   return (
-    <ProductShell active="audit" day={dashboardStats.day}>
+    <ProductShell active="audit" day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt}>
       <PageHead
         title="Audit log"
         sub="Every decision is appended here, hash-linked to the one before it and signed with Ed25519. The summary stays readable; raw detail and cryptographic material remain inspectable."
-        right={<AgentControls nextDay={dashboardStats.day + 1} headSeq={head?.seq ?? 0} />}
+        right={<AgentControls nextDay={dashboardStats.day + 1} headSeq={head?.seq ?? 0} clockMode={dashboardStats.clockMode} />}
       />
 
       <section aria-label="Hash chain" className="mb-6 rounded-lg border border-line bg-surface p-4 sm:p-5">

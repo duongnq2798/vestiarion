@@ -1,4 +1,5 @@
 import { supabase, unwrap } from "./supabase";
+import { cycleClockMode, type CycleClockMode } from "./clock";
 
 /**
  * PostgREST serialises `numeric` as a string so it can't lose precision in
@@ -98,6 +99,11 @@ export interface MilestoneRow {
   title: string;
   amount: number;
   verification_source: string | null;
+  verification_method: string;
+  verification_status: string;
+  verification_checked_at: string | null;
+  verified_at: string | null;
+  verification_detail: Record<string, unknown>;
   verified: boolean;
   status: string;
   agent_reasoning: string | null;
@@ -170,6 +176,8 @@ export async function latestForecast(): Promise<ForecastRow | undefined> {
 
 export interface DashboardStats {
   day: number;
+  clockMode: CycleClockMode;
+  lastCycleAt: string | null;
   totalPaidOut: number;
   decisionsLogged: number;
   flagged: number;
@@ -179,12 +187,13 @@ export interface DashboardStats {
 export async function stats(): Promise<DashboardStats> {
   const db = supabase();
 
-  const [paidInvoices, paidMilestones, clock, decisions, flagged] = await Promise.all([
+  const [paidInvoices, paidMilestones, clock, decisions, flagged, latestCycle] = await Promise.all([
     db.from("invoices").select("amount, tx_ref").eq("status", "paid"),
     db.from("milestones").select("amount, tx_ref").eq("status", "paid"),
     db.from("sim_clock").select("current_day").eq("id", 1).single(),
     db.from("ledger_entries").select("*", { count: "exact", head: true }).eq("actor", "agent"),
     db.from("invoices").select("*", { count: "exact", head: true }).eq("status", "flagged"),
+    db.from("ledger_entries").select("ts").eq("action", "cycle_complete").order("seq", { ascending: false }).limit(1).maybeSingle(),
   ]);
 
   const paid = [
@@ -194,6 +203,8 @@ export async function stats(): Promise<DashboardStats> {
 
   return {
     day: (clock.data as { current_day: number } | null)?.current_day ?? 0,
+    clockMode: cycleClockMode(),
+    lastCycleAt: (latestCycle.data as { ts: string } | null)?.ts ?? null,
     totalPaidOut: paid.reduce((sum, r) => sum + num(r.amount), 0),
     decisionsLogged: decisions.count ?? 0,
     flagged: flagged.count ?? 0,

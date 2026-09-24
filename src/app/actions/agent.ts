@@ -33,7 +33,9 @@ export async function runAgentCycleAction(): Promise<AgentActionResult> {
     revalidatePath("/", "layout");
     return {
       ok: true,
-      message: `Day ${result.day} complete · ${result.lines.length} decisions logged.`,
+      message: result.clockMode === "simulate"
+        ? `Day ${result.day} complete · ${result.lines.length} decisions logged.`
+        : `Cycle complete at ${new Date(result.finishedAt).toLocaleString()} · ${result.lines.length} decisions logged.`,
       day: result.day,
       lines: result.lines.length,
     };

@@ -53,14 +53,14 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
   const needsReview = stopped.length;
 
   return (
-    <ProductShell active="treasury" day={dashboardStats.day}>
+    <ProductShell active="treasury" day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt}>
       <PageHead
         title="Treasury"
         sub="What the agent holds, what it decided, and why."
-        right={<AgentControls nextDay={dashboardStats.day + 1} headSeq={headSeq} />}
+        right={<AgentControls nextDay={dashboardStats.day + 1} headSeq={headSeq} clockMode={dashboardStats.clockMode} />}
       />
 
-      {since != null && <CycleReport entries={entries} day={dashboardStats.day} since={since} />}
+      {since != null && <CycleReport entries={entries} day={dashboardStats.day} since={since} clockMode={dashboardStats.clockMode} completedAt={dashboardStats.lastCycleAt} />}
 
       <div className="mb-8 grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-4">
         <BalanceTile accounts={accounts} />

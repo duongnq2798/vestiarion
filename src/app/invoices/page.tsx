@@ -30,11 +30,11 @@ export default async function InvoicesPage({ searchParams }: PageProps<"/invoice
   const ordinaryPayables = payables.filter((decision) => decision.outcome !== "refused");
 
   return (
-    <ProductShell active="invoices" day={dashboardStats.day}>
+    <ProductShell active="invoices" day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt}>
       <PageHead
         title="AP / AR"
         sub="Three-way match, counterparty risk, and payment authority — with the agent’s complete reasoning on every line."
-        right={<AgentControls nextDay={dashboardStats.day + 1} headSeq={entries[0]?.seq ?? 0} />}
+        right={<AgentControls nextDay={dashboardStats.day + 1} headSeq={entries[0]?.seq ?? 0} clockMode={dashboardStats.clockMode} />}
       />
 
       {filter && (

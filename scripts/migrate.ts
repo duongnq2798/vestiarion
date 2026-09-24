@@ -63,7 +63,7 @@ async function main() {
     await client.end();
   }
 
-  console.log("\nMigrations applied. Next: npm run seed");
+  console.log("\nMigrations applied. Add real data in the app, or run the destructive demo-only seed command explicitly.");
 }
 
 main().catch((e) => {

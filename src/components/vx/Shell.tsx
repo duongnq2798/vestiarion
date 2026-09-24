@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { getChainProvider } from "@/lib/circle";
 import { stats } from "@/lib/queries";
 import { screeningMode } from "@/lib/compliance";
+import type { CycleClockMode } from "@/lib/clock";
 import { Label } from "./Primitives";
 import { ProvenanceBar, type ProvenanceLeg } from "./Provenance";
 
@@ -20,13 +21,20 @@ export type NavKey = (typeof NAV)[number]["key"];
 export async function ProductShell({
   active,
   day,
+  clockMode,
+  lastCycleAt,
   children,
 }: {
   active: NavKey;
   day?: number;
+  clockMode?: CycleClockMode;
+  lastCycleAt?: string | null;
   children: ReactNode;
 }) {
-  const currentDay = day ?? (await stats()).day;
+  const fallbackStats = day == null || clockMode == null || lastCycleAt === undefined ? await stats() : null;
+  const currentDay = day ?? fallbackStats?.day ?? 0;
+  const currentClockMode = clockMode ?? fallbackStats?.clockMode ?? "simulate";
+  const currentLastCycleAt = lastCycleAt === undefined ? fallbackStats?.lastCycleAt ?? null : lastCycleAt;
   const provider = getChainProvider();
   const legs: ProvenanceLeg[] = [
     { label: "Payments", detail: "Arc testnet", live: provider.mode === "live" },
@@ -42,9 +50,10 @@ export async function ProductShell({
             <div className="min-w-0">
               <div className="flex items-baseline gap-3">
                 <span className="text-[0.8125rem] font-semibold uppercase tracking-[0.22em] text-ink">Vestiarion</span>
-                <Label>Day {currentDay}</Label>
+                <Label>{currentClockMode === "simulate" ? `Day ${currentDay}` : "Wall clock"}</Label>
               </div>
               <p className="mt-1 truncate text-sm text-ink-2">{process.env.BUSINESS_NAME?.trim() || "Vestiarion workspace"}</p>
+              <p className="mt-0.5 text-xs text-ink-3">{currentLastCycleAt ? `Last cycle ${new Date(currentLastCycleAt).toLocaleString()}` : "No cycle recorded yet"}</p>
             </div>
             <ProvenanceBar legs={legs} />
           </div>

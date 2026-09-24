@@ -71,6 +71,10 @@ export function milestoneDecision(milestone: MilestoneRow, entries: LedgerEntry[
   const guardrailBlocked = entry?.detail.guardrailBlocked === true;
   const limit = numberValue(observed?.paymentLimit) ?? 0;
   const risk = stringValue(observed?.riskLevel) ?? "unscreened";
+  const githubSource = milestone.verification_source?.match(/^https:\/\/github\.com\/[^/]+\/[^/]+\/pull\/\d+\/?$/)?.[0];
+  const verificationLabel = milestone.verification_method === "github"
+    ? milestone.verification_status === "verified" ? "merged PR" : milestone.verification_status.replace("_", " ")
+    : milestone.verification_method === "manual" ? "manual approval" : milestone.verification_method === "seed" ? "demo fixture" : "not verified";
   return {
     id: milestone.id,
     domain: "contractor",
@@ -82,7 +86,7 @@ export function milestoneDecision(milestone: MilestoneRow, entries: LedgerEntry[
     outcome: statusOutcome(milestone.status, milestone.tx_ref, guardrailBlocked),
     reasoning: milestone.agent_reasoning ?? "The agent is waiting for milestone verification.",
     evidence: [
-      { label: "Verified by", value: milestone.verification_source ?? "none", state: milestone.verified ? "ok" : "missing" },
+      { label: "Verified by", value: verificationLabel, href: githubSource, state: milestone.verified ? "ok" : "missing" },
       { label: "Verified", value: milestone.verified ? "yes" : "not yet", state: milestone.verified ? "ok" : "missing" },
       { label: "Risk", value: risk, state: risk === "high" ? "missing" : "neutral" },
     ],

@@ -24,11 +24,11 @@ export default async function CounterpartiesPage() {
   ]);
 
   return (
-    <ProductShell active="counterparties" day={dashboardStats.day}>
+    <ProductShell active="counterparties" day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt}>
       <PageHead
         title="Counterparties"
         sub="Add the people and businesses Vestiarion may invoice or pay. Each new record is screened immediately."
-        right={<AgentControls nextDay={dashboardStats.day + 1} headSeq={entries[0]?.seq ?? 0} />}
+        right={<AgentControls nextDay={dashboardStats.day + 1} headSeq={entries[0]?.seq ?? 0} clockMode={dashboardStats.clockMode} />}
       />
 
       <section className="mb-8">

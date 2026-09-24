@@ -27,3 +27,11 @@ Database rollback: the added evidence columns are backward-compatible and should
 Application rollback: revert the Phase 4 commit to remove the intake forms and Server Actions. Records already created remain valid business data; do not delete them as part of an application rollback. The external, bearer-protected emergency reset API remains separate from normal product navigation.
 
 Data recovery: creation and CSV import are append operations, and each accepted row has a human ledger entry containing its id. If a bad import must be reversed, identify its exact invoice ids from `import_invoice` entries, export those rows, and delete only those ids during a controlled maintenance window. Ledger entries remain as the immutable record of both the original action and the correction.
+
+## Phase 5 — verification and wall clock
+
+Application rollback: disable `.github/workflows/agent-cycle.yml` first so an older deployment is not triggered unexpectedly, then revert the Phase 5 commit. Existing verification provenance columns are backward-compatible and should remain for audit history.
+
+Operational rollback: unset `GITHUB_TOKEN` to stop remote verification; the app will label checks unavailable and retain previous verdicts. Set `CYCLE_CLOCK_MODE=simulate` only for a disposable demo. Returning a production deployment to the numbered clock does not change real invoice due dates, which always use wall-clock timestamps.
+
+Database rollback: export milestone verification details before dropping any Phase 5 columns. Never rewrite or remove the human/system ledger entries that recorded the original verification decisions.

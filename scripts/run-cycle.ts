@@ -14,7 +14,8 @@ async function main() {
   const started = Date.now();
   const result = await runAgentCycle();
 
-  console.log(`day ${result.day} · payments ${result.mode} · ${Date.now() - started}ms\n`);
+  const clock = result.clockMode === "simulate" ? `day ${result.day}` : `wall clock ${result.finishedAt}`;
+  console.log(`${clock} · payments ${result.mode} · ${Date.now() - started}ms\n`);
   for (const line of result.lines) {
     console.log(`  [${line.domain}] ${line.message}`);
   }
