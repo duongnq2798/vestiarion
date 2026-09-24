@@ -38,8 +38,11 @@ async function main() {
 
   console.log("\nCOUNTERPARTIES");
   for (const c of counterparties as Array<Record<string, string>>) {
+    const performance = c.performance_score == null
+      ? "no history"
+      : `${(Number(c.performance_score) * 100).toFixed(1)}% clean`;
     console.log(
-      `  ${c.name.padEnd(34)} ${c.risk_level.padEnd(11)} limit ${String(c.payment_limit ?? "—").padStart(10)}  ${short(c.address)}`
+      `  ${c.name.padEnd(34)} ${c.risk_level.padEnd(11)} performance ${performance.padEnd(12)} limit ${String(c.payment_limit ?? "—").padStart(10)}  ${short(c.address)}`
     );
   }
 

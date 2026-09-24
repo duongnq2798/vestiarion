@@ -1,5 +1,6 @@
 import { supabase, unwrap } from "./supabase";
 import { cycleClockMode, type CycleClockMode } from "./clock";
+import type { CounterpartyHistoryInputs } from "./agent/counterparty-history";
 
 /**
  * PostgREST serialises `numeric` as a string so it can't lose precision in
@@ -46,7 +47,8 @@ export interface CounterpartyRow {
   payment_limit: number | null;
   baseline_payment_limit: number | null;
   last_screened_at: string | null;
-  performance_score: number;
+  performance_score: number | null;
+  performance_inputs: CounterpartyHistoryInputs | null;
 }
 
 export async function listCounterparties(): Promise<CounterpartyRow[]> {
@@ -58,7 +60,9 @@ export async function listCounterparties(): Promise<CounterpartyRow[]> {
     payment_limit: r.payment_limit == null ? null : num(r.payment_limit),
     baseline_payment_limit:
       r.baseline_payment_limit == null ? null : num(r.baseline_payment_limit),
-    performance_score: num(r.performance_score),
+    performance_score: r.performance_score == null ? null : num(r.performance_score),
+    performance_inputs:
+      (r.performance_inputs as CounterpartyHistoryInputs | null | undefined) ?? null,
   }));
 }
 

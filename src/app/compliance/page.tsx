@@ -1,5 +1,6 @@
 import AgentControls from "@/components/AgentControls";
 import { Card, Label, Money, SectionHead } from "@/components/vx/Primitives";
+import { PerformanceHistory } from "@/components/vx/PerformanceHistory";
 import { RiskDial } from "@/components/vx/RiskDial";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
 import type { RiskTier } from "@/components/vx/types";
@@ -58,6 +59,10 @@ export default async function CompliancePage() {
               </div>
               <div className="mt-4 border-y border-line py-3">
                 <RiskDial risk={riskTier(counterparty.risk_level)} baseline={counterparty.baseline_payment_limit} effective={counterparty.payment_limit} />
+                <PerformanceHistory
+                  score={counterparty.performance_score}
+                  inputs={counterparty.performance_inputs}
+                />
                 {counterparty.baseline_payment_limit != null && counterparty.payment_limit != null && (
                   <p className="mt-2 text-xs text-ink-3">
                     Business baseline <Money value={counterparty.baseline_payment_limit} /> · screened authority <Money value={counterparty.payment_limit} />

@@ -1,6 +1,7 @@
 import AgentControls from "@/components/AgentControls";
 import CounterpartyIntake from "@/components/intake/CounterpartyIntake";
 import { Money, SectionHead } from "@/components/vx/Primitives";
+import { PerformanceHistory } from "@/components/vx/PerformanceHistory";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { hasAgentControlSession } from "@/lib/agent-session";
 import { listLedgerEntries } from "@/lib/ledger";
@@ -50,8 +51,13 @@ export default async function CounterpartiesPage() {
                   <h3 className="truncate text-sm font-semibold text-ink">{counterparty.name}</h3>
                   <p className="mt-0.5 text-xs capitalize text-ink-3">{counterparty.role} · {counterparty.chain || "chain not set"}</p>
                 </div>
-                <span className={`rounded-full border px-2 py-0.5 text-xs font-medium capitalize ${RISK_STYLE[counterparty.risk_level] ?? RISK_STYLE.unscreened}`}>{counterparty.risk_level}</span>
+                <span className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium capitalize ${RISK_STYLE[counterparty.risk_level] ?? RISK_STYLE.unscreened}`}>{counterparty.risk_level}</span>
               </div>
+              <PerformanceHistory
+                score={counterparty.performance_score}
+                inputs={counterparty.performance_inputs}
+                compact
+              />
               <dl className="mt-4 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3 text-xs">
                 <div className="min-w-0"><dt className="text-ink-3">Configured limit</dt><dd className="mt-0.5 text-ink">{counterparty.baseline_payment_limit == null ? "Not set" : <Money value={counterparty.baseline_payment_limit} />}</dd></div>
                 <div className="min-w-0"><dt className="text-ink-3">Current authority</dt><dd className="mt-0.5 text-ink">{counterparty.payment_limit == null ? "Not set" : <Money value={counterparty.payment_limit} />}</dd></div>

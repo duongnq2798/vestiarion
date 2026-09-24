@@ -1,6 +1,16 @@
 import { supabase, unwrap } from "./supabase";
 import { appendLedgerEntry } from "./ledger";
 import { z } from "zod";
+import {
+  COUNTERPARTY_HISTORY_ACTIONS,
+  deriveCounterpartyHistories,
+  derivePerformanceScore,
+  emptyCounterpartyHistory,
+  isMaterialPerformanceChange,
+  PERFORMANCE_SCORE_MATERIAL_DELTA,
+  type CounterpartyHistoryInputs,
+  type CounterpartyHistoryLedgerEntry,
+} from "./agent/counterparty-history";
 
 /**
  * RFB5 — continuous compliance, not a one-time gate. Every counterparty is
@@ -214,12 +224,14 @@ export interface CounterpartyScreeningRow {
   baseline_payment_limit: string | number | null;
   last_screened_at: string | null;
   jurisdiction?: string | null;
+  performance_score?: string | number | null;
+  performance_inputs?: CounterpartyHistoryInputs | null;
 }
 
 const toNum = (v: string | number | null) => (v == null ? null : Number(v));
 
 const SCREENING_COLUMNS =
-  "id, name, risk_level, payment_limit, baseline_payment_limit, last_screened_at, jurisdiction";
+  "id, name, risk_level, payment_limit, baseline_payment_limit, last_screened_at, jurisdiction, performance_score, performance_inputs";
 
 /**
  * Decides what a screen should write, without touching the database. The
@@ -355,10 +367,125 @@ export interface SweepResult {
   screened: ScreeningOutcome[];
   skipped: number;
   failures: Array<{ counterpartyId: string; name: string; error: string }>;
+  performance: CounterpartyPerformanceOutcome[];
   complete: boolean;
 }
 
+export interface CounterpartyPerformanceOutcome {
+  counterpartyId: string;
+  name: string;
+  previousScore: number | null;
+  score: number | null;
+  observations: number;
+  inputs: CounterpartyHistoryInputs;
+  materiallyChanged: boolean;
+}
+
 class ScreeningLookupError extends Error {}
+
+const HISTORY_LEDGER_PAGE_SIZE = 1_000;
+
+async function listCounterpartyHistoryEntries(): Promise<CounterpartyHistoryLedgerEntry[]> {
+  const db = supabase();
+  const entries: CounterpartyHistoryLedgerEntry[] = [];
+  let afterSequence = 0;
+
+  while (true) {
+    const page = unwrap(
+      await db
+        .from("ledger_entries")
+        .select("seq, domain, action, detail")
+        .in("action", [...COUNTERPARTY_HISTORY_ACTIONS])
+        .gt("seq", afterSequence)
+        .order("seq", { ascending: true })
+        .limit(HISTORY_LEDGER_PAGE_SIZE)
+    ) as Array<CounterpartyHistoryLedgerEntry & { seq: number }>;
+    entries.push(...page);
+    if (page.length < HISTORY_LEDGER_PAGE_SIZE) break;
+    afterSequence = page.at(-1)!.seq;
+  }
+
+  return entries;
+}
+
+async function refreshCounterpartyPerformance(
+  rows: CounterpartyScreeningRow[]
+): Promise<CounterpartyPerformanceOutcome[]> {
+  const db = supabase();
+  const [invoiceRows, milestoneRows, ledgerEntries] = await Promise.all([
+    db.from("invoices").select("id, counterparty_id"),
+    db.from("milestones").select("id, contractor_id"),
+    listCounterpartyHistoryEntries(),
+  ]);
+  if (invoiceRows.error) throw new Error(invoiceRows.error.message);
+  if (milestoneRows.error) throw new Error(milestoneRows.error.message);
+
+  const histories = deriveCounterpartyHistories(ledgerEntries, {
+    invoiceCounterparty: new Map(
+      (invoiceRows.data as Array<{ id: string; counterparty_id: string }>).map((row) => [
+        row.id,
+        row.counterparty_id,
+      ])
+    ),
+    milestoneCounterparty: new Map(
+      (milestoneRows.data as Array<{ id: string; contractor_id: string }>).map((row) => [
+        row.id,
+        row.contractor_id,
+      ])
+    ),
+  });
+
+  const outcomes: CounterpartyPerformanceOutcome[] = [];
+  for (const row of rows) {
+    const performance = derivePerformanceScore(
+      histories.get(row.id) ?? emptyCounterpartyHistory()
+    );
+    const previousScore = toNum(row.performance_score ?? null);
+    const materiallyChanged = isMaterialPerformanceChange(previousScore, performance.score);
+    const update = await db
+      .from("counterparties")
+      .update({
+        performance_score: performance.score,
+        performance_inputs: performance.inputs,
+      })
+      .eq("id", row.id);
+    if (update.error) throw new Error(update.error.message);
+
+    const outcome = {
+      counterpartyId: row.id,
+      name: row.name,
+      previousScore,
+      score: performance.score,
+      observations: performance.observations,
+      inputs: performance.inputs,
+      materiallyChanged,
+    };
+    outcomes.push(outcome);
+
+    if (materiallyChanged) {
+      const before = previousScore == null ? "no history" : previousScore.toFixed(3);
+      const after = performance.score == null ? "no history" : performance.score.toFixed(3);
+      await appendLedgerEntry({
+        actor: "agent",
+        domain: "compliance",
+        action: "performance_score_changed",
+        summary: `${row.name} performance history ${before} → ${after}`,
+        detail: {
+          counterpartyId: row.id,
+          counterpartyName: row.name,
+          previousScore,
+          performanceScore: performance.score,
+          observations: performance.observations,
+          inputs: performance.inputs,
+          materialDelta: PERFORMANCE_SCORE_MATERIAL_DELTA,
+          evidenceOnly: true,
+        },
+      });
+    }
+  }
+
+  return outcomes;
+}
 
 async function recordScreeningFailure(
   row: CounterpartyScreeningRow,
@@ -427,6 +554,7 @@ export async function runComplianceSweep(): Promise<SweepResult> {
   }
 
   const changes = screened.filter((s) => s.changed);
+  const performance = await refreshCounterpartyPerformance(rows);
   const complete = failures.length === 0;
   await appendLedgerEntry({
     actor: "agent",
@@ -449,8 +577,15 @@ export async function runComplianceSweep(): Promise<SweepResult> {
       })),
       failures,
       skipped: rows.length - screened.length,
+      performance: performance.map((result) => ({
+        counterpartyId: result.counterpartyId,
+        score: result.score,
+        observations: result.observations,
+        inputs: result.inputs,
+        materiallyChanged: result.materiallyChanged,
+      })),
     },
   });
 
-  return { screened, skipped: rows.length - due.length, failures, complete };
+  return { screened, skipped: rows.length - due.length, failures, performance, complete };
 }

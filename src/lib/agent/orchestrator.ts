@@ -8,6 +8,10 @@ import { refreshGitHubMilestones } from "../milestone-verification";
 import { seedScale } from "../seed";
 import { executePayment, type PaymentExecution } from "../payments";
 import { CycleMetricsCollector } from "./cycle-metrics";
+import {
+  emptyCounterpartyHistory,
+  type CounterpartyHistoryInputs,
+} from "./counterparty-history";
 import { CycleJournal, messageOf, type CycleStage } from "./journal";
 import { decide } from "./decide";
 import { enforceApGuardrails } from "./guardrails";
@@ -68,6 +72,18 @@ export interface CycleResult {
 }
 
 const num = (v: unknown) => (typeof v === "number" ? v : Number(v ?? 0));
+
+function performanceEvidence(
+  score: string | number | null,
+  inputs: CounterpartyHistoryInputs | null
+) {
+  return {
+    score: score == null ? null : num(score),
+    status: score == null ? "no_history_yet" : "measured_from_ledger",
+    inputs: inputs ?? emptyCounterpartyHistory(),
+    note: "Historical evidence for closer review, not a verdict or payment guardrail.",
+  };
+}
 
 /**
  * Writes the operating account's balance back from whatever the provider
@@ -471,7 +487,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
   const payables = unwrap(
     await db
       .from("invoices")
-      .select("*, counterparties(id, name, risk_level, payment_limit, address)")
+      .select("*, counterparties(id, name, risk_level, payment_limit, performance_score, performance_inputs, address)")
       .eq("direction", "payable")
       .in("status", ["pending", "matched"])
   ) as Array<{
@@ -487,6 +503,8 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
       name: string;
       risk_level: string;
       payment_limit: string | null;
+      performance_score: string | null;
+      performance_inputs: CounterpartyHistoryInputs | null;
       address: string | null;
     };
   }>;
@@ -563,6 +581,10 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           name: counterparty.name,
           riskLevel: counterparty.risk_level,
           paymentLimit: limit,
+          performanceHistory: performanceEvidence(
+            counterparty.performance_score,
+            counterparty.performance_inputs
+          ),
         },
         treasury: { operatingBalance },
         duplicateMatches: duplicateContext.matches.map((match) => ({
@@ -698,6 +720,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
       summary: `${decision.action.toUpperCase()} invoice from ${counterparty.name} for ${amount} USDC`,
       detail: {
         invoiceId: invoice.id,
+        counterpartyId: counterparty.id,
         decision,
         decisionMode: mode,
         referenceDecision: reference,
@@ -708,6 +731,10 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           amount,
           paymentLimit: limit,
           riskLevel: counterparty.risk_level,
+          performanceHistory: performanceEvidence(
+            counterparty.performance_score,
+            counterparty.performance_inputs
+          ),
           poReference: invoice.po_reference,
           goodsReceived: invoice.goods_received,
           operatingBalance,
@@ -754,7 +781,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
   const milestones = unwrap(
     await db
       .from("milestones")
-      .select("*, counterparties(id, name, risk_level, payment_limit, address)")
+      .select("*, counterparties(id, name, risk_level, payment_limit, performance_score, performance_inputs, address)")
       .eq("verified", true)
       .eq("status", "verified")
   ) as Array<{
@@ -768,6 +795,8 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
       name: string;
       risk_level: string;
       payment_limit: string | null;
+      performance_score: string | null;
+      performance_inputs: CounterpartyHistoryInputs | null;
       address: string | null;
     };
   }>;
@@ -792,6 +821,10 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           name: contractor.name,
           riskLevel: contractor.risk_level,
           paymentLimit: limit,
+          performanceHistory: performanceEvidence(
+            contractor.performance_score,
+            contractor.performance_inputs
+          ),
         },
         responseShape: {
           action: "release | hold",
@@ -872,6 +905,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
       summary: `${decision.action.toUpperCase()} milestone "${milestone.title}" for ${contractor.name} (${amount} USDC)`,
       detail: {
         milestoneId: milestone.id,
+        counterpartyId: contractor.id,
         decision,
         decisionMode: mode,
         referenceDecision: reference,
@@ -881,6 +915,10 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           amount,
           paymentLimit: limit,
           riskLevel: contractor.risk_level,
+          performanceHistory: performanceEvidence(
+            contractor.performance_score,
+            contractor.performance_inputs
+          ),
           verificationSource: milestone.verification_source,
         },
         execution: {
