@@ -41,6 +41,12 @@ class MemoryStore implements PaymentIntentStore {
       attemptCount: 0,
       lastError: null,
       confirmedAt: null,
+      chain: null,
+      providerMode: input.provider === "circle" ? "live" : "simulate",
+      feeUsd: null,
+      feeSource: null,
+      settledInMs: null,
+      executedAt: null,
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
     };
@@ -67,6 +73,12 @@ class MemoryStore implements PaymentIntentStore {
       status: transfer.status,
       lastError: null,
       confirmedAt: transfer.status === "confirmed" ? "2026-01-01T00:01:00.000Z" : null,
+      chain: transfer.chain,
+      providerMode: transfer.providerMode,
+      feeUsd: transfer.feeUsd,
+      feeSource: transfer.feeSource,
+      settledInMs: transfer.settledInMs,
+      executedAt: "2026-01-01T00:01:00.000Z",
     };
     return { ...this.intent };
   }
@@ -115,6 +127,8 @@ function transferResult(status: TransferResult["status"], providerTxId = "circle
     chain: "ARC-TESTNET",
     status,
     feeUsd: 0.01,
+    feeSource: "chain_reported",
+    providerMode: "live",
     settledInMs: 5,
   };
 }
@@ -146,7 +160,15 @@ describe("payment idempotency", () => {
 
     expect((await executePayment(request, { provider, store })).status).toBe("pending");
     const settled = await executePayment(request, { provider, store });
-    expect(settled).toMatchObject({ status: "confirmed", reconciled: true, txHash: "0xhash" });
+    expect(settled).toMatchObject({
+      status: "confirmed",
+      reconciled: true,
+      txHash: "0xhash",
+      feeUsd: 0.01,
+      feeSource: "chain_reported",
+      providerMode: "live",
+      settledInMs: 5,
+    });
     expect(provider.transfers).toHaveLength(1);
     expect(provider.reconciliations).toEqual(["circle-tx-1"]);
   });

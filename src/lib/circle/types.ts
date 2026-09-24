@@ -16,7 +16,9 @@ export interface TransferResult {
   chain: string;
   status: "confirmed" | "pending" | "failed";
   feeUsd: number;
-  settledInMs: number;
+  feeSource: "chain_reported" | "provider_estimate" | "simulated_profile";
+  providerMode: "live" | "simulate";
+  settledInMs: number | null;
 }
 
 export interface EarnDepositParams {

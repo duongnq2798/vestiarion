@@ -58,6 +58,8 @@ export class SimulateProvider implements ChainProvider {
       chain: account.chain,
       status: "confirmed",
       feeUsd: ARC_FEE_USD,
+      feeSource: "simulated_profile",
+      providerMode: "simulate",
       settledInMs: 320 + Math.floor(Math.random() * 150),
     };
   }
@@ -70,6 +72,8 @@ export class SimulateProvider implements ChainProvider {
       chain: "ARC-TESTNET",
       status: "confirmed",
       feeUsd: ARC_FEE_USD,
+      feeSource: "simulated_profile",
+      providerMode: "simulate",
       settledInMs: 0,
     };
   }

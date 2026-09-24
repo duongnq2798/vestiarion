@@ -19,6 +19,12 @@ export interface PaymentIntent {
   attemptCount: number;
   lastError: string | null;
   confirmedAt: string | null;
+  chain: string | null;
+  providerMode: "live" | "simulate" | null;
+  feeUsd: number | null;
+  feeSource: TransferResult["feeSource"] | null;
+  settledInMs: number | null;
+  executedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -37,6 +43,12 @@ interface PaymentIntentRow {
   attempt_count: number;
   last_error: string | null;
   confirmed_at: string | null;
+  chain: string | null;
+  provider_mode: "live" | "simulate" | null;
+  fee_usd: string | number | null;
+  fee_source: TransferResult["feeSource"] | null;
+  settled_in_ms: string | number | null;
+  executed_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -67,6 +79,12 @@ export interface PaymentExecution {
   attemptCount: number;
   error: string | null;
   reconciled: boolean;
+  chain: string | null;
+  providerMode: "live" | "simulate" | null;
+  feeUsd: number | null;
+  feeSource: TransferResult["feeSource"] | null;
+  settledInMs: number | null;
+  executedAt: string | null;
 }
 
 function asUuid(bytes: Uint8Array): string {
@@ -98,6 +116,12 @@ function fromRow(row: PaymentIntentRow): PaymentIntent {
     attemptCount: row.attempt_count,
     lastError: row.last_error,
     confirmedAt: row.confirmed_at,
+    chain: row.chain,
+    providerMode: row.provider_mode,
+    feeUsd: row.fee_usd == null ? null : Number(row.fee_usd),
+    feeSource: row.fee_source,
+    settledInMs: row.settled_in_ms == null ? null : Number(row.settled_in_ms),
+    executedAt: row.executed_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -110,6 +134,7 @@ export class SupabasePaymentIntentStore implements PaymentIntentStore {
       source_id: input.sourceId,
       idempotency_key: input.idempotencyKey,
       provider: input.provider,
+      provider_mode: input.provider === "circle" ? "live" : "simulate",
       amount: input.amount,
       destination: input.destination,
     }, { onConflict: "idempotency_key", ignoreDuplicates: true });
@@ -140,6 +165,12 @@ export class SupabasePaymentIntentStore implements PaymentIntentStore {
       status: result.status,
       last_error: null,
       confirmed_at: result.status === "confirmed" ? now : null,
+      chain: result.chain,
+      provider_mode: result.providerMode,
+      fee_usd: result.feeUsd,
+      fee_source: result.feeSource,
+      settled_in_ms: result.settledInMs,
+      executed_at: now,
       updated_at: now,
     }).eq("idempotency_key", idempotencyKey);
     if (update.error) throw new Error(update.error.message);
@@ -168,6 +199,12 @@ function execution(intent: PaymentIntent, reconciled: boolean): PaymentExecution
     attemptCount: intent.attemptCount,
     error: intent.lastError,
     reconciled,
+    chain: intent.chain,
+    providerMode: intent.providerMode,
+    feeUsd: intent.feeUsd,
+    feeSource: intent.feeSource,
+    settledInMs: intent.settledInMs,
+    executedAt: intent.executedAt,
   };
 }
 

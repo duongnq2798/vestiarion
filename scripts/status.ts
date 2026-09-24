@@ -20,6 +20,13 @@ async function main() {
   const invoices = (await db.from("invoices").select("status, amount, direction")).data ?? [];
   const milestones = (await db.from("milestones").select("status, amount")).data ?? [];
   const ledger = await db.from("ledger_entries").select("*", { count: "exact", head: true });
+  const cycleRuns = await db.from("cycle_runs").select("*", { count: "exact", head: true });
+  const cycleSnapshots = await db.from("cycle_snapshots").select("*", { count: "exact", head: true });
+  const paymentIntents = await db.from("payment_intents").select("*", { count: "exact", head: true });
+  const measuredPayments = await db
+    .from("payment_intents")
+    .select("*", { count: "exact", head: true })
+    .not("executed_at", "is", null);
   const clock = (await db.from("sim_clock").select("current_day").eq("id", 1).single()).data;
 
   console.log(`day ${(clock as { current_day: number } | null)?.current_day ?? 0}   ledger height ${ledger.count ?? 0}\n`);
@@ -44,6 +51,11 @@ async function main() {
 
   console.log("\nINVOICES   ", JSON.stringify(byStatus(invoices as Array<{ status: string }>)));
   console.log("MILESTONES ", JSON.stringify(byStatus(milestones as Array<{ status: string }>)));
+  console.log(
+    "TELEMETRY  ",
+    `${cycleRuns.count ?? 0} cycle runs, ${cycleSnapshots.count ?? 0} snapshots, ` +
+      `${measuredPayments.count ?? 0}/${paymentIntents.count ?? 0} payment intents measured`
+  );
 }
 
 main().catch((e) => {

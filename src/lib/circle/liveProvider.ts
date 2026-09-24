@@ -19,6 +19,18 @@ interface AccountRow {
   circle_wallet_id: string | null;
 }
 
+function measuredSettlementMs(transaction: { createDate: string; firstConfirmDate?: string }): number | null {
+  if (!transaction.firstConfirmDate) return null;
+  const elapsed = Date.parse(transaction.firstConfirmDate) - Date.parse(transaction.createDate);
+  return Number.isFinite(elapsed) && elapsed >= 0 ? elapsed : null;
+}
+
+function reportedFeeUsd(value: string | undefined): number | null {
+  if (!value) return null;
+  const fee = Number(value);
+  return Number.isFinite(fee) && fee >= 0 ? fee : null;
+}
+
 /**
  * Real Arc-testnet implementation over Circle's Developer-Controlled Wallets
  * SDK. Activated automatically by `./index.ts` once CIRCLE_API_KEY and
@@ -105,15 +117,26 @@ export class LiveProvider implements ChainProvider {
     // the abort signal caps how long a cycle can block on one payment.
     let status: TransferResult["status"] = "pending";
     let txHash: string | undefined;
+    let feeUsd = ARC_FEE_USD;
+    let feeSource: TransferResult["feeSource"] = "provider_estimate";
+    let settledInMs: number | null = null;
     try {
       const settled = await this.client.getTransaction({
         id: txId,
         waitForState: "CONFIRMED",
         signal: AbortSignal.timeout(45_000),
       });
-      const state = settled.data?.transaction?.state;
-      txHash = settled.data?.transaction?.txHash;
+      const transaction = settled.data?.transaction;
+      const state = transaction?.state;
+      txHash = transaction?.txHash;
       status = state === "CONFIRMED" || state === "COMPLETE" ? "confirmed" : "pending";
+      const reportedFee = reportedFeeUsd(transaction?.networkFeeInUSD);
+      if (reportedFee != null) {
+        feeUsd = reportedFee;
+        feeSource = "chain_reported";
+      }
+      settledInMs = transaction ? measuredSettlementMs(transaction) : null;
+      if (status === "confirmed" && settledInMs == null) settledInMs = Date.now() - started;
     } catch (err) {
       // A timeout leaves the transfer in flight rather than failed, so those
       // two cases are reported differently — the ledger records which.
@@ -126,8 +149,10 @@ export class LiveProvider implements ChainProvider {
       txRef: txHash ?? txId,
       chain: account.chain,
       status,
-      feeUsd: ARC_FEE_USD,
-      settledInMs: Date.now() - started,
+      feeUsd,
+      feeSource,
+      providerMode: "live",
+      settledInMs,
     };
   }
 
@@ -140,14 +165,17 @@ export class LiveProvider implements ChainProvider {
     const confirmed = transaction.state === "CONFIRMED" || transaction.state === "COMPLETE";
     const failed = ["CANCELLED", "DENIED", "FAILED", "STUCK"].includes(transaction.state);
     const txHash = transaction.txHash ?? null;
+    const reportedFee = reportedFeeUsd(transaction.networkFeeInUSD);
     return {
       providerTxId,
       txHash,
       txRef: txHash ?? providerTxId,
       chain: transaction.blockchain,
       status: confirmed ? "confirmed" : failed ? "failed" : "pending",
-      feeUsd: transaction.networkFeeInUSD ? Number(transaction.networkFeeInUSD) : ARC_FEE_USD,
-      settledInMs: Date.now() - started,
+      feeUsd: reportedFee ?? ARC_FEE_USD,
+      feeSource: reportedFee == null ? "provider_estimate" : "chain_reported",
+      providerMode: "live",
+      settledInMs: measuredSettlementMs(transaction) ?? (confirmed ? Date.now() - started : null),
     };
   }
 

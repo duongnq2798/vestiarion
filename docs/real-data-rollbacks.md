@@ -43,3 +43,11 @@ Application rollback: revert the Phase 6 commit. This reintroduces the fixed led
 Database rollback: the target-query function and its two expression indexes are read-only accelerators. They can remain safely. If removal is required, revoke and drop `ledger_entries_for_targets(text[], text[])`, then drop the two target indexes; no business data changes.
 
 Fixture recovery: `npm run fixture:guardrail` is additive and writes an immutable ledger receipt. If the explicitly named fixture rows must be removed from a disposable demo database, export their ids first and retain the ledger entry as the record that the probe happened. Never run broad deletes against a real book.
+
+## Phase 7 — execution and cycle telemetry
+
+Application rollback: stop scheduled cycles first, then revert the Phase 7 commit. Existing telemetry rows remain valid evidence and should stay available to later application versions. Older application code ignores the additional payment-intent columns and the two new tables.
+
+Database rollback: export `payment_intents`, `cycle_runs`, and `cycle_snapshots` before removing anything. Reconcile all in-flight payment intents before changing that table. If removal is unavoidable, drop the append-only trigger and trigger function, then drop `cycle_snapshots` before `cycle_runs`; remove the new payment-intent columns only after the export. Never backfill fee or settlement fields from a typical-cost profile and present those estimates as measurements.
+
+Measurement boundary: Phase 7 deliberately does not backfill earlier cycles or transfers. At rollout, the configured database contained 0 instrumented cycles, 0 snapshots, and 0 payment-intent measurements. The payment-capable validation cycle was not run after the environment safety gate rejected it, so the baseline period and measured duration are both zero rather than invented.

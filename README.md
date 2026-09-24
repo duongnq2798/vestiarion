@@ -90,6 +90,8 @@ src/lib/agent/
                              numbers and the whole policy is testable
   orchestrator.ts            The agent cycle: compliance -> AP -> contractors
                              -> treasury -> forecast, all logged to the ledger
+  cycle-metrics.ts           Counts outcomes, decision sources, and code-level
+                             guardrail overrides at the point they occur
 tests/                    Vitest. Every money path that can be tested without
                            a network: the hash chain and its tamper cases,
                            risk tiering, the treasury economics, provider
@@ -231,6 +233,23 @@ in `verification_source` and configure a read-only `GITHUB_TOKEN`. A merged resp
 milestone; an unmerged response does not. Missing credentials and API failures are displayed as
 unavailable or failed while retaining the prior verdict. A control-session holder can instead add
 a manual verification note, which is written to the signed ledger with `actor: human`.
+
+### Measurement provenance
+
+Every newly executed payment intent records its target, transaction reference, chain, provider
+mode, execution timestamp, fee, fee source, and measured settlement time when Circle supplies
+confirmation timestamps. `chain_reported` means Circle returned the fee; `provider_estimate`
+means the configured Arc cost was used because it did not; `simulated_profile` is never presented
+as live performance. A pending reconciliation has no settlement duration until confirmation.
+
+Each completed post-Phase-7 cycle appends one `cycle_runs` row and one immutable
+`cycle_snapshots` row with wall-clock timing, account balances, liquid and reserve positions, open
+AP/AR, obligation horizons, outcome counts, model-versus-heuristic counts, guardrail overrides,
+and provider modes. Existing cycles and transfers were intentionally not backfilled. Immediately
+after instrumentation the configured project therefore reports **0 instrumented cycles, 0
+snapshots, and 0 measured payment intents**. A payment-capable validation run was rejected by the
+execution safety gate, so there is no measurement period or resulting benchmark to claim yet;
+the first permitted agent cycle will populate these tables.
 
 ## Tests
 

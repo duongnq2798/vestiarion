@@ -3,10 +3,11 @@ import { supabase, unwrap } from "../supabase";
 import { appendLedgerEntry } from "../ledger";
 import { getChainProvider } from "../circle";
 import { cycleClockMode, type CycleClockMode } from "../clock";
-import { runComplianceSweep } from "../compliance";
+import { runComplianceSweep, screeningMode as complianceScreeningMode } from "../compliance";
 import { refreshGitHubMilestones } from "../milestone-verification";
 import { seedScale } from "../seed";
-import { executePayment } from "../payments";
+import { executePayment, type PaymentExecution } from "../payments";
+import { CycleMetricsCollector } from "./cycle-metrics";
 import { decide } from "./decide";
 import { enforceApGuardrails } from "./guardrails";
 import { OPEN_PAYABLE_STATUSES, summarizePayableObligations } from "./obligations";
@@ -98,6 +99,7 @@ export async function runAgentCycle(): Promise<CycleResult> {
   const db = supabase();
   const provider = getChainProvider();
   const lines: CycleLogLine[] = [];
+  const metrics = new CycleMetricsCollector();
   const startedAt = new Date().toISOString();
   const clockMode = cycleClockMode();
 
@@ -313,8 +315,10 @@ export async function runAgentCycle(): Promise<CycleResult> {
       riskLevel: counterparty.risk_level,
       paymentLimit: limit,
     });
+    metrics.recordDecisionMode(mode);
     let status = guardrail.status ?? statusForAction[decision.action];
     let txRef: string | null = null;
+    let paymentExecution: PaymentExecution | null = null;
     let reasoning = guardrail.reasoning;
     const guardrailBlocked = guardrail.blocked;
 
@@ -337,6 +341,7 @@ export async function runAgentCycle(): Promise<CycleResult> {
             amount,
             memo: `Invoice ${invoice.id}`,
           }, { provider });
+          paymentExecution = result;
           txRef = result.txRef;
           status = result.status === "confirmed" ? "paid" : result.status === "pending" ? "matched" : "held";
           if (result.status === "failed") reasoning += ` [transfer failed: ${result.error ?? "provider reported failure"}]`;
@@ -361,6 +366,7 @@ export async function runAgentCycle(): Promise<CycleResult> {
       })
       .eq("id", invoice.id);
     if (update.error) throw new Error(update.error.message);
+    metrics.recordInvoice(status, guardrailBlocked);
 
     await appendLedgerEntry({
       actor: "agent",
@@ -381,7 +387,17 @@ export async function runAgentCycle(): Promise<CycleResult> {
           goodsReceived: invoice.goods_received,
           operatingBalance,
         },
-        execution: { txRef, chainMode: provider.mode, resultingStatus: status, settlementRequired: true },
+        execution: {
+          txRef,
+          chainMode: paymentExecution?.providerMode ?? provider.mode,
+          resultingStatus: status,
+          settlementRequired: true,
+          feeUsd: paymentExecution?.feeUsd ?? null,
+          feeSource: paymentExecution?.feeSource ?? null,
+          settledInMs: paymentExecution?.settledInMs ?? null,
+          executedAt: paymentExecution?.executedAt ?? null,
+          reconciled: paymentExecution?.reconciled ?? false,
+        },
       },
     });
 
@@ -456,9 +472,11 @@ export async function runAgentCycle(): Promise<CycleResult> {
         };
       },
     });
+    metrics.recordDecisionMode(mode);
 
     let status = "held";
     let txRef: string | null = null;
+    let paymentExecution: PaymentExecution | null = null;
     let reasoning = decision.reasoning;
     let guardrailBlocked = false;
 
@@ -478,6 +496,7 @@ export async function runAgentCycle(): Promise<CycleResult> {
             amount,
             memo: `Milestone ${milestone.id}`,
           }, { provider });
+          paymentExecution = result;
           txRef = result.txRef;
           status = result.status === "confirmed" ? "paid" : result.status === "pending" ? "verified" : "held";
           if (result.status === "failed") reasoning += ` [transfer failed: ${result.error ?? "provider reported failure"}]`;
@@ -501,6 +520,7 @@ export async function runAgentCycle(): Promise<CycleResult> {
       })
       .eq("id", milestone.id);
     if (update.error) throw new Error(update.error.message);
+    metrics.recordMilestone(status, guardrailBlocked);
 
     await appendLedgerEntry({
       actor: "agent",
@@ -518,7 +538,17 @@ export async function runAgentCycle(): Promise<CycleResult> {
           riskLevel: contractor.risk_level,
           verificationSource: milestone.verification_source,
         },
-        execution: { txRef, chainMode: provider.mode, resultingStatus: status, settlementRequired: true },
+        execution: {
+          txRef,
+          chainMode: paymentExecution?.providerMode ?? provider.mode,
+          resultingStatus: status,
+          settlementRequired: true,
+          feeUsd: paymentExecution?.feeUsd ?? null,
+          feeSource: paymentExecution?.feeSource ?? null,
+          settledInMs: paymentExecution?.settledInMs ?? null,
+          executedAt: paymentExecution?.executedAt ?? null,
+          reconciled: paymentExecution?.reconciled ?? false,
+        },
       },
     });
 
@@ -620,6 +650,7 @@ export async function runAgentCycle(): Promise<CycleResult> {
       schema: treasuryDecisionSchema,
       fallback: (): TreasuryDecision => plan.decision,
     });
+    metrics.recordDecisionMode(mode);
 
     let executed = false;
     let executionNote: string | null = null;
@@ -703,7 +734,11 @@ export async function runAgentCycle(): Promise<CycleResult> {
     await db.from("invoices").select("amount").eq("direction", "receivable").in("status", ["pending", "matched"])
   ) as Array<{ amount: string }>;
 
-  const finalAccounts = unwrap(await db.from("accounts").select("balance")) as Array<{
+  const finalAccounts = unwrap(await db.from("accounts").select("id, name, kind, token, balance")) as Array<{
+    id: string;
+    name: string;
+    kind: string;
+    token: string;
     balance: string;
   }>;
   const liquid = finalAccounts.reduce((s, r) => s + num(r.balance), 0);
@@ -723,14 +758,73 @@ export async function runAgentCycle(): Promise<CycleResult> {
   if (forecast.error) throw new Error(forecast.error.message);
 
   const finishedAt = new Date().toISOString();
+  const cycleMetrics = metrics.snapshot();
+  const cycleRun = unwrap(
+    await db.from("cycle_runs").insert({
+      started_at: startedAt,
+      finished_at: finishedAt,
+      duration_ms: Math.max(0, Date.parse(finishedAt) - Date.parse(startedAt)),
+      clock_mode: clockMode,
+      sim_day: clockMode === "simulate" ? day : null,
+      decision_count: cycleMetrics.decisionCount,
+      paid_count: cycleMetrics.paidCount,
+      held_count: cycleMetrics.heldCount,
+      flagged_count: cycleMetrics.flaggedCount,
+      awaiting_info_count: cycleMetrics.awaitingInfoCount,
+      released_count: cycleMetrics.releasedCount,
+      model_decision_count: cycleMetrics.modelDecisionCount,
+      heuristic_decision_count: cycleMetrics.heuristicDecisionCount,
+      guardrail_override_count: cycleMetrics.guardrailOverrideCount,
+      chain_mode: provider.mode,
+      screening_mode: complianceScreeningMode(),
+    }).select("id").single<{ id: string }>()
+  );
+  const accountBalances = Object.fromEntries(finalAccounts.map((account) => [account.id, {
+    name: account.name,
+    kind: account.kind,
+    token: account.token,
+    balance: num(account.balance),
+  }]));
+  const totalLiquid = finalAccounts
+    .filter((account) => account.kind !== "reserve")
+    .reduce((sum, account) => sum + num(account.balance), 0);
+  const reservePosition = finalAccounts
+    .filter((account) => account.kind === "reserve")
+    .reduce((sum, account) => sum + num(account.balance), 0);
+  const snapshot = unwrap(
+    await db.from("cycle_snapshots").insert({
+      cycle_run_id: cycleRun.id,
+      captured_at: finishedAt,
+      sim_day: clockMode === "simulate" ? day : null,
+      account_balances: accountBalances,
+      total_liquid: totalLiquid,
+      open_payables: payableSummary.openTotal,
+      open_receivables: projectedInflow,
+      obligations_due_7d: obligationsDue7d,
+      obligations_due_14d: obligationsDue14d,
+      reserve_position: reservePosition,
+      chain_mode: provider.mode,
+    }).select("id").single<{ id: string }>()
+  );
   await appendLedgerEntry({
     actor: "system",
     domain: "system",
     action: "cycle_complete",
     summary: clockMode === "simulate"
-      ? `Agent cycle ${day} complete: ${lines.length} decisions logged`
-      : `Agent cycle complete at ${finishedAt}: ${lines.length} decisions logged`,
-    detail: { day, clockMode, startedAt, finishedAt, decisionCount: lines.length, chainMode: provider.mode },
+      ? `Agent cycle ${day} complete: ${cycleMetrics.decisionCount} agent decisions recorded`
+      : `Agent cycle complete at ${finishedAt}: ${cycleMetrics.decisionCount} agent decisions recorded`,
+    detail: {
+      day,
+      clockMode,
+      startedAt,
+      finishedAt,
+      decisionCount: cycleMetrics.decisionCount,
+      chainMode: provider.mode,
+      screeningMode: complianceScreeningMode(),
+      cycleRunId: cycleRun.id,
+      snapshotId: snapshot.id,
+      outcomes: cycleMetrics,
+    },
   });
 
   return { day, lines, mode: provider.mode, clockMode, startedAt, finishedAt };
