@@ -30,6 +30,12 @@ export interface CycleRunTelemetry {
   modelDecisionCount: number;
   heuristicDecisionCount: number;
   guardrailOverrideCount: number;
+  /**
+   * Model verdicts that chose a different action from the rule-based policy.
+   * Null for cycles run before the comparison existed — never zero, which
+   * would claim perfect agreement over decisions never compared.
+   */
+  referenceDisagreementCount: number | null;
   chainMode: "live" | "simulate";
   screeningMode: "live" | "simulate";
 }
@@ -147,6 +153,8 @@ async function listCycleRuns(): Promise<CycleRunTelemetry[]> {
     modelDecisionCount: num(row.model_decision_count),
     heuristicDecisionCount: num(row.heuristic_decision_count),
     guardrailOverrideCount: num(row.guardrail_override_count),
+    referenceDisagreementCount:
+      row.reference_disagreement_count == null ? null : num(row.reference_disagreement_count),
     chainMode: row.chain_mode as CycleRunTelemetry["chainMode"],
     screeningMode: row.screening_mode as CycleRunTelemetry["screeningMode"],
   }));

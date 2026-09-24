@@ -102,6 +102,20 @@ function usdLabel(value: number): string {
   return `$${value.toFixed(decimals)}`;
 }
 
+/**
+ * How a cycle's agreement with the written policy should read in the table.
+ *
+ * A cycle that predates the comparison and a cycle where the model agreed on
+ * everything are both "0 disagreements" if you let null collapse to zero, and
+ * they mean opposite things: one was never measured, the other was measured and
+ * passed. The distinction is the whole reason the column is nullable.
+ */
+function policyDeparture(run: CycleRunTelemetry): string {
+  if (run.referenceDisagreementCount == null) return "not compared";
+  if (run.modelDecisionCount === 0) return "model not consulted";
+  return `${run.referenceDisagreementCount} of ${run.modelDecisionCount}`;
+}
+
 function MetricPlot({ values, label, unit, color, valueLabel }: {
   values: number[];
   label: string;
@@ -336,8 +350,8 @@ function DecisionModeChart({ runs }: { runs: CycleRunTelemetry[] }) {
   const totals = runs.map((run) => run.modelDecisionCount + run.heuristicDecisionCount);
   const width = scaleLinear().domain([0, Math.max(...totals, 1)]).range([0, 100]);
   return (
-    <ChartCard title="Model vs heuristic" description="The model share and rule-based fallback are persisted by the orchestrator, including cycles where one side is zero." provenance={<Provenance modes={runs.map((run) => run.chainMode)} detail="Cycles" />}>
-      <div className="flex gap-4 text-xs text-ink-2"><span><span className="mr-1.5 inline-block size-2 bg-agent" />Model</span><span><span className="mr-1.5 inline-block size-2 bg-line-strong" />Heuristic</span></div>
+    <ChartCard title="Model vs heuristic" description="The model share and rule-based fallback are persisted by the orchestrator, including cycles where one side is zero. Where the model was consulted, its verdict is scored against the same written policy the fallback applies." provenance={<Provenance modes={runs.map((run) => run.chainMode)} detail="Cycles" />}>
+      <div className="flex gap-4 text-xs text-ink-2"><span><span className="mr-1.5 inline-block size-2 bg-agent" />Model</span><span><span className="mr-1.5 inline-block size-2 bg-line-strong" />Heuristic</span><span className="text-refusal">&#9670; Departed from policy</span></div>
       <ol className="mt-4 space-y-3">
         {runs.map((run, index) => {
           const total = totals[index];
@@ -349,11 +363,16 @@ function DecisionModeChart({ runs }: { runs: CycleRunTelemetry[] }) {
                 {run.heuristicDecisionCount > 0 && <span title={`Heuristic: ${run.heuristicDecisionCount}`} className="bg-line-strong" style={{ width: `${width(run.heuristicDecisionCount)}%` }} />}
               </>}
             </div>
-            <span className="text-right tabular-nums text-ink-2">{run.modelDecisionCount}/{total}</span>
+            <span className="text-right tabular-nums text-ink-2">
+              {run.modelDecisionCount}/{total}
+              {run.referenceDisagreementCount != null && run.referenceDisagreementCount > 0 && (
+                <span className="ml-1 text-refusal" title={`${run.referenceDisagreementCount} model verdict(s) departed from the written policy`}>&#9670;{run.referenceDisagreementCount}</span>
+              )}
+            </span>
           </li>;
         })}
       </ol>
-      <DetailsTable summary="Decision mode table" headers={["Finished", "Model", "Heuristic", "Total", "Duration"]} rows={runs.map((run) => [when(run.finishedAt), run.modelDecisionCount, run.heuristicDecisionCount, run.decisionCount, `${run.durationMs} ms`])} />
+      <DetailsTable summary="Decision mode table" headers={["Finished", "Model", "Heuristic", "Departed from policy", "Total", "Duration"]} rows={runs.map((run) => [when(run.finishedAt), run.modelDecisionCount, run.heuristicDecisionCount, policyDeparture(run), run.decisionCount, `${run.durationMs} ms`])} />
     </ChartCard>
   );
 }
