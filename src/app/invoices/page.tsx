@@ -6,20 +6,21 @@ import { invoiceDecision } from "@/components/vx/map";
 import { SectionHead } from "@/components/vx/Primitives";
 import { EmptyState, PageHead, ProductShell } from "@/components/vx/Shell";
 import { hasAgentControlSession } from "@/lib/agent-session";
-import { listLedgerEntries } from "@/lib/ledger";
+import { listLedgerEntries, listLedgerEntriesForTargets } from "@/lib/ledger";
 import { listCounterparties, listInvoices, stats } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
 export default async function InvoicesPage({ searchParams }: PageProps<"/invoices">) {
   const query = await searchParams;
-  const [invoices, counterparties, entries, dashboardStats, canMutate] = await Promise.all([
+  const [invoices, counterparties, headEntries, dashboardStats, canMutate] = await Promise.all([
     listInvoices(),
     listCounterparties(),
-    listLedgerEntries(300),
+    listLedgerEntries(1),
     stats(),
     hasAgentControlSession(),
   ]);
+  const entries = await listLedgerEntriesForTargets({ invoiceIds: invoices.map((invoice) => invoice.id) });
   const filter = typeof query.status === "string" ? query.status : undefined;
   const shown = filter ? invoices.filter((invoice) => invoice.status === filter) : invoices;
   const counterpartiesById = new Map(counterparties.map((counterparty) => [counterparty.id, counterparty]));
@@ -34,7 +35,7 @@ export default async function InvoicesPage({ searchParams }: PageProps<"/invoice
       <PageHead
         title="AP / AR"
         sub="Three-way match, counterparty risk, and payment authority — with the agent’s complete reasoning on every line."
-        right={<AgentControls nextDay={dashboardStats.day + 1} headSeq={entries[0]?.seq ?? 0} clockMode={dashboardStats.clockMode} />}
+        right={<AgentControls nextDay={dashboardStats.day + 1} headSeq={headEntries[0]?.seq ?? 0} clockMode={dashboardStats.clockMode} />}
       />
 
       {filter && (

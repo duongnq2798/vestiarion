@@ -19,7 +19,8 @@
     "agent:doctor": "tsx scripts/agent-doctor.ts",
     "arc:proof": "tsx scripts/arc-live-proof.ts",
     "status": "tsx scripts/status.ts",
-    "cycle": "tsx scripts/run-cycle.ts"
+    "cycle": "tsx scripts/run-cycle.ts",
+    "fixture:guardrail": "tsx scripts/guardrail-fixture.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",

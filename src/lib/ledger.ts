@@ -191,6 +191,72 @@ export async function listLedgerEntries(limit = 200): Promise<LedgerEntry[]> {
   return rows.map(rowToEntry);
 }
 
+export async function listLedgerEntriesForTargets({
+  invoiceIds = [],
+  milestoneIds = [],
+}: {
+  invoiceIds?: string[];
+  milestoneIds?: string[];
+}): Promise<LedgerEntry[]> {
+  if (invoiceIds.length === 0 && milestoneIds.length === 0) return [];
+  const rows = unwrap(
+    await supabase().rpc("ledger_entries_for_targets", {
+      p_invoice_ids: invoiceIds,
+      p_milestone_ids: milestoneIds,
+    })
+  ) as LedgerRow[];
+  return rows.map(rowToEntry);
+}
+
+export async function listLedgerEntriesByDomain(domain: LedgerDomain, limit = 100): Promise<LedgerEntry[]> {
+  const rows = unwrap(
+    await supabase()
+      .from("ledger_entries")
+      .select("*")
+      .eq("domain", domain)
+      .order("seq", { ascending: false })
+      .limit(limit)
+  ) as LedgerRow[];
+  return rows.map(rowToEntry);
+}
+
+export async function listLedgerEntriesAfter(sequence: number): Promise<LedgerEntry[]> {
+  const rows = unwrap(
+    await supabase()
+      .from("ledger_entries")
+      .select("*")
+      .gt("seq", sequence)
+      .order("seq", { ascending: false })
+  ) as LedgerRow[];
+  return rows.map(rowToEntry);
+}
+
+export async function listLedgerEntryPage({
+  before,
+  domain,
+  limit = 100,
+}: {
+  before?: number;
+  domain?: LedgerDomain;
+  limit?: number;
+} = {}): Promise<LedgerEntry[]> {
+  let query = supabase()
+    .from("ledger_entries")
+    .select("*")
+    .order("seq", { ascending: false })
+    .limit(Math.min(Math.max(limit, 1), 200));
+  if (before != null) query = query.lt("seq", before);
+  if (domain) query = query.eq("domain", domain);
+  const rows = unwrap(await query) as LedgerRow[];
+  return rows.map(rowToEntry);
+}
+
+export async function ledgerEntryCount(): Promise<number> {
+  const result = await supabase().from("ledger_entries").select("*", { count: "exact", head: true });
+  if (result.error) throw new Error(result.error.message);
+  return result.count ?? 0;
+}
+
 export interface VerificationResult {
   valid: boolean;
   checkedEntries: number;

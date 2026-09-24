@@ -140,6 +140,7 @@ Two independent upgrades from there, in either order:
 | `npm run seed` | **Destructive demo only:** replaces business data with fictional fixtures |
 | `npm run bootstrap:circle` | Creates Arc-testnet wallets for accounts and counterparties |
 | `npm run cycle` | Runs one agent cycle headlessly using the configured clock mode |
+| `npm run fixture:guardrail` | **Demo only:** adds one no-transfer model-vs-code refusal probe |
 | `npm run status` | Balances, wallets, open invoices, ledger height |
 | `npm run circle:doctor` / `agent:doctor` | Reports exactly which parts are live |
 | `npm run arc:proof` | Standalone: two wallets, a faucet check, one real transfer |
@@ -178,6 +179,12 @@ The simulator and the real integration share one interface (`ChainProvider` in
 
 `npm run arc:proof` does steps 3–5 standalone — two wallets, a faucet check, and one real transfer
 — if you want to verify the path without touching the app.
+
+To exercise the red guardrail band without risking a payment, `npm run fixture:guardrail` creates
+one explicitly labelled demo invoice for 0.9 USDC against a medium-risk 0.5 USDC screened limit.
+It feeds a model-style `pay` verdict through the same `enforceApGuardrails` function used by the
+live orchestrator. Code changes the result to held, records `guardrailBlocked: true`, and never
+calls a transfer provider. The command is additive and idempotent; it is not part of normal setup.
 
 ### What is genuinely live, and what is not
 
@@ -242,6 +249,10 @@ The suite covers the paths where being wrong costs money, and nothing else:
 - **Risk tiering** — the property continuous re-screening depends on: screening the same
   counterparty twenty times leaves its limit exactly where one screening left it, and coming off
   the watchlist restores the full limit rather than leaving a false positive permanent.
+- **Obligation accounting** — held and awaiting-information payables remain inside the 7- and
+  14-day liquidity buffers until they are paid or explicitly rejected.
+- **Execution guardrails** — a model `pay` verdict above a screened-down limit is converted to a
+  refusal before the provider boundary, which is the exact case rendered by the demo probe.
 - **Treasury economics** — that the policy is scale-free. The same book scaled down 1000x flips
   sweep to hold, and a more expensive chain flips it back, without a tuned constant anywhere.
 - **Provider selection** — that a pinned provider with a missing key raises instead of quietly

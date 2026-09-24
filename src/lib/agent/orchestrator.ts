@@ -8,6 +8,8 @@ import { refreshGitHubMilestones } from "../milestone-verification";
 import { seedScale } from "../seed";
 import { executePayment } from "../payments";
 import { decide } from "./decide";
+import { enforceApGuardrails } from "./guardrails";
+import { OPEN_PAYABLE_STATUSES, summarizePayableObligations } from "./obligations";
 import { planTreasury, type TreasuryDecision } from "./treasury";
 
 const SYSTEM_PROMPT = `You are Vestiarion, an autonomous treasury agent operating a small business's money on the Arc blockchain, settled in USDC. You hold real spending authority inside the guardrails below.
@@ -304,21 +306,24 @@ export async function runAgentCycle(): Promise<CycleResult> {
       request_info: "awaiting_info",
     };
 
-    let status = statusForAction[decision.action];
+    const guardrail = enforceApGuardrails({
+      action: decision.action,
+      reasoning: decision.reasoning,
+      amount,
+      riskLevel: counterparty.risk_level,
+      paymentLimit: limit,
+    });
+    let status = guardrail.status ?? statusForAction[decision.action];
     let txRef: string | null = null;
-    let reasoning = decision.reasoning;
-    let guardrailBlocked = false;
+    let reasoning = guardrail.reasoning;
+    const guardrailBlocked = guardrail.blocked;
 
     if (decision.action === "pay") {
       // The guardrails are enforced here, after the model has spoken. A
       // hallucinated or jailbroken "pay" on a flagged counterparty dies in
       // code, not in the prompt.
-      if (highRisk || overLimit) {
-        guardrailBlocked = true;
-        status = highRisk ? "flagged" : "held";
-        reasoning += highRisk
-          ? " [guardrail override: counterparty is high risk — payment refused before execution]"
-          : ` [guardrail override: amount exceeds the ${limit} USDC payment limit — payment refused before execution]`;
+      if (guardrail.blocked) {
+        // Refused by enforceApGuardrails before the provider can be called.
       } else if (!operating) {
         status = "held";
         reasoning += " [no operating account configured]";
@@ -367,6 +372,7 @@ export async function runAgentCycle(): Promise<CycleResult> {
         decision,
         decisionMode: mode,
         guardrailBlocked,
+        guardrailRule: guardrail.rule,
         observed: {
           amount,
           paymentLimit: limit,
@@ -535,10 +541,10 @@ export async function runAgentCycle(): Promise<CycleResult> {
   const openInvoices = unwrap(
     await db
       .from("invoices")
-      .select("amount, due_date")
+      .select("amount, due_date, status")
       .eq("direction", "payable")
-      .in("status", ["pending", "matched"])
-  ) as Array<{ amount: string; due_date: string }>;
+      .in("status", [...OPEN_PAYABLE_STATUSES])
+  ) as Array<{ amount: string; due_date: string; status: string }>;
   const openMilestones = unwrap(
     await db.from("milestones").select("amount").in("status", ["pending", "verified"])
   ) as Array<{ amount: string }>;
@@ -547,32 +553,23 @@ export async function runAgentCycle(): Promise<CycleResult> {
   // day — that is the whole RFB3 argument — so every open milestone counts
   // against the near-term buffer regardless of horizon.
   const milestoneTotal = openMilestones.reduce((s, r) => s + num(r.amount), 0);
-  const payablesDueWithin = (days: number) => {
-    const cutoff = Date.now() + days * 86_400_000;
-    return openInvoices
-      .filter((r) => Date.parse(r.due_date) <= cutoff)
-      .reduce((s, r) => s + num(r.amount), 0);
-  };
+  const payableSummary = summarizePayableObligations(openInvoices);
 
   // The buffer the agent must not sweep below is what is actually due soon,
   // not every invoice on the books. Summing the whole payables ledger and
   // labelling it "next 7 days" — which this did until it was measured —
   // makes the agent hoard cash it could have earned yield on, and hands the
   // model a premise it has no way to check.
-  const obligationsDue7d = payablesDueWithin(7) + milestoneTotal;
-  const obligationsDue14d = payablesDueWithin(14) + milestoneTotal;
-  const obligationsOpenTotal =
-    openInvoices.reduce((s, r) => s + num(r.amount), 0) + milestoneTotal;
+  const obligationsDue7d = payableSummary.due7d + milestoneTotal;
+  const obligationsDue14d = payableSummary.due14d + milestoneTotal;
+  const obligationsOpenTotal = payableSummary.openTotal + milestoneTotal;
 
   // How long swept cash could actually stay swept. An open milestone is
   // payable today, so its presence collapses the horizon to zero days.
   const daysUntilNextObligation =
     milestoneTotal > 0
       ? 0
-      : openInvoices.reduce((soonest, r) => {
-          const days = (Date.parse(r.due_date) - Date.now()) / 86_400_000;
-          return Math.min(soonest, Math.max(0, days));
-        }, Number.POSITIVE_INFINITY);
+      : payableSummary.daysUntilNext;
 
   if (operatingNow && reserveNow) {
     const operatingBalance = num(operatingNow.balance);

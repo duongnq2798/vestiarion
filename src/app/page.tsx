@@ -7,21 +7,21 @@ import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { AccountsList, BalanceTile, ForecastPanel, MoreLink, StatTile } from "@/components/vx/Treasury";
 import type { Account, Forecast } from "@/components/vx/types";
 import { getChainProvider } from "@/lib/circle";
-import { listLedgerEntries } from "@/lib/ledger";
+import { listLedgerEntries, listLedgerEntriesAfter, listLedgerEntriesByDomain, listLedgerEntriesForTargets } from "@/lib/ledger";
 import { latestForecast, listAccounts, listCounterparties, listInvoices, listTreasuryActions, stats } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage({ searchParams }: PageProps<"/">) {
   const query = await searchParams;
-  const [accountsRows, actionRows, forecastRow, dashboardStats, invoices, counterparties, entries] = await Promise.all([
+  const [accountsRows, actionRows, forecastRow, dashboardStats, invoices, counterparties, headEntries] = await Promise.all([
     listAccounts(),
     listTreasuryActions(),
     latestForecast(),
     stats(),
     listInvoices(),
     listCounterparties(),
-    listLedgerEntries(300),
+    listLedgerEntries(1),
   ]);
   const provider = getChainProvider();
   const counterpartiesById = new Map(counterparties.map((counterparty) => [counterparty.id, counterparty]));
@@ -38,18 +38,20 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
         recommendation: forecastRow.recommendation ?? "",
       }
     : undefined;
-  const invoiceDecisions = invoices.map((invoice) =>
-    invoiceDecision(invoice, counterpartiesById.get(invoice.counterparty_id), entries)
-  );
-  const stopped = invoiceDecisions.filter((decision) => decision.outcome === "refused" || decision.outcome === "held");
-  const treasuryDecisions = entries
-    .filter((entry) => entry.domain === "treasury")
-    .slice(0, 2)
-    .map(treasuryLedgerDecision);
-  const executedReserveMoves = actionRows.slice(0, 2).map(treasuryActionDecision);
-  const headSeq = entries[0]?.seq ?? 0;
   const sinceValue = typeof query.since === "string" ? Number(query.since) : undefined;
   const since = Number.isFinite(sinceValue) ? sinceValue : undefined;
+  const [invoiceEntries, treasuryEntries, cycleEntries] = await Promise.all([
+    listLedgerEntriesForTargets({ invoiceIds: invoices.map((invoice) => invoice.id) }),
+    listLedgerEntriesByDomain("treasury", 2),
+    since == null ? Promise.resolve([]) : listLedgerEntriesAfter(since),
+  ]);
+  const invoiceDecisions = invoices.map((invoice) =>
+    invoiceDecision(invoice, counterpartiesById.get(invoice.counterparty_id), invoiceEntries)
+  );
+  const stopped = invoiceDecisions.filter((decision) => decision.outcome === "refused" || decision.outcome === "held");
+  const treasuryDecisions = treasuryEntries.map(treasuryLedgerDecision);
+  const executedReserveMoves = actionRows.slice(0, 2).map(treasuryActionDecision);
+  const headSeq = headEntries[0]?.seq ?? 0;
   const needsReview = stopped.length;
 
   return (
@@ -60,7 +62,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
         right={<AgentControls nextDay={dashboardStats.day + 1} headSeq={headSeq} clockMode={dashboardStats.clockMode} />}
       />
 
-      {since != null && <CycleReport entries={entries} day={dashboardStats.day} since={since} clockMode={dashboardStats.clockMode} completedAt={dashboardStats.lastCycleAt} />}
+      {since != null && <CycleReport entries={cycleEntries} day={dashboardStats.day} since={since} clockMode={dashboardStats.clockMode} completedAt={dashboardStats.lastCycleAt} />}
 
       <div className="mb-8 grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-4">
         <BalanceTile accounts={accounts} />

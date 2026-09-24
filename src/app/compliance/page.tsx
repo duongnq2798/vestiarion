@@ -3,7 +3,7 @@ import { Card, Label, Money, SectionHead } from "@/components/vx/Primitives";
 import { RiskDial } from "@/components/vx/RiskDial";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
 import type { RiskTier } from "@/components/vx/types";
-import { listLedgerEntries } from "@/lib/ledger";
+import { listLedgerEntries, listLedgerEntriesByDomain } from "@/lib/ledger";
 import { listCounterparties, stats } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
@@ -13,9 +13,10 @@ function riskTier(value: string): RiskTier {
 }
 
 export default async function CompliancePage() {
-  const [counterparties, entries, dashboardStats] = await Promise.all([
+  const [counterparties, entries, headEntries, dashboardStats] = await Promise.all([
     listCounterparties(),
-    listLedgerEntries(300),
+    listLedgerEntriesByDomain("compliance", 100),
+    listLedgerEntries(1),
     stats(),
   ]);
   const lastSweep = entries.find((entry) => entry.action === "compliance_sweep");
@@ -27,7 +28,7 @@ export default async function CompliancePage() {
       <PageHead
         title="Compliance"
         sub="Continuous screening changes payment authority by tier. A hit reduces a limit; it does not silently turn the counterparty into a yes/no ban."
-        right={<AgentControls nextDay={dashboardStats.day + 1} headSeq={entries[0]?.seq ?? 0} clockMode={dashboardStats.clockMode} />}
+        right={<AgentControls nextDay={dashboardStats.day + 1} headSeq={headEntries[0]?.seq ?? 0} clockMode={dashboardStats.clockMode} />}
       />
 
       {lastSweep && (

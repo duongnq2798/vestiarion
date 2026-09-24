@@ -35,3 +35,11 @@ Application rollback: disable `.github/workflows/agent-cycle.yml` first so an ol
 Operational rollback: unset `GITHUB_TOKEN` to stop remote verification; the app will label checks unavailable and retain previous verdicts. Set `CYCLE_CLOCK_MODE=simulate` only for a disposable demo. Returning a production deployment to the numbered clock does not change real invoice due dates, which always use wall-clock timestamps.
 
 Database rollback: export milestone verification details before dropping any Phase 5 columns. Never rewrite or remove the human/system ledger entries that recorded the original verification decisions.
+
+## Phase 6 — obligation and audit correctness
+
+Application rollback: revert the Phase 6 commit. This reintroduces the fixed ledger window and the understated obligation buffer, so it should be a short-lived emergency measure only.
+
+Database rollback: the target-query function and its two expression indexes are read-only accelerators. They can remain safely. If removal is required, revoke and drop `ledger_entries_for_targets(text[], text[])`, then drop the two target indexes; no business data changes.
+
+Fixture recovery: `npm run fixture:guardrail` is additive and writes an immutable ledger receipt. If the explicitly named fixture rows must be removed from a disposable demo database, export their ids first and retain the ledger entry as the record that the probe happened. Never run broad deletes against a real book.
