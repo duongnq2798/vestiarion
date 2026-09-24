@@ -13,8 +13,9 @@ Built for the [Tameion Agents Hackathon](https://tameion.thecanteenapp.com) (Can
 
 ## What it does
 
-Vestiarion runs a small dev shop's treasury ("Northstar Studio" in the bundled demo data) through
-one decision loop, the **agent cycle**:
+Vestiarion runs a configured business's treasury through one decision loop, the **agent cycle**.
+`BUSINESS_NAME` controls the identity shown in the product; no customer name is hard-coded into
+the interface:
 
 1. **Compliance (RFB5)** — the whole counterparty book is re-screened every cycle, not checked
    once at onboarding. A hit tiers the payment limit down instead of a blunt yes/no, and the tier
@@ -109,13 +110,17 @@ Create a [Supabase](https://supabase.com) project and put its URL and keys in `.
 
 ```bash
 npm run db:migrate
-npm run seed
 npm run dev
 ```
 
-Open the app and click **Run Agent Cycle**. Each click advances one day and runs the full decision
-loop; **Reset Demo Data** starts over. Out of the box, payments are simulated against Arc's real
-fee and latency profile ($0.01, <500ms) and decisions come from the rule-based heuristic.
+Open the app, unlock controls with `AGENT_API_TOKEN`, and add counterparties and invoices through
+the product. Each **Run day** click advances the demo clock and runs the full decision loop. Out of
+the box, payments are simulated against Arc's real fee and latency profile ($0.01, <500ms) and
+decisions come from the rule-based heuristic.
+
+`npm run seed` is a destructive, opt-in demo command. It deletes the current business records and
+loads the fictional Northstar Studio fixture. It is not part of normal setup, and there is no seed
+or reset control in the product UI. Use it only in a disposable demo database.
 
 Two independent upgrades from there, in either order:
 
@@ -131,7 +136,7 @@ Two independent upgrades from there, in either order:
 | `npm run verify` | Typecheck, lint, and the full test suite — what CI runs |
 | `npm run test` / `test:watch` | Vitest, once or on change |
 | `npm run db:migrate` | Applies `supabase/migrations/*.sql` |
-| `npm run seed` | Loads the demo business (keeps existing wallet provisioning) |
+| `npm run seed` | **Destructive demo only:** replaces business data with fictional fixtures |
 | `npm run bootstrap:circle` | Creates Arc-testnet wallets for accounts and counterparties |
 | `npm run cycle` | Runs one agent cycle headlessly — point cron at this |
 | `npm run status` | Balances, wallets, open invoices, ledger height |
@@ -183,18 +188,21 @@ which produced each entry:
 - **Simulated** — the USYC leg. EarnKit needs a `KIT_KEY` and a chosen vault id, and Arc testnet
   has no live vault to choose; Circle's own `arc-fintech` sample mocks reward accrual for the same
   reason. The integration point is marked in `src/lib/circle/liveProvider.ts`.
-- **Simulated** — sanctions screening runs against a small bundled watchlist standing in for a
-  self-hosted opensanctions/yente instance. `screenName` in `src/lib/compliance.ts` is the single
-  function to replace; the risk tiering downstream is unchanged.
+- **Live when configured** — sanctions screening calls an OpenSanctions/yente match endpoint when
+  `OPENSANCTIONS_API_URL` is set. Without it, the product explicitly labels the small bundled
+  watchlist as simulated. Provider errors create an incomplete check and retain the previous
+  verdict; they never silently clear a counterparty.
 
 ## Bringing your own business
 
 Everything the agent reasons about lives in five tables (`accounts`, `counterparties`,
 `invoices`, `milestones`, plus the ledger). To point Vestiarion at a real business:
 
-- Insert your real vendors/contractors/clients into `counterparties`.
-- Insert real invoices as they arrive (or wire up an email/PDF ingestion step ahead of the
-  `invoices` table — the agent only needs `amount`, `po_reference`, and `goods_received`).
+- Set `BUSINESS_NAME`, then add vendors, contractors, and clients on `/counterparties`. Their
+  configured payment limit is stored separately from the authority derived by screening.
+- Add payables or receivables on `/invoices`, or import up to 200 rows from CSV after inspecting a
+  local preview. Amounts that cannot fit exact six-decimal USDC precision are rejected rather than
+  rounded. Every accepted record is written to the signed ledger as a human action.
 - Insert milestones with a real `verification_source` (a Git PR merge, a Kimai/Frappe timesheet
   entry, a client sign-off) and flip `verified` when that source confirms the work.
 - Run `npm run bootstrap:circle` once real accounts exist, fund the operating wallet, and call

@@ -1,8 +1,11 @@
 import AgentControls from "@/components/AgentControls";
+import InvoiceCsvImport from "@/components/intake/InvoiceCsvImport";
+import InvoiceIntake from "@/components/intake/InvoiceIntake";
 import { DecisionCard } from "@/components/vx/DecisionCard";
 import { invoiceDecision } from "@/components/vx/map";
 import { SectionHead } from "@/components/vx/Primitives";
 import { EmptyState, PageHead, ProductShell } from "@/components/vx/Shell";
+import { hasAgentControlSession } from "@/lib/agent-session";
 import { listLedgerEntries } from "@/lib/ledger";
 import { listCounterparties, listInvoices, stats } from "@/lib/queries";
 
@@ -10,11 +13,12 @@ export const dynamic = "force-dynamic";
 
 export default async function InvoicesPage({ searchParams }: PageProps<"/invoices">) {
   const query = await searchParams;
-  const [invoices, counterparties, entries, dashboardStats] = await Promise.all([
+  const [invoices, counterparties, entries, dashboardStats, canMutate] = await Promise.all([
     listInvoices(),
     listCounterparties(),
     listLedgerEntries(300),
     stats(),
+    hasAgentControlSession(),
   ]);
   const filter = typeof query.status === "string" ? query.status : undefined;
   const shown = filter ? invoices.filter((invoice) => invoice.status === filter) : invoices;
@@ -39,6 +43,24 @@ export default async function InvoicesPage({ searchParams }: PageProps<"/invoice
           <a href="/invoices" className="ml-auto text-ink-2 underline hover:text-ink">Clear filter</a>
         </div>
       )}
+
+      <section className="mb-8">
+        <SectionHead title="Invoice intake" meta="manual entry or CSV preview and confirm" />
+        {canMutate ? (
+          <div className="grid gap-4 lg:grid-cols-2">
+            <details open className="rounded-lg border border-line bg-surface p-4 sm:p-5">
+              <summary className="cursor-pointer text-sm font-semibold text-ink">Enter one invoice</summary>
+              <div className="mt-4"><InvoiceIntake counterparties={counterparties.map(({ id, name, role }) => ({ id, name, role }))} /></div>
+            </details>
+            <details className="rounded-lg border border-line bg-surface p-4 sm:p-5">
+              <summary className="cursor-pointer text-sm font-semibold text-ink">Import CSV</summary>
+              <div className="mt-4"><InvoiceCsvImport /></div>
+            </details>
+          </div>
+        ) : (
+          <p className="rounded-lg border border-dashed border-line-strong px-5 py-6 text-sm text-ink-2">Unlock controls above to add or import invoices.</p>
+        )}
+      </section>
 
       <div className="space-y-8">
         {refused.length > 0 && (

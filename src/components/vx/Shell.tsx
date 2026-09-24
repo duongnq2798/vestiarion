@@ -9,6 +9,7 @@ import { ProvenanceBar, type ProvenanceLeg } from "./Provenance";
 const NAV = [
   { key: "treasury", href: "/", label: "Treasury" },
   { key: "invoices", href: "/invoices", label: "AP / AR" },
+  { key: "counterparties", href: "/counterparties", label: "Counterparties" },
   { key: "contractors", href: "/contractors", label: "Contractors" },
   { key: "compliance", href: "/compliance", label: "Compliance" },
   { key: "audit", href: "/audit", label: "Audit log" },
@@ -43,7 +44,7 @@ export async function ProductShell({
                 <span className="text-[0.8125rem] font-semibold uppercase tracking-[0.22em] text-ink">Vestiarion</span>
                 <Label>Day {currentDay}</Label>
               </div>
-              <p className="mt-1 truncate text-sm text-ink-2">Northstar Studio</p>
+              <p className="mt-1 truncate text-sm text-ink-2">{process.env.BUSINESS_NAME?.trim() || "Vestiarion workspace"}</p>
             </div>
             <ProvenanceBar legs={legs} />
           </div>

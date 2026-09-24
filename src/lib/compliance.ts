@@ -259,7 +259,13 @@ export async function screenCounterparty(counterpartyId: string): Promise<Screen
       .eq("id", counterpartyId)
       .single<CounterpartyScreeningRow>()
   );
-  return applyScreening(cp);
+  try {
+    return await applyScreening(cp);
+  } catch (error) {
+    if (!(error instanceof ScreeningLookupError)) throw error;
+    await recordScreeningFailure(cp, error.message, true);
+    throw error;
+  }
 }
 
 /**
@@ -354,6 +360,40 @@ export interface SweepResult {
 
 class ScreeningLookupError extends Error {}
 
+async function recordScreeningFailure(
+  row: CounterpartyScreeningRow,
+  message: string,
+  writeLedgerEntry = false
+): Promise<void> {
+  const failureCheck = await supabase().from("compliance_checks").insert({
+    counterparty_id: row.id,
+    risk_level: row.risk_level,
+    source: screeningMode() === "live" ? "opensanctions:yente" : "simulated-sanctions-list",
+    notes: message,
+    screening_mode: screeningMode(),
+    status: "failed",
+  });
+  if (failureCheck.error) throw new Error(failureCheck.error.message);
+
+  if (writeLedgerEntry) {
+    await appendLedgerEntry({
+      actor: "agent",
+      domain: "compliance",
+      action: "screening_incomplete",
+      summary: `Screening incomplete for ${row.name}; previous verdict retained`,
+      detail: {
+        counterpartyId: row.id,
+        counterpartyName: row.name,
+        previousRiskLevel: row.risk_level,
+        previousLastScreenedAt: row.last_screened_at,
+        screeningMode: screeningMode(),
+        complete: false,
+        error: message,
+      },
+    });
+  }
+}
+
 /**
  * One pass over the whole counterparty book. Every counterparty whose
  * screening has gone stale is re-checked, and the sweep itself is logged — so
@@ -382,15 +422,7 @@ export async function runComplianceSweep(): Promise<SweepResult> {
 
       // Preserve the previous counterparty verdict and timestamp. This check
       // records the outage itself without pretending it produced a new tier.
-      const failureCheck = await db.from("compliance_checks").insert({
-        counterparty_id: row.id,
-        risk_level: row.risk_level,
-        source: "opensanctions:yente",
-        notes: message,
-        screening_mode: screeningMode(),
-        status: "failed",
-      });
-      if (failureCheck.error) throw new Error(failureCheck.error.message);
+      await recordScreeningFailure(row, message);
     }
   }
 

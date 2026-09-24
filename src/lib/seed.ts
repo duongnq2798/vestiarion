@@ -48,7 +48,7 @@ const TABLES = [
 
 /**
  * Wallet provisioning survives a reset. Rows are keyed by name, which is
- * stable across re-seeds, so clicking "Reset Demo Data" in live mode
+ * stable across an explicit CLI re-seed, so running the demo-only command in live mode
  * restores the demo without stranding the Arc wallets that `bootstrap:circle`
  * created — or silently minting nine more.
  */

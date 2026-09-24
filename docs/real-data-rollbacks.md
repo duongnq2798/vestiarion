@@ -21,3 +21,9 @@ Database rollback after reconciliation: retain the table as an audit record if p
 Application rollback: unset `OPENSANCTIONS_API_URL` to return immediately to the labelled bundled provider, or revert the Phase 3 commit. Existing live verdicts and their tiered limits remain until the bundled provider screens them again; review high-risk rows before changing providers.
 
 Database rollback: the added evidence columns are backward-compatible and should normally remain. Dropping them discards raw match scores, matched entity ids, and explicit failed-check records, so export `compliance_checks` first if removal is unavoidable.
+
+## Phase 4 — operator intake
+
+Application rollback: revert the Phase 4 commit to remove the intake forms and Server Actions. Records already created remain valid business data; do not delete them as part of an application rollback. The external, bearer-protected emergency reset API remains separate from normal product navigation.
+
+Data recovery: creation and CSV import are append operations, and each accepted row has a human ledger entry containing its id. If a bad import must be reversed, identify its exact invoice ids from `import_invoice` entries, export those rows, and delete only those ids during a controlled maintenance window. Ledger entries remain as the immutable record of both the original action and the correction.

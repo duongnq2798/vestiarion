@@ -37,6 +37,9 @@ export interface CounterpartyRow {
   id: string;
   name: string;
   role: string;
+  address: string | null;
+  chain: string | null;
+  jurisdiction: string | null;
   risk_level: string;
   risk_notes: string | null;
   payment_limit: number | null;
