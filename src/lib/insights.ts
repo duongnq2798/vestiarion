@@ -41,7 +41,7 @@ export interface CycleRunTelemetry {
    * Its counts are real but partial: they cover the stages that ran before it
    * stopped, and nothing after.
    */
-  status: "running" | "completed" | "failed";
+  status: "running" | "completed" | "partial" | "failed";
   failedStage: string | null;
   errorMessage: string | null;
   chainMode: "live" | "simulate";

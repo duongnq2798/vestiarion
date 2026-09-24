@@ -118,6 +118,10 @@ function usdLabel(value: number): string {
 function cycleResult(run: CycleRunTelemetry): string {
   if (run.status === "running") return "still running";
   if (run.status === "failed") return `failed at ${run.failedStage ?? "an unnamed stage"}`;
+  // A partial cycle ran to the end but did not do all of it. Its counts are
+  // real and stop where the failure stopped them, so it is neither a clean run
+  // nor a dead one, and flattening it into either would mislead.
+  if (run.status === "partial") return `partial — ${run.failedStage ?? "a stage"} failed`;
   return "completed";
 }
 
@@ -340,12 +344,12 @@ function OutcomeChart({ runs }: { runs: CycleRunTelemetry[] }) {
           return <li key={run.id} className="grid grid-cols-[3.5rem_minmax(0,1fr)_2rem] items-center gap-2 text-xs">
             <span className="font-mono text-ink-3">#{index + 1}</span>
             <div className="flex h-5 min-w-0 overflow-hidden rounded-sm bg-raised" aria-label={`${total} outcomes`}>
-              {total === 0 ? <span className={`m-auto text-[0.625rem] ${run.status === "failed" ? "text-refusal" : "text-ink-3"}`}>{run.status === "failed" ? `failed at ${run.failedStage ?? "an unnamed stage"}` : run.status === "running" ? "still running" : "no outcomes"}</span> : outcomes.map((outcome) => {
+              {total === 0 ? <span className={`m-auto text-[0.625rem] ${run.status === "failed" || run.status === "partial" ? "text-refusal" : "text-ink-3"}`}>{run.status === "failed" || run.status === "partial" ? `${run.status} — ${run.failedStage ?? "a stage"} failed` : run.status === "running" ? "still running" : "no outcomes"}</span> : outcomes.map((outcome) => {
                 const value = outcome.value(run);
                 return value > 0 ? <span key={outcome.key} title={`${outcome.label}: ${value}`} style={{ width: `${width(value)}%`, background: outcome.color }} /> : null;
               })}
             </div>
-            <span className="text-right tabular-nums text-ink-2">{total}{run.status === "failed" && total > 0 && <span className="ml-1 text-refusal" title={`Partial: the cycle failed at ${run.failedStage ?? "an unnamed stage"}`}>&#9670;</span>}</span>
+            <span className="text-right tabular-nums text-ink-2">{total}{(run.status === "failed" || run.status === "partial") && total > 0 && <span className="ml-1 text-refusal" title={`Partial: the cycle failed at ${run.failedStage ?? "an unnamed stage"}`}>&#9670;</span>}</span>
           </li>;
         })}
       </ol>

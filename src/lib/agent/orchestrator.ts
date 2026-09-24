@@ -8,7 +8,7 @@ import { refreshGitHubMilestones } from "../milestone-verification";
 import { seedScale } from "../seed";
 import { executePayment, type PaymentExecution } from "../payments";
 import { CycleMetricsCollector } from "./cycle-metrics";
-import { CycleJournal, messageOf } from "./journal";
+import { CycleJournal, messageOf, type CycleStage } from "./journal";
 import { decide } from "./decide";
 import { enforceApGuardrails } from "./guardrails";
 import { blockingDuplicate, findDuplicates, type InvoiceLike } from "./duplicates";
@@ -159,11 +159,11 @@ export async function runAgentCycle(): Promise<CycleResult> {
   };
 
   try {
-    const result = await executeCycle(ctx);
-    journal.finish();
-    return result;
+    return await executeCycle(ctx);
   } catch (err) {
-    journal.fail(err);
+    // Reached only when something outside every stage threw — the shared
+    // measurements between stages, or the write that closes the run. A stage
+    // that fails is recorded by the stage helper and never lands here.
     // Best effort: if the database is what failed, this will fail too, and the
     // row stays `running` — which still says more than the nothing it said
     // before. The original error is what the operator needs, so it is never
@@ -201,7 +201,33 @@ export async function runAgentCycle(): Promise<CycleResult> {
 
 async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
   const { db, provider, lines, metrics, journal, startedAt, clockMode, day, cycleRunId } = ctx;
-  journal.enter("reconcile");
+
+  /**
+   * Runs one stage, or records why it could not. A stage that throws no longer
+   * takes the rest of the cycle with it: the failure is recorded, the stages
+   * that genuinely depend on it are skipped, and the ones that do not carry on.
+   * `STAGE_REQUIRES` in ./journal.ts is where that line is drawn, and it is
+   * drawn on safety — fail closed on anything that authorises money leaving the
+   * business, stay open on anything that only observes or records.
+   */
+  const stage = async (name: CycleStage, body: () => Promise<void>): Promise<void> => {
+    const gate = journal.gate(name);
+    if (!gate.run) {
+      journal.skipped(name, gate.because);
+      lines.push({ domain: "system", message: `Skipped ${name}: ${gate.because}` });
+      return;
+    }
+    const started = Date.now();
+    try {
+      await body();
+      journal.completed(name, Date.now() - started);
+    } catch (err) {
+      journal.failed(name, err, Date.now() - started);
+      lines.push({ domain: "system", message: `Stage ${name} failed: ${messageOf(err)}` });
+    }
+  };
+
+  await stage("reconcile", async () => {
 
   // ------------------------------------------------------------ 0. reconcile
   // In live mode the chain is the source of truth for cash. Reading the
@@ -251,7 +277,9 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     }
   }
 
-  journal.enter("compliance");
+  });
+
+  await stage("compliance", async () => {
   // ---------------------------------------------------------------- 1. compliance
   // The whole counterparty book, every cycle — not only the ones still marked
   // unscreened. The vendor that screened clear last week is precisely the one
@@ -298,7 +326,9 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     });
   }
 
-  journal.enter("follow_up");
+  });
+
+  await stage("follow_up", async () => {
   // ------------------------------------------------------- 1b. follow up
   // Runs after screening and before AP on purpose: a risk tier that moved this
   // cycle should reach a frozen invoice immediately, not next time.
@@ -416,6 +446,8 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     }
   }
 
+  });
+
   // ------------------------------------------------------------------ shared state
   const accounts = unwrap(await db.from("accounts").select("*")) as Array<{
     id: string;
@@ -429,7 +461,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
   // it stood when the cycle began.
   let operatingBalance = num(operating?.balance);
 
-  journal.enter("ap");
+  await stage("ap", async () => {
   // ----------------------------------------------------------------------- 2. AP
   const payables = unwrap(
     await db
@@ -702,7 +734,9 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     });
   }
 
-  journal.enter("contractors");
+  });
+
+  await stage("contractors", async () => {
   // --------------------------------------------------------------- 3. contractors
   const milestones = unwrap(
     await db
@@ -856,8 +890,11 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     });
   }
 
-  journal.enter("treasury");
-  // ------------------------------------------------------------------ 4. treasury
+  });
+
+  // ------------------------------------- shared obligation measurement
+  // Read-only, and deliberately outside any stage: the forecast reports these
+  // numbers whether or not the treasury decision was allowed to run.
   const freshAccounts = unwrap(await db.from("accounts").select("*")) as Array<{
     id: string;
     kind: string;
@@ -900,6 +937,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
       ? 0
       : payableSummary.daysUntilNext;
 
+  await stage("treasury", async () => {
   if (operatingNow && reserveNow) {
     const operatingBalance = num(operatingNow.balance);
     const reserveBalance = num(reserveNow.balance);
@@ -1030,12 +1068,12 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     });
   }
 
-  journal.enter("forecast");
-  // ------------------------------------------------------------------ 5. forecast
-  const receivables = unwrap(
-    await db.from("invoices").select("amount").eq("direction", "receivable").in("status", ["pending", "matched"])
-  ) as Array<{ amount: string }>;
+  });
 
+  // --------------------------------------------------- closing balances
+  // Read once, outside any stage, because both the forecast and the cycle's
+  // own snapshot need them — and the snapshot has to be able to record where
+  // the cycle left the book even if the forecast itself failed.
   const finalAccounts = unwrap(await db.from("accounts").select("id, name, kind, token, balance")) as Array<{
     id: string;
     name: string;
@@ -1044,7 +1082,14 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     balance: string;
   }>;
   const liquid = finalAccounts.reduce((s, r) => s + num(r.balance), 0);
-  const projectedInflow = receivables.reduce((s, r) => s + num(r.amount), 0);
+  let projectedInflow = 0;
+
+  await stage("forecast", async () => {
+  // ------------------------------------------------------------------ 5. forecast
+  const receivables = unwrap(
+    await db.from("invoices").select("amount").eq("direction", "receivable").in("status", ["pending", "matched"])
+  ) as Array<{ amount: string }>;
+  projectedInflow = receivables.reduce((s, r) => s + num(r.amount), 0);
 
   const forecast = await db.from("forecasts").insert({
     as_of: new Date().toISOString(),
@@ -1058,16 +1103,23 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
         : "Liquidity healthy.",
   });
   if (forecast.error) throw new Error(forecast.error.message);
+  });
 
   const finishedAt = new Date().toISOString();
   const cycleMetrics = metrics.snapshot();
-  journal.finish();
+  const outcome = journal.outcome();
+  const failureSummary = journal.summary();
+  if (failureSummary) {
+    lines.push({ domain: "system", message: `Cycle ${outcome}: ${failureSummary}` });
+  }
   // Closes the row opened before the cycle began, rather than creating one. A
   // run that never reaches here stays recorded as failed, or as `running` if
   // the database itself was what went down.
   const cycleRun = unwrap(
     await db.from("cycle_runs").update({
-      status: "completed",
+      status: outcome,
+      failed_stage: journal.failedStage(),
+      error_message: failureSummary,
       finished_at: finishedAt,
       duration_ms: Math.max(0, Date.parse(finishedAt) - Date.parse(startedAt)),
       stages: journal.stages(),
