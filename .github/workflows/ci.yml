@@ -56,11 +56,21 @@ jobs:
       - name: Explain the failure
         if: failure()
         run: |
+          # Annotations are the only part of a run readable without a GitHub
+          # login; step logs and job summaries both require one. A red build
+          # nobody outside the repo can diagnose is a red build that gets
+          # ignored, so the cause goes here as well as in the summary.
+          if [ -s verify.log ]; then
+            tail -n 25 verify.log | while IFS= read -r line; do
+              printf '::error::%s\n' "$line"
+            done
+          else
+            echo "::error title=CI failed early::No step produced output. The job failed before or during checkout, setup-node, or npm ci."
+          fi
           {
             echo "## CI failed"
             echo
-            echo "Last 80 lines of the combined log:"
             echo '```'
-            tail -n 80 verify.log 2>/dev/null || echo "(no log was produced — the job failed before any step ran)"
+            tail -n 80 verify.log 2>/dev/null || echo "(no log was produced)"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
