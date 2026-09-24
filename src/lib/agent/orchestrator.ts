@@ -2,9 +2,10 @@ import { z } from "zod";
 import { supabase, unwrap } from "../supabase";
 import { appendLedgerEntry } from "../ledger";
 import { getChainProvider } from "../circle";
-import { screenCounterparty } from "../compliance";
+import { runComplianceSweep } from "../compliance";
 import { seedScale } from "../seed";
 import { decide } from "./decide";
+import { planTreasury, type TreasuryDecision } from "./treasury";
 
 const SYSTEM_PROMPT = `You are Vestiarion, an autonomous treasury agent operating a small business's money on the Arc blockchain, settled in USDC. You hold real spending authority inside the guardrails below.
 
@@ -37,7 +38,6 @@ const treasuryDecisionSchema = z.object({
   amount: z.number().min(0),
   reasoning: z.string().min(10),
 });
-type TreasuryDecision = z.infer<typeof treasuryDecisionSchema>;
 
 export interface CycleLogLine {
   domain: string;
@@ -142,15 +142,30 @@ export async function runAgentCycle(): Promise<CycleResult> {
   }
 
   // ---------------------------------------------------------------- 1. compliance
-  const unscreened = unwrap(
-    await db.from("counterparties").select("id, name").eq("risk_level", "unscreened")
-  ) as Array<{ id: string; name: string }>;
+  // The whole counterparty book, every cycle — not only the ones still marked
+  // unscreened. The vendor that screened clear last week is precisely the one
+  // worth re-checking; screening once at onboarding is the failure RFB5 names.
+  const sweep = await runComplianceSweep();
 
-  for (const counterparty of unscreened) {
-    const result = await screenCounterparty(counterparty.id);
+  for (const outcome of sweep.screened) {
+    if (outcome.firstScreen) {
+      lines.push({
+        domain: "compliance",
+        message: `Screened ${outcome.name} → ${outcome.riskLevel}`,
+      });
+    } else if (outcome.changed) {
+      lines.push({
+        domain: "compliance",
+        message: `${outcome.name}: risk ${outcome.previousRiskLevel} → ${outcome.riskLevel}`,
+      });
+    }
+  }
+
+  const unchanged = sweep.screened.filter((s) => !s.changed).length;
+  if (unchanged > 0) {
     lines.push({
       domain: "compliance",
-      message: `Screened ${counterparty.name} → ${result.riskLevel}`,
+      message: `Re-screened ${unchanged} counterpart${unchanged === 1 ? "y" : "ies"}, no change`,
     });
   }
 
@@ -481,21 +496,65 @@ export async function runAgentCycle(): Promise<CycleResult> {
   const reserveNow = freshAccounts.find((a) => a.kind === "reserve");
 
   const openInvoices = unwrap(
-    await db.from("invoices").select("amount").eq("direction", "payable").in("status", ["pending", "matched"])
-  ) as Array<{ amount: string }>;
+    await db
+      .from("invoices")
+      .select("amount, due_date")
+      .eq("direction", "payable")
+      .in("status", ["pending", "matched"])
+  ) as Array<{ amount: string; due_date: string }>;
   const openMilestones = unwrap(
     await db.from("milestones").select("amount").in("status", ["pending", "verified"])
   ) as Array<{ amount: string }>;
 
-  const upcomingObligations =
-    openInvoices.reduce((s, r) => s + num(r.amount), 0) +
-    openMilestones.reduce((s, r) => s + num(r.amount), 0);
+  // Milestones carry no due date because a verified one is payable the same
+  // day — that is the whole RFB3 argument — so every open milestone counts
+  // against the near-term buffer regardless of horizon.
+  const milestoneTotal = openMilestones.reduce((s, r) => s + num(r.amount), 0);
+  const payablesDueWithin = (days: number) => {
+    const cutoff = Date.now() + days * 86_400_000;
+    return openInvoices
+      .filter((r) => Date.parse(r.due_date) <= cutoff)
+      .reduce((s, r) => s + num(r.amount), 0);
+  };
+
+  // The buffer the agent must not sweep below is what is actually due soon,
+  // not every invoice on the books. Summing the whole payables ledger and
+  // labelling it "next 7 days" — which this did until it was measured —
+  // makes the agent hoard cash it could have earned yield on, and hands the
+  // model a premise it has no way to check.
+  const obligationsDue7d = payablesDueWithin(7) + milestoneTotal;
+  const obligationsDue14d = payablesDueWithin(14) + milestoneTotal;
+  const obligationsOpenTotal =
+    openInvoices.reduce((s, r) => s + num(r.amount), 0) + milestoneTotal;
+
+  // How long swept cash could actually stay swept. An open milestone is
+  // payable today, so its presence collapses the horizon to zero days.
+  const daysUntilNextObligation =
+    milestoneTotal > 0
+      ? 0
+      : openInvoices.reduce((soonest, r) => {
+          const days = (Date.parse(r.due_date) - Date.now()) / 86_400_000;
+          return Math.min(soonest, Math.max(0, days));
+        }, Number.POSITIVE_INFINITY);
 
   if (operatingNow && reserveNow) {
     const operatingBalance = num(operatingNow.balance);
     const reserveBalance = num(reserveNow.balance);
     const apy = num(reserveNow.apy);
     const amountScale = seedScale();
+
+    // A sweep is only worth making if it earns more than it costs, so the
+    // policy is computed first and handed to the model as context. It is also
+    // the fallback, which means the LLM and the heuristic reason from exactly
+    // the same numbers rather than from two different pictures of the book.
+    const plan = planTreasury({
+      operatingBalance,
+      reserveBalance,
+      apy,
+      obligationsDue7d,
+      daysUntilNextObligation,
+      roundTripCostUsd: provider.estimatedFeeUsd * 2,
+    });
 
     const { value: decision, mode } = await decide<TreasuryDecision>({
       systemPrompt: SYSTEM_PROMPT,
@@ -504,7 +563,20 @@ export async function runAgentCycle(): Promise<CycleResult> {
         operatingBalance,
         reserveBalance,
         reserveApy: apy,
-        upcomingObligationsNext7Days: upcomingObligations,
+        upcomingObligationsNext7Days: obligationsDue7d,
+        upcomingObligationsNext14Days: obligationsDue14d,
+        totalOpenObligations: obligationsOpenTotal,
+        daysUntilNextObligation: Number.isFinite(daysUntilNextObligation)
+          ? Number(daysUntilNextObligation.toFixed(2))
+          : null,
+        economics: {
+          idleAboveBuffer: plan.idle,
+          requiredBuffer: plan.buffer,
+          expectedHoldDays: plan.holdDays,
+          projectedYieldUsd: plan.projectedYieldUsd,
+          roundTripCostUsd: plan.roundTripCostUsd,
+          note: "A sweep costs one transfer now and one redemption later. Sweeping is only worth doing when projectedYieldUsd exceeds roundTripCostUsd.",
+        },
         responseShape: {
           action: "sweep_to_usyc | redeem_from_usyc | hold",
           amount: "number",
@@ -512,30 +584,7 @@ export async function runAgentCycle(): Promise<CycleResult> {
         },
       }),
       schema: treasuryDecisionSchema,
-      fallback: (): TreasuryDecision => {
-        const buffer = upcomingObligations * 1.15;
-        const idle = operatingBalance - buffer;
-        if (idle > 100) {
-          return {
-            action: "sweep_to_usyc",
-            amount: Math.floor(idle),
-            reasoning: `Operating balance ${operatingBalance} USDC exceeds a 15% buffer over the ${upcomingObligations} USDC due in the next 7 days; sweeping ${Math.floor(idle)} USDC into USYC at ${(apy * 100).toFixed(2)}% APY.`,
-          };
-        }
-        if (idle < 0 && reserveBalance > 0) {
-          const need = Math.min(Math.ceil(-idle), reserveBalance);
-          return {
-            action: "redeem_from_usyc",
-            amount: need,
-            reasoning: `Operating balance falls ${Math.ceil(-idle)} USDC short of the obligation buffer; redeeming ${need} USDC from USYC ahead of the due dates.`,
-          };
-        }
-        return {
-          action: "hold",
-          amount: 0,
-          reasoning: `Operating balance ${operatingBalance} USDC sits within the buffer for ${upcomingObligations} USDC of near-term obligations; no treasury action needed.`,
-        };
-      },
+      fallback: (): TreasuryDecision => plan.decision,
     });
 
     let executed = false;
@@ -589,7 +638,23 @@ export async function runAgentCycle(): Promise<CycleResult> {
         // The USYC leg is simulated until EarnKit is wired up; recording that
         // here means the audit trail never overstates what actually happened.
         earnMode: provider.earnMode,
-        observed: { operatingBalance, reserveBalance, upcomingObligations, apy, amountScale },
+        observed: {
+          operatingBalance,
+          reserveBalance,
+          obligationsDue7d,
+          obligationsDue14d,
+          obligationsOpenTotal,
+          apy,
+          amountScale,
+        },
+        economics: {
+          idleAboveBuffer: plan.idle,
+          requiredBuffer: plan.buffer,
+          expectedHoldDays: plan.holdDays,
+          projectedYieldUsd: plan.projectedYieldUsd,
+          roundTripCostUsd: plan.roundTripCostUsd,
+        },
+        heuristicWouldHave: plan.decision.action,
       },
     });
 
@@ -614,10 +679,10 @@ export async function runAgentCycle(): Promise<CycleResult> {
     as_of: new Date().toISOString(),
     horizon_days: 14,
     projected_inflow: projectedInflow,
-    projected_outflow: upcomingObligations,
+    projected_outflow: obligationsDue14d,
     liquid_balance: liquid,
     recommendation:
-      upcomingObligations > liquid
+      obligationsDue14d > liquid
         ? "Liquidity gap projected — redeem from USYC or accelerate receivables before the next cycle."
         : "Liquidity healthy.",
   });

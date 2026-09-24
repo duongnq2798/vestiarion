@@ -70,7 +70,7 @@ export function selectProvider(): DecisionMode {
  * Models are asked for bare JSON, but they still wrap it in prose or a code
  * fence often enough that parsing has to tolerate both.
  */
-function extractJson(text: string): unknown {
+export function extractJson(text: string): unknown {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const raw = fenced ? fenced[1] : text;
   const start = raw.indexOf("{");

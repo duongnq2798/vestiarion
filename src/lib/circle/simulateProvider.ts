@@ -8,6 +8,7 @@ import type {
   TransferParams,
   TransferResult,
 } from "./types";
+import { ARC_FEE_USD } from "./types";
 
 interface AccountRow {
   id: string;
@@ -27,6 +28,7 @@ interface AccountRow {
 export class SimulateProvider implements ChainProvider {
   readonly mode = "simulate" as const;
   readonly earnMode = "simulate" as const;
+  readonly estimatedFeeUsd = ARC_FEE_USD;
 
   private async account(id: string): Promise<AccountRow> {
     return unwrap(
@@ -53,7 +55,7 @@ export class SimulateProvider implements ChainProvider {
       txRef: `sim_${crypto.randomUUID().slice(0, 12)}`,
       chain: account.chain,
       status: "confirmed",
-      feeUsd: 0.01,
+      feeUsd: ARC_FEE_USD,
       settledInMs: 320 + Math.floor(Math.random() * 150),
     };
   }

@@ -93,7 +93,7 @@ export interface LedgerEntry extends LedgerEntryInput {
   hash: string;
 }
 
-interface LedgerRow {
+export interface LedgerRow {
   seq: number;
   id: string;
   ts: string;
@@ -114,21 +114,21 @@ interface LedgerRow {
  * with a sorted key array only sorts the top level, which is the classic way
  * to get a hash chain that silently fails to reproduce.
  */
-function canonical(value: unknown): string {
+export function canonicalJson(value: unknown): string {
   if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
-  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
   const entries = Object.entries(value as Record<string, unknown>)
     .filter(([, v]) => v !== undefined)
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-    .map(([k, v]) => `${JSON.stringify(k)}:${canonical(v)}`);
+    .map(([k, v]) => `${JSON.stringify(k)}:${canonicalJson(v)}`);
   return `{${entries.join(",")}}`;
 }
 
-function bodyHashOf(input: LedgerEntryInput): string {
+export function bodyHashOf(input: LedgerEntryInput): string {
   return crypto
     .createHash("sha256")
     .update(
-      canonical({
+      canonicalJson({
         actor: input.actor,
         domain: input.domain,
         action: input.action,
@@ -198,13 +198,16 @@ export interface VerificationResult {
   reason?: string;
 }
 
-/** Replays the whole chain: signature authorship, body integrity, and hash continuity. */
-export async function verifyLedger(): Promise<VerificationResult> {
-  const { publicKey } = loadKeys();
-  const rows = unwrap(
-    await supabase().from("ledger_entries").select("*").order("seq", { ascending: true })
-  ) as LedgerRow[];
-
+/**
+ * Replays a chain in memory: signature authorship, body integrity, and hash
+ * continuity, in that order. Kept free of I/O so the same function verifies
+ * the live ledger, an exported chain, and a deliberately tampered fixture in
+ * the test suite — one implementation, no second verifier to drift.
+ */
+export function verifyChain(
+  rows: LedgerRow[],
+  publicKey: crypto.KeyObject
+): VerificationResult {
   let expectedPrev = GENESIS_HASH;
 
   for (const row of rows) {
@@ -265,4 +268,13 @@ export async function verifyLedger(): Promise<VerificationResult> {
   }
 
   return { valid: true, checkedEntries: rows.length };
+}
+
+/** Verifies the ledger as stored in Postgres, oldest entry first. */
+export async function verifyLedger(): Promise<VerificationResult> {
+  const { publicKey } = loadKeys();
+  const rows = unwrap(
+    await supabase().from("ledger_entries").select("*").order("seq", { ascending: true })
+  ) as LedgerRow[];
+  return verifyChain(rows, publicKey);
 }

@@ -147,12 +147,17 @@ export async function seedDatabase() {
     await db
       .from("counterparties")
       .insert([
-        { name: "Vercel Inc", role: "vendor", chain: "ARC-TESTNET", payment_limit: amt(2000) },
-        { name: "Anthropic API Services", role: "vendor", chain: "ARC-TESTNET", payment_limit: amt(5000) },
-        { name: "Zenith Trading LLC", role: "vendor", chain: "ARC-TESTNET", payment_limit: amt(3000) },
-        { name: "Lumen Retail Co", role: "client", chain: "ARC-TESTNET", payment_limit: null },
-        { name: "Priya Shah — Backend Contractor", role: "contractor", chain: "ARC-TESTNET", payment_limit: amt(4000) },
-        { name: "Diego Ramirez — Design Contractor", role: "contractor", chain: "ARC-TESTNET", payment_limit: amt(2500) },
+        { name: "Vercel Inc", role: "vendor", chain: "ARC-TESTNET", payment_limit: amt(2000), baseline_payment_limit: amt(2000) },
+        { name: "Anthropic API Services", role: "vendor", chain: "ARC-TESTNET", payment_limit: amt(5000), baseline_payment_limit: amt(5000) },
+        { name: "Zenith Trading LLC", role: "vendor", chain: "ARC-TESTNET", payment_limit: amt(3000), baseline_payment_limit: amt(3000) },
+        // On the watchlist at the medium tier, which is the tier worth
+        // demonstrating: it is not a block, it is a reduced limit. The
+        // 900 USDC invoice below would clear a 2000 limit and does not clear
+        // the 500 the screening leaves behind.
+        { name: "Wardrobe Holdings Ltd", role: "vendor", chain: "ARC-TESTNET", payment_limit: amt(2000), baseline_payment_limit: amt(2000) },
+        { name: "Lumen Retail Co", role: "client", chain: "ARC-TESTNET", payment_limit: null, baseline_payment_limit: null },
+        { name: "Priya Shah — Backend Contractor", role: "contractor", chain: "ARC-TESTNET", payment_limit: amt(4000), baseline_payment_limit: amt(4000) },
+        { name: "Diego Ramirez — Design Contractor", role: "contractor", chain: "ARC-TESTNET", payment_limit: amt(2500), baseline_payment_limit: amt(2500) },
       ])
       .select("id, name")
   ) as Array<{ id: string; name: string }>;
@@ -208,6 +213,18 @@ export async function seedDatabase() {
       po_reference: null,
       goods_received: false,
       due_date: daysFromNow(5),
+    },
+    {
+      // A complete three-way match from a counterparty that would be paid
+      // without hesitation — except that screening tiered its limit to 500.
+      // Nothing about this invoice is wrong; the counterparty is what changed.
+      direction: "payable",
+      counterparty_id: cp("Wardrobe"),
+      amount: amt(900),
+      memo: "Office fit-out — final instalment",
+      po_reference: "PO-1061",
+      goods_received: true,
+      due_date: daysFromNow(6),
     },
     {
       direction: "receivable",

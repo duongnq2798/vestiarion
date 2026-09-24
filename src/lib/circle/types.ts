@@ -1,3 +1,6 @@
+/** Arc's published transfer cost. One number, used by every provider. */
+export const ARC_FEE_USD = 0.01;
+
 export interface TransferParams {
   fromAccountId: string;
   toAddress: string;
@@ -43,6 +46,13 @@ export interface BalanceSnapshot {
 export interface ChainProvider {
   readonly mode: "simulate" | "live";
   readonly earnMode: "simulate" | "live";
+  /**
+   * Typical cost of one transfer, in USD. Arc is ~$0.01. The treasury policy
+   * prices a sweep-and-redeem round trip from this rather than a constant, so
+   * a chain with different economics changes the agent's behaviour without a
+   * change to its reasoning.
+   */
+  readonly estimatedFeeUsd: number;
   transfer(params: TransferParams): Promise<TransferResult>;
   depositToEarn(params: EarnDepositParams): Promise<EarnResult>;
   withdrawFromEarn(params: EarnDepositParams): Promise<EarnResult>;

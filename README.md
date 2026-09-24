@@ -16,8 +16,12 @@ Built for the [Tameion Agents Hackathon](https://tameion.thecanteenapp.com) (Can
 Vestiarion runs a small dev shop's treasury ("Northstar Studio" in the bundled demo data) through
 one decision loop, the **agent cycle**:
 
-1. **Compliance (RFB5)** — every counterparty is re-screened, not just checked once at onboarding.
-   A hit tiers the payment limit down instead of a blunt yes/no.
+1. **Compliance (RFB5)** — the whole counterparty book is re-screened every cycle, not checked
+   once at onboarding. A hit tiers the payment limit down instead of a blunt yes/no, and the tier
+   is *reversible*: the limit the business configured lives in its own column, so a counterparty
+   that comes off the watchlist gets its full limit back and one that stays on it does not decay
+   a little further every time it is looked at. The sweep is logged whether or not anything
+   changed, because proving screening happened is the part a one-time gate cannot do.
 2. **AP automation (RFB2)** — each payable invoice gets a three-way match (PO ↔ goods received ↔
    invoice) plus a risk check, and the agent decides to **pay**, **hold** (over limit), **request
    info** (no PO match), or **flag as fraud** (high-risk counterparty) — with its reasoning
@@ -25,7 +29,11 @@ one decision loop, the **agent cycle**:
 3. **Contractor payments (RFB3)** — verified milestones are released the same day instead of
    waiting for a Net-30 cycle, because at ~$0.01/tx on Arc, paying often costs nothing.
 4. **Treasury (RFB1)** — idle operating cash above a 7-day obligation buffer is swept into a
-   USYC-yielding reserve; the agent redeems back out ahead of due dates rather than after.
+   USYC-yielding reserve; the agent redeems back out ahead of due dates rather than after. The
+   sweep only happens when it pays for itself: a sweep and the redemption that must follow it are
+   two transactions, so the policy computes the yield earned over the days until the next
+   obligation and compares it to the round-trip fee. Idle cash that would earn less than it costs
+   to move stays liquid (`src/lib/agent/treasury.ts`).
 5. **Continuous audit trail** — every decision above is appended to a hash-chained, Ed25519-signed
    ledger (`/audit`). A reviewer can verify the whole chain in one click and read *why* the agent
    acted, not just that a balance moved — the "continuous euthyna" the hackathon brief describes.
@@ -74,9 +82,16 @@ src/lib/circle/           ChainProvider interface, three implementations:
                               payments, simulated USYC leg, both labelled
 src/lib/agent/
   decide.ts                 Provider-agnostic decision helper: Anthropic ->
-                             DeepSeek -> rule-based heuristic
+                             OpenAI -> DeepSeek -> rule-based heuristic
+  treasury.ts               The sweep/redeem policy as a pure function, so the
+                             LLM and the heuristic reason from one set of
+                             numbers and the whole policy is testable
   orchestrator.ts            The agent cycle: compliance -> AP -> contractors
                              -> treasury -> forecast, all logged to the ledger
+tests/                    Vitest. Every money path that can be tested without
+                           a network: the hash chain and its tamper cases,
+                           risk tiering, the treasury economics, provider
+                           selection and fallback. `npm run verify`
 scripts/                  seed, bootstrap:circle, and three doctors that tell
                            you exactly which parts are live
 src/app/                  Dashboard, AP/AR, Contractors, Compliance, Audit Log
@@ -113,6 +128,8 @@ Two independent upgrades from there, in either order:
 
 | Command | Does |
 | --- | --- |
+| `npm run verify` | Typecheck, lint, and the full test suite — what CI runs |
+| `npm run test` / `test:watch` | Vitest, once or on change |
 | `npm run db:migrate` | Applies `supabase/migrations/*.sql` |
 | `npm run seed` | Loads the demo business (keeps existing wallet provisioning) |
 | `npm run bootstrap:circle` | Creates Arc-testnet wallets for accounts and counterparties |
@@ -125,12 +142,14 @@ Seeded amounts scale down automatically when Circle credentials are present (`SE
 because the public faucet grants 20 testnet USDC every two hours and a demo denominated in
 thousands would never settle. The business narrative is the same; the decimal point moves.
 
-One consequence is worth knowing before you demo: **in live mode the agent usually declines to
-sweep into USYC**, and it is right to. Asked to move ~30 testnet USDC at 4.5% APY it works out
-the yield is a fraction of a cent and holds instead — reasoning we left alone rather than
-nudging, because an agent that sweeps regardless of whether sweeping pays is the cron job this
-project exists to not be. Run in simulate mode (`SEED_SCALE=1`, no Circle keys) to see the
-treasury logic exercised at a scale where the sweep is rational.
+One consequence is worth knowing before you demo: **in live mode the agent declines to sweep into
+USYC**, and it is right to. Moving ~30 testnet USDC at 4.5% APY for the three days until the next
+invoice is due earns about $0.011, against $0.02 in sweep-and-redeem fees on Arc. The agent works
+that out and holds — not as a threshold someone tuned, but as the arithmetic in `planTreasury`,
+which is why the same policy flips to sweeping the moment the numbers justify it. Run in simulate
+mode (`SEED_SCALE=1`, no Circle keys) to see exactly that: the identical book scaled up 1000x
+sweeps 13,900 USDC. An agent that sweeps regardless of whether sweeping pays is the cron job this
+project exists to not be.
 
 ## Going live on Arc testnet
 
@@ -181,6 +200,33 @@ Everything the agent reasons about lives in five tables (`accounts`, `counterpar
 - Run `npm run bootstrap:circle` once real accounts exist, fund the operating wallet, and call
   `POST /api/agent/tick` on a schedule (cron, GitHub Action, whatever you have) instead of a
   button click.
+
+## Tests
+
+```bash
+npm run verify        # typecheck + lint + tests — what CI runs on every push
+npm run test:watch    # while working
+```
+
+The suite covers the paths where being wrong costs money, and nothing else:
+
+- **The ledger** — canonical JSON ordering, and every way a chain can be broken: content edited
+  in place, a payment rewritten and the chain re-linked behind it with a forged key, an entry
+  deleted, entries reordered, a chain that does not start at genesis, a forged link hash. Each
+  must be caught by the *specific* check meant to catch it, so a passing chain cannot be an
+  accident of two errors cancelling.
+- **Risk tiering** — the property continuous re-screening depends on: screening the same
+  counterparty twenty times leaves its limit exactly where one screening left it, and coming off
+  the watchlist restores the full limit rather than leaving a false positive permanent.
+- **Treasury economics** — that the policy is scale-free. The same book scaled down 1000x flips
+  sweep to hold, and a more expensive chain flips it back, without a tuned constant anywhere.
+- **Provider selection** — that a pinned provider with a missing key raises instead of quietly
+  billing a different vendor, and that a rate-limited model falls back to the heuristic and is
+  *recorded* as the heuristic rather than passed off as the model's judgement.
+
+Nothing in the suite needs Supabase, Circle, or an LLM key. Everything that does is exercised by
+`npm run cycle` against a real project — which is the honest place for it, not a mock that agrees
+with itself.
 
 ## Guardrails
 

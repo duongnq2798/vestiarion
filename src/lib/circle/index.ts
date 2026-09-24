@@ -20,11 +20,16 @@ import { LiveProvider } from "./liveProvider";
 class HybridProvider implements ChainProvider {
   readonly mode = "live" as const;
   readonly earnMode = "simulate" as const;
+  readonly estimatedFeeUsd: number;
 
   constructor(
     private readonly live: LiveProvider,
     private readonly simulated: SimulateProvider
-  ) {}
+  ) {
+    // Payments are the real leg, so the real leg's fee is the one that prices
+    // a round trip.
+    this.estimatedFeeUsd = live.estimatedFeeUsd;
+  }
 
   transfer(params: TransferParams): Promise<TransferResult> {
     return this.live.transfer(params);

@@ -1,0 +1,7 @@
+# One line ending everywhere. The repo is developed on Windows and tested on
+# Linux in CI; without this, a hash-chained ledger's fixtures and the SQL that
+# builds them can differ by \r and nothing else.
+* text=auto eol=lf
+*.png binary
+*.ico binary
+*.pem binary
