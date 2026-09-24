@@ -39,6 +39,7 @@ const TABLES = [
   "forecasts",
   "compliance_checks",
   "treasury_actions",
+  "payment_intents",
   "milestones",
   "invoices",
   "counterparties",

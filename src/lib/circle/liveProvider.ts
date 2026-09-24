@@ -91,6 +91,8 @@ export class LiveProvider implements ChainProvider {
       tokenId,
       destinationAddress: params.toAddress,
       amount: [params.amount.toFixed(6)],
+      idempotencyKey: params.idempotencyKey,
+      refId: params.memo,
       fee: { type: "level", config: { feeLevel: "MEDIUM" } },
     });
 
@@ -119,10 +121,32 @@ export class LiveProvider implements ChainProvider {
     }
 
     return {
+      providerTxId: txId,
+      txHash: txHash ?? null,
       txRef: txHash ?? txId,
       chain: account.chain,
       status,
       feeUsd: ARC_FEE_USD,
+      settledInMs: Date.now() - started,
+    };
+  }
+
+  async reconcileTransfer(providerTxId: string): Promise<TransferResult> {
+    const started = Date.now();
+    const response = await this.client.getTransaction({ id: providerTxId });
+    const transaction = response.data?.transaction;
+    if (!transaction) throw new Error(`Circle returned no transaction for ${providerTxId}`);
+
+    const confirmed = transaction.state === "CONFIRMED" || transaction.state === "COMPLETE";
+    const failed = ["CANCELLED", "DENIED", "FAILED", "STUCK"].includes(transaction.state);
+    const txHash = transaction.txHash ?? null;
+    return {
+      providerTxId,
+      txHash,
+      txRef: txHash ?? providerTxId,
+      chain: transaction.blockchain,
+      status: confirmed ? "confirmed" : failed ? "failed" : "pending",
+      feeUsd: transaction.networkFeeInUSD ? Number(transaction.networkFeeInUSD) : ARC_FEE_USD,
       settledInMs: Date.now() - started,
     };
   }

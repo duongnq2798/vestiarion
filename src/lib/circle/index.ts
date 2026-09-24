@@ -35,6 +35,10 @@ class HybridProvider implements ChainProvider {
     return this.live.transfer(params);
   }
 
+  reconcileTransfer(providerTxId: string): Promise<TransferResult> {
+    return this.live.reconcileTransfer(providerTxId);
+  }
+
   getBalance(accountId: string): Promise<BalanceSnapshot> {
     return this.live.getBalance(accountId);
   }

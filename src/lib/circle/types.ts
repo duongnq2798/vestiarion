@@ -5,10 +5,13 @@ export interface TransferParams {
   fromAccountId: string;
   toAddress: string;
   amount: number;
+  idempotencyKey: string;
   memo?: string;
 }
 
 export interface TransferResult {
+  providerTxId: string;
+  txHash: string | null;
   txRef: string;
   chain: string;
   status: "confirmed" | "pending" | "failed";
@@ -54,6 +57,7 @@ export interface ChainProvider {
    */
   readonly estimatedFeeUsd: number;
   transfer(params: TransferParams): Promise<TransferResult>;
+  reconcileTransfer(providerTxId: string): Promise<TransferResult>;
   depositToEarn(params: EarnDepositParams): Promise<EarnResult>;
   withdrawFromEarn(params: EarnDepositParams): Promise<EarnResult>;
   getBalance(accountId: string): Promise<BalanceSnapshot>;

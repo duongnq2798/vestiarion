@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import { supabase, unwrap } from "../supabase";
 import type {
   BalanceSnapshot,
@@ -51,12 +50,27 @@ export class SimulateProvider implements ChainProvider {
       );
     }
     await this.addBalance(account.id, -params.amount, balance);
+    const providerTxId = `sim_${params.idempotencyKey}`;
     return {
-      txRef: `sim_${crypto.randomUUID().slice(0, 12)}`,
+      providerTxId,
+      txHash: providerTxId,
+      txRef: providerTxId,
       chain: account.chain,
       status: "confirmed",
       feeUsd: ARC_FEE_USD,
       settledInMs: 320 + Math.floor(Math.random() * 150),
+    };
+  }
+
+  async reconcileTransfer(providerTxId: string): Promise<TransferResult> {
+    return {
+      providerTxId,
+      txHash: providerTxId,
+      txRef: providerTxId,
+      chain: "ARC-TESTNET",
+      status: "confirmed",
+      feeUsd: ARC_FEE_USD,
+      settledInMs: 0,
     };
   }
 

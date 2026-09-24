@@ -4,6 +4,7 @@ import { appendLedgerEntry } from "../ledger";
 import { getChainProvider } from "../circle";
 import { runComplianceSweep } from "../compliance";
 import { seedScale } from "../seed";
+import { executePayment } from "../payments";
 import { decide } from "./decide";
 import { planTreasury, type TreasuryDecision } from "./treasury";
 
@@ -294,15 +295,18 @@ export async function runAgentCycle(): Promise<CycleResult> {
         reasoning += " [no operating account configured]";
       } else {
         try {
-          const result = await provider.transfer({
+          const result = await executePayment({
+            sourceType: "invoice",
+            sourceId: invoice.id,
             fromAccountId: operating.id,
-            toAddress: payoutAddress(counterparty.address, counterparty.id),
+            destination: payoutAddress(counterparty.address, counterparty.id),
             amount,
             memo: `Invoice ${invoice.id}`,
-          });
+          }, { provider });
           txRef = result.txRef;
-          status = result.status === "failed" ? "held" : "paid";
-          if (result.status === "failed") reasoning += " [transfer reported FAILED by Circle]";
+          status = result.status === "confirmed" ? "paid" : result.status === "pending" ? "matched" : "held";
+          if (result.status === "failed") reasoning += ` [transfer failed: ${result.error ?? "provider reported failure"}]`;
+          else if (result.status === "pending") reasoning += " [transfer submitted; awaiting provider confirmation]";
           else operatingBalance = await syncOperatingBalance(operating.id);
         } catch (err) {
           status = "held";
@@ -342,7 +346,7 @@ export async function runAgentCycle(): Promise<CycleResult> {
           goodsReceived: invoice.goods_received,
           operatingBalance,
         },
-        execution: { txRef, chainMode: provider.mode, resultingStatus: status },
+        execution: { txRef, chainMode: provider.mode, resultingStatus: status, settlementRequired: true },
       },
     });
 
@@ -431,15 +435,19 @@ export async function runAgentCycle(): Promise<CycleResult> {
           : ` [guardrail override: amount exceeds the ${limit} USDC limit — release refused]`;
       } else if (operating) {
         try {
-          const result = await provider.transfer({
+          const result = await executePayment({
+            sourceType: "milestone",
+            sourceId: milestone.id,
             fromAccountId: operating.id,
-            toAddress: payoutAddress(contractor.address, contractor.id),
+            destination: payoutAddress(contractor.address, contractor.id),
             amount,
             memo: `Milestone ${milestone.id}`,
-          });
+          }, { provider });
           txRef = result.txRef;
-          status = result.status === "failed" ? "held" : "paid";
-          if (status === "paid") operatingBalance = await syncOperatingBalance(operating.id);
+          status = result.status === "confirmed" ? "paid" : result.status === "pending" ? "verified" : "held";
+          if (result.status === "failed") reasoning += ` [transfer failed: ${result.error ?? "provider reported failure"}]`;
+          else if (result.status === "pending") reasoning += " [transfer submitted; awaiting provider confirmation]";
+          else operatingBalance = await syncOperatingBalance(operating.id);
         } catch (err) {
           reasoning += ` [execution failed: ${(err as Error).message}]`;
         }
@@ -475,7 +483,7 @@ export async function runAgentCycle(): Promise<CycleResult> {
           riskLevel: contractor.risk_level,
           verificationSource: milestone.verification_source,
         },
-        execution: { txRef, chainMode: provider.mode, resultingStatus: status },
+        execution: { txRef, chainMode: provider.mode, resultingStatus: status, settlementRequired: true },
       },
     });
 
