@@ -14,31 +14,53 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: npm
 
-      - run: npm ci
+      # Step logs need a GitHub login to read. The job summary does not, so
+      # every step tees into one file and a failure publishes the tail of it —
+      # a red run that cannot be diagnosed without credentials is a run that
+      # gets ignored.
+      - name: Environment
+        run: |
+          set -o pipefail
+          { node --version; npm --version; uname -a; } 2>&1 | tee -a verify.log
+
+      - name: Install
+        run: set -o pipefail && npm ci 2>&1 | tee -a verify.log
 
       - name: Typecheck
-        run: npm run typecheck
+        run: set -o pipefail && npm run typecheck 2>&1 | tee -a verify.log
 
       - name: Lint
-        run: npm run lint
+        run: set -o pipefail && npm run lint 2>&1 | tee -a verify.log
 
       # No secrets are needed. Everything under test is pure: the ledger's
       # hash chain, risk tiering, the treasury policy, provider selection.
       # Anything that needs Supabase or Circle is exercised by `npm run cycle`
       # against a real project, not here.
       - name: Test
-        run: npm run test
+        run: set -o pipefail && npm run test 2>&1 | tee -a verify.log
 
       - name: Build
-        run: npm run build
+        run: set -o pipefail && npm run build 2>&1 | tee -a verify.log
         env:
           NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder
           SUPABASE_SERVICE_ROLE_KEY: ci-placeholder
+
+      - name: Explain the failure
+        if: failure()
+        run: |
+          {
+            echo "## CI failed"
+            echo
+            echo "Last 80 lines of the combined log:"
+            echo '```'
+            tail -n 80 verify.log 2>/dev/null || echo "(no log was produced — the job failed before any step ran)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
