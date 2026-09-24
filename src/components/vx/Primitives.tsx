@@ -39,7 +39,7 @@ export function Money({
 
 export function Label({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
-    <span className={`font-mono text-[0.6875rem] font-medium uppercase tracking-[0.08em] text-ink-3 ${className}`}>
+    <span className={`font-mono text-[0.6875rem] font-semibold uppercase tracking-[0.11em] text-ink-3 ${className}`}>
       {children}
     </span>
   );
@@ -57,7 +57,7 @@ const OUTCOMES: Record<Outcome, { word: string; className: string }> = {
 export function OutcomeBadge({ outcome, label }: { outcome: Outcome; label?: string }) {
   const item = OUTCOMES[outcome];
   return (
-    <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium ${item.className}`}>
+    <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-semibold ${item.className}`}>
       <OutcomeGlyph outcome={outcome} className="size-3" />
       {label ?? item.word}
     </span>
@@ -67,7 +67,7 @@ export function OutcomeBadge({ outcome, label }: { outcome: Outcome; label?: str
 export function ModeBadge({ mode }: { mode?: string }) {
   if (!mode) return null;
   return (
-    <span className="rounded border border-agent-line bg-agent-soft px-1.5 py-0.5 font-mono text-[0.6875rem] uppercase tracking-wide text-agent">
+    <span className="rounded-full border border-agent-line bg-agent-soft px-2 py-0.5 font-mono text-[0.6875rem] font-semibold uppercase tracking-wide text-agent">
       {mode}
     </span>
   );
@@ -121,14 +121,14 @@ export function Card({
     held: "border-held-line bg-surface",
     simulated: "border-dashed border-line-strong bg-surface",
   }[tone];
-  return <section className={`rounded-lg border ${toneClass} ${className}`}>{children}</section>;
+  return <section className={`surface-shadow rounded-xl border ${toneClass} ${className}`}>{children}</section>;
 }
 
 export function SectionHead({ title, meta, action }: { title: string; meta?: ReactNode; action?: ReactNode }) {
   return (
     <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h2 className="text-[0.9375rem] font-semibold text-ink">{title}</h2>
+        <h2 className="text-base font-semibold tracking-tight text-ink">{title}</h2>
         {meta && <span className="text-[0.8125rem] text-ink-3">{meta}</span>}
       </div>
       {action}

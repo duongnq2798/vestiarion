@@ -44,7 +44,7 @@ export default async function CounterpartiesPage() {
         <SectionHead title="Counterparty book" meta={`${counterparties.length} records`} />
         <div className="grid gap-3 md:grid-cols-2">
           {counterparties.map((counterparty) => (
-            <article key={counterparty.id} className="min-w-0 rounded-lg border border-line bg-surface p-4">
+            <article key={counterparty.id} className="surface-shadow min-w-0 rounded-xl border border-line bg-surface p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <h3 className="truncate text-sm font-semibold text-ink">{counterparty.name}</h3>

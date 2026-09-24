@@ -28,12 +28,12 @@ export default function AgentControlsUnlock() {
           required
           autoComplete="current-password"
           placeholder="Control token"
-          className="h-10 min-w-0 rounded-md border border-line-strong bg-surface px-3 text-sm text-ink outline-none focus:border-agent"
+          className="h-10 min-w-0 rounded-xl border border-line-strong bg-surface px-3 text-sm text-ink shadow-sm outline-none focus:border-agent"
         />
         <button
           type="submit"
           disabled={pending}
-          className="h-10 shrink-0 rounded-md bg-agent px-4 text-sm font-semibold text-on-agent hover:bg-agent/90 disabled:opacity-60"
+          className="brand-shadow h-10 shrink-0 rounded-xl bg-agent px-4 text-sm font-semibold text-on-agent transition-transform hover:-translate-y-0.5 disabled:opacity-60"
         >
           {pending ? "Checking…" : "Unlock controls"}
         </button>

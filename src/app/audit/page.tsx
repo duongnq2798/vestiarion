@@ -37,7 +37,7 @@ export default async function AuditPage({ searchParams }: PageProps<"/audit">) {
         right={<AgentControls nextDay={dashboardStats.day + 1} headSeq={head?.seq ?? 0} clockMode={dashboardStats.clockMode} />}
       />
 
-      <section aria-label="Hash chain" className="mb-6 rounded-lg border border-line bg-surface p-4 sm:p-5">
+      <section aria-label="Hash chain" className="surface-shadow mb-6 rounded-2xl border border-line bg-surface p-4 sm:p-6">
         <dl className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
           <div><dt><Label>Entries</Label></dt><dd className="mt-1 text-xl font-semibold tabular-nums text-ink">{totalEntries}</dd></div>
           <div><dt><Label>Head</Label></dt><dd className="mt-1.5 font-mono text-[0.8125rem] text-ink">{head ? `#${pad(head.seq)}` : "—"}</dd></div>
@@ -46,7 +46,7 @@ export default async function AuditPage({ searchParams }: PageProps<"/audit">) {
         <div className="mt-4 border-t border-line pt-4"><VerifyLedgerBadge /></div>
       </section>
 
-      <details className="mb-6 rounded-lg border border-line bg-surface p-4 text-xs text-ink-3">
+      <details className="surface-shadow mb-6 rounded-2xl border border-line bg-surface p-4 text-xs text-ink-3">
         <summary className="cursor-pointer font-medium text-ink-2 hover:text-ink">Ledger signing public key</summary>
         <pre className="mt-3 overflow-x-auto whitespace-pre-wrap rounded-md bg-ground p-3 font-mono text-ink-2">{publicKey}</pre>
       </details>

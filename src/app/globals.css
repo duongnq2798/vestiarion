@@ -1,43 +1,44 @@
 @import "tailwindcss";
 
 /*
- * Vestiarion's proof-first visual language.
- * Green is reserved for verifiable proof, amber for waiting, red for a
- * guardrail refusal or failed proof, and lapis for the agent's voice.
+ * Vestiarion's proof-first visual language: warm ledger paper, blue-black
+ * ink, cobalt agent voice, jade proof, saffron waiting, vermilion refusal.
+ * The palette is intentionally editorial rather than generic dashboard blue.
  */
 @theme {
-  --color-ground: #0c0e11;
-  --color-surface: #13161a;
-  --color-raised: #1a1e24;
-  --color-line: #262b33;
-  --color-line-strong: #3b424d;
+  --color-ground: #f3f0e7;
+  --color-surface: #fffefa;
+  --color-raised: #e9e5d9;
+  --color-line: #ddd8ca;
+  --color-line-strong: #bbb5a7;
 
-  --color-ink: #e8eaed;
-  --color-ink-2: #b1b8c2;
-  --color-ink-3: #8b93a0;
+  --color-ink: #18211c;
+  --color-ink-2: #4d5a53;
+  --color-ink-3: #79837d;
 
-  --color-agent: #8fa9f2;
-  --color-agent-soft: #161f38;
-  --color-agent-line: #2c3b66;
-  --color-on-agent: #0c0e11;
+  --color-agent: #3048c9;
+  --color-agent-soft: #e9edff;
+  --color-agent-line: #aeb9f6;
+  --color-on-agent: #ffffff;
 
-  --color-proof: #5fcc98;
-  --color-proof-soft: #0f241a;
-  --color-proof-line: #1f4a36;
+  --color-proof: #11765a;
+  --color-proof-soft: #e2f4ec;
+  --color-proof-line: #9bcfbd;
 
-  --color-held: #e2ae52;
-  --color-held-soft: #261d0e;
-  --color-held-line: #4d3a17;
+  --color-held: #a65f08;
+  --color-held-soft: #fff1cf;
+  --color-held-line: #e2bd70;
 
-  --color-refused: #f2807a;
-  --color-refused-soft: #2a1414;
-  --color-refused-line: #5c2622;
+  --color-refused: #cf4434;
+  --color-refused-soft: #ffe8e2;
+  --color-refused-line: #efa69a;
 
   --text-reasoning: 1.0625rem;
   --text-reasoning--line-height: 1.65;
 
   --animate-arrive: arrive 420ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
   --animate-sweep: sweep 1.4s ease-in-out infinite;
+  --animate-drift: drift 12s ease-in-out infinite alternate;
 
   @keyframes arrive {
     from { opacity: 0; transform: translateY(6px); }
@@ -47,6 +48,11 @@
   @keyframes sweep {
     from { transform: translateX(-100%); }
     to { transform: translateX(250%); }
+  }
+
+  @keyframes drift {
+    from { transform: translate3d(-1%, -1%, 0) scale(1); }
+    to { transform: translate3d(2%, 1%, 0) scale(1.035); }
   }
 }
 
@@ -59,9 +65,28 @@
 @utility hatch {
   background-image: repeating-linear-gradient(
     135deg,
-    var(--color-line) 0 1px,
-    transparent 1px 7px
+    color-mix(in srgb, var(--color-line-strong) 38%, transparent) 0 1px,
+    transparent 1px 8px
   );
+}
+
+@utility ledger-grid {
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--color-agent) 7%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--color-agent) 7%, transparent) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+@utility surface-shadow {
+  box-shadow:
+    0 1px 0 rgb(24 33 28 / 0.04),
+    0 14px 40px rgb(43 54 47 / 0.07);
+}
+
+@utility brand-shadow {
+  box-shadow:
+    0 12px 28px rgb(48 72 201 / 0.18),
+    inset 0 1px 0 rgb(255 255 255 / 0.26);
 }
 
 @utility no-scrollbar {
@@ -74,16 +99,20 @@
 
 @layer base {
   html {
-    color-scheme: dark;
+    color-scheme: light;
     background: var(--color-ground);
   }
 
   body {
     min-width: 320px;
-    background: var(--color-ground);
+    background:
+      radial-gradient(circle at 86% -8%, rgb(221 226 255 / 0.78), transparent 27rem),
+      radial-gradient(circle at 8% 22%, rgb(221 244 234 / 0.66), transparent 23rem),
+      var(--color-ground);
     color: var(--color-ink);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
 
   button,
@@ -107,8 +136,8 @@
   }
 
   ::selection {
-    background: var(--color-agent-line);
-    color: var(--color-ink);
+    background: var(--color-agent);
+    color: var(--color-on-agent);
   }
 }
 

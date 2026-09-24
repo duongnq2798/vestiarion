@@ -49,11 +49,11 @@ export default async function InvoicesPage({ searchParams }: PageProps<"/invoice
         <SectionHead title="Invoice intake" meta="manual entry or CSV preview and confirm" />
         {canMutate ? (
           <div className="grid gap-4 lg:grid-cols-2">
-            <details open className="rounded-lg border border-line bg-surface p-4 sm:p-5">
+            <details open className="surface-shadow rounded-2xl border border-line bg-surface p-4 sm:p-6">
               <summary className="cursor-pointer text-sm font-semibold text-ink">Enter one invoice</summary>
               <div className="mt-4"><InvoiceIntake counterparties={counterparties.map(({ id, name, role }) => ({ id, name, role }))} /></div>
             </details>
-            <details className="rounded-lg border border-line bg-surface p-4 sm:p-5">
+            <details className="surface-shadow rounded-2xl border border-line bg-surface p-4 sm:p-6">
               <summary className="cursor-pointer text-sm font-semibold text-ink">Import CSV</summary>
               <div className="mt-4"><InvoiceCsvImport /></div>
             </details>

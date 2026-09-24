@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { curveMonotoneX, line as d3Line, scaleBand, scaleLinear, scaleTime } from "d3";
 import type {
   CycleRunTelemetry,
   CycleSnapshotTelemetry,
@@ -46,21 +47,21 @@ function ChartCard({ title, description, provenance, children }: {
   children: ReactNode;
 }) {
   return (
-    <Card className="min-w-0 p-4 sm:p-5">
+    <Card className="min-w-0 overflow-hidden p-5 sm:p-6">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="font-semibold text-ink">{title}</h2>
+          <h2 className="text-lg font-semibold tracking-tight text-ink">{title}</h2>
           <p className="mt-1 max-w-2xl text-sm leading-relaxed text-ink-2">{description}</p>
         </div>
         {provenance}
       </div>
-      <div className="mt-5">{children}</div>
+      <div className="mt-6">{children}</div>
     </Card>
   );
 }
 
 function EmptyChart({ children }: { children: ReactNode }) {
-  return <p className="rounded-md border border-dashed border-line-strong px-4 py-8 text-center text-sm text-ink-2">{children}</p>;
+  return <p className="hatch rounded-xl border border-dashed border-line-strong bg-ground/45 px-4 py-10 text-center text-sm text-ink-2">{children}</p>;
 }
 
 function DetailsTable({ summary, headers, rows }: {
@@ -107,25 +108,48 @@ function MetricPlot({ values, label, unit, color, valueLabel }: {
   const bottom = 28;
   const min = Math.min(...values);
   const max = Math.max(...values);
-  const range = max - min;
-  const x = (index: number) => values.length === 1 ? (left + width - right) / 2 : left + index * ((width - left - right) / (values.length - 1));
-  const y = (value: number) => range === 0 ? (top + height - bottom) / 2 : top + (max - value) * ((height - top - bottom) / range);
-  const points = values.map((value, index) => `${x(index)},${y(value)}`).join(" ");
+  const padding = min === max ? Math.max(Math.abs(min) * 0.12, 1) : 0;
+  const x = scaleLinear()
+    .domain([0, Math.max(values.length - 1, 1)])
+    .range([left, width - right]);
+  const y = scaleLinear()
+    .domain([Math.min(0, min - padding), max + padding])
+    .nice(3)
+    .range([height - bottom, top]);
+  const path = values.length > 1
+    ? d3Line<number>().x((_value, index) => x(index)).y((value) => y(value)).curve(curveMonotoneX)(values)
+    : null;
+  const ticks = y.ticks(3);
   return (
-    <div className="min-w-0 rounded-md border border-line bg-ground/40 p-2">
+    <div className="min-w-0 rounded-xl border border-line bg-ground/35 p-3">
       <div className="flex items-baseline justify-between gap-2 px-1">
         <Label>{label}</Label>
         <span className="font-mono text-[0.6875rem] text-ink-3">{unit}</span>
       </div>
       <svg viewBox={`0 0 ${width} ${height}`} className="mt-1 h-auto w-full" role="img" aria-label={`${label}: ${values.length} observed point${values.length === 1 ? "" : "s"}, from ${valueLabel(min)} to ${valueLabel(max)}`}>
-        <line x1={left} y1={top} x2={left} y2={height - bottom} stroke="var(--color-line-strong)" />
-        <line x1={left} y1={height - bottom} x2={width - right} y2={height - bottom} stroke="var(--color-line-strong)" />
-        <text x={left - 5} y={top + 3} textAnchor="end" fill="var(--color-ink-3)" fontSize="10">{valueLabel(max)}</text>
-        <text x={left - 5} y={height - bottom + 3} textAnchor="end" fill="var(--color-ink-3)" fontSize="10">{valueLabel(min)}</text>
-        {values.length > 1 && <polyline points={points} fill="none" stroke={color} strokeWidth="2" vectorEffect="non-scaling-stroke" />}
-        {values.map((value, index) => <circle key={index} cx={x(index)} cy={y(value)} r="3" fill={color}><title>{valueLabel(value)}</title></circle>)}
-        <text x={left} y={height - 8} fill="var(--color-ink-3)" fontSize="10">first</text>
-        <text x={width - right} y={height - 8} textAnchor="end" fill="var(--color-ink-3)" fontSize="10">latest</text>
+        <defs>
+          <linearGradient id={`${label.replaceAll(" ", "-")}-wash`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor={color} stopOpacity="0.16" />
+            <stop offset="1" stopColor={color} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        {ticks.map((tick) => <g key={tick}>
+          <line x1={left} y1={y(tick)} x2={width - right} y2={y(tick)} stroke="var(--color-line)" strokeDasharray="2 5" />
+          <text x={left - 5} y={y(tick) + 3} textAnchor="end" fill="var(--color-ink-3)" fontSize="9">{valueLabel(tick)}</text>
+        </g>)}
+        {path && <>
+          <path d={`${path} L ${x(values.length - 1)},${height - bottom} L ${x(0)},${height - bottom} Z`} fill={`url(#${label.replaceAll(" ", "-")}-wash)`} />
+          <path d={path} fill="none" stroke={color} strokeWidth="2.25" vectorEffect="non-scaling-stroke" />
+        </>}
+        {values.map((value, index) => <circle key={index} cx={x(values.length === 1 ? 0.5 : index)} cy={y(value)} r="3.5" fill="var(--color-surface)" stroke={color} strokeWidth="2"><title>{valueLabel(value)}</title></circle>)}
+        {values.length === 1 ? (
+          <text x={width / 2} y={height - 8} textAnchor="middle" fill="var(--color-ink-3)" fontSize="10">only observation</text>
+        ) : (
+          <>
+            <text x={left} y={height - 8} fill="var(--color-ink-3)" fontSize="10">first</text>
+            <text x={width - right} y={height - 8} textAnchor="end" fill="var(--color-ink-3)" fontSize="10">latest</text>
+          </>
+        )}
       </svg>
     </div>
   );
@@ -185,9 +209,20 @@ function BalanceChart({ snapshots, moves }: { snapshots: CycleSnapshotTelemetry[
   const max = Math.max(...values, 1);
   const minTime = Date.parse(snapshots[0].capturedAt);
   const maxTime = Date.parse(snapshots.at(-1)?.capturedAt ?? snapshots[0].capturedAt);
-  const xTime = (date: string) => minTime === maxTime ? (left + width - right) / 2 : left + (Date.parse(date) - minTime) * ((width - left - right) / (maxTime - minTime));
-  const y = (value: number) => top + (max - value) * ((height - top - bottom) / max);
-  const points = (selector: (snapshot: CycleSnapshotTelemetry) => number) => snapshots.map((snapshot) => `${xTime(snapshot.capturedAt)},${y(selector(snapshot))}`).join(" ");
+  const halfDay = 43_200_000;
+  const xTime = scaleTime()
+    .domain(minTime === maxTime ? [new Date(minTime - halfDay), new Date(maxTime + halfDay)] : [new Date(minTime), new Date(maxTime)])
+    .range([left, width - right]);
+  const y = scaleLinear().domain([0, max]).nice(4).range([height - bottom, top]);
+  const liquidPath = d3Line<CycleSnapshotTelemetry>()
+    .x((snapshot) => xTime(new Date(snapshot.capturedAt)))
+    .y((snapshot) => y(snapshot.totalLiquid))
+    .curve(curveMonotoneX)(snapshots);
+  const reservePath = d3Line<CycleSnapshotTelemetry>()
+    .x((snapshot) => xTime(new Date(snapshot.capturedAt)))
+    .y((snapshot) => y(snapshot.reservePosition))
+    .curve(curveMonotoneX)(snapshots);
+  const yTicks = y.ticks(4);
   const relevantMoves = moves.filter((move) => Date.parse(move.createdAt) >= minTime && Date.parse(move.createdAt) <= maxTime);
   return (
     <ChartCard
@@ -200,23 +235,23 @@ function BalanceChart({ snapshots, moves }: { snapshots: CycleSnapshotTelemetry[
         <span><span className="mr-1.5 inline-block h-0.5 w-5 bg-proof align-middle" />Reserve</span>
         <span><span className="mr-1.5 text-held">◆</span>Treasury move</span>
       </div>
-      <svg viewBox={`0 0 ${width} ${height}`} className="mt-2 h-auto w-full" role="img" aria-label={`${snapshots.length} balance snapshots; latest liquid balance ${fmt(snapshots.at(-1)?.totalLiquid ?? 0)} USDC and reserve ${fmt(snapshots.at(-1)?.reservePosition ?? 0)} USYC`}>
-        <line x1={left} y1={top} x2={left} y2={height - bottom} stroke="var(--color-line-strong)" />
-        <line x1={left} y1={height - bottom} x2={width - right} y2={height - bottom} stroke="var(--color-line-strong)" />
-        <text x={left - 7} y={top + 4} textAnchor="end" fill="var(--color-ink-3)" fontSize="11">{fmt(max)}</text>
-        <text x={left - 7} y={height - bottom + 4} textAnchor="end" fill="var(--color-ink-3)" fontSize="11">0</text>
+      <svg viewBox={`0 0 ${width} ${height}`} className="mt-3 h-auto w-full rounded-xl bg-ground/35 p-1" role="img" aria-label={`${snapshots.length} balance snapshots; latest liquid balance ${fmt(snapshots.at(-1)?.totalLiquid ?? 0)} USDC and reserve ${fmt(snapshots.at(-1)?.reservePosition ?? 0)} USYC`}>
+        {yTicks.map((tick) => <g key={tick}>
+          <line x1={left} y1={y(tick)} x2={width - right} y2={y(tick)} stroke="var(--color-line)" strokeDasharray="2 6" />
+          <text x={left - 7} y={y(tick) + 4} textAnchor="end" fill="var(--color-ink-3)" fontSize="10">{fmt(tick)}</text>
+        </g>)}
         <text x="13" y={(top + height - bottom) / 2} textAnchor="middle" fill="var(--color-ink-3)" fontSize="10" transform={`rotate(-90 13 ${(top + height - bottom) / 2})`}>token units</text>
         {snapshots.length > 1 && <>
-          <polyline points={points((snapshot) => snapshot.totalLiquid)} fill="none" stroke="var(--color-agent)" strokeWidth="2" vectorEffect="non-scaling-stroke" />
-          <polyline points={points((snapshot) => snapshot.reservePosition)} fill="none" stroke="var(--color-proof)" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+          {liquidPath && <path d={liquidPath} fill="none" stroke="var(--color-agent)" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />}
+          {reservePath && <path d={reservePath} fill="none" stroke="var(--color-proof)" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />}
         </>}
         {snapshots.map((snapshot) => <g key={snapshot.id}>
-          <circle cx={xTime(snapshot.capturedAt)} cy={y(snapshot.totalLiquid)} r="3" fill="var(--color-agent)" />
-          <circle cx={xTime(snapshot.capturedAt)} cy={y(snapshot.reservePosition)} r="3" fill="var(--color-proof)" />
+          <circle cx={xTime(new Date(snapshot.capturedAt))} cy={y(snapshot.totalLiquid)} r="3.5" fill="var(--color-surface)" stroke="var(--color-agent)" strokeWidth="2" />
+          <circle cx={xTime(new Date(snapshot.capturedAt))} cy={y(snapshot.reservePosition)} r="3.5" fill="var(--color-surface)" stroke="var(--color-proof)" strokeWidth="2" />
         </g>)}
         {relevantMoves.map((move) => <g key={move.id}>
-          <line x1={xTime(move.createdAt)} y1={top} x2={xTime(move.createdAt)} y2={height - bottom} stroke="var(--color-held)" strokeDasharray="3 4" opacity="0.7" />
-          <text x={xTime(move.createdAt)} y={top - 7} textAnchor="middle" fill="var(--color-held)" fontSize="11">{move.action === "sweep_to_usyc" ? "S" : move.action === "redeem_from_usyc" ? "R" : "B"}</text>
+          <line x1={xTime(new Date(move.createdAt))} y1={top} x2={xTime(new Date(move.createdAt))} y2={height - bottom} stroke="var(--color-held)" strokeDasharray="3 4" opacity="0.7" />
+          <text x={xTime(new Date(move.createdAt))} y={top - 7} textAnchor="middle" fill="var(--color-held)" fontSize="11">{move.action === "sweep_to_usyc" ? "S" : move.action === "redeem_from_usyc" ? "R" : "B"}</text>
         </g>)}
         <text x={left} y={height - 12} fill="var(--color-ink-3)" fontSize="10">{when(snapshots[0].capturedAt)}</text>
         <text x={width - right} y={height - 12} textAnchor="end" fill="var(--color-ink-3)" fontSize="10">{when(snapshots.at(-1)?.capturedAt ?? snapshots[0].capturedAt)}</text>
@@ -243,6 +278,8 @@ function OutcomeChart({ runs }: { runs: CycleRunTelemetry[] }) {
   if (runs.length === 0) {
     return <ChartCard title="Decision outcomes per cycle" description="Executed and refused outcomes counted where each decision occurs."><EmptyChart>No cycles recorded yet — run an agent cycle to populate this.</EmptyChart></ChartCard>;
   }
+  const totals = runs.map((run) => outcomes.reduce((sum, outcome) => sum + outcome.value(run), 0));
+  const width = scaleLinear().domain([0, Math.max(...totals, 1)]).range([0, 100]);
   return (
     <ChartCard title="Decision outcomes per cycle" description="Each horizontal bar is one completed cycle; segments are observed outcomes, not a fitted trend." provenance={<Provenance modes={runs.map((run) => run.chainMode)} detail="Cycles" />}>
       <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-ink-2">
@@ -250,13 +287,13 @@ function OutcomeChart({ runs }: { runs: CycleRunTelemetry[] }) {
       </div>
       <ol className="mt-4 space-y-3">
         {runs.map((run, index) => {
-          const total = outcomes.reduce((sum, outcome) => sum + outcome.value(run), 0);
+          const total = totals[index];
           return <li key={run.id} className="grid grid-cols-[3.5rem_minmax(0,1fr)_2rem] items-center gap-2 text-xs">
             <span className="font-mono text-ink-3">#{index + 1}</span>
             <div className="flex h-5 min-w-0 overflow-hidden rounded-sm bg-raised" aria-label={`${total} outcomes`}>
               {total === 0 ? <span className="m-auto text-[0.625rem] text-ink-3">no outcomes</span> : outcomes.map((outcome) => {
                 const value = outcome.value(run);
-                return value > 0 ? <span key={outcome.key} title={`${outcome.label}: ${value}`} style={{ width: `${(value / total) * 100}%`, background: outcome.color }} /> : null;
+                return value > 0 ? <span key={outcome.key} title={`${outcome.label}: ${value}`} style={{ width: `${width(value)}%`, background: outcome.color }} /> : null;
               })}
             </div>
             <span className="text-right tabular-nums text-ink-2">{total}</span>
@@ -272,18 +309,20 @@ function DecisionModeChart({ runs }: { runs: CycleRunTelemetry[] }) {
   if (runs.length === 0) {
     return <ChartCard title="Model vs heuristic" description="Which decision engine actually returned each verdict."><EmptyChart>No cycles recorded yet — run an agent cycle to populate this.</EmptyChart></ChartCard>;
   }
+  const totals = runs.map((run) => run.modelDecisionCount + run.heuristicDecisionCount);
+  const width = scaleLinear().domain([0, Math.max(...totals, 1)]).range([0, 100]);
   return (
     <ChartCard title="Model vs heuristic" description="The model share and rule-based fallback are persisted by the orchestrator, including cycles where one side is zero." provenance={<Provenance modes={runs.map((run) => run.chainMode)} detail="Cycles" />}>
       <div className="flex gap-4 text-xs text-ink-2"><span><span className="mr-1.5 inline-block size-2 bg-agent" />Model</span><span><span className="mr-1.5 inline-block size-2 bg-line-strong" />Heuristic</span></div>
       <ol className="mt-4 space-y-3">
         {runs.map((run, index) => {
-          const total = run.modelDecisionCount + run.heuristicDecisionCount;
+          const total = totals[index];
           return <li key={run.id} className="grid grid-cols-[3.5rem_minmax(0,1fr)_3.5rem] items-center gap-2 text-xs">
             <span className="font-mono text-ink-3">#{index + 1}</span>
             <div className="flex h-5 min-w-0 overflow-hidden rounded-sm bg-raised">
               {total === 0 ? <span className="m-auto text-[0.625rem] text-ink-3">no decisions</span> : <>
-                {run.modelDecisionCount > 0 && <span title={`Model: ${run.modelDecisionCount}`} className="bg-agent" style={{ width: `${(run.modelDecisionCount / total) * 100}%` }} />}
-                {run.heuristicDecisionCount > 0 && <span title={`Heuristic: ${run.heuristicDecisionCount}`} className="bg-line-strong" style={{ width: `${(run.heuristicDecisionCount / total) * 100}%` }} />}
+                {run.modelDecisionCount > 0 && <span title={`Model: ${run.modelDecisionCount}`} className="bg-agent" style={{ width: `${width(run.modelDecisionCount)}%` }} />}
+                {run.heuristicDecisionCount > 0 && <span title={`Heuristic: ${run.heuristicDecisionCount}`} className="bg-line-strong" style={{ width: `${width(run.heuristicDecisionCount)}%` }} />}
               </>}
             </div>
             <span className="text-right tabular-nums text-ink-2">{run.modelDecisionCount}/{total}</span>
@@ -319,24 +358,44 @@ function ScreeningChart({ screenings }: { screenings: ScreeningTelemetry[] }) {
   }
   const batches = screeningBatches(screenings);
   const max = Math.max(...batches.map((batch) => batch.rows.length));
+  const width = 760;
+  const height = Math.max(180, batches.length * 48 + 62);
+  const left = 105;
+  const right = 76;
+  const top = 22;
+  const bottom = 30;
+  const keys = batches.map((batch, index) => `${batch.at}-${index}`);
+  const x = scaleLinear().domain([0, max]).nice().range([left, width - right]);
+  const y = scaleBand().domain(keys).range([top, height - bottom]).padding(0.34);
+  const ticks = x.ticks(Math.min(max, 5));
   return (
-    <ChartCard title="Screening coverage" description="Consecutive checks within two minutes are displayed as one observed batch. A red marker is a failed lookup; the previous verdict stayed in force." provenance={<Provenance modes={screenings.map((row) => row.mode)} detail="Screening" />}>
-      <ol className="space-y-3">
+    <ChartCard title="Screening coverage" description="Consecutive checks within two minutes are displayed as one observed batch. A red segment is a failed lookup; the previous verdict stayed in force." provenance={<Provenance modes={screenings.map((row) => row.mode)} detail="Screening" />}>
+      <div className="mt-1 flex flex-wrap gap-4 text-xs text-ink-2" aria-hidden>
+        <span><span className="mr-1.5 inline-block size-2 rounded-sm bg-proof" />Completed</span>
+        <span><span className="mr-1.5 inline-block size-2 rounded-sm bg-refused" />Failed lookup</span>
+        <span><span className="mr-1.5 text-held">◆</span>Tier change</span>
+      </div>
+      <svg viewBox={`0 0 ${width} ${height}`} className="mt-3 h-auto w-full rounded-xl bg-ground/35 p-1" role="img" aria-label={`${screenings.length} screening checks in ${batches.length} observed batches`}>
+        {ticks.map((tick) => <g key={tick}>
+          <line x1={x(tick)} y1={top} x2={x(tick)} y2={height - bottom} stroke="var(--color-line)" strokeDasharray="2 6" />
+          <text x={x(tick)} y={height - 10} textAnchor="middle" fill="var(--color-ink-3)" fontSize="10">{tick}</text>
+        </g>)}
         {batches.map((batch, index) => {
           const changes = batch.rows.filter((row) => row.tierChanged).length;
           const failures = batch.rows.filter((row) => row.status === "failed").length;
-          return <li key={`${batch.at}-${index}`} className="grid grid-cols-[5rem_minmax(0,1fr)_4.5rem] items-center gap-2 text-xs">
-            <span className="font-mono text-ink-3">{when(batch.at).replace(" UTC", "")}</span>
-            <div className="h-5 min-w-0 overflow-hidden rounded-sm bg-raised">
-              <div className="flex h-full" style={{ width: `${(batch.rows.length / max) * 100}%` }}>
-                {batch.rows.length - failures > 0 && <span className="h-full bg-proof" style={{ width: `${((batch.rows.length - failures) / batch.rows.length) * 100}%` }} />}
-                {failures > 0 && <span className="h-full bg-refused" style={{ width: `${(failures / batch.rows.length) * 100}%` }} />}
-              </div>
-            </div>
-            <span className="text-right tabular-nums text-ink-2">{batch.rows.length} check{batch.rows.length === 1 ? "" : "s"}{changes > 0 ? ` · ${changes} Δ` : ""}{failures > 0 ? ` · ${failures} !` : ""}</span>
-          </li>;
+          const key = keys[index];
+          const barY = y(key) ?? 0;
+          const complete = batch.rows.length - failures;
+          return <g key={key}>
+            <text x={left - 10} y={barY + y.bandwidth() / 2 + 4} textAnchor="end" fill="var(--color-ink-3)" fontSize="10">{when(batch.at).replace(" UTC", "")}</text>
+            <rect x={left} y={barY} width={width - left - right} height={y.bandwidth()} rx="5" fill="var(--color-raised)" />
+            {complete > 0 && <rect x={left} y={barY} width={x(complete) - left} height={y.bandwidth()} rx="5" fill="var(--color-proof)" opacity="0.88" />}
+            {failures > 0 && <rect x={x(complete)} y={barY} width={x(batch.rows.length) - x(complete)} height={y.bandwidth()} rx="3" fill="var(--color-refused)" />}
+            {changes > 0 && <path d={`M ${x(batch.rows.length) + 9} ${barY + y.bandwidth() / 2 - 5} l 5 5 -5 5 -5 -5 Z`} fill="var(--color-held)" />}
+            <text x={width - right + 10} y={barY + y.bandwidth() / 2 + 4} fill="var(--color-ink-2)" fontSize="10">{batch.rows.length} check{batch.rows.length === 1 ? "" : "s"}</text>
+          </g>;
         })}
-      </ol>
+      </svg>
       <DetailsTable summary="Screening receipt table" headers={["Checked", "Counterparty", "Mode", "Result", "Transition", "Source"]} rows={screenings.map((row) => [when(row.createdAt), row.counterpartyName, row.mode === "live" ? "LIVE" : "SIMULATED", row.status === "failed" ? "failed — retained" : row.riskLevel, row.tierChanged ? `${row.previousRiskLevel} → ${row.riskLevel}` : "none observed", row.source])} />
     </ChartCard>
   );

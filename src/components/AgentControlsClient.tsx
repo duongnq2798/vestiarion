@@ -45,7 +45,7 @@ export default function AgentControlsClient({ nextDay, headSeq, clockMode }: { n
           type="button"
           disabled={busy}
           onClick={runCycle}
-          className="relative inline-flex h-10 items-center justify-center gap-2 overflow-hidden rounded-md bg-agent px-4 text-sm font-semibold text-on-agent hover:bg-agent/90 disabled:cursor-progress disabled:opacity-70"
+          className="brand-shadow relative inline-flex h-10 items-center justify-center gap-2 overflow-hidden rounded-xl bg-agent px-4 text-sm font-semibold text-on-agent transition-transform hover:-translate-y-0.5 disabled:cursor-progress disabled:opacity-70"
         >
           <span aria-hidden>▶</span>
           {running ? `Running ${runLabel}…` : clockMode === "simulate" ? `Run day ${nextDay}` : "Run cycle now"}

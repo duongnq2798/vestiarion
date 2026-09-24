@@ -33,10 +33,11 @@ function MetricCard({ label, value, note, href, measured }: {
   measured: boolean;
 }) {
   return (
-    <Link href={href} className={`group rounded-lg border p-4 transition-colors hover:border-agent-line sm:p-5 ${measured ? "border-line bg-surface" : "hatch border-dashed border-line-strong"}`}>
+    <Link href={href} className={`group surface-shadow relative overflow-hidden rounded-2xl border p-5 transition-all hover:-translate-y-1 hover:border-agent-line sm:p-6 ${measured ? "border-line bg-surface" : "hatch border-dashed border-line-strong bg-surface/70"}`}>
+      <span aria-hidden className={`absolute inset-x-0 top-0 h-1 ${measured ? "bg-proof" : "bg-line-strong/50"}`} />
       <Label>{label}</Label>
-      <p className={`mt-2 font-mono font-semibold tracking-tight ${measured ? "text-2xl text-ink" : "text-base text-ink-2"}`}>{value}</p>
-      <p className="mt-2 text-xs leading-relaxed text-ink-3">{note} <span className="text-agent group-hover:underline">View evidence →</span></p>
+      <p className={`mt-3 font-mono font-semibold tracking-[-0.025em] ${measured ? "text-3xl text-ink" : "text-base leading-snug text-ink-2"}`}>{value}</p>
+      <p className="mt-3 text-xs leading-relaxed text-ink-3">{note} <span className="font-semibold text-agent group-hover:underline">View evidence →</span></p>
     </Link>
   );
 }
@@ -67,7 +68,7 @@ function latestCycleNote(metrics: LandingMetrics): string {
 }
 
 function MetricsFallback() {
-  return <div className="h-56 animate-pulse rounded-lg border border-line bg-surface" aria-label="Loading live measurements" />;
+  return <div className="surface-shadow h-56 animate-pulse rounded-2xl border border-line bg-surface" aria-label="Loading live measurements" />;
 }
 
 const claims = [
@@ -100,7 +101,7 @@ const claims = [
 function DecisionFlowDiagram() {
   const stages = ["Compliance", "AP", "Contractors", "Treasury", "Forecast"];
   return (
-    <figure className="rounded-xl border border-line bg-surface p-4 sm:p-6">
+    <figure className="surface-shadow ledger-grid rounded-3xl border border-line bg-surface p-4 sm:p-7">
       <svg viewBox="0 0 1000 430" className="hidden h-auto w-full sm:block" role="img" aria-labelledby="flow-title flow-desc">
         <title id="flow-title">Vestiarion decision flow</title>
         <desc id="flow-desc">Compliance, accounts payable, contractor payments, treasury, and forecasting feed decisions through a code guardrail before execution, while every stage writes to a signed ledger.</desc>
@@ -161,6 +162,40 @@ function DecisionFlowDiagram() {
   );
 }
 
+function ProofPanel({ provenance }: { provenance: ProvenanceLeg[] }) {
+  const steps = [
+    ["01", "Observe", "book + screening evidence"],
+    ["02", "Reason", "model or explicit heuristic"],
+    ["03", "Enforce", "code-level policy boundary"],
+    ["04", "Sign", "append-only audit receipt"],
+  ] as const;
+  return (
+    <aside className="surface-shadow relative overflow-hidden rounded-[1.75rem] border border-line bg-surface p-5 sm:p-6">
+      <div aria-hidden className="absolute -right-14 -top-16 size-44 rounded-full bg-agent-soft blur-2xl motion-safe:animate-drift" />
+      <div className="relative">
+        <div className="flex items-center justify-between gap-4 border-b border-line pb-4">
+          <div><Label className="text-agent">System state</Label><p className="mt-1 text-sm font-semibold text-ink">Proof before movement</p></div>
+          <span className="brand-shadow grid size-11 place-items-center rounded-xl bg-agent font-mono text-sm font-bold text-on-agent">V/01</span>
+        </div>
+        <ol className="my-5 space-y-3">
+          {steps.map(([number, title, detail]) => (
+            <li key={number} className="grid grid-cols-[2rem_5rem_minmax(0,1fr)] items-baseline gap-2">
+              <span className="font-mono text-[0.6875rem] font-semibold text-agent">{number}</span>
+              <span className="text-sm font-semibold text-ink">{title}</span>
+              <span className="text-xs text-ink-3">{detail}</span>
+            </li>
+          ))}
+        </ol>
+        <ProvenanceBar legs={provenance} />
+        <div className="mt-5 rounded-xl border border-refused-line bg-refused-soft px-4 py-3">
+          <p className="font-mono text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-refused">Guardrail is executable policy</p>
+          <p className="mt-1 text-xs leading-relaxed text-ink-2">A model verdict cannot cross the payment boundary without passing deterministic checks.</p>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
 export default function LandingPage() {
   const provider = getChainProvider();
   const currentScreeningMode = screeningMode();
@@ -171,61 +206,64 @@ export default function LandingPage() {
   ];
 
   return (
-    <div className="min-h-dvh overflow-x-hidden">
-      <header className="border-b border-line bg-surface">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
-          <Link href="/" className="font-mono text-[0.8125rem] font-semibold uppercase tracking-[0.22em] text-ink">Vestiarion</Link>
+    <div className="min-h-dvh overflow-x-hidden bg-transparent">
+      <header className="sticky top-0 z-50 border-b border-line/80 bg-surface/88 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3.5 sm:px-6">
+          <Link href="/" className="group inline-flex items-center gap-2.5 font-mono text-[0.8125rem] font-semibold uppercase tracking-[0.2em] text-ink">
+            <span className="brand-shadow grid size-8 place-items-center rounded-lg bg-agent text-xs tracking-normal text-on-agent transition-transform group-hover:-rotate-3">V</span>
+            Vestiarion
+          </Link>
           <nav aria-label="Landing navigation" className="flex items-center gap-2 sm:gap-4">
             <Link href="/insights" className="hidden text-sm text-ink-2 hover:text-ink sm:block">Measured outcomes</Link>
             <Link href="/audit" className="hidden text-sm text-ink-2 hover:text-ink sm:block">Audit proof</Link>
-            <Link href="/console" className="rounded-md bg-agent px-3 py-2 text-sm font-semibold text-on-agent hover:bg-agent/90">Open console</Link>
+            <Link href="/console" className="brand-shadow rounded-xl bg-agent px-4 py-2.5 text-sm font-semibold text-on-agent transition-transform hover:-translate-y-0.5">Open console</Link>
           </nav>
         </div>
       </header>
 
       <main>
-        <section className="border-b border-line">
-          <div className="mx-auto grid max-w-6xl gap-10 px-4 py-14 sm:px-6 sm:py-20 lg:grid-cols-[minmax(0,1fr)_26rem] lg:items-end">
+        <section className="ledger-grid relative overflow-hidden border-b border-line bg-surface/30">
+          <div aria-hidden className="absolute -left-36 top-8 size-[28rem] rounded-full bg-proof-soft/80 blur-3xl motion-safe:animate-drift" />
+          <div aria-hidden className="absolute -right-28 bottom-0 size-[30rem] rounded-full bg-agent-soft/80 blur-3xl motion-safe:animate-drift" />
+          <div className="relative mx-auto grid max-w-6xl gap-12 px-4 py-16 sm:px-6 sm:py-24 lg:grid-cols-[minmax(0,1fr)_27rem] lg:items-center">
             <div>
               <Label className="text-agent">Autonomous treasury · Arc testnet</Label>
-              <h1 className="mt-4 max-w-4xl text-balance text-4xl font-semibold tracking-[-0.035em] text-ink sm:text-6xl">An agent that can prove why it moved money—or why it refused.</h1>
-              <p className="mt-5 max-w-2xl text-pretty font-serif text-xl leading-relaxed text-ink-2 sm:text-2xl">Vestiarion screens counterparties, matches obligations, verifies work, and manages liquidity. A model proposes each action; code enforces the boundary; a signed ledger keeps the receipt.</p>
-              <div className="mt-7 flex flex-wrap gap-3">
-                <Link href="/console" className="rounded-md bg-agent px-5 py-3 text-sm font-semibold text-on-agent hover:bg-agent/90">See the agent run</Link>
-                <Link href="/audit" className="rounded-md border border-line-strong px-5 py-3 text-sm font-semibold text-ink hover:bg-raised">Verify the ledger</Link>
+              <h1 className="mt-5 max-w-4xl text-balance text-5xl font-semibold leading-[0.97] tracking-[-0.055em] text-ink sm:text-7xl">Money moves.<br /><span className="font-serif font-normal italic text-agent">Evidence remains.</span></h1>
+              <p className="mt-6 max-w-2xl text-pretty font-serif text-xl leading-relaxed text-ink-2 sm:text-[1.65rem]">Vestiarion screens counterparties, matches obligations, verifies work, and manages liquidity. A model proposes each action; code enforces the boundary; a signed ledger keeps the receipt.</p>
+              <div className="mt-8 flex flex-wrap gap-3">
+                <Link href="/console" className="brand-shadow rounded-xl bg-agent px-5 py-3 text-sm font-semibold text-on-agent transition-transform hover:-translate-y-0.5">See the agent run</Link>
+                <Link href="/audit" className="rounded-xl border border-line-strong bg-surface/80 px-5 py-3 text-sm font-semibold text-ink transition-colors hover:border-agent-line hover:text-agent">Verify the ledger</Link>
               </div>
             </div>
-            <div>
-              <ProvenanceBar legs={provenance} />
-              <p className="mt-4 text-sm leading-relaxed text-ink-3">This deployment labels each subsystem separately. Arc testnet is explicit. A simulated yield leg never inherits the live payment badge.</p>
-            </div>
+            <ProofPanel provenance={provenance} />
           </div>
         </section>
 
-        <section aria-labelledby="measurements-title" className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16">
+        <section aria-labelledby="measurements-title" className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
           <div className="mb-6 max-w-3xl">
             <Label>Live database receipts</Label>
-            <h2 id="measurements-title" className="mt-2 text-3xl font-semibold tracking-tight text-ink">Numbers only appear after the system produces them.</h2>
+            <h2 id="measurements-title" className="mt-3 text-4xl font-semibold tracking-[-0.04em] text-ink sm:text-5xl">Numbers only appear after the system produces them.</h2>
             <p className="mt-3 text-sm leading-relaxed text-ink-2">The current ledger can contain real earlier evidence while post-instrumentation cycle and transfer series remain empty. The page keeps that distinction visible.</p>
           </div>
           <Suspense fallback={<MetricsFallback />}><LiveMetrics /></Suspense>
         </section>
 
-        <section className="border-y border-line bg-surface/40">
-          <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16">
+        <section className="border-y border-line bg-surface/55">
+          <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
             <Label>How a decision becomes an action</Label>
-            <h2 className="mt-2 mb-6 text-3xl font-semibold tracking-tight text-ink">One loop. Two layers of judgment. One receipt chain.</h2>
+            <h2 className="mt-3 mb-8 text-4xl font-semibold tracking-[-0.04em] text-ink sm:text-5xl">One loop. Two layers of judgment. One receipt chain.</h2>
             <DecisionFlowDiagram />
           </div>
         </section>
 
-        <section className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16">
+        <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
           <Label>Claims with receipts</Label>
-          <h2 className="mt-2 text-3xl font-semibold tracking-tight text-ink">Do not take the landing page’s word for it.</h2>
-          <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
-            {claims.map((claim) => (
-              <Link key={claim.title} href={claim.href} className="group rounded-lg border border-line bg-surface p-5 hover:border-agent-line sm:p-6">
-                <h3 className="text-lg font-semibold text-ink">{claim.title}</h3>
+          <h2 className="mt-3 text-4xl font-semibold tracking-[-0.04em] text-ink sm:text-5xl">Do not take the landing page’s word for it.</h2>
+          <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2">
+            {claims.map((claim, index) => (
+              <Link key={claim.title} href={claim.href} className="group surface-shadow relative overflow-hidden rounded-2xl border border-line bg-surface p-6 transition-all hover:-translate-y-1 hover:border-agent-line sm:p-7">
+                <span className="absolute right-5 top-4 font-mono text-4xl font-bold text-raised">0{index + 1}</span>
+                <h3 className="relative max-w-[28rem] text-xl font-semibold tracking-tight text-ink">{claim.title}</h3>
                 <p className="mt-2 text-sm leading-relaxed text-ink-2">{claim.body}</p>
                 <p className="mt-4 text-sm font-medium text-agent group-hover:underline">{claim.evidence} →</p>
               </Link>
@@ -233,15 +271,15 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section className="border-t border-line">
-          <div className="mx-auto flex max-w-6xl flex-col gap-5 px-4 py-12 sm:px-6 md:flex-row md:items-center md:justify-between">
-            <div><h2 className="text-2xl font-semibold text-ink">Open the evidence, not a scripted demo.</h2><p className="mt-1 text-sm text-ink-2">Inspect the current book, every refusal, and the chain verifier.</p></div>
-            <div className="flex flex-wrap gap-3"><Link href="/console" className="rounded-md bg-agent px-5 py-3 text-sm font-semibold text-on-agent">Open console</Link><Link href="/insights" className="rounded-md border border-line-strong px-5 py-3 text-sm font-semibold text-ink">Measured outcomes</Link></div>
+        <section className="border-t border-line bg-agent text-on-agent">
+          <div className="mx-auto flex max-w-6xl flex-col gap-5 px-4 py-14 sm:px-6 md:flex-row md:items-center md:justify-between">
+            <div><h2 className="text-3xl font-semibold tracking-tight text-on-agent">Open the evidence, not a scripted demo.</h2><p className="mt-2 text-sm text-white/75">Inspect the current book, every refusal, and the chain verifier.</p></div>
+            <div className="flex flex-wrap gap-3"><Link href="/console" className="rounded-xl bg-surface px-5 py-3 text-sm font-semibold text-agent">Open console</Link><Link href="/insights" className="rounded-xl border border-white/35 px-5 py-3 text-sm font-semibold text-on-agent hover:bg-white/10">Measured outcomes</Link></div>
           </div>
         </section>
       </main>
 
-      <footer className="border-t border-line px-4 py-6 text-center font-mono text-xs text-ink-3">Vestiarion · signed decisions · Arc testnet</footer>
+      <footer className="border-t border-line bg-surface px-4 py-7 text-center font-mono text-xs text-ink-3">Vestiarion · signed decisions · Arc testnet</footer>
     </div>
   );
 }

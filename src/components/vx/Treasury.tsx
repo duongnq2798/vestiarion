@@ -23,7 +23,7 @@ export function StatTile({
       {sub && <div className="mt-2 text-[0.8125rem] leading-snug text-ink-2">{sub}</div>}
     </>
   );
-  const className = `block min-w-0 rounded-lg border px-4 py-3.5 ${tone === "held" ? "border-held-line bg-held-soft" : "border-line bg-surface"} ${href ? "transition-colors hover:border-line-strong" : ""}`;
+  const className = `surface-shadow block min-w-0 rounded-xl border px-4 py-4 ${tone === "held" ? "border-held-line bg-held-soft" : "border-line bg-surface"} ${href ? "transition-all hover:-translate-y-0.5 hover:border-agent-line" : ""}`;
   return href ? <a href={href} className={className}>{content}</a> : <div className={className}>{content}</div>;
 }
 

@@ -4,7 +4,7 @@ import { useActionState, useEffect, useRef } from "react";
 import { createInvoiceAction, type IntakeActionResult } from "@/app/actions/intake";
 
 const INITIAL: IntakeActionResult = { ok: false, message: "" };
-const INPUT = "h-10 w-full rounded-md border border-line-strong bg-surface px-3 text-sm text-ink outline-none placeholder:text-ink-3 focus:border-agent";
+const INPUT = "h-10 w-full rounded-xl border border-line-strong bg-surface px-3 text-sm text-ink shadow-sm outline-none placeholder:text-ink-3 focus:border-agent focus:ring-2 focus:ring-agent-soft";
 
 export interface IntakeCounterparty {
   id: string;
@@ -58,7 +58,7 @@ export default function InvoiceIntake({ counterparties }: { counterparties: Inta
         <p aria-live="polite" className={`text-sm ${state.message && !state.ok ? "text-refused" : "text-ink-2"}`}>
           {state.message || "The agent will evaluate this invoice on the next cycle."}
         </p>
-        <button disabled={pending || counterparties.length === 0} className="h-10 shrink-0 rounded-md bg-agent px-4 text-sm font-semibold text-on-agent hover:bg-agent/90 disabled:opacity-60">
+        <button disabled={pending || counterparties.length === 0} className="brand-shadow h-10 shrink-0 rounded-xl bg-agent px-4 text-sm font-semibold text-on-agent transition-transform hover:-translate-y-0.5 disabled:opacity-60">
           {pending ? "Adding…" : "Add invoice"}
         </button>
       </div>

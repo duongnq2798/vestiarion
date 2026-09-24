@@ -76,6 +76,8 @@ src/lib/supabase.ts       Server-side client (service role; never imported
                            from a client component)
 src/lib/insights.ts       Typed, server-only query boundary for measured
                            transfer, cycle, balance, and screening history
+src/components/vx/        Shared light-theme interface primitives and D3
+  InsightsCharts.tsx       scales/shapes rendered declaratively through React
 src/lib/ledger.ts         Hash-chained, Ed25519-signed append-only audit log
 src/lib/compliance.ts     Continuous counterparty screening + risk tiering
 src/lib/circle/           ChainProvider interface, three implementations:

@@ -39,7 +39,7 @@ export function AuditLedger({ entries, since }: { entries: LedgerEntry[]; since?
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border border-line bg-surface">
+    <div className="surface-shadow overflow-hidden rounded-2xl border border-line bg-surface">
       <div className="hidden grid-cols-[3.25rem_3rem_5.75rem_minmax(0,1fr)_auto] items-center gap-x-3 border-b border-line py-2 pl-9 pr-4 sm:grid">
         <Label>Seq</Label><Label>UTC</Label><Label>Domain</Label><Label>Entry</Label><Label>Hash</Label>
       </div>
