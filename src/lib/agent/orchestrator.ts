@@ -11,6 +11,7 @@ import { CycleMetricsCollector } from "./cycle-metrics";
 import { decide } from "./decide";
 import { enforceApGuardrails } from "./guardrails";
 import { blockingDuplicate, findDuplicates, type InvoiceLike } from "./duplicates";
+import { followUpConfig, planFollowUp, type DecisionFacts } from "./follow-up";
 import { OPEN_PAYABLE_STATUSES, summarizePayableObligations } from "./obligations";
 import { planTreasury, type TreasuryDecision } from "./treasury";
 
@@ -202,6 +203,123 @@ export async function runAgentCycle(): Promise<CycleResult> {
       domain: "contractor",
       message: `Checked ${milestoneVerification.checked} GitHub milestone${milestoneVerification.checked === 1 ? "" : "s"}: ${milestoneVerification.verified} merged, ${milestoneVerification.unavailable} unavailable, ${milestoneVerification.failed} failed`,
     });
+  }
+
+  // ------------------------------------------------------- 1b. follow up
+  // Runs after screening and before AP on purpose: a risk tier that moved this
+  // cycle should reach a frozen invoice immediately, not next time.
+  //
+  // Everything the agent held or asked a question about used to leave the
+  // decision loop permanently. It would ask a vendor for a purchase order and
+  // never look again, while the invoice went on counting against the liquidity
+  // buffer — cash reserved for an obligation the agent had itself frozen and
+  // forgotten.
+  const followUp = followUpConfig();
+  const frozenRows = unwrap(
+    await db
+      .from("invoices")
+      .select(
+        "id, status, amount, due_date, decided_at, escalated_at, po_reference, goods_received, counterparties(risk_level, payment_limit)"
+      )
+      .eq("direction", "payable")
+      .in("status", ["held", "awaiting_info", "flagged"])
+    // PostgREST types an embedded row as an array; it is one-to-one here.
+  ) as unknown as Array<{
+    id: string;
+    status: string;
+    amount: string;
+    due_date: string;
+    decided_at: string | null;
+    escalated_at: string | null;
+    po_reference: string | null;
+    goods_received: boolean;
+    counterparties: { risk_level: string; payment_limit: string | null };
+  }>;
+
+  if (frozenRows.length > 0) {
+    // The facts each decision rested on are already in the ledger. Reading
+    // them back is what makes "has anything changed?" answerable at all.
+    const priorEntries = unwrap(
+      await db
+        .from("ledger_entries")
+        .select("detail")
+        .eq("domain", "ap")
+        .in("detail->>invoiceId", frozenRows.map((row) => row.id))
+        .order("seq", { ascending: false })
+    ) as Array<{ detail: Record<string, unknown> }>;
+
+    const factsByInvoice = new Map<string, DecisionFacts>();
+    for (const entry of priorEntries) {
+      const invoiceId = entry.detail.invoiceId as string | undefined;
+      const observed = entry.detail.observed as Record<string, unknown> | undefined;
+      if (!invoiceId || !observed || factsByInvoice.has(invoiceId)) continue;
+      factsByInvoice.set(invoiceId, {
+        poReference: (observed.poReference as string | null) ?? null,
+        goodsReceived: observed.goodsReceived === true,
+        riskLevel: String(observed.riskLevel ?? "unscreened"),
+        paymentLimit: observed.paymentLimit == null ? null : num(observed.paymentLimit),
+      });
+    }
+
+    const now = Date.now();
+    for (const row of frozenRows) {
+      const plan = planFollowUp(
+        {
+          id: row.id,
+          status: row.status,
+          amount: num(row.amount),
+          dueDate: row.due_date,
+          decidedAt: row.decided_at,
+          escalatedAt: row.escalated_at,
+          poReference: row.po_reference,
+          goodsReceived: row.goods_received,
+          riskLevel: row.counterparties.risk_level,
+          paymentLimit:
+            row.counterparties.payment_limit == null ? null : num(row.counterparties.payment_limit),
+        },
+        factsByInvoice.get(row.id) ?? null,
+        now,
+        followUp
+      );
+
+      if (plan.action === "wait") continue;
+
+      const update =
+        plan.action === "reopen"
+          ? await db.from("invoices").update({ status: "pending" }).eq("id", row.id)
+          : await db.from("invoices").update({ escalated_at: new Date(now).toISOString() }).eq("id", row.id);
+      if (update.error) throw new Error(update.error.message);
+
+      await appendLedgerEntry({
+        actor: "agent",
+        domain: "ap",
+        action: plan.action === "reopen" ? "invoice_reopened" : "invoice_escalated",
+        summary:
+          plan.action === "reopen"
+            ? `Reopened ${row.status.replace("_", " ")} invoice for ${num(row.amount)} USDC: evidence changed`
+            : `Escalated ${row.status.replace("_", " ")} invoice for ${num(row.amount)} USDC to a human`,
+        detail: {
+          invoiceId: row.id,
+          followUp: {
+            action: plan.action,
+            reason: plan.reason,
+            changes: plan.changes,
+            ageDays: plan.ageDays == null ? null : Number(plan.ageDays.toFixed(2)),
+            pastDue: plan.pastDue,
+            staleAfterDays: followUp.staleAfterDays,
+          },
+          previousStatus: row.status,
+        },
+      });
+
+      lines.push({
+        domain: "ap",
+        message:
+          plan.action === "reopen"
+            ? `Reopened ${num(row.amount)} USDC invoice: ${plan.changes.join("; ") || "no recorded decision facts"}`
+            : `Escalated ${num(row.amount)} USDC invoice for human review`,
+      });
+    }
   }
 
   // ------------------------------------------------------------------ shared state

@@ -179,7 +179,7 @@ function ProofPanel({ provenance }: { provenance: ProvenanceLeg[] }) {
         <div className="flex items-center justify-between gap-4 border-b border-line pb-4">
           <div><Label className="text-agent">System state</Label><p className="mt-1 text-sm font-semibold text-ink">Proof before movement</p></div>
           <div className="relative">
-            <BrandMark className="brand-shadow size-11 text-agent" />
+            <BrandMark className="logo-shadow size-11 text-agent" />
             <span className="absolute -bottom-1 -right-1 rounded-full border border-line bg-surface px-1.5 py-0.5 font-mono text-[0.5rem] font-bold text-agent">01</span>
           </div>
         </div>
@@ -216,7 +216,7 @@ export default function LandingPage() {
       <header className="sticky top-0 z-50 border-b border-line/80 bg-surface/88 backdrop-blur-xl">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3.5 sm:px-6">
           <Link href="/" className="group inline-flex items-center gap-2.5 font-mono text-[0.8125rem] font-semibold uppercase tracking-[0.2em] text-ink">
-            <BrandMark className="brand-shadow size-9 shrink-0 text-agent transition-transform duration-300 group-hover:-rotate-6 group-hover:scale-105" />
+            <BrandMark className="logo-shadow size-9 shrink-0 text-agent transition-transform duration-300 group-hover:-rotate-6 group-hover:scale-105" />
             <span>Vestiarion</span>
           </Link>
           <nav aria-label="Landing navigation" className="flex items-center gap-2 sm:gap-4">

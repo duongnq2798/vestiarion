@@ -89,6 +89,10 @@
     inset 0 1px 0 rgb(255 255 255 / 0.26);
 }
 
+@utility logo-shadow {
+  filter: drop-shadow(0 8px 14px rgb(48 72 201 / 0.2));
+}
+
 @utility no-scrollbar {
   scrollbar-width: none;
 

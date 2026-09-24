@@ -52,7 +52,7 @@ export async function ProductShell({
             <div className="min-w-0">
               <div className="flex items-baseline gap-3">
                 <Link href="/" className="group inline-flex items-center gap-2.5 text-[0.8125rem] font-semibold uppercase tracking-[0.2em] text-ink hover:text-agent">
-                  <BrandMark className="brand-shadow size-8 shrink-0 text-agent transition-transform duration-300 group-hover:-rotate-6 group-hover:scale-105" />
+                  <BrandMark className="logo-shadow size-8 shrink-0 text-agent transition-transform duration-300 group-hover:-rotate-6 group-hover:scale-105" />
                   <span>Vestiarion</span>
                 </Link>
                 <Label>{currentClockMode === "simulate" ? `Day ${currentDay}` : "Wall clock"}</Label>
