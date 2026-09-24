@@ -1,0 +1,195 @@
+# Vestiarion
+
+An autonomous treasury agent for a small business, settled in USDC on Arc.
+
+Built for the [Tameion Agents Hackathon](https://tameion.thecanteenapp.com) (Canteen × Circle).
+
+> *Tameion* is ancient Greek for a treasury — literally the room the money was kept in. In
+> Byzantium that room grew into the *vestiarion*, the department that minted the coin, held the
+> stores, and paid the army. Vestiarion is the same idea in software: **one agent that runs a
+> company's entire money cycle** — pays vendors, releases contractor pay, screens counterparties,
+> and puts idle cash to work — instead of five disconnected tools a person stitches together by
+> hand on a Tuesday.
+
+## What it does
+
+Vestiarion runs a small dev shop's treasury ("Northstar Studio" in the bundled demo data) through
+one decision loop, the **agent cycle**:
+
+1. **Compliance (RFB5)** — every counterparty is re-screened, not just checked once at onboarding.
+   A hit tiers the payment limit down instead of a blunt yes/no.
+2. **AP automation (RFB2)** — each payable invoice gets a three-way match (PO ↔ goods received ↔
+   invoice) plus a risk check, and the agent decides to **pay**, **hold** (over limit), **request
+   info** (no PO match), or **flag as fraud** (high-risk counterparty) — with its reasoning
+   attached to the line item.
+3. **Contractor payments (RFB3)** — verified milestones are released the same day instead of
+   waiting for a Net-30 cycle, because at ~$0.01/tx on Arc, paying often costs nothing.
+4. **Treasury (RFB1)** — idle operating cash above a 7-day obligation buffer is swept into a
+   USYC-yielding reserve; the agent redeems back out ahead of due dates rather than after.
+5. **Continuous audit trail** — every decision above is appended to a hash-chained, Ed25519-signed
+   ledger (`/audit`). A reviewer can verify the whole chain in one click and read *why* the agent
+   acted, not just that a balance moved — the "continuous euthyna" the hackathon brief describes.
+
+Every decision is made by asking an LLM for a structured `{action, reasoning, confidence}` verdict
+under an explicit guardrail policy (never pay a high-risk counterparty, never exceed a payment
+limit, keep a liquidity buffer before sweeping to yield). Anthropic, OpenAI, and DeepSeek are all
+supported, and with no key at all the same decision points fall back to a transparent rule-based
+heuristic — so the app runs end-to-end with zero credentials, and every ledger entry records which
+path produced it.
+
+## Why this maps to the judging criteria
+
+- **Agentic sophistication (30%)** — the agent chooses *whether* and *when* to pay, not just how;
+  every choice comes with a checkable reason, and guardrails can override an LLM's own decision
+  (see the `[guardrail override]` path in `src/lib/agent/orchestrator.ts`), which is what makes it
+  an agent operating inside bounds rather than an unconstrained script.
+- **Circle tool usage (20%)** — built directly against Circle's Developer-Controlled Wallets SDK
+  (transfers, balances), EarnKit (USYC), and App Kit, following the same architecture as
+  [`circlefin/arc-fintech`](https://github.com/circlefin/arc-fintech). See
+  [Going live on Arc testnet](#going-live-on-arc-testnet).
+- **Innovation (20%)** — the signed hash-chain ledger is a working version of Prior Art #01 and
+  #08 from the hackathon brief (continuous audit trail; a single agent running mint/hold/pay) —
+  ideas the brief explicitly says "nobody has built yet."
+- **Traction (30%)** — the agent runs against real Circle wallets on Arc testnet, and
+  `npm run cycle` is the same code path the dashboard button uses, so it can run unattended on a
+  schedule. Pointing it at a real business is a data change, not a code change — see
+  [Bringing your own business](#bringing-your-own-business).
+
+## Architecture
+
+```
+supabase/migrations/      Postgres schema. Money is numeric(20,6), never a
+  0001_init.sql            float; the ledger chain is linked inside an
+                           append_ledger_entry() function under an advisory
+                           lock so concurrent cycles cannot fork it.
+src/lib/supabase.ts       Server-side client (service role; never imported
+                           from a client component)
+src/lib/ledger.ts         Hash-chained, Ed25519-signed append-only audit log
+src/lib/compliance.ts     Continuous counterparty screening + risk tiering
+src/lib/circle/           ChainProvider interface, three implementations:
+  simulateProvider.ts       - simulate: needs no credentials, uses Arc's real
+  liveProvider.ts             fee/latency profile
+  index.ts                  - live: Circle Developer-Controlled Wallets
+                            - hybrid (default with credentials): real Arc
+                              payments, simulated USYC leg, both labelled
+src/lib/agent/
+  decide.ts                 Provider-agnostic decision helper: Anthropic ->
+                             DeepSeek -> rule-based heuristic
+  orchestrator.ts            The agent cycle: compliance -> AP -> contractors
+                             -> treasury -> forecast, all logged to the ledger
+scripts/                  seed, bootstrap:circle, and three doctors that tell
+                           you exactly which parts are live
+src/app/                  Dashboard, AP/AR, Contractors, Compliance, Audit Log
+```
+
+## Running it
+
+```bash
+npm install
+cp .env.example .env.local
+```
+
+Create a [Supabase](https://supabase.com) project and put its URL and keys in `.env.local`
+(Project Settings → API, plus the database password and project ref under Database). Then:
+
+```bash
+npm run db:migrate
+npm run seed
+npm run dev
+```
+
+Open the app and click **Run Agent Cycle**. Each click advances one day and runs the full decision
+loop; **Reset Demo Data** starts over. Out of the box, payments are simulated against Arc's real
+fee and latency profile ($0.01, <500ms) and decisions come from the rule-based heuristic.
+
+Two independent upgrades from there, in either order:
+
+| Want | Set | Check with |
+| --- | --- | --- |
+| Real LLM reasoning | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `DEEPSEEK_API_KEY` | `npm run agent:doctor` |
+| Real USDC on Arc | `CIRCLE_API_KEY` + `CIRCLE_ENTITY_SECRET` | `npm run circle:doctor` |
+
+### Scripts
+
+| Command | Does |
+| --- | --- |
+| `npm run db:migrate` | Applies `supabase/migrations/*.sql` |
+| `npm run seed` | Loads the demo business (keeps existing wallet provisioning) |
+| `npm run bootstrap:circle` | Creates Arc-testnet wallets for accounts and counterparties |
+| `npm run cycle` | Runs one agent cycle headlessly — point cron at this |
+| `npm run status` | Balances, wallets, open invoices, ledger height |
+| `npm run circle:doctor` / `agent:doctor` | Reports exactly which parts are live |
+| `npm run arc:proof` | Standalone: two wallets, a faucet check, one real transfer |
+
+Seeded amounts scale down automatically when Circle credentials are present (`SEED_SCALE`),
+because the public faucet grants 20 testnet USDC every two hours and a demo denominated in
+thousands would never settle. The business narrative is the same; the decimal point moves.
+
+One consequence is worth knowing before you demo: **in live mode the agent usually declines to
+sweep into USYC**, and it is right to. Asked to move ~30 testnet USDC at 4.5% APY it works out
+the yield is a fraction of a cent and holds instead — reasoning we left alone rather than
+nudging, because an agent that sweeps regardless of whether sweeping pays is the cron job this
+project exists to not be. Run in simulate mode (`SEED_SCALE=1`, no Circle keys) to see the
+treasury logic exercised at a scale where the sweep is rational.
+
+## Going live on Arc testnet
+
+The simulator and the real integration share one interface (`ChainProvider` in
+`src/lib/circle/types.ts`), so switching is additive:
+
+1. Get a **API key** and **Entity Secret** from the [Circle Console](https://console.circle.com)
+   and put them in `.env.local`.
+2. `npm run circle:doctor` — confirms the key is accepted and the entity secret is registered.
+3. `npm run seed && npm run bootstrap:circle` — creates a real Arc-testnet wallet for every
+   treasury account *and* every counterparty, and writes the ids and addresses back to Supabase.
+   Counterparties get wallets so the demo is verifiable: when the agent pays a contractor you can
+   watch the USDC land at a real address. A real deployment stores the address the counterparty
+   gives you instead.
+4. Fund the operating wallet: [faucet.circle.com](https://faucet.circle.com), select **Arc
+   Testnet**, 20 USDC every 2 hours. (The Console faucet API, `requestTestnetTokens`, returns 403
+   on sandbox keys for Arc — the public faucet is the reliable route.)
+5. Run a cycle. The dashboard header now reads *payments: Arc testnet (live)* and paid invoices
+   carry a real transaction hash.
+
+`npm run arc:proof` does steps 3–5 standalone — two wallets, a faucet check, and one real transfer
+— if you want to verify the path without touching the app.
+
+### What is genuinely live, and what is not
+
+The dashboard reports payments and yield separately because they differ, and the audit log records
+which produced each entry:
+
+- **Live** — wallet creation, USDC transfers, balances, transaction confirmation, all through
+  Circle Developer-Controlled Wallets on Arc testnet.
+- **Simulated** — the USYC leg. EarnKit needs a `KIT_KEY` and a chosen vault id, and Arc testnet
+  has no live vault to choose; Circle's own `arc-fintech` sample mocks reward accrual for the same
+  reason. The integration point is marked in `src/lib/circle/liveProvider.ts`.
+- **Simulated** — sanctions screening runs against a small bundled watchlist standing in for a
+  self-hosted opensanctions/yente instance. `screenName` in `src/lib/compliance.ts` is the single
+  function to replace; the risk tiering downstream is unchanged.
+
+## Bringing your own business
+
+Everything the agent reasons about lives in five tables (`accounts`, `counterparties`,
+`invoices`, `milestones`, plus the ledger). To point Vestiarion at a real business:
+
+- Insert your real vendors/contractors/clients into `counterparties`.
+- Insert real invoices as they arrive (or wire up an email/PDF ingestion step ahead of the
+  `invoices` table — the agent only needs `amount`, `po_reference`, and `goods_received`).
+- Insert milestones with a real `verification_source` (a Git PR merge, a Kimai/Frappe timesheet
+  entry, a client sign-off) and flip `verified` when that source confirms the work.
+- Run `npm run bootstrap:circle` once real accounts exist, fund the operating wallet, and call
+  `POST /api/agent/tick` on a schedule (cron, GitHub Action, whatever you have) instead of a
+  button click.
+
+## Guardrails
+
+The agent's system prompt (`src/lib/agent/orchestrator.ts`) is the enforced policy, not a
+suggestion — the orchestrator re-checks risk level and payment limit *after* the LLM decides and
+before executing a transfer, so a jailbroken or hallucinated "pay" decision on a flagged
+counterparty is blocked in code, not just discouraged in the prompt (see the
+`[guardrail override]` branch).
+
+## License
+
+MIT
