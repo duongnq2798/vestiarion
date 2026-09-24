@@ -61,7 +61,10 @@ jobs:
           # nobody outside the repo can diagnose is a red build that gets
           # ignored, so the cause goes here as well as in the summary.
           if [ -s verify.log ]; then
-            tail -n 25 verify.log | while IFS= read -r line; do
+            # The head, not the tail. npm prints its whole help text after a
+            # usage error, so the last 25 lines are a flag list and the actual
+            # message is at the top — which cost a round trip to learn.
+            head -n 30 verify.log | while IFS= read -r line; do
               printf '::error::%s\n' "$line"
             done
           else
