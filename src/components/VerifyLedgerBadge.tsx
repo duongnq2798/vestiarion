@@ -1,34 +1,45 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
+
+interface VerificationResponse {
+  valid?: boolean;
+  checkedEntries?: number;
+  brokenAt?: number;
+  reason?: string;
+}
 
 export default function VerifyLedgerBadge() {
-  const [state, setState] = useState<"idle" | "checking" | "valid" | "invalid">("idle");
-  const [detail, setDetail] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+  const [result, setResult] = useState<VerificationResponse | null>(null);
 
-  async function verify() {
-    setState("checking");
-    const res = await fetch("/api/ledger/verify");
-    const data = await res.json();
-    if (data.valid) {
-      setState("valid");
-      setDetail(`${data.checkedEntries} entries verified, hash chain and signatures intact.`);
-    } else {
-      setState("invalid");
-      setDetail(`Broken at entry ${data.brokenAt}: ${data.reason}`);
-    }
+  function verify() {
+    startTransition(async () => {
+      try {
+        const response = await fetch("/api/ledger/verify");
+        setResult((await response.json()) as VerificationResponse);
+      } catch (error) {
+        setResult({ valid: false, reason: error instanceof Error ? error.message : "Verification request failed" });
+      }
+    });
   }
 
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
       <button
+        type="button"
+        disabled={pending}
         onClick={verify}
-        className="rounded-md border border-neutral-700 px-4 py-2 text-sm font-medium text-neutral-300 hover:bg-neutral-900"
+        className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md border border-ink-3 px-3.5 text-[0.8125rem] font-medium text-ink hover:bg-raised disabled:opacity-70"
       >
-        {state === "checking" ? "Verifying…" : "Verify hash chain"}
+        <span aria-hidden className={pending ? "motion-safe:animate-spin" : ""}>✦</span>
+        {pending ? "Checking every signature…" : result ? "Verify again" : "Verify hash chain"}
       </button>
-      {state === "valid" && <span className="text-sm text-emerald-400">✓ {detail}</span>}
-      {state === "invalid" && <span className="text-sm text-rose-400">✗ {detail}</span>}
+      <p aria-live="polite" className="min-h-5 text-[0.8125rem]">
+        {result?.valid === true && <span className="text-proof">Chain intact — {result.checkedEntries ?? 0} signatures and {Math.max((result.checkedEntries ?? 0) - 1, 0)} links verified.</span>}
+        {result?.valid === false && <span className="text-refused">Chain broken{result.brokenAt ? ` at #${String(result.brokenAt).padStart(4, "0")}` : ""}: {result.reason ?? "verification failed"}</span>}
+        {!result && !pending && <span className="text-ink-3">Not yet verified in this session.</span>}
+      </p>
     </div>
   );
 }

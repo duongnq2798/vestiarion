@@ -40,6 +40,7 @@ export interface CounterpartyRow {
   risk_level: string;
   risk_notes: string | null;
   payment_limit: number | null;
+  baseline_payment_limit: number | null;
   last_screened_at: string | null;
   performance_score: number;
 }
@@ -51,6 +52,8 @@ export async function listCounterparties(): Promise<CounterpartyRow[]> {
   return rows.map((r) => ({
     ...(r as unknown as CounterpartyRow),
     payment_limit: r.payment_limit == null ? null : num(r.payment_limit),
+    baseline_payment_limit:
+      r.baseline_payment_limit == null ? null : num(r.baseline_payment_limit),
     performance_score: num(r.performance_score),
   }));
 }

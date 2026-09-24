@@ -1,69 +1,90 @@
 import AgentControls from "@/components/AgentControls";
-import { listCounterparties } from "@/lib/queries";
+import { Card, Label, Money, SectionHead } from "@/components/vx/Primitives";
+import { RiskDial } from "@/components/vx/RiskDial";
+import { PageHead, ProductShell } from "@/components/vx/Shell";
+import type { RiskTier } from "@/components/vx/types";
+import { listLedgerEntries } from "@/lib/ledger";
+import { listCounterparties, stats } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
-const riskStyles: Record<string, string> = {
-  unscreened: "bg-neutral-800 text-neutral-400",
-  clear: "bg-emerald-950 text-emerald-300",
-  medium: "bg-amber-950 text-amber-300",
-  high: "bg-rose-950 text-rose-300",
-};
+function riskTier(value: string): RiskTier {
+  return value === "clear" || value === "medium" || value === "high" ? value : "unscreened";
+}
 
 export default async function CompliancePage() {
-  const counterparties = await listCounterparties();
+  const [counterparties, entries, dashboardStats] = await Promise.all([
+    listCounterparties(),
+    listLedgerEntries(300),
+    stats(),
+  ]);
+  const lastSweep = entries.find((entry) => entry.action === "compliance_sweep");
+  const riskChanges = entries.filter((entry) => entry.action === "risk_level_changed").slice(0, 5);
 
   return (
-    <div className="flex flex-col gap-8">
-      <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-neutral-50">Compliance Intelligence</h1>
-          <p className="mt-1 text-sm text-neutral-400">
-            Continuous screening, not a one-time gate: every counterparty is re-checked on each
-            agent cycle, and a hit tiers the payment limit down instead of a blunt refusal.
-          </p>
-        </div>
-        <AgentControls />
-      </div>
+    <ProductShell active="compliance" day={dashboardStats.day}>
+      <PageHead
+        title="Compliance"
+        sub="Continuous screening changes payment authority by tier. A hit reduces a limit; it does not silently turn the counterparty into a yes/no ban."
+        right={<AgentControls nextDay={dashboardStats.day + 1} headSeq={entries[0]?.seq ?? 0} />}
+      />
 
-      <div className="overflow-hidden rounded-lg border border-neutral-800">
-        <table className="w-full text-sm">
-          <thead className="bg-neutral-900 text-left text-neutral-400">
-            <tr>
-              <th className="px-4 py-2 font-normal">Counterparty</th>
-              <th className="px-4 py-2 font-normal">Role</th>
-              <th className="px-4 py-2 font-normal">Risk</th>
-              <th className="px-4 py-2 font-normal">Payment limit</th>
-              <th className="px-4 py-2 font-normal">Last screened</th>
-              <th className="px-4 py-2 font-normal">Notes</th>
-            </tr>
-          </thead>
-          <tbody>
-            {counterparties.map((c) => (
-              <tr key={c.id} className="border-t border-neutral-800 align-top">
-                <td className="px-4 py-2 text-neutral-100">{c.name}</td>
-                <td className="px-4 py-2 text-neutral-400">{c.role}</td>
-                <td className="px-4 py-2">
-                  <span
-                    className={`rounded px-2 py-0.5 text-xs font-medium ${
-                      riskStyles[c.risk_level] ?? riskStyles.unscreened
-                    }`}
-                  >
-                    {c.risk_level}
-                  </span>
-                </td>
-                <td className="px-4 py-2 font-mono text-neutral-300">
-                  {c.payment_limit != null ? `$${c.payment_limit.toLocaleString()}` : "—"}
-                </td>
-                <td className="px-4 py-2 text-neutral-500">
-                  {c.last_screened_at ? new Date(c.last_screened_at).toLocaleString() : "never"}
-                </td>
-                <td className="px-4 py-2 text-neutral-400">{c.risk_notes ?? "—"}</td>
-              </tr>
+      {lastSweep && (
+        <section className="hatch mb-6 rounded-lg border border-dashed border-line-strong px-4 py-3" aria-label="Latest screening sweep">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <Label>Latest continuous screening sweep</Label>
+              <p className="mt-1 text-sm text-ink">{lastSweep.summary}</p>
+            </div>
+            <a href={`/audit#seq-${lastSweep.seq}`} className="font-mono text-xs text-agent hover:underline">audit #{String(lastSweep.seq).padStart(4, "0")} →</a>
+          </div>
+        </section>
+      )}
+
+      <section>
+        <SectionHead title="Counterparties" meta={`${counterparties.length} continuously screened`} />
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          {counterparties.map((counterparty) => (
+            <Card key={counterparty.id} className="p-4 sm:p-5" tone={counterparty.risk_level === "high" ? "refused" : counterparty.risk_level === "medium" ? "held" : "default"}>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 className="font-semibold text-ink">{counterparty.name}</h2>
+                  <p className="mt-0.5 text-sm capitalize text-ink-3">{counterparty.role}</p>
+                </div>
+                <Label>{counterparty.last_screened_at ? `Screened ${new Date(counterparty.last_screened_at).toLocaleString("en-US")}` : "Never screened"}</Label>
+              </div>
+              <div className="mt-4 border-y border-line py-3">
+                <RiskDial risk={riskTier(counterparty.risk_level)} baseline={counterparty.baseline_payment_limit} effective={counterparty.payment_limit} />
+                {counterparty.baseline_payment_limit != null && counterparty.payment_limit != null && (
+                  <p className="mt-2 text-xs text-ink-3">
+                    Business baseline <Money value={counterparty.baseline_payment_limit} /> · screened authority <Money value={counterparty.payment_limit} />
+                  </p>
+                )}
+              </div>
+              <div className="mt-3">
+                <Label>Screening evidence</Label>
+                <p className="mt-1 text-sm leading-relaxed text-ink-2">{counterparty.risk_notes ?? "No screening notes recorded."}</p>
+              </div>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      <section className="mt-8">
+        <SectionHead title="Risk-level changes" meta="events where screening changed authority" action={<a href="/audit?domain=compliance" className="text-[0.8125rem] text-agent hover:underline">Compliance audit →</a>} />
+        {riskChanges.length === 0 ? (
+          <p className="rounded-lg border border-line bg-surface p-4 text-sm text-ink-2">No risk tier changed after initial screening. The sweep above still proves screening ran.</p>
+        ) : (
+          <ol className="divide-y divide-line rounded-lg border border-held-line bg-surface">
+            {riskChanges.map((entry) => (
+              <li key={entry.id} className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <span className="text-sm text-held">{entry.summary}</span>
+                <a href={`/audit#seq-${entry.seq}`} className="font-mono text-xs text-agent hover:underline">#{String(entry.seq).padStart(4, "0")}</a>
+              </li>
             ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
+          </ol>
+        )}
+      </section>
+    </ProductShell>
   );
 }
