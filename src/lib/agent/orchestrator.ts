@@ -293,7 +293,7 @@ export async function runAgentCycle(): Promise<CycleResult> {
       history
     );
 
-    const { value: decision, mode } = await decide<ApDecision>({
+    const { value: decision, mode, reference, agreedWithReference } = await decide<ApDecision>({
       systemPrompt: SYSTEM_PROMPT,
       userPrompt: JSON.stringify({
         task: "Decide whether to pay this accounts-payable invoice.",
@@ -382,7 +382,7 @@ export async function runAgentCycle(): Promise<CycleResult> {
       paymentLimit: limit,
       duplicates,
     });
-    metrics.recordDecisionMode(mode);
+    metrics.recordDecisionMode(mode, agreedWithReference);
     let status = guardrail.status ?? statusForAction[decision.action];
     let txRef: string | null = null;
     let paymentExecution: PaymentExecution | null = null;
@@ -444,6 +444,8 @@ export async function runAgentCycle(): Promise<CycleResult> {
         invoiceId: invoice.id,
         decision,
         decisionMode: mode,
+        referenceDecision: reference,
+        agreedWithReference,
         guardrailBlocked,
         guardrailRule: guardrail.rule,
         observed: {
@@ -516,7 +518,7 @@ export async function runAgentCycle(): Promise<CycleResult> {
     const highRisk = contractor.risk_level === "high";
     const overLimit = limit != null && amount > limit;
 
-    const { value: decision, mode } = await decide<MilestoneDecision>({
+    const { value: decision, mode, reference, agreedWithReference } = await decide<MilestoneDecision>({
       systemPrompt: SYSTEM_PROMPT,
       userPrompt: JSON.stringify({
         task: "Decide whether to release this verified contractor milestone immediately, rather than waiting for a Net-30 cycle.",
@@ -552,7 +554,7 @@ export async function runAgentCycle(): Promise<CycleResult> {
         };
       },
     });
-    metrics.recordDecisionMode(mode);
+    metrics.recordDecisionMode(mode, agreedWithReference);
 
     let status = "held";
     let txRef: string | null = null;
@@ -611,6 +613,8 @@ export async function runAgentCycle(): Promise<CycleResult> {
         milestoneId: milestone.id,
         decision,
         decisionMode: mode,
+        referenceDecision: reference,
+        agreedWithReference,
         guardrailBlocked,
         observed: {
           amount,
@@ -700,7 +704,7 @@ export async function runAgentCycle(): Promise<CycleResult> {
       roundTripCostUsd: provider.estimatedFeeUsd * 2,
     });
 
-    const { value: decision, mode } = await decide<TreasuryDecision>({
+    const { value: decision, mode, reference, agreedWithReference } = await decide<TreasuryDecision>({
       systemPrompt: SYSTEM_PROMPT,
       userPrompt: JSON.stringify({
         task: "Decide whether to sweep idle operating cash into the USYC-yielding reserve, redeem from the reserve back into operating, or hold.",
@@ -730,7 +734,7 @@ export async function runAgentCycle(): Promise<CycleResult> {
       schema: treasuryDecisionSchema,
       fallback: (): TreasuryDecision => plan.decision,
     });
-    metrics.recordDecisionMode(mode);
+    metrics.recordDecisionMode(mode, agreedWithReference);
 
     let executed = false;
     let executionNote: string | null = null;
@@ -778,6 +782,8 @@ export async function runAgentCycle(): Promise<CycleResult> {
       detail: {
         decision,
         decisionMode: mode,
+        referenceDecision: reference,
+        agreedWithReference,
         executed,
         executionNote,
         // The USYC leg is simulated until EarnKit is wired up; recording that
@@ -855,6 +861,7 @@ export async function runAgentCycle(): Promise<CycleResult> {
       model_decision_count: cycleMetrics.modelDecisionCount,
       heuristic_decision_count: cycleMetrics.heuristicDecisionCount,
       guardrail_override_count: cycleMetrics.guardrailOverrideCount,
+      reference_disagreement_count: cycleMetrics.referenceDisagreementCount,
       chain_mode: provider.mode,
       screening_mode: complianceScreeningMode(),
     }).select("id").single<{ id: string }>()

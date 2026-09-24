@@ -31,6 +31,34 @@ export interface DecideParams<T> {
 export interface DecideResult<T> {
   value: T;
   mode: DecisionMode;
+  /**
+   * What the rule-based policy would have decided, always computed.
+   *
+   * The heuristic is already evaluated on every call — it is the fallback —
+   * so running it alongside a model decision costs nothing and turns it into
+   * a *reference policy*. Recording both is the cheapest honest eval this
+   * architecture can have: the disagreement rate between a stated policy and
+   * a model's judgement, measured on real decisions rather than on a fixture
+   * set, and sensitive to a prompt edit, a model swap, or provider drift the
+   * moment it happens.
+   *
+   * Identical to `value` when the heuristic itself produced the decision.
+   */
+  reference: T;
+  /** False when the model departed from the written policy. Null in heuristic mode. */
+  agreedWithReference: boolean | null;
+}
+
+/**
+ * Two decisions agree when they choose the same action. Amounts and prose are
+ * deliberately ignored: this measures whether the model and the written policy
+ * reach the same *verdict*, not whether they phrase it alike.
+ */
+function sameAction(a: unknown, b: unknown): boolean | null {
+  const left = (a as { action?: unknown })?.action;
+  const right = (b as { action?: unknown })?.action;
+  if (typeof left !== "string" || typeof right !== "string") return null;
+  return left === right;
 }
 
 let anthropicClient: Anthropic | undefined;
@@ -157,20 +185,70 @@ const CALLERS: Record<
   deepseek: callDeepSeek,
 };
 
+/**
+ * Distinguishes a request that failed from a reply that arrived malformed.
+ * Only the second is worth repeating verbatim to the model — a rate limit or a
+ * dead socket will not be fixed by explaining the JSON schema again.
+ */
+export function isMalformedReply(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return (
+    error.name === "ZodError" ||
+    error instanceof SyntaxError ||
+    /no JSON object in model output/.test(error.message)
+  );
+}
+
+function repairPrompt(userPrompt: string, error: unknown): string {
+  const detail = error instanceof Error ? error.message : String(error);
+  return [
+    userPrompt,
+    "",
+    "Your previous reply could not be used. It was rejected with:",
+    detail,
+    "",
+    "Reply again with ONLY the JSON object in the shape requested above. No prose, no code fence, no trailing commentary.",
+  ].join("\n");
+}
+
 export async function decide<T>(params: DecideParams<T>): Promise<DecideResult<T>> {
   const provider = selectProvider();
+  // Computed up front, not only on failure: it is the reference the model's
+  // verdict is scored against, and it is a pure local function either way.
+  const reference = params.fallback();
   if (provider === "heuristic") {
-    return { value: params.fallback(), mode: "heuristic" };
+    return { value: reference, mode: "heuristic", reference, agreedWithReference: null };
   }
 
+  const call = CALLERS[provider];
+
   try {
-    const text = await CALLERS[provider](params as DecideParams<unknown>);
-    return { value: params.schema.parse(extractJson(text)), mode: provider };
+    const text = await call(params as DecideParams<unknown>);
+    const value = params.schema.parse(extractJson(text));
+    return { value, mode: provider, reference, agreedWithReference: sameAction(value, reference) };
   } catch (err) {
-    // A model that is down, rate-limited, or returns unparseable output must
-    // not stop the treasury from running — but the fallback is recorded as
-    // such in the ledger rather than passed off as the model's judgement.
+    // One retry, and only when the model answered but answered badly. A
+    // stray code fence or a missing field used to cost the entire decision:
+    // the agent dropped silently to the heuristic and a money decision lost
+    // the judgement it had been about to apply. Showing the model its own
+    // rejection recovers most of those, and costs one call when it does not.
+    if (isMalformedReply(err)) {
+      try {
+        const retried = await call({
+          ...(params as DecideParams<unknown>),
+          userPrompt: repairPrompt(params.userPrompt, err),
+        });
+        const value = params.schema.parse(extractJson(retried));
+        return { value, mode: provider, reference, agreedWithReference: sameAction(value, reference) };
+      } catch (retryErr) {
+        console.error(`[agent] ${provider} retry also unusable:`, retryErr);
+      }
+    }
+
+    // A model that is down, rate-limited, or still unparseable must not stop
+    // the treasury from running — but the fallback is recorded as such in the
+    // ledger rather than passed off as the model's judgement.
     console.error(`[agent] ${provider} decision failed, falling back to heuristic:`, err);
-    return { value: params.fallback(), mode: "heuristic" };
+    return { value: reference, mode: "heuristic", reference, agreedWithReference: null };
   }
 }

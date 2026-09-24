@@ -118,7 +118,11 @@ describe("decide", () => {
       schema,
       fallback,
     });
-    expect(result).toEqual({ value: { action: "hold", confidence: 0.5 }, mode: "heuristic" });
+    expect(result).toMatchObject({ value: { action: "hold", confidence: 0.5 }, mode: "heuristic" });
+    // In heuristic mode the reference IS the decision, so agreement is not a
+    // defined quantity and must not be reported as agreement.
+    expect(result.reference).toEqual(result.value);
+    expect(result.agreedWithReference).toBeNull();
   });
 
   it("returns the model's decision, labelled with the provider that made it", async () => {
@@ -133,7 +137,11 @@ describe("decide", () => {
     );
 
     const result = await decide({ systemPrompt: "s", userPrompt: "u", schema, fallback });
-    expect(result).toEqual({ value: { action: "pay", confidence: 0.91 }, mode: "deepseek" });
+    expect(result).toMatchObject({ value: { action: "pay", confidence: 0.91 }, mode: "deepseek" });
+    // The rule-based policy said hold; the model said pay. That divergence is
+    // the whole eval signal and has to survive into the result.
+    expect(result.reference).toEqual({ action: "hold", confidence: 0.5 });
+    expect(result.agreedWithReference).toBe(false);
   });
 
   it("falls back to the heuristic when the provider is down", async () => {
@@ -216,5 +224,96 @@ describe("decide", () => {
 
     await decide({ systemPrompt: "s", userPrompt: "u", schema, fallback });
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("decide — one retry on a malformed reply", () => {
+  it("recovers a decision the model first returned unusably", async () => {
+    // Before this retry existed, a stray word outside the JSON cost the whole
+    // decision: the agent dropped silently to the heuristic and a money
+    // decision lost the judgement it was about to apply.
+    process.env.DEEPSEEK_API_KEY = "k";
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ choices: [{ message: { content: "I cannot comply." } }] }), {
+          status: 200,
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ choices: [{ message: { content: '{"action":"pay","confidence":0.8}' } }] }),
+          { status: 200 }
+        )
+      );
+
+    const result = await decide({ systemPrompt: "s", userPrompt: "u", schema, fallback });
+    expect(result.mode).toBe("deepseek");
+    expect(result.value).toEqual({ action: "pay", confidence: 0.8 });
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows the model its own rejection rather than repeating the prompt", async () => {
+    process.env.DEEPSEEK_API_KEY = "k";
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ choices: [{ message: { content: "no json here" } }] }), {
+          status: 200,
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ choices: [{ message: { content: '{"action":"hold","confidence":0.6}' } }] }),
+          { status: 200 }
+        )
+      );
+
+    await decide({ systemPrompt: "s", userPrompt: "original context", schema, fallback });
+
+    const retryBody = JSON.parse(String(fetchSpy.mock.calls[1][1]?.body));
+    const retryUser = retryBody.messages[1].content;
+    expect(retryUser).toContain("original context");
+    expect(retryUser).toContain("could not be used");
+    expect(retryUser).toContain("no JSON object");
+  });
+
+  it("does not retry a rate limit, which repeating cannot fix", async () => {
+    // Retrying a 429 spends another call to be refused again, and on a
+    // treasury cycle that is real money and real latency.
+    process.env.DEEPSEEK_API_KEY = "k";
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response("rate limited", { status: 429 }));
+
+    const result = await decide({ systemPrompt: "s", userPrompt: "u", schema, fallback });
+    expect(result.mode).toBe("heuristic");
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not retry a dead socket", async () => {
+    process.env.DEEPSEEK_API_KEY = "k";
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("ECONNRESET"));
+
+    await decide({ systemPrompt: "s", userPrompt: "u", schema, fallback });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("gives up after one retry rather than looping", async () => {
+    process.env.DEEPSEEK_API_KEY = "k";
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ choices: [{ message: { content: "still not json" } }] }), {
+        status: 200,
+      })
+    );
+
+    const result = await decide({ systemPrompt: "s", userPrompt: "u", schema, fallback });
+    expect(result.mode).toBe("heuristic");
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
 });

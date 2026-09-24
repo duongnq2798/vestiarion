@@ -10,6 +10,8 @@ export interface CycleMetrics {
   modelDecisionCount: number;
   heuristicDecisionCount: number;
   guardrailOverrideCount: number;
+  /** Model decisions that departed from the written rule-based policy. */
+  referenceDisagreementCount: number;
 }
 
 export class CycleMetricsCollector {
@@ -23,12 +25,20 @@ export class CycleMetricsCollector {
     modelDecisionCount: 0,
     heuristicDecisionCount: 0,
     guardrailOverrideCount: 0,
+    referenceDisagreementCount: 0,
   };
 
-  recordDecisionMode(mode: DecisionMode): void {
+  /**
+   * `agreedWithReference` is null in heuristic mode, where the model and the
+   * reference are the same thing and a disagreement is not defined. Counting
+   * those as agreement would flatter the metric toward 100% exactly when the
+   * model is not being consulted at all.
+   */
+  recordDecisionMode(mode: DecisionMode, agreedWithReference?: boolean | null): void {
     this.metrics.decisionCount += 1;
     if (mode === "heuristic") this.metrics.heuristicDecisionCount += 1;
     else this.metrics.modelDecisionCount += 1;
+    if (agreedWithReference === false) this.metrics.referenceDisagreementCount += 1;
   }
 
   recordInvoice(status: string, guardrailBlocked: boolean): void {
