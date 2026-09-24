@@ -12,6 +12,7 @@ import {
   counterpartyFilterError,
   mapCounterparty,
 } from "@/lib/api/counterparties";
+import { mapMilestone, milestoneStatusError } from "@/lib/api/milestones";
 
 describe("cursors", () => {
   it("round-trips a sequence position", () => {
@@ -173,5 +174,38 @@ describe("counterparty read payload", () => {
     expect(payload.performanceScore).toBeNull();
     expect(payload.performanceInputs).toBeNull();
     expect(payload).toMatchObject({ baselinePaymentLimit: 2, paymentLimit: 0.5 });
+  });
+});
+
+describe("milestone read payload", () => {
+  it("rejects an unknown status instead of ignoring it", () => {
+    expect(milestoneStatusError("complete")).toBe(
+      "status must be one of pending, verified, paid, held."
+    );
+  });
+
+  it("does not report a simulated transaction reference as a chain hash", () => {
+    const payload = mapMilestone({
+      id: "milestone-1",
+      title: "Ship the API",
+      amount: "1200.000000",
+      status: "paid",
+      verification_source: "deliverable:github-pr#482",
+      verification_method: "github",
+      verification_status: "verified",
+      verification_checked_at: "2026-09-25T00:00:00.000Z",
+      verified_at: "2026-09-25T00:00:00.000Z",
+      verification_detail: { merged: true },
+      verified: true,
+      decided_at: "2026-09-25T00:00:00.000Z",
+      settled_at: "2026-09-25T00:00:01.000Z",
+      agent_reasoning: "Verified work can be released.",
+      tx_ref: "sim_milestone-1_1",
+      counterparties: { id: "cp-1", name: "Contractor", risk_level: "clear" },
+      created_at: "2026-09-24T00:00:00.000Z",
+    });
+
+    expect(payload.txHash).toBeNull();
+    expect(payload.agentReasoning).toBe("Verified work can be released.");
   });
 });
