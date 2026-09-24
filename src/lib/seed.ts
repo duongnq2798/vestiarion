@@ -1,5 +1,6 @@
 import { supabase, unwrap } from "./supabase";
 import { appendLedgerEntry } from "./ledger";
+import { currentConfig } from "./context";
 
 /**
  * Demo business: Northstar Studio, a four-person dev shop. The fixtures are
@@ -28,9 +29,9 @@ function daysFromNow(n: number) {
  * error, which is the whole point of running against Arc at all.
  */
 export function seedScale(): number {
-  const override = process.env.SEED_SCALE;
-  if (override) return Number(override);
-  const live = !!process.env.CIRCLE_API_KEY && !!process.env.CIRCLE_ENTITY_SECRET;
+  const config = currentConfig();
+  if (config.seedScale != null && Number.isFinite(config.seedScale)) return config.seedScale;
+  const live = !!config.chain.circleApiKey && !!config.chain.circleEntitySecret;
   return live ? 0.001 : 1;
 }
 

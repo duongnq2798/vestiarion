@@ -1,3 +1,5 @@
+import { currentConfig } from "../context";
+
 /**
  * Reads what a transfer actually cost, from Arc itself.
  *
@@ -87,8 +89,14 @@ async function arcRpc(
   return body.result;
 }
 
+/**
+ * The node to read receipts from. `LiveProvider` passes its configured URL
+ * explicitly; this is the fallback for a direct caller, and it reads the
+ * running scope rather than the process environment so that two businesses
+ * pointed at different nodes do not silently share one.
+ */
 export function arcRpcUrl(): string {
-  return process.env.ARC_RPC_URL || ARC_TESTNET_RPC_URL;
+  return currentConfig().chain.arcRpcUrl || ARC_TESTNET_RPC_URL;
 }
 
 /**

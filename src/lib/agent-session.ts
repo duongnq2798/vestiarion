@@ -5,6 +5,19 @@ import { AGENT_SESSION_COOKIE, agentSessionProof, secureTokenMatches } from "./a
 
 const SESSION_MAX_AGE_SECONDS = 60 * 60;
 
+/**
+ * Deliberately not part of `VestiarionConfig`, and deliberately still read from
+ * the environment.
+ *
+ * `AGENT_API_TOKEN` guards *this deployment's HTTP surface* — its routes, its
+ * cookies, its Server Actions. It says nothing about a business's treasury, and
+ * a business is what a config describes. An MCP server or a Slack bot embedding
+ * Vestiarion authenticates its own callers by its own means and never consults
+ * this; putting it in the config would invite the opposite, a library handing
+ * out an authentication decision that belongs to whoever owns the endpoint.
+ *
+ * `server-only` at the top of this file is the other half of that boundary.
+ */
 function configuredToken(): string | undefined {
   return process.env.AGENT_API_TOKEN;
 }

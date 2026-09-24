@@ -103,10 +103,17 @@ describe("configFromEnv — defaults that encode a policy", () => {
     expect(configFromEnv(env({ FOLLOW_UP_STALE_DAYS: "1.5" })).followUp.staleAfterDays).toBe(1.5);
   });
 
-  it("defaults to the real clock, and takes simulate only when asked", () => {
-    expect(configFromEnv(env()).clockMode).toBe("real");
-    expect(configFromEnv(env({ CYCLE_CLOCK_MODE: "simulate" })).clockMode).toBe("simulate");
-    expect(configFromEnv(env({ CYCLE_CLOCK_MODE: "anything-else" })).clockMode).toBe("real");
+  it("keeps the demo clock outside production, and the wall clock inside it", () => {
+    // Preserves exactly what `cycleClockMode` did before the decision moved
+    // here. Defaulting to "real" would quietly have changed how the demo
+    // behaves for everyone running locally.
+    expect(configFromEnv(env()).clockMode).toBe("simulate");
+    expect(configFromEnv(env({ NODE_ENV: "production" })).clockMode).toBe("real");
+    expect(configFromEnv(env({ CYCLE_CLOCK_MODE: "real" })).clockMode).toBe("real");
+    expect(
+      configFromEnv(env({ NODE_ENV: "production", CYCLE_CLOCK_MODE: "simulate" })).clockMode
+    ).toBe("simulate");
+    expect(configFromEnv(env({ CYCLE_CLOCK_MODE: "anything-else" })).clockMode).toBe("simulate");
   });
 });
 

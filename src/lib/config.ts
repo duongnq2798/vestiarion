@@ -98,6 +98,12 @@ function trimmed(raw: string | undefined): string | undefined {
   return value ? value : undefined;
 }
 
+function clockModeFrom(env: EnvLike): "real" | "simulate" {
+  const configured = trimmed(env.CYCLE_CLOCK_MODE)?.toLowerCase();
+  if (configured === "real" || configured === "simulate") return configured;
+  return env.NODE_ENV === "production" ? "real" : "simulate";
+}
+
 export class ConfigError extends Error {
   constructor(message: string) {
     super(message);
@@ -189,7 +195,11 @@ export function configFromEnv(env: EnvLike = process.env): VestiarionConfig {
     },
     ledgerSigningKey: trimmed(env.LEDGER_SIGNING_KEY),
     githubToken: trimmed(env.GITHUB_TOKEN),
-    clockMode: trimmed(env.CYCLE_CLOCK_MODE)?.toLowerCase() === "simulate" ? "simulate" : "real",
+    // Matches what `cycleClockMode` has always done: an explicit setting wins,
+    // and otherwise production runs on the wall clock while a development
+    // checkout keeps the numbered demo day. Defaulting to "real" here would
+    // have quietly changed how the demo behaves for everyone running locally.
+    clockMode: clockModeFrom(env),
     seedScale: env.SEED_SCALE == null ? undefined : Number(env.SEED_SCALE),
   };
 }

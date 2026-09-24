@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { configFromEnv } from "@/lib/config";
+import { runWithConfig } from "@/lib/context";
 import {
   classifyOpenSanctionsCandidate,
   isScreeningDue,
@@ -103,20 +105,20 @@ describe("OpenSanctions tier mapping", () => {
 });
 
 describe("screenName with OpenSanctions", () => {
-  const originalUrl = process.env.OPENSANCTIONS_API_URL;
-  const originalKey = process.env.OPENSANCTIONS_API_KEY;
+  // A configured business rather than a mutated environment: settings resolve
+  // once into a config, so changing process.env after the fact would not
+  // reach the running scope anyway.
+  const withYente = (over: Record<string, string> = {}) =>
+    configFromEnv({
+      NEXT_PUBLIC_SUPABASE_URL: "https://p.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "k",
+      OPENSANCTIONS_API_URL: "https://yente.internal",
+      ...over,
+    });
 
-  afterEach(() => {
-    vi.unstubAllGlobals();
-    if (originalUrl === undefined) delete process.env.OPENSANCTIONS_API_URL;
-    else process.env.OPENSANCTIONS_API_URL = originalUrl;
-    if (originalKey === undefined) delete process.env.OPENSANCTIONS_API_KEY;
-    else process.env.OPENSANCTIONS_API_KEY = originalKey;
-  });
+  afterEach(() => vi.unstubAllGlobals());
 
   it("sends name and jurisdiction to the match endpoint and records raw evidence", async () => {
-    process.env.OPENSANCTIONS_API_URL = "https://yente.internal/";
-    process.env.OPENSANCTIONS_API_KEY = "secret-key";
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       responses: {
         counterparty: {
@@ -133,7 +135,10 @@ describe("screenName with OpenSanctions", () => {
     }), { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
 
-    const result = await screenName("Acme Limited", "gb");
+    const result = await runWithConfig(
+      withYente({ OPENSANCTIONS_API_URL: "https://yente.internal/", OPENSANCTIONS_API_KEY: "secret-key" }),
+      () => screenName("Acme Limited", "gb")
+    );
     expect(result).toMatchObject({ riskLevel: "high", rawScore: 0.93, matchedEntityId: "NK-live" });
     expect(fetchMock).toHaveBeenCalledOnce();
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
@@ -145,9 +150,10 @@ describe("screenName with OpenSanctions", () => {
   });
 
   it("throws on an unavailable provider instead of returning clear", async () => {
-    process.env.OPENSANCTIONS_API_URL = "https://yente.internal";
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("unavailable", { status: 503 })));
-    await expect(screenName("Acme Limited")).rejects.toThrow("HTTP 503");
+    await expect(
+      runWithConfig(withYente(), () => screenName("Acme Limited"))
+    ).rejects.toThrow("HTTP 503");
   });
 });
 
@@ -309,38 +315,35 @@ describe("isScreeningDue", () => {
 });
 
 describe("rescreenIntervalMs", () => {
-  const original = process.env.COMPLIANCE_RESCREEN_HOURS;
-  const originalUrl = process.env.OPENSANCTIONS_API_URL;
-  afterEach(() => {
-    if (original === undefined) delete process.env.COMPLIANCE_RESCREEN_HOURS;
-    else process.env.COMPLIANCE_RESCREEN_HOURS = original;
-    if (originalUrl === undefined) delete process.env.OPENSANCTIONS_API_URL;
-    else process.env.OPENSANCTIONS_API_URL = originalUrl;
-  });
+  // The defaults and the rejection of nonsense both live in configFromEnv
+  // now, so these read a built config rather than a mutated environment.
+  const interval = (over: Record<string, string> = {}) =>
+    runWithConfig(
+      configFromEnv({
+        NEXT_PUBLIC_SUPABASE_URL: "https://p.supabase.co",
+        SUPABASE_SERVICE_ROLE_KEY: "k",
+        ...over,
+      }),
+      () => rescreenIntervalMs()
+    );
 
-  it("defaults to every cycle", () => {
-    delete process.env.COMPLIANCE_RESCREEN_HOURS;
-    delete process.env.OPENSANCTIONS_API_URL;
-    expect(rescreenIntervalMs()).toBe(0);
+  it("defaults to every cycle on the bundled list", () => {
+    expect(interval()).toBe(0);
   });
 
   it("defaults live screening to a 24-hour cadence", () => {
-    delete process.env.COMPLIANCE_RESCREEN_HOURS;
-    process.env.OPENSANCTIONS_API_URL = "https://yente.internal";
-    expect(rescreenIntervalMs()).toBe(24 * 3_600_000);
+    expect(interval({ OPENSANCTIONS_API_URL: "https://yente.internal" })).toBe(24 * 3_600_000);
   });
 
-  it("reads hours from the environment", () => {
-    process.env.COMPLIANCE_RESCREEN_HOURS = "24";
-    expect(rescreenIntervalMs()).toBe(86_400_000);
+  it("reads an explicit cadence", () => {
+    expect(interval({ COMPLIANCE_RESCREEN_HOURS: "24" })).toBe(86_400_000);
   });
 
   it("falls back to every cycle on nonsense rather than skipping screening", () => {
     // Failing open on a compliance control is the wrong direction; a bad
     // value must mean "screen more", never "screen less".
     for (const bad of ["", "abc", "-5", "0"]) {
-      process.env.COMPLIANCE_RESCREEN_HOURS = bad;
-      expect(rescreenIntervalMs()).toBe(0);
+      expect(interval({ COMPLIANCE_RESCREEN_HOURS: bad })).toBe(0);
     }
   });
 });

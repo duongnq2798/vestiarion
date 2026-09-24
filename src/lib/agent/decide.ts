@@ -1,5 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { ZodType } from "zod";
+import { currentConfig } from "../context";
+import type { LlmConfig } from "../config";
 
 /**
  * Every "should the agent actually do this" question passes through here.
@@ -61,13 +63,14 @@ function sameAction(a: unknown, b: unknown): boolean | null {
   return left === right;
 }
 
-let anthropicClient: Anthropic | undefined;
-
-const KEY_FOR: Record<Exclude<DecisionMode, "heuristic">, string> = {
-  anthropic: "ANTHROPIC_API_KEY",
-  openai: "OPENAI_API_KEY",
-  deepseek: "DEEPSEEK_API_KEY",
-};
+/**
+ * One Anthropic client per configuration, not one per process.
+ *
+ * A module-level client meant the first business to make a decision fixed the
+ * API key every later one would be billed against. Keyed by the config the
+ * context already holds, so it disappears when that context does.
+ */
+const anthropicClients = new WeakMap<LlmConfig, Anthropic>();
 
 const PREFERENCE: Array<Exclude<DecisionMode, "heuristic">> = [
   "anthropic",
@@ -75,23 +78,18 @@ const PREFERENCE: Array<Exclude<DecisionMode, "heuristic">> = [
   "deepseek",
 ];
 
-export function selectProvider(): DecisionMode {
-  const configured = process.env.AGENT_LLM_PROVIDER?.toLowerCase();
-
-  if (configured === "heuristic") return "heuristic";
-  if (configured && configured in KEY_FOR) {
-    const provider = configured as Exclude<DecisionMode, "heuristic">;
-    // An explicit choice whose key is missing is a configuration mistake, not
-    // an invitation to quietly bill a different provider.
-    if (!process.env[KEY_FOR[provider]]) {
-      throw new Error(
-        `AGENT_LLM_PROVIDER=${provider} but ${KEY_FOR[provider]} is not set`
-      );
-    }
-    return provider;
-  }
-
-  return PREFERENCE.find((p) => process.env[KEY_FOR[p]]) ?? "heuristic";
+/**
+ * Which engine answers, given a configuration.
+ *
+ * A pure function of `LlmConfig` now — the "pinned a provider whose key is
+ * missing" check moved into `configFromEnv`, where it fails when the config is
+ * built rather than in the middle of a treasury cycle. A caller constructing a
+ * config by hand gets the same guarantee: an unusable combination cannot be
+ * represented, because `provider` is only set once its key is present.
+ */
+export function selectProvider(llm: LlmConfig = currentConfig().llm): DecisionMode {
+  if (llm.provider) return llm.provider;
+  return PREFERENCE.find((p) => llm[p]) ?? "heuristic";
 }
 
 /**
@@ -107,12 +105,18 @@ export function extractJson(text: string): unknown {
   return JSON.parse(raw.slice(start, end + 1));
 }
 
-async function callAnthropic(params: DecideParams<unknown>): Promise<string> {
-  if (!anthropicClient) {
-    anthropicClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+async function callAnthropic(params: DecideParams<unknown>, llm: LlmConfig): Promise<string> {
+  const settings = llm.anthropic;
+  if (!settings) throw new Error("Anthropic was selected but is not configured");
+
+  let client = anthropicClients.get(llm);
+  if (!client) {
+    client = new Anthropic({ apiKey: settings.apiKey });
+    anthropicClients.set(llm, client);
   }
-  const response = await anthropicClient.messages.create({
-    model: process.env.ANTHROPIC_MODEL ?? "claude-sonnet-5",
+
+  const response = await client.messages.create({
+    model: settings.model ?? "claude-sonnet-5",
     max_tokens: 1024,
     system: params.systemPrompt,
     messages: [{ role: "user", content: params.userPrompt }],
@@ -158,27 +162,31 @@ async function callOpenAICompatible(
   return content;
 }
 
-function callOpenAI(params: DecideParams<unknown>): Promise<string> {
+function callOpenAI(params: DecideParams<unknown>, llm: LlmConfig): Promise<string> {
+  const settings = llm.openai;
+  if (!settings) throw new Error("OpenAI was selected but is not configured");
   return callOpenAICompatible(params, {
     label: "OpenAI",
-    baseUrl: process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
-    apiKey: process.env.OPENAI_API_KEY!,
-    model: process.env.OPENAI_MODEL ?? "gpt-5",
+    baseUrl: settings.baseUrl ?? "https://api.openai.com/v1",
+    apiKey: settings.apiKey,
+    model: settings.model ?? "gpt-5",
   });
 }
 
-function callDeepSeek(params: DecideParams<unknown>): Promise<string> {
+function callDeepSeek(params: DecideParams<unknown>, llm: LlmConfig): Promise<string> {
+  const settings = llm.deepseek;
+  if (!settings) throw new Error("DeepSeek was selected but is not configured");
   return callOpenAICompatible(params, {
     label: "DeepSeek",
-    baseUrl: process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com",
-    apiKey: process.env.DEEPSEEK_API_KEY!,
-    model: process.env.DEEPSEEK_MODEL ?? "deepseek-chat",
+    baseUrl: settings.baseUrl ?? "https://api.deepseek.com",
+    apiKey: settings.apiKey,
+    model: settings.model ?? "deepseek-chat",
   });
 }
 
 const CALLERS: Record<
   Exclude<DecisionMode, "heuristic">,
-  (params: DecideParams<unknown>) => Promise<string>
+  (params: DecideParams<unknown>, llm: LlmConfig) => Promise<string>
 > = {
   anthropic: callAnthropic,
   openai: callOpenAI,
@@ -212,7 +220,8 @@ function repairPrompt(userPrompt: string, error: unknown): string {
 }
 
 export async function decide<T>(params: DecideParams<T>): Promise<DecideResult<T>> {
-  const provider = selectProvider();
+  const llm = currentConfig().llm;
+  const provider = selectProvider(llm);
   // Computed up front, not only on failure: it is the reference the model's
   // verdict is scored against, and it is a pure local function either way.
   const reference = params.fallback();
@@ -220,7 +229,8 @@ export async function decide<T>(params: DecideParams<T>): Promise<DecideResult<T
     return { value: reference, mode: "heuristic", reference, agreedWithReference: null };
   }
 
-  const call = CALLERS[provider];
+  const caller = CALLERS[provider];
+  const call = (p: DecideParams<unknown>) => caller(p, llm);
 
   try {
     const text = await call(params as DecideParams<unknown>);

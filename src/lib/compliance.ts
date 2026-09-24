@@ -1,5 +1,6 @@
 import { supabase, unwrap } from "./supabase";
 import { appendLedgerEntry } from "./ledger";
+import { currentConfig } from "./context";
 import { z } from "zod";
 import {
   COUNTERPARTY_HISTORY_ACTIONS,
@@ -56,7 +57,7 @@ export interface ScreeningResult {
 export const STRONG_SANCTIONS_MATCH_THRESHOLD = 0.85;
 
 export function screeningMode(): "live" | "simulate" {
-  return process.env.OPENSANCTIONS_API_URL ? "live" : "simulate";
+  return currentConfig().compliance.openSanctionsUrl ? "live" : "simulate";
 }
 
 export function screenBundledName(name: string): ScreeningResult {
@@ -135,13 +136,11 @@ function matchEndpoint(baseUrl: string): string {
 }
 
 export async function screenName(name: string, jurisdiction?: string | null): Promise<ScreeningResult> {
-  const baseUrl = process.env.OPENSANCTIONS_API_URL;
+  const { openSanctionsUrl: baseUrl, openSanctionsApiKey } = currentConfig().compliance;
   if (!baseUrl) return screenBundledName(name);
 
   const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (process.env.OPENSANCTIONS_API_KEY) {
-    headers.Authorization = `ApiKey ${process.env.OPENSANCTIONS_API_KEY}`;
-  }
+  if (openSanctionsApiKey) headers.Authorization = `ApiKey ${openSanctionsApiKey}`;
 
   const response = await fetch(matchEndpoint(baseUrl), {
     method: "POST",
@@ -191,8 +190,9 @@ export function paymentLimitForRisk(risk: string, baseline: number | null): numb
 
 /** Live screening defaults to daily; the zero-credential demo re-screens every cycle. */
 export function rescreenIntervalMs(): number {
-  const hours = Number(process.env.COMPLIANCE_RESCREEN_HOURS ?? (screeningMode() === "live" ? 24 : 0));
-  return Number.isFinite(hours) && hours > 0 ? hours * 3_600_000 : 0;
+  // The live-versus-bundled default and the rejection of nonsense values both
+  // moved into configFromEnv, where every setting is resolved once.
+  return currentConfig().compliance.rescreenIntervalHours * 3_600_000;
 }
 
 export function isScreeningDue(

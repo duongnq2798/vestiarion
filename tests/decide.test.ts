@@ -1,77 +1,54 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { decide, extractJson, selectProvider } from "@/lib/agent/decide";
+import { configFromEnv, type LlmConfig } from "@/lib/config";
+import { runWithConfig } from "@/lib/context";
 
-const KEYS = [
-  "ANTHROPIC_API_KEY",
-  "OPENAI_API_KEY",
-  "DEEPSEEK_API_KEY",
-  "AGENT_LLM_PROVIDER",
-] as const;
+const llm = (over: Partial<LlmConfig> = {}): LlmConfig => over;
 
-let saved: Record<string, string | undefined> = {};
+/** A config whose only interesting part is its LLM settings. */
+function configWith(llmConfig: LlmConfig) {
+  return { ...configFromEnv({
+    NEXT_PUBLIC_SUPABASE_URL: "https://p.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "k",
+  }), llm: llmConfig };
+}
 
-beforeEach(() => {
-  saved = Object.fromEntries(KEYS.map((k) => [k, process.env[k]]));
-  for (const k of KEYS) delete process.env[k];
-});
-
-afterEach(() => {
-  for (const k of KEYS) {
-    if (saved[k] === undefined) delete process.env[k];
-    else process.env[k] = saved[k];
-  }
-  vi.restoreAllMocks();
-});
+afterEach(() => vi.restoreAllMocks());
 
 describe("selectProvider", () => {
+  // A pure function of LlmConfig now. The "pinned a provider whose key is
+  // missing" check moved into configFromEnv, where it fails when the config is
+  // built rather than midway through a treasury cycle — see config.test.ts.
   it("falls back to the heuristic when nothing is configured", () => {
-    expect(selectProvider()).toBe("heuristic");
+    expect(selectProvider(llm())).toBe("heuristic");
   });
 
-  it("prefers Anthropic when several keys are present", () => {
-    process.env.ANTHROPIC_API_KEY = "a";
-    process.env.OPENAI_API_KEY = "b";
-    process.env.DEEPSEEK_API_KEY = "c";
-    expect(selectProvider()).toBe("anthropic");
+  it("prefers Anthropic when several providers are available", () => {
+    expect(selectProvider(llm({
+      anthropic: { apiKey: "a" }, openai: { apiKey: "o" }, deepseek: { apiKey: "d" },
+    }))).toBe("anthropic");
   });
 
-  it("falls through the preference order to the key that exists", () => {
-    process.env.DEEPSEEK_API_KEY = "c";
-    expect(selectProvider()).toBe("deepseek");
+  it("falls through the preference order to the one that exists", () => {
+    expect(selectProvider(llm({ deepseek: { apiKey: "d" } }))).toBe("deepseek");
   });
 
   it("honours an explicit choice over the preference order", () => {
-    process.env.ANTHROPIC_API_KEY = "a";
-    process.env.DEEPSEEK_API_KEY = "c";
-    process.env.AGENT_LLM_PROVIDER = "deepseek";
-    expect(selectProvider()).toBe("deepseek");
+    expect(selectProvider(llm({
+      provider: "deepseek", anthropic: { apiKey: "a" }, deepseek: { apiKey: "d" },
+    }))).toBe("deepseek");
   });
 
-  it("accepts the explicit choice case-insensitively", () => {
-    process.env.DEEPSEEK_API_KEY = "c";
-    process.env.AGENT_LLM_PROVIDER = "DeepSeek";
-    expect(selectProvider()).toBe("deepseek");
+  it("lets the heuristic be pinned even when providers are available", () => {
+    expect(selectProvider(llm({ provider: "heuristic", anthropic: { apiKey: "a" } })))
+      .toBe("heuristic");
   });
 
-  it("throws rather than silently billing a different provider", () => {
-    // Pinning a provider whose key is missing is a configuration mistake. The
-    // dangerous behaviour would be quietly using whichever key *is* present.
-    process.env.ANTHROPIC_API_KEY = "a";
-    process.env.AGENT_LLM_PROVIDER = "openai";
-    expect(() => selectProvider()).toThrow(/OPENAI_API_KEY is not set/);
-  });
-
-  it("lets the heuristic be pinned even when keys are available", () => {
-    process.env.ANTHROPIC_API_KEY = "a";
-    process.env.AGENT_LLM_PROVIDER = "heuristic";
-    expect(selectProvider()).toBe("heuristic");
-  });
-
-  it("ignores an unrecognised provider name and auto-selects", () => {
-    process.env.DEEPSEEK_API_KEY = "c";
-    process.env.AGENT_LLM_PROVIDER = "llama";
-    expect(selectProvider()).toBe("deepseek");
+  it("reads the running scope when given no argument", () => {
+    runWithConfig(configWith(llm({ deepseek: { apiKey: "d" } })), () => {
+      expect(selectProvider()).toBe("deepseek");
+    });
   });
 });
 
@@ -108,16 +85,20 @@ describe("extractJson", () => {
 });
 
 const schema = z.object({ action: z.enum(["pay", "hold"]), confidence: z.number() });
+
+const noProvider = configWith(llm());
+const withDeepSeek = configWith(llm({ deepseek: { apiKey: "k" } }));
+
+/** Runs a decision for a business whose only provider is DeepSeek. */
+const decideAsDeepSeek = <T,>(params: Parameters<typeof decide<T>>[0]) =>
+  runWithConfig(withDeepSeek, () => decide(params));
 const fallback = () => ({ action: "hold" as const, confidence: 0.5 });
 
 describe("decide", () => {
-  it("uses the heuristic and labels it as such when no key is set", async () => {
-    const result = await decide({
-      systemPrompt: "s",
-      userPrompt: "u",
-      schema,
-      fallback,
-    });
+  it("uses the heuristic and labels it as such when no provider is configured", async () => {
+    const result = await runWithConfig(noProvider, () =>
+      decide({ systemPrompt: "s", userPrompt: "u", schema, fallback })
+    );
     expect(result).toMatchObject({ value: { action: "hold", confidence: 0.5 }, mode: "heuristic" });
     // In heuristic mode the reference IS the decision, so agreement is not a
     // defined quantity and must not be reported as agreement.
@@ -126,7 +107,6 @@ describe("decide", () => {
   });
 
   it("returns the model's decision, labelled with the provider that made it", async () => {
-    process.env.DEEPSEEK_API_KEY = "k";
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -136,7 +116,7 @@ describe("decide", () => {
       )
     );
 
-    const result = await decide({ systemPrompt: "s", userPrompt: "u", schema, fallback });
+    const result = await decideAsDeepSeek({ systemPrompt: "s", userPrompt: "u", schema, fallback });
     expect(result).toMatchObject({ value: { action: "pay", confidence: 0.91 }, mode: "deepseek" });
     // The rule-based policy said hold; the model said pay. That divergence is
     // the whole eval signal and has to survive into the result.
@@ -147,19 +127,17 @@ describe("decide", () => {
   it("falls back to the heuristic when the provider is down", async () => {
     // A rate-limited model must not stop the treasury — but the ledger has to
     // record the heuristic as the author, not the model.
-    process.env.DEEPSEEK_API_KEY = "k";
     vi.spyOn(console, "error").mockImplementation(() => {});
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response("rate limited", { status: 429 })
     );
 
-    const result = await decide({ systemPrompt: "s", userPrompt: "u", schema, fallback });
+    const result = await decideAsDeepSeek({ systemPrompt: "s", userPrompt: "u", schema, fallback });
     expect(result.mode).toBe("heuristic");
     expect(result.value).toEqual({ action: "hold", confidence: 0.5 });
   });
 
   it("falls back when the model returns valid JSON in the wrong shape", async () => {
-    process.env.DEEPSEEK_API_KEY = "k";
     vi.spyOn(console, "error").mockImplementation(() => {});
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
@@ -168,34 +146,31 @@ describe("decide", () => {
       )
     );
 
-    const result = await decide({ systemPrompt: "s", userPrompt: "u", schema, fallback });
+    const result = await decideAsDeepSeek({ systemPrompt: "s", userPrompt: "u", schema, fallback });
     expect(result.mode).toBe("heuristic");
   });
 
   it("falls back when the model returns no content", async () => {
-    process.env.DEEPSEEK_API_KEY = "k";
     vi.spyOn(console, "error").mockImplementation(() => {});
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ choices: [] }), { status: 200 })
     );
 
-    expect((await decide({ systemPrompt: "s", userPrompt: "u", schema, fallback })).mode).toBe(
+    expect((await decideAsDeepSeek({ systemPrompt: "s", userPrompt: "u", schema, fallback })).mode).toBe(
       "heuristic"
     );
   });
 
   it("falls back when the network call throws outright", async () => {
-    process.env.DEEPSEEK_API_KEY = "k";
     vi.spyOn(console, "error").mockImplementation(() => {});
     vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("ECONNRESET"));
 
-    expect((await decide({ systemPrompt: "s", userPrompt: "u", schema, fallback })).mode).toBe(
+    expect((await decideAsDeepSeek({ systemPrompt: "s", userPrompt: "u", schema, fallback })).mode).toBe(
       "heuristic"
     );
   });
 
   it("sends the system prompt and the business context to the provider", async () => {
-    process.env.DEEPSEEK_API_KEY = "k";
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
         JSON.stringify({ choices: [{ message: { content: '{"action":"pay","confidence":1}' } }] }),
@@ -203,7 +178,7 @@ describe("decide", () => {
       )
     );
 
-    await decide({
+    await decideAsDeepSeek({
       systemPrompt: "never pay high risk",
       userPrompt: '{"invoice":{"amount":240}}',
       schema,
@@ -218,11 +193,10 @@ describe("decide", () => {
   });
 
   it("does not call out at all when pinned to the heuristic", async () => {
-    process.env.DEEPSEEK_API_KEY = "k";
-    process.env.AGENT_LLM_PROVIDER = "heuristic";
+    const pinned = configWith(llm({ provider: "heuristic", deepseek: { apiKey: "k" } }));
     const fetchSpy = vi.spyOn(globalThis, "fetch");
 
-    await decide({ systemPrompt: "s", userPrompt: "u", schema, fallback });
+    await runWithConfig(pinned, () => decide({ systemPrompt: "s", userPrompt: "u", schema, fallback }));
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
@@ -232,7 +206,6 @@ describe("decide — one retry on a malformed reply", () => {
     // Before this retry existed, a stray word outside the JSON cost the whole
     // decision: the agent dropped silently to the heuristic and a money
     // decision lost the judgement it was about to apply.
-    process.env.DEEPSEEK_API_KEY = "k";
     vi.spyOn(console, "error").mockImplementation(() => {});
     const fetchSpy = vi
       .spyOn(globalThis, "fetch")
@@ -248,14 +221,13 @@ describe("decide — one retry on a malformed reply", () => {
         )
       );
 
-    const result = await decide({ systemPrompt: "s", userPrompt: "u", schema, fallback });
+    const result = await decideAsDeepSeek({ systemPrompt: "s", userPrompt: "u", schema, fallback });
     expect(result.mode).toBe("deepseek");
     expect(result.value).toEqual({ action: "pay", confidence: 0.8 });
     expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
 
   it("shows the model its own rejection rather than repeating the prompt", async () => {
-    process.env.DEEPSEEK_API_KEY = "k";
     vi.spyOn(console, "error").mockImplementation(() => {});
     const fetchSpy = vi
       .spyOn(globalThis, "fetch")
@@ -271,7 +243,7 @@ describe("decide — one retry on a malformed reply", () => {
         )
       );
 
-    await decide({ systemPrompt: "s", userPrompt: "original context", schema, fallback });
+    await decideAsDeepSeek({ systemPrompt: "s", userPrompt: "original context", schema, fallback });
 
     const retryBody = JSON.parse(String(fetchSpy.mock.calls[1][1]?.body));
     const retryUser = retryBody.messages[1].content;
@@ -283,28 +255,25 @@ describe("decide — one retry on a malformed reply", () => {
   it("does not retry a rate limit, which repeating cannot fix", async () => {
     // Retrying a 429 spends another call to be refused again, and on a
     // treasury cycle that is real money and real latency.
-    process.env.DEEPSEEK_API_KEY = "k";
     vi.spyOn(console, "error").mockImplementation(() => {});
     const fetchSpy = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValue(new Response("rate limited", { status: 429 }));
 
-    const result = await decide({ systemPrompt: "s", userPrompt: "u", schema, fallback });
+    const result = await decideAsDeepSeek({ systemPrompt: "s", userPrompt: "u", schema, fallback });
     expect(result.mode).toBe("heuristic");
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 
   it("does not retry a dead socket", async () => {
-    process.env.DEEPSEEK_API_KEY = "k";
     vi.spyOn(console, "error").mockImplementation(() => {});
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("ECONNRESET"));
 
-    await decide({ systemPrompt: "s", userPrompt: "u", schema, fallback });
+    await decideAsDeepSeek({ systemPrompt: "s", userPrompt: "u", schema, fallback });
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 
   it("gives up after one retry rather than looping", async () => {
-    process.env.DEEPSEEK_API_KEY = "k";
     vi.spyOn(console, "error").mockImplementation(() => {});
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ choices: [{ message: { content: "still not json" } }] }), {
@@ -312,7 +281,7 @@ describe("decide — one retry on a malformed reply", () => {
       })
     );
 
-    const result = await decide({ systemPrompt: "s", userPrompt: "u", schema, fallback });
+    const result = await decideAsDeepSeek({ systemPrompt: "s", userPrompt: "u", schema, fallback });
     expect(result.mode).toBe("heuristic");
     expect(fetchSpy).toHaveBeenCalledTimes(2);
   });

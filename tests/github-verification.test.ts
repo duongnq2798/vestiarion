@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { cycleClockMode } from "@/lib/clock";
+import { configFromEnv } from "@/lib/config";
+import { runWithConfig } from "@/lib/context";
 import { parseGitHubPullRequestUrl, verifyGitHubPullRequest } from "@/lib/github-verification";
 
 describe("GitHub pull request source parsing", () => {
@@ -79,18 +81,37 @@ describe("GitHub pull request verification", () => {
 });
 
 describe("cycle clock mode", () => {
+  // The decision moved into configFromEnv so a caller can choose a clock the
+  // same way it chooses a database. The behaviour it encodes is unchanged, so
+  // these assertions moved with it rather than being dropped.
+  const mode = (over: Record<string, string>) =>
+    configFromEnv({
+      NEXT_PUBLIC_SUPABASE_URL: "https://p.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "k",
+      ...over,
+    }).clockMode;
+
   it("uses wall-clock mode by default in production", () => {
-    expect(cycleClockMode({ NODE_ENV: "production" })).toBe("real");
+    expect(mode({ NODE_ENV: "production" })).toBe("real");
   });
 
   it("keeps numbered days by default in development and tests", () => {
-    expect(cycleClockMode({ NODE_ENV: "development" })).toBe("simulate");
-    expect(cycleClockMode({ NODE_ENV: "test" })).toBe("simulate");
+    expect(mode({ NODE_ENV: "development" })).toBe("simulate");
+    expect(mode({ NODE_ENV: "test" })).toBe("simulate");
   });
 
   it("honors either explicit mode and ignores unsafe values", () => {
-    expect(cycleClockMode({ NODE_ENV: "production", CYCLE_CLOCK_MODE: "simulate" })).toBe("simulate");
-    expect(cycleClockMode({ NODE_ENV: "development", CYCLE_CLOCK_MODE: " REAL " })).toBe("real");
-    expect(cycleClockMode({ NODE_ENV: "production", CYCLE_CLOCK_MODE: "tomorrow" })).toBe("real");
+    expect(mode({ NODE_ENV: "production", CYCLE_CLOCK_MODE: "simulate" })).toBe("simulate");
+    expect(mode({ NODE_ENV: "development", CYCLE_CLOCK_MODE: " REAL " })).toBe("real");
+    expect(mode({ NODE_ENV: "production", CYCLE_CLOCK_MODE: "tomorrow" })).toBe("real");
+  });
+
+  it("is what cycleClockMode reports for the running scope", () => {
+    const config = configFromEnv({
+      NEXT_PUBLIC_SUPABASE_URL: "https://p.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "k",
+      CYCLE_CLOCK_MODE: "simulate",
+    });
+    runWithConfig(config, () => expect(cycleClockMode()).toBe("simulate"));
   });
 });

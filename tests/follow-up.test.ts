@@ -1,4 +1,6 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
+import { configFromEnv } from "@/lib/config";
+import { runWithConfig } from "@/lib/context";
 import {
   factChanges,
   followUpConfig,
@@ -204,29 +206,32 @@ describe("planFollowUp — not turning into an alert treadmill", () => {
 });
 
 describe("followUpConfig", () => {
-  const original = { ...process.env };
-  afterEach(() => {
-    delete process.env.FOLLOW_UP_STALE_DAYS;
-    delete process.env.FOLLOW_UP_RE_ESCALATE_DAYS;
-    if (original.FOLLOW_UP_STALE_DAYS) process.env.FOLLOW_UP_STALE_DAYS = original.FOLLOW_UP_STALE_DAYS;
-  });
+  // Validation moved into configFromEnv, so these build a config rather than
+  // mutating the environment a running scope has already read.
+  const cadence = (over: Record<string, string> = {}) =>
+    runWithConfig(
+      configFromEnv({
+        NEXT_PUBLIC_SUPABASE_URL: "https://p.supabase.co",
+        SUPABASE_SERVICE_ROLE_KEY: "k",
+        ...over,
+      }),
+      () => followUpConfig()
+    );
 
   it("has usable defaults", () => {
-    expect(followUpConfig()).toEqual({ staleAfterDays: 3, reEscalateAfterDays: 7 });
+    expect(cadence()).toEqual({ staleAfterDays: 3, reEscalateAfterDays: 7 });
   });
 
-  it("reads overrides from the environment", () => {
-    process.env.FOLLOW_UP_STALE_DAYS = "1";
-    process.env.FOLLOW_UP_RE_ESCALATE_DAYS = "2";
-    expect(followUpConfig()).toEqual({ staleAfterDays: 1, reEscalateAfterDays: 2 });
+  it("reads an explicit cadence", () => {
+    expect(cadence({ FOLLOW_UP_STALE_DAYS: "1", FOLLOW_UP_RE_ESCALATE_DAYS: "2" }))
+      .toEqual({ staleAfterDays: 1, reEscalateAfterDays: 2 });
   });
 
   it("falls back to the default on nonsense rather than never escalating", () => {
     // A bad value must not mean "stay silent forever", which is the direction
     // that loses money quietly.
     for (const bad of ["", "abc", "-1", "0"]) {
-      process.env.FOLLOW_UP_STALE_DAYS = bad;
-      expect(followUpConfig().staleAfterDays).toBe(3);
+      expect(cadence({ FOLLOW_UP_STALE_DAYS: bad }).staleAfterDays).toBe(3);
     }
   });
 });

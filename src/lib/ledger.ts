@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import path from "node:path";
 import fs from "node:fs";
 import { supabase, unwrap } from "./supabase";
+import { currentConfig } from "./context";
 
 /**
  * The Vestiarion ledger: an append-only, hash-chained, Ed25519-signed record
@@ -36,9 +37,17 @@ function ensureKeypair() {
   if (!fs.existsSync(keyDir)) fs.mkdirSync(keyDir, { recursive: true });
   if (fs.existsSync(privKeyPath) && fs.existsSync(pubKeyPath)) return;
 
-  // LEDGER_SIGNING_KEY lets a serverless deployment carry the key in an env
-  // var instead of the filesystem, which does not persist between invocations.
-  const fromEnv = process.env.LEDGER_SIGNING_KEY;
+  // A configured key lets a serverless deployment carry it in an environment
+  // variable instead of the filesystem, which does not persist between
+  // invocations.
+  //
+  // NOT YET MULTI-TENANT. The key path is one fixed location under `data/`,
+  // so two businesses sharing a process would sign with the same key and each
+  // could verify the other's chain as its own. Authorship is only meaningful
+  // when the key is not shared, so per-tenant key material has to land before
+  // anything serves more than one business for real. Recorded here rather than
+  // in a tracker because this is the line that would have to change.
+  const fromEnv = currentConfig().ledgerSigningKey;
   if (fromEnv) {
     const privateKey = crypto.createPrivateKey(fromEnv.replace(/\\n/g, "\n"));
     fs.writeFileSync(privKeyPath, privateKey.export({ type: "pkcs8", format: "pem" }));

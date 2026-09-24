@@ -29,6 +29,11 @@
  * same reasons are written to the ledger and rendered in the UI.
  */
 
+import { currentConfig } from "../context";
+import type { FollowUpConfig } from "../config";
+
+export type { FollowUpConfig };
+
 export interface FrozenInvoice {
   id: string;
   status: string;
@@ -64,22 +69,11 @@ export interface FollowUpPlan {
   pastDue: boolean;
 }
 
-export interface FollowUpConfig {
-  /** Days a frozen invoice may sit unchanged before a human is told. */
-  staleAfterDays: number;
-  /** Days before the same invoice may be escalated again. */
-  reEscalateAfterDays: number;
-}
-
 const DAY_MS = 86_400_000;
 
+/** The current business's follow-up cadence. Validation lives in configFromEnv. */
 export function followUpConfig(): FollowUpConfig {
-  const stale = Number(process.env.FOLLOW_UP_STALE_DAYS ?? 3);
-  const reEscalate = Number(process.env.FOLLOW_UP_RE_ESCALATE_DAYS ?? 7);
-  return {
-    staleAfterDays: Number.isFinite(stale) && stale > 0 ? stale : 3,
-    reEscalateAfterDays: Number.isFinite(reEscalate) && reEscalate > 0 ? reEscalate : 7,
-  };
+  return currentConfig().followUp;
 }
 
 function ageInDays(since: string | null, now: number): number | null {

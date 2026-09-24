@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { currentConfig } from "./context";
 
 export interface GitHubPullRequestRef {
   owner: string;
@@ -39,7 +40,7 @@ export async function verifyGitHubPullRequest(
   ref: GitHubPullRequestRef,
   options: { token?: string; fetchImpl?: typeof fetch } = {}
 ): Promise<GitHubVerificationResult> {
-  const token = options.token ?? process.env.GITHUB_TOKEN;
+  const token = options.token ?? currentConfig().githubToken;
   if (!token) {
     return { status: "unavailable", ref, reason: "GITHUB_TOKEN is not configured" };
   }
