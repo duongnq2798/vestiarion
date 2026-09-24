@@ -1,113 +1,247 @@
-import AgentControls from "@/components/AgentControls";
-import { CycleReport } from "@/components/vx/CycleReport";
-import { DecisionCard } from "@/components/vx/DecisionCard";
-import { invoiceDecision, treasuryActionDecision, treasuryLedgerDecision } from "@/components/vx/map";
-import { Money, SectionHead } from "@/components/vx/Primitives";
-import { PageHead, ProductShell } from "@/components/vx/Shell";
-import { AccountsList, BalanceTile, ForecastPanel, MoreLink, StatTile } from "@/components/vx/Treasury";
-import type { Account, Forecast } from "@/components/vx/types";
+import type { Metadata } from "next";
+import Link from "next/link";
+import { Suspense } from "react";
+import { ProvenanceBar, type ProvenanceLeg } from "@/components/vx/Provenance";
+import { fmt, Label } from "@/components/vx/Primitives";
 import { getChainProvider } from "@/lib/circle";
-import { listLedgerEntries, listLedgerEntriesAfter, listLedgerEntriesByDomain, listLedgerEntriesForTargets } from "@/lib/ledger";
-import { latestForecast, listAccounts, listCounterparties, listInvoices, listTreasuryActions, stats } from "@/lib/queries";
+import { screeningMode } from "@/lib/compliance";
+import { getLandingMetrics, type LandingMetrics } from "@/lib/landing";
 
 export const dynamic = "force-dynamic";
 
-export default async function DashboardPage({ searchParams }: PageProps<"/">) {
-  const query = await searchParams;
-  const [accountsRows, actionRows, forecastRow, dashboardStats, invoices, counterparties, headEntries] = await Promise.all([
-    listAccounts(),
-    listTreasuryActions(),
-    latestForecast(),
-    stats(),
-    listInvoices(),
-    listCounterparties(),
-    listLedgerEntries(1),
-  ]);
-  const provider = getChainProvider();
-  const counterpartiesById = new Map(counterparties.map((counterparty) => [counterparty.id, counterparty]));
-  const accounts: Account[] = accountsRows.map((account) => ({
-    ...account,
-    simulated: account.kind === "reserve" && provider.earnMode !== "live",
-  }));
-  const forecast: Forecast | undefined = forecastRow
-    ? {
-        horizonDays: forecastRow.horizon_days,
-        inflow: forecastRow.projected_inflow,
-        outflow: forecastRow.projected_outflow,
-        liquid: forecastRow.liquid_balance,
-        recommendation: forecastRow.recommendation ?? "",
-      }
-    : undefined;
-  const sinceValue = typeof query.since === "string" ? Number(query.since) : undefined;
-  const since = Number.isFinite(sinceValue) ? sinceValue : undefined;
-  const [invoiceEntries, treasuryEntries, cycleEntries] = await Promise.all([
-    listLedgerEntriesForTargets({ invoiceIds: invoices.map((invoice) => invoice.id) }),
-    listLedgerEntriesByDomain("treasury", 2),
-    since == null ? Promise.resolve([]) : listLedgerEntriesAfter(since),
-  ]);
-  const invoiceDecisions = invoices.map((invoice) =>
-    invoiceDecision(invoice, counterpartiesById.get(invoice.counterparty_id), invoiceEntries)
+export const metadata: Metadata = {
+  title: "Vestiarion — Verifiable Treasury Agent on Arc",
+  description: "A treasury agent that screens counterparties, pays obligations, applies code-level guardrails, and signs every decision into an auditable chain on Arc testnet.",
+  openGraph: {
+    title: "Vestiarion — Verifiable Treasury Agent on Arc",
+    description: "See the live console, measured Arc testnet outcomes, and signed decision ledger behind an autonomous business treasury.",
+    type: "website",
+    siteName: "Vestiarion",
+  },
+  twitter: {
+    card: "summary",
+    title: "Vestiarion — Verifiable Treasury Agent on Arc",
+    description: "An autonomous treasury agent whose decisions, refusals, and evidence are inspectable.",
+  },
+};
+
+function MetricCard({ label, value, note, href, measured }: {
+  label: string;
+  value: string;
+  note: string;
+  href: string;
+  measured: boolean;
+}) {
+  return (
+    <Link href={href} className={`group rounded-lg border p-4 transition-colors hover:border-agent-line sm:p-5 ${measured ? "border-line bg-surface" : "hatch border-dashed border-line-strong"}`}>
+      <Label>{label}</Label>
+      <p className={`mt-2 font-mono font-semibold tracking-tight ${measured ? "text-2xl text-ink" : "text-base text-ink-2"}`}>{value}</p>
+      <p className="mt-2 text-xs leading-relaxed text-ink-3">{note} <span className="text-agent group-hover:underline">View evidence →</span></p>
+    </Link>
   );
-  const stopped = invoiceDecisions.filter((decision) => decision.outcome === "refused" || decision.outcome === "held");
-  const treasuryDecisions = treasuryEntries.map(treasuryLedgerDecision);
-  const executedReserveMoves = actionRows.slice(0, 2).map(treasuryActionDecision);
-  const headSeq = headEntries[0]?.seq ?? 0;
-  const needsReview = stopped.length;
+}
+
+async function LiveMetrics() {
+  const metrics = await getLandingMetrics();
+  const hasCycles = metrics.instrumentedCycles > 0;
+  const hasTransfers = metrics.settledLiveTransfers > 0;
+  return (
+    <div>
+      <div className="grid grid-cols-1 gap-3 min-[430px]:grid-cols-2 lg:grid-cols-3">
+        <MetricCard label="Instrumented cycles" value={hasCycles ? String(metrics.instrumentedCycles) : "No cycle measured yet"} note={hasCycles ? latestCycleNote(metrics) : "Phase 7 history starts with the next permitted cycle."} href="/insights" measured={hasCycles} />
+        <MetricCard label="Agent decisions" value={hasCycles ? String(metrics.instrumentedDecisions) : "No decision series yet"} note={hasCycles ? "Persisted at the decision point." : "Earlier ledger entries were not backfilled into cycle metrics."} href="/insights" measured={hasCycles} />
+        <MetricCard label="Live transfers settled" value={hasTransfers ? String(metrics.settledLiveTransfers) : "No measured transfer yet"} note={hasTransfers ? "Confirmed Circle payment intents on Arc testnet." : "No confirmed post-instrumentation payment intent exists."} href="/insights" measured={hasTransfers} />
+        <MetricCard label="Median chain fee" value={metrics.medianChainFeeUsd == null ? "No chain-reported fee yet" : `$${fmt(metrics.medianChainFeeUsd)}`} note={metrics.medianChainFeeUsd == null ? "Provider estimates are deliberately excluded." : `${metrics.chainFeeSampleCount} chain-reported live sample${metrics.chainFeeSampleCount === 1 ? "" : "s"}.`} href="/insights" measured={metrics.medianChainFeeUsd != null} />
+        <MetricCard label="Median settlement" value={metrics.medianSettlementMs == null ? "No confirmed timing yet" : `${Math.round(metrics.medianSettlementMs)} ms`} note={metrics.medianSettlementMs == null ? "Pending transfers have no invented duration." : `${metrics.settlementSampleCount} confirmed live sample${metrics.settlementSampleCount === 1 ? "" : "s"}.`} href="/insights" measured={metrics.medianSettlementMs != null} />
+        <MetricCard label="Signed ledger height" value={metrics.ledgerHeight > 0 ? String(metrics.ledgerHeight) : "Ledger is empty"} note={metrics.ledgerHeight > 0 ? "Current append-only chain length." : "No entry is styled as an achievement."} href="/audit" measured={metrics.ledgerHeight > 0} />
+      </div>
+      <p className="mt-3 text-xs leading-relaxed text-ink-3">All figures above are server-rendered from the configured Supabase project. Transfer metrics include live Arc testnet rows only; simulated rows never enter these medians.</p>
+    </div>
+  );
+}
+
+function latestCycleNote(metrics: LandingMetrics): string {
+  return metrics.latestInstrumentedCycleAt
+    ? `Latest completed ${new Date(metrics.latestInstrumentedCycleAt).toLocaleString("en-US", { timeZone: "UTC" })} UTC.`
+    : "No completed instrumented cycle.";
+}
+
+function MetricsFallback() {
+  return <div className="h-56 animate-pulse rounded-lg border border-line bg-surface" aria-label="Loading live measurements" />;
+}
+
+const claims = [
+  {
+    title: "A model can recommend payment. Code can still refuse it.",
+    body: "Every payable verdict crosses risk, screened-limit, evidence, and liquidity checks before the provider boundary. A blocked verdict records what the model argued and which rule overruled it.",
+    href: "/console",
+    evidence: "See the guardrail receipt",
+  },
+  {
+    title: "Screening changes authority, not history.",
+    body: "A live OpenSanctions match or labelled bundled fallback derives the current payment limit from the business baseline. Re-screening is reversible and failed lookups retain the previous verdict.",
+    href: "/compliance",
+    evidence: "Inspect tiered limits",
+  },
+  {
+    title: "Treasury moves must beat their own cost.",
+    body: "The reserve policy prices projected yield against the sweep-and-redemption round trip while protecting obligations due in 7 and 14 days. Uneconomic movement stays liquid.",
+    href: "/audit?domain=treasury",
+    evidence: "Read the economics",
+  },
+  {
+    title: "The audit log is a cryptographic receipt, not a feed.",
+    body: "Every human, agent, and system action is Ed25519-signed, linked to the previous entry, and independently verified against the full chain on demand.",
+    href: "/audit",
+    evidence: "Verify the hash chain",
+  },
+] as const;
+
+function DecisionFlowDiagram() {
+  const stages = ["Compliance", "AP", "Contractors", "Treasury", "Forecast"];
+  return (
+    <figure className="rounded-xl border border-line bg-surface p-4 sm:p-6">
+      <svg viewBox="0 0 1000 430" className="hidden h-auto w-full sm:block" role="img" aria-labelledby="flow-title flow-desc">
+        <title id="flow-title">Vestiarion decision flow</title>
+        <desc id="flow-desc">Compliance, accounts payable, contractor payments, treasury, and forecasting feed decisions through a code guardrail before execution, while every stage writes to a signed ledger.</desc>
+        <defs><marker id="desktop-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="var(--color-ink-3)" /></marker></defs>
+        {stages.map((stage, index) => {
+          const x = 20 + index * 196;
+          return <g key={stage}>
+            <rect x={x} y="35" width="156" height="78" rx="8" fill="var(--color-raised)" stroke="var(--color-line-strong)" />
+            <text x={x + 78} y="81" textAnchor="middle" fill="var(--color-ink)" fontSize="17" fontWeight="600">{stage}</text>
+            {index < stages.length - 1 && <line x1={x + 156} y1="74" x2={x + 188} y2="74" stroke="var(--color-ink-3)" markerEnd="url(#desktop-arrow)" />}
+            <line x1={x + 78} y1="113" x2={x + 78} y2="358" stroke="var(--color-line-strong)" strokeDasharray="4 6" />
+          </g>;
+        })}
+        <rect x="175" y="178" width="190" height="64" rx="8" fill="var(--color-agent-soft)" stroke="var(--color-agent-line)" />
+        <text x="270" y="205" textAnchor="middle" fill="var(--color-agent)" fontSize="15" fontWeight="600">LLM or heuristic verdict</text>
+        <text x="270" y="226" textAnchor="middle" fill="var(--color-ink-2)" fontSize="12">action · reasoning · confidence</text>
+        <line x1="365" y1="210" x2="431" y2="210" stroke="var(--color-ink-3)" markerEnd="url(#desktop-arrow)" />
+        <rect x="440" y="168" width="160" height="84" rx="8" fill="var(--color-refused-soft)" stroke="var(--color-refused-line)" />
+        <text x="520" y="201" textAnchor="middle" fill="var(--color-refused)" fontSize="15" fontWeight="700">CODE GUARDRAIL</text>
+        <text x="520" y="223" textAnchor="middle" fill="var(--color-ink-2)" fontSize="12">may override the model</text>
+        <line x1="600" y1="210" x2="666" y2="210" stroke="var(--color-ink-3)" markerEnd="url(#desktop-arrow)" />
+        <rect x="675" y="178" width="160" height="64" rx="8" fill="var(--color-proof-soft)" stroke="var(--color-proof-line)" />
+        <text x="755" y="205" textAnchor="middle" fill="var(--color-proof)" fontSize="15" fontWeight="600">Execute or hold</text>
+        <text x="755" y="226" textAnchor="middle" fill="var(--color-ink-2)" fontSize="12">provider boundary</text>
+        <rect x="90" y="350" width="820" height="58" rx="8" fill="var(--color-ground)" stroke="var(--color-proof-line)" />
+        <text x="500" y="383" textAnchor="middle" fill="var(--color-proof)" fontSize="16" fontWeight="600">SIGNED HASH-CHAIN LEDGER · EVIDENCE UNDER EVERY STAGE</text>
+      </svg>
+
+      <svg viewBox="0 0 360 790" className="h-auto w-full sm:hidden" role="img" aria-labelledby="flow-mobile-title flow-mobile-desc">
+        <title id="flow-mobile-title">Vestiarion decision flow</title>
+        <desc id="flow-mobile-desc">Five treasury stages lead into a model or heuristic verdict, then a code guardrail, execution or hold, and the signed ledger.</desc>
+        <defs><marker id="mobile-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="var(--color-ink-3)" /></marker></defs>
+        {stages.map((stage, index) => {
+          const y = 18 + index * 78;
+          return <g key={stage}>
+            <rect x="55" y={y} width="250" height="52" rx="8" fill="var(--color-raised)" stroke="var(--color-line-strong)" />
+            <text x="180" y={y + 32} textAnchor="middle" fill="var(--color-ink)" fontSize="16" fontWeight="600">{stage}</text>
+            {index < stages.length - 1 && <line x1="180" y1={y + 52} x2="180" y2={y + 71} stroke="var(--color-ink-3)" markerEnd="url(#mobile-arrow)" />}
+          </g>;
+        })}
+        <line x1="180" y1="382" x2="180" y2="417" stroke="var(--color-ink-3)" markerEnd="url(#mobile-arrow)" />
+        <rect x="40" y="425" width="280" height="66" rx="8" fill="var(--color-agent-soft)" stroke="var(--color-agent-line)" />
+        <text x="180" y="451" textAnchor="middle" fill="var(--color-agent)" fontSize="15" fontWeight="600">LLM or heuristic verdict</text>
+        <text x="180" y="474" textAnchor="middle" fill="var(--color-ink-2)" fontSize="12">action · reasoning · confidence</text>
+        <line x1="180" y1="491" x2="180" y2="526" stroke="var(--color-ink-3)" markerEnd="url(#mobile-arrow)" />
+        <rect x="40" y="534" width="280" height="72" rx="8" fill="var(--color-refused-soft)" stroke="var(--color-refused-line)" />
+        <text x="180" y="563" textAnchor="middle" fill="var(--color-refused)" fontSize="15" fontWeight="700">CODE GUARDRAIL</text>
+        <text x="180" y="587" textAnchor="middle" fill="var(--color-ink-2)" fontSize="12">may override the model</text>
+        <line x1="180" y1="606" x2="180" y2="641" stroke="var(--color-ink-3)" markerEnd="url(#mobile-arrow)" />
+        <rect x="40" y="649" width="280" height="58" rx="8" fill="var(--color-proof-soft)" stroke="var(--color-proof-line)" />
+        <text x="180" y="684" textAnchor="middle" fill="var(--color-proof)" fontSize="15" fontWeight="600">Execute or hold</text>
+        <line x1="180" y1="707" x2="180" y2="735" stroke="var(--color-ink-3)" markerEnd="url(#mobile-arrow)" />
+        <rect x="20" y="742" width="320" height="42" rx="8" fill="var(--color-ground)" stroke="var(--color-proof-line)" />
+        <text x="180" y="768" textAnchor="middle" fill="var(--color-proof)" fontSize="12" fontWeight="600">SIGNED HASH-CHAIN LEDGER</text>
+      </svg>
+      <figcaption className="mt-3 text-sm leading-relaxed text-ink-2">The reasoning engine proposes. Deterministic policy decides whether execution is allowed. Every stage leaves a signed receipt, including refusals and unavailable evidence.</figcaption>
+    </figure>
+  );
+}
+
+export default function LandingPage() {
+  const provider = getChainProvider();
+  const currentScreeningMode = screeningMode();
+  const provenance: ProvenanceLeg[] = [
+    { label: "Payments", detail: "Arc testnet", live: provider.mode === "live" },
+    { label: "Yield", detail: "USYC reserve", live: provider.earnMode === "live" },
+    { label: "Screening", detail: currentScreeningMode === "live" ? "OpenSanctions" : "bundled list", live: currentScreeningMode === "live" },
+  ];
 
   return (
-    <ProductShell active="treasury" day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt}>
-      <PageHead
-        title="Treasury"
-        sub="What the agent holds, what it decided, and why."
-        right={<AgentControls nextDay={dashboardStats.day + 1} headSeq={headSeq} clockMode={dashboardStats.clockMode} />}
-      />
-
-      {since != null && <CycleReport entries={cycleEntries} day={dashboardStats.day} since={since} clockMode={dashboardStats.clockMode} completedAt={dashboardStats.lastCycleAt} />}
-
-      <div className="mb-8 grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-4">
-        <BalanceTile accounts={accounts} />
-        <StatTile label="Paid out to date" sub={`${dashboardStats.onchainTransfers} settled on-chain`}>
-          <Money value={dashboardStats.totalPaidOut} />
-        </StatTile>
-        <StatTile label="Decisions logged" href="/audit" sub="Every entry is hash-linked and signed">
-          <span className="tabular-nums">{dashboardStats.decisionsLogged}</span>
-        </StatTile>
-        <StatTile label="Needs you" tone={needsReview > 0 ? "held" : "default"} href="/invoices" sub={needsReview > 0 ? "Held or flagged — the agent will not act alone" : "Nothing waiting"}>
-          <span className="tabular-nums">{needsReview}</span>
-        </StatTile>
-      </div>
-
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_22rem]">
-        <div className="min-w-0 space-y-8">
-          {stopped.length > 0 && (
-            <section>
-              <SectionHead title="Stopped" meta="refused by code, or waiting for you" />
-              <div className="space-y-4">{stopped.slice(0, 3).map((decision) => <DecisionCard key={decision.id} decision={decision} />)}</div>
-            </section>
-          )}
-
-          <section>
-            <SectionHead title="Treasury decisions" meta="yield moves include their economics" action={<MoreLink href="/audit?domain=treasury">Full audit log</MoreLink>} />
-            {treasuryDecisions.length === 0 ? (
-              <p className="rounded-lg border border-dashed border-line-strong p-5 text-sm text-ink-2">Run an agent cycle to see why cash was swept, redeemed, or held liquid.</p>
-            ) : (
-              <div className="space-y-4">{treasuryDecisions.map((decision) => <DecisionCard key={decision.id} decision={decision} />)}</div>
-            )}
-          </section>
-
-          {executedReserveMoves.length > 0 && (
-            <section>
-              <SectionHead title="Executed reserve movements" meta="recorded treasury actions" />
-              <div className="space-y-4">{executedReserveMoves.map((decision) => <DecisionCard key={decision.id} decision={decision} compact />)}</div>
-            </section>
-          )}
+    <div className="min-h-dvh overflow-x-hidden">
+      <header className="border-b border-line bg-surface">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
+          <Link href="/" className="font-mono text-[0.8125rem] font-semibold uppercase tracking-[0.22em] text-ink">Vestiarion</Link>
+          <nav aria-label="Landing navigation" className="flex items-center gap-2 sm:gap-4">
+            <Link href="/insights" className="hidden text-sm text-ink-2 hover:text-ink sm:block">Measured outcomes</Link>
+            <Link href="/audit" className="hidden text-sm text-ink-2 hover:text-ink sm:block">Audit proof</Link>
+            <Link href="/console" className="rounded-md bg-agent px-3 py-2 text-sm font-semibold text-on-agent hover:bg-agent/90">Open console</Link>
+          </nav>
         </div>
+      </header>
 
-        <aside className="min-w-0 space-y-6">
-          <AccountsList accounts={accounts} />
-          {forecast && <ForecastPanel forecast={forecast} />}
-        </aside>
-      </div>
-    </ProductShell>
+      <main>
+        <section className="border-b border-line">
+          <div className="mx-auto grid max-w-6xl gap-10 px-4 py-14 sm:px-6 sm:py-20 lg:grid-cols-[minmax(0,1fr)_26rem] lg:items-end">
+            <div>
+              <Label className="text-agent">Autonomous treasury · Arc testnet</Label>
+              <h1 className="mt-4 max-w-4xl text-balance text-4xl font-semibold tracking-[-0.035em] text-ink sm:text-6xl">An agent that can prove why it moved money—or why it refused.</h1>
+              <p className="mt-5 max-w-2xl text-pretty font-serif text-xl leading-relaxed text-ink-2 sm:text-2xl">Vestiarion screens counterparties, matches obligations, verifies work, and manages liquidity. A model proposes each action; code enforces the boundary; a signed ledger keeps the receipt.</p>
+              <div className="mt-7 flex flex-wrap gap-3">
+                <Link href="/console" className="rounded-md bg-agent px-5 py-3 text-sm font-semibold text-on-agent hover:bg-agent/90">See the agent run</Link>
+                <Link href="/audit" className="rounded-md border border-line-strong px-5 py-3 text-sm font-semibold text-ink hover:bg-raised">Verify the ledger</Link>
+              </div>
+            </div>
+            <div>
+              <ProvenanceBar legs={provenance} />
+              <p className="mt-4 text-sm leading-relaxed text-ink-3">This deployment labels each subsystem separately. Arc testnet is explicit. A simulated yield leg never inherits the live payment badge.</p>
+            </div>
+          </div>
+        </section>
+
+        <section aria-labelledby="measurements-title" className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16">
+          <div className="mb-6 max-w-3xl">
+            <Label>Live database receipts</Label>
+            <h2 id="measurements-title" className="mt-2 text-3xl font-semibold tracking-tight text-ink">Numbers only appear after the system produces them.</h2>
+            <p className="mt-3 text-sm leading-relaxed text-ink-2">The current ledger can contain real earlier evidence while post-instrumentation cycle and transfer series remain empty. The page keeps that distinction visible.</p>
+          </div>
+          <Suspense fallback={<MetricsFallback />}><LiveMetrics /></Suspense>
+        </section>
+
+        <section className="border-y border-line bg-surface/40">
+          <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16">
+            <Label>How a decision becomes an action</Label>
+            <h2 className="mt-2 mb-6 text-3xl font-semibold tracking-tight text-ink">One loop. Two layers of judgment. One receipt chain.</h2>
+            <DecisionFlowDiagram />
+          </div>
+        </section>
+
+        <section className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16">
+          <Label>Claims with receipts</Label>
+          <h2 className="mt-2 text-3xl font-semibold tracking-tight text-ink">Do not take the landing page’s word for it.</h2>
+          <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
+            {claims.map((claim) => (
+              <Link key={claim.title} href={claim.href} className="group rounded-lg border border-line bg-surface p-5 hover:border-agent-line sm:p-6">
+                <h3 className="text-lg font-semibold text-ink">{claim.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-ink-2">{claim.body}</p>
+                <p className="mt-4 text-sm font-medium text-agent group-hover:underline">{claim.evidence} →</p>
+              </Link>
+            ))}
+          </div>
+        </section>
+
+        <section className="border-t border-line">
+          <div className="mx-auto flex max-w-6xl flex-col gap-5 px-4 py-12 sm:px-6 md:flex-row md:items-center md:justify-between">
+            <div><h2 className="text-2xl font-semibold text-ink">Open the evidence, not a scripted demo.</h2><p className="mt-1 text-sm text-ink-2">Inspect the current book, every refusal, and the chain verifier.</p></div>
+            <div className="flex flex-wrap gap-3"><Link href="/console" className="rounded-md bg-agent px-5 py-3 text-sm font-semibold text-on-agent">Open console</Link><Link href="/insights" className="rounded-md border border-line-strong px-5 py-3 text-sm font-semibold text-ink">Measured outcomes</Link></div>
+          </div>
+        </section>
+      </main>
+
+      <footer className="border-t border-line px-4 py-6 text-center font-mono text-xs text-ink-3">Vestiarion · signed decisions · Arc testnet</footer>
+    </div>
   );
 }

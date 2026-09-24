@@ -15,7 +15,7 @@ export default function AgentControlsClient({ nextDay, headSeq, clockMode }: { n
 
   function refreshDashboard() {
     startTransition(() => {
-      router.push(headSeq == null ? "/" : `/?since=${headSeq}`);
+      router.push(headSeq == null ? "/console" : `/console?since=${headSeq}`);
       router.refresh();
     });
   }

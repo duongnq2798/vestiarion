@@ -57,3 +57,9 @@ Measurement boundary: Phase 7 deliberately does not backfill earlier cycles or t
 Application rollback: revert the Phase 8 commit. This removes only the Insights route, its navigation entry, and its read-only query layer; it does not alter or delete telemetry. The Phase 7 writer remains active so history continues to accumulate while the UI is rolled back.
 
 Data rollback: none. Phase 8 adds no migration and writes no rows. Its transfer, balance, outcome, decision-mode, and screening visuals are projections of existing database records. Empty states are a supported state, not a condition to repair with fixture data.
+
+## Phase 9 — evidence-first landing page
+
+Application rollback: revert the Phase 9 commit. The treasury console returns from `/console` to `/`; the temporary `/app` alias and landing page disappear. No database rows or control sessions are changed. If external links have already been published, add a deployment-level redirect before rollback so `/console` does not become a dead link.
+
+Data rollback: none. Landing metrics are read-only projections. They use `cycle_runs`, confirmed live `payment_intents`, and an exact ledger count. Median fee deliberately excludes provider estimates. Removing the page requires no data cleanup.

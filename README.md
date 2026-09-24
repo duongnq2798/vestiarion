@@ -100,8 +100,9 @@ tests/                    Vitest. Every money path that can be tested without
                            selection and fallback. `npm run verify`
 scripts/                  seed, bootstrap:circle, and three doctors that tell
                            you exactly which parts are live
-src/app/                  Dashboard, AP/AR, Contractors, Compliance, Audit Log
-                           and database-backed Insights
+src/app/                  Evidence-first landing page at `/`; working treasury
+                           console at `/console`, plus AP/AR, Contractors,
+                           Compliance, Audit Log, and database-backed Insights
 ```
 
 ## Running it
@@ -119,7 +120,7 @@ npm run db:migrate
 npm run dev
 ```
 
-Open the app, unlock controls with `AGENT_API_TOKEN`, and add counterparties and invoices through
+Open `/console`, unlock controls with `AGENT_API_TOKEN`, and add counterparties and invoices through
 the product. Each **Run day** click advances the demo clock and runs the full decision loop. Out of
 the box, payments are simulated against Arc's real fee and latency profile ($0.01, <500ms) and
 decisions come from the rule-based heuristic.
@@ -259,6 +260,12 @@ ship a sample series: transfer and cycle charts render an explicit empty receipt
 the first instrumented run. Screening history is drawn from `compliance_checks`; because
 older checks do not carry a sweep id, the UI transparently groups consecutive checks
 within two minutes as an observed batch rather than claiming a stronger association.
+
+The public `/` landing page queries its statistics through `src/lib/landing.ts`. Instrumented
+cycles and decisions come from `cycle_runs`; settled transfers and median settlement time come
+from confirmed live `payment_intents`; median fee includes only `chain_reported` samples; ledger
+height is an exact count of `ledger_entries`. A missing sample renders as unavailable prose rather
+than a zero achievement. Every claim links to the console route that provides its evidence.
 
 ## Tests
 

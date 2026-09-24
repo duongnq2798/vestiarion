@@ -8,7 +8,7 @@ import { Label } from "./Primitives";
 import { ProvenanceBar, type ProvenanceLeg } from "./Provenance";
 
 const NAV = [
-  { key: "treasury", href: "/", label: "Treasury" },
+  { key: "treasury", href: "/console", label: "Treasury" },
   { key: "insights", href: "/insights", label: "Insights" },
   { key: "invoices", href: "/invoices", label: "AP / AR" },
   { key: "counterparties", href: "/counterparties", label: "Counterparties" },
@@ -50,7 +50,7 @@ export async function ProductShell({
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0">
               <div className="flex items-baseline gap-3">
-                <span className="text-[0.8125rem] font-semibold uppercase tracking-[0.22em] text-ink">Vestiarion</span>
+                <Link href="/" className="text-[0.8125rem] font-semibold uppercase tracking-[0.22em] text-ink hover:text-agent">Vestiarion</Link>
                 <Label>{currentClockMode === "simulate" ? `Day ${currentDay}` : "Wall clock"}</Label>
               </div>
               <p className="mt-1 truncate text-sm text-ink-2">{process.env.BUSINESS_NAME?.trim() || "Vestiarion workspace"}</p>

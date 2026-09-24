@@ -21,7 +21,7 @@ export async function unlockAgentControls(
   if (typeof candidate !== "string" || !(await createAgentControlSession(candidate))) {
     return { ok: false, message: "Invalid control token." };
   }
-  revalidatePath("/", "layout");
+  revalidatePath("/console", "layout");
   return { ok: true, message: "Controls unlocked for one hour." };
 }
 
@@ -30,7 +30,7 @@ export async function runAgentCycleAction(): Promise<AgentActionResult> {
 
   try {
     const result = await runAgentCycle();
-    revalidatePath("/", "layout");
+    revalidatePath("/console", "layout");
     return {
       ok: true,
       message: result.clockMode === "simulate"
