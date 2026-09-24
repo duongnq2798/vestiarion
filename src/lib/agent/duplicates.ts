@@ -67,11 +67,6 @@ export const DUPLICATE_REPORT_CONFIDENCE = 0.45;
 /** Strongest duplicate candidates included in one model decision context. */
 export const DUPLICATE_MATCHES_IN_CONTEXT = 5;
 
-export interface FindDuplicatesOptions {
-  /** Use Number.POSITIVE_INFINITY when the caller needs the complete set. */
-  limit?: number;
-}
-
 /**
  * A monthly charge falls somewhere near here. Two invoices this far apart are
  * evidence *against* duplication, however alike they otherwise look — which is
@@ -220,16 +215,24 @@ function applyMatchLimit(matches: DuplicateMatch[], limit: number): DuplicateMat
 }
 
 /** Reportable matches for one invoice, strongest first and capped by default. */
+/**
+ * Every reportable match, strongest first — deliberately uncapped.
+ *
+ * Detection and presentation are different jobs and only one of them may be
+ * truncated. A cap here would be a footgun with the safety off: any call site
+ * that forgot to ask for the complete set would silently stop blocking the
+ * sixth duplicate a vendor submitted, no test would fail, and the app would run
+ * exactly as before while the fraud guardrail quietly weakened. Truncation
+ * lives in `duplicateMatchContext`, which is only ever used to build a prompt.
+ */
 export function findDuplicates(
   invoice: InvoiceLike,
-  candidates: InvoiceLike[],
-  { limit = DUPLICATE_MATCHES_IN_CONTEXT }: FindDuplicatesOptions = {}
+  candidates: InvoiceLike[]
 ): DuplicateMatch[] {
-  const matches = candidates
+  return candidates
     .map((candidate) => scoreDuplicate(invoice, candidate))
     .filter((match): match is DuplicateMatch => match !== null)
     .sort((a, b) => b.confidence - a.confidence);
-  return applyMatchLimit(matches, limit);
 }
 
 export function duplicateMatchContext(

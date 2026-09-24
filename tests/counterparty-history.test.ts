@@ -16,11 +16,11 @@ describe("derivePerformanceScore", () => {
     expect(derivePerformanceScore(inputs())).toMatchObject({ score: null, observations: 0 });
   });
 
-  it("scores an entirely clean history at one", () => {
-    expect(derivePerformanceScore(inputs({ paidWithoutIntervention: 12 }))).toMatchObject({
-      score: 1,
-      observations: 12,
-    });
+  it("approaches one on a long clean history without ever claiming certainty", () => {
+    const short = derivePerformanceScore(inputs({ paidWithoutIntervention: 3 })).score!;
+    const long = derivePerformanceScore(inputs({ paidWithoutIntervention: 60 })).score!;
+    expect(long).toBeGreaterThan(short);
+    expect(long).toBeLessThan(1);
   });
 
   it("makes a single fraud flag visible among many clean payments", () => {
@@ -29,7 +29,38 @@ describe("derivePerformanceScore", () => {
         paidWithoutIntervention: 19,
         duplicateSubmissions: 1,
       })).score
-    ).toBe(0.95);
+    ).toBe(0.909);
+  });
+
+  it("refuses to make a strong claim from one observation", () => {
+    // A raw ratio scored one held invoice at 0.000 and one clean payment at
+    // 1.000 — the numbers a reviewer would act on, from a single data point.
+    const oneGood = derivePerformanceScore(inputs({ paidWithoutIntervention: 1 })).score!;
+    const oneBad = derivePerformanceScore(inputs({ heldOrFlagged: 1 })).score!;
+
+    expect(oneGood).toBeGreaterThan(0.5);
+    expect(oneGood).toBeLessThan(0.75);
+    expect(oneBad).toBeLessThan(0.5);
+    expect(oneBad).toBeGreaterThan(0.25);
+  });
+
+  it("separates weak evidence from strong evidence in the same direction", () => {
+    const weak = derivePerformanceScore(inputs({ paidWithoutIntervention: 1 })).score!;
+    const strong = derivePerformanceScore(inputs({ paidWithoutIntervention: 20 })).score!;
+    expect(strong - weak).toBeGreaterThan(0.25);
+  });
+
+  it("does not mark a counterparty down for a limit we set ourselves", () => {
+    // A hold caused by our own configuration says nothing about their conduct,
+    // and the risk tier behind it is already in front of the model.
+    const clean = derivePerformanceScore(inputs({ paidWithoutIntervention: 4 })).score!;
+    const withOurHolds = derivePerformanceScore(
+      inputs({ paidWithoutIntervention: 4, heldByOurPolicy: 3 })
+    );
+    expect(withOurHolds.score).toBe(clean);
+    expect(withOurHolds.observations).toBe(4);
+    // It is still disclosed, just not scored.
+    expect(withOurHolds.inputs.heldByOurPolicy).toBe(3);
   });
 
   it("is monotonic: clean outcomes never lower it and adverse facts never raise it", () => {

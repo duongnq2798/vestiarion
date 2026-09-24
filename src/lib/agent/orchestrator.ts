@@ -548,9 +548,10 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     // The system prompt has always told the model to flag a duplicate invoice.
     // Until this was computed it had no way to see one: it is shown a single
     // invoice and cannot know an identical bill was settled last week.
-    // Detection stays uncapped because guardrails must see every match. Only
-    // the evidence presented to the model is truncated; payment refusal must
-    // never depend on how many other invoices happened to resemble this one.
+    // Detection is uncapped by construction — `findDuplicates` has no limit to
+    // forget. Only the evidence presented to the model is truncated, by
+    // `duplicateMatchContext`; payment refusal must never depend on how many
+    // other invoices happened to resemble this one.
     const duplicates = findDuplicates(
       {
         id: invoice.id,
@@ -561,8 +562,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
         dueDate: invoice.due_date,
         status: "pending",
       },
-      history,
-      { limit: Number.POSITIVE_INFINITY }
+      history
     );
     const duplicateContext = duplicateMatchContext(duplicates);
 

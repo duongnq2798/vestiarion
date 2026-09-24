@@ -158,35 +158,36 @@ describe("findDuplicates", () => {
     expect(findDuplicates(inv(), candidates).map((m) => m.otherId)).not.toContain("unrelated");
   });
 
-  it("caps the context at the strongest matches", () => {
+  it("detects every match, however crowded the book", () => {
+    // Detection has no cap to forget. The prompt is what gets truncated.
     const crowdedBook = [
       paid({ id: "weak", amount: 260 }),
-      ...Array.from({ length: DUPLICATE_MATCHES_IN_CONTEXT }, (_, index) =>
+      ...Array.from({ length: DUPLICATE_MATCHES_IN_CONTEXT + 4 }, (_, index) =>
         paid({ id: `strong-${index}` })
       ),
     ];
 
     const matches = findDuplicates(inv(), crowdedBook);
 
-    expect(matches).toHaveLength(DUPLICATE_MATCHES_IN_CONTEXT);
-    expect(matches.every((match) => match.confidence === 0.95)).toBe(true);
-    expect(matches.map((match) => match.otherId)).not.toContain("weak");
+    expect(matches).toHaveLength(DUPLICATE_MATCHES_IN_CONTEXT + 5);
+    expect(matches[0].confidence).toBe(0.95);
+    expect(matches.at(-1)!.otherId).toBe("weak");
   });
 
-  it("reports the true total when only a sample is shown", () => {
-    const allMatches = findDuplicates(
-      inv(),
-      Array.from({ length: DUPLICATE_MATCHES_IN_CONTEXT + 3 }, (_, index) =>
-        paid({ id: `match-${index}` })
-      ),
-      { limit: Number.POSITIVE_INFINITY }
+  it("shows the model only the strongest, and says how many there were", () => {
+    const crowdedBook = Array.from(
+      { length: DUPLICATE_MATCHES_IN_CONTEXT + 3 },
+      (_, index) => paid({ id: `match-${index}` })
     );
 
-    expect(duplicateMatchContext(allMatches)).toMatchObject({
-      total: DUPLICATE_MATCHES_IN_CONTEXT + 3,
-      matches: { length: DUPLICATE_MATCHES_IN_CONTEXT },
-    });
+    const context = duplicateMatchContext(findDuplicates(inv(), crowdedBook));
+
+    expect(context.matches).toHaveLength(DUPLICATE_MATCHES_IN_CONTEXT);
+    // A model handed 5 of 8 and told it is seeing everything is being misled.
+    expect(context.total).toBe(DUPLICATE_MATCHES_IN_CONTEXT + 3);
   });
+
+
 });
 
 describe("blockingDuplicate", () => {
@@ -211,14 +212,19 @@ describe("blockingDuplicate", () => {
     expect(blockingDuplicate([])).toBeNull();
   });
 
-  it("still blocks on a match excluded from the presentation cap", () => {
-    const candidates = [paid({ id: "settled-repeat" })];
-    const shownToModel = findDuplicates(inv(), candidates, { limit: 0 });
-    const fullDetectionSet = findDuplicates(inv(), candidates, {
-      limit: Number.POSITIVE_INFINITY,
-    });
+  it("blocks on a settled repeat that never reached the prompt", () => {
+    // The property the whole split exists for: a refusal must not depend on
+    // how many other invoices happened to resemble this one.
+    const noise = Array.from({ length: DUPLICATE_MATCHES_IN_CONTEXT }, (_, index) =>
+      inv({ id: `pending-${index}`, status: "pending", poReference: "PO-1042" })
+    );
+    const candidates = [...noise, paid({ id: "settled-repeat" })];
 
-    expect(shownToModel).toEqual([]);
-    expect(blockingDuplicate(fullDetectionSet)?.otherId).toBe("settled-repeat");
+    const detected = findDuplicates(inv(), candidates);
+    const shownToModel = duplicateMatchContext(detected, 1).matches;
+
+    expect(shownToModel).toHaveLength(1);
+    expect(detected.length).toBeGreaterThan(DUPLICATE_MATCHES_IN_CONTEXT);
+    expect(blockingDuplicate(detected)?.otherId).toBe("settled-repeat");
   });
 });

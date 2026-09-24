@@ -6,6 +6,13 @@ export interface CounterpartyHistoryInputs {
   heldOrFlagged: number;
   duplicateSubmissions: number;
   riskTierChanges: number;
+  /**
+   * Holds caused by *our* configuration rather than their conduct: an amount
+   * above the limit we set, or a risk tier screening assigned. Recorded and
+   * shown, but deliberately kept out of the arithmetic — see the note on
+   * `derivePerformanceScore`.
+   */
+  heldByOurPolicy: number;
 }
 
 export interface CounterpartyPerformance {
@@ -44,30 +51,56 @@ export function emptyCounterpartyHistory(): CounterpartyHistoryInputs {
     heldOrFlagged: 0,
     duplicateSubmissions: 0,
     riskTierChanges: 0,
+    heldByOurPolicy: 0,
   };
 }
 
 /**
- * The score is the share of observed outcomes that completed cleanly. Each
- * intervention or adverse fact contributes one observation, so the result is
- * evidence a reviewer can reconstruct from the disclosed counts rather than
- * a hidden weighting or a prior dressed up as measurement.
+ * Weight of the "no information" position, in pseudo-observations. Two means a
+ * counterparty needs a few real outcomes before the score moves far from 0.5.
+ */
+export const PERFORMANCE_PRIOR_WEIGHT = 2;
+
+/**
+ * The share of observed outcomes that completed cleanly — pulled toward 0.5
+ * until there is enough evidence to leave it.
+ *
+ * A raw ratio was the first attempt and it made a strong claim from weak
+ * evidence: one held invoice scored a counterparty 0.000, one clean payment
+ * scored it 1.000, and a vendor with a single observation was indistinguishable
+ * from one with fifty. Those are the numbers a reviewer would act on.
+ *
+ * Shrinking toward 0.5 fixes that without inventing a prior: 0.5 is the absence
+ * of information, not a guess about the counterparty. One clean payment now
+ * reads 0.667 and one adverse outcome 0.333 — real signal, honestly weak. The
+ * disclosed counts still let a reviewer reconstruct the arithmetic, and
+ * `observations` says how much evidence is behind it.
+ *
+ * `heldByOurPolicy` is excluded on purpose. A payment held because the amount
+ * exceeded the limit *we* configured, or because screening assigned a risk
+ * tier, says nothing about how the counterparty behaves — and the risk tier is
+ * already in front of the model as `riskLevel`. Counting it here would mark a
+ * vendor down for our own settings and show the same negative fact twice.
  */
 export function derivePerformanceScore(
   inputs: CounterpartyHistoryInputs
 ): CounterpartyPerformance {
-  const observations =
-    inputs.paidWithoutIntervention +
+  const clean = inputs.paidWithoutIntervention;
+  const adverse =
     inputs.informationRequested +
     inputs.heldOrFlagged +
     inputs.duplicateSubmissions +
     inputs.riskTierChanges;
+  const observations = clean + adverse;
 
+  if (observations === 0) {
+    return { score: null, observations: 0, inputs: { ...inputs } };
+  }
+
+  const smoothed =
+    (clean + PERFORMANCE_PRIOR_WEIGHT / 2) / (observations + PERFORMANCE_PRIOR_WEIGHT);
   return {
-    score:
-      observations === 0
-        ? null
-        : Number((inputs.paidWithoutIntervention / observations).toFixed(3)),
+    score: Number(smoothed.toFixed(3)),
     observations,
     inputs: { ...inputs },
   };
@@ -87,6 +120,7 @@ interface SubjectHistory {
   paid: boolean;
   informationRequested: boolean;
   heldOrFlagged: boolean;
+  heldByOurPolicy: boolean;
   duplicateSubmitted: boolean;
 }
 
@@ -94,6 +128,35 @@ function record(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
+}
+
+/**
+ * Whether a hold was our doing rather than theirs.
+ *
+ * An invoice held because it exceeded the limit *we* configured, or because
+ * screening assigned a risk tier, is a statement about our own risk appetite.
+ * The counterparty may have done nothing wrong at all — Wardrobe Holdings was
+ * scored 0.000 on a perfectly matched invoice whose only fault was that
+ * screening had tiered its limit underneath it, a fact already sitting in front
+ * of the model as `riskLevel`.
+ */
+function heldByOurConfiguration(entry: CounterpartyHistoryLedgerEntry): boolean {
+  const rule = entry.detail.guardrailRule;
+  if (rule === "counterparty.payment_limit" || rule === "counterparty.high_risk") return true;
+
+  const observed = record(entry.detail.observed);
+  if (!observed) return false;
+
+  const risk = observed.riskLevel;
+  if (risk === "high" || risk === "medium") return true;
+
+  const limit = observed.paymentLimit;
+  const amount = observed.amount;
+  return (
+    typeof limit === "number" &&
+    typeof amount === "number" &&
+    amount > limit
+  );
 }
 
 function isConfirmedDuplicate(entry: CounterpartyHistoryLedgerEntry): boolean {
@@ -165,6 +228,7 @@ export function deriveCounterpartyHistories(
       paid: false,
       informationRequested: false,
       heldOrFlagged: false,
+      heldByOurPolicy: false,
       duplicateSubmitted: false,
     };
     const execution = record(entry.detail.execution);
@@ -178,7 +242,8 @@ export function deriveCounterpartyHistories(
     }
     if (entry.action === "ap_request_info") subject.informationRequested = true;
     if (entry.action === "ap_hold" || entry.action === "milestone_hold") {
-      subject.heldOrFlagged = true;
+      if (heldByOurConfiguration(entry)) subject.heldByOurPolicy = true;
+      else subject.heldOrFlagged = true;
     }
     if (entry.action === "ap_flag_fraud") {
       if (isConfirmedDuplicate(entry)) subject.duplicateSubmitted = true;
@@ -193,6 +258,7 @@ export function deriveCounterpartyHistories(
       subject.paid &&
       !subject.informationRequested &&
       !subject.heldOrFlagged &&
+      !subject.heldByOurPolicy &&
       !subject.duplicateSubmitted
     ) {
       history.paidWithoutIntervention += 1;
@@ -200,6 +266,7 @@ export function deriveCounterpartyHistories(
     if (subject.informationRequested) history.informationRequested += 1;
     if (subject.duplicateSubmitted) history.duplicateSubmissions += 1;
     else if (subject.heldOrFlagged) history.heldOrFlagged += 1;
+    else if (subject.heldByOurPolicy) history.heldByOurPolicy += 1;
   }
 
   return histories;
