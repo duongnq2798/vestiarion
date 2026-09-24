@@ -6,6 +6,7 @@ import { screeningMode } from "@/lib/compliance";
 import type { CycleClockMode } from "@/lib/clock";
 import { Label } from "./Primitives";
 import { ProvenanceBar, type ProvenanceLeg } from "./Provenance";
+import { BrandMark } from "./Brand";
 
 const NAV = [
   { key: "treasury", href: "/console", label: "Treasury" },
@@ -51,8 +52,8 @@ export async function ProductShell({
             <div className="min-w-0">
               <div className="flex items-baseline gap-3">
                 <Link href="/" className="group inline-flex items-center gap-2.5 text-[0.8125rem] font-semibold uppercase tracking-[0.2em] text-ink hover:text-agent">
-                  <span className="brand-shadow inline-grid size-7 place-items-center rounded-lg bg-agent font-mono text-xs tracking-normal text-on-agent transition-transform group-hover:-rotate-3">V</span>
-                  Vestiarion
+                  <BrandMark className="brand-shadow size-8 shrink-0 text-agent transition-transform duration-300 group-hover:-rotate-6 group-hover:scale-105" />
+                  <span>Vestiarion</span>
                 </Link>
                 <Label>{currentClockMode === "simulate" ? `Day ${currentDay}` : "Wall clock"}</Label>
               </div>

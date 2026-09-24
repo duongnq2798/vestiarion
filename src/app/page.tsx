@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { ProvenanceBar, type ProvenanceLeg } from "@/components/vx/Provenance";
 import { fmt, Label } from "@/components/vx/Primitives";
+import { BrandMark } from "@/components/vx/Brand";
 import { getChainProvider } from "@/lib/circle";
 import { screeningMode } from "@/lib/compliance";
 import { getLandingMetrics, type LandingMetrics } from "@/lib/landing";
@@ -101,63 +102,65 @@ const claims = [
 function DecisionFlowDiagram() {
   const stages = ["Compliance", "AP", "Contractors", "Treasury", "Forecast"];
   return (
-    <figure className="surface-shadow ledger-grid rounded-3xl border border-line bg-surface p-4 sm:p-7">
-      <svg viewBox="0 0 1000 430" className="hidden h-auto w-full sm:block" role="img" aria-labelledby="flow-title flow-desc">
-        <title id="flow-title">Vestiarion decision flow</title>
-        <desc id="flow-desc">Compliance, accounts payable, contractor payments, treasury, and forecasting feed decisions through a code guardrail before execution, while every stage writes to a signed ledger.</desc>
-        <defs><marker id="desktop-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="var(--color-ink-3)" /></marker></defs>
-        {stages.map((stage, index) => {
-          const x = 20 + index * 196;
-          return <g key={stage}>
-            <rect x={x} y="35" width="156" height="78" rx="8" fill="var(--color-raised)" stroke="var(--color-line-strong)" />
-            <text x={x + 78} y="81" textAnchor="middle" fill="var(--color-ink)" fontSize="17" fontWeight="600">{stage}</text>
-            {index < stages.length - 1 && <line x1={x + 156} y1="74" x2={x + 188} y2="74" stroke="var(--color-ink-3)" markerEnd="url(#desktop-arrow)" />}
-            <line x1={x + 78} y1="113" x2={x + 78} y2="358" stroke="var(--color-line-strong)" strokeDasharray="4 6" />
-          </g>;
-        })}
-        <rect x="175" y="178" width="190" height="64" rx="8" fill="var(--color-agent-soft)" stroke="var(--color-agent-line)" />
-        <text x="270" y="205" textAnchor="middle" fill="var(--color-agent)" fontSize="15" fontWeight="600">LLM or heuristic verdict</text>
-        <text x="270" y="226" textAnchor="middle" fill="var(--color-ink-2)" fontSize="12">action · reasoning · confidence</text>
-        <line x1="365" y1="210" x2="431" y2="210" stroke="var(--color-ink-3)" markerEnd="url(#desktop-arrow)" />
-        <rect x="440" y="168" width="160" height="84" rx="8" fill="var(--color-refused-soft)" stroke="var(--color-refused-line)" />
-        <text x="520" y="201" textAnchor="middle" fill="var(--color-refused)" fontSize="15" fontWeight="700">CODE GUARDRAIL</text>
-        <text x="520" y="223" textAnchor="middle" fill="var(--color-ink-2)" fontSize="12">may override the model</text>
-        <line x1="600" y1="210" x2="666" y2="210" stroke="var(--color-ink-3)" markerEnd="url(#desktop-arrow)" />
-        <rect x="675" y="178" width="160" height="64" rx="8" fill="var(--color-proof-soft)" stroke="var(--color-proof-line)" />
-        <text x="755" y="205" textAnchor="middle" fill="var(--color-proof)" fontSize="15" fontWeight="600">Execute or hold</text>
-        <text x="755" y="226" textAnchor="middle" fill="var(--color-ink-2)" fontSize="12">provider boundary</text>
-        <rect x="90" y="350" width="820" height="58" rx="8" fill="var(--color-ground)" stroke="var(--color-proof-line)" />
-        <text x="500" y="383" textAnchor="middle" fill="var(--color-proof)" fontSize="16" fontWeight="600">SIGNED HASH-CHAIN LEDGER · EVIDENCE UNDER EVERY STAGE</text>
-      </svg>
+    <figure className="surface-shadow ledger-grid mx-auto max-w-5xl rounded-3xl border border-line bg-surface p-4 sm:p-7" aria-labelledby="flow-title" aria-describedby="flow-desc">
+      <div className="flex items-end justify-between gap-4">
+        <div>
+          <Label className="text-agent">01 · Observe the operating cycle</Label>
+          <h3 id="flow-title" className="mt-2 text-lg font-semibold tracking-tight text-ink sm:text-xl">Five stages. One accountable book.</h3>
+        </div>
+        <span className="hidden rounded-full border border-line bg-surface px-3 py-1 font-mono text-[0.625rem] uppercase tracking-[0.14em] text-ink-3 sm:block">one cycle</span>
+      </div>
 
-      <svg viewBox="0 0 360 790" className="h-auto w-full sm:hidden" role="img" aria-labelledby="flow-mobile-title flow-mobile-desc">
-        <title id="flow-mobile-title">Vestiarion decision flow</title>
-        <desc id="flow-mobile-desc">Five treasury stages lead into a model or heuristic verdict, then a code guardrail, execution or hold, and the signed ledger.</desc>
-        <defs><marker id="mobile-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="var(--color-ink-3)" /></marker></defs>
-        {stages.map((stage, index) => {
-          const y = 18 + index * 78;
-          return <g key={stage}>
-            <rect x="55" y={y} width="250" height="52" rx="8" fill="var(--color-raised)" stroke="var(--color-line-strong)" />
-            <text x="180" y={y + 32} textAnchor="middle" fill="var(--color-ink)" fontSize="16" fontWeight="600">{stage}</text>
-            {index < stages.length - 1 && <line x1="180" y1={y + 52} x2="180" y2={y + 71} stroke="var(--color-ink-3)" markerEnd="url(#mobile-arrow)" />}
-          </g>;
-        })}
-        <line x1="180" y1="382" x2="180" y2="417" stroke="var(--color-ink-3)" markerEnd="url(#mobile-arrow)" />
-        <rect x="40" y="425" width="280" height="66" rx="8" fill="var(--color-agent-soft)" stroke="var(--color-agent-line)" />
-        <text x="180" y="451" textAnchor="middle" fill="var(--color-agent)" fontSize="15" fontWeight="600">LLM or heuristic verdict</text>
-        <text x="180" y="474" textAnchor="middle" fill="var(--color-ink-2)" fontSize="12">action · reasoning · confidence</text>
-        <line x1="180" y1="491" x2="180" y2="526" stroke="var(--color-ink-3)" markerEnd="url(#mobile-arrow)" />
-        <rect x="40" y="534" width="280" height="72" rx="8" fill="var(--color-refused-soft)" stroke="var(--color-refused-line)" />
-        <text x="180" y="563" textAnchor="middle" fill="var(--color-refused)" fontSize="15" fontWeight="700">CODE GUARDRAIL</text>
-        <text x="180" y="587" textAnchor="middle" fill="var(--color-ink-2)" fontSize="12">may override the model</text>
-        <line x1="180" y1="606" x2="180" y2="641" stroke="var(--color-ink-3)" markerEnd="url(#mobile-arrow)" />
-        <rect x="40" y="649" width="280" height="58" rx="8" fill="var(--color-proof-soft)" stroke="var(--color-proof-line)" />
-        <text x="180" y="684" textAnchor="middle" fill="var(--color-proof)" fontSize="15" fontWeight="600">Execute or hold</text>
-        <line x1="180" y1="707" x2="180" y2="735" stroke="var(--color-ink-3)" markerEnd="url(#mobile-arrow)" />
-        <rect x="20" y="742" width="320" height="42" rx="8" fill="var(--color-ground)" stroke="var(--color-proof-line)" />
-        <text x="180" y="768" textAnchor="middle" fill="var(--color-proof)" fontSize="12" fontWeight="600">SIGNED HASH-CHAIN LEDGER</text>
-      </svg>
-      <figcaption className="mt-3 text-sm leading-relaxed text-ink-2">The reasoning engine proposes. Deterministic policy decides whether execution is allowed. Every stage leaves a signed receipt, including refusals and unavailable evidence.</figcaption>
+      <ol className="mt-5 hidden grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr_auto_1fr] items-center gap-2 sm:grid" aria-label="Agent cycle stages">
+        {stages.map((stage, index) => (
+          <li key={stage} className="contents">
+            <div className="min-w-0 rounded-xl border border-line bg-ground/65 px-2 py-3 text-center">
+              <span className="block font-mono text-[0.625rem] text-agent">0{index + 1}</span>
+              <span className="mt-1 block truncate text-sm font-semibold text-ink">{stage}</span>
+            </div>
+            {index < stages.length - 1 && <span aria-hidden className="text-center font-mono text-sm text-ink-3">→</span>}
+          </li>
+        ))}
+      </ol>
+      <ol className="mt-4 grid grid-cols-6 gap-2 sm:hidden" aria-label="Agent cycle stages">
+        {stages.map((stage, index) => (
+          <li key={stage} className={`col-span-2 min-w-0 rounded-xl border border-line bg-ground/65 px-2 py-2.5 text-center ${index === 3 ? "col-start-2" : ""}`}>
+            <span className="block font-mono text-[0.5625rem] text-agent">0{index + 1}</span>
+            <span className="mt-0.5 block truncate text-xs font-semibold text-ink">{stage}</span>
+          </li>
+        ))}
+      </ol>
+
+      <div aria-hidden className="mx-auto h-7 w-px border-l border-dashed border-line-strong" />
+      <div className="grid items-stretch gap-2 sm:grid-cols-[1fr_auto_1fr_auto_1fr] sm:gap-3">
+        <div className="rounded-2xl border border-agent-line bg-agent-soft px-3 py-3 text-center sm:px-4 sm:py-4">
+          <Label className="text-agent">02 · Reason</Label>
+          <p className="mt-2 font-semibold text-agent">LLM or heuristic verdict</p>
+          <p className="mt-1 hidden text-xs text-ink-2 sm:block">action · reasoning · confidence</p>
+        </div>
+        <span aria-hidden className="grid h-5 rotate-90 place-items-center font-mono text-ink-3 sm:h-auto sm:rotate-0">{`→`}</span>
+        <div className="rounded-2xl border border-refused-line bg-refused-soft px-3 py-3 text-center sm:px-4 sm:py-4">
+          <Label className="text-refused">03 · Enforce</Label>
+          <p className="mt-2 font-semibold text-refused">Code guardrail</p>
+          <p className="mt-1 hidden text-xs text-ink-2 sm:block">may override the model</p>
+        </div>
+        <span aria-hidden className="grid h-5 rotate-90 place-items-center font-mono text-ink-3 sm:h-auto sm:rotate-0">{`→`}</span>
+        <div className="rounded-2xl border border-proof-line bg-proof-soft px-3 py-3 text-center sm:px-4 sm:py-4">
+          <Label className="text-proof">04 · Act</Label>
+          <p className="mt-2 font-semibold text-proof">Execute or hold</p>
+          <p className="mt-1 hidden text-xs text-ink-2 sm:block">provider boundary</p>
+        </div>
+      </div>
+
+      <div aria-hidden className="mx-auto h-7 w-px border-l border-dashed border-proof-line" />
+      <div className="flex items-center justify-between gap-3 rounded-2xl border border-proof-line bg-ground/80 px-3 py-3 text-left sm:px-4">
+        <div className="flex items-center gap-3">
+          <BrandMark className="size-8 shrink-0 text-agent" />
+          <div><Label className="text-proof">05 · Sign</Label><p className="mt-0.5 text-sm font-semibold text-ink">Signed hash-chain ledger</p></div>
+        </div>
+        <p className="hidden max-w-md text-xs leading-relaxed text-ink-2 min-[430px]:block sm:text-right">Evidence under every stage—including refusals.</p>
+      </div>
+      <figcaption id="flow-desc" className="mt-4 text-xs leading-relaxed text-ink-3">The reasoning engine proposes; deterministic policy decides; every outcome leaves a signed receipt.</figcaption>
     </figure>
   );
 }
@@ -175,7 +178,10 @@ function ProofPanel({ provenance }: { provenance: ProvenanceLeg[] }) {
       <div className="relative">
         <div className="flex items-center justify-between gap-4 border-b border-line pb-4">
           <div><Label className="text-agent">System state</Label><p className="mt-1 text-sm font-semibold text-ink">Proof before movement</p></div>
-          <span className="brand-shadow grid size-11 place-items-center rounded-xl bg-agent font-mono text-sm font-bold text-on-agent">V/01</span>
+          <div className="relative">
+            <BrandMark className="brand-shadow size-11 text-agent" />
+            <span className="absolute -bottom-1 -right-1 rounded-full border border-line bg-surface px-1.5 py-0.5 font-mono text-[0.5rem] font-bold text-agent">01</span>
+          </div>
         </div>
         <ol className="my-5 space-y-3">
           {steps.map(([number, title, detail]) => (
@@ -210,8 +216,8 @@ export default function LandingPage() {
       <header className="sticky top-0 z-50 border-b border-line/80 bg-surface/88 backdrop-blur-xl">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3.5 sm:px-6">
           <Link href="/" className="group inline-flex items-center gap-2.5 font-mono text-[0.8125rem] font-semibold uppercase tracking-[0.2em] text-ink">
-            <span className="brand-shadow grid size-8 place-items-center rounded-lg bg-agent text-xs tracking-normal text-on-agent transition-transform group-hover:-rotate-3">V</span>
-            Vestiarion
+            <BrandMark className="brand-shadow size-9 shrink-0 text-agent transition-transform duration-300 group-hover:-rotate-6 group-hover:scale-105" />
+            <span>Vestiarion</span>
           </Link>
           <nav aria-label="Landing navigation" className="flex items-center gap-2 sm:gap-4">
             <Link href="/insights" className="hidden text-sm text-ink-2 hover:text-ink sm:block">Measured outcomes</Link>
@@ -225,7 +231,7 @@ export default function LandingPage() {
         <section className="ledger-grid relative overflow-hidden border-b border-line bg-surface/30">
           <div aria-hidden className="absolute -left-36 top-8 size-[28rem] rounded-full bg-proof-soft/80 blur-3xl motion-safe:animate-drift" />
           <div aria-hidden className="absolute -right-28 bottom-0 size-[30rem] rounded-full bg-agent-soft/80 blur-3xl motion-safe:animate-drift" />
-          <div className="relative mx-auto grid max-w-6xl gap-12 px-4 py-16 sm:px-6 sm:py-24 lg:grid-cols-[minmax(0,1fr)_27rem] lg:items-center">
+          <div className="relative mx-auto grid max-w-6xl gap-10 px-4 py-14 sm:px-6 sm:py-20 lg:grid-cols-[minmax(0,1fr)_27rem] lg:items-center lg:py-24">
             <div>
               <Label className="text-agent">Autonomous treasury · Arc testnet</Label>
               <h1 className="mt-5 max-w-4xl text-balance text-5xl font-semibold leading-[0.97] tracking-[-0.055em] text-ink sm:text-7xl">Money moves.<br /><span className="font-serif font-normal italic text-agent">Evidence remains.</span></h1>
@@ -239,7 +245,7 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section aria-labelledby="measurements-title" className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
+        <section aria-labelledby="measurements-title" className="mx-auto max-w-6xl px-4 pb-10 pt-14 sm:px-6 sm:pb-14 sm:pt-20">
           <div className="mb-6 max-w-3xl">
             <Label>Live database receipts</Label>
             <h2 id="measurements-title" className="mt-3 text-4xl font-semibold tracking-[-0.04em] text-ink sm:text-5xl">Numbers only appear after the system produces them.</h2>
@@ -249,14 +255,14 @@ export default function LandingPage() {
         </section>
 
         <section className="border-y border-line bg-surface/55">
-          <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
+          <div className="mx-auto max-w-6xl px-4 pb-8 pt-12 sm:px-6 sm:pb-12 sm:pt-16">
             <Label>How a decision becomes an action</Label>
-            <h2 className="mt-3 mb-8 text-4xl font-semibold tracking-[-0.04em] text-ink sm:text-5xl">One loop. Two layers of judgment. One receipt chain.</h2>
+            <h2 className="mb-6 mt-3 max-w-4xl text-4xl font-semibold tracking-[-0.04em] text-ink sm:text-5xl">One loop. Two layers of judgment. One receipt chain.</h2>
             <DecisionFlowDiagram />
           </div>
         </section>
 
-        <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
+        <section className="mx-auto max-w-6xl px-4 pb-14 pt-10 sm:px-6 sm:pb-20 sm:pt-14">
           <Label>Claims with receipts</Label>
           <h2 className="mt-3 text-4xl font-semibold tracking-[-0.04em] text-ink sm:text-5xl">Do not take the landing page’s word for it.</h2>
           <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2">
