@@ -52,3 +52,63 @@ export function ledgerPublicKeyFromConfig(config: VestiarionConfig): crypto.KeyO
 
   return null;
 }
+
+/**
+ * The private key this deployment signs with, straight from configuration and
+ * held only in memory.
+ *
+ * The old path wrote a configured key to disk before using it, which is why the
+ * environment variable could not help the serverless case it was added for.
+ */
+export function ledgerSigningKeyFromConfig(config: VestiarionConfig): crypto.KeyObject | null {
+  if (!config.ledgerSigningKey) return null;
+  try {
+    return crypto.createPrivateKey(readablePem(config.ledgerSigningKey));
+  } catch (err) {
+    throw new Error(`LEDGER_SIGNING_KEY is not a readable private key: ${(err as Error).message}`);
+  }
+}
+
+/**
+ * Where a development checkout keeps its throwaway key. Injected so the policy
+ * below can be decided without a filesystem — and so a test can assert which
+ * calls it does *not* make.
+ */
+export interface LocalLedgerKeyStore {
+  read(): crypto.KeyObject | null;
+  create(): crypto.KeyObject;
+}
+
+/** Signing has no fallback: either a key is available or nothing may be appended. */
+export class LedgerSigningKeyError extends Error {}
+
+/**
+ * Which key signs, in one place.
+ *
+ * Configuration wins outright, and the local store is not consulted at all when
+ * it does. That ordering is the fix for the defect this replaces:
+ * `ensureKeypair()` returned early whenever key files already existed, so a
+ * configured key was silently ignored on any host that had run once — including
+ * the single-tenant case of setting the variable after a first local run.
+ */
+export function ledgerSigningKey(
+  config: VestiarionConfig,
+  local: LocalLedgerKeyStore
+): crypto.KeyObject {
+  const configured = ledgerSigningKeyFromConfig(config);
+  if (configured) return configured;
+
+  const existing = local.read();
+  if (existing) return existing;
+
+  if (!config.allowGeneratedLedgerKey) {
+    throw new LedgerSigningKeyError(
+      "This deployment has no ledger signing key and may not generate one. Set LEDGER_SIGNING_KEY " +
+        "to a PKCS8 Ed25519 PEM — the same key that signed the existing entries, or the chain " +
+        "stops verifying from here on. A key invented now would sign entries nobody could check " +
+        "afterwards and would be lost when this instance is replaced."
+    );
+  }
+
+  return local.create();
+}
