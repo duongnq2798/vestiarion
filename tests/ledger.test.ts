@@ -230,6 +230,21 @@ describe("verifyChain", () => {
     expect(result.reason).toMatch(/signature/);
   });
 
+  it("reports an unchecked chain, not a broken one, when no public key is configured", () => {
+    // The contrast with the test above is the whole point. A chain signed by a
+    // different key is evidence of a problem; a deployment that declares no key
+    // has produced no evidence at all. Collapsing the second into `valid: false`
+    // makes a missing env var read as a tampered audit trail — the worst false
+    // alarm this system can raise.
+    const { privateKey } = keypair();
+    const rows = buildChain(SAMPLE, privateKey);
+
+    const result = verifyChain(rows, null);
+    expect(result.valid).toBeNull();
+    expect(result.brokenAt).toBeUndefined();
+    expect(result.checkedEntries).toBe(3);
+  });
+
   it("reports the total height even when it breaks on the first entry", () => {
     const { publicKey, privateKey } = keypair();
     const rows = buildChain(SAMPLE, privateKey);

@@ -155,6 +155,16 @@ describe("describeConfig", () => {
     expect(described.chain).toEqual({ circleConfigured: true, arcRpcConfigured: false });
   });
 
+  it("says whether a public key is configured, separately from the signing key", () => {
+    // An operator reading /api/v1/status needs to know whether this deployment
+    // can check signatures at all. A verify-only host holds the public half and
+    // no signing key, so one flag cannot answer for both.
+    expect(describeConfig(full())).toMatchObject({ ledgerPublicKeyProvided: false });
+    expect(
+      describeConfig(configFromEnv(env({ LEDGER_PUBLIC_KEY: "-----BEGIN PUBLIC KEY-----" })))
+    ).toMatchObject({ ledgerPublicKeyProvided: true, ledgerSigningKeyProvided: false });
+  });
+
   it("reports the database by host only", () => {
     expect(describeConfig(full()).database).toEqual({ host: "proj.supabase.co" });
   });

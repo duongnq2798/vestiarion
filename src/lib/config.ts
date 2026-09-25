@@ -73,6 +73,11 @@ export interface VestiarionConfig {
   followUp: FollowUpConfig;
   /** PKCS8 PEM. Serverless hosts have no persistent disk to keep a key on. */
   ledgerSigningKey?: string;
+  /**
+   * SPKI PEM. Checking a signature needs only this half, so a host that serves
+   * the audit trail without ever appending to it holds no secret at all.
+   */
+  ledgerPublicKey?: string;
   /** Read-only token used to check whether a milestone's PR URL is merged. */
   githubToken?: string;
   /** `simulate` advances a numbered demo day; `real` uses wall-clock time. */
@@ -194,6 +199,7 @@ export function configFromEnv(env: EnvLike = process.env): VestiarionConfig {
       reEscalateAfterDays: positiveNumber(env.FOLLOW_UP_RE_ESCALATE_DAYS, 7),
     },
     ledgerSigningKey: trimmed(env.LEDGER_SIGNING_KEY),
+    ledgerPublicKey: trimmed(env.LEDGER_PUBLIC_KEY),
     githubToken: trimmed(env.GITHUB_TOKEN),
     // Matches what `cycleClockMode` has always done: an explicit setting wins,
     // and otherwise production runs on the wall clock while a development
@@ -227,6 +233,10 @@ export function describeConfig(config: VestiarionConfig): Record<string, unknown
     },
     followUp: config.followUp,
     ledgerSigningKeyProvided: !!config.ledgerSigningKey,
+    // Separate from the signing key on purpose: a host that serves the audit
+    // trail without appending to it holds only this half, and an operator needs
+    // to see that signatures can be checked there at all.
+    ledgerPublicKeyProvided: !!config.ledgerPublicKey,
     githubTokenProvided: !!config.githubToken,
     clockMode: config.clockMode,
   };

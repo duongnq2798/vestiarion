@@ -3,6 +3,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { supabase, unwrap } from "./supabase";
 import { currentConfig } from "./context";
+import { ledgerPublicKeyFromConfig } from "./ledger-keys";
 
 /**
  * The Vestiarion ledger: an append-only, hash-chained, Ed25519-signed record
@@ -71,9 +72,31 @@ function loadKeys() {
   };
 }
 
-export function ledgerPublicKeyPem(): string {
-  ensureKeypair();
-  return fs.readFileSync(pubKeyPath, "utf8");
+/**
+ * The public half of whatever key this deployment verifies against, or `null`
+ * when it declares none.
+ *
+ * Deliberately not `loadKeys()`: that calls `ensureKeypair()`, which *creates*
+ * key material and writes it under `data/`. Reading a public key must never do
+ * either — a serverless host has no writable disk, and the audit page returned
+ * 500 for exactly that reason. Configuration first, then a development
+ * checkout's existing file, and never a key brought into being by being asked
+ * for.
+ */
+function ledgerPublicKey(): crypto.KeyObject | null {
+  const configured = ledgerPublicKeyFromConfig(currentConfig());
+  if (configured) return configured;
+
+  if (fs.existsSync(pubKeyPath)) return crypto.createPublicKey(fs.readFileSync(pubKeyPath));
+  if (fs.existsSync(privKeyPath)) {
+    return crypto.createPublicKey(crypto.createPrivateKey(fs.readFileSync(privKeyPath)));
+  }
+  return null;
+}
+
+export function ledgerPublicKeyPem(): string | null {
+  const key = ledgerPublicKey();
+  return key ? key.export({ type: "spki", format: "pem" }).toString() : null;
 }
 
 export type LedgerDomain =
@@ -267,7 +290,13 @@ export async function ledgerEntryCount(): Promise<number> {
 }
 
 export interface VerificationResult {
-  valid: boolean;
+  /**
+   * `true` verified, `false` broken, and `null` *not checked* — which is a
+   * third answer, not a soft failure. A deployment holding no public key has
+   * produced no evidence either way, and reporting that as `false` would make a
+   * missing environment variable indistinguishable from a tampered chain.
+   */
+  valid: boolean | null;
   checkedEntries: number;
   brokenAt?: number;
   reason?: string;
@@ -281,8 +310,16 @@ export interface VerificationResult {
  */
 export function verifyChain(
   rows: LedgerRow[],
-  publicKey: crypto.KeyObject
+  publicKey: crypto.KeyObject | null
 ): VerificationResult {
+  if (!publicKey) {
+    return {
+      valid: null,
+      checkedEntries: rows.length,
+      reason: "no ledger public key is configured, so authorship was not checked",
+    };
+  }
+
   let expectedPrev = GENESIS_HASH;
 
   for (const row of rows) {
@@ -347,7 +384,7 @@ export function verifyChain(
 
 /** Verifies the ledger as stored in Postgres, oldest entry first. */
 export async function verifyLedger(): Promise<VerificationResult> {
-  const { publicKey } = loadKeys();
+  const publicKey = ledgerPublicKey();
   const rows = unwrap(
     await supabase().from("ledger_entries").select("*").order("seq", { ascending: true })
   ) as LedgerRow[];

@@ -71,6 +71,21 @@ No parameters. Replays signatures, body hashes, and hash-chain continuity.
 {"data":{"valid":true,"checkedEntries":99}}
 ```
 
+`valid` has three values, not two. `true` verified and `false` broken are
+findings about the chain; **`null` means no verdict was produced** — the
+deployment declares no ledger public key, so authorship was never checked. A
+consumer that treats `null` as a failure will report a tampered audit trail
+because an environment variable is missing. `reason` says which case it is, and
+`brokenAt` is absent whenever `valid` is `null`.
+
+```json
+{"data":{"valid":null,"checkedEntries":99,"reason":"no ledger public key is configured, so authorship was not checked"}}
+```
+
+Set `LEDGER_PUBLIC_KEY` (the public half alone is enough) or `LEDGER_SIGNING_KEY`
+to get a real verdict. `GET /api/v1/status` reports both as
+`ledgerPublicKeyProvided` and `ledgerSigningKeyProvided`.
+
 The compatibility route `GET /api/ledger/verify` remains available for the
 Audit page and retains its legacy bare response:
 

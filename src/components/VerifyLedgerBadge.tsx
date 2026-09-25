@@ -3,7 +3,8 @@
 import { useState, useTransition } from "react";
 
 interface VerificationResponse {
-  valid?: boolean;
+  /** `null` is "not checked" — see `VerificationResult` in `lib/ledger`. */
+  valid?: boolean | null;
   checkedEntries?: number;
   brokenAt?: number;
   reason?: string;
@@ -19,7 +20,9 @@ export default function VerifyLedgerBadge() {
         const response = await fetch("/api/ledger/verify");
         setResult((await response.json()) as VerificationResponse);
       } catch (error) {
-        setResult({ valid: false, reason: error instanceof Error ? error.message : "Verification request failed" });
+        // A request that never arrived checked nothing. Calling that `false`
+        // would accuse the chain of being broken because the network was.
+        setResult({ valid: null, reason: error instanceof Error ? error.message : "Verification request failed" });
       }
     });
   }
@@ -38,6 +41,7 @@ export default function VerifyLedgerBadge() {
       <p aria-live="polite" className="min-h-5 text-[0.8125rem]">
         {result?.valid === true && <span className="text-proof">Chain intact — {result.checkedEntries ?? 0} signatures and {Math.max((result.checkedEntries ?? 0) - 1, 0)} links verified.</span>}
         {result?.valid === false && <span className="text-refused">Chain broken{result.brokenAt ? ` at #${String(result.brokenAt).padStart(4, "0")}` : ""}: {result.reason ?? "verification failed"}</span>}
+        {result != null && result.valid == null && <span className="text-ink-3">Not checked — {result.reason ?? "no verdict was produced"}. This is not a finding about the chain.</span>}
         {!result && !pending && <span className="text-ink-3">Not yet verified in this session.</span>}
       </p>
     </div>
