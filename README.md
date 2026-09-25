@@ -67,13 +67,21 @@ path produced it.
 
 ## Architecture
 
+The layout below is the short version. [ARCHITECTURE.md](ARCHITECTURE.md) goes further, and
+[docs/api.md](docs/api.md) documents the read API.
+
 ```
 supabase/migrations/      Postgres schema. Money is numeric(20,6), never a
   0001_init.sql            float; the ledger chain is linked inside an
                            append_ledger_entry() function under an advisory
                            lock so concurrent cycles cannot fork it.
-src/lib/supabase.ts       Server-side client (service role; never imported
-                           from a client component)
+src/lib/config.ts         VestiarionConfig, and the only place the environment
+src/lib/context.ts         is read. A scope carries a config and its clients,
+                           so one process can serve more than one business
+src/lib/supabase.ts       Server-side client for the current scope (service
+                           role; never imported from a client component)
+src/lib/api/              The v1 read contract: one envelope, coded errors,
+                           opaque cursors
 src/lib/insights.ts       Typed, server-only query boundary for measured
                            transfer, cycle, balance, and screening history
 src/components/vx/        Shared light-theme interface primitives and D3
@@ -107,6 +115,8 @@ scripts/                  seed, bootstrap:circle, and three doctors that tell
 src/app/                  Evidence-first landing page at `/`; working treasury
                            console at `/console`, plus AP/AR, Contractors,
                            Compliance, Audit Log, and database-backed Insights
+src/app/api/v1/           Authenticated read API for bots, MCP servers and
+                           anything else consuming Vestiarion
 ```
 
 ## Running it
