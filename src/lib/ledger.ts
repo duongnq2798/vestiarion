@@ -4,6 +4,7 @@ import fs from "node:fs";
 import { supabase, unwrap } from "./supabase";
 import { currentConfig } from "./context";
 import {
+  ledgerKeyId,
   ledgerPublicKeyFromConfig,
   ledgerSigningKey,
   type LocalLedgerKeyStore,
@@ -93,6 +94,12 @@ function ledgerPublicKey(): crypto.KeyObject | null {
   return null;
 }
 
+/** The id of the key this deployment verifies with, for display beside it. */
+export function ledgerPublicKeyId(): string | null {
+  const key = ledgerPublicKey();
+  return key ? ledgerKeyId(key) : null;
+}
+
 export function ledgerPublicKeyPem(): string | null {
   const key = ledgerPublicKey();
   return key ? key.export({ type: "spki", format: "pem" }).toString() : null;
@@ -122,6 +129,8 @@ export interface LedgerEntry extends LedgerEntryInput {
   signature: string;
   prevHash: string;
   hash: string;
+  /** Which key signed it; `null` for entries written before key identity. */
+  signingKeyId: string | null;
 }
 
 export interface LedgerRow {
@@ -137,6 +146,14 @@ export interface LedgerRow {
   signature: string;
   prev_hash: string;
   hash: string;
+  /**
+   * Which key signed this entry, `null` for entries written before the column
+   * existed. A label, not a claim: it is outside the body hash and outside the
+   * chain hash, so it selects the key to check against and proves nothing by
+   * itself. Verification stays sound because the signature must still verify
+   * under whatever key the label names.
+   */
+  signing_key_id?: string | null;
 }
 
 /**
@@ -184,6 +201,7 @@ function rowToEntry(row: LedgerRow): LedgerEntry {
     signature: row.signature,
     prevHash: row.prev_hash,
     hash: row.hash,
+    signingKeyId: row.signing_key_id ?? null,
   };
 }
 
@@ -204,6 +222,7 @@ export async function appendLedgerEntry(input: LedgerEntryInput): Promise<Ledger
         p_detail: input.detail,
         p_body_hash: bodyHash,
         p_signature: signature,
+        p_signing_key_id: ledgerKeyId(privateKey),
       })
       .single<LedgerRow>()
   );
@@ -319,6 +338,7 @@ export function verifyChain(
     };
   }
 
+  const verifyingKeyId = ledgerKeyId(publicKey);
   let expectedPrev = GENESIS_HASH;
 
   for (const row of rows) {
@@ -335,6 +355,20 @@ export function verifyChain(
         checkedEntries: rows.length,
         brokenAt: row.seq,
         reason: "entry content does not match its recorded body hash",
+      };
+    }
+
+    // Checked before the signature so that holding the wrong key reads as what
+    // it is. Without this, an intact chain and a mismatched environment
+    // variable produce the identical "signature does not verify" — the one
+    // message a reader is most likely to take as forgery.
+    if (row.signing_key_id && row.signing_key_id !== verifyingKeyId) {
+      return {
+        valid: null,
+        checkedEntries: rows.length,
+        reason:
+          `entry #${row.seq} was signed by key ${row.signing_key_id}, but this deployment ` +
+          `verifies with key ${verifyingKeyId}, so its authorship was not checked`,
       };
     }
 

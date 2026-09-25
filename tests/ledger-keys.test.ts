@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { configFromEnv, type VestiarionConfig } from "@/lib/config";
 import {
+  ledgerKeyId,
   ledgerPublicKeyFromConfig,
   ledgerSigningKey,
   ledgerSigningKeyFromConfig,
@@ -220,5 +221,23 @@ describe("ledgerSigningKey — which key actually signs", () => {
       /LEDGER_SIGNING_KEY/
     );
     expect(calls.create).toBe(0);
+  });
+});
+
+describe("ledgerKeyId", () => {
+  it("identifies a key the same way from either half", () => {
+    // The id has to be derivable by a verifier that holds only the public key
+    // and by a signer that holds only the private one, or the label on an entry
+    // could never be matched against the key that checks it.
+    const key = keypair();
+    expect(ledgerKeyId(key.privateKey)).toBe(ledgerKeyId(key.publicKey));
+  });
+
+  it("gives different keys different ids", () => {
+    expect(ledgerKeyId(keypair().publicKey)).not.toBe(ledgerKeyId(keypair().publicKey));
+  });
+
+  it("is 16 lowercase hex characters", () => {
+    expect(ledgerKeyId(keypair().publicKey)).toMatch(/^[0-9a-f]{16}$/);
   });
 });

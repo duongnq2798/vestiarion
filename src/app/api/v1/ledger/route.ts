@@ -37,6 +37,13 @@ export interface LedgerEntryPayload {
   signature: string;
   prevHash: string;
   hash: string;
+  /**
+   * Which key signed the entry; `null` for entries written before key identity
+   * existed. A consumer verifying for itself needs this to pick the right key,
+   * or it hits the ambiguity this field was added to remove: an intact chain
+   * and the wrong key look identical without it.
+   */
+  signingKeyId: string | null;
 }
 
 export async function GET(request: Request) {
@@ -64,7 +71,7 @@ export async function GET(request: Request) {
     async (): Promise<ApiCollection<LedgerEntryPayload>> => {
       let query = supabase()
         .from("ledger_entries")
-        .select("seq, id, ts, actor, domain, action, summary, detail, body_hash, signature, prev_hash, hash")
+        .select("seq, id, ts, actor, domain, action, summary, detail, body_hash, signature, prev_hash, hash, signing_key_id")
         .order("seq", { ascending: true })
         // One more than asked for, so `hasMore` is observed rather than guessed.
         .limit(limitResult.limit + 1);
@@ -88,6 +95,7 @@ export async function GET(request: Request) {
         signature: String(row.signature),
         prevHash: String(row.prev_hash),
         hash: String(row.hash),
+        signingKeyId: row.signing_key_id == null ? null : String(row.signing_key_id),
       }));
 
       return paginate(entries, limitResult.limit, (entry) => ({ k: entry.seq }));
