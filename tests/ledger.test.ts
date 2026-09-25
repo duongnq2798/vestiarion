@@ -7,18 +7,30 @@ import {
   type LedgerEntryInput,
   type LedgerRow,
 } from "@/lib/ledger";
+import { ledgerKeyId } from "@/lib/ledger-keys";
 
 const GENESIS = "0".repeat(64);
 
 /**
  * Rebuilds, in TypeScript, exactly what `append_ledger_entry()` does in
  * Postgres: sign the body, then link it as sha256(prev || body || sig).
- * If the two ever drift, these tests keep passing while the real ledger
- * stops verifying — so `chain-parity.test.ts` pins the SQL side separately.
+ *
+ * KNOWN GAP. If the two ever drift, every test here keeps passing while the
+ * real ledger stops verifying. This comment used to claim a `chain-parity.test.ts`
+ * pinned the SQL side; no such file has ever existed, so nothing pins it. The
+ * risk is live: migration 0014 changed that function. Closing this needs a real
+ * Postgres in the suite — the linking is done by the database, so nothing short
+ * of running it proves the two agree.
  */
 function buildChain(
   inputs: LedgerEntryInput[],
-  privateKey: crypto.KeyObject
+  privateKey: crypto.KeyObject,
+  /**
+   * The key label rows carry. `undefined` reproduces an entry written before
+   * `signing_key_id` existed, which is what every row already in a real ledger
+   * looks like.
+   */
+  signingKeyId?: string
 ): LedgerRow[] {
   const rows: LedgerRow[] = [];
   let prev = GENESIS;
@@ -46,6 +58,7 @@ function buildChain(
       signature,
       prev_hash: prev,
       hash,
+      signing_key_id: signingKeyId ?? null,
     });
     prev = hash;
   });
@@ -243,6 +256,45 @@ describe("verifyChain", () => {
     expect(result.valid).toBeNull();
     expect(result.brokenAt).toBeUndefined();
     expect(result.checkedEntries).toBe(3);
+  });
+
+  it("names both keys when an entry was signed by a different one", () => {
+    // Without the label this is the most confusing failure the system can
+    // produce: "signature does not verify" on an intact chain, because the
+    // deployment was handed the wrong key. Saying which key signed and which
+    // key is checking turns a suspected forgery into a configuration error.
+    const signed = keypair();
+    const verifying = keypair();
+    const rows = buildChain(SAMPLE, signed.privateKey, ledgerKeyId(signed.publicKey));
+
+    const result = verifyChain(rows, verifying.publicKey);
+
+    // `null`, not `false`, for the same reason a missing key is not a finding:
+    // holding the wrong key produces no evidence about this chain either way.
+    // Saying `false` here would accuse the ledger of forgery over a deployment
+    // that was handed the wrong environment variable.
+    expect(result.valid).toBeNull();
+    expect(result.brokenAt).toBeUndefined();
+    expect(result.reason).toContain(ledgerKeyId(signed.publicKey));
+    expect(result.reason).toContain(ledgerKeyId(verifying.publicKey));
+    expect(result.reason).not.toMatch(/signature does not verify/);
+  });
+
+  it("verifies an unlabelled entry against the configured key, as before", () => {
+    // Every row written before this column existed is unlabelled. They must go
+    // on verifying exactly as they did, or the migration breaks the history it
+    // was added to protect.
+    const { publicKey, privateKey } = keypair();
+    const rows = buildChain(SAMPLE, privateKey);
+
+    expect(verifyChain(rows, publicKey)).toEqual({ valid: true, checkedEntries: 3 });
+  });
+
+  it("accepts an entry labelled with the key that is checking it", () => {
+    const { publicKey, privateKey } = keypair();
+    const rows = buildChain(SAMPLE, privateKey, ledgerKeyId(publicKey));
+
+    expect(verifyChain(rows, publicKey)).toEqual({ valid: true, checkedEntries: 3 });
   });
 
   it("reports the total height even when it breaks on the first entry", () => {

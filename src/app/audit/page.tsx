@@ -5,7 +5,7 @@ import { DOMAINS } from "@/components/vx/Glyphs";
 import { Hash, Label } from "@/components/vx/Primitives";
 import { EmptyState, PageHead, ProductShell } from "@/components/vx/Shell";
 import type { Domain } from "@/components/vx/types";
-import { ledgerEntryCount, ledgerPublicKeyPem, listLedgerEntries, listLedgerEntryPage } from "@/lib/ledger";
+import { ledgerEntryCount, ledgerPublicKeyId, ledgerPublicKeyPem, listLedgerEntries, listLedgerEntryPage } from "@/lib/ledger";
 import { stats } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
@@ -38,6 +38,7 @@ export default async function AuditPage({ searchParams }: AuditPageProps) {
   const head = headEntries[0];
   const hasOlder = entries.length === 100;
   const publicKey = ledgerPublicKeyPem();
+  const keyId = ledgerPublicKeyId();
 
   return (
     <ProductShell active="audit" day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt}>
@@ -57,7 +58,9 @@ export default async function AuditPage({ searchParams }: AuditPageProps) {
       </section>
 
       <details className="surface-shadow mb-6 rounded-2xl border border-line bg-surface p-4 text-xs text-ink-3">
-        <summary className="cursor-pointer font-medium text-ink-2 hover:text-ink">Ledger signing public key</summary>
+        <summary className="cursor-pointer font-medium text-ink-2 hover:text-ink">
+          Ledger signing public key{keyId ? <> · <span className="font-mono text-ink-2">{keyId}</span></> : null}
+        </summary>
         {publicKey ? (
           <pre className="mt-3 overflow-x-auto whitespace-pre-wrap rounded-md bg-ground p-3 font-mono text-ink-2">{publicKey}</pre>
         ) : (

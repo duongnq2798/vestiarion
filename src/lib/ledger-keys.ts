@@ -15,6 +15,19 @@ import type { VestiarionConfig } from "./config";
  * can decide how to say that, and `verifyChain` keeps the two apart.
  */
 
+/**
+ * A short, stable name for a key, derived from the key itself.
+ *
+ * Taken from the public half so that a verifier holding only that half computes
+ * the same id as the signer holding the private one. No registry has to agree
+ * on anything: the id travels with the key material.
+ */
+export function ledgerKeyId(key: crypto.KeyObject): string {
+  const publicKey = key.type === "private" ? crypto.createPublicKey(key) : key;
+  const spki = publicKey.export({ type: "spki", format: "der" });
+  return crypto.createHash("sha256").update(spki).digest("hex").slice(0, 16);
+}
+
 /** Dashboard env vars carry a PEM's newlines escaped about as often as not. */
 function readablePem(raw: string): string {
   return raw.replace(/\\n/g, "\n");
