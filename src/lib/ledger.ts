@@ -3,7 +3,11 @@ import path from "node:path";
 import fs from "node:fs";
 import { supabase, unwrap } from "./supabase";
 import { currentConfig } from "./context";
-import { ledgerPublicKeyFromConfig } from "./ledger-keys";
+import {
+  ledgerPublicKeyFromConfig,
+  ledgerSigningKey,
+  type LocalLedgerKeyStore,
+} from "./ledger-keys";
 
 /**
  * The Vestiarion ledger: an append-only, hash-chained, Ed25519-signed record
@@ -24,8 +28,12 @@ import { ledgerPublicKeyFromConfig } from "./ledger-keys";
  * read-then-write window in which two agent cycles could observe the same
  * `prev_hash` and fork the chain.
  *
- * The signing key lives on disk outside the repo (`data/`, gitignored). In a
- * real deployment it belongs in a KMS; the verification path is unchanged.
+ * A deployment's signing key comes from its configuration and is held only in
+ * memory; a development checkout falls back to a generated key under `data/`
+ * (gitignored). Verifying needs only the public half, so a host that serves the
+ * audit trail without appending to it holds no secret at all. In a real
+ * deployment the private key belongs in a KMS, which would replace
+ * `ledgerSigningKey`'s source and nothing else.
  */
 
 const GENESIS_HASH = "0".repeat(64);
@@ -34,54 +42,45 @@ const keyDir = path.join(process.cwd(), "data");
 const privKeyPath = path.join(keyDir, "ledger-signing-key.pem");
 const pubKeyPath = path.join(keyDir, "ledger-signing-key.pub.pem");
 
-function ensureKeypair() {
-  if (!fs.existsSync(keyDir)) fs.mkdirSync(keyDir, { recursive: true });
-  if (fs.existsSync(privKeyPath) && fs.existsSync(pubKeyPath)) return;
-
-  // A configured key lets a serverless deployment carry it in an environment
-  // variable instead of the filesystem, which does not persist between
-  // invocations.
-  //
-  // NOT YET MULTI-TENANT. The key path is one fixed location under `data/`,
-  // so two businesses sharing a process would sign with the same key and each
-  // could verify the other's chain as its own. Authorship is only meaningful
-  // when the key is not shared, so per-tenant key material has to land before
-  // anything serves more than one business for real. Recorded here rather than
-  // in a tracker because this is the line that would have to change.
-  const fromEnv = currentConfig().ledgerSigningKey;
-  if (fromEnv) {
-    const privateKey = crypto.createPrivateKey(fromEnv.replace(/\\n/g, "\n"));
+/**
+ * A development checkout's throwaway key, kept under `data/`.
+ *
+ * `create()` is the only thing in this module that writes, and `ledgerSigningKey`
+ * reaches it only where `allowGeneratedLedgerKey` is true. So a production host
+ * never attempts the `mkdir` that used to take the whole ledger down with it,
+ * and a configured key never travels through the filesystem on its way to
+ * being used.
+ *
+ * STILL NOT PER-TENANT. A configured key now belongs to a config, so two
+ * scopes carrying their own `LEDGER_SIGNING_KEY` already sign as themselves.
+ * This fallback does not: it is one fixed path, so two businesses sharing a
+ * development process and no configured key would sign with the same key and
+ * each could verify the other's chain as its own. Real multi-tenant use needs
+ * a configured key per tenant, which is now possible rather than merely
+ * planned.
+ */
+const localLedgerKeys: LocalLedgerKeyStore = {
+  read() {
+    if (!fs.existsSync(privKeyPath)) return null;
+    return crypto.createPrivateKey(fs.readFileSync(privKeyPath));
+  },
+  create() {
+    const { publicKey, privateKey } = crypto.generateKeyPairSync("ed25519");
+    fs.mkdirSync(keyDir, { recursive: true });
     fs.writeFileSync(privKeyPath, privateKey.export({ type: "pkcs8", format: "pem" }));
-    fs.writeFileSync(
-      pubKeyPath,
-      crypto.createPublicKey(privateKey).export({ type: "spki", format: "pem" })
-    );
-    return;
-  }
-
-  const { publicKey, privateKey } = crypto.generateKeyPairSync("ed25519");
-  fs.writeFileSync(privKeyPath, privateKey.export({ type: "pkcs8", format: "pem" }));
-  fs.writeFileSync(pubKeyPath, publicKey.export({ type: "spki", format: "pem" }));
-}
-
-function loadKeys() {
-  ensureKeypair();
-  return {
-    privateKey: crypto.createPrivateKey(fs.readFileSync(privKeyPath)),
-    publicKey: crypto.createPublicKey(fs.readFileSync(pubKeyPath)),
-  };
-}
+    fs.writeFileSync(pubKeyPath, publicKey.export({ type: "spki", format: "pem" }));
+    return privateKey;
+  },
+};
 
 /**
  * The public half of whatever key this deployment verifies against, or `null`
  * when it declares none.
  *
- * Deliberately not `loadKeys()`: that calls `ensureKeypair()`, which *creates*
- * key material and writes it under `data/`. Reading a public key must never do
- * either — a serverless host has no writable disk, and the audit page returned
- * 500 for exactly that reason. Configuration first, then a development
- * checkout's existing file, and never a key brought into being by being asked
- * for.
+ * Reading a public key must never create one: a serverless host has no writable
+ * disk, and the audit page returned 500 for exactly that reason. Configuration
+ * first, then a development checkout's existing file, and never a key brought
+ * into being by being asked for.
  */
 function ledgerPublicKey(): crypto.KeyObject | null {
   const configured = ledgerPublicKeyFromConfig(currentConfig());
@@ -189,7 +188,7 @@ function rowToEntry(row: LedgerRow): LedgerEntry {
 }
 
 export async function appendLedgerEntry(input: LedgerEntryInput): Promise<LedgerEntry> {
-  const { privateKey } = loadKeys();
+  const privateKey = ledgerSigningKey(currentConfig(), localLedgerKeys);
   const bodyHash = bodyHashOf(input);
   const signature = crypto
     .sign(null, Buffer.from(bodyHash, "hex"), privateKey)

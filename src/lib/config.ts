@@ -78,6 +78,13 @@ export interface VestiarionConfig {
    * the audit trail without ever appending to it holds no secret at all.
    */
   ledgerPublicKey?: string;
+  /**
+   * Whether this deployment may sign with a key it generated itself. True in a
+   * development checkout, where a throwaway key keeps `npm run dev` working
+   * with no setup. False in production, where an invented key would sign
+   * entries nobody can verify afterwards and would leave with the instance.
+   */
+  allowGeneratedLedgerKey: boolean;
   /** Read-only token used to check whether a milestone's PR URL is merged. */
   githubToken?: string;
   /** `simulate` advances a numbered demo day; `real` uses wall-clock time. */
@@ -200,6 +207,7 @@ export function configFromEnv(env: EnvLike = process.env): VestiarionConfig {
     },
     ledgerSigningKey: trimmed(env.LEDGER_SIGNING_KEY),
     ledgerPublicKey: trimmed(env.LEDGER_PUBLIC_KEY),
+    allowGeneratedLedgerKey: env.NODE_ENV !== "production",
     githubToken: trimmed(env.GITHUB_TOKEN),
     // Matches what `cycleClockMode` has always done: an explicit setting wins,
     // and otherwise production runs on the wall clock while a development
