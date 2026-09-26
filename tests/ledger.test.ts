@@ -20,12 +20,12 @@ function ring(active: crypto.KeyObject | null, ...retired: crypto.KeyObject[]): 
  * Rebuilds, in TypeScript, exactly what `append_ledger_entry()` does in
  * Postgres: sign the body, then link it as sha256(prev || body || sig).
  *
- * KNOWN GAP. If the two ever drift, every test here keeps passing while the
- * real ledger stops verifying. This comment used to claim a `chain-parity.test.ts`
- * pinned the SQL side; no such file has ever existed, so nothing pins it. The
- * risk is live: migration 0014 changed that function. Closing this needs a real
- * Postgres in the suite — the linking is done by the database, so nothing short
- * of running it proves the two agree.
+ * If the two ever drift, every test here keeps passing while the real ledger
+ * stops verifying. `ledger-parity.test.ts` is what catches that: it runs the
+ * real migrations on a real Postgres in this process and hands rows linked by
+ * `append_ledger_entry()` itself to `verifyChain()`. This comment once claimed
+ * such a file existed when it did not; it exists now, and it is the only test
+ * that exercises the SQL side.
  */
 function buildChain(
   inputs: LedgerEntryInput[],
