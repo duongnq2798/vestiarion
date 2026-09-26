@@ -85,6 +85,12 @@ export interface VestiarionConfig {
    * entries nobody can verify afterwards and would leave with the instance.
    */
   allowGeneratedLedgerKey: boolean;
+  /**
+   * Public halves of keys that signed earlier entries and no longer sign, as
+   * one concatenated PEM bundle. Rotating a key moves its public half here, so
+   * the history it signed stays verifiable instead of reading as forged.
+   */
+  ledgerRetiredPublicKeys?: string;
   /** Read-only token used to check whether a milestone's PR URL is merged. */
   githubToken?: string;
   /** `simulate` advances a numbered demo day; `real` uses wall-clock time. */
@@ -208,6 +214,7 @@ export function configFromEnv(env: EnvLike = process.env): VestiarionConfig {
     ledgerSigningKey: trimmed(env.LEDGER_SIGNING_KEY),
     ledgerPublicKey: trimmed(env.LEDGER_PUBLIC_KEY),
     allowGeneratedLedgerKey: env.NODE_ENV !== "production",
+    ledgerRetiredPublicKeys: trimmed(env.LEDGER_RETIRED_PUBLIC_KEYS),
     githubToken: trimmed(env.GITHUB_TOKEN),
     // Matches what `cycleClockMode` has always done: an explicit setting wins,
     // and otherwise production runs on the wall clock while a development
@@ -245,6 +252,9 @@ export function describeConfig(config: VestiarionConfig): Record<string, unknown
     // trail without appending to it holds only this half, and an operator needs
     // to see that signatures can be checked there at all.
     ledgerPublicKeyProvided: !!config.ledgerPublicKey,
+    // A count, never the material: after a rotation an operator confirms the
+    // old key landed in the bundle from /api/v1/status without it being echoed.
+    ledgerRetiredKeyCount: (config.ledgerRetiredPublicKeys?.match(/-----BEGIN /g) ?? []).length,
     githubTokenProvided: !!config.githubToken,
     clockMode: config.clockMode,
   };

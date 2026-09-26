@@ -7,9 +7,14 @@ import {
   type LedgerEntryInput,
   type LedgerRow,
 } from "@/lib/ledger";
-import { ledgerKeyId } from "@/lib/ledger-keys";
+import { ledgerKeyId, type LedgerKeyring } from "@/lib/ledger-keys";
 
 const GENESIS = "0".repeat(64);
+
+/** A keyring holding one current key and whatever retired ones are given. */
+function ring(active: crypto.KeyObject | null, ...retired: crypto.KeyObject[]): LedgerKeyring {
+  return { active, retired };
+}
 
 /**
  * Rebuilds, in TypeScript, exactly what `append_ledger_entry()` does in
@@ -64,6 +69,24 @@ function buildChain(
   });
 
   return rows;
+}
+
+/** Appends further signed rows after an existing chain, as a rotation would. */
+function continueChain(
+  existing: LedgerRow[],
+  inputs: LedgerEntryInput[],
+  privateKey: crypto.KeyObject,
+  signingKeyId?: string
+): LedgerRow[] {
+  const head = existing[existing.length - 1];
+  const rows = buildChain(inputs, privateKey, signingKeyId);
+  let prev = head.hash;
+  return rows.map((row, i) => {
+    const hash = crypto.createHash("sha256").update(prev + row.body_hash + row.signature).digest("hex");
+    const linked = { ...row, seq: head.seq + i + 1, prev_hash: prev, hash };
+    prev = hash;
+    return linked;
+  });
 }
 
 const SAMPLE: LedgerEntryInput[] = [
@@ -157,13 +180,13 @@ describe("bodyHashOf", () => {
 describe("verifyChain", () => {
   it("accepts an empty ledger", () => {
     const { publicKey } = keypair();
-    expect(verifyChain([], publicKey)).toEqual({ valid: true, checkedEntries: 0 });
+    expect(verifyChain([], ring(publicKey))).toEqual({ valid: true, checkedEntries: 0 });
   });
 
   it("accepts a well-formed chain", () => {
     const { publicKey, privateKey } = keypair();
     const rows = buildChain(SAMPLE, privateKey);
-    expect(verifyChain(rows, publicKey)).toEqual({ valid: true, checkedEntries: 3 });
+    expect(verifyChain(rows, ring(publicKey))).toEqual({ valid: true, checkedEntries: 3 });
   });
 
   it("detects a rewritten amount even when every hash is recomputed downstream", () => {
@@ -177,7 +200,7 @@ describe("verifyChain", () => {
     tampered[1] = { ...tampered[1], detail: { amount: 20000 } };
     const rows = buildChain(tampered, forgedKey);
 
-    const result = verifyChain(rows, publicKey);
+    const result = verifyChain(rows, ring(publicKey));
     expect(result.valid).toBe(false);
     expect(result.brokenAt).toBe(1);
     expect(result.reason).toMatch(/signature/);
@@ -188,7 +211,7 @@ describe("verifyChain", () => {
     const rows = buildChain(SAMPLE, privateKey);
     rows[1].summary = "PAY invoice from Vercel Inc for 20000 USDC";
 
-    const result = verifyChain(rows, publicKey);
+    const result = verifyChain(rows, ring(publicKey));
     expect(result.valid).toBe(false);
     expect(result.brokenAt).toBe(2);
     expect(result.reason).toMatch(/body hash/);
@@ -199,7 +222,7 @@ describe("verifyChain", () => {
     const rows = buildChain(SAMPLE, privateKey);
     const withGap = [rows[0], rows[2]];
 
-    const result = verifyChain(withGap, publicKey);
+    const result = verifyChain(withGap, ring(publicKey));
     expect(result.valid).toBe(false);
     expect(result.brokenAt).toBe(3);
     expect(result.reason).toMatch(/prev_hash/);
@@ -210,7 +233,7 @@ describe("verifyChain", () => {
     const rows = buildChain(SAMPLE, privateKey);
     const swapped = [rows[1], rows[0], rows[2]];
 
-    expect(verifyChain(swapped, publicKey).valid).toBe(false);
+    expect(verifyChain(swapped, ring(publicKey)).valid).toBe(false);
   });
 
   it("detects a chain that does not start at genesis", () => {
@@ -218,7 +241,7 @@ describe("verifyChain", () => {
     const rows = buildChain(SAMPLE, privateKey);
     rows[0].prev_hash = "f".repeat(64);
 
-    const result = verifyChain(rows, publicKey);
+    const result = verifyChain(rows, ring(publicKey));
     expect(result.valid).toBe(false);
     expect(result.brokenAt).toBe(1);
   });
@@ -228,7 +251,7 @@ describe("verifyChain", () => {
     const rows = buildChain(SAMPLE.slice(0, 1), privateKey);
     rows[0].hash = "a".repeat(64);
 
-    const result = verifyChain(rows, publicKey);
+    const result = verifyChain(rows, ring(publicKey));
     expect(result.valid).toBe(false);
     expect(result.reason).toMatch(/chain hash/);
   });
@@ -238,7 +261,7 @@ describe("verifyChain", () => {
     const { publicKey: otherPublic } = keypair();
     const rows = buildChain(SAMPLE, privateKey);
 
-    const result = verifyChain(rows, otherPublic);
+    const result = verifyChain(rows, ring(otherPublic));
     expect(result.valid).toBe(false);
     expect(result.reason).toMatch(/signature/);
   });
@@ -252,7 +275,7 @@ describe("verifyChain", () => {
     const { privateKey } = keypair();
     const rows = buildChain(SAMPLE, privateKey);
 
-    const result = verifyChain(rows, null);
+    const result = verifyChain(rows, ring(null));
     expect(result.valid).toBeNull();
     expect(result.brokenAt).toBeUndefined();
     expect(result.checkedEntries).toBe(3);
@@ -267,7 +290,7 @@ describe("verifyChain", () => {
     const verifying = keypair();
     const rows = buildChain(SAMPLE, signed.privateKey, ledgerKeyId(signed.publicKey));
 
-    const result = verifyChain(rows, verifying.publicKey);
+    const result = verifyChain(rows, ring(verifying.publicKey));
 
     // `null`, not `false`, for the same reason a missing key is not a finding:
     // holding the wrong key produces no evidence about this chain either way.
@@ -287,20 +310,65 @@ describe("verifyChain", () => {
     const { publicKey, privateKey } = keypair();
     const rows = buildChain(SAMPLE, privateKey);
 
-    expect(verifyChain(rows, publicKey)).toEqual({ valid: true, checkedEntries: 3 });
+    expect(verifyChain(rows, ring(publicKey))).toEqual({ valid: true, checkedEntries: 3 });
   });
 
   it("accepts an entry labelled with the key that is checking it", () => {
     const { publicKey, privateKey } = keypair();
     const rows = buildChain(SAMPLE, privateKey, ledgerKeyId(publicKey));
 
-    expect(verifyChain(rows, publicKey)).toEqual({ valid: true, checkedEntries: 3 });
+    expect(verifyChain(rows, ring(publicKey))).toEqual({ valid: true, checkedEntries: 3 });
+  });
+
+  it("accepts entries labelled with a retired key that is still in the keyring", () => {
+    // Rotation, from the verifier's side: the old key stops signing but stays
+    // known, so everything it signed remains checkable. Without this, rotating
+    // a key turns the whole history into an apparent forgery.
+    const old = keypair();
+    const current = keypair();
+    const rows = buildChain(SAMPLE, old.privateKey, ledgerKeyId(old.publicKey));
+
+    expect(verifyChain(rows, ring(current.publicKey, old.publicKey))).toEqual({ valid: true, checkedEntries: 3 });
+  });
+
+  it("accepts unlabelled entries signed by a retired key", () => {
+    // Every row written before key identity existed is unlabelled, and after a
+    // rotation those rows were signed by a key that is now retired. They must
+    // still verify, or the first rotation breaks the entire pre-migration
+    // history.
+    const old = keypair();
+    const current = keypair();
+    const rows = buildChain(SAMPLE, old.privateKey);
+
+    expect(verifyChain(rows, ring(current.publicKey, old.publicKey))).toEqual({ valid: true, checkedEntries: 3 });
+  });
+
+  it("verifies a chain that crosses a rotation", () => {
+    const old = keypair();
+    const current = keypair();
+    const before = buildChain(SAMPLE.slice(0, 2), old.privateKey, ledgerKeyId(old.publicKey));
+    const after = continueChain(before, SAMPLE.slice(2), current.privateKey, ledgerKeyId(current.publicKey));
+
+    expect(verifyChain([...before, ...after], ring(current.publicKey, old.publicKey))).toEqual({ valid: true, checkedEntries: 3 });
+  });
+
+  it("names the unknown key and the known ones when a label matches nothing in the keyring", () => {
+    const unknown = keypair();
+    const current = keypair();
+    const rows = buildChain(SAMPLE, unknown.privateKey, ledgerKeyId(unknown.publicKey));
+
+    const result = verifyChain(rows, ring(current.publicKey));
+
+    expect(result.valid).toBeNull();
+    expect(result.reason).toContain(ledgerKeyId(unknown.publicKey));
+    expect(result.reason).toContain(ledgerKeyId(current.publicKey));
+    expect(result.reason).toMatch(/keyring/);
   });
 
   it("reports the total height even when it breaks on the first entry", () => {
     const { publicKey, privateKey } = keypair();
     const rows = buildChain(SAMPLE, privateKey);
     rows[0].prev_hash = "f".repeat(64);
-    expect(verifyChain(rows, publicKey).checkedEntries).toBe(3);
+    expect(verifyChain(rows, ring(publicKey)).checkedEntries).toBe(3);
   });
 });

@@ -125,3 +125,85 @@ export function ledgerSigningKey(
 
   return local.create();
 }
+
+export interface LedgerKeyring {
+  /** The key this deployment signs with, or is told is current. */
+  active: crypto.KeyObject | null;
+  /** Keys that signed earlier entries and no longer sign. */
+  retired: crypto.KeyObject[];
+}
+
+/** PEM blocks are self-delimiting, so a bundle needs no separator of its own. */
+const PEM_BLOCK = /-----BEGIN [A-Z0-9 ]+-----[\s\S]*?-----END [A-Z0-9 ]+-----/g;
+
+function retiredPublicKeys(bundle: string | undefined): crypto.KeyObject[] {
+  if (!bundle) return [];
+  const blocks = readablePem(bundle).match(PEM_BLOCK) ?? [];
+  if (blocks.length === 0) {
+    throw new Error("LEDGER_RETIRED_PUBLIC_KEYS contains no PEM block");
+  }
+  return blocks.map((block, i) => {
+    // A retired *private* key has no business anywhere near a running
+    // deployment; its presence here is a mistake worth stopping on.
+    if (isPrivatePem(block)) {
+      throw new Error(`LEDGER_RETIRED_PUBLIC_KEYS block ${i + 1} is a private key; it takes public halves only`);
+    }
+    try {
+      return crypto.createPublicKey(block);
+    } catch (err) {
+      throw new Error(`LEDGER_RETIRED_PUBLIC_KEYS block ${i + 1} is not a readable public key: ${(err as Error).message}`);
+    }
+  });
+}
+
+/**
+ * Every key this deployment will accept a signature from: the one it signs
+ * with (or is told is current) and the ones that signed before it.
+ */
+export function ledgerKeyring(config: VestiarionConfig): LedgerKeyring {
+  return {
+    active: ledgerPublicKeyFromConfig(config),
+    retired: retiredPublicKeys(config.ledgerRetiredPublicKeys),
+  };
+}
+
+/** What rotation detection needs from the newest ledger entry. */
+export interface SignedHead {
+  signing_key_id?: string | null;
+  body_hash: string;
+  signature: string;
+}
+
+export interface KeyRotation {
+  from: string;
+  to: string;
+}
+
+/**
+ * Whether the key that signed the newest entry differs from the one that will
+ * sign the next. That is a rotation, and it belongs in the ledger as an entry
+ * of its own — signed by the new key — so the audit trail records its own
+ * change of authority rather than leaving a reader to infer it from a label
+ * that changes between two rows.
+ *
+ * Only a lineage this keyring can vouch for is reported. A head signed by an
+ * unknown key is not something to write a claim about; verification will say
+ * what it can.
+ */
+export function detectKeyRotation(head: SignedHead | null, keyring: LedgerKeyring): KeyRotation | null {
+  if (!head || !keyring.active) return null;
+  const to = ledgerKeyId(keyring.active);
+
+  if (head.signing_key_id) {
+    if (head.signing_key_id === to) return null;
+    const known = keyring.retired.some((key) => ledgerKeyId(key) === head.signing_key_id);
+    return known ? { from: head.signing_key_id, to } : null;
+  }
+
+  // Unlabelled: predates key identity, so the signer has to be found by trying.
+  const bodyHash = Buffer.from(head.body_hash, "hex");
+  const signature = Buffer.from(head.signature, "hex");
+  if (crypto.verify(null, bodyHash, keyring.active, signature)) return null;
+  const signer = keyring.retired.find((key) => crypto.verify(null, bodyHash, key, signature));
+  return signer ? { from: ledgerKeyId(signer), to } : null;
+}

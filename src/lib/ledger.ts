@@ -3,10 +3,14 @@ import path from "node:path";
 import fs from "node:fs";
 import { supabase, unwrap } from "./supabase";
 import { currentConfig } from "./context";
+import type { VestiarionConfig } from "./config";
 import {
+  detectKeyRotation,
   ledgerKeyId,
+  ledgerKeyring,
   ledgerPublicKeyFromConfig,
   ledgerSigningKey,
+  type LedgerKeyring,
   type LocalLedgerKeyStore,
 } from "./ledger-keys";
 
@@ -205,8 +209,8 @@ function rowToEntry(row: LedgerRow): LedgerEntry {
   };
 }
 
-export async function appendLedgerEntry(input: LedgerEntryInput): Promise<LedgerEntry> {
-  const privateKey = ledgerSigningKey(currentConfig(), localLedgerKeys);
+/** Signs and links one entry. The rotation check above this must not recurse into it. */
+async function appendSigned(input: LedgerEntryInput, privateKey: crypto.KeyObject): Promise<LedgerEntry> {
   const bodyHash = bodyHashOf(input);
   const signature = crypto
     .sign(null, Buffer.from(bodyHash, "hex"), privateKey)
@@ -228,6 +232,65 @@ export async function appendLedgerEntry(input: LedgerEntryInput): Promise<Ledger
   );
 
   return rowToEntry(row);
+}
+
+/**
+ * If the key that signed the newest entry is not the one about to sign, the
+ * ledger records that itself — an entry signed by the new key, naming both —
+ * before anything else is written under the new authority.
+ */
+async function recordKeyRotationIfAny(privateKey: crypto.KeyObject): Promise<void> {
+  const head = unwrap(
+    await supabase()
+      .from("ledger_entries")
+      .select("signing_key_id, body_hash, signature")
+      .order("seq", { ascending: false })
+      .limit(1)
+  ) as Array<{ signing_key_id: string | null; body_hash: string; signature: string }>;
+
+  const rotation = detectKeyRotation(head[0] ?? null, ledgerVerificationKeyring());
+  if (!rotation) return;
+
+  await appendSigned(
+    {
+      actor: "system",
+      domain: "system",
+      action: "ledger_key_rotated",
+      summary: `Ledger signing key rotated: ${rotation.from} retired, ${rotation.to} now signs`,
+      detail: { from: rotation.from, to: rotation.to },
+    },
+    privateKey
+  );
+}
+
+/**
+ * One rotation check per configuration per process, shared by concurrent
+ * appends so two cycles starting together cannot both write the rotation
+ * entry. A failed check is forgotten so the next append tries again rather
+ * than skipping rotation for the life of the process. Two *processes* starting
+ * together after a rotation can still each record it; both statements are
+ * true, and the advisory lock inside append_ledger_entry keeps the chain
+ * itself consistent.
+ */
+const rotationChecks = new WeakMap<VestiarionConfig, Promise<void>>();
+
+function rotationRecorded(config: VestiarionConfig, privateKey: crypto.KeyObject): Promise<void> {
+  let pending = rotationChecks.get(config);
+  if (!pending) {
+    pending = recordKeyRotationIfAny(privateKey).catch((err) => {
+      rotationChecks.delete(config);
+      throw err;
+    });
+    rotationChecks.set(config, pending);
+  }
+  return pending;
+}
+
+export async function appendLedgerEntry(input: LedgerEntryInput): Promise<LedgerEntry> {
+  const config = currentConfig();
+  const privateKey = ledgerSigningKey(config, localLedgerKeys);
+  await rotationRecorded(config, privateKey);
+  return appendSigned(input, privateKey);
 }
 
 export async function listLedgerEntries(limit = 200): Promise<LedgerEntry[]> {
@@ -328,9 +391,13 @@ export interface VerificationResult {
  */
 export function verifyChain(
   rows: LedgerRow[],
-  publicKey: crypto.KeyObject | null
+  keyring: LedgerKeyring
 ): VerificationResult {
-  if (!publicKey) {
+  const known = new Map<string, crypto.KeyObject>();
+  if (keyring.active) known.set(ledgerKeyId(keyring.active), keyring.active);
+  for (const key of keyring.retired) known.set(ledgerKeyId(key), key);
+
+  if (known.size === 0) {
     return {
       valid: null,
       checkedEntries: rows.length,
@@ -338,7 +405,7 @@ export function verifyChain(
     };
   }
 
-  const verifyingKeyId = ledgerKeyId(publicKey);
+  const knownIds = [...known.keys()].join(", ");
   let expectedPrev = GENESIS_HASH;
 
   for (const row of rows) {
@@ -358,32 +425,39 @@ export function verifyChain(
       };
     }
 
-    // Checked before the signature so that holding the wrong key reads as what
-    // it is. Without this, an intact chain and a mismatched environment
-    // variable produce the identical "signature does not verify" — the one
-    // message a reader is most likely to take as forgery.
-    if (row.signing_key_id && row.signing_key_id !== verifyingKeyId) {
-      return {
-        valid: null,
-        checkedEntries: rows.length,
-        reason:
-          `entry #${row.seq} was signed by key ${row.signing_key_id}, but this deployment ` +
-          `verifies with key ${verifyingKeyId}, so its authorship was not checked`,
-      };
+    // Which keys may vouch for this entry. A labelled row names one, and a
+    // label the keyring does not know is reported as exactly that, before the
+    // signature is tried: without this, an intact chain and a missing retired
+    // key produce the identical "signature does not verify" — the one message
+    // a reader is most likely to take as forgery. An unlabelled row predates
+    // key identity, so any key this business has ever declared may have
+    // signed it.
+    let candidates: crypto.KeyObject[];
+    if (row.signing_key_id) {
+      const key = known.get(row.signing_key_id);
+      if (!key) {
+        return {
+          valid: null,
+          checkedEntries: rows.length,
+          reason:
+            `entry #${row.seq} was signed by key ${row.signing_key_id}, which is not in this ` +
+            `deployment's keyring (${knownIds}), so its authorship was not checked`,
+        };
+      }
+      candidates = [key];
+    } else {
+      candidates = [...known.values()];
     }
 
-    const signatureOk = crypto.verify(
-      null,
-      Buffer.from(row.body_hash, "hex"),
-      publicKey,
-      Buffer.from(row.signature, "hex")
-    );
+    const bodyHash = Buffer.from(row.body_hash, "hex");
+    const signature = Buffer.from(row.signature, "hex");
+    const signatureOk = candidates.some((key) => crypto.verify(null, bodyHash, key, signature));
     if (!signatureOk) {
       return {
         valid: false,
         checkedEntries: rows.length,
         brokenAt: row.seq,
-        reason: "signature does not verify against the ledger public key",
+        reason: "signature does not verify against any key in the ledger keyring",
       };
     }
 
@@ -415,11 +489,20 @@ export function verifyChain(
   return { valid: true, checkedEntries: rows.length };
 }
 
+/**
+ * The keys this deployment accepts signatures from. The active slot honours
+ * the development checkout's file fallback the same way `ledgerPublicKey()`
+ * does; retired keys come from configuration alone, because nothing on disk
+ * ever retired.
+ */
+export function ledgerVerificationKeyring(): LedgerKeyring {
+  return { active: ledgerPublicKey(), retired: ledgerKeyring(currentConfig()).retired };
+}
+
 /** Verifies the ledger as stored in Postgres, oldest entry first. */
 export async function verifyLedger(): Promise<VerificationResult> {
-  const publicKey = ledgerPublicKey();
   const rows = unwrap(
     await supabase().from("ledger_entries").select("*").order("seq", { ascending: true })
   ) as LedgerRow[];
-  return verifyChain(rows, publicKey);
+  return verifyChain(rows, ledgerVerificationKeyring());
 }
