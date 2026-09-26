@@ -352,9 +352,17 @@ The suite covers the paths where being wrong costs money, and nothing else:
   billing a different vendor, and that a rate-limited model falls back to the heuristic and is
   *recorded* as the heuristic rather than passed off as the model's judgement.
 
-Nothing in the suite needs Supabase, Circle, or an LLM key. Everything that does is exercised by
-`npm run cycle` against a real project — which is the honest place for it, not a mock that agrees
-with itself.
+- **The database's half of the chain** — `append_ledger_entry()` is a Postgres function, so the
+  link between one entry and the next is computed by the database, not by the code the other
+  tests exercise. `tests/ledger-parity.test.ts` runs every migration, unmodified, on a real
+  Postgres inside the test process (PGlite — Postgres compiled to WebAssembly), appends through
+  the real function, and hands the rows it stored to the same `verifyChain()` the app uses. If
+  the SQL and the verifier ever disagree about what a link is, this is the only test that turns
+  red.
+
+Nothing in the suite needs Supabase, Circle, or an LLM key — the Postgres above is in-process and
+needs no server. Everything that does need a live service is exercised by `npm run cycle` against
+a real project, which is the honest place for it, not a mock that agrees with itself.
 
 ## Guardrails
 
