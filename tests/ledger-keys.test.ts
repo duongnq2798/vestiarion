@@ -6,6 +6,7 @@ import {
   ledgerKeyId,
   ledgerKeyring,
   ledgerPublicKeyFromConfig,
+  ledgerReadKeys,
   ledgerSigningKey,
   ledgerSigningKeyFromConfig,
   type LocalLedgerKeyStore,
@@ -353,5 +354,55 @@ describe("detectKeyRotation", () => {
 
   it("reports nothing when there is no active key to rotate to", () => {
     expect(detectKeyRotation(signedHead(old.privateKey, oldId), { active: null, retired: [old.publicKey] })).toBeNull();
+  });
+});
+
+describe("ledgerReadKeys — the read path never throws over a bad key", () => {
+  // Observed on production 2026-09-26: a signing key pasted with its newlines
+  // lost took /audit down with a 500, although a perfectly good LEDGER_PUBLIC_KEY
+  // was configured beside it. Reading needs no secret; a broken secret must
+  // be reported, not fatal.
+
+  it("falls back to the public key when the signing key is unreadable, and says so", () => {
+    const good = keypair();
+    const keys = ledgerReadKeys(config({ LEDGER_SIGNING_KEY: "-----BEGIN PRIVATE KEY-----", LEDGER_PUBLIC_KEY: good.publicPem }));
+
+    expect(keys.active).not.toBeNull();
+    expect(accepts(keys.active!, good.privateKey)).toBe(true);
+    expect(keys.warnings).toHaveLength(1);
+    expect(keys.warnings[0]).toMatch(/LEDGER_SIGNING_KEY/);
+  });
+
+  it("reports an unreadable signing key even when nothing else is configured", () => {
+    const keys = ledgerReadKeys(config({ LEDGER_SIGNING_KEY: "not a pem" }));
+
+    expect(keys.active).toBeNull();
+    expect(keys.warnings.join(" ")).toMatch(/LEDGER_SIGNING_KEY/);
+  });
+
+  it("reports an unreadable public key instead of throwing", () => {
+    const keys = ledgerReadKeys(config({ LEDGER_PUBLIC_KEY: "not a pem" }));
+
+    expect(keys.active).toBeNull();
+    expect(keys.warnings.join(" ")).toMatch(/LEDGER_PUBLIC_KEY/);
+  });
+
+  it("drops an unreadable retired bundle with a warning and keeps the active key", () => {
+    const good = keypair();
+    const keys = ledgerReadKeys(config({ LEDGER_PUBLIC_KEY: good.publicPem, LEDGER_RETIRED_PUBLIC_KEYS: "garbage" }));
+
+    expect(accepts(keys.active!, good.privateKey)).toBe(true);
+    expect(keys.retired).toEqual([]);
+    expect(keys.warnings.join(" ")).toMatch(/LEDGER_RETIRED_PUBLIC_KEYS/);
+  });
+
+  it("has no warnings when everything reads", () => {
+    const active = keypair();
+    const old = keypair();
+    const keys = ledgerReadKeys(config({ LEDGER_SIGNING_KEY: active.privatePem, LEDGER_RETIRED_PUBLIC_KEYS: old.publicPem }));
+
+    expect(keys.warnings).toEqual([]);
+    expect(accepts(keys.active!, active.privateKey)).toBe(true);
+    expect(keys.retired).toHaveLength(1);
   });
 });

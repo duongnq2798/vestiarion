@@ -82,6 +82,23 @@ because an environment variable is missing. `reason` says which case it is, and
 {"data":{"valid":null,"checkedEntries":99,"reason":"no ledger public key is configured, so authorship was not checked"}}
 ```
 
+A key that is configured but cannot be read — a PEM pasted with its newlines
+lost is the usual case — is a **configuration problem, not a finding about the
+chain**, and the two are kept apart. The read path never fails over a bad key:
+it falls back to `LEDGER_PUBLIC_KEY`, then to a development checkout's key
+file, verifies with whatever it could read, and reports what it could not in
+`warnings`:
+
+```json
+{"data":{"valid":true,"checkedEntries":105,"warnings":["LEDGER_SIGNING_KEY is not a readable private key: error:1E08010C:DECODER routines::unsupported"]}}
+```
+
+When a broken key is the reason no key is available at all, `reason` names it
+instead of saying "no ledger public key is configured", which would send an
+operator to add a key that is already there, pasted wrong. Appending is
+different: signing has no fallback, so a cycle still fails loudly on the same
+broken key.
+
 Set `LEDGER_PUBLIC_KEY` (the public half alone is enough) or `LEDGER_SIGNING_KEY`
 to get a real verdict. `GET /api/v1/status` reports both as
 `ledgerPublicKeyProvided` and `ledgerSigningKeyProvided`, and

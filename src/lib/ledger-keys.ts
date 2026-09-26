@@ -131,6 +131,8 @@ export interface LedgerKeyring {
   active: crypto.KeyObject | null;
   /** Keys that signed earlier entries and no longer sign. */
   retired: crypto.KeyObject[];
+  /** Configuration problems met while assembling the ring; reported, never fatal. */
+  warnings?: string[];
 }
 
 /** PEM blocks are self-delimiting, so a bundle needs no separator of its own. */
@@ -206,4 +208,48 @@ export function detectKeyRotation(head: SignedHead | null, keyring: LedgerKeyrin
   if (crypto.verify(null, bodyHash, keyring.active, signature)) return null;
   const signer = keyring.retired.find((key) => crypto.verify(null, bodyHash, key, signature));
   return signer ? { from: ledgerKeyId(signer), to } : null;
+}
+
+export interface LedgerReadKeys extends LedgerKeyring {
+  /** Configuration problems found while reading; never fatal on this path. */
+  warnings: string[];
+}
+
+/**
+ * Every key the read path will use, and every configuration problem it met
+ * getting them — because reading never throws over a bad key.
+ *
+ * Observed on production: a signing key pasted with its newlines lost took the
+ * audit page down with a 500, although a perfectly good `LEDGER_PUBLIC_KEY` sat
+ * beside it. Reading needs no secret. A broken secret is reported here so
+ * `/audit` and the verify endpoints can say it in words; appending still throws
+ * on it, because signing has no fallback.
+ */
+export function ledgerReadKeys(config: VestiarionConfig): LedgerReadKeys {
+  const warnings: string[] = [];
+  let active: crypto.KeyObject | null = null;
+
+  if (config.ledgerSigningKey) {
+    try {
+      active = crypto.createPublicKey(crypto.createPrivateKey(readablePem(config.ledgerSigningKey)));
+    } catch (err) {
+      warnings.push(`LEDGER_SIGNING_KEY is not a readable private key: ${(err as Error).message}`);
+    }
+  }
+  if (!active && config.ledgerPublicKey) {
+    try {
+      active = ledgerPublicKeyFromConfig({ ...config, ledgerSigningKey: undefined });
+    } catch (err) {
+      warnings.push((err as Error).message);
+    }
+  }
+
+  let retired: crypto.KeyObject[] = [];
+  try {
+    retired = retiredPublicKeys(config.ledgerRetiredPublicKeys);
+  } catch (err) {
+    warnings.push((err as Error).message);
+  }
+
+  return { active, retired, warnings };
 }

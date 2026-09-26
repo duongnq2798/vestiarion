@@ -365,6 +365,32 @@ describe("verifyChain", () => {
     expect(result.reason).toMatch(/keyring/);
   });
 
+  it("carries configuration warnings alongside a verdict about the chain", () => {
+    // The chain being fine and the configuration being broken are two
+    // different facts. Hiding either behind the other is how a bad paste
+    // either looks like a forgery or goes unnoticed for weeks.
+    const { publicKey, privateKey } = keypair();
+    const rows = buildChain(SAMPLE, privateKey);
+    const warning = "LEDGER_SIGNING_KEY is not a readable private key: unsupported";
+
+    const result = verifyChain(rows, { ...ring(publicKey), warnings: [warning] });
+
+    expect(result.valid).toBe(true);
+    expect(result.warnings).toEqual([warning]);
+  });
+
+  it("names the broken key, not 'no key configured', when a broken key is why there is none", () => {
+    const { privateKey } = keypair();
+    const rows = buildChain(SAMPLE, privateKey);
+    const warning = "LEDGER_SIGNING_KEY is not a readable private key: unsupported";
+
+    const result = verifyChain(rows, { active: null, retired: [], warnings: [warning] });
+
+    expect(result.valid).toBeNull();
+    expect(result.reason).toContain("LEDGER_SIGNING_KEY");
+    expect(result.reason).not.toMatch(/no ledger public key is configured/);
+  });
+
   it("reports the total height even when it breaks on the first entry", () => {
     const { publicKey, privateKey } = keypair();
     const rows = buildChain(SAMPLE, privateKey);
