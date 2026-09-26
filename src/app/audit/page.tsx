@@ -5,7 +5,7 @@ import { DOMAINS } from "@/components/vx/Glyphs";
 import { Hash, Label } from "@/components/vx/Primitives";
 import { EmptyState, PageHead, ProductShell } from "@/components/vx/Shell";
 import type { Domain } from "@/components/vx/types";
-import { ledgerEntryCount, ledgerPublicKeyId, ledgerPublicKeyPem, listLedgerEntries, listLedgerEntryPage } from "@/lib/ledger";
+import { ledgerEntryCount, ledgerPublicKeyId, ledgerPublicKeyPem, ledgerReadWarnings, listLedgerEntries, listLedgerEntryPage } from "@/lib/ledger";
 import { stats } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
@@ -39,6 +39,7 @@ export default async function AuditPage({ searchParams }: AuditPageProps) {
   const hasOlder = entries.length === 100;
   const publicKey = ledgerPublicKeyPem();
   const keyId = ledgerPublicKeyId();
+  const keyWarnings = ledgerReadWarnings();
 
   return (
     <ProductShell active="audit" day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt}>
@@ -56,6 +57,19 @@ export default async function AuditPage({ searchParams }: AuditPageProps) {
         </dl>
         <div className="mt-4 border-t border-line pt-4"><VerifyLedgerBadge /></div>
       </section>
+
+      {keyWarnings.length > 0 && (
+        <section role="alert" aria-label="Ledger key configuration" className="surface-shadow mb-6 rounded-2xl border border-refused bg-surface p-4 text-sm sm:p-6">
+          <p className="font-medium text-refused">Ledger key configuration needs attention</p>
+          <ul className="mt-2 list-disc space-y-1 pl-5 font-mono text-xs text-refused">
+            {keyWarnings.map((warning) => <li key={warning}>{warning}</li>)}
+          </ul>
+          <p className="mt-3 text-ink-3">
+            The entries below are shown from the database regardless. A key that cannot be read is a
+            configuration problem, not a finding about the chain.
+          </p>
+        </section>
+      )}
 
       <details className="surface-shadow mb-6 rounded-2xl border border-line bg-surface p-4 text-xs text-ink-3">
         <summary className="cursor-pointer font-medium text-ink-2 hover:text-ink">

@@ -7,10 +7,10 @@ import type { VestiarionConfig } from "./config";
 import {
   detectKeyRotation,
   ledgerKeyId,
-  ledgerKeyring,
-  ledgerPublicKeyFromConfig,
+  ledgerReadKeys,
   ledgerSigningKey,
   type LedgerKeyring,
+  type LedgerReadKeys,
   type LocalLedgerKeyStore,
 } from "./ledger-keys";
 
@@ -87,15 +87,24 @@ const localLedgerKeys: LocalLedgerKeyStore = {
  * first, then a development checkout's existing file, and never a key brought
  * into being by being asked for.
  */
-function ledgerPublicKey(): crypto.KeyObject | null {
-  const configured = ledgerPublicKeyFromConfig(currentConfig());
-  if (configured) return configured;
-
-  if (fs.existsSync(pubKeyPath)) return crypto.createPublicKey(fs.readFileSync(pubKeyPath));
-  if (fs.existsSync(privKeyPath)) {
-    return crypto.createPublicKey(crypto.createPrivateKey(fs.readFileSync(privKeyPath)));
+function ledgerReadKeyring(): LedgerReadKeys {
+  const keys = ledgerReadKeys(currentConfig());
+  if (!keys.active) {
+    if (fs.existsSync(pubKeyPath)) keys.active = crypto.createPublicKey(fs.readFileSync(pubKeyPath));
+    else if (fs.existsSync(privKeyPath)) {
+      keys.active = crypto.createPublicKey(crypto.createPrivateKey(fs.readFileSync(privKeyPath)));
+    }
   }
-  return null;
+  return keys;
+}
+
+function ledgerPublicKey(): crypto.KeyObject | null {
+  return ledgerReadKeyring().active;
+}
+
+/** Configuration problems the read path met, for the audit page to say in words. */
+export function ledgerReadWarnings(): string[] {
+  return ledgerReadKeyring().warnings;
 }
 
 /** The id of the key this deployment verifies with, for display beside it. */
@@ -381,6 +390,8 @@ export interface VerificationResult {
   checkedEntries: number;
   brokenAt?: number;
   reason?: string;
+  /** Configuration problems found on the way to this verdict; not about the chain. */
+  warnings?: string[];
 }
 
 /**
@@ -393,15 +404,28 @@ export function verifyChain(
   rows: LedgerRow[],
   keyring: LedgerKeyring
 ): VerificationResult {
+  const result = verifyRows(rows, keyring);
+  // The chain being fine and the configuration being broken are two different
+  // facts; neither is allowed to hide the other.
+  return keyring.warnings?.length ? { ...result, warnings: keyring.warnings } : result;
+}
+
+function verifyRows(rows: LedgerRow[], keyring: LedgerKeyring): VerificationResult {
   const known = new Map<string, crypto.KeyObject>();
   if (keyring.active) known.set(ledgerKeyId(keyring.active), keyring.active);
   for (const key of keyring.retired) known.set(ledgerKeyId(key), key);
 
   if (known.size === 0) {
+    // When a broken key is the reason there is none, say which key is broken.
+    // "No key configured" would send an operator to add one that is already
+    // there, pasted wrong.
+    const because = keyring.warnings?.length
+      ? keyring.warnings.join("; ")
+      : "no ledger public key is configured";
     return {
       valid: null,
       checkedEntries: rows.length,
-      reason: "no ledger public key is configured, so authorship was not checked",
+      reason: `${because}, so authorship was not checked`,
     };
   }
 
@@ -496,7 +520,7 @@ export function verifyChain(
  * ever retired.
  */
 export function ledgerVerificationKeyring(): LedgerKeyring {
-  return { active: ledgerPublicKey(), retired: ledgerKeyring(currentConfig()).retired };
+  return ledgerReadKeyring();
 }
 
 /** Verifies the ledger as stored in Postgres, oldest entry first. */

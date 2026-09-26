@@ -8,6 +8,8 @@ interface VerificationResponse {
   checkedEntries?: number;
   brokenAt?: number;
   reason?: string;
+  /** Configuration problems met on the way to the verdict; not about the chain. */
+  warnings?: string[];
 }
 
 export default function VerifyLedgerBadge() {
@@ -43,6 +45,9 @@ export default function VerifyLedgerBadge() {
         {result?.valid === false && <span className="text-refused">Chain broken{result.brokenAt ? ` at #${String(result.brokenAt).padStart(4, "0")}` : ""}: {result.reason ?? "verification failed"}</span>}
         {result != null && result.valid == null && <span className="text-ink-3">Not checked — {result.reason ?? "no verdict was produced"}. This is not a finding about the chain.</span>}
         {!result && !pending && <span className="text-ink-3">Not yet verified in this session.</span>}
+        {result?.warnings?.map((warning) => (
+          <span key={warning} className="block text-refused">Configuration: {warning}</span>
+        ))}
       </p>
     </div>
   );
