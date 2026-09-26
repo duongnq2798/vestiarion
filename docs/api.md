@@ -84,7 +84,36 @@ because an environment variable is missing. `reason` says which case it is, and
 
 Set `LEDGER_PUBLIC_KEY` (the public half alone is enough) or `LEDGER_SIGNING_KEY`
 to get a real verdict. `GET /api/v1/status` reports both as
-`ledgerPublicKeyProvided` and `ledgerSigningKeyProvided`.
+`ledgerPublicKeyProvided` and `ledgerSigningKeyProvided`, and
+`ledgerRetiredKeyCount` says how many earlier keys the deployment still accepts.
+
+### Key identity and rotation
+
+Every entry written since migration 0014 carries `signingKeyId`: the first 16
+hex characters of SHA-256 over the signing key's SPKI DER, derivable from either
+half of the key. Older entries carry `null`. The label is outside both the body
+hash and the chain hash — it selects which key to check against and proves
+nothing by itself; the signature must still verify under the key it names.
+
+Verification accepts a **keyring**: the current key plus every public key in
+`LEDGER_RETIRED_PUBLIC_KEYS`. A labelled entry is checked against the key it
+names; an unlabelled one against any key in the ring. So a rotated key keeps
+the history it signed verifiable, and a label the ring does not know is
+reported as its own case, again with `valid: null`:
+
+```json
+{"data":{"valid":null,"checkedEntries":112,"reason":"entry #104 was signed by key 4f2a9c1e88b30d57, which is not in this deployment's keyring (a71b0e6640cc2f93), so its authorship was not checked"}}
+```
+
+That message names the missing key and the ones the deployment has, which is
+the difference between a suspected forgery and a retired key that was never
+added to the bundle.
+
+A rotation is recorded in the ledger itself. The first append under a new key
+first writes a `system` entry with `action: "ledger_key_rotated"`, signed by
+the new key, whose `detail` is `{"from": "<old id>", "to": "<new id>"}`. A
+consumer following the ledger stream therefore sees the change of authority as
+an entry, not as a label that silently differs between two rows.
 
 The compatibility route `GET /api/ledger/verify` remains available for the
 Audit page and retains its legacy bare response:

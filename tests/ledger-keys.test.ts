@@ -2,7 +2,9 @@ import crypto from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { configFromEnv, type VestiarionConfig } from "@/lib/config";
 import {
+  detectKeyRotation,
   ledgerKeyId,
+  ledgerKeyring,
   ledgerPublicKeyFromConfig,
   ledgerSigningKey,
   ledgerSigningKeyFromConfig,
@@ -239,5 +241,117 @@ describe("ledgerKeyId", () => {
 
   it("is 16 lowercase hex characters", () => {
     expect(ledgerKeyId(keypair().publicKey)).toMatch(/^[0-9a-f]{16}$/);
+  });
+});
+
+describe("ledgerKeyring", () => {
+  it("is empty when no key material is configured", () => {
+    expect(ledgerKeyring(config())).toEqual({ active: null, retired: [] });
+  });
+
+  it("puts the deployment's own key in the active slot", () => {
+    const key = keypair();
+    const ring = ledgerKeyring(config({ LEDGER_PUBLIC_KEY: key.publicPem }));
+
+    expect(ring.active).not.toBeNull();
+    expect(accepts(ring.active!, key.privateKey)).toBe(true);
+    expect(ring.retired).toEqual([]);
+  });
+
+  it("reads several retired public keys from one concatenated PEM bundle", () => {
+    // The same shape as a CA bundle: PEM blocks are self-delimiting, so one
+    // variable can carry every key that has ever signed without inventing a
+    // separator that a dashboard would then mangle.
+    const active = keypair();
+    const older = keypair();
+    const oldest = keypair();
+    const ring = ledgerKeyring(
+      config({
+        LEDGER_PUBLIC_KEY: active.publicPem,
+        LEDGER_RETIRED_PUBLIC_KEYS: older.publicPem + oldest.publicPem,
+      })
+    );
+
+    expect(ring.retired).toHaveLength(2);
+    expect(accepts(ring.retired[0], older.privateKey)).toBe(true);
+    expect(accepts(ring.retired[1], oldest.privateKey)).toBe(true);
+  });
+
+  it("accepts a retired bundle whose newlines arrived escaped", () => {
+    const older = keypair();
+    const ring = ledgerKeyring(
+      config({ LEDGER_RETIRED_PUBLIC_KEYS: older.publicPem.replace(/\n/g, "\\n") })
+    );
+
+    expect(ring.retired).toHaveLength(1);
+    expect(accepts(ring.retired[0], older.privateKey)).toBe(true);
+  });
+
+  it("rejects a private key in the retired bundle", () => {
+    // A retired *private* key has no reason to exist anywhere near a running
+    // deployment. Its presence is a mistake worth stopping on.
+    const older = keypair();
+    expect(() => ledgerKeyring(config({ LEDGER_RETIRED_PUBLIC_KEYS: older.privatePem }))).toThrow(
+      /LEDGER_RETIRED_PUBLIC_KEYS/
+    );
+  });
+
+  it("rejects a bundle containing no PEM block at all", () => {
+    expect(() => ledgerKeyring(config({ LEDGER_RETIRED_PUBLIC_KEYS: "not a pem" }))).toThrow(
+      /LEDGER_RETIRED_PUBLIC_KEYS/
+    );
+  });
+});
+
+/** The head of a ledger as rotation detection sees it: a signed body, maybe labelled. */
+function signedHead(privateKey: crypto.KeyObject, label: string | null) {
+  const bodyHash = crypto.createHash("sha256").update("head-body").digest("hex");
+  return {
+    signing_key_id: label,
+    body_hash: bodyHash,
+    signature: crypto.sign(null, Buffer.from(bodyHash, "hex"), privateKey).toString("hex"),
+  };
+}
+
+describe("detectKeyRotation", () => {
+  const old = keypair();
+  const current = keypair();
+  const ring = { active: current.publicKey, retired: [old.publicKey] };
+  const oldId = ledgerKeyId(old.publicKey);
+  const currentId = ledgerKeyId(current.publicKey);
+
+  it("finds nothing to rotate from on an empty ledger", () => {
+    expect(detectKeyRotation(null, ring)).toBeNull();
+  });
+
+  it("finds no rotation when the head already carries the active key", () => {
+    expect(detectKeyRotation(signedHead(current.privateKey, currentId), ring)).toBeNull();
+  });
+
+  it("reports a rotation when the head is labelled with a retired key", () => {
+    expect(detectKeyRotation(signedHead(old.privateKey, oldId), ring)).toEqual({ from: oldId, to: currentId });
+  });
+
+  it("recognises an unlabelled head signed by a retired key", () => {
+    // Every pre-identity row is unlabelled, so the first rotation after the
+    // migration has to be found by trying signatures, not by reading a label.
+    expect(detectKeyRotation(signedHead(old.privateKey, null), ring)).toEqual({ from: oldId, to: currentId });
+  });
+
+  it("finds no rotation for an unlabelled head signed by the active key", () => {
+    expect(detectKeyRotation(signedHead(current.privateKey, null), ring)).toBeNull();
+  });
+
+  it("does not attest a rotation from a key it does not know", () => {
+    // A head signed by a key outside the keyring is not something this
+    // deployment can vouch about. Verification will say so; rotation must not
+    // write an entry claiming a lineage it cannot check.
+    const stranger = keypair();
+    expect(detectKeyRotation(signedHead(stranger.privateKey, ledgerKeyId(stranger.publicKey)), ring)).toBeNull();
+    expect(detectKeyRotation(signedHead(stranger.privateKey, null), ring)).toBeNull();
+  });
+
+  it("reports nothing when there is no active key to rotate to", () => {
+    expect(detectKeyRotation(signedHead(old.privateKey, oldId), { active: null, retired: [old.publicKey] })).toBeNull();
   });
 });

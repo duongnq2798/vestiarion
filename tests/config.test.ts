@@ -165,6 +165,17 @@ describe("describeConfig", () => {
     ).toMatchObject({ ledgerPublicKeyProvided: true, ledgerSigningKeyProvided: false });
   });
 
+  it("counts the retired keys it still accepts, without reproducing them", () => {
+    // After a rotation an operator checks /api/v1/status to confirm the old key
+    // landed in the bundle. The count answers that; the material itself never
+    // needs to appear in a response, public or not.
+    const pem = "-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----\n";
+    expect(describeConfig(full())).toMatchObject({ ledgerRetiredKeyCount: 0 });
+    expect(
+      describeConfig(configFromEnv(env({ LEDGER_RETIRED_PUBLIC_KEYS: pem + pem })))
+    ).toMatchObject({ ledgerRetiredKeyCount: 2 });
+  });
+
   it("reports the database by host only", () => {
     expect(describeConfig(full()).database).toEqual({ host: "proj.supabase.co" });
   });
