@@ -1,4 +1,4 @@
-import { supabase, unwrap } from "../supabase";
+import { db, unwrap } from "../dal";
 import type {
   BalanceSnapshot,
   ChainProvider,
@@ -36,13 +36,13 @@ export class SimulateProvider implements ChainProvider {
 
   private async account(id: string): Promise<AccountRow> {
     return unwrap(
-      await supabase().from("accounts").select("*").eq("id", id).single<AccountRow>()
+      await db().from("accounts").select("*").eq("id", id).single<AccountRow>()
     );
   }
 
   private async addBalance(id: string, delta: number, current: number): Promise<void> {
     const next = Number((current + delta).toFixed(6));
-    const res = await supabase().from("accounts").update({ balance: next }).eq("id", id);
+    const res = await db().from("accounts").update({ balance: next }).eq("id", id);
     if (res.error) throw new Error(res.error.message);
   }
 

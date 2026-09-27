@@ -1,4 +1,4 @@
-import { supabase, unwrap } from "./supabase";
+import { db, unwrap } from "./dal";
 
 export function median(values: number[]): number | null {
   if (values.length === 0) return null;
@@ -21,16 +21,16 @@ export interface LandingMetrics {
 
 /** Server-only source for every number rendered as a landing-page metric. */
 export async function getLandingMetrics(): Promise<LandingMetrics> {
-  const db = supabase();
+  const client = db();
   const [runsResult, transfersResult, ledgerResult] = await Promise.all([
-    db.from("cycle_runs").select("decision_count, finished_at").order("finished_at", { ascending: true }),
-    db
+    client.from("cycle_runs").select("decision_count, finished_at").order("finished_at", { ascending: true }),
+    client
       .from("payment_intents")
       .select("fee_usd, fee_source, settled_in_ms")
       .eq("provider_mode", "live")
       .eq("status", "confirmed")
       .not("executed_at", "is", null),
-    db.from("ledger_entries").select("*", { count: "exact", head: true }),
+    client.from("ledger_entries").select("*", { count: "exact", head: true }),
   ]);
 
   const runs = unwrap(runsResult) as Array<{ decision_count: number; finished_at: string }>;

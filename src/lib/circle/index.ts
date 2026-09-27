@@ -8,7 +8,7 @@ import type {
 } from "./types";
 import { SimulateProvider } from "./simulateProvider";
 import { LiveProvider } from "./liveProvider";
-import { currentConfig } from "../context";
+import { currentOrgConfig } from "../context";
 import type { VestiarionConfig } from "../config";
 
 /**
@@ -69,7 +69,7 @@ class HybridProvider implements ChainProvider {
 const providers = new WeakMap<VestiarionConfig, ChainProvider>();
 
 export function getChainProvider(): ChainProvider {
-  const config = currentConfig();
+  const config = currentOrgConfig();
   const existing = providers.get(config);
   if (existing) return existing;
 
@@ -81,6 +81,12 @@ export function getChainProvider(): ChainProvider {
 
   providers.set(config, provider);
   return provider;
+}
+
+/** What a page shows about payments and yield, computed inside the organization's scope. */
+export function chainModes(): { mode: "live" | "simulate"; earnMode: "live" | "simulate" } {
+  const provider = getChainProvider();
+  return { mode: provider.mode, earnMode: provider.earnMode };
 }
 
 export type {

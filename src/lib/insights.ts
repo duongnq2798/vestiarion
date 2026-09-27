@@ -1,4 +1,4 @@
-import { supabase, unwrap } from "./supabase";
+import { db, unwrap } from "./dal";
 
 const num = (value: unknown): number => Number(value ?? 0);
 
@@ -115,7 +115,7 @@ export function annotateScreeningChanges(rows: ScreeningRow[]): ScreeningTelemet
 
 async function listTransferTelemetry(): Promise<TransferTelemetry[]> {
   const rows = unwrap(
-    await supabase()
+    await db()
       .from("payment_intents")
       .select("id, source_type, source_id, provider_tx_id, tx_hash, fee_usd, fee_source, settled_in_ms, chain, provider_mode, executed_at, status")
       .not("executed_at", "is", null)
@@ -145,7 +145,7 @@ async function listTransferTelemetry(): Promise<TransferTelemetry[]> {
 
 async function listCycleRuns(): Promise<CycleRunTelemetry[]> {
   const rows = unwrap(
-    await supabase().from("cycle_runs").select("*").order("finished_at", { ascending: false }).limit(120)
+    await db().from("cycle_runs").select("*").order("finished_at", { ascending: false }).limit(120)
   ) as Array<Record<string, unknown>>;
   return rows.reverse().map((row) => ({
     id: String(row.id),
@@ -173,7 +173,7 @@ async function listCycleRuns(): Promise<CycleRunTelemetry[]> {
 
 async function listCycleSnapshots(): Promise<CycleSnapshotTelemetry[]> {
   const rows = unwrap(
-    await supabase().from("cycle_snapshots").select("*").order("captured_at", { ascending: false }).limit(120)
+    await db().from("cycle_snapshots").select("*").order("captured_at", { ascending: false }).limit(120)
   ) as Array<Record<string, unknown>>;
   return rows.reverse().map((row) => ({
     id: String(row.id),
@@ -191,7 +191,7 @@ async function listCycleSnapshots(): Promise<CycleSnapshotTelemetry[]> {
 
 async function listTreasuryMoves(): Promise<TreasuryMoveTelemetry[]> {
   const rows = unwrap(
-    await supabase().from("treasury_actions").select("id, action, amount, created_at").order("created_at", { ascending: false }).limit(120)
+    await db().from("treasury_actions").select("id, action, amount, created_at").order("created_at", { ascending: false }).limit(120)
   ) as Array<Record<string, unknown>>;
   return rows.reverse().map((row) => ({
     id: String(row.id),
@@ -203,7 +203,7 @@ async function listTreasuryMoves(): Promise<TreasuryMoveTelemetry[]> {
 
 async function listScreeningHistory(): Promise<ScreeningTelemetry[]> {
   const rows = unwrap(
-    await supabase()
+    await db()
       .from("compliance_checks")
       .select("id, counterparty_id, risk_level, screening_mode, source, status, created_at, counterparties(name)")
       .order("created_at", { ascending: false })

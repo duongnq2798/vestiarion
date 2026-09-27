@@ -2,7 +2,7 @@ import {
   initiateDeveloperControlledWalletsClient,
   type CircleDeveloperControlledWalletsClient,
 } from "@circle-fin/developer-controlled-wallets";
-import { supabase, unwrap } from "../supabase";
+import { db, unwrap } from "../dal";
 import type {
   BalanceSnapshot,
   ChainProvider,
@@ -93,7 +93,7 @@ export class LiveProvider implements ChainProvider {
 
   private async account(accountId: string): Promise<AccountRow & { walletId: string }> {
     const row = unwrap(
-      await supabase()
+      await db()
         .from("accounts")
         .select("id, chain, token, circle_wallet_id")
         .eq("id", accountId)

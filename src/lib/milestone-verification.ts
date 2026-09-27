@@ -1,6 +1,6 @@
 import { parseGitHubPullRequestUrl, verifyGitHubPullRequest } from "./github-verification";
 import { appendLedgerEntry } from "./ledger";
-import { supabase, unwrap } from "./supabase";
+import { db, unwrap } from "./dal";
 
 interface MilestoneVerificationRow {
   id: string;
@@ -21,9 +21,9 @@ export interface VerificationRefreshResult {
 
 /** Refresh GitHub-backed evidence before the contractor release pass. */
 export async function refreshGitHubMilestones(): Promise<VerificationRefreshResult> {
-  const db = supabase();
+  const client = db();
   const rows = unwrap(
-    await db
+    await client
       .from("milestones")
       .select("id, title, verification_source, verification_method, verification_status, verified, status")
       .neq("status", "paid")
@@ -58,7 +58,7 @@ export async function refreshGitHubMilestones(): Promise<VerificationRefreshResu
       ? { pullRequest: ref.url, state: result.state, mergedAt: result.mergedAt }
       : { pullRequest: ref.url, error: result.reason };
 
-    const update = await db.from("milestones").update({
+    const update = await client.from("milestones").update({
       verified: nextVerified,
       status: nextStatus,
       verification_method: "github",

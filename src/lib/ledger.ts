@@ -1,8 +1,6 @@
 import crypto from "node:crypto";
-import path from "node:path";
-import fs from "node:fs";
-import { supabase, unwrap } from "./supabase";
-import { currentConfig } from "./context";
+import { db, unwrap } from "./dal";
+import { currentOrgConfig, currentSecretWarnings } from "./context";
 import type { VestiarionConfig } from "./config";
 import {
   detectKeyRotation,
@@ -34,8 +32,7 @@ import {
  * `prev_hash` and fork the chain.
  *
  * A deployment's signing key comes from its configuration and is held only in
- * memory; a development checkout falls back to a generated key under `data/`
- * (gitignored). Verifying needs only the public half, so a host that serves the
+ * memory. Verifying needs only the public half, so a host that serves the
  * audit trail without appending to it holds no secret at all. In a real
  * deployment the private key belongs in a KMS, which would replace
  * `ledgerSigningKey`'s source and nothing else.
@@ -43,59 +40,20 @@ import {
 
 const GENESIS_HASH = "0".repeat(64);
 
-const keyDir = path.join(process.cwd(), "data");
-const privKeyPath = path.join(keyDir, "ledger-signing-key.pem");
-const pubKeyPath = path.join(keyDir, "ledger-signing-key.pub.pem");
-
-/**
- * A development checkout's throwaway key, kept under `data/`.
- *
- * `create()` is the only thing in this module that writes, and `ledgerSigningKey`
- * reaches it only where `allowGeneratedLedgerKey` is true. So a production host
- * never attempts the `mkdir` that used to take the whole ledger down with it,
- * and a configured key never travels through the filesystem on its way to
- * being used.
- *
- * STILL NOT PER-TENANT. A configured key now belongs to a config, so two
- * scopes carrying their own `LEDGER_SIGNING_KEY` already sign as themselves.
- * This fallback does not: it is one fixed path, so two businesses sharing a
- * development process and no configured key would sign with the same key and
- * each could verify the other's chain as its own. Real multi-tenant use needs
- * a configured key per tenant, which is now possible rather than merely
- * planned.
- */
-const localLedgerKeys: LocalLedgerKeyStore = {
-  read() {
-    if (!fs.existsSync(privKeyPath)) return null;
-    return crypto.createPrivateKey(fs.readFileSync(privKeyPath));
-  },
-  create() {
-    const { publicKey, privateKey } = crypto.generateKeyPairSync("ed25519");
-    fs.mkdirSync(keyDir, { recursive: true });
-    fs.writeFileSync(privKeyPath, privateKey.export({ type: "pkcs8", format: "pem" }));
-    fs.writeFileSync(pubKeyPath, publicKey.export({ type: "spki", format: "pem" }));
-    return privateKey;
+/** Organizations sign only with their own persisted key (spec §5.4); a key file on this machine is nobody's. */
+const NO_LOCAL_KEYS: LocalLedgerKeyStore = {
+  read: () => null,
+  create: () => {
+    throw new Error("an organization's ledger key is created with the organization, never on demand");
   },
 };
 
 /**
- * The public half of whatever key this deployment verifies against, or `null`
- * when it declares none.
- *
- * Reading a public key must never create one: a serverless host has no writable
- * disk, and the audit page returned 500 for exactly that reason. Configuration
- * first, then a development checkout's existing file, and never a key brought
- * into being by being asked for.
+ * The public half of whatever key this organization verifies against, or
+ * `null` when it declares none.
  */
 function ledgerReadKeyring(): LedgerReadKeys {
-  const keys = ledgerReadKeys(currentConfig());
-  if (!keys.active) {
-    if (fs.existsSync(pubKeyPath)) keys.active = crypto.createPublicKey(fs.readFileSync(pubKeyPath));
-    else if (fs.existsSync(privKeyPath)) {
-      keys.active = crypto.createPublicKey(crypto.createPrivateKey(fs.readFileSync(privKeyPath)));
-    }
-  }
-  return keys;
+  return ledgerReadKeys(currentOrgConfig());
 }
 
 function ledgerPublicKey(): crypto.KeyObject | null {
@@ -104,7 +62,7 @@ function ledgerPublicKey(): crypto.KeyObject | null {
 
 /** Configuration problems the read path met, for the audit page to say in words. */
 export function ledgerReadWarnings(): string[] {
-  return ledgerReadKeyring().warnings;
+  return [...currentSecretWarnings(), ...ledgerReadKeyring().warnings];
 }
 
 /** The id of the key this deployment verifies with, for display beside it. */
@@ -226,7 +184,7 @@ async function appendSigned(input: LedgerEntryInput, privateKey: crypto.KeyObjec
     .toString("hex");
 
   const row = unwrap(
-    await supabase()
+    await db()
       .rpc("append_ledger_entry", {
         p_actor: input.actor,
         p_domain: input.domain,
@@ -250,7 +208,7 @@ async function appendSigned(input: LedgerEntryInput, privateKey: crypto.KeyObjec
  */
 async function recordKeyRotationIfAny(privateKey: crypto.KeyObject): Promise<void> {
   const head = unwrap(
-    await supabase()
+    await db()
       .from("ledger_entries")
       .select("signing_key_id, body_hash, signature")
       .order("seq", { ascending: false })
@@ -296,15 +254,15 @@ function rotationRecorded(config: VestiarionConfig, privateKey: crypto.KeyObject
 }
 
 export async function appendLedgerEntry(input: LedgerEntryInput): Promise<LedgerEntry> {
-  const config = currentConfig();
-  const privateKey = ledgerSigningKey(config, localLedgerKeys);
+  const config = currentOrgConfig();
+  const privateKey = ledgerSigningKey(config, NO_LOCAL_KEYS);
   await rotationRecorded(config, privateKey);
   return appendSigned(input, privateKey);
 }
 
 export async function listLedgerEntries(limit = 200): Promise<LedgerEntry[]> {
   const rows = unwrap(
-    await supabase()
+    await db()
       .from("ledger_entries")
       .select("*")
       .order("seq", { ascending: false })
@@ -322,7 +280,7 @@ export async function listLedgerEntriesForTargets({
 }): Promise<LedgerEntry[]> {
   if (invoiceIds.length === 0 && milestoneIds.length === 0) return [];
   const rows = unwrap(
-    await supabase().rpc("ledger_entries_for_targets", {
+    await db().rpc("ledger_entries_for_targets", {
       p_invoice_ids: invoiceIds,
       p_milestone_ids: milestoneIds,
     })
@@ -332,7 +290,7 @@ export async function listLedgerEntriesForTargets({
 
 export async function listLedgerEntriesByDomain(domain: LedgerDomain, limit = 100): Promise<LedgerEntry[]> {
   const rows = unwrap(
-    await supabase()
+    await db()
       .from("ledger_entries")
       .select("*")
       .eq("domain", domain)
@@ -344,7 +302,7 @@ export async function listLedgerEntriesByDomain(domain: LedgerDomain, limit = 10
 
 export async function listLedgerEntriesAfter(sequence: number): Promise<LedgerEntry[]> {
   const rows = unwrap(
-    await supabase()
+    await db()
       .from("ledger_entries")
       .select("*")
       .gt("seq", sequence)
@@ -362,7 +320,7 @@ export async function listLedgerEntryPage({
   domain?: LedgerDomain;
   limit?: number;
 } = {}): Promise<LedgerEntry[]> {
-  let query = supabase()
+  let query = db()
     .from("ledger_entries")
     .select("*")
     .order("seq", { ascending: false })
@@ -374,7 +332,7 @@ export async function listLedgerEntryPage({
 }
 
 export async function ledgerEntryCount(): Promise<number> {
-  const result = await supabase().from("ledger_entries").select("*", { count: "exact", head: true });
+  const result = await db().from("ledger_entries").select("*", { count: "exact", head: true });
   if (result.error) throw new Error(result.error.message);
   return result.count ?? 0;
 }
@@ -514,10 +472,9 @@ function verifyRows(rows: LedgerRow[], keyring: LedgerKeyring): VerificationResu
 }
 
 /**
- * The keys this deployment accepts signatures from. The active slot honours
- * the development checkout's file fallback the same way `ledgerPublicKey()`
- * does; retired keys come from configuration alone, because nothing on disk
- * ever retired.
+ * The keys this organization accepts signatures from: the active slot from
+ * its own configuration, exactly as `ledgerPublicKey()` reads it, plus
+ * whatever it has retired.
  */
 export function ledgerVerificationKeyring(): LedgerKeyring {
   return ledgerReadKeyring();
@@ -526,7 +483,7 @@ export function ledgerVerificationKeyring(): LedgerKeyring {
 /** Verifies the ledger as stored in Postgres, oldest entry first. */
 export async function verifyLedger(): Promise<VerificationResult> {
   const rows = unwrap(
-    await supabase().from("ledger_entries").select("*").order("seq", { ascending: true })
+    await db().from("ledger_entries").select("*").order("seq", { ascending: true })
   ) as LedgerRow[];
   return verifyChain(rows, ledgerVerificationKeyring());
 }

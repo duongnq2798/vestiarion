@@ -1,4 +1,4 @@
-import { supabase, unwrap } from "./supabase";
+import { db, unwrap } from "./dal";
 import { cycleClockMode, type CycleClockMode } from "./clock";
 import type { CounterpartyHistoryInputs } from "./agent/counterparty-history";
 
@@ -26,7 +26,7 @@ export interface AccountRow {
 
 export async function listAccounts(): Promise<AccountRow[]> {
   const rows = unwrap(
-    await supabase().from("accounts").select("*").order("kind", { ascending: true })
+    await db().from("accounts").select("*").order("kind", { ascending: true })
   ) as Record<string, unknown>[];
   return rows.map((r) => ({
     ...(r as unknown as AccountRow),
@@ -53,7 +53,7 @@ export interface CounterpartyRow {
 
 export async function listCounterparties(): Promise<CounterpartyRow[]> {
   const rows = unwrap(
-    await supabase().from("counterparties").select("*").order("name")
+    await db().from("counterparties").select("*").order("name")
   ) as Record<string, unknown>[];
   return rows.map((r) => ({
     ...(r as unknown as CounterpartyRow),
@@ -83,7 +83,7 @@ export interface InvoiceRow {
 
 export async function listInvoices(): Promise<InvoiceRow[]> {
   const rows = unwrap(
-    await supabase()
+    await db()
       .from("invoices")
       .select("*, counterparties(name)")
       .order("due_date", { ascending: true })
@@ -116,7 +116,7 @@ export interface MilestoneRow {
 
 export async function listMilestones(): Promise<MilestoneRow[]> {
   const rows = unwrap(
-    await supabase()
+    await db()
       .from("milestones")
       .select("*, counterparties(name)")
       .order("created_at", { ascending: true })
@@ -139,7 +139,7 @@ export interface TreasuryActionRow {
 
 export async function listTreasuryActions(): Promise<TreasuryActionRow[]> {
   const rows = unwrap(
-    await supabase()
+    await db()
       .from("treasury_actions")
       .select("*")
       .order("created_at", { ascending: false })
@@ -162,7 +162,7 @@ export interface ForecastRow {
 
 export async function latestForecast(): Promise<ForecastRow | undefined> {
   const rows = unwrap(
-    await supabase()
+    await db()
       .from("forecasts")
       .select("*")
       .order("created_at", { ascending: false })
@@ -189,15 +189,17 @@ export interface DashboardStats {
 }
 
 export async function stats(): Promise<DashboardStats> {
-  const db = supabase();
+  const client = db();
 
   const [paidInvoices, paidMilestones, clock, decisions, flagged, latestCycle] = await Promise.all([
-    db.from("invoices").select("amount, tx_ref").eq("status", "paid"),
-    db.from("milestones").select("amount, tx_ref").eq("status", "paid"),
-    db.from("sim_clock").select("current_day").eq("id", 1).single(),
-    db.from("ledger_entries").select("*", { count: "exact", head: true }).eq("actor", "agent"),
-    db.from("invoices").select("*", { count: "exact", head: true }).eq("status", "flagged"),
-    db.from("ledger_entries").select("ts").eq("action", "cycle_complete").order("seq", { ascending: false }).limit(1).maybeSingle(),
+    client.from("invoices").select("amount, tx_ref").eq("status", "paid"),
+    client.from("milestones").select("amount, tx_ref").eq("status", "paid"),
+    // No row yet is not an error: an organization that has never run a
+    // simulated cycle has no sim_clock row until its first one.
+    client.from("sim_clock").select("current_day").maybeSingle(),
+    client.from("ledger_entries").select("*", { count: "exact", head: true }).eq("actor", "agent"),
+    client.from("invoices").select("*", { count: "exact", head: true }).eq("status", "flagged"),
+    client.from("ledger_entries").select("ts").eq("action", "cycle_complete").order("seq", { ascending: false }).limit(1).maybeSingle(),
   ]);
 
   const paid = [
