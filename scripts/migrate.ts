@@ -3,6 +3,7 @@
  * project, in filename order.
  *
  *   npm run db:migrate
+ *   npm run db:migrate -- --through 0016
  *
  * Needs SUPABASE_PROJECT_ID and SUPABASE_DATABASE_PASSWORD (Project Settings
  * > Database). Each file runs inside one transaction, so a failure leaves
@@ -13,6 +14,7 @@ import { config } from "dotenv";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { Client } from "pg";
+import { selectMigrations } from "../src/lib/platform/migrations";
 
 config({ path: [".env.local", ".env"], quiet: true });
 
@@ -31,9 +33,17 @@ function connectionString(): string {
   return `postgresql://postgres.${ref}:${encodeURIComponent(password)}@aws-0-${region}.pooler.supabase.com:5432/postgres`;
 }
 
+function throughArgument(argv: string[]): string | undefined {
+  const index = argv.indexOf("--through");
+  if (index === -1) return undefined;
+  const value = argv[index + 1];
+  if (!value) throw new Error("--through needs a migration number, e.g. --through 0016");
+  return value;
+}
+
 async function main() {
   const dir = path.join(process.cwd(), "supabase", "migrations");
-  const files = readdirSync(dir).filter((f) => f.endsWith(".sql")).sort();
+  const files = selectMigrations(readdirSync(dir).filter((f) => f.endsWith(".sql")), throughArgument(process.argv.slice(2)));
   if (files.length === 0) {
     console.log("No migrations found.");
     return;

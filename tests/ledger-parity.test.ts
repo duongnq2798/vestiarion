@@ -121,19 +121,22 @@ describe("append_ledger_entry() agrees with verifyChain()", () => {
 });
 
 describe("migration 0014 on a real Postgres", () => {
-  it("leaves exactly one append_ledger_entry, so a caller cannot reach an older shape", async () => {
-    // PostgREST resolves an RPC by name and argument names. Two overloads would
-    // let a caller silently land on the one that records no key. This was
-    // observed by hand on production when the migration was applied; here it
-    // is pinned.
+  it("every append_ledger_entry records the signing key id, so no caller can reach a shape that drops it", async () => {
+    // PostgREST resolves an RPC by name and argument names. The hazard 0014
+    // actually named is a shape that records no key at all — not "there is
+    // exactly one" — because 0016 deliberately adds a second overload
+    // (p_org_id-first) for its deploy window, alongside the one pinned here.
+    // 0017 (Task 9) drops the old shape and returns this to exactly one.
     const result = await db.query<{ args: string }>(
       `select pg_get_function_identity_arguments(p.oid) as args
          from pg_proc p join pg_namespace n on n.oid = p.pronamespace
         where n.nspname = 'public' and p.proname = 'append_ledger_entry'`
     );
 
-    expect(result.rows).toHaveLength(1);
-    expect(result.rows[0].args).toContain("p_signing_key_id");
+    expect(result.rows.length).toBeGreaterThanOrEqual(1);
+    for (const row of result.rows) {
+      expect(row.args).toContain("p_signing_key_id");
+    }
   });
 
   it("records null for a caller that sends no key id, as pre-identity code did", async () => {
