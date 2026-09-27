@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { NoOrgScopeError, runWith } from "@/lib/context";
-import { db, platformDb, TENANT_TABLES } from "@/lib/dal";
+import { db, platformDb, TENANT_RPCS, TENANT_TABLES } from "@/lib/dal";
 import { carriesOrg, fakeSupabase } from "./support/fake-supabase";
 
 const ORG_A = "0b6c1c9e-4a4f-4a7e-9b1e-000000000a0a";
@@ -19,6 +19,21 @@ describe("db() outside an organization", () => {
   it("throws before any request is made", async () => {
     const { fake, result } = scoped(() => db(), null);
     await expect(result).rejects.toThrow(NoOrgScopeError);
+    expect(fake.requests).toEqual([]);
+  });
+});
+
+describe("a handle's bound organization", () => {
+  it("refuses to act once a nested scope enters another organization", async () => {
+    // db() binds its organization when it is called, not on every use. A
+    // handle kept past a nested `runWith` for another organization must
+    // refuse rather than go on quietly serving the one it was created in.
+    const fake = fakeSupabase();
+    const result = runWith({ config, db: fake.client, orgId: ORG_A }, async () => {
+      const handle = db();
+      return runWith({ config, db: fake.client, orgId: ORG_B }, () => handle.from("invoices").select("*"));
+    });
+    await expect(result).rejects.toThrow(/belongs to a different organization/);
     expect(fake.requests).toEqual([]);
   });
 });
@@ -65,6 +80,26 @@ describe("db() writes", () => {
     expect(fake.requests).toEqual([]);
   });
 
+  it("refuses a foreign row inside an array insert", async () => {
+    const { fake, result } = scoped(async () => db().from("invoices").insert([{ amount: "1" }, { amount: "2", org_id: ORG_B }]));
+    await expect(result).rejects.toThrow(/names a different organization/);
+    expect(fake.requests).toEqual([]);
+  });
+
+  it("refuses a foreign row in an upsert", async () => {
+    const { fake, result } = scoped(async () =>
+      db().from("payment_intents").upsert({ idempotency_key: "k", org_id: ORG_B }, { onConflict: "org_id" })
+    );
+    await expect(result).rejects.toThrow(/names a different organization/);
+    expect(fake.requests).toEqual([]);
+  });
+
+  it("refuses a row with org_id explicitly null", async () => {
+    const { fake, result } = scoped(async () => db().from("invoices").insert({ amount: "1", org_id: null }));
+    await expect(result).rejects.toThrow(/names a different organization/);
+    expect(fake.requests).toEqual([]);
+  });
+
   it("confines an update to the organization and refuses to move a row out of it", async () => {
     const ok = scoped(async () => db().from("invoices").update({ status: "paid" }).eq("id", "i1"));
     await ok.result;
@@ -74,6 +109,7 @@ describe("db() writes", () => {
 
     const moved = scoped(async () => db().from("invoices").update({ org_id: ORG_B }).eq("id", "i1"));
     await expect(moved.result).rejects.toThrow(/names a different organization/);
+    expect(moved.fake.requests).toEqual([]);
   });
 
   it("confines a delete to the organization", async () => {
@@ -84,17 +120,46 @@ describe("db() writes", () => {
   });
 });
 
-describe("db() RPCs", () => {
-  it("passes the organization to every tenant function", async () => {
-    const { fake, result } = scoped(async () => db().rpc("claim_payment_intent", { p_idempotency_key: "k" }));
+describe("db() upserts that could update a row (R9)", () => {
+  it("refuses a merge upsert with no onConflict named", async () => {
+    const { fake, result } = scoped(async () => db().from("counterparties").upsert({ name: "Acme" }));
+    await expect(result).rejects.toThrow(/must name org_id in onConflict/);
+    expect(fake.requests).toEqual([]);
+  });
+
+  it("refuses a merge upsert whose onConflict does not include org_id", async () => {
+    const { fake, result } = scoped(async () =>
+      db().from("payment_intents").upsert({ idempotency_key: "k" }, { onConflict: "idempotency_key" })
+    );
+    await expect(result).rejects.toThrow(/must name org_id in onConflict/);
+    expect(fake.requests).toEqual([]);
+  });
+
+  it("accepts a merge upsert whose onConflict includes org_id", async () => {
+    const { fake, result } = scoped(async () => db().from("sim_clock").upsert({ current_day: 0 }, { onConflict: "org_id" }));
     await result;
-    expect(fake.requests[0].path).toBe("/rest/v1/rpc/claim_payment_intent");
-    expect(fake.requests[0].body).toEqual({ p_idempotency_key: "k", p_org_id: ORG_A });
+    expect(carriesOrg(fake.requests[0], ORG_A)).toBe(true);
+    expect(fake.requests[0].params.get("on_conflict")).toBe("org_id");
+  });
+});
+
+describe("db() RPCs", () => {
+  it.each(TENANT_RPCS)("passes the organization to %s", async (rpc) => {
+    const { fake, result } = scoped(async () => db().rpc(rpc, { some: "arg" }));
+    await result;
+    expect(fake.requests[0].path).toBe(`/rest/v1/rpc/${rpc}`);
+    expect(fake.requests[0].body).toEqual({ some: "arg", p_org_id: ORG_A });
   });
 
   it("does not let a caller pass a different organization", async () => {
     const { fake, result } = scoped(async () => db().rpc("advance_sim_day", { p_org_id: ORG_B }));
     await expect(result).rejects.toThrow(/names a different organization/);
+    expect(fake.requests).toEqual([]);
+  });
+
+  it("refuses an unknown RPC name", async () => {
+    const { fake, result } = scoped(async () => db().rpc("drop_everything" as never));
+    await expect(result).rejects.toThrow(/drop_everything is not a tenant function/);
     expect(fake.requests).toEqual([]);
   });
 });

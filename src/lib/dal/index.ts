@@ -9,7 +9,12 @@ import { currentContext, currentOrgId } from "../context";
  * every insert and upsert stamps it, and every tenant RPC receives it as
  * `p_org_id`. A caller cannot widen that: a row or an argument naming another
  * organization is refused, not re-stamped, because it means some other code
- * path already crossed a tenant boundary.
+ * path already crossed a tenant boundary. An upsert that could still *update*
+ * a row — anything but `ignoreDuplicates` — must also name `org_id` in
+ * `onConflict`, or the conflict key it does name could resolve onto another
+ * organization's row. And the organization is bound once, when `db()` is
+ * called: a handle kept past a nested scope for another organization refuses
+ * to act rather than keep serving the one it was created in.
  *
  * `platformDb()` reaches the three tables that exist before any organization
  * is known — organizations, memberships, invitations — and nothing else.
@@ -50,6 +55,37 @@ function stamp<T extends Row | Row[]>(values: T, orgId: string): T {
   return (Array.isArray(values) ? values.map(one) : one(values)) as T;
 }
 
+/**
+ * Merge-mode upsert — `ignoreDuplicates` unset or `false`, postgrest-js's own
+ * default — resolves the conflict on whatever `onConflict` names, and on the
+ * global `id` primary key when it names nothing. Naming `org_id` is what
+ * confines that resolution to rows already inside the organization; without
+ * it, an upsert stamped with the right `org_id` on *insert* would still
+ * *update* — and relabel into this organization — whatever row elsewhere
+ * happens to share the key it does name (R9). `ignoreDuplicates` upserts
+ * never update an existing row, so they carry no such risk.
+ */
+function refuseUnsafeUpsert(options?: { onConflict?: string; ignoreDuplicates?: boolean }): void {
+  if (options?.ignoreDuplicates === true) return;
+  const columns = (options?.onConflict ?? "").split(",").map((column) => column.trim());
+  if (!columns.includes("org_id")) {
+    throw new Error("An upsert that can update rows must name org_id in onConflict");
+  }
+}
+
+/**
+ * `db()` binds its organization once, when it is called. A handle kept
+ * across an `await` and then used inside a nested `runWith` for another
+ * organization must not go on acting for the first one, so `from()` and
+ * `rpc()` re-check the scope on every call rather than trusting the closure
+ * (R10).
+ */
+function refuseScopeMismatch(boundOrgId: string): void {
+  if (currentOrgId() !== boundOrgId) {
+    throw new Error("This database handle belongs to a different organization than the one in scope");
+  }
+}
+
 function tenantTable(client: SupabaseClient, table: TenantTable, orgId: string) {
   const from = () => client.from(table);
   return {
@@ -60,7 +96,10 @@ function tenantTable(client: SupabaseClient, table: TenantTable, orgId: string) 
     upsert: (
       values: Row | Row[],
       options?: { onConflict?: string; ignoreDuplicates?: boolean; count?: Count; defaultToNull?: boolean }
-    ) => from().upsert(stamp(values, orgId), options),
+    ) => {
+      refuseUnsafeUpsert(options);
+      return from().upsert(stamp(values, orgId), options);
+    },
     update: (values: Row, options?: { count?: Count }) => {
       refuseOtherOrg(values, orgId, "org_id");
       return from().update(values, options).eq("org_id", orgId);
@@ -75,10 +114,12 @@ export function db() {
   return {
     orgId,
     from(table: TenantTable) {
+      refuseScopeMismatch(orgId);
       if (!(TENANT_TABLES as readonly string[]).includes(table)) throw new Error(`${table} is not a tenant table`);
       return tenantTable(client, table, orgId);
     },
     rpc(name: TenantRpc, args: Row = {}, options?: { head?: boolean; get?: boolean; count?: Count }) {
+      refuseScopeMismatch(orgId);
       if (!(TENANT_RPCS as readonly string[]).includes(name)) throw new Error(`${name} is not a tenant function`);
       refuseOtherOrg(args, orgId, "p_org_id");
       return client.rpc(name, { ...args, p_org_id: orgId }, options);
