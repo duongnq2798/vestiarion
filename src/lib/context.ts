@@ -20,14 +20,34 @@ import { configFromEnv, type VestiarionConfig } from "./config";
  * module variable does not.
  *
  * A process with no scope entered falls back to one derived from the
- * environment. That keeps the single-tenant Next.js app working untouched, and
- * it is why `runWith` is additive rather than a breaking change.
+ * environment. The ambient fallback serves platform configuration (LLM,
+ * compliance, database URL), but never an organization — that requires an
+ * explicit scope via `currentOrgId()`, which throws `NoOrgScopeError` outside
+ * an organization's scope. That keeps the single-tenant Next.js app working
+ * untouched for its own configuration, and it is why `runWith` is additive
+ * rather than a breaking change. With more than one business, tenant data read
+ * outside a scope is an error rather than "whichever business the environment
+ * describes" — which would be the exact failure that puts one tenant's rows on
+ * another's screen.
  */
+
+/** Which organization, and for whom, the current work is being done. */
+export interface OrgScope {
+  orgId: string;
+  /** The signed-in person; absent for the cron and for scripts. */
+  userId?: string;
+  /** Why some of the organization's stored secrets could not be read. */
+  secretWarnings?: string[];
+}
 
 export interface VestiarionContext {
   config: VestiarionConfig;
   /** Service-role client. Bypasses row-level security; never expose to a browser. */
   db: SupabaseClient;
+  /** Absent outside an organization's scope — and then no tenant data may be touched. */
+  orgId?: string;
+  userId?: string;
+  secretWarnings?: string[];
 }
 
 const storage = new AsyncLocalStorage<VestiarionContext>();
@@ -41,8 +61,8 @@ function createDb(config: VestiarionConfig): SupabaseClient {
   });
 }
 
-export function createContext(config: VestiarionConfig): VestiarionContext {
-  return { config, db: createDb(config) };
+export function createContext(config: VestiarionConfig, scope: Partial<OrgScope> = {}): VestiarionContext {
+  return { config, db: createDb(config), ...scope };
 }
 
 /**
@@ -58,8 +78,8 @@ export function runWith<T>(context: VestiarionContext, fn: () => T): T {
 }
 
 /** Convenience for callers that have a config rather than a built context. */
-export function runWithConfig<T>(config: VestiarionConfig, fn: () => T): T {
-  return runWith(createContext(config), fn);
+export function runWithConfig<T>(config: VestiarionConfig, fn: () => T, scope?: Partial<OrgScope>): T {
+  return runWith(createContext(config, scope), fn);
 }
 
 /**
@@ -84,6 +104,48 @@ export function currentConfig(): VestiarionConfig {
 /** True when work is running inside an explicit scope rather than the ambient one. */
 export function hasScope(): boolean {
   return storage.getStore() !== undefined;
+}
+
+export class NoOrgScopeError extends Error {
+  constructor() {
+    super("Tenant data was touched with no organization in scope");
+    this.name = "NoOrgScopeError";
+  }
+}
+
+/**
+ * The organization the current work belongs to.
+ *
+ * There is deliberately no fallback. The ambient, environment-derived context
+ * never carries an organization, so tenant data read outside a scope is an
+ * error rather than "whichever business the environment describes" — which,
+ * with more than one business, is the exact failure that puts one tenant's
+ * rows on another's screen.
+ */
+export function currentOrgId(): string {
+  const orgId = storage.getStore()?.orgId;
+  if (!orgId) throw new NoOrgScopeError();
+  return orgId;
+}
+
+export function currentUserId(): string | undefined {
+  return storage.getStore()?.userId;
+}
+
+/**
+ * The configuration of the organization in scope. Anything that reads an
+ * organization's secrets — its ledger key, its Circle credentials — reads
+ * them through this, so that outside a scope it throws instead of quietly
+ * using the environment's.
+ */
+export function currentOrgConfig(): VestiarionConfig {
+  currentOrgId();
+  return currentConfig();
+}
+
+export function currentSecretWarnings(): string[] {
+  currentOrgId();
+  return storage.getStore()?.secretWarnings ?? [];
 }
 
 /**

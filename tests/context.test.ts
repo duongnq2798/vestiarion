@@ -4,7 +4,12 @@ import {
   createContext,
   currentConfig,
   currentContext,
+  currentOrgId,
+  currentUserId,
+  currentOrgConfig,
+  currentSecretWarnings,
   hasScope,
+  NoOrgScopeError,
   resetAmbientContext,
   runWith,
   runWithConfig,
@@ -159,5 +164,54 @@ describe("the ambient fallback", () => {
       expect(hasScope()).toBe(true);
       expect(currentConfig().businessName).toBe("Northstar Studio");
     });
+  });
+});
+
+const ORG_A = "0b6c1c9e-4a4f-4a7e-9b1e-000000000a0a";
+const ORG_B = "0b6c1c9e-4a4f-4a7e-9b1e-000000000b0b";
+
+describe("the organization in scope", () => {
+  it("is absent outside every scope, and asking for it throws", () => {
+    expect(currentContext().orgId).toBeUndefined();
+    expect(() => currentOrgId()).toThrow(NoOrgScopeError);
+  });
+
+  it("is absent in a scope that names only a configuration", () => {
+    runWithConfig(northstar, () => {
+      expect(() => currentOrgId()).toThrow("Tenant data was touched with no organization in scope");
+    });
+  });
+
+  it("is the one the scope names, and the inner scope wins", () => {
+    runWithConfig(northstar, () => {
+      expect(currentOrgId()).toBe(ORG_A);
+      runWithConfig(meridian, () => expect(currentOrgId()).toBe(ORG_B), { orgId: ORG_B });
+      expect(currentOrgId()).toBe(ORG_A);
+    }, { orgId: ORG_A });
+  });
+
+  it("survives awaits without leaking between concurrent scopes", async () => {
+    const seen = await Promise.all([
+      runWithConfig(northstar, async () => {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        return currentOrgId();
+      }, { orgId: ORG_A }),
+      runWithConfig(meridian, async () => currentOrgId(), { orgId: ORG_B }),
+    ]);
+    expect(seen).toEqual([ORG_A, ORG_B]);
+  });
+
+  it("carries the user when one is named", () => {
+    runWithConfig(northstar, () => expect(currentUserId()).toBe("user-1"), { orgId: ORG_A, userId: "user-1" });
+    runWithConfig(northstar, () => expect(currentUserId()).toBeUndefined(), { orgId: ORG_A });
+  });
+
+  it("guards the organization's configuration and its secret warnings", () => {
+    expect(() => currentOrgConfig()).toThrow(NoOrgScopeError);
+    expect(() => currentSecretWarnings()).toThrow(NoOrgScopeError);
+    runWithConfig(northstar, () => {
+      expect(currentOrgConfig().businessName).toBe("Northstar Studio");
+      expect(currentSecretWarnings()).toEqual(["stored key could not be read"]);
+    }, { orgId: ORG_A, secretWarnings: ["stored key could not be read"] });
   });
 });
