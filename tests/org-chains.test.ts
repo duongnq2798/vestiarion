@@ -94,16 +94,25 @@ describe("advance_sim_day(p_org_id)", () => {
     expect(foundingNow).toBe(founding);
   });
 
-  it("leaves the old signature working for the founding clock", async () => {
-    // Ruling R1: the old advance_sim_day() updates every row whose id is 1,
-    // and the second organization's sim_clock row (created above by the
-    // upsert in the per-org test) also has id default 1 — so its own return
-    // value is ambiguous between the two rows. Assert on the founding row's
-    // current_day before and after instead of on the function's return value.
+  it("leaves the old signature working for the founding clock, and never touches a new organization's clock", async () => {
+    // Ruling R1, revised for R5: R5 gave every new organization's sim_clock
+    // row id = null (a unique constraint permits any number of nulls; only
+    // the founding row, written by 0001 before this migration ever ran,
+    // still has id = 1). The old advance_sim_day()'s `where id = 1` can
+    // therefore only ever match the founding row — there is no second row
+    // for its return value to be ambiguous with anymore — so this also
+    // pins that a new organization's clock is left alone by the old call.
     const before = (await db.query<{ current_day: number }>("select current_day from sim_clock where org_id = $1", [FOUNDING_ORG_ID])).rows[0].current_day;
-    await db.query("select advance_sim_day() as d");
+    const otherBefore = (await db.query<{ current_day: number }>("select current_day from sim_clock where org_id = $1", [other])).rows[0].current_day;
+
+    const returned = (await db.query<{ d: number }>("select advance_sim_day() as d")).rows[0].d;
+
     const after = (await db.query<{ current_day: number }>("select current_day from sim_clock where org_id = $1", [FOUNDING_ORG_ID])).rows[0].current_day;
+    const otherAfter = (await db.query<{ current_day: number }>("select current_day from sim_clock where org_id = $1", [other])).rows[0].current_day;
+
     expect(after).toBe(before + 1);
+    expect(returned).toBe(after);
+    expect(otherAfter).toBe(otherBefore);
   });
 });
 
@@ -129,6 +138,28 @@ describe("ledger_entries_for_targets(p_org_id, …)", () => {
     await appendSignedForOrg(db, other, withTarget, key.privateKey);
     const rows = (await db.query<{ org_id: string }>("select * from ledger_entries_for_targets($1::uuid, array[$2::text])", [other, target])).rows;
     expect(rows.map((row) => row.org_id)).toEqual([other]);
+  });
+});
+
+describe("function privileges", () => {
+  it("keeps every append_ledger_entry, advance_sim_day, claim_payment_intent and ledger_entries_for_targets away from anon and authenticated", async () => {
+    // The browser has no legitimate direct RPC access to any of these — 0003
+    // and 0004/0007 lock the old signatures down, and 0016 must do the same
+    // for every signature it touches or leaves behind, old and new alike.
+    const functions = await db.query<{ fn: string; anon_exec: boolean; auth_exec: boolean }>(
+      `select p.oid::regprocedure::text as fn,
+              has_function_privilege('anon', p.oid, 'execute') as anon_exec,
+              has_function_privilege('authenticated', p.oid, 'execute') as auth_exec
+         from pg_proc p
+         join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'public'
+          and p.proname in ('append_ledger_entry', 'advance_sim_day', 'claim_payment_intent', 'ledger_entries_for_targets')`
+    );
+
+    expect(functions.rows.length).toBeGreaterThan(0);
+    for (const row of functions.rows) {
+      expect(row, row.fn).toMatchObject({ anon_exec: false, auth_exec: false });
+    }
   });
 });
 

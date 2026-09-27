@@ -100,6 +100,20 @@ begin
 end;
 $$;
 
+revoke execute on function public.append_ledger_entry(uuid, text, text, text, text, jsonb, text, text, text)
+  from public, anon, authenticated;
+grant execute on function public.append_ledger_entry(uuid, text, text, text, text, jsonb, text, text, text)
+  to service_role;
+
+-- Pre-existing gap, closed here: 0003 locked down the 7-argument
+-- append_ledger_entry, but 0014 dropped that signature and created this
+-- 8-argument one (to add p_signing_key_id) without re-applying the revoke,
+-- so it has been executable by anon/authenticated ever since 0014.
+revoke execute on function public.append_ledger_entry(text, text, text, text, jsonb, text, text, text)
+  from public, anon, authenticated;
+grant execute on function public.append_ledger_entry(text, text, text, text, jsonb, text, text, text)
+  to service_role;
+
 create or replace function public.ledger_entries_for_targets(
   p_org_id        uuid,
   p_invoice_ids   text[] default '{}'::text[],
@@ -131,6 +145,11 @@ as $$
   on conflict (org_id) do update set current_day = clock.current_day + 1
   returning current_day;
 $$;
+
+revoke execute on function public.advance_sim_day(uuid)
+  from public, anon, authenticated;
+grant execute on function public.advance_sim_day(uuid)
+  to service_role;
 
 -- ------------------------------------------------------- payment intents
 create or replace function public.claim_payment_intent(p_org_id uuid, p_idempotency_key text)
@@ -169,6 +188,7 @@ grant execute on function public.claim_payment_intent(uuid, text)
 -- drop function if exists public.advance_sim_day(uuid);
 -- drop function if exists public.claim_payment_intent(uuid, text);
 -- update public.sim_clock set id = 1 where org_id = '00000000-0000-4000-8000-000000000001';
+-- delete from public.sim_clock where org_id <> '00000000-0000-4000-8000-000000000001';
 -- alter table public.sim_clock alter column id set not null;
 -- alter table public.sim_clock alter column id set default 1;
 -- alter table public.sim_clock drop constraint sim_clock_id_key;
