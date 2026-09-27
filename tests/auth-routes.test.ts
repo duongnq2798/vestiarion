@@ -21,6 +21,10 @@ describe("safeNext — where to go after signing in", () => {
     ["javascript:alert(1)"],
     ["o/founding/console"],
     ["/o/founding\n/console"],
+    ["/.//evil.example"],
+    ["/..//evil.example"],
+    ["/%2e//evil.example"],
+    ["/o/../..//evil.example"],
   ])("sends anything else to the default: %s", (input) => {
     expect(safeNext(input as string | null | undefined)).toBe(DEFAULT_AFTER_LOGIN);
   });

@@ -1,14 +1,24 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { supabaseAuthEnv } from "@/lib/auth/env";
-import { loginRedirectFor } from "@/lib/auth/routes";
+import { supabaseAuthEnv, supabaseAuthEnvOrNull } from "@/lib/auth/env";
+import { loginRedirectFor, requiresSession } from "@/lib/auth/routes";
 
 /**
  * Refreshes an expiring session and sends signed-out visitors of product pages
  * to /login. Optimistic only — it reads the cookie and never the database; the
  * pages re-check with `verifySession()`.
+ *
+ * A public page must not go down because sign-in is misconfigured, so the
+ * routing decision comes first: only a path that `requiresSession` reads the
+ * env strictly (and throws if it is missing). A protected path still fails
+ * loudly, same as before.
  */
 export async function proxy(request: NextRequest) {
+  const pathname = request.nextUrl.pathname;
+  if (!requiresSession(pathname) && !supabaseAuthEnvOrNull()) {
+    return NextResponse.next();
+  }
+
   let response = NextResponse.next({ request });
   const { url, anonKey } = supabaseAuthEnv();
 
