@@ -99,3 +99,34 @@ describe("orgConfig", () => {
     expect(warnings[0]).not.toContain(ledgerPem);
   });
 });
+
+describe("orgConfig — credentialsUnreadable (R12)", () => {
+  // A stored Circle secret this deployment cannot open must not look like
+  // "no Circle credentials configured" — that is sandbox mode, and it would
+  // let getChainProvider() silently simulate a live organization's payments
+  // instead of refusing to pay (spec §5.4).
+
+  it("is set when the stored Circle API key cannot be decrypted", () => {
+    const { config } = orgConfig(base, row(OTHER_ORG, { apiKey: "org-key" }, strangerKeys), keys);
+    expect(config.chain.circleApiKey).toBeUndefined();
+    expect(config.chain.credentialsUnreadable).toContain("circle_api_key_enc");
+  });
+
+  it("is set when the stored Circle entity secret cannot be decrypted", () => {
+    const { config } = orgConfig(base, row(OTHER_ORG, { entity: "org-secret" }, strangerKeys), keys);
+    expect(config.chain.circleEntitySecret).toBeUndefined();
+    expect(config.chain.credentialsUnreadable).toContain("circle_entity_secret_enc");
+  });
+
+  it("is left unset for a row with no Circle credentials stored at all", () => {
+    const { config } = orgConfig(base, row(OTHER_ORG), keys);
+    expect(config.chain.credentialsUnreadable).toBeUndefined();
+  });
+
+  it("is left unset when the stored Circle credentials decrypt successfully", () => {
+    const { config } = orgConfig(base, row(OTHER_ORG, { apiKey: "org-key", entity: "org-secret" }, keys), keys);
+    expect(config.chain.circleApiKey).toBe("org-key");
+    expect(config.chain.circleEntitySecret).toBe("org-secret");
+    expect(config.chain.credentialsUnreadable).toBeUndefined();
+  });
+});

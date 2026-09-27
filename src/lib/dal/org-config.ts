@@ -56,14 +56,33 @@ export function orgConfig(
     }
   };
 
+  /**
+   * A stored Circle secret this deployment could not open must not be
+   * indistinguishable from "no Circle credentials configured" — that reads as
+   * sandbox mode, and would let `getChainProvider()` silently simulate a live
+   * organization's payments instead of refusing to pay (spec §5.4, R12).
+   * `open()` above already pushed a warning for the column that failed; the
+   * first such failure is enough to say so.
+   */
+  let credentialsUnreadable: string | undefined;
+  const openCircleSecret = (column: "circle_api_key_enc" | "circle_entity_secret_enc"): string | undefined => {
+    const before = warnings.length;
+    const value = open(column);
+    if (org[column] && value === undefined) credentialsUnreadable ??= warnings[before];
+    return value;
+  };
+  const circleApiKey = openCircleSecret("circle_api_key_enc");
+  const circleEntitySecret = openCircleSecret("circle_entity_secret_enc");
+
   return {
     config: {
       ...base,
       businessName: org.name,
       chain: {
         ...base.chain,
-        circleApiKey: open("circle_api_key_enc"),
-        circleEntitySecret: open("circle_entity_secret_enc"),
+        circleApiKey,
+        circleEntitySecret,
+        credentialsUnreadable,
       },
       ledgerSigningKey: open("ledger_signing_key_enc"),
       ledgerPublicKey: undefined,

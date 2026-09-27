@@ -1,6 +1,6 @@
 import { db, unwrap, type TenantTable } from "./dal";
 import { appendLedgerEntry } from "./ledger";
-import { currentConfig } from "./context";
+import { currentOrgConfig } from "./context";
 
 /**
  * Demo business: Northstar Studio, a four-person dev shop. The fixtures are
@@ -29,7 +29,7 @@ function daysFromNow(n: number) {
  * error, which is the whole point of running against Arc at all.
  */
 export function seedScale(): number {
-  const config = currentConfig();
+  const config = currentOrgConfig();
   if (config.seedScale != null && Number.isFinite(config.seedScale)) return config.seedScale;
   const live = !!config.chain.circleApiKey && !!config.chain.circleEntitySecret;
   return live ? 0.001 : 1;

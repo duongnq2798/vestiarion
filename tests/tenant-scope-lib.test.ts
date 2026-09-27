@@ -17,6 +17,7 @@ import {
   verifyLedger,
 } from "@/lib/ledger";
 import { latestForecast, listAccounts, listCounterparties, listInvoices, listMilestones, listTreasuryActions, stats } from "@/lib/queries";
+import { LedgerSigningKeyError } from "@/lib/ledger-keys";
 import { carriesOrg, fakeSupabase } from "./support/fake-supabase";
 
 /**
@@ -78,11 +79,24 @@ describe("an organization's secrets", () => {
   });
 
   it("make appending fail loudly when the organization has no signing key", async () => {
-    const orgConfig = { ...config, ledgerSigningKey: undefined, allowGeneratedLedgerKey: false };
+    const scopedConfig = { ...config, ledgerSigningKey: undefined, allowGeneratedLedgerKey: false };
+    const fake = fakeSupabase();
     await expect(
-      runWith({ config: orgConfig, db: fakeSupabase().client, orgId: ORG }, () =>
+      runWith({ config: scopedConfig, db: fake.client, orgId: ORG }, () =>
         appendLedgerEntry({ actor: "system", domain: "system", action: "note", summary: "x", detail: {} })
       )
-    ).rejects.toThrow();
+    ).rejects.toThrow(LedgerSigningKeyError);
+    expect(fake.requests.some((request) => request.path === "/rest/v1/rpc/append_ledger_entry")).toBe(false);
+  });
+
+  it("never invents a key on demand, even where this deployment allows a generated one — an organization's key is created only with the organization", async () => {
+    const scopedConfig = { ...config, ledgerSigningKey: undefined, allowGeneratedLedgerKey: true };
+    const fake = fakeSupabase();
+    await expect(
+      runWith({ config: scopedConfig, db: fake.client, orgId: ORG }, () =>
+        appendLedgerEntry({ actor: "system", domain: "system", action: "note", summary: "x", detail: {} })
+      )
+    ).rejects.toThrow(/created with the organization, never on demand/);
+    expect(fake.requests.some((request) => request.path === "/rest/v1/rpc/append_ledger_entry")).toBe(false);
   });
 });

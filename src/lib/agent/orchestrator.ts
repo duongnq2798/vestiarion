@@ -119,6 +119,21 @@ function payoutAddress(address: string | null, counterpartyId: string): string {
   return address ?? `sim:${counterpartyId}`;
 }
 
+/**
+ * The real-clock day, from the organization's own `sim_clock` row.
+ *
+ * A missing row is normal: an organization that has never run a simulated
+ * cycle has none yet, and the day defaults to zero. A request that failed
+ * outright is a different fact and must not be read the same way — that
+ * would start a cycle's records at a wrong day rather than refusing to start
+ * it at all.
+ */
+async function realClockDay(orgDb: OrgDb): Promise<number> {
+  const clock = await orgDb.from("sim_clock").select("current_day").maybeSingle<{ current_day: number }>();
+  if (clock.error) throw new Error(clock.error.message);
+  return clock.data?.current_day ?? 0;
+}
+
 interface CycleContext {
   db: OrgDb;
   provider: ReturnType<typeof getChainProvider>;
@@ -155,11 +170,9 @@ export async function runAgentCycle(options: { triggeredBy?: string } = {}): Pro
   const startedAt = new Date().toISOString();
   const clockMode = cycleClockMode();
 
-  // An organization that has never run a simulated cycle has no sim_clock
-  // row yet, so the real-clock read defaults the day rather than erroring.
   const day = clockMode === "simulate"
     ? unwrap(await orgDb.rpc("advance_sim_day").single<number>())
-    : (await orgDb.from("sim_clock").select("current_day").maybeSingle<{ current_day: number }>()).data?.current_day ?? 0;
+    : await realClockDay(orgDb);
 
   const run = unwrap(
     await orgDb

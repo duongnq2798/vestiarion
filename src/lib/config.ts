@@ -40,6 +40,15 @@ export interface ChainConfig {
   usdcTokenId?: string;
   /** Overrides the public Arc testnet RPC used to read real transaction fees. */
   arcRpcUrl?: string;
+  /**
+   * Why an organization's stored Circle credentials could not be opened. Set
+   * only by `orgConfig`, never by `configFromEnv`: a platform deployment has
+   * no sealed secrets to fail to open. Its presence, not its text, is what
+   * `getChainProvider()` acts on — a stored-but-unreadable credential must
+   * refuse rather than read as "no Circle credentials configured" and quietly
+   * simulate a live organization's payments (spec §5.4).
+   */
+  credentialsUnreadable?: string;
 }
 
 export interface LlmConfig {
