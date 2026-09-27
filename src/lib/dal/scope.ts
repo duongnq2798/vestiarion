@@ -1,6 +1,6 @@
 import { currentContext, runWith, type VestiarionContext } from "../context";
 import { parseMasterKeys, type MasterKey } from "../secrets";
-import { unwrap } from "../supabase";
+import { platformDb, unwrap } from "./index";
 import { FOUNDING_ORG_ID, ORG_SECRET_COLUMNS, orgConfig, type OrgRow } from "./org-config";
 
 /**
@@ -34,7 +34,7 @@ function masterKeys(): MasterKey[] | { unavailable: string } | null {
 }
 
 async function orgRowBy(column: "id" | "slug", value: string): Promise<OrgRow> {
-  const result = await currentContext().db.from("orgs").select(ORG_SECRET_COLUMNS).eq(column, value).single<OrgRow>();
+  const result = await platformDb().from("orgs").select(ORG_SECRET_COLUMNS).eq(column, value).single<OrgRow>();
   if (result.error?.code === "PGRST116") throw new Error(`No organization with ${column} ${value}`);
   return unwrap(result);
 }
