@@ -233,6 +233,25 @@ that is the first step of the plan:
   `request.jwt.claims` with `set local` inside each transaction — which is how Supabase itself feeds
   `auth.jwt()`, so the same policies apply unchanged. **Chosen if** Option A is rejected.
 
+**Decided on 2026-09-27: Option A.** Probe output (a token signed with a wrong secret as the control,
+then one signed with the project's legacy JWT secret, both claiming `role: authenticated`):
+
+    JWKS: 200 | algs: ES256
+    control   (wrong signature): HTTP 401 | code PGRST301 | No suitable key or wrong key type
+    candidate (project secret) : HTTP 403 | code 42501 | permission denied for table ledger_entries
+
+The control fails as a JWT error, so the probe discriminates. The candidate's signature is accepted and
+the request runs as `authenticated` — Postgres, not PostgREST, refuses it, because `0003` revoked that
+role's table grants. What this proves is acceptance. That `auth.jwt()` then carries the `org_id` claim
+is PostgREST's documented behaviour for an accepted token, not something this probe observed; Plan 2's
+first RLS test must assert it.
+
+Two consequences Plan 2 has to design for. The server needs `SUPABASE_JWT_SECRET` in production to sign
+per-request tokens, and it is as powerful as the service-role key. And the project now signs its own
+sessions with ES256; Option A depends on the **legacy** HS256 secret remaining accepted, so revoking
+it — by the operator or by Supabase retiring legacy keys — breaks Option A. Importing a signing key the
+server controls is the durable alternative to weigh.
+
 The cron uses the same mechanism per organization. The service role remains only for platform
 operations: creating organizations, the commands in 5.5, migrations.
 
@@ -332,6 +351,15 @@ organization's data through the UI or the API.
    routes move under `/o/[slug]`. Only the founding organization exists; the operator signs in as its
    owner. `AGENT_API_TOKEN` stops unlocking the UI; until step 5 enforces the full permission map,
    every mutating control requires the `owner` role — the one rule that is safe with a single user.
+   **Shipped 2026-09-27 as #8 (merge `c831b65`); measured on production:** `0015` applied and verified
+   (one founding organization, every row assigned, one FK per table, one `append_ledger_entry`
+   overload); legacy paths 307 to `/o/founding/…` with the query kept; signed-out product pages 307 to
+   `/login?next=…`; the operator signed in end to end and was granted owner (ledger #199, no email);
+   a UI-triggered cycle recorded `by` (#202) while cron cycles kept their shape (#198); the founding
+   secrets were encrypted into `orgs` under master key `v1`; a signed-in non-member saw "Workspace not
+   found"; the ledger stayed `valid: true` throughout. Follow-ups #9 and #10 made the sign-in failure
+   message honest and moved email links onto the site with branded templates, delivered through
+   Resend from `vestiarion.xyz`, now the canonical host.
 3. **The Data Access Layer:** `orgScoped()`, `currentOrgId()`, the lint rule, the eight direct callers
    migrated, per-organization ledger chains, per-organization secrets read from `orgs`. Because
    `currentOrgId()` now throws without a scope, the cron enters the founding organization's scope
