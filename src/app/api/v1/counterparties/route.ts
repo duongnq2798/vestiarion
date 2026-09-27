@@ -1,4 +1,4 @@
-import { supabase, unwrap } from "@/lib/supabase";
+import { db, unwrap } from "@/lib/dal";
 import { apiError, guardApiRequest, handleApiRequest } from "@/lib/api/guard";
 import {
   decodeCursor,
@@ -46,7 +46,7 @@ export async function GET(request: Request) {
     "GET /api/v1/counterparties",
     async (): Promise<ApiCollection<CounterpartyPayload>> => {
       // Newest first: this is a human-browsed book, not an append-only stream.
-      let query = supabase()
+      let query = db()
         .from("counterparties")
         .select(SELECT)
         .order("created_at", { ascending: false })

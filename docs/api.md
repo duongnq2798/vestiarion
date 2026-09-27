@@ -132,8 +132,14 @@ the new key, whose `detail` is `{"from": "<old id>", "to": "<new id>"}`. A
 consumer following the ledger stream therefore sees the change of authority as
 an entry, not as a label that silently differs between two rows.
 
-The compatibility route `GET /api/ledger/verify` remains available for the
-Audit page and retains its legacy bare response:
+The compatibility route `GET /api/ledger/verify?org=<slug>` remains available
+for the Audit page and retains its legacy bare response. It is member-only: it
+takes the signed-in session, not the bearer token, and verifies the named
+organization's chain for one of its members. Without a session it returns
+`401`; for an organization the caller is not a member of, or one that does not
+exist, it returns `404`, so it discloses neither whether another organization
+exists nor how long its chain is. Its errors keep the legacy bare shape,
+`{"error":"…"}`.
 
 ```json
 {"valid":true,"checkedEntries":99}

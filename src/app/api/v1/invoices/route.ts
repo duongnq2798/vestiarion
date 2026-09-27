@@ -1,4 +1,4 @@
-import { supabase, unwrap } from "@/lib/supabase";
+import { db, unwrap } from "@/lib/dal";
 import { guardApiRequest, apiError, handleApiRequest } from "@/lib/api/guard";
 import {
   decodeCursor,
@@ -79,7 +79,7 @@ export async function GET(request: Request) {
   return handleApiRequest(
     "GET /api/v1/invoices",
     async (): Promise<ApiCollection<InvoicePayload>> => {
-      let query = supabase()
+      let query = db()
         .from("invoices")
         .select(
           "id, direction, status, amount, currency, memo, po_reference, goods_received, due_date, decided_at, settled_at, escalated_at, agent_reasoning, tx_ref, created_at, counterparties(id, name, risk_level)"

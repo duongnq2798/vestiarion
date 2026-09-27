@@ -1,6 +1,6 @@
 import { describeConfig } from "@/lib/config";
 import { currentConfig } from "@/lib/context";
-import { getChainProvider } from "@/lib/circle";
+import { chainModes } from "@/lib/circle";
 import { screeningMode } from "@/lib/compliance";
 import { stats } from "@/lib/queries";
 import { guardApiRequest, handleApiRequest } from "@/lib/api/guard";
@@ -39,15 +39,17 @@ export async function GET(request: Request) {
 
   return handleApiRequest("GET /api/v1/status", async (): Promise<ApiResource<StatusPayload>> => {
     const config = currentConfig();
-    const provider = getChainProvider();
+    // Modes, not the provider: status must still answer when the
+    // organization's Circle credentials cannot be read (R12).
+    const modes = chainModes();
     const snapshot = await stats();
 
     return {
       data: {
         businessName: config.businessName,
         provenance: {
-          payments: provider.mode,
-          yield: provider.earnMode,
+          payments: modes.mode,
+          yield: modes.earnMode,
           screening: screeningMode(),
         },
         clock: {

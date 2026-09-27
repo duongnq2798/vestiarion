@@ -65,6 +65,12 @@ describe("every /o/[slug] page", () => {
   it.each(PAGES.map(rel))("%s renders per request", (file) => {
     expect(read(path.join(ROOT, file))).toContain('export const dynamic = "force-dynamic"');
   });
+
+  it.each(PAGES.map(rel))("%s loads its data inside the organization's scope", (file) => {
+    const body = defaultExportBody(read(path.join(ROOT, file)));
+    expect(body).toMatch(/const access = await requireMembership\(slug\);/);
+    expect(body).toMatch(/return inOrg\(access, async \(\) =>/);
+  });
 });
 
 describe("every server action", () => {
@@ -86,6 +92,26 @@ describe("every server action", () => {
 
   it.each(actions.map((action) => [action.label, action.body]))("%s awaits authorizeMutation first", (_label, body) => {
     expect(awaitedNames(body)[0]).toBe("authorizeMutation");
+  });
+
+  it.each(actions.map((action) => [action.label, action.body]))("%s does its work inside the organization's scope", (_label, body) => {
+    expect(body).toMatch(/return inOrg\(auth, async \(\) =>/);
+  });
+});
+
+describe("the entry points bound to the founding organization", () => {
+  it("the cron enters it explicitly", () => {
+    expect(read(path.join(ROOT, "src", "app", "api", "agent", "tick", "route.ts"))).toContain("withFoundingOrg(");
+  });
+
+  it("the ledger verify route checks the session and the membership before verifying", () => {
+    const source = read(path.join(ROOT, "src", "app", "api", "ledger", "verify", "route.ts"));
+    const session = source.indexOf("getSessionUser(");
+    const membership = source.indexOf("membershipFor(");
+    const verify = source.indexOf("verifyLedger(");
+    expect(session).toBeGreaterThan(-1);
+    expect(membership).toBeGreaterThan(session);
+    expect(verify).toBeGreaterThan(membership);
   });
 });
 

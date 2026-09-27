@@ -12,14 +12,14 @@ interface VerificationResponse {
   warnings?: string[];
 }
 
-export default function VerifyLedgerBadge() {
+export default function VerifyLedgerBadge({ orgSlug }: { orgSlug: string }) {
   const [pending, startTransition] = useTransition();
   const [result, setResult] = useState<VerificationResponse | null>(null);
 
   function verify() {
     startTransition(async () => {
       try {
-        const response = await fetch("/api/ledger/verify");
+        const response = await fetch(`/api/ledger/verify?org=${encodeURIComponent(orgSlug)}`);
         setResult((await response.json()) as VerificationResponse);
       } catch (error) {
         // A request that never arrived checked nothing. Calling that `false`

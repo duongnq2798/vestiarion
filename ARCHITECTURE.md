@@ -32,8 +32,8 @@ and chain-hash rules can be tested without a database.
 Collections intended for human browsing are newest first and use
 `created_at + id` as a stable cursor. The ledger is the exception: its
 gap-free sequence is ascending so integrations can resume from a watermark.
-The legacy `src/app/api/ledger/verify/route.ts` remains unchanged for the Audit
-page.
+The legacy `src/app/api/ledger/verify/route.ts` still serves the Audit page; it
+is member-only and takes `?org=<slug>` (see `docs/api.md`).
 
 ## Data ownership
 

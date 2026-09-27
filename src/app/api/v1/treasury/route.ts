@@ -1,4 +1,4 @@
-import { supabase, unwrap } from "@/lib/supabase";
+import { db, unwrap } from "@/lib/dal";
 import { guardApiRequest, handleApiRequest } from "@/lib/api/guard";
 import type { ApiResource } from "@/lib/api/contract";
 import { mapTreasuryPayload, type TreasuryPayload } from "@/lib/api/treasury";
@@ -12,20 +12,20 @@ export async function GET(request: Request) {
   return handleApiRequest(
     "GET /api/v1/treasury",
     async (): Promise<ApiResource<TreasuryPayload>> => {
-      const db = supabase();
+      const client = db();
       const [accountResult, snapshotResult, forecastResult, actionResult] = await Promise.all([
-        db
+        client
           .from("accounts")
           .select("id, name, kind, chain, token, address, balance, apy")
           .order("kind", { ascending: true })
           .order("name", { ascending: true }),
-        db
+        client
           .from("cycle_snapshots")
           .select("captured_at, obligations_due_7d, obligations_due_14d")
           .order("captured_at", { ascending: false })
           .limit(1)
           .maybeSingle(),
-        db
+        client
           .from("forecasts")
           .select(
             "id, as_of, horizon_days, projected_inflow, projected_outflow, liquid_balance, recommendation"
@@ -33,7 +33,7 @@ export async function GET(request: Request) {
           .order("created_at", { ascending: false })
           .limit(1)
           .maybeSingle(),
-        db
+        client
           .from("treasury_actions")
           .select("id, action, amount, from_account, to_account, reasoning, created_at")
           .order("created_at", { ascending: false })
