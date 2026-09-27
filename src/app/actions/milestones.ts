@@ -5,7 +5,7 @@ import "server-only";
 import { z } from "zod";
 import { authorizeMutation } from "@/lib/auth/authorize";
 import { revalidateOrgPages } from "@/lib/auth/revalidate";
-import { db, unwrap } from "@/lib/dal";
+import { db } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
 import { appendLedgerEntry } from "@/lib/ledger";
 
@@ -35,13 +35,16 @@ export async function manualMilestoneVerificationAction(
     if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? "Invalid verification input." };
 
     const { milestoneId, intent, note } = parsed.data;
-    const milestone = unwrap(
-      await db()
-        .from("milestones")
-        .select("id, title, verified, status, verification_source")
-        .eq("id", milestoneId)
-        .single<{ id: string; title: string; verified: boolean; status: string; verification_source: string | null }>()
-    );
+    // Scoped to the organization: another organization's milestone id is
+    // answered exactly like one that does not exist.
+    const lookup = await db()
+      .from("milestones")
+      .select("id, title, verified, status, verification_source")
+      .eq("id", milestoneId)
+      .maybeSingle<{ id: string; title: string; verified: boolean; status: string; verification_source: string | null }>();
+    if (lookup.error) throw new Error(lookup.error.message);
+    const milestone = lookup.data;
+    if (!milestone) return { ok: false, message: "Milestone not found." };
     if (milestone.status === "paid" && intent === "revoke") {
       return { ok: false, message: "A paid milestone cannot be unverified; record a correcting audit action instead." };
     }

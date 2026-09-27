@@ -26,7 +26,7 @@ export default async function ContractorsPage({ params }: { params: Promise<{ sl
     const decisions = milestones.map((milestone) => milestoneDecision(milestone, entries));
 
     return (
-      <ProductShell active="contractors" day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()} orgSlug={slug}>
+      <ProductShell active="contractors" day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()} orgSlug={slug} orgName={access.membership.name}>
         <PageHead
           title="Contractors"
           sub="Milestone pay follows verified work instead of a Net-30 calendar. Every release still passes risk and authority guardrails."

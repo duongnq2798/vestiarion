@@ -7,6 +7,13 @@
  *   npm run seed -- <org-slug>
  *   npm run bootstrap:circle -- <org-slug>
  *
+ * The wallets are minted with the organization's own Circle credentials,
+ * stored encrypted on the organization and opened inside its scope; for the
+ * founding organization, `npm run org:adopt-env` puts them there. This
+ * environment's CIRCLE_API_KEY and CIRCLE_ENTITY_SECRET are never used: they
+ * would mint another organization's wallets in the founding organization's
+ * Circle entity.
+ *
  * Counterparties get wallets here so the demo is verifiable: when the agent
  * pays Priya, you can watch the USDC land at a real Arc-testnet address. A
  * real deployment would store the address the counterparty gives you instead
@@ -16,6 +23,7 @@
  */
 import { config } from "dotenv";
 import { initiateDeveloperControlledWalletsClient } from "@circle-fin/developer-controlled-wallets";
+import { circleCredentialsFrom } from "./lib/circle-credentials";
 import { orgSlugFromArgv } from "./lib/org-arg";
 
 config({ path: [".env.local", ".env"], quiet: true });
@@ -27,14 +35,11 @@ const explain = (e: unknown) =>
   JSON.stringify((e as ApiError)?.response?.data ?? (e as ApiError)?.message ?? e);
 
 async function main() {
+  const slug = orgSlugFromArgv(process.argv.slice(2), "npm run bootstrap:circle -- <org-slug>");
   const { withOrgSlug } = await import("../src/lib/dal/scope");
-  await withOrgSlug(orgSlugFromArgv(process.argv.slice(2), "npm run bootstrap:circle -- <org-slug>"), async () => {
-    const apiKey = process.env.CIRCLE_API_KEY;
-    const entitySecret = process.env.CIRCLE_ENTITY_SECRET;
-    if (!apiKey || !entitySecret) {
-      console.error("Set CIRCLE_API_KEY and CIRCLE_ENTITY_SECRET in .env.local first.");
-      process.exit(1);
-    }
+  await withOrgSlug(slug, async () => {
+    const { currentOrgConfig } = await import("../src/lib/context");
+    const { apiKey, entitySecret } = circleCredentialsFrom(currentOrgConfig().chain, slug);
 
     const { db, unwrap } = await import("../src/lib/dal");
     const orgDb = db();
@@ -123,7 +128,7 @@ async function main() {
       console.log(`  Address: ${refreshed.address}`);
       console.log("  Faucet:  https://faucet.circle.com  (select Arc Testnet, 20 USDC / 2h)");
     }
-    console.log("Then run `npm run circle:doctor -- <org-slug>` to confirm the balance landed.");
+    console.log(`Then run \`npm run circle:doctor -- ${slug}\` to confirm the balance landed.`);
   });
 }
 

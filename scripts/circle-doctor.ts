@@ -8,9 +8,16 @@
  * real on-chain balance next to what the named organization's records
  * believe — a drift between the two is the thing most worth catching early in
  * a treasury app.
+ *
+ * It checks the organization's own Circle credentials, stored encrypted on
+ * the organization and opened inside its scope (for the founding
+ * organization, `npm run org:adopt-env` puts them there) — the credentials
+ * its payments actually use, not this environment's CIRCLE_API_KEY and
+ * CIRCLE_ENTITY_SECRET.
  */
 import { config } from "dotenv";
 import { initiateDeveloperControlledWalletsClient } from "@circle-fin/developer-controlled-wallets";
+import { circleCredentialsFrom } from "./lib/circle-credentials";
 import { orgSlugFromArgv } from "./lib/org-arg";
 
 config({ path: [".env.local", ".env"], quiet: true });
@@ -22,14 +29,14 @@ const explain = (e: unknown) =>
 const fmt = (n: number) => n.toFixed(6).replace(/0+$/, "").replace(/\.$/, "");
 
 async function main() {
+  const slug = orgSlugFromArgv(process.argv.slice(2), "npm run circle:doctor -- <org-slug>");
   const { withOrgSlug } = await import("../src/lib/dal/scope");
-  await withOrgSlug(orgSlugFromArgv(process.argv.slice(2), "npm run circle:doctor -- <org-slug>"), async () => {
-    const apiKey = process.env.CIRCLE_API_KEY;
-    const entitySecret = process.env.CIRCLE_ENTITY_SECRET;
-
-    console.log(`API key:       ${apiKey ? "present" : "MISSING"}`);
-    console.log(`Entity secret: ${entitySecret ? "present" : "MISSING"}`);
-    if (!apiKey || !entitySecret) process.exit(1);
+  await withOrgSlug(slug, async () => {
+    const { currentOrgConfig } = await import("../src/lib/context");
+    // Refuses, naming what is missing or why it could not be read, before
+    // anything reaches Circle.
+    const { apiKey, entitySecret } = circleCredentialsFrom(currentOrgConfig().chain, slug);
+    console.log(`Circle credentials: ${slug}'s own, stored on the organization`);
 
     const client = initiateDeveloperControlledWalletsClient({ apiKey, entitySecret });
 

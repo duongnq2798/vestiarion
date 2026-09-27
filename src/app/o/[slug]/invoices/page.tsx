@@ -47,7 +47,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
     const ordinaryPayables = payables.filter((decision) => decision.outcome !== "refused");
 
     return (
-      <ProductShell active="invoices" day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()} orgSlug={slug}>
+      <ProductShell active="invoices" day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()} orgSlug={slug} orgName={access.membership.name}>
         <PageHead
           title="AP / AR"
           sub="Three-way match, counterparty risk, and payment authority — with the agent’s complete reasoning on every line."

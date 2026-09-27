@@ -32,7 +32,7 @@ export default async function CompliancePage({ params }: { params: Promise<{ slu
     const riskChanges = entries.filter((entry) => entry.action === "risk_level_changed").slice(0, 5);
 
     return (
-      <ProductShell active="compliance" day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()} orgSlug={slug}>
+      <ProductShell active="compliance" day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()} orgSlug={slug} orgName={access.membership.name}>
         <PageHead
           title="Compliance"
           sub="Continuous screening changes payment authority by tier. A hit reduces a limit; it does not silently turn the counterparty into a yes/no ban."

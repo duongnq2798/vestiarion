@@ -31,7 +31,7 @@ export default async function CounterpartiesPage({ params }: { params: Promise<{
     ]);
 
     return (
-      <ProductShell active="counterparties" day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()} orgSlug={slug}>
+      <ProductShell active="counterparties" day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()} orgSlug={slug} orgName={access.membership.name}>
         <PageHead
           title="Counterparties"
           sub="Add the people and businesses Vestiarion may invoice or pay. Each new record is screened immediately."

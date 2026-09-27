@@ -50,7 +50,7 @@ export default async function AuditPage({ params, searchParams }: AuditPageProps
     const keyWarnings = ledgerReadWarnings();
 
     return (
-      <ProductShell active="audit" day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()} orgSlug={slug}>
+      <ProductShell active="audit" day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()} orgSlug={slug} orgName={access.membership.name}>
         <PageHead
           title="Audit log"
           sub="Every decision is appended here, hash-linked to the one before it and signed with Ed25519. The summary stays readable; raw detail and cryptographic material remain inspectable."

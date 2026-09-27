@@ -33,6 +33,7 @@ export function ProductShell({
   lastCycleAt,
   chainModes,
   orgSlug,
+  orgName,
   children,
 }: {
   active: NavKey;
@@ -41,6 +42,8 @@ export function ProductShell({
   lastCycleAt: string | null;
   chainModes: { mode: "live" | "simulate"; earnMode: "live" | "simulate" };
   orgSlug: string;
+  /** The organization's own name, never the platform's `BUSINESS_NAME`. */
+  orgName: string;
   children: ReactNode;
 }) {
   const legs: ProvenanceLeg[] = [
@@ -62,7 +65,7 @@ export function ProductShell({
                 </Link>
                 <Label>{clockMode === "simulate" ? `Day ${day}` : "Wall clock"}</Label>
               </div>
-              <p className="mt-2 truncate text-sm font-medium text-ink-2">{process.env.BUSINESS_NAME?.trim() || "Vestiarion workspace"}</p>
+              <p className="mt-2 truncate text-sm font-medium text-ink-2">{orgName}</p>
               <p className="mt-0.5 text-xs text-ink-3">{lastCycleAt ? `Last cycle ${new Date(lastCycleAt).toLocaleString()}` : "No cycle recorded yet"}</p>
             </div>
             <div className="flex shrink-0 flex-col items-end gap-2">

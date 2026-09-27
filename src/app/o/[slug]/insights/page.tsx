@@ -15,7 +15,7 @@ export default async function InsightsPage({ params }: { params: Promise<{ slug:
     const [data, dashboardStats] = await Promise.all([getInsightsData(), stats()]);
 
     return (
-      <ProductShell active="insights" day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()} orgSlug={slug}>
+      <ProductShell active="insights" day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()} orgSlug={slug} orgName={access.membership.name}>
         <PageHead
           title="Measured outcomes"
           sub="Receipts from completed cycles, payment execution, and screening checks. Empty space means the system has not measured it yet."

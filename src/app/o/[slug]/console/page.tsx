@@ -69,7 +69,7 @@ export default async function DashboardPage({
     const needsReview = stopped.length;
 
     return (
-      <ProductShell active="treasury" day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={modes} orgSlug={slug}>
+      <ProductShell active="treasury" day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={modes} orgSlug={slug} orgName={access.membership.name}>
         <PageHead
           title="Treasury"
           sub="What the agent holds, what it decided, and why."

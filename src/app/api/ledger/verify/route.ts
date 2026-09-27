@@ -15,9 +15,11 @@ export async function GET(request: Request) {
   const slug = new URL(request.url).searchParams.get("org") ?? "";
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Sign in to verify this ledger." }, { status: 401 });
-  const membership = await membershipFor(user.id, slug);
-  if (!membership) return NextResponse.json({ error: "Not found" }, { status: 404 });
   try {
+    // Inside the try, so a database error looking the membership up answers
+    // with the same fixed JSON as any other failure, not a framework 500.
+    const membership = await membershipFor(user.id, slug);
+    if (!membership) return NextResponse.json({ error: "Not found" }, { status: 404 });
     return NextResponse.json(await inOrg({ user, membership }, () => verifyLedger()));
   } catch (err) {
     console.error("ledger verification failed", err);
