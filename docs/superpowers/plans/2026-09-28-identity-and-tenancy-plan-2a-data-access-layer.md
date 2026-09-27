@@ -2136,7 +2136,7 @@ It ships in this branch and runs on production only after the new code is live (
 - Modify: `tests/support/pglite.ts` (`appendSigned` documents that it is pre-0017 only)
 
 **Interfaces:**
-- Produces: `org_id` without a default on all 12 tenant tables; the old RPC signatures dropped; `append_ledger_entry(p_org_id, …)` taking only the per-organization lock; `sim_clock.id` dropped.
+- Produces: `org_id` without a default on all 12 tenant tables; the old RPC signatures dropped; `append_ledger_entry(p_org_id, …)` taking only the per-organization lock. `sim_clock.id` stays as a vestigial nullable unique column (ledger Ruling R5): `0001`, which `db:migrate` replays every run, inserts into it and creates a function that reads it.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -2288,7 +2288,8 @@ begin
   end loop;
 end $$;
 
-alter table public.sim_clock drop column if exists id;
+-- sim_clock.id stays: 0001, which db:migrate replays on every run, inserts into
+-- it and creates advance_sim_day() over it. 0016 made it nullable and unique.
 
 -- Rollback (restores the defaults and the old signatures; run before reverting the code):
 -- do $$ declare t text; begin foreach t in array array['accounts','counterparties','invoices','milestones',
