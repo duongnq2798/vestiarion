@@ -40,7 +40,7 @@ export default async function CounterpartiesPage({ params }: { params: Promise<{
         {canMutate ? (
           <CounterpartyIntake orgSlug={slug} />
         ) : (
-          <p className="rounded-lg border border-dashed border-line-strong px-5 py-6 text-sm text-ink-2">Unlock controls above to add a counterparty.</p>
+          <p className="rounded-lg border border-dashed border-line-strong px-5 py-6 text-sm text-ink-2">Only an owner of this workspace can add counterparties.</p>
         )}
       </section>
 

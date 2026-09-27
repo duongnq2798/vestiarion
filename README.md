@@ -127,15 +127,23 @@ cp .env.example .env.local
 ```
 
 Create a [Supabase](https://supabase.com) project and put its URL and keys in `.env.local`
-(Project Settings → API, plus the database password and project ref under Database). Then:
+(Project Settings → API, plus the database password and project ref under Database). Also set
+`VESTIARION_MASTER_KEYS` (generate with
+`node -e "console.log('v1:' + require('crypto').randomBytes(32).toString('base64'))"`). Then:
 
 ```bash
 npm run db:migrate
 npm run dev
 ```
 
-Open `/console`, unlock controls with `AGENT_API_TOKEN`, and add counterparties and invoices through
-the product. Each **Run day** click advances the demo clock and runs the full decision loop. Out of
+Sign in at `/login` with your email, then grant yourself ownership of the founding organization:
+
+```bash
+npm run org:grant -- founding <your email> owner
+```
+
+Open `/o/founding/console` and add counterparties and invoices through the product. Each **Run day**
+click advances the demo clock and runs the full decision loop. Out of
 the box, payments are simulated against Arc's measured fee and latency profile ($0.0032, 2–5s) and
 decisions come from the rule-based heuristic. Those two figures are not quoted from a docs page:
 they were read back off Arc testnet from the receipts of real transfers this agent executed — see
@@ -293,8 +301,8 @@ so the ledger timestamp—not the nominal cron minute—is the source of truth f
 For automatic contractor evidence, put a full `https://github.com/<owner>/<repo>/pull/<number>` URL
 in `verification_source` and configure a read-only `GITHUB_TOKEN`. A merged response verifies the
 milestone; an unmerged response does not. Missing credentials and API failures are displayed as
-unavailable or failed while retaining the prior verdict. A control-session holder can instead add
-a manual verification note, which is written to the signed ledger with `actor: human`.
+unavailable or failed while retaining the prior verdict. An owner can instead add a manual
+verification note, which is written to the signed ledger with `actor: human`.
 
 ### Measurement provenance
 

@@ -2356,51 +2356,54 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 Operator steps are marked **[partner]** — they involve secrets or dashboards the agent does not touch.
 
-**Files:** none changed; this task opens the pull request and verifies production.
+**Files:** none changed; this task opens the pull request, proves sign-in locally before the merge, and verifies production.
 
 - [ ] **Step 1: [partner] Create the master key**
 
 Run: `node -e "console.log('v1:' + require('crypto').randomBytes(32).toString('base64'))"`
 Add the printed line as `VESTIARION_MASTER_KEYS=` to `.env.local`, and to Vercel (Production, **Sensitive**). Keep a copy somewhere safe: losing it makes every stored organization secret unreadable.
 
-- [ ] **Step 2: [partner] Check Vercel has the public auth settings**
+- [ ] **Step 2: [partner] Confirm Vercel's Production env before the merge build**
 
-Vercel must have `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` for Production. They are inlined at build time, so they must exist before the deploy.
+Confirm on Vercel (Production): `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (inlined at build time; no code used them before this branch), `SITE_URL=https://vestiarion.vercel.app` (sign-in throws in production without it), `VESTIARION_MASTER_KEYS`. Vercel applies env changes only to new deployments.
 
 - [ ] **Step 3: [partner] Configure Supabase Auth**
 
 Dashboard → *Authentication → URL Configuration*:
 - Site URL: `https://vestiarion.vercel.app`
-- Redirect URLs: `https://vestiarion.vercel.app/auth/callback`, `http://localhost:3000/auth/callback`
+- Redirect URLs, exactly: `https://vestiarion.vercel.app/auth/callback**` and `http://localhost:3000/auth/callback**` — no `*.vercel.app` or other wildcard host (Ruling 7). Sign-in started from any other host (a per-deployment Vercel URL) fails with the "different browser" message.
 
-Optional: enable the Google provider, then set `AUTH_GOOGLE_ENABLED=true` on Vercel.
+Addresses outside the Supabase project team need custom SMTP (spec §6; Plan 3); in Plan 1 only the operator signs in.
 
 - [ ] **Step 4: Open the pull request**
 
 Push the branch and open a PR titled `feat(auth): accounts and a founding organization (identity & tenancy, plan 1)`. Wait for `verify` and the Vercel build to pass.
 
-- [ ] **Step 5: Apply 0015 before deploying**
+- [ ] **Step 5: Apply migration 0015 outside the cron window**
+
+`agent-cycle.yml` runs at minute 17 of hours 00, 06, 12, 18 UTC; 0015 takes ACCESS EXCLUSIVE locks on 11 tables in one transaction.
 
 Run: `npm run db:migrate`
-Expected: every file prints `ok`, including `0015_tenancy.sql`. (The idempotency test in Task 3 is what makes re-running the earlier fourteen safe.)
+Expected: every file prints `ok`, including `0015_tenancy.sql`. The currently deployed code keeps working on the migrated schema (defaults fill `org_id`).
 
-- [ ] **Step 6: [partner] Merge**
+- [ ] **Step 6: [partner] Prove sign-in locally, before merge**
 
-Only on the partner's explicit instruction for this PR.
+Run: `npm run dev`
+Sign in at `http://localhost:3000/login` with the operator's own email. Expect `/onboarding` → "No workspace yet".
 
-- [ ] **Step 7: [partner] Sign in, and become the founding owner**
+Then: `npm run org:grant -- founding <operator email> owner`
+Expected: the success line with the new `membership_granted` ledger seq.
 
-Sign in at `https://vestiarion.vercel.app/login` with the operator's email. Expect `/onboarding` to say "No workspace yet". Then:
+Reload `/onboarding` → redirected to `/o/founding/console`. Run a cycle from the UI → the new cycle-complete ledger entry carries `detail.by` = the operator's user id.
 
-Run: `npm run org:grant -- founding <operator email> owner`
-Expected: `<email> is now owner of Vestiarion workspace (founding).`
-
-Reload `/onboarding` — expect a redirect to `/o/founding/console`.
-
-- [ ] **Step 8: Adopt the env secrets**
+- [ ] **Step 7: Adopt the env secrets**
 
 Run: `npm run org:adopt-env -- founding --expect-key-id 9b03458d9a617871`
-Expected: `ledger key 9b03458d9a617871 stored for founding …, and re-derived from the database.` Leave every env secret in place.
+Expected: `ledger key 9b03458d9a617871 stored … and re-derived from the database.` Leave every env secret in place.
+
+- [ ] **Step 8: [partner] Merge**
+
+Only on the partner's explicit instruction for this PR.
 
 - [ ] **Step 9: Measure production**
 
@@ -2411,14 +2414,16 @@ curl -s -o /dev/null -w "%{http_code} %{redirect_url}\n" "$U/o/founding/console"
 curl -s "$U/api/ledger/verify"
 ```
 
-Expected: `307 …/o/founding/console`; `307 …/login?next=%2Fo%2Ffounding%2Fconsole` (signed out); `{"valid":true,"checkedEntries":N}` with N ≥ 114.
+Expected: `/console` → `307 …/o/founding/console`; signed out `/o/founding/console` → `307 …/login?next=%2Fo%2Ffounding%2Fconsole`; `/api/ledger/verify` → `valid: true` with more entries than before.
 
-Signed in as the owner, in a browser: `/o/founding/audit` lists the entries and the verify badge reads "Chain intact"; the Run-cycle control is present.
+Signed in as the owner, in a browser: `/o/founding/audit` lists the entries and the verify badge reads "Chain intact".
 
-**[partner]** Sign in with a second account that is not a member: `/o/founding/console` must answer 404.
+**[partner]** Sign in with a second account that is not a member (needs an address the Supabase mailer delivers to): `/o/founding/console` must answer the "Workspace not found" page.
 
 Run: `gh workflow run agent-cycle.yml` and wait for success; `/api/ledger/verify` must then report more entries than before, still `valid: true`.
 
+The spec §9 "second sandbox organization" check is deferred to Plan 2 (Ruling 12).
+
 - [ ] **Step 10: Record the outcome**
 
-Add to the spec's §10 step 2 a line: `Shipped <date> as #<PR>; measured: <the four results above>.` Commit on `main` after the merge is deployed.
+Add to the spec's §10 step 2 a line: `Shipped <date> as #<PR>; measured: <the results above>.` Commit on `main` after the merge is deployed.

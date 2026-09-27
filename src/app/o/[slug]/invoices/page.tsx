@@ -72,7 +72,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
             </details>
           </div>
         ) : (
-          <p className="rounded-lg border border-dashed border-line-strong px-5 py-6 text-sm text-ink-2">Unlock controls above to add or import invoices.</p>
+          <p className="rounded-lg border border-dashed border-line-strong px-5 py-6 text-sm text-ink-2">Only an owner of this workspace can add or import invoices.</p>
         )}
       </section>
 
