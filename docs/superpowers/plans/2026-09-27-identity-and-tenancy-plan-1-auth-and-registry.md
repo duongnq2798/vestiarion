@@ -2391,6 +2391,8 @@ Expected: every file prints `ok`, including `0015_tenancy.sql`. The currently de
 Run: `npm run dev`
 Sign in at `http://localhost:3000/login` with the operator's own email. Expect `/onboarding` → "No workspace yet".
 
+Before running `org:grant`, open `http://localhost:3000/o/founding/console` and expect the "Workspace not found" page (not Next's bare 404) — it proves a signed-in non-member is refused without disclosure.
+
 Then: `npm run org:grant -- founding <operator email> owner`
 Expected: the success line with the new `membership_granted` ledger seq.
 
