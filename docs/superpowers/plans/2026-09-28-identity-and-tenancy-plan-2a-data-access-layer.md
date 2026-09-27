@@ -2136,7 +2136,7 @@ It ships in this branch and runs on production only after the new code is live (
 - Modify: `tests/support/pglite.ts` (`appendSigned` documents that it is pre-0017 only)
 
 **Interfaces:**
-- Produces: `org_id` without a default on all 12 tenant tables; the old RPC signatures dropped; `append_ledger_entry(p_org_id, …)` taking only the per-organization lock. `sim_clock.id` stays as a vestigial nullable unique column (ledger Ruling R5): `0001`, which `db:migrate` replays every run, inserts into it and creates a function that reads it.
+- Produces: `org_id` without a default on the 11 tenant tables of §5.2 (`sim_clock` keeps its founding default — Ruling R13); the old RPC signatures dropped; `append_ledger_entry(p_org_id, …)` taking only the per-organization lock. `sim_clock.id` stays as a vestigial nullable unique column (ledger Ruling R5): `0001`, which `db:migrate` replays every run, inserts into it and creates a function that reads it.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -2164,14 +2164,14 @@ describe("0017: the transitional parts are gone", () => {
     await contracted.close();
   });
 
-  it("no tenant table defaults org_id any more", async () => {
+  it("no tenant table defaults org_id any more, except sim_clock's bootstrap row (Ruling R13)", async () => {
     const rows = (await contracted.query<{ table_name: string; column_default: string | null }>(
       `select table_name, column_default from information_schema.columns
         where table_schema = 'public' and column_name = 'org_id' and table_name = any($1)`,
       [TENANT]
     )).rows;
     expect(rows.map((row) => row.table_name).sort()).toEqual([...TENANT].sort());
-    expect(rows.filter((row) => row.column_default !== null)).toEqual([]);
+    expect(rows.filter((row) => row.column_default !== null).map((row) => row.table_name)).toEqual(["sim_clock"]);
   });
 
   it("an insert that does not name its organization fails", async () => {
@@ -2302,12 +2302,17 @@ declare
 begin
   foreach t in array array[
     'accounts', 'counterparties', 'invoices', 'milestones', 'treasury_actions', 'compliance_checks',
-    'forecasts', 'ledger_entries', 'payment_intents', 'cycle_runs', 'cycle_snapshots', 'sim_clock'
+    'forecasts', 'ledger_entries', 'payment_intents', 'cycle_runs', 'cycle_snapshots'
   ]
   loop
     execute format('alter table public.%I alter column org_id drop default', t);
   end loop;
 end $$;
+
+-- sim_clock keeps its founding default (ledger Ruling R13): 0001, replayed on
+-- every db:migrate run, inserts its bootstrap row without naming org_id, and
+-- Postgres checks NOT NULL before ON CONFLICT. Every real write names its
+-- organization — advance_sim_day(p_org_id) and the DAL's stamped upsert.
 
 -- sim_clock.id stays: 0001, which db:migrate replays on every run, inserts into
 -- it and creates advance_sim_day() over it. 0016 made it nullable and unique.
