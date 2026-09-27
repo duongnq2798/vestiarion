@@ -14,7 +14,6 @@ import {
   runWith,
   runWithConfig,
 } from "@/lib/context";
-import { supabase } from "@/lib/supabase";
 
 function configFor(name: string, project: string): VestiarionConfig {
   return configFromEnv({
@@ -48,14 +47,14 @@ describe("scoping", () => {
   it("gives each scope its own database client", () => {
     // The property the module-level singleton destroyed: whoever called first
     // decided which database the whole process talked to.
-    const a = runWithConfig(northstar, () => supabase());
-    const b = runWithConfig(meridian, () => supabase());
+    const a = runWithConfig(northstar, () => currentContext().db);
+    const b = runWithConfig(meridian, () => currentContext().db);
     expect(a).not.toBe(b);
   });
 
   it("reuses one client within a scope rather than reconnecting per call", () => {
     const context = createContext(northstar);
-    const [first, second] = runWith(context, () => [supabase(), supabase()]);
+    const [first, second] = runWith(context, () => [currentContext().db, currentContext().db]);
     expect(first).toBe(second);
   });
 
@@ -90,13 +89,13 @@ describe("scoping", () => {
   it("keeps interleaved concurrent work on its own database throughout", async () => {
     const clients = await Promise.all([
       runWithConfig(northstar, async () => {
-        const before = supabase();
+        const before = currentContext().db;
         await new Promise((resolve) => setTimeout(resolve, 5));
-        return [before, supabase()];
+        return [before, currentContext().db];
       }),
       runWithConfig(meridian, async () => {
         await new Promise((resolve) => setTimeout(resolve, 1));
-        return [supabase(), supabase()];
+        return [currentContext().db, currentContext().db];
       }),
     ]);
 
