@@ -2,9 +2,9 @@
 
 import "server-only";
 
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { siteOrigin } from "@/lib/auth/env";
 import { safeNext } from "@/lib/auth/routes";
 import { createSupabaseServerClient } from "@/lib/auth/supabase-server";
 
@@ -13,12 +13,14 @@ export interface LoginState {
   message: string;
 }
 
-/** Supabase checks this against its allow-list of redirect URLs, so a forged Host cannot send the link elsewhere. */
-async function callbackUrl(next: FormDataEntryValue | null): Promise<string> {
-  const h = await headers();
-  const origin = h.get("origin") ?? `${h.get("x-forwarded-proto") ?? "https"}://${h.get("host")}`;
+/**
+ * Built from configuration, never from request headers — Origin and Host are
+ * client-supplied, and a forged Host could otherwise steer a magic link at an
+ * attacker's domain if the Supabase redirect allow-list is broad.
+ */
+function callbackUrl(next: FormDataEntryValue | null): string {
   const target = safeNext(typeof next === "string" ? next : null);
-  return `${origin}/auth/callback?next=${encodeURIComponent(target)}`;
+  return `${siteOrigin()}/auth/callback?next=${encodeURIComponent(target)}`;
 }
 
 export async function signInWithEmail(_previous: LoginState, formData: FormData): Promise<LoginState> {
@@ -28,7 +30,7 @@ export async function signInWithEmail(_previous: LoginState, formData: FormData)
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.auth.signInWithOtp({
     email,
-    options: { emailRedirectTo: await callbackUrl(formData.get("next")), shouldCreateUser: true },
+    options: { emailRedirectTo: callbackUrl(formData.get("next")), shouldCreateUser: true },
   });
   if (error) {
     console.error("sign-in link failed", error.message);
@@ -41,7 +43,7 @@ export async function signInWithGoogle(formData: FormData): Promise<void> {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
-    options: { redirectTo: await callbackUrl(formData.get("next")) },
+    options: { redirectTo: callbackUrl(formData.get("next")) },
   });
   if (error || !data.url) redirect("/login?error=google");
   redirect(data.url);
