@@ -188,3 +188,83 @@ describe("0016 is idempotent", () => {
     await fresh.close();
   }, 60_000);
 });
+
+describe("0017: the transitional parts are gone", () => {
+  let contracted: PGlite;
+  let northstar: string;
+  const TENANT = [
+    "accounts", "counterparties", "invoices", "milestones", "treasury_actions", "compliance_checks",
+    "forecasts", "ledger_entries", "payment_intents", "cycle_runs", "cycle_snapshots", "sim_clock",
+  ];
+
+  beforeAll(async () => {
+    contracted = await createDatabase();
+    await applyMigrations(contracted, THROUGH_0016);
+    await appendSignedForOrg(contracted, FOUNDING_ORG_ID, entry("before 0017"), key.privateKey);
+    await contracted.query("select advance_sim_day($1::uuid)", [FOUNDING_ORG_ID]);
+    await applyMigrations(contracted);
+    northstar = await createOrg(contracted, "northstar");
+  }, 60_000);
+
+  afterAll(async () => {
+    await contracted.close();
+  });
+
+  it("no tenant table defaults org_id any more, except sim_clock's bootstrap row (Ruling R13)", async () => {
+    const rows = (await contracted.query<{ table_name: string; column_default: string | null }>(
+      `select table_name, column_default from information_schema.columns
+        where table_schema = 'public' and column_name = 'org_id' and table_name = any($1)`,
+      [TENANT]
+    )).rows;
+    expect(rows.map((row) => row.table_name).sort()).toEqual([...TENANT].sort());
+    expect(rows.filter((row) => row.column_default !== null).map((row) => row.table_name)).toEqual(["sim_clock"]);
+  });
+
+  it("an insert that does not name its organization fails", async () => {
+    await expect(contracted.query("insert into counterparties (name, role) values ('No Org', 'vendor')")).rejects.toThrow(/org_id/);
+  });
+
+  it("keeps exactly one signature of each tenant function, all taking p_org_id", async () => {
+    const rows = (await contracted.query<{ proname: string; args: string }>(
+      `select p.proname, pg_get_function_identity_arguments(p.oid) as args
+         from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'public'
+          and p.proname in ('append_ledger_entry', 'advance_sim_day', 'claim_payment_intent', 'ledger_entries_for_targets')
+        order by p.proname`
+    )).rows;
+    expect(rows.map((row) => row.proname)).toEqual(["advance_sim_day", "append_ledger_entry", "claim_payment_intent", "ledger_entries_for_targets"]);
+    for (const row of rows) expect(row.args).toMatch(/^p_org_id uuid/);
+  });
+
+  it("keeps the founding chain and clock through the contraction", async () => {
+    await appendSignedForOrg(contracted, FOUNDING_ORG_ID, entry("after 0017"), key.privateKey);
+    const chain = (await contracted.query<LedgerRow>("select * from ledger_entries where org_id = $1 order by seq", [FOUNDING_ORG_ID])).rows;
+    expect(verifyChain(chain, ring)).toEqual({ valid: true, checkedEntries: 2 });
+    const day = (await contracted.query<{ d: number }>("select advance_sim_day($1::uuid) as d", [FOUNDING_ORG_ID])).rows[0].d;
+    expect(day).toBeGreaterThanOrEqual(2);
+  });
+
+  it("gives a new organization its own clock", async () => {
+    expect((await contracted.query<{ d: number }>("select advance_sim_day($1::uuid) as d", [northstar])).rows[0].d).toBe(1);
+  });
+
+  it("re-runs without error", async () => {
+    await applyMigrations(contracted);
+    await applyMigrations(contracted);
+  });
+
+  it("leaves no tenant function executable by the browser roles, even after a full replay", async () => {
+    // Replaying 0001–0007 re-creates the old signatures for a moment; 0017 drops
+    // them again, and the surviving ones must still refuse anon and authenticated.
+    const rows = (await contracted.query<{ fn: string; anon: boolean; auth: boolean }>(
+      `select p.oid::regprocedure::text as fn,
+              has_function_privilege('anon', p.oid, 'execute') as anon,
+              has_function_privilege('authenticated', p.oid, 'execute') as auth
+         from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'public'
+          and p.proname in ('append_ledger_entry', 'advance_sim_day', 'claim_payment_intent', 'ledger_entries_for_targets')`
+    )).rows;
+    expect(rows).toHaveLength(4);
+    expect(rows.filter((row) => row.anon || row.auth)).toEqual([]);
+  });
+});

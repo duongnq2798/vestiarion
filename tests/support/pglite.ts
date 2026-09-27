@@ -38,7 +38,10 @@ export async function applyMigrations(db: PGlite, include: (file: string) => boo
   }
 }
 
-/** Signs the way `appendLedgerEntry` does and hands the body to the real Postgres function to link. */
+/**
+ * Signs the way `appendLedgerEntry` does and hands the body to the real Postgres function to link.
+ * Calls the pre-0017 signature (no `p_org_id`): for tests of migrations before 0017 only.
+ */
 export async function appendSigned(
   db: PGlite,
   input: LedgerEntryInput,
