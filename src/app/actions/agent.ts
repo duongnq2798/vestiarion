@@ -18,7 +18,7 @@ export async function runAgentCycleAction(orgSlug: string): Promise<AgentActionR
   if (!auth.ok) return { ok: false, message: auth.message };
 
   try {
-    const result = await runAgentCycle();
+    const result = await runAgentCycle({ triggeredBy: auth.user.id });
     revalidateOrgPages();
     return {
       ok: true,

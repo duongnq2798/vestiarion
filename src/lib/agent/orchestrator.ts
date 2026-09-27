@@ -129,6 +129,7 @@ interface CycleContext {
   clockMode: CycleClockMode;
   day: number;
   cycleRunId: string;
+  triggeredBy?: string;
 }
 
 /**
@@ -145,7 +146,7 @@ interface CycleContext {
  * Before this, a cycle that died partway left no trace that it had run at all,
  * while everything it had already written stayed committed.
  */
-export async function runAgentCycle(): Promise<CycleResult> {
+export async function runAgentCycle(options: { triggeredBy?: string } = {}): Promise<CycleResult> {
   const db = supabase();
   const provider = getChainProvider();
   const lines: CycleLogLine[] = [];
@@ -177,6 +178,7 @@ export async function runAgentCycle(): Promise<CycleResult> {
 
   const ctx: CycleContext = {
     db, provider, lines, metrics, journal, startedAt, clockMode, day, cycleRunId: run.id,
+    triggeredBy: options.triggeredBy,
   };
 
   try {
@@ -221,7 +223,7 @@ export async function runAgentCycle(): Promise<CycleResult> {
 }
 
 async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
-  const { db, provider, lines, metrics, journal, startedAt, clockMode, day, cycleRunId } = ctx;
+  const { db, provider, lines, metrics, journal, startedAt, clockMode, day, cycleRunId, triggeredBy } = ctx;
 
   /**
    * Runs one stage, or records why it could not. A stage that throws no longer
@@ -1223,6 +1225,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
       ? `Agent cycle ${day} complete: ${cycleMetrics.decisionCount} agent decisions recorded`
       : `Agent cycle complete at ${finishedAt}: ${cycleMetrics.decisionCount} agent decisions recorded`,
     detail: {
+      ...(triggeredBy ? { by: triggeredBy } : {}),
       day,
       clockMode,
       startedAt,
