@@ -5,6 +5,7 @@ import "server-only";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { siteOrigin } from "@/lib/auth/env";
+import { signInFailureMessage } from "@/lib/auth/messages";
 import { safeNext } from "@/lib/auth/routes";
 import { createSupabaseServerClient } from "@/lib/auth/supabase-server";
 
@@ -33,8 +34,8 @@ export async function signInWithEmail(_previous: LoginState, formData: FormData)
     options: { emailRedirectTo: callbackUrl(formData.get("next")), shouldCreateUser: true },
   });
   if (error) {
-    console.error("sign-in link failed", error.message);
-    return { ok: false, message: "We could not send a sign-in link just now. Try again in a minute." };
+    console.error("sign-in link failed", error.status, error.code, error.message);
+    return { ok: false, message: signInFailureMessage(error) };
   }
   return { ok: true, message: `Check ${email} for a sign-in link, and open it in this browser.` };
 }
