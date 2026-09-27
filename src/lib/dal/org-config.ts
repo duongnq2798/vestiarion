@@ -31,7 +31,7 @@ type SecretColumn = "ledger_signing_key_enc" | "circle_api_key_enc" | "circle_en
 export function orgConfig(
   base: VestiarionConfig,
   org: OrgRow,
-  keys: MasterKey[] | null
+  keys: MasterKey[] | { unavailable: string } | null
 ): { config: VestiarionConfig; warnings: string[] } {
   const warnings: string[] = [];
   const open = (column: SecretColumn): string | undefined => {
@@ -39,6 +39,13 @@ export function orgConfig(
     if (!envelope) return undefined;
     if (!keys) {
       warnings.push(`${column} is stored, but VESTIARION_MASTER_KEYS is not set`);
+      return undefined;
+    }
+    if (!Array.isArray(keys)) {
+      // Set, but unparseable — a broken deployment, not a missing optional.
+      // Reading still carries on: this secret is left unset and reported,
+      // same as any other key it cannot open.
+      warnings.push(`${column} is stored, but ${keys.unavailable}`);
       return undefined;
     }
     try {

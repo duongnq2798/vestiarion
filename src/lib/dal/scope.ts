@@ -8,18 +8,29 @@ import { FOUNDING_ORG_ID, ORG_SECRET_COLUMNS, orgConfig, type OrgRow } from "./o
  * one of these; outside them, `currentOrgId()` throws.
  *
  * The organization's row is read once per scope and its secrets decrypted into
- * a configuration of its own. Nested scopes are safe: the inner one replaces
- * every organization field, so nothing of the outer organization survives.
+ * a configuration of its own. Nested scopes are safe: each one is built from
+ * the platform configuration carried in `platformConfig`, not from whatever
+ * organization happens to be in scope already, so entering a second
+ * organization from inside the first neither inherits nor leaks the first
+ * organization's secrets or settings.
  */
 
 /**
- * An unset master key is reported per secret by `orgConfig`, so reading keeps
- * working. A master key that is set but malformed throws: that is a broken
- * deployment, not a missing optional.
+ * Either the parsed master keys, the reason none are usable, or `null` when
+ * none are configured at all — `orgConfig` turns that reason into a warning
+ * per stored secret rather than losing the whole scope to it. A master key
+ * that is set but malformed is a broken deployment, not a missing optional,
+ * but §5.4/§8 still call for reading to continue and for signing or paying to
+ * be what fails, so this reports rather than throws.
  */
-function masterKeys(): MasterKey[] | null {
+function masterKeys(): MasterKey[] | { unavailable: string } | null {
   const raw = process.env.VESTIARION_MASTER_KEYS;
-  return raw && raw.trim() ? parseMasterKeys(raw) : null;
+  if (!raw || !raw.trim()) return null;
+  try {
+    return parseMasterKeys(raw);
+  } catch (error) {
+    return { unavailable: (error as Error).message };
+  }
 }
 
 async function orgRowBy(column: "id" | "slug", value: string): Promise<OrgRow> {
@@ -29,9 +40,14 @@ async function orgRowBy(column: "id" | "slug", value: string): Promise<OrgRow> {
 }
 
 function contextFor(org: OrgRow, userId: string | undefined): VestiarionContext {
-  const base = currentContext();
-  const { config, warnings } = orgConfig(base.config, org, masterKeys());
-  return { config, db: base.db, orgId: org.id, userId, secretWarnings: warnings };
+  const current = currentContext();
+  // Build from the platform base, not from whatever organization is already in
+  // scope: entering org B from inside org A must not make B's config a
+  // derivative of A's, so a nested `withOrg` still starts from the platform's
+  // own settings (§ R7).
+  const platformConfig = current.platformConfig ?? current.config;
+  const { config, warnings } = orgConfig(platformConfig, org, masterKeys());
+  return { config, db: current.db, orgId: org.id, userId, secretWarnings: warnings, platformConfig };
 }
 
 export async function orgContext(orgId: string, userId?: string): Promise<VestiarionContext> {
@@ -48,9 +64,9 @@ export async function withOrgSlug<T>(slug: string, fn: () => Promise<T>): Promis
 }
 
 /**
- * The founding organization, for the three places the spec binds to it: the
- * cron (§10.3), the v1 API until scoped keys exist (§4.5), and the public
- * landing page. Nothing else may use it as a default.
+ * The founding organization, for the four places the spec binds to it: the
+ * cron (§10.3), the v1 API until scoped keys exist (§4.5), the public landing
+ * page, and the demo reset. Nothing else may use it as a default.
  */
 export function withFoundingOrg<T>(fn: () => Promise<T>): Promise<T> {
   return withOrg(FOUNDING_ORG_ID, fn);

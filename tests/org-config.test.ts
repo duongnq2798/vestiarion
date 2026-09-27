@@ -89,4 +89,13 @@ describe("orgConfig", () => {
     expect(config.ledgerSigningKey).toBeUndefined();
     expect(warnings).toEqual(["ledger_signing_key_enc is stored, but VESTIARION_MASTER_KEYS is not set"]);
   });
+
+  it("reports, and leaves unset, a stored secret when the configured master keys are malformed", () => {
+    const { config, warnings } = orgConfig(base, row(OTHER_ORG, { ledger: ledgerPem }), {
+      unavailable: "VESTIARION_MASTER_KEYS entry 1 is not id:base64",
+    });
+    expect(config.ledgerSigningKey).toBeUndefined();
+    expect(warnings).toEqual(["ledger_signing_key_enc is stored, but VESTIARION_MASTER_KEYS entry 1 is not id:base64"]);
+    expect(warnings[0]).not.toContain(ledgerPem);
+  });
 });

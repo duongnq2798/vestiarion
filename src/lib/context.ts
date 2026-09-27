@@ -48,6 +48,11 @@ export interface VestiarionContext {
   orgId?: string;
   userId?: string;
   secretWarnings?: string[];
+  /**
+   * The platform configuration an organization's config was built from.
+   * Absent outside an organization's scope.
+   */
+  platformConfig?: VestiarionConfig;
 }
 
 const storage = new AsyncLocalStorage<VestiarionContext>();
