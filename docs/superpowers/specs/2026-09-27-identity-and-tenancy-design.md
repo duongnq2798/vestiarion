@@ -252,6 +252,16 @@ sessions with ES256; Option A depends on the **legacy** HS256 secret remaining a
 it — by the operator or by Supabase retiring legacy keys — breaks Option A. Importing a signing key the
 server controls is the durable alternative to weigh.
 
+**Signing key, decided on 2026-09-28: the legacy HS256 secret, behind one signing function.** The app's
+own `NEXT_PUBLIC_SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are themselves HS256 JWTs signed by
+that secret (checked: both decode to `alg: HS256`). Revoking it would already break every request the
+app makes, so Option A adds no dependency the app does not have. Importing an ES256 key only pays off
+together with moving to Supabase's newer API keys (`sb_publishable_…`, `sb_secret_…`); the two belong
+in one change, made before the legacy secret is ever revoked, and out of this tier. Until then, token
+minting lives in one module (`mintRequestToken`), so switching algorithm is a change to that module and
+to one environment variable. `SUPABASE_JWT_SECRET` goes to Vercel as a sensitive variable in step 4,
+not before.
+
 The cron uses the same mechanism per organization. The service role remains only for platform
 operations: creating organizations, the commands in 5.5, migrations.
 
@@ -384,6 +394,7 @@ Each step lands as its own pull request, with production measured after it deplo
 | Risk | Handling |
 |---|---|
 | Option A is rejected by the project's JWT configuration | Option B needs no new dependency; decided by the spike before any RLS work |
+| Supabase retires the legacy HS256 secret | The anon and service-role keys break at the same moment, so the app's migration to the newer API keys and an imported signing key is one change; token minting is isolated in `mintRequestToken` so that change is small |
 | The master key leaks from Vercel env and exposes every tenant's secrets | Accepted for this stage and stated; KMS is the next step, and the envelope's key id makes that migration possible without re-encrypting in place |
 | Moving every route under `/o/[slug]` breaks links and bookmarks | The founding organization's old paths redirect to `/o/founding/…` |
 | The existing agent-cycle rate limit (`rate-limit.ts`) is per-instance and therefore weak today | Recorded; the new limits are database-backed; replacing the old one is a follow-up, not part of this tier |
