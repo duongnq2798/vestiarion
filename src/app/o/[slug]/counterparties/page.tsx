@@ -3,7 +3,7 @@ import CounterpartyIntake from "@/components/intake/CounterpartyIntake";
 import { Money, SectionHead } from "@/components/vx/Primitives";
 import { PerformanceHistory } from "@/components/vx/PerformanceHistory";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
-import { hasAgentControlSession } from "@/lib/agent-session";
+import { viewerCanMutate } from "@/lib/auth/authorize";
 import { requireMembership } from "@/lib/auth/membership";
 import { listLedgerEntries } from "@/lib/ledger";
 import { listCounterparties, stats } from "@/lib/queries";
@@ -24,7 +24,7 @@ export default async function CounterpartiesPage({ params }: { params: Promise<{
     listCounterparties(),
     stats(),
     listLedgerEntries(1),
-    hasAgentControlSession(),
+    viewerCanMutate(slug),
   ]);
 
   return (
@@ -32,13 +32,13 @@ export default async function CounterpartiesPage({ params }: { params: Promise<{
       <PageHead
         title="Counterparties"
         sub="Add the people and businesses Vestiarion may invoice or pay. Each new record is screened immediately."
-        right={<AgentControls nextDay={dashboardStats.day + 1} headSeq={entries[0]?.seq ?? 0} clockMode={dashboardStats.clockMode} />}
+        right={<AgentControls orgSlug={slug} nextDay={dashboardStats.day + 1} headSeq={entries[0]?.seq ?? 0} clockMode={dashboardStats.clockMode} />}
       />
 
       <section className="mb-8">
         <SectionHead title="Add counterparty" meta="human-entered · screened on submission" />
         {canMutate ? (
-          <CounterpartyIntake />
+          <CounterpartyIntake orgSlug={slug} />
         ) : (
           <p className="rounded-lg border border-dashed border-line-strong px-5 py-6 text-sm text-ink-2">Unlock controls above to add a counterparty.</p>
         )}

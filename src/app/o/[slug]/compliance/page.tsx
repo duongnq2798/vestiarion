@@ -33,7 +33,7 @@ export default async function CompliancePage({ params }: { params: Promise<{ slu
       <PageHead
         title="Compliance"
         sub="Continuous screening changes payment authority by tier. A hit reduces a limit; it does not silently turn the counterparty into a yes/no ban."
-        right={<AgentControls nextDay={dashboardStats.day + 1} headSeq={headEntries[0]?.seq ?? 0} clockMode={dashboardStats.clockMode} />}
+        right={<AgentControls orgSlug={slug} nextDay={dashboardStats.day + 1} headSeq={headEntries[0]?.seq ?? 0} clockMode={dashboardStats.clockMode} />}
       />
 
       {lastSweep && (

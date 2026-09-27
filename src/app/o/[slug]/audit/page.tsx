@@ -51,7 +51,7 @@ export default async function AuditPage({ params, searchParams }: AuditPageProps
       <PageHead
         title="Audit log"
         sub="Every decision is appended here, hash-linked to the one before it and signed with Ed25519. The summary stays readable; raw detail and cryptographic material remain inspectable."
-        right={<AgentControls nextDay={dashboardStats.day + 1} headSeq={head?.seq ?? 0} clockMode={dashboardStats.clockMode} />}
+        right={<AgentControls orgSlug={slug} nextDay={dashboardStats.day + 1} headSeq={head?.seq ?? 0} clockMode={dashboardStats.clockMode} />}
       />
 
       <section aria-label="Hash chain" className="surface-shadow mb-6 rounded-2xl border border-line bg-surface p-4 sm:p-6">

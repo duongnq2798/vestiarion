@@ -6,7 +6,7 @@ import { createCounterpartyAction, type IntakeActionResult } from "@/app/actions
 const INITIAL: IntakeActionResult = { ok: false, message: "" };
 const INPUT = "h-10 w-full rounded-xl border border-line-strong bg-surface px-3 text-sm text-ink shadow-sm outline-none placeholder:text-ink-3 focus:border-agent focus:ring-2 focus:ring-agent-soft";
 
-export default function CounterpartyIntake() {
+export default function CounterpartyIntake({ orgSlug }: { orgSlug: string }) {
   const formRef = useRef<HTMLFormElement>(null);
   const [state, action, pending] = useActionState(createCounterpartyAction, INITIAL);
 
@@ -16,6 +16,7 @@ export default function CounterpartyIntake() {
 
   return (
     <form ref={formRef} action={action} className="surface-shadow rounded-2xl border border-line bg-surface p-4 sm:p-6">
+      <input type="hidden" name="orgSlug" value={orgSlug} />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Field label="Legal or trading name" htmlFor="cp-name">
           <input className={INPUT} id="cp-name" name="name" required maxLength={160} autoComplete="organization" />

@@ -1,11 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
-  agentSessionProof,
   bearerToken,
   evaluateResetGuard,
   hasValidAgentBearer,
   RESET_CONFIRMATION,
-  secureTokenMatches,
 } from "@/lib/agent-security";
 
 describe("agent bearer authentication", () => {
@@ -27,13 +25,6 @@ describe("agent bearer authentication", () => {
   it("parses only a single canonical bearer credential", () => {
     expect(bearerToken("Bearer abc.def-123")).toBe("abc.def-123");
     expect(bearerToken("Bearer abc def")).toBeNull();
-  });
-
-  it("compares session proofs without exposing the bearer token", () => {
-    const proof = agentSessionProof("top-secret");
-    expect(proof).not.toContain("top-secret");
-    expect(secureTokenMatches(proof, agentSessionProof("top-secret"))).toBe(true);
-    expect(secureTokenMatches(proof, agentSessionProof("other-secret"))).toBe(false);
   });
 });
 

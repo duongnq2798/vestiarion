@@ -4,10 +4,11 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { runAgentCycleAction } from "@/app/actions/agent";
 import type { CycleClockMode } from "@/lib/clock";
+import { orgHref } from "@/lib/auth/org-paths";
 
 const STEPS = ["reading invoices", "screening counterparties", "checking milestones", "testing treasury economics"];
 
-export default function AgentControlsClient({ nextDay, headSeq, clockMode }: { nextDay: number; headSeq?: number; clockMode: CycleClockMode }) {
+export default function AgentControlsClient({ orgSlug, nextDay, headSeq, clockMode }: { orgSlug: string; nextDay: number; headSeq?: number; clockMode: CycleClockMode }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [busy, setBusy] = useState(false);
@@ -15,7 +16,7 @@ export default function AgentControlsClient({ nextDay, headSeq, clockMode }: { n
 
   function refreshDashboard() {
     startTransition(() => {
-      router.push(headSeq == null ? "/console" : `/console?since=${headSeq}`);
+      router.push(headSeq == null ? orgHref(orgSlug, "/console") : orgHref(orgSlug, `/console?since=${headSeq}`));
       router.refresh();
     });
   }
@@ -24,7 +25,7 @@ export default function AgentControlsClient({ nextDay, headSeq, clockMode }: { n
     setBusy(true);
     setMessage(null);
     try {
-      const result = await runAgentCycleAction();
+      const result = await runAgentCycleAction(orgSlug);
       setMessage(result.ok ? result.message : `Cycle failed: ${result.message}`);
       if (result.ok) refreshDashboard();
     } catch (error) {

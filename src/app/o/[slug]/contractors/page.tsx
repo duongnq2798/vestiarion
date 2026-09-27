@@ -3,7 +3,7 @@ import MilestoneVerification from "@/components/MilestoneVerification";
 import { DecisionCard } from "@/components/vx/DecisionCard";
 import { milestoneDecision } from "@/components/vx/map";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
-import { hasAgentControlSession } from "@/lib/agent-session";
+import { viewerCanMutate } from "@/lib/auth/authorize";
 import { requireMembership } from "@/lib/auth/membership";
 import { listLedgerEntries, listLedgerEntriesForTargets } from "@/lib/ledger";
 import { listMilestones, stats } from "@/lib/queries";
@@ -17,7 +17,7 @@ export default async function ContractorsPage({ params }: { params: Promise<{ sl
     listMilestones(),
     listLedgerEntries(1),
     stats(),
-    hasAgentControlSession(),
+    viewerCanMutate(slug),
   ]);
   const entries = await listLedgerEntriesForTargets({ milestoneIds: milestones.map((milestone) => milestone.id) });
   const decisions = milestones.map((milestone) => milestoneDecision(milestone, entries));
@@ -27,7 +27,7 @@ export default async function ContractorsPage({ params }: { params: Promise<{ sl
       <PageHead
         title="Contractors"
         sub="Milestone pay follows verified work instead of a Net-30 calendar. Every release still passes risk and authority guardrails."
-        right={<AgentControls nextDay={dashboardStats.day + 1} headSeq={headEntries[0]?.seq ?? 0} clockMode={dashboardStats.clockMode} />}
+        right={<AgentControls orgSlug={slug} nextDay={dashboardStats.day + 1} headSeq={headEntries[0]?.seq ?? 0} clockMode={dashboardStats.clockMode} />}
       />
       <div className="space-y-5">
         {decisions.map((decision, index) => (
@@ -35,6 +35,7 @@ export default async function ContractorsPage({ params }: { params: Promise<{ sl
             <DecisionCard decision={decision} orgSlug={slug} />
             {canMutate && (
               <MilestoneVerification
+                orgSlug={slug}
                 milestoneId={milestones[index].id}
                 verified={milestones[index].verified}
                 disabled={milestones[index].status === "paid"}

@@ -3,7 +3,7 @@
 import "server-only";
 
 import { runAgentCycle } from "@/lib/agent/orchestrator";
-import { createAgentControlSession, hasAgentControlSession } from "@/lib/agent-session";
+import { authorizeMutation } from "@/lib/auth/authorize";
 import { revalidateOrgPages } from "@/lib/auth/revalidate";
 
 export interface AgentActionResult {
@@ -13,20 +13,9 @@ export interface AgentActionResult {
   lines?: number;
 }
 
-export async function unlockAgentControls(
-  _previous: AgentActionResult,
-  formData: FormData
-): Promise<AgentActionResult> {
-  const candidate = formData.get("agentToken");
-  if (typeof candidate !== "string" || !(await createAgentControlSession(candidate))) {
-    return { ok: false, message: "Invalid control token." };
-  }
-  revalidateOrgPages();
-  return { ok: true, message: "Controls unlocked for one hour." };
-}
-
-export async function runAgentCycleAction(): Promise<AgentActionResult> {
-  if (!(await hasAgentControlSession())) return { ok: false, message: "Control session expired." };
+export async function runAgentCycleAction(orgSlug: string): Promise<AgentActionResult> {
+  const auth = await authorizeMutation(orgSlug);
+  if (!auth.ok) return { ok: false, message: auth.message };
 
   try {
     const result = await runAgentCycle();

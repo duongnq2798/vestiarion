@@ -5,7 +5,7 @@ import { DecisionCard } from "@/components/vx/DecisionCard";
 import { invoiceDecision } from "@/components/vx/map";
 import { SectionHead } from "@/components/vx/Primitives";
 import { EmptyState, PageHead, ProductShell } from "@/components/vx/Shell";
-import { hasAgentControlSession } from "@/lib/agent-session";
+import { viewerCanMutate } from "@/lib/auth/authorize";
 import { requireMembership } from "@/lib/auth/membership";
 import { orgHref } from "@/lib/auth/org-paths";
 import { listLedgerEntries, listLedgerEntriesForTargets } from "@/lib/ledger";
@@ -31,7 +31,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
     listCounterparties(),
     listLedgerEntries(1),
     stats(),
-    hasAgentControlSession(),
+    viewerCanMutate(slug),
   ]);
   const entries = await listLedgerEntriesForTargets({ invoiceIds: invoices.map((invoice) => invoice.id) });
   const filter = typeof query.status === "string" ? query.status : undefined;
@@ -48,7 +48,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
       <PageHead
         title="AP / AR"
         sub="Three-way match, counterparty risk, and payment authority — with the agent’s complete reasoning on every line."
-        right={<AgentControls nextDay={dashboardStats.day + 1} headSeq={headEntries[0]?.seq ?? 0} clockMode={dashboardStats.clockMode} />}
+        right={<AgentControls orgSlug={slug} nextDay={dashboardStats.day + 1} headSeq={headEntries[0]?.seq ?? 0} clockMode={dashboardStats.clockMode} />}
       />
 
       {filter && (
@@ -64,11 +64,11 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
           <div className="grid gap-4 lg:grid-cols-2">
             <details open className="surface-shadow rounded-2xl border border-line bg-surface p-4 sm:p-6">
               <summary className="cursor-pointer text-sm font-semibold text-ink">Enter one invoice</summary>
-              <div className="mt-4"><InvoiceIntake counterparties={counterparties.map(({ id, name, role }) => ({ id, name, role }))} /></div>
+              <div className="mt-4"><InvoiceIntake orgSlug={slug} counterparties={counterparties.map(({ id, name, role }) => ({ id, name, role }))} /></div>
             </details>
             <details className="surface-shadow rounded-2xl border border-line bg-surface p-4 sm:p-6">
               <summary className="cursor-pointer text-sm font-semibold text-ink">Import CSV</summary>
-              <div className="mt-4"><InvoiceCsvImport /></div>
+              <div className="mt-4"><InvoiceCsvImport orgSlug={slug} /></div>
             </details>
           </div>
         ) : (

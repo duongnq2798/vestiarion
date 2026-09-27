@@ -69,7 +69,7 @@ export default async function DashboardPage({
       <PageHead
         title="Treasury"
         sub="What the agent holds, what it decided, and why."
-        right={<AgentControls nextDay={dashboardStats.day + 1} headSeq={headSeq} clockMode={dashboardStats.clockMode} />}
+        right={<AgentControls orgSlug={slug} nextDay={dashboardStats.day + 1} headSeq={headSeq} clockMode={dashboardStats.clockMode} />}
       />
 
       {since != null && <CycleReport entries={cycleEntries} day={dashboardStats.day} since={since} clockMode={dashboardStats.clockMode} completedAt={dashboardStats.lastCycleAt} orgSlug={slug} />}
