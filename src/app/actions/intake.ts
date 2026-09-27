@@ -5,6 +5,7 @@ import "server-only";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { hasAgentControlSession } from "@/lib/agent-session";
+import { revalidateOrgPages } from "@/lib/auth/revalidate";
 import { screenCounterparty } from "@/lib/compliance";
 import {
   counterpartyInputSchema,
@@ -85,9 +86,7 @@ export async function createCounterpartyAction(
 
     try {
       const screening = await screenCounterparty(counterparty.id);
-      revalidatePath("/counterparties");
-      revalidatePath("/compliance");
-      revalidatePath("/audit");
+      revalidateOrgPages();
       return {
         ok: true,
         created: 1,
@@ -95,9 +94,7 @@ export async function createCounterpartyAction(
         message: `${counterparty.name} added and screened: ${screening.riskLevel} risk.`,
       };
     } catch (error) {
-      revalidatePath("/counterparties");
-      revalidatePath("/compliance");
-      revalidatePath("/audit");
+      revalidateOrgPages();
       return {
         ok: true,
         created: 1,
@@ -169,9 +166,8 @@ export async function createInvoiceAction(
       },
     });
 
-    revalidatePath("/invoices");
     revalidatePath("/");
-    revalidatePath("/audit");
+    revalidateOrgPages();
     return { ok: true, created: 1, message: `Invoice added for ${counterparty.name}.` };
   } catch (error) {
     console.error("invoice intake failed", error);
@@ -249,9 +245,8 @@ export async function importInvoicesAction(
       });
     }
 
-    revalidatePath("/invoices");
     revalidatePath("/");
-    revalidatePath("/audit");
+    revalidateOrgPages();
     return { ok: true, created: inserted.length, message: `Imported ${inserted.length} invoice${inserted.length === 1 ? "" : "s"}.` };
   } catch (error) {
     console.error("invoice CSV import failed", error);

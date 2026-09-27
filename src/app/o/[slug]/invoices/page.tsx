@@ -6,6 +6,7 @@ import { invoiceDecision } from "@/components/vx/map";
 import { SectionHead } from "@/components/vx/Primitives";
 import { EmptyState, PageHead, ProductShell } from "@/components/vx/Shell";
 import { hasAgentControlSession } from "@/lib/agent-session";
+import { orgHref } from "@/lib/auth/org-paths";
 import { listLedgerEntries, listLedgerEntriesForTargets } from "@/lib/ledger";
 import { listCounterparties, listInvoices, stats } from "@/lib/queries";
 
@@ -16,10 +17,12 @@ type InvoiceSearchParams = Promise<{
 }>;
 
 type InvoicePageProps = {
+  params: Promise<{ slug: string }>;
   searchParams: InvoiceSearchParams;
 };
 
-export default async function InvoicesPage({ searchParams }: InvoicePageProps) {
+export default async function InvoicesPage({ params, searchParams }: InvoicePageProps) {
+  const { slug } = await params;
   const query = await searchParams;
   const [invoices, counterparties, headEntries, dashboardStats, canMutate] = await Promise.all([
     listInvoices(),
@@ -39,7 +42,7 @@ export default async function InvoicesPage({ searchParams }: InvoicePageProps) {
   const ordinaryPayables = payables.filter((decision) => decision.outcome !== "refused");
 
   return (
-    <ProductShell active="invoices" day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt}>
+    <ProductShell active="invoices" day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} orgSlug={slug}>
       <PageHead
         title="AP / AR"
         sub="Three-way match, counterparty risk, and payment authority — with the agent’s complete reasoning on every line."
@@ -49,7 +52,7 @@ export default async function InvoicesPage({ searchParams }: InvoicePageProps) {
       {filter && (
         <div className="mb-6 flex items-center gap-3 rounded-md border border-held-line bg-held-soft px-3 py-2 text-sm text-held">
           Showing status: <span className="font-mono">{filter}</span>
-          <a href="/invoices" className="ml-auto text-ink-2 underline hover:text-ink">Clear filter</a>
+          <a href={orgHref(slug, "/invoices")} className="ml-auto text-ink-2 underline hover:text-ink">Clear filter</a>
         </div>
       )}
 
@@ -75,24 +78,24 @@ export default async function InvoicesPage({ searchParams }: InvoicePageProps) {
         {refused.length > 0 && (
           <section>
             <SectionHead title="Guardrail overrides" meta="the model said pay; code stopped execution" />
-            <div className="space-y-4">{refused.map((decision) => <DecisionCard key={decision.id} decision={decision} />)}</div>
+            <div className="space-y-4">{refused.map((decision) => <DecisionCard key={decision.id} decision={decision} orgSlug={slug} />)}</div>
           </section>
         )}
-        <InvoiceSection title="Payables" meta={`${payables.length} invoices`} decisions={ordinaryPayables} />
-        <InvoiceSection title="Receivables" meta={`${receivables.length} invoices`} decisions={receivables} />
+        <InvoiceSection title="Payables" meta={`${payables.length} invoices`} decisions={ordinaryPayables} orgSlug={slug} />
+        <InvoiceSection title="Receivables" meta={`${receivables.length} invoices`} decisions={receivables} orgSlug={slug} />
       </div>
     </ProductShell>
   );
 }
 
-function InvoiceSection({ title, meta, decisions }: { title: string; meta: string; decisions: ReturnType<typeof invoiceDecision>[] }) {
+function InvoiceSection({ title, meta, decisions, orgSlug }: { title: string; meta: string; decisions: ReturnType<typeof invoiceDecision>[]; orgSlug: string }) {
   return (
     <section>
       <SectionHead title={title} meta={meta} />
       {decisions.length === 0 ? (
         <EmptyState title={`No ${title.toLowerCase()} here`} body="There are no records in this view." />
       ) : (
-        <div className="space-y-4">{decisions.map((decision) => <DecisionCard key={decision.id} decision={decision} />)}</div>
+        <div className="space-y-4">{decisions.map((decision) => <DecisionCard key={decision.id} decision={decision} orgSlug={orgSlug} />)}</div>
       )}
     </section>
   );

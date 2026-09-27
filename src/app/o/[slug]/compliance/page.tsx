@@ -4,6 +4,7 @@ import { PerformanceHistory } from "@/components/vx/PerformanceHistory";
 import { RiskDial } from "@/components/vx/RiskDial";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
 import type { RiskTier } from "@/components/vx/types";
+import { orgHref } from "@/lib/auth/org-paths";
 import { listLedgerEntries, listLedgerEntriesByDomain } from "@/lib/ledger";
 import { listCounterparties, stats } from "@/lib/queries";
 
@@ -13,7 +14,8 @@ function riskTier(value: string): RiskTier {
   return value === "clear" || value === "medium" || value === "high" ? value : "unscreened";
 }
 
-export default async function CompliancePage() {
+export default async function CompliancePage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
   const [counterparties, entries, headEntries, dashboardStats] = await Promise.all([
     listCounterparties(),
     listLedgerEntriesByDomain("compliance", 100),
@@ -25,7 +27,7 @@ export default async function CompliancePage() {
   const riskChanges = entries.filter((entry) => entry.action === "risk_level_changed").slice(0, 5);
 
   return (
-    <ProductShell active="compliance" day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt}>
+    <ProductShell active="compliance" day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} orgSlug={slug}>
       <PageHead
         title="Compliance"
         sub="Continuous screening changes payment authority by tier. A hit reduces a limit; it does not silently turn the counterparty into a yes/no ban."
@@ -40,7 +42,7 @@ export default async function CompliancePage() {
               <p className="mt-1 text-sm text-ink">{lastSweep.summary}</p>
               {!lastSweepComplete && <p className="mt-1 text-xs text-refused">Incomplete — no failed lookup was treated as clear, and every previous verdict remains in force.</p>}
             </div>
-            <a href={`/audit#seq-${lastSweep.seq}`} className="font-mono text-xs text-agent hover:underline">audit #{String(lastSweep.seq).padStart(4, "0")} →</a>
+            <a href={orgHref(slug, `/audit#seq-${lastSweep.seq}`)} className="font-mono text-xs text-agent hover:underline">audit #{String(lastSweep.seq).padStart(4, "0")} →</a>
           </div>
         </section>
       )}
@@ -79,7 +81,7 @@ export default async function CompliancePage() {
       </section>
 
       <section className="mt-8">
-        <SectionHead title="Risk-level changes" meta="events where screening changed authority" action={<a href="/audit?domain=compliance" className="text-[0.8125rem] text-agent hover:underline">Compliance audit →</a>} />
+        <SectionHead title="Risk-level changes" meta="events where screening changed authority" action={<a href={orgHref(slug, "/audit?domain=compliance")} className="text-[0.8125rem] text-agent hover:underline">Compliance audit →</a>} />
         {riskChanges.length === 0 ? (
           <p className="rounded-lg border border-line bg-surface p-4 text-sm text-ink-2">No risk tier changed after initial screening. The sweep above still proves screening ran.</p>
         ) : (
@@ -87,7 +89,7 @@ export default async function CompliancePage() {
             {riskChanges.map((entry) => (
               <li key={entry.id} className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                 <span className="text-sm text-held">{entry.summary}</span>
-                <a href={`/audit#seq-${entry.seq}`} className="font-mono text-xs text-agent hover:underline">#{String(entry.seq).padStart(4, "0")}</a>
+                <a href={orgHref(slug, `/audit#seq-${entry.seq}`)} className="font-mono text-xs text-agent hover:underline">#{String(entry.seq).padStart(4, "0")}</a>
               </li>
             ))}
           </ol>

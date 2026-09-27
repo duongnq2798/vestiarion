@@ -6,6 +6,7 @@ import { Money, SectionHead } from "@/components/vx/Primitives";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { AccountsList, BalanceTile, ForecastPanel, MoreLink, StatTile } from "@/components/vx/Treasury";
 import type { Account, Forecast } from "@/components/vx/types";
+import { orgHref } from "@/lib/auth/org-paths";
 import { getChainProvider } from "@/lib/circle";
 import { listLedgerEntries, listLedgerEntriesAfter, listLedgerEntriesByDomain, listLedgerEntriesForTargets } from "@/lib/ledger";
 import { latestForecast, listAccounts, listCounterparties, listInvoices, listTreasuryActions, stats } from "@/lib/queries";
@@ -13,10 +14,13 @@ import { latestForecast, listAccounts, listCounterparties, listInvoices, listTre
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage({
+  params,
   searchParams,
 }: {
+  params: Promise<{ slug: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const { slug } = await params;
   const query = await searchParams;
   const [accountsRows, actionRows, forecastRow, dashboardStats, invoices, counterparties, headEntries] = await Promise.all([
     listAccounts(),
@@ -59,24 +63,24 @@ export default async function DashboardPage({
   const needsReview = stopped.length;
 
   return (
-    <ProductShell active="treasury" day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt}>
+    <ProductShell active="treasury" day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} orgSlug={slug}>
       <PageHead
         title="Treasury"
         sub="What the agent holds, what it decided, and why."
         right={<AgentControls nextDay={dashboardStats.day + 1} headSeq={headSeq} clockMode={dashboardStats.clockMode} />}
       />
 
-      {since != null && <CycleReport entries={cycleEntries} day={dashboardStats.day} since={since} clockMode={dashboardStats.clockMode} completedAt={dashboardStats.lastCycleAt} />}
+      {since != null && <CycleReport entries={cycleEntries} day={dashboardStats.day} since={since} clockMode={dashboardStats.clockMode} completedAt={dashboardStats.lastCycleAt} orgSlug={slug} />}
 
       <div className="mb-8 grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-4">
         <BalanceTile accounts={accounts} />
         <StatTile label="Paid out to date" sub={`${dashboardStats.onchainTransfers} settled on-chain`}>
           <Money value={dashboardStats.totalPaidOut} />
         </StatTile>
-        <StatTile label="Decisions logged" href="/audit" sub="Every entry is hash-linked and signed">
+        <StatTile label="Decisions logged" href={orgHref(slug, "/audit")} sub="Every entry is hash-linked and signed">
           <span className="tabular-nums">{dashboardStats.decisionsLogged}</span>
         </StatTile>
-        <StatTile label="Needs you" tone={needsReview > 0 ? "held" : "default"} href="/invoices" sub={needsReview > 0 ? "Held or flagged — the agent will not act alone" : "Nothing waiting"}>
+        <StatTile label="Needs you" tone={needsReview > 0 ? "held" : "default"} href={orgHref(slug, "/invoices")} sub={needsReview > 0 ? "Held or flagged — the agent will not act alone" : "Nothing waiting"}>
           <span className="tabular-nums">{needsReview}</span>
         </StatTile>
       </div>
@@ -86,23 +90,23 @@ export default async function DashboardPage({
           {stopped.length > 0 && (
             <section>
               <SectionHead title="Stopped" meta="refused by code, or waiting for you" />
-              <div className="space-y-4">{stopped.slice(0, 3).map((decision) => <DecisionCard key={decision.id} decision={decision} />)}</div>
+              <div className="space-y-4">{stopped.slice(0, 3).map((decision) => <DecisionCard key={decision.id} decision={decision} orgSlug={slug} />)}</div>
             </section>
           )}
 
           <section>
-            <SectionHead title="Treasury decisions" meta="yield moves include their economics" action={<MoreLink href="/audit?domain=treasury">Full audit log</MoreLink>} />
+            <SectionHead title="Treasury decisions" meta="yield moves include their economics" action={<MoreLink href={orgHref(slug, "/audit?domain=treasury")}>Full audit log</MoreLink>} />
             {treasuryDecisions.length === 0 ? (
               <p className="rounded-lg border border-dashed border-line-strong p-5 text-sm text-ink-2">Run an agent cycle to see why cash was swept, redeemed, or held liquid.</p>
             ) : (
-              <div className="space-y-4">{treasuryDecisions.map((decision) => <DecisionCard key={decision.id} decision={decision} />)}</div>
+              <div className="space-y-4">{treasuryDecisions.map((decision) => <DecisionCard key={decision.id} decision={decision} orgSlug={slug} />)}</div>
             )}
           </section>
 
           {executedReserveMoves.length > 0 && (
             <section>
               <SectionHead title="Executed reserve movements" meta="recorded treasury actions" />
-              <div className="space-y-4">{executedReserveMoves.map((decision) => <DecisionCard key={decision.id} decision={decision} compact />)}</div>
+              <div className="space-y-4">{executedReserveMoves.map((decision) => <DecisionCard key={decision.id} decision={decision} compact orgSlug={slug} />)}</div>
             </section>
           )}
         </div>

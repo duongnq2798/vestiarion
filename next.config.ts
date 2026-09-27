@@ -1,7 +1,10 @@
 import type { NextConfig } from "next";
+import { legacyRedirects } from "./src/lib/auth/org-paths";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  async redirects() {
+    return legacyRedirects();
+  },
 };
 
 export default nextConfig;

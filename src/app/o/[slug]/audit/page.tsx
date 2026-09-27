@@ -5,6 +5,7 @@ import { DOMAINS } from "@/components/vx/Glyphs";
 import { Hash, Label } from "@/components/vx/Primitives";
 import { EmptyState, PageHead, ProductShell } from "@/components/vx/Shell";
 import type { Domain } from "@/components/vx/types";
+import { orgHref } from "@/lib/auth/org-paths";
 import { ledgerEntryCount, ledgerPublicKeyId, ledgerPublicKeyPem, ledgerReadWarnings, listLedgerEntries, listLedgerEntryPage } from "@/lib/ledger";
 import { stats } from "@/lib/queries";
 
@@ -17,10 +18,12 @@ type AuditSearchParams = Promise<{
 }>;
 
 type AuditPageProps = {
+  params: Promise<{ slug: string }>;
   searchParams: AuditSearchParams;
 };
 
-export default async function AuditPage({ searchParams }: AuditPageProps) {
+export default async function AuditPage({ params, searchParams }: AuditPageProps) {
+  const { slug } = await params;
   const query = await searchParams;
   const domainValue = typeof query.domain === "string" ? query.domain : undefined;
   const domain = DOMAINS.includes(domainValue as Domain) ? (domainValue as Domain) : undefined;
@@ -42,7 +45,7 @@ export default async function AuditPage({ searchParams }: AuditPageProps) {
   const keyWarnings = ledgerReadWarnings();
 
   return (
-    <ProductShell active="audit" day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt}>
+    <ProductShell active="audit" day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} orgSlug={slug}>
       <PageHead
         title="Audit log"
         sub="Every decision is appended here, hash-linked to the one before it and signed with Ed25519. The summary stays readable; raw detail and cryptographic material remain inspectable."
@@ -94,13 +97,13 @@ export default async function AuditPage({ searchParams }: AuditPageProps) {
       ) : (
         <>
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-            <DomainFilter active={domain} />
+            <DomainFilter active={domain} orgSlug={slug} />
             <span className="font-mono text-xs text-ink-3">newest first · {shown.length} shown</span>
           </div>
           <AuditLedger entries={shown} since={since} />
           {hasOlder && (
             <div className="mt-4 flex justify-center">
-              <a href={`/audit?before=${entries.at(-1)!.seq}${domain ? `&domain=${domain}` : ""}`} className="rounded-md border border-line-strong px-4 py-2 text-sm text-agent hover:bg-raised">Older entries →</a>
+              <a href={orgHref(slug, `/audit?before=${entries.at(-1)!.seq}${domain ? `&domain=${domain}` : ""}`)} className="rounded-md border border-line-strong px-4 py-2 text-sm text-agent hover:bg-raised">Older entries →</a>
             </div>
           )}
         </>

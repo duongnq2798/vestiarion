@@ -2,9 +2,9 @@
 
 import "server-only";
 
-import { revalidatePath } from "next/cache";
 import { runAgentCycle } from "@/lib/agent/orchestrator";
 import { createAgentControlSession, hasAgentControlSession } from "@/lib/agent-session";
+import { revalidateOrgPages } from "@/lib/auth/revalidate";
 
 export interface AgentActionResult {
   ok: boolean;
@@ -21,7 +21,7 @@ export async function unlockAgentControls(
   if (typeof candidate !== "string" || !(await createAgentControlSession(candidate))) {
     return { ok: false, message: "Invalid control token." };
   }
-  revalidatePath("/console", "layout");
+  revalidateOrgPages();
   return { ok: true, message: "Controls unlocked for one hour." };
 }
 
@@ -30,7 +30,7 @@ export async function runAgentCycleAction(): Promise<AgentActionResult> {
 
   try {
     const result = await runAgentCycle();
-    revalidatePath("/console", "layout");
+    revalidateOrgPages();
     return {
       ok: true,
       message: result.clockMode === "simulate"

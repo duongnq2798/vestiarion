@@ -16,7 +16,8 @@ const RISK_STYLE: Record<string, string> = {
   unscreened: "border-line-strong text-ink-2",
 };
 
-export default async function CounterpartiesPage() {
+export default async function CounterpartiesPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
   const [counterparties, dashboardStats, entries, canMutate] = await Promise.all([
     listCounterparties(),
     stats(),
@@ -25,7 +26,7 @@ export default async function CounterpartiesPage() {
   ]);
 
   return (
-    <ProductShell active="counterparties" day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt}>
+    <ProductShell active="counterparties" day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} orgSlug={slug}>
       <PageHead
         title="Counterparties"
         sub="Add the people and businesses Vestiarion may invoice or pay. Each new record is screened immediately."

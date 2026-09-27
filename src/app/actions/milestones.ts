@@ -2,9 +2,9 @@
 
 import "server-only";
 
-import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { hasAgentControlSession } from "@/lib/agent-session";
+import { revalidateOrgPages } from "@/lib/auth/revalidate";
 import { appendLedgerEntry } from "@/lib/ledger";
 import { supabase, unwrap } from "@/lib/supabase";
 
@@ -71,7 +71,6 @@ export async function manualMilestoneVerificationAction(
     },
   });
 
-  revalidatePath("/contractors");
-  revalidatePath("/audit");
+  revalidateOrgPages();
   return { ok: true, message: verified ? "Manual verification recorded." : "Verification revoked and recorded." };
 }

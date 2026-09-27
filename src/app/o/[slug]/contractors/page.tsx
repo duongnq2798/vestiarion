@@ -9,7 +9,8 @@ import { listMilestones, stats } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
-export default async function ContractorsPage() {
+export default async function ContractorsPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
   const [milestones, headEntries, dashboardStats, canMutate] = await Promise.all([
     listMilestones(),
     listLedgerEntries(1),
@@ -20,7 +21,7 @@ export default async function ContractorsPage() {
   const decisions = milestones.map((milestone) => milestoneDecision(milestone, entries));
 
   return (
-    <ProductShell active="contractors" day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt}>
+    <ProductShell active="contractors" day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} orgSlug={slug}>
       <PageHead
         title="Contractors"
         sub="Milestone pay follows verified work instead of a Net-30 calendar. Every release still passes risk and authority guardrails."
@@ -29,7 +30,7 @@ export default async function ContractorsPage() {
       <div className="space-y-5">
         {decisions.map((decision, index) => (
           <div key={decision.id}>
-            <DecisionCard decision={decision} />
+            <DecisionCard decision={decision} orgSlug={slug} />
             {canMutate && (
               <MilestoneVerification
                 milestoneId={milestones[index].id}

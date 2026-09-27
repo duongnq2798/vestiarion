@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { ProvenanceBar, type ProvenanceLeg } from "@/components/vx/Provenance";
 import { fmt, Label } from "@/components/vx/Primitives";
 import { BrandMark } from "@/components/vx/Brand";
+import { FOUNDING_ORG_SLUG, orgHref } from "@/lib/auth/org-paths";
 import { getChainProvider } from "@/lib/circle";
 import { screeningMode } from "@/lib/compliance";
 import { getLandingMetrics, type LandingMetrics } from "@/lib/landing";
@@ -50,12 +51,12 @@ async function LiveMetrics() {
   return (
     <div>
       <div className="grid grid-cols-1 gap-3 min-[430px]:grid-cols-2 lg:grid-cols-3">
-        <MetricCard label="Instrumented cycles" value={hasCycles ? String(metrics.instrumentedCycles) : "No cycle measured yet"} note={hasCycles ? latestCycleNote(metrics) : "Phase 7 history starts with the next permitted cycle."} href="/insights" measured={hasCycles} />
-        <MetricCard label="Agent decisions" value={hasCycles ? String(metrics.instrumentedDecisions) : "No decision series yet"} note={hasCycles ? "Persisted at the decision point." : "Earlier ledger entries were not backfilled into cycle metrics."} href="/insights" measured={hasCycles} />
-        <MetricCard label="Live transfers settled" value={hasTransfers ? String(metrics.settledLiveTransfers) : "No measured transfer yet"} note={hasTransfers ? "Confirmed Circle payment intents on Arc testnet." : "No confirmed post-instrumentation payment intent exists."} href="/insights" measured={hasTransfers} />
-        <MetricCard label="Median chain fee" value={metrics.medianChainFeeUsd == null ? "No chain-reported fee yet" : `$${fmt(metrics.medianChainFeeUsd)}`} note={metrics.medianChainFeeUsd == null ? "Provider estimates are deliberately excluded." : `${metrics.chainFeeSampleCount} chain-reported live sample${metrics.chainFeeSampleCount === 1 ? "" : "s"}.`} href="/insights" measured={metrics.medianChainFeeUsd != null} />
-        <MetricCard label="Median settlement" value={metrics.medianSettlementMs == null ? "No confirmed timing yet" : `${Math.round(metrics.medianSettlementMs)} ms`} note={metrics.medianSettlementMs == null ? "Pending transfers have no invented duration." : `${metrics.settlementSampleCount} confirmed live sample${metrics.settlementSampleCount === 1 ? "" : "s"}.`} href="/insights" measured={metrics.medianSettlementMs != null} />
-        <MetricCard label="Signed ledger height" value={metrics.ledgerHeight > 0 ? String(metrics.ledgerHeight) : "Ledger is empty"} note={metrics.ledgerHeight > 0 ? "Current append-only chain length." : "No entry is styled as an achievement."} href="/audit" measured={metrics.ledgerHeight > 0} />
+        <MetricCard label="Instrumented cycles" value={hasCycles ? String(metrics.instrumentedCycles) : "No cycle measured yet"} note={hasCycles ? latestCycleNote(metrics) : "Phase 7 history starts with the next permitted cycle."} href={orgHref(FOUNDING_ORG_SLUG, "/insights")} measured={hasCycles} />
+        <MetricCard label="Agent decisions" value={hasCycles ? String(metrics.instrumentedDecisions) : "No decision series yet"} note={hasCycles ? "Persisted at the decision point." : "Earlier ledger entries were not backfilled into cycle metrics."} href={orgHref(FOUNDING_ORG_SLUG, "/insights")} measured={hasCycles} />
+        <MetricCard label="Live transfers settled" value={hasTransfers ? String(metrics.settledLiveTransfers) : "No measured transfer yet"} note={hasTransfers ? "Confirmed Circle payment intents on Arc testnet." : "No confirmed post-instrumentation payment intent exists."} href={orgHref(FOUNDING_ORG_SLUG, "/insights")} measured={hasTransfers} />
+        <MetricCard label="Median chain fee" value={metrics.medianChainFeeUsd == null ? "No chain-reported fee yet" : `$${fmt(metrics.medianChainFeeUsd)}`} note={metrics.medianChainFeeUsd == null ? "Provider estimates are deliberately excluded." : `${metrics.chainFeeSampleCount} chain-reported live sample${metrics.chainFeeSampleCount === 1 ? "" : "s"}.`} href={orgHref(FOUNDING_ORG_SLUG, "/insights")} measured={metrics.medianChainFeeUsd != null} />
+        <MetricCard label="Median settlement" value={metrics.medianSettlementMs == null ? "No confirmed timing yet" : `${Math.round(metrics.medianSettlementMs)} ms`} note={metrics.medianSettlementMs == null ? "Pending transfers have no invented duration." : `${metrics.settlementSampleCount} confirmed live sample${metrics.settlementSampleCount === 1 ? "" : "s"}.`} href={orgHref(FOUNDING_ORG_SLUG, "/insights")} measured={metrics.medianSettlementMs != null} />
+        <MetricCard label="Signed ledger height" value={metrics.ledgerHeight > 0 ? String(metrics.ledgerHeight) : "Ledger is empty"} note={metrics.ledgerHeight > 0 ? "Current append-only chain length." : "No entry is styled as an achievement."} href={orgHref(FOUNDING_ORG_SLUG, "/audit")} measured={metrics.ledgerHeight > 0} />
       </div>
       <p className="mt-3 text-xs leading-relaxed text-ink-3">All figures above are server-rendered from the configured Supabase project. Transfer metrics include live Arc testnet rows only; simulated rows never enter these medians.</p>
     </div>
@@ -76,25 +77,25 @@ const claims = [
   {
     title: "A model can recommend payment. Code can still refuse it.",
     body: "Every payable verdict crosses risk, screened-limit, evidence, and liquidity checks before the provider boundary. A blocked verdict records what the model argued and which rule overruled it.",
-    href: "/console",
+    href: orgHref(FOUNDING_ORG_SLUG, "/console"),
     evidence: "See the guardrail receipt",
   },
   {
     title: "Screening changes authority, not history.",
     body: "A live OpenSanctions match or labelled bundled fallback derives the current payment limit from the business baseline. Re-screening is reversible and failed lookups retain the previous verdict.",
-    href: "/compliance",
+    href: orgHref(FOUNDING_ORG_SLUG, "/compliance"),
     evidence: "Inspect tiered limits",
   },
   {
     title: "Treasury moves must beat their own cost.",
     body: "The reserve policy prices projected yield against the sweep-and-redemption round trip while protecting obligations due in 7 and 14 days. Uneconomic movement stays liquid.",
-    href: "/audit?domain=treasury",
+    href: orgHref(FOUNDING_ORG_SLUG, "/audit?domain=treasury"),
     evidence: "Read the economics",
   },
   {
     title: "The audit log is a cryptographic receipt, not a feed.",
     body: "Every human, agent, and system action is Ed25519-signed, linked to the previous entry, and independently verified against the full chain on demand.",
-    href: "/audit",
+    href: orgHref(FOUNDING_ORG_SLUG, "/audit"),
     evidence: "Verify the hash chain",
   },
 ] as const;
@@ -220,9 +221,9 @@ export default function LandingPage() {
             <span>Vestiarion</span>
           </Link>
           <nav aria-label="Landing navigation" className="flex items-center gap-2 sm:gap-4">
-            <Link href="/insights" className="hidden text-sm text-ink-2 hover:text-ink sm:block">Measured outcomes</Link>
-            <Link href="/audit" className="hidden text-sm text-ink-2 hover:text-ink sm:block">Audit proof</Link>
-            <Link href="/console" className="brand-shadow rounded-xl bg-agent px-4 py-2.5 text-sm font-semibold text-on-agent transition-transform hover:-translate-y-0.5">Open console</Link>
+            <Link href={orgHref(FOUNDING_ORG_SLUG, "/insights")} className="hidden text-sm text-ink-2 hover:text-ink sm:block">Measured outcomes</Link>
+            <Link href={orgHref(FOUNDING_ORG_SLUG, "/audit")} className="hidden text-sm text-ink-2 hover:text-ink sm:block">Audit proof</Link>
+            <Link href={orgHref(FOUNDING_ORG_SLUG, "/console")} className="brand-shadow rounded-xl bg-agent px-4 py-2.5 text-sm font-semibold text-on-agent transition-transform hover:-translate-y-0.5">Open console</Link>
           </nav>
         </div>
       </header>
@@ -237,8 +238,8 @@ export default function LandingPage() {
               <h1 className="mt-5 max-w-4xl text-balance text-5xl font-semibold leading-[0.97] tracking-[-0.055em] text-ink sm:text-7xl">Money moves.<br /><span className="font-serif font-normal italic text-agent">Evidence remains.</span></h1>
               <p className="mt-6 max-w-2xl text-pretty font-serif text-xl leading-relaxed text-ink-2 sm:text-[1.65rem]">Vestiarion screens counterparties, matches obligations, verifies work, and manages liquidity. A model proposes each action; code enforces the boundary; a signed ledger keeps the receipt.</p>
               <div className="mt-8 flex flex-wrap gap-3">
-                <Link href="/console" className="brand-shadow rounded-xl bg-agent px-5 py-3 text-sm font-semibold text-on-agent transition-transform hover:-translate-y-0.5">See the agent run</Link>
-                <Link href="/audit" className="rounded-xl border border-line-strong bg-surface/80 px-5 py-3 text-sm font-semibold text-ink transition-colors hover:border-agent-line hover:text-agent">Verify the ledger</Link>
+                <Link href={orgHref(FOUNDING_ORG_SLUG, "/console")} className="brand-shadow rounded-xl bg-agent px-5 py-3 text-sm font-semibold text-on-agent transition-transform hover:-translate-y-0.5">See the agent run</Link>
+                <Link href={orgHref(FOUNDING_ORG_SLUG, "/audit")} className="rounded-xl border border-line-strong bg-surface/80 px-5 py-3 text-sm font-semibold text-ink transition-colors hover:border-agent-line hover:text-agent">Verify the ledger</Link>
               </div>
             </div>
             <ProofPanel provenance={provenance} />
@@ -280,7 +281,7 @@ export default function LandingPage() {
         <section className="border-t border-line bg-agent text-on-agent">
           <div className="mx-auto flex max-w-6xl flex-col gap-5 px-4 py-14 sm:px-6 md:flex-row md:items-center md:justify-between">
             <div><h2 className="text-3xl font-semibold tracking-tight text-on-agent">Open the evidence, not a scripted demo.</h2><p className="mt-2 text-sm text-white/75">Inspect the current book, every refusal, and the chain verifier.</p></div>
-            <div className="flex flex-wrap gap-3"><Link href="/console" className="rounded-xl bg-surface px-5 py-3 text-sm font-semibold text-agent">Open console</Link><Link href="/insights" className="rounded-xl border border-white/35 px-5 py-3 text-sm font-semibold text-on-agent hover:bg-white/10">Measured outcomes</Link></div>
+            <div className="flex flex-wrap gap-3"><Link href={orgHref(FOUNDING_ORG_SLUG, "/console")} className="rounded-xl bg-surface px-5 py-3 text-sm font-semibold text-agent">Open console</Link><Link href={orgHref(FOUNDING_ORG_SLUG, "/insights")} className="rounded-xl border border-white/35 px-5 py-3 text-sm font-semibold text-on-agent hover:bg-white/10">Measured outcomes</Link></div>
           </div>
         </section>
       </main>
