@@ -21,7 +21,9 @@
     "arc:proof": "tsx scripts/arc-live-proof.ts",
     "status": "tsx scripts/status.ts",
     "cycle": "tsx scripts/run-cycle.ts",
-    "fixture:guardrail": "tsx scripts/guardrail-fixture.ts"
+    "fixture:guardrail": "tsx scripts/guardrail-fixture.ts",
+    "org:grant": "tsx scripts/org-grant.ts",
+    "org:adopt-env": "tsx scripts/org-adopt-env.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",
