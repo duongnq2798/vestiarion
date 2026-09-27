@@ -13,13 +13,19 @@ config({ path: [".env.local", ".env"], quiet: true });
 async function main() {
   const { configFromEnv } = await import("../src/lib/config");
   const { createContext } = await import("../src/lib/context");
-  const { isValidSlug } = await import("../src/lib/auth/org-paths");
+  const { FOUNDING_ORG_SLUG, isValidSlug } = await import("../src/lib/auth/org-paths");
   const { isOrgRole } = await import("../src/lib/auth/roles");
 
   const [slug, emailArg, role] = process.argv.slice(2);
   const email = emailArg?.trim().toLowerCase();
   if (!slug || !isValidSlug(slug) || !email || !isOrgRole(role)) {
     throw new Error("usage: npm run org:grant -- <slug> <email> <owner|admin|approver|viewer>");
+  }
+
+  if (slug !== FOUNDING_ORG_SLUG) {
+    throw new Error(
+      `Until data is scoped per organization (Plan 2), only the founding organization can have members; refusing to grant a role in ${slug}.`
+    );
   }
 
   const db = createContext(configFromEnv(process.env)).db;
@@ -43,7 +49,16 @@ async function main() {
     .upsert({ org_id: org.data.id, user_id: userId, role }, { onConflict: "org_id,user_id" });
   if (upsert.error) throw new Error(upsert.error.message);
 
-  console.log(`${email} is now ${role} of ${org.data.name} (${slug}).`);
+  const { appendLedgerEntry } = await import("../src/lib/ledger");
+  const entry = await appendLedgerEntry({
+    actor: "system",
+    domain: "system",
+    action: "membership_granted",
+    summary: `Granted ${role} in ${org.data.name}`,
+    detail: { orgId: org.data.id, userId, role },
+  });
+
+  console.log(`${email} is now ${role} of ${org.data.name} (${slug}). Ledger entry #${entry.seq}.`);
 }
 
 main().catch((error) => {
