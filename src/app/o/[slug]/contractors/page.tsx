@@ -4,6 +4,7 @@ import { DecisionCard } from "@/components/vx/DecisionCard";
 import { milestoneDecision } from "@/components/vx/map";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { hasAgentControlSession } from "@/lib/agent-session";
+import { requireMembership } from "@/lib/auth/membership";
 import { listLedgerEntries, listLedgerEntriesForTargets } from "@/lib/ledger";
 import { listMilestones, stats } from "@/lib/queries";
 
@@ -11,6 +12,7 @@ export const dynamic = "force-dynamic";
 
 export default async function ContractorsPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
+  await requireMembership(slug);
   const [milestones, headEntries, dashboardStats, canMutate] = await Promise.all([
     listMilestones(),
     listLedgerEntries(1),

@@ -4,6 +4,7 @@ import { PerformanceHistory } from "@/components/vx/PerformanceHistory";
 import { RiskDial } from "@/components/vx/RiskDial";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
 import type { RiskTier } from "@/components/vx/types";
+import { requireMembership } from "@/lib/auth/membership";
 import { orgHref } from "@/lib/auth/org-paths";
 import { listLedgerEntries, listLedgerEntriesByDomain } from "@/lib/ledger";
 import { listCounterparties, stats } from "@/lib/queries";
@@ -16,6 +17,7 @@ function riskTier(value: string): RiskTier {
 
 export default async function CompliancePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
+  await requireMembership(slug);
   const [counterparties, entries, headEntries, dashboardStats] = await Promise.all([
     listCounterparties(),
     listLedgerEntriesByDomain("compliance", 100),

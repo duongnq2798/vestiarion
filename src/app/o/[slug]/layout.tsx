@@ -1,7 +1,5 @@
-import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
-import { membershipFor } from "@/lib/auth/membership";
-import { verifySession } from "@/lib/auth/session";
+import { requireMembership } from "@/lib/auth/membership";
 
 type OrgLayoutProps = {
   children: ReactNode;
@@ -9,13 +7,15 @@ type OrgLayoutProps = {
 };
 
 /**
- * Every product page passes through here. A non-member gets the same 404 as a
- * slug that does not exist, so the existence of another business is never
- * disclosed.
+ * Defence in depth only: in this Next version a layout does not control
+ * whether its child segments render or appear in the RSC payload, so this
+ * check alone would not stop a page from running. Each page under
+ * `/o/[slug]` calls `requireMembership` itself before loading tenant data;
+ * this call just means a request that never reaches a page (a bare fetch of
+ * the layout's own boundary) is still covered.
  */
 export default async function OrgLayout({ children, params }: OrgLayoutProps) {
   const { slug } = await params;
-  const user = await verifySession(`/o/${slug}/console`);
-  if (!(await membershipFor(user.id, slug))) notFound();
+  await requireMembership(slug);
   return children;
 }

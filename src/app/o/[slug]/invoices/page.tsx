@@ -6,6 +6,7 @@ import { invoiceDecision } from "@/components/vx/map";
 import { SectionHead } from "@/components/vx/Primitives";
 import { EmptyState, PageHead, ProductShell } from "@/components/vx/Shell";
 import { hasAgentControlSession } from "@/lib/agent-session";
+import { requireMembership } from "@/lib/auth/membership";
 import { orgHref } from "@/lib/auth/org-paths";
 import { listLedgerEntries, listLedgerEntriesForTargets } from "@/lib/ledger";
 import { listCounterparties, listInvoices, stats } from "@/lib/queries";
@@ -23,6 +24,7 @@ type InvoicePageProps = {
 
 export default async function InvoicesPage({ params, searchParams }: InvoicePageProps) {
   const { slug } = await params;
+  await requireMembership(slug);
   const query = await searchParams;
   const [invoices, counterparties, headEntries, dashboardStats, canMutate] = await Promise.all([
     listInvoices(),

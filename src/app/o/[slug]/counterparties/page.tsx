@@ -4,6 +4,7 @@ import { Money, SectionHead } from "@/components/vx/Primitives";
 import { PerformanceHistory } from "@/components/vx/PerformanceHistory";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { hasAgentControlSession } from "@/lib/agent-session";
+import { requireMembership } from "@/lib/auth/membership";
 import { listLedgerEntries } from "@/lib/ledger";
 import { listCounterparties, stats } from "@/lib/queries";
 
@@ -18,6 +19,7 @@ const RISK_STYLE: Record<string, string> = {
 
 export default async function CounterpartiesPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
+  await requireMembership(slug);
   const [counterparties, dashboardStats, entries, canMutate] = await Promise.all([
     listCounterparties(),
     stats(),

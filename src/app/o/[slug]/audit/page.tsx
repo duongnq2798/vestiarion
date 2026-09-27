@@ -5,6 +5,7 @@ import { DOMAINS } from "@/components/vx/Glyphs";
 import { Hash, Label } from "@/components/vx/Primitives";
 import { EmptyState, PageHead, ProductShell } from "@/components/vx/Shell";
 import type { Domain } from "@/components/vx/types";
+import { requireMembership } from "@/lib/auth/membership";
 import { orgHref } from "@/lib/auth/org-paths";
 import { ledgerEntryCount, ledgerPublicKeyId, ledgerPublicKeyPem, ledgerReadWarnings, listLedgerEntries, listLedgerEntryPage } from "@/lib/ledger";
 import { stats } from "@/lib/queries";
@@ -24,6 +25,7 @@ type AuditPageProps = {
 
 export default async function AuditPage({ params, searchParams }: AuditPageProps) {
   const { slug } = await params;
+  await requireMembership(slug);
   const query = await searchParams;
   const domainValue = typeof query.domain === "string" ? query.domain : undefined;
   const domain = DOMAINS.includes(domainValue as Domain) ? (domainValue as Domain) : undefined;

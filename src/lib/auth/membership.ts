@@ -1,8 +1,10 @@
 import "server-only";
+import { notFound } from "next/navigation";
 import { cache } from "react";
 import { supabase, unwrap } from "@/lib/supabase";
 import { isValidSlug } from "./org-paths";
 import type { OrgRole } from "./roles";
+import { verifySession, type SessionUser } from "./session";
 
 export interface OrgMembership {
   orgId: string;
@@ -40,3 +42,23 @@ export const membershipFor = cache(async (userId: string, slug: string): Promise
   ) as unknown as MembershipRow[];
   return rows[0] ? toMembership(rows[0]) : null;
 });
+
+/**
+ * The actual gate. In this Next version a layout does not control whether its
+ * child segments render or appear in the RSC payload — the router renders
+ * route segments independently, so hiding or swapping them in a layout does
+ * not stop them from running (see the shipped
+ * `01-app/02-guides/authentication.md`, "Layouts and auth checks"). Every
+ * page under `/o/[slug]` must therefore call this itself, before it loads any
+ * tenant data — the layout's own check is defence in depth, not the gate. A
+ * non-member and a slug that does not exist both end in the same `notFound()`,
+ * so neither discloses whether another business exists.
+ */
+export const requireMembership = cache(
+  async (slug: string): Promise<{ user: SessionUser; membership: OrgMembership }> => {
+    const user = await verifySession(`/o/${slug}/console`);
+    const membership = await membershipFor(user.id, slug);
+    if (!membership) notFound();
+    return { user, membership };
+  }
+);

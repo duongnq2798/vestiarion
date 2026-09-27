@@ -6,6 +6,7 @@ import { Money, SectionHead } from "@/components/vx/Primitives";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { AccountsList, BalanceTile, ForecastPanel, MoreLink, StatTile } from "@/components/vx/Treasury";
 import type { Account, Forecast } from "@/components/vx/types";
+import { requireMembership } from "@/lib/auth/membership";
 import { orgHref } from "@/lib/auth/org-paths";
 import { getChainProvider } from "@/lib/circle";
 import { listLedgerEntries, listLedgerEntriesAfter, listLedgerEntriesByDomain, listLedgerEntriesForTargets } from "@/lib/ledger";
@@ -21,6 +22,7 @@ export default async function DashboardPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { slug } = await params;
+  await requireMembership(slug);
   const query = await searchParams;
   const [accountsRows, actionRows, forecastRow, dashboardStats, invoices, counterparties, headEntries] = await Promise.all([
     listAccounts(),
