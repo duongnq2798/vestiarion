@@ -2206,6 +2206,21 @@ describe("0017: the transitional parts are gone", () => {
     await applyMigrations(contracted);
     await applyMigrations(contracted);
   });
+
+  it("leaves no tenant function executable by the browser roles, even after a full replay", async () => {
+    // Replaying 0001–0007 re-creates the old signatures for a moment; 0017 drops
+    // them again, and the surviving ones must still refuse anon and authenticated.
+    const rows = (await contracted.query<{ fn: string; anon: boolean; auth: boolean }>(
+      `select p.oid::regprocedure::text as fn,
+              has_function_privilege('anon', p.oid, 'execute') as anon,
+              has_function_privilege('authenticated', p.oid, 'execute') as auth
+         from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'public'
+          and p.proname in ('append_ledger_entry', 'advance_sim_day', 'claim_payment_intent', 'ledger_entries_for_targets')`
+    )).rows;
+    expect(rows).toHaveLength(4);
+    expect(rows.filter((row) => row.anon || row.auth)).toEqual([]);
+  });
 });
 ```
 
@@ -2274,6 +2289,12 @@ begin
   return v_row;
 end;
 $$;
+
+-- create or replace keeps existing grants, but state it: only the server calls this.
+revoke execute on function public.append_ledger_entry(uuid, text, text, text, text, jsonb, text, text, text)
+  from public, anon, authenticated;
+grant execute on function public.append_ledger_entry(uuid, text, text, text, text, jsonb, text, text, text)
+  to service_role;
 
 do $$
 declare
