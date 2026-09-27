@@ -12,7 +12,7 @@ export interface IntakeCounterparty {
   role: string;
 }
 
-export default function InvoiceIntake({ counterparties }: { counterparties: IntakeCounterparty[] }) {
+export default function InvoiceIntake({ counterparties, orgSlug }: { counterparties: IntakeCounterparty[]; orgSlug: string }) {
   const formRef = useRef<HTMLFormElement>(null);
   const [state, action, pending] = useActionState(createInvoiceAction, INITIAL);
 
@@ -22,6 +22,7 @@ export default function InvoiceIntake({ counterparties }: { counterparties: Inta
 
   return (
     <form ref={formRef} action={action} className="space-y-4">
+      <input type="hidden" name="orgSlug" value={orgSlug} />
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Direction" htmlFor="invoice-direction">
           <select className={INPUT} id="invoice-direction" name="direction" defaultValue="payable">

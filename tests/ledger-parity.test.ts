@@ -1,11 +1,9 @@
 import crypto from "node:crypto";
-import { readdirSync, readFileSync } from "node:fs";
-import path from "node:path";
-import { PGlite } from "@electric-sql/pglite";
-import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
+import type { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { bodyHashOf, verifyChain, type LedgerEntryInput, type LedgerRow } from "@/lib/ledger";
+import { verifyChain, type LedgerEntryInput, type LedgerRow } from "@/lib/ledger";
 import { ledgerKeyId, type LedgerKeyring } from "@/lib/ledger-keys";
+import { appendSigned, applyMigrations, createDatabase } from "./support/pglite";
 
 /**
  * The one place the database and the verifier are made to agree.
@@ -33,13 +31,8 @@ const GENESIS = "0".repeat(64);
 let db: PGlite;
 
 beforeAll(async () => {
-  db = new PGlite({ extensions: { pgcrypto } });
-  await db.exec("create role anon; create role authenticated; create role service_role;");
-
-  const dir = path.join(process.cwd(), "supabase", "migrations");
-  for (const file of readdirSync(dir).filter((f) => f.endsWith(".sql")).sort()) {
-    await db.exec(readFileSync(path.join(dir, file), "utf8"));
-  }
+  db = await createDatabase();
+  await applyMigrations(db);
 }, 60_000);
 
 afterAll(async () => {
@@ -53,21 +46,6 @@ function keypair() {
 
 function ring(active: crypto.KeyObject | null, ...retired: crypto.KeyObject[]): LedgerKeyring {
   return { active, retired };
-}
-
-/** Signs the way `appendLedgerEntry` does and hands the body to the database to link. */
-async function appendThroughPostgres(
-  input: LedgerEntryInput,
-  privateKey: crypto.KeyObject,
-  signingKeyId: string | null = ledgerKeyId(privateKey)
-): Promise<LedgerRow> {
-  const bodyHash = bodyHashOf(input);
-  const signature = crypto.sign(null, Buffer.from(bodyHash, "hex"), privateKey).toString("hex");
-  const result = await db.query<LedgerRow>(
-    "select * from append_ledger_entry($1, $2, $3, $4, $5::jsonb, $6, $7, $8)",
-    [input.actor, input.domain, input.action, input.summary, JSON.stringify(input.detail), bodyHash, signature, signingKeyId]
-  );
-  return result.rows[0];
 }
 
 async function storedChain(): Promise<LedgerRow[]> {
@@ -105,7 +83,7 @@ const key = keypair();
 describe("append_ledger_entry() agrees with verifyChain()", () => {
 
   it("links the first entry to a genesis of zeros", async () => {
-    const row = await appendThroughPostgres(ENTRIES[0], key.privateKey);
+    const row = await appendSigned(db, ENTRIES[0], key.privateKey);
 
     expect(row.prev_hash).toBe(GENESIS);
     expect(verifyChain([row], ring(key.publicKey))).toEqual({ valid: true, checkedEntries: 1 });
@@ -115,8 +93,8 @@ describe("append_ledger_entry() agrees with verifyChain()", () => {
     // The database links each entry; the verifier recomputes every link. If
     // the two ever disagree about what a link is, this is the assertion that
     // says so — nothing else in the suite can.
-    await appendThroughPostgres(ENTRIES[1], key.privateKey);
-    await appendThroughPostgres(ENTRIES[2], key.privateKey);
+    await appendSigned(db, ENTRIES[1], key.privateKey);
+    await appendSigned(db, ENTRIES[2], key.privateKey);
 
     const rows = await storedChain();
     expect(rows).toHaveLength(3);
@@ -160,7 +138,8 @@ describe("migration 0014 on a real Postgres", () => {
 
   it("records null for a caller that sends no key id, as pre-identity code did", async () => {
     const legacy = keypair();
-    const row = await appendThroughPostgres(
+    const row = await appendSigned(
+      db,
       { actor: "system", domain: "system", action: "legacy_append", summary: "No key id supplied", detail: {} },
       legacy.privateKey,
       null

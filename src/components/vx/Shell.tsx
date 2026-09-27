@@ -1,21 +1,23 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { signOut } from "@/app/login/actions";
 import { getChainProvider } from "@/lib/circle";
 import { stats } from "@/lib/queries";
 import { screeningMode } from "@/lib/compliance";
 import type { CycleClockMode } from "@/lib/clock";
+import { orgHref } from "@/lib/auth/org-paths";
 import { Label } from "./Primitives";
 import { ProvenanceBar, type ProvenanceLeg } from "./Provenance";
 import { BrandMark } from "./Brand";
 
 const NAV = [
-  { key: "treasury", href: "/console", label: "Treasury" },
-  { key: "insights", href: "/insights", label: "Insights" },
-  { key: "invoices", href: "/invoices", label: "AP / AR" },
-  { key: "counterparties", href: "/counterparties", label: "Counterparties" },
-  { key: "contractors", href: "/contractors", label: "Contractors" },
-  { key: "compliance", href: "/compliance", label: "Compliance" },
-  { key: "audit", href: "/audit", label: "Audit log" },
+  { key: "treasury", path: "/console", label: "Treasury" },
+  { key: "insights", path: "/insights", label: "Insights" },
+  { key: "invoices", path: "/invoices", label: "AP / AR" },
+  { key: "counterparties", path: "/counterparties", label: "Counterparties" },
+  { key: "contractors", path: "/contractors", label: "Contractors" },
+  { key: "compliance", path: "/compliance", label: "Compliance" },
+  { key: "audit", path: "/audit", label: "Audit log" },
 ] as const;
 
 export type NavKey = (typeof NAV)[number]["key"];
@@ -25,12 +27,14 @@ export async function ProductShell({
   day,
   clockMode,
   lastCycleAt,
+  orgSlug,
   children,
 }: {
   active: NavKey;
   day?: number;
   clockMode?: CycleClockMode;
   lastCycleAt?: string | null;
+  orgSlug: string;
   children: ReactNode;
 }) {
   const fallbackStats = day == null || clockMode == null || lastCycleAt === undefined ? await stats() : null;
@@ -60,13 +64,18 @@ export async function ProductShell({
               <p className="mt-2 truncate text-sm font-medium text-ink-2">{process.env.BUSINESS_NAME?.trim() || "Vestiarion workspace"}</p>
               <p className="mt-0.5 text-xs text-ink-3">{currentLastCycleAt ? `Last cycle ${new Date(currentLastCycleAt).toLocaleString()}` : "No cycle recorded yet"}</p>
             </div>
-            <ProvenanceBar legs={legs} />
+            <div className="flex shrink-0 flex-col items-end gap-2">
+              <ProvenanceBar legs={legs} />
+              <form action={signOut}>
+                <button type="submit" className="text-[0.8125rem] text-ink-3 hover:text-ink">Sign out</button>
+              </form>
+            </div>
           </div>
           <nav aria-label="Sections" className="no-scrollbar -mb-px flex gap-1 overflow-x-auto">
             {NAV.map((item) => (
               <Link
                 key={item.key}
-                href={item.href}
+                href={orgHref(orgSlug, item.path)}
                 aria-current={item.key === active ? "page" : undefined}
                 className={`shrink-0 rounded-t-md border-b-2 px-3 pb-2.5 pt-2 text-sm transition-colors ${item.key === active ? "border-agent bg-agent-soft/70 font-semibold text-agent" : "border-transparent text-ink-2 hover:bg-raised/70 hover:text-ink"}`}
               >

@@ -2,9 +2,9 @@
 
 import "server-only";
 
-import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { hasAgentControlSession } from "@/lib/agent-session";
+import { authorizeMutation } from "@/lib/auth/authorize";
+import { revalidateOrgPages } from "@/lib/auth/revalidate";
 import { appendLedgerEntry } from "@/lib/ledger";
 import { supabase, unwrap } from "@/lib/supabase";
 
@@ -23,7 +23,8 @@ export async function manualMilestoneVerificationAction(
   _previous: MilestoneActionResult,
   formData: FormData
 ): Promise<MilestoneActionResult> {
-  if (!(await hasAgentControlSession())) return { ok: false, message: "Control session expired." };
+  const auth = await authorizeMutation(formData.get("orgSlug"));
+  if (!auth.ok) return { ok: false, message: auth.message };
   const parsed = manualVerificationSchema.safeParse({
     milestoneId: formData.get("milestoneId"),
     intent: formData.get("intent"),
@@ -62,6 +63,7 @@ export async function manualMilestoneVerificationAction(
     action: verified ? "verify_milestone_manual" : "revoke_milestone_verification",
     summary: `${verified ? "Verified" : "Revoked verification for"} milestone “${milestone.title}” manually`,
     detail: {
+      by: auth.user.id,
       milestoneId: milestone.id,
       verificationSource: milestone.verification_source,
       verificationMethod: "manual",
@@ -71,7 +73,6 @@ export async function manualMilestoneVerificationAction(
     },
   });
 
-  revalidatePath("/contractors");
-  revalidatePath("/audit");
+  revalidateOrgPages();
   return { ok: true, message: verified ? "Manual verification recorded." : "Verification revoked and recorded." };
 }

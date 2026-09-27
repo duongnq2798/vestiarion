@@ -21,13 +21,16 @@
     "arc:proof": "tsx scripts/arc-live-proof.ts",
     "status": "tsx scripts/status.ts",
     "cycle": "tsx scripts/run-cycle.ts",
-    "fixture:guardrail": "tsx scripts/guardrail-fixture.ts"
+    "fixture:guardrail": "tsx scripts/guardrail-fixture.ts",
+    "org:grant": "tsx scripts/org-grant.ts",
+    "org:adopt-env": "tsx scripts/org-adopt-env.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",
     "@circle-fin/app-kit": "^1.15.2",
     "@circle-fin/developer-controlled-wallets": "^10.8.1",
     "@circle-fin/earn-kit": "^1.7.0",
+    "@supabase/ssr": "0.12.7",
     "@supabase/supabase-js": "^2.117.1",
     "d3": "^7.9.0",
     "date-fns": "^4.4.0",

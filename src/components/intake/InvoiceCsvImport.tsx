@@ -7,7 +7,7 @@ import { csvInvoiceInputSchema, firstZodMessage } from "@/lib/intake-validation"
 
 const INITIAL: IntakeActionResult = { ok: false, message: "" };
 
-export default function InvoiceCsvImport() {
+export default function InvoiceCsvImport({ orgSlug }: { orgSlug: string }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [rows, setRows] = useState<InvoiceCsvRow[]>([]);
   const [previewError, setPreviewError] = useState("");
@@ -80,6 +80,7 @@ export default function InvoiceCsvImport() {
 
       {rows.length > 0 && (
         <form onSubmit={confirmImport} className="space-y-3">
+          <input type="hidden" name="orgSlug" value={orgSlug} />
           <input type="hidden" name="rowsJson" value={JSON.stringify(rows)} />
           <div className="max-h-72 overflow-auto rounded-md border border-line">
             <table className="w-full min-w-[760px] text-left text-xs">

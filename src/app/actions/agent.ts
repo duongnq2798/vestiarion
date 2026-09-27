@@ -2,9 +2,9 @@
 
 import "server-only";
 
-import { revalidatePath } from "next/cache";
 import { runAgentCycle } from "@/lib/agent/orchestrator";
-import { createAgentControlSession, hasAgentControlSession } from "@/lib/agent-session";
+import { authorizeMutation } from "@/lib/auth/authorize";
+import { revalidateOrgPages } from "@/lib/auth/revalidate";
 
 export interface AgentActionResult {
   ok: boolean;
@@ -13,24 +13,13 @@ export interface AgentActionResult {
   lines?: number;
 }
 
-export async function unlockAgentControls(
-  _previous: AgentActionResult,
-  formData: FormData
-): Promise<AgentActionResult> {
-  const candidate = formData.get("agentToken");
-  if (typeof candidate !== "string" || !(await createAgentControlSession(candidate))) {
-    return { ok: false, message: "Invalid control token." };
-  }
-  revalidatePath("/console", "layout");
-  return { ok: true, message: "Controls unlocked for one hour." };
-}
-
-export async function runAgentCycleAction(): Promise<AgentActionResult> {
-  if (!(await hasAgentControlSession())) return { ok: false, message: "Control session expired." };
+export async function runAgentCycleAction(orgSlug: string): Promise<AgentActionResult> {
+  const auth = await authorizeMutation(orgSlug);
+  if (!auth.ok) return { ok: false, message: auth.message };
 
   try {
-    const result = await runAgentCycle();
-    revalidatePath("/console", "layout");
+    const result = await runAgentCycle({ triggeredBy: auth.user.id });
+    revalidateOrgPages();
     return {
       ok: true,
       message: result.clockMode === "simulate"

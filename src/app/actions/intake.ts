@@ -4,7 +4,8 @@ import "server-only";
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { hasAgentControlSession } from "@/lib/agent-session";
+import { authorizeMutation } from "@/lib/auth/authorize";
+import { revalidateOrgPages } from "@/lib/auth/revalidate";
 import { screenCounterparty } from "@/lib/compliance";
 import {
   counterpartyInputSchema,
@@ -23,12 +24,6 @@ export interface IntakeActionResult {
   verdict?: string;
 }
 
-const INITIAL_FAILURE: IntakeActionResult = { ok: false, message: "Control session expired. Unlock controls and try again." };
-
-async function authorized(): Promise<boolean> {
-  return hasAgentControlSession();
-}
-
 function formString(formData: FormData, key: string): string {
   const value = formData.get(key);
   return typeof value === "string" ? value : "";
@@ -38,7 +33,8 @@ export async function createCounterpartyAction(
   _previous: IntakeActionResult,
   formData: FormData
 ): Promise<IntakeActionResult> {
-  if (!(await authorized())) return INITIAL_FAILURE;
+  const auth = await authorizeMutation(formData.get("orgSlug"));
+  if (!auth.ok) return { ok: false, message: auth.message };
 
   const parsed = counterpartyInputSchema.safeParse({
     name: formString(formData, "name"),
@@ -74,6 +70,7 @@ export async function createCounterpartyAction(
       action: "create_counterparty",
       summary: `Added ${counterparty.name} as a ${input.role}`,
       detail: {
+        by: auth.user.id,
         counterpartyId: counterparty.id,
         role: input.role,
         chain: input.chain,
@@ -85,9 +82,7 @@ export async function createCounterpartyAction(
 
     try {
       const screening = await screenCounterparty(counterparty.id);
-      revalidatePath("/counterparties");
-      revalidatePath("/compliance");
-      revalidatePath("/audit");
+      revalidateOrgPages();
       return {
         ok: true,
         created: 1,
@@ -95,9 +90,7 @@ export async function createCounterpartyAction(
         message: `${counterparty.name} added and screened: ${screening.riskLevel} risk.`,
       };
     } catch (error) {
-      revalidatePath("/counterparties");
-      revalidatePath("/compliance");
-      revalidatePath("/audit");
+      revalidateOrgPages();
       return {
         ok: true,
         created: 1,
@@ -115,7 +108,8 @@ export async function createInvoiceAction(
   _previous: IntakeActionResult,
   formData: FormData
 ): Promise<IntakeActionResult> {
-  if (!(await authorized())) return INITIAL_FAILURE;
+  const auth = await authorizeMutation(formData.get("orgSlug"));
+  if (!auth.ok) return { ok: false, message: auth.message };
 
   const parsed = invoiceInputSchema.safeParse({
     direction: formString(formData, "direction"),
@@ -148,6 +142,7 @@ export async function createInvoiceAction(
           po_reference: input.poReference,
           goods_received: input.goodsReceived,
           due_date: dueDateIso(input.dueDate),
+          created_by: auth.user.id,
         })
         .select("id")
         .single<{ id: string }>()
@@ -159,6 +154,7 @@ export async function createInvoiceAction(
       action: "create_invoice",
       summary: `Added ${input.direction} invoice for ${counterparty.name}: ${input.amount} USDC`,
       detail: {
+        by: auth.user.id,
         invoiceId: invoice.id,
         counterpartyId: counterparty.id,
         counterpartyName: counterparty.name,
@@ -169,9 +165,8 @@ export async function createInvoiceAction(
       },
     });
 
-    revalidatePath("/invoices");
     revalidatePath("/");
-    revalidatePath("/audit");
+    revalidateOrgPages();
     return { ok: true, created: 1, message: `Invoice added for ${counterparty.name}.` };
   } catch (error) {
     console.error("invoice intake failed", error);
@@ -185,7 +180,8 @@ export async function importInvoicesAction(
   _previous: IntakeActionResult,
   formData: FormData
 ): Promise<IntakeActionResult> {
-  if (!(await authorized())) return INITIAL_FAILURE;
+  const auth = await authorizeMutation(formData.get("orgSlug"));
+  if (!auth.ok) return { ok: false, message: auth.message };
 
   const rowsJson = formString(formData, "rowsJson");
   let decoded: unknown;
@@ -225,6 +221,7 @@ export async function importInvoicesAction(
           po_reference: row.po_reference,
           goods_received: row.goods_received,
           due_date: dueDateIso(row.due_date),
+          created_by: auth.user.id,
         })))
         .select("id")
     ) as Array<{ id: string }>;
@@ -237,6 +234,7 @@ export async function importInvoicesAction(
         action: "import_invoice",
         summary: `Imported ${row.direction} invoice for ${counterparty.name}: ${row.amount} USDC`,
         detail: {
+          by: auth.user.id,
           invoiceId: inserted[index].id,
           importMethod: "csv_preview_confirm",
           counterpartyId: counterparty.id,
@@ -249,9 +247,8 @@ export async function importInvoicesAction(
       });
     }
 
-    revalidatePath("/invoices");
     revalidatePath("/");
-    revalidatePath("/audit");
+    revalidateOrgPages();
     return { ok: true, created: inserted.length, message: `Imported ${inserted.length} invoice${inserted.length === 1 ? "" : "s"}.` };
   } catch (error) {
     console.error("invoice CSV import failed", error);

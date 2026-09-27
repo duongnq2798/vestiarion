@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { orgHref } from "@/lib/auth/org-paths";
 import type { LedgerEntry } from "@/lib/ledger";
 import { ChevronGlyph, DOMAIN_CODE, DOMAIN_NAME, DOMAINS, DomainGlyph } from "./Glyphs";
 import { Hash, Label, ModeBadge, OutcomeBadge } from "./Primitives";
@@ -136,13 +137,13 @@ function AuditRow({
   );
 }
 
-export function DomainFilter({ active }: { active?: Domain }) {
+export function DomainFilter({ active, orgSlug }: { active?: Domain; orgSlug: string }) {
   const className = (selected: boolean) => `inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${selected ? "border-ink-3 bg-raised text-ink" : "border-line text-ink-2 hover:border-line-strong"}`;
   return (
     <nav aria-label="Filter audit log by domain" className="flex flex-wrap gap-1.5">
-      <Link href="/audit" className={className(!active)}>All</Link>
+      <Link href={orgHref(orgSlug, "/audit")} className={className(!active)}>All</Link>
       {DOMAINS.map((domain) => (
-        <Link key={domain} href={`/audit?domain=${domain}`} className={className(active === domain)}>
+        <Link key={domain} href={orgHref(orgSlug, `/audit?domain=${domain}`)} className={className(active === domain)}>
           <DomainGlyph domain={domain} className="size-2.5" />{DOMAIN_NAME[domain]}
         </Link>
       ))}

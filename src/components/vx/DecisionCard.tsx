@@ -1,8 +1,9 @@
+import { orgHref } from "@/lib/auth/org-paths";
 import type { Decision, Evidence, Guardrail } from "./types";
 import { CheckGlyph, CrossGlyph, DOMAIN_NAME, DomainGlyph, ShieldGlyph } from "./Glyphs";
 import { Card, explorerTx, fmt, Hash, Label, ModeBadge, Money, OutcomeBadge, Reasoning } from "./Primitives";
 
-export function DecisionCard({ decision, compact = false }: { decision: Decision; compact?: boolean }) {
+export function DecisionCard({ decision, compact = false, orgSlug }: { decision: Decision; compact?: boolean; orgSlug: string }) {
   const refused = decision.outcome === "refused";
   const tone = refused
     ? "refused"
@@ -60,7 +61,7 @@ export function DecisionCard({ decision, compact = false }: { decision: Decision
           <EvidenceRow items={decision.evidence} />
           <div className="flex shrink-0 flex-wrap items-center gap-4">
             {decision.auditSeq != null && (
-              <a href={`/audit#seq-${decision.auditSeq}`} className="font-mono text-xs text-ink-3 hover:text-ink hover:underline">
+              <a href={orgHref(orgSlug, `/audit#seq-${decision.auditSeq}`)} className="font-mono text-xs text-ink-3 hover:text-ink hover:underline">
                 audit #{String(decision.auditSeq).padStart(4, "0")}
               </a>
             )}

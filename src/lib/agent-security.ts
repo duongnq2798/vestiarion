@@ -1,7 +1,6 @@
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 
 export const RESET_CONFIRMATION = "RESET_DEMO_DATA";
-export const AGENT_SESSION_COOKIE = "vestiarion_agent_session";
 
 function digest(value: string): Buffer {
   return createHash("sha256").update(value, "utf8").digest();
@@ -24,11 +23,6 @@ export function bearerToken(authorization: string | null): string | null {
 
 export function hasValidAgentBearer(authorization: string | null, expectedToken: string | undefined): boolean {
   return secureTokenMatches(bearerToken(authorization), expectedToken);
-}
-
-/** The cookie is a keyed proof, never the operator's bearer token. */
-export function agentSessionProof(token: string): string {
-  return createHmac("sha256", token).update("vestiarion-agent-control-session-v1", "utf8").digest("base64url");
 }
 
 export type ResetGuardResult =
