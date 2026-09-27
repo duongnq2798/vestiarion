@@ -2,7 +2,9 @@
 -- of 0015 and 0016 go.
 --
 -- RUN ONLY AFTER the code that passes p_org_id is live. Before that, this
--- breaks every append, every simulated day and every payment claim.
+-- breaks every append, every simulated day and every payment claim — and,
+-- once org_id has no default, every insert the old code makes too (NOT NULL
+-- org_id). Until then: `npm run db:migrate -- --through 0016`.
 --
 -- Idempotent throughout: scripts/migrate.ts re-runs every migration each time.
 
@@ -75,10 +77,10 @@ begin
   end loop;
 end $$;
 
--- sim_clock keeps its founding default (ledger Ruling R13): 0001, replayed on
--- every db:migrate run, inserts its bootstrap row without naming org_id, and
--- Postgres checks NOT NULL before ON CONFLICT. Every real write names its
--- organization — advance_sim_day(p_org_id) and the DAL's stamped upsert.
+-- sim_clock keeps its founding default: 0001, replayed on every db:migrate
+-- run, inserts its bootstrap row without naming org_id, and Postgres checks
+-- NOT NULL before ON CONFLICT. Every real write names its organization —
+-- advance_sim_day(p_org_id) and the DAL's stamped upsert.
 
 -- sim_clock.id stays: 0001, which db:migrate replays on every run, inserts into
 -- it and creates advance_sim_day() over it. 0016 made it nullable and unique.
@@ -88,4 +90,9 @@ end $$;
 --   'treasury_actions','compliance_checks','forecasts','ledger_entries','payment_intents','cycle_runs',
 --   'cycle_snapshots','sim_clock'] loop execute format('alter table public.%I alter column org_id set default '
 --   '''00000000-0000-4000-8000-000000000001''', t); end loop; end $$;
--- then re-create the four old functions from 0014 (append), 0001 (advance_sim_day), 0004 (claim) and 0007 (targets).
+-- then `npm run db:migrate -- --through 0016`, which replays 0001–0016: the four
+-- old signatures with their revokes, and 0016's append that also takes the
+-- global lock, so old and new deployments serialise during the switch.
+-- Only while the founding organization is the only one with rows — 0014's
+-- append links to the newest row of any organization, and the old code reads
+-- every tenant table unfiltered. A later plain db:migrate re-applies 0017.

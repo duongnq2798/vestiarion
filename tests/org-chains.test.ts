@@ -200,7 +200,7 @@ describe("0017: the transitional parts are gone", () => {
   beforeAll(async () => {
     contracted = await createDatabase();
     await applyMigrations(contracted, THROUGH_0016);
-    await appendSignedForOrg(contracted, FOUNDING_ORG_ID, entry("before 0017"), key.privateKey);
+    await appendSigned(contracted, entry("before 0017"), key.privateKey);
     await contracted.query("select advance_sim_day($1::uuid)", [FOUNDING_ORG_ID]);
     await applyMigrations(contracted);
     northstar = await createOrg(contracted, "northstar");
@@ -241,7 +241,7 @@ describe("0017: the transitional parts are gone", () => {
     const chain = (await contracted.query<LedgerRow>("select * from ledger_entries where org_id = $1 order by seq", [FOUNDING_ORG_ID])).rows;
     expect(verifyChain(chain, ring)).toEqual({ valid: true, checkedEntries: 2 });
     const day = (await contracted.query<{ d: number }>("select advance_sim_day($1::uuid) as d", [FOUNDING_ORG_ID])).rows[0].d;
-    expect(day).toBeGreaterThanOrEqual(2);
+    expect(day).toBe(2);
   });
 
   it("gives a new organization its own clock", async () => {
@@ -253,8 +253,31 @@ describe("0017: the transitional parts are gone", () => {
     await applyMigrations(contracted);
   });
 
+  it("keeps the per-organization-only lock body after a full replay", async () => {
+    // Replaying 0001-0016 re-creates 0016's dual-lock append (the transitional
+    // global lock plus the per-org one) under the very signature 0017 also
+    // uses; only 0017's own create-or-replace overwrites that body again.
+    // Without this, deleting 0017's create-or-replace would leave 0016's body
+    // in place — the global lock back in production — and every other test
+    // here would still pass, since none of them inspects the function body.
+    const def = (await contracted.query<{ def: string }>(
+      `select pg_get_functiondef('public.append_ledger_entry(uuid,text,text,text,text,jsonb,text,text,text)'::regprocedure) as def`
+    )).rows[0].def;
+    expect(def).toContain("'vestiarion_ledger:' || p_org_id");
+    expect(def).not.toContain("hashtext('vestiarion_ledger')");
+  });
+
+  it("still defaults only sim_clock's org_id after a full replay", async () => {
+    const rows = (await contracted.query<{ table_name: string; column_default: string | null }>(
+      `select table_name, column_default from information_schema.columns
+        where table_schema = 'public' and column_name = 'org_id' and table_name = any($1)`,
+      [TENANT]
+    )).rows;
+    expect(rows.filter((row) => row.column_default !== null).map((row) => row.table_name)).toEqual(["sim_clock"]);
+  });
+
   it("leaves no tenant function executable by the browser roles, even after a full replay", async () => {
-    // Replaying 0001–0007 re-creates the old signatures for a moment; 0017 drops
+    // Replaying 0001–0014 re-creates the old signatures for a moment; 0017 drops
     // them again, and the surviving ones must still refuse anon and authenticated.
     const rows = (await contracted.query<{ fn: string; anon: boolean; auth: boolean }>(
       `select p.oid::regprocedure::text as fn,
