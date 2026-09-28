@@ -2,8 +2,6 @@
 
 An autonomous treasury agent for a small business, settled in USDC on Arc.
 
-Built for the [Tameion Agents Hackathon](https://tameion.thecanteenapp.com) (Canteen × Circle).
-
 > *Tameion* is ancient Greek for a treasury — literally the room the money was kept in. In
 > Byzantium that room grew into the *vestiarion*, the department that minted the coin, held the
 > stores, and paid the army. Vestiarion is the same idea in software: **one agent that runs a
@@ -17,20 +15,20 @@ Vestiarion runs a configured business's treasury through one decision loop, the 
 Each organization's own name (`orgs.name`) is the identity shown in the product; no customer name
 is hard-coded into the interface:
 
-1. **Compliance (RFB5)** — the whole counterparty book is re-screened every cycle, not checked
+1. **Compliance** — the whole counterparty book is re-screened every cycle, not checked
    once at onboarding. A hit tiers the payment limit down instead of a blunt yes/no, and the tier
    is *reversible*: the limit the business configured lives in its own column, so a counterparty
    that comes off the watchlist gets its full limit back and one that stays on it does not decay
    a little further every time it is looked at. The sweep is logged whether or not anything
    changed, because proving screening happened is the part a one-time gate cannot do.
-2. **AP automation (RFB2)** — each payable invoice gets a three-way match (PO ↔ goods received ↔
+2. **AP automation** — each payable invoice gets a three-way match (PO ↔ goods received ↔
    invoice) plus a risk check, and the agent decides to **pay**, **hold** (over limit), **request
    info** (no PO match), or **flag as fraud** (high-risk counterparty) — with its reasoning
    attached to the line item.
-3. **Contractor payments (RFB3)** — a GitHub PR URL can be checked for an actual merge before a
+3. **Contractor payments** — a GitHub PR URL can be checked for an actual merge before a
    milestone is released. Human verification remains available and is recorded as a human ledger
    action. Verified milestones are released the same day instead of waiting for Net-30.
-4. **Treasury (RFB1)** — idle operating cash above a 7-day obligation buffer is swept into a
+4. **Treasury** — idle operating cash above a 7-day obligation buffer is swept into a
    USYC-yielding reserve; the agent redeems back out ahead of due dates rather than after. The
    sweep only happens when it pays for itself: a sweep and the redemption that must follow it are
    two transactions, so the policy computes the yield earned over the days until the next
@@ -38,7 +36,7 @@ is hard-coded into the interface:
    to move stays liquid (`src/lib/agent/treasury.ts`).
 5. **Continuous audit trail** — every decision above is appended to a hash-chained, Ed25519-signed
    ledger (`/audit`). A reviewer can verify the whole chain in one click and read *why* the agent
-   acted, not just that a balance moved — the "continuous euthyna" the hackathon brief describes.
+   acted, not just that a balance moved.
 
 Every decision is made by asking an LLM for a structured `{action, reasoning, confidence}` verdict
 under an explicit guardrail policy (never pay a high-risk counterparty, never exceed a payment
@@ -46,24 +44,6 @@ limit, keep a liquidity buffer before sweeping to yield). Anthropic, OpenAI, and
 supported, and with no key at all the same decision points fall back to a transparent rule-based
 heuristic — so the app runs end-to-end with zero credentials, and every ledger entry records which
 path produced it.
-
-## Why this maps to the judging criteria
-
-- **Agentic sophistication (30%)** — the agent chooses *whether* and *when* to pay, not just how;
-  every choice comes with a checkable reason, and guardrails can override an LLM's own decision
-  (see the `[guardrail override]` path in `src/lib/agent/orchestrator.ts`), which is what makes it
-  an agent operating inside bounds rather than an unconstrained script.
-- **Circle tool usage (20%)** — built directly against Circle's Developer-Controlled Wallets SDK
-  (transfers, balances), EarnKit (USYC), and App Kit, following the same architecture as
-  [`circlefin/arc-fintech`](https://github.com/circlefin/arc-fintech). See
-  [Going live on Arc testnet](#going-live-on-arc-testnet).
-- **Innovation (20%)** — the signed hash-chain ledger is a working version of Prior Art #01 and
-  #08 from the hackathon brief (continuous audit trail; a single agent running mint/hold/pay) —
-  ideas the brief explicitly says "nobody has built yet."
-- **Traction (30%)** — the agent runs against real Circle wallets on Arc testnet, and
-  `npm run cycle -- <org-slug>` is the same code path the dashboard button uses, so it can run
-  unattended on a schedule. Pointing it at a real business is a data change, not a code change —
-  see [Bringing your own business](#bringing-your-own-business).
 
 ## Architecture
 
