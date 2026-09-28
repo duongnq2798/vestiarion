@@ -450,6 +450,40 @@ organization's data through the UI or the API.
    3. deploy;
    4. measure: a cycle runs and the ledger stays `valid: true`, and a token minted for another
       organization reads nothing of the founding organization's.
+
+   **Shipped 2026-09-28 as #15 (merge `1ac7e89`).** Three changes were made beyond the plan:
+   - `0001` no longer re-creates its public-read policies when `db:migrate` replays it. They would
+     otherwise have opened every organization to the tenant role until `0003` ran.
+   - `0018` verifies its own grants and reloads PostgREST's config.
+   - The demo reset keeps the ledger.
+
+   Measured on production, with `0018` and `0019` applied while the service-role code was still live.
+   The database:
+   - `vestiarion_tenant` has USAGE on `extensions` and `authenticator` is a member of it;
+   - 12 permissive and 12 restrictive policies exist, and no public-read policy remains;
+   - 6 composite foreign keys exist;
+   - the role's `statement_timeout` is 8 s;
+   - `digest()` resolves under the role.
+
+   Tokens minted locally, the same way the app mints them:
+
+   | Token | Request | Result |
+   |---|---|---|
+   | founding | ledger | 200, founding rows only |
+   | founding | invoices with `counterparties(name)` | 200; the embed resolves across the composite key |
+   | random organization | ledger, invoices | 200, 0 rows |
+   | `role: authenticated` | ledger | 403 |
+   | tenant role | `orgs` | 403 |
+
+   The old code's cron cycle still completed, and the ledger stayed `valid: true` (148 entries).
+
+   After the deploy:
+   - the first cron cycle to run under the tenant role wrote #230–#232 for the founding organization,
+     signed by `9b03458d9a617871`;
+   - a cycle started from the owner's console wrote #233–#235, with `by` recorded;
+   - the ledger reported `valid: true` (151 entries);
+   - `/api/v1/status` reported `tenantAccessConfigured: true`;
+   - the owner's pages render.
 5. **Self-serve and roles:** `/onboarding`, `create_org()`, limits, invitations, the permission map
    enforced everywhere, the cron iterating organizations, sandbox cleanup.
 
