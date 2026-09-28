@@ -276,7 +276,10 @@ not before.
    tenant-to-tenant foreign key therefore becomes composite, e.g. `invoices (org_id, counterparty_id) →
    counterparties (org_id, id)`, so the database itself refuses a link to another organization's row.
    The single-column key it replaces is dropped, so PostgREST still sees exactly one relationship to
-   embed.
+   embed. `cycle_snapshots`'s unique `(cycle_run_id)` becomes `(org_id, cycle_run_id)`. Under the composite key a
+   run fixes its organization, so this is still one snapshot per run; it also keeps PostgREST's one-to-one
+   detection, which needs the unique key to match the foreign key's columns exactly. (This amends 5.2's
+   "unchanged".)
 
 The per-request token is minted by `mintRequestToken`:
 
