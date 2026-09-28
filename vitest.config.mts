@@ -2,10 +2,11 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 /**
- * Tests run in the `node` environment, not jsdom: everything under test is
- * server-side treasury logic — hash chains, risk tiering, guardrails — and
- * none of it touches the DOM. React components are covered by the app
- * itself; the money paths are covered here.
+ * Tests run in the `node` environment, not jsdom. Everything under test is
+ * server-side treasury logic — hash chains, risk tiering, guardrails — or the
+ * markup a UI primitive renders, which `react-dom/server` produces without a
+ * DOM (the `*.test.tsx` files). Interaction is checked in the browser, on the
+ * development-only /design page.
  */
 export default defineConfig({
   resolve: {
@@ -15,7 +16,7 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["tests/**/*.test.ts"],
+    include: ["tests/**/*.test.ts", "tests/**/*.test.tsx"],
     setupFiles: ["tests/setup.ts"],
     coverage: {
       provider: "v8",
