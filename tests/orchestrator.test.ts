@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
-import { runAgentCycle } from "@/lib/agent/orchestrator";
+import { agentCycleSuccessMessage, cycleCompleteSummary, runAgentCycle } from "@/lib/agent/orchestrator";
 import { fakeSupabase, orgTestContext, type RecordedRequest } from "./support/fake-supabase";
 
 /**
@@ -94,5 +94,56 @@ describe("runAgentCycle — opens the run through begin_cycle_run before anythin
     expect(advanceIndex).toBeGreaterThan(beginIndex);
     expect(patchIndex).toBeGreaterThan(advanceIndex);
     expect(fake.requests[patchIndex].body).toEqual({ sim_day: 3 });
+  });
+});
+
+describe("cycleCompleteSummary", () => {
+  it("uses the singular at exactly one decision, in simulate mode", () => {
+    expect(cycleCompleteSummary("simulate", 3, "2026-09-28T00:00:00.000Z", 1)).toBe(
+      "Agent cycle 3 complete: 1 agent decision recorded"
+    );
+  });
+
+  it("uses the plural at any other count, in simulate mode", () => {
+    expect(cycleCompleteSummary("simulate", 3, "2026-09-28T00:00:00.000Z", 0)).toBe(
+      "Agent cycle 3 complete: 0 agent decisions recorded"
+    );
+    expect(cycleCompleteSummary("simulate", 3, "2026-09-28T00:00:00.000Z", 2)).toBe(
+      "Agent cycle 3 complete: 2 agent decisions recorded"
+    );
+  });
+
+  it("names the finish time instead of the day number in real-clock mode", () => {
+    expect(cycleCompleteSummary("real", 3, "2026-09-28T00:00:00.000Z", 1)).toBe(
+      "Agent cycle complete at 2026-09-28T00:00:00.000Z: 1 agent decision recorded"
+    );
+  });
+});
+
+describe("agentCycleSuccessMessage", () => {
+  it("uses the singular at exactly one line, in simulate mode", () => {
+    expect(
+      agentCycleSuccessMessage({ clockMode: "simulate", day: 4, finishedAt: "2026-09-28T00:00:00.000Z", lines: [{ domain: "ap", message: "x" }] })
+    ).toBe("Day 4 complete · 1 decision logged.");
+  });
+
+  it("uses the plural at any other count, in simulate mode", () => {
+    expect(
+      agentCycleSuccessMessage({ clockMode: "simulate", day: 4, finishedAt: "2026-09-28T00:00:00.000Z", lines: [] })
+    ).toBe("Day 4 complete · 0 decisions logged.");
+    expect(
+      agentCycleSuccessMessage({
+        clockMode: "simulate",
+        day: 4,
+        finishedAt: "2026-09-28T00:00:00.000Z",
+        lines: [{ domain: "ap", message: "x" }, { domain: "treasury", message: "y" }],
+      })
+    ).toBe("Day 4 complete · 2 decisions logged.");
+  });
+
+  it("names the finish time instead of the day number in real-clock mode", () => {
+    expect(
+      agentCycleSuccessMessage({ clockMode: "real", day: 4, finishedAt: "2026-09-28T00:00:00.000Z", lines: [{ domain: "ap", message: "x" }] })
+    ).toBe(`Cycle complete at ${new Date("2026-09-28T00:00:00.000Z").toLocaleString()} · 1 decision logged.`);
   });
 });

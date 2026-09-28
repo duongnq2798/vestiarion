@@ -28,13 +28,33 @@ export function StatTile({
   return href ? <Link href={href} className={className}>{content}</Link> : <div className={className}>{content}</div>;
 }
 
-export function BalanceTile({ accounts }: { accounts: Account[] }) {
+/**
+ * The balance tile's label and sub-line, pinned as a pure function: a
+ * sandbox workspace's funds are simulated money end to end, so it always
+ * gets the fixed sandbox wording, regardless of the simulated reserve
+ * amount. A live workspace keeps the on-chain label, and defers to the
+ * caller's own sub-line (the simulated-reserve note, which needs the `Money`
+ * component) by returning `sub: null` when there is a simulated reserve to
+ * mention.
+ */
+export function balanceTileCopy(
+  mode: "sandbox" | "live",
+  simulatedReserve: number
+): { label: string; sub: string | null } {
+  if (mode === "sandbox") {
+    return { label: "Balance (simulated)", sub: "Sandbox workspace: these funds are simulated, nothing is on-chain" };
+  }
+  return { label: "Balance on-chain", sub: simulatedReserve > 0 ? null : "All funds shown are on-chain" };
+}
+
+export function BalanceTile({ accounts, mode }: { accounts: Account[]; mode: "sandbox" | "live" }) {
   const live = accounts.filter((account) => !account.simulated).reduce((sum, account) => sum + account.balance, 0);
   const simulated = accounts.filter((account) => account.simulated).reduce((sum, account) => sum + account.balance, 0);
+  const copy = balanceTileCopy(mode, simulated);
   return (
     <StatTile
-      label="Balance on-chain"
-      sub={simulated > 0 ? <span>+ <Money value={simulated} token="USYC" simulated className="text-ink-2" /> in the simulated reserve, not counted above</span> : "All funds shown are on-chain"}
+      label={copy.label}
+      sub={copy.sub ?? <span>+ <Money value={simulated} token="USYC" simulated className="text-ink-2" /> in the simulated reserve, not counted above</span>}
     >
       <Money value={live} />
     </StatTile>

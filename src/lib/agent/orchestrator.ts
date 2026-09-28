@@ -25,6 +25,33 @@ import {
 import { followUpConfig, planFollowUp, type DecisionFacts } from "./follow-up";
 import { OPEN_PAYABLE_STATUSES, summarizePayableObligations } from "./obligations";
 import { planTreasury, type TreasuryDecision } from "./treasury";
+import { plural } from "../copy";
+
+/** The closing `cycle_complete` ledger entry's summary line, pulled out as a
+ * pure function so the singular/plural wording can be tested without
+ * driving a full cycle through `runAgentCycle`. */
+export function cycleCompleteSummary(
+  clockMode: CycleClockMode,
+  day: number,
+  finishedAt: string,
+  decisionCount: number
+): string {
+  const decisions = plural(decisionCount, "1 agent decision recorded", `${decisionCount} agent decisions recorded`);
+  return clockMode === "simulate"
+    ? `Agent cycle ${day} complete: ${decisions}`
+    : `Agent cycle complete at ${finishedAt}: ${decisions}`;
+}
+
+/** The success message `runAgentCycleAction` returns to the console. Kept
+ * pure and exported so the singular/plural wording is testable without
+ * driving a full cycle, and so the wording lives next to the summary it
+ * echoes rather than being reworded independently in the action. */
+export function agentCycleSuccessMessage(result: Pick<CycleResult, "clockMode" | "day" | "finishedAt" | "lines">): string {
+  const decisions = plural(result.lines.length, "1 decision logged", `${result.lines.length} decisions logged`);
+  return result.clockMode === "simulate"
+    ? `Day ${result.day} complete · ${decisions}.`
+    : `Cycle complete at ${new Date(result.finishedAt).toLocaleString()} · ${decisions}.`;
+}
 
 const SYSTEM_PROMPT = `You are Vestiarion, an autonomous treasury agent operating a small business's money on the Arc blockchain, settled in USDC. You hold real spending authority inside the guardrails below.
 
@@ -1255,9 +1282,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     actor: "system",
     domain: "system",
     action: "cycle_complete",
-    summary: clockMode === "simulate"
-      ? `Agent cycle ${day} complete: ${cycleMetrics.decisionCount} agent decisions recorded`
-      : `Agent cycle complete at ${finishedAt}: ${cycleMetrics.decisionCount} agent decisions recorded`,
+    summary: cycleCompleteSummary(clockMode, day, finishedAt, cycleMetrics.decisionCount),
     detail: {
       ...(triggeredBy ? { by: triggeredBy } : {}),
       day,
