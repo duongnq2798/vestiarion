@@ -31,6 +31,10 @@ export type LlmProvider = "anthropic" | "openai" | "deepseek" | "heuristic";
 export interface DatabaseConfig {
   url: string;
   serviceRoleKey: string;
+  /** The public anon key; tenant requests present it alongside their own token. */
+  anonKey?: string;
+  /** Signs each tenant request's token (SUPABASE_JWT_SECRET). As powerful as the service role key. */
+  requestTokenSecret?: string;
 }
 
 export interface ChainConfig {
@@ -200,7 +204,12 @@ export function configFromEnv(env: EnvLike = process.env): VestiarionConfig {
 
   return {
     businessName: trimmed(env.BUSINESS_NAME) ?? "Vestiarion workspace",
-    database: { url, serviceRoleKey },
+    database: {
+      url,
+      serviceRoleKey,
+      anonKey: trimmed(env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
+      requestTokenSecret: trimmed(env.SUPABASE_JWT_SECRET),
+    },
     chain: {
       circleApiKey: trimmed(env.CIRCLE_API_KEY),
       circleEntitySecret: trimmed(env.CIRCLE_ENTITY_SECRET),
@@ -245,7 +254,10 @@ export function configFromEnv(env: EnvLike = process.env): VestiarionConfig {
 export function describeConfig(config: VestiarionConfig): Record<string, unknown> {
   return {
     businessName: config.businessName,
-    database: { host: safeHost(config.database.url) },
+    database: {
+      host: safeHost(config.database.url),
+      tenantAccessConfigured: !!(config.database.anonKey && config.database.requestTokenSecret),
+    },
     chain: {
       circleConfigured: !!(config.chain.circleApiKey && config.chain.circleEntitySecret),
       arcRpcConfigured: !!config.chain.arcRpcUrl,
