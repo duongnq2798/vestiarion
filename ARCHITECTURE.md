@@ -68,14 +68,16 @@ the count side.
 **The permission map** (spec §7) lives as data in `src/lib/auth/roles.ts` — `PERMISSIONS` maps each
 of `workspace.read`, `agent.pause`, `approval.decide`, `records.write`, `agent.run_cycle`,
 `agent.resume`, `members.manage`, and `org.administer` to the roles that hold it — and is enforced
-once, at the boundary: every mutating server action calls `authorize(slug, permission)`
-(`src/lib/auth/authorize.ts`), which re-derives the caller's membership and role from the session
-rather than trusting anything the form claims, while pages call the read-only `viewerCan` to decide
-whether to render a control at all. `records.write` and `agent.run_cycle` need `owner` or `admin`;
-`org.administer` — going live, Circle credentials, rotating the ledger key, deleting the
-organization — is `owner` only. `canAssignRole` enforces the other half of §7 in code: an admin may
-grant `approver` or `viewer` but nothing at or above its own rank, and only an owner assigns
-`admin` or `owner`.
+at the boundary through `authorize(slug, permission)` (`src/lib/auth/authorize.ts`), which
+re-derives the caller's membership and role from the session rather than trusting anything the form
+claims; a page can call the read-only `viewerCan` to decide whether to render a control at all.
+Today's actions call it for `records.write` (`src/app/actions/intake.ts`,
+`src/app/actions/milestones.ts`) and `agent.run_cycle` (`src/app/actions/agent.ts`) — both need
+`owner` or `admin` — which is the whole map §7 currently has a caller for. The remaining
+permissions, and `canAssignRole`'s rule that an admin may grant `approver` or `viewer` but nothing
+at its own rank or above while only an owner assigns `admin` or `owner`, are defined in `roles.ts`
+ahead of the features that will call them: pausing/resuming the agent and deciding approvals
+(Tier 1), and member invitation and management (Plan 3a step 5b).
 
 **The cron** (`POST /api/agent/tick`) no longer runs one configured business.
 `runLiveOrganizations` (`src/lib/agent/cron.ts`) lists every organization in `mode = 'live'` and,

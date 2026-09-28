@@ -136,15 +136,16 @@ first line of its ledger. One person can hold up to 3 workspaces this way; a set
 is rolled back rather than left half-built. The header's **Workspaces** link (`/onboarding?new`)
 lists the workspaces you belong to and lets you create another.
 
-Every member of a workspace has one role. **Owner** and **admin** manage counterparties, invoices,
-and milestones and can run a cycle by hand; **approver** can pause the agent and decide approvals
-but cannot create records, keeping maker separate from checker; **viewer** reads everything — the
-console, the ledger, past cycles — and changes nothing. Only an owner can add or remove another
-owner or admin, go live, rotate the ledger key, or delete the workspace; an admin can still manage
-approvers and viewers. A workspace always keeps at least one owner: the database itself refuses to
-remove or demote the last one. A sandbox workspace is capped at 20 agent cycles per UTC day, counted
-in the database so the cap holds however many server instances are running, which bounds how much a
-trial workspace can spend on LLM calls.
+Every member of a workspace has one role. **Owner** and **admin** add counterparties, invoices, and
+milestones, and can run a cycle by hand; **approver** and **viewer** read everything — the console,
+the ledger, past cycles — and change nothing, so an approver cannot create the records it may one
+day approve, keeping maker separate from checker from the start. A workspace always keeps at least
+one owner: the database itself refuses to remove or demote the last one. A sandbox workspace is
+capped at 20 agent cycles per UTC day, counted in the database so the cap holds however many server
+instances are running, which bounds how much a trial workspace can spend on LLM calls. The rest of
+the role distinctions the product will eventually make — pausing the agent, deciding approvals,
+inviting and managing members — are defined in the permission map already, ahead of the features
+that will use them.
 
 Only the **founding organization** — seeded ahead of any sign-in, in `live` mode — skips self-serve
 creation: it exists before anyone signs in, so no self-serve step ever generates it a ledger key.
