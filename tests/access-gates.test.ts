@@ -125,12 +125,6 @@ describe("the entry points bound to the founding organization", () => {
     expect(read(path.join(ROOT, "src", "app", "api", "agent", "reset", "route.ts"))).toContain("withFoundingOrg(");
   });
 
-  it("the cron runs every live organization instead (spec §4.4)", () => {
-    const source = read(path.join(ROOT, "src", "app", "api", "agent", "tick", "route.ts"));
-    expect(source).toContain("runLiveOrganizations(");
-    expect(source).not.toContain("withFoundingOrg(");
-  });
-
   it("the ledger verify route checks the session and the membership before verifying", () => {
     const source = read(path.join(ROOT, "src", "app", "api", "ledger", "verify", "route.ts"));
     const session = source.indexOf("getSessionUser(");
@@ -139,6 +133,14 @@ describe("the entry points bound to the founding organization", () => {
     expect(session).toBeGreaterThan(-1);
     expect(membership).toBeGreaterThan(session);
     expect(verify).toBeGreaterThan(membership);
+  });
+});
+
+describe("the cron", () => {
+  it("runs every live organization instead of the founding one (spec §4.4)", () => {
+    const source = read(path.join(ROOT, "src", "app", "api", "agent", "tick", "route.ts"));
+    expect(source).toContain("runLiveOrganizations(");
+    expect(source).not.toContain("withFoundingOrg(");
   });
 });
 

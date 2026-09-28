@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { currentOrgId, runWith } from "@/lib/context";
 import { runLiveOrganizations } from "@/lib/agent/cron";
@@ -30,6 +30,8 @@ function liveOrgsDatabase(request: RecordedRequest): FakeReply {
 }
 
 describe("runLiveOrganizations", () => {
+  afterEach(() => vi.restoreAllMocks());
+
   it("runs the work in every live organization, isolating each one's failure (spec §4.4)", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     const fake = fakeSupabase(liveOrgsDatabase);
@@ -52,7 +54,6 @@ describe("runLiveOrganizations", () => {
     const orgsQuery = fake.requests.find((request) => request.path === "/rest/v1/orgs" && request.params.has("mode"));
     expect(orgsQuery?.params.get("mode")).toBe("eq.live");
     expect(console.error).toHaveBeenCalledWith("cycle failed for", "b-corp", expect.any(Error));
-    vi.restoreAllMocks();
   });
 
   it("returns an empty result for no live organizations, without running anything", async () => {

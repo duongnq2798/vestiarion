@@ -18,7 +18,7 @@ export async function authorize(orgSlug: unknown, permission: Permission): Promi
   if (!user) return { ok: false, message: "Your session has ended. Sign in again." };
   const membership = await membershipFor(user.id, orgSlug);
   if (!membership) {
-    return { ok: false, message: "Only an owner of this workspace can do that." };
+    return { ok: false, message: "You are not a member of this workspace." };
   }
   if (!can(membership.role, permission)) {
     return { ok: false, message: `Your role in this workspace (${membership.role}) cannot do that.` };

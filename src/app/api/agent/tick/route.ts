@@ -26,6 +26,11 @@ export async function POST(request: Request) {
     // organization's failure does not stop the rest (§4.4). Sandbox
     // organizations are not in the cron — their cycles run from the console,
     // capped by sandboxCyclesUsedToday (§10 step 5a).
+    //
+    // Live organizations run sequentially in this one invocation, so the
+    // tick's wall time is the sum of their cycles, not the slowest one.
+    // Today there is one live organization. Revisit `maxDuration` or running
+    // organizations in parallel once a second one goes live.
     const results = await runLiveOrganizations(() => runAgentCycle());
     const organizations = results.map((result) =>
       result.ok

@@ -21,7 +21,7 @@ export async function runAgentCycleAction(orgSlug: string): Promise<AgentActionR
   return inOrg(auth, async () => {
     try {
       if (auth.membership.mode === "sandbox" && (await sandboxCyclesUsedToday()) >= SANDBOX_DAILY_CYCLES) {
-        return { ok: false, message: "This sandbox has run its 20 cycles for today (UTC). It resets at midnight UTC." };
+        return { ok: false, message: `This sandbox has run its ${SANDBOX_DAILY_CYCLES} cycles for today (UTC). It resets at midnight UTC.` };
       }
       const result = await runAgentCycle({ triggeredBy: auth.user.id });
       revalidateOrgPages();
