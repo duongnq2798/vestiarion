@@ -311,3 +311,20 @@ the confirmations.
 | `tailwind-merge` misreads a custom token | a class silently disappears | extended config + contract test |
 | A shared-layout indicator animates between the sidebar and the sheet | a pill flies across the screen | one `LayoutGroup` per navigation instance |
 | D1 proves wrong (Radix stalls) | primitives need a new engine | Radix is imported only inside `src/components/ui/`, so a switch to Base UI touches that folder alone |
+
+## 13. Rulings made while planning (2026-09-28)
+
+Found by reading the installed libraries and React DOM before writing code. Where one contradicts an earlier
+section, this section wins.
+
+| # | Ruling | Why | Cost if wrong |
+|---|---|---|---|
+| P1 | Two plans, two PRs: **A** — tokens, primitives, `/design`, contract tests, root providers; **B** — every screen migrated, the command palette, the consistency tests, removal of the old utilities. Replaces "one PR" in §10. | B's code is written against A's reviewed APIs rather than guessed ones; A changes nothing a user sees and can merge alone. | One extra review and deploy cycle. |
+| P2 | Forms submit through a `useActionForm` hook (`onSubmit` + `startTransition`) instead of `<form action>` alone. Replaces the remount-on-success idea in D9 and §4.5. | React 19 resets a form after every `<form action>` submission whatever the action returns (`startHostTransition` calls `requestFormReset` unconditionally), so today a refused intake wipes what the person typed. Radix 1.6 Select and Checkbox listen for the form's `reset` event, so `form.reset()` on success clears them too. The `action` prop stays, so React still refuses a submission made before hydration. | A form that must work without JavaScript would need the old wiring back; none here does. |
+| P3 | `Reveal` uses an `IntersectionObserver` and a CSS transition, not Motion. It never hides an element that is on screen when the page hydrates, and hides one below the fold only once JavaScript runs. Replaces the Motion `whileInView` in D4 and §4.4. | Motion's `initial` state renders `opacity: 0` into the server HTML: a slow or failed script would leave the landing page blank. | None found; Motion stays for shared layout and presence. |
+| P4 | `MotionProvider` wraps the workspace frame and `/design`, not the root layout. | Motion's feature bundle then loads only where something animates with it; the landing and sign-in pages never fetch it. An `m` element outside the provider renders, unanimated. | A future public-page animation has to add the provider. |
+| P5 | The React Compiler lint rules are errors in this repo (`react-hooks/set-state-in-effect`, `react-hooks/refs`, …). Primitives never set state synchronously in an effect or read a ref during render; open-state that must close on navigation keys itself to the pathname, as the workspace switcher already does. | `npm run lint` fails otherwise. | — |
+| P6 | `FormMessage` is server-safe; it has no hooks. | Corrects §4.2. | — |
+| P7 | While loading, a `Button`'s spinner takes the leading icon's place, or precedes the label when there is none. | Corrects "width unchanged" in §5: a label that changes to "Saving…" changes width anyway. | — |
+| P8 | A failed copy to the clipboard is reported by a toast. | It is the one action with no inline place for an error, and the text it tried to copy stays on screen to copy by hand. Narrows D5's "never only a toast" to action results. | — |
+| P9 | Work happens in a separate worktree (`E:\APP2028\hackathon-project-ui`) with its own `node_modules`, and its dev server on port 3100. | Another session shares the main checkout and switched its branch mid-task, once committing onto this branch. | Disk space for a second `node_modules`. |
