@@ -496,6 +496,33 @@ organization's data through the UI or the API.
      - A new sandbox gets an operating account holding 10,000 simulated USDC and an empty reserve, so
        its first cycle has something to reason about.
      - Its first ledger entry, `org_created`, is signed with the key just generated.
+
+     Shipped on 2026-09-28. `0020` was applied to production before the merge. The database then showed:
+     - `create_org` has one signature, and only the service role can execute it (`anon`, `authenticated`
+       and `vestiarion_tenant` cannot);
+     - `keep_an_owner` is SECURITY DEFINER, owned by `postgres`, with an empty `search_path`;
+     - the `memberships_keep_an_owner` trigger exists, and the founding organization still has its owner.
+
+     After the deploy:
+     - the scheduled cycle answered `{"organizations":[{"slug":"founding","ok":true}]}` and wrote
+       #236–#238, signed by `9b03458d9a617871`;
+     - the founding ledger reported `valid: true` (157 entries).
+
+     The first self-serve workspace, `note-one`, was created from `/onboarding`:
+     - it is a sandbox with one owner and the two simulated accounts;
+     - its genesis entry #239 `org_created` is signed by its own key `b8f99a96beb9e488`, and
+       `detail.ledgerKeyId` names the same key;
+     - a cycle started from its console wrote #240–#242 under that key.
+
+     These were read from the stored rows. The signatures themselves were not checked here, because
+     `/api/ledger/verify?org=note-one` answers only the workspace's members.
+
+     Tokens minted the way the app mints them read only their own organization's rows:
+
+     | Token | `ledger_entries` | `accounts` | `cycle_runs` |
+     |---|---|---|---|
+     | founding | 157 rows, founding only | 3, founding only | 40, founding only |
+     | `note-one` | 4 rows, `note-one` only | 2, `note-one` only | 1, `note-one` only |
    - **5b — members:** invitations with their email, the members page (change role, remove), the
      database rule that no one grants a role above their own, `last_active_at`, and the daily cleanup
      of abandoned sandboxes.
