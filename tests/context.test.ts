@@ -208,9 +208,30 @@ describe("the organization in scope", () => {
   it("guards the organization's configuration and its secret warnings", () => {
     expect(() => currentOrgConfig()).toThrow(NoOrgScopeError);
     expect(() => currentSecretWarnings()).toThrow(NoOrgScopeError);
-    runWithConfig(northstar, () => {
+    // The shape `contextFor` builds: the organization's configuration, with the
+    // platform configuration it was built from beside it.
+    const scoped = { ...createContext(northstar, { orgId: ORG_A, secretWarnings: ["stored key could not be read"] }), platformConfig: meridian };
+    runWith(scoped, () => {
       expect(currentOrgConfig().businessName).toBe("Northstar Studio");
       expect(currentSecretWarnings()).toEqual(["stored key could not be read"]);
+    });
+  });
+
+  it("keeps the organization's configuration from a scope the Data Access Layer did not build", () => {
+    // runWith and runWithConfig accept an organization beside any
+    // configuration — the environment's ledger key and Circle credentials
+    // included — so such a scope could read one organization's rows while
+    // signing and paying as the platform. Only `contextFor` sets
+    // `platformConfig`, so its absence is what marks a scope entered by hand
+    // (R19).
+    const refusal = "An organization's configuration is only available inside a scope entered through the Data Access Layer";
+    runWithConfig(northstar, () => {
+      expect(currentOrgId()).toBe(ORG_A);
+      expect(() => currentOrgConfig()).toThrow(refusal);
+      expect(() => currentSecretWarnings()).toThrow(refusal);
     }, { orgId: ORG_A, secretWarnings: ["stored key could not be read"] });
+    runWith(createContext(northstar, { orgId: ORG_A }), () => {
+      expect(() => currentOrgConfig()).toThrow(refusal);
+    });
   });
 });

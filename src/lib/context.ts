@@ -50,7 +50,8 @@ export interface VestiarionContext {
   secretWarnings?: string[];
   /**
    * The platform configuration an organization's config was built from.
-   * Absent outside an organization's scope.
+   * Absent outside an organization's scope. Only the Data Access Layer's
+   * `contextFor` sets it, which is what `currentOrgConfig()` checks (R19).
    */
   platformConfig?: VestiarionConfig;
 }
@@ -74,9 +75,12 @@ export function createContext(config: VestiarionConfig, scope: Partial<OrgScope>
  * Runs `fn` against a specific configuration. Everything it calls — directly
  * or through any number of awaits — sees that context and no other.
  *
- * This is the whole multi-tenant story: an MCP server or a Slack bot resolves
- * which workspace a request belongs to, builds or looks up its context, and
- * runs the work inside it.
+ * An organization is not entered with this directly. `withOrg`, `inOrg` and
+ * `withFoundingOrg` (src/lib/dal/scope.ts) build the context from the
+ * organization's own row and then call this; a context naming an
+ * organization that was built any other way can read its rows but is refused
+ * its configuration (R19). ESLint keeps this and `runWithConfig` out of
+ * application code for the same reason.
  */
 export function runWith<T>(context: VestiarionContext, fn: () => T): T {
   return storage.run(context, fn);
@@ -138,19 +142,39 @@ export function currentUserId(): string | undefined {
 }
 
 /**
- * The configuration of the organization in scope. Anything that reads an
- * organization's secrets — its ledger key, its Circle credentials — reads
- * them through this, so that outside a scope it throws instead of quietly
- * using the environment's.
+ * The organization's scope, provided the Data Access Layer built it.
+ *
+ * `runWith` and `runWithConfig` accept `{ orgId }` beside any configuration,
+ * so a scope can name the right organization while carrying the
+ * environment's ledger key and Circle credentials: it would read that
+ * organization's rows while signing and paying as the platform. Only
+ * `contextFor` pairs an organization with the configuration built from its
+ * own row, and only it sets `platformConfig`, so a scope without one is
+ * refused here. The lint rule keeps `runWith` out of application code; this
+ * also covers scripts, which the lint rule does not reach (R19).
  */
-export function currentOrgConfig(): VestiarionConfig {
-  currentOrgId();
-  return currentConfig();
+function organizationContext(): VestiarionContext {
+  const context = storage.getStore();
+  if (!context?.orgId) throw new NoOrgScopeError();
+  if (!context.platformConfig) {
+    throw new Error("An organization's configuration is only available inside a scope entered through the Data Access Layer");
+  }
+  return context;
 }
 
+/**
+ * The configuration of the organization in scope. Anything that reads an
+ * organization's secrets — its ledger key, its Circle credentials — reads
+ * them through this, so that outside a scope, or in one the Data Access Layer
+ * did not build, it throws instead of quietly using the environment's.
+ */
+export function currentOrgConfig(): VestiarionConfig {
+  return organizationContext().config;
+}
+
+/** Why some of the organization's stored secrets could not be read; guarded like its configuration. */
 export function currentSecretWarnings(): string[] {
-  currentOrgId();
-  return storage.getStore()?.secretWarnings ?? [];
+  return organizationContext().secretWarnings ?? [];
 }
 
 /**

@@ -18,6 +18,12 @@ const FIXTURES: Record<string, string> = {
   "dynamically imports the raw client": 'export const leak = async () => await import("@supabase/supabase-js");\n',
   "dynamically imports the context": 'export const leak = async () => await import("@/lib/context");\n',
   "dynamically imports the context relatively": 'export const leak = async () => await import("../../lib/context");\n',
+  // runWith and runWithConfig accept `{ orgId }` beside any configuration, so
+  // a scope entered with them could read one organization's rows while
+  // signing and paying with the environment's secrets. Organizations are
+  // entered through @/lib/dal/scope instead (R19).
+  "enters an organization's scope by hand": 'import { runWithConfig } from "@/lib/context";\nexport const enter = runWithConfig;\n',
+  "enters a scope by hand, relatively": 'import { runWith } from "../../lib/context";\nexport const enter = runWith;\n',
 };
 
 async function restrictedImportMessages(code: string, filePath: string): Promise<string[]> {

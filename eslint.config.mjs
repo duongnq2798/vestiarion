@@ -5,7 +5,9 @@ import nextTs from "eslint-config-next/typescript";
 // Shared by both the static-import rule and the dynamic-import rule below, so
 // the two forms of the same warning cannot drift apart (R16).
 const RAW_CLIENT_MESSAGE = "Use db() or platformDb() from @/lib/dal; the raw client can read every organization.";
-const CONTEXT_MESSAGE = "The context's client bypasses organization scoping. Use db() or platformDb() from @/lib/dal.";
+const CONTEXT_MESSAGE =
+  "The context's client, runWith and runWithConfig bypass organization scoping. Use db() or platformDb() from " +
+  "@/lib/dal, and enter an organization through @/lib/dal/scope.";
 
 const eslintConfig = defineConfig([
   ...nextVitals,
@@ -23,6 +25,13 @@ const eslintConfig = defineConfig([
     // (R16); `allowTypeImports` keeps `import type { SupabaseClient }` and
     // `import { type SupabaseClient }` allowed, since both files below only ever
     // use it as a type.
+    //
+    // `runWith` and `runWithConfig` are restricted with the context's client:
+    // they accept `{ orgId }` beside any configuration, so a scope entered with
+    // them could read one organization's rows while signing and paying with
+    // the environment's secrets. Organizations are entered through
+    // @/lib/dal/scope, which builds the scope from the organization's own row
+    // (R19).
     files: ["src/**/*.{ts,tsx}"],
     ignores: ["src/lib/dal/**", "src/lib/context.ts"],
     rules: {
@@ -36,14 +45,14 @@ const eslintConfig = defineConfig([
           },
           {
             name: "@/lib/context",
-            importNames: ["currentContext", "createContext"],
+            importNames: ["currentContext", "createContext", "runWith", "runWithConfig"],
             message: CONTEXT_MESSAGE,
           },
         ],
         patterns: [
           {
             group: ["**/context"],
-            importNames: ["currentContext", "createContext"],
+            importNames: ["currentContext", "createContext", "runWith", "runWithConfig"],
             message: CONTEXT_MESSAGE,
           },
         ],

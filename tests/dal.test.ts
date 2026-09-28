@@ -8,10 +8,18 @@ const ORG_A = "0b6c1c9e-4a4f-4a7e-9b1e-000000000a0a";
 const ORG_B = "0b6c1c9e-4a4f-4a7e-9b1e-000000000b0b";
 const config = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k" });
 
-/** `null` means no organization in scope (`undefined` would take the default). */
+/**
+ * An organization's context in the shape `contextFor` builds it, with the
+ * platform configuration beside it — or, for `null`, the platform's own
+ * context with no organization (`undefined` would take the default).
+ */
+function contextOf(orgId: string | null, client: ReturnType<typeof fakeSupabase>["client"]) {
+  return orgId ? { config, db: client, orgId, platformConfig: config } : { config, db: client };
+}
+
 function scoped<T>(fn: () => Promise<T> | T, orgId: string | null = ORG_A) {
   const fake = fakeSupabase();
-  const result = runWith({ config, db: fake.client, orgId: orgId ?? undefined }, async () => fn());
+  const result = runWith(contextOf(orgId, fake.client), async () => fn());
   return { fake, result };
 }
 
@@ -29,9 +37,9 @@ describe("a handle's bound organization", () => {
     // handle kept past a nested `runWith` for another organization must
     // refuse rather than go on quietly serving the one it was created in.
     const fake = fakeSupabase();
-    const result = runWith({ config, db: fake.client, orgId: ORG_A }, async () => {
+    const result = runWith(contextOf(ORG_A, fake.client), async () => {
       const handle = db();
-      return runWith({ config, db: fake.client, orgId: ORG_B }, () => handle.from("invoices").select("*"));
+      return runWith(contextOf(ORG_B, fake.client), () => handle.from("invoices").select("*"));
     });
     await expect(result).rejects.toThrow(/belongs to a different organization/);
     expect(fake.requests).toEqual([]);

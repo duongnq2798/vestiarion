@@ -23,7 +23,7 @@ describe("runAgentCycle — refuses before touching the database (R12)", () => {
     const fake = fakeSupabase();
 
     await expect(
-      runWith({ config: unreadable, db: fake.client, orgId: ORG }, () => runAgentCycle())
+      runWith({ config: unreadable, db: fake.client, orgId: ORG, platformConfig: config }, () => runAgentCycle())
     ).rejects.toThrow(/refusing to fall back to simulated payments/);
     expect(fake.requests).toEqual([]);
   });
@@ -44,7 +44,7 @@ describe("runAgentCycle — the real-clock sim_clock read", () => {
     );
 
     await expect(
-      runWith({ config: realClockConfig, db: fake.client, orgId: ORG }, () => runAgentCycle())
+      runWith({ config: realClockConfig, db: fake.client, orgId: ORG, platformConfig: realClockConfig }, () => runAgentCycle())
     ).rejects.toThrow("sim_clock read failed: connection reset");
 
     expect(fake.requests.some((request) => request.path === "/rest/v1/sim_clock")).toBe(true);

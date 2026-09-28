@@ -22,7 +22,7 @@ function withUnreadableCredentials(reason: string) {
 describe("getChainProvider — stored Circle credentials that cannot be read", () => {
   it("refuses rather than falling back to simulated payments", () => {
     const reason = "could not decrypt circle_api_key_enc of organization x: wrong master key, or the ciphertext was altered or moved";
-    runWith({ config: withUnreadableCredentials(reason), db: fakeSupabase().client, orgId: ORG }, () => {
+    runWith({ config: withUnreadableCredentials(reason), db: fakeSupabase().client, orgId: ORG, platformConfig: config }, () => {
       expect(() => getChainProvider()).toThrow(
         `This organization's Circle credentials are stored but could not be read (${reason}); refusing to fall back to simulated payments`
       );
@@ -30,7 +30,7 @@ describe("getChainProvider — stored Circle credentials that cannot be read", (
   });
 
   it("does not refuse an organization with no stored Circle credentials at all", () => {
-    runWith({ config, db: fakeSupabase().client, orgId: ORG }, () => {
+    runWith({ config, db: fakeSupabase().client, orgId: ORG, platformConfig: config }, () => {
       expect(() => getChainProvider()).not.toThrow();
       expect(getChainProvider().mode).toBe("simulate");
     });
@@ -40,13 +40,13 @@ describe("getChainProvider — stored Circle credentials that cannot be read", (
 describe("chainModes — must render a page even when getChainProvider() refuses", () => {
   it("reports simulate/simulate without constructing a provider", () => {
     const reason = "could not decrypt circle_entity_secret_enc of organization x: wrong master key, or the ciphertext was altered or moved";
-    runWith({ config: withUnreadableCredentials(reason), db: fakeSupabase().client, orgId: ORG }, () => {
+    runWith({ config: withUnreadableCredentials(reason), db: fakeSupabase().client, orgId: ORG, platformConfig: config }, () => {
       expect(chainModes()).toEqual({ mode: "simulate", earnMode: "simulate" });
     });
   });
 
   it("still reports the real provider's modes when credentials are readable", () => {
-    runWith({ config, db: fakeSupabase().client, orgId: ORG }, () => {
+    runWith({ config, db: fakeSupabase().client, orgId: ORG, platformConfig: config }, () => {
       expect(chainModes()).toEqual({ mode: "simulate", earnMode: "simulate" });
     });
   });

@@ -24,6 +24,11 @@ import { carriesOrg, fakeSupabase } from "./support/fake-supabase";
  * Every library function that touches tenant data: outside an organization it
  * refuses before any request, and inside one every request it makes names that
  * organization.
+ *
+ * The organization contexts here are built by hand in the shape `contextFor`
+ * builds them, `platformConfig` included — without it `currentOrgConfig()`
+ * refuses (R19), and a read that reaches for the organization's keys would
+ * stop there instead of running to the end.
  */
 
 const ORG = "0b6c1c9e-4a4f-4a7e-9b1e-000000000a0a";
@@ -57,7 +62,7 @@ describe.each(READS)("%s", (_name, read) => {
 
   it("names the organization on every request it makes", async () => {
     const fake = fakeSupabase();
-    await runWith({ config, db: fake.client, orgId: ORG }, read).catch(() => undefined);
+    await runWith({ config, db: fake.client, orgId: ORG, platformConfig: config }, read).catch(() => undefined);
     expect(fake.requests.length).toBeGreaterThan(0);
     for (const request of fake.requests) expect(carriesOrg(request, ORG), `${request.method} ${request.path}`).toBe(true);
   });
@@ -73,7 +78,7 @@ describe("an organization's secrets", () => {
   });
 
   it("surface a stored secret that could not be read as a ledger warning", () => {
-    runWith({ config, db: fakeSupabase().client, orgId: ORG, secretWarnings: ["could not decrypt ledger_signing_key_enc"] }, () => {
+    runWith({ config, db: fakeSupabase().client, orgId: ORG, secretWarnings: ["could not decrypt ledger_signing_key_enc"], platformConfig: config }, () => {
       expect(ledgerReadWarnings()).toContain("could not decrypt ledger_signing_key_enc");
     });
   });
@@ -82,7 +87,7 @@ describe("an organization's secrets", () => {
     const scopedConfig = { ...config, ledgerSigningKey: undefined, allowGeneratedLedgerKey: false };
     const fake = fakeSupabase();
     await expect(
-      runWith({ config: scopedConfig, db: fake.client, orgId: ORG }, () =>
+      runWith({ config: scopedConfig, db: fake.client, orgId: ORG, platformConfig: config }, () =>
         appendLedgerEntry({ actor: "system", domain: "system", action: "note", summary: "x", detail: {} })
       )
     ).rejects.toThrow(LedgerSigningKeyError);
@@ -93,7 +98,7 @@ describe("an organization's secrets", () => {
     const scopedConfig = { ...config, ledgerSigningKey: undefined, allowGeneratedLedgerKey: true };
     const fake = fakeSupabase();
     await expect(
-      runWith({ config: scopedConfig, db: fake.client, orgId: ORG }, () =>
+      runWith({ config: scopedConfig, db: fake.client, orgId: ORG, platformConfig: config }, () =>
         appendLedgerEntry({ actor: "system", domain: "system", action: "note", summary: "x", detail: {} })
       )
     ).rejects.toThrow(/created with the organization, never on demand/);
