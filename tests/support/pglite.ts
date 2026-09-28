@@ -87,6 +87,15 @@ export async function createOrg(db: PGlite, slug: string): Promise<string> {
   return result.rows[0].id;
 }
 
+/** A person, for tests that need someone to be `created_by` or a member. */
+export async function createUser(db: PGlite, email: string): Promise<string> {
+  const result = await db.query<{ id: string }>(
+    "insert into auth.users (id, email) values (gen_random_uuid(), $1) returning id",
+    [email]
+  );
+  return result.rows[0].id;
+}
+
 export const TENANT_TABLES = [
   "accounts", "counterparties", "invoices", "milestones", "treasury_actions", "compliance_checks",
   "forecasts", "ledger_entries", "payment_intents", "cycle_runs", "cycle_snapshots", "sim_clock",
