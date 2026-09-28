@@ -54,6 +54,10 @@ export interface VestiarionContext {
    * `contextFor` sets it, which is what `currentOrgConfig()` checks (R19).
    */
   platformConfig?: VestiarionConfig;
+  /** The organization's own client: every request runs as vestiarion_tenant for orgId. Set only by the DAL. */
+  tenantDb?: SupabaseClient;
+  /** The fetch both clients use. Production leaves it unset; tests pass a recorder. */
+  fetch?: typeof fetch;
 }
 
 const storage = new AsyncLocalStorage<VestiarionContext>();
@@ -61,9 +65,10 @@ const storage = new AsyncLocalStorage<VestiarionContext>();
 /** The environment-derived context, built once, for the single-tenant case. */
 let ambient: VestiarionContext | undefined;
 
-function createDb(config: VestiarionConfig): SupabaseClient {
+function createDb(config: VestiarionConfig, fetchImpl?: typeof fetch): SupabaseClient {
   return createClient(config.database.url, config.database.serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
+    ...(fetchImpl ? { global: { fetch: fetchImpl } } : {}),
   });
 }
 

@@ -9,7 +9,7 @@ import { fakeSupabase, type RecordedRequest } from "./support/fake-supabase";
 
 const ORG = "5d0f3a2e-8c1b-4f7a-9e6d-00000000beef";
 const SEALED_ORG = "5d0f3a2e-8c1b-4f7a-9e6d-00000000feed";
-const base = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k" });
+const base = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k", NEXT_PUBLIC_SUPABASE_ANON_KEY: "test-anon-key", SUPABASE_JWT_SECRET: "test-request-token-secret-at-least-32-characters" });
 
 const sealingKeys = parseMasterKeys(`w1:${crypto.randomBytes(32).toString("base64")}`);
 const sealedLedgerKey = "sealed-ledger-key-must-not-leak";
@@ -43,7 +43,7 @@ function orgsTable(request: RecordedRequest) {
 
 function inPlatform<T>(fn: () => Promise<T>) {
   const fake = fakeSupabase(orgsTable);
-  return { fake, run: () => runWith({ config: base, db: fake.client }, fn) };
+  return { fake, run: () => runWith({ config: base, db: fake.client, fetch: fake.fetch }, fn) };
 }
 
 describe("withOrg", () => {
@@ -98,10 +98,12 @@ describe("nested scopes", () => {
     const platformConfig = configFromEnv({
       NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid",
       SUPABASE_SERVICE_ROLE_KEY: "k",
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: "test-anon-key",
+      SUPABASE_JWT_SECRET: "test-request-token-secret-at-least-32-characters",
       LEDGER_RETIRED_PUBLIC_KEYS: "-----BEGIN PUBLIC KEY-----\nretired\n-----END PUBLIC KEY-----",
     });
     const fake = fakeSupabase(orgsTable);
-    const result = await runWith({ config: platformConfig, db: fake.client }, () =>
+    const result = await runWith({ config: platformConfig, db: fake.client, fetch: fake.fetch }, () =>
       withOrg(ORG, () => withFoundingOrg(async () => currentConfig().ledgerRetiredPublicKeys))
     );
     expect(result).toBe(platformConfig.ledgerRetiredPublicKeys);

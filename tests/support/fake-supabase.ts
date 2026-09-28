@@ -1,4 +1,6 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type { VestiarionConfig } from "@/lib/config";
+import type { VestiarionContext } from "@/lib/context";
 
 /**
  * A real supabase-js client whose network is a recorder. Tests assert on the
@@ -29,6 +31,8 @@ export interface FakeReply {
 export function fakeSupabase(respond: (request: RecordedRequest) => FakeReply = () => ({ body: [] })): {
   client: SupabaseClient;
   requests: RecordedRequest[];
+  /** The recorder itself, for a context's `fetch`, so the tenant client a scope builds records too. */
+  fetch: typeof fetch;
 } {
   const requests: RecordedRequest[] = [];
   const recordingFetch: typeof fetch = async (input, init) => {
@@ -52,7 +56,17 @@ export function fakeSupabase(respond: (request: RecordedRequest) => FakeReply = 
     auth: { persistSession: false, autoRefreshToken: false },
     global: { fetch: recordingFetch },
   });
-  return { client, requests };
+  return { client, requests, fetch: recordingFetch };
+}
+
+/** An organization context as the DAL builds it, over one recorded fake client. */
+export function orgTestContext(input: {
+  config: VestiarionConfig; client: SupabaseClient; orgId: string; secretWarnings?: string[]; userId?: string;
+}): VestiarionContext {
+  return {
+    config: input.config, db: input.client, tenantDb: input.client, orgId: input.orgId,
+    platformConfig: input.config, secretWarnings: input.secretWarnings, userId: input.userId,
+  };
 }
 
 /** Whether a request names the organization: a filter, a stamped body, or an RPC argument. */

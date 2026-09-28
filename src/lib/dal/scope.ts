@@ -2,6 +2,7 @@ import { currentContext, runWith, type VestiarionContext } from "../context";
 import { parseMasterKeys, type MasterKey } from "../secrets";
 import { platformDb, unwrap } from "./index";
 import { FOUNDING_ORG_ID, ORG_SECRET_COLUMNS, orgConfig, type OrgRow } from "./org-config";
+import { tenantClient } from "./tenant-client";
 
 /**
  * How work enters an organization. Every tenant read and write happens inside
@@ -47,7 +48,18 @@ function contextFor(org: OrgRow, userId: string | undefined): VestiarionContext 
   // own settings (§ R7).
   const platformConfig = current.platformConfig ?? current.config;
   const { config, warnings } = orgConfig(platformConfig, org, masterKeys());
-  return { config, db: current.db, orgId: org.id, userId, secretWarnings: warnings, platformConfig };
+  return {
+    config,
+    db: current.db,
+    // Database settings are platform settings, so the tenant client is built
+    // from the platform's, never from anything the organization's row supplies.
+    tenantDb: tenantClient(platformConfig.database, org.id, userId, { fetch: current.fetch }),
+    fetch: current.fetch,
+    orgId: org.id,
+    userId,
+    secretWarnings: warnings,
+    platformConfig,
+  };
 }
 
 export async function orgContext(orgId: string, userId?: string): Promise<VestiarionContext> {

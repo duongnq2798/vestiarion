@@ -4,10 +4,11 @@ import { currentContext, currentOrgId } from "../context";
 /**
  * The Data Access Layer: the only way the application reaches tenant data.
  *
- * `db()` is a service-role client narrowed to one organization. Every read,
- * update and delete it builds carries `org_id = <the organization in scope>`,
- * every insert and upsert stamps it, and every tenant RPC receives it as
- * `p_org_id`. A caller cannot widen that: a row or an argument naming another
+ * `db()` is the organization's tenant client, narrowed to it twice over: each
+ * request runs as `vestiarion_tenant` with a token naming the organization, so
+ * row-level security confines it in the database; and every read, update and
+ * delete it builds carries `org_id = <the organization in scope>`, every
+ * insert and upsert stamps it, and every tenant RPC receives it as `p_org_id`. A caller cannot widen that: a row or an argument naming another
  * organization is refused, not re-stamped, because it means some other code
  * path already crossed a tenant boundary. An upsert that could still *update*
  * a row — anything but `ignoreDuplicates` — must also name `org_id` in
@@ -17,7 +18,8 @@ import { currentContext, currentOrgId } from "../context";
  * to act rather than keep serving the one it was created in.
  *
  * `platformDb()` reaches the three tables that exist before any organization
- * is known — organizations, memberships, invitations — and nothing else.
+ * is known — organizations, memberships, invitations — and nothing else. It
+ * keeps the service role, because none of those rows belong to one tenant.
  *
  * ESLint forbids the raw client outside this directory. See eslint.config.mjs.
  */
@@ -114,7 +116,11 @@ function tenantTable(client: SupabaseClient, table: TenantTable, orgId: string) 
 
 export function db() {
   const orgId = currentOrgId();
-  const client = currentContext().db;
+  const client = currentContext().tenantDb;
+  // No fallback to the service role: a scope the DAL did not build has no
+  // tenant client, and reaching tenant data without one is the failure this
+  // whole layer exists to prevent.
+  if (!client) throw new Error("This organization's scope has no tenant client; enter it through withOrg or inOrg");
   return {
     orgId,
     from(table: TenantTable) {

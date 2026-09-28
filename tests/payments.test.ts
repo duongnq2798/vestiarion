@@ -16,7 +16,7 @@ import type {
   TransferParams,
   TransferResult,
 } from "@/lib/circle";
-import { fakeSupabase, type RecordedRequest } from "./support/fake-supabase";
+import { fakeSupabase, orgTestContext, type RecordedRequest } from "./support/fake-supabase";
 
 const request: PaymentRequest = {
   sourceType: "invoice",
@@ -235,7 +235,7 @@ describe("SupabasePaymentIntentStore.claim (R20)", () => {
 
   function inOrganization<T>(respond: (request: RecordedRequest) => { body: unknown }, fn: () => Promise<T>) {
     const fake = fakeSupabase(respond);
-    return { fake, result: runWith({ config, db: fake.client, orgId: ORG, platformConfig: config }, fn) };
+    return { fake, result: runWith(orgTestContext({ config, client: fake.client, orgId: ORG }), fn) };
   }
 
   it("is not a claim when the update matched nothing", async () => {
