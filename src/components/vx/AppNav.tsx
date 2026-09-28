@@ -6,7 +6,7 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent
 import { orgHref } from "@/lib/auth/org-paths";
 import type { OrgRole } from "@/lib/auth/roles";
 import { BrandMark } from "./Brand";
-import { CheckGlyph, CloseGlyph, MenuGlyph, NavGlyph, SelectorGlyph } from "./Glyphs";
+import { CheckGlyph, CloseGlyph, MenuGlyph, NavGlyph, PlusGlyph, SelectorGlyph } from "./Glyphs";
 import { HOME_PATH, NAV_GROUPS, navItemForPathname } from "./nav";
 
 /**
@@ -95,8 +95,9 @@ function WorkspaceMeta({ workspace }: { workspace: WorkspaceSummary }) {
 }
 
 /**
- * The workspace in view and, for someone in several, a list to move between
- * them — landing on the same section of the other workspace.
+ * The workspace in view, and a list to move between workspaces — landing on
+ * the same section of the other one — or to create another. Open even with a
+ * single workspace: creating the second one starts here.
  */
 export function WorkspaceSwitcher({ current, workspaces }: { current: WorkspaceSummary; workspaces: WorkspaceSummary[] }) {
   const pathname = usePathname();
@@ -115,20 +116,6 @@ export function WorkspaceSwitcher({ current, workspaces }: { current: WorkspaceS
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [open]);
-
-  const summary = (
-    <>
-      <WorkspaceBadge workspace={current} />
-      <span className="min-w-0 flex-1 text-left">
-        <span className="block truncate text-sm font-semibold text-ink">{current.name}</span>
-        <WorkspaceMeta workspace={current} />
-      </span>
-    </>
-  );
-
-  if (workspaces.length < 2) {
-    return <div className="flex items-center gap-3 rounded-xl border border-line bg-surface/80 px-2.5 py-2">{summary}</div>;
-  }
 
   const section = navItemForPathname(pathname)?.path ?? HOME_PATH;
   // The current workspace's own link leads to the URL already open, which would not close it.
@@ -153,7 +140,11 @@ export function WorkspaceSwitcher({ current, workspaces }: { current: WorkspaceS
         onClick={() => setOpenAt(open ? null : pathname)}
         className={`flex w-full items-center gap-3 rounded-xl border px-2.5 py-2 transition-colors ${open ? "border-agent-line bg-surface" : "border-line bg-surface/80 hover:border-line-strong hover:bg-surface"}`}
       >
-        {summary}
+        <WorkspaceBadge workspace={current} />
+        <span className="min-w-0 flex-1 text-left">
+          <span className="block truncate text-sm font-semibold text-ink">{current.name}</span>
+          <WorkspaceMeta workspace={current} />
+        </span>
         <SelectorGlyph className="size-4 text-ink-3" />
         <span className="sr-only">Switch workspace</span>
       </button>
@@ -189,8 +180,13 @@ export function WorkspaceSwitcher({ current, workspaces }: { current: WorkspaceS
             );
           })}
         </ul>
+        {/* `?new` keeps /onboarding from sending a one-workspace person straight back here. */}
         <div className="mt-1 border-t border-line pt-1">
-          <Link href="/onboarding" onClick={close} className="flex items-center rounded-lg px-2.5 py-2 text-sm text-agent hover:bg-raised/70">
+          <Link href="/onboarding?new#create-workspace" onClick={close} className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-agent hover:bg-raised/70">
+            <PlusGlyph className="size-4" />
+            Create workspace
+          </Link>
+          <Link href="/onboarding?new" onClick={close} className="flex items-center rounded-lg px-2.5 py-2 text-sm text-ink-2 hover:bg-raised/70 hover:text-ink">
             All workspaces
           </Link>
         </div>

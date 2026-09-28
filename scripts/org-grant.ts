@@ -4,7 +4,12 @@
  *
  *   npm run org:grant -- founding you@example.com owner
  *
- * The person must have signed in once, so that an account exists.
+ * The person must have signed in once, so that an account exists. Invitations
+ * (Plan 3b) are the product's own way for a member to bring someone else into
+ * a workspace; this stays the operator's tool, for the founding organization
+ * and for anyone self-serve invitations can't yet reach. The last-owner
+ * trigger (migration 0020) is what now keeps a sole owner from being
+ * downgraded or removed out from under a workspace.
  */
 import { config } from "dotenv";
 
@@ -13,19 +18,13 @@ config({ path: [".env.local", ".env"], quiet: true });
 async function main() {
   const { configFromEnv } = await import("../src/lib/config");
   const { createContext } = await import("../src/lib/context");
-  const { FOUNDING_ORG_SLUG, isValidSlug } = await import("../src/lib/auth/org-paths");
+  const { isValidSlug } = await import("../src/lib/auth/org-paths");
   const { isOrgRole } = await import("../src/lib/auth/roles");
 
   const [slug, emailArg, role] = process.argv.slice(2);
   const email = emailArg?.trim().toLowerCase();
   if (!slug || !isValidSlug(slug) || !email || !isOrgRole(role)) {
     throw new Error("usage: npm run org:grant -- <slug> <email> <owner|admin|approver|viewer>");
-  }
-
-  if (slug !== FOUNDING_ORG_SLUG) {
-    throw new Error(
-      `Until self-serve onboarding and invitations arrive (spec §10, rollout step 5), only the founding organization can have members; refusing to grant a role in ${slug}.`
-    );
   }
 
   const db = createContext(configFromEnv(process.env)).db;

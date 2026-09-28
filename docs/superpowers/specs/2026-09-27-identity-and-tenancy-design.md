@@ -486,6 +486,19 @@ organization's data through the UI or the API.
    - the owner's pages render.
 5. **Self-serve and roles:** `/onboarding`, `create_org()`, limits, invitations, the permission map
    enforced everywhere, the cron iterating organizations, sandbox cleanup.
+   Split in two, decided on 2026-09-28. Each half lands as its own pull request.
+   - **5a — self-serve workspaces and roles:** `/onboarding` creates a workspace, the permission map of
+     §7 is enforced on every action and control, the last owner is protected in the database, the
+     sandbox cycle cap applies, and the cron iterates the `live` organizations.
+     - `create_org(p_org_id, p_user_id, p_name, p_slug, p_ledger_key_enc)` is executable by the
+       service role only. The server generates the organization's id first, because the ledger key's
+       ciphertext is bound to it (5.4).
+     - A new sandbox gets an operating account holding 10,000 simulated USDC and an empty reserve, so
+       its first cycle has something to reason about.
+     - Its first ledger entry, `org_created`, is signed with the key just generated.
+   - **5b — members:** invitations with their email, the members page (change role, remove), the
+     database rule that no one grants a role above their own, `last_active_at`, and the daily cleanup
+     of abandoned sandboxes.
 
 Each step lands as its own pull request, with production measured after it deploys.
 

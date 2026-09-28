@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -74,12 +74,12 @@ describe("every /o/[slug] page", () => {
 });
 
 describe("every server action", () => {
-  it("lives in src/app/actions, except the public sign-in action", () => {
+  it("lives in src/app/actions, except sign-in and creating a first workspace", () => {
     const withDirective = walk(path.join(ROOT, "src")).filter(
       (file) => /\.(ts|tsx)$/.test(file) && /^\s*["']use server["']/.test(read(file))
     );
     const outside = withDirective.map(rel).filter((file) => !file.startsWith("src/app/actions/"));
-    expect(outside).toEqual(["src/app/login/actions.ts"]);
+    expect(outside.sort()).toEqual(["src/app/login/actions.ts", "src/app/onboarding/actions.ts"]);
   });
 
   const actions = ACTION_FILES.flatMap((file) =>
@@ -90,18 +90,39 @@ describe("every server action", () => {
     expect(actions.length).toBeGreaterThanOrEqual(5);
   });
 
-  it.each(actions.map((action) => [action.label, action.body]))("%s awaits authorizeMutation first", (_label, body) => {
-    expect(awaitedNames(body)[0]).toBe("authorizeMutation");
+  it.each(actions.map((action) => [action.label, action.body]))("%s awaits authorize first", (_label, body) => {
+    expect(awaitedNames(body)[0]).toBe("authorize");
   });
 
   it.each(actions.map((action) => [action.label, action.body]))("%s does its work inside the organization's scope", (_label, body) => {
     expect(body).toMatch(/return inOrg\(auth, async \(\) =>/);
   });
+
+  it("passes a permission string literal as the second argument to authorize", () => {
+    const bodies = actions.map((action) => action.body).join("\n");
+    const matches = bodies.match(/authorize\([^,]+,\s*"[a-z_.]+"\)/g) ?? [];
+    expect(matches.length).toBeGreaterThanOrEqual(5);
+  });
+});
+
+describe("every onboarding action", () => {
+  // Creating a workspace happens before there is an organization to authorize
+  // against, so the gate is the session: a signed-out POST must stop there.
+  const ONBOARDING_ACTIONS = path.join(ROOT, "src", "app", "onboarding", "actions.ts");
+  const actions = existsSync(ONBOARDING_ACTIONS) ? exportedAsyncFunctions(read(ONBOARDING_ACTIONS)) : [];
+
+  it("exists — the list is not empty", () => {
+    expect(actions.map((action) => action.name)).toContain("createWorkspaceAction");
+  });
+
+  it.each(actions.map((action) => [action.name, action.body]))("%s awaits getSessionUser first", (_name, body) => {
+    expect(awaitedNames(body)[0]).toBe("getSessionUser");
+  });
 });
 
 describe("the entry points bound to the founding organization", () => {
-  it("the cron enters it explicitly", () => {
-    expect(read(path.join(ROOT, "src", "app", "api", "agent", "tick", "route.ts"))).toContain("withFoundingOrg(");
+  it("the demo reset enters it explicitly", () => {
+    expect(read(path.join(ROOT, "src", "app", "api", "agent", "reset", "route.ts"))).toContain("withFoundingOrg(");
   });
 
   it("the ledger verify route checks the session and the membership before verifying", () => {
@@ -112,6 +133,14 @@ describe("the entry points bound to the founding organization", () => {
     expect(session).toBeGreaterThan(-1);
     expect(membership).toBeGreaterThan(session);
     expect(verify).toBeGreaterThan(membership);
+  });
+});
+
+describe("the cron", () => {
+  it("runs every live organization instead of the founding one (spec §4.4)", () => {
+    const source = read(path.join(ROOT, "src", "app", "api", "agent", "tick", "route.ts"));
+    expect(source).toContain("runLiveOrganizations(");
+    expect(source).not.toContain("withFoundingOrg(");
   });
 });
 

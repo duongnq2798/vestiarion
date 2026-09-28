@@ -24,8 +24,9 @@ export async function POST(request: Request) {
   if (!guard.allowed) return NextResponse.json({ error: guard.error }, { status: guard.status });
 
   try {
-    // Bound to the founding organization, like the cron: the platform token
-    // that authorizes this names no organization of its own.
+    // Bound to the founding organization: the demo reset is the founding
+    // organization's own, and the platform token that authorizes this names
+    // no organization of its own.
     await withFoundingOrg(() => seedDatabase());
     return NextResponse.json({ ok: true });
   } catch (err) {

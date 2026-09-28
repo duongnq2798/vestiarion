@@ -62,6 +62,14 @@ function requireDatabaseSettings(platformConfig: VestiarionConfig): void {
   }
 }
 
+/**
+ * The same check, for a caller about to create an organization: finding out
+ * only on the way into it would leave one behind that nobody can enter.
+ */
+export function requireOrgScopeSettings(): void {
+  requireDatabaseSettings(platformConfigOf(currentContext()));
+}
+
 function contextFor(platformConfig: VestiarionConfig, org: OrgRow, userId: string | undefined): VestiarionContext {
   const current = currentContext();
   const { config, warnings } = orgConfig(platformConfig, org, masterKeys());
@@ -101,15 +109,17 @@ export async function withOrgSlug<T>(slug: string, fn: () => Promise<T>): Promis
 }
 
 /**
- * The founding organization, for the four places the spec binds to it: the
- * cron (§10.3), the v1 API until scoped keys exist (§4.5), the public landing
- * page, and the demo reset. Nothing else may use it as a default.
+ * The founding organization, for the places the spec binds to it: the v1 API
+ * until scoped keys exist (§4.5), the public landing page, and the demo
+ * reset. The cron used to be a fourth (§10.3), before step 5 of the rollout
+ * moved it to `runLiveOrganizations` over every `live` organization (§4.4).
+ * Nothing else may use this as a default.
  */
 export function withFoundingOrg<T>(fn: () => Promise<T>): Promise<T> {
   return withOrg(FOUNDING_ORG_ID, fn);
 }
 
-/** What `requireMembership` and a successful `authorizeMutation` return. */
+/** What `requireMembership` and a successful `authorize` return. */
 export interface OrgAccess {
   user: { id: string };
   membership: { orgId: string };

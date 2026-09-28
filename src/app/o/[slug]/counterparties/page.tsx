@@ -5,7 +5,7 @@ import { Money, SectionHead } from "@/components/vx/Primitives";
 import { PerformanceHistory } from "@/components/vx/PerformanceHistory";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { sectionTitle } from "@/components/vx/nav";
-import { viewerCanMutate } from "@/lib/auth/authorize";
+import { viewerCan } from "@/lib/auth/authorize";
 import { requireMembership } from "@/lib/auth/membership";
 import { chainModes } from "@/lib/circle";
 import { inOrg } from "@/lib/dal/scope";
@@ -27,11 +27,11 @@ export default async function CounterpartiesPage({ params }: { params: Promise<{
   const { slug } = await params;
   const access = await requireMembership(slug);
   return inOrg(access, async () => {
-    const [counterparties, dashboardStats, entries, canMutate] = await Promise.all([
+    const [counterparties, dashboardStats, entries, canWrite] = await Promise.all([
       listCounterparties(),
       stats(),
       listLedgerEntries(1),
-      viewerCanMutate(slug),
+      viewerCan(slug, "records.write"),
     ]);
 
     return (
@@ -44,10 +44,10 @@ export default async function CounterpartiesPage({ params }: { params: Promise<{
 
         <section className="mb-8">
           <SectionHead title="Add counterparty" meta="human-entered · screened on submission" />
-          {canMutate ? (
+          {canWrite ? (
             <CounterpartyIntake orgSlug={slug} />
           ) : (
-            <p className="rounded-lg border border-dashed border-line-strong px-5 py-6 text-sm text-ink-2">Only an owner of this workspace can add counterparties.</p>
+            <p className="rounded-lg border border-dashed border-line-strong px-5 py-6 text-sm text-ink-2">Only an owner or admin of this workspace can add counterparties.</p>
           )}
         </section>
 

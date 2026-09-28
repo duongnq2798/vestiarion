@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
+import { runLiveOrganizations } from "@/lib/agent/cron";
 import { runAgentCycle } from "@/lib/agent/orchestrator";
 import { hasValidAgentBearer } from "@/lib/agent-security";
-import { withFoundingOrg } from "@/lib/dal/scope";
 import { takeAgentCycleToken } from "@/lib/rate-limit";
 
 function clientIp(request: Request): string {
@@ -22,11 +22,25 @@ export async function POST(request: Request) {
   }
 
   try {
-    // The founding organization, named explicitly: there is no default
-    // organization to fall back on. Step 5 of the spec replaces this with
-    // iterating every organization that is due (§4.4).
-    const result = await withFoundingOrg(() => runAgentCycle());
-    return NextResponse.json(result);
+    // Every `live` organization gets its own cycle, in its own scope; one
+    // organization's failure does not stop the rest (§4.4). Sandbox
+    // organizations are not in the cron — their cycles run from the console,
+    // capped by sandboxCyclesUsedToday (§10 step 5a).
+    //
+    // Live organizations run sequentially in this one invocation, so the
+    // tick's wall time is the sum of their cycles, not the slowest one.
+    // Today there is one live organization. Revisit `maxDuration` or running
+    // organizations in parallel once a second one goes live.
+    const results = await runLiveOrganizations(() => runAgentCycle());
+    const organizations = results.map((result) =>
+      result.ok
+        ? { slug: result.slug, ok: true as const, lines: result.result.lines.length }
+        // Never echo more than the error's message: whatever else it carries
+        // isn't this endpoint's to expose.
+        : { slug: result.slug, ok: false as const, error: result.error }
+    );
+    const status = results.every((result) => result.ok) ? 200 : 500;
+    return NextResponse.json({ organizations }, { status });
   } catch (err) {
     console.error("agent cycle failed", err);
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });

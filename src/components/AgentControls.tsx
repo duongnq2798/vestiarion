@@ -1,4 +1,4 @@
-import { viewerCanMutate } from "@/lib/auth/authorize";
+import { viewerCan } from "@/lib/auth/authorize";
 import type { CycleClockMode } from "@/lib/clock";
 import AgentControlsClient from "./AgentControlsClient";
 
@@ -14,6 +14,6 @@ export default async function AgentControls({
   headSeq?: number;
   clockMode?: CycleClockMode;
 }) {
-  if (!(await viewerCanMutate(orgSlug))) return null;
+  if (!(await viewerCan(orgSlug, "agent.run_cycle"))) return null;
   return <AgentControlsClient orgSlug={orgSlug} nextDay={nextDay} headSeq={headSeq} clockMode={clockMode} />;
 }

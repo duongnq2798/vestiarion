@@ -26,6 +26,8 @@ export interface RecordedRequest {
 export interface FakeReply {
   status?: number;
   body: unknown;
+  /** Extra response headers — e.g. `content-range`, for supabase-js to read a `head: true` count from. */
+  headers?: Record<string, string>;
 }
 
 export function fakeSupabase(respond: (request: RecordedRequest) => FakeReply = () => ({ body: [] })): {
@@ -49,7 +51,7 @@ export function fakeSupabase(respond: (request: RecordedRequest) => FakeReply = 
     const reply = respond(request);
     return new Response(JSON.stringify(reply.body), {
       status: reply.status ?? 200,
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...reply.headers },
     });
   };
   const client = createClient("https://tests.supabase.invalid", "test-service-role", {

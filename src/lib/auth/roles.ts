@@ -6,10 +6,36 @@ export function isOrgRole(value: unknown): value is OrgRole {
 }
 
 /**
- * Plan 1's entire permission model. Plan 3 replaces this with the full role
- * table from spec §7; until then the only safe rule with a single user is that
- * only an owner changes anything.
+ * Spec §7 as data. Pause and resume are asymmetric on purpose: anyone who can
+ * approve money leaving can stop it; starting it again is deliberate. An
+ * approver cannot create records, separating maker from checker.
  */
-export function canMutate(role: OrgRole | null | undefined): boolean {
-  return role === "owner";
+export const PERMISSIONS = {
+  "workspace.read": ["owner", "admin", "approver", "viewer"],
+  "agent.pause": ["owner", "admin", "approver"],
+  "approval.decide": ["owner", "admin", "approver"],
+  "records.write": ["owner", "admin"],
+  "agent.run_cycle": ["owner", "admin"],
+  "agent.resume": ["owner", "admin"],
+  "members.manage": ["owner", "admin"],
+  "org.administer": ["owner"],
+} as const satisfies Record<string, readonly OrgRole[]>;
+
+export type Permission = keyof typeof PERMISSIONS;
+
+export function can(role: OrgRole | null | undefined, permission: Permission): boolean {
+  return !!role && (PERMISSIONS[permission] as readonly OrgRole[]).includes(role);
+}
+
+const RANK: Record<OrgRole, number> = { viewer: 0, approver: 1, admin: 2, owner: 3 };
+
+/**
+ * An owner may assign any role. An admin may assign approver and viewer only,
+ * and nobody else assigns roles at all (spec §7: no one grants a role above
+ * their own, and admin and owner changes are the owner's).
+ */
+export function canAssignRole(actor: OrgRole | null | undefined, target: OrgRole): boolean {
+  if (actor === "owner") return true;
+  if (actor === "admin") return RANK[target] < RANK.admin;
+  return false;
 }

@@ -218,3 +218,11 @@ export function SignOutGlyph({ className = "size-4" }: GlyphProps) {
     </svg>
   );
 }
+
+export function PlusGlyph({ className = "size-4" }: GlyphProps) {
+  return (
+    <svg viewBox="0 0 16 16" className={`shrink-0 ${className}`} aria-hidden>
+      <path d="M8 3.25v9.5M3.25 8h9.5" {...LINE} />
+    </svg>
+  );
+}
