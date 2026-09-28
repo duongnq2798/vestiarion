@@ -3,7 +3,7 @@ import type { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { verifyChain, type LedgerEntryInput, type LedgerRow } from "@/lib/ledger";
 import { ledgerKeyId, type LedgerKeyring } from "@/lib/ledger-keys";
-import { appendSigned, applyMigrations, createDatabase } from "./support/pglite";
+import { FOUNDING_ORG_ID, appendSignedForOrg, applyMigrations, createDatabase } from "./support/pglite";
 
 /**
  * The one place the database and the verifier are made to agree.
@@ -83,7 +83,7 @@ const key = keypair();
 describe("append_ledger_entry() agrees with verifyChain()", () => {
 
   it("links the first entry to a genesis of zeros", async () => {
-    const row = await appendSigned(db, ENTRIES[0], key.privateKey);
+    const row = await appendSignedForOrg(db, FOUNDING_ORG_ID, ENTRIES[0], key.privateKey);
 
     expect(row.prev_hash).toBe(GENESIS);
     expect(verifyChain([row], ring(key.publicKey))).toEqual({ valid: true, checkedEntries: 1 });
@@ -93,8 +93,8 @@ describe("append_ledger_entry() agrees with verifyChain()", () => {
     // The database links each entry; the verifier recomputes every link. If
     // the two ever disagree about what a link is, this is the assertion that
     // says so — nothing else in the suite can.
-    await appendSigned(db, ENTRIES[1], key.privateKey);
-    await appendSigned(db, ENTRIES[2], key.privateKey);
+    await appendSignedForOrg(db, FOUNDING_ORG_ID, ENTRIES[1], key.privateKey);
+    await appendSignedForOrg(db, FOUNDING_ORG_ID, ENTRIES[2], key.privateKey);
 
     const rows = await storedChain();
     expect(rows).toHaveLength(3);
@@ -121,25 +121,29 @@ describe("append_ledger_entry() agrees with verifyChain()", () => {
 });
 
 describe("migration 0014 on a real Postgres", () => {
-  it("leaves exactly one append_ledger_entry, so a caller cannot reach an older shape", async () => {
-    // PostgREST resolves an RPC by name and argument names. Two overloads would
-    // let a caller silently land on the one that records no key. This was
-    // observed by hand on production when the migration was applied; here it
-    // is pinned.
+  it("every append_ledger_entry records the signing key id, so no caller can reach a shape that drops it", async () => {
+    // PostgREST resolves an RPC by name and argument names. The hazard 0014
+    // actually named is a shape that records no key at all — not "there is
+    // exactly one" — because 0016 deliberately adds a second overload
+    // (p_org_id-first) for its deploy window, alongside the one pinned here.
+    // 0017 (Task 9) drops the old shape and returns this to exactly one.
     const result = await db.query<{ args: string }>(
       `select pg_get_function_identity_arguments(p.oid) as args
          from pg_proc p join pg_namespace n on n.oid = p.pronamespace
         where n.nspname = 'public' and p.proname = 'append_ledger_entry'`
     );
 
-    expect(result.rows).toHaveLength(1);
-    expect(result.rows[0].args).toContain("p_signing_key_id");
+    expect(result.rows.length).toBeGreaterThanOrEqual(1);
+    for (const row of result.rows) {
+      expect(row.args).toContain("p_signing_key_id");
+    }
   });
 
   it("records null for a caller that sends no key id, as pre-identity code did", async () => {
     const legacy = keypair();
-    const row = await appendSigned(
+    const row = await appendSignedForOrg(
       db,
+      FOUNDING_ORG_ID,
       { actor: "system", domain: "system", action: "legacy_append", summary: "No key id supplied", detail: {} },
       legacy.privateKey,
       null

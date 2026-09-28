@@ -1,4 +1,4 @@
-import { supabase, unwrap } from "@/lib/supabase";
+import { db, unwrap } from "@/lib/dal";
 import { apiError, guardApiRequest, handleApiRequest } from "@/lib/api/guard";
 import {
   decodeCursor,
@@ -40,7 +40,7 @@ export async function GET(request: Request) {
     "GET /api/v1/milestones",
     async (): Promise<ApiCollection<MilestonePayload>> => {
       // Newest first: callers inspect current work; this is not a resumable log.
-      let query = supabase()
+      let query = db()
         .from("milestones")
         .select(
           "id, title, amount, status, verification_source, verification_method, verification_status, verification_checked_at, verified_at, verification_detail, verified, decided_at, settled_at, agent_reasoning, tx_ref, created_at, counterparties(id, name, risk_level)"

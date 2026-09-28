@@ -1,4 +1,4 @@
-import { supabase, unwrap } from "./supabase";
+import { db, unwrap } from "./dal";
 import { appendLedgerEntry } from "./ledger";
 import { currentConfig } from "./context";
 import { z } from "zod";
@@ -263,9 +263,9 @@ export function planScreening(cp: CounterpartyScreeningRow, result = screenBundl
 }
 
 export async function screenCounterparty(counterpartyId: string): Promise<ScreeningOutcome> {
-  const db = supabase();
+  const client = db();
   const cp = unwrap(
-    await db
+    await client
       .from("counterparties")
       .select(SCREENING_COLUMNS)
       .eq("id", counterpartyId)
@@ -285,7 +285,7 @@ export async function screenCounterparty(counterpartyId: string): Promise<Screen
  * book from a single select rather than one round trip per counterparty.
  */
 async function applyScreening(cp: CounterpartyScreeningRow): Promise<ScreeningOutcome> {
-  const db = supabase();
+  const client = db();
   let result: ScreeningResult;
   try {
     result = await screenName(cp.name, cp.jurisdiction);
@@ -295,7 +295,7 @@ async function applyScreening(cp: CounterpartyScreeningRow): Promise<ScreeningOu
   const plan = planScreening(cp, result);
   const now = new Date().toISOString();
 
-  const update = await db
+  const update = await client
     .from("counterparties")
     .update({
       risk_level: plan.result.riskLevel,
@@ -307,7 +307,7 @@ async function applyScreening(cp: CounterpartyScreeningRow): Promise<ScreeningOu
     .eq("id", cp.id);
   if (update.error) throw new Error(update.error.message);
 
-  const insert = await db.from("compliance_checks").insert({
+  const insert = await client.from("compliance_checks").insert({
     counterparty_id: cp.id,
     risk_level: plan.result.riskLevel,
     source: plan.result.source,
@@ -386,13 +386,13 @@ class ScreeningLookupError extends Error {}
 const HISTORY_LEDGER_PAGE_SIZE = 1_000;
 
 async function listCounterpartyHistoryEntries(): Promise<CounterpartyHistoryLedgerEntry[]> {
-  const db = supabase();
+  const client = db();
   const entries: CounterpartyHistoryLedgerEntry[] = [];
   let afterSequence = 0;
 
   while (true) {
     const page = unwrap(
-      await db
+      await client
         .from("ledger_entries")
         .select("seq, domain, action, detail")
         .in("action", [...COUNTERPARTY_HISTORY_ACTIONS])
@@ -411,10 +411,10 @@ async function listCounterpartyHistoryEntries(): Promise<CounterpartyHistoryLedg
 async function refreshCounterpartyPerformance(
   rows: CounterpartyScreeningRow[]
 ): Promise<CounterpartyPerformanceOutcome[]> {
-  const db = supabase();
+  const client = db();
   const [invoiceRows, milestoneRows, ledgerEntries] = await Promise.all([
-    db.from("invoices").select("id, counterparty_id"),
-    db.from("milestones").select("id, contractor_id"),
+    client.from("invoices").select("id, counterparty_id"),
+    client.from("milestones").select("id, contractor_id"),
     listCounterpartyHistoryEntries(),
   ]);
   if (invoiceRows.error) throw new Error(invoiceRows.error.message);
@@ -442,7 +442,7 @@ async function refreshCounterpartyPerformance(
     );
     const previousScore = toNum(row.performance_score ?? null);
     const materiallyChanged = isMaterialPerformanceChange(previousScore, performance.score);
-    const update = await db
+    const update = await client
       .from("counterparties")
       .update({
         performance_score: performance.score,
@@ -492,7 +492,7 @@ async function recordScreeningFailure(
   message: string,
   writeLedgerEntry = false
 ): Promise<void> {
-  const failureCheck = await supabase().from("compliance_checks").insert({
+  const failureCheck = await db().from("compliance_checks").insert({
     counterparty_id: row.id,
     risk_level: row.risk_level,
     source: screeningMode() === "live" ? "opensanctions:yente" : "simulated-sanctions-list",
@@ -528,9 +528,9 @@ async function recordScreeningFailure(
  * nothing changed. Proof of absence is the part a one-time gate cannot give.
  */
 export async function runComplianceSweep(): Promise<SweepResult> {
-  const db = supabase();
+  const client = db();
   const rows = unwrap(
-    await db.from("counterparties").select(SCREENING_COLUMNS).order("name")
+    await client.from("counterparties").select(SCREENING_COLUMNS).order("name")
   ) as CounterpartyScreeningRow[];
 
   const interval = rescreenIntervalMs();

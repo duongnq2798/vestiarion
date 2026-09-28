@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { evaluateResetGuard, hasValidAgentBearer } from "@/lib/agent-security";
+import { withFoundingOrg } from "@/lib/dal/scope";
 import { seedDatabase } from "@/lib/seed";
 
 export async function POST(request: Request) {
@@ -23,7 +24,9 @@ export async function POST(request: Request) {
   if (!guard.allowed) return NextResponse.json({ error: guard.error }, { status: guard.status });
 
   try {
-    await seedDatabase();
+    // Bound to the founding organization, like the cron: the platform token
+    // that authorizes this names no organization of its own.
+    await withFoundingOrg(() => seedDatabase());
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("demo reset failed", err);

@@ -38,7 +38,10 @@ export async function applyMigrations(db: PGlite, include: (file: string) => boo
   }
 }
 
-/** Signs the way `appendLedgerEntry` does and hands the body to the real Postgres function to link. */
+/**
+ * Signs the way `appendLedgerEntry` does and hands the body to the real Postgres function to link.
+ * Calls the pre-0017 signature (no `p_org_id`): for tests of migrations before 0017 only.
+ */
 export async function appendSigned(
   db: PGlite,
   input: LedgerEntryInput,
@@ -52,4 +55,30 @@ export async function appendSigned(
     [input.actor, input.domain, input.action, input.summary, JSON.stringify(input.detail), bodyHash, signature, signingKeyId]
   );
   return result.rows[0];
+}
+
+/** As `appendSigned`, through the per-organization append that 0016 adds. */
+export async function appendSignedForOrg(
+  db: PGlite,
+  orgId: string,
+  input: LedgerEntryInput,
+  privateKey: crypto.KeyObject,
+  signingKeyId: string | null = ledgerKeyId(privateKey)
+): Promise<LedgerRow> {
+  const bodyHash = bodyHashOf(input);
+  const signature = crypto.sign(null, Buffer.from(bodyHash, "hex"), privateKey).toString("hex");
+  const result = await db.query<LedgerRow>(
+    "select * from append_ledger_entry($1::uuid, $2, $3, $4, $5, $6::jsonb, $7, $8, $9)",
+    [orgId, input.actor, input.domain, input.action, input.summary, JSON.stringify(input.detail), bodyHash, signature, signingKeyId]
+  );
+  return result.rows[0];
+}
+
+/** A second organization, for isolation tests. */
+export async function createOrg(db: PGlite, slug: string): Promise<string> {
+  const result = await db.query<{ id: string }>(
+    "insert into orgs (slug, name, mode) values ($1, $1, 'sandbox') returning id",
+    [slug]
+  );
+  return result.rows[0].id;
 }

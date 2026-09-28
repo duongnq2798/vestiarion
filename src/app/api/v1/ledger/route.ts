@@ -1,4 +1,4 @@
-import { supabase, unwrap } from "@/lib/supabase";
+import { db, unwrap } from "@/lib/dal";
 import { guardApiRequest, apiError, handleApiRequest } from "@/lib/api/guard";
 import {
   decodeCursor,
@@ -69,7 +69,7 @@ export async function GET(request: Request) {
   return handleApiRequest(
     "GET /api/v1/ledger",
     async (): Promise<ApiCollection<LedgerEntryPayload>> => {
-      let query = supabase()
+      let query = db()
         .from("ledger_entries")
         .select("seq, id, ts, actor, domain, action, summary, detail, body_hash, signature, prev_hash, hash, signing_key_id")
         .order("seq", { ascending: true })

@@ -1,7 +1,7 @@
 import "server-only";
 import { notFound } from "next/navigation";
 import { cache } from "react";
-import { supabase, unwrap } from "@/lib/supabase";
+import { platformDb, unwrap } from "@/lib/dal";
 import { isValidSlug } from "./org-paths";
 import type { OrgRole } from "./roles";
 import { verifySession, type SessionUser } from "./session";
@@ -30,7 +30,7 @@ function toMembership(row: MembershipRow): OrgMembership {
  * the one thing that must be readable before a tenant is known.
  */
 export const membershipsOf = cache(async (userId: string): Promise<OrgMembership[]> => {
-  const rows = unwrap(await supabase().from("memberships").select(SELECT).eq("user_id", userId)) as unknown as MembershipRow[];
+  const rows = unwrap(await platformDb().from("memberships").select(SELECT).eq("user_id", userId)) as unknown as MembershipRow[];
   return rows.map(toMembership).sort((a, b) => a.name.localeCompare(b.name));
 });
 
@@ -38,7 +38,7 @@ export const membershipFor = cache(async (userId: string, slug: string): Promise
   // A slug that could not exist never reaches the database.
   if (!isValidSlug(slug)) return null;
   const rows = unwrap(
-    await supabase().from("memberships").select(SELECT).eq("user_id", userId).eq("orgs.slug", slug).limit(1)
+    await platformDb().from("memberships").select(SELECT).eq("user_id", userId).eq("orgs.slug", slug).limit(1)
   ) as unknown as MembershipRow[];
   return rows[0] ? toMembership(rows[0]) : null;
 });

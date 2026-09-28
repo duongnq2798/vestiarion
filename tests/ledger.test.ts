@@ -371,7 +371,7 @@ describe("verifyChain", () => {
     // either looks like a forgery or goes unnoticed for weeks.
     const { publicKey, privateKey } = keypair();
     const rows = buildChain(SAMPLE, privateKey);
-    const warning = "LEDGER_SIGNING_KEY is not a readable private key: unsupported";
+    const warning = "The ledger signing key is not a readable private key: unsupported";
 
     const result = verifyChain(rows, { ...ring(publicKey), warnings: [warning] });
 
@@ -382,12 +382,12 @@ describe("verifyChain", () => {
   it("names the broken key, not 'no key configured', when a broken key is why there is none", () => {
     const { privateKey } = keypair();
     const rows = buildChain(SAMPLE, privateKey);
-    const warning = "LEDGER_SIGNING_KEY is not a readable private key: unsupported";
+    const warning = "The ledger signing key is not a readable private key: unsupported";
 
     const result = verifyChain(rows, { active: null, retired: [], warnings: [warning] });
 
     expect(result.valid).toBeNull();
-    expect(result.reason).toContain("LEDGER_SIGNING_KEY");
+    expect(result.reason).toContain(warning);
     expect(result.reason).not.toMatch(/no ledger public key is configured/);
   });
 

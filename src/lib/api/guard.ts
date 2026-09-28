@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { hasValidAgentBearer } from "../agent-security";
+import { withFoundingOrg } from "../dal/scope";
 import { takeAgentCycleToken } from "../rate-limit";
 import { STATUS_FOR, type ApiError, type ApiErrorCode } from "./contract";
 
@@ -67,13 +68,21 @@ export function guardApiRequest(
  * Wraps a handler so an unexpected throw becomes a coded error instead of a
  * framework stack trace. The message is logged in full and never returned:
  * a database error can name a table, a column, or a connection string.
+ *
+ * The handler runs inside the founding organization. Until Tier 2's scoped
+ * keys exist, the platform token reads the founding organization only (spec
+ * §4.5) — a stated, temporary binding, made here and nowhere else in the v1
+ * API. A handler that settles on a coded error inside that scope, such as a
+ * lookup by id that finds nothing, returns the `apiError` response, and it is
+ * sent as it is.
  */
 export async function handleApiRequest<T>(
   label: string,
-  handler: () => Promise<T>
+  handler: () => Promise<T | NextResponse>
 ): Promise<NextResponse> {
   try {
-    return NextResponse.json(await handler());
+    const result = await withFoundingOrg(handler);
+    return result instanceof NextResponse ? result : NextResponse.json(result);
   } catch (error) {
     console.error(`[api] ${label} failed`, error);
     return apiError("internal", "The request could not be completed.");

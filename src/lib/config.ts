@@ -40,6 +40,15 @@ export interface ChainConfig {
   usdcTokenId?: string;
   /** Overrides the public Arc testnet RPC used to read real transaction fees. */
   arcRpcUrl?: string;
+  /**
+   * Why an organization's stored Circle credentials could not be opened. Set
+   * only by `orgConfig`, never by `configFromEnv`: a platform deployment has
+   * no sealed secrets to fail to open. Its presence, not its text, is what
+   * `getChainProvider()` acts on — a stored-but-unreadable credential must
+   * refuse rather than read as "no Circle credentials configured" and quietly
+   * simulate a live organization's payments (spec §5.4).
+   */
+  credentialsUnreadable?: string;
 }
 
 export interface LlmConfig {
@@ -79,10 +88,13 @@ export interface VestiarionConfig {
    */
   ledgerPublicKey?: string;
   /**
-   * Whether this deployment may sign with a key it generated itself. True in a
-   * development checkout, where a throwaway key keeps `npm run dev` working
-   * with no setup. False in production, where an invented key would sign
-   * entries nobody can verify afterwards and would leave with the instance.
+   * Whether `ledgerSigningKey()` may sign with a key its local store creates.
+   * Inside an organization it is always false — `orgConfig` sets it, because
+   * an organization signs only with the key stored on it (spec §5.4) — and
+   * the ledger's own store never holds or creates a key anyway, so there it
+   * only selects which error a missing key throws. `configFromEnv` still
+   * derives it from NODE_ENV; no application code passes a store that can
+   * create a key.
    */
   allowGeneratedLedgerKey: boolean;
   /**

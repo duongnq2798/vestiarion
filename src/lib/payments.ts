@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { ChainProvider, TransferResult } from "./circle";
-import { supabase, unwrap } from "./supabase";
+import { db, unwrap } from "./dal";
 
 export type PaymentSourceType = "invoice" | "milestone";
 export type PaymentIntentStatus = "created" | "submitting" | "pending" | "confirmed" | "failed";
@@ -129,7 +129,7 @@ function fromRow(row: PaymentIntentRow): PaymentIntent {
 
 export class SupabasePaymentIntentStore implements PaymentIntentStore {
   async ensure(input: PaymentRequest & { idempotencyKey: string; provider: "circle" | "simulate" }): Promise<PaymentIntent> {
-    const result = await supabase().from("payment_intents").upsert({
+    const result = await db().from("payment_intents").upsert({
       source_type: input.sourceType,
       source_id: input.sourceId,
       idempotency_key: input.idempotencyKey,
@@ -144,22 +144,26 @@ export class SupabasePaymentIntentStore implements PaymentIntentStore {
 
   async get(idempotencyKey: string): Promise<PaymentIntent> {
     const row = unwrap(
-      await supabase().from("payment_intents").select("*").eq("idempotency_key", idempotencyKey).single<PaymentIntentRow>()
+      await db().from("payment_intents").select("*").eq("idempotency_key", idempotencyKey).single<PaymentIntentRow>()
     );
     return fromRow(row);
   }
 
   async claim(idempotencyKey: string): Promise<PaymentIntent | null> {
-    const result = await supabase()
+    const result = await db()
       .rpc("claim_payment_intent", { p_idempotency_key: idempotencyKey })
       .maybeSingle<PaymentIntentRow>();
     if (result.error) throw new Error(result.error.message);
-    return result.data ? fromRow(result.data) : null;
+    // The function returns its composite type even when the UPDATE matched
+    // nothing, and PostgREST sends that as an object whose every field is
+    // null. Only a row with an id is a claim; anything else means another
+    // cycle holds it, and treating it as ours would transfer twice (R20).
+    return result.data?.id ? fromRow(result.data) : null;
   }
 
   async recordResult(idempotencyKey: string, result: TransferResult): Promise<PaymentIntent> {
     const now = new Date().toISOString();
-    const update = await supabase().from("payment_intents").update({
+    const update = await db().from("payment_intents").update({
       provider_tx_id: result.providerTxId,
       tx_hash: result.txHash,
       status: result.status,
@@ -178,7 +182,7 @@ export class SupabasePaymentIntentStore implements PaymentIntentStore {
   }
 
   async recordError(idempotencyKey: string, error: string): Promise<PaymentIntent> {
-    const update = await supabase().from("payment_intents").update({
+    const update = await db().from("payment_intents").update({
       status: "failed",
       last_error: error,
       updated_at: new Date().toISOString(),

@@ -1,0 +1,83 @@
+import { currentContext, runWith, type VestiarionContext } from "../context";
+import { parseMasterKeys, type MasterKey } from "../secrets";
+import { platformDb, unwrap } from "./index";
+import { FOUNDING_ORG_ID, ORG_SECRET_COLUMNS, orgConfig, type OrgRow } from "./org-config";
+
+/**
+ * How work enters an organization. Every tenant read and write happens inside
+ * one of these; outside them, `currentOrgId()` throws.
+ *
+ * The organization's row is read once per scope and its secrets decrypted into
+ * a configuration of its own. Nested scopes are safe: each one is built from
+ * the platform configuration carried in `platformConfig`, not from whatever
+ * organization happens to be in scope already, so entering a second
+ * organization from inside the first neither inherits nor leaks the first
+ * organization's secrets or settings.
+ */
+
+/**
+ * Either the parsed master keys, the reason none are usable, or `null` when
+ * none are configured at all — `orgConfig` turns that reason into a warning
+ * per stored secret rather than losing the whole scope to it. A master key
+ * that is set but malformed is a broken deployment, not a missing optional,
+ * but §5.4/§8 still call for reading to continue and for signing or paying to
+ * be what fails, so this reports rather than throws.
+ */
+function masterKeys(): MasterKey[] | { unavailable: string } | null {
+  const raw = process.env.VESTIARION_MASTER_KEYS;
+  if (!raw || !raw.trim()) return null;
+  try {
+    return parseMasterKeys(raw);
+  } catch (error) {
+    return { unavailable: (error as Error).message };
+  }
+}
+
+async function orgRowBy(column: "id" | "slug", value: string): Promise<OrgRow> {
+  const result = await platformDb().from("orgs").select(ORG_SECRET_COLUMNS).eq(column, value).single<OrgRow>();
+  if (result.error?.code === "PGRST116") throw new Error(`No organization with ${column} ${value}`);
+  return unwrap(result);
+}
+
+function contextFor(org: OrgRow, userId: string | undefined): VestiarionContext {
+  const current = currentContext();
+  // Build from the platform base, not from whatever organization is already in
+  // scope: entering org B from inside org A must not make B's config a
+  // derivative of A's, so a nested `withOrg` still starts from the platform's
+  // own settings (§ R7).
+  const platformConfig = current.platformConfig ?? current.config;
+  const { config, warnings } = orgConfig(platformConfig, org, masterKeys());
+  return { config, db: current.db, orgId: org.id, userId, secretWarnings: warnings, platformConfig };
+}
+
+export async function orgContext(orgId: string, userId?: string): Promise<VestiarionContext> {
+  return contextFor(await orgRowBy("id", orgId), userId);
+}
+
+export async function withOrg<T>(orgId: string, fn: () => Promise<T>, options: { userId?: string } = {}): Promise<T> {
+  return runWith(await orgContext(orgId, options.userId), fn);
+}
+
+/** For operators and scripts, which name organizations by slug. */
+export async function withOrgSlug<T>(slug: string, fn: () => Promise<T>): Promise<T> {
+  return runWith(contextFor(await orgRowBy("slug", slug), undefined), fn);
+}
+
+/**
+ * The founding organization, for the four places the spec binds to it: the
+ * cron (§10.3), the v1 API until scoped keys exist (§4.5), the public landing
+ * page, and the demo reset. Nothing else may use it as a default.
+ */
+export function withFoundingOrg<T>(fn: () => Promise<T>): Promise<T> {
+  return withOrg(FOUNDING_ORG_ID, fn);
+}
+
+/** What `requireMembership` and a successful `authorizeMutation` return. */
+export interface OrgAccess {
+  user: { id: string };
+  membership: { orgId: string };
+}
+
+export function inOrg<T>(access: OrgAccess, fn: () => Promise<T>): Promise<T> {
+  return withOrg(access.membership.orgId, fn, { userId: access.user.id });
+}

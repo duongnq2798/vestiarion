@@ -5,6 +5,8 @@ import { PerformanceHistory } from "@/components/vx/PerformanceHistory";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { viewerCanMutate } from "@/lib/auth/authorize";
 import { requireMembership } from "@/lib/auth/membership";
+import { chainModes } from "@/lib/circle";
+import { inOrg } from "@/lib/dal/scope";
 import { listLedgerEntries } from "@/lib/ledger";
 import { listCounterparties, stats } from "@/lib/queries";
 
@@ -19,59 +21,61 @@ const RISK_STYLE: Record<string, string> = {
 
 export default async function CounterpartiesPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  await requireMembership(slug);
-  const [counterparties, dashboardStats, entries, canMutate] = await Promise.all([
-    listCounterparties(),
-    stats(),
-    listLedgerEntries(1),
-    viewerCanMutate(slug),
-  ]);
+  const access = await requireMembership(slug);
+  return inOrg(access, async () => {
+    const [counterparties, dashboardStats, entries, canMutate] = await Promise.all([
+      listCounterparties(),
+      stats(),
+      listLedgerEntries(1),
+      viewerCanMutate(slug),
+    ]);
 
-  return (
-    <ProductShell active="counterparties" day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} orgSlug={slug}>
-      <PageHead
-        title="Counterparties"
-        sub="Add the people and businesses Vestiarion may invoice or pay. Each new record is screened immediately."
-        right={<AgentControls orgSlug={slug} nextDay={dashboardStats.day + 1} headSeq={entries[0]?.seq ?? 0} clockMode={dashboardStats.clockMode} />}
-      />
+    return (
+      <ProductShell active="counterparties" day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()} orgSlug={slug} orgName={access.membership.name}>
+        <PageHead
+          title="Counterparties"
+          sub="Add the people and businesses Vestiarion may invoice or pay. Each new record is screened immediately."
+          right={<AgentControls orgSlug={slug} nextDay={dashboardStats.day + 1} headSeq={entries[0]?.seq ?? 0} clockMode={dashboardStats.clockMode} />}
+        />
 
-      <section className="mb-8">
-        <SectionHead title="Add counterparty" meta="human-entered · screened on submission" />
-        {canMutate ? (
-          <CounterpartyIntake orgSlug={slug} />
-        ) : (
-          <p className="rounded-lg border border-dashed border-line-strong px-5 py-6 text-sm text-ink-2">Only an owner of this workspace can add counterparties.</p>
-        )}
-      </section>
+        <section className="mb-8">
+          <SectionHead title="Add counterparty" meta="human-entered · screened on submission" />
+          {canMutate ? (
+            <CounterpartyIntake orgSlug={slug} />
+          ) : (
+            <p className="rounded-lg border border-dashed border-line-strong px-5 py-6 text-sm text-ink-2">Only an owner of this workspace can add counterparties.</p>
+          )}
+        </section>
 
-      <section>
-        <SectionHead title="Counterparty book" meta={`${counterparties.length} records`} />
-        <div className="grid gap-3 md:grid-cols-2">
-          {counterparties.map((counterparty) => (
-            <article key={counterparty.id} className="surface-shadow min-w-0 rounded-xl border border-line bg-surface p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <h3 className="truncate text-sm font-semibold text-ink">{counterparty.name}</h3>
-                  <p className="mt-0.5 text-xs capitalize text-ink-3">{counterparty.role} · {counterparty.chain || "chain not set"}</p>
+        <section>
+          <SectionHead title="Counterparty book" meta={`${counterparties.length} records`} />
+          <div className="grid gap-3 md:grid-cols-2">
+            {counterparties.map((counterparty) => (
+              <article key={counterparty.id} className="surface-shadow min-w-0 rounded-xl border border-line bg-surface p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h3 className="truncate text-sm font-semibold text-ink">{counterparty.name}</h3>
+                    <p className="mt-0.5 text-xs capitalize text-ink-3">{counterparty.role} · {counterparty.chain || "chain not set"}</p>
+                  </div>
+                  <span className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium capitalize ${RISK_STYLE[counterparty.risk_level] ?? RISK_STYLE.unscreened}`}>{counterparty.risk_level}</span>
                 </div>
-                <span className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium capitalize ${RISK_STYLE[counterparty.risk_level] ?? RISK_STYLE.unscreened}`}>{counterparty.risk_level}</span>
-              </div>
-              <PerformanceHistory
-                score={counterparty.performance_score}
-                inputs={counterparty.performance_inputs}
-                compact
-              />
-              <dl className="mt-4 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3 text-xs">
-                <div className="min-w-0"><dt className="text-ink-3">Configured limit</dt><dd className="mt-0.5 text-ink">{counterparty.baseline_payment_limit == null ? "Not set" : <Money value={counterparty.baseline_payment_limit} />}</dd></div>
-                <div className="min-w-0"><dt className="text-ink-3">Current authority</dt><dd className="mt-0.5 text-ink">{counterparty.payment_limit == null ? "Not set" : <Money value={counterparty.payment_limit} />}</dd></div>
-                <div className="min-w-0"><dt className="text-ink-3">Jurisdiction</dt><dd className="mt-0.5 break-words text-ink">{counterparty.jurisdiction || "Not set"}</dd></div>
-                <div className="min-w-0"><dt className="text-ink-3">Last screened</dt><dd className="mt-0.5 break-words text-ink">{counterparty.last_screened_at ? new Date(counterparty.last_screened_at).toLocaleString() : "Not yet"}</dd></div>
-              </dl>
-              {counterparty.address && <p className="mt-3 truncate border-t border-line pt-3 font-mono text-[0.7rem] text-ink-3" title={counterparty.address}>{counterparty.address}</p>}
-            </article>
-          ))}
-        </div>
-      </section>
-    </ProductShell>
-  );
+                <PerformanceHistory
+                  score={counterparty.performance_score}
+                  inputs={counterparty.performance_inputs}
+                  compact
+                />
+                <dl className="mt-4 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3 text-xs">
+                  <div className="min-w-0"><dt className="text-ink-3">Configured limit</dt><dd className="mt-0.5 text-ink">{counterparty.baseline_payment_limit == null ? "Not set" : <Money value={counterparty.baseline_payment_limit} />}</dd></div>
+                  <div className="min-w-0"><dt className="text-ink-3">Current authority</dt><dd className="mt-0.5 text-ink">{counterparty.payment_limit == null ? "Not set" : <Money value={counterparty.payment_limit} />}</dd></div>
+                  <div className="min-w-0"><dt className="text-ink-3">Jurisdiction</dt><dd className="mt-0.5 break-words text-ink">{counterparty.jurisdiction || "Not set"}</dd></div>
+                  <div className="min-w-0"><dt className="text-ink-3">Last screened</dt><dd className="mt-0.5 break-words text-ink">{counterparty.last_screened_at ? new Date(counterparty.last_screened_at).toLocaleString() : "Not yet"}</dd></div>
+                </dl>
+                {counterparty.address && <p className="mt-3 truncate border-t border-line pt-3 font-mono text-[0.7rem] text-ink-3" title={counterparty.address}>{counterparty.address}</p>}
+              </article>
+            ))}
+          </div>
+        </section>
+      </ProductShell>
+    );
+  });
 }

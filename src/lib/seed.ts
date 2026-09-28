@@ -1,6 +1,6 @@
-import { supabase, unwrap } from "./supabase";
+import { db, unwrap, type TenantTable } from "./dal";
 import { appendLedgerEntry } from "./ledger";
-import { currentConfig } from "./context";
+import { currentOrgConfig } from "./context";
 
 /**
  * Demo business: Northstar Studio, a four-person dev shop. The fixtures are
@@ -29,13 +29,13 @@ function daysFromNow(n: number) {
  * error, which is the whole point of running against Arc at all.
  */
 export function seedScale(): number {
-  const config = currentConfig();
+  const config = currentOrgConfig();
   if (config.seedScale != null && Number.isFinite(config.seedScale)) return config.seedScale;
   const live = !!config.chain.circleApiKey && !!config.chain.circleEntitySecret;
   return live ? 0.001 : 1;
 }
 
-const TABLES = [
+const TABLES: TenantTable[] = [
   "ledger_entries",
   "forecasts",
   "compliance_checks",
@@ -45,7 +45,7 @@ const TABLES = [
   "invoices",
   "counterparties",
   "accounts",
-] as const;
+];
 
 /**
  * Wallet provisioning survives a reset. Rows are keyed by name, which is
@@ -59,12 +59,12 @@ interface Provisioning {
 }
 
 async function captureProvisioning(): Promise<Provisioning> {
-  const db = supabase();
+  const client = db();
   const accounts = (
-    (await db.from("accounts").select("name, circle_wallet_id, address")).data ?? []
+    (await client.from("accounts").select("name, circle_wallet_id, address")).data ?? []
   ) as Array<{ name: string; circle_wallet_id: string | null; address: string | null }>;
   const counterparties = (
-    (await db.from("counterparties").select("name, address")).data ?? []
+    (await client.from("counterparties").select("name, address")).data ?? []
   ) as Array<{ name: string; address: string | null }>;
 
   return {
@@ -76,11 +76,11 @@ async function captureProvisioning(): Promise<Provisioning> {
 }
 
 async function restoreProvisioning(saved: Provisioning) {
-  const db = supabase();
+  const client = db();
 
   for (const [name, wallet] of saved.accounts) {
     if (!wallet.circle_wallet_id && !wallet.address) continue;
-    const res = await db
+    const res = await client
       .from("accounts")
       .update({ circle_wallet_id: wallet.circle_wallet_id, address: wallet.address })
       .eq("name", name);
@@ -89,24 +89,26 @@ async function restoreProvisioning(saved: Provisioning) {
 
   for (const [name, address] of saved.counterparties) {
     if (!address) continue;
-    const res = await db.from("counterparties").update({ address }).eq("name", name);
+    const res = await client.from("counterparties").update({ address }).eq("name", name);
     if (res.error) throw new Error(res.error.message);
   }
 }
 
 export async function resetDatabase() {
-  const db = supabase();
+  const client = db();
   for (const table of TABLES) {
     // PostgREST requires a filter on delete; this one matches every row.
-    const res = await db.from(table).delete().not("id", "is", null);
+    const res = await client.from(table).delete().not("id", "is", null);
     if (res.error) throw new Error(`clearing ${table}: ${res.error.message}`);
   }
-  const clock = await db.from("sim_clock").update({ current_day: 0 }).eq("id", 1);
+  // update would match nothing for an organization on its first simulated
+  // cycle, which has no sim_clock row yet; the upsert both creates and resets it.
+  const clock = await client.from("sim_clock").upsert({ current_day: 0 }, { onConflict: "org_id" });
   if (clock.error) throw new Error(clock.error.message);
 }
 
 export async function seedDatabase() {
-  const db = supabase();
+  const client = db();
   const scale = seedScale();
   const amt = (value: number) => Number((value * scale).toFixed(6));
 
@@ -114,7 +116,7 @@ export async function seedDatabase() {
   await resetDatabase();
 
   const accounts = unwrap(
-    await db
+    await client
       .from("accounts")
       .insert([
         {
@@ -146,7 +148,7 @@ export async function seedDatabase() {
   ) as Array<{ id: string; name: string }>;
 
   const counterparties = unwrap(
-    await db
+    await client
       .from("counterparties")
       .insert([
         { name: "Vercel Inc", role: "vendor", chain: "ARC-TESTNET", payment_limit: amt(2000), baseline_payment_limit: amt(2000) },
@@ -170,7 +172,7 @@ export async function seedDatabase() {
     return match.id;
   };
 
-  const invoices = await db.from("invoices").insert([
+  const invoices = await client.from("invoices").insert([
     {
       direction: "payable",
       counterparty_id: cp("Vercel"),
@@ -240,7 +242,7 @@ export async function seedDatabase() {
   ]);
   if (invoices.error) throw new Error(invoices.error.message);
 
-  const milestones = await db.from("milestones").insert([
+  const milestones = await client.from("milestones").insert([
     {
       contractor_id: cp("Priya"),
       title: "API rate-limiting module shipped",

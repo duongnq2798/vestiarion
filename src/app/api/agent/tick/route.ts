@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { runAgentCycle } from "@/lib/agent/orchestrator";
 import { hasValidAgentBearer } from "@/lib/agent-security";
+import { withFoundingOrg } from "@/lib/dal/scope";
 import { takeAgentCycleToken } from "@/lib/rate-limit";
 
 function clientIp(request: Request): string {
@@ -21,7 +22,10 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await runAgentCycle();
+    // The founding organization, named explicitly: there is no default
+    // organization to fall back on. Step 5 of the spec replaces this with
+    // iterating every organization that is due (§4.4).
+    const result = await withFoundingOrg(() => runAgentCycle());
     return NextResponse.json(result);
   } catch (err) {
     console.error("agent cycle failed", err);

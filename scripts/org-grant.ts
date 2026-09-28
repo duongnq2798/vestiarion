@@ -24,7 +24,7 @@ async function main() {
 
   if (slug !== FOUNDING_ORG_SLUG) {
     throw new Error(
-      `Until data is scoped per organization (Plan 2), only the founding organization can have members; refusing to grant a role in ${slug}.`
+      `Until self-serve onboarding and invitations arrive (spec §10, rollout step 5), only the founding organization can have members; refusing to grant a role in ${slug}.`
     );
   }
 
@@ -49,14 +49,20 @@ async function main() {
     .upsert({ org_id: org.data.id, user_id: userId, role }, { onConflict: "org_id,user_id" });
   if (upsert.error) throw new Error(upsert.error.message);
 
+  // The grant is recorded on the chain of the organization it was made in,
+  // signed with that organization's own key.
+  const { withOrg } = await import("../src/lib/dal/scope");
   const { appendLedgerEntry } = await import("../src/lib/ledger");
-  const entry = await appendLedgerEntry({
-    actor: "system",
-    domain: "system",
-    action: "membership_granted",
-    summary: `Granted ${role} in ${org.data.name}`,
-    detail: { orgId: org.data.id, userId, role },
-  });
+  const grantedIn = org.data;
+  const entry = await withOrg(grantedIn.id, () =>
+    appendLedgerEntry({
+      actor: "system",
+      domain: "system",
+      action: "membership_granted",
+      summary: `Granted ${role} in ${grantedIn.name}`,
+      detail: { orgId: grantedIn.id, userId, role },
+    })
+  );
 
   console.log(`${email} is now ${role} of ${org.data.name} (${slug}). Ledger entry #${entry.seq}.`);
 }

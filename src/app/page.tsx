@@ -4,8 +4,9 @@ import { Suspense } from "react";
 import { ProvenanceBar, type ProvenanceLeg } from "@/components/vx/Provenance";
 import { fmt, Label } from "@/components/vx/Primitives";
 import { BrandMark } from "@/components/vx/Brand";
-import { getChainProvider } from "@/lib/circle";
+import { chainModes } from "@/lib/circle";
 import { screeningMode } from "@/lib/compliance";
+import { withFoundingOrg } from "@/lib/dal/scope";
 import { getLandingMetrics, type LandingMetrics } from "@/lib/landing";
 
 export const dynamic = "force-dynamic";
@@ -43,8 +44,12 @@ function MetricCard({ label, value, note, href, measured }: {
   );
 }
 
+/**
+ * The public showcase reads the founding organization, named explicitly: a
+ * sandbox organization's demo data must never inflate its "live" figures.
+ */
 async function LiveMetrics() {
-  const metrics = await getLandingMetrics();
+  const metrics = await withFoundingOrg(() => getLandingMetrics());
   const hasCycles = metrics.instrumentedCycles > 0;
   const hasTransfers = metrics.settledLiveTransfers > 0;
   return (
@@ -202,12 +207,14 @@ function ProofPanel({ provenance }: { provenance: ProvenanceLeg[] }) {
   );
 }
 
-export default function LandingPage() {
-  const provider = getChainProvider();
+export default async function LandingPage() {
+  // The founding organization's modes, like the metrics below; chainModes()
+  // still answers when its Circle credentials cannot be read (R12).
+  const modes = await withFoundingOrg(async () => chainModes());
   const currentScreeningMode = screeningMode();
   const provenance: ProvenanceLeg[] = [
-    { label: "Payments", detail: "Arc testnet", live: provider.mode === "live" },
-    { label: "Yield", detail: "USYC reserve", live: provider.earnMode === "live" },
+    { label: "Payments", detail: "Arc testnet", live: modes.mode === "live" },
+    { label: "Yield", detail: "USYC reserve", live: modes.earnMode === "live" },
     { label: "Screening", detail: currentScreeningMode === "live" ? "OpenSanctions" : "bundled list", live: currentScreeningMode === "live" },
   ];
 

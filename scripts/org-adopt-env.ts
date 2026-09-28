@@ -5,7 +5,9 @@
  *
  *   npm run org:adopt-env -- founding --expect-key-id 9b03458d9a617871
  *
- * Does NOT remove anything from env: the app reads env secrets until Plan 2.
+ * The app reads each organization's secrets from its own row, never from env
+ * — this command is the only thing that still reads the env copies, so they
+ * can be removed from hosting once production is verified.
  */
 import crypto from "node:crypto";
 import { config } from "dotenv";
@@ -54,7 +56,7 @@ async function main() {
 
   console.log(`ledger key ${roundTrip} stored for ${slug} under master key ${keys[0].id}, and re-derived from the database.`);
   console.log(`circle api key: ${adopted.circle_api_key_enc ? "stored" : "absent"} · entity secret: ${adopted.circle_entity_secret_enc ? "stored" : "absent"}`);
-  console.log("Env copies are still in use by the app. Do not remove them until Plan 2 switches reads to the database.");
+  console.log("The app reads this from the organization's row now, never from env. The env copies were only needed for this command and can be removed from hosting once production is verified.");
 }
 
 main().catch((error) => {

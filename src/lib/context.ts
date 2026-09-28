@@ -20,14 +20,40 @@ import { configFromEnv, type VestiarionConfig } from "./config";
  * module variable does not.
  *
  * A process with no scope entered falls back to one derived from the
- * environment. That keeps the single-tenant Next.js app working untouched, and
- * it is why `runWith` is additive rather than a breaking change.
+ * environment. The ambient fallback serves platform configuration (LLM,
+ * compliance, database URL), but never an organization — that requires an
+ * explicit scope via `currentOrgId()`, which throws `NoOrgScopeError` outside
+ * an organization's scope. That keeps the single-tenant Next.js app working
+ * untouched for its own configuration, and it is why `runWith` is additive
+ * rather than a breaking change. With more than one business, tenant data read
+ * outside a scope is an error rather than "whichever business the environment
+ * describes" — which would be the exact failure that puts one tenant's rows on
+ * another's screen.
  */
+
+/** Which organization, and for whom, the current work is being done. */
+export interface OrgScope {
+  orgId: string;
+  /** The signed-in person; absent for the cron and for scripts. */
+  userId?: string;
+  /** Why some of the organization's stored secrets could not be read. */
+  secretWarnings?: string[];
+}
 
 export interface VestiarionContext {
   config: VestiarionConfig;
   /** Service-role client. Bypasses row-level security; never expose to a browser. */
   db: SupabaseClient;
+  /** Absent outside an organization's scope — and then no tenant data may be touched. */
+  orgId?: string;
+  userId?: string;
+  secretWarnings?: string[];
+  /**
+   * The platform configuration an organization's config was built from.
+   * Absent outside an organization's scope. Only the Data Access Layer's
+   * `contextFor` sets it, which is what `currentOrgConfig()` checks (R19).
+   */
+  platformConfig?: VestiarionConfig;
 }
 
 const storage = new AsyncLocalStorage<VestiarionContext>();
@@ -41,25 +67,28 @@ function createDb(config: VestiarionConfig): SupabaseClient {
   });
 }
 
-export function createContext(config: VestiarionConfig): VestiarionContext {
-  return { config, db: createDb(config) };
+export function createContext(config: VestiarionConfig, scope: Partial<OrgScope> = {}): VestiarionContext {
+  return { config, db: createDb(config), ...scope };
 }
 
 /**
  * Runs `fn` against a specific configuration. Everything it calls — directly
  * or through any number of awaits — sees that context and no other.
  *
- * This is the whole multi-tenant story: an MCP server or a Slack bot resolves
- * which workspace a request belongs to, builds or looks up its context, and
- * runs the work inside it.
+ * An organization is not entered with this directly. `withOrg`, `inOrg` and
+ * `withFoundingOrg` (src/lib/dal/scope.ts) build the context from the
+ * organization's own row and then call this; a context naming an
+ * organization that was built any other way can read its rows but is refused
+ * its configuration (R19). ESLint keeps this and `runWithConfig` out of
+ * application code for the same reason.
  */
 export function runWith<T>(context: VestiarionContext, fn: () => T): T {
   return storage.run(context, fn);
 }
 
 /** Convenience for callers that have a config rather than a built context. */
-export function runWithConfig<T>(config: VestiarionConfig, fn: () => T): T {
-  return runWith(createContext(config), fn);
+export function runWithConfig<T>(config: VestiarionConfig, fn: () => T, scope?: Partial<OrgScope>): T {
+  return runWith(createContext(config, scope), fn);
 }
 
 /**
@@ -84,6 +113,68 @@ export function currentConfig(): VestiarionConfig {
 /** True when work is running inside an explicit scope rather than the ambient one. */
 export function hasScope(): boolean {
   return storage.getStore() !== undefined;
+}
+
+export class NoOrgScopeError extends Error {
+  constructor() {
+    super("Tenant data was touched with no organization in scope");
+    this.name = "NoOrgScopeError";
+  }
+}
+
+/**
+ * The organization the current work belongs to.
+ *
+ * There is deliberately no fallback. The ambient, environment-derived context
+ * never carries an organization, so tenant data read outside a scope is an
+ * error rather than "whichever business the environment describes" — which,
+ * with more than one business, is the exact failure that puts one tenant's
+ * rows on another's screen.
+ */
+export function currentOrgId(): string {
+  const orgId = storage.getStore()?.orgId;
+  if (!orgId) throw new NoOrgScopeError();
+  return orgId;
+}
+
+export function currentUserId(): string | undefined {
+  return storage.getStore()?.userId;
+}
+
+/**
+ * The organization's scope, provided the Data Access Layer built it.
+ *
+ * `runWith` and `runWithConfig` accept `{ orgId }` beside any configuration,
+ * so a scope can name the right organization while carrying the
+ * environment's ledger key and Circle credentials: it would read that
+ * organization's rows while signing and paying as the platform. Only
+ * `contextFor` pairs an organization with the configuration built from its
+ * own row, and only it sets `platformConfig`, so a scope without one is
+ * refused here. The lint rule keeps `runWith` out of application code; this
+ * also covers scripts, which the lint rule does not reach (R19).
+ */
+function organizationContext(): VestiarionContext {
+  const context = storage.getStore();
+  if (!context?.orgId) throw new NoOrgScopeError();
+  if (!context.platformConfig) {
+    throw new Error("An organization's configuration is only available inside a scope entered through the Data Access Layer");
+  }
+  return context;
+}
+
+/**
+ * The configuration of the organization in scope. Anything that reads an
+ * organization's secrets — its ledger key, its Circle credentials — reads
+ * them through this, so that outside a scope, or in one the Data Access Layer
+ * did not build, it throws instead of quietly using the environment's.
+ */
+export function currentOrgConfig(): VestiarionConfig {
+  return organizationContext().config;
+}
+
+/** Why some of the organization's stored secrets could not be read; guarded like its configuration. */
+export function currentSecretWarnings(): string[] {
+  return organizationContext().secretWarnings ?? [];
 }
 
 /**

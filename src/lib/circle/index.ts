@@ -8,7 +8,7 @@ import type {
 } from "./types";
 import { SimulateProvider } from "./simulateProvider";
 import { LiveProvider } from "./liveProvider";
-import { currentConfig } from "../context";
+import { currentOrgConfig } from "../context";
 import type { VestiarionConfig } from "../config";
 
 /**
@@ -69,11 +69,20 @@ class HybridProvider implements ChainProvider {
 const providers = new WeakMap<VestiarionConfig, ChainProvider>();
 
 export function getChainProvider(): ChainProvider {
-  const config = currentConfig();
+  const config = currentOrgConfig();
   const existing = providers.get(config);
   if (existing) return existing;
 
-  const { circleApiKey, circleEntitySecret } = config.chain;
+  const { circleApiKey, circleEntitySecret, credentialsUnreadable } = config.chain;
+  if (credentialsUnreadable) {
+    // A stored Circle credential this deployment could not decrypt must not
+    // be treated as "no credentials configured": that would silently drop a
+    // live organization into simulated payments, which then mark invoices
+    // paid for money that never moved (spec §5.4, R12).
+    throw new Error(
+      `This organization's Circle credentials are stored but could not be read (${credentialsUnreadable}); refusing to fall back to simulated payments`
+    );
+  }
   const provider: ChainProvider =
     circleApiKey && circleEntitySecret
       ? new HybridProvider(new LiveProvider(config.chain), new SimulateProvider())
@@ -81,6 +90,17 @@ export function getChainProvider(): ChainProvider {
 
   providers.set(config, provider);
   return provider;
+}
+
+/** What a page shows about payments and yield, computed inside the organization's scope. */
+export function chainModes(): { mode: "live" | "simulate"; earnMode: "live" | "simulate" } {
+  // getChainProvider() refuses outright when the organization's stored Circle
+  // credentials could not be read (R12) — a page must still render, and the
+  // warning already reaches it through ledgerReadWarnings(), so this reports
+  // the safe simulate/simulate default rather than propagating that throw.
+  if (currentOrgConfig().chain.credentialsUnreadable) return { mode: "simulate", earnMode: "simulate" };
+  const provider = getChainProvider();
+  return { mode: provider.mode, earnMode: provider.earnMode };
 }
 
 export type {

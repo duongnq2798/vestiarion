@@ -166,7 +166,7 @@ describe("ledgerSigningKeyFromConfig", () => {
 
   it("throws on malformed key material", () => {
     expect(() => ledgerSigningKeyFromConfig(config({ LEDGER_SIGNING_KEY: "not a pem" }))).toThrow(
-      /LEDGER_SIGNING_KEY/
+      /^The ledger signing key is not a readable private key: /
     );
   });
 
@@ -174,7 +174,7 @@ describe("ledgerSigningKeyFromConfig", () => {
     const key = keypair();
     expect(() =>
       ledgerSigningKeyFromConfig(config({ LEDGER_SIGNING_KEY: key.publicPem }))
-    ).toThrow(/LEDGER_SIGNING_KEY/);
+    ).toThrow(/^The ledger signing key is not a readable private key: /);
   });
 });
 
@@ -214,14 +214,14 @@ describe("ledgerSigningKey — which key actually signs", () => {
     expect(calls.create).toBe(1);
   });
 
-  it("refuses to invent a key in production, naming the setting that fixes it", () => {
+  it("refuses to invent a key in production, naming how to fix it", () => {
     // A key invented here would sign entries nobody can verify afterwards and
     // would vanish with the instance. Failing loudly is the only safe answer,
-    // and the message has to say what to set.
+    // and the message has to say how to fix it.
     const { store, calls } = localStore(null);
 
     expect(() => ledgerSigningKey(config({ NODE_ENV: "production" }), store)).toThrow(
-      /LEDGER_SIGNING_KEY/
+      /org:adopt-env/
     );
     expect(calls.create).toBe(0);
   });
@@ -370,14 +370,14 @@ describe("ledgerReadKeys — the read path never throws over a bad key", () => {
     expect(keys.active).not.toBeNull();
     expect(accepts(keys.active!, good.privateKey)).toBe(true);
     expect(keys.warnings).toHaveLength(1);
-    expect(keys.warnings[0]).toMatch(/LEDGER_SIGNING_KEY/);
+    expect(keys.warnings[0]).toMatch(/^The ledger signing key is not a readable private key: /);
   });
 
   it("reports an unreadable signing key even when nothing else is configured", () => {
     const keys = ledgerReadKeys(config({ LEDGER_SIGNING_KEY: "not a pem" }));
 
     expect(keys.active).toBeNull();
-    expect(keys.warnings.join(" ")).toMatch(/LEDGER_SIGNING_KEY/);
+    expect(keys.warnings.join(" ")).toMatch(/The ledger signing key is not a readable private key: /);
   });
 
   it("reports an unreadable public key instead of throwing", () => {

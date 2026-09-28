@@ -1,8 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { signOut } from "@/app/login/actions";
-import { getChainProvider } from "@/lib/circle";
-import { stats } from "@/lib/queries";
 import { screeningMode } from "@/lib/compliance";
 import type { CycleClockMode } from "@/lib/clock";
 import { orgHref } from "@/lib/auth/org-paths";
@@ -22,29 +20,35 @@ const NAV = [
 
 export type NavKey = (typeof NAV)[number]["key"];
 
-export async function ProductShell({
+/**
+ * Renders what the page hands it and reads no tenant data of its own. React
+ * can render a child after the page function has returned, which is outside
+ * the organization's scope, so the page loads everything inside `inOrg` and
+ * passes it down rather than letting the shell fetch.
+ */
+export function ProductShell({
   active,
   day,
   clockMode,
   lastCycleAt,
+  chainModes,
   orgSlug,
+  orgName,
   children,
 }: {
   active: NavKey;
-  day?: number;
-  clockMode?: CycleClockMode;
-  lastCycleAt?: string | null;
+  day: number;
+  clockMode: CycleClockMode;
+  lastCycleAt: string | null;
+  chainModes: { mode: "live" | "simulate"; earnMode: "live" | "simulate" };
   orgSlug: string;
+  /** The organization's own name, never the platform's `BUSINESS_NAME`. */
+  orgName: string;
   children: ReactNode;
 }) {
-  const fallbackStats = day == null || clockMode == null || lastCycleAt === undefined ? await stats() : null;
-  const currentDay = day ?? fallbackStats?.day ?? 0;
-  const currentClockMode = clockMode ?? fallbackStats?.clockMode ?? "simulate";
-  const currentLastCycleAt = lastCycleAt === undefined ? fallbackStats?.lastCycleAt ?? null : lastCycleAt;
-  const provider = getChainProvider();
   const legs: ProvenanceLeg[] = [
-    { label: "Payments", detail: "Arc testnet", live: provider.mode === "live" },
-    { label: "Yield", detail: "USYC reserve", live: provider.earnMode === "live" },
+    { label: "Payments", detail: "Arc testnet", live: chainModes.mode === "live" },
+    { label: "Yield", detail: "USYC reserve", live: chainModes.earnMode === "live" },
     { label: "Screening", detail: screeningMode() === "live" ? "OpenSanctions" : "bundled list", live: screeningMode() === "live" },
   ];
 
@@ -59,10 +63,10 @@ export async function ProductShell({
                   <BrandMark className="logo-shadow size-8 shrink-0 text-agent transition-transform duration-300 group-hover:-rotate-6 group-hover:scale-105" />
                   <span>Vestiarion</span>
                 </Link>
-                <Label>{currentClockMode === "simulate" ? `Day ${currentDay}` : "Wall clock"}</Label>
+                <Label>{clockMode === "simulate" ? `Day ${day}` : "Wall clock"}</Label>
               </div>
-              <p className="mt-2 truncate text-sm font-medium text-ink-2">{process.env.BUSINESS_NAME?.trim() || "Vestiarion workspace"}</p>
-              <p className="mt-0.5 text-xs text-ink-3">{currentLastCycleAt ? `Last cycle ${new Date(currentLastCycleAt).toLocaleString()}` : "No cycle recorded yet"}</p>
+              <p className="mt-2 truncate text-sm font-medium text-ink-2">{orgName}</p>
+              <p className="mt-0.5 text-xs text-ink-3">{lastCycleAt ? `Last cycle ${new Date(lastCycleAt).toLocaleString()}` : "No cycle recorded yet"}</p>
             </div>
             <div className="flex shrink-0 flex-col items-end gap-2">
               <ProvenanceBar legs={legs} />

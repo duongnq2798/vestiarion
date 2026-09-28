@@ -4,12 +4,16 @@ import {
   createContext,
   currentConfig,
   currentContext,
+  currentOrgId,
+  currentUserId,
+  currentOrgConfig,
+  currentSecretWarnings,
   hasScope,
+  NoOrgScopeError,
   resetAmbientContext,
   runWith,
   runWithConfig,
 } from "@/lib/context";
-import { supabase } from "@/lib/supabase";
 
 function configFor(name: string, project: string): VestiarionConfig {
   return configFromEnv({
@@ -43,14 +47,14 @@ describe("scoping", () => {
   it("gives each scope its own database client", () => {
     // The property the module-level singleton destroyed: whoever called first
     // decided which database the whole process talked to.
-    const a = runWithConfig(northstar, () => supabase());
-    const b = runWithConfig(meridian, () => supabase());
+    const a = runWithConfig(northstar, () => currentContext().db);
+    const b = runWithConfig(meridian, () => currentContext().db);
     expect(a).not.toBe(b);
   });
 
   it("reuses one client within a scope rather than reconnecting per call", () => {
     const context = createContext(northstar);
-    const [first, second] = runWith(context, () => [supabase(), supabase()]);
+    const [first, second] = runWith(context, () => [currentContext().db, currentContext().db]);
     expect(first).toBe(second);
   });
 
@@ -85,13 +89,13 @@ describe("scoping", () => {
   it("keeps interleaved concurrent work on its own database throughout", async () => {
     const clients = await Promise.all([
       runWithConfig(northstar, async () => {
-        const before = supabase();
+        const before = currentContext().db;
         await new Promise((resolve) => setTimeout(resolve, 5));
-        return [before, supabase()];
+        return [before, currentContext().db];
       }),
       runWithConfig(meridian, async () => {
         await new Promise((resolve) => setTimeout(resolve, 1));
-        return [supabase(), supabase()];
+        return [currentContext().db, currentContext().db];
       }),
     ]);
 
@@ -158,6 +162,76 @@ describe("the ambient fallback", () => {
     runWithConfig(northstar, () => {
       expect(hasScope()).toBe(true);
       expect(currentConfig().businessName).toBe("Northstar Studio");
+    });
+  });
+});
+
+const ORG_A = "0b6c1c9e-4a4f-4a7e-9b1e-000000000a0a";
+const ORG_B = "0b6c1c9e-4a4f-4a7e-9b1e-000000000b0b";
+
+describe("the organization in scope", () => {
+  it("is absent outside every scope, and asking for it throws", () => {
+    expect(currentContext().orgId).toBeUndefined();
+    expect(() => currentOrgId()).toThrow(NoOrgScopeError);
+  });
+
+  it("is absent in a scope that names only a configuration", () => {
+    runWithConfig(northstar, () => {
+      expect(() => currentOrgId()).toThrow("Tenant data was touched with no organization in scope");
+    });
+  });
+
+  it("is the one the scope names, and the inner scope wins", () => {
+    runWithConfig(northstar, () => {
+      expect(currentOrgId()).toBe(ORG_A);
+      runWithConfig(meridian, () => expect(currentOrgId()).toBe(ORG_B), { orgId: ORG_B });
+      expect(currentOrgId()).toBe(ORG_A);
+    }, { orgId: ORG_A });
+  });
+
+  it("survives awaits without leaking between concurrent scopes", async () => {
+    const seen = await Promise.all([
+      runWithConfig(northstar, async () => {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        return currentOrgId();
+      }, { orgId: ORG_A }),
+      runWithConfig(meridian, async () => currentOrgId(), { orgId: ORG_B }),
+    ]);
+    expect(seen).toEqual([ORG_A, ORG_B]);
+  });
+
+  it("carries the user when one is named", () => {
+    runWithConfig(northstar, () => expect(currentUserId()).toBe("user-1"), { orgId: ORG_A, userId: "user-1" });
+    runWithConfig(northstar, () => expect(currentUserId()).toBeUndefined(), { orgId: ORG_A });
+  });
+
+  it("guards the organization's configuration and its secret warnings", () => {
+    expect(() => currentOrgConfig()).toThrow(NoOrgScopeError);
+    expect(() => currentSecretWarnings()).toThrow(NoOrgScopeError);
+    // The shape `contextFor` builds: the organization's configuration, with the
+    // platform configuration it was built from beside it.
+    const scoped = { ...createContext(northstar, { orgId: ORG_A, secretWarnings: ["stored key could not be read"] }), platformConfig: meridian };
+    runWith(scoped, () => {
+      expect(currentOrgConfig().businessName).toBe("Northstar Studio");
+      expect(currentSecretWarnings()).toEqual(["stored key could not be read"]);
+    });
+  });
+
+  it("keeps the organization's configuration from a scope the Data Access Layer did not build", () => {
+    // runWith and runWithConfig accept an organization beside any
+    // configuration — the environment's ledger key and Circle credentials
+    // included — so such a scope could read one organization's rows while
+    // signing and paying as the platform. Only `contextFor` sets
+    // `platformConfig`, so its absence is what marks a scope entered by hand
+    // (R19).
+    const refusal = "An organization's configuration is only available inside a scope entered through the Data Access Layer";
+    runWithConfig(northstar, () => {
+      expect(currentOrgId()).toBe(ORG_A);
+      expect(() => currentOrgConfig()).toThrow(refusal);
+      expect(() => currentSecretWarnings()).toThrow(refusal);
+    }, { orgId: ORG_A, secretWarnings: ["stored key could not be read"] });
+    runWith(createContext(northstar, { orgId: ORG_A }), () => {
+      expect(() => currentOrgConfig()).toThrow(refusal);
     });
   });
 });

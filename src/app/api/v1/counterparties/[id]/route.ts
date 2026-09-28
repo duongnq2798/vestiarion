@@ -1,4 +1,5 @@
-import { supabase } from "@/lib/supabase";
+import type { NextResponse } from "next/server";
+import { db } from "@/lib/dal";
 import { apiError, guardApiRequest, handleApiRequest } from "@/lib/api/guard";
 import type { ApiResource } from "@/lib/api/contract";
 import {
@@ -27,25 +28,23 @@ export async function GET(
   if (denied) return denied;
 
   const { id } = await params;
-  const db = supabase();
-  const counterpartyResult = await db
-    .from("counterparties")
-    .select(COUNTERPARTY_SELECT)
-    .eq("id", id)
-    .maybeSingle();
-  if (counterpartyResult.error) {
-    return handleApiRequest("GET /api/v1/counterparties/{id}", async () => {
-      throw new Error(counterpartyResult.error.message);
-    });
-  }
-  if (!counterpartyResult.data) {
-    return apiError("not_found", `Counterparty "${id}" was not found.`);
-  }
-
   return handleApiRequest(
     "GET /api/v1/counterparties/{id}",
-    async (): Promise<ApiResource<CounterpartyDetailPayload>> => {
-      const checksResult = await db
+    async (): Promise<ApiResource<CounterpartyDetailPayload> | NextResponse> => {
+      // The lookup carries the organization, so another organization's
+      // counterparty id is answered as not found rather than served.
+      const client = db();
+      const counterpartyResult = await client
+        .from("counterparties")
+        .select(COUNTERPARTY_SELECT)
+        .eq("id", id)
+        .maybeSingle();
+      if (counterpartyResult.error) throw new Error(counterpartyResult.error.message);
+      if (!counterpartyResult.data) {
+        return apiError("not_found", `Counterparty "${id}" was not found.`);
+      }
+
+      const checksResult = await client
         .from("compliance_checks")
         .select(CHECK_SELECT)
         .eq("counterparty_id", id)

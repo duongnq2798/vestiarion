@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { configFromEnv } from "@/lib/config";
+import { runWith } from "@/lib/context";
 import {
   executePayment,
   paymentIdempotencyKey,
+  SupabasePaymentIntentStore,
   type PaymentIntent,
   type PaymentIntentStore,
   type PaymentRequest,
@@ -13,6 +16,7 @@ import type {
   TransferParams,
   TransferResult,
 } from "@/lib/circle";
+import { fakeSupabase, type RecordedRequest } from "./support/fake-supabase";
 
 const request: PaymentRequest = {
   sourceType: "invoice",
@@ -182,5 +186,93 @@ describe("payment idempotency", () => {
     expect((await executePayment(request, { provider, store })).status).toBe("confirmed");
     expect(provider.transfers).toHaveLength(1);
     expect(provider.reconciliations).toHaveLength(0);
+  });
+});
+
+/**
+ * The store against a real supabase-js client whose network is a recorder.
+ * `claim_payment_intent` is declared `returns payment_intents`, so when its
+ * UPDATE matches nothing — another cycle holds a fresh claim, or the intent
+ * already settled — it still returns one composite value with every field
+ * null, and PostgREST sends that as an object, not as an empty result.
+ */
+describe("SupabasePaymentIntentStore.claim (R20)", () => {
+  const ORG = "0b6c1c9e-4a4f-4a7e-9b1e-000000000a0a";
+  const config = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k" });
+  const KEY = paymentIdempotencyKey(request.sourceType, request.sourceId);
+
+  /** A payment_intents row as PostgREST returns it. */
+  function intentRow(overrides: Record<string, unknown> = {}) {
+    return {
+      id: "5a1d0c4e-2b7f-4e61-9d3a-00000000c1a1",
+      org_id: ORG,
+      source_type: request.sourceType,
+      source_id: request.sourceId,
+      idempotency_key: KEY,
+      provider: "circle",
+      provider_tx_id: null,
+      tx_hash: null,
+      amount: "12.500000",
+      destination: request.destination,
+      status: "submitting",
+      attempt_count: 1,
+      last_error: null,
+      confirmed_at: null,
+      chain: null,
+      provider_mode: "live",
+      fee_usd: null,
+      fee_source: null,
+      settled_in_ms: null,
+      executed_at: null,
+      created_at: "2026-09-28T00:00:00+00:00",
+      updated_at: "2026-09-28T00:00:00+00:00",
+      ...overrides,
+    };
+  }
+
+  /** What the function returns when its UPDATE matched no row. */
+  const NOTHING_CLAIMED = Object.fromEntries(Object.keys(intentRow()).map((column) => [column, null]));
+
+  function inOrganization<T>(respond: (request: RecordedRequest) => { body: unknown }, fn: () => Promise<T>) {
+    const fake = fakeSupabase(respond);
+    return { fake, result: runWith({ config, db: fake.client, orgId: ORG, platformConfig: config }, fn) };
+  }
+
+  it("is not a claim when the update matched nothing", async () => {
+    const { fake, result } = inOrganization(
+      (sent) => ({ body: sent.path === "/rest/v1/rpc/claim_payment_intent" ? NOTHING_CLAIMED : [] }),
+      () => new SupabasePaymentIntentStore().claim(KEY)
+    );
+    expect(await result).toBeNull();
+    expect(fake.requests.map((sent) => [sent.path, sent.body])).toEqual([
+      ["/rest/v1/rpc/claim_payment_intent", { p_idempotency_key: KEY, p_org_id: ORG }],
+    ]);
+  });
+
+  it("is the claimed intent when the update matched a row", async () => {
+    const { result } = inOrganization(
+      (sent) => ({ body: sent.path === "/rest/v1/rpc/claim_payment_intent" ? intentRow({ attempt_count: 2 }) : [] }),
+      () => new SupabasePaymentIntentStore().claim(KEY)
+    );
+    expect(await result).toMatchObject({ idempotencyKey: KEY, status: "submitting", attemptCount: 2, amount: 12.5 });
+  });
+
+  it("keeps a cycle that lost the claim from transferring a second time", async () => {
+    // Another cycle claimed this intent moments ago and is mid-transfer: the
+    // row is `submitting` with no provider id yet. This cycle must leave it
+    // to that one rather than send the money again.
+    const { result } = inOrganization((sent) => {
+      if (sent.path === "/rest/v1/rpc/claim_payment_intent") return { body: NOTHING_CLAIMED };
+      if (sent.path === "/rest/v1/payment_intents" && sent.method === "GET") return { body: intentRow() };
+      return { body: [] };
+    }, async () => {
+      const provider = new FakeProvider();
+      provider.transferResults.push(transferResult("confirmed"));
+      const execution = await executePayment(request, { provider });
+      return { execution, transfers: provider.transfers };
+    });
+    const { execution, transfers } = await result;
+    expect(transfers).toEqual([]);
+    expect(execution).toMatchObject({ status: "pending", providerTxId: null, attemptCount: 1 });
   });
 });

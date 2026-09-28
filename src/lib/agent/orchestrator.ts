@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { supabase, unwrap } from "../supabase";
+import { db, unwrap, type OrgDb } from "../dal";
 import { appendLedgerEntry } from "../ledger";
 import { getChainProvider } from "../circle";
 import { cycleClockMode, type CycleClockMode } from "../clock";
@@ -96,20 +96,20 @@ function performanceEvidence(
  * applied during reconciliation — see the comment there.
  */
 async function syncOperatingBalance(accountId: string): Promise<number> {
-  const db = supabase();
+  const client = db();
   const provider = getChainProvider();
   const snapshot = await provider.getBalance(accountId);
 
   let carveOut = 0;
   if (provider.mode === "live" && provider.earnMode === "simulate") {
     const reserve = (
-      await db.from("accounts").select("balance").eq("kind", "reserve").maybeSingle()
+      await client.from("accounts").select("balance").eq("kind", "reserve").maybeSingle()
     ).data as { balance: string } | null;
     carveOut = num(reserve?.balance);
   }
 
   const spendable = Math.max(0, Number((snapshot.balance - carveOut).toFixed(6)));
-  const res = await db.from("accounts").update({ balance: spendable }).eq("id", accountId);
+  const res = await client.from("accounts").update({ balance: spendable }).eq("id", accountId);
   if (res.error) throw new Error(res.error.message);
   return spendable;
 }
@@ -119,8 +119,23 @@ function payoutAddress(address: string | null, counterpartyId: string): string {
   return address ?? `sim:${counterpartyId}`;
 }
 
+/**
+ * The real-clock day, from the organization's own `sim_clock` row.
+ *
+ * A missing row is normal: an organization that has never run a simulated
+ * cycle has none yet, and the day defaults to zero. A request that failed
+ * outright is a different fact and must not be read the same way — that
+ * would start a cycle's records at a wrong day rather than refusing to start
+ * it at all.
+ */
+async function realClockDay(orgDb: OrgDb): Promise<number> {
+  const clock = await orgDb.from("sim_clock").select("current_day").maybeSingle<{ current_day: number }>();
+  if (clock.error) throw new Error(clock.error.message);
+  return clock.data?.current_day ?? 0;
+}
+
 interface CycleContext {
-  db: ReturnType<typeof supabase>;
+  db: OrgDb;
   provider: ReturnType<typeof getChainProvider>;
   lines: CycleLogLine[];
   metrics: CycleMetricsCollector;
@@ -147,7 +162,7 @@ interface CycleContext {
  * while everything it had already written stayed committed.
  */
 export async function runAgentCycle(options: { triggeredBy?: string } = {}): Promise<CycleResult> {
-  const db = supabase();
+  const orgDb = db();
   const provider = getChainProvider();
   const lines: CycleLogLine[] = [];
   const metrics = new CycleMetricsCollector();
@@ -156,13 +171,11 @@ export async function runAgentCycle(options: { triggeredBy?: string } = {}): Pro
   const clockMode = cycleClockMode();
 
   const day = clockMode === "simulate"
-    ? unwrap(await db.rpc("advance_sim_day").single<number>())
-    : unwrap(
-        await db.from("sim_clock").select("current_day").eq("id", 1).single<{ current_day: number }>()
-      ).current_day;
+    ? unwrap(await orgDb.rpc("advance_sim_day").single<number>())
+    : await realClockDay(orgDb);
 
   const run = unwrap(
-    await db
+    await orgDb
       .from("cycle_runs")
       .insert({
         started_at: startedAt,
@@ -177,7 +190,7 @@ export async function runAgentCycle(options: { triggeredBy?: string } = {}): Pro
   );
 
   const ctx: CycleContext = {
-    db, provider, lines, metrics, journal, startedAt, clockMode, day, cycleRunId: run.id,
+    db: orgDb, provider, lines, metrics, journal, startedAt, clockMode, day, cycleRunId: run.id,
     triggeredBy: options.triggeredBy,
   };
 
@@ -194,7 +207,7 @@ export async function runAgentCycle(options: { triggeredBy?: string } = {}): Pro
     try {
       const finishedAt = new Date().toISOString();
       const snapshot = metrics.snapshot();
-      await db
+      await orgDb
         .from("cycle_runs")
         .update({
           status: "failed",

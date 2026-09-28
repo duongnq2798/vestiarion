@@ -37,6 +37,16 @@ function isPrivatePem(pem: string): boolean {
   return /-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----/.test(pem);
 }
 
+/**
+ * Inside an organization the signing key is the one stored on its row; in a
+ * configuration built from the environment it is `LEDGER_SIGNING_KEY`. This
+ * module is handed a configuration and cannot tell which, so the message
+ * says what is wrong without naming a setting that may not be the source.
+ */
+function unreadableSigningKey(err: unknown): string {
+  return `The ledger signing key is not a readable private key: ${(err as Error).message}`;
+}
+
 export function ledgerPublicKeyFromConfig(config: VestiarionConfig): crypto.KeyObject | null {
   // A host that can sign is the authority on which key signs. `ledgerPublicKey`
   // exists for verify-only hosts, so a stale one must never relabel what this
@@ -45,7 +55,7 @@ export function ledgerPublicKeyFromConfig(config: VestiarionConfig): crypto.KeyO
     try {
       return crypto.createPublicKey(crypto.createPrivateKey(readablePem(config.ledgerSigningKey)));
     } catch (err) {
-      throw new Error(`LEDGER_SIGNING_KEY is not a readable private key: ${(err as Error).message}`);
+      throw new Error(unreadableSigningKey(err));
     }
   }
 
@@ -78,14 +88,17 @@ export function ledgerSigningKeyFromConfig(config: VestiarionConfig): crypto.Key
   try {
     return crypto.createPrivateKey(readablePem(config.ledgerSigningKey));
   } catch (err) {
-    throw new Error(`LEDGER_SIGNING_KEY is not a readable private key: ${(err as Error).message}`);
+    throw new Error(unreadableSigningKey(err));
   }
 }
 
 /**
- * Where a development checkout keeps its throwaway key. Injected so the policy
- * below can be decided without a filesystem — and so a test can assert which
- * calls it does *not* make.
+ * A source of signing keys other than configuration, consulted only when the
+ * configuration holds none. The ledger passes one that has no key and refuses
+ * to create one (`NO_LOCAL_KEYS` in ledger.ts): an organization signs only
+ * with the key stored on it, and no checkout keeps a throwaway key any more.
+ * It stays injected so the policy below is decided without a filesystem — and
+ * so a test can assert which calls it does *not* make.
  */
 export interface LocalLedgerKeyStore {
   read(): crypto.KeyObject | null;
@@ -116,10 +129,12 @@ export function ledgerSigningKey(
 
   if (!config.allowGeneratedLedgerKey) {
     throw new LedgerSigningKeyError(
-      "This deployment has no ledger signing key and may not generate one. Set LEDGER_SIGNING_KEY " +
-        "to a PKCS8 Ed25519 PEM — the same key that signed the existing entries, or the chain " +
-        "stops verifying from here on. A key invented now would sign entries nobody could check " +
-        "afterwards and would be lost when this instance is replaced."
+      "This organization has no readable ledger signing key stored on it, and one may not be " +
+        "generated on demand. A key has to be stored on the organization — for the founding " +
+        "organization, `npm run org:adopt-env` — and it must be the same key that signed the " +
+        "existing entries, or the chain stops verifying from here on. A key invented now would " +
+        "sign entries nobody could check afterwards and would be lost when this instance is " +
+        "replaced."
     );
   }
 
@@ -233,7 +248,7 @@ export function ledgerReadKeys(config: VestiarionConfig): LedgerReadKeys {
     try {
       active = crypto.createPublicKey(crypto.createPrivateKey(readablePem(config.ledgerSigningKey)));
     } catch (err) {
-      warnings.push(`LEDGER_SIGNING_KEY is not a readable private key: ${(err as Error).message}`);
+      warnings.push(unreadableSigningKey(err));
     }
   }
   if (!active && config.ledgerPublicKey) {
