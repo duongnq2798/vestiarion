@@ -78,7 +78,8 @@ function refuseUnsafeUpsert(options?: { onConflict?: string; ignoreDuplicates?: 
  * across an `await` and then used inside a nested `runWith` for another
  * organization must not go on acting for the first one, so `from()` and
  * `rpc()` re-check the scope on every call rather than trusting the closure
- * (R10).
+ * (R10) — and so does every method of the table handle `from()` returns,
+ * which can be kept across a nested scope just the same.
  */
 function refuseScopeMismatch(boundOrgId: string): void {
   if (currentOrgId() !== boundOrgId) {
@@ -87,7 +88,10 @@ function refuseScopeMismatch(boundOrgId: string): void {
 }
 
 function tenantTable(client: SupabaseClient, table: TenantTable, orgId: string) {
-  const from = () => client.from(table);
+  const from = () => {
+    refuseScopeMismatch(orgId);
+    return client.from(table);
+  };
   return {
     select: <Q extends string = "*">(columns?: Q, options?: { head?: boolean; count?: Count }) =>
       from().select(columns, options).eq("org_id", orgId),

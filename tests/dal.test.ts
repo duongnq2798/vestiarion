@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { NoOrgScopeError, runWith } from "@/lib/context";
-import { db, platformDb, TENANT_RPCS, TENANT_TABLES } from "@/lib/dal";
+import { db, platformDb, TENANT_RPCS, TENANT_TABLES, type OrgDb } from "@/lib/dal";
 import { carriesOrg, fakeSupabase } from "./support/fake-supabase";
 
 const ORG_A = "0b6c1c9e-4a4f-4a7e-9b1e-000000000a0a";
@@ -40,6 +40,27 @@ describe("a handle's bound organization", () => {
     const result = runWith(contextOf(ORG_A, fake.client), async () => {
       const handle = db();
       return runWith(contextOf(ORG_B, fake.client), () => handle.from("invoices").select("*"));
+    });
+    await expect(result).rejects.toThrow(/belongs to a different organization/);
+    expect(fake.requests).toEqual([]);
+  });
+
+  const TABLE_METHODS: Array<[string, (table: ReturnType<OrgDb["from"]>) => unknown]> = [
+    ["select", (table) => table.select("*")],
+    ["insert", (table) => table.insert({ amount: "1" })],
+    ["upsert", (table) => table.upsert({ amount: "1" }, { onConflict: "org_id,id" })],
+    ["update", (table) => table.update({ status: "paid" })],
+    ["delete", (table) => table.delete()],
+  ];
+
+  it.each(TABLE_METHODS)("refuses a table handle's %s once a nested scope enters another organization", async (_method, act) => {
+    // `db().from(table)` kept across the nested scope is a handle as much as
+    // `db()` is, so each of its methods re-checks the scope too — not only
+    // the `from()` that produced it.
+    const fake = fakeSupabase();
+    const result = runWith(contextOf(ORG_A, fake.client), async () => {
+      const invoices = db().from("invoices");
+      return runWith(contextOf(ORG_B, fake.client), () => act(invoices));
     });
     await expect(result).rejects.toThrow(/belongs to a different organization/);
     expect(fake.requests).toEqual([]);
