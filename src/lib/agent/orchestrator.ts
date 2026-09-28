@@ -15,6 +15,7 @@ import {
 import { CycleJournal, messageOf, type CycleStage } from "./journal";
 import { decide } from "./decide";
 import { enforceApGuardrails } from "./guardrails";
+import { SandboxCapReachedError } from "./sandbox-cap";
 import {
   blockingDuplicate,
   duplicateMatchContext,
@@ -161,7 +162,9 @@ interface CycleContext {
  * Before this, a cycle that died partway left no trace that it had run at all,
  * while everything it had already written stayed committed.
  */
-export async function runAgentCycle(options: { triggeredBy?: string } = {}): Promise<CycleResult> {
+export async function runAgentCycle(
+  options: { triggeredBy?: string; dailyCap?: number } = {}
+): Promise<CycleResult> {
   const orgDb = db();
   const provider = getChainProvider();
   const lines: CycleLogLine[] = [];
@@ -170,31 +173,49 @@ export async function runAgentCycle(options: { triggeredBy?: string } = {}): Pro
   const startedAt = new Date().toISOString();
   const clockMode = cycleClockMode();
 
-  const day = clockMode === "simulate"
-    ? unwrap(await orgDb.rpc("advance_sim_day").single<number>())
-    : await realClockDay(orgDb);
-
-  const run = unwrap(
-    await orgDb
-      .from("cycle_runs")
-      .insert({
-        started_at: startedAt,
-        status: "running",
-        clock_mode: clockMode,
-        sim_day: clockMode === "simulate" ? day : null,
-        chain_mode: provider.mode,
-        screening_mode: complianceScreeningMode(),
-      })
-      .select("id")
-      .single<{ id: string }>()
-  );
-
-  const ctx: CycleContext = {
-    db: orgDb, provider, lines, metrics, journal, startedAt, clockMode, day, cycleRunId: run.id,
-    triggeredBy: options.triggeredBy,
-  };
+  // Opens the run — and, for a sandbox organization, enforces its daily cap —
+  // inside begin_cycle_run (migration 0022) before anything else happens.
+  // Refused there, nothing downstream has run: no day advanced, no row
+  // written. `sandbox_cap_reached: …` is the one error this function
+  // translates; every other failure here means the run never opened at all,
+  // so there is nothing yet to mark failed.
+  let runId: string;
+  try {
+    runId = unwrap(
+      await orgDb
+        .rpc("begin_cycle_run", {
+          p_daily_cap: options.dailyCap ?? null,
+          p_started_at: startedAt,
+          p_clock_mode: clockMode,
+          p_chain_mode: provider.mode,
+          p_screening_mode: complianceScreeningMode(),
+        })
+        .single<string>()
+    );
+  } catch (err) {
+    const message = messageOf(err);
+    if (message.startsWith("sandbox_cap_reached")) throw new SandboxCapReachedError();
+    throw err;
+  }
 
   try {
+    // Only now, with the run open, does simulate mode advance the numbered
+    // day — a refused cycle above advances nothing — and the day is recorded
+    // onto the run that already exists rather than carried on its insert.
+    const day = clockMode === "simulate"
+      ? unwrap(await orgDb.rpc("advance_sim_day").single<number>())
+      : await realClockDay(orgDb);
+
+    if (clockMode === "simulate") {
+      const patch = await orgDb.from("cycle_runs").update({ sim_day: day }).eq("id", runId);
+      if (patch.error) throw new Error(patch.error.message);
+    }
+
+    const ctx: CycleContext = {
+      db: orgDb, provider, lines, metrics, journal, startedAt, clockMode, day, cycleRunId: runId,
+      triggeredBy: options.triggeredBy,
+    };
+
     return await executeCycle(ctx);
   } catch (err) {
     // Reached only when something outside every stage threw — the shared
@@ -227,7 +248,7 @@ export async function runAgentCycle(options: { triggeredBy?: string } = {}): Pro
           guardrail_override_count: snapshot.guardrailOverrideCount,
           reference_disagreement_count: snapshot.referenceDisagreementCount,
         })
-        .eq("id", run.id);
+        .eq("id", runId);
     } catch (recordingError) {
       console.error("[agent] could not record the failed cycle:", recordingError);
     }

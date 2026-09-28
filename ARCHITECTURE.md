@@ -90,8 +90,9 @@ isolation the cycle already had, lifted one level). The endpoint reports
 `{ organizations: [{ slug, ok, lines } | { slug, ok: false, error }] }`, `200` when every
 organization succeeded and `500` when any failed. Sandbox organizations are never in this list: a
 member runs their own cycles from the console instead, capped at `SANDBOX_DAILY_CYCLES` (20) per
-organization per UTC day, counted from `cycle_runs` (`src/lib/agent/sandbox-cap.ts`) so the cap
-holds across serverless instances rather than resetting per cold start.
+organization per UTC day. The cap is enforced inside `begin_cycle_run` (migration 0022), which
+opens the `cycle_runs` row under a per-organization lock and counts the day's runs in the same
+transaction, so it holds across serverless instances rather than resetting per cold start.
 
 ## Read API
 

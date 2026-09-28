@@ -3,7 +3,7 @@
 import "server-only";
 
 import { runAgentCycle } from "@/lib/agent/orchestrator";
-import { SANDBOX_DAILY_CYCLES, sandboxCyclesUsedToday } from "@/lib/agent/sandbox-cap";
+import { SANDBOX_DAILY_CYCLES, SandboxCapReachedError } from "@/lib/agent/sandbox-cap";
 import { authorize } from "@/lib/auth/authorize";
 import { revalidateOrgPages } from "@/lib/auth/revalidate";
 import { inOrg } from "@/lib/dal/scope";
@@ -20,10 +20,12 @@ export async function runAgentCycleAction(orgSlug: string): Promise<AgentActionR
   if (!auth.ok) return { ok: false, message: auth.message };
   return inOrg(auth, async () => {
     try {
-      if (auth.membership.mode === "sandbox" && (await sandboxCyclesUsedToday()) >= SANDBOX_DAILY_CYCLES) {
-        return { ok: false, message: `This sandbox has run its ${SANDBOX_DAILY_CYCLES} cycles for today (UTC). It resets at midnight UTC.` };
-      }
-      const result = await runAgentCycle({ triggeredBy: auth.user.id });
+      // The cap itself is enforced inside begin_cycle_run (migration 0022);
+      // this only tells it which organizations are capped at all.
+      const result = await runAgentCycle({
+        triggeredBy: auth.user.id,
+        dailyCap: auth.membership.mode === "sandbox" ? SANDBOX_DAILY_CYCLES : undefined,
+      });
       revalidateOrgPages();
       return {
         ok: true,
@@ -34,6 +36,9 @@ export async function runAgentCycleAction(orgSlug: string): Promise<AgentActionR
         lines: result.lines.length,
       };
     } catch (error) {
+      if (error instanceof SandboxCapReachedError) {
+        return { ok: false, message: error.message };
+      }
       console.error("agent cycle failed", error);
       return { ok: false, message: error instanceof Error ? error.message : "The agent cycle did not complete." };
     }
