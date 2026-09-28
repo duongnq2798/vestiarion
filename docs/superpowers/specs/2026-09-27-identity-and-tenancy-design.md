@@ -540,7 +540,8 @@ organization's data through the UI or the API.
        message is lost. Accepting still requires signing in with the invited address.
      - An organization has at most 20 open invitations, and sends at most 50 a day, withdrawn ones
        included. Inviting the same address again withdraws the older invitation. Replaced and revoked
-       invitations are kept as withdrawn rows (`revoked_at`), never deleted.
+       invitations are kept as withdrawn rows (`revoked_at`). They go only with the inviter's account
+       or the workspace.
      - Deleting an account keeps the workspaces it created and the members it invited (migration
        `0023`): those references become null, and the invitations it sent are deleted. Deleting a
        workspace's only owner is still refused.
@@ -555,6 +556,43 @@ organization's data through the UI or the API.
      - The sandbox cycle cap moves into `begin_cycle_run(p_org_id, p_daily_cap, …)`, which takes a
        per-organization lock, counts today's runs and opens the run in one transaction. That closes
        the check-then-act gap left by step 5a.
+
+     Shipped on 2026-09-28.
+
+     `0021`–`0023` were applied to production before the merge. The database then showed:
+     - the membership functions, `touch_org_activity` and `delete_sandbox_org` are executable by
+       the service role only;
+     - `begin_cycle_run` is also executable by `vestiarion_tenant`;
+     - `invitations.revoked_at` and its open-invitation index exist;
+     - every foreign key to `auth.users` from this schema has an ON DELETE action;
+     - `org_members` returns the founding organization's one owner;
+     - `delete_sandbox_org` refuses the founding organization with `not_a_sandbox`.
+
+     After the deploy:
+     - the scheduled cycle, whose run is now opened by `begin_cycle_run`, answered
+       `{"organizations":[{"slug":"founding","ok":true}]}`;
+     - a manual run of the cleanup workflow answered `{"deleted":0,"failed":0}`;
+     - the ledger reported `valid: true` (163 entries).
+
+     The partner invited a second address into `note-one`, with Resend configured, and accepted from
+     that address:
+     - #249 `member_invited` and #250 `member_joined` are signed by `note-one`'s key and carry ids
+       only (`by`, `invitationId`, `role`), no address;
+     - the invitation row is accepted;
+     - the new viewer belongs to `note-one` and to no other workspace.
+
+     Two defects were found and fixed on the same day:
+     - The invite form squeezed its email field to its minimum width.
+     - A person who signed in from an invitation link landed on `/onboarding` instead of the
+       invitation. The cause is that the Supabase email templates link to `/auth/confirm` without
+       the `next` the login action carries. Two fixes:
+       - the destination is now kept in a short-lived cookie;
+       - `0024`, applied before that deploy, lets `/onboarding` list the invitations waiting for the
+         signed-in address with an Accept button, so a link opened on another device still ends in
+         the workspace.
+
+     Not yet exercised in a browser: changing a member's role, removing a member, and leaving a
+     workspace. Their rules are covered by the PGlite tests of `0021`.
 
 Each step lands as its own pull request, with production measured after it deploys.
 
