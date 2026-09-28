@@ -121,8 +121,14 @@ describe("every onboarding action", () => {
 });
 
 describe("the entry points bound to the founding organization", () => {
-  it("the cron enters it explicitly", () => {
-    expect(read(path.join(ROOT, "src", "app", "api", "agent", "tick", "route.ts"))).toContain("withFoundingOrg(");
+  it("the demo reset enters it explicitly", () => {
+    expect(read(path.join(ROOT, "src", "app", "api", "agent", "reset", "route.ts"))).toContain("withFoundingOrg(");
+  });
+
+  it("the cron runs every live organization instead (spec §4.4)", () => {
+    const source = read(path.join(ROOT, "src", "app", "api", "agent", "tick", "route.ts"));
+    expect(source).toContain("runLiveOrganizations(");
+    expect(source).not.toContain("withFoundingOrg(");
   });
 
   it("the ledger verify route checks the session and the membership before verifying", () => {
