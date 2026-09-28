@@ -17,7 +17,11 @@ declare
 begin
   foreach parent in array array['counterparties', 'accounts', 'cycle_runs']
   loop
-    if not exists (select 1 from pg_constraint where conname = parent || '_org_id_id_key') then
+    if not exists (
+      select 1 from pg_constraint
+       where conname = parent || '_org_id_id_key'
+         and conrelid = format('public.%I', parent)::regclass
+    ) then
       execute format('alter table public.%I add constraint %I unique (org_id, id)', parent, parent || '_org_id_id_key');
     end if;
   end loop;
@@ -51,7 +55,11 @@ begin
       execute format('alter table public.%I drop constraint %I', spec.child, old.conname);
     end loop;
 
-    if not exists (select 1 from pg_constraint where conname = spec.child || '_' || spec.col || '_org_fkey') then
+    if not exists (
+      select 1 from pg_constraint
+       where conname = spec.child || '_' || spec.col || '_org_fkey'
+         and conrelid = format('public.%I', spec.child)::regclass
+    ) then
       execute format(
         'alter table public.%I add constraint %I foreign key (org_id, %I) references public.%I (org_id, id) on delete %s',
         spec.child, spec.child || '_' || spec.col || '_org_fkey', spec.col, spec.parent, spec.on_delete
@@ -67,13 +75,29 @@ end $$;
 -- duplicate-key error before the composite foreign key above ever runs, which
 -- both hides the real (foreign-key) reason for the refusal and depends on no
 -- two organizations' cycle runs ever colliding on id. Scope it to the
--- organization the same way.
+-- organization the same way, dropping the old constraint by shape (like the
+-- foreign keys above) rather than by name, so a replay after this constraint
+-- is already composite finds nothing matching and leaves it alone.
 do $$
+declare
+  old record;
 begin
-  if exists (select 1 from pg_constraint where conname = 'cycle_snapshots_cycle_run_id_key') then
-    alter table public.cycle_snapshots drop constraint cycle_snapshots_cycle_run_id_key;
-  end if;
-  if not exists (select 1 from pg_constraint where conname = 'cycle_snapshots_org_id_cycle_run_id_key') then
+  for old in
+    select c.conname
+      from pg_constraint c
+     where c.contype = 'u'
+       and c.conrelid = 'public.cycle_snapshots'::regclass
+       and c.conkey = array[(select attnum from pg_attribute
+                              where attrelid = 'public.cycle_snapshots'::regclass and attname = 'cycle_run_id')]::int2[]
+  loop
+    execute format('alter table public.cycle_snapshots drop constraint %I', old.conname);
+  end loop;
+
+  if not exists (
+    select 1 from pg_constraint
+     where conname = 'cycle_snapshots_org_id_cycle_run_id_key'
+       and conrelid = 'public.cycle_snapshots'::regclass
+  ) then
     alter table public.cycle_snapshots add constraint cycle_snapshots_org_id_cycle_run_id_key unique (org_id, cycle_run_id);
   end if;
 end $$;

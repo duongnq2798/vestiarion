@@ -56,6 +56,17 @@ describe("a link within the organization", () => {
   });
 });
 
+describe("one snapshot per cycle run", () => {
+  it("a second snapshot for the same organization's cycle run is rejected", async () => {
+    await expect(db.query(
+      `insert into cycle_snapshots (org_id, cycle_run_id, captured_at, account_balances, total_liquid, open_payables,
+         open_receivables, obligations_due_7d, obligations_due_14d, reserve_position, chain_mode)
+       values ($1, $2, now(), '{}'::jsonb, 0, 0, 0, 0, 0, 0, 'simulate')`,
+      [A, rowsA.cycleRunId]
+    )).rejects.toThrow(/duplicate key/);
+  });
+});
+
 describe("delete rules survive the change", () => {
   it("deleting an account clears the treasury action's reference and keeps the row's organization", async () => {
     const acct = (await db.query<{ id: string }>("insert into accounts (org_id, name, kind, chain) values ($1, 'gone', 'operating', 'ARC-TESTNET') returning id", [A])).rows[0].id;
@@ -95,8 +106,19 @@ describe("0019 is idempotent", () => {
   it("replays twice without error or duplicate keys", async () => {
     await applyMigrations(db);
     await applyMigrations(db);
-    const n = (await db.query<{ n: number }>(
-      "select count(*)::int as n from pg_constraint where contype = 'f' and conrelid = 'public.invoices'::regclass and confrelid = 'public.counterparties'::regclass")).rows[0].n;
-    expect(n).toBe(1);
+
+    const fk = async (child: string, parent: string) => (await db.query<{ n: number }>(
+      "select count(*)::int as n from pg_constraint where contype = 'f' and conrelid = $1::regclass and confrelid = $2::regclass",
+      [`public.${child}`, `public.${parent}`]
+    )).rows[0].n;
+
+    expect(await fk("invoices", "counterparties")).toBe(1);
+    expect(await fk("treasury_actions", "accounts")).toBe(2);
+    expect(await fk("cycle_snapshots", "cycle_runs")).toBe(1);
+
+    const uniqueByName = (await db.query<{ n: number }>(
+      "select count(*)::int as n from pg_constraint where contype = 'u' and conname = 'cycle_snapshots_org_id_cycle_run_id_key' and conrelid = 'public.cycle_snapshots'::regclass"
+    )).rows[0].n;
+    expect(uniqueByName).toBe(1);
   });
 });
