@@ -128,15 +128,35 @@ npm run db:migrate
 npm run dev
 ```
 
-Sign in at `/login` with your email, then grant yourself ownership of the founding organization:
+Sign in at `/login` with your email. A first sign-in with no workspace lands at `/onboarding`: name
+a business and you get your own **sandbox** workspace on the spot — its own Ed25519 ledger signing
+key, generated and encrypted with no manual step, an `Operating (simulated)` account holding 10,000
+simulated USDC, an empty `Reserve (simulated)` account, and a signed `org_created` entry as the
+first line of its ledger. One person can hold up to 3 workspaces this way; a setup that fails partway
+is rolled back rather than left half-built. The header's **Workspaces** link (`/onboarding?new`)
+lists the workspaces you belong to and lets you create another.
+
+Every member of a workspace has one role. **Owner** and **admin** manage counterparties, invoices,
+and milestones and can run a cycle by hand; **approver** can pause the agent and decide approvals
+but cannot create records, keeping maker separate from checker; **viewer** reads everything — the
+console, the ledger, past cycles — and changes nothing. Only an owner can add or remove another
+owner or admin, go live, rotate the ledger key, or delete the workspace; an admin can still manage
+approvers and viewers. A workspace always keeps at least one owner: the database itself refuses to
+remove or demote the last one. A sandbox workspace is capped at 20 agent cycles per UTC day, counted
+in the database so the cap holds however many server instances are running, which bounds how much a
+trial workspace can spend on LLM calls.
+
+Only the **founding organization** — seeded ahead of any sign-in, in `live` mode — skips self-serve
+creation: it exists before anyone signs in, so no self-serve step ever generates it a ledger key.
+Becoming its operator still means granting yourself ownership by hand:
 
 ```bash
 npm run org:grant -- founding <your email> owner
 ```
 
-On a fresh database the founding organization has no ledger signing key yet — organizations no
-longer get one generated for free, so the first ledger-writing action (adding an invoice, running
-a day) fails with `LedgerSigningKeyError` until a key is stored on it. One-time setup:
+On a fresh database the founding organization has no ledger signing key yet, so the first
+ledger-writing action (adding an invoice, running a day) fails with `LedgerSigningKeyError` until a
+key is stored on it. One-time setup:
 
 ```bash
 node -e 'const c=require("crypto");const{publicKey,privateKey}=c.generateKeyPairSync("ed25519");require("fs").appendFileSync(".env.local","\nLEDGER_SIGNING_KEY=\""+privateKey.export({type:"pkcs8",format:"pem"})+"\"\n");console.log(c.createHash("sha256").update(publicKey.export({type:"spki",format:"der"})).digest("hex").slice(0,16));'
@@ -155,7 +175,8 @@ quoted and multi-line; both forms are read the same way (`src/lib/platform/adopt
 one-time setup is only for a new, empty database: production's founding organization already has
 its key stored.
 
-Open `/o/founding/console` and add counterparties and invoices through the product. Each **Run day**
+Open your workspace's console — `/o/<slug>/console`, or `/o/founding/console` for the founding
+organization — and add counterparties and invoices through the product. Each **Run day**
 click advances the demo clock and runs the full decision loop. Out of
 the box, payments are simulated against Arc's measured fee and latency profile ($0.0032, 2–5s) and
 decisions come from the rule-based heuristic. Those two figures are not quoted from a docs page:
@@ -318,9 +339,13 @@ Everything the agent reasons about lives in five tables (`accounts`, `counterpar
 Production uses wall-clock mode by default; `CYCLE_CLOCK_MODE=simulate` is an explicit demo opt-in
 that advances the numbered day counter. Every page shows the real timestamp of the latest completed
 cycle. The included `.github/workflows/agent-cycle.yml` calls the protected endpoint every six
-hours. Configure repository secrets `VESTIARION_URL` (the deployment origin) and
+hours, and one call now runs a cycle for every workspace in `live` mode, not only yours — each in
+its own isolated scope, so one workspace's failure is recorded against that workspace and does not
+stop the others. Configure repository secrets `VESTIARION_URL` (the deployment origin) and
 `AGENT_API_TOKEN` (the same server secret used by the app). GitHub Actions schedules can be delayed,
 so the ledger timestamp—not the nominal cron minute—is the source of truth for when a cycle ran.
+Sandbox workspaces are never in this list; their cycles run from the console, one **Run cycle**
+click at a time, up to the daily cap above.
 
 For automatic contractor evidence, put a full `https://github.com/<owner>/<repo>/pull/<number>` URL
 in `verification_source` and configure a read-only `GITHUB_TOKEN`. A merged response verifies the
