@@ -4,7 +4,7 @@ import "server-only";
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { authorizeMutation } from "@/lib/auth/authorize";
+import { authorize } from "@/lib/auth/authorize";
 import { revalidateOrgPages } from "@/lib/auth/revalidate";
 import { screenCounterparty } from "@/lib/compliance";
 import { db, unwrap } from "@/lib/dal";
@@ -34,7 +34,7 @@ export async function createCounterpartyAction(
   _previous: IntakeActionResult,
   formData: FormData
 ): Promise<IntakeActionResult> {
-  const auth = await authorizeMutation(formData.get("orgSlug"));
+  const auth = await authorize(formData.get("orgSlug"), "records.write");
   if (!auth.ok) return { ok: false, message: auth.message };
   return inOrg(auth, async () => {
     const parsed = counterpartyInputSchema.safeParse({
@@ -110,7 +110,7 @@ export async function createInvoiceAction(
   _previous: IntakeActionResult,
   formData: FormData
 ): Promise<IntakeActionResult> {
-  const auth = await authorizeMutation(formData.get("orgSlug"));
+  const auth = await authorize(formData.get("orgSlug"), "records.write");
   if (!auth.ok) return { ok: false, message: auth.message };
   return inOrg(auth, async () => {
     const parsed = invoiceInputSchema.safeParse({
@@ -187,7 +187,7 @@ export async function importInvoicesAction(
   _previous: IntakeActionResult,
   formData: FormData
 ): Promise<IntakeActionResult> {
-  const auth = await authorizeMutation(formData.get("orgSlug"));
+  const auth = await authorize(formData.get("orgSlug"), "records.write");
   if (!auth.ok) return { ok: false, message: auth.message };
   return inOrg(auth, async () => {
     const rowsJson = formString(formData, "rowsJson");

@@ -109,7 +109,7 @@ export function withFoundingOrg<T>(fn: () => Promise<T>): Promise<T> {
   return withOrg(FOUNDING_ORG_ID, fn);
 }
 
-/** What `requireMembership` and a successful `authorizeMutation` return. */
+/** What `requireMembership` and a successful `authorize` return. */
 export interface OrgAccess {
   user: { id: string };
   membership: { orgId: string };

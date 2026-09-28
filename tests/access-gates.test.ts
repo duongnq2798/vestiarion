@@ -90,12 +90,18 @@ describe("every server action", () => {
     expect(actions.length).toBeGreaterThanOrEqual(5);
   });
 
-  it.each(actions.map((action) => [action.label, action.body]))("%s awaits authorizeMutation first", (_label, body) => {
-    expect(awaitedNames(body)[0]).toBe("authorizeMutation");
+  it.each(actions.map((action) => [action.label, action.body]))("%s awaits authorize first", (_label, body) => {
+    expect(awaitedNames(body)[0]).toBe("authorize");
   });
 
   it.each(actions.map((action) => [action.label, action.body]))("%s does its work inside the organization's scope", (_label, body) => {
     expect(body).toMatch(/return inOrg\(auth, async \(\) =>/);
+  });
+
+  it("passes a permission string literal as the second argument to authorize", () => {
+    const bodies = actions.map((action) => action.body).join("\n");
+    const matches = bodies.match(/authorize\([^,]+,\s*"[a-z_.]+"\)/g) ?? [];
+    expect(matches.length).toBeGreaterThanOrEqual(5);
   });
 });
 

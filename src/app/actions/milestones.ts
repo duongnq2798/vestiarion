@@ -3,7 +3,7 @@
 import "server-only";
 
 import { z } from "zod";
-import { authorizeMutation } from "@/lib/auth/authorize";
+import { authorize } from "@/lib/auth/authorize";
 import { revalidateOrgPages } from "@/lib/auth/revalidate";
 import { db } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
@@ -24,7 +24,7 @@ export async function manualMilestoneVerificationAction(
   _previous: MilestoneActionResult,
   formData: FormData
 ): Promise<MilestoneActionResult> {
-  const auth = await authorizeMutation(formData.get("orgSlug"));
+  const auth = await authorize(formData.get("orgSlug"), "records.write");
   if (!auth.ok) return { ok: false, message: auth.message };
   return inOrg(auth, async () => {
     const parsed = manualVerificationSchema.safeParse({

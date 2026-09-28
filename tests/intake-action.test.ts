@@ -8,7 +8,7 @@ import { fakeSupabase, type RecordedRequest } from "./support/fake-supabase";
  * `createInvoiceAction` against a real supabase-js client whose network is a
  * recorder. Two stand-ins, both for things a node test cannot have: the
  * `server-only` marker, which Next resolves itself and which is not installed
- * as a package, and the signed-in session behind `authorizeMutation`, which
+ * as a package, and the signed-in session behind `authorize`, which
  * reads request cookies. Everything after authorization is the real action,
  * entering the organization through the real `inOrg`.
  */
@@ -20,7 +20,7 @@ const { ORG, USER } = vi.hoisted(() => ({
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/auth/authorize", () => ({
-  authorizeMutation: async () => ({
+  authorize: async () => ({
     ok: true,
     user: { id: USER, email: null },
     membership: { orgId: ORG, slug: "northstar", name: "Northstar", mode: "sandbox", role: "owner" },
