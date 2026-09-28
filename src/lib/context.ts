@@ -54,6 +54,10 @@ export interface VestiarionContext {
    * `contextFor` sets it, which is what `currentOrgConfig()` checks (R19).
    */
   platformConfig?: VestiarionConfig;
+  /** The organization's own client: every request runs as vestiarion_tenant for orgId. Set only by the DAL. */
+  tenantDb?: SupabaseClient;
+  /** The fetch `contextFor` builds `tenantDb` with. Production leaves it unset; tests pass a recorder. */
+  fetch?: typeof fetch;
 }
 
 const storage = new AsyncLocalStorage<VestiarionContext>();

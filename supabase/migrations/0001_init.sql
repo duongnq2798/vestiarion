@@ -189,9 +189,11 @@ as $$
 $$;
 
 -- --------------------------------------------------------------------- rls
--- This is a single-tenant demo operated by its owner through the server-side
--- service role. Read access is public so judges can inspect state; all
--- writes go through the service role, which bypasses RLS.
+-- This once left read access public so judges could inspect state; 0003
+-- removed that posture. This file is never edited except to drop what it
+-- once created — scripts/migrate.ts replays it on every run, including
+-- `--through 0001`/`0002`, and a `create policy` here would reopen public
+-- read access for the whole window until 0003 runs later in the same pass.
 alter table accounts          enable row level security;
 alter table counterparties    enable row level security;
 alter table invoices          enable row level security;
@@ -202,6 +204,10 @@ alter table forecasts         enable row level security;
 alter table ledger_entries    enable row level security;
 alter table sim_clock         enable row level security;
 
+-- Drop-only: 0003 is what removes the public-read posture, but this file
+-- replays before it on every run, so it must never recreate what it once
+-- created. Keeping the drop (rather than deleting the block) keeps a replay
+-- against an old database idempotent.
 do $$
 declare
   t text;
@@ -213,6 +219,5 @@ begin
   loop
     policy_name := t || '_public_read';
     execute format('drop policy if exists %I on %I', policy_name, t);
-    execute format('create policy %I on %I for select using (true)', policy_name, t);
   end loop;
 end $$;

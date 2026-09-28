@@ -7,6 +7,43 @@ and ESLint forbids importing the raw service-role client anywhere outside it.
 Circle provides Arc testnet payment execution, while simulation modes remain
 available for screening and reserve operations.
 
+## Isolation: two lines
+
+One organization's data never reaches another's request, by two independent
+mechanisms (spec §5.6):
+
+**Line 1 — the Data Access Layer.** `db()` adds `.eq('org_id', ...)` to every
+query and sets `org_id` on every insert; `no-restricted-imports` forbids
+importing the raw Supabase client outside `src/lib/dal/`.
+
+**Line 2 — row-level security as a dedicated role.** Tenant requests run as
+the Postgres role `vestiarion_tenant`, never as `authenticated` — the role a
+signed-in browser session carries keeps no table or RPC privileges at all
+(as since migration `0003`), so a mistaken policy can never expose rows to
+it. `mintRequestToken` (`src/lib/dal/request-token.ts`) signs a fresh HS256
+token per request with `SUPABASE_JWT_SECRET`, naming the role, the
+organization (`org_id`), and the caller (`sub`: the signed-in user, or
+`system` for the cron and scripts), with a 5-minute expiry. `tenantClient`
+(`src/lib/dal/tenant-client.ts`) hands that token to supabase-js through the
+`accessToken` option — a fresh mint per call, so a long cycle never outlives
+its token, and there is no fallback to the service role. `db()` uses this
+client; `platformDb()` keeps the service role for platform operations
+(creating organizations, migrations, the commands in `npm run org:*`).
+
+On the database side, migration `0018` enables row level security on every
+tenant table and adds a permissive `tenant_isolation` policy plus a
+restrictive `tenant_isolation_guard`, both testing
+`org_id = request_org_id()` — a function reading the claim out of
+`request.jwt.claims`, because a custom role cannot use Supabase's `auth`
+schema. `ledger_entries` and `cycle_snapshots` grant only `select, insert` to
+the tenant role, so the audit trail and its snapshots are append-only even
+for a compromised or buggy request. `anon` and `authenticated` keep no
+privileges, as since `0003`. Row-level security does not constrain
+foreign-key checks, so migration `0019` makes every tenant-to-tenant foreign
+key composite (`org_id, ...`) and widens `cycle_snapshots`'s unique key to
+`(org_id, cycle_run_id)`, so the database itself refuses a link into another
+organization's row.
+
 ## Read API
 
 The versioned read boundary lives under `src/app/api/v1/`:

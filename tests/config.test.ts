@@ -12,8 +12,22 @@ const env = (over: Record<string, string | undefined> = {}) =>
 describe("configFromEnv — the database is the one hard requirement", () => {
   it("builds a usable config from just a database", () => {
     const config = configFromEnv(env());
-    expect(config.database).toEqual({ url: "https://proj.supabase.co", serviceRoleKey: "service-role" });
+    expect(config.database).toEqual({
+      url: "https://proj.supabase.co",
+      serviceRoleKey: "service-role",
+      anonKey: undefined,
+      requestTokenSecret: undefined,
+    });
     expect(config.llm).toEqual({});
+  });
+
+  it("reads the anon key and the request-token secret, trimmed", () => {
+    const config = configFromEnv(env({
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: "  anon-secret  ",
+      SUPABASE_JWT_SECRET: "  jwt-secret  ",
+    }));
+    expect(config.database.anonKey).toBe("anon-secret");
+    expect(config.database.requestTokenSecret).toBe("jwt-secret");
   });
 
   it("refuses to build without a database, rather than failing later", () => {
@@ -129,6 +143,8 @@ describe("describeConfig", () => {
       OPENSANCTIONS_API_KEY: "os-secret",
       GITHUB_TOKEN: "ghp-secret",
       LEDGER_SIGNING_KEY: "-----BEGIN PRIVATE KEY-----",
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: "anon-key-should-not-leak",
+      SUPABASE_JWT_SECRET: "jwt-secret-should-not-leak",
     }));
 
   it("leaks no secret anywhere in its output", () => {
@@ -138,6 +154,7 @@ describe("describeConfig", () => {
     for (const secret of [
       "sk-ant-secret", "sk-deep-secret", "circle-secret", "entity-secret",
       "os-secret", "ghp-secret", "service-role", "BEGIN PRIVATE KEY",
+      "anon-key-should-not-leak", "jwt-secret-should-not-leak",
     ]) {
       expect(json, `leaked ${secret}`).not.toContain(secret);
     }
@@ -176,12 +193,25 @@ describe("describeConfig", () => {
     ).toMatchObject({ ledgerRetiredKeyCount: 2 });
   });
 
-  it("reports the database by host only", () => {
-    expect(describeConfig(full()).database).toEqual({ host: "proj.supabase.co" });
+  it("reports the database by host only, plus whether tenant access is configured", () => {
+    expect(describeConfig(full()).database).toEqual({ host: "proj.supabase.co", tenantAccessConfigured: true });
   });
 
   it("does not throw on a malformed database url", () => {
-    const config = configFromEnv(env({ NEXT_PUBLIC_SUPABASE_URL: "not-a-url" }));
-    expect(describeConfig(config).database).toEqual({ host: "invalid-url" });
+    const config = configFromEnv(env({ NEXT_PUBLIC_SUPABASE_URL: "not-a-url", NEXT_PUBLIC_SUPABASE_ANON_KEY: "a", SUPABASE_JWT_SECRET: "b" }));
+    expect(describeConfig(config).database).toEqual({ host: "invalid-url", tenantAccessConfigured: true });
+  });
+
+  it("reports tenant access as configured only when both the anon key and the request-token secret are set", () => {
+    expect(describeConfig(configFromEnv(env()))).toMatchObject({ database: { tenantAccessConfigured: false } });
+    expect(
+      describeConfig(configFromEnv(env({ NEXT_PUBLIC_SUPABASE_ANON_KEY: "a" })))
+    ).toMatchObject({ database: { tenantAccessConfigured: false } });
+    expect(
+      describeConfig(configFromEnv(env({ SUPABASE_JWT_SECRET: "b" })))
+    ).toMatchObject({ database: { tenantAccessConfigured: false } });
+    expect(
+      describeConfig(configFromEnv(env({ NEXT_PUBLIC_SUPABASE_ANON_KEY: "a", SUPABASE_JWT_SECRET: "b" })))
+    ).toMatchObject({ database: { tenantAccessConfigured: true } });
   });
 });
