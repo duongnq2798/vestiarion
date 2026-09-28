@@ -135,7 +135,13 @@ Create a [Supabase](https://supabase.com) project and put its URL and keys in `.
 required wherever the app or a script runs, because every organization's ledger signing key and
 Circle credentials live encrypted on its own row in `orgs`, decrypted with this key, and the app
 no longer reads `LEDGER_SIGNING_KEY`, `LEDGER_PUBLIC_KEY`, `CIRCLE_API_KEY`, or
-`CIRCLE_ENTITY_SECRET` from the environment directly. Then:
+`CIRCLE_ENTITY_SECRET` from the environment directly.
+
+Also set `SUPABASE_JWT_SECRET` — required wherever the app runs, not only in production. Every
+tenant request is signed with it (`src/lib/dal/request-token.ts`) so Postgres can enforce
+row-level security as the `vestiarion_tenant` role; it is as powerful as the service role key, so
+handle it the same way. Find it under Supabase → Project Settings → JWT Keys → Legacy JWT secret.
+On Vercel, set it as a Sensitive variable for both Production and Preview. Then:
 
 ```bash
 npm run db:migrate
@@ -176,10 +182,11 @@ decisions come from the rule-based heuristic. Those two figures are not quoted f
 they were read back off Arc testnet from the receipts of real transfers this agent executed — see
 [What we measured](#what-we-measured).
 
-`npm run seed -- <org-slug>` is a destructive, opt-in demo command. It deletes the named
-organization's current business records and loads the fictional Northstar Studio fixture. It is
-not part of normal setup, and there is no seed or reset control in the product UI. Use it only
-against a disposable demo organization.
+`npm run seed -- <org-slug>` is a destructive, opt-in demo command. It clears the named
+organization's current business records and loads the fictional Northstar Studio fixture. The
+ledger is append-only for tenants and is never cleared: the reset appends its own `demo_reset`
+entry naming what it cleared instead. It is not part of normal setup, and there is no seed or
+reset control in the product UI. Use it only against a disposable demo organization.
 
 Two independent upgrades from there, in either order:
 
