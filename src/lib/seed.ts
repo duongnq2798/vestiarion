@@ -35,8 +35,11 @@ export function seedScale(): number {
   return live ? 0.001 : 1;
 }
 
+// The tenant role cannot DELETE ledger_entries (0018): an audit chain a reset
+// could erase would not be one. The reset clears everything else and then
+// appends its own entry describing what it cleared, rather than clearing the
+// ledger too.
 const TABLES: TenantTable[] = [
-  "ledger_entries",
   "forecasts",
   "compliance_checks",
   "treasury_actions",
@@ -105,6 +108,14 @@ export async function resetDatabase() {
   // cycle, which has no sim_clock row yet; the upsert both creates and resets it.
   const clock = await client.from("sim_clock").upsert({ current_day: 0 }, { onConflict: "org_id" });
   if (clock.error) throw new Error(clock.error.message);
+
+  await appendLedgerEntry({
+    actor: "system",
+    domain: "system",
+    action: "demo_reset",
+    summary: `Demo data reset: ${TABLES.length} tables cleared; the ledger keeps its history`,
+    detail: { cleared: [...TABLES] },
+  });
 }
 
 export async function seedDatabase() {

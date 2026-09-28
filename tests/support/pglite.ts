@@ -11,14 +11,18 @@ export const MIGRATIONS_DIR = path.join(process.cwd(), "supabase", "migrations")
 
 /**
  * What Supabase provides that a vanilla Postgres does not, and nothing more:
- * the three API roles the migrations grant and revoke against, and the
- * `auth.users` table that the tenancy tables reference.
+ * the three API roles the migrations grant and revoke against, the
+ * `auth.users` table that the tenancy tables reference, and the `extensions`
+ * schema so 0018's conditional grant on it is exercised. pgcrypto itself
+ * stays wherever PGlite loads it (below) — this schema is otherwise empty.
  */
 const SUPABASE_BASELINE = `
   create role anon;
   create role authenticated;
   create role service_role;
+  create role authenticator;
   create schema auth;
+  create schema extensions;
   create table auth.users (id uuid primary key, email text);
 `;
 
@@ -81,4 +85,78 @@ export async function createOrg(db: PGlite, slug: string): Promise<string> {
     [slug]
   );
   return result.rows[0].id;
+}
+
+export const TENANT_TABLES = [
+  "accounts", "counterparties", "invoices", "milestones", "treasury_actions", "compliance_checks",
+  "forecasts", "ledger_entries", "payment_intents", "cycle_runs", "cycle_snapshots", "sim_clock",
+] as const;
+
+export interface SeededRows {
+  counterpartyId: string;
+  accountId: string;
+  invoiceId: string;
+  cycleRunId: string;
+  idempotencyKey: string;
+}
+
+type Queryable = Pick<PGlite, "query">;
+
+/** One row in every tenant table for `orgId`, written as the superuser (the service role's stand-in). */
+export async function seedOrgRows(db: PGlite, orgId: string, tag: string): Promise<SeededRows> {
+  const one = async (sql: string, params: unknown[]) => (await db.query<{ id: string }>(sql, params)).rows[0]?.id;
+  const counterpartyId = await one(
+    "insert into counterparties (org_id, name, role) values ($1, $2, 'vendor') returning id", [orgId, `cp-${tag}`]);
+  const accountId = await one(
+    "insert into accounts (org_id, name, kind, chain) values ($1, $2, 'operating', 'ARC-TESTNET') returning id", [orgId, `acct-${tag}`]);
+  const invoiceId = await one(
+    "insert into invoices (org_id, direction, counterparty_id, amount, due_date) values ($1, 'payable', $2, 1, now()) returning id",
+    [orgId, counterpartyId]);
+  await db.query("insert into milestones (org_id, contractor_id, title, amount) values ($1, $2, $3, 1)", [orgId, counterpartyId, `m-${tag}`]);
+  await db.query("insert into treasury_actions (org_id, action, amount, from_account) values ($1, 'rebalance', 1, $2)", [orgId, accountId]);
+  await db.query("insert into compliance_checks (org_id, counterparty_id, risk_level, source) values ($1, $2, 'clear', 'test')", [orgId, counterpartyId]);
+  await db.query(
+    "insert into forecasts (org_id, as_of, horizon_days, projected_inflow, projected_outflow, liquid_balance) values ($1, now(), 7, 0, 0, 0)", [orgId]);
+  const idempotencyKey = `k-${tag}`;
+  await db.query(
+    `insert into payment_intents (org_id, source_type, source_id, idempotency_key, provider, amount, destination)
+     values ($1, 'invoice', $2, $3, 'simulate', 1, 'sim:x')`, [orgId, invoiceId, idempotencyKey]);
+  const cycleRunId = await one(
+    "insert into cycle_runs (org_id, started_at, clock_mode, chain_mode, screening_mode) values ($1, now(), 'real', 'simulate', 'simulate') returning id",
+    [orgId]);
+  await db.query(
+    `insert into cycle_snapshots (org_id, cycle_run_id, captured_at, account_balances, total_liquid, open_payables,
+       open_receivables, obligations_due_7d, obligations_due_14d, reserve_position, chain_mode)
+     values ($1, $2, now(), '{}'::jsonb, 0, 0, 0, 0, 0, 0, 'simulate')`, [orgId, cycleRunId]);
+  await db.query("select advance_sim_day($1::uuid)", [orgId]);
+  const key = crypto.generateKeyPairSync("ed25519");
+  await appendSignedForOrg(db, orgId, { actor: "system", domain: "system", action: "note", summary: tag, detail: { tag } }, key.privateKey);
+  return { counterpartyId, accountId, invoiceId, cycleRunId, idempotencyKey };
+}
+
+/**
+ * Runs `fn` the way PostgREST runs a request made with a tenant token: as the
+ * role `vestiarion_tenant`, with `request.jwt.claims` holding the token's
+ * claims. `null` means a request whose token names no organization.
+ */
+export async function asTenant<T>(db: PGlite, orgId: string | null, fn: (tx: Queryable) => Promise<T>): Promise<T> {
+  return db.transaction(async (tx) => {
+    const claims = orgId ? { role: "vestiarion_tenant", org_id: orgId } : { role: "vestiarion_tenant" };
+    await tx.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify(claims)]);
+    // PostgREST connects as authenticator and switches to vestiarion_tenant
+    // from there, through the membership 0018 grants — not straight to the
+    // target role — so this does the same, rather than jumping straight to
+    // `set local role vestiarion_tenant`.
+    await tx.query("set local role authenticator");
+    await tx.query("set local role vestiarion_tenant");
+    return fn(tx);
+  });
+}
+
+/** Runs `fn` as one of the browser roles, which must have no access at all. */
+export async function asRole<T>(db: PGlite, role: "anon" | "authenticated", fn: (tx: Queryable) => Promise<T>): Promise<T> {
+  return db.transaction(async (tx) => {
+    await tx.query(`set local role ${role}`);
+    return fn(tx);
+  });
 }

@@ -15,3 +15,7 @@
  */
 process.env.NEXT_PUBLIC_SUPABASE_URL ??= "https://tests.supabase.invalid";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role";
+// Entering an organization builds a tenant client (spec §5.6), which needs both
+// of these to mint and present a request token — so they get placeholders too.
+process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??= "test-anon-key";
+process.env.SUPABASE_JWT_SECRET ??= "test-request-token-secret-at-least-32-characters";

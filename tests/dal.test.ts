@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { NoOrgScopeError, runWith } from "@/lib/context";
 import { db, platformDb, TENANT_RPCS, TENANT_TABLES, type OrgDb } from "@/lib/dal";
-import { carriesOrg, fakeSupabase } from "./support/fake-supabase";
+import { carriesOrg, fakeSupabase, orgTestContext } from "./support/fake-supabase";
 
 const ORG_A = "0b6c1c9e-4a4f-4a7e-9b1e-000000000a0a";
 const ORG_B = "0b6c1c9e-4a4f-4a7e-9b1e-000000000b0b";
@@ -14,7 +14,7 @@ const config = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase
  * context with no organization (`undefined` would take the default).
  */
 function contextOf(orgId: string | null, client: ReturnType<typeof fakeSupabase>["client"]) {
-  return orgId ? { config, db: client, orgId, platformConfig: config } : { config, db: client };
+  return orgId ? orgTestContext({ config, client, orgId }) : { config, db: client };
 }
 
 function scoped<T>(fn: () => Promise<T> | T, orgId: string | null = ORG_A) {

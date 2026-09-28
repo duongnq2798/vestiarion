@@ -28,7 +28,7 @@ vi.mock("@/lib/auth/authorize", () => ({
 }));
 
 const COUNTERPARTY = "0b6c1c9e-4a4f-4a7e-9b1e-00000000c0de";
-const config = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k" });
+const config = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k", NEXT_PUBLIC_SUPABASE_ANON_KEY: "test-anon-key", SUPABASE_JWT_SECRET: "test-request-token-secret-at-least-32-characters" });
 
 function invoiceForm(): FormData {
   const form = new FormData();
@@ -74,7 +74,7 @@ describe("createInvoiceAction's counterparty lookup", () => {
     // lookup is scoped to this organization, so both find nothing — and the
     // form says so in words rather than in PostgREST's.
     const fake = fakeSupabase(organizationDatabase([]));
-    const result = await runWith({ config, db: fake.client }, () => createInvoiceAction({ ok: false, message: "" }, invoiceForm()));
+    const result = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => createInvoiceAction({ ok: false, message: "" }, invoiceForm()));
 
     expect(result).toEqual({ ok: false, message: "Counterparty not found." });
     const lookup = fake.requests.find((sent) => sent.path === "/rest/v1/counterparties");
@@ -86,7 +86,7 @@ describe("createInvoiceAction's counterparty lookup", () => {
 
   it("goes on to add the invoice for a counterparty it does hold", async () => {
     const fake = fakeSupabase(organizationDatabase([{ id: COUNTERPARTY, name: "Acme Supplies" }]));
-    await runWith({ config, db: fake.client }, () => createInvoiceAction({ ok: false, message: "" }, invoiceForm()));
+    await runWith({ config, db: fake.client, fetch: fake.fetch }, () => createInvoiceAction({ ok: false, message: "" }, invoiceForm()));
 
     const insert = fake.requests.find((sent) => sent.path === "/rest/v1/invoices" && sent.method === "POST");
     expect(insert?.body).toMatchObject({ counterparty_id: COUNTERPARTY, org_id: ORG, created_by: USER });

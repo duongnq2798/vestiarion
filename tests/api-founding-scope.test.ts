@@ -9,7 +9,7 @@ import { GET as getCounterparty } from "@/app/api/v1/counterparties/[id]/route";
 import { GET as getStatus } from "@/app/api/v1/status/route";
 import { carriesOrg, fakeSupabase, type RecordedRequest } from "./support/fake-supabase";
 
-const config = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k" });
+const config = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k", NEXT_PUBLIC_SUPABASE_ANON_KEY: "test-anon-key", SUPABASE_JWT_SECRET: "test-request-token-secret-at-least-32-characters" });
 
 describe("handleApiRequest", () => {
   it("runs the handler in the founding organization — the transitional binding of spec §4.5", async () => {
@@ -18,13 +18,13 @@ describe("handleApiRequest", () => {
         ? { body: { id: FOUNDING_ORG_ID, slug: "founding", name: "Vestiarion workspace", mode: "live", ledger_signing_key_enc: null, circle_api_key_enc: null, circle_entity_secret_enc: null } }
         : { body: [] }
     );
-    const response = await runWith({ config, db: fake.client }, () => handleApiRequest("test", async () => ({ orgId: currentOrgId() })));
+    const response = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => handleApiRequest("test", async () => ({ orgId: currentOrgId() })));
     expect(await response.json()).toEqual({ orgId: FOUNDING_ORG_ID });
   });
 
   it("sends a coded error the handler settles on inside that scope as it is", async () => {
     const fake = fakeSupabase(foundingDatabase({}));
-    const response = await runWith({ config, db: fake.client }, () =>
+    const response = await runWith({ config, db: fake.client, fetch: fake.fetch }, () =>
       handleApiRequest("test", async () => apiError("not_found", "Nothing here."))
     );
     expect(response.status).toBe(404);
@@ -52,7 +52,7 @@ describe("GET /api/v1/counterparties/{id}", () => {
     const request = new Request(`https://vestiarion.invalid/api/v1/counterparties/${ID}`, {
       headers: { authorization: `Bearer ${TOKEN}` },
     });
-    return runWith({ config, db: fake.client }, () => getCounterparty(request, { params: Promise.resolve({ id: ID }) }));
+    return runWith({ config, db: fake.client, fetch: fake.fetch }, () => getCounterparty(request, { params: Promise.resolve({ id: ID }) }));
   }
 
   function tenantRequests(fake: ReturnType<typeof fakeSupabase>): RecordedRequest[] {
@@ -109,7 +109,7 @@ describe("GET /api/v1/status", () => {
     process.env.AGENT_API_TOKEN = TOKEN;
     const fake = fakeSupabase((request) => (request.path === "/rest/v1/orgs" ? { body: foundingRow } : { body: [] }));
     const request = new Request("https://vestiarion.invalid/api/v1/status", { headers: { authorization: `Bearer ${TOKEN}` } });
-    const response = await runWith({ config, db: fake.client }, () => getStatus(request));
+    const response = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => getStatus(request));
     return { response, body: (await response.json()) as { data: { provenance: Record<string, string> } } };
   }
 
