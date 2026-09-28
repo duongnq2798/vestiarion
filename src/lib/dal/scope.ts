@@ -1,4 +1,5 @@
 import { currentContext, runWith, type VestiarionContext } from "../context";
+import type { VestiarionConfig } from "../config";
 import { parseMasterKeys, type MasterKey } from "../secrets";
 import { platformDb, unwrap } from "./index";
 import { FOUNDING_ORG_ID, ORG_SECRET_COLUMNS, orgConfig, type OrgRow } from "./org-config";
@@ -40,13 +41,29 @@ async function orgRowBy(column: "id" | "slug", value: string): Promise<OrgRow> {
   return unwrap(result);
 }
 
-function contextFor(org: OrgRow, userId: string | undefined): VestiarionContext {
+/** The platform base a scope's own configuration is built from — see `contextFor`. */
+function platformConfigOf(current: VestiarionContext): VestiarionConfig {
+  return current.platformConfig ?? current.config;
+}
+
+/**
+ * `tenantClient` refuses to build without these, naming the same two
+ * settings — but by then `contextFor` has already read the organization's
+ * row and decrypted its secrets for nothing. Checking here first, before
+ * either happens, is what makes a broken deployment fail fast instead of
+ * doing that work and throwing anyway.
+ */
+function requireDatabaseSettings(platformConfig: VestiarionConfig): void {
+  if (!platformConfig.database.anonKey) {
+    throw new Error("NEXT_PUBLIC_SUPABASE_ANON_KEY is not set, so no organization's data can be reached");
+  }
+  if (!platformConfig.database.requestTokenSecret) {
+    throw new Error("SUPABASE_JWT_SECRET is not set, so no request can be authorised for an organization");
+  }
+}
+
+function contextFor(platformConfig: VestiarionConfig, org: OrgRow, userId: string | undefined): VestiarionContext {
   const current = currentContext();
-  // Build from the platform base, not from whatever organization is already in
-  // scope: entering org B from inside org A must not make B's config a
-  // derivative of A's, so a nested `withOrg` still starts from the platform's
-  // own settings (§ R7).
-  const platformConfig = current.platformConfig ?? current.config;
   const { config, warnings } = orgConfig(platformConfig, org, masterKeys());
   return {
     config,
@@ -63,7 +80,13 @@ function contextFor(org: OrgRow, userId: string | undefined): VestiarionContext 
 }
 
 export async function orgContext(orgId: string, userId?: string): Promise<VestiarionContext> {
-  return contextFor(await orgRowBy("id", orgId), userId);
+  // Build from the platform base, not from whatever organization is already in
+  // scope: entering org B from inside org A must not make B's config a
+  // derivative of A's, so a nested `withOrg` still starts from the platform's
+  // own settings (§ R7).
+  const platformConfig = platformConfigOf(currentContext());
+  requireDatabaseSettings(platformConfig);
+  return contextFor(platformConfig, await orgRowBy("id", orgId), userId);
 }
 
 export async function withOrg<T>(orgId: string, fn: () => Promise<T>, options: { userId?: string } = {}): Promise<T> {
@@ -72,7 +95,9 @@ export async function withOrg<T>(orgId: string, fn: () => Promise<T>, options: {
 
 /** For operators and scripts, which name organizations by slug. */
 export async function withOrgSlug<T>(slug: string, fn: () => Promise<T>): Promise<T> {
-  return runWith(contextFor(await orgRowBy("slug", slug), undefined), fn);
+  const platformConfig = platformConfigOf(currentContext());
+  requireDatabaseSettings(platformConfig);
+  return runWith(contextFor(platformConfig, await orgRowBy("slug", slug), undefined), fn);
 }
 
 /**

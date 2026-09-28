@@ -8,7 +8,8 @@ import { currentContext, currentOrgId } from "../context";
  * request runs as `vestiarion_tenant` with a token naming the organization, so
  * row-level security confines it in the database; and every read, update and
  * delete it builds carries `org_id = <the organization in scope>`, every
- * insert and upsert stamps it, and every tenant RPC receives it as `p_org_id`. A caller cannot widen that: a row or an argument naming another
+ * insert and upsert stamps it, and every tenant RPC receives it as `p_org_id`.
+ * A caller cannot widen that: a row or an argument naming another
  * organization is refused, not re-stamped, because it means some other code
  * path already crossed a tenant boundary. An upsert that could still *update*
  * a row — anything but `ignoreDuplicates` — must also name `org_id` in
