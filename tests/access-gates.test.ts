@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -74,12 +74,12 @@ describe("every /o/[slug] page", () => {
 });
 
 describe("every server action", () => {
-  it("lives in src/app/actions, except the public sign-in action", () => {
+  it("lives in src/app/actions, except sign-in and creating a first workspace", () => {
     const withDirective = walk(path.join(ROOT, "src")).filter(
       (file) => /\.(ts|tsx)$/.test(file) && /^\s*["']use server["']/.test(read(file))
     );
     const outside = withDirective.map(rel).filter((file) => !file.startsWith("src/app/actions/"));
-    expect(outside).toEqual(["src/app/login/actions.ts"]);
+    expect(outside.sort()).toEqual(["src/app/login/actions.ts", "src/app/onboarding/actions.ts"]);
   });
 
   const actions = ACTION_FILES.flatMap((file) =>
@@ -102,6 +102,21 @@ describe("every server action", () => {
     const bodies = actions.map((action) => action.body).join("\n");
     const matches = bodies.match(/authorize\([^,]+,\s*"[a-z_.]+"\)/g) ?? [];
     expect(matches.length).toBeGreaterThanOrEqual(5);
+  });
+});
+
+describe("every onboarding action", () => {
+  // Creating a workspace happens before there is an organization to authorize
+  // against, so the gate is the session: a signed-out POST must stop there.
+  const ONBOARDING_ACTIONS = path.join(ROOT, "src", "app", "onboarding", "actions.ts");
+  const actions = existsSync(ONBOARDING_ACTIONS) ? exportedAsyncFunctions(read(ONBOARDING_ACTIONS)) : [];
+
+  it("exists — the list is not empty", () => {
+    expect(actions.map((action) => action.name)).toContain("createWorkspaceAction");
+  });
+
+  it.each(actions.map((action) => [action.name, action.body]))("%s awaits getSessionUser first", (_name, body) => {
+    expect(awaitedNames(body)[0]).toBe("getSessionUser");
   });
 });
 
