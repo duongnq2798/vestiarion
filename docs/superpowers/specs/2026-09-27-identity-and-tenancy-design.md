@@ -262,6 +262,43 @@ minting lives in one module (`mintRequestToken`), so switching algorithm is a ch
 to one environment variable. `SUPABASE_JWT_SECRET` goes to Vercel as a sensitive variable in step 4,
 not before.
 
+**Line 2 as built, decided on 2026-09-28 (Plan 2b).** Three refinements to the text above.
+
+1. **A dedicated role, `vestiarion_tenant`, not `authenticated`.** Tokens minted by the server carry
+   `role: vestiarion_tenant`. Only that role receives table and RPC privileges, and every policy is
+   written for it. `authenticated` — the role every signed-in browser session has — keeps no privileges
+   at all, as since `0003`, so a mistaken policy can never expose rows to a browser session.
+2. **Policies read the claim through `public.request_org_id()`, not `auth.jwt()`.** The function returns
+   `current_setting('request.jwt.claims')`'s `org_id`, or null when there is none, and every policy is
+   `org_id = request_org_id()`. Supabase does not let a custom role use the `auth` schema; the value is
+   the same one `auth.jwt()` reads.
+3. **Composite foreign keys.** Row-level security does not apply to foreign-key checks. Every
+   tenant-to-tenant foreign key therefore becomes composite, e.g. `invoices (org_id, counterparty_id) →
+   counterparties (org_id, id)`, so the database itself refuses a link to another organization's row.
+   The single-column key it replaces is dropped, so PostgREST still sees exactly one relationship to
+   embed.
+
+The per-request token is minted by `mintRequestToken`:
+
+- claims: `role: vestiarion_tenant`, `org_id`, `sub` (the user, or `system` for the cron and scripts),
+  and a 5-minute expiry;
+- a fresh token is minted for every request, through supabase-js's `accessToken` option, so a long
+  cycle never outlives its token;
+- `db()` uses this client; `platformDb()` keeps the service role;
+- the DAL's own `org_id` filters stay, as the first of the two lines.
+
+**Spike, 2026-09-28.** A throwaway role, `vx_spike`, was granted to `authenticator`, and a
+function returning the request's claims was granted to it; both were dropped afterwards.
+
+    candidate (role vx_spike, project secret): HTTP 200 | current_user=vx_spike | raw org_id=00000000-0000-4000-8000-000000000001
+              auth.jwt() from that role: permission denied for schema auth
+    control 1 (role that does not exist)     : HTTP 401 | code 22023
+    control 2 (role vx_spike, wrong secret)  : HTTP 401 | code PGRST301
+    control 3 (role authenticated, no grant) : HTTP 403 | code 42501
+
+PostgREST switches to a custom role named in a server-signed HS256 token, and the `org_id` claim is
+visible inside Postgres. This closes the question the first spike left open.
+
 The cron uses the same mechanism per organization. The service role remains only for platform
 operations: creating organizations, the commands in 5.5, migrations.
 
@@ -323,6 +360,7 @@ new organizations, and the founding organization as `live`.
 | Not a member of `/o/[slug]` | 404 — the slug's existence is not disclosed |
 | Member without the permission | 403 page; `forbidden` in the API |
 | Organization secret fails to decrypt | Reading continues with a warning; signing and transfers fail loudly (as #7) |
+| `SUPABASE_JWT_SECRET` or the anon key missing where the app runs | Entering an organization's scope fails with a message naming the setting; the service role is never used as a fallback |
 | One organization fails during the cron | Recorded in its own `cycle_runs`; the others run |
 | Session expired mid-action | `/login?next=<the original URL>` |
 | `create_org()` over the per-user limit | Refused with a message naming the limit |
@@ -336,9 +374,14 @@ new organizations, and the founding organization as `live`.
   identically to before.
 - *Per-organization chains:* interleave appends to two organizations; each chain verifies on its own;
   appends to one never change the other's `prev_hash`.
-- *RLS, for real:* recreate Supabase's `auth.jwt()` (it reads `request.jwt.claims`), `set role
-  authenticated` with a claim for organization A, and assert that no row of organization B can be
-  selected, inserted, updated or deleted — through tables and through every RPC.
+- *RLS, for real:* `set role vestiarion_tenant` and set `request.jwt.claims` to organization A — the
+  setting PostgREST fills from the token. Assert:
+  - no row of organization B can be selected, inserted, updated or deleted, through tables and through
+    every RPC;
+  - a request without the claim sees nothing;
+  - `ledger_entries` cannot be updated or deleted;
+  - a foreign key cannot point at another organization's row;
+  - `anon` and `authenticated` still have no access.
 - *Database invariants:* the last owner cannot be removed or demoted; a role above the granter's is
   refused; `create_org()` refuses a fourth organization; `delete_sandbox_org()` refuses a live one.
 
@@ -394,7 +437,16 @@ organization's data through the UI or the API.
    - `/api/v1/*` needs the token;
    - `/api/ledger/verify?org=founding` answers 401 signed out and "Not found" to a signed-in non-member;
    - the owner's pages render.
-4. **RLS:** policies, the mechanism chosen in step 1, the PGlite isolation tests.
+4. **RLS:** the `vestiarion_tenant` role, `request_org_id()`, the policies, the composite foreign keys,
+   `mintRequestToken` and the per-scope tenant client, and the PGlite isolation tests (all as described
+   under "Line 2 as built" in 5.6).
+   Rollout, in one phase, because the migrations change nothing for the service role the deployed code
+   uses:
+   1. the operator adds `SUPABASE_JWT_SECRET` to Vercel;
+   2. apply the migrations;
+   3. deploy;
+   4. measure: a cycle runs and the ledger stays `valid: true`, and a token minted for another
+      organization reads nothing of the founding organization's.
 5. **Self-serve and roles:** `/onboarding`, `create_org()`, limits, invitations, the permission map
    enforced everywhere, the cron iterating organizations, sandbox cleanup.
 
