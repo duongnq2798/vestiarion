@@ -15,10 +15,25 @@ export type SendResult = { sent: true; id: string } | { sent: false; reason: str
 
 const DEFAULT_FROM = "Vestiarion <no-reply@vestiarion.xyz>";
 
+/**
+ * A sender on vestiarion.xyz: either a bare address, or `Name <address>` with
+ * exactly one address, inside the angle brackets. Anything else (another
+ * domain, a lookalike such as `vestiarion.xyz.example.com`, a second address)
+ * does not match.
+ */
+const VESTIARION_SENDER = /^(?:[^<>]*<[^<>\s@]+@vestiarion\.xyz>|[^<>\s@]+@vestiarion\.xyz)$/i;
+
 export function emailSettingsFromEnv(env: NodeJS.ProcessEnv = process.env): { apiKey: string; from: string } | null {
   const apiKey = env.RESEND_API_KEY?.trim();
   if (!apiKey) return null;
-  return { apiKey, from: env.EMAIL_FROM?.trim() || DEFAULT_FROM };
+  const configured = env.EMAIL_FROM?.trim();
+  if (!configured) return { apiKey, from: DEFAULT_FROM };
+  if (!VESTIARION_SENDER.test(configured)) {
+    // Never the value itself: only that it was not used.
+    console.warn("EMAIL_FROM ignored: only @vestiarion.xyz addresses may send");
+    return { apiKey, from: DEFAULT_FROM };
+  }
+  return { apiKey, from: configured };
 }
 
 export async function sendEmail(

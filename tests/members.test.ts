@@ -8,10 +8,13 @@ import {
   acceptInvitation,
   changeMemberRole,
   hashInvitationToken,
+  invitationPreview,
   inviteMember,
+  listOpenInvitations,
   MemberError,
   memberErrorFrom,
   removeMember,
+  revokeInvitation,
 } from "@/lib/platform/members";
 import { encryptSecret, parseMasterKeys } from "@/lib/secrets";
 import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
@@ -73,6 +76,9 @@ function membersFake(options: {
   acceptInvitation?: (request: RecordedRequest) => FakeReply | undefined;
   changeMemberRole?: (request: RecordedRequest) => FakeReply | undefined;
   removeMember?: (request: RecordedRequest) => FakeReply | undefined;
+  invitations?: (request: RecordedRequest) => FakeReply;
+  /** The ledger append fails, as it would with an unreadable signing key. */
+  ledgerFails?: boolean;
 } = {}) {
   const fake = fakeSupabase((request) => {
     if (request.path === "/rest/v1/orgs") return { body: orgRow() };
@@ -111,7 +117,10 @@ function membersFake(options: {
       const body = request.body as Record<string, unknown>;
       return { body: body.p_actor === body.p_user_id ? "owner" : "approver" };
     }
+    if (request.path === "/rest/v1/invitations" && options.invitations) return options.invitations(request);
+    if (request.path === "/rest/v1/rpc/revoke_invitation") return { body: null };
     if (request.path === "/rest/v1/rpc/append_ledger_entry") {
+      if (options.ledgerFails) return { status: 500, body: { message: "ledger unavailable" } };
       return {
         body: {
           seq: 1, id: "e1", ts: "2026-09-28T00:00:00Z", actor: "human", domain: "system", action: "x",
@@ -185,6 +194,38 @@ describe("inviteMember", () => {
     expect(rpcBodies(fake.requests, "append_ledger_entry")).toHaveLength(0);
     expect(sendEmailMock).not.toHaveBeenCalled();
   });
+
+  it("throws the rate-limit MemberError on invitation_rate_limited, and appends nothing", async () => {
+    const { fake, run } = membersFake({
+      inviteMember: () => ({ status: 400, body: { code: "P0001", message: "invitation_rate_limited: at most 50 invitations per organization per day", details: null, hint: null } }),
+    });
+
+    const attempt = run(() =>
+      withOrg(ORG, () => inviteMember({ actorId: ACTOR, orgName: "Northstar", email: "new@example.com", role: "viewer", token: "tok4" }))
+    );
+    await expect(attempt).rejects.toBeInstanceOf(MemberError);
+    await expect(attempt).rejects.toThrow("This workspace has sent 50 invitations in the last 24 hours. Try again tomorrow.");
+    expect(rpcBodies(fake.requests, "append_ledger_entry")).toHaveLength(0);
+    expect(sendEmailMock).not.toHaveBeenCalled();
+  });
+
+  it("still returns the link and sends the email when the ledger append fails after the invitation is stored", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    sendEmailMock.mockResolvedValueOnce({ sent: true, id: "msg_2" });
+    const { run } = membersFake({ ledgerFails: true });
+
+    const result = await run(() =>
+      withOrg(ORG, () => inviteMember({ actorId: ACTOR, orgName: "Northstar", email: "new@example.com", role: "viewer", token: "ledger-down-token" }))
+    );
+
+    expect(result).toEqual({ invitationId: "inv-1", link: `${siteOrigin()}/invite/ledger-down-token`, emailed: true });
+    expect(sendEmailMock).toHaveBeenCalledTimes(1);
+    expect(error).toHaveBeenCalledWith("ledger entry not recorded", "member_invited", ORG);
+    const logged = JSON.stringify(error.mock.calls);
+    expect(logged).not.toContain("new@example.com");
+    expect(logged).not.toContain("ledger-down-token");
+    error.mockRestore();
+  });
 });
 
 describe("memberErrorFrom", () => {
@@ -193,6 +234,12 @@ describe("memberErrorFrom", () => {
     expect(error).toBeInstanceOf(MemberError);
     expect(error?.code).toBe("last_owner");
     expect(error?.message).toBe("A workspace must keep at least one owner.");
+  });
+
+  it("maps invitation_rate_limited to its own message", () => {
+    const error = memberErrorFrom({ message: "invitation_rate_limited: at most 50 invitations per organization per day" });
+    expect(error?.code).toBe("invitation_rate_limited");
+    expect(error?.message).toBe("This workspace has sent 50 invitations in the last 24 hours. Try again tomorrow.");
   });
 
   it("returns null for a message it does not recognize", () => {
@@ -214,11 +261,70 @@ describe("acceptInvitation", () => {
     expect(appends[0]).toMatchObject({
       p_org_id: ORG,
       p_action: "member_joined",
-      p_summary: "A member joined as approver",
+      p_summary: "A member joined with the approver role",
       p_detail: { by: TARGET, role: "approver", invitationId: "inv-1" },
     });
 
     expect(result).toEqual({ orgId: ORG, slug: "northstar", role: "approver" });
+  });
+
+  it("still returns the membership, and logs by id, when the ledger append fails after the invitation was accepted", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { run } = membersFake({ ledgerFails: true });
+
+    const result = await run(() => acceptInvitation({ token: "accept-tok-2", userId: TARGET }));
+
+    expect(result).toEqual({ orgId: ORG, slug: "northstar", role: "approver" });
+    expect(error).toHaveBeenCalledWith("ledger entry not recorded", "member_joined", ORG);
+    expect(JSON.stringify(error.mock.calls)).not.toContain("accept-tok-2");
+    error.mockRestore();
+  });
+});
+
+describe("the ledger entry after a committed change is best effort", () => {
+  it.each([
+    ["member_role_changed", () => changeMemberRole({ actorId: ACTOR, userId: TARGET, role: "approver" })],
+    ["member_removed", () => removeMember({ actorId: ACTOR, userId: TARGET })],
+    ["member_left", () => removeMember({ actorId: ACTOR, userId: ACTOR })],
+    ["invitation_revoked", () => revokeInvitation({ actorId: ACTOR, invitationId: "inv-1" })],
+  ] as const)("%s resolves and logs when the append fails", async (action, change) => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { run } = membersFake({ ledgerFails: true });
+
+    await expect(run(() => withOrg(ORG, change))).resolves.toBeUndefined();
+    expect(error).toHaveBeenCalledWith("ledger entry not recorded", action, ORG);
+    error.mockRestore();
+  });
+});
+
+describe("invitationPreview", () => {
+  const open = { role: "viewer", expires_at: "2999-01-01T00:00:00Z", accepted_at: null, revoked_at: null, orgs: { name: "Northstar" } };
+
+  it("describes an open invitation", async () => {
+    const { run } = membersFake({ invitations: () => ({ body: open }) });
+    await expect(run(() => invitationPreview("tok"))).resolves.toEqual({ orgName: "Northstar", role: "viewer", state: "open" });
+  });
+
+  it("is null for a withdrawn invitation, the same as an unknown link", async () => {
+    const { run } = membersFake({ invitations: () => ({ body: { ...open, revoked_at: "2026-09-28T00:00:00Z" } }) });
+    await expect(run(() => invitationPreview("tok"))).resolves.toBeNull();
+  });
+});
+
+describe("listOpenInvitations", () => {
+  it("asks only for invitations that are neither accepted, withdrawn nor expired", async () => {
+    const { fake, run } = membersFake({
+      invitations: () => ({ body: [{ id: "inv-1", email: "a@example.com", role: "viewer", expires_at: "2999-01-01T00:00:00Z" }] }),
+    });
+
+    const rows = await run(() => listOpenInvitations(ORG));
+
+    expect(rows).toEqual([{ id: "inv-1", email: "a@example.com", role: "viewer", expiresAt: "2999-01-01T00:00:00Z" }]);
+    const listing = fake.requests.find((request) => request.path === "/rest/v1/invitations");
+    expect(listing?.params.get("org_id")).toBe(`eq.${ORG}`);
+    expect(listing?.params.get("accepted_at")).toBe("is.null");
+    expect(listing?.params.get("revoked_at")).toBe("is.null");
+    expect(listing?.params.get("expires_at")).toMatch(/^gt\./);
   });
 });
 
@@ -231,7 +337,7 @@ describe("removeMember", () => {
     const appends = rpcBodies(fake.requests, "append_ledger_entry");
     expect(appends[0]).toMatchObject({
       p_action: "member_left",
-      p_summary: "A owner left the workspace",
+      p_summary: "A member with the owner role left the workspace",
       p_detail: { by: ACTOR, role: "owner" },
     });
     expect(appends[0].p_detail).not.toHaveProperty("member");
@@ -245,7 +351,7 @@ describe("removeMember", () => {
     const appends = rpcBodies(fake.requests, "append_ledger_entry");
     expect(appends[0]).toMatchObject({
       p_action: "member_removed",
-      p_summary: "A approver was removed",
+      p_summary: "A member with the approver role was removed",
       p_detail: { by: ACTOR, member: TARGET, role: "approver" },
     });
   });

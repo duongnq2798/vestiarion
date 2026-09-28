@@ -63,7 +63,7 @@ export function invitationEmail(input: {
           <td style="background-color:#fffefa;border:1px solid #ddd8ca;border-radius:16px;padding:40px 40px 32px 40px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
             <p style="margin:0 0 12px 0;font-family:'SFMono-Regular',Menlo,Consolas,monospace;font-size:11px;line-height:16px;letter-spacing:2px;text-transform:uppercase;color:#79837d;">Workspace invitation</p>
             <h1 style="margin:0 0 16px 0;font-size:26px;line-height:32px;font-weight:700;color:#18211c;">You&rsquo;re invited to ${orgNameSafe}</h1>
-            <p style="margin:0;font-size:15px;line-height:24px;color:#4d5a53;">You&rsquo;ve been invited to join <strong style="color:#18211c;">${orgNameSafe}</strong> on Vestiarion as a <strong style="color:#18211c;">${roleSafe}</strong>. Use the button below to accept.</p>
+            <p style="margin:0;font-size:15px;line-height:24px;color:#4d5a53;">You&rsquo;ve been invited to join <strong style="color:#18211c;">${orgNameSafe}</strong> on Vestiarion with the <strong style="color:#18211c;">${roleSafe}</strong> role. Use the button below to accept.</p>
 
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:28px 0 20px 0;">
               <tr>
@@ -96,7 +96,7 @@ export function invitationEmail(input: {
 </html>`;
 
   const text = [
-    `You've been invited to join ${orgName} on Vestiarion as a ${role}.`,
+    `You've been invited to join ${orgName} on Vestiarion with the ${role} role.`,
     "",
     "Accept your invitation:",
     link,

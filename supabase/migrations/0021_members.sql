@@ -12,14 +12,36 @@
 -- Leaving (removing yourself) is open to every member; the last-owner trigger
 -- from 0020 still refuses the last owner.
 --
+-- Invitations are never deleted here: replacing or revoking one sets
+-- revoked_at and keeps the row, withdrawn. An invitation is open while it is
+-- not accepted, not withdrawn and not expired. Every invitation created counts
+-- toward a limit of 50 per organization per day, withdrawn ones included, so
+-- re-inviting the same address cannot send unbounded email.
+--
 -- security definer: org_members and the address checks read auth.users,
 -- which the service role cannot read on Supabase. search_path stays ''.
 --
 -- Idempotent throughout: scripts/migrate.ts re-runs every migration each time.
 
+alter table public.invitations add column if not exists revoked_at timestamptz;
+
 create index if not exists invitations_org_idx on public.invitations (org_id);
+
+-- One unaccepted, unwithdrawn invitation per address. An earlier version of
+-- this file created the index without the revoked_at condition; replace it
+-- once if a database still has that one.
+do $$
+begin
+  if exists (
+    select 1 from pg_indexes
+     where schemaname = 'public' and indexname = 'invitations_open_address_idx'
+       and indexdef not like '%revoked_at%'
+  ) then
+    drop index public.invitations_open_address_idx;
+  end if;
+end $$;
 create unique index if not exists invitations_open_address_idx
-  on public.invitations (org_id, email) where accepted_at is null;
+  on public.invitations (org_id, email) where accepted_at is null and revoked_at is null;
 
 create or replace function public.role_rank(p_role text) returns int
 language sql immutable
@@ -63,6 +85,7 @@ declare
   v_actor_role text := public.member_role(p_org_id, p_actor);
   v_email      text := lower(btrim(p_email));
   v_open       int;
+  v_today      int;
   v_row        public.invitations;
 begin
   if v_actor_role is null then
@@ -82,11 +105,24 @@ begin
   end if;
 
   -- Serialise invitations per organization so two requests cannot both pass
-  -- the limit (the same reasoning as create_org in 0020).
+  -- a limit (the same reasoning as create_org in 0020).
   perform pg_advisory_xact_lock(hashtext('vestiarion_invite:' || p_org_id::text));
-  delete from public.invitations where org_id = p_org_id and email = v_email and accepted_at is null;
+
+  -- Every invitation sends an email, so every one created in the last day
+  -- counts, withdrawn ones included.
+  select count(*) into v_today from public.invitations
+   where org_id = p_org_id and created_at > now() - interval '1 day';
+  if v_today >= 50 then
+    raise exception 'invitation_rate_limited: at most 50 invitations per organization per day';
+  end if;
+
+  -- Inviting the same address again withdraws the earlier invitation and keeps
+  -- its row. An expired one is withdrawn too: it still holds the address in
+  -- invitations_open_address_idx.
+  update public.invitations set revoked_at = now()
+   where org_id = p_org_id and email = v_email and accepted_at is null and revoked_at is null;
   select count(*) into v_open from public.invitations
-   where org_id = p_org_id and accepted_at is null and expires_at > now();
+   where org_id = p_org_id and accepted_at is null and revoked_at is null and expires_at > now();
   if v_open >= 20 then
     raise exception 'invitation_limit_reached: at most 20 open invitations per organization';
   end if;
@@ -109,7 +145,8 @@ declare
   v_email text;
 begin
   select * into v_inv from public.invitations i where i.token_hash = p_token_hash for update;
-  if not found then
+  -- A withdrawn invitation reads as an unknown link.
+  if not found or v_inv.revoked_at is not null then
     raise exception 'invitation_not_found: no invitation matches this link';
   end if;
   if v_inv.accepted_at is not null then
@@ -203,14 +240,15 @@ begin
     raise exception 'not_a_member: the acting person is not a member of this organization';
   end if;
   select i.role into v_role from public.invitations i
-   where i.id = p_invitation_id and i.org_id = p_org_id and i.accepted_at is null;
+   where i.id = p_invitation_id and i.org_id = p_org_id and i.accepted_at is null and i.revoked_at is null;
   if not found then
     raise exception 'invitation_not_found: no open invitation with that id';
   end if;
   if not public.can_assign_role(v_actor_role, v_role) then
     raise exception 'role_not_assignable: a % cannot revoke an invitation for a %', v_actor_role, v_role;
   end if;
-  delete from public.invitations where id = p_invitation_id;
+  -- Kept, withdrawn: it still counts toward the daily limit.
+  update public.invitations set revoked_at = now() where id = p_invitation_id;
 end;
 $$;
 
@@ -253,3 +291,4 @@ end $$;
 --   public.accept_invitation(text, uuid), public.invite_member(uuid, uuid, text, text, text),
 --   public.member_role(uuid, uuid), public.can_assign_role(text, text), public.role_rank(text);
 -- drop index if exists public.invitations_open_address_idx, public.invitations_org_idx;
+-- alter table public.invitations drop column if exists revoked_at;

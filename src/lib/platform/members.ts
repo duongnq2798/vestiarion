@@ -13,12 +13,16 @@ import { appendLedgerEntry } from "../ledger";
  * service-role function (migration 0021) that is told who is acting and
  * checks that person's role itself; this module adds the signed ledger entry
  * and the email. The ledger records user ids, never an email address.
+ *
+ * The ledger entry is appended after the function has committed, in its own
+ * transaction, so it is best effort: if it fails, the change it describes has
+ * still happened, and is reported as done (see `recordLedgerEntry`).
  */
 
 export type MemberErrorCode =
   | "not_a_member" | "member_not_found" | "role_not_assignable" | "invalid_email" | "already_a_member"
   | "invitation_limit_reached" | "invitation_not_found" | "invitation_used" | "invitation_expired"
-  | "invitation_email_mismatch" | "invitation_no_longer_valid" | "last_owner";
+  | "invitation_email_mismatch" | "invitation_no_longer_valid" | "invitation_rate_limited" | "last_owner";
 
 const MESSAGES: Record<MemberErrorCode, string> = {
   not_a_member: "You are not a member of this workspace.",
@@ -32,6 +36,7 @@ const MESSAGES: Record<MemberErrorCode, string> = {
   invitation_expired: "This invitation has expired. Ask for a new one.",
   invitation_email_mismatch: "This invitation was sent to a different email address. Sign in with that address to accept it.",
   invitation_no_longer_valid: "The person who sent this invitation can no longer grant that role. Ask for a new one.",
+  invitation_rate_limited: "This workspace has sent 50 invitations in the last 24 hours. Try again tomorrow.",
   last_owner: "A workspace must keep at least one owner.",
 };
 
@@ -56,6 +61,21 @@ export function hashInvitationToken(token: string): string {
   return crypto.createHash("sha256").update(token).digest("hex");
 }
 
+/**
+ * Appends the ledger entry for a change that has already committed. A failure
+ * here (an unreadable signing key, a transient error) must not turn a done
+ * change into a reported failure: a retry would then be refused, or repeat
+ * it. So it is logged by action and organization id only, never an address
+ * or a token, and swallowed.
+ */
+async function recordLedgerEntry(action: string, orgId: string, append: () => Promise<unknown>): Promise<void> {
+  try {
+    await append();
+  } catch {
+    console.error("ledger entry not recorded", action, orgId);
+  }
+}
+
 /** The row `invite_member` returns — `public.invitations` (migration 0021). */
 interface InvitationRow {
   id: string;
@@ -66,6 +86,7 @@ interface InvitationRow {
   invited_by: string;
   expires_at: string;
   accepted_at: string | null;
+  revoked_at: string | null;
   created_at: string;
 }
 
@@ -111,13 +132,15 @@ export async function inviteMember(input: {
   if (result.error) raise(result.error);
   const row = result.data as InvitationRow;
 
-  await appendLedgerEntry({
-    actor: "human",
-    domain: "system",
-    action: "member_invited",
-    summary: `Invitation sent for the ${input.role} role`,
-    detail: { by: input.actorId, invitationId: row.id, role: input.role },
-  });
+  await recordLedgerEntry("member_invited", orgId, () =>
+    appendLedgerEntry({
+      actor: "human",
+      domain: "system",
+      action: "member_invited",
+      summary: `Invitation sent for the ${input.role} role`,
+      detail: { by: input.actorId, invitationId: row.id, role: input.role },
+    })
+  );
 
   const link = `${siteOrigin()}/invite/${token}`;
   const email = invitationEmail({
@@ -148,17 +171,19 @@ export async function acceptInvitation(input: { token: string; userId: string })
   if (result.error) raise(result.error);
   const row = result.data as { org_id: string; slug: string; role: OrgRole; invitation_id: string };
 
-  await withOrg(
-    row.org_id,
-    () =>
-      appendLedgerEntry({
-        actor: "human",
-        domain: "system",
-        action: "member_joined",
-        summary: `A member joined as ${row.role}`,
-        detail: { by: input.userId, role: row.role, invitationId: row.invitation_id },
-      }),
-    { userId: input.userId }
+  await recordLedgerEntry("member_joined", row.org_id, () =>
+    withOrg(
+      row.org_id,
+      () =>
+        appendLedgerEntry({
+          actor: "human",
+          domain: "system",
+          action: "member_joined",
+          summary: `A member joined with the ${row.role} role`,
+          detail: { by: input.userId, role: row.role, invitationId: row.invitation_id },
+        }),
+      { userId: input.userId }
+    )
   );
 
   return { orgId: row.org_id, slug: row.slug, role: row.role };
@@ -168,13 +193,21 @@ export async function acceptInvitation(input: { token: string; userId: string })
 export async function invitationPreview(token: string): Promise<{ orgName: string; role: OrgRole; state: "open" | "used" | "expired" } | null> {
   const result = await platformDb()
     .from("invitations")
-    .select("role, expires_at, accepted_at, orgs!inner(name)")
+    .select("role, expires_at, accepted_at, revoked_at, orgs!inner(name)")
     .eq("token_hash", hashInvitationToken(token))
     .maybeSingle();
   if (result.error) throw new Error(result.error.message);
   if (!result.data) return null;
 
-  const row = result.data as unknown as { role: OrgRole; expires_at: string; accepted_at: string | null; orgs: { name: string } };
+  const row = result.data as unknown as {
+    role: OrgRole;
+    expires_at: string;
+    accepted_at: string | null;
+    revoked_at: string | null;
+    orgs: { name: string };
+  };
+  // A withdrawn invitation reads as an unknown link, as accept_invitation treats it.
+  if (row.revoked_at !== null) return null;
   const state: "open" | "used" | "expired" =
     row.accepted_at !== null ? "used" : new Date(row.expires_at) <= new Date() ? "expired" : "open";
   return { orgName: row.orgs.name, role: row.role, state };
@@ -189,13 +222,15 @@ export async function changeMemberRole(input: { actorId: string; userId: string;
   if (result.error) raise(result.error);
   const from = result.data as OrgRole;
 
-  await appendLedgerEntry({
-    actor: "human",
-    domain: "system",
-    action: "member_role_changed",
-    summary: `A member's role changed from ${from} to ${input.role}`,
-    detail: { by: input.actorId, member: input.userId, from, to: input.role },
-  });
+  await recordLedgerEntry("member_role_changed", orgId, () =>
+    appendLedgerEntry({
+      actor: "human",
+      domain: "system",
+      action: "member_role_changed",
+      summary: `A member's role changed from ${from} to ${input.role}`,
+      detail: { by: input.actorId, member: input.userId, from, to: input.role },
+    })
+  );
 }
 
 /** Runs in scope: `p_org_id` comes from `currentOrgId()`. */
@@ -208,21 +243,25 @@ export async function removeMember(input: { actorId: string; userId: string }): 
   const role = result.data as OrgRole;
 
   if (input.actorId === input.userId) {
-    await appendLedgerEntry({
-      actor: "human",
-      domain: "system",
-      action: "member_left",
-      summary: `A ${role} left the workspace`,
-      detail: { by: input.actorId, role },
-    });
+    await recordLedgerEntry("member_left", orgId, () =>
+      appendLedgerEntry({
+        actor: "human",
+        domain: "system",
+        action: "member_left",
+        summary: `A member with the ${role} role left the workspace`,
+        detail: { by: input.actorId, role },
+      })
+    );
   } else {
-    await appendLedgerEntry({
-      actor: "human",
-      domain: "system",
-      action: "member_removed",
-      summary: `A ${role} was removed`,
-      detail: { by: input.actorId, member: input.userId, role },
-    });
+    await recordLedgerEntry("member_removed", orgId, () =>
+      appendLedgerEntry({
+        actor: "human",
+        domain: "system",
+        action: "member_removed",
+        summary: `A member with the ${role} role was removed`,
+        detail: { by: input.actorId, member: input.userId, role },
+      })
+    );
   }
 }
 
@@ -236,13 +275,15 @@ export async function revokeInvitation(input: { actorId: string; invitationId: s
   });
   if (result.error) raise(result.error);
 
-  await appendLedgerEntry({
-    actor: "human",
-    domain: "system",
-    action: "invitation_revoked",
-    summary: "An invitation was revoked",
-    detail: { by: input.actorId, invitationId: input.invitationId },
-  });
+  await recordLedgerEntry("invitation_revoked", orgId, () =>
+    appendLedgerEntry({
+      actor: "human",
+      domain: "system",
+      action: "invitation_revoked",
+      summary: "An invitation was revoked",
+      detail: { by: input.actorId, invitationId: input.invitationId },
+    })
+  );
 }
 
 export async function listMembers(orgId: string): Promise<Member[]> {
@@ -262,6 +303,7 @@ export async function listOpenInvitations(orgId: string): Promise<OpenInvitation
       .select("id, email, role, expires_at")
       .eq("org_id", orgId)
       .is("accepted_at", null)
+      .is("revoked_at", null)
       .gt("expires_at", new Date().toISOString())
       .order("created_at")
   ) as Array<{ id: string; email: string; role: OrgRole; expires_at: string }>;

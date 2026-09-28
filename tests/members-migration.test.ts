@@ -1,7 +1,9 @@
 import crypto from "node:crypto";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import type { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { applyMigrations, asRole, asServiceRole, asTenant, createDatabase, createUser } from "./support/pglite";
+import { applyMigrations, asRole, asServiceRole, asTenant, createDatabase, createUser, MIGRATIONS_DIR } from "./support/pglite";
 
 /**
  * Migration 0021: every membership change goes through a service-role
@@ -81,12 +83,38 @@ describe("invite_member", () => {
     await expect(invite(owner, "VIEWER@example.com", "admin")).rejects.toThrow(/already_a_member/);
   });
 
-  it("replaces the open invitation for the same address", async () => {
-    await invite(owner, "again@example.com", "viewer");
+  it("withdraws the open invitation for the same address, keeping its row, and its link stops working", async () => {
+    const first = hash();
+    await invite(owner, "again@example.com", "viewer", first);
     await invite(owner, "again@example.com", "approver");
-    const open = await db.query<{ role: string }>(
-      "select role from public.invitations where org_id = $1 and email = 'again@example.com' and accepted_at is null", [orgId]);
-    expect(open.rows.map((r) => r.role)).toEqual(["approver"]);
+    const rows = await db.query<{ role: string; withdrawn: boolean }>(
+      `select role, revoked_at is not null as withdrawn from public.invitations
+        where org_id = $1 and email = 'again@example.com' order by created_at, role desc`, [orgId]);
+    expect(rows.rows).toEqual([{ role: "viewer", withdrawn: true }, { role: "approver", withdrawn: false }]);
+
+    const again = await createUser(db, "again@example.com");
+    await expect(accept(first, again)).rejects.toThrow(/invitation_not_found/);
+  });
+
+  it("refuses the 51st invitation in a day, counting withdrawn ones and not older ones", async () => {
+    const other = (await db.query<{ id: string }>(
+      "insert into public.orgs (slug, name) values ('chatty-co', 'Chatty') returning id")).rows[0].id;
+    await db.query("insert into public.memberships (org_id, user_id, role) values ($1, $2, 'owner')", [other, owner]);
+    // 49 withdrawn today (they count, though none is open), and 5 from two days ago (they do not).
+    await db.query(
+      `insert into public.invitations (org_id, email, role, token_hash, invited_by, expires_at, revoked_at)
+       select $1, 'r' || n || '@example.com', 'viewer', md5(random()::text || n), $2, now() + interval '7 days', now()
+         from generate_series(1, 49) n`, [other, owner]);
+    await db.query(
+      `insert into public.invitations (org_id, email, role, token_hash, invited_by, expires_at, created_at, revoked_at)
+       select $1, 'old' || n || '@example.com', 'viewer', md5(random()::text || n), $2, now() + interval '5 days',
+              now() - interval '2 days', now() - interval '2 days'
+         from generate_series(1, 5) n`, [other, owner]);
+
+    await expect(call("select public.invite_member($1, $2, 'fiftieth@example.com', 'viewer', $3)", [other, owner, hash()]))
+      .resolves.toHaveLength(1);
+    await expect(call("select public.invite_member($1, $2, 'fifty-first@example.com', 'viewer', $3)", [other, owner, hash()]))
+      .rejects.toThrow(/invitation_rate_limited: at most 50 invitations per organization per day/);
   });
 
   it("refuses a 21st open invitation", async () => {
@@ -172,12 +200,25 @@ describe("change_member_role and remove_member", () => {
 });
 
 describe("revoke_invitation and org_members", () => {
-  it("revokes only an invitation the actor could have sent", async () => {
-    const [ownerInvite] = await invite(owner, "boss@example.com", "admin");
+  it("revokes only an invitation the actor could have sent, keeping the row as withdrawn", async () => {
+    const token = hash();
+    const [ownerInvite] = await invite(owner, "boss@example.com", "admin", token);
     await expect(call("select public.revoke_invitation($1, $2, $3)", [orgId, admin, ownerInvite.id])).rejects.toThrow(/role_not_assignable/);
     await call("select public.revoke_invitation($1, $2, $3)", [orgId, owner, ownerInvite.id]);
-    const left = await db.query("select 1 from public.invitations where id = $1", [ownerInvite.id]);
-    expect(left.rows).toHaveLength(0);
+    const left = await db.query<{ withdrawn: boolean }>(
+      "select revoked_at is not null as withdrawn from public.invitations where id = $1", [ownerInvite.id]);
+    expect(left.rows).toEqual([{ withdrawn: true }]);
+
+    // Withdrawn is no longer open: it cannot be revoked again, nor accepted.
+    await expect(call("select public.revoke_invitation($1, $2, $3)", [orgId, owner, ownerInvite.id])).rejects.toThrow(/invitation_not_found/);
+    const boss = await createUser(db, "boss@example.com");
+    await expect(accept(token, boss)).rejects.toThrow(/invitation_not_found/);
+  });
+
+  it("lets the same address be invited again after a revoke", async () => {
+    const [first] = await invite(owner, "twice@example.com", "viewer");
+    await call("select public.revoke_invitation($1, $2, $3)", [orgId, owner, first.id]);
+    await expect(invite(owner, "twice@example.com", "viewer")).resolves.toHaveLength(1);
   });
 
   it("lists members with their address and role", async () => {
@@ -185,6 +226,29 @@ describe("revoke_invitation and org_members", () => {
     expect(rows).toContainEqual({ email: "owner@example.com", role: "owner" });
     expect(rows).toContainEqual({ email: "viewer@example.com", role: "viewer" });
   });
+});
+
+describe("replaying 0021", () => {
+  it("replaces an open-address index created without the revoked_at condition", async () => {
+    const fresh = await createDatabase();
+    try {
+      await applyMigrations(fresh);
+      await fresh.exec(`
+        drop index public.invitations_open_address_idx;
+        create unique index invitations_open_address_idx on public.invitations (org_id, email) where accepted_at is null;
+      `);
+      const sql = readFileSync(path.join(MIGRATIONS_DIR, "0021_members.sql"), "utf8");
+      await fresh.exec(sql);
+      await fresh.exec(sql);
+
+      const index = await fresh.query<{ indexdef: string }>(
+        "select indexdef from pg_indexes where schemaname = 'public' and indexname = 'invitations_open_address_idx'");
+      expect(index.rows).toHaveLength(1);
+      expect(index.rows[0].indexdef).toMatch(/accepted_at IS NULL\) AND \(revoked_at IS NULL/);
+    } finally {
+      await fresh.close();
+    }
+  }, 60_000);
 });
 
 describe("who may call these functions", () => {

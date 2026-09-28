@@ -1,14 +1,42 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { invitationEmail } from "@/lib/email/invitation";
 import { emailSettingsFromEnv, sendEmail } from "@/lib/email/send";
 
 describe("emailSettingsFromEnv", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  const env = (values: Record<string, string>) => values as unknown as NodeJS.ProcessEnv;
+
   it("is null without RESEND_API_KEY", () => {
     expect(emailSettingsFromEnv({} as unknown as NodeJS.ProcessEnv)).toBeNull();
   });
   it("defaults the sender to no-reply@vestiarion.xyz", () => {
     expect(emailSettingsFromEnv({ RESEND_API_KEY: "re_test" } as unknown as NodeJS.ProcessEnv))
       .toEqual({ apiKey: "re_test", from: "Vestiarion <no-reply@vestiarion.xyz>" });
+  });
+
+  it.each([
+    "Vestiarion Team <team@vestiarion.xyz>",
+    "team@vestiarion.xyz",
+    "Vestiarion <No-Reply@Vestiarion.XYZ>",
+  ])("accepts an EMAIL_FROM on vestiarion.xyz: %s", (from) => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(emailSettingsFromEnv(env({ RESEND_API_KEY: "re_test", EMAIL_FROM: from }))).toEqual({ apiKey: "re_test", from });
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "Vestiarion <no-reply@example.com>",
+    "someone@gmail.com",
+    "no-reply@vestiarion.xyz.example.com",
+    "Vestiarion <no-reply@notvestiarion.xyz>",
+    "no-reply@vestiarion.xyz <x@evil.test>",
+  ])("ignores an EMAIL_FROM on any other domain, warning without the value: %s", (from) => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(emailSettingsFromEnv(env({ RESEND_API_KEY: "re_test", EMAIL_FROM: from })))
+      .toEqual({ apiKey: "re_test", from: "Vestiarion <no-reply@vestiarion.xyz>" });
+    expect(warn).toHaveBeenCalledWith("EMAIL_FROM ignored: only @vestiarion.xyz addresses may send");
+    expect(JSON.stringify(warn.mock.calls)).not.toContain(from);
   });
 });
 
@@ -54,7 +82,10 @@ describe("invitationEmail", () => {
       expect(part).toContain("approver");
       expect(part).toContain("https://www.vestiarion.xyz/invite/tok");
       expect(part).toContain("2026-10-05");
+      expect(part).not.toContain("as a ");
     }
+    expect(email.text).toContain("on Vestiarion with the approver role.");
+    expect(email.html).toContain(`with the <strong style="color:#18211c;">approver</strong> role`);
   });
 
   it("renders a workspace name as text, never as markup", () => {
