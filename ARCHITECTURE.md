@@ -65,7 +65,10 @@ under a row lock on `orgs` so two concurrent demotions of different owners canno
 owner remaining and leave zero — the same write-skew shape `create_org`'s advisory lock avoids on
 the count side. Because memberships cascade from `auth.users`, deleting the account of a person who
 is an organization's sole owner is refused. To delete them, first give that organization another
-owner, or delete the organization.
+owner, or delete the organization. Any other account can be deleted, and deleting it keeps the
+workspaces it created and the members it invited: migration `0023` gives every foreign key to
+`auth.users` a delete action, so `orgs.created_by`, `memberships.invited_by`, `invoices.created_by`
+and `milestones.created_by` become null, and the invitations the person sent are deleted with them.
 
 **The permission map** (spec §7) lives as data in `src/lib/auth/roles.ts` — `PERMISSIONS` maps each
 of `workspace.read`, `agent.pause`, `approval.decide`, `records.write`, `agent.run_cycle`,
@@ -92,7 +95,11 @@ do either — enforced identically by `can_assign_role` in the database and `can
 `roles.ts`. Inviting (`invite_member`) generates 32 random bytes, base64url-encoded, for the link,
 and stores only the `sha256` hex of that token (`invitations.token_hash`); the raw token never
 reaches the database. An invitation expires 7 days after creation, and an organization holds at most
-20 open invitations at a time. With `RESEND_API_KEY` set, `sendEmail` (`src/lib/email/send.ts`)
+20 open invitations at a time. Inviting the same address again withdraws the older invitation, and
+revoking one withdraws it too: a withdrawn invitation is kept as a row with `revoked_at` set, never
+deleted, and its link reads as unknown. Every invitation created counts toward a limit of 50 per
+organization per day, withdrawn ones included (`invitation_rate_limited`), which bounds the email a
+workspace can send. With `RESEND_API_KEY` set, `sendEmail` (`src/lib/email/send.ts`)
 sends the link through Resend; without it, `inviteMemberAction` returns the link to the inviter to
 share directly, shown once. Opening `/invite/<token>` (`src/app/invite/[token]/page.tsx`) has no
 side effect — it only previews the invitation; accepting is a separate submit (`accept_invitation`)

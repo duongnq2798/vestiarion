@@ -538,8 +538,12 @@ organization's data through the UI or the API.
        `no-reply@vestiarion.xyz`, when `RESEND_API_KEY` is set. The invitation link is always shown
        once to the person who sent it, so an invitation works before email is configured and when a
        message is lost. Accepting still requires signing in with the invited address.
-     - An organization has at most 20 open invitations. Inviting the same address again replaces the
-       open invitation for it.
+     - An organization has at most 20 open invitations, and sends at most 50 a day, withdrawn ones
+       included. Inviting the same address again withdraws the older invitation. Replaced and revoked
+       invitations are kept as withdrawn rows (`revoked_at`), never deleted.
+     - Deleting an account keeps the workspaces it created and the members it invited (migration
+       `0023`): those references become null, and the invitations it sent are deleted. Deleting a
+       workspace's only owner is still refused.
      - Accepting is a POST from a page that needs a session, so a mail scanner that follows the link
        does not use the invitation up.
      - `last_active_at` is refreshed on member page views and actions, at most hourly. The update in

@@ -159,7 +159,10 @@ An **owner** or **admin** invites someone from the workspace's **Members** page
 **viewer**. With `RESEND_API_KEY` set, the invitation is emailed; otherwise the page hands back a
 link to share directly — shown once, since only its sha256 hash is stored. The link previews the
 invitation without accepting it; accepting needs signing in with the invited address and expires the
-link after 7 days. Anyone can leave a workspace they belong to from the same page.
+link after 7 days. Inviting the same address again withdraws the older invitation; withdrawn and
+revoked invitations are kept, marked withdrawn, and a workspace can send at most 50 invitations a
+day. Anyone can leave a workspace they belong to from the same page. Deleting an account keeps the
+workspaces it created and the members it invited; deleting a workspace's only owner is refused.
 
 Only the **founding organization** — seeded ahead of any sign-in, in `live` mode — skips self-serve
 creation: it exists before anyone signs in, so no self-serve step ever generates it a ledger key.
