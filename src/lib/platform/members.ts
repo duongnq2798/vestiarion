@@ -159,18 +159,21 @@ export async function inviteMember(input: {
   return { invitationId: row.id, link, emailed: sendResult.sent };
 }
 
-/**
- * Accepts an invitation for the signed-in user. Runs outside any scope: the
- * organization is not known until `accept_invitation` names it, after which
- * the ledger entry is appended inside that organization's own scope.
- */
-export async function acceptInvitation(input: { token: string; userId: string }): Promise<{ orgId: string; slug: string; role: OrgRole }> {
-  const result = await platformDb()
-    .rpc("accept_invitation", { p_token_hash: hashInvitationToken(input.token), p_user_id: input.userId })
-    .single<{ org_id: string; slug: string; role: OrgRole; invitation_id: string }>();
-  if (result.error) raise(result.error);
-  const row = result.data as { org_id: string; slug: string; role: OrgRole; invitation_id: string };
+/** The row `accept_invitation` and `accept_invitation_by_id` both return. */
+interface AcceptedInvitationRow {
+  org_id: string;
+  slug: string;
+  role: OrgRole;
+  invitation_id: string;
+}
 
+/**
+ * The ledger entry and return shape both acceptance paths share, once the
+ * RPC (whichever one) has named the organization and the row. Runs outside
+ * any scope until here: the organization is not known before the RPC
+ * returns, after which the ledger entry is appended inside its own scope.
+ */
+async function finishAcceptance(row: AcceptedInvitationRow, userId: string): Promise<{ orgId: string; slug: string; role: OrgRole }> {
   await recordLedgerEntry("member_joined", row.org_id, () =>
     withOrg(
       row.org_id,
@@ -180,13 +183,53 @@ export async function acceptInvitation(input: { token: string; userId: string })
           domain: "system",
           action: "member_joined",
           summary: `A member joined with the ${row.role} role`,
-          detail: { by: input.userId, role: row.role, invitationId: row.invitation_id },
+          detail: { by: userId, role: row.role, invitationId: row.invitation_id },
         }),
-      { userId: input.userId }
+      { userId }
     )
   );
 
   return { orgId: row.org_id, slug: row.slug, role: row.role };
+}
+
+/** Accepts an invitation by its token, for the signed-in user. */
+export async function acceptInvitation(input: { token: string; userId: string }): Promise<{ orgId: string; slug: string; role: OrgRole }> {
+  const result = await platformDb()
+    .rpc("accept_invitation", { p_token_hash: hashInvitationToken(input.token), p_user_id: input.userId })
+    .single<AcceptedInvitationRow>();
+  if (result.error) raise(result.error);
+  return finishAcceptance(result.data as AcceptedInvitationRow, input.userId);
+}
+
+/**
+ * Accepts an invitation by its id, for the signed-in user — for the pending
+ * invitations listed on /onboarding (migration 0024), where the id is what
+ * the page already has rather than the raw token from a link.
+ */
+export async function acceptInvitationById(input: { invitationId: string; userId: string }): Promise<{ orgId: string; slug: string; role: OrgRole }> {
+  const result = await platformDb()
+    .rpc("accept_invitation_by_id", { p_invitation_id: input.invitationId, p_user_id: input.userId })
+    .single<AcceptedInvitationRow>();
+  if (result.error) raise(result.error);
+  return finishAcceptance(result.data as AcceptedInvitationRow, input.userId);
+}
+
+export interface PendingInvitation {
+  invitationId: string;
+  orgName: string;
+  role: OrgRole;
+  expiresAt: string;
+}
+
+/** The open invitations waiting for the signed-in user, across every organization (migration 0024). */
+export async function pendingInvitationsFor(userId: string): Promise<PendingInvitation[]> {
+  const rows = unwrap(await platformDb().rpc("pending_invitations_for", { p_user_id: userId })) as Array<{
+    invitation_id: string;
+    org_name: string;
+    role: OrgRole;
+    expires_at: string;
+  }>;
+  return rows.map((row) => ({ invitationId: row.invitation_id, orgName: row.org_name, role: row.role, expiresAt: row.expires_at }));
 }
 
 /** For the accept page: what an invitation link is for, before the person signs in. */

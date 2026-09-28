@@ -1,6 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { NextRequest } from "next/server";
+import { describe, expect, it, vi } from "vitest";
+import { AFTER_SIGN_IN_COOKIE } from "@/lib/auth/after-sign-in";
 import { parseConfirmParams } from "@/lib/auth/confirm";
 import { loginErrorMessage } from "@/lib/auth/messages";
+
+const { verifyOtpMock } = vi.hoisted(() => ({ verifyOtpMock: vi.fn() }));
+vi.mock("@/lib/auth/supabase-server", () => ({
+  createSupabaseServerClient: vi.fn(async () => ({ auth: { verifyOtp: verifyOtpMock } })),
+}));
+
+const { GET } = await import("@/app/auth/confirm/route");
 
 /**
  * The email link now lands on this site — /auth/confirm?token_hash=…&type=email —
@@ -48,6 +57,44 @@ describe("parseConfirmParams", () => {
     ["an unknown type", `token_hash=${PKCE_HASH}&type=admin`],
   ])("refuses %s", (_label, query) => {
     expect(parseConfirmParams(params(query))).toBeNull();
+  });
+});
+
+describe("GET /auth/confirm — the vx_after_sign_in cookie", () => {
+  function request(query: string, cookie?: string): NextRequest {
+    const headers: Record<string, string> = {};
+    if (cookie) headers.cookie = cookie;
+    return new NextRequest(`https://vestiarion.invalid/auth/confirm?${query}`, { headers });
+  }
+
+  it("falls back to the cookie's target when next is absent, and deletes the cookie", async () => {
+    verifyOtpMock.mockResolvedValueOnce({ error: null });
+
+    const response = await GET(
+      request(`token_hash=${PKCE_HASH}&type=email`, `${AFTER_SIGN_IN_COOKIE}=%2Finvite%2Fabc123`)
+    );
+
+    expect(response.headers.get("location")).toBe("https://vestiarion.invalid/invite/abc123");
+    expect(response.headers.get("set-cookie")).toContain(AFTER_SIGN_IN_COOKIE);
+  });
+
+  it("prefers an explicit next over the cookie", async () => {
+    verifyOtpMock.mockResolvedValueOnce({ error: null });
+
+    const response = await GET(
+      request(`token_hash=${PKCE_HASH}&type=email&next=%2Fo%2Ffounding%2Faudit`, `${AFTER_SIGN_IN_COOKIE}=%2Finvite%2Fabc123`)
+    );
+
+    expect(response.headers.get("location")).toBe("https://vestiarion.invalid/o/founding/audit");
+  });
+
+  it("deletes the cookie even when verification fails", async () => {
+    verifyOtpMock.mockResolvedValueOnce({ error: { status: 403, code: "otp_expired", message: "expired" } });
+
+    const response = await GET(request(`token_hash=${PKCE_HASH}&type=email`, `${AFTER_SIGN_IN_COOKIE}=%2Finvite%2Fabc123`));
+
+    expect(response.headers.get("location")).toBe("https://vestiarion.invalid/login?error=expired");
+    expect(response.headers.get("set-cookie")).toContain(AFTER_SIGN_IN_COOKIE);
   });
 });
 

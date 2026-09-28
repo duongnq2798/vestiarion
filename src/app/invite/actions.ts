@@ -3,9 +3,10 @@
 import "server-only";
 
 import { redirect } from "next/navigation";
+import { z } from "zod";
 import { orgHref } from "@/lib/auth/org-paths";
 import { getSessionUser } from "@/lib/auth/session";
-import { acceptInvitation, MemberError } from "@/lib/platform/members";
+import { acceptInvitation, acceptInvitationById, MemberError } from "@/lib/platform/members";
 
 export interface AcceptInvitationResult {
   ok: boolean;
@@ -14,6 +15,8 @@ export interface AcceptInvitationResult {
 
 /** The token is 32 random bytes, base64url-encoded (43 characters, unpadded); the range leaves room for that to change. */
 const TOKEN = /^[A-Za-z0-9_-]{20,100}$/;
+
+const INVITATION_ID = z.string().uuid();
 
 /**
  * Accepting an invitation happens before there is any membership to
@@ -37,6 +40,34 @@ export async function acceptInvitationAction(
   let slug: string;
   try {
     ({ slug } = await acceptInvitation({ token, userId: user.id }));
+  } catch (error) {
+    if (error instanceof MemberError) return { ok: false, message: error.message };
+    console.error("invitation acceptance failed", error);
+    return { ok: false, message: "This invitation could not be accepted. Try again in a moment." };
+  }
+  redirect(orgHref(slug, "/console"));
+}
+
+/**
+ * Accepts a pending invitation listed on /onboarding (migration 0024's
+ * `pending_invitations_for`), by its id rather than the token from a link.
+ * The session is the gate for the same reason as `acceptInvitationAction`.
+ */
+export async function acceptInvitationByIdAction(
+  _previous: AcceptInvitationResult,
+  formData: FormData
+): Promise<AcceptInvitationResult> {
+  const user = await getSessionUser();
+  if (!user) return { ok: false, message: "Your session has ended. Sign in again." };
+
+  const invitationId = formData.get("invitationId");
+  if (typeof invitationId !== "string" || !INVITATION_ID.safeParse(invitationId).success) {
+    return { ok: false, message: "This invitation link is not valid." };
+  }
+
+  let slug: string;
+  try {
+    ({ slug } = await acceptInvitationById({ invitationId, userId: user.id }));
   } catch (error) {
     if (error instanceof MemberError) return { ok: false, message: error.message };
     console.error("invitation acceptance failed", error);
