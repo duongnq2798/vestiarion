@@ -56,14 +56,16 @@ caller so two concurrent requests cannot both slip past the limit, it enforces a
 organizations per `created_by`, inserts the organization in `sandbox` mode, and makes the caller
 its `owner`. `createWorkspace` then seeds two accounts — `Operating (simulated)` at 10,000 USDC and
 an empty `Reserve (simulated)` — and appends the first ledger entry, `org_created`, signed with the
-new key; a failure at this stage is rolled back (accounts deleted, then the organization row) so a
-half-built workspace never counts against the limit.
+new key; a failure at this stage is rolled back (accounts deleted, then the organization row) —
+unless its first ledger entry already committed, in which case the chain, and the workspace, stay.
 
 `0020` also adds a trigger, `memberships_keep_an_owner`, that fires before every membership update
 or delete: removing or demoting an organization's last `owner` raises rather than commits, checked
 under a row lock on `orgs` so two concurrent demotions of different owners cannot both see one
 owner remaining and leave zero — the same write-skew shape `create_org`'s advisory lock avoids on
-the count side.
+the count side. Because memberships cascade from `auth.users`, deleting the account of a person who
+is an organization's sole owner is refused. To delete them, first give that organization another
+owner, or delete the organization.
 
 **The permission map** (spec §7) lives as data in `src/lib/auth/roles.ts` — `PERMISSIONS` maps each
 of `workspace.read`, `agent.pause`, `approval.decide`, `records.write`, `agent.run_cycle`,
@@ -74,10 +76,11 @@ claims; a page can call the read-only `viewerCan` to decide whether to render a 
 Today's actions call it for `records.write` (`src/app/actions/intake.ts`,
 `src/app/actions/milestones.ts`) and `agent.run_cycle` (`src/app/actions/agent.ts`) — both need
 `owner` or `admin` — which is the whole map §7 currently has a caller for. The remaining
-permissions, and `canAssignRole`'s rule that an admin may grant `approver` or `viewer` but nothing
-at its own rank or above while only an owner assigns `admin` or `owner`, are defined in `roles.ts`
-ahead of the features that will call them: pausing/resuming the agent and deciding approvals
-(Tier 1), and member invitation and management (Plan 3a step 5b).
+permissions — `workspace.read`, `agent.pause`, `approval.decide`, `agent.resume`, `members.manage`,
+and `org.administer` — and `canAssignRole`'s rule that an admin may grant `approver` or `viewer` but
+nothing at its own rank or above while only an owner assigns `admin` or `owner`, are defined in
+`roles.ts` ahead of the features that will call them: pausing/resuming the agent and deciding
+approvals (Tier 1), and member invitation and management, still to come.
 
 **The cron** (`POST /api/agent/tick`) no longer runs one configured business.
 `runLiveOrganizations` (`src/lib/agent/cron.ts`) lists every organization in `mode = 'live'` and,

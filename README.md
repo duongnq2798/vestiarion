@@ -132,7 +132,7 @@ Sign in at `/login` with your email. A first sign-in with no workspace lands at 
 a business and you get your own **sandbox** workspace on the spot — its own Ed25519 ledger signing
 key, generated and encrypted with no manual step, an `Operating (simulated)` account holding 10,000
 simulated USDC, an empty `Reserve (simulated)` account, and a signed `org_created` entry as the
-first line of its ledger. One person can hold up to 3 workspaces this way; a setup that fails partway
+first line of its ledger. One person can create up to 3 workspaces this way; a setup that fails partway
 is rolled back rather than left half-built. The header's **Workspaces** link (`/onboarding?new`)
 lists the workspaces you belong to and lets you create another.
 
