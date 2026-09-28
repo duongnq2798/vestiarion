@@ -1065,7 +1065,13 @@ Subject: `docs: the tenant role, its token secret, and the demo reset`.
 - [ ] **Step 2: Rollout.** The controller runs it with the partner after the pull request's checks pass. It is not part of any subagent's task.
 
 1. The partner adds `SUPABASE_JWT_SECRET` to Vercel (Sensitive; Production and Preview), then redeploys the preview.
-2. `npm run db:migrate` (applies 0018 and 0019). Measure while the OLD code is still live:
+2. `npm run db:migrate` (applies 0018 and 0019), away from the cron's `:17` slot, because both take brief exclusive locks. Measure while the OLD code is still live:
+   - read-only privilege checks: `has_schema_privilege('vestiarion_tenant', 'extensions', 'USAGE')` and `pg_has_role('authenticator', 'vestiarion_tenant', 'MEMBER')`;
+   - `set role vestiarion_tenant; select extensions.digest('x', 'sha256')`;
+   - token probes, which are independent of the deployed code:
+     - a locally minted founding token reads `/rest/v1/ledger_entries`, and `/rest/v1/invoices?select=*,counterparties(name)` (this proves the embed works across the composite key);
+     - a random-organization token reads `[]`;
+     - a token with `role: authenticated` gets 403;
    - the role, the policies (12), `request_org_id()`, the composite keys, and one foreign key per embedded relationship exist;
    - the ledger still verifies;
    - a cron cycle (`workflow_dispatch`) still completes.
