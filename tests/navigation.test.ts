@@ -53,6 +53,7 @@ describe("navItemForPathname — which section the current URL is in", () => {
     ["/o/acme/console", "treasury"],
     ["/o/founding/invoices", "invoices"],
     ["/o/acme/audit/anything-deeper", "audit"],
+    ["/o/x/members", "members"],
   ])("%s → %s", (pathname, key) => {
     expect(navItemForPathname(pathname)?.key).toBe(key);
   });

@@ -26,6 +26,7 @@ export const NAV_GROUPS = [
     items: [
       { key: "compliance", path: "/compliance", label: "Compliance" },
       { key: "audit", path: "/audit", label: "Audit log" },
+      { key: "members", path: "/members", label: "Members" },
     ],
   },
 ] as const;
