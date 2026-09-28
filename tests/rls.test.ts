@@ -88,6 +88,7 @@ describe("0018's self-checks", () => {
   // below — correctly raise when the privilege they check for is absent,
   // which is the only thing standing between a silent WARNING and a failed
   // migration.
+  // Each builds a fresh database and replays every migration, which can take longer than the default timeout when the whole suite runs in parallel.
   it("the extensions-USAGE guard raises when the grant did not take", async () => {
     const fresh = await createDatabase();
     await applyMigrations(fresh);
@@ -101,7 +102,7 @@ describe("0018's self-checks", () => {
       end $$;
     `)).rejects.toThrow(/vestiarion_tenant has no USAGE on schema extensions/);
     await fresh.close();
-  });
+  }, 60_000);
 
   it("the authenticator-membership guard raises when the grant did not take", async () => {
     const fresh = await createDatabase();
@@ -116,7 +117,7 @@ describe("0018's self-checks", () => {
       end $$;
     `)).rejects.toThrow(/authenticator could not be granted vestiarion_tenant membership/);
     await fresh.close();
-  });
+  }, 60_000);
 });
 
 describe.each(TENANT_TABLES)("%s", (table) => {
