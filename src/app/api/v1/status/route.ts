@@ -21,10 +21,15 @@ export const dynamic = "force-dynamic";
  */
 export interface StatusPayload {
   businessName: string;
-  /** Payments and yield differ and are reported separately, as in the UI. */
+  /**
+   * Payments and yield differ and are reported separately, as in the UI.
+   * `unavailable` means the organization's Circle credentials are stored but
+   * could not be read: cycles refuse to pay then rather than simulate (R12),
+   * so neither leg is live or simulated.
+   */
   provenance: {
-    payments: "live" | "simulate";
-    yield: "live" | "simulate";
+    payments: "live" | "simulate" | "unavailable";
+    yield: "live" | "simulate" | "unavailable";
     screening: "live" | "simulate";
   };
   clock: { mode: "real" | "simulate"; day: number; lastCycleAt: string | null };
@@ -40,7 +45,11 @@ export async function GET(request: Request) {
   return handleApiRequest("GET /api/v1/status", async (): Promise<ApiResource<StatusPayload>> => {
     const config = currentConfig();
     // Modes, not the provider: status must still answer when the
-    // organization's Circle credentials cannot be read (R12).
+    // organization's Circle credentials cannot be read (R12). chainModes()
+    // reports simulate/simulate then so pages render, but a cycle refuses to
+    // pay in that state, so a client told `simulate` would wait for
+    // settlements that never come.
+    const unreadable = !!config.chain.credentialsUnreadable;
     const modes = chainModes();
     const snapshot = await stats();
 
@@ -48,8 +57,8 @@ export async function GET(request: Request) {
       data: {
         businessName: config.businessName,
         provenance: {
-          payments: modes.mode,
-          yield: modes.earnMode,
+          payments: unreadable ? "unavailable" : modes.mode,
+          yield: unreadable ? "unavailable" : modes.earnMode,
           screening: screeningMode(),
         },
         clock: {

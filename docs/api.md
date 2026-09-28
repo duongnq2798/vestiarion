@@ -33,6 +33,13 @@ sequence because it is an append-only stream.
 No parameters. Reports safe configuration descriptors and operating modes;
 secrets are never included.
 
+`provenance.payments` and `provenance.yield` are each `live`, `simulate`, or
+`unavailable`. `unavailable` means the founding organization's Circle
+credentials are stored but cannot be read — sealed under a master key this
+deployment does not hold, for example. A cycle refuses to pay in that state
+rather than fall back to simulation, so status does not report it as
+`simulate`.
+
 ```json
 {"data":{"businessName":"Vestiarion workspace","provenance":{"payments":"live","yield":"simulate","screening":"simulate"},"clock":{"mode":"simulate","day":25,"lastCycleAt":"2026-09-24T18:33:04.546517+00:00"},"totals":{"decisionsLogged":77,"totalPaidOut":4.815,"flagged":1},"configuration":{"businessName":"Vestiarion workspace","database":{"host":"your-project.supabase.co"},"chain":{"circleConfigured":true,"arcRpcConfigured":false},"llm":{"pinned":null,"available":["deepseek"]},"compliance":{"mode":"bundled","rescreenIntervalHours":0},"followUp":{"staleAfterDays":3,"reEscalateAfterDays":7},"ledgerSigningKeyProvided":false,"githubTokenProvided":false,"clockMode":"simulate"},"apiVersion":"v1"}}
 ```
