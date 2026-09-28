@@ -16,8 +16,10 @@ import type { Member, OpenInvitation } from "@/lib/platform/members";
 
 const INITIAL: MemberActionResult = { ok: false, message: "" };
 
+const dateFormat = new Intl.DateTimeFormat("en-US", { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" });
+
 function joined(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+  return dateFormat.format(new Date(iso));
 }
 
 function RoleCell({ orgSlug, member, canChange, assignable }: { orgSlug: string; member: Member; canChange: boolean; assignable: readonly OrgRole[] }) {
@@ -45,16 +47,9 @@ function RoleCell({ orgSlug, member, canChange, assignable }: { orgSlug: string;
   );
 }
 
-function RemoveOrLeaveCell({ orgSlug, member, isSelf, canRemove }: { orgSlug: string; member: Member; isSelf: boolean; canRemove: boolean }) {
-  const router = useRouter();
+/** Removing someone else. The viewer's own row uses `LeaveCell` instead — see the note on that component. */
+function RemoveButton({ orgSlug, member }: { orgSlug: string; member: Member }) {
   const [state, action, pending] = useActionState(removeMemberAction, INITIAL);
-
-  useEffect(() => {
-    if (state.left) router.replace("/onboarding");
-    else if (state.ok) router.refresh();
-  }, [state.ok, state.left, router]);
-
-  if (!isSelf && !canRemove) return null;
 
   return (
     <form action={action} className="inline-flex flex-col items-end gap-1">
@@ -65,7 +60,43 @@ function RemoveOrLeaveCell({ orgSlug, member, isSelf, canRemove }: { orgSlug: st
         disabled={pending}
         className="rounded-md border border-refused-line px-2.5 py-1 text-xs font-medium text-refused transition-colors hover:bg-refused-soft disabled:opacity-60"
       >
-        {isSelf ? (pending ? "Leaving…" : "Leave") : (pending ? "Removing…" : "Remove")}
+        {pending ? "Removing…" : "Remove"}
+      </button>
+      {!state.ok && state.message && <span className="text-xs text-refused">{state.message}</span>}
+    </form>
+  );
+}
+
+/**
+ * The viewer's own row. Self-removal does not revalidate the route (see
+ * `removeMemberAction`), specifically so this state and its redirect live in
+ * `MembersPanel` — a component that is not part of whatever re-renders once
+ * membership changes — rather than in a per-row component that a revalidation
+ * could unmount before its effect runs.
+ */
+function LeaveCell({
+  orgSlug,
+  userId,
+  action,
+  state,
+  pending,
+}: {
+  orgSlug: string;
+  userId: string;
+  action: (formData: FormData) => void;
+  state: MemberActionResult;
+  pending: boolean;
+}) {
+  return (
+    <form action={action} className="inline-flex flex-col items-end gap-1">
+      <input type="hidden" name="orgSlug" value={orgSlug} />
+      <input type="hidden" name="userId" value={userId} />
+      <button
+        type="submit"
+        disabled={pending}
+        className="rounded-md border border-refused-line px-2.5 py-1 text-xs font-medium text-refused transition-colors hover:bg-refused-soft disabled:opacity-60"
+      >
+        {pending ? "Leaving…" : "Leave"}
       </button>
       {!state.ok && state.message && <span className="text-xs text-refused">{state.message}</span>}
     </form>
@@ -194,6 +225,12 @@ export default function MembersPanel({
   assignable: readonly OrgRole[];
 }) {
   const isManager = assignable.length > 0;
+  const router = useRouter();
+  const [leaveState, leaveAction, leavePending] = useActionState(removeMemberAction, INITIAL);
+
+  useEffect(() => {
+    if (leaveState.left) router.replace("/onboarding");
+  }, [leaveState.left, router]);
 
   return (
     <div className="space-y-8">
@@ -221,7 +258,11 @@ export default function MembersPanel({
                     </td>
                     <td className="px-4 py-3 text-ink-2">{joined(member.joinedAt)}</td>
                     <td className="px-4 py-3 text-right">
-                      <RemoveOrLeaveCell orgSlug={orgSlug} member={member} isSelf={isSelf} canRemove={canChange} />
+                      {isSelf ? (
+                        <LeaveCell orgSlug={orgSlug} userId={member.userId} action={leaveAction} state={leaveState} pending={leavePending} />
+                      ) : canChange ? (
+                        <RemoveButton orgSlug={orgSlug} member={member} />
+                      ) : null}
                     </td>
                   </tr>
                 );

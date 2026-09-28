@@ -89,7 +89,15 @@ export async function removeMemberAction(_previous: MemberActionResult, formData
     }
     try {
       await removeMember({ actorId: auth.user.id, userId });
-      revalidateOrgPages();
+      // Self-removal ends the viewer's own membership. Revalidating here would
+      // refresh the current route within this same transition — the
+      // membership gate then calls notFound() — which can unmount the
+      // component whose effect is meant to redirect to /onboarding before
+      // that effect gets to run. So the tree is left alone on self-removal;
+      // the client redirects on `left: true` instead, from a component that
+      // stays mounted through it. Removing someone else does not touch the
+      // viewer's own membership, so it revalidates as usual.
+      if (!isSelf) revalidateOrgPages();
       return { ok: true, message: isSelf ? "You left the workspace." : "Member removed.", left: isSelf };
     } catch (error) {
       return fail(error);

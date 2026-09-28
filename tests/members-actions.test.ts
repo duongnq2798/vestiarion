@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import {
@@ -26,10 +26,13 @@ const { ORG, USER, OTHER } = vi.hoisted(() => ({
 }));
 
 vi.mock("server-only", () => ({}));
+
+const { revalidatePathMock } = vi.hoisted(() => ({ revalidatePathMock: vi.fn() }));
 // `revalidatePath` requires a request's static-generation store, which does
 // not exist outside Next's own server; stubbed so a success path can be
-// asserted on rather than swallowed as a caught, logged error.
-vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+// asserted on rather than swallowed as a caught, logged error, and hoisted so
+// tests can assert on whether it was called.
+vi.mock("next/cache", () => ({ revalidatePath: revalidatePathMock }));
 
 const { authorizeMock } = vi.hoisted(() => ({ authorizeMock: vi.fn() }));
 vi.mock("@/lib/auth/authorize", () => ({ authorize: authorizeMock }));
@@ -49,6 +52,13 @@ vi.mock("@/lib/platform/members", async (importOriginal) => {
     removeMember: removeMemberMock,
     revokeInvitation: revokeInvitationMock,
   };
+});
+
+// Every mock is shared across tests (module mocks are singletons); cleared
+// between tests so a `not.toHaveBeenCalled()` assertion cannot pass only
+// because an earlier test happened to run first.
+beforeEach(() => {
+  vi.clearAllMocks();
 });
 
 const config = configFromEnv({
@@ -150,7 +160,7 @@ describe("removeMemberAction", () => {
     expect(removeMemberMock).not.toHaveBeenCalled();
   });
 
-  it("lets a viewer remove themselves, and returns left: true", async () => {
+  it("lets a viewer remove themselves, returns left: true, and does not revalidate", async () => {
     authorizeMock.mockResolvedValueOnce({ ok: true, user: { id: USER, email: null }, membership: membership("viewer") });
     removeMemberMock.mockResolvedValueOnce(undefined);
 
@@ -158,6 +168,23 @@ describe("removeMemberAction", () => {
 
     expect(removeMemberMock).toHaveBeenCalledWith({ actorId: USER, userId: USER });
     expect(result).toEqual({ ok: true, message: "You left the workspace.", left: true });
+    // Revalidating here would refresh the current route in the same
+    // transition that delivers `left: true` — the membership gate then calls
+    // notFound() — which can unmount the component whose effect is meant to
+    // redirect to /onboarding before it runs. So self-removal must not
+    // revalidate; the client redirects on `left: true` instead.
+    expect(revalidatePathMock).not.toHaveBeenCalled();
+  });
+
+  it("removing someone else revalidates, and returns left: false", async () => {
+    authorizeMock.mockResolvedValueOnce({ ok: true, user: { id: USER, email: null }, membership: membership("owner") });
+    removeMemberMock.mockResolvedValueOnce(undefined);
+
+    const result = await run(() => removeMemberAction(INITIAL, removeForm(OTHER)));
+
+    expect(removeMemberMock).toHaveBeenCalledWith({ actorId: USER, userId: OTHER });
+    expect(result).toEqual({ ok: true, message: "Member removed.", left: false });
+    expect(revalidatePathMock).toHaveBeenCalled();
   });
 });
 
