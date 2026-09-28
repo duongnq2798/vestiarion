@@ -4,7 +4,8 @@ import { currentContext, runWith } from "@/lib/context";
 import { db, platformDb } from "@/lib/dal";
 import { mintRequestToken } from "@/lib/dal/request-token";
 import { tenantClient } from "@/lib/dal/tenant-client";
-import { withOrg } from "@/lib/dal/scope";
+import { FOUNDING_ORG_ID } from "@/lib/dal/org-config";
+import { withFoundingOrg, withOrg } from "@/lib/dal/scope";
 import { fakeSupabase, type RecordedRequest } from "./support/fake-supabase";
 
 const ORG = "5d0f3a2e-8c1b-4f7a-9e6d-00000000beef";
@@ -19,10 +20,15 @@ function claimsOf(request: RecordedRequest) {
   return JSON.parse(Buffer.from(token.split(".")[1] ?? "", "base64url").toString() || "null");
 }
 
+function orgRow(id: string, slug: string) {
+  return { id, slug, name: slug, mode: "sandbox" as const, ledger_signing_key_enc: null, circle_api_key_enc: null, circle_entity_secret_enc: null };
+}
+
+/** Answers whichever organization the request's `id` filter names, so a test that enters more than one org gets each one's own row. */
 function orgsReply(request: RecordedRequest) {
-  return request.path === "/rest/v1/orgs"
-    ? { body: { id: ORG, slug: "northstar", name: "Northstar", mode: "sandbox", ledger_signing_key_enc: null, circle_api_key_enc: null, circle_entity_secret_enc: null } }
-    : { body: [] };
+  if (request.path !== "/rest/v1/orgs") return { body: [] };
+  const id = request.params.get("id")?.replace(/^eq\./, "");
+  return { body: id === FOUNDING_ORG_ID ? orgRow(FOUNDING_ORG_ID, "founding") : orgRow(ORG, "northstar") };
 }
 
 describe("tenantClient", () => {
@@ -74,10 +80,28 @@ describe("a scope entered through the DAL", () => {
     expect(invoices.params.get("org_id")).toBe(`eq.${ORG}`);
   });
 
-  it("cannot be entered when the token secret is missing", async () => {
+  it("keeps a nested scope's token separate from the outer scope's, in both directions", async () => {
+    const fake = fakeSupabase(orgsReply);
+    await runWith({ config, db: fake.client, fetch: fake.fetch }, () =>
+      withOrg(ORG, async () => {
+        await withFoundingOrg(async () => { await db().from("invoices").select("id"); });
+        await db().from("invoices").select("id");
+      }, { userId: "user-9" })
+    );
+    const [inner, outer] = fake.requests.filter((request) => request.path === "/rest/v1/invoices");
+    expect(claimsOf(inner)).toMatchObject({ org_id: FOUNDING_ORG_ID, sub: "system" });
+    expect(claimsOf(outer)).toMatchObject({ org_id: ORG, sub: "user-9" });
+  });
+
+  it("cannot be entered when the token secret is missing, and never reads the organization's row to find out", async () => {
     const fake = fakeSupabase(orgsReply);
     const broken = configFromEnv({ ...env, SUPABASE_JWT_SECRET: "" });
     await expect(runWith({ config: broken, db: fake.client, fetch: fake.fetch }, () => withOrg(ORG, async () => null))).rejects.toThrow(/SUPABASE_JWT_SECRET/);
+    // A broken deployment fails on the setting it's missing, not partway
+    // through work that setting would have been needed for — so the
+    // organization's row (which decrypting its secrets would need) is never
+    // even fetched.
+    expect(fake.requests).toEqual([]);
   });
 
   it("keeps platformDb on the service role inside an organization", async () => {

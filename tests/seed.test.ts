@@ -6,10 +6,10 @@ import { resetDatabase } from "@/lib/seed";
 import { carriesOrg, fakeSupabase, orgTestContext, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 
 /**
- * The tenant role lost DELETE on ledger_entries in migration 0018 (R-whatever
- * the ledger's own append-only guarantee is called): a reset that could erase
- * the audit trail would not be one. `resetDatabase` must clear every other
- * tenant table but leave the ledger alone, and say so in the ledger itself.
+ * Migration 0018 grants the tenant role no DELETE on ledger_entries: a reset
+ * that could erase the audit trail would not be one. `resetDatabase` must
+ * clear every other tenant table but leave the ledger alone, and say so in
+ * the ledger itself.
  */
 
 const ORG = "0b6c1c9e-4a4f-4a7e-9b1e-000000000a0a";

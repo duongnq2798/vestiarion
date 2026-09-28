@@ -78,6 +78,47 @@ describe("extensions schema", () => {
   });
 });
 
+describe("0018's self-checks", () => {
+  // A GRANT run by a role without the grant option only raises a WARNING,
+  // not an error, when it doesn't take — PGlite always applies migrations as
+  // a superuser, so the GRANT itself can never actually fail to take here,
+  // and there's no clean way on PGlite to reproduce the privilege-less role
+  // that would make it warn instead of grant in production. What can be
+  // proven on PGlite is that the guard clauses 0018 adds — copied verbatim
+  // below — correctly raise when the privilege they check for is absent,
+  // which is the only thing standing between a silent WARNING and a failed
+  // migration.
+  it("the extensions-USAGE guard raises when the grant did not take", async () => {
+    const fresh = await createDatabase();
+    await applyMigrations(fresh);
+    await fresh.exec("revoke usage on schema extensions from vestiarion_tenant");
+    await expect(fresh.exec(`
+      do $$
+      begin
+        if not has_schema_privilege('vestiarion_tenant', 'extensions', 'USAGE') then
+          raise exception 'vestiarion_tenant has no USAGE on schema extensions, so digest() would not resolve for tenant requests';
+        end if;
+      end $$;
+    `)).rejects.toThrow(/vestiarion_tenant has no USAGE on schema extensions/);
+    await fresh.close();
+  });
+
+  it("the authenticator-membership guard raises when the grant did not take", async () => {
+    const fresh = await createDatabase();
+    await applyMigrations(fresh);
+    await fresh.exec("revoke vestiarion_tenant from authenticator");
+    await expect(fresh.exec(`
+      do $$
+      begin
+        if not pg_has_role('authenticator', 'vestiarion_tenant', 'MEMBER') then
+          raise exception 'authenticator could not be granted vestiarion_tenant membership, so PostgREST could not switch to the role';
+        end if;
+      end $$;
+    `)).rejects.toThrow(/authenticator could not be granted vestiarion_tenant membership/);
+    await fresh.close();
+  });
+});
+
 describe.each(TENANT_TABLES)("%s", (table) => {
   it("shows a tenant its own rows and none of another organization's", async () => {
     expect(await asTenant(db, A, (tx) => count(tx, table))).toBeGreaterThan(0);
@@ -131,8 +172,53 @@ describe("writes name the tenant's own organization", () => {
       tx.query("update counterparties set org_id = $1 where org_id = $2", [B, A]))).rejects.toThrow(/row-level security/);
   });
 
-  it("accepts a row for its own organization", async () => {
-    await asTenant(db, A, (tx) => tx.query("insert into forecasts (org_id, as_of, horizon_days, projected_inflow, projected_outflow, liquid_balance) values ($1, now(), 7, 0, 0, 0)", [A]));
+  it("accepts a row for its own organization, for every CRUD table plus a cycle_snapshots insert", async () => {
+    // A dedicated organization, so this test's own inserts can't collide with
+    // what beforeAll already seeded for A (sim_clock in particular holds one
+    // row per organization).
+    const C = await createOrg(db, "acceptco");
+
+    // Column shapes copied from seedOrgRows: each insert both proves RLS
+    // accepts an own-organization row for that table, and — for the tables
+    // whose FK another entry below needs — supplies a same-organization row
+    // for the composite foreign key to hold.
+    const ids: Record<string, string> = {};
+    const insertReturningId = async (table: string, sql: string, params: unknown[]) => {
+      const row = (await asTenant(db, C, (tx) => tx.query<{ id: string }>(sql, params))).rows[0];
+      expect(row?.id).toBeTruthy();
+      ids[table] = row.id;
+    };
+    const insertRow = async (table: string, sql: string, params: unknown[]) => {
+      await asTenant(db, C, (tx) => tx.query(sql, params));
+    };
+
+    await insertReturningId("counterparties",
+      "insert into counterparties (org_id, name, role) values ($1, 'own-cp', 'vendor') returning id", [C]);
+    await insertReturningId("accounts",
+      "insert into accounts (org_id, name, kind, chain) values ($1, 'own-acct', 'operating', 'ARC-TESTNET') returning id", [C]);
+    await insertReturningId("invoices",
+      "insert into invoices (org_id, direction, counterparty_id, amount, due_date) values ($1, 'payable', $2, 1, now()) returning id",
+      [C, ids.counterparties]);
+    await insertRow("milestones",
+      "insert into milestones (org_id, contractor_id, title, amount) values ($1, $2, 'own-ms', 1)", [C, ids.counterparties]);
+    await insertRow("treasury_actions",
+      "insert into treasury_actions (org_id, action, amount, from_account) values ($1, 'rebalance', 1, $2)", [C, ids.accounts]);
+    await insertRow("compliance_checks",
+      "insert into compliance_checks (org_id, counterparty_id, risk_level, source) values ($1, $2, 'clear', 'test')", [C, ids.counterparties]);
+    await insertRow("forecasts",
+      "insert into forecasts (org_id, as_of, horizon_days, projected_inflow, projected_outflow, liquid_balance) values ($1, now(), 7, 0, 0, 0)", [C]);
+    await insertRow("payment_intents",
+      `insert into payment_intents (org_id, source_type, source_id, idempotency_key, provider, amount, destination)
+       values ($1, 'invoice', $2, 'k-own-insert', 'simulate', 1, 'sim:x')`, [C, ids.invoices]);
+    await insertReturningId("cycle_runs",
+      "insert into cycle_runs (org_id, started_at, clock_mode, chain_mode, screening_mode) values ($1, now(), 'real', 'simulate', 'simulate') returning id",
+      [C]);
+    await insertRow("sim_clock", "insert into sim_clock (org_id, current_day) values ($1, 0)", [C]);
+    await insertReturningId("cycle_snapshots",
+      `insert into cycle_snapshots (org_id, cycle_run_id, captured_at, account_balances, total_liquid, open_payables,
+         open_receivables, obligations_due_7d, obligations_due_14d, reserve_position, chain_mode)
+       values ($1, $2, now(), '{}'::jsonb, 0, 0, 0, 0, 0, 0, 'simulate') returning id`,
+      [C, ids.cycle_runs]);
   });
 });
 
@@ -156,7 +242,7 @@ describe("the tenant RPCs under the tenant role", () => {
   });
 
   it("refuses advancing another organization's clock", async () => {
-    await expect(asTenant(db, A, (tx) => tx.query("select advance_sim_day($1::uuid)", [B]))).rejects.toThrow();
+    await expect(asTenant(db, A, (tx) => tx.query("select advance_sim_day($1::uuid)", [B]))).rejects.toThrow(/row-level security/);
   });
 
   it("cannot claim another organization's payment", async () => {

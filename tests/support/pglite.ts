@@ -143,6 +143,11 @@ export async function asTenant<T>(db: PGlite, orgId: string | null, fn: (tx: Que
   return db.transaction(async (tx) => {
     const claims = orgId ? { role: "vestiarion_tenant", org_id: orgId } : { role: "vestiarion_tenant" };
     await tx.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify(claims)]);
+    // PostgREST connects as authenticator and switches to vestiarion_tenant
+    // from there, through the membership 0018 grants — not straight to the
+    // target role — so this does the same, rather than jumping straight to
+    // `set local role vestiarion_tenant`.
+    await tx.query("set local role authenticator");
     await tx.query("set local role vestiarion_tenant");
     return fn(tx);
   });
