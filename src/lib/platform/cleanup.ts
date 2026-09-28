@@ -5,33 +5,37 @@ export const SANDBOX_IDLE_DAYS = 60;
 
 interface SandboxRow {
   id: string;
-  slug: string;
 }
 
+/**
+ * Counts only. The response is printed into the scheduled workflow's log, and
+ * sandbox slugs derive from people's workspace names, so per-organization
+ * detail goes to the server log, by organization id.
+ */
 export interface CleanupResult {
-  deleted: string[];
-  failed: { slug: string; error: string }[];
+  deleted: number;
+  failed: number;
 }
 
 /**
  * Deletes every sandbox organization that has been inactive since the
  * cutoff. Each organization is its own call to `delete_sandbox_org`
  * (migration 0022), so one organization's failure never stops the rest: it
- * lands in `failed` instead. `delete_sandbox_org` itself re-checks
- * `last_active_at` against the cutoff it is given, so a sandbox that became
- * active between the listing and the delete survives — that call simply
- * returns `false`, and the slug is skipped rather than pushed anywhere.
+ * is logged and counted in `failed` instead. `delete_sandbox_org` itself
+ * re-checks `last_active_at` against the cutoff it is given, so a sandbox
+ * that became active between the listing and the delete survives — that call
+ * simply returns `false`, and the organization is counted nowhere.
  */
 export async function deleteAbandonedSandboxes(now: Date = new Date()): Promise<CleanupResult> {
   const cutoff = new Date(now.getTime() - SANDBOX_IDLE_DAYS * 24 * 60 * 60 * 1000);
   const cutoffIso = cutoff.toISOString();
 
   const sandboxes = unwrap(
-    await platformDb().from("orgs").select("id, slug").eq("mode", "sandbox").lt("last_active_at", cutoffIso)
+    await platformDb().from("orgs").select("id").eq("mode", "sandbox").lt("last_active_at", cutoffIso)
   ) as unknown as SandboxRow[];
 
-  const deleted: string[] = [];
-  const failed: { slug: string; error: string }[] = [];
+  let deleted = 0;
+  let failed = 0;
 
   for (const org of sandboxes) {
     const { data, error } = await platformDb().rpc("delete_sandbox_org", {
@@ -39,11 +43,12 @@ export async function deleteAbandonedSandboxes(now: Date = new Date()): Promise<
       p_inactive_before: cutoffIso,
     });
     if (error) {
-      failed.push({ slug: org.slug, error: error.message });
+      failed += 1;
+      console.error("could not delete abandoned sandbox", org.id, error.message);
       continue;
     }
     if (data === true) {
-      deleted.push(org.slug);
+      deleted += 1;
       console.log("deleted abandoned sandbox", org.id);
     }
   }

@@ -45,13 +45,19 @@ function sandboxesDatabase(request: RecordedRequest): FakeReply {
 describe("deleteAbandonedSandboxes", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it("lists sandboxes idle since the cutoff and sorts each reply into deleted, skipped or failed", async () => {
-    vi.spyOn(console, "log").mockImplementation(() => {});
+  it("lists sandboxes idle since the cutoff and counts each reply as deleted, skipped or failed", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
     const fake = fakeSupabase(sandboxesDatabase);
 
     const result = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => deleteAbandonedSandboxes(NOW));
 
-    expect(result).toEqual({ deleted: ["deleted-co"], failed: [{ slug: "broken-co", error: "boom" }] });
+    expect(result).toEqual({ deleted: 1, failed: 1 });
+    // Per-organization detail goes to the server log by id only; no slug
+    // (derived from a workspace name) appears in the result or the logs.
+    expect(log).toHaveBeenCalledWith("deleted abandoned sandbox", DELETED);
+    expect(error).toHaveBeenCalledWith("could not delete abandoned sandbox", BROKEN, "boom");
+    expect(JSON.stringify([result, log.mock.calls, error.mock.calls])).not.toMatch(/-co/);
 
     const listing = fake.requests.find((request) => request.path === "/rest/v1/orgs");
     expect(listing?.params.get("mode")).toBe("eq.sandbox");
@@ -69,7 +75,7 @@ describe("deleteAbandonedSandboxes", () => {
 
     const result = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => deleteAbandonedSandboxes(NOW));
 
-    expect(result).toEqual({ deleted: [], failed: [] });
+    expect(result).toEqual({ deleted: 0, failed: 0 });
     expect(fake.requests.some((request) => request.path === "/rest/v1/rpc/delete_sandbox_org")).toBe(false);
   });
 });

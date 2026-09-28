@@ -245,9 +245,11 @@ export async function runAgentCycle(
 
     return await executeCycle(ctx);
   } catch (err) {
-    // Reached only when something outside every stage threw — the shared
-    // measurements between stages, or the write that closes the run. A stage
-    // that fails is recorded by the stage helper and never lands here.
+    // Reached only when something outside every stage threw — opening the
+    // day (`advance_sim_day`, or `realClockDay` in real-clock mode), the
+    // `sim_day` PATCH onto the run, the shared measurements between stages,
+    // or the write that closes the run. A stage that fails is recorded by the
+    // stage helper and never lands here.
     // Best effort: if the database is what failed, this will fail too, and the
     // row stays `running` — which still says more than the nothing it said
     // before. The original error is what the operator needs, so it is never

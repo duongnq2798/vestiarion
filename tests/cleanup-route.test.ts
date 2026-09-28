@@ -44,21 +44,32 @@ describe("POST /api/platform/cleanup", () => {
     expect(deleteAbandonedSandboxes).not.toHaveBeenCalled();
   });
 
-  it("returns 200 with the body when nothing failed", async () => {
-    deleteAbandonedSandboxes.mockResolvedValueOnce({ deleted: ["a-corp"], failed: [] });
+  it("returns 200 with the counts when nothing failed", async () => {
+    deleteAbandonedSandboxes.mockResolvedValueOnce({ deleted: 2, failed: 0 });
 
     const response = await post(`Bearer ${TOKEN}`);
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ deleted: ["a-corp"], failed: [] });
+    expect(await response.json()).toEqual({ deleted: 2, failed: 0 });
   });
 
-  it("returns 500 with the body when any deletion failed", async () => {
-    deleteAbandonedSandboxes.mockResolvedValueOnce({ deleted: [], failed: [{ slug: "b-corp", error: "boom" }] });
+  it("returns 500 with the counts when any deletion failed", async () => {
+    deleteAbandonedSandboxes.mockResolvedValueOnce({ deleted: 0, failed: 1 });
 
     const response = await post(`Bearer ${TOKEN}`);
 
     expect(response.status).toBe(500);
-    expect(await response.json()).toEqual({ deleted: [], failed: [{ slug: "b-corp", error: "boom" }] });
+    expect(await response.json()).toEqual({ deleted: 0, failed: 1 });
+  });
+
+  it("logs and returns a JSON 500 when the listing itself fails", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    deleteAbandonedSandboxes.mockRejectedValueOnce(new Error("listing unavailable"));
+
+    const response = await post(`Bearer ${TOKEN}`);
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: "cleanup failed" });
+    expect(error).toHaveBeenCalledWith("sandbox cleanup failed", "listing unavailable");
   });
 });

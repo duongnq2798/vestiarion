@@ -52,13 +52,13 @@ describe("touchOrgActivity", () => {
     expect(fake.requests).toHaveLength(2);
   });
 
-  it("resolves without throwing, and warns with the org id, when the rpc fails", async () => {
+  it("resolves without throwing, and warns with the org id and the error message, when the rpc fails", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const fake = fakeSupabase(() => ({ status: 500, body: { message: "boom" } }));
 
     await expect(
       runWith({ config, db: fake.client, fetch: fake.fetch }, () => touchOrgActivity(ORG, 1_000_000))
     ).resolves.toBeUndefined();
-    expect(console.warn).toHaveBeenCalledWith("could not record workspace activity", ORG);
+    expect(console.warn).toHaveBeenCalledWith("could not record workspace activity", ORG, "boom");
   });
 });

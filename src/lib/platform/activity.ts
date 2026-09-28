@@ -27,8 +27,9 @@ export async function touchOrgActivity(orgId: string, now: number = Date.now()):
     const { error } = await platformDb().rpc("touch_org_activity", { p_org_id: orgId });
     if (error) throw new Error(error.message);
     lastRefreshed.set(orgId, now);
-  } catch {
-    console.warn("could not record workspace activity", orgId);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn("could not record workspace activity", orgId, message);
   }
 }
 

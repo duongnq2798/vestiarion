@@ -121,6 +121,6 @@ describe("begin_cycle_run", () => {
     const mine = await createOrg(db, "mine-co");
     const theirs = await createOrg(db, "theirs-co");
     await expect(asTenant(db, mine, (tx) =>
-      tx.query("select public.begin_cycle_run($1, null, now(), 'real', 'simulate', 'simulate')", [theirs]))).rejects.toThrow();
+      tx.query("select public.begin_cycle_run($1, null, now(), 'real', 'simulate', 'simulate')", [theirs]))).rejects.toThrow(/row-level security/);
   });
 });

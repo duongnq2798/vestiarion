@@ -8,6 +8,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { deleted, failed } = await deleteAbandonedSandboxes();
-  return NextResponse.json({ deleted, failed }, { status: failed.length > 0 ? 500 : 200 });
+  try {
+    // Counts only: this body is printed into the workflow's log, and sandbox
+    // slugs derive from workspace names. The detail is in the server log.
+    const { deleted, failed } = await deleteAbandonedSandboxes();
+    return NextResponse.json({ deleted, failed }, { status: failed > 0 ? 500 : 200 });
+  } catch (err) {
+    console.error("sandbox cleanup failed", (err as Error).message);
+    return NextResponse.json({ error: "cleanup failed" }, { status: 500 });
+  }
 }
