@@ -374,6 +374,26 @@ organization's data through the UI or the API.
    migrated, per-organization ledger chains, per-organization secrets read from `orgs`. Because
    `currentOrgId()` now throws without a scope, the cron enters the founding organization's scope
    explicitly in this step; step 5 generalises it to every due organization.
+   **Shipped 2026-09-28 as #12 (merge `2abeea6`).** `orgScoped()` shipped as `db()` in `src/lib/dal`, with
+   `platformDb()` for the three platform tables. The ledger and clock changes landed as two migrations:
+   `0016` (additive, applied with `db:migrate -- --through 0016` before the merge) and `0017` (contract,
+   applied after the code was live).
+   The preview first failed its type check: Vercel restores `.next/cache`, and TypeScript's incremental
+   builder ran out of memory on main's stale build info. `incremental` is now off (`b0d4fd7`).
+   Measured on production:
+   - after `0016`, the old code kept working and the ledger stayed `valid: true` (136 entries);
+   - after the deploy, a cron cycle wrote #218–#220 through the per-organization append, founding's
+     `org_id`, signed by `9b03458d9a617871`;
+   - after `0017`, each tenant RPC has one signature and all take `p_org_id`, none executable by `anon` or
+     `authenticated`, and only `sim_clock` keeps an `org_id` default (its bootstrap row is replayed from
+     `0001`); cycle #221–#223 followed;
+   - the operator then removed `LEDGER_SIGNING_KEY`, `LEDGER_PUBLIC_KEY`, `CIRCLE_API_KEY` and
+     `CIRCLE_ENTITY_SECRET` from Vercel. The next cycle (#224–#226) still ran in live payment mode and was
+     signed by the same key, so both now come only from the organization's encrypted row;
+   - the ledger reported `valid: true` with 145 entries across all three phases;
+   - `/api/v1/*` needs the token;
+   - `/api/ledger/verify?org=founding` answers 401 signed out and "Not found" to a signed-in non-member;
+   - the owner's pages render.
 4. **RLS:** policies, the mechanism chosen in step 1, the PGlite isolation tests.
 5. **Self-serve and roles:** `/onboarding`, `create_org()`, limits, invitations, the permission map
    enforced everywhere, the cron iterating organizations, sandbox cleanup.
