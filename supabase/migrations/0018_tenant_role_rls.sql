@@ -17,16 +17,31 @@ end $$;
 
 -- PostgREST connects as authenticator and switches to the role a valid token names.
 grant vestiarion_tenant to authenticator;
+-- A GRANT run by a role that lacks the grant option only raises a WARNING,
+-- not an error, when it does not take — so a broken membership would
+-- otherwise go unnoticed until a request actually failed after deploy.
+do $$
+begin
+  if not pg_has_role('authenticator', 'vestiarion_tenant', 'MEMBER') then
+    raise exception 'authenticator could not be granted vestiarion_tenant membership, so PostgREST could not switch to the role';
+  end if;
+end $$;
 grant usage on schema public to vestiarion_tenant;
 
 -- append_ledger_entry() calls digest(), which on Supabase lives in the
 -- extensions schema; only anon/authenticated/service_role have USAGE there by
 -- default, so without this the tenant role could not append to the ledger.
 -- PGlite has no such schema out of the box, hence the existence check.
+-- Same reasoning as above: GRANT failing silently is only a WARNING, so the
+-- check below turns a grant that did not take into a failed migration
+-- instead of a working deploy that cannot append to the ledger.
 do $$
 begin
   if exists (select 1 from pg_namespace where nspname = 'extensions') then
     grant usage on schema extensions to vestiarion_tenant;
+    if not has_schema_privilege('vestiarion_tenant', 'extensions', 'USAGE') then
+      raise exception 'vestiarion_tenant has no USAGE on schema extensions, so digest() would not resolve for tenant requests';
+    end if;
   end if;
 end $$;
 
@@ -89,6 +104,13 @@ grant execute on function public.append_ledger_entry(uuid, text, text, text, tex
 grant execute on function public.advance_sim_day(uuid) to vestiarion_tenant;
 grant execute on function public.claim_payment_intent(uuid, text) to vestiarion_tenant;
 grant execute on function public.ledger_entries_for_targets(uuid, text[], text[]) to vestiarion_tenant;
+
+-- ALTER ROLE ... SET statement_timeout (above) only reaches the role
+-- PostgREST impersonates once PostgREST reloads its config; without this,
+-- every connection PostgREST already pooled would keep serving
+-- vestiarion_tenant with no statement_timeout until it happened to reload on
+-- its own.
+notify pgrst, 'reload config';
 
 -- Rollback (the app must be using the service role again first):
 -- do $$ declare t text; begin foreach t in array array['accounts','counterparties','invoices','milestones',
