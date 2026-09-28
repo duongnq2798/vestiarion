@@ -116,10 +116,12 @@ export function ledgerSigningKey(
 
   if (!config.allowGeneratedLedgerKey) {
     throw new LedgerSigningKeyError(
-      "This deployment has no ledger signing key and may not generate one. Set LEDGER_SIGNING_KEY " +
-        "to a PKCS8 Ed25519 PEM — the same key that signed the existing entries, or the chain " +
-        "stops verifying from here on. A key invented now would sign entries nobody could check " +
-        "afterwards and would be lost when this instance is replaced."
+      "This organization has no readable ledger signing key stored on it, and one may not be " +
+        "generated on demand. A key has to be stored on the organization — for the founding " +
+        "organization, `npm run org:adopt-env` — and it must be the same key that signed the " +
+        "existing entries, or the chain stops verifying from here on. A key invented now would " +
+        "sign entries nobody could check afterwards and would be lost when this instance is " +
+        "replaced."
     );
   }
 

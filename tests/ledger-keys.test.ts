@@ -214,14 +214,14 @@ describe("ledgerSigningKey — which key actually signs", () => {
     expect(calls.create).toBe(1);
   });
 
-  it("refuses to invent a key in production, naming the setting that fixes it", () => {
+  it("refuses to invent a key in production, naming how to fix it", () => {
     // A key invented here would sign entries nobody can verify afterwards and
     // would vanish with the instance. Failing loudly is the only safe answer,
-    // and the message has to say what to set.
+    // and the message has to say how to fix it.
     const { store, calls } = localStore(null);
 
     expect(() => ledgerSigningKey(config({ NODE_ENV: "production" }), store)).toThrow(
-      /LEDGER_SIGNING_KEY/
+      /org:adopt-env/
     );
     expect(calls.create).toBe(0);
   });

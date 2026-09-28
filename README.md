@@ -148,6 +148,26 @@ Sign in at `/login` with your email, then grant yourself ownership of the foundi
 npm run org:grant -- founding <your email> owner
 ```
 
+On a fresh database the founding organization has no ledger signing key yet — organizations no
+longer get one generated for free, so the first ledger-writing action (adding an invoice, running
+a day) fails with `LedgerSigningKeyError` until a key is stored on it. One-time setup:
+
+```bash
+node -e 'const c=require("crypto");const{publicKey,privateKey}=c.generateKeyPairSync("ed25519");require("fs").appendFileSync(".env.local","LEDGER_SIGNING_KEY=\""+privateKey.export({type:"pkcs8",format:"pem"})+"\"\n");console.log(c.createHash("sha256").update(publicKey.export({type:"spki",format:"der"})).digest("hex").slice(0,16));'
+npm run org:adopt-env -- founding --expect-key-id <id printed above>
+```
+
+The first line generates an Ed25519 key, appends it to `.env.local` as `LEDGER_SIGNING_KEY`
+without ever printing the private key, and prints only its id — the first 16 hex characters of
+SHA-256 over the public key's SPKI DER (`ledgerKeyId` in `src/lib/ledger-keys.ts`). The second
+line encrypts that key onto the founding organization's row (needs `VESTIARION_MASTER_KEYS`,
+above); `--expect-key-id` guards against storing the wrong key, and the command names the id it
+actually found if yours doesn't match. If `.env.local` needs the PEM on one line instead — a
+hosting dashboard's env var field, say — its newlines can be escaped as literal `\n` rather than
+quoted and multi-line; both forms are read the same way (`src/lib/platform/adopt.ts`). This
+one-time setup is only for a new, empty database: production's founding organization already has
+its key stored.
+
 Open `/o/founding/console` and add counterparties and invoices through the product. Each **Run day**
 click advances the demo clock and runs the full decision loop. Out of
 the box, payments are simulated against Arc's measured fee and latency profile ($0.0032, 2–5s) and
