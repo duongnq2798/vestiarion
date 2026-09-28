@@ -526,6 +526,31 @@ organization's data through the UI or the API.
    - **5b — members:** invitations with their email, the members page (change role, remove), the
      database rule that no one grants a role above their own, `last_active_at`, and the daily cleanup
      of abandoned sandboxes.
+     Decided on 2026-09-28 while planning it:
+     - Every membership change goes through a service-role function that is given the acting person
+       and checks their role itself (`invite_member`, `accept_invitation`, `change_member_role`,
+       `remove_member`, `revoke_invitation`). These functions are where "no one grants a role above
+       their own" lives:
+       - an owner may grant or change any role;
+       - an admin may grant or change only `approver` and `viewer`;
+       - accepting an invitation checks the inviter's role again, at that moment.
+     - The invitation email goes through Resend's HTTP API from the app, from
+       `no-reply@vestiarion.xyz`, when `RESEND_API_KEY` is set. The invitation link is always shown
+       once to the person who sent it, so an invitation works before email is configured and when a
+       message is lost. Accepting still requires signing in with the invited address.
+     - An organization has at most 20 open invitations. Inviting the same address again replaces the
+       open invitation for it.
+     - Accepting is a POST from a page that needs a session, so a mail scanner that follows the link
+       does not use the invitation up.
+     - `last_active_at` is refreshed on member page views and actions, at most hourly. The update in
+       the database is conditional, and each server instance also remembers its last refresh.
+     - The daily cleanup is a GitHub Actions schedule calling a bearer-protected route.
+       `delete_sandbox_org(p_org_id, p_inactive_before)` refuses a live organization and one active
+       since the cutoff. It removes the organization's rows table by table, its ledger included,
+       because the organization it belonged to no longer exists.
+     - The sandbox cycle cap moves into `begin_cycle_run(p_org_id, p_daily_cap, …)`, which takes a
+       per-organization lock, counts today's runs and opens the run in one transaction. That closes
+       the check-then-act gap left by step 5a.
 
 Each step lands as its own pull request, with production measured after it deploys.
 
