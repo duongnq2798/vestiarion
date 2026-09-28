@@ -34,13 +34,17 @@ export type TenantTable = (typeof TENANT_TABLES)[number];
 
 export const TENANT_RPCS = [
   "append_ledger_entry", "advance_sim_day", "claim_payment_intent", "ledger_entries_for_targets",
+  "begin_cycle_run",
 ] as const;
 export type TenantRpc = (typeof TENANT_RPCS)[number];
 
 export const PLATFORM_TABLES = ["orgs", "memberships", "invitations"] as const;
 export type PlatformTable = (typeof PLATFORM_TABLES)[number];
 
-export const PLATFORM_RPCS = ["create_org"] as const;
+export const PLATFORM_RPCS = [
+  "create_org", "invite_member", "accept_invitation", "change_member_role", "remove_member",
+  "revoke_invitation", "org_members", "touch_org_activity", "delete_sandbox_org",
+] as const;
 export type PlatformRpc = (typeof PLATFORM_RPCS)[number];
 
 type Row = Record<string, unknown>;

@@ -35,6 +35,7 @@ describe("requiresSession", () => {
     ["/o/founding/console", true],
     ["/o/founding", true],
     ["/onboarding", true],
+    ["/invite/x", true],
     ["/", false],
     ["/login", false],
     ["/auth/callback", false],
@@ -53,6 +54,10 @@ describe("loginRedirectFor", () => {
 
   it("lets a signed-in visitor through", () => {
     expect(loginRedirectFor("/o/founding/audit", "", true)).toBeNull();
+  });
+
+  it("sends a signed-out visitor of an invitation link to login, remembering the token", () => {
+    expect(loginRedirectFor("/invite/x", "", false)).toBe("/login?next=%2Finvite%2Fx");
   });
 
   it("never redirects a public page", () => {

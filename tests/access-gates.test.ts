@@ -79,7 +79,7 @@ describe("every server action", () => {
       (file) => /\.(ts|tsx)$/.test(file) && /^\s*["']use server["']/.test(read(file))
     );
     const outside = withDirective.map(rel).filter((file) => !file.startsWith("src/app/actions/"));
-    expect(outside.sort()).toEqual(["src/app/login/actions.ts", "src/app/onboarding/actions.ts"]);
+    expect(outside.sort()).toEqual(["src/app/invite/actions.ts", "src/app/login/actions.ts", "src/app/onboarding/actions.ts"]);
   });
 
   const actions = ACTION_FILES.flatMap((file) =>
@@ -117,6 +117,29 @@ describe("every onboarding action", () => {
 
   it.each(actions.map((action) => [action.name, action.body]))("%s awaits getSessionUser first", (_name, body) => {
     expect(awaitedNames(body)[0]).toBe("getSessionUser");
+  });
+});
+
+describe("every invite action", () => {
+  // Accepting an invitation happens before the visitor is necessarily a
+  // member of the organization it names, so the gate is the session, exactly
+  // as for the onboarding actions above.
+  const INVITE_ACTIONS = path.join(ROOT, "src", "app", "invite", "actions.ts");
+  const actions = existsSync(INVITE_ACTIONS) ? exportedAsyncFunctions(read(INVITE_ACTIONS)) : [];
+
+  it("exists — the list is not empty", () => {
+    expect(actions.map((action) => action.name)).toContain("acceptInvitationAction");
+  });
+
+  it.each(actions.map((action) => [action.name, action.body]))("%s awaits getSessionUser first", (_name, body) => {
+    expect(awaitedNames(body)[0]).toBe("getSessionUser");
+  });
+});
+
+describe("the invite acceptance page", () => {
+  it("does not import acceptInvitation — only the action does", () => {
+    const source = read(path.join(ROOT, "src", "app", "invite", "[token]", "page.tsx"));
+    expect(source).not.toMatch(/acceptInvitation/);
   });
 });
 

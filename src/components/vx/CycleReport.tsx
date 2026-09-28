@@ -6,17 +6,26 @@ import { entryOutcome, pad } from "./AuditLedger";
 import { DOMAIN_CODE, DomainGlyph, OutcomeGlyph } from "./Glyphs";
 import { Label } from "./Primitives";
 
+/**
+ * The header, pinned as a pure function. Its count is every row the report
+ * lists, the closing `cycle_complete` row included, so the header always
+ * agrees with the visible list.
+ */
+export function cycleReportHeading(cycleName: string, rows: ReadonlyArray<unknown>): string {
+  const n = rows.length;
+  return `${cycleName}: the agent logged ${n} ${n === 1 ? "entry" : "entries"}`;
+}
+
 export function CycleReport({ entries, day, since, clockMode, completedAt, orgSlug }: { entries: LedgerEntry[]; day: number; since: number; clockMode: CycleClockMode; completedAt: string | null; orgSlug: string }) {
   const rows = entries.filter((entry) => entry.seq > since).sort((a, b) => a.seq - b.seq);
   if (rows.length === 0) return null;
-  const decisions = rows.filter((entry) => entry.domain !== "system");
   const cycleName = clockMode === "simulate" ? `Day ${day}` : completedAt ? new Date(completedAt).toLocaleString() : "Wall-clock cycle";
   return (
     <section aria-label={`${cycleName} cycle`} className="mb-6 rounded-lg border border-agent-line bg-surface p-4 sm:p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <Label className="text-agent">Cycle complete</Label>
-          <h2 className="mt-1 text-xl font-semibold tracking-tight text-ink">{cycleName}: the agent made {decisions.length} decisions</h2>
+          <h2 className="mt-1 text-xl font-semibold tracking-tight text-ink">{cycleReportHeading(cycleName, rows)}</h2>
         </div>
         <Link href={orgHref(orgSlug, `/audit?since=${since}#seq-${rows.at(-1)!.seq}`)} className="text-[0.8125rem] text-agent hover:underline">#{pad(rows[0].seq)}–#{pad(rows.at(-1)!.seq)} in the audit log →</Link>
       </div>

@@ -65,7 +65,10 @@ under a row lock on `orgs` so two concurrent demotions of different owners canno
 owner remaining and leave zero — the same write-skew shape `create_org`'s advisory lock avoids on
 the count side. Because memberships cascade from `auth.users`, deleting the account of a person who
 is an organization's sole owner is refused. To delete them, first give that organization another
-owner, or delete the organization.
+owner, or delete the organization. Any other account can be deleted, and deleting it keeps the
+workspaces it created and the members it invited: migration `0023` gives every foreign key to
+`auth.users` a delete action, so `orgs.created_by`, `memberships.invited_by`, `invoices.created_by`
+and `milestones.created_by` become null, and the invitations the person sent are deleted with them.
 
 **The permission map** (spec §7) lives as data in `src/lib/auth/roles.ts` — `PERMISSIONS` maps each
 of `workspace.read`, `agent.pause`, `approval.decide`, `records.write`, `agent.run_cycle`,
@@ -73,14 +76,47 @@ of `workspace.read`, `agent.pause`, `approval.decide`, `records.write`, `agent.r
 at the boundary through `authorize(slug, permission)` (`src/lib/auth/authorize.ts`), which
 re-derives the caller's membership and role from the session rather than trusting anything the form
 claims; a page can call the read-only `viewerCan` to decide whether to render a control at all.
-Today's actions call it for `records.write` (`src/app/actions/intake.ts`,
-`src/app/actions/milestones.ts`) and `agent.run_cycle` (`src/app/actions/agent.ts`) — both need
-`owner` or `admin` — which is the whole map §7 currently has a caller for. The remaining
-permissions — `workspace.read`, `agent.pause`, `approval.decide`, `agent.resume`, `members.manage`,
-and `org.administer` — and `canAssignRole`'s rule that an admin may grant `approver` or `viewer` but
-nothing at its own rank or above while only an owner assigns `admin` or `owner`, are defined in
-`roles.ts` ahead of the features that will call them: pausing/resuming the agent and deciding
-approvals (Tier 1), and member invitation and management, still to come.
+Actions call it for `records.write` (`src/app/actions/intake.ts`, `src/app/actions/milestones.ts`),
+`agent.run_cycle` (`src/app/actions/agent.ts`), and `members.manage` (`src/app/actions/members.ts`,
+for inviting, changing a role, revoking an invitation, and removing someone other than yourself —
+`owner` and `admin` hold it; leaving a workspace yourself needs only `workspace.read`, since it is
+open to every member). The remaining permissions — `workspace.read` (beyond the leaving case above),
+`agent.pause`, `agent.resume`, `approval.decide`, and `org.administer` — and `canAssignRole`'s rule
+that an admin may grant `approver` or `viewer` but nothing at its own rank or above while only an
+owner assigns `admin` or `owner`, are defined in `roles.ts` ahead of the features that will call
+them: pausing/resuming the agent and deciding approvals (Tier 1).
+
+**Members and invitations** (spec §7, §10 step 5b) go through service-role-only functions in
+migration `0021`, each told who is acting and re-deriving that person's role inside its own
+transaction — `src/lib/platform/members.ts` wraps them, adds the signed ledger entry, and never
+passes an email address into it (`detail.by` and `detail.member` carry user ids only). `owner` may
+grant or change any role; `admin` may grant or change only `approver` and `viewer`; no one else may
+do either — enforced identically by `can_assign_role` in the database and `canAssignRole` in
+`roles.ts`. Inviting (`invite_member`) generates 32 random bytes, base64url-encoded, for the link,
+and stores only the `sha256` hex of that token (`invitations.token_hash`); the raw token never
+reaches the database. An invitation expires 7 days after creation, and an organization holds at most
+20 open invitations at a time. Inviting the same address again withdraws the older invitation, and
+revoking one withdraws it too: a withdrawn invitation is kept as a row with `revoked_at` set, never
+deleted, and its link reads as unknown. Every invitation created counts toward a limit of 50 per
+organization per day, withdrawn ones included (`invitation_rate_limited`), which bounds the email a
+workspace can send. With `RESEND_API_KEY` set, `sendEmail` (`src/lib/email/send.ts`)
+sends the link through Resend; without it, `inviteMemberAction` returns the link to the inviter to
+share directly, shown once. Opening `/invite/<token>` (`src/app/invite/[token]/page.tsx`) has no
+side effect — it only previews the invitation; accepting is a separate submit (`accept_invitation`)
+that requires signing in with the invited address first, and fails with `invitation_email_mismatch`
+otherwise. The members page (`/o/[slug]/members`) lists members and open invitations through
+`org_members`, and lets `owner`/`admin` change a role, revoke an invitation, or remove a member; any
+member can leave (`remove_member` with `p_actor = p_user_id`), and the `memberships_keep_an_owner`
+trigger (`0020`) still refuses to remove or demote a workspace's last owner.
+
+**Abandoned sandboxes** are cleaned up daily. A sandbox organization's `last_active_at` is touched
+(at most once an hour) on membership-gated page views; one whose `last_active_at` is more than 60
+days old is deleted — `delete_sandbox_org` (migration `0022`) refuses outright if the organization is
+not a sandbox, and re-checks `last_active_at` against the cutoff before deleting, so an organization
+that became active between the listing and the delete survives. A `live` organization is never
+deleted automatically. `POST /api/platform/cleanup`, bearer-guarded the same way as the cron, lists
+and deletes candidates; `.github/workflows/sandbox-cleanup.yml` calls it once a day and on manual
+dispatch.
 
 **The cron** (`POST /api/agent/tick`) no longer runs one configured business.
 `runLiveOrganizations` (`src/lib/agent/cron.ts`) lists every organization in `mode = 'live'` and,
@@ -90,8 +126,9 @@ isolation the cycle already had, lifted one level). The endpoint reports
 `{ organizations: [{ slug, ok, lines } | { slug, ok: false, error }] }`, `200` when every
 organization succeeded and `500` when any failed. Sandbox organizations are never in this list: a
 member runs their own cycles from the console instead, capped at `SANDBOX_DAILY_CYCLES` (20) per
-organization per UTC day, counted from `cycle_runs` (`src/lib/agent/sandbox-cap.ts`) so the cap
-holds across serverless instances rather than resetting per cold start.
+organization per UTC day. The cap is enforced inside `begin_cycle_run` (migration 0022), which
+opens the `cycle_runs` row under a per-organization lock and counts the day's runs in the same
+transaction, so it holds across serverless instances rather than resetting per cold start.
 
 ## Read API
 

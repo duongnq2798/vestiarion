@@ -25,7 +25,9 @@ export async function POST(request: Request) {
     // Every `live` organization gets its own cycle, in its own scope; one
     // organization's failure does not stop the rest (§4.4). Sandbox
     // organizations are not in the cron — their cycles run from the console,
-    // capped by sandboxCyclesUsedToday (§10 step 5a).
+    // capped inside begin_cycle_run via runAgentCycle's dailyCap (§10 step
+    // 5a). Passing none here is correct: this path only ever runs live
+    // organizations, which begin_cycle_run never caps.
     //
     // Live organizations run sequentially in this one invocation, so the
     // tick's wall time is the sum of their cycles, not the slowest one.

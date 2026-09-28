@@ -1,0 +1,36 @@
+import { describe, expect, it } from "vitest";
+import { balanceTileCopy } from "@/components/vx/Treasury";
+
+/**
+ * The balance tile's label and sub-line, pinned as a pure function so the
+ * sandbox-vs-live wording is testable without rendering the component. A
+ * sandbox workspace's funds are always simulated money, never on-chain — the
+ * label must say so regardless of the simulated reserve amount, which is
+ * what previously read "Balance on-chain" even in a sandbox.
+ */
+describe("balanceTileCopy", () => {
+  it("labels a sandbox balance as simulated regardless of the simulated reserve", () => {
+    expect(balanceTileCopy("sandbox", 0)).toEqual({
+      label: "Balance (simulated)",
+      sub: "Sandbox workspace: these funds are simulated, nothing is on-chain",
+    });
+    expect(balanceTileCopy("sandbox", 500)).toEqual({
+      label: "Balance (simulated)",
+      sub: "Sandbox workspace: these funds are simulated, nothing is on-chain",
+    });
+  });
+
+  it("keeps the live on-chain label, with a fixed sub-line when nothing is simulated", () => {
+    expect(balanceTileCopy("live", 0)).toEqual({
+      label: "Balance on-chain",
+      sub: "All funds shown are on-chain",
+    });
+  });
+
+  it("keeps the live on-chain label, deferring to the caller's own sub-line when a reserve is simulated", () => {
+    expect(balanceTileCopy("live", 500)).toEqual({
+      label: "Balance on-chain",
+      sub: null,
+    });
+  });
+});

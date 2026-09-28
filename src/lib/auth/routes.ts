@@ -8,7 +8,9 @@ export const DEFAULT_AFTER_LOGIN = "/onboarding";
 const BASE = "http://vestiarion.invalid";
 
 export function requiresSession(pathname: string): boolean {
-  return pathname === "/onboarding" || pathname === "/o" || pathname.startsWith("/o/");
+  return (
+    pathname === "/onboarding" || pathname === "/o" || pathname.startsWith("/o/") || pathname.startsWith("/invite/")
+  );
 }
 
 /** The login URL for a signed-out request to a protected page, or null to let it through. */

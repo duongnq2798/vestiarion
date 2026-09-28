@@ -83,7 +83,7 @@ export default async function DashboardPage({
         {since != null && <CycleReport entries={cycleEntries} day={dashboardStats.day} since={since} clockMode={dashboardStats.clockMode} completedAt={dashboardStats.lastCycleAt} orgSlug={slug} />}
 
         <div className="mb-8 grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 xl:grid-cols-4">
-          <BalanceTile accounts={accounts} />
+          <BalanceTile accounts={accounts} mode={access.membership.mode} />
           <StatTile label="Paid out to date" sub={`${dashboardStats.onchainTransfers} settled on-chain`}>
             <Money value={dashboardStats.totalPaidOut} />
           </StatTile>
