@@ -65,6 +65,10 @@ src/lib/api/              The v1 read contract: one envelope, coded errors,
                            opaque cursors
 src/lib/insights.ts       Typed, server-only query boundary for measured
                            transfer, cycle, balance, and screening history
+src/components/ui/        The design system: Radix-based primitives styled from
+                           the tokens in globals.css — buttons, fields, menus,
+                           dialogs, sheets, tabs, toasts, the command palette.
+                           /design shows every one in development
 src/components/vx/        Shared light-theme interface primitives and D3
   Brand.tsx                Reusable vector Treasury Seal brand mark
   nav.ts                   The workspace's sections, in groups: one list feeds
