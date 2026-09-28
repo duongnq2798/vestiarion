@@ -154,7 +154,11 @@ export class SupabasePaymentIntentStore implements PaymentIntentStore {
       .rpc("claim_payment_intent", { p_idempotency_key: idempotencyKey })
       .maybeSingle<PaymentIntentRow>();
     if (result.error) throw new Error(result.error.message);
-    return result.data ? fromRow(result.data) : null;
+    // The function returns its composite type even when the UPDATE matched
+    // nothing, and PostgREST sends that as an object whose every field is
+    // null. Only a row with an id is a claim; anything else means another
+    // cycle holds it, and treating it as ours would transfer twice (R20).
+    return result.data?.id ? fromRow(result.data) : null;
   }
 
   async recordResult(idempotencyKey: string, result: TransferResult): Promise<PaymentIntent> {
