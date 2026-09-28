@@ -42,7 +42,7 @@ Application rollback: revert the Phase 6 commit. This reintroduces the fixed led
 
 Database rollback: the target-query function and its two expression indexes are read-only accelerators. They can remain safely. If removal is required, revoke and drop `ledger_entries_for_targets(text[], text[])`, then drop the two target indexes; no business data changes.
 
-Fixture recovery: `npm run fixture:guardrail` is additive and writes an immutable ledger receipt. If the explicitly named fixture rows must be removed from a disposable demo database, export their ids first and retain the ledger entry as the record that the probe happened. Never run broad deletes against a real book.
+Fixture recovery: `npm run fixture:guardrail -- <org-slug>` is additive and writes an immutable ledger receipt. If the explicitly named fixture rows must be removed from a disposable demo database, export their ids first and retain the ledger entry as the record that the probe happened. Never run broad deletes against a real book.
 
 ## Phase 7 — execution and cycle telemetry
 

@@ -166,7 +166,7 @@ describe("ledgerSigningKeyFromConfig", () => {
 
   it("throws on malformed key material", () => {
     expect(() => ledgerSigningKeyFromConfig(config({ LEDGER_SIGNING_KEY: "not a pem" }))).toThrow(
-      /LEDGER_SIGNING_KEY/
+      /^The ledger signing key is not a readable private key: /
     );
   });
 
@@ -174,7 +174,7 @@ describe("ledgerSigningKeyFromConfig", () => {
     const key = keypair();
     expect(() =>
       ledgerSigningKeyFromConfig(config({ LEDGER_SIGNING_KEY: key.publicPem }))
-    ).toThrow(/LEDGER_SIGNING_KEY/);
+    ).toThrow(/^The ledger signing key is not a readable private key: /);
   });
 });
 
@@ -370,14 +370,14 @@ describe("ledgerReadKeys — the read path never throws over a bad key", () => {
     expect(keys.active).not.toBeNull();
     expect(accepts(keys.active!, good.privateKey)).toBe(true);
     expect(keys.warnings).toHaveLength(1);
-    expect(keys.warnings[0]).toMatch(/LEDGER_SIGNING_KEY/);
+    expect(keys.warnings[0]).toMatch(/^The ledger signing key is not a readable private key: /);
   });
 
   it("reports an unreadable signing key even when nothing else is configured", () => {
     const keys = ledgerReadKeys(config({ LEDGER_SIGNING_KEY: "not a pem" }));
 
     expect(keys.active).toBeNull();
-    expect(keys.warnings.join(" ")).toMatch(/LEDGER_SIGNING_KEY/);
+    expect(keys.warnings.join(" ")).toMatch(/The ledger signing key is not a readable private key: /);
   });
 
   it("reports an unreadable public key instead of throwing", () => {

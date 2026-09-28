@@ -14,8 +14,8 @@ Built for the [Tameion Agents Hackathon](https://tameion.thecanteenapp.com) (Can
 ## What it does
 
 Vestiarion runs a configured business's treasury through one decision loop, the **agent cycle**.
-`BUSINESS_NAME` controls the identity shown in the product; no customer name is hard-coded into
-the interface:
+Each organization's own name (`orgs.name`) is the identity shown in the product; no customer name
+is hard-coded into the interface:
 
 1. **Compliance (RFB5)** — the whole counterparty book is re-screened every cycle, not checked
    once at onboarding. A hit tiers the payment limit down instead of a blunt yes/no, and the tier
@@ -153,12 +153,13 @@ longer get one generated for free, so the first ledger-writing action (adding an
 a day) fails with `LedgerSigningKeyError` until a key is stored on it. One-time setup:
 
 ```bash
-node -e 'const c=require("crypto");const{publicKey,privateKey}=c.generateKeyPairSync("ed25519");require("fs").appendFileSync(".env.local","LEDGER_SIGNING_KEY=\""+privateKey.export({type:"pkcs8",format:"pem"})+"\"\n");console.log(c.createHash("sha256").update(publicKey.export({type:"spki",format:"der"})).digest("hex").slice(0,16));'
+node -e 'const c=require("crypto");const{publicKey,privateKey}=c.generateKeyPairSync("ed25519");require("fs").appendFileSync(".env.local","\nLEDGER_SIGNING_KEY=\""+privateKey.export({type:"pkcs8",format:"pem"})+"\"\n");console.log(c.createHash("sha256").update(publicKey.export({type:"spki",format:"der"})).digest("hex").slice(0,16));'
 npm run org:adopt-env -- founding --expect-key-id <id printed above>
 ```
 
-The first line generates an Ed25519 key, appends it to `.env.local` as `LEDGER_SIGNING_KEY`
-without ever printing the private key, and prints only its id — the first 16 hex characters of
+The first line generates an Ed25519 key, appends it to `.env.local` as `LEDGER_SIGNING_KEY` on a
+line of its own — even when the file does not end in a newline — without ever printing the
+private key, and prints only its id — the first 16 hex characters of
 SHA-256 over the public key's SPKI DER (`ledgerKeyId` in `src/lib/ledger-keys.ts`). The second
 line encrypts that key onto the founding organization's row (needs `VESTIARION_MASTER_KEYS`,
 above); `--expect-key-id` guards against storing the wrong key, and the command names the id it
@@ -312,8 +313,10 @@ which produced each entry:
 Everything the agent reasons about lives in five tables (`accounts`, `counterparties`,
 `invoices`, `milestones`, plus the ledger). To point Vestiarion at a real business:
 
-- Set `BUSINESS_NAME`, then add vendors, contractors, and clients on `/counterparties`. Their
-  configured payment limit is stored separately from the authority derived by screening.
+- The workspace name shown in the product is the organization's own, `orgs.name` (the founding
+  organization starts as "Vestiarion workspace"; `BUSINESS_NAME` no longer changes it). Add
+  vendors, contractors, and clients on `/counterparties`. Their configured payment limit is stored
+  separately from the authority derived by screening.
 - Add payables or receivables on `/invoices`, or import up to 200 rows from CSV after inspecting a
   local preview. Amounts that cannot fit exact six-decimal USDC precision are rejected rather than
   rounded. Every accepted record is written to the signed ledger as a human action.

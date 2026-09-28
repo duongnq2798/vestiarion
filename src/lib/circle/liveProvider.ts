@@ -101,7 +101,7 @@ export class LiveProvider implements ChainProvider {
     );
     if (!row.circle_wallet_id) {
       throw new Error(
-        `Account ${accountId} has no circle_wallet_id — run \`npm run bootstrap:circle\` first`
+        `Account ${accountId} has no circle_wallet_id — run \`npm run bootstrap:circle -- <org-slug>\` first`
       );
     }
     return { ...row, walletId: row.circle_wallet_id };
@@ -123,7 +123,7 @@ export class LiveProvider implements ChainProvider {
   async transfer(params: TransferParams): Promise<TransferResult> {
     if (params.toAddress.startsWith("sim:")) {
       throw new Error(
-        `Counterparty has no on-chain address (${params.toAddress}). Run \`npm run bootstrap:circle\` to give every counterparty a wallet.`
+        `Counterparty has no on-chain address (${params.toAddress}). Run \`npm run bootstrap:circle -- <org-slug>\` to give every counterparty a wallet.`
       );
     }
 

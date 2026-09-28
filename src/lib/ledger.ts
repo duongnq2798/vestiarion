@@ -31,11 +31,12 @@ import {
  * read-then-write window in which two agent cycles could observe the same
  * `prev_hash` and fork the chain.
  *
- * A deployment's signing key comes from its configuration and is held only in
- * memory. Verifying needs only the public half, so a host that serves the
- * audit trail without appending to it holds no secret at all. In a real
- * deployment the private key belongs in a KMS, which would replace
- * `ledgerSigningKey`'s source and nothing else.
+ * Each organization signs with its own key, stored encrypted on its `orgs`
+ * row and decrypted into the configuration of its scope, where it is held
+ * only in memory (spec §5.4). Verifying needs only the public half, which is
+ * derived from that same stored key. In a real deployment the private key
+ * belongs in a KMS, which would replace where `orgConfig` reads it from and
+ * nothing else.
  */
 
 const GENESIS_HASH = "0".repeat(64);

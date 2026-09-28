@@ -88,10 +88,13 @@ export interface VestiarionConfig {
    */
   ledgerPublicKey?: string;
   /**
-   * Whether this deployment may sign with a key it generated itself. True in a
-   * development checkout, where a throwaway key keeps `npm run dev` working
-   * with no setup. False in production, where an invented key would sign
-   * entries nobody can verify afterwards and would leave with the instance.
+   * Whether `ledgerSigningKey()` may sign with a key its local store creates.
+   * Inside an organization it is always false — `orgConfig` sets it, because
+   * an organization signs only with the key stored on it (spec §5.4) — and
+   * the ledger's own store never holds or creates a key anyway, so there it
+   * only selects which error a missing key throws. `configFromEnv` still
+   * derives it from NODE_ENV; no application code passes a store that can
+   * create a key.
    */
   allowGeneratedLedgerKey: boolean;
   /**

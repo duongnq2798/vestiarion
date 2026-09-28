@@ -87,10 +87,11 @@ export default async function AuditPage({ params, searchParams }: AuditPageProps
             <pre className="mt-3 overflow-x-auto whitespace-pre-wrap rounded-md bg-ground p-3 font-mono text-ink-2">{publicKey}</pre>
           ) : (
             <p className="mt-3 rounded-md bg-ground p-3">
-              This deployment declares no ledger key, so signatures on the entries below cannot be
-              checked here. Set <span className="font-mono text-ink-2">LEDGER_PUBLIC_KEY</span> to the
-              public half of the key that signed them. Nothing about the chain is known to be wrong —
-              it is unverified, which is a different statement.
+              This organization has no readable ledger key, so signatures on the entries below cannot
+              be checked here. The key that signed them has to be stored on the organization — for the
+              founding organization, <span className="font-mono text-ink-2">npm run org:adopt-env</span>.
+              Nothing about the chain is known to be wrong — it is unverified, which is a different
+              statement.
             </p>
           )}
         </details>

@@ -100,7 +100,7 @@ a bad key: it verifies with whatever it could read and reports what it could
 not in `warnings`:
 
 ```json
-{"data":{"valid":true,"checkedEntries":105,"warnings":["LEDGER_SIGNING_KEY is not a readable private key: error:1E08010C:DECODER routines::unsupported"]}}
+{"data":{"valid":true,"checkedEntries":105,"warnings":["The ledger signing key is not a readable private key: error:1E08010C:DECODER routines::unsupported"]}}
 ```
 
 When a broken key is the reason no key is available at all, `reason` names it

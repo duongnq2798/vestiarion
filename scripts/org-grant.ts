@@ -24,7 +24,7 @@ async function main() {
 
   if (slug !== FOUNDING_ORG_SLUG) {
     throw new Error(
-      `Until data is scoped per organization (Plan 2), only the founding organization can have members; refusing to grant a role in ${slug}.`
+      `Until self-serve onboarding and invitations arrive (spec §10, rollout step 5), only the founding organization can have members; refusing to grant a role in ${slug}.`
     );
   }
 
