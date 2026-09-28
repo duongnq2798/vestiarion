@@ -101,6 +101,16 @@ describe("submittedBy — which submit button sent the form", () => {
     expect(submittedBy(data, "intent", "submit")).toBe(false);
   });
 
+  it("a named button without a value is not the sender when its sibling’s value was sent", () => {
+    expect(submittedBy(data, "intent", undefined)).toBe(false);
+  });
+
+  it("a named button without a value is the sender when the empty value was sent", () => {
+    const empty = new FormData();
+    empty.set("intent", "");
+    expect(submittedBy(empty, "intent", undefined)).toBe(true);
+  });
+
   it("is no button while nothing is being submitted", () => {
     expect(submittedBy(null, "intent", "draft")).toBe(false);
   });

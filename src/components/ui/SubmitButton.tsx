@@ -5,13 +5,15 @@ import { Button, type ButtonProps } from "./Button";
 
 /**
  * Whether the submission in `data` was sent by the button with this `name`
- * and `value`. A button without a name cannot be told apart, so it counts as
- * the sender of any submission.
+ * and `value`, following how a form actually submits it: a button without a
+ * name cannot be told apart, so it counts as the sender of any submission;
+ * a named button with no `value` submits the empty string, so it is the
+ * sender only when `data` holds `name=""`.
  */
 export function submittedBy(data: FormData | null, name: string | undefined, value: ButtonProps["value"]): boolean {
   if (!data) return false;
-  if (name == null || value == null) return true;
-  return data.get(name) === String(value);
+  if (name == null) return true;
+  return data.get(name) === String(value ?? "");
 }
 
 export type SubmitButtonProps = Omit<ButtonProps, "type" | "asChild"> & {
