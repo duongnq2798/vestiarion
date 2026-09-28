@@ -1,6 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { Geist, Geist_Mono, Newsreader } from "next/font/google";
+import { Toaster } from "@/components/ui/Toaster";
+import { TooltipProvider } from "@/components/ui/Tooltip";
+import { THEME_COLOR } from "@/components/ui/tokens";
 import "./globals.css";
 
 const sans = Geist({
@@ -39,7 +42,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#fffefa",
+  themeColor: THEME_COLOR,
   colorScheme: "light",
 };
 
@@ -57,7 +60,10 @@ export default function RootLayout({ children }: RootLayoutProps) {
         >
           Skip to content
         </a>
-        {children}
+        <TooltipProvider delayDuration={300} skipDelayDuration={150}>
+          {children}
+        </TooltipProvider>
+        <Toaster />
       </body>
     </html>
   );
