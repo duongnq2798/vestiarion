@@ -67,8 +67,14 @@ src/lib/insights.ts       Typed, server-only query boundary for measured
                            transfer, cycle, balance, and screening history
 src/components/vx/        Shared light-theme interface primitives and D3
   Brand.tsx                Reusable vector Treasury Seal brand mark
+  nav.ts                   The workspace's sections, in groups: one list feeds
+                             the sidebar, the mobile drawer and page titles
+  AppFrame.tsx             Workspace navigation, drawn by the /o/[slug] layout:
+                             a sidebar from `lg` up, a top bar and drawer below
   InsightsCharts.tsx       scales/shapes rendered declaratively through React
-src/app/icon.svg          Matching app icon / favicon asset
+src/app/icon.svg          The app icon. `node scripts/build-icons.mjs` renders it
+                           to favicon.ico, apple-icon.png and the web manifest's
+                           icons; re-run it whenever the icon changes
 src/lib/ledger.ts         Hash-chained, Ed25519-signed append-only audit log
 src/lib/compliance.ts     Continuous counterparty screening + risk tiering
 src/lib/circle/           ChainProvider interface, three implementations:
@@ -133,8 +139,9 @@ a business and you get your own **sandbox** workspace on the spot — its own Ed
 key, generated and encrypted with no manual step, an `Operating (simulated)` account holding 10,000
 simulated USDC, an empty `Reserve (simulated)` account, and a signed `org_created` entry as the
 first line of its ledger. One person can create up to 3 workspaces this way; a setup that fails partway
-is rolled back rather than left half-built. The header's **Workspaces** link (`/onboarding?new`)
-lists the workspaces you belong to and lets you create another.
+is rolled back rather than left half-built. The workspace switcher at the top of the navigation
+lists the workspaces you belong to and moves between them; its **Create workspace** and **All
+workspaces** links (`/onboarding?new`) let you create another.
 
 Every member of a workspace has one role. **Owner** and **admin** add counterparties, invoices, and
 milestones, and can run a cycle by hand; **approver** and **viewer** read everything — the console,

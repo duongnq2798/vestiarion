@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { orgHref } from "@/lib/auth/org-paths";
 import type { LedgerEntry } from "@/lib/ledger";
 import type { CycleClockMode } from "@/lib/clock";
@@ -17,7 +18,7 @@ export function CycleReport({ entries, day, since, clockMode, completedAt, orgSl
           <Label className="text-agent">Cycle complete</Label>
           <h2 className="mt-1 text-xl font-semibold tracking-tight text-ink">{cycleName}: the agent made {decisions.length} decisions</h2>
         </div>
-        <a href={orgHref(orgSlug, `/audit?since=${since}#seq-${rows.at(-1)!.seq}`)} className="text-[0.8125rem] text-agent hover:underline">#{pad(rows[0].seq)}–#{pad(rows.at(-1)!.seq)} in the audit log →</a>
+        <Link href={orgHref(orgSlug, `/audit?since=${since}#seq-${rows.at(-1)!.seq}`)} className="text-[0.8125rem] text-agent hover:underline">#{pad(rows[0].seq)}–#{pad(rows.at(-1)!.seq)} in the audit log →</Link>
       </div>
       <ol className="mt-4 divide-y divide-line rounded-md border border-line">
         {rows.map((entry, index) => {

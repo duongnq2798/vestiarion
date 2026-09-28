@@ -19,14 +19,14 @@ export default function MilestoneVerification({ milestoneId, verified, disabled,
           minLength={3}
           maxLength={280}
           placeholder={verified ? "Reason for revoking verification" : "Evidence checked or approver note"}
-          className="h-9 w-full rounded-md border border-line-strong bg-surface px-3 text-sm text-ink outline-none placeholder:text-ink-3 focus:border-agent"
+          className="h-11 w-full rounded-md border border-line-strong bg-surface px-3 text-base text-ink outline-none placeholder:text-ink-3 focus:border-agent sm:h-9 sm:text-sm"
         />
       </label>
       <button
         name="intent"
         value={verified ? "revoke" : "verify"}
         disabled={pending || disabled}
-        className="h-9 shrink-0 rounded-md border border-line-strong px-3 text-sm font-medium text-ink hover:bg-raised disabled:opacity-60"
+        className="h-11 shrink-0 rounded-md border border-line-strong px-3 text-sm font-medium text-ink hover:bg-raised disabled:opacity-60 sm:h-9"
       >
         {pending ? "Recording…" : verified ? "Revoke manually" : "Verify manually"}
       </button>

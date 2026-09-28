@@ -11,18 +11,19 @@ export default function LoginForm({ next }: { next: string }) {
     <form action={action} className="space-y-3">
       <input type="hidden" name="next" value={next} />
       <label className="block text-sm font-medium text-ink" htmlFor="email">Work email</label>
+      {/* 16px below `sm`: iOS zooms the page into any smaller field it focuses. */}
       <input
         id="email"
         name="email"
         type="email"
         autoComplete="email"
         required
-        className="w-full rounded-md border border-line bg-ground px-3 py-2 text-sm text-ink"
+        className="h-11 w-full rounded-xl border border-line-strong bg-ground px-3 text-base text-ink outline-none focus:border-agent focus:ring-2 focus:ring-agent-soft sm:text-sm"
       />
       <button
         type="submit"
         disabled={pending}
-        className="w-full rounded-md bg-ink px-3.5 py-2 text-sm font-medium text-ground disabled:opacity-70"
+        className="brand-shadow h-11 w-full rounded-xl bg-agent px-3.5 text-sm font-semibold text-on-agent transition-transform hover:-translate-y-0.5 disabled:translate-y-0 disabled:opacity-70"
       >
         {pending ? "Sending…" : "Email me a sign-in link"}
       </button>

@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+import Link from "next/link";
 import AgentControls from "@/components/AgentControls";
 import InvoiceCsvImport from "@/components/intake/InvoiceCsvImport";
 import InvoiceIntake from "@/components/intake/InvoiceIntake";
@@ -5,6 +7,7 @@ import { DecisionCard } from "@/components/vx/DecisionCard";
 import { invoiceDecision } from "@/components/vx/map";
 import { SectionHead } from "@/components/vx/Primitives";
 import { EmptyState, PageHead, ProductShell } from "@/components/vx/Shell";
+import { sectionTitle } from "@/components/vx/nav";
 import { viewerCan } from "@/lib/auth/authorize";
 import { requireMembership } from "@/lib/auth/membership";
 import { orgHref } from "@/lib/auth/org-paths";
@@ -14,6 +17,8 @@ import { listLedgerEntries, listLedgerEntriesForTargets } from "@/lib/ledger";
 import { listCounterparties, listInvoices, stats } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: sectionTitle("invoices") };
 
 type InvoiceSearchParams = Promise<{
   status?: string | string[];
@@ -47,9 +52,9 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
     const ordinaryPayables = payables.filter((decision) => decision.outcome !== "refused");
 
     return (
-      <ProductShell active="invoices" day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()} orgSlug={slug} orgName={access.membership.name}>
+      <ProductShell day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()}>
         <PageHead
-          title="AP / AR"
+          title={sectionTitle("invoices")}
           sub="Three-way match, counterparty risk, and payment authority — with the agent’s complete reasoning on every line."
           right={<AgentControls orgSlug={slug} nextDay={dashboardStats.day + 1} headSeq={headEntries[0]?.seq ?? 0} clockMode={dashboardStats.clockMode} />}
         />
@@ -57,14 +62,14 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
         {filter && (
           <div className="mb-6 flex items-center gap-3 rounded-md border border-held-line bg-held-soft px-3 py-2 text-sm text-held">
             Showing status: <span className="font-mono">{filter}</span>
-            <a href={orgHref(slug, "/invoices")} className="ml-auto text-ink-2 underline hover:text-ink">Clear filter</a>
+            <Link href={orgHref(slug, "/invoices")} className="ml-auto text-ink-2 underline hover:text-ink">Clear filter</Link>
           </div>
         )}
 
         <section className="mb-8">
           <SectionHead title="Invoice intake" meta="manual entry or CSV preview and confirm" />
           {canWrite ? (
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div className="grid gap-4 xl:grid-cols-2">
               <details open className="surface-shadow rounded-2xl border border-line bg-surface p-4 sm:p-6">
                 <summary className="cursor-pointer text-sm font-semibold text-ink">Enter one invoice</summary>
                 <div className="mt-4"><InvoiceIntake orgSlug={slug} counterparties={counterparties.map(({ id, name, role }) => ({ id, name, role }))} /></div>

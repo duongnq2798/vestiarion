@@ -131,6 +131,16 @@ function policyDeparture(run: CycleRunTelemetry): string {
   return `${run.referenceDisagreementCount} of ${run.modelDecisionCount}`;
 }
 
+/**
+ * An SVG's text scales with its viewBox, so a chart drawn 760 units wide and
+ * shown on a phone prints its labels at a few pixels. Each chart is therefore
+ * drawn twice: a compact frame below `sm` — fewer units across, larger type,
+ * wider gutters — and the wide frame from `sm` up. Only one is ever displayed.
+ */
+type Frame = "compact" | "wide";
+const FRAMES: Frame[] = ["compact", "wide"];
+const FRAME_CLASS: Record<Frame, string> = { compact: "sm:hidden", wide: "hidden sm:block" };
+
 function MetricPlot({ values, label, unit, color, valueLabel }: {
   values: number[];
   label: string;
@@ -141,11 +151,33 @@ function MetricPlot({ values, label, unit, color, valueLabel }: {
   if (values.length === 0) {
     return <div className="flex min-h-40 items-center justify-center rounded-md border border-dashed border-line text-center text-xs text-ink-3">No confirmed measurement</div>;
   }
-  const width = 360;
+  return (
+    <div className="min-w-0 rounded-xl border border-line bg-ground/35 p-3">
+      <div className="flex items-baseline justify-between gap-2 px-1">
+        <Label>{label}</Label>
+        <span className="font-mono text-[0.6875rem] text-ink-3">{unit}</span>
+      </div>
+      {FRAMES.map((frame) => <MetricSvg key={frame} frame={frame} values={values} label={label} color={color} valueLabel={valueLabel} />)}
+    </div>
+  );
+}
+
+function MetricSvg({ frame, values, label, color, valueLabel }: {
+  frame: Frame;
+  values: number[];
+  label: string;
+  color: string;
+  valueLabel: (value: number) => string;
+}) {
+  const compact = frame === "compact";
+  const width = compact ? 300 : 360;
   const height = 150;
   const right = 12;
   const top = 20;
   const bottom = 28;
+  const tickFont = compact ? 10.5 : 9;
+  const axisFont = compact ? 11 : 10;
+  const gradient = `${label.replaceAll(" ", "-")}-wash-${frame}`;
   const min = Math.min(...values);
   const max = Math.max(...values);
   // Pad relative to the data, never by a fixed amount. This floor used to be
@@ -162,8 +194,8 @@ function MetricPlot({ values, label, unit, color, valueLabel }: {
   // to six decimals is a much wider string than "$2.00", and a fixed 38px
   // gutter clipped the first character off every tick.
   const left = Math.min(
-    96,
-    Math.max(38, ...ticks.map((tick) => valueLabel(tick).length * 5.2 + 9))
+    compact ? 112 : 96,
+    Math.max(38, ...ticks.map((tick) => valueLabel(tick).length * tickFont * 0.58 + 9))
   );
   const x = scaleLinear()
     .domain([0, Math.max(values.length - 1, 1)])
@@ -172,37 +204,31 @@ function MetricPlot({ values, label, unit, color, valueLabel }: {
     ? d3Line<number>().x((_value, index) => x(index)).y((value) => y(value)).curve(curveMonotoneX)(values)
     : null;
   return (
-    <div className="min-w-0 rounded-xl border border-line bg-ground/35 p-3">
-      <div className="flex items-baseline justify-between gap-2 px-1">
-        <Label>{label}</Label>
-        <span className="font-mono text-[0.6875rem] text-ink-3">{unit}</span>
-      </div>
-      <svg viewBox={`0 0 ${width} ${height}`} className="mt-1 h-auto w-full" role="img" aria-label={`${label}: ${values.length} observed point${values.length === 1 ? "" : "s"}, from ${valueLabel(min)} to ${valueLabel(max)}`}>
-        <defs>
-          <linearGradient id={`${label.replaceAll(" ", "-")}-wash`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor={color} stopOpacity="0.16" />
-            <stop offset="1" stopColor={color} stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        {ticks.map((tick) => <g key={tick}>
-          <line x1={left} y1={y(tick)} x2={width - right} y2={y(tick)} stroke="var(--color-line)" strokeDasharray="2 5" />
-          <text x={left - 5} y={y(tick) + 3} textAnchor="end" fill="var(--color-ink-3)" fontSize="9">{valueLabel(tick)}</text>
-        </g>)}
-        {path && <>
-          <path d={`${path} L ${x(values.length - 1)},${height - bottom} L ${x(0)},${height - bottom} Z`} fill={`url(#${label.replaceAll(" ", "-")}-wash)`} />
-          <path d={path} fill="none" stroke={color} strokeWidth="2.25" vectorEffect="non-scaling-stroke" />
-        </>}
-        {values.map((value, index) => <circle key={index} cx={x(values.length === 1 ? 0.5 : index)} cy={y(value)} r="3.5" fill="var(--color-surface)" stroke={color} strokeWidth="2"><title>{valueLabel(value)}</title></circle>)}
-        {values.length === 1 ? (
-          <text x={width / 2} y={height - 8} textAnchor="middle" fill="var(--color-ink-3)" fontSize="10">only observation</text>
-        ) : (
-          <>
-            <text x={left} y={height - 8} fill="var(--color-ink-3)" fontSize="10">first</text>
-            <text x={width - right} y={height - 8} textAnchor="end" fill="var(--color-ink-3)" fontSize="10">latest</text>
-          </>
-        )}
-      </svg>
-    </div>
+    <svg viewBox={`0 0 ${width} ${height}`} className={`mt-1 h-auto w-full ${FRAME_CLASS[frame]}`} role="img" aria-label={`${label}: ${values.length} observed point${values.length === 1 ? "" : "s"}, from ${valueLabel(min)} to ${valueLabel(max)}`}>
+      <defs>
+        <linearGradient id={gradient} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor={color} stopOpacity="0.16" />
+          <stop offset="1" stopColor={color} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      {ticks.map((tick) => <g key={tick}>
+        <line x1={left} y1={y(tick)} x2={width - right} y2={y(tick)} stroke="var(--color-line)" strokeDasharray="2 5" />
+        <text x={left - 5} y={y(tick) + 3} textAnchor="end" fill="var(--color-ink-3)" fontSize={tickFont}>{valueLabel(tick)}</text>
+      </g>)}
+      {path && <>
+        <path d={`${path} L ${x(values.length - 1)},${height - bottom} L ${x(0)},${height - bottom} Z`} fill={`url(#${gradient})`} />
+        <path d={path} fill="none" stroke={color} strokeWidth="2.25" vectorEffect="non-scaling-stroke" />
+      </>}
+      {values.map((value, index) => <circle key={index} cx={x(values.length === 1 ? 0.5 : index)} cy={y(value)} r="3.5" fill="var(--color-surface)" stroke={color} strokeWidth="2"><title>{valueLabel(value)}</title></circle>)}
+      {values.length === 1 ? (
+        <text x={width / 2} y={height - 8} textAnchor="middle" fill="var(--color-ink-3)" fontSize={axisFont}>only observation</text>
+      ) : (
+        <>
+          <text x={left} y={height - 8} fill="var(--color-ink-3)" fontSize={axisFont}>first</text>
+          <text x={width - right} y={height - 8} textAnchor="end" fill="var(--color-ink-3)" fontSize={axisFont}>latest</text>
+        </>
+      )}
+    </svg>
   );
 }
 
@@ -252,31 +278,6 @@ function BalanceChart({ snapshots, moves }: { snapshots: CycleSnapshotTelemetry[
       </ChartCard>
     );
   }
-  const width = 760;
-  const height = 250;
-  const left = 54;
-  const right = 18;
-  const top = 28;
-  const bottom = 38;
-  const values = snapshots.flatMap((snapshot) => [snapshot.totalLiquid, snapshot.reservePosition]);
-  const max = Math.max(...values, 1);
-  const minTime = Date.parse(snapshots[0].capturedAt);
-  const maxTime = Date.parse(snapshots.at(-1)?.capturedAt ?? snapshots[0].capturedAt);
-  const halfDay = 43_200_000;
-  const xTime = scaleTime()
-    .domain(minTime === maxTime ? [new Date(minTime - halfDay), new Date(maxTime + halfDay)] : [new Date(minTime), new Date(maxTime)])
-    .range([left, width - right]);
-  const y = scaleLinear().domain([0, max]).nice(4).range([height - bottom, top]);
-  const liquidPath = d3Line<CycleSnapshotTelemetry>()
-    .x((snapshot) => xTime(new Date(snapshot.capturedAt)))
-    .y((snapshot) => y(snapshot.totalLiquid))
-    .curve(curveMonotoneX)(snapshots);
-  const reservePath = d3Line<CycleSnapshotTelemetry>()
-    .x((snapshot) => xTime(new Date(snapshot.capturedAt)))
-    .y((snapshot) => y(snapshot.reservePosition))
-    .curve(curveMonotoneX)(snapshots);
-  const yTicks = y.ticks(4);
-  const relevantMoves = moves.filter((move) => Date.parse(move.createdAt) >= minTime && Date.parse(move.createdAt) <= maxTime);
   return (
     <ChartCard
       title="Treasury balance over time"
@@ -288,33 +289,68 @@ function BalanceChart({ snapshots, moves }: { snapshots: CycleSnapshotTelemetry[
         <span><span className="mr-1.5 inline-block h-0.5 w-5 bg-proof align-middle" />Reserve</span>
         <span><span className="mr-1.5 text-held">◆</span>Treasury move</span>
       </div>
-      <svg viewBox={`0 0 ${width} ${height}`} className="mt-3 h-auto w-full rounded-xl bg-ground/35 p-1" role="img" aria-label={`${snapshots.length} balance snapshots; latest liquid balance ${fmt(snapshots.at(-1)?.totalLiquid ?? 0)} USDC and reserve ${fmt(snapshots.at(-1)?.reservePosition ?? 0)} USYC`}>
-        {yTicks.map((tick) => <g key={tick}>
-          <line x1={left} y1={y(tick)} x2={width - right} y2={y(tick)} stroke="var(--color-line)" strokeDasharray="2 6" />
-          <text x={left - 7} y={y(tick) + 4} textAnchor="end" fill="var(--color-ink-3)" fontSize="10">{fmt(tick)}</text>
-        </g>)}
-        <text x="13" y={(top + height - bottom) / 2} textAnchor="middle" fill="var(--color-ink-3)" fontSize="10" transform={`rotate(-90 13 ${(top + height - bottom) / 2})`}>token units</text>
-        {snapshots.length > 1 && <>
-          {liquidPath && <path d={liquidPath} fill="none" stroke="var(--color-agent)" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />}
-          {reservePath && <path d={reservePath} fill="none" stroke="var(--color-proof)" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />}
-        </>}
-        {snapshots.map((snapshot) => <g key={snapshot.id}>
-          <circle cx={xTime(new Date(snapshot.capturedAt))} cy={y(snapshot.totalLiquid)} r="3.5" fill="var(--color-surface)" stroke="var(--color-agent)" strokeWidth="2" />
-          <circle cx={xTime(new Date(snapshot.capturedAt))} cy={y(snapshot.reservePosition)} r="3.5" fill="var(--color-surface)" stroke="var(--color-proof)" strokeWidth="2" />
-        </g>)}
-        {relevantMoves.map((move) => <g key={move.id}>
-          <line x1={xTime(new Date(move.createdAt))} y1={top} x2={xTime(new Date(move.createdAt))} y2={height - bottom} stroke="var(--color-held)" strokeDasharray="3 4" opacity="0.7" />
-          <text x={xTime(new Date(move.createdAt))} y={top - 7} textAnchor="middle" fill="var(--color-held)" fontSize="11">{move.action === "sweep_to_usyc" ? "S" : move.action === "redeem_from_usyc" ? "R" : "B"}</text>
-        </g>)}
-        <text x={left} y={height - 12} fill="var(--color-ink-3)" fontSize="10">{when(snapshots[0].capturedAt)}</text>
-        <text x={width - right} y={height - 12} textAnchor="end" fill="var(--color-ink-3)" fontSize="10">{when(snapshots.at(-1)?.capturedAt ?? snapshots[0].capturedAt)}</text>
-      </svg>
+      {FRAMES.map((frame) => <BalanceSvg key={frame} frame={frame} snapshots={snapshots} moves={moves} />)}
       <DetailsTable
         summary="Balance snapshot table"
         headers={["Captured", "Mode", "Liquid", "Reserve", "Open AP", "Open AR", "Due 7d", "Due 14d"]}
         rows={snapshots.map((snapshot) => [when(snapshot.capturedAt), snapshot.chainMode === "live" ? "LIVE" : "SIMULATED", fmt(snapshot.totalLiquid), fmt(snapshot.reservePosition), fmt(snapshot.openPayables), fmt(snapshot.openReceivables), fmt(snapshot.obligationsDue7d), fmt(snapshot.obligationsDue14d)])}
       />
     </ChartCard>
+  );
+}
+
+function BalanceSvg({ frame, snapshots, moves }: { frame: Frame; snapshots: CycleSnapshotTelemetry[]; moves: TreasuryMoveTelemetry[] }) {
+  const compact = frame === "compact";
+  const width = compact ? 380 : 760;
+  const height = compact ? 240 : 250;
+  const right = compact ? 14 : 18;
+  const top = 28;
+  const bottom = 38;
+  const font = compact ? 12 : 10;
+  const values = snapshots.flatMap((snapshot) => [snapshot.totalLiquid, snapshot.reservePosition]);
+  const max = Math.max(...values, 1);
+  const minTime = Date.parse(snapshots[0].capturedAt);
+  const maxTime = Date.parse(snapshots.at(-1)?.capturedAt ?? snapshots[0].capturedAt);
+  const halfDay = 43_200_000;
+  const y = scaleLinear().domain([0, max]).nice(4).range([height - bottom, top]);
+  const yTicks = y.ticks(4);
+  // Room for the rotated axis title, then for the widest tick label: "20,000.00"
+  // at a fixed 54 units ran into the title and past the left edge.
+  const left = Math.max(54, 22 + Math.max(...yTicks.map((tick) => fmt(tick).length)) * font * 0.58 + 7);
+  const xTime = scaleTime()
+    .domain(minTime === maxTime ? [new Date(minTime - halfDay), new Date(maxTime + halfDay)] : [new Date(minTime), new Date(maxTime)])
+    .range([left, width - right]);
+  const liquidPath = d3Line<CycleSnapshotTelemetry>()
+    .x((snapshot) => xTime(new Date(snapshot.capturedAt)))
+    .y((snapshot) => y(snapshot.totalLiquid))
+    .curve(curveMonotoneX)(snapshots);
+  const reservePath = d3Line<CycleSnapshotTelemetry>()
+    .x((snapshot) => xTime(new Date(snapshot.capturedAt)))
+    .y((snapshot) => y(snapshot.reservePosition))
+    .curve(curveMonotoneX)(snapshots);
+  const relevantMoves = moves.filter((move) => Date.parse(move.createdAt) >= minTime && Date.parse(move.createdAt) <= maxTime);
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} className={`mt-3 h-auto w-full rounded-xl bg-ground/35 p-1 ${FRAME_CLASS[frame]}`} role="img" aria-label={`${snapshots.length} balance snapshots; latest liquid balance ${fmt(snapshots.at(-1)?.totalLiquid ?? 0)} USDC and reserve ${fmt(snapshots.at(-1)?.reservePosition ?? 0)} USYC`}>
+      {yTicks.map((tick) => <g key={tick}>
+        <line x1={left} y1={y(tick)} x2={width - right} y2={y(tick)} stroke="var(--color-line)" strokeDasharray="2 6" />
+        <text x={left - 7} y={y(tick) + 4} textAnchor="end" fill="var(--color-ink-3)" fontSize={font}>{fmt(tick)}</text>
+      </g>)}
+      <text x="13" y={(top + height - bottom) / 2} textAnchor="middle" fill="var(--color-ink-3)" fontSize={font} transform={`rotate(-90 13 ${(top + height - bottom) / 2})`}>token units</text>
+      {snapshots.length > 1 && <>
+        {liquidPath && <path d={liquidPath} fill="none" stroke="var(--color-agent)" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />}
+        {reservePath && <path d={reservePath} fill="none" stroke="var(--color-proof)" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />}
+      </>}
+      {snapshots.map((snapshot) => <g key={snapshot.id}>
+        <circle cx={xTime(new Date(snapshot.capturedAt))} cy={y(snapshot.totalLiquid)} r="3.5" fill="var(--color-surface)" stroke="var(--color-agent)" strokeWidth="2" />
+        <circle cx={xTime(new Date(snapshot.capturedAt))} cy={y(snapshot.reservePosition)} r="3.5" fill="var(--color-surface)" stroke="var(--color-proof)" strokeWidth="2" />
+      </g>)}
+      {relevantMoves.map((move) => <g key={move.id}>
+        <line x1={xTime(new Date(move.createdAt))} y1={top} x2={xTime(new Date(move.createdAt))} y2={height - bottom} stroke="var(--color-held)" strokeDasharray="3 4" opacity="0.7" />
+        <text x={xTime(new Date(move.createdAt))} y={top - 7} textAnchor="middle" fill="var(--color-held)" fontSize={font + 1}>{move.action === "sweep_to_usyc" ? "S" : move.action === "redeem_from_usyc" ? "R" : "B"}</text>
+      </g>)}
+      <text x={left} y={height - 12} fill="var(--color-ink-3)" fontSize={font}>{when(snapshots[0].capturedAt)}</text>
+      <text x={width - right} y={height - 12} textAnchor="end" fill="var(--color-ink-3)" fontSize={font}>{when(snapshots.at(-1)?.capturedAt ?? snapshots[0].capturedAt)}</text>
+    </svg>
   );
 }
 
@@ -344,12 +380,12 @@ function OutcomeChart({ runs }: { runs: CycleRunTelemetry[] }) {
           return <li key={run.id} className="grid grid-cols-[3.5rem_minmax(0,1fr)_2rem] items-center gap-2 text-xs">
             <span className="font-mono text-ink-3">#{index + 1}</span>
             <div className="flex h-5 min-w-0 overflow-hidden rounded-sm bg-raised" aria-label={`${total} outcomes`}>
-              {total === 0 ? <span className={`m-auto text-[0.625rem] ${run.status === "failed" || run.status === "partial" ? "text-refusal" : "text-ink-3"}`}>{run.status === "failed" || run.status === "partial" ? `${run.status} — ${run.failedStage ?? "a stage"} failed` : run.status === "running" ? "still running" : "no outcomes"}</span> : outcomes.map((outcome) => {
+              {total === 0 ? <span className={`m-auto text-[0.625rem] ${run.status === "failed" || run.status === "partial" ? "text-refused" : "text-ink-3"}`}>{run.status === "failed" || run.status === "partial" ? `${run.status} — ${run.failedStage ?? "a stage"} failed` : run.status === "running" ? "still running" : "no outcomes"}</span> : outcomes.map((outcome) => {
                 const value = outcome.value(run);
                 return value > 0 ? <span key={outcome.key} title={`${outcome.label}: ${value}`} style={{ width: `${width(value)}%`, background: outcome.color }} /> : null;
               })}
             </div>
-            <span className="text-right tabular-nums text-ink-2">{total}{(run.status === "failed" || run.status === "partial") && total > 0 && <span className="ml-1 text-refusal" title={`Partial: the cycle failed at ${run.failedStage ?? "an unnamed stage"}`}>&#9670;</span>}</span>
+            <span className="text-right tabular-nums text-ink-2">{total}{(run.status === "failed" || run.status === "partial") && total > 0 && <span className="ml-1 text-refused" title={`Partial: the cycle failed at ${run.failedStage ?? "an unnamed stage"}`}>&#9670;</span>}</span>
           </li>;
         })}
       </ol>
@@ -366,7 +402,7 @@ function DecisionModeChart({ runs }: { runs: CycleRunTelemetry[] }) {
   const width = scaleLinear().domain([0, Math.max(...totals, 1)]).range([0, 100]);
   return (
     <ChartCard title="Model vs heuristic" description="The model share and rule-based fallback are persisted by the orchestrator, including cycles where one side is zero. Where the model was consulted, its verdict is scored against the same written policy the fallback applies." provenance={<Provenance modes={runs.map((run) => run.chainMode)} detail="Cycles" />}>
-      <div className="flex gap-4 text-xs text-ink-2"><span><span className="mr-1.5 inline-block size-2 bg-agent" />Model</span><span><span className="mr-1.5 inline-block size-2 bg-line-strong" />Heuristic</span><span className="text-refusal">&#9670; Departed from policy</span></div>
+      <div className="flex gap-4 text-xs text-ink-2"><span><span className="mr-1.5 inline-block size-2 bg-agent" />Model</span><span><span className="mr-1.5 inline-block size-2 bg-line-strong" />Heuristic</span><span className="text-refused">&#9670; Departed from policy</span></div>
       <ol className="mt-4 space-y-3">
         {runs.map((run, index) => {
           const total = totals[index];
@@ -381,7 +417,7 @@ function DecisionModeChart({ runs }: { runs: CycleRunTelemetry[] }) {
             <span className="text-right tabular-nums text-ink-2">
               {run.modelDecisionCount}/{total}
               {run.referenceDisagreementCount != null && run.referenceDisagreementCount > 0 && (
-                <span className="ml-1 text-refusal" title={`${run.referenceDisagreementCount} model verdict(s) departed from the written policy`}>&#9670;{run.referenceDisagreementCount}</span>
+                <span className="ml-1 text-refused" title={`${run.referenceDisagreementCount} model verdict(s) departed from the written policy`}>&#9670;{run.referenceDisagreementCount}</span>
               )}
             </span>
           </li>;
@@ -415,17 +451,6 @@ function ScreeningChart({ screenings }: { screenings: ScreeningTelemetry[] }) {
     return <ChartCard title="Screening coverage" description="Completed and failed counterparty checks, with observed tier transitions."><EmptyChart>No screening checks recorded yet — run an agent cycle to populate this.</EmptyChart></ChartCard>;
   }
   const batches = screeningBatches(screenings);
-  const max = Math.max(...batches.map((batch) => batch.rows.length));
-  const width = 760;
-  const height = Math.max(180, batches.length * 48 + 62);
-  const left = 105;
-  const right = 76;
-  const top = 22;
-  const bottom = 30;
-  const keys = batches.map((batch, index) => `${batch.at}-${index}`);
-  const x = scaleLinear().domain([0, max]).nice().range([left, width - right]);
-  const y = scaleBand().domain(keys).range([top, height - bottom]).padding(0.34);
-  const ticks = x.ticks(Math.min(max, 5));
   return (
     <ChartCard title="Screening coverage" description="Consecutive checks within two minutes are displayed as one observed batch. A red segment is a failed lookup; the previous verdict stayed in force." provenance={<Provenance modes={screenings.map((row) => row.mode)} detail="Screening" />}>
       <div className="mt-1 flex flex-wrap gap-4 text-xs text-ink-2" aria-hidden>
@@ -433,29 +458,50 @@ function ScreeningChart({ screenings }: { screenings: ScreeningTelemetry[] }) {
         <span><span className="mr-1.5 inline-block size-2 rounded-sm bg-refused" />Failed lookup</span>
         <span><span className="mr-1.5 text-held">◆</span>Tier change</span>
       </div>
-      <svg viewBox={`0 0 ${width} ${height}`} className="mt-3 h-auto w-full rounded-xl bg-ground/35 p-1" role="img" aria-label={`${screenings.length} screening checks in ${batches.length} observed batches`}>
-        {ticks.map((tick) => <g key={tick}>
-          <line x1={x(tick)} y1={top} x2={x(tick)} y2={height - bottom} stroke="var(--color-line)" strokeDasharray="2 6" />
-          <text x={x(tick)} y={height - 10} textAnchor="middle" fill="var(--color-ink-3)" fontSize="10">{tick}</text>
-        </g>)}
-        {batches.map((batch, index) => {
-          const changes = batch.rows.filter((row) => row.tierChanged).length;
-          const failures = batch.rows.filter((row) => row.status === "failed").length;
-          const key = keys[index];
-          const barY = y(key) ?? 0;
-          const complete = batch.rows.length - failures;
-          return <g key={key}>
-            <text x={left - 10} y={barY + y.bandwidth() / 2 + 4} textAnchor="end" fill="var(--color-ink-3)" fontSize="10">{when(batch.at).replace(" UTC", "")}</text>
-            <rect x={left} y={barY} width={width - left - right} height={y.bandwidth()} rx="5" fill="var(--color-raised)" />
-            {complete > 0 && <rect x={left} y={barY} width={x(complete) - left} height={y.bandwidth()} rx="5" fill="var(--color-proof)" opacity="0.88" />}
-            {failures > 0 && <rect x={x(complete)} y={barY} width={x(batch.rows.length) - x(complete)} height={y.bandwidth()} rx="3" fill="var(--color-refused)" />}
-            {changes > 0 && <path d={`M ${x(batch.rows.length) + 9} ${barY + y.bandwidth() / 2 - 5} l 5 5 -5 5 -5 -5 Z`} fill="var(--color-held)" />}
-            <text x={width - right + 10} y={barY + y.bandwidth() / 2 + 4} fill="var(--color-ink-2)" fontSize="10">{batch.rows.length} check{batch.rows.length === 1 ? "" : "s"}</text>
-          </g>;
-        })}
-      </svg>
+      {FRAMES.map((frame) => <ScreeningSvg key={frame} frame={frame} batches={batches} checks={screenings.length} />)}
       <DetailsTable summary="Screening receipt table" headers={["Checked", "Counterparty", "Mode", "Result", "Transition", "Source"]} rows={screenings.map((row) => [when(row.createdAt), row.counterpartyName, row.mode === "live" ? "LIVE" : "SIMULATED", row.status === "failed" ? "failed — retained" : row.riskLevel, row.tierChanged ? `${row.previousRiskLevel} → ${row.riskLevel}` : "none observed", row.source])} />
     </ChartCard>
+  );
+}
+
+function ScreeningSvg({ frame, batches, checks }: { frame: Frame; batches: ScreeningBatch[]; checks: number }) {
+  const compact = frame === "compact";
+  const font = compact ? 12 : 10;
+  const max = Math.max(...batches.map((batch) => batch.rows.length));
+  const width = compact ? 380 : 760;
+  const height = Math.max(compact ? 170 : 180, batches.length * (compact ? 46 : 48) + 62);
+  // The gutters hold a batch's time on the left and its count on the right.
+  const left = Math.max(compact ? 0 : 105, Math.max(...batches.map((batch) => when(batch.at).replace(" UTC", "").length)) * font * 0.58 + 14);
+  const right = compact ? 88 : 80;
+  const top = 22;
+  const bottom = 30;
+  const keys = batches.map((batch, index) => `${batch.at}-${index}`);
+  const x = scaleLinear().domain([0, max]).nice().range([left, width - right]);
+  const y = scaleBand().domain(keys).range([top, height - bottom]).padding(0.34);
+  const ticks = x.ticks(Math.min(max, 5));
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} className={`mt-3 h-auto w-full rounded-xl bg-ground/35 p-1 ${FRAME_CLASS[frame]}`} role="img" aria-label={`${checks} screening checks in ${batches.length} observed batches`}>
+      {ticks.map((tick) => <g key={tick}>
+        <line x1={x(tick)} y1={top} x2={x(tick)} y2={height - bottom} stroke="var(--color-line)" strokeDasharray="2 6" />
+        <text x={x(tick)} y={height - 10} textAnchor="middle" fill="var(--color-ink-3)" fontSize={font}>{tick}</text>
+      </g>)}
+      {batches.map((batch, index) => {
+        const changes = batch.rows.filter((row) => row.tierChanged).length;
+        const failures = batch.rows.filter((row) => row.status === "failed").length;
+        const key = keys[index];
+        const barY = y(key) ?? 0;
+        const complete = batch.rows.length - failures;
+        return <g key={key}>
+          <text x={left - 10} y={barY + y.bandwidth() / 2 + 4} textAnchor="end" fill="var(--color-ink-3)" fontSize={font}>{when(batch.at).replace(" UTC", "")}</text>
+          <rect x={left} y={barY} width={width - left - right} height={y.bandwidth()} rx="5" fill="var(--color-raised)" />
+          {complete > 0 && <rect x={left} y={barY} width={x(complete) - left} height={y.bandwidth()} rx="5" fill="var(--color-proof)" opacity="0.88" />}
+          {failures > 0 && <rect x={x(complete)} y={barY} width={x(batch.rows.length) - x(complete)} height={y.bandwidth()} rx="3" fill="var(--color-refused)" />}
+          {changes > 0 && <path d={`M ${x(batch.rows.length) + 9} ${barY + y.bandwidth() / 2 - 5} l 5 5 -5 5 -5 -5 Z`} fill="var(--color-held)" />}
+          {/* Past the tier-change marker, which a full bar puts in this gutter too. */}
+          <text x={width - right + (changes > 0 ? 22 : 10)} y={barY + y.bandwidth() / 2 + 4} fill="var(--color-ink-2)" fontSize={font}>{batch.rows.length} check{batch.rows.length === 1 ? "" : "s"}</text>
+        </g>;
+      })}
+    </svg>
   );
 }
 

@@ -9,8 +9,9 @@ const INITIAL: CreateWorkspaceResult = { ok: false, message: "" };
 export default function CreateWorkspaceForm() {
   const [state, action, pending] = useActionState(createWorkspaceAction, INITIAL);
   return (
-    <form action={action} className="surface-shadow space-y-3 rounded-2xl border border-line bg-surface p-5">
+    <form action={action} className="surface-shadow space-y-3 rounded-2xl border border-line bg-surface p-5 sm:p-6">
       <label className="block text-sm font-medium text-ink" htmlFor="workspace-name">Workspace name</label>
+      {/* 16px below `sm`: iOS zooms the page into any smaller field it focuses. */}
       <input
         id="workspace-name"
         name="name"
@@ -18,12 +19,12 @@ export default function CreateWorkspaceForm() {
         required
         maxLength={80}
         autoComplete="organization"
-        className="w-full rounded-md border border-line bg-ground px-3 py-2 text-sm text-ink"
+        className="h-11 w-full rounded-xl border border-line-strong bg-ground px-3 text-base text-ink outline-none focus:border-agent focus:ring-2 focus:ring-agent-soft sm:text-sm"
       />
       <button
         type="submit"
         disabled={pending}
-        className="w-full rounded-md bg-ink px-3.5 py-2 text-sm font-medium text-ground disabled:opacity-70"
+        className="brand-shadow h-11 w-full rounded-xl bg-agent px-3.5 text-sm font-semibold text-on-agent transition-transform hover:-translate-y-0.5 disabled:translate-y-0 disabled:opacity-70"
       >
         {pending ? "Creating…" : "Create workspace"}
       </button>

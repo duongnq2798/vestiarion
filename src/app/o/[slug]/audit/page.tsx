@@ -1,9 +1,12 @@
+import type { Metadata } from "next";
+import Link from "next/link";
 import AgentControls from "@/components/AgentControls";
 import VerifyLedgerBadge from "@/components/VerifyLedgerBadge";
 import { AuditLedger, DomainFilter, pad } from "@/components/vx/AuditLedger";
 import { DOMAINS } from "@/components/vx/Glyphs";
 import { Hash, Label } from "@/components/vx/Primitives";
 import { EmptyState, PageHead, ProductShell } from "@/components/vx/Shell";
+import { sectionTitle } from "@/components/vx/nav";
 import type { Domain } from "@/components/vx/types";
 import { requireMembership } from "@/lib/auth/membership";
 import { orgHref } from "@/lib/auth/org-paths";
@@ -13,6 +16,8 @@ import { ledgerEntryCount, ledgerPublicKeyId, ledgerPublicKeyPem, ledgerReadWarn
 import { stats } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: sectionTitle("audit") };
 
 type AuditSearchParams = Promise<{
   domain?: string | string[];
@@ -50,9 +55,9 @@ export default async function AuditPage({ params, searchParams }: AuditPageProps
     const keyWarnings = ledgerReadWarnings();
 
     return (
-      <ProductShell active="audit" day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()} orgSlug={slug} orgName={access.membership.name}>
+      <ProductShell day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()}>
         <PageHead
-          title="Audit log"
+          title={sectionTitle("audit")}
           sub="Every decision is appended here, hash-linked to the one before it and signed with Ed25519. The summary stays readable; raw detail and cryptographic material remain inspectable."
           right={<AgentControls orgSlug={slug} nextDay={dashboardStats.day + 1} headSeq={head?.seq ?? 0} clockMode={dashboardStats.clockMode} />}
         />
@@ -109,7 +114,7 @@ export default async function AuditPage({ params, searchParams }: AuditPageProps
             <AuditLedger entries={shown} since={since} />
             {hasOlder && (
               <div className="mt-4 flex justify-center">
-                <a href={orgHref(slug, `/audit?before=${entries.at(-1)!.seq}${domain ? `&domain=${domain}` : ""}`)} className="rounded-md border border-line-strong px-4 py-2 text-sm text-agent hover:bg-raised">Older entries →</a>
+                <Link href={orgHref(slug, `/audit?before=${entries.at(-1)!.seq}${domain ? `&domain=${domain}` : ""}`)} className="rounded-md border border-line-strong px-4 py-2 text-sm text-agent hover:bg-raised">Older entries →</Link>
               </div>
             )}
           </>

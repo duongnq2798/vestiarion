@@ -1,8 +1,10 @@
+import type { Metadata } from "next";
 import AgentControls from "@/components/AgentControls";
 import CounterpartyIntake from "@/components/intake/CounterpartyIntake";
 import { Money, SectionHead } from "@/components/vx/Primitives";
 import { PerformanceHistory } from "@/components/vx/PerformanceHistory";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
+import { sectionTitle } from "@/components/vx/nav";
 import { viewerCan } from "@/lib/auth/authorize";
 import { requireMembership } from "@/lib/auth/membership";
 import { chainModes } from "@/lib/circle";
@@ -11,6 +13,8 @@ import { listLedgerEntries } from "@/lib/ledger";
 import { listCounterparties, stats } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: sectionTitle("counterparties") };
 
 const RISK_STYLE: Record<string, string> = {
   clear: "border-proof-line bg-proof-soft text-proof",
@@ -31,9 +35,9 @@ export default async function CounterpartiesPage({ params }: { params: Promise<{
     ]);
 
     return (
-      <ProductShell active="counterparties" day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()} orgSlug={slug} orgName={access.membership.name}>
+      <ProductShell day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()}>
         <PageHead
-          title="Counterparties"
+          title={sectionTitle("counterparties")}
           sub="Add the people and businesses Vestiarion may invoice or pay. Each new record is screened immediately."
           right={<AgentControls orgSlug={slug} nextDay={dashboardStats.day + 1} headSeq={entries[0]?.seq ?? 0} clockMode={dashboardStats.clockMode} />}
         />

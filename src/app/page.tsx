@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { ProvenanceBar, type ProvenanceLeg } from "@/components/vx/Provenance";
 import { fmt, Label } from "@/components/vx/Primitives";
 import { BrandMark } from "@/components/vx/Brand";
+import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
 import { chainModes } from "@/lib/circle";
 import { screeningMode } from "@/lib/compliance";
 import { withFoundingOrg } from "@/lib/dal/scope";
@@ -219,22 +220,10 @@ export default async function LandingPage() {
   ];
 
   return (
-    <div className="min-h-dvh overflow-x-hidden bg-transparent">
-      <header className="sticky top-0 z-50 border-b border-line/80 bg-surface/88 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3.5 sm:px-6">
-          <Link href="/" className="group inline-flex items-center gap-2.5 font-mono text-[0.8125rem] font-semibold uppercase tracking-[0.2em] text-ink">
-            <BrandMark className="logo-shadow size-9 shrink-0 text-agent transition-transform duration-300 group-hover:-rotate-6 group-hover:scale-105" />
-            <span>Vestiarion</span>
-          </Link>
-          <nav aria-label="Landing navigation" className="flex items-center gap-2 sm:gap-4">
-            <Link href={"/onboarding"} className="hidden text-sm text-ink-2 hover:text-ink sm:block">Measured outcomes</Link>
-            <Link href={"/onboarding"} className="hidden text-sm text-ink-2 hover:text-ink sm:block">Audit proof</Link>
-            <Link href={"/onboarding"} className="brand-shadow rounded-xl bg-agent px-4 py-2.5 text-sm font-semibold text-on-agent transition-transform hover:-translate-y-0.5">Open console</Link>
-          </nav>
-        </div>
-      </header>
+    <div className="min-h-dvh overflow-x-clip bg-transparent">
+      <SiteHeader landing />
 
-      <main>
+      <main id="main">
         <section className="ledger-grid relative overflow-hidden border-b border-line bg-surface/30">
           <div aria-hidden className="absolute -left-36 top-8 size-[28rem] rounded-full bg-proof-soft/80 blur-3xl motion-safe:animate-drift" />
           <div aria-hidden className="absolute -right-28 bottom-0 size-[30rem] rounded-full bg-agent-soft/80 blur-3xl motion-safe:animate-drift" />
@@ -252,7 +241,7 @@ export default async function LandingPage() {
           </div>
         </section>
 
-        <section aria-labelledby="measurements-title" className="mx-auto max-w-6xl px-4 pb-10 pt-14 sm:px-6 sm:pb-14 sm:pt-20">
+        <section id="measurements" aria-labelledby="measurements-title" className="mx-auto max-w-6xl scroll-mt-16 px-4 pb-10 pt-14 sm:px-6 sm:pb-14 sm:pt-20">
           <div className="mb-6 max-w-3xl">
             <Label>Live database receipts</Label>
             <h2 id="measurements-title" className="mt-3 text-4xl font-semibold tracking-[-0.04em] text-ink sm:text-5xl">Numbers only appear after the system produces them.</h2>
@@ -261,17 +250,17 @@ export default async function LandingPage() {
           <Suspense fallback={<MetricsFallback />}><LiveMetrics /></Suspense>
         </section>
 
-        <section className="border-y border-line bg-surface/55">
+        <section id="how-it-works" aria-labelledby="how-it-works-title" className="scroll-mt-16 border-y border-line bg-surface/55">
           <div className="mx-auto max-w-6xl px-4 pb-8 pt-12 sm:px-6 sm:pb-12 sm:pt-16">
             <Label>How a decision becomes an action</Label>
-            <h2 className="mb-6 mt-3 max-w-4xl text-4xl font-semibold tracking-[-0.04em] text-ink sm:text-5xl">One loop. Two layers of judgment. One receipt chain.</h2>
+            <h2 id="how-it-works-title" className="mb-6 mt-3 max-w-4xl text-4xl font-semibold tracking-[-0.04em] text-ink sm:text-5xl">One loop. Two layers of judgment. One receipt chain.</h2>
             <DecisionFlowDiagram />
           </div>
         </section>
 
-        <section className="mx-auto max-w-6xl px-4 pb-14 pt-10 sm:px-6 sm:pb-20 sm:pt-14">
+        <section id="proof" aria-labelledby="proof-title" className="mx-auto max-w-6xl scroll-mt-16 px-4 pb-14 pt-10 sm:px-6 sm:pb-20 sm:pt-14">
           <Label>Claims with receipts</Label>
-          <h2 className="mt-3 text-4xl font-semibold tracking-[-0.04em] text-ink sm:text-5xl">Do not take the landing page’s word for it.</h2>
+          <h2 id="proof-title" className="mt-3 text-4xl font-semibold tracking-[-0.04em] text-ink sm:text-5xl">Do not take the landing page’s word for it.</h2>
           <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2">
             {claims.map((claim, index) => (
               <Link key={claim.title} href={claim.href} className="group surface-shadow relative overflow-hidden rounded-2xl border border-line bg-surface p-6 transition-all hover:-translate-y-1 hover:border-agent-line sm:p-7">
@@ -292,7 +281,7 @@ export default async function LandingPage() {
         </section>
       </main>
 
-      <footer className="border-t border-line bg-surface px-4 py-7 text-center font-mono text-xs text-ink-3">Vestiarion · signed decisions · Arc testnet</footer>
+      <SiteFooter />
     </div>
   );
 }

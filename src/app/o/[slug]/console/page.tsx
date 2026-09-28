@@ -1,9 +1,11 @@
+import type { Metadata } from "next";
 import AgentControls from "@/components/AgentControls";
 import { CycleReport } from "@/components/vx/CycleReport";
 import { DecisionCard } from "@/components/vx/DecisionCard";
 import { invoiceDecision, treasuryActionDecision, treasuryLedgerDecision } from "@/components/vx/map";
 import { Money, SectionHead } from "@/components/vx/Primitives";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
+import { sectionTitle } from "@/components/vx/nav";
 import { AccountsList, BalanceTile, ForecastPanel, MoreLink, StatTile } from "@/components/vx/Treasury";
 import type { Account, Forecast } from "@/components/vx/types";
 import { requireMembership } from "@/lib/auth/membership";
@@ -14,6 +16,8 @@ import { listLedgerEntries, listLedgerEntriesAfter, listLedgerEntriesByDomain, l
 import { latestForecast, listAccounts, listCounterparties, listInvoices, listTreasuryActions, stats } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: sectionTitle("treasury") };
 
 export default async function DashboardPage({
   params,
@@ -69,16 +73,16 @@ export default async function DashboardPage({
     const needsReview = stopped.length;
 
     return (
-      <ProductShell active="treasury" day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={modes} orgSlug={slug} orgName={access.membership.name}>
+      <ProductShell day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={modes}>
         <PageHead
-          title="Treasury"
+          title={sectionTitle("treasury")}
           sub="What the agent holds, what it decided, and why."
           right={<AgentControls orgSlug={slug} nextDay={dashboardStats.day + 1} headSeq={headSeq} clockMode={dashboardStats.clockMode} />}
         />
 
         {since != null && <CycleReport entries={cycleEntries} day={dashboardStats.day} since={since} clockMode={dashboardStats.clockMode} completedAt={dashboardStats.lastCycleAt} orgSlug={slug} />}
 
-        <div className="mb-8 grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-4">
+        <div className="mb-8 grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 xl:grid-cols-4">
           <BalanceTile accounts={accounts} />
           <StatTile label="Paid out to date" sub={`${dashboardStats.onchainTransfers} settled on-chain`}>
             <Money value={dashboardStats.totalPaidOut} />
@@ -91,7 +95,7 @@ export default async function DashboardPage({
           </StatTile>
         </div>
 
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_22rem]">
+        <div className="grid grid-cols-1 gap-8 xl:grid-cols-[minmax(0,1fr)_22rem]">
           <div className="min-w-0 space-y-8">
             {stopped.length > 0 && (
               <section>
@@ -117,7 +121,7 @@ export default async function DashboardPage({
             )}
           </div>
 
-          <aside className="min-w-0 space-y-6">
+          <aside className="min-w-0 space-y-6 md:grid md:grid-cols-2 md:items-start md:gap-6 md:space-y-0 xl:block xl:space-y-6">
             <AccountsList accounts={accounts} />
             {forecast && <ForecastPanel forecast={forecast} />}
           </aside>
