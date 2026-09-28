@@ -18,7 +18,7 @@ export const overlayMotion = [
 export const overlayBackdrop = [
   "fixed inset-0 z-50 bg-ink/40 backdrop-blur-[2px]",
   "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0",
-  "duration-200 data-[state=closed]:duration-150",
+  "duration-200 ease-emphasized data-[state=closed]:duration-150 data-[state=closed]:ease-exit",
 ].join(" ");
 
 /** A panel in the middle of the screen: dialogs and confirmations. */
