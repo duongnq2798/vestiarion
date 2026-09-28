@@ -61,9 +61,9 @@ path produced it.
   #08 from the hackathon brief (continuous audit trail; a single agent running mint/hold/pay) —
   ideas the brief explicitly says "nobody has built yet."
 - **Traction (30%)** — the agent runs against real Circle wallets on Arc testnet, and
-  `npm run cycle` is the same code path the dashboard button uses, so it can run unattended on a
-  schedule. Pointing it at a real business is a data change, not a code change — see
-  [Bringing your own business](#bringing-your-own-business).
+  `npm run cycle -- <org-slug>` is the same code path the dashboard button uses, so it can run
+  unattended on a schedule. Pointing it at a real business is a data change, not a code change —
+  see [Bringing your own business](#bringing-your-own-business).
 
 ## Architecture
 
@@ -78,8 +78,9 @@ supabase/migrations/      Postgres schema. Money is numeric(20,6), never a
 src/lib/config.ts         VestiarionConfig, and the only place the environment
 src/lib/context.ts         is read. A scope carries a config and its clients,
                            so one process can serve more than one business
-src/lib/supabase.ts       Server-side client for the current scope (service
-                           role; never imported from a client component)
+src/lib/dal/               The only module allowed to hold the raw service-role
+                           client; db() scopes every query to the organization in
+                           scope
 src/lib/api/              The v1 read contract: one envelope, coded errors,
                            opaque cursors
 src/lib/insights.ts       Typed, server-only query boundary for measured
@@ -110,8 +111,9 @@ tests/                    Vitest. Every money path that can be tested without
                            a network: the hash chain and its tamper cases,
                            risk tiering, the treasury economics, provider
                            selection and fallback. `npm run verify`
-scripts/                  seed, bootstrap:circle, and three doctors that tell
-                           you exactly which parts are live
+scripts/                  Tenant scripts require an organization slug
+                           (`-- <org-slug>`); seed, bootstrap:circle, and
+                           three doctors tell you which parts are live
 src/app/                  Evidence-first landing page at `/`; working treasury
                            console at `/console`, plus AP/AR, Contractors,
                            Compliance, Audit Log, and database-backed Insights
@@ -129,7 +131,11 @@ cp .env.example .env.local
 Create a [Supabase](https://supabase.com) project and put its URL and keys in `.env.local`
 (Project Settings → API, plus the database password and project ref under Database). Also set
 `VESTIARION_MASTER_KEYS` (generate with
-`node -e "console.log('v1:' + require('crypto').randomBytes(32).toString('base64'))"`). Then:
+`node -e "console.log('v1:' + require('crypto').randomBytes(32).toString('base64'))"`) —
+required wherever the app or a script runs, because every organization's ledger signing key and
+Circle credentials live encrypted on its own row in `orgs`, decrypted with this key, and the app
+no longer reads `LEDGER_SIGNING_KEY`, `LEDGER_PUBLIC_KEY`, `CIRCLE_API_KEY`, or
+`CIRCLE_ENTITY_SECRET` from the environment directly. Then:
 
 ```bash
 npm run db:migrate
@@ -149,16 +155,17 @@ decisions come from the rule-based heuristic. Those two figures are not quoted f
 they were read back off Arc testnet from the receipts of real transfers this agent executed — see
 [What we measured](#what-we-measured).
 
-`npm run seed` is a destructive, opt-in demo command. It deletes the current business records and
-loads the fictional Northstar Studio fixture. It is not part of normal setup, and there is no seed
-or reset control in the product UI. Use it only in a disposable demo database.
+`npm run seed -- <org-slug>` is a destructive, opt-in demo command. It deletes the named
+organization's current business records and loads the fictional Northstar Studio fixture. It is
+not part of normal setup, and there is no seed or reset control in the product UI. Use it only
+against a disposable demo organization.
 
 Two independent upgrades from there, in either order:
 
 | Want | Set | Check with |
 | --- | --- | --- |
 | Real LLM reasoning | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `DEEPSEEK_API_KEY` | `npm run agent:doctor` |
-| Real USDC on Arc | `CIRCLE_API_KEY` + `CIRCLE_ENTITY_SECRET` | `npm run circle:doctor` |
+| Real USDC on Arc | `CIRCLE_API_KEY` + `CIRCLE_ENTITY_SECRET` (via `npm run org:adopt-env`) | `npm run circle:doctor -- <org-slug>` |
 
 ### Scripts
 
@@ -166,13 +173,13 @@ Two independent upgrades from there, in either order:
 | --- | --- |
 | `npm run verify` | Typecheck, lint, and the full test suite — what CI runs |
 | `npm run test` / `test:watch` | Vitest, once or on change |
-| `npm run db:migrate` | Applies `supabase/migrations/*.sql` |
-| `npm run seed` | **Destructive demo only:** replaces business data with fictional fixtures |
-| `npm run bootstrap:circle` | Creates Arc-testnet wallets for accounts and counterparties |
-| `npm run cycle` | Runs one agent cycle headlessly using the configured clock mode |
-| `npm run fixture:guardrail` | **Demo only:** adds one no-transfer model-vs-code refusal probe |
-| `npm run status` | Balances, wallets, open invoices, ledger height |
-| `npm run circle:doctor` / `agent:doctor` | Reports exactly which parts are live |
+| `npm run db:migrate` / `-- --through <N>` | Applies `supabase/migrations/*.sql`, optionally only through migration `<N>` |
+| `npm run seed -- <org-slug>` | **Destructive demo only:** replaces that organization's business data with fictional fixtures |
+| `npm run bootstrap:circle -- <org-slug>` | Creates Arc-testnet wallets for that organization's accounts and counterparties |
+| `npm run cycle -- <org-slug>` | Runs one agent cycle headlessly using the configured clock mode |
+| `npm run fixture:guardrail -- <org-slug>` | **Demo only:** adds one no-transfer model-vs-code refusal probe |
+| `npm run status -- <org-slug>` | Balances, wallets, open invoices, ledger height |
+| `npm run circle:doctor -- <org-slug>` / `agent:doctor` | Reports exactly which parts are live |
 | `npm run arc:proof` | Standalone: two wallets, a faucet check, one real transfer |
 
 Seeded amounts scale down automatically when Circle credentials are present (`SEED_SCALE`),
@@ -235,28 +242,35 @@ assert about your own system drift, and figures you read do not.
 The simulator and the real integration share one interface (`ChainProvider` in
 `src/lib/circle/types.ts`), so switching is additive:
 
-1. Get a **API key** and **Entity Secret** from the [Circle Console](https://console.circle.com)
-   and put them in `.env.local`.
-2. `npm run circle:doctor` — confirms the key is accepted and the entity secret is registered.
-3. `npm run seed && npm run bootstrap:circle` — creates a real Arc-testnet wallet for every
-   treasury account *and* every counterparty, and writes the ids and addresses back to Supabase.
+1. Get an **API key** and **Entity Secret** from the [Circle Console](https://console.circle.com)
+   and put them in `.env.local`, alongside a PKCS8 Ed25519 `LEDGER_SIGNING_KEY` if the
+   organization does not already have one stored.
+2. `npm run org:adopt-env -- <org-slug> --expect-key-id <key id>` — encrypts the ledger signing
+   key and Circle credentials onto that organization's row. From here the app reads them from
+   `orgs`, never from `.env.local`.
+3. `npm run circle:doctor -- <org-slug>` — confirms the key is accepted and the entity secret is
+   registered.
+4. `npm run seed -- <org-slug> && npm run bootstrap:circle -- <org-slug>` — creates a real
+   Arc-testnet wallet for every treasury account *and* every counterparty, and writes the ids and
+   addresses back to Supabase.
    Counterparties get wallets so the demo is verifiable: when the agent pays a contractor you can
    watch the USDC land at a real address. A real deployment stores the address the counterparty
    gives you instead.
-4. Fund the operating wallet: [faucet.circle.com](https://faucet.circle.com), select **Arc
+5. Fund the operating wallet: [faucet.circle.com](https://faucet.circle.com), select **Arc
    Testnet**, 20 USDC every 2 hours. (The Console faucet API, `requestTestnetTokens`, returns 403
    on sandbox keys for Arc — the public faucet is the reliable route.)
-5. Run a cycle. The dashboard header now reads *payments: Arc testnet (live)* and paid invoices
+6. Run a cycle. The dashboard header now reads *payments: Arc testnet (live)* and paid invoices
    carry a real transaction hash.
 
-`npm run arc:proof` does steps 3–5 standalone — two wallets, a faucet check, and one real transfer
+`npm run arc:proof` does steps 4–6 standalone — two wallets, a faucet check, and one real transfer
 — if you want to verify the path without touching the app.
 
-To exercise the red guardrail band without risking a payment, `npm run fixture:guardrail` creates
-one explicitly labelled demo invoice for 0.9 USDC against a medium-risk 0.5 USDC screened limit.
-It feeds a model-style `pay` verdict through the same `enforceApGuardrails` function used by the
-live orchestrator. Code changes the result to held, records `guardrailBlocked: true`, and never
-calls a transfer provider. The command is additive and idempotent; it is not part of normal setup.
+To exercise the red guardrail band without risking a payment,
+`npm run fixture:guardrail -- <org-slug>` creates one explicitly labelled demo invoice for 0.9
+USDC against a medium-risk 0.5 USDC screened limit. It feeds a model-style `pay` verdict through
+the same `enforceApGuardrails` function used by the live orchestrator. Code changes the result to
+held, records `guardrailBlocked: true`, and never calls a transfer provider. The command is
+additive and idempotent; it is not part of normal setup.
 
 ### What is genuinely live, and what is not
 
@@ -285,9 +299,9 @@ Everything the agent reasons about lives in five tables (`accounts`, `counterpar
   rounded. Every accepted record is written to the signed ledger as a human action.
 - Insert milestones with a real `verification_source` (a Git PR merge, a Kimai/Frappe timesheet
   entry, a client sign-off) and flip `verified` when that source confirms the work.
-- Run `npm run bootstrap:circle` once real accounts exist, fund the operating wallet, and call
-  `POST /api/agent/tick` on a schedule (cron, GitHub Action, whatever you have) instead of a
-  button click.
+- Run `npm run bootstrap:circle -- <org-slug>` once real accounts exist, fund the operating
+  wallet, and call `POST /api/agent/tick` on a schedule (cron, GitHub Action, whatever you have)
+  instead of a button click.
 
 ### Running on a real clock
 
@@ -369,8 +383,9 @@ The suite covers the paths where being wrong costs money, and nothing else:
   red.
 
 Nothing in the suite needs Supabase, Circle, or an LLM key — the Postgres above is in-process and
-needs no server. Everything that does need a live service is exercised by `npm run cycle` against
-a real project, which is the honest place for it, not a mock that agrees with itself.
+needs no server. Everything that does need a live service is exercised by
+`npm run cycle -- <org-slug>` against a real project, which is the honest place for it, not a
+mock that agrees with itself.
 
 ## Guardrails
 

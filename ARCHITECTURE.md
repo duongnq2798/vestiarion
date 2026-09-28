@@ -1,10 +1,11 @@
 # Vestiarion architecture
 
 Vestiarion is a Next.js 16 App Router application backed by Supabase. Server
-components and route handlers use the service-role client in
-`src/lib/supabase.ts`; client components must never import it. Circle provides
-Arc testnet payment execution, while simulation modes remain available for
-screening and reserve operations.
+components and route handlers reach tenant data only through the Data Access
+Layer (`src/lib/dal`): `db()` scopes every query to the organization in scope,
+and ESLint forbids importing the raw service-role client anywhere outside it.
+Circle provides Arc testnet payment execution, while simulation modes remain
+available for screening and reserve operations.
 
 ## Read API
 
@@ -30,10 +31,11 @@ mapping and validation live in `src/lib/api/counterparties.ts`,
 and chain-hash rules can be tested without a database.
 
 Collections intended for human browsing are newest first and use
-`created_at + id` as a stable cursor. The ledger is the exception: its
-gap-free sequence is ascending so integrations can resume from a watermark.
-The legacy `src/app/api/ledger/verify/route.ts` still serves the Audit page; it
-is member-only and takes `?org=<slug>` (see `docs/api.md`).
+`created_at + id` as a stable cursor. The ledger is the exception: its `seq`
+is ascending and, within one organization, a correct resume watermark even
+though it runs with gaps — continuity is proven by the hash chain, not by
+`seq`. The legacy `src/app/api/ledger/verify/route.ts` still serves the Audit
+page; it is member-only and takes `?org=<slug>` (see `docs/api.md`).
 
 ## Data ownership
 

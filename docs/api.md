@@ -58,14 +58,17 @@ GET /api/v1/ledger?limit=100&cursor=<previous page.nextCursor>
 
 Continue until `hasMore` is `false` and `nextCursor` is `null`. On the next
 poll, reuse the last non-null cursor you successfully processed. Because the
-ledger is append-only and ascending by its gap-free `seq`, that cursor is a
-watermark: later entries are returned once, and earlier entries are not
-replayed. A malformed cursor receives `400 invalid_request`; the API never
-silently restarts from the beginning.
+ledger is append-only and ascending by `seq`, that cursor is a watermark:
+later entries are returned once, and earlier entries are not replayed. `seq`
+is a global identity column, so within one organization it is monotonic but
+not gap-free — continuity is proven by the hash chain, not by `seq` running
+without gaps. A malformed cursor receives `400 invalid_request`; the API
+never silently restarts from the beginning.
 
 ## `GET /api/v1/ledger/verify`
 
-No parameters. Replays signatures, body hashes, and hash-chain continuity.
+No parameters. Replays signatures, body hashes, and hash-chain continuity for
+the founding organization, the one this token reads (§4.5).
 
 ```json
 {"data":{"valid":true,"checkedEntries":99}}
@@ -73,21 +76,21 @@ No parameters. Replays signatures, body hashes, and hash-chain continuity.
 
 `valid` has three values, not two. `true` verified and `false` broken are
 findings about the chain; **`null` means no verdict was produced** — the
-deployment declares no ledger public key, so authorship was never checked. A
-consumer that treats `null` as a failure will report a tampered audit trail
-because an environment variable is missing. `reason` says which case it is, and
-`brokenAt` is absent whenever `valid` is `null`.
+founding organization has no ledger public key to check against, so
+authorship was never checked. A consumer that treats `null` as a failure will
+report a tampered audit trail because a key was never adopted onto the
+organization. `reason` says which case it is, and `brokenAt` is absent
+whenever `valid` is `null`.
 
 ```json
 {"data":{"valid":null,"checkedEntries":99,"reason":"no ledger public key is configured, so authorship was not checked"}}
 ```
 
-A key that is configured but cannot be read — a PEM pasted with its newlines
-lost is the usual case — is a **configuration problem, not a finding about the
-chain**, and the two are kept apart. The read path never fails over a bad key:
-it falls back to `LEDGER_PUBLIC_KEY`, then to a development checkout's key
-file, verifies with whatever it could read, and reports what it could not in
-`warnings`:
+A key that is stored but cannot be read — a PEM whose newlines were lost when
+it was adopted is the usual case — is a **configuration problem, not a finding
+about the chain**, and the two are kept apart. The read path never fails over
+a bad key: it verifies with whatever it could read and reports what it could
+not in `warnings`:
 
 ```json
 {"data":{"valid":true,"checkedEntries":105,"warnings":["LEDGER_SIGNING_KEY is not a readable private key: error:1E08010C:DECODER routines::unsupported"]}}
@@ -95,14 +98,21 @@ file, verifies with whatever it could read, and reports what it could not in
 
 When a broken key is the reason no key is available at all, `reason` names it
 instead of saying "no ledger public key is configured", which would send an
-operator to add a key that is already there, pasted wrong. Appending is
+operator to adopt a key that is already stored, just unreadable. Appending is
 different: signing has no fallback, so a cycle still fails loudly on the same
 broken key.
 
-Set `LEDGER_PUBLIC_KEY` (the public half alone is enough) or `LEDGER_SIGNING_KEY`
-to get a real verdict. `GET /api/v1/status` reports both as
-`ledgerPublicKeyProvided` and `ledgerSigningKeyProvided`, and
-`ledgerRetiredKeyCount` says how many earlier keys the deployment still accepts.
+Every organization's ledger signing key lives encrypted on its own `orgs` row,
+decrypted with `VESTIARION_MASTER_KEYS` (§5.4) — adopted once with
+`npm run org:adopt-env -- founding --expect-key-id 9b03458d9a617871`, never
+read from `LEDGER_PUBLIC_KEY` or `LEDGER_SIGNING_KEY` directly. `GET
+/api/v1/status` reports the founding organization's own configuration:
+`ledgerSigningKeyProvided` is the flag that reflects whether its stored key
+was read; `ledgerPublicKeyProvided` is always `false` inside an organization,
+because the public half is derived from the stored signing key rather than
+configured on its own. `ledgerRetiredKeyCount` says how many earlier keys the
+founding organization still accepts — `LEDGER_RETIRED_PUBLIC_KEYS` is still
+read from the environment, and applies to the founding organization only.
 
 ### Key identity and rotation
 
