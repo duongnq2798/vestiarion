@@ -11,8 +11,10 @@ export const MIGRATIONS_DIR = path.join(process.cwd(), "supabase", "migrations")
 
 /**
  * What Supabase provides that a vanilla Postgres does not, and nothing more:
- * the three API roles the migrations grant and revoke against, and the
- * `auth.users` table that the tenancy tables reference.
+ * the three API roles the migrations grant and revoke against, the
+ * `auth.users` table that the tenancy tables reference, and the `extensions`
+ * schema so 0018's conditional grant on it is exercised. pgcrypto itself
+ * stays wherever PGlite loads it (below) — this schema is otherwise empty.
  */
 const SUPABASE_BASELINE = `
   create role anon;
@@ -20,6 +22,7 @@ const SUPABASE_BASELINE = `
   create role service_role;
   create role authenticator;
   create schema auth;
+  create schema extensions;
   create table auth.users (id uuid primary key, email text);
 `;
 
