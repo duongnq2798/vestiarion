@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { signOut } from "@/app/login/actions";
+import AcceptInvitationByIdForm from "@/components/AcceptInvitationByIdForm";
 import CreateWorkspaceForm from "@/components/CreateWorkspaceForm";
 import { ChevronGlyph } from "@/components/vx/Glyphs";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
@@ -9,6 +10,7 @@ import { HOME_PATH } from "@/components/vx/nav";
 import { membershipsOf } from "@/lib/auth/membership";
 import { orgHref } from "@/lib/auth/org-paths";
 import { verifySession } from "@/lib/auth/session";
+import { pendingInvitationsFor } from "@/lib/platform/members";
 
 export const metadata: Metadata = { title: "Workspaces" };
 
@@ -16,17 +18,29 @@ type OnboardingPageProps = {
   searchParams: Promise<{ new?: string | string[] }>;
 };
 
+const expiresFormat = new Intl.DateTimeFormat("en-US", { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" });
+
 /**
  * Where a signed-in person lands, and where they create a workspace. Signing
  * in sends people here by default, so one workspace still goes straight in;
  * `?new`, which the workspace switcher links to, stays here to list workspaces
  * and create another. Several: choose. None: create the first.
+ *
+ * Also where an invitation on another device, another browser, or from
+ * Google sign-in, is found again: the `vx_after_sign_in` cookie
+ * (src/lib/auth/after-sign-in.ts) only covers the same browser, so any open
+ * invitation for this person's address is listed here too, and finding one
+ * holds off the single-workspace redirect — the person came here for a
+ * reason, even with one workspace already.
  */
 export default async function OnboardingPage({ searchParams }: OnboardingPageProps) {
   const user = await verifySession("/onboarding");
   const memberships = await membershipsOf(user.id);
+  const invitations = await pendingInvitationsFor(user.id);
   const query = await searchParams;
-  if (memberships.length === 1 && query.new === undefined) redirect(orgHref(memberships[0].slug, HOME_PATH));
+  if (memberships.length === 1 && query.new === undefined && invitations.length === 0) {
+    redirect(orgHref(memberships[0].slug, HOME_PATH));
+  }
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -40,6 +54,27 @@ export default async function OnboardingPage({ searchParams }: OnboardingPagePro
       </SiteHeader>
       <main id="main" className="flex flex-1 items-center justify-center px-4 py-12 sm:py-16">
         <div className="w-full max-w-md">
+          {invitations.length > 0 && (
+            <section className="mb-10">
+              <h2 className="text-lg font-semibold text-ink">Invitations for you</h2>
+              <ul className="mt-4 space-y-2">
+                {invitations.map((invitation) => (
+                  <li
+                    key={invitation.invitationId}
+                    className="surface-shadow flex items-center justify-between gap-3 rounded-xl border border-line bg-surface px-4 py-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-ink">{invitation.orgName}</p>
+                      <p className="text-xs capitalize text-ink-3">
+                        Invited as {invitation.role} · expires {expiresFormat.format(new Date(invitation.expiresAt))}
+                      </p>
+                    </div>
+                    <AcceptInvitationByIdForm invitationId={invitation.invitationId} />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
           {memberships.length ? (
             <>
               <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">Choose a workspace</h1>
