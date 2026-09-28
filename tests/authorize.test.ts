@@ -14,6 +14,9 @@ vi.mock("@/lib/auth/session", () => ({ getSessionUser }));
 const { membershipFor } = vi.hoisted(() => ({ membershipFor: vi.fn() }));
 vi.mock("@/lib/auth/membership", () => ({ membershipFor }));
 
+const { touchOrgActivity } = vi.hoisted(() => ({ touchOrgActivity: vi.fn() }));
+vi.mock("@/lib/platform/activity", () => ({ touchOrgActivity }));
+
 const { authorize } = await import("@/lib/auth/authorize");
 
 const USER = { id: "0b6c1c9e-4a4f-4a7e-9b1e-0000000000e1", email: null };
@@ -50,10 +53,18 @@ describe("authorize", () => {
     });
   });
 
-  it("authorizes a member whose role holds the permission", async () => {
+  it("never touches activity when authorization is refused", async () => {
+    getSessionUser.mockResolvedValueOnce(USER);
+    membershipFor.mockResolvedValueOnce(null);
+    await authorize("northstar", "workspace.read");
+    expect(touchOrgActivity).not.toHaveBeenCalled();
+  });
+
+  it("authorizes a member whose role holds the permission, and touches the workspace's activity", async () => {
     getSessionUser.mockResolvedValueOnce(USER);
     const membership = { orgId: "org-1", slug: "northstar", name: "Northstar", mode: "sandbox" as const, role: "owner" as const };
     membershipFor.mockResolvedValueOnce(membership);
     expect(await authorize("northstar", "org.administer")).toEqual({ ok: true, user: USER, membership });
+    expect(touchOrgActivity).toHaveBeenCalledWith("org-1");
   });
 });

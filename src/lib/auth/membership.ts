@@ -2,6 +2,7 @@ import "server-only";
 import { notFound } from "next/navigation";
 import { cache } from "react";
 import { platformDb, unwrap } from "@/lib/dal";
+import { touchOrgActivity } from "@/lib/platform/activity";
 import { isValidSlug } from "./org-paths";
 import type { OrgRole } from "./roles";
 import { verifySession, type SessionUser } from "./session";
@@ -59,6 +60,7 @@ export const requireMembership = cache(
     const user = await verifySession(`/o/${slug}/console`);
     const membership = await membershipFor(user.id, slug);
     if (!membership) notFound();
+    await touchOrgActivity(membership.orgId);
     return { user, membership };
   }
 );

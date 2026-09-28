@@ -1,4 +1,5 @@
 import "server-only";
+import { touchOrgActivity } from "@/lib/platform/activity";
 import { membershipFor, type OrgMembership } from "./membership";
 import { can, type Permission } from "./roles";
 import { getSessionUser, type SessionUser } from "./session";
@@ -23,6 +24,7 @@ export async function authorize(orgSlug: unknown, permission: Permission): Promi
   if (!can(membership.role, permission)) {
     return { ok: false, message: `Your role in this workspace (${membership.role}) cannot do that.` };
   }
+  await touchOrgActivity(membership.orgId);
   return { ok: true, user, membership };
 }
 
