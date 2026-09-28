@@ -33,7 +33,7 @@ export function Disclosure({
       <summary
         className={cn(
           "cursor-pointer list-none select-none [&::-webkit-details-marker]:hidden",
-          framed && "flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-medium text-ink-2 transition-colors duration-150 hover:text-ink",
+          framed && "flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-medium text-ink-2 transition-colors duration-150 ease-standard hover:text-ink",
           summaryClassName
         )}
       >

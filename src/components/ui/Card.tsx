@@ -13,7 +13,7 @@ export const cardVariants = cva("rounded-2xl border bg-surface shadow-surface", 
       simulated: "border-dashed border-line-strong",
     },
     interactive: {
-      true: "transition duration-200 ease-standard hover:-translate-y-0.5 hover:border-agent-line hover:shadow-raised active:translate-y-0",
+      true: "transition duration-150 ease-standard hover:-translate-y-0.5 hover:border-agent-line hover:shadow-raised active:translate-y-0",
       false: "",
     },
   },
