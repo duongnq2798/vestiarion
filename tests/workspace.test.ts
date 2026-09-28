@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { isValidSlug } from "@/lib/auth/org-paths";
@@ -48,10 +48,18 @@ const SLUG_CLASH: FakeReply = {
  * the scope reads carries whatever envelope `create_org` last received, so the
  * scope decrypts the key that was just generated rather than a fixture.
  */
-function workspaceFake(options: { takenSlugs?: string[]; createOrg?: (attempt: number) => FakeReply | undefined } = {}) {
+function workspaceFake(options: {
+  takenSlugs?: string[];
+  createOrg?: (attempt: number) => FakeReply | undefined;
+  /** Answers first, for a failure somewhere after `create_org`. */
+  fail?: (request: RecordedRequest) => FakeReply | undefined;
+  config?: typeof config;
+} = {}) {
   let created: Record<string, unknown> | undefined;
   let createOrgCalls = 0;
   const fake = fakeSupabase((request) => {
+    const failure = options.fail?.(request);
+    if (failure) return failure;
     if (request.path === "/rest/v1/orgs" && request.params.has("slug")) {
       const slug = request.params.get("slug")!.replace(/^eq\./, "");
       return { body: options.takenSlugs?.includes(slug) ? [{ id: "5d0f3a2e-8c1b-4f7a-9e6d-00000000beef" }] : [] };
@@ -71,7 +79,7 @@ function workspaceFake(options: { takenSlugs?: string[]; createOrg?: (attempt: n
       };
       return { body: created };
     }
-    if (request.path === "/rest/v1/orgs" && request.params.has("id")) {
+    if (request.method === "GET" && request.path === "/rest/v1/orgs" && request.params.has("id")) {
       if (created && request.params.get("id") === `eq.${created.id}`) return { body: created };
       return { status: 406, body: { code: "PGRST116", message: "JSON object requested, multiple (or no) rows returned" } };
     }
@@ -82,7 +90,16 @@ function workspaceFake(options: { takenSlugs?: string[]; createOrg?: (attempt: n
     }
     return { body: [] };
   });
-  return { fake, run: <T>(fn: () => Promise<T>) => runWith({ config, db: fake.client, fetch: fake.fetch }, fn) };
+  return {
+    fake,
+    run: <T>(fn: () => Promise<T>) => runWith({ config: options.config ?? config, db: fake.client, fetch: fake.fetch }, fn),
+  };
+}
+
+const DB_ERROR = (message: string): FakeReply => ({ status: 500, body: { code: "XX000", message, details: null, hint: null } });
+
+function deletes(requests: RecordedRequest[]) {
+  return requests.filter((request) => request.method === "DELETE").map((request) => [request.path, request.params.toString()]);
 }
 
 function rpcBodies(requests: RecordedRequest[], name: string) {
@@ -222,5 +239,78 @@ describe("createWorkspace", () => {
     const { fake, run } = workspaceFake();
     await expect(run(() => createWorkspace({ userId: USER, name: "Northstar Studio" }))).rejects.toThrow(/VESTIARION_MASTER_KEYS/);
     expect(fake.requests).toEqual([]);
+  });
+
+  it("creates nothing on a deployment that could not enter the new organization", async () => {
+    const { fake, run } = workspaceFake({ config: configFromEnv({
+      NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid",
+      SUPABASE_SERVICE_ROLE_KEY: "k",
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: "test-anon-key",
+    }) });
+    await expect(run(() => createWorkspace({ userId: USER, name: "Northstar Studio" }))).rejects.toThrow(/SUPABASE_JWT_SECRET/);
+    expect(fake.requests).toEqual([]);
+  });
+
+  it("calls create_org as the platform, never with a tenant token", async () => {
+    const { fake, run } = workspaceFake();
+    await run(() => createWorkspace({ userId: USER, name: "Northstar Studio" }));
+    const createOrg = fake.requests.find((request) => request.path === "/rest/v1/rpc/create_org")!;
+    // fakeSupabase() builds its service client with the key "test-service-role".
+    expect(createOrg.headers.get("authorization")).toBe("Bearer test-service-role");
+  });
+
+  it("never leaves a double hyphen before the suffix", async () => {
+    // The base slug is 34 a's, a hyphen and "b": cutting it to 35 for the
+    // suffix would otherwise end it on the hyphen.
+    const base = `${"a".repeat(34)}-b`;
+    const { run } = workspaceFake({ takenSlugs: [base] });
+    const result = await run(() => createWorkspace({ userId: USER, name: `${"a".repeat(34)} bcd`, random: () => "beef" }));
+    expect(result.slug).toBe(`${"a".repeat(34)}-beef`);
+  });
+});
+
+describe("a workspace whose setup fails", () => {
+  let logged: unknown[][] = [];
+  beforeEach(() => {
+    logged = [];
+    vi.spyOn(console, "error").mockImplementation((...args) => { logged.push(args); });
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("is removed when the accounts cannot be written, and the original error surfaces", async () => {
+    const { fake, run } = workspaceFake({
+      fail: (request) => (request.method === "POST" && request.path === "/rest/v1/accounts" ? DB_ERROR("accounts insert failed") : undefined),
+    });
+    await expect(run(() => createWorkspace({ userId: USER, name: "Northstar Studio" }))).rejects.toThrow("accounts insert failed");
+    const [{ p_org_id: orgId }] = rpcBodies(fake.requests, "create_org");
+    expect(deletes(fake.requests)).toContainEqual(["/rest/v1/orgs", `id=eq.${orgId}`]);
+    expect(logged).toEqual([["workspace setup failed; rolled back", orgId]]);
+  });
+
+  it("has its accounts and then itself removed when the first ledger entry cannot be written", async () => {
+    const { fake, run } = workspaceFake({
+      fail: (request) => (request.path === "/rest/v1/rpc/append_ledger_entry" ? DB_ERROR("append failed") : undefined),
+    });
+    await expect(run(() => createWorkspace({ userId: USER, name: "Northstar Studio" }))).rejects.toThrow("append failed");
+    const [{ p_org_id: orgId }] = rpcBodies(fake.requests, "create_org");
+    expect(deletes(fake.requests)).toEqual([
+      ["/rest/v1/accounts", `org_id=eq.${orgId}`],
+      ["/rest/v1/orgs", `id=eq.${orgId}`],
+    ]);
+    const accountsDelete = fake.requests.find((request) => request.method === "DELETE" && request.path === "/rest/v1/accounts")!;
+    expect(claimsOf(accountsDelete)).toMatchObject({ role: "vestiarion_tenant", org_id: orgId, sub: USER });
+  });
+
+  it("still surfaces the original error when the clean-up itself fails", async () => {
+    const { run } = workspaceFake({
+      fail: (request) => {
+        if (request.path === "/rest/v1/rpc/append_ledger_entry") return DB_ERROR("append failed");
+        if (request.method === "DELETE") return DB_ERROR("delete refused");
+        return undefined;
+      },
+    });
+    await expect(run(() => createWorkspace({ userId: USER, name: "Northstar Studio" }))).rejects.toThrow("append failed");
   });
 });

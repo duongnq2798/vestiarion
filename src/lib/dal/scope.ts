@@ -62,6 +62,14 @@ function requireDatabaseSettings(platformConfig: VestiarionConfig): void {
   }
 }
 
+/**
+ * The same check, for a caller about to create an organization: finding out
+ * only on the way into it would leave one behind that nobody can enter.
+ */
+export function requireOrgScopeSettings(): void {
+  requireDatabaseSettings(platformConfigOf(currentContext()));
+}
+
 function contextFor(platformConfig: VestiarionConfig, org: OrgRow, userId: string | undefined): VestiarionContext {
   const current = currentContext();
   const { config, warnings } = orgConfig(platformConfig, org, masterKeys());

@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { isValidSlug } from "../auth/org-paths";
 import { db, platformDb } from "../dal";
-import { withOrg } from "../dal/scope";
+import { requireOrgScopeSettings, withOrg } from "../dal/scope";
 import { appendLedgerEntry } from "../ledger";
 import { ledgerKeyId } from "../ledger-keys";
 import { encryptSecret, masterKeysFromEnv } from "../secrets";
@@ -64,14 +64,16 @@ export async function createWorkspace(input: {
   if (name.length < 1 || name.length > MAX_NAME) {
     throw new Error(`A workspace name must be 1 to ${MAX_NAME} characters.`);
   }
-  // Without a master key the new organization's ledger key could not be
-  // stored, and an organization with no key can never sign its ledger.
+  // A deployment that could not enter the new organization, or could not
+  // store its ledger key, must fail here, before anything is created: an
+  // organization it cannot set up would still count against the person's limit.
+  requireOrgScopeSettings();
   const keys = masterKeysFromEnv();
 
   const base = slugFromName(name);
   let created: { orgId: string; slug: string; publicKey: crypto.KeyObject } | undefined;
   for (let attempt = 0; attempt < ATTEMPTS && !created; attempt++) {
-    const slug = attempt === 0 ? base : `${base.slice(0, MAX_BASE_SLUG - 1)}-${random()}`;
+    const slug = attempt === 0 ? base : `${base.slice(0, MAX_BASE_SLUG - 1).replace(/-+$/, "")}-${random()}`;
 
     // A courtesy that saves generating a key for an address already taken.
     // The unique constraint `create_org` meets is what actually decides, since
@@ -104,21 +106,50 @@ export async function createWorkspace(input: {
   if (!created) throw new Error("Could not find a free address for this workspace; try a different name.");
 
   const { orgId, slug, publicKey } = created;
-  await withOrg(
-    orgId,
-    async () => {
-      const inserted = await db().from("accounts").insert(SIMULATED_ACCOUNTS);
-      if (inserted.error) throw new Error(inserted.error.message);
-      await appendLedgerEntry({
-        actor: "human",
-        domain: "system",
-        action: "org_created",
-        summary: `Workspace created: ${name}`,
-        detail: { by: userId, slug, mode: "sandbox", ledgerKeyId: ledgerKeyId(publicKey) },
-      });
-    },
-    { userId }
-  );
+  try {
+    await withOrg(
+      orgId,
+      async () => {
+        const inserted = await db().from("accounts").insert(SIMULATED_ACCOUNTS);
+        if (inserted.error) throw new Error(inserted.error.message);
+        await appendLedgerEntry({
+          actor: "human",
+          domain: "system",
+          action: "org_created",
+          summary: `Workspace created: ${name}`,
+          detail: { by: userId, slug, mode: "sandbox", ledgerKeyId: ledgerKeyId(publicKey) },
+        });
+      },
+      { userId }
+    );
+  } catch (error) {
+    await rollBack(orgId, userId);
+    throw error;
+  }
 
   return { orgId, slug };
+}
+
+/**
+ * Undoes a `create_org` whose setup failed, so a half-built organization does
+ * not count against the person's limit. Best effort throughout: the error
+ * worth reporting is the one that caused this, not one met cleaning up.
+ *
+ * The accounts go first, through the tenant role, because they restrict the
+ * organization's delete and only that role may remove them. Memberships
+ * cascade with the organization. If the first ledger entry did commit, its
+ * restrict refuses the delete, and that is right: a chain once started stays.
+ */
+async function rollBack(orgId: string, userId: string): Promise<void> {
+  try {
+    await withOrg(orgId, async () => { await db().from("accounts").delete(); }, { userId });
+  } catch {
+    // The organization's delete below fails on its own if accounts remain.
+  }
+  try {
+    await platformDb().from("orgs").delete().eq("id", orgId);
+  } catch {
+    // Left for an operator; the original error still reaches the caller.
+  }
+  console.error("workspace setup failed; rolled back", orgId);
 }
