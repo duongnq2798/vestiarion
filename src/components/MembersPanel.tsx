@@ -121,41 +121,45 @@ function InviteForm({ orgSlug, assignable }: { orgSlug: string; assignable: read
     <form
       action={action}
       onSubmit={() => setCopied(false)}
-      className="surface-shadow flex flex-col gap-3 rounded-2xl border border-line bg-surface p-4 sm:flex-row sm:items-end sm:p-5"
+      className="surface-shadow flex flex-col gap-3 rounded-2xl border border-line bg-surface p-4 sm:p-5"
     >
       <input type="hidden" name="orgSlug" value={orgSlug} />
-      <div className="flex-1">
-        <label htmlFor="invite-email" className="block text-sm font-medium text-ink">Email</label>
-        <input
-          id="invite-email"
-          name="email"
-          type="email"
-          required
-          autoComplete="email"
-          className="mt-1 h-10 w-full rounded-lg border border-line-strong bg-ground px-3 text-sm text-ink outline-none focus:border-agent focus:ring-2 focus:ring-agent-soft"
-        />
-      </div>
-      <div>
-        <label htmlFor="invite-role" className="block text-sm font-medium text-ink">Role</label>
-        <select
-          id="invite-role"
-          name="role"
-          defaultValue={assignable[assignable.length - 1]}
-          className="mt-1 h-10 rounded-lg border border-line-strong bg-ground px-3 text-sm capitalize text-ink outline-none focus:border-agent focus:ring-2 focus:ring-agent-soft"
+      {/* The fields share one row; the result sits below it, so the email field keeps the row's free width. */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+        <div className="min-w-0 flex-1">
+          <label htmlFor="invite-email" className="block text-sm font-medium text-ink">Email</label>
+          <input
+            id="invite-email"
+            name="email"
+            type="email"
+            required
+            autoComplete="email"
+            placeholder="name@company.com"
+            className="mt-1 h-10 w-full rounded-lg border border-line-strong bg-ground px-3 text-sm text-ink outline-none placeholder:text-ink-3 focus:border-agent focus:ring-2 focus:ring-agent-soft"
+          />
+        </div>
+        <div>
+          <label htmlFor="invite-role" className="block text-sm font-medium text-ink">Role</label>
+          <select
+            id="invite-role"
+            name="role"
+            defaultValue={assignable[assignable.length - 1]}
+            className="mt-1 h-10 w-full rounded-lg border border-line-strong bg-ground px-3 text-sm capitalize text-ink outline-none focus:border-agent focus:ring-2 focus:ring-agent-soft sm:w-auto"
+          >
+            {assignable.map((role) => (
+              <option key={role} value={role}>{role}</option>
+            ))}
+          </select>
+        </div>
+        <button
+          type="submit"
+          disabled={pending}
+          className="brand-shadow h-10 rounded-xl bg-agent px-4 text-sm font-semibold text-on-agent transition-transform hover:-translate-y-0.5 disabled:translate-y-0 disabled:opacity-70"
         >
-          {assignable.map((role) => (
-            <option key={role} value={role}>{role}</option>
-          ))}
-        </select>
+          {pending ? "Inviting…" : "Invite"}
+        </button>
       </div>
-      <button
-        type="submit"
-        disabled={pending}
-        className="brand-shadow h-10 rounded-xl bg-agent px-4 text-sm font-semibold text-on-agent transition-transform hover:-translate-y-0.5 disabled:translate-y-0 disabled:opacity-70"
-      >
-        {pending ? "Inviting…" : "Invite"}
-      </button>
-      <div className="w-full sm:basis-full">
+      <div className="empty:hidden">
         {state.message && (
           <p aria-live="polite" className={`text-sm ${state.ok ? "text-ink-3" : "text-refused"}`}>{state.message}</p>
         )}
