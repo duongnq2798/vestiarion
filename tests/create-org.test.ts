@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import type { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { applyMigrations, createDatabase, createUser } from "./support/pglite";
+import { applyMigrations, asServiceRole, createDatabase, createUser } from "./support/pglite";
 
 /**
  * Migration 0020: create_org is the only way an organization is born outside
@@ -97,6 +97,25 @@ describe("create_org", () => {
     const byRole = Object.fromEntries(result.rows.map((row) => [row.role, row.ok]));
     expect(byRole).toEqual({ anon: false, authenticated: false, vestiarion_tenant: false, service_role: true });
   });
+
+  it("works through the real invoker path: service_role, RLS enabled, bypassed by BYPASSRLS", async () => {
+    // Every other test in this file calls create_org over PGlite's own
+    // superuser connection, which never runs RLS at all. This is the one
+    // test that exercises the actual production path: connected as
+    // service_role, orgs' and memberships' row-level security switched on,
+    // and access coming from BYPASSRLS rather than from being unauthenticated
+    // to RLS in the first place.
+    const orgId = crypto.randomUUID();
+    const row = await asServiceRole(db, async (tx) => {
+      const result = await tx.query<OrgRow>(
+        "select * from public.create_org($1, $2, $3, $4, $5::jsonb)",
+        [orgId, carol, "Carol RLS Co", "carol-rls-co", JSON.stringify({ k: "z" })]
+      );
+      return result.rows[0];
+    });
+    expect(row).toMatchObject({ mode: "sandbox", created_by: carol, slug: "carol-rls-co" });
+    expect(await ownerRole(row.id, carol)).toBe("owner");
+  });
 });
 
 describe("the last-owner guard", () => {
@@ -115,6 +134,18 @@ describe("the last-owner guard", () => {
   it("refuses to demote the only owner", async () => {
     await expect(
       db.query("update public.memberships set role = 'admin' where org_id = $1 and user_id = $2", [orgId, carol])
+    ).rejects.toThrow(/last owner/);
+  });
+
+  it("refuses to move the only owner's membership row to a different organization", async () => {
+    // An UPDATE that changes org_id leaves the old organization ownerless
+    // just as surely as a DELETE or a demotion would, so the guard treats it
+    // the same way — keyed off old.org_id, not the row's destination.
+    const elsewhere = (await db.query<{ id: string }>(
+      "insert into public.orgs (slug, name) values ('carol-elsewhere', 'Carol Elsewhere') returning id"
+    )).rows[0].id;
+    await expect(
+      db.query("update public.memberships set org_id = $1 where org_id = $2 and user_id = $3", [elsewhere, orgId, carol])
     ).rejects.toThrow(/last owner/);
   });
 

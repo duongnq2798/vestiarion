@@ -23,7 +23,11 @@ declare
   v_org      public.orgs;
 begin
   -- Serialise one person's creations so two concurrent requests cannot both
-  -- pass the limit.
+  -- pass the limit: the advisory lock blocks the second transaction until
+  -- the first commits or rolls back, and the count below then runs under a
+  -- fresh snapshot — READ COMMITTED takes one per statement, and PostgREST
+  -- runs every RPC at READ COMMITTED — so it sees whatever the first
+  -- transaction actually committed.
   perform pg_advisory_xact_lock(hashtext('vestiarion_create_org:' || p_user_id::text));
   select count(*) into v_existing from public.orgs where created_by = p_user_id;
   if v_existing >= 3 then
@@ -44,24 +48,54 @@ grant execute on function public.create_org(uuid, uuid, text, text, jsonb) to se
 
 -- Every organization keeps at least one owner. Deleting the organization itself
 -- still cascades: by the time its memberships go, the organization row is gone.
+--
+-- security definer, because vestiarion_tenant — the role every tenant request
+-- runs as — has no privileges on public.orgs at all (0015 grants that table
+-- to service_role only). Run as invoker, the guard's own read of orgs would
+-- fail with permission denied, or, if orgs ever gained a narrower policy for
+-- that role, could silently see fewer rows than exist and let the guard be
+-- bypassed. search_path stays pinned to '' so the definer's elevated
+-- privileges cannot be redirected to an attacker's function or table of the
+-- same name sitting earlier on some other search path.
 create or replace function public.keep_an_owner() returns trigger
 language plpgsql
+security definer
 set search_path = ''
 as $$
 begin
   if old.role = 'owner'
-     and (tg_op = 'DELETE' or new.role <> 'owner')
-     and exists (select 1 from public.orgs where id = old.org_id)
-     and not exists (
-       select 1 from public.memberships
-        where org_id = old.org_id and role = 'owner' and user_id <> old.user_id
-     )
+     and (tg_op = 'DELETE' or new.role <> 'owner' or new.org_id <> old.org_id)
   then
-    raise exception 'the last owner of an organization cannot be removed or demoted';
+    -- Lock the organization row before counting its other owners. Without
+    -- this, two concurrent transactions each demoting or removing a
+    -- different owner of the same organization could each see the other
+    -- still as owner (write skew under READ COMMITTED) and both commit,
+    -- leaving zero owners. The lock makes the second transaction wait for
+    -- the first to commit or roll back; the count below then runs under a
+    -- fresh snapshot — READ COMMITTED takes one per statement — so it sees
+    -- whatever the first transaction actually committed.
+    perform 1 from public.orgs where id = old.org_id for no key update;
+    if not found then
+      -- The organization row itself is gone: this membership row is
+      -- cascading away with it, not being demoted or removed on its own.
+      return case when tg_op = 'DELETE' then old else new end;
+    end if;
+
+    if not exists (
+      select 1 from public.memberships
+       where org_id = old.org_id and role = 'owner' and user_id <> old.user_id
+     )
+    then
+      raise exception 'the last owner of an organization cannot be removed or demoted';
+    end if;
   end if;
   return case when tg_op = 'DELETE' then old else new end;
 end;
 $$;
+
+-- Trigger functions fire regardless of EXECUTE privilege; this only keeps
+-- the browser roles from calling keep_an_owner() directly.
+revoke execute on function public.keep_an_owner() from public, anon, authenticated;
 
 drop trigger if exists memberships_keep_an_owner on public.memberships;
 create trigger memberships_keep_an_owner

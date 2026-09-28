@@ -19,7 +19,7 @@ export const MIGRATIONS_DIR = path.join(process.cwd(), "supabase", "migrations")
 const SUPABASE_BASELINE = `
   create role anon;
   create role authenticated;
-  create role service_role;
+  create role service_role bypassrls;
   create role authenticator;
   create schema auth;
   create schema extensions;
@@ -166,6 +166,19 @@ export async function asTenant<T>(db: PGlite, orgId: string | null, fn: (tx: Que
 export async function asRole<T>(db: PGlite, role: "anon" | "authenticated", fn: (tx: Queryable) => Promise<T>): Promise<T> {
   return db.transaction(async (tx) => {
     await tx.query(`set local role ${role}`);
+    return fn(tx);
+  });
+}
+
+/**
+ * Runs `fn` as `service_role`, the way the server's own RPC calls run: RLS
+ * applies to the connection but is bypassed through the role's BYPASSRLS
+ * attribute (as on Supabase), rather than sidestepped by staying on PGlite's
+ * superuser connection.
+ */
+export async function asServiceRole<T>(db: PGlite, fn: (tx: Queryable) => Promise<T>): Promise<T> {
+  return db.transaction(async (tx) => {
+    await tx.query("set local role service_role");
     return fn(tx);
   });
 }
