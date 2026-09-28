@@ -3,7 +3,7 @@ import MilestoneVerification from "@/components/MilestoneVerification";
 import { DecisionCard } from "@/components/vx/DecisionCard";
 import { milestoneDecision } from "@/components/vx/map";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
-import { viewerCanMutate } from "@/lib/auth/authorize";
+import { viewerCan } from "@/lib/auth/authorize";
 import { requireMembership } from "@/lib/auth/membership";
 import { chainModes } from "@/lib/circle";
 import { inOrg } from "@/lib/dal/scope";
@@ -16,11 +16,11 @@ export default async function ContractorsPage({ params }: { params: Promise<{ sl
   const { slug } = await params;
   const access = await requireMembership(slug);
   return inOrg(access, async () => {
-    const [milestones, headEntries, dashboardStats, canMutate] = await Promise.all([
+    const [milestones, headEntries, dashboardStats, canWrite] = await Promise.all([
       listMilestones(),
       listLedgerEntries(1),
       stats(),
-      viewerCanMutate(slug),
+      viewerCan(slug, "records.write"),
     ]);
     const entries = await listLedgerEntriesForTargets({ milestoneIds: milestones.map((milestone) => milestone.id) });
     const decisions = milestones.map((milestone) => milestoneDecision(milestone, entries));
@@ -36,7 +36,7 @@ export default async function ContractorsPage({ params }: { params: Promise<{ sl
           {decisions.map((decision, index) => (
             <div key={decision.id}>
               <DecisionCard decision={decision} orgSlug={slug} />
-              {canMutate && (
+              {canWrite && (
                 <MilestoneVerification
                   orgSlug={slug}
                   milestoneId={milestones[index].id}

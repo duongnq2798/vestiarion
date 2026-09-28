@@ -3,7 +3,8 @@
 import "server-only";
 
 import { runAgentCycle } from "@/lib/agent/orchestrator";
-import { authorizeMutation } from "@/lib/auth/authorize";
+import { SANDBOX_DAILY_CYCLES, sandboxCyclesUsedToday } from "@/lib/agent/sandbox-cap";
+import { authorize } from "@/lib/auth/authorize";
 import { revalidateOrgPages } from "@/lib/auth/revalidate";
 import { inOrg } from "@/lib/dal/scope";
 
@@ -15,10 +16,13 @@ export interface AgentActionResult {
 }
 
 export async function runAgentCycleAction(orgSlug: string): Promise<AgentActionResult> {
-  const auth = await authorizeMutation(orgSlug);
+  const auth = await authorize(orgSlug, "agent.run_cycle");
   if (!auth.ok) return { ok: false, message: auth.message };
   return inOrg(auth, async () => {
     try {
+      if (auth.membership.mode === "sandbox" && (await sandboxCyclesUsedToday()) >= SANDBOX_DAILY_CYCLES) {
+        return { ok: false, message: `This sandbox has run its ${SANDBOX_DAILY_CYCLES} cycles for today (UTC). It resets at midnight UTC.` };
+      }
       const result = await runAgentCycle({ triggeredBy: auth.user.id });
       revalidateOrgPages();
       return {

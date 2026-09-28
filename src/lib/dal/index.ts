@@ -19,8 +19,9 @@ import { currentContext, currentOrgId } from "../context";
  * to act rather than keep serving the one it was created in.
  *
  * `platformDb()` reaches the three tables that exist before any organization
- * is known — organizations, memberships, invitations — and nothing else. It
- * keeps the service role, because none of those rows belong to one tenant.
+ * is known — organizations, memberships, invitations — and the functions that
+ * write them, and nothing else. It keeps the service role, because none of
+ * those rows belong to one tenant.
  *
  * ESLint forbids the raw client outside this directory. See eslint.config.mjs.
  */
@@ -38,6 +39,9 @@ export type TenantRpc = (typeof TENANT_RPCS)[number];
 
 export const PLATFORM_TABLES = ["orgs", "memberships", "invitations"] as const;
 export type PlatformTable = (typeof PLATFORM_TABLES)[number];
+
+export const PLATFORM_RPCS = ["create_org"] as const;
+export type PlatformRpc = (typeof PLATFORM_RPCS)[number];
 
 type Row = Record<string, unknown>;
 type Count = "exact" | "planned" | "estimated";
@@ -146,6 +150,10 @@ export function platformDb() {
     from(table: PlatformTable) {
       if (!(PLATFORM_TABLES as readonly string[]).includes(table)) throw new Error(`${table} is not a platform table`);
       return client.from(table);
+    },
+    rpc(name: PlatformRpc, args: Row = {}) {
+      if (!(PLATFORM_RPCS as readonly string[]).includes(name)) throw new Error(`${name} is not a platform function`);
+      return client.rpc(name, args);
     },
   };
 }

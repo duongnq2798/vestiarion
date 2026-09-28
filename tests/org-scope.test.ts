@@ -82,7 +82,7 @@ describe("the other ways in", () => {
     expect(await run()).toBe(FOUNDING_ORG_ID);
   });
 
-  it("inOrg takes what requireMembership and authorizeMutation return", async () => {
+  it("inOrg takes what requireMembership and authorize return", async () => {
     const access = { user: { id: "user-2", email: null }, membership: { orgId: ORG } };
     const { run } = inPlatform(() => inOrg(access, async () => [currentOrgId(), currentUserId()]));
     expect(await run()).toEqual([ORG, "user-2"]);

@@ -5,7 +5,7 @@ import { DecisionCard } from "@/components/vx/DecisionCard";
 import { invoiceDecision } from "@/components/vx/map";
 import { SectionHead } from "@/components/vx/Primitives";
 import { EmptyState, PageHead, ProductShell } from "@/components/vx/Shell";
-import { viewerCanMutate } from "@/lib/auth/authorize";
+import { viewerCan } from "@/lib/auth/authorize";
 import { requireMembership } from "@/lib/auth/membership";
 import { orgHref } from "@/lib/auth/org-paths";
 import { chainModes } from "@/lib/circle";
@@ -29,12 +29,12 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
   const access = await requireMembership(slug);
   return inOrg(access, async () => {
     const query = await searchParams;
-    const [invoices, counterparties, headEntries, dashboardStats, canMutate] = await Promise.all([
+    const [invoices, counterparties, headEntries, dashboardStats, canWrite] = await Promise.all([
       listInvoices(),
       listCounterparties(),
       listLedgerEntries(1),
       stats(),
-      viewerCanMutate(slug),
+      viewerCan(slug, "records.write"),
     ]);
     const entries = await listLedgerEntriesForTargets({ invoiceIds: invoices.map((invoice) => invoice.id) });
     const filter = typeof query.status === "string" ? query.status : undefined;
@@ -63,7 +63,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
 
         <section className="mb-8">
           <SectionHead title="Invoice intake" meta="manual entry or CSV preview and confirm" />
-          {canMutate ? (
+          {canWrite ? (
             <div className="grid gap-4 lg:grid-cols-2">
               <details open className="surface-shadow rounded-2xl border border-line bg-surface p-4 sm:p-6">
                 <summary className="cursor-pointer text-sm font-semibold text-ink">Enter one invoice</summary>
@@ -75,7 +75,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
               </details>
             </div>
           ) : (
-            <p className="rounded-lg border border-dashed border-line-strong px-5 py-6 text-sm text-ink-2">Only an owner of this workspace can add or import invoices.</p>
+            <p className="rounded-lg border border-dashed border-line-strong px-5 py-6 text-sm text-ink-2">Only an owner or admin of this workspace can add or import invoices.</p>
           )}
         </section>
 

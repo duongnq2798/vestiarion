@@ -209,4 +209,16 @@ describe("the table boundary", () => {
     await result;
     expect(fake.requests[0].path).toBe("/rest/v1/memberships");
   });
+
+  it("keeps tenant functions out of platformDb()", async () => {
+    const { fake, result } = scoped(async () => platformDb().rpc("append_ledger_entry" as never, {}), null);
+    await expect(result).rejects.toThrow(/append_ledger_entry is not a platform function/);
+    expect(fake.requests).toEqual([]);
+  });
+
+  it("lets platformDb() call a platform function with its arguments untouched", async () => {
+    const { fake, result } = scoped(async () => platformDb().rpc("create_org", { p_slug: "northstar" }), null);
+    await result;
+    expect(fake.requests.map((request) => [request.path, request.body])).toEqual([["/rest/v1/rpc/create_org", { p_slug: "northstar" }]]);
+  });
 });

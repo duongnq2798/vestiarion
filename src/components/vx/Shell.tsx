@@ -70,9 +70,13 @@ export function ProductShell({
             </div>
             <div className="flex shrink-0 flex-col items-end gap-2">
               <ProvenanceBar legs={legs} />
-              <form action={signOut}>
-                <button type="submit" className="text-[0.8125rem] text-ink-3 hover:text-ink">Sign out</button>
-              </form>
+              <div className="flex items-center gap-4">
+                {/* `?new` keeps /onboarding from sending a one-workspace person straight back here. */}
+                <Link href="/onboarding?new" className="text-[0.8125rem] text-ink-3 hover:text-ink">Workspaces</Link>
+                <form action={signOut}>
+                  <button type="submit" className="text-[0.8125rem] text-ink-3 hover:text-ink">Sign out</button>
+                </form>
+              </div>
             </div>
           </div>
           <nav aria-label="Sections" className="no-scrollbar -mb-px flex gap-1 overflow-x-auto">
