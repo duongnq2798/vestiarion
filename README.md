@@ -67,8 +67,14 @@ src/lib/insights.ts       Typed, server-only query boundary for measured
                            transfer, cycle, balance, and screening history
 src/components/vx/        Shared light-theme interface primitives and D3
   Brand.tsx                Reusable vector Treasury Seal brand mark
+  nav.ts                   The workspace's sections, in groups: one list feeds
+                             the sidebar, the mobile drawer and page titles
+  AppFrame.tsx             Workspace navigation, drawn by the /o/[slug] layout:
+                             a sidebar from `lg` up, a top bar and drawer below
   InsightsCharts.tsx       scales/shapes rendered declaratively through React
-src/app/icon.svg          Matching app icon / favicon asset
+src/app/icon.svg          The app icon. `node scripts/build-icons.mjs` renders it
+                           to favicon.ico, apple-icon.png and the web manifest's
+                           icons; re-run it whenever the icon changes
 src/lib/ledger.ts         Hash-chained, Ed25519-signed append-only audit log
 src/lib/compliance.ts     Continuous counterparty screening + risk tiering
 src/lib/circle/           ChainProvider interface, three implementations:

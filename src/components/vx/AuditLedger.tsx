@@ -39,14 +39,17 @@ export function AuditLedger({ entries, since }: { entries: LedgerEntry[]; since?
     else groups.push({ day, rows: [entry] });
   }
 
+  // `overflow-clip`, not `-hidden`: a hidden overflow makes the card a scroll
+  // container, and the day headers would stick to it instead of the viewport.
+  // They stop below the workspace's top bar where there is one (below `lg`).
   return (
-    <div className="surface-shadow overflow-hidden rounded-2xl border border-line bg-surface">
+    <div className="surface-shadow overflow-clip rounded-2xl border border-line bg-surface">
       <div className="hidden grid-cols-[3.25rem_3rem_5.75rem_minmax(0,1fr)_auto] items-center gap-x-3 border-b border-line py-2 pl-9 pr-4 sm:grid">
         <Label>Seq</Label><Label>UTC</Label><Label>Domain</Label><Label>Entry</Label><Label>Hash</Label>
       </div>
       {groups.map((group, groupIndex) => (
         <section key={`${group.day}-${groupIndex}`} aria-label={group.day}>
-          <div className="sticky top-0 z-10 flex items-baseline justify-between border-b border-line bg-raised/95 px-4 py-1.5 backdrop-blur sm:pl-9">
+          <div className="sticky top-14 z-10 flex items-baseline justify-between border-b border-line bg-raised/95 px-4 py-1.5 backdrop-blur sm:pl-9 lg:top-0">
             <span className="text-[0.8125rem] font-semibold text-ink">{group.day}</span>
             <span className="font-mono text-[0.6875rem] text-ink-3">#{pad(group.rows.at(-1)!.seq)}–#{pad(group.rows[0].seq)} · {group.rows.length} entries</span>
           </div>
@@ -91,7 +94,7 @@ function AuditRow({
   return (
     <li
       id={`seq-${entry.seq}`}
-      className={`relative border-b border-line last:border-b-0 ${fresh ? "bg-agent-soft/60 motion-safe:animate-arrive" : ""} ${refused ? "bg-refused-soft/70" : ""} ${changed && !refused ? "bg-held-soft/35" : ""}`}
+      className={`relative scroll-mt-24 border-b border-line last:border-b-0 lg:scroll-mt-12 ${fresh ? "bg-agent-soft/60 motion-safe:animate-arrive" : ""} ${refused ? "bg-refused-soft/70" : ""} ${changed && !refused ? "bg-held-soft/35" : ""}`}
       style={fresh ? { animationDelay: `${index * 55}ms` } : undefined}
     >
       <span aria-hidden className="absolute bottom-0 left-4 top-0 w-px bg-line-strong sm:left-[1.1rem]" />
@@ -138,7 +141,7 @@ function AuditRow({
 }
 
 export function DomainFilter({ active, orgSlug }: { active?: Domain; orgSlug: string }) {
-  const className = (selected: boolean) => `inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${selected ? "border-ink-3 bg-raised text-ink" : "border-line text-ink-2 hover:border-line-strong"}`;
+  const className = (selected: boolean) => `inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs sm:px-2.5 sm:py-1 ${selected ? "border-ink-3 bg-raised text-ink" : "border-line text-ink-2 hover:border-line-strong"}`;
   return (
     <nav aria-label="Filter audit log by domain" className="flex flex-wrap gap-1.5">
       <Link href={orgHref(orgSlug, "/audit")} className={className(!active)}>All</Link>

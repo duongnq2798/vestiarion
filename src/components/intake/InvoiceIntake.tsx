@@ -4,7 +4,8 @@ import { useActionState, useEffect, useRef } from "react";
 import { createInvoiceAction, type IntakeActionResult } from "@/app/actions/intake";
 
 const INITIAL: IntakeActionResult = { ok: false, message: "" };
-const INPUT = "h-10 w-full rounded-xl border border-line-strong bg-surface px-3 text-sm text-ink shadow-sm outline-none placeholder:text-ink-3 focus:border-agent focus:ring-2 focus:ring-agent-soft";
+// 16px below `sm`: iOS zooms the page into any smaller field it focuses.
+const INPUT = "h-11 w-full rounded-xl border border-line-strong bg-surface px-3 text-base text-ink shadow-sm outline-none placeholder:text-ink-3 focus:border-agent focus:ring-2 focus:ring-agent-soft sm:h-10 sm:text-sm";
 
 export interface IntakeCounterparty {
   id: string;

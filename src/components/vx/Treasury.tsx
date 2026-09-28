@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { ReactNode } from "react";
 import type { Account, Forecast } from "./types";
 import { ArrowGlyph } from "./Glyphs";
@@ -24,7 +25,7 @@ export function StatTile({
     </>
   );
   const className = `surface-shadow block min-w-0 rounded-xl border px-4 py-4 ${tone === "held" ? "border-held-line bg-held-soft" : "border-line bg-surface"} ${href ? "transition-all hover:-translate-y-0.5 hover:border-agent-line" : ""}`;
-  return href ? <a href={href} className={className}>{content}</a> : <div className={className}>{content}</div>;
+  return href ? <Link href={href} className={className}>{content}</Link> : <div className={className}>{content}</div>;
 }
 
 export function BalanceTile({ accounts }: { accounts: Account[] }) {
@@ -98,5 +99,5 @@ export function ForecastPanel({ forecast }: { forecast: Forecast }) {
 }
 
 export function MoreLink({ href, children }: { href: string; children: ReactNode }) {
-  return <a href={href} className="inline-flex items-center gap-1 text-[0.8125rem] text-agent hover:underline">{children}<ArrowGlyph /></a>;
+  return <Link href={href} className="inline-flex items-center gap-1 text-[0.8125rem] text-agent hover:underline">{children}<ArrowGlyph /></Link>;
 }

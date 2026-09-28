@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { orgHref } from "@/lib/auth/org-paths";
 import type { Decision, Evidence, Guardrail } from "./types";
 import { CheckGlyph, CrossGlyph, DOMAIN_NAME, DomainGlyph, ShieldGlyph } from "./Glyphs";
@@ -61,9 +62,9 @@ export function DecisionCard({ decision, compact = false, orgSlug }: { decision:
           <EvidenceRow items={decision.evidence} />
           <div className="flex shrink-0 flex-wrap items-center gap-4">
             {decision.auditSeq != null && (
-              <a href={orgHref(orgSlug, `/audit#seq-${decision.auditSeq}`)} className="font-mono text-xs text-ink-3 hover:text-ink hover:underline">
+              <Link href={orgHref(orgSlug, `/audit#seq-${decision.auditSeq}`)} className="font-mono text-xs text-ink-3 hover:text-ink hover:underline">
                 audit #{String(decision.auditSeq).padStart(4, "0")}
-              </a>
+              </Link>
             )}
             {decision.txHash ? (
               <Hash value={decision.txHash} href={explorerTx(decision.txHash)} />
