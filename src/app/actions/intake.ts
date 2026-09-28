@@ -127,14 +127,16 @@ export async function createInvoiceAction(
     const input = parsed.data;
     try {
       // Scoped to the organization, so another organization's counterparty id
-      // is not found here rather than linked to this organization's invoice.
-      const counterparty = unwrap(
-        await db()
-          .from("counterparties")
-          .select("id, name")
-          .eq("id", input.counterpartyId)
-          .single<{ id: string; name: string }>()
-      );
+      // is not found here rather than linked to this organization's invoice,
+      // and is answered exactly like one that does not exist.
+      const lookup = await db()
+        .from("counterparties")
+        .select("id, name")
+        .eq("id", input.counterpartyId)
+        .maybeSingle<{ id: string; name: string }>();
+      if (lookup.error) throw new Error(lookup.error.message);
+      const counterparty = lookup.data;
+      if (!counterparty) return { ok: false, message: "Counterparty not found." };
       const invoice = unwrap(
         await db()
           .from("invoices")

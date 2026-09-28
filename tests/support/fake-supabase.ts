@@ -12,6 +12,13 @@ export interface RecordedRequest {
   path: string;
   params: URLSearchParams;
   body: unknown;
+  /**
+   * What supabase-js sent. `Accept` tells a responder what PostgREST would
+   * answer: `.single()` asks for `application/vnd.pgrst.object+json`, which
+   * PostgREST refuses with a 406 when no row matches, while `.maybeSingle()`
+   * asks for an array and gets `[]`.
+   */
+  headers: Headers;
 }
 
 export interface FakeReply {
@@ -32,6 +39,7 @@ export function fakeSupabase(respond: (request: RecordedRequest) => FakeReply = 
       path: url.pathname,
       params: url.searchParams,
       body: typeof raw === "string" && raw ? JSON.parse(raw) : undefined,
+      headers: new Headers(init?.headers),
     };
     requests.push(request);
     const reply = respond(request);
