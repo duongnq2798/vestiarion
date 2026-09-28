@@ -13,6 +13,8 @@ export type CheckboxProps = Omit<ComponentProps<typeof CheckboxPrimitive.Root>, 
 /**
  * A checkbox with its label. Inside a form it submits `name=on` when ticked,
  * like a native one, and returns to its default when the form resets.
+ *
+ * `className` styles the row — the box and the label together — not the box alone.
  */
 export function Checkbox({ label, description, id, className, ...props }: CheckboxProps) {
   const generated = useId();

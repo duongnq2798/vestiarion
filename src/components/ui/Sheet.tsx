@@ -53,7 +53,7 @@ export function SheetContent({ side, title, description, hideHeader = false, sho
           <DialogPrimitive.Title className="text-base font-semibold tracking-tight text-ink">{title}</DialogPrimitive.Title>
           {description && <DialogPrimitive.Description className="text-sm text-ink-2">{description}</DialogPrimitive.Description>}
         </div>
-        {children}
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{children}</div>
         {showClose && (
           <DialogPrimitive.Close asChild>
             <Button variant="ghost" size="icon" aria-label="Close" className="absolute right-2 top-2.5">

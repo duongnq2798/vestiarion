@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronDown } from "lucide-react";
+import { Check, ChevronDown, ChevronUp } from "lucide-react";
 import { Select as SelectPrimitive } from "radix-ui";
 import type { ComponentProps } from "react";
 import { cn } from "./cn";
@@ -47,7 +47,13 @@ export function SelectContent({ className, children, position = "popper", ...pro
         )}
         {...props}
       >
+        <SelectPrimitive.ScrollUpButton className="flex h-6 cursor-default items-center justify-center text-ink-3">
+          <ChevronUp aria-hidden className="size-4" />
+        </SelectPrimitive.ScrollUpButton>
         <SelectPrimitive.Viewport>{children}</SelectPrimitive.Viewport>
+        <SelectPrimitive.ScrollDownButton className="flex h-6 cursor-default items-center justify-center text-ink-3">
+          <ChevronDown aria-hidden className="size-4" />
+        </SelectPrimitive.ScrollDownButton>
       </SelectPrimitive.Content>
     </SelectPrimitive.Portal>
   );

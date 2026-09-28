@@ -259,7 +259,7 @@
  * <details> always has.
  */
 @supports (interpolate-size: allow-keywords) {
-  :root {
+  details.disclosure {
     interpolate-size: allow-keywords;
   }
 

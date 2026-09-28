@@ -41,7 +41,10 @@ export const buttonVariants = cva(
 
 export type ButtonProps = ComponentProps<"button"> &
   VariantProps<typeof buttonVariants> & {
-    /** Renders the child element — a `Link`, an `<a>` — with the button’s look instead of a `<button>`. */
+    /**
+     * Renders the child element — a `Link`, an `<a>` — with the button’s look instead of a `<button>`.
+     * `loading` and `icon` apply to a `<button>` only — a link has no busy or disabled state.
+     */
     asChild?: boolean;
     /** Disables the button, marks it busy and shows a spinner in the leading icon’s place. */
     loading?: boolean;
@@ -53,7 +56,7 @@ const ICON_ONLY = new Set(["icon", "icon-sm"]);
 
 export function Button({ className, variant, size, asChild = false, loading = false, icon, type, disabled, children, ...props }: ButtonProps) {
   const iconOnly = size != null && ICON_ONLY.has(size);
-  if (process.env.NODE_ENV !== "production" && iconOnly && !props["aria-label"] && !props["aria-labelledby"]) {
+  if (process.env.NODE_ENV !== "production" && iconOnly && !asChild && !props["aria-label"] && !props["aria-labelledby"]) {
     console.error("Button: an icon-only button needs an aria-label, or it has no accessible name.");
   }
   // A link reads as text: it takes no height or padding from a size.

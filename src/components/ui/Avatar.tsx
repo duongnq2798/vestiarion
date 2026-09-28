@@ -27,7 +27,7 @@ const avatarVariants = cva("grid shrink-0 select-none place-items-center font-se
 export function Avatar({ name, tone, shape, size, className }: VariantProps<typeof avatarVariants> & { name: string; className?: string }) {
   return (
     <span aria-hidden="true" className={cn(avatarVariants({ tone, shape, size }), className)}>
-      {name.trim().charAt(0) || "?"}
+      {[...name.trim()][0] ?? "?"}
     </span>
   );
 }

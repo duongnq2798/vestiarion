@@ -23,7 +23,7 @@ export const overlayBackdrop = [
 
 /** A panel in the middle of the screen: dialogs and confirmations. */
 export const dialogPanel =
-  "fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-line bg-surface p-5 text-ink shadow-overlay outline-hidden sm:p-6";
+  "fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-h-[calc(100dvh-2rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-line bg-surface p-5 text-ink shadow-overlay outline-hidden sm:p-6";
 
 export const dialogMotion = [
   "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",

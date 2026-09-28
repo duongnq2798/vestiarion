@@ -67,6 +67,19 @@ describe("Button", () => {
     expect(error).not.toHaveBeenCalled();
     error.mockRestore();
   });
+
+  it("does not complain about an icon link named on the link itself", () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    html(
+      <Button asChild size="icon">
+        <a href="/x" aria-label="Open">
+          <svg />
+        </a>
+      </Button>
+    );
+    expect(error).not.toHaveBeenCalled();
+    error.mockRestore();
+  });
 });
 
 describe("SubmitButton", () => {

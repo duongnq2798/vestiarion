@@ -61,6 +61,12 @@ describe("ProgressBar", () => {
   it("clamps a value outside 0–100", () => {
     expect(html(<ProgressBar value={140} label="Import" />)).toContain('aria-valuenow="100"');
   });
+
+  it("treats a value that is not a number as indeterminate", () => {
+    const markup = html(<ProgressBar value={Number.NaN} label="Import" />);
+    expect(markup).not.toContain("aria-valuenow");
+    expect(markup).toContain("animate-sweep");
+  });
 });
 
 describe("EmptyState", () => {
@@ -79,6 +85,10 @@ describe("Avatar", () => {
 
   it("falls back when the name is blank", () => {
     expect(html(<Avatar name="   " />)).toContain(">?<");
+  });
+
+  it("keeps an emoji whole", () => {
+    expect(html(<Avatar name="🦊 Fox" />)).toContain("🦊");
   });
 });
 

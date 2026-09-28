@@ -2,7 +2,7 @@ import { cn } from "./cn";
 
 /** Progress towards a known end (`value`, 0–100), or indeterminate work when there is no value. */
 export function ProgressBar({ value, label, className }: { value?: number; label: string; className?: string }) {
-  const percent = value == null ? null : Math.round(Math.min(100, Math.max(0, value)));
+  const percent = value == null || !Number.isFinite(value) ? null : Math.round(Math.min(100, Math.max(0, value)));
   return (
     <div
       role="progressbar"
