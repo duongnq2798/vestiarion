@@ -144,15 +144,22 @@ lists the workspaces you belong to and moves between them; its **Create workspac
 workspaces** links (`/onboarding?new`) let you create another.
 
 Every member of a workspace has one role. **Owner** and **admin** add counterparties, invoices, and
-milestones, and can run a cycle by hand; **approver** and **viewer** read everything — the console,
-the ledger, past cycles — and change nothing, so an approver cannot create the records it may one
-day approve, keeping maker separate from checker from the start. A workspace always keeps at least
-one owner: the database itself refuses to remove or demote the last one. A sandbox workspace is
-capped at 20 agent cycles per UTC day, counted in the database so the cap holds however many server
-instances are running, which bounds how much a trial workspace can spend on LLM calls. The rest of
-the role distinctions the product will eventually make — pausing the agent, deciding approvals,
-inviting and managing members — are defined in the permission map already, ahead of the features
-that will use them.
+milestones, can run a cycle by hand, and can invite and manage members; **approver** and **viewer**
+read everything — the console, the ledger, past cycles — and change nothing, so an approver cannot
+create the records it may one day approve, keeping maker separate from checker from the start. A
+workspace always keeps at least one owner: the database itself refuses to remove or demote the last
+one. A sandbox workspace is capped at 20 agent cycles per UTC day, counted in the database so the
+cap holds however many server instances are running, which bounds how much a trial workspace can
+spend on LLM calls, and a sandbox that sits inactive for 60 days is deleted by a daily cleanup job.
+The rest of the role distinctions the product will eventually make — pausing the agent, deciding
+approvals — are defined in the permission map already, ahead of the features that will use them.
+
+An **owner** or **admin** invites someone from the workspace's **Members** page
+(`/o/<slug>/members`), by email and role; an owner may grant any role, an admin only **approver** or
+**viewer**. With `RESEND_API_KEY` set, the invitation is emailed; otherwise the page hands back a
+link to share directly — shown once, since only its sha256 hash is stored. The link previews the
+invitation without accepting it; accepting needs signing in with the invited address and expires the
+link after 7 days. Anyone can leave a workspace they belong to from the same page.
 
 Only the **founding organization** — seeded ahead of any sign-in, in `live` mode — skips self-serve
 creation: it exists before anyone signs in, so no self-serve step ever generates it a ledger key.

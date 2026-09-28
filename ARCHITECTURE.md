@@ -73,14 +73,43 @@ of `workspace.read`, `agent.pause`, `approval.decide`, `records.write`, `agent.r
 at the boundary through `authorize(slug, permission)` (`src/lib/auth/authorize.ts`), which
 re-derives the caller's membership and role from the session rather than trusting anything the form
 claims; a page can call the read-only `viewerCan` to decide whether to render a control at all.
-Today's actions call it for `records.write` (`src/app/actions/intake.ts`,
-`src/app/actions/milestones.ts`) and `agent.run_cycle` (`src/app/actions/agent.ts`) — both need
-`owner` or `admin` — which is the whole map §7 currently has a caller for. The remaining
-permissions — `workspace.read`, `agent.pause`, `approval.decide`, `agent.resume`, `members.manage`,
-and `org.administer` — and `canAssignRole`'s rule that an admin may grant `approver` or `viewer` but
-nothing at its own rank or above while only an owner assigns `admin` or `owner`, are defined in
-`roles.ts` ahead of the features that will call them: pausing/resuming the agent and deciding
-approvals (Tier 1), and member invitation and management, still to come.
+Actions call it for `records.write` (`src/app/actions/intake.ts`, `src/app/actions/milestones.ts`),
+`agent.run_cycle` (`src/app/actions/agent.ts`), and `members.manage` (`src/app/actions/members.ts`,
+for inviting, changing a role, revoking an invitation, and removing someone other than yourself —
+`owner` and `admin` hold it; leaving a workspace yourself needs only `workspace.read`, since it is
+open to every member). The remaining permissions — `workspace.read` (beyond the leaving case above),
+`agent.pause`, `agent.resume`, `approval.decide`, and `org.administer` — and `canAssignRole`'s rule
+that an admin may grant `approver` or `viewer` but nothing at its own rank or above while only an
+owner assigns `admin` or `owner`, are defined in `roles.ts` ahead of the features that will call
+them: pausing/resuming the agent and deciding approvals (Tier 1).
+
+**Members and invitations** (spec §7, §10 step 5b) go through service-role-only functions in
+migration `0021`, each told who is acting and re-deriving that person's role inside its own
+transaction — `src/lib/platform/members.ts` wraps them, adds the signed ledger entry, and never
+passes an email address into it (`detail.by` and `detail.member` carry user ids only). `owner` may
+grant or change any role; `admin` may grant or change only `approver` and `viewer`; no one else may
+do either — enforced identically by `can_assign_role` in the database and `canAssignRole` in
+`roles.ts`. Inviting (`invite_member`) generates 32 random bytes, base64url-encoded, for the link,
+and stores only the `sha256` hex of that token (`invitations.token_hash`); the raw token never
+reaches the database. An invitation expires 7 days after creation, and an organization holds at most
+20 open invitations at a time. With `RESEND_API_KEY` set, `sendEmail` (`src/lib/email/send.ts`)
+sends the link through Resend; without it, `inviteMemberAction` returns the link to the inviter to
+share directly, shown once. Opening `/invite/<token>` (`src/app/invite/[token]/page.tsx`) has no
+side effect — it only previews the invitation; accepting is a separate submit (`accept_invitation`)
+that requires signing in with the invited address first, and fails with `invitation_email_mismatch`
+otherwise. The members page (`/o/[slug]/members`) lists members and open invitations through
+`org_members`, and lets `owner`/`admin` change a role, revoke an invitation, or remove a member; any
+member can leave (`remove_member` with `p_actor = p_user_id`), and the `memberships_keep_an_owner`
+trigger (`0020`) still refuses to remove or demote a workspace's last owner.
+
+**Abandoned sandboxes** are cleaned up daily. A sandbox organization's `last_active_at` is touched
+(at most once an hour) on membership-gated page views; one whose `last_active_at` is more than 60
+days old is deleted — `delete_sandbox_org` (migration `0022`) refuses outright if the organization is
+not a sandbox, and re-checks `last_active_at` against the cutoff before deleting, so an organization
+that became active between the listing and the delete survives. A `live` organization is never
+deleted automatically. `POST /api/platform/cleanup`, bearer-guarded the same way as the cron, lists
+and deletes candidates; `.github/workflows/sandbox-cleanup.yml` calls it once a day and on manual
+dispatch.
 
 **The cron** (`POST /api/agent/tick`) no longer runs one configured business.
 `runLiveOrganizations` (`src/lib/agent/cron.ts`) lists every organization in `mode = 'live'` and,
