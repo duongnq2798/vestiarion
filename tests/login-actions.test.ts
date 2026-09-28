@@ -12,8 +12,8 @@ import { AFTER_SIGN_IN_COOKIE } from "@/lib/auth/after-sign-in";
 
 vi.mock("server-only", () => ({}));
 
-const { setMock } = vi.hoisted(() => ({ setMock: vi.fn() }));
-vi.mock("next/headers", () => ({ cookies: vi.fn(async () => ({ set: setMock, get: vi.fn(), delete: vi.fn() })) }));
+const { setMock, deleteMock } = vi.hoisted(() => ({ setMock: vi.fn(), deleteMock: vi.fn() }));
+vi.mock("next/headers", () => ({ cookies: vi.fn(async () => ({ set: setMock, get: vi.fn(), delete: deleteMock })) }));
 
 const { signInWithOtpMock, signInWithOAuthMock } = vi.hoisted(() => ({
   signInWithOtpMock: vi.fn(),
@@ -61,15 +61,16 @@ describe("signInWithEmail — remembering the destination", () => {
     );
   });
 
-  it("does not set the cookie when next is the default or missing", async () => {
+  it("deletes any existing cookie instead of setting one when next is the default or missing", async () => {
     signInWithOtpMock.mockResolvedValueOnce({ error: null });
 
     await signInWithEmail({ ok: false, message: "" }, form({ email: "person@example.com" }));
 
     expect(setMock).not.toHaveBeenCalled();
+    expect(deleteMock).toHaveBeenCalledWith(AFTER_SIGN_IN_COOKIE);
   });
 
-  it("does not set the cookie when the send fails", async () => {
+  it("touches neither the set nor the delete cookie call when the send fails", async () => {
     signInWithOtpMock.mockResolvedValueOnce({ error: { status: 500, code: "unknown", message: "boom" } });
 
     const result = await signInWithEmail(
@@ -79,6 +80,7 @@ describe("signInWithEmail — remembering the destination", () => {
 
     expect(result.ok).toBe(false);
     expect(setMock).not.toHaveBeenCalled();
+    expect(deleteMock).not.toHaveBeenCalled();
   });
 });
 
@@ -97,19 +99,21 @@ describe("signInWithGoogle — remembering the destination", () => {
     );
   });
 
-  it("does not set the cookie when next is the default or missing", async () => {
+  it("deletes any existing cookie instead of setting one when next is the default or missing", async () => {
     signInWithOAuthMock.mockResolvedValueOnce({ data: { url: "https://accounts.google.com/o" }, error: null });
 
     await expect(signInWithGoogle(form({}))).rejects.toThrow("REDIRECT:https://accounts.google.com/o");
 
     expect(setMock).not.toHaveBeenCalled();
+    expect(deleteMock).toHaveBeenCalledWith(AFTER_SIGN_IN_COOKIE);
   });
 
-  it("does not set the cookie when the provider fails to start", async () => {
+  it("touches neither the set nor the delete cookie call when the provider fails to start", async () => {
     signInWithOAuthMock.mockResolvedValueOnce({ data: { url: null }, error: { message: "boom" } });
 
     await expect(signInWithGoogle(form({ next: "/invite/abc123" }))).rejects.toThrow("REDIRECT:/login?error=google");
 
     expect(setMock).not.toHaveBeenCalled();
+    expect(deleteMock).not.toHaveBeenCalled();
   });
 });

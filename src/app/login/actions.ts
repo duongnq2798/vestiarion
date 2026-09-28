@@ -37,10 +37,17 @@ function callbackUrl(target: string): string {
  * that carried a `next` would land on the default instead (see
  * `src/lib/auth/after-sign-in.ts`). Never logged: it can hold an invitation
  * token.
+ *
+ * A default target deletes any cookie left over from an earlier sign-in
+ * instead of leaving it in place: on a shared browser, an old invitation (or
+ * other) destination must not hijack a later, unrelated sign-in.
  */
 async function rememberAfterSignIn(target: string): Promise<void> {
-  if (target === DEFAULT_AFTER_LOGIN) return;
   const store = await cookies();
+  if (target === DEFAULT_AFTER_LOGIN) {
+    store.delete(AFTER_SIGN_IN_COOKIE);
+    return;
+  }
   store.set(AFTER_SIGN_IN_COOKIE, target, {
     httpOnly: true,
     sameSite: "lax",

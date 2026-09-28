@@ -132,6 +132,10 @@ describe("accept_invitation_by_id", () => {
     const [row] = await invite("someone.else@example.com", "viewer");
 
     await expect(acceptById(row.id, outsider)).rejects.toThrow(/invitation_email_mismatch/);
+
+    const open = await db.query<{ accepted_at: Date | null }>(
+      "select accepted_at from public.invitations where id = $1", [row.id]);
+    expect(open.rows[0].accepted_at).toBeNull();
   });
 
   it("refuses an unknown id", async () => {

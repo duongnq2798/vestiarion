@@ -35,8 +35,16 @@ const expiresFormat = new Intl.DateTimeFormat("en-US", { year: "numeric", month:
  */
 export default async function OnboardingPage({ searchParams }: OnboardingPageProps) {
   const user = await verifySession("/onboarding");
-  const memberships = await membershipsOf(user.id);
-  const invitations = await pendingInvitationsFor(user.id);
+  const [memberships, invitations] = await Promise.all([
+    membershipsOf(user.id),
+    // Best-effort: this is the default landing page after every sign-in, so a
+    // failure here must not take the page down with it — the workspace list
+    // below still works without it.
+    pendingInvitationsFor(user.id).catch(() => {
+      console.error("pending invitations unavailable");
+      return [];
+    }),
+  ]);
   const query = await searchParams;
   if (memberships.length === 1 && query.new === undefined && invitations.length === 0) {
     redirect(orgHref(memberships[0].slug, HOME_PATH));
@@ -54,8 +62,11 @@ export default async function OnboardingPage({ searchParams }: OnboardingPagePro
       </SiteHeader>
       <main id="main" className="flex flex-1 items-center justify-center px-4 py-12 sm:py-16">
         <div className="w-full max-w-md">
+          <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">
+            {memberships.length ? "Choose a workspace" : "No workspace yet"}
+          </h1>
           {invitations.length > 0 && (
-            <section className="mb-10">
+            <section className="mt-6">
               <h2 className="text-lg font-semibold text-ink">Invitations for you</h2>
               <ul className="mt-4 space-y-2">
                 {invitations.map((invitation) => (
@@ -65,8 +76,9 @@ export default async function OnboardingPage({ searchParams }: OnboardingPagePro
                   >
                     <div className="min-w-0">
                       <p className="truncate font-medium text-ink">{invitation.orgName}</p>
-                      <p className="text-xs capitalize text-ink-3">
-                        Invited as {invitation.role} · expires {expiresFormat.format(new Date(invitation.expiresAt))}
+                      <p className="text-xs text-ink-3">
+                        Invited as <span className="capitalize">{invitation.role}</span> · expires{" "}
+                        {expiresFormat.format(new Date(invitation.expiresAt))}
                       </p>
                     </div>
                     <AcceptInvitationByIdForm invitationId={invitation.invitationId} />
@@ -77,7 +89,6 @@ export default async function OnboardingPage({ searchParams }: OnboardingPagePro
           )}
           {memberships.length ? (
             <>
-              <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">Choose a workspace</h1>
               <p className="mt-2 text-sm text-ink-3">Pick one to open. You can switch at any time from the navigation.</p>
               <ul className="mt-6 space-y-2">
                 {memberships.map((membership) => (
@@ -105,7 +116,6 @@ export default async function OnboardingPage({ searchParams }: OnboardingPagePro
             </>
           ) : (
             <>
-              <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">No workspace yet</h1>
               <p className="mt-3 text-sm leading-relaxed text-ink-3">
                 Create a workspace to try Vestiarion with simulated money. A teammate can also invite you to theirs.
               </p>
