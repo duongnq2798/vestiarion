@@ -46,8 +46,13 @@ describe("chainModes — must render a page even when getChainProvider() refuses
   });
 
   it("still reports the real provider's modes when credentials are readable", () => {
-    runWith({ config, db: fakeSupabase().client, orgId: ORG, platformConfig: config }, () => {
-      expect(chainModes()).toEqual({ mode: "simulate", earnMode: "simulate" });
+    // Placeholder credentials build the real HybridProvider — live payments,
+    // simulated yield — because constructing Circle's SDK client makes no
+    // request. That answer differs from the simulate/simulate shortcut
+    // above, so this can tell the provider from the shortcut.
+    const readable = { ...config, chain: { ...config.chain, circleApiKey: "placeholder-api-key", circleEntitySecret: "placeholder-entity-secret" } };
+    runWith({ config: readable, db: fakeSupabase().client, orgId: ORG, platformConfig: config }, () => {
+      expect(chainModes()).toEqual({ mode: "live", earnMode: "simulate" });
     });
   });
 });

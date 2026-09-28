@@ -127,6 +127,103 @@ describe("the membership lookup", () => {
   });
 });
 
+/** Modules that read or write tenant data, or hand out an organization's secrets. */
+const TENANT_DATA_MODULES = [
+  "src/lib/queries", "src/lib/ledger", "src/lib/insights", "src/lib/landing", "src/lib/dal",
+  "src/lib/circle", "src/lib/compliance", "src/lib/payments", "src/lib/seed",
+];
+
+function loadsTenantData(modulePath: string): boolean {
+  return TENANT_DATA_MODULES.includes(modulePath) || modulePath.startsWith("src/lib/dal/");
+}
+
+/**
+ * Every import that loads a module at run time, with the names it binds:
+ * `default`, `*` for a namespace, a re-export or `import()`, and none for a
+ * bare side-effect import. `import type` and a named block whose every
+ * specifier is `type` are erased by the compiler, so they are not listed.
+ */
+function valueImports(source: string): Array<{ specifier: string; names: string[] }> {
+  const found: Array<{ specifier: string; names: string[] }> = [];
+  const valueNames = (block: string) =>
+    block.split(",").map((part) => part.trim()).filter((part) => part && !/^type\s/.test(part)).map((part) => part.split(/\s+as\s+/)[0]);
+  for (const [, clause, specifier] of source.matchAll(/^\s*import\s+([^"';]*?)\s+from\s+["']([^"']+)["']/gm)) {
+    if (/^type\s/.test(clause)) continue;
+    const block = /\{([^}]*)\}/.exec(clause);
+    const names = block ? valueNames(block[1]) : [];
+    for (const part of clause.replace(/\{[^}]*\}/, "").split(",").map((piece) => piece.trim()).filter(Boolean)) {
+      names.push(part.startsWith("*") ? "*" : "default");
+    }
+    if (names.length > 0) found.push({ specifier, names });
+  }
+  for (const [, specifier] of source.matchAll(/^\s*import\s+["']([^"']+)["']/gm)) found.push({ specifier, names: [] });
+  for (const [, clause, specifier] of source.matchAll(/^\s*export\s+([^"';]*?)\s+from\s+["']([^"']+)["']/gm)) {
+    if (/^type\s/.test(clause)) continue;
+    const block = /\{([^}]*)\}/.exec(clause);
+    const names = block ? valueNames(block[1]) : ["*"];
+    if (names.length > 0) found.push({ specifier, names });
+  }
+  for (const [, specifier] of source.matchAll(/\bimport\(\s*["']([^"']+)["']\s*\)/g)) found.push({ specifier, names: ["*"] });
+  return found;
+}
+
+/** The repository path an application specifier names (`@/…` or relative), or `null` for a package. */
+function moduleOf(specifier: string, file: string): string | null {
+  const target = specifier.startsWith("@/")
+    ? path.join(ROOT, "src", specifier.slice(2))
+    : specifier.startsWith(".") ? path.resolve(path.dirname(file), specifier) : null;
+  return target ? rel(target).replace(/\.(tsx?|jsx?|mjs)$/, "").replace(/\/index$/, "") : null;
+}
+
+describe("every component", () => {
+  // A page loads its data inside `inOrg` and hands it down, because React can
+  // render a component after the page function has returned — outside the
+  // organization's scope, where a tenant read refuses — and a component in a
+  // client bundle has no database at all. So a component takes tenant data
+  // as props and never loads it: a type from these modules is fine, a value
+  // is not. The one exception reads platform configuration, not tenant data:
+  // Shell's `import { screeningMode } from "@/lib/compliance"`.
+  const COMPONENTS = walk(path.join(ROOT, "src", "components")).filter((file) => /\.(ts|tsx)$/.test(file));
+
+  it("exists — the list is not empty", () => {
+    expect(COMPONENTS.length).toBeGreaterThanOrEqual(10);
+  });
+
+  it("never value-imports a module that loads tenant data", () => {
+    const offending = COMPONENTS.flatMap((file) =>
+      valueImports(read(file)).flatMap(({ specifier, names }) => {
+        const imported = moduleOf(specifier, file);
+        if (!imported || !loadsTenantData(imported)) return [];
+        if (imported === "src/lib/compliance" && names.length > 0 && names.every((name) => name === "screeningMode")) return [];
+        return [`${rel(file)}: { ${names.join(", ")} } from "${specifier}"`];
+      })
+    );
+    expect(offending).toEqual([]);
+  });
+
+  it("reads imports the way that check depends on", () => {
+    // Without this, a parser that found nothing would pass the check above.
+    expect(valueImports(read(path.join(ROOT, "src", "components", "vx", "Shell.tsx")))).toContainEqual({
+      specifier: "@/lib/compliance",
+      names: ["screeningMode"],
+    });
+    expect(valueImports('import type { LedgerEntry } from "@/lib/ledger";\nimport { type A,\n  type B } from "@/lib/queries";\n')).toEqual([]);
+    expect(
+      valueImports(
+        'import { stats, type Stats } from "@/lib/queries";\nimport * as ledger from "../../lib/ledger";\nimport "@/lib/seed";\n' +
+          'export { db } from "@/lib/dal";\nconst later = () => import("@/lib/payments");\n'
+      )
+    ).toEqual([
+      { specifier: "@/lib/queries", names: ["stats"] },
+      { specifier: "../../lib/ledger", names: ["*"] },
+      { specifier: "@/lib/seed", names: [] },
+      { specifier: "@/lib/dal", names: ["db"] },
+      { specifier: "@/lib/payments", names: ["*"] },
+    ]);
+    expect(moduleOf("../../lib/dal/scope", path.join(ROOT, "src", "components", "vx", "Shell.tsx"))).toBe("src/lib/dal/scope");
+  });
+});
+
 describe("every /api/v1 route", () => {
   it.each(V1_ROUTES.map(rel))("%s checks the bearer token before any work", (file) => {
     const source = read(path.join(ROOT, file));
