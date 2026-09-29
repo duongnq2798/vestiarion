@@ -174,6 +174,37 @@ describe("existingPaymentIntents — which payables the AP stage reconciles inst
     expect(lookup.params.get("source_id")).toBe("in.(matched-1,matched-2)");
   });
 
+  it("leaves out a submission that failed before the provider returned an id, so the invoice is decided again", async () => {
+    const { run } = cycleFake((r) =>
+      r.path === "/rest/v1/payment_intents"
+        ? {
+            body: [
+              { source_id: "failed-no-id", provider_tx_id: null, status: "failed" },
+              { source_id: "failed-by-provider", provider_tx_id: "circle-tx-2", status: "failed" },
+              { source_id: "submitting", provider_tx_id: null, status: "submitting" },
+              { source_id: "created-no-id", provider_tx_id: null, status: "created" },
+            ],
+          }
+        : undefined
+    );
+
+    const intents = await run(() =>
+      existingPaymentIntents(db(), [
+        { id: "failed-no-id", status: "matched" },
+        { id: "failed-by-provider", status: "matched" },
+        { id: "submitting", status: "matched" },
+        { id: "created-no-id", status: "matched" },
+      ])
+    );
+
+    // No transfer to reconcile by: both go back through the model and the guardrails.
+    expect(intents.has("failed-no-id")).toBe(false);
+    expect(intents.has("created-no-id")).toBe(false);
+    // A transfer Circle reported failed is a real transfer, still reconciled by its id.
+    expect(intents.get("failed-by-provider")).toEqual({ providerTxId: "circle-tx-2", status: "failed" });
+    expect(intents.get("submitting")).toEqual({ providerTxId: null, status: "submitting" });
+  });
+
   it("asks nothing when no payable is matched", async () => {
     const { fake, run } = cycleFake();
 
@@ -277,6 +308,23 @@ describe("reconcileApInvoice — a matched payable with a payment in flight", ()
     expect(body.status).toBe("held");
     expect(body.tx_ref).toBe("circle-tx-1");
     expect(body.agent_reasoning).toBe(`${invoice.reasoning} [transfer failed: provider reported failure]`);
+  });
+
+  it("does not append a note the reasoning already ends with", async () => {
+    payInvoiceMock.mockResolvedValue({
+      status: "held", txRef: "circle-tx-1", note: " [transfer failed: provider reported failure]", operatingBalance: null,
+      execution: { status: "failed", error: null, providerTxId: "circle-tx-1", providerMode: "live", reconciled: true },
+    });
+    const { fake, run } = cycleFake();
+    const reasoning = `${invoice.reasoning} [transfer failed: provider reported failure]`;
+
+    await run(() =>
+      reconcileApInvoice({ ...invoice, reasoning }, { providerTxId: "circle-tx-1", status: "failed" }, { db: db(), provider, operating: { id: ACCOUNT_ID } })
+    );
+
+    const body = invoicePatches(fake.requests)[0].body as Record<string, unknown>;
+    expect(body.status).toBe("held");
+    expect(body.agent_reasoning).toBe(reasoning);
   });
 
   it("leaves the payment matched, and says so, when the reconcile itself could not read the provider", async () => {

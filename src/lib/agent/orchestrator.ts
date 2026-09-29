@@ -6,7 +6,7 @@ import { cycleClockMode, type CycleClockMode } from "../clock";
 import { runComplianceSweep, screeningMode as complianceScreeningMode } from "../compliance";
 import { refreshGitHubMilestones } from "../milestone-verification";
 import { seedScale } from "../seed";
-import { executePayment, type PaymentExecution } from "../payments";
+import { executePayment, type PaymentExecution, type PaymentSourceType } from "../payments";
 import { payInvoice, syncOperatingBalance, payoutAddress } from "./pay";
 import { CycleMetricsCollector } from "./cycle-metrics";
 import {
@@ -262,16 +262,58 @@ export async function existingPaymentIntents(
   orgDb: OrgDb,
   payables: Array<{ id: string; status: string }>
 ): Promise<Map<string, ExistingPaymentIntent>> {
-  const matched = payables.filter((payable) => payable.status === "matched").map((payable) => payable.id);
-  if (matched.length === 0) return new Map();
+  return paymentIntentsFor(orgDb, "invoice", payables, "matched");
+}
+
+/**
+ * The contractor stage's twin of `existingPaymentIntents`: the payment intent
+ * already recorded for each `verified` milestone, by milestone id. A pending
+ * release maps the milestone back to `verified`, so a `verified` milestone
+ * with an intent has a release in flight, and the stage reconciles it through
+ * `reconcileMilestone` rather than deciding it again. A `verified` milestone
+ * with no intent is not in the map and is decided exactly as before.
+ */
+export async function existingMilestoneIntents(
+  orgDb: OrgDb,
+  milestones: Array<{ id: string; status: string }>
+): Promise<Map<string, ExistingPaymentIntent>> {
+  return paymentIntentsFor(orgDb, "milestone", milestones, "verified");
+}
+
+async function paymentIntentsFor(
+  orgDb: OrgDb,
+  sourceType: PaymentSourceType,
+  sources: Array<{ id: string; status: string }>,
+  inFlightStatus: string
+): Promise<Map<string, ExistingPaymentIntent>> {
+  const ids = sources.filter((source) => source.status === inFlightStatus).map((source) => source.id);
+  if (ids.length === 0) return new Map();
   const rows = unwrap(
     await orgDb
       .from("payment_intents")
       .select("source_id, provider_tx_id, status")
-      .eq("source_type", "invoice")
-      .in("source_id", matched)
+      .eq("source_type", sourceType)
+      .in("source_id", ids)
   ) as Array<{ source_id: string; provider_tx_id: string | null; status: string }>;
-  return new Map(rows.map((row) => [row.source_id, { providerTxId: row.provider_tx_id, status: row.status }]));
+  // An intent with no provider id that is `created` (never claimed) or
+  // `failed` (the submission failed before the provider returned an id) has
+  // no transfer to reconcile by: `executePayment` would claim it and submit.
+  // Left out, its source is decided again — model and guardrails — so a
+  // payment limit cut or a risk change since is respected. Should the lost
+  // submission have reached the provider after all, a resubmission reuses the
+  // same idempotency key. A `failed` intent with a provider id is a real
+  // transfer the provider reported on, and is still reconciled by that id.
+  const inFlight = rows.filter(
+    (row) => !(row.provider_tx_id === null && (row.status === "failed" || row.status === "created"))
+  );
+  return new Map(inFlight.map((row) => [row.source_id, { providerTxId: row.provider_tx_id, status: row.status }]));
+}
+
+/** `reasoning` with `note` appended, unless it already ends with it — a
+ * source that churns through the same outcome every cycle does not repeat it. */
+function withNote(reasoning: string | null, note: string): string {
+  const base = reasoning ?? "";
+  return note !== "" && base.endsWith(note) ? base : `${base}${note}`;
 }
 
 /**
@@ -392,7 +434,7 @@ export async function reconcileApInvoice(
 
   const status = outcome.status;
   const txRef = outcome.txRef ?? invoice.txRef;
-  const reasoning = `${invoice.reasoning ?? ""}${status === "matched" ? "" : outcome.reasoningSuffix}`;
+  const reasoning = withNote(invoice.reasoning, status === "matched" ? "" : outcome.reasoningSuffix);
   const now = new Date().toISOString();
   const update = await deps.db
     .from("invoices")
@@ -462,6 +504,21 @@ export async function releaseMilestoneIfNotPaused(
       operatingBalance: null,
     };
   }
+  return releaseMilestone(input, deps);
+}
+
+/**
+ * The one release step for a milestone, without the pause check: what
+ * `releaseMilestoneIfNotPaused` does once it knows the agent is not paused,
+ * and what `reconcileMilestone` calls directly when a transfer already exists
+ * (nothing new can move, so the pause is not consulted). The milestone's
+ * idempotency key makes `executePayment` reconcile an existing intent rather
+ * than pay again. Mirrors `payInvoice` (src/lib/agent/pay.ts) for invoices.
+ */
+async function releaseMilestone(
+  input: { milestoneId: string; destination: string; amount: number },
+  deps: { provider: ChainProvider; operatingAccountId: string }
+): Promise<PayStepOutcome> {
   let result;
   try {
     result = await executePayment(
@@ -506,6 +563,173 @@ export async function releaseMilestoneIfNotPaused(
     }
   }
   return { status, txRef: result.txRef, paymentExecution: result, reasoningSuffix, heldBecausePaused: false, operatingBalance };
+}
+
+/**
+ * The contractor stage's step for a `verified` milestone whose release is
+ * already in flight — the twin of `reconcileApInvoice` above, with the same
+ * semantics. A pending release maps the milestone back to `verified`, which
+ * the stage selects every cycle; deciding it again could record a transfer
+ * that is pending or already confirmed on chain as `held` with no txRef, and
+ * nothing would look at it after that. So: no model, no guardrails. Instead
+ * it releases through the milestone's idempotency key, which makes
+ * `executePayment` reconcile the existing intent rather than pay again.
+ *
+ * When a transfer already exists — a provider id, or a confirmed intent —
+ * nothing new can move, so the pause is not consulted. When none does yet,
+ * `executePayment` may submit it: the contractor's current risk level is read
+ * again first (a contractor now screened high risk is held, not paid), then
+ * the release goes through `releaseMilestoneIfNotPaused`, which holds while
+ * the agent is paused (D6). With no operating account there, the milestone
+ * is held and noted, as `payInvoice` does for an invoice.
+ *
+ * A reconcile that did not complete is not an outcome: no operating account
+ * to reconcile against, a reconcile that could not read the provider, or one
+ * that threw before any result leaves the milestone `verified` for the next
+ * cycle rather than demoting it to `held`.
+ *
+ * The milestone keeps its decision time and, when the reconciliation reports
+ * none, its recorded txRef; the reasoning gains a note only when the status
+ * moves on. The ledger entry is `milestone_reconcile` (domain `contractor`) —
+ * `detail.reconciled: true`, or `false` with `reconcileError` — and carries
+ * no `observed` facts.
+ */
+export async function reconcileMilestone(
+  milestone: {
+    id: string;
+    title: string;
+    amount: number;
+    contractorId: string;
+    contractorName: string;
+    address: string | null;
+    reasoning: string | null;
+    txRef: string | null;
+  },
+  intent: ExistingPaymentIntent,
+  deps: { db: OrgDb; provider: ChainProvider; operating: { id: string } | null }
+): Promise<{ status: string; operatingBalance: number | null; line: CycleLogLine }> {
+  const transferExists = intent.providerTxId !== null || intent.status === "confirmed";
+  const name = milestone.contractorName;
+  const amount = milestone.amount;
+  const release = { milestoneId: milestone.id, destination: payoutAddress(milestone.address, milestone.contractorId), amount };
+  const subject = `milestone "${milestone.title}" for ${name} (${amount} USDC)`;
+
+  if (transferExists && !deps.operating) {
+    return {
+      status: "verified",
+      operatingBalance: null,
+      line: { domain: "contractor", message: `${name}: in-flight release left pending, no operating account to reconcile it against (${amount} USDC)` },
+    };
+  }
+
+  let outcome: PayStepOutcome;
+  let notResubmitted = false;
+  if (transferExists && deps.operating) {
+    const result = await releaseMilestone(release, { provider: deps.provider, operatingAccountId: deps.operating.id });
+    const execution = result.paymentExecution;
+    const incomplete =
+      execution === null
+        ? result.reasoningSuffix.trim().replace(/^\[(.*)\]$/, "$1")
+        : execution.status === "failed" && execution.error != null && execution.providerTxId != null
+          ? execution.error
+          : null;
+    if (incomplete !== null) {
+      await appendLedgerEntry({
+        actor: "agent",
+        domain: "contractor",
+        action: "milestone_reconcile",
+        summary: `RECONCILE ${subject}: not completed, left pending`,
+        detail: {
+          milestoneId: milestone.id,
+          counterpartyId: milestone.contractorId,
+          reconciled: false,
+          reconcileError: incomplete,
+          previousStatus: "verified",
+          execution: {
+            txRef: milestone.txRef ?? execution?.txRef ?? null,
+            chainMode: execution?.providerMode ?? deps.provider.mode,
+            resultingStatus: "verified",
+            settlementRequired: true,
+          },
+        },
+      });
+      return {
+        status: "verified",
+        operatingBalance: null,
+        line: { domain: "contractor", message: `${name}: could not reconcile the in-flight release, left pending for the next cycle (${amount} USDC)` },
+      };
+    }
+    outcome = result;
+  } else if ((await currentRiskLevel(deps.db, milestone.contractorId)) === "high") {
+    notResubmitted = true;
+    outcome = {
+      status: "held",
+      txRef: null,
+      paymentExecution: null,
+      reasoningSuffix: NOT_RESUBMITTED_HIGH_RISK_NOTE,
+      heldBecausePaused: false,
+      operatingBalance: null,
+    };
+  } else if (deps.operating) {
+    outcome = await releaseMilestoneIfNotPaused(release, { provider: deps.provider, operatingAccountId: deps.operating.id });
+  } else {
+    outcome = {
+      status: "held",
+      txRef: null,
+      paymentExecution: null,
+      reasoningSuffix: " [no operating account configured]",
+      heldBecausePaused: false,
+      operatingBalance: null,
+    };
+  }
+
+  const status = outcome.status;
+  const txRef = outcome.txRef ?? milestone.txRef;
+  const reasoning = withNote(milestone.reasoning, status === "verified" ? "" : outcome.reasoningSuffix);
+  const now = new Date().toISOString();
+  const update = await deps.db
+    .from("milestones")
+    .update({ status, agent_reasoning: reasoning, settled_at: status === "paid" ? now : null, tx_ref: txRef })
+    .eq("id", milestone.id);
+  if (update.error) throw new Error(update.error.message);
+
+  const execution = outcome.paymentExecution;
+  await appendLedgerEntry({
+    actor: "agent",
+    domain: "contractor",
+    action: "milestone_reconcile",
+    summary: `RECONCILE ${subject}: ${status}`,
+    detail: {
+      milestoneId: milestone.id,
+      counterpartyId: milestone.contractorId,
+      reconciled: true,
+      previousStatus: "verified",
+      ...(notResubmitted ? { notResubmittedBecause: "counterparty.high_risk" } : {}),
+      execution: {
+        txRef,
+        chainMode: execution?.providerMode ?? deps.provider.mode,
+        resultingStatus: status,
+        settlementRequired: true,
+        feeUsd: execution?.feeUsd ?? null,
+        feeSource: execution?.feeSource ?? null,
+        settledInMs: execution?.settledInMs ?? null,
+        executedAt: execution?.executedAt ?? null,
+        reconciled: execution?.reconciled ?? false,
+        ...heldBecausePausedDetail(outcome.heldBecausePaused),
+      },
+    },
+  });
+
+  const message = outcome.heldBecausePaused
+    ? `${name}: not paid, the agent was paused (${amount} USDC)`
+    : notResubmitted
+      ? `${name}: not resubmitted, the contractor is now screened high risk (${amount} USDC)`
+      : status === "paid"
+        ? `${name}: reconciled an in-flight release, now paid (${amount} USDC)`
+        : status === "verified"
+          ? `${name}: reconciled an in-flight release, still pending (${amount} USDC)`
+          : `${name}: reconciled an in-flight release, now held (${amount} USDC)`;
+  return { status, operatingBalance: outcome.operatingBalance, line: { domain: "contractor", message } };
 }
 
 /** What the treasury stage's attempted move decided — mirrors `PayStepOutcome`
@@ -1275,10 +1499,13 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
       .eq("status", "verified")
   ) as Array<{
     id: string;
+    status: string;
     title: string;
     amount: string;
     verification_source: string | null;
     contractor_id: string;
+    agent_reasoning: string | null;
+    tx_ref: string | null;
     counterparties: {
       id: string;
       name: string;
@@ -1290,9 +1517,35 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     };
   }>;
 
+  // A `verified` milestone with a payment intent already has a release in
+  // flight: it is reconciled, not decided again (see reconcileMilestone).
+  const releasesInFlight = await existingMilestoneIntents(db, milestones);
+
   for (const milestone of milestones) {
     const contractor = milestone.counterparties;
     const amount = num(milestone.amount);
+
+    const intent = releasesInFlight.get(milestone.id);
+    if (intent) {
+      const reconciled = await reconcileMilestone(
+        {
+          id: milestone.id,
+          title: milestone.title,
+          amount,
+          contractorId: contractor.id,
+          contractorName: contractor.name,
+          address: contractor.address,
+          reasoning: milestone.agent_reasoning,
+          txRef: milestone.tx_ref,
+        },
+        intent,
+        { db, provider, operating: operating ? { id: operating.id } : null }
+      );
+      if (reconciled.operatingBalance !== null) operatingBalance = reconciled.operatingBalance;
+      metrics.recordMilestone(reconciled.status, false);
+      lines.push(reconciled.line);
+      continue;
+    }
     const limit = contractor.payment_limit == null ? null : num(contractor.payment_limit);
     const highRisk = contractor.risk_level === "high";
     const overLimit = limit != null && amount > limit;
