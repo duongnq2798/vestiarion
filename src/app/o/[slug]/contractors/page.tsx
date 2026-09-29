@@ -1,6 +1,8 @@
+import { Flag } from "lucide-react";
 import type { Metadata } from "next";
 import AgentControls from "@/components/AgentControls";
 import MilestoneVerification from "@/components/MilestoneVerification";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { DecisionCard } from "@/components/vx/DecisionCard";
 import { milestoneDecision } from "@/components/vx/map";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
@@ -36,21 +38,30 @@ export default async function ContractorsPage({ params }: { params: Promise<{ sl
           sub="Milestone pay follows verified work instead of a Net-30 calendar. Every release still passes risk and authority guardrails."
           right={<AgentControls orgSlug={slug} nextDay={dashboardStats.day + 1} headSeq={headEntries[0]?.seq ?? 0} clockMode={dashboardStats.clockMode} />}
         />
-        <div className="space-y-5">
-          {decisions.map((decision, index) => (
-            <div key={decision.id}>
-              <DecisionCard decision={decision} orgSlug={slug} />
-              {canWrite && (
-                <MilestoneVerification
-                  orgSlug={slug}
-                  milestoneId={milestones[index].id}
-                  verified={milestones[index].verified}
-                  disabled={milestones[index].status === "paid"}
-                />
-              )}
-            </div>
-          ))}
-        </div>
+        {decisions.length === 0 ? (
+          <EmptyState
+            titleAs="h2"
+            icon={<Flag />}
+            title="No milestones yet"
+            body="Contractor milestones appear here once they are recorded. Pay is released when the work is verified."
+          />
+        ) : (
+          <div className="space-y-5">
+            {decisions.map((decision, index) => (
+              <div key={decision.id}>
+                <DecisionCard decision={decision} orgSlug={slug} />
+                {canWrite && (
+                  <MilestoneVerification
+                    orgSlug={slug}
+                    milestoneId={milestones[index].id}
+                    verified={milestones[index].verified}
+                    disabled={milestones[index].status === "paid"}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </ProductShell>
     );
   });
