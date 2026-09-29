@@ -61,11 +61,19 @@ function database(accounts: AccountRow[], options: { lostRace?: string[] } = {})
 
 function circle(options: {
   sets?: Array<{ id: string; name?: string }>;
+  /** The entity's wallet sets, served in pages as Circle does: `pageSize` at a time, after the id `pageAfter` names. */
+  allSets?: Array<{ id: string; name?: string }>;
+  listWalletSets?: (input: { pageSize?: number; pageAfter?: string }) => Promise<unknown>;
   createWallets?: (input: { blockchains: string[] }, call: number) => Promise<unknown>;
   createWalletSet?: () => Promise<unknown>;
 } = {}) {
   let walletCalls = 0;
-  const listWalletSets = vi.fn(async () => ({ data: { walletSets: options.sets ?? [] } }));
+  const listWalletSets = vi.fn(async (input: { pageSize?: number; pageAfter?: string } = {}) => {
+    if (options.listWalletSets) return options.listWalletSets(input);
+    if (!options.allSets) return { data: { walletSets: options.sets ?? [] } };
+    const start = input.pageAfter ? options.allSets.findIndex((set) => set.id === input.pageAfter) + 1 : 0;
+    return { data: { walletSets: options.allSets.slice(start, start + (input.pageSize ?? 10)) } };
+  });
   const createWalletSet = vi.fn(
     options.createWalletSet ?? (async ({ name }: { name: string }) => ({ data: { walletSet: { id: "set-new", name } } }))
   );
@@ -329,6 +337,96 @@ describe("the wallet set per host (hosted wallets H3, Review Focus 4)", () => {
     await expect(inOrg(fake, () => treasuryWalletSetId(client))).resolves.toBe("set-treasury");
     await expect(inOrg(fake, () => treasuryWalletSetId(client), hostedConfig)).resolves.toBe("set-new");
     expect(fakeCircle.createWalletSet).toHaveBeenCalledExactlyOnceWith({ name: HOSTED_SET });
+  });
+});
+
+describe("treasuryWalletSetId pages through the entity's wallet sets (R5)", () => {
+  const filler = (from: number, count: number) =>
+    Array.from({ length: count }, (_, index) => ({ id: `set-${from + index}`, name: `someone-else-${from + index}` }));
+  const find = async (fakeCircle: ReturnType<typeof circle>) =>
+    inOrg(database([]), () => treasuryWalletSetId(fakeCircle.factory({ apiKey: API_KEY, entitySecret: ENTITY_SECRET })));
+
+  it("finds the set on the third page, asking for each page after the last id of the one before", async () => {
+    const fakeCircle = circle({ allSets: [...filler(0, 100), { id: "set-treasury", name: TREASURY_WALLET_SET }, ...filler(100, 30)] });
+
+    await expect(find(fakeCircle)).resolves.toBe("set-treasury");
+
+    expect(fakeCircle.listWalletSets.mock.calls.map(([input]) => input)).toEqual([
+      { pageSize: 50 },
+      { pageSize: 50, pageAfter: "set-49" },
+      { pageSize: 50, pageAfter: "set-99" },
+    ]);
+    expect(fakeCircle.createWalletSet).not.toHaveBeenCalled();
+  });
+
+  it("creates the set when the list ends without it, on a short page", async () => {
+    const fakeCircle = circle({ allSets: filler(0, 60) });
+    await expect(find(fakeCircle)).resolves.toBe("set-new");
+    expect(fakeCircle.listWalletSets).toHaveBeenCalledTimes(2);
+    expect(fakeCircle.createWalletSet).toHaveBeenCalledExactlyOnceWith({ name: TREASURY_WALLET_SET });
+  });
+
+  it("creates the set when the list ends on an empty page after full ones", async () => {
+    const fakeCircle = circle({ allSets: filler(0, 100) });
+    await expect(find(fakeCircle)).resolves.toBe("set-new");
+    expect(fakeCircle.listWalletSets).toHaveBeenCalledTimes(3);
+    expect(fakeCircle.createWalletSet).toHaveBeenCalledOnce();
+  });
+
+  it("gives up after 40 full pages with a fixed error, and creates nothing", async () => {
+    const fakeCircle = circle({ allSets: filler(0, 40 * 50 + 1) });
+    const outcome = await find(fakeCircle).catch((error: unknown) => error);
+    expect(outcome).toBeInstanceOf(Error);
+    expect((outcome as Error).message).toBe(
+      "The workspace's wallet set was not among the first 2000 of the Circle entity's wallet sets; none was created"
+    );
+    expect(fakeCircle.listWalletSets).toHaveBeenCalledTimes(40);
+    expect(fakeCircle.createWalletSet).not.toHaveBeenCalled();
+  });
+
+  it("finds the set on the fortieth page, the last one read", async () => {
+    const fakeCircle = circle({ allSets: [...filler(0, 39 * 50 + 49), { id: "set-treasury", name: TREASURY_WALLET_SET }, ...filler(5000, 5)] });
+    await expect(find(fakeCircle)).resolves.toBe("set-treasury");
+    expect(fakeCircle.listWalletSets).toHaveBeenCalledTimes(40);
+  });
+
+  it("runs every page through circleCall: a failed page is CircleCallFailed, never the SDK's error, and creates nothing", async () => {
+    let calls = 0;
+    const fakeCircle = circle({
+      listWalletSets: async () => {
+        calls += 1;
+        if (calls === 2) throw new InternalServerError({ ...REQUEST, status: 500, message: LEAKY });
+        return { data: { walletSets: filler(0, 50) } };
+      },
+    });
+    const outcome = await find(fakeCircle).catch((error: unknown) => error);
+    expect((outcome as Error).name).toBe("CircleCallFailed");
+    expect((outcome as Error).message).toBe("Circle listWalletSets failed with HTTP 500");
+    expect(inspect(outcome)).not.toContain(API_KEY);
+    expect(fakeCircle.createWalletSet).not.toHaveBeenCalled();
+  });
+
+  it("gives up on a page Circle does not answer within 15 s", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    let calls = 0;
+    const fakeCircle = circle({
+      listWalletSets: async () => {
+        calls += 1;
+        if (calls === 2) return new Promise<never>(() => {});
+        return { data: { walletSets: filler(0, 50) } };
+      },
+    });
+    let outcome: unknown;
+    const pending = find(fakeCircle).then(
+      (value) => (outcome = value),
+      (error: unknown) => (outcome = error)
+    );
+    for (let turn = 0; turn < 200 && calls < 2; turn += 1) await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(calls).toBe(2);
+    await vi.advanceTimersByTimeAsync(15_000);
+    await pending;
+    expect((outcome as Error).name).toBe("CircleCallFailed");
+    expect(fakeCircle.createWalletSet).not.toHaveBeenCalled();
   });
 });
 

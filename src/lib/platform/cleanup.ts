@@ -5,6 +5,23 @@ export const SANDBOX_IDLE_DAYS = 60;
 
 interface SandboxRow {
   id: string;
+  wallet_host: "own" | "hosted" | null;
+}
+
+/**
+ * Whether any account of the organization has a Circle wallet, read through
+ * the platform's `orgs` table: the org comes back only if an embedded account
+ * with a wallet matches (`!inner`).
+ */
+async function hasWallet(orgId: string): Promise<{ wallet: boolean; error?: string }> {
+  const { data, error } = await platformDb()
+    .from("orgs")
+    .select("id, accounts!inner(id)")
+    .eq("id", orgId)
+    .not("accounts.circle_wallet_id", "is", null)
+    .limit(1);
+  if (error) return { wallet: false, error: error.message };
+  return { wallet: (data ?? []).length > 0 };
 }
 
 /**
@@ -25,6 +42,13 @@ export interface CleanupResult {
  * re-checks `last_active_at` against the cutoff it is given, so a sandbox
  * that became active between the listing and the delete survives — that call
  * simply returns `false`, and the organization is counted nowhere.
+ *
+ * Hosted sandboxes are listed too (R6), so an abandoned one frees its place
+ * under `HOSTED_WORKSPACE_LIMIT`. Each is first checked for a wallet: one with
+ * a wallet may hold faucet funds its owner is using, so it is kept without a
+ * call (counted nowhere), and one whose check fails is counted in `failed`.
+ * `delete_sandbox_org`'s own `has_hosted_wallet` refusal stays the authority
+ * for a wallet created between the check and the delete.
  */
 export async function deleteAbandonedSandboxes(now: Date = new Date()): Promise<CleanupResult> {
   const cutoff = new Date(now.getTime() - SANDBOX_IDLE_DAYS * 24 * 60 * 60 * 1000);
@@ -33,21 +57,28 @@ export async function deleteAbandonedSandboxes(now: Date = new Date()): Promise<
   const sandboxes = unwrap(
     await platformDb()
       .from("orgs")
-      .select("id")
+      .select("id, wallet_host")
       .eq("mode", "sandbox")
       .lt("last_active_at", cutoffIso)
       .is("circle_api_key_enc", null)
-      // 0030 (hosted wallets H6): no hosted sandbox is listed. Only a hosted
-      // sandbox with wallets must be kept, but keeping every hosted one costs
-      // nothing, and delete_sandbox_org's own refusal stays authoritative.
-      // Not `.neq("wallet_host", "hosted")` alone: in SQL that drops nulls too.
-      .or("wallet_host.is.null,wallet_host.neq.hosted")
   ) as unknown as SandboxRow[];
 
   let deleted = 0;
   let failed = 0;
 
   for (const org of sandboxes) {
+    if (org.wallet_host === "hosted") {
+      const check = await hasWallet(org.id);
+      if (check.error) {
+        failed += 1;
+        console.error("could not check abandoned hosted sandbox for wallets", org.id, check.error);
+        continue;
+      }
+      if (check.wallet) {
+        console.log("kept abandoned hosted sandbox with wallets", org.id);
+        continue;
+      }
+    }
     const { data, error } = await platformDb().rpc("delete_sandbox_org", {
       p_org_id: org.id,
       p_inactive_before: cutoffIso,

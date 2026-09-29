@@ -17,7 +17,7 @@ describe("adoptEnvSecrets", () => {
       orgId: ORG,
       env: { LEDGER_SIGNING_KEY: escaped, CIRCLE_API_KEY: "circle-key", CIRCLE_ENTITY_SECRET: "entity-secret" },
       keys,
-      expectLedgerKeyId: id,
+      expectLedgerKeyId: id, walletHost: null,
     });
 
     expect(adopted.ledgerKeyId).toBe(id);
@@ -32,16 +32,35 @@ describe("adoptEnvSecrets", () => {
     const otherPem = other.privateKey.export({ type: "pkcs8", format: "pem" }).toString();
     const otherId = ledgerKeyId(other.publicKey);
 
-    expect(() => adoptEnvSecrets({ orgId: ORG, env: { LEDGER_SIGNING_KEY: otherPem }, keys, expectLedgerKeyId: id }))
+    expect(() => adoptEnvSecrets({ orgId: ORG, env: { LEDGER_SIGNING_KEY: otherPem }, keys, expectLedgerKeyId: id, walletHost: null }))
       .toThrow(new RegExp(`${otherId}.*${id}`));
   });
 
   it("refuses when there is no ledger key to adopt", () => {
-    expect(() => adoptEnvSecrets({ orgId: ORG, env: {}, keys, expectLedgerKeyId: id })).toThrow(/LEDGER_SIGNING_KEY/);
+    expect(() => adoptEnvSecrets({ orgId: ORG, env: {}, keys, expectLedgerKeyId: id, walletHost: null })).toThrow(/LEDGER_SIGNING_KEY/);
+  });
+
+  it.each(["own", null] as const)("adopts into a workspace whose wallet host is %s", (walletHost) => {
+    const adopted = adoptEnvSecrets({ orgId: ORG, env: { LEDGER_SIGNING_KEY: pem }, keys, expectLedgerKeyId: id, walletHost });
+    expect(adopted.ledgerKeyId).toBe(id);
+  });
+
+  it("refuses a hosted workspace, before reading anything: its Circle credentials are the platform's hosted pair (review minor 3)", () => {
+    expect(() =>
+      adoptEnvSecrets({
+        orgId: ORG,
+        env: { LEDGER_SIGNING_KEY: escaped, CIRCLE_API_KEY: "circle-key", CIRCLE_ENTITY_SECRET: "entity-secret" },
+        keys,
+        expectLedgerKeyId: id,
+        walletHost: "hosted",
+      })
+    ).toThrow(
+      "This workspace uses a hosted testnet wallet (wallet_host = 'hosted'); refusing to adopt this environment's secrets into it"
+    );
   });
 
   it("leaves absent Circle credentials absent rather than encrypting an empty string", () => {
-    const adopted = adoptEnvSecrets({ orgId: ORG, env: { LEDGER_SIGNING_KEY: pem }, keys, expectLedgerKeyId: id });
+    const adopted = adoptEnvSecrets({ orgId: ORG, env: { LEDGER_SIGNING_KEY: pem }, keys, expectLedgerKeyId: id, walletHost: null });
     expect(adopted.circle_api_key_enc).toBeNull();
     expect(adopted.circle_entity_secret_enc).toBeNull();
   });

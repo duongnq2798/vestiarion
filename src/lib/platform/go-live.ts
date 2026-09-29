@@ -244,8 +244,9 @@ function validSecret(value: string): boolean {
  * workspace with no operating wallet is refused (`no_operating_wallet`): it
  * cannot pay, and has no wallet to prove new credentials against.
  *
- * The update is conditional on the mode read at the start: a workspace that
- * went live meanwhile is asked to try again. A wallet created meanwhile, by a
+ * The update is conditional on the mode and the wallet host read at the
+ * start: a workspace that went live, or chose a hosted wallet, meanwhile is
+ * asked to try again. A wallet created meanwhile, by a
  * concurrent "Create wallets" under the old credentials, is caught by
  * `goLive`, which proves the stored credentials again.
  *
@@ -290,17 +291,18 @@ export async function connectCircle(input: {
     await proveSameEntity(factory({ apiKey, entitySecret }), provisioned);
   }
 
+  const update = platformDb()
+    .from("orgs")
+    .update({
+      circle_api_key_enc: encryptSecret(apiKey, { orgId: input.orgId, column: "circle_api_key_enc" }, keys),
+      circle_entity_secret_enc: encryptSecret(entitySecret, { orgId: input.orgId, column: "circle_entity_secret_enc" }, keys),
+      wallet_host: "own",
+    })
+    .eq("id", input.orgId)
+    .eq("mode", state.mode);
+  // Bound to the host read at the start too: a hosted choice landing meanwhile is not overwritten.
   const written = unwrap(
-    await platformDb()
-      .from("orgs")
-      .update({
-        circle_api_key_enc: encryptSecret(apiKey, { orgId: input.orgId, column: "circle_api_key_enc" }, keys),
-        circle_entity_secret_enc: encryptSecret(entitySecret, { orgId: input.orgId, column: "circle_entity_secret_enc" }, keys),
-        wallet_host: "own",
-      })
-      .eq("id", input.orgId)
-      .eq("mode", state.mode)
-      .select("id")
+    await (state.walletHost === null ? update.is("wallet_host", null) : update.eq("wallet_host", state.walletHost)).select("id")
   ) as Array<{ id: string }>;
   if (written.length === 0) throw new Error("the workspace changed while Circle was being connected; nothing was stored");
 
@@ -342,6 +344,8 @@ export async function createWallets(input: {
     input.orgId,
     async () => {
       const chain = currentOrgConfig().chain;
+      // Read as its own account, now hosted: never mint with a pair the check above did not see.
+      if (!isHosted(state) && chain.walletHost === "hosted") throw new GoLiveError("credentials_changed");
       if (chain.credentialsUnreadable) {
         throw new GoLiveError(chain.walletHost === "hosted" ? "hosted_unavailable" : "credentials_unreadable");
       }
@@ -399,7 +403,8 @@ export async function goLive(input: { orgId: string; actorId: string; client?: C
     input.orgId,
     async () => {
       const chain = currentOrgConfig().chain;
-      if (hosted && chain.walletHost !== "hosted") throw new GoLiveError("credentials_changed");
+      // The host changed between the state read and this scope, either way: the checks below would be the wrong ones.
+      if (hosted !== (chain.walletHost === "hosted")) throw new GoLiveError("credentials_changed");
       if (chain.credentialsUnreadable) throw new GoLiveError(hosted ? "hosted_unavailable" : "credentials_unreadable");
       if (!chain.circleApiKey || !chain.circleEntitySecret) throw new GoLiveError("not_connected");
       const accounts = await walletAccounts();
@@ -504,8 +509,9 @@ export async function goLiveStatus(orgId: string): Promise<GoLiveStatus> {
  * lock: it refuses a workspace holding Circle credentials or any wallet
  * (`hosted_not_allowed`), holds the platform to `HOSTED_WORKSPACE_LIMIT`
  * hosted workspaces (`hosted_limit_reached`), and leaves one already hosted
- * as it is. Choosing records `hosted_wallet_chosen` with ids only; choosing
- * again, a no-op, records nothing.
+ * as it is. It answers whether it marked the workspace hosted, and only then
+ * is `hosted_wallet_chosen` recorded, with ids only: choosing again, or a
+ * second owner choosing at the same moment, records nothing.
  */
 export async function chooseHostedWallet(input: { orgId: string; actorId: string }): Promise<void> {
   const platform = await inScopeOf(input.orgId, input.actorId, async () => {
@@ -514,14 +520,16 @@ export async function chooseHostedWallet(input: { orgId: string; actorId: string
   });
   if (!platform.available) throw new GoLiveError("hosted_unavailable");
 
-  const before = await orgState(input.orgId);
-  const { error } = await platformDb().rpc("choose_hosted_wallet", { p_org_id: input.orgId, p_limit: platform.limit });
+  const { data: changed, error } = await platformDb().rpc("choose_hosted_wallet", {
+    p_org_id: input.orgId,
+    p_limit: platform.limit,
+  });
   if (error) {
     if (error.message.includes("hosted_not_allowed")) throw new GoLiveError("hosted_not_allowed");
     if (error.message.includes("hosted_limit_reached")) throw new GoLiveError("hosted_limit_reached");
     throw new Error(error.message);
   }
-  if (isHosted(before)) return;
+  if (changed !== true) return;
 
   await record(input.orgId, input.actorId, {
     action: "hosted_wallet_chosen",

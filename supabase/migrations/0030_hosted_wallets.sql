@@ -27,7 +27,26 @@ alter table public.orgs add column if not exists wallet_host text
 -- whole platform, serialises every choice, so two workspaces choosing at the
 -- limit cannot both pass the count (the create_org and create_api_key
 -- reasoning). A null or negative limit admits nobody.
-create or replace function public.choose_hosted_wallet(p_org_id uuid, p_limit int) returns void
+--
+-- Returns whether it changed anything: true only when it marked the workspace
+-- hosted, so the caller records the choice once (hosted_wallet_chosen).
+--
+-- 0030's first version returned void, and a return type cannot be replaced in
+-- place: that version, wherever it was applied, is dropped first. The boolean
+-- one is left alone on every later replay.
+do $$
+begin
+  if exists (
+    select 1 from pg_catalog.pg_proc p
+      join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public' and p.proname = 'choose_hosted_wallet'
+       and pg_catalog.pg_get_function_result(p.oid) = 'void'
+  ) then
+    drop function public.choose_hosted_wallet(uuid, int);
+  end if;
+end $$;
+
+create or replace function public.choose_hosted_wallet(p_org_id uuid, p_limit int) returns boolean
 language plpgsql
 security definer
 set search_path = ''
@@ -48,7 +67,7 @@ begin
     raise exception 'hosted_not_allowed: a workspace with Circle credentials or wallets cannot switch to a hosted wallet';
   end if;
   if v_org.wallet_host = 'hosted' then
-    return;
+    return false;
   end if;
 
   select count(*) into v_hosted from public.orgs where wallet_host = 'hosted';
@@ -57,6 +76,7 @@ begin
   end if;
 
   update public.orgs set wallet_host = 'hosted' where id = p_org_id;
+  return true;
 end;
 $$;
 

@@ -32,8 +32,10 @@ afterAll(async () => {
 
 const ENVELOPE = { v: 1, iv: "x", tag: "y", data: "z" };
 
+/** Whether the call changed anything: true only when it marked the workspace hosted (review minor 1). */
 const choose = (orgId: string, limit: number | null) =>
-  asServiceRole(db, (tx) => tx.query("select public.choose_hosted_wallet($1, $2)", [orgId, limit]));
+  asServiceRole(db, async (tx) =>
+    (await tx.query<{ changed: boolean }>("select public.choose_hosted_wallet($1, $2) as changed", [orgId, limit])).rows[0].changed);
 
 const hostOf = async (orgId: string) =>
   (await db.query<{ wallet_host: string | null }>("select wallet_host from public.orgs where id = $1", [orgId])).rows[0].wallet_host;
@@ -76,7 +78,7 @@ describe("choose_hosted_wallet (0030)", () => {
     await clearHosted();
     const orgId = await createOrg(db, "fresh-co");
 
-    await choose(orgId, 100);
+    expect(await choose(orgId, 100)).toBe(true);
 
     expect(await hostOf(orgId)).toBe("hosted");
   });
@@ -86,7 +88,7 @@ describe("choose_hosted_wallet (0030)", () => {
     const orgId = await createOrg(db, "was-own-co");
     await db.query("update public.orgs set wallet_host = 'own' where id = $1", [orgId]);
 
-    await choose(orgId, 100);
+    expect(await choose(orgId, 100)).toBe(true);
 
     expect(await hostOf(orgId)).toBe("hosted");
   });
@@ -94,9 +96,10 @@ describe("choose_hosted_wallet (0030)", () => {
   it("is a no-op for a workspace already hosted, even at the limit", async () => {
     await clearHosted();
     const orgId = await createOrg(db, "again-co");
-    await choose(orgId, 1);
+    expect(await choose(orgId, 1)).toBe(true);
 
-    await choose(orgId, 1);
+    // Nothing changed, so the caller records nothing a second time.
+    expect(await choose(orgId, 1)).toBe(false);
 
     expect(await hostOf(orgId)).toBe("hosted");
   });
@@ -279,6 +282,28 @@ describe("delete_sandbox_org (0030)", () => {
 });
 
 describe("replay (0030)", () => {
+  it("returns a boolean after a replay, including over a database that has 0030's first, void version", async () => {
+    await db.query("drop function public.choose_hosted_wallet(uuid, int)");
+    await db.query(
+      "create function public.choose_hosted_wallet(p_org_id uuid, p_limit int) returns void language sql as 'select null::void'"
+    );
+    await db.query("grant execute on function public.choose_hosted_wallet(uuid, int) to authenticated");
+
+    await applyMigrations(db);
+
+    const result = await db.query<{ result: string }>(
+      "select pg_catalog.pg_get_function_result('public.choose_hosted_wallet(uuid, int)'::regprocedure) as result"
+    );
+    expect(result.rows[0].result).toBe("boolean");
+    await clearHosted();
+    const orgId = await createOrg(db, "upgraded-co");
+    expect(await choose(orgId, 100)).toBe(true);
+    // The grants are the migration's again, not the stand-in's defaults.
+    await expect(
+      asRole(db, "authenticated", (tx) => tx.query("select public.choose_hosted_wallet($1, 100)", [orgId]))
+    ).rejects.toThrow(/permission denied/);
+  });
+
   it("is idempotent across a replay of every migration, keeping each workspace's choice", async () => {
     await clearHosted();
     const hosted = await createOrg(db, "replay-hosted-co");

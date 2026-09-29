@@ -25,6 +25,8 @@ export function walletSetName(orgId: string, host: "own" | "hosted" | null | und
 }
 
 const WALLET_CALL_DEADLINE_MS = 15_000;
+const WALLET_SET_PAGE_SIZE = 50;
+const WALLET_SET_PAGE_LIMIT = 40;
 const SIMULATED_SUFFIX = " (simulated)";
 
 export interface ProvisionResult {
@@ -98,18 +100,41 @@ export async function circleCall<T>(call: string, work: () => Promise<T>, write:
  * configuration as the client's credentials, so a hosted organization's
  * wallets always land in its own set inside the hosted entity.
  *
+ * The entity's sets are read a page at a time (R5): the hosted entity holds a
+ * set per hosted workspace, far more than one page, and a set missed on a
+ * later page would be created again. Each page is its own `circleCall`, under
+ * its own deadline, and asks for the sets after the last id of the page
+ * before; a short page is the end of the list. After
+ * `WALLET_SET_PAGE_LIMIT` full pages it gives up rather than create a set it
+ * may already have.
+ *
  * Two first runs at once can each create a set of that name. That is
  * harmless: a wallet works from either, and later runs take the first found.
  */
 export async function treasuryWalletSetId(client: CircleClient): Promise<string> {
   const name = walletSetName(currentOrgId(), currentOrgConfig().chain.walletHost);
-  const listed = await circleCall("listWalletSets", () => client.listWalletSets({ pageSize: 50 }), false);
-  // The SDK types wallet sets as a union whose end-user variant has no
-  // `name`; developer-controlled sets always have one.
-  const sets = (listed.data?.walletSets ?? []) as Array<{ id: string; name?: string }>;
-  const existing = sets.find((set) => set.name === name)?.id;
-  if (existing) return existing;
+  let pageAfter: string | undefined;
+  for (let page = 0; page < WALLET_SET_PAGE_LIMIT; page += 1) {
+    const after = pageAfter;
+    const listed = await circleCall(
+      "listWalletSets",
+      () => client.listWalletSets({ pageSize: WALLET_SET_PAGE_SIZE, ...(after ? { pageAfter: after } : {}) }),
+      false
+    );
+    // The SDK types wallet sets as a union whose end-user variant has no
+    // `name`; developer-controlled sets always have one.
+    const sets = (listed.data?.walletSets ?? []) as Array<{ id: string; name?: string }>;
+    const existing = sets.find((set) => set.name === name)?.id;
+    if (existing) return existing;
+    if (sets.length < WALLET_SET_PAGE_SIZE) return createWalletSet(client, name);
+    pageAfter = sets[sets.length - 1].id;
+  }
+  throw new Error(
+    `The workspace's wallet set was not among the first ${WALLET_SET_PAGE_LIMIT * WALLET_SET_PAGE_SIZE} of the Circle entity's wallet sets; none was created`
+  );
+}
 
+async function createWalletSet(client: CircleClient, name: string): Promise<string> {
   const created = await circleCall("createWalletSet", () => client.createWalletSet({ name }), true);
   const id = created.data?.walletSet?.id;
   if (!id) throw new CircleCallFailed("createWalletSet");
@@ -168,7 +193,8 @@ function withoutSimulated(name: string): string {
  * Gives every treasury account of the organization in scope a Circle
  * developer-controlled wallet on its chain, minted with the credentials its
  * scope holds (its own, or for a hosted organization the platform's hosted
- * pair, in a set of its own: `walletSetName`), drops " (simulated)" from the account's name, and zeroes
+ * pair, in a set of its own: `walletSetName`). It drops " (simulated)" from
+ * the account's name, and zeroes
  * its balance: the stored balance was the simulation's, and the new wallet
  * holds nothing until it is funded, so a simulated balance (or a simulated
  * reserve) never carries into live mode. Reconcile reads the real one.

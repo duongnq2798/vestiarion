@@ -31,12 +31,18 @@ async function main() {
   }
 
   const db = createContext(configFromEnv(process.env)).db;
-  const org = await db.from("orgs").select("id").eq("slug", slug).maybeSingle();
+  const org = await db.from("orgs").select("id, wallet_host").eq("slug", slug).maybeSingle();
   if (org.error) throw new Error(org.error.message);
   if (!org.data) throw new Error(`no organization with slug ${slug}`);
 
   const keys = masterKeysFromEnv();
-  const adopted = adoptEnvSecrets({ orgId: org.data.id, env: process.env, keys, expectLedgerKeyId: expected });
+  const adopted = adoptEnvSecrets({
+    orgId: org.data.id,
+    env: process.env,
+    keys,
+    expectLedgerKeyId: expected,
+    walletHost: org.data.wallet_host,
+  });
 
   const update = await db
     .from("orgs")

@@ -8,8 +8,9 @@ import { inOrg } from "@/lib/dal/scope";
 import { chooseHostedWallet, connectCircle, createWallets, goLive, GoLiveError, operatingBalance } from "@/lib/platform/go-live";
 
 /**
- * The three Go live steps (docs/superpowers/specs/2026-09-29-go-live-design.md),
- * and the hosted-wallet choice (2026-09-30-hosted-wallets-design.md), owner only (L1). The Circle credentials arrive in form data, go straight to
+ * The three Go live steps (docs/superpowers/specs/2026-09-29-go-live-design.md)
+ * and the hosted-wallet choice (2026-09-30-hosted-wallets-design.md), owner
+ * only (L1). The Circle credentials arrive in form data, go straight to
  * `connectCircle`, and are never returned, logged or revalidated into a page:
  * the result is only ever `{ ok, message }` with a fixed message.
  */
