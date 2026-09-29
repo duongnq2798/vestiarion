@@ -50,11 +50,55 @@ export const MDX_TO_MARKDOWN: Record<string, (attributes: JsxAttributes, childre
 };
 
 /**
- * Components that render a block, a `div`: each stands in its own paragraph,
- * on lines of its own after a blank line. Inside a paragraph MDX renders it
- * inline, a `div` inside a `p`.
+ * Components that render a block (a `div`, or a card's link). MDX renders one
+ * as a block in two cases, and inline, a `div` inside a `p`, otherwise; the
+ * converter refuses the otherwise.
+ *
+ * - Its opening and closing tags each stand alone on their line (or it is one
+ *   self-closing tag alone on its line). Whatever the line before, even a
+ *   paragraph, a table row or a quote, it starts a block there.
+ * - It is written on one line, `<Callout>x</Callout>`, alone on that line,
+ *   and its paragraph holds nothing but JSX, which MDX unwraps: the lines
+ *   around it are blank, a heading, a code fence, or JSX themselves. After a
+ *   table row it would be a cell; after a quote, a list item or text, and
+ *   before text, it would continue a paragraph.
  */
-const BLOCK_COMPONENTS = new Set(["Callout", "Cards", "EndpointTable"]);
+const BLOCK_COMPONENTS = new Set(["Callout", "Cards", "Card", "EndpointTable"]);
+
+/** Components that belong only inside another: a `Card` is one cell of a `Cards` grid. */
+const PARENT_OF: Record<string, string> = { Card: "Cards" };
+
+/** Whether `text` holds only spaces and tabs from `from` to the end of its line. */
+function restOfLineBlank(text: string, from: number): boolean {
+  const lineEnd = text.indexOf("\n", from);
+  return text.slice(from, lineEnd < 0 ? text.length : lineEnd).trim() === "";
+}
+
+/** The line before the one `at` is on, or null on the first line. */
+function lineBefore(text: string, at: number): string | null {
+  const lineStart = text.lastIndexOf("\n", at - 1) + 1;
+  return lineStart === 0 ? null : text.slice(text.lastIndexOf("\n", lineStart - 2) + 1, lineStart - 1);
+}
+
+/** The line after the one `at` is on, or null on the last line. */
+function lineAfter(text: string, at: number): string | null {
+  const lineEnd = text.indexOf("\n", at);
+  if (lineEnd < 0) return null;
+  const next = text.indexOf("\n", lineEnd + 1);
+  return text.slice(lineEnd + 1, next < 0 ? text.length : next);
+}
+
+/** A line a one-line component's paragraph can sit next to and still hold only JSX: none, blank, a heading, a code fence or a line of JSX tags. */
+function paragraphBoundary(line: string | null): boolean {
+  if (line === null) return true;
+  const trimmed = line.trim();
+  return trimmed === "" || /^ {0,3}#{1,6}(?:\s|$)/.test(line) || trimmed.startsWith(FENCE_TOKEN) || /^<\/?[A-Z][^]*>$/.test(trimmed);
+}
+
+/** Whether `text` holds only spaces and tabs from the start of the line to `at`. */
+function lineBlankBefore(text: string, at: number): boolean {
+  return text.slice(text.lastIndexOf("\n", at - 1) + 1, at).trim() === "";
+}
 
 // Private-use characters hold code out of the conversion; the docs never contain them.
 const FENCE_TOKEN = "";
@@ -308,19 +352,20 @@ function closeTag(text: string, from: number, name: string): { start: number; en
 const COMPONENT = /<([A-Z][A-Za-z0-9]*)(?=[\s/>])/;
 
 /** Converts held MDX: ESM and comments dropped, each component replaced by its Markdown. */
-function convertHeld(text: string, origin: string): string {
+function convertHeld(text: string, origin: string, parent?: string): string {
   let rest = withoutEsm(text).replace(/\{\/\*[\s\S]*?\*\/\}/g, "");
   let out = "";
-  const context: ConvertContext = { origin, convert: (mdx) => convertHeld(mdx, origin) };
   for (let match = COMPONENT.exec(rest); match; match = COMPONENT.exec(rest)) {
     const name = match[1];
     const start = match.index;
     const tag = openTag(rest, start + 1 + name.length, name);
     let children = "";
     let end = tag.end;
+    let closeStart = -1;
     if (!tag.selfClosing) {
       const close = closeTag(rest, tag.end, name);
       children = rest.slice(tag.end, close.start);
+      closeStart = close.start;
       end = close.end;
     }
     const toMarkdown = Object.hasOwn(MDX_TO_MARKDOWN, name) ? MDX_TO_MARKDOWN[name] : undefined;
@@ -329,13 +374,18 @@ function convertHeld(text: string, origin: string): string {
     const lineStart = rest.lastIndexOf("\n", start - 1) + 1;
     const block = rest.slice(lineStart, start).trim() === "";
     if (BLOCK_COMPONENTS.has(name)) {
-      const previousLine = lineStart === 0 ? "" : rest.slice(rest.lastIndexOf("\n", lineStart - 2) + 1, lineStart - 1);
-      const lineEnd = rest.indexOf("\n", end);
-      const after = rest.slice(end, lineEnd < 0 ? rest.length : lineEnd);
-      if (!block || previousLine.trim() !== "" || after.trim() !== "") {
-        throw new Error(`<${name}> is a block: put it on lines of its own, after a blank line, not inside a paragraph`);
+      const tagsAlone =
+        block && restOfLineBlank(rest, tag.end) && (tag.selfClosing || (lineBlankBefore(rest, closeStart) && restOfLineBlank(rest, end)));
+      const oneLine = block && !tagsAlone && !rest.slice(start, end).includes("\n") && restOfLineBlank(rest, end);
+      const unwrapped = oneLine && paragraphBoundary(lineBefore(rest, start)) && paragraphBoundary(lineAfter(rest, end));
+      if (!tagsAlone && !unwrapped) {
+        throw new Error(`<${name}> is a block, but MDX would read it inline here: put its opening and closing tags each on a line of its own`);
       }
     }
+    if (Object.hasOwn(PARENT_OF, name) && parent !== PARENT_OF[name]) {
+      throw new Error(`<${name}> belongs inside <${PARENT_OF[name]}>`);
+    }
+    const context: ConvertContext = { origin, convert: (mdx) => convertHeld(mdx, origin, name) };
     const markdown = toMarkdown(tag.attributes, children, context);
     const before = refuseExpressions(rest.slice(0, block ? lineStart : start));
     out += block ? `${before}\n\n${markdown}\n\n` : `${before}${markdown}`;

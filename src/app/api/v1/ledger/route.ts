@@ -2,6 +2,7 @@ import { db, unwrap } from "@/lib/dal";
 import { guardApiRequest, apiError, handleApiRequest } from "@/lib/api/guard";
 import {
   decodeCursor,
+  isSequenceCursor,
   paginate,
   parseLimit,
   type ApiCollection,
@@ -62,6 +63,10 @@ export async function GET(request: Request) {
     // it was resuming.
     return apiError("invalid_request", "cursor is not a cursor this API issued.");
   }
+  // Another endpoint's cursor decodes too; its `k` would reach the query as NaN.
+  if (cursor && !isSequenceCursor(cursor)) {
+    return apiError("invalid_request", "cursor is not valid for this endpoint.");
+  }
 
   const domain = url.searchParams.get("domain");
   const actor = url.searchParams.get("actor");
@@ -77,7 +82,7 @@ export async function GET(request: Request) {
         // One more than asked for, so `hasMore` is observed rather than guessed.
         .limit(limitResult.limit + 1);
 
-      if (cursor) query = query.gt("seq", Number(cursor.k));
+      if (cursor) query = query.gt("seq", cursor.k);
       if (domain) query = query.eq("domain", domain);
       if (actor) query = query.eq("actor", actor);
 

@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/Card";
 import { cn } from "@/components/ui/cn";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/Table";
 import { slugify } from "@/lib/docs/headings";
+import { isPageHref } from "@/lib/docs/paths";
 
 /**
  * How the docs' MDX renders: the product's type and primitives instead of
@@ -29,7 +30,7 @@ function Pre({ children }: { children?: ReactNode }) {
 function Anchor({ href = "", className, children, ...props }: ComponentProps<"a">) {
   const classes = cn("font-medium text-agent underline [overflow-wrap:anywhere] decoration-agent-line underline-offset-4 transition-colors duration-150 ease-standard hover:decoration-agent", className);
   // A page is a client-side navigation; a document (a `.md` view, llms.txt, the OpenAPI JSON) is a plain link.
-  if (href.startsWith("/") && !href.startsWith("/api/") && !/\.(?:md|txt|json)(?:[?#]|$)/.test(href)) {
+  if (isPageHref(href)) {
     return (
       <Link href={href} className={classes} {...props}>
         {children}
@@ -53,16 +54,17 @@ function Cards({ children }: { children?: ReactNode }) {
 function DocsCard({ title, href, children }: { title: string; href: string; children?: ReactNode }) {
   const body = (
     <>
-      <span className="flex items-center justify-between gap-3 text-[0.9375rem] font-semibold tracking-tight text-ink">
+      <div className="flex items-center justify-between gap-3 text-[0.9375rem] font-semibold tracking-tight text-ink">
         {title}
         <ArrowRight aria-hidden className="size-4 shrink-0 text-ink-3" />
-      </span>
-      <span className="mt-1.5 block text-sm leading-relaxed text-ink-2 [&>p]:m-0">{children}</span>
+      </div>
+      {/* MDX gives a card's body as a paragraph; the card sets its type. */}
+      <div className="mt-1.5 text-sm leading-relaxed text-ink-2 [&>p]:m-0 [&>p]:text-sm [&>p]:leading-relaxed">{children}</div>
     </>
   );
   return (
     <Card asChild interactive className="block p-5">
-      {href.startsWith("/docs/") || href === "/docs" ? <Link href={href}>{body}</Link> : <a href={href}>{body}</a>}
+      {isPageHref(href) ? <Link href={href}>{body}</Link> : <a href={href}>{body}</a>}
     </Card>
   );
 }

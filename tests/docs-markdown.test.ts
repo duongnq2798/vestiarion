@@ -90,7 +90,7 @@ describe("mdxToMarkdown", () => {
     expect(mdxToMarkdown('<Callout title="Heads up">\nKeys are shown **once**.\n\nStore them.\n</Callout>\n', ORIGIN)).toBe(
       "> **Heads up** Keys are shown **once**.\n>\n> Store them.\n"
     );
-    expect(mdxToMarkdown("<Callout tone='held'>No title.</Callout>", ORIGIN)).toBe("> No title.\n");
+    expect(mdxToMarkdown("<Callout tone='held'>\nNo title.\n</Callout>", ORIGIN)).toBe("> No title.\n");
     expect(mdxToMarkdown('<Callout title="List">\n- one\n- two\n</Callout>', ORIGIN)).toBe("> **List**\n>\n> - one\n> - two\n");
   });
 
@@ -127,17 +127,51 @@ describe("mdxToMarkdown", () => {
     expect(mdxToMarkdown('<Callout title={"Braces"}>\nText.\n</Callout>', ORIGIN)).toBe("> **Braces** Text.\n");
   });
 
-  it("refuses a Callout inside a paragraph: it is a block", () => {
-    expect(() => mdxToMarkdown("Text <Callout>inline</Callout> more.", ORIGIN)).toThrow(/<Callout> is a block/);
-    expect(() => mdxToMarkdown("<Callout>x</Callout> and more.", ORIGIN)).toThrow(/<Callout> is a block/);
-    expect(() => mdxToMarkdown("A paragraph line\n<Callout>x</Callout>", ORIGIN)).toThrow(/<Callout> is a block/);
-    expect(mdxToMarkdown("Before.\n\n<Callout>x</Callout>\n\nAfter.", ORIGIN)).toBe("Before.\n\n> x\n\nAfter.\n");
+  it("refuses a Callout where MDX would read it inline, a div inside a p", () => {
+    expect(() => mdxToMarkdown("Text <Callout>\ninline\n</Callout>", ORIGIN)).toThrow(/<Callout> is a block/);
+    expect(() => mdxToMarkdown("<Callout>\nx\n</Callout> and more.", ORIGIN)).toThrow(/<Callout> is a block/);
+    expect(() => mdxToMarkdown("<Callout>\nx</Callout>", ORIGIN)).toThrow(/<Callout> is a block/);
+    expect(() => mdxToMarkdown("<Callout> x\n</Callout>", ORIGIN)).toThrow(/<Callout> is a block/);
+    expect(() => mdxToMarkdown("Text <EndpointTable /> here.", ORIGIN)).toThrow(/<EndpointTable> is a block/);
+  });
+
+  it.each([
+    ["a heading", "## Keys"],
+    ["a closing code fence", "```bash\nexport X=1\n```"],
+    ["a table row", "| a |\n| --- |\n| b |"],
+    ["a quote line", "> quoted"],
+    ["a list item", "- item"],
+    ["a paragraph line", "A paragraph line"],
+  ])("takes a Callout with its tags on lines of their own, right after %s, as a block, as MDX does", (_name, before) => {
+    expect(mdxToMarkdown(`${before}\n<Callout>\nx\n</Callout>\nAfter.\n`, ORIGIN)).toBe(`${before}\n\n> x\n\nAfter.\n`);
+    expect(mdxToMarkdown(`${before}\n<EndpointTable />\n`, ORIGIN)).toContain(`${before}\n\n**`);
+  });
+
+  it.each([
+    ["the start", ""],
+    ["a blank line", "Before.\n\n"],
+    ["a heading", "## Keys\n"],
+    ["a closing code fence", "```bash\nexport X=1\n```\n"],
+  ])("takes a one-line Callout right after %s as a block: MDX unwraps a paragraph that holds only JSX", (_name, before) => {
+    expect(mdxToMarkdown(`${before}<Callout>x</Callout>\n\nAfter.\n`, ORIGIN)).toBe(`${before}${before && !before.endsWith("\n\n") ? "\n" : ""}> x\n\nAfter.\n`);
+  });
+
+  it.each([
+    ["a table row, whose cell it becomes", "| a |\n| --- |\n| b |\n<Callout>x</Callout>\n"],
+    ["a quote line, which it continues", "> quoted\n<Callout>x</Callout>\n"],
+    ["a list item, which it continues", "- item\n<Callout>x</Callout>\n"],
+    ["a paragraph line, which it continues", "Text\n<Callout>x</Callout>\n"],
+    ["text on the next line, which joins its paragraph", "<Callout>x</Callout>\nmore text\n"],
+  ])("refuses a one-line Callout after %s", (_name, source) => {
+    expect(() => mdxToMarkdown(source, ORIGIN)).toThrow(/<Callout> is a block/);
   });
 
   it("writes a card grid as a list of links, each with its description", () => {
     const source = [
       "<Cards>",
-      '  <Card title="Quickstart" href="/docs/get-started/quickstart">Your first request.</Card>',
+      '  <Card title="Quickstart" href="/docs/get-started/quickstart">',
+      "    Your first request.",
+      "  </Card>",
       '  <Card title="Spec" href="/api/v1/openapi.json">',
       "    The OpenAPI document.",
       "  </Card>",
@@ -146,7 +180,16 @@ describe("mdxToMarkdown", () => {
     expect(mdxToMarkdown(source, ORIGIN)).toBe(
       "- [Quickstart](https://x.test/docs/get-started/quickstart): Your first request.\n- [Spec](https://x.test/api/v1/openapi.json): The OpenAPI document.\n"
     );
-    expect(() => mdxToMarkdown('<Card title="No link">x</Card>', ORIGIN)).toThrow(/<Card> needs a title and an href/);
+    expect(() => mdxToMarkdown('<Cards>\n<Card title="No link">\nx\n</Card>\n</Cards>', ORIGIN)).toThrow(/<Card> needs a title and an href/);
+  });
+
+  it("takes one-line Cards in a grid, whose lines hold only JSX, and refuses a Card outside Cards", () => {
+    expect(mdxToMarkdown('<Cards>\n  <Card title="a" href="/docs">One.</Card>\n  <Card title="b" href="/docs/api">Two.</Card>\n</Cards>', ORIGIN)).toBe(
+      "- [a](https://x.test/docs): One.\n- [b](https://x.test/docs/api): Two.\n"
+    );
+    expect(() => mdxToMarkdown('<Card title="a" href="/docs">\nx\n</Card>', ORIGIN)).toThrow(/<Card> belongs inside <Cards>/);
+    expect(() => mdxToMarkdown('<Callout>\n<Card title="a" href="/docs">\nx\n</Card>\n</Callout>', ORIGIN)).toThrow(/<Card> belongs inside <Cards>/);
+    expect(() => mdxToMarkdown('Text <Card title="a" href="/docs">x</Card>', ORIGIN)).toThrow(/<Card> is a block/);
   });
 });
 

@@ -8,6 +8,7 @@ import { CONTENT_DIR, hasSource, NOTES_LOADERS, PAGE_LOADERS, publishedPages, re
 import { slugifyHeadings, splitCodeSpans, stripFences } from "@/lib/docs/headings";
 import { DOCS_NAV, flatPages, neighbours, slugOfPathname } from "@/lib/docs/nav";
 import { publicOrigin } from "@/lib/docs/origin";
+import { isPageHref } from "@/lib/docs/paths";
 import { ERROR_MEANINGS, referenceSectionIds } from "@/lib/docs/reference";
 
 /**
@@ -157,6 +158,15 @@ describe("the docs navigation", () => {
     expect(neighbours("data-delivery").next?.slug).toBe("get-started/quickstart");
     expect(neighbours(pages[pages.length - 1].slug).next).toBeUndefined();
     expect(neighbours("no-such-page")).toEqual({});
+  });
+});
+
+describe("isPageHref", () => {
+  it("is true for a page of this site, and false for a document, another site or an anchor", () => {
+    for (const href of ["/docs", "/docs/webhooks", "/docs/api/list-invoices#errors", "/", "/login", "/docs/x?y=1"]) expect(isPageHref(href), href).toBe(true);
+    for (const href of ["/docs.md", "/docs/api/list-invoices.md", "/docs/webhooks/verify.md#node", "/llms.txt", "/llms-full.txt", "/api/v1/openapi.json", "/api/v1/status", "https://example.com/docs", "//example.com", "#top", "mailto:a@b.test"]) {
+      expect(isPageHref(href), href).toBe(false);
+    }
   });
 });
 

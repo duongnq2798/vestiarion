@@ -10,6 +10,7 @@ import remarkGfm from "remark-gfm";
 import { describe, expect, it } from "vitest";
 import { useMDXComponents } from "../mdx-components";
 import { CodeBlock } from "@/components/docs/CodeBlock";
+import { CopyPage } from "@/components/docs/CopyPage";
 import { headingComponents } from "@/components/docs/DocsHeading";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { CONTENT_DIR } from "@/lib/docs/content";
@@ -78,6 +79,19 @@ describe("the MDX components", () => {
     expect(internal.props.href).toBe("/docs/webhooks");
     expect(A({ href: "https://example.com", children: "x" }).type).toBe("a");
     expect(A({ href: "#top", children: "x" }).type).toBe("a");
+  });
+
+  it("links a document (a .md view, llms.txt, the OpenAPI JSON) with a plain anchor, from prose and from a card alike", () => {
+    const A = components.a as (props: { href: string; children: ReactNode }) => ReactElement<{ href: string }>;
+    const Card = components.Card as (props: { title: string; href: string; children: ReactNode }) => ReactElement<{ children: ReactElement }>;
+    for (const href of ["/docs/get-started/quickstart.md", "/docs.md", "/llms.txt", "/llms-full.txt", "/api/v1/openapi.json"]) {
+      expect(A({ href, children: "x" }).type, href).toBe("a");
+      expect(Card({ title: "x", href, children: "y" }).props.children.type, href).toBe("a");
+    }
+    for (const href of ["/docs", "/docs/webhooks", "/docs/api/list-invoices#errors"]) {
+      expect(A({ href, children: "x" }).type, href).toBe(Link);
+      expect(Card({ title: "x", href, children: "y" }).props.children.type, href).toBe(Link);
+    }
   });
 
   it("puts a table in a scrolling frame", () => {
@@ -175,4 +189,26 @@ describe("compiled MDX renders the ids slugifyHeadings gives", () => {
       expect(renderedIds(await renderPage(source))).toEqual(slugifyHeadings(source).map((heading) => heading.id));
     }
   );
+});
+
+describe("the overview's card grid", () => {
+  it("renders each card as its own grid cell, a link, never a paragraph of inline links", async () => {
+    const source = readFileSync(path.join(CONTENT_DIR, "index.mdx"), "utf8");
+    const markup = await renderPage(source);
+    const open = markup.indexOf('<div class="my-6 grid');
+    const grid = markup.slice(markup.indexOf(">", open) + 1, markup.indexOf("<h2", open));
+    expect(open).toBeGreaterThan(-1);
+    expect(grid.startsWith("<a ")).toBe(true);
+    expect(grid).not.toMatch(/<p[^>]*><a /);
+    expect(grid.match(/<a [^>]*href="\/docs[^"]*"/g)).toHaveLength(5);
+  });
+});
+
+describe("CopyPage", () => {
+  it("names its button by its visible text, and says what it copies in a title", () => {
+    const markup = html(<CopyPage slug="webhooks/verify" markdown="# Verifying signatures" />);
+    expect(markup).toMatch(/<button[^>]* title="Copy this page as Markdown"[^>]*>[\s\S]*?Copy page<\/button>/);
+    expect(markup).not.toMatch(/<button[^>]* aria-label="Copy/);
+    expect(markup).toContain('href="/docs/webhooks/verify.md"');
+  });
 });

@@ -4,6 +4,8 @@ import {
   MAX_PAGE_SIZE,
   decodeCursor,
   encodeCursor,
+  isSequenceCursor,
+  isTimestampCursor,
   paginate,
   parseLimit,
   STATUS_FOR,
@@ -53,6 +55,35 @@ describe("cursors", () => {
   it("treats an absent cursor as the start, which is not an error", () => {
     expect(decodeCursor(null)).toBeNull();
     expect(decodeCursor(undefined)).toBeNull();
+  });
+});
+
+describe("cursor shapes", () => {
+  const UUID = "9440f32c-000d-4a63-97f1-4eb6bf78439f";
+
+  it("a sequence cursor is a safe non-negative integer position and nothing else", () => {
+    expect(isSequenceCursor({ k: 82 })).toBe(true);
+    expect(isSequenceCursor({ k: 0 })).toBe(true);
+    for (const bad of [{ k: -1 }, { k: 1.5 }, { k: Number.MAX_SAFE_INTEGER + 1 }, { k: "82" }, { k: "abc" }, { k: 82, id: UUID }, { k: "2026-09-24T15:22:50.176754+00:00", id: UUID }]) {
+      expect(isSequenceCursor(bad), JSON.stringify(bad)).toBe(false);
+    }
+  });
+
+  it("a timestamp cursor is an ISO timestamp and a uuid tiebreak", () => {
+    expect(isTimestampCursor({ k: "2026-09-24T15:22:50.176754+00:00", id: UUID })).toBe(true);
+    expect(isTimestampCursor({ k: "2026-09-25T01:02:03.000Z", id: UUID })).toBe(true);
+    for (const bad of [
+      { k: 82 },
+      { k: "2026-09-24T15:22:50Z" },
+      { k: "2026-09-24T15:22:50Z", id: "" },
+      { k: "2026-09-24T15:22:50Z", id: "b7a1" },
+      { k: "abc", id: UUID },
+      { k: "2026-13-45T99:99:99Z", id: UUID },
+      // A timestamp that smuggles PostgREST filter syntax is not a timestamp.
+      { k: "2026-09-24T15:22:50Z),id.gt.(0", id: UUID },
+    ]) {
+      expect(isTimestampCursor(bad), JSON.stringify(bad)).toBe(false);
+    }
   });
 });
 

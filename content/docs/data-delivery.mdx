@@ -17,7 +17,7 @@ Vestiarion gives you its data in two ways. You pull it with the REST API when yo
 
 To follow the ledger without missing an entry:
 
-1. Backfill with [`GET /api/v1/ledger`](/docs/api/list-ledger-entries), paging with the cursor until `hasMore` is `false`. Store the last cursor.
+1. Backfill with [`GET /api/v1/ledger`](/docs/api/list-ledger-entries), paging with the cursor until `hasMore` is `false`. Store the last non-null `nextCursor`.
 2. Receive new entries by [webhook](/docs/webhooks), and store each one keyed by its `seq`, so a duplicate or an out-of-order delivery lands in the right place.
 3. Now and then, resume the ledger from your stored cursor. It returns anything a webhook did not bring, such as an entry whose delivery [failed for good](/docs/webhooks/retries).
 

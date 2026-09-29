@@ -81,7 +81,7 @@ const PAGE_PARAMS: DocParam[] = [
     required: false,
     type: "string",
     description:
-      "The previous response's `page.nextCursor`, passed back unchanged to continue. Opaque: never decode or construct one. A cursor this API did not issue is refused with `400`.",
+      "The previous response's `page.nextCursor`, passed back unchanged to continue. Opaque: never decode or construct one. A cursor this endpoint could not have issued is refused with `400`.",
   },
 ];
 
@@ -111,7 +111,7 @@ export const OPERATIONS: readonly DocOperation[] = [
     path: "/api/v1/ledger",
     summary: "List ledger entries",
     description:
-      "The audit chain, oldest first, as a resumable stream. Because the ledger is append-only and ascending by `seq`, a stored `page.nextCursor` is a watermark: later entries are returned once, and earlier entries are not replayed. Persist the cursor only after processing every entry in the response.\n\n`seq` is monotonic within a workspace but not gap-free; continuity is proven by the hash chain, not by `seq`.",
+      "The audit chain, oldest first, as a resumable stream. Because the ledger is append-only and ascending by `seq`, a stored `page.nextCursor` is a watermark: a request from it never returns an entry before it. Persist the last non-null `nextCursor` only after processing every entry in the responses read, and resume from it; the last page, which had no cursor of its own, is returned again, so de-duplicate on `seq`.\n\n`seq` is monotonic within a workspace but not gap-free; continuity is proven by the hash chain, not by `seq`.",
     tag: "Ledger",
     params: [
       ...PAGE_PARAMS,

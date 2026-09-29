@@ -27,7 +27,12 @@ export function generateStaticParams() {
   return OPERATIONS.map((op) => ({ operation: op.id }));
 }
 
-export const dynamicParams = false;
+/**
+ * An address outside the static params still reaches this page, which answers
+ * it with `notFound()` before reading any file, so the docs' own not-found
+ * page renders, inside the docs shell with its search, instead of the site's.
+ */
+export const dynamicParams = true;
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const found = findPage(`api/${(await params).operation}`);

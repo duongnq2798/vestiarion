@@ -25,6 +25,7 @@ export type TryItOperation = { id: string; path: string; params: DocParam[] };
 export type TryItResult =
   | { kind: "ok"; status: number; ok: boolean; elapsedMs: number; body: unknown }
   | { kind: "refused" }
+  | { kind: "missing"; names: string[] }
   | { kind: "network-error" };
 
 /** Shown with a 401, alongside the API's own body. */
@@ -33,6 +34,15 @@ export const AUTHENTICATION_HINT = "Create a key on your workspace's Settings pa
 /** The one path every "Try it" request must stay inside. */
 function isAllowedUrl(url: string, origin: string): boolean {
   return url.startsWith(`${origin.replace(/\/+$/, "")}/api/v1/`);
+}
+
+/**
+ * The required path parameters that have no value yet, by name. Without one,
+ * the URL would carry its `<name>` placeholder, so nothing is sent until each
+ * is filled in.
+ */
+export function missingPathParams(op: Pick<TryItOperation, "params">, values: Record<string, string>): string[] {
+  return op.params.filter((param) => param.in === "path" && param.required && !(values[param.name] ?? "").trim()).map((param) => param.name);
 }
 
 /**
@@ -55,6 +65,8 @@ export async function runTryIt(
   values: Record<string, string>,
   fetchImpl: typeof fetch
 ): Promise<TryItResult> {
+  const missing = missingPathParams(op, values);
+  if (missing.length > 0) return { kind: "missing", names: missing };
   const url = requestUrl(op, origin, values);
   if (!isAllowedUrl(url, origin)) return { kind: "refused" };
 
@@ -89,6 +101,14 @@ export function TryItResultView({ result }: { result: TryItResult | null }) {
     return (
       <Callout tone="refused" title="Refused" role="alert" className="mt-4">
         The built URL does not stay inside this origin&rsquo;s <code>/api/v1/</code>, so nothing was sent.
+      </Callout>
+    );
+  }
+
+  if (result.kind === "missing") {
+    return (
+      <Callout tone="held" role="alert" className="mt-4">
+        Enter {result.names.join(", ")} first: nothing was sent.
       </Callout>
     );
   }
@@ -137,6 +157,8 @@ export default function TryIt({ op }: { op: TryItOperation }) {
     const raw = values[name] ?? "";
     return raw === "any" ? "" : raw;
   }
+
+  const missing = missingPathParams(op, values);
 
   async function send(event: FormEvent) {
     event.preventDefault();
@@ -194,9 +216,12 @@ export default function TryIt({ op }: { op: TryItOperation }) {
         </Field>
       ))}
 
-      <Button type="submit" loading={sending}>
-        Send
-      </Button>
+      <div className="flex flex-wrap items-center gap-3">
+        <Button type="submit" loading={sending} disabled={missing.length > 0}>
+          Send
+        </Button>
+        {missing.length > 0 && <p className="text-xs text-ink-3">Enter {missing.join(", ")} to send the request.</p>}
+      </div>
 
       <TryItResultView result={result} />
     </form>

@@ -15,7 +15,12 @@ export function generateStaticParams() {
     .map((page) => ({ slug: page.slug ? page.slug.split("/") : [] }));
 }
 
-export const dynamicParams = false;
+/**
+ * An address outside the static params still reaches this page, which answers
+ * it with `notFound()` before reading any file, so the docs' own not-found
+ * page renders, inside the docs shell with its search, instead of the site's.
+ */
+export const dynamicParams = true;
 
 function slugOf(segments: string[] | undefined): string {
   return (segments ?? []).join("/");

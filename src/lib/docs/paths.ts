@@ -23,3 +23,14 @@ export function slugOfPathname(pathname: string): string | null {
   const match = /^\/docs(?:\/(.*?))?\/?$/.exec(pathname);
   return match ? (match[1] ?? "") : null;
 }
+
+/**
+ * Whether `href` is a page of this site, which a link reaches by client-side
+ * navigation (`next/link`). A document is not: a `.md` view, `llms.txt`, the
+ * OpenAPI JSON or anything else under `/api/` is served by a route handler
+ * and opened with a plain `<a>`; so is another site, and an anchor.
+ */
+export function isPageHref(href: string): boolean {
+  if (!href.startsWith("/") || href.startsWith("//") || href.startsWith("/api/")) return false;
+  return !/\.(?:md|txt|json)(?:[?#]|$)/.test(href);
+}

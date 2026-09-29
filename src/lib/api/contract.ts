@@ -98,6 +98,34 @@ export function decodeCursor(raw: string | null | undefined): CursorPayload | nu
   }
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** An ISO 8601 timestamp with a zone, as Postgres returns `timestamptz`: `2026-09-24T15:22:50.176754+00:00`. */
+const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/;
+
+/**
+ * Whether a decoded cursor has the shape a sequence-ordered endpoint (the
+ * ledger) issues: a safe non-negative integer `k` and no tiebreak. Anything
+ * else, such as another endpoint's cursor, would reach the query as `NaN`.
+ */
+export function isSequenceCursor(cursor: CursorPayload): cursor is { k: number } {
+  return typeof cursor.k === "number" && Number.isSafeInteger(cursor.k) && cursor.k >= 0 && cursor.id === undefined;
+}
+
+/**
+ * Whether a decoded cursor has the shape a timestamp-ordered endpoint issues:
+ * an ISO timestamp `k` and a uuid `id` tiebreak. Both are interpolated into
+ * a PostgREST filter, so nothing but those two shapes may get that far.
+ */
+export function isTimestampCursor(cursor: CursorPayload): cursor is { k: string; id: string } {
+  return (
+    typeof cursor.k === "string" &&
+    ISO_TIMESTAMP.test(cursor.k) &&
+    Number.isFinite(Date.parse(cursor.k)) &&
+    typeof cursor.id === "string" &&
+    UUID.test(cursor.id)
+  );
+}
+
 /**
  * Clamps a caller-supplied page size. An unbounded limit is a way to ask one
  * request to read an entire ledger, so the ceiling is enforced rather than

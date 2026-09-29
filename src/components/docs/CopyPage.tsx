@@ -12,7 +12,7 @@ import { docsMarkdownPath } from "@/lib/docs/paths";
 export function CopyPage({ slug, markdown }: { slug: string; markdown: string }) {
   return (
     <div className="flex shrink-0 items-center gap-1">
-      <CopyButton value={markdown} label="Copy this page as Markdown" variant="secondary" size="sm">
+      <CopyButton value={markdown} title="Copy this page as Markdown" variant="secondary" size="sm">
         Copy page
       </CopyButton>
       <Button asChild variant="ghost" size="sm">

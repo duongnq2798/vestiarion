@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import TryIt, { AUTHENTICATION_HINT, runTryIt, TryItResultView, type TryItOperation } from "@/components/docs/TryIt";
+import TryIt, { AUTHENTICATION_HINT, missingPathParams, runTryIt, TryItResultView, type TryItOperation } from "@/components/docs/TryIt";
 import { operationById } from "@/lib/api/openapi";
 
 /**
@@ -131,11 +131,39 @@ describe("TryItResultView", () => {
   });
 });
 
+describe("a required path parameter", () => {
+  it("is missing while it is empty or blank, and only then", () => {
+    expect(missingPathParams(op("get-counterparty"), {})).toEqual(["id"]);
+    expect(missingPathParams(op("get-counterparty"), { id: "   " })).toEqual(["id"]);
+    expect(missingPathParams(op("get-counterparty"), { id: "dc5e5751-3287-46c9-8bd1-83a42ab02699" })).toEqual([]);
+    expect(missingPathParams(op("list-invoices"), {})).toEqual([]);
+  });
+
+  it("stops runTryIt from sending the literal <id> placeholder", async () => {
+    const fetchMock = vi.fn();
+    expect(await runTryIt(op("get-counterparty"), origin, "vxk_a", { id: "" }, fetchMock)).toEqual({ kind: "missing", names: ["id"] });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("is named when it stops a request", () => {
+    const markup = html(<TryItResultView result={{ kind: "missing", names: ["id"] }} />);
+    expect(markup).toContain("id");
+    expect(markup).toContain("nothing was sent");
+  });
+});
+
 describe("TryIt", () => {
   it("labels the key field, masks it by default, and offers Send", () => {
     const markup = html(<TryIt op={op("get-status")} />);
     expect(markup).toContain(">Workspace API key<");
     expect(markup).toContain('type="password"');
     expect(markup).toContain(">Send<");
+    expect(markup).not.toMatch(/<button[^>]*type="submit"[^>]* disabled=""/);
+  });
+
+  it("disables Send, and says why, until every required path parameter has a value", () => {
+    const markup = html(<TryIt op={op("get-counterparty")} />);
+    expect(markup).toMatch(/<button[^>]*type="submit"[^>]* disabled=""/);
+    expect(markup).toContain("Enter id to send the request.");
   });
 });
