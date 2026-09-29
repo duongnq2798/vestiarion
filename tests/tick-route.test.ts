@@ -12,7 +12,14 @@ vi.mock("@/lib/agent/cron", () => ({ runLiveOrganizations, runScheduledCycle }))
 const { deliverPendingWebhooks } = vi.hoisted(() => ({ deliverPendingWebhooks: vi.fn() }));
 vi.mock("@/lib/webhooks/deliver", () => ({ deliverPendingWebhooks }));
 
+const { afterTasks } = vi.hoisted(() => ({ afterTasks: [] as Array<() => unknown> }));
+vi.mock("next/server", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("next/server")>();
+  return { ...actual, after: (task: () => unknown) => void afterTasks.push(task) };
+});
+
 const { POST, maxDuration } = await import("@/app/api/agent/tick/route");
+const { dispatchWebhooksSoon, resetDispatchSoonForTests } = await import("@/lib/webhooks/dispatch-soon");
 
 const TOKEN = "tick-route-test-token";
 const previousToken = process.env.AGENT_API_TOKEN;
@@ -45,6 +52,18 @@ function post(): Promise<Response> {
 }
 
 describe("POST /api/agent/tick", () => {
+  it("runs its cycles with dispatch-soon off, since it dispatches within its own budget", async () => {
+    afterTasks.length = 0;
+    resetDispatchSoonForTests();
+    runLiveOrganizations.mockImplementationOnce(async () => {
+      dispatchWebhooksSoon(); // what every ledger append in a cycle calls
+      return [];
+    });
+    await post();
+    expect(afterTasks).toHaveLength(0);
+    expect(deliverPendingWebhooks).toHaveBeenCalledOnce();
+  });
+
   it("reports 500 with one entry per organization when any organization failed", async () => {
     runLiveOrganizations.mockResolvedValueOnce([
       { slug: "a-corp", ok: true, result: { lines: [{}, {}] } },

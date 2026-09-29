@@ -21,14 +21,15 @@ The same panel can send a **test event** to an endpoint, and remove an endpoint.
 
 ## Timing
 
-Deliveries go out from two places, never inside an unrelated request:
+Every delivery is queued in the same transaction that appends its ledger entry, and goes out from one of three places:
 
-- **Right after each scheduled agent tick**, for the entries that tick just appended. The dispatch gets what is left of the tick's own time budget: at most 30 seconds, less when the tick's cycles used most of it, and none at all (the dispatch is skipped) when nothing is left.
-- **Every 10 minutes**, from a scheduled dispatcher, for everything still queued.
+- **Right after the request that appended the entry.** Approving a payment, pausing the agent, changing a member or a key: once the response has been sent, a short dispatch (at most 20 seconds) sends what is due. Entries appended within a few seconds of each other can share one dispatch. The person's request never waits on your endpoint.
+- **Right after each scheduled agent tick's cycles**, for the entries they appended. The dispatch gets what is left of the tick's own time budget: at most 30 seconds, and none at all when nothing is left; the queue then waits for the next dispatch of any kind.
+- **On a schedule, every 10 minutes**, for retries and anything still queued. The schedule runs on GitHub Actions, which can start a scheduled run late or skip it under load, so a retry can wait longer than its backoff step; the next append or tick also picks it up.
 
-A dispatch run is bounded by 60 seconds and 500 deliveries, claimed in batches of 25. No batch is claimed, and no request is started, with less than about 12 seconds left (one request's 10-second timeout plus a margin), so nothing is left half-sent when a run ends; a queue larger than one run is finished by the next. A tick with less than that left dispatches nothing and leaves the queue to the 10-minute run.
+A dispatch run is bounded by 60 seconds and 500 deliveries, claimed in batches of 25. No batch is claimed, and no request is started, with less than about 12 seconds left (one request's 10-second timeout plus a margin), so nothing is left half-sent when a run ends; a queue larger than one run is finished by the next.
 
-**A test event is the one exception.** Sending it from Settings delivers it at once, inside that person's own request: a single attempt, at most about 10 seconds, with no retry whatever the result. Every other delivery is queued when its ledger entry is appended, and sent by the tick or the 10-minute dispatcher above.
+**A test event is sent differently.** Sending it from Settings delivers it at once, inside that person's own request: a single attempt, at most about 10 seconds, with no retry whatever the result.
 
 ## In this section
 

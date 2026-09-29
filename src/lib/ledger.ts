@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { db, unwrap } from "./dal";
 import { currentOrgConfig, currentSecretWarnings } from "./context";
 import type { VestiarionConfig } from "./config";
+import { dispatchWebhooksSoon } from "./webhooks/dispatch-soon";
 import {
   detectKeyRotation,
   ledgerKeyId,
@@ -199,6 +200,9 @@ async function appendSigned(input: LedgerEntryInput, privateKey: crypto.KeyObjec
       .single<LedgerRow>()
   );
 
+  // The append queued this entry's webhook deliveries in the same transaction
+  // (webhooks design W2); send them right after the response (W3).
+  dispatchWebhooksSoon();
   return rowToEntry(row);
 }
 
