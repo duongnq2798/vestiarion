@@ -1,7 +1,7 @@
 import { currentOrgId } from "../context";
 import { db, unwrap } from "../dal";
 import { getChainProvider } from "../circle";
-import { appendLedgerEntry } from "../ledger";
+import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { payInvoice, syncOperatingBalance } from "./pay";
 
 /**
@@ -32,9 +32,10 @@ import { payInvoice, syncOperatingBalance } from "./pay";
  * `payment_in_flight` before any claim, since either would record a real
  * transfer as something that did not happen.
  *
- * The ledger entry written after a decision commits is best effort, the same
- * pattern `src/lib/platform/members.ts` uses: the decision has already
- * happened and must be reported as done even if the entry fails to append.
+ * The ledger entry written after a decision commits is best effort, through
+ * `appendLedgerEntryBestEffort` as `src/lib/platform/members.ts` uses it: the
+ * decision has already happened and must be reported as done even if the
+ * entry fails to append.
  */
 
 export type ApprovalErrorCode =
@@ -85,21 +86,6 @@ function raiseFromClaim(error: { message: string }): never {
     throw new ApprovalError(code, MESSAGES[code]);
   }
   throw new Error(error.message);
-}
-
-/**
- * Appends the ledger entry for a change that has already committed. A
- * failure here must not turn a done decision into a reported failure, so it
- * is logged by action and organization id only and swallowed — the same
- * `recordLedgerEntry` as `src/lib/platform/members.ts`, kept local here
- * rather than shared since the two modules have no other coupling.
- */
-async function recordLedgerEntry(action: string, orgId: string, append: () => Promise<unknown>): Promise<void> {
-  try {
-    await append();
-  } catch {
-    console.error("ledger entry not recorded", action, orgId);
-  }
 }
 
 const num = (v: unknown) => (typeof v === "number" ? v : Number(v ?? 0));
@@ -380,23 +366,21 @@ export async function approveAndPay(
     throw new Error(update.error.message);
   }
 
-  await recordLedgerEntry("approval_paid", orgId, () =>
-    appendLedgerEntry({
-      actor: "human",
-      domain: "ap",
-      action: "approval_paid",
-      summary: approvalPaidSummary(result.status, invoice.amount, invoice.counterpartyName),
-      detail: {
-        by: input.actorId,
-        invoiceId: invoice.id,
-        counterpartyId: invoice.counterpartyId,
-        amount: invoice.amount,
-        overrode: previous,
-        txRef: result.txRef,
-        status: result.status,
-      },
-    })
-  );
+  await appendLedgerEntryBestEffort(orgId, {
+    actor: "human",
+    domain: "ap",
+    action: "approval_paid",
+    summary: approvalPaidSummary(result.status, invoice.amount, invoice.counterpartyName),
+    detail: {
+      by: input.actorId,
+      invoiceId: invoice.id,
+      counterpartyId: invoice.counterpartyId,
+      amount: invoice.amount,
+      overrode: previous,
+      txRef: result.txRef,
+      status: result.status,
+    },
+  });
 
   return { status: result.status, txRef: result.txRef, note: result.note };
 }
@@ -419,15 +403,13 @@ export async function rejectInvoice(input: { actorId: string; invoiceId: string;
   }
 
   const reason = trimReason(input.reason);
-  await recordLedgerEntry("approval_rejected", orgId, () =>
-    appendLedgerEntry({
-      actor: "human",
-      domain: "ap",
-      action: "approval_rejected",
-      summary: "An invoice was rejected",
-      detail: reason === undefined ? { by: input.actorId, invoiceId: input.invoiceId } : { by: input.actorId, invoiceId: input.invoiceId, reason },
-    })
-  );
+  await appendLedgerEntryBestEffort(orgId, {
+    actor: "human",
+    domain: "ap",
+    action: "approval_rejected",
+    summary: "An invoice was rejected",
+    detail: reason === undefined ? { by: input.actorId, invoiceId: input.invoiceId } : { by: input.actorId, invoiceId: input.invoiceId, reason },
+  });
 }
 
 export async function returnInvoice(input: { actorId: string; invoiceId: string }): Promise<void> {
@@ -447,13 +429,11 @@ export async function returnInvoice(input: { actorId: string; invoiceId: string 
     throw new Error(update.error.message);
   }
 
-  await recordLedgerEntry("approval_returned", orgId, () =>
-    appendLedgerEntry({
-      actor: "human",
-      domain: "ap",
-      action: "approval_returned",
-      summary: "An invoice was returned, undecided",
-      detail: { by: input.actorId, invoiceId: input.invoiceId },
-    })
-  );
+  await appendLedgerEntryBestEffort(orgId, {
+    actor: "human",
+    domain: "ap",
+    action: "approval_returned",
+    summary: "An invoice was returned, undecided",
+    detail: { by: input.actorId, invoiceId: input.invoiceId },
+  });
 }

@@ -4,7 +4,7 @@ import { currentOrgId } from "../context";
 import { db, platformDb, unwrap } from "../dal";
 import { emailSettingsFromEnv, sendEmail } from "../email/send";
 import { waitingDigestEmail, type DigestItem } from "../email/waiting-digest";
-import { appendLedgerEntry } from "../ledger";
+import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { listMembers } from "../platform/members";
 
 /**
@@ -119,20 +119,6 @@ async function decidingRecipients(orgId: string): Promise<Recipient[]> {
 }
 
 /**
- * Appends the ledger entry for a digest already sent. The emails are out and
- * the invoices marked, so a failure here is logged by action and organization
- * id only and swallowed, the same `recordLedgerEntry` pattern as
- * `src/lib/platform/members.ts`.
- */
-async function recordLedgerEntry(action: string, orgId: string, append: () => Promise<unknown>): Promise<void> {
-  try {
-    await append();
-  } catch {
-    console.error("ledger entry not recorded", action, orgId);
-  }
-}
-
-/**
  * Emails the digest of waiting payables to every member of the workspace in
  * scope who can decide them. Each recipient gets a message of their own; the
  * invoices are marked once at least one send succeeded, and the ledger
@@ -198,15 +184,13 @@ export async function notifyWaitingDecisions(): Promise<{ sent: number; failed: 
     const escalatedIds = waiting.filter((invoice) => invoice.escalated).map((invoice) => invoice.id);
     await markNotified(invoiceIds);
 
-    await recordLedgerEntry("notification_sent", scopedOrgId, () =>
-      appendLedgerEntry({
-        actor: "system",
-        domain: "system",
-        action: "notification_sent",
-        summary: `Told ${counts.sent} member(s) that ${waiting.length} payment(s) need a decision`,
-        detail: { invoiceIds, escalatedIds, recipients: counts.sent, failed: counts.failed },
-      })
-    );
+    await appendLedgerEntryBestEffort(scopedOrgId, {
+      actor: "system",
+      domain: "system",
+      action: "notification_sent",
+      summary: `Told ${counts.sent} member(s) that ${waiting.length} payment(s) need a decision`,
+      detail: { invoiceIds, escalatedIds, recipients: counts.sent, failed: counts.failed },
+    });
     return counts;
   } catch (error) {
     console.error(
