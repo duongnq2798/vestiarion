@@ -115,11 +115,11 @@ The site documents exactly that, at the same level of care.
   - It is back-filled from the product PRs that changed the API or the integration surface: API keys, webhooks, OpenAPI and these docs.
   - Every later PR that changes the surface adds an entry, and `AGENTS.md` says so.
 - **D10. Layout and look:**
-  - The product's tokens, typography and dark mode.
+  - The product's tokens and typography. The product has one light theme and no dark mode, so the docs have none either: a theme system is a cross-cutting change of its own. Code blocks are dark panels, as the product already shows them.
   - Three columns at ≥ 1280 px (sidebar, content, table of contents); a sidebar in a `Sheet` below that; no horizontal scroll at 360 px.
   - Code blocks highlighted at build time with shiki, with a copy button.
   - The docs are public: no login.
-  - Every page has its own title, description and canonical URL, and appears in the sitemap.
+  - Every page has its own title, description and canonical URL. A new `src/app/sitemap.ts` lists the landing page and every docs page; the app has none today.
   - The landing page and the product nav link to `/docs`.
 - **D11. Limits are stated truthfully.** Today the API has no rate limit per key, and the Limits page says so. It also covers what is bounded: page size at most 200, and the response shapes. Rate limiting is future work and is out of scope here.
 - **D12. The repo's docs move into the site.** `docs/api.md` and `docs/webhooks.md` become the site's content. The files in the repository then shrink to a pointer to `/docs`, so there is one copy.
@@ -170,7 +170,7 @@ src/components/docs/*          SchemaTree, ParamTable, CodeSamples, TryIt, Toc, 
   - `/docs/<page>.md` answers 200 for every page.
 - **"Try it":** a component test proves the key never reaches `localStorage` or `sessionStorage`, and only goes in the request's `Authorization` header to `/api/v1/…`.
 - **In a browser,** checked with headless Edge:
-  - the pages at 360, 520 and 1440 px, in light and dark;
+  - the pages at 360, 520 and 1440 px;
   - search;
   - "Try it" against the dev server with a sandbox key;
   - "Copy page".
