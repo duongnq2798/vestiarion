@@ -2310,7 +2310,7 @@ import { ACCOUNTS, DECISIONS, FORECAST, HISTORY, INSIGHTS, LEDGER, PROVENANCE } 
               <RiskDial risk="clear" baseline={5000} effective={5000} />
               <RiskDial risk="medium" baseline={5000} effective={2500} />
               <RiskDial risk="high" baseline={5000} effective={0} />
-              <PerformanceHistory score={0.82} inputs={HISTORY} />
+              <PerformanceHistory score={derivePerformanceScore(HISTORY).score} inputs={HISTORY} />
             </Card>
             <InsightsCharts data={INSIGHTS} />
             <InsightsCharts data={{ transfers: [], runs: [], snapshots: [], treasuryMoves: [], screenings: [] }} />
