@@ -66,6 +66,7 @@ export const PAGE_LOADERS: Record<string, () => Promise<MdxModule>> = {
   "webhooks/security": () => import("../../../content/docs/webhooks/security.mdx"),
   "webhooks/guarantees": () => import("../../../content/docs/webhooks/guarantees.mdx"),
   "ai-integration": () => import("../../../content/docs/ai-integration.mdx"),
+  "ai-integration/mcp": () => import("../../../content/docs/ai-integration/mcp.mdx"),
   changelog: () => import("../../../content/docs/changelog.mdx"),
 };
 

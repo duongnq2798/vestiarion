@@ -21,6 +21,10 @@ Give an agent `llms-full.txt` when it needs the whole API at once, and `llms.txt
 
 [`/api/v1/openapi.json`](/api/v1/openapi.json) is an OpenAPI 3.1 document for every `/api/v1` endpoint: its parameters with their types, defaults and allowed values, its response schema, its errors, and the bearer authentication. It is built from the same schemas the API's tests check every endpoint's responses against. Use it to generate a client, or to give an agent exact types.
 
+## MCP server
+
+The pages above help an agent write code against the API. To let an agent read your workspace's records directly, connect it to the [MCP server](/docs/ai-integration/mcp) at `https://www.vestiarion.xyz/api/mcp` with a workspace API key. Its tools are the API's read operations, one each, and none of them writes. The page has setup for Claude Code, Cursor, Codex and clients that only start local servers.
+
 ## Setup for coding agents
 
 Each block below tells the agent where the docs are and how to handle the key. Add it to your project, and keep the key itself in the `VESTIARION_API_KEY` environment variable, never in the file.

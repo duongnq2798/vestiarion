@@ -71,7 +71,10 @@ export const DOCS_NAV: NavSection[] = [
   },
   {
     title: "AI integration",
-    pages: [{ slug: "ai-integration", title: "AI integration", description: "Markdown views, llms.txt and the OpenAPI document, for coding agents." }],
+    pages: [
+      { slug: "ai-integration", title: "AI integration", description: "Markdown views, llms.txt and the OpenAPI document, for coding agents." },
+      { slug: "ai-integration/mcp", title: "MCP server", description: "Connect an AI agent to your workspace's records through read-only MCP tools." },
+    ],
   },
   {
     title: "Changelog",
