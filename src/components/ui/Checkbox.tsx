@@ -25,7 +25,7 @@ export function Checkbox({ label, description, id, className, ...props }: Checkb
       <CheckboxPrimitive.Root
         id={checkboxId}
         aria-describedby={descriptionId}
-        className="mt-0.5 grid size-5 shrink-0 cursor-pointer place-items-center rounded-md border border-line-strong bg-surface text-on-agent shadow-control outline-hidden transition-colors duration-150 ease-standard focus-visible:ring-4 focus-visible:ring-agent-soft disabled:cursor-not-allowed data-[state=checked]:border-agent data-[state=checked]:bg-agent"
+        className="mt-0.5 grid size-5 shrink-0 cursor-pointer place-items-center rounded-md border border-line-strong bg-surface text-on-agent shadow-control transition-colors duration-150 ease-standard disabled:cursor-not-allowed data-[state=checked]:border-agent data-[state=checked]:bg-agent"
         {...props}
       >
         <CheckboxPrimitive.Indicator className="duration-150 data-[state=checked]:animate-in data-[state=checked]:zoom-in-50">

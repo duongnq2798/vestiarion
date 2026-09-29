@@ -15,7 +15,7 @@ import { Eyebrow } from "@/components/ui/Eyebrow";
 import { jsonSchema, OPERATIONS, operationById } from "@/lib/api/openapi";
 import { loadNotes } from "@/lib/docs/content";
 import { docsHref, findPage } from "@/lib/docs/nav";
-import { publicOrigin } from "@/lib/docs/origin";
+import { publicOrigin } from "@/lib/public-origin";
 import { notesHeadings, REFERENCE_SECTIONS, referenceHeadings, sectionId, type ReferenceSection } from "@/lib/docs/reference";
 import { sampleRequest } from "@/lib/docs/samples";
 import { schemaTree } from "@/lib/docs/schema-tree";

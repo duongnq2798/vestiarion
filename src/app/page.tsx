@@ -19,14 +19,17 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Vestiarion — Verifiable Treasury Agent on Arc",
   description: "A treasury agent that screens counterparties, pays obligations, applies code-level guardrails, and signs every decision into an auditable chain on Arc testnet.",
+  alternates: { canonical: "/" },
   openGraph: {
     title: "Vestiarion — Verifiable Treasury Agent on Arc",
     description: "See the live console, measured Arc testnet outcomes, and signed decision ledger behind an autonomous business treasury.",
+    url: "/",
     type: "website",
     siteName: "Vestiarion",
+    locale: "en_US",
   },
   twitter: {
-    card: "summary",
+    card: "summary_large_image",
     title: "Vestiarion — Verifiable Treasury Agent on Arc",
     description: "An autonomous treasury agent whose decisions, refusals, and evidence are inspectable.",
   },

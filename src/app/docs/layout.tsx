@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { DocsShell } from "@/components/docs/DocsShell";
-import { publicOrigin } from "@/lib/docs/origin";
+import { publicOrigin } from "@/lib/public-origin";
 import { buildSearchIndex } from "@/lib/docs/search-index";
 
 /** Public: no session and no key. The pages are static, built from `content/docs`. */

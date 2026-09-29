@@ -2,7 +2,7 @@ import { findPage } from "./nav";
 import { pageHeadings, publishedPages } from "./content";
 import { fencedLines, headingText, stripFences } from "./headings";
 import { pageMarkdown } from "./markdown";
-import { publicOrigin } from "./origin";
+import { publicOrigin } from "@/lib/public-origin";
 import type { SearchEntry } from "./search";
 
 export type { SearchEntry } from "./search";

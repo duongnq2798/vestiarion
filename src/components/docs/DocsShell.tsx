@@ -5,7 +5,7 @@ import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
 import type { Heading } from "@/lib/docs/headings";
 import { pageMarkdown } from "@/lib/docs/markdown";
 import { DOCS_NAV } from "@/lib/docs/nav";
-import { publicOrigin } from "@/lib/docs/origin";
+import { publicOrigin } from "@/lib/public-origin";
 import type { SearchEntry } from "@/lib/docs/search";
 import { CopyPage } from "./CopyPage";
 import { DocsPager } from "./DocsPager";

@@ -1,6 +1,6 @@
 import { publishedPages } from "@/lib/docs/content";
 import { pageMarkdown } from "@/lib/docs/markdown";
-import { publicOrigin } from "@/lib/docs/origin";
+import { publicOrigin } from "@/lib/public-origin";
 
 /**
  * Each docs page as Markdown. Reached through rewrites in `next.config.ts`:

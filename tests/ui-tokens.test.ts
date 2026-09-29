@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { MOTION, THEME_COLOR } from "@/components/ui/tokens";
+import { COLOR, MOTION, THEME_COLOR } from "@/components/ui/tokens";
 
 /**
  * The few token values TypeScript needs are copies of CSS custom properties.
@@ -18,6 +18,13 @@ function token(name: string): string | undefined {
 describe("design tokens shared with TypeScript", () => {
   it("THEME_COLOR is the surface colour", () => {
     expect(token("color-surface")).toBe(THEME_COLOR);
+  });
+
+  it.each(Object.entries(COLOR))("the %s colour matches its CSS token", (name, value) => {
+    const cssName = name
+      .replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)
+      .replace(/([a-z])(\d)/, "$1-$2");
+    expect(token(`color-${cssName}`)).toBe(value);
   });
 
   it.each(Object.entries(MOTION.ease))("the %s easing matches its CSS token", (name, curve) => {
@@ -102,18 +109,27 @@ describe("text colour contrast (WCAG AA)", () => {
 });
 
 /**
- * Menu, select and command rows tint `raised` over the `surface` panel when highlighted, and the secondary text in
- * them (command shortcut hints) stays `ink-3`, so the tint has to stay light enough for it.
+ * Menu, select and command rows mark the current row with a `raised` tint over the `surface` panel and an agent bar
+ * at the row's left edge. The secondary text in a row (command shortcut hints) stays `ink-3`, so the tint has to stay
+ * light enough for it; the tint alone is too faint to find the row by, so the bar has to show and reach 3:1.
  */
 describe("highlighted rows", () => {
+  const ui = (file: string) => readFileSync(path.join(process.cwd(), "src", "components", "ui", file), "utf8");
+
   it.each([
-    { rows: "menu and select rows", file: "overlay.ts", pattern: /data-\[highlighted\]:bg-raised\/(\d+)/ },
-    { rows: "command rows", file: "Command.tsx", pattern: /data-\[selected=true\]:bg-raised\/(\d+)/ },
-  ])("ink-3 on highlighted $rows reaches 4.5:1", ({ file, pattern }) => {
-    const code = readFileSync(path.join(process.cwd(), "src", "components", "ui", file), "utf8");
+    { rows: "menu and select rows", file: "overlay.ts", state: "data-[highlighted]", pattern: /data-\[highlighted\]:bg-raised\/(\d+)/ },
+    { rows: "command rows", file: "Command.tsx", state: "data-[selected=true]", pattern: /data-\[selected=true\]:bg-raised\/(\d+)/ },
+  ])("highlighted $rows keep ink-3 at 4.5:1 and show the bar", ({ file, state, pattern }) => {
+    const code = ui(file);
     const opacity = pattern.exec(code)?.[1];
     expect(opacity).toBeDefined();
     const tint = over(colour("raised"), Number(opacity) / 100, colour("surface"));
     expect(ratio(colour("ink-3"), tint)).toBeGreaterThanOrEqual(4.5);
+    expect(code).toContain(`${state}:before:opacity-100`);
+  });
+
+  it("the bar is agent-blue and reaches 3:1 even on full raised", () => {
+    expect(ui("overlay.ts")).toMatch(/(?<![\w:-])before:bg-agent(?![\w-])/);
+    expect(contrast("agent", "raised")).toBeGreaterThanOrEqual(3);
   });
 });

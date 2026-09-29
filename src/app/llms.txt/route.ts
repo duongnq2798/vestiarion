@@ -1,5 +1,5 @@
 import { llmsIndex } from "@/lib/docs/markdown";
-import { publicOrigin } from "@/lib/docs/origin";
+import { publicOrigin } from "@/lib/public-origin";
 
 /** `/llms.txt`: an index of the docs for language models, each page linked by its Markdown view. Public and static. */
 export const dynamic = "force-static";

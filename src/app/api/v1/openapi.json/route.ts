@@ -1,5 +1,5 @@
 import { buildOpenApiDocument } from "@/lib/api/openapi";
-import { publicOrigin } from "@/lib/docs/origin";
+import { publicOrigin } from "@/lib/public-origin";
 
 /**
  * The OpenAPI 3.1 document for `/api/v1`. Public and static: it describes the

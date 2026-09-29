@@ -31,9 +31,13 @@ export const dialogMotion = [
   "duration-200 ease-emphasized data-[state=closed]:duration-150 data-[state=closed]:ease-exit",
 ].join(" ");
 
-/** A row in a menu, a select or the command palette. 44px tall on touch widths. */
+/**
+ * A row in a menu, a select or the command palette. 44px tall on touch widths. The current row (under the pointer
+ * or the arrow keys) takes a tint and, like the nav's current section, an agent bar at its left edge: the tint reads
+ * about 1.1:1 against the panel, the bar 6:1.
+ */
 export const menuItemBase =
-  "relative flex min-h-11 cursor-default select-none items-center gap-2.5 rounded-lg px-2.5 text-sm text-ink-2 outline-hidden transition-colors duration-150 ease-standard sm:min-h-9 [&_svg]:size-4 [&_svg]:shrink-0 [&>svg]:text-ink-3";
+  "relative flex min-h-11 cursor-default select-none items-center gap-2.5 rounded-lg px-2.5 text-sm text-ink-2 outline-hidden transition-colors duration-150 ease-standard sm:min-h-9 [&_svg]:size-4 [&_svg]:shrink-0 [&>svg]:text-ink-3 before:pointer-events-none before:absolute before:inset-y-2 before:left-0 before:w-1 before:rounded-r-full before:bg-agent before:opacity-0 before:transition-opacity before:duration-150 before:ease-standard";
 
 /** A Radix menu or select row: Radix marks the row under the pointer or the arrow keys `data-highlighted`. */
-export const menuItem = `${menuItemBase} data-[highlighted]:bg-raised/70 data-[highlighted]:text-ink data-[disabled]:pointer-events-none data-[disabled]:opacity-50`;
+export const menuItem = `${menuItemBase} data-[highlighted]:bg-raised/70 data-[highlighted]:text-ink data-[highlighted]:before:opacity-100 data-[disabled]:pointer-events-none data-[disabled]:opacity-50`;

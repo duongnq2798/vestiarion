@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 import { publishedPages } from "@/lib/docs/content";
-import { publicOrigin } from "@/lib/docs/origin";
+import { publicOrigin } from "@/lib/public-origin";
 import { docsHref } from "@/lib/docs/paths";
 
 /**
