@@ -97,8 +97,14 @@ export async function waitingToNotify(): Promise<WaitingInvoice[]> {
 /** Records that the members were told about these invoices. In scope. */
 export async function markNotified(ids: string[], at: Date = new Date()): Promise<void> {
   if (ids.length === 0) return;
-  const result = await db().from("invoices").update({ notified_at: at.toISOString() }).in("id", ids);
-  if (result.error) throw new Error(result.error.message);
+  const marked = unwrap(
+    await db().from("invoices").update({ notified_at: at.toISOString() }).in("id", ids).select("id")
+  ) as Array<{ id: string }>;
+  if (marked.length < ids.length) {
+    // The one failure mode that would silently re-send every cycle: an
+    // update that matched fewer rows than it was given.
+    console.warn("notifications: marked fewer invoices than given", marked.length, ids.length, currentOrgId());
+  }
 }
 
 interface Recipient {
@@ -194,8 +200,12 @@ export async function notifyWaitingDecisions(): Promise<{ sent: number; failed: 
         break;
       }
       const result = await sendEmail({ to: recipient.email, ...email }, settings);
-      if (result.sent) counts.sent += 1;
-      else counts.failed += 1;
+      if (result.sent) {
+        counts.sent += 1;
+      } else {
+        counts.failed += 1;
+        console.warn("notifications: send failed", scopedOrgId, result.reason);
+      }
     }
 
     if (counts.sent === 0) {

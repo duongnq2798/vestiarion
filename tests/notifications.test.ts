@@ -121,7 +121,11 @@ function waitingFake(options: {
     }
     if (request.path === "/rest/v1/invoices" && request.method === "PATCH") {
       options.events?.push("mark");
-      return options.invoicePatch ?? { body: [] };
+      if (options.invoicePatch) return options.invoicePatch;
+      // Default: PostgREST's `.select("id")` echoes back one row per id the update matched.
+      const idParam = request.params.get("id") ?? "";
+      const ids = idParam.startsWith("in.(") ? idParam.slice(4, -1).split(",").filter(Boolean) : [];
+      return { body: ids.map((id) => ({ id })) };
     }
     if (request.path === "/rest/v1/rpc/org_members") {
       return { body: members.map(({ user_id, email, role }) => ({ user_id, email, role, joined_at: "2026-09-01T00:00:00Z" })) };
@@ -207,6 +211,15 @@ describe("markNotified", () => {
     await run(() => markNotified([]));
     expect(patches(fake.requests)).toHaveLength(0);
   });
+
+  it("warns with the counts when fewer rows come back than ids were given", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { run } = waitingFake({ invoicePatch: { body: [{ id: NEW_ID }] } });
+
+    await run(() => markNotified([NEW_ID, ESCALATED_ID]));
+
+    expect(warn).toHaveBeenCalledWith("notifications: marked fewer invoices than given", 1, 2, ORG);
+  });
 });
 
 describe("notifyWaitingDecisions", () => {
@@ -254,6 +267,7 @@ describe("notifyWaitingDecisions", () => {
   });
 
   it("marks the included invoices after the sends, and records ids and counts only", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const events: string[] = [];
     sendEmailMock.mockImplementation(async (message: { to: string }) => {
       events.push("send");
@@ -264,6 +278,8 @@ describe("notifyWaitingDecisions", () => {
     const result = await run(() => notifyWaitingDecisions());
 
     expect(result).toEqual({ sent: 1, failed: 1, invoices: 2 });
+    expect(warn).toHaveBeenCalledWith("notifications: send failed", ORG, "status 500");
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("@example.com");
     expect(events).toEqual(["send", "send", "mark", "ledger"]);
     const [patch] = patches(fake.requests);
     expect(patch.params.get("id")).toBe(`in.(${NEW_ID},${ESCALATED_ID})`);

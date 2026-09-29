@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: agent-cycle
+  cancel-in-progress: false
+
 jobs:
   run-cycle:
     runs-on: ubuntu-latest
