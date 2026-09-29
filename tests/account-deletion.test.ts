@@ -109,6 +109,7 @@ describe("0023 is idempotent", () => {
         { tbl: "milestones", col: "created_by", action: "n" },
         { tbl: "orgs", col: "agent_paused_by", action: "n" },
         { tbl: "orgs", col: "created_by", action: "n" },
+        { tbl: "webhook_endpoints", col: "created_by", action: "n" },
       ]);
     } finally {
       await fresh.close();

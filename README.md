@@ -136,6 +136,10 @@ src/app/api/v1/           Read API for bots, MCP servers and anything else
                            workspace API key
 src/lib/platform/api-keys.ts  Key generation and hashing, listing and
                                revocation; only sha256(secret) is ever stored
+src/lib/webhooks/         Signing, SSRF-safe sending, and the retry/disable
+                           policy for a workspace's own HTTPS endpoints; a
+                           new ledger entry queues a signed delivery to each
+                           active one
 ```
 
 Each workspace creates and revokes its own read-only API keys on
@@ -143,6 +147,10 @@ Each workspace creates and revokes its own read-only API keys on
 key is shown once, in full, right after it is created, and authenticates
 `/api/v1` requests for that workspace alone — there is no shared or
 platform-wide credential on that surface.
+
+The same page lets an owner or admin (`webhooks.manage`) register up to 5
+HTTPS endpoints that receive the workspace's ledger, signed, as it happens —
+pushed rather than polled. See [docs/webhooks.md](docs/webhooks.md).
 
 ## Running it
 

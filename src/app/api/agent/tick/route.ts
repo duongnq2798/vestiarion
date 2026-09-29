@@ -2,8 +2,14 @@ import { NextResponse } from "next/server";
 import { runLiveOrganizations, runScheduledCycle } from "@/lib/agent/cron";
 import { hasValidAgentBearer } from "@/lib/agent-security";
 import { takeAgentCycleToken } from "@/lib/rate-limit";
+import { deliverPendingWebhooks } from "@/lib/webhooks/deliver";
 
 export const maxDuration = 300;
+
+/** The webhook dispatch after a tick gets at most this long (webhooks design W3). */
+const WEBHOOK_DISPATCH_MS = 30_000;
+/** Kept free at the end of `maxDuration` for the dispatch to hand back and the response to go out. */
+const WEBHOOK_DISPATCH_MARGIN_MS = 15_000;
 
 function clientIp(request: Request): string {
   return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
@@ -12,6 +18,7 @@ function clientIp(request: Request): string {
 }
 
 export async function POST(request: Request) {
+  const startedAt = Date.now();
   if (!hasValidAgentBearer(request.headers.get("authorization"), process.env.AGENT_API_TOKEN)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -39,6 +46,24 @@ export async function POST(request: Request) {
     // Each scheduled cycle is followed by the digest of payables waiting for
     // a decision (notifications design N1, N2); it never changes the result.
     const results = await runLiveOrganizations(runScheduledCycle);
+
+    // The cycles' ledger entries go out to webhook endpoints right away
+    // (webhooks design W3), within what is left of this invocation: at most
+    // 30 seconds, and never so long that the tick would outrun `maxDuration`.
+    // When nothing is left it is skipped; the 10-minute schedule picks up the
+    // rest. Best-effort: it never changes the tick's status or body.
+    const dispatchMs = Math.min(
+      WEBHOOK_DISPATCH_MS,
+      maxDuration * 1000 - (Date.now() - startedAt) - WEBHOOK_DISPATCH_MARGIN_MS
+    );
+    if (dispatchMs > 0) {
+      try {
+        await deliverPendingWebhooks({ deadlineMs: dispatchMs });
+      } catch {
+        console.error("webhook dispatch after the tick failed");
+      }
+    }
+
     const organizations = results.map((result) => {
       if (!result.ok) {
         // Never echo more than the error's message: whatever else it
