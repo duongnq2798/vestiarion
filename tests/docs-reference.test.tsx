@@ -45,16 +45,34 @@ describe("ParamTable", () => {
     expect(html(<ParamTable params={[]} />)).toBe('<p class="my-4 leading-7 text-ink-2">No parameters.</p>');
   });
 
-  it("lists each parameter's place, type, requirement, default, allowed values and description, in a scrolling frame", () => {
-    const markup = html(<ParamTable params={operationById("list-invoices")!.params} />);
-    expect(markup).toMatch(/^<div class="relative w-full overflow-x-auto/);
-    for (const header of ["Name", "In", "Type", "Required", "Default", "Allowed values", "Description"]) expect(markup).toContain(`>${header}</th>`);
+  it("lists each parameter as a stacked item: name, type, requirement, then description, default and allowed values", () => {
+    const params = operationById("list-invoices")!.params;
+    const markup = html(<ParamTable params={params} />);
+    expect(markup).toMatch(/^<ul aria-label="Parameters" class="[^"]*divide-y/);
+    expect(markup).not.toContain("<table");
+    expect(markup.match(/<li /g)).toHaveLength(params.length);
+    for (const param of params) expect(markup).toContain(`>${param.name}</code>`);
+    expect(markup).toContain(">integer</span>");
+    expect(markup).toContain(">optional</span>");
+    expect(markup).not.toContain(">required</span>");
+    // Every parameter here is in the query: only a path parameter says where it goes.
+    expect(markup).not.toContain("in: path");
     expect(markup).toContain(">1 to 200<");
     expect(markup).toContain(">50</code>");
     expect(markup).toContain(">receivable</code>");
-    expect(markup).toContain("<code");
     expect(markup).not.toContain("`");
-    expect(html(<ParamTable params={operationById("get-counterparty")!.params} />)).toContain(">Required</td>");
+    // "Default" and "Allowed" only where a parameter has one.
+    expect(markup.match(/>Default:/g)).toHaveLength(params.filter((param) => param.default !== undefined).length);
+    const allowed = params.filter((param) => param.enum || param.minimum !== undefined || param.maximum !== undefined);
+    expect(markup.match(/>Allowed:/g)).toHaveLength(allowed.length);
+    expect(allowed.length).toBeLessThan(params.length);
+  });
+
+  it("marks a path parameter required and in the path", () => {
+    const markup = html(<ParamTable params={operationById("get-counterparty")!.params} />);
+    expect(markup).toContain(">required</span>");
+    expect(markup).toContain(">in: path</span>");
+    expect(markup).not.toContain(">Default:");
   });
 });
 
