@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { invitationEmail } from "@/lib/email/invitation";
-import { emailSettingsFromEnv, sendEmail } from "@/lib/email/send";
+import { emailSettingsFromEnv, SEND_TIMEOUT_MS, sendEmail } from "@/lib/email/send";
 
 describe("emailSettingsFromEnv", () => {
   afterEach(() => vi.restoreAllMocks());
@@ -68,6 +68,41 @@ describe("sendEmail", () => {
     const result = await sendEmail(message, { apiKey: "re_test", from: "x <no-reply@vestiarion.xyz>" },
       async () => new Response(JSON.stringify({ message: "bad" }), { status: 422 }));
     expect(result).toEqual({ sent: false, reason: "status 422" });
+  });
+
+  it(`gives up on a send that has not answered after ${SEND_TIMEOUT_MS / 1000} s, without throwing`, async () => {
+    vi.useFakeTimers();
+    // Node runs AbortSignal.timeout on its own timer, which fake timers do not
+    // reach; this stand-in aborts the same way (a TimeoutError) on the faked clock.
+    const timeout = vi.spyOn(AbortSignal, "timeout").mockImplementation((ms: number) => {
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(new DOMException("The operation was aborted due to timeout", "TimeoutError")), ms);
+      return controller.signal;
+    });
+    try {
+      let signal: AbortSignal | undefined;
+      // A Resend that never answers: the request settles only when its signal aborts.
+      const hanging: typeof fetch = (_url, init) =>
+        new Promise((_resolve, reject) => {
+          signal = init?.signal ?? undefined;
+          signal?.addEventListener("abort", () => reject(signal?.reason));
+        });
+      let settled = false;
+      const pending = sendEmail(message, { apiKey: "re_test", from: "x <no-reply@vestiarion.xyz>" }, hanging).finally(() => {
+        settled = true;
+      });
+
+      await vi.advanceTimersByTimeAsync(SEND_TIMEOUT_MS - 1);
+      expect(signal).toBeDefined();
+      expect(settled).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(1);
+      await expect(pending).resolves.toEqual({ sent: false, reason: "timeout" });
+      expect(timeout).toHaveBeenCalledWith(SEND_TIMEOUT_MS);
+    } finally {
+      vi.useRealTimers();
+      timeout.mockRestore();
+    }
   });
 });
 

@@ -6,6 +6,7 @@ import { runWith } from "@/lib/context";
 import { withOrg } from "@/lib/dal/scope";
 import {
   DIGEST_MAX_RECIPIENTS,
+  DIGEST_SEND_DEADLINE_MS,
   markNotified,
   notifyWaitingDecisions,
   waitingToNotify,
@@ -335,8 +336,56 @@ describe("notifyWaitingDecisions", () => {
     const { fake, run } = waitingFake({ invoicePatch: { status: 500, body: { message: "update refused" } } });
 
     await expect(run(() => notifyWaitingDecisions())).resolves.toEqual({ sent: 1, failed: 0, invoices: 1 });
-    expect(error).toHaveBeenCalledWith("notifications: digest failed", ORG, "update refused");
+    // Counts only, never an address, so the duplicate the next cycle sends can be traced.
+    expect(error).toHaveBeenCalledWith("notifications: marking failed after the sends", ORG, { recipients: 1, failed: 0 }, "update refused");
+    expect(JSON.stringify(error.mock.calls)).not.toContain("@");
     expect(rpcBodies(fake.requests, "append_ledger_entry")).toHaveLength(0);
+  });
+
+  describe("with a clock", () => {
+    const READ_AT = new Date("2026-09-29T06:00:00.000Z");
+    beforeEach(() => {
+      // Only Date is faked: the recorded fake and supabase-js still resolve on real timers.
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(READ_AT);
+    });
+    afterEach(() => vi.useRealTimers());
+
+    /** Each send takes `ms` of the clock. */
+    function sendsTaking(ms: number) {
+      sendEmailMock.mockImplementation(async () => {
+        vi.setSystemTime(new Date(Date.now() + ms));
+        return { sent: true, id: "e" };
+      });
+    }
+
+    it("stamps notified_at with the time the invoices were read, not the time the sends finished", async () => {
+      sendsTaking(5_000);
+      const { fake, run } = waitingFake({ members: [member(1, "owner"), member(2, "admin")] });
+
+      await run(() => notifyWaitingDecisions());
+
+      // An escalation that lands during the sends is later than this, so it is news again next cycle.
+      const [patch] = patches(fake.requests);
+      expect(patch.body).toEqual({ notified_at: READ_AT.toISOString() });
+    });
+
+    it(`stops sending once the digest has taken ${DIGEST_SEND_DEADLINE_MS / 1000} s, counts the rest as failed, and still marks`, async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      sendsTaking(25_000);
+      const { fake, run } = waitingFake({
+        members: [member(1, "owner"), member(2, "admin"), member(3, "approver"), member(4, "approver"), member(5, "approver")],
+      });
+
+      const result = await run(() => notifyWaitingDecisions());
+
+      // Sends start at 0 s, 25 s and 50 s; at 75 s the deadline has passed, so the last two are never sent.
+      expect(result).toEqual({ sent: 3, failed: 2, invoices: 1 });
+      expect(recipients()).toEqual(["member01@example.com", "member02@example.com", "member03@example.com"]);
+      expect(warn).toHaveBeenCalledWith("notifications: send deadline passed, not sent", 2, ORG);
+      expect(patches(fake.requests)).toHaveLength(1);
+      expect(rpcBodies(fake.requests, "append_ledger_entry")[0]).toMatchObject({ p_detail: { recipients: 3, failed: 2 } });
+    });
   });
 
   it("still marks and reports the sends when the ledger append fails", async () => {

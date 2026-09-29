@@ -32,12 +32,22 @@ export interface WaitingInvoice {
 /** At most this many members receive one workspace's digest (N5); the rest are logged, not emailed. */
 export const DIGEST_MAX_RECIPIENTS = 25;
 
+/**
+ * How long one workspace's sends may take in all. The cron runs workspaces
+ * one after another inside a single tick, so a slow Resend must not starve
+ * the later workspaces' cycles, or run the function out of time between the
+ * sends and the marking. Each send is also bounded, by `SEND_TIMEOUT_MS`.
+ */
+export const DIGEST_SEND_DEADLINE_MS = 60_000;
+
 const WAITING_STATUSES = ["held", "flagged", "awaiting_info"] as const;
 
 /** The roles that hold `approval.decide`, in the order recipients are chosen. */
 const DECIDING_ROLES: readonly OrgRole[] = ["owner", "admin", "approver"];
 
 const num = (v: unknown) => (typeof v === "number" ? v : Number(v ?? 0));
+
+const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 /**
  * The waiting payables the members have not been told about yet, in due order.
@@ -124,6 +134,12 @@ async function decidingRecipients(orgId: string): Promise<Recipient[]> {
  * invoices are marked once at least one send succeeded, and the ledger
  * records ids and counts, never an address (N8).
  *
+ * The sends stop at `DIGEST_SEND_DEADLINE_MS`: the recipients not reached
+ * by then are counted as failed without a send, and the invoices are still
+ * marked if anyone was told. They are marked with the time they were read,
+ * so an escalation that lands while the sends run is later than the mark,
+ * and is news again on the next cycle.
+ *
  * Never throws (N2): every failure is logged with the workspace id, and the
  * counts so far are returned.
  */
@@ -134,6 +150,7 @@ export async function notifyWaitingDecisions(): Promise<{ sent: number; failed: 
     orgId = currentOrgId();
     const scopedOrgId = orgId;
 
+    const readAt = new Date();
     const waiting = await waitingToNotify();
     if (waiting.length === 0) return counts;
     counts.invoices = waiting.length;
@@ -168,7 +185,14 @@ export async function notifyWaitingDecisions(): Promise<{ sent: number; failed: 
     const origin = siteOrigin();
     const email = waitingDigestEmail({ orgName: org.name, items, link: `${origin}/o/${org.slug}/approvals`, origin });
 
-    for (const recipient of recipients) {
+    const deadline = Date.now() + DIGEST_SEND_DEADLINE_MS;
+    for (const [index, recipient] of recipients.entries()) {
+      if (Date.now() >= deadline) {
+        const unsent = recipients.length - index;
+        counts.failed += unsent;
+        console.warn("notifications: send deadline passed, not sent", unsent, scopedOrgId);
+        break;
+      }
       const result = await sendEmail({ to: recipient.email, ...email }, settings);
       if (result.sent) counts.sent += 1;
       else counts.failed += 1;
@@ -182,7 +206,18 @@ export async function notifyWaitingDecisions(): Promise<{ sent: number; failed: 
 
     const invoiceIds = waiting.map((invoice) => invoice.id);
     const escalatedIds = waiting.filter((invoice) => invoice.escalated).map((invoice) => invoice.id);
-    await markNotified(invoiceIds);
+    try {
+      await markNotified(invoiceIds, readAt);
+    } catch (error) {
+      // The emails are out but unmarked, so the next cycle sends them again: say how many, never to whom.
+      console.error(
+        "notifications: marking failed after the sends",
+        scopedOrgId,
+        { recipients: counts.sent, failed: counts.failed },
+        messageOf(error)
+      );
+      return counts;
+    }
 
     await appendLedgerEntryBestEffort(scopedOrgId, {
       actor: "system",
@@ -193,11 +228,7 @@ export async function notifyWaitingDecisions(): Promise<{ sent: number; failed: 
     });
     return counts;
   } catch (error) {
-    console.error(
-      "notifications: digest failed",
-      orgId ?? "no organization in scope",
-      error instanceof Error ? error.message : String(error)
-    );
+    console.error("notifications: digest failed", orgId ?? "no organization in scope", messageOf(error));
     return counts;
   }
 }
