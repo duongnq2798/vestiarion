@@ -169,4 +169,29 @@ describe("deriveCounterpartyHistories", () => {
   it("reads ap_reconcile entries from the ledger", () => {
     expect(COUNTERPARTY_HISTORY_ACTIONS).toContain("ap_reconcile");
   });
+
+  it("counts a release the milestone reconcile later confirmed as paid, and one still pending as nothing yet", () => {
+    const histories = deriveCounterpartyHistories(
+      [
+        // Released by the agent, pending at first, confirmed by a later cycle's reconcile.
+        { domain: "contractor", action: "milestone_release", detail: { milestoneId: "settled-later", execution: { resultingStatus: "verified" }, guardrailBlocked: false } },
+        { domain: "contractor", action: "milestone_reconcile", detail: { milestoneId: "settled-later", counterpartyId: "cp-2", reconciled: true, execution: { resultingStatus: "paid" } } },
+        // Still in flight.
+        { domain: "contractor", action: "milestone_reconcile", detail: { milestoneId: "in-flight", counterpartyId: "cp-2", reconciled: true, execution: { resultingStatus: "verified" } } },
+      ],
+      {
+        invoiceCounterparty: new Map(),
+        milestoneCounterparty: new Map([
+          ["settled-later", "cp-2"],
+          ["in-flight", "cp-2"],
+        ]),
+      }
+    );
+
+    expect(histories.get("cp-2")).toEqual(inputs({ paidWithoutIntervention: 1 }));
+  });
+
+  it("reads milestone_reconcile entries from the ledger", () => {
+    expect(COUNTERPARTY_HISTORY_ACTIONS).toContain("milestone_reconcile");
+  });
 });
