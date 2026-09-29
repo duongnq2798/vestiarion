@@ -2,7 +2,7 @@
 
 import { X } from "lucide-react";
 import { Dialog as DialogPrimitive } from "radix-ui";
-import type { ComponentProps, ReactNode } from "react";
+import { useRef, type ComponentProps, type ReactNode } from "react";
 import { Button } from "./Button";
 import { cn } from "./cn";
 import { dialogMotion, dialogPanel, overlayBackdrop } from "./overlay";
@@ -22,14 +22,42 @@ export type DialogContentProps = Omit<ComponentProps<typeof DialogPrimitive.Cont
 /**
  * A modal panel in the middle of the screen. The title is required: it is what
  * a screen reader announces as the dialog opens.
+ *
+ * Closing returns focus to whatever held it when the dialog opened. Radix
+ * alone returns it to the dialog's Trigger, and a dialog opened another way —
+ * a keyboard shortcut, a button elsewhere — has none.
  */
-export function DialogContent({ title, description, hideHeader = false, showClose = true, className, children, ...props }: DialogContentProps) {
+export function DialogContent({
+  title,
+  description,
+  hideHeader = false,
+  showClose = true,
+  className,
+  children,
+  onOpenAutoFocus,
+  onCloseAutoFocus,
+  ...props
+}: DialogContentProps) {
+  const returnFocus = useRef<HTMLElement | null>(null);
   return (
     <DialogPrimitive.Portal>
       <DialogPrimitive.Overlay className={overlayBackdrop} />
       <DialogPrimitive.Content
         className={cn(dialogPanel, dialogMotion, "grid max-w-lg gap-5", className)}
         {...(description ? {} : { "aria-describedby": undefined })}
+        onOpenAutoFocus={(event) => {
+          const active = document.activeElement;
+          returnFocus.current = active instanceof HTMLElement && active !== document.body ? active : null;
+          onOpenAutoFocus?.(event);
+        }}
+        onCloseAutoFocus={(event) => {
+          onCloseAutoFocus?.(event);
+          const target = returnFocus.current;
+          returnFocus.current = null;
+          if (event.defaultPrevented || !target?.isConnected) return;
+          event.preventDefault();
+          target.focus({ preventScroll: true });
+        }}
         {...props}
       >
         <div className={cn("space-y-1.5", showClose && "pr-10", hideHeader && "sr-only")}>
