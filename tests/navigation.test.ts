@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { HOME_PATH, NAV_GROUPS, NAV_ITEMS, navItemForPathname, sectionPathOf, sectionTitle } from "@/components/vx/nav";
+import { DOCS_LINK, HOME_PATH, NAV_GROUPS, NAV_ITEMS, navItemForPathname, sectionPathOf, sectionTitle } from "@/components/vx/nav";
 import { LEGACY_PRODUCT_PATHS } from "@/lib/auth/org-paths";
 
 /**
@@ -52,6 +52,20 @@ describe("the workspace navigation", () => {
       expect(source).toMatch(new RegExp(`<PageHead\\s+title=\\{sectionTitle\\("${key}"\\)\\}`));
     }
   );
+});
+
+describe("the Docs link", () => {
+  it("leads to the public developer docs, outside the workspace's sections", () => {
+    expect(DOCS_LINK).toEqual({ href: "/docs", label: "Docs" });
+    expect(NAV_ITEMS.map((item) => item.path)).not.toContain(DOCS_LINK.href);
+  });
+
+  it("is in the navigation panel, which the sidebar and the drawer share, and in the command palette", () => {
+    const panel = readFileSync(path.join(process.cwd(), "src", "components", "vx", "AppNav.tsx"), "utf8");
+    expect(panel).toMatch(/<Link\s+href=\{DOCS_LINK\.href\}/);
+    const palette = readFileSync(path.join(process.cwd(), "src", "components", "vx", "CommandPalette.tsx"), "utf8");
+    expect(palette).toContain("go(DOCS_TARGET.href)");
+  });
 });
 
 describe("navItemForPathname — which section the current URL is in", () => {

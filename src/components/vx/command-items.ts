@@ -1,5 +1,5 @@
 import { orgHref } from "@/lib/auth/org-paths";
-import { NAV_ITEMS, sectionPathOf, type NavKey } from "./nav";
+import { DOCS_LINK, NAV_ITEMS, sectionPathOf, type NavKey } from "./nav";
 import type { WorkspaceSummary } from "./workspace";
 
 /**
@@ -38,6 +38,14 @@ export function sectionTargets(slug: string): Array<CommandTarget & { key: NavKe
     keywords: SECTION_KEYWORDS[item.key],
   }));
 }
+
+/** The public developer docs: the API reference, webhooks and keys, outside any workspace. */
+export const DOCS_TARGET: CommandTarget = {
+  id: "developer-docs",
+  label: "Developer docs",
+  href: DOCS_LINK.href,
+  keywords: ["docs", "documentation", "api", "reference", "webhooks", "developers", "help"],
+};
 
 /** Every other workspace, opened on the section the person is looking at now. */
 export function workspaceTargets(current: WorkspaceSummary, workspaces: readonly WorkspaceSummary[], pathname: string): CommandTarget[] {
