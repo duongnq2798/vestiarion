@@ -122,13 +122,16 @@ describe("approveInvoiceAction", () => {
     expect(result).toEqual({ ok: true, message: "Payment submitted; waiting for confirmation." });
   });
 
-  it("builds the failed-transfer message from a ' [transfer failed: …]' note", async () => {
+  it("reports a failed transfer as a failure, from a ' [transfer failed: …]' note", async () => {
     authorizeMock.mockResolvedValueOnce({ ok: true, user: { id: USER, email: null }, membership: membership("approver") });
     approveAndPayMock.mockResolvedValueOnce({ status: "held", txRef: null, note: " [transfer failed: insufficient allowance]" });
 
     const result = await run(() => approveInvoiceAction(INITIAL, form(VALID_ID)));
 
-    expect(result).toEqual({ ok: true, message: "The transfer failed: insufficient allowance. The invoice is held." });
+    // The invoice changed (it is held with the provider's reason), so the pages refresh — but a person must
+    // read a failed payment as a failure, not as a success toast.
+    expect(result).toEqual({ ok: false, message: "The transfer failed: insufficient allowance. The invoice is held." });
+    expect(revalidatePathMock).toHaveBeenCalled();
   });
 
   it("builds the failed-transfer message from a ' [execution failed: …]' note", async () => {
@@ -137,7 +140,7 @@ describe("approveInvoiceAction", () => {
 
     const result = await run(() => approveInvoiceAction(INITIAL, form(VALID_ID)));
 
-    expect(result).toEqual({ ok: true, message: "The transfer failed: provider unavailable. The invoice is held." });
+    expect(result).toEqual({ ok: false, message: "The transfer failed: provider unavailable. The invoice is held." });
   });
 
   it("falls back to the trimmed note when it does not parse", async () => {
@@ -146,7 +149,7 @@ describe("approveInvoiceAction", () => {
 
     const result = await run(() => approveInvoiceAction(INITIAL, form(VALID_ID)));
 
-    expect(result).toEqual({ ok: true, message: "The transfer failed: something odd happened. The invoice is held." });
+    expect(result).toEqual({ ok: false, message: "The transfer failed: something odd happened. The invoice is held." });
   });
 
   it("returns an ApprovalError's message", async () => {

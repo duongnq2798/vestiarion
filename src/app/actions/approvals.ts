@@ -48,14 +48,11 @@ export async function approveInvoiceAction(_previous: ApprovalActionResult, form
     if (!parsed.success) return { ok: false, message: "That invoice is not waiting for a decision." };
     try {
       const result = await approveAndPay({ actorId: auth.user.id, invoiceId: parsed.data });
+      // The invoice changed either way, so the pages refresh; a transfer that ended held is still a failure
+      // to the person who pressed Approve and pay.
       revalidateOrgPages();
-      const message =
-        result.status === "paid"
-          ? "Paid."
-          : result.status === "matched"
-            ? "Payment submitted; waiting for confirmation."
-            : heldMessage(result.note);
-      return { ok: true, message };
+      if (result.status === "held") return { ok: false, message: heldMessage(result.note) };
+      return { ok: true, message: result.status === "paid" ? "Paid." : "Payment submitted; waiting for confirmation." };
     } catch (error) {
       return fail(error);
     }
