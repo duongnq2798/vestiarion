@@ -2424,6 +2424,8 @@ describe("the design system holds", () => {
 });
 ```
 
+> **Amended during execution:** two of the patterns above had holes — the input pattern stopped at the `>` of an arrow function, and the radius pattern missed side- and corner-prefixed radii (`rounded-t-[4px]`, `rounded-tl-3xl`). The shipped `tests/ui-consistency.test.ts` uses `/<input\b(?:=>|[^>])*>/g` and `/(?<![\w-])rounded(?:-(?:t|r|b|l|s|e|tl|tr|br|bl|ss|se|ee|es))?(?:-sm|-3xl|-\[[^\]]*\])?(?![\w-])/g`, names every pattern as a constant, and pins each with probe strings in a `describe("the patterns themselves")` block. The file is the reference, not this block.
+
 - [ ] **Step 4: Run the consistency tests and clear what they find**
 
 Run: `npx vitest run tests/ui-consistency.test.ts`
