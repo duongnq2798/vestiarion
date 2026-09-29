@@ -422,7 +422,9 @@ export async function returnInvoice(input: { actorId: string; invoiceId: string 
 
   const update = await db()
     .from("invoices")
-    .update({ status: "pending", decided_at: null, escalated_at: null })
+    // notified_at is cleared too: a payable the agent re-holds after this is
+    // news again, not silently excluded until the follow-up stage escalates it.
+    .update({ status: "pending", decided_at: null, escalated_at: null, notified_at: null })
     .eq("id", input.invoiceId);
   if (update.error) {
     logAfterClaim(input.invoiceId, "return");

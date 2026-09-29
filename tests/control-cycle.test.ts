@@ -111,13 +111,22 @@ describe("applyFollowUp — the follow-up stage's write is a compare-and-set", (
     const line = await run(() => applyFollowUp(db(), { id: INVOICE_ID, status: "held", amount: 150 }, reopen, FOLLOW_UP_CONFIG, Date.now()));
 
     const [patch] = invoicePatches(fake.requests);
-    expect(patch.body).toEqual({ status: "pending" });
+    expect(patch.body).toEqual({ status: "pending", notified_at: null });
     expect(patch.params.get("id")).toBe(`eq.${INVOICE_ID}`);
     expect(patch.params.get("status")).toBe("eq.held");
     expect(patch.params.get("select")).toBe("id");
     const [append] = rpcBodies(fake.requests, "append_ledger_entry");
     expect(append.p_action).toBe("invoice_reopened");
     expect(line).toEqual({ domain: "ap", message: "Reopened 150 USDC invoice: PO added" });
+  });
+
+  it("clears notified_at on reopen, so a re-held payable is news again", async () => {
+    const { fake, run } = cycleFake((r) => (r.path === "/rest/v1/invoices" && r.method === "PATCH" ? { body: [{ id: INVOICE_ID }] } : undefined));
+
+    await run(() => applyFollowUp(db(), { id: INVOICE_ID, status: "held", amount: 150 }, reopen, FOLLOW_UP_CONFIG, Date.now()));
+
+    const [patch] = invoicePatches(fake.requests);
+    expect(patch.body).toMatchObject({ notified_at: null });
   });
 
   it("writes no ledger entry and no cycle line when a person claimed the invoice meanwhile", async () => {

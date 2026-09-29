@@ -137,10 +137,13 @@ export async function applyFollowUp(
 ): Promise<CycleLogLine | null> {
   if (plan.action === "wait") return null;
 
+  // A reopen also clears notified_at: the payable left the waiting set once
+  // told, and if the AP stage holds it again it should be news again, not
+  // silently excluded until this stage escalates it.
   const changed = unwrap(
     await orgDb
       .from("invoices")
-      .update(plan.action === "reopen" ? { status: "pending" } : { escalated_at: new Date(now).toISOString() })
+      .update(plan.action === "reopen" ? { status: "pending", notified_at: null } : { escalated_at: new Date(now).toISOString() })
       .eq("id", row.id)
       .eq("status", row.status)
       .select("id")
