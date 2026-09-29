@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { Verdict, type EvidenceTone } from "@/components/landing/evidence/Evidence";
-import { screeningMode } from "@/lib/compliance";
 
 const REPOSITORY = "https://github.com/duongnq2798/vestiarion";
 
@@ -35,9 +34,8 @@ function Credential({
   );
 }
 
-export function Credentials() {
-  const currentScreeningMode = screeningMode();
-  const screeningIsLive = currentScreeningMode === "live";
+export function Credentials({ screeningMode }: { screeningMode: "live" | "simulate" }) {
+  const screeningIsLive = screeningMode === "live";
 
   return (
     <section aria-labelledby="credentials-title" className="border-y border-line bg-surface/80">

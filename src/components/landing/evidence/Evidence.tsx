@@ -1,4 +1,4 @@
-import { useId, type ReactNode } from "react";
+import { useId, type CSSProperties, type ReactNode } from "react";
 import { cn } from "@/components/ui/cn";
 
 /**
@@ -34,10 +34,10 @@ export function HashText({ value, className, head = 4, tail = 4 }: { value: stri
  * signature attests. Decorative — the words around it are repeated as text
  * wherever the seal carries meaning.
  */
-export function Seal({ tone = "proof", words = "Signed · Ed25519 · Hash-linked ·", className }: { tone?: EvidenceTone; words?: string; className?: string }) {
+export function Seal({ tone = "proof", words = "Signed · Ed25519 · Hash-linked ·", className, style }: { tone?: EvidenceTone; words?: string; className?: string; style?: CSSProperties }) {
   const path = useId();
   return (
-    <svg viewBox="0 0 120 120" aria-hidden="true" focusable="false" className={cn("size-20", toneText[tone], className)}>
+    <svg viewBox="0 0 120 120" aria-hidden="true" focusable="false" className={cn("size-20", toneText[tone], className)} style={style}>
       <defs>
         <path id={path} d="M60 60 m-47 0 a47 47 0 1 1 94 0 a47 47 0 1 1 -94 0" />
       </defs>
@@ -81,9 +81,9 @@ export function Receipt({ children, className, slipClassName }: { children: Reac
 export function ChainLink({ hash, horizontal = false, className }: { hash?: string; horizontal?: boolean; className?: string }) {
   return (
     <div aria-hidden className={cn("flex items-center gap-2 text-ink-3", horizontal ? "flex-row" : "flex-col", className)}>
-      <span className={cn("chain-link-line", horizontal ? "h-px w-8" : "h-6 w-px")} />
+      <span className={cn(horizontal ? "chain-link-line-x h-px w-8" : "chain-link-line h-6 w-px")} />
       {hash && <span className="font-mono text-[0.6875rem] tracking-wide">prev <HashText value={hash} /></span>}
-      <span className={cn("chain-link-line", horizontal ? "h-px w-8" : "h-6 w-px")} />
+      <span className={cn(horizontal ? "chain-link-line-x h-px w-8" : "chain-link-line h-6 w-px")} />
     </div>
   );
 }

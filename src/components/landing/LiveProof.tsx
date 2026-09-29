@@ -1,11 +1,12 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { Receipt, Verdict } from "@/components/landing/evidence/Evidence";
 import { cn } from "@/components/ui/cn";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { Reveal } from "@/components/ui/Reveal";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { fmt } from "@/components/vx/Primitives";
-import { withFoundingOrg } from "@/lib/dal/scope";
-import { getLandingMetrics, type LandingMetrics } from "@/lib/landing";
+import type { LandingMetrics } from "@/lib/landing";
 
 function settlementValue(value: number | null): string {
   if (value == null) return "Awaiting a confirmed live sample";
@@ -54,12 +55,14 @@ function CompactFigure({ label, value, note, measured }: {
   );
 }
 
-function LiveMetrics({ metrics }: { metrics: LandingMetrics }) {
+async function LiveMetrics({ source }: { source: Promise<LandingMetrics> }) {
+  const metrics = await source;
   const hasCycles = metrics.instrumentedCycles > 0;
   const hasTransfers = metrics.settledLiveTransfers > 0;
   const hasSettlement = metrics.medianSettlementMs != null;
   const hasFee = metrics.medianChainFeeUsd != null;
   const hasLedger = metrics.ledgerHeight > 0;
+  const feeValue = metrics.medianChainFeeUsd;
 
   return (
     <div>
@@ -86,7 +89,7 @@ function LiveMetrics({ metrics }: { metrics: LandingMetrics }) {
       <div className="mt-7 grid gap-x-8 sm:grid-cols-2">
         <SupportingFigure
           label="Median chain fee"
-          value={hasFee ? `$${fmt(metrics.medianChainFeeUsd!)}` : "No chain-reported fee yet"}
+          value={feeValue == null ? "No chain-reported fee yet" : `$${fmt(feeValue)}`}
           note={hasFee ? `${metrics.chainFeeSampleCount} live fee receipt${metrics.chainFeeSampleCount === 1 ? "" : "s"}; provider estimates are excluded.` : "A configured estimate never passes as measured cost."}
           measured={hasFee}
         />
@@ -136,9 +139,17 @@ function LiveMetrics({ metrics }: { metrics: LandingMetrics }) {
   );
 }
 
-export async function LiveProof() {
-  const metrics = await withFoundingOrg(() => getLandingMetrics());
+function MetricsFallback() {
+  return (
+    <div aria-busy="true">
+      <p className="sr-only">Loading live measurements</p>
+      <Skeleton className="h-[70rem] rounded-none sm:h-[50rem] lg:h-[38rem]" />
+    </div>
+  );
+}
 
+/** `metrics` starts at the page boundary and streams behind a stable skeleton. */
+export function LiveProof({ metrics }: { metrics: Promise<LandingMetrics> }) {
   return (
     <section id="measurements" aria-labelledby="measurements-title" className="mx-auto max-w-6xl scroll-mt-16 px-4 pb-14 pt-16 sm:px-6 sm:pb-20 sm:pt-24">
       <Reveal>
@@ -151,7 +162,9 @@ export async function LiveProof() {
             Empty evidence stays empty. Live transfers, estimates, simulations, run records and signed ledger entries remain visibly distinct.
           </p>
         </div>
-        <LiveMetrics metrics={metrics} />
+        <Suspense fallback={<MetricsFallback />}>
+          <LiveMetrics source={metrics} />
+        </Suspense>
       </Reveal>
     </section>
   );

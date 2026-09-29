@@ -19,3 +19,107 @@
   background-size: 1px 6px;
   opacity: 0.55;
 }
+
+@utility chain-link-line-x {
+  background-image: linear-gradient(to right, currentColor 55%, transparent 0);
+  background-size: 6px 1px;
+  opacity: 0.55;
+}
+
+/*
+ * The hero's receipt prints itself: each line arrives at its own `--d`
+ * delay, the stage being worked on lights up, a scan line passes down the
+ * slip and the seal is stamped last. All of it is CSS, so it runs before
+ * hydration. Under reduced motion none of it runs: the finished receipt is
+ * simply there (the global rule only shortens durations, and these delays
+ * would still hold each line back).
+ */
+@utility replay-print {
+  animation: replay-print 460ms var(--ease-emphasized) var(--d, 0ms) both;
+}
+
+@utility replay-lit {
+  animation:
+    replay-print 460ms var(--ease-emphasized) var(--d, 0ms) both,
+    replay-lit 1300ms var(--ease-standard) var(--d, 0ms) both;
+}
+
+@utility replay-stamp {
+  transform-origin: center;
+  rotate: -12deg;
+  animation: replay-stamp 560ms var(--ease-emphasized) var(--d, 0ms) both;
+}
+
+@utility replay-scan {
+  animation: replay-scan 4300ms linear both;
+}
+
+@keyframes replay-print {
+  from {
+    opacity: 0;
+    clip-path: inset(0 0 100% 0);
+    translate: 0 -3px;
+  }
+  to {
+    opacity: 1;
+    clip-path: inset(0 0 0 0);
+    translate: 0 0;
+  }
+}
+
+@keyframes replay-lit {
+  0% { background-color: transparent; }
+  18% { background-color: var(--color-agent-soft); }
+  100% { background-color: transparent; }
+}
+
+@keyframes replay-stamp {
+  0% { opacity: 0; scale: 1.8; rotate: -34deg; }
+  55% { opacity: 1; scale: 0.92; rotate: -9deg; }
+  100% { opacity: 1; scale: 1; rotate: -12deg; }
+}
+
+@keyframes replay-scan {
+  0% { top: -2.5rem; opacity: 0; }
+  8% { opacity: 1; }
+  88% { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+
+/* Paused by the visitor, or off screen: the receipt stops where it is. */
+.replay[data-frozen] *,
+.replay[data-frozen] {
+  animation-play-state: paused !important;
+}
+
+/* The ledger grid, drawn for the dark "How it works" section. */
+@utility ledger-grid-dark {
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--color-ground) 5%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--color-ground) 5%, transparent) 1px, transparent 1px);
+  background-size: 32px 32px;
+  mask-image: radial-gradient(ellipse 80% 70% at 50% 30%, #000, transparent);
+}
+
+/* A dashed connector whose dashes travel downward, the way a step hands its
+   result to the next. Still under reduced motion. */
+@utility chain-flow {
+  background-image: linear-gradient(to bottom, currentColor 50%, transparent 0);
+  background-size: 1px 8px;
+  animation: chain-flow 900ms linear infinite;
+}
+
+@keyframes chain-flow {
+  to { background-position: 0 8px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .replay,
+  .replay * {
+    animation: none !important;
+  }
+
+  .replay-scan {
+    display: none;
+  }
+}

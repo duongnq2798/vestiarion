@@ -5,7 +5,14 @@ import { FinalCta } from "@/components/landing/FinalCta";
 import { Hero } from "@/components/landing/Hero";
 import { HowItWorks } from "@/components/landing/HowItWorks";
 import { LiveProof } from "@/components/landing/LiveProof";
+import type { ChainHeadEntry } from "@/components/landing/hero/EvidenceReplay";
+import type { ProvenanceLeg } from "@/components/vx/Provenance";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
+import { chainModes } from "@/lib/circle";
+import { screeningMode } from "@/lib/compliance";
+import { withFoundingOrg } from "@/lib/dal/scope";
+import { getLandingMetrics } from "@/lib/landing";
+import { listLedgerEntries } from "@/lib/ledger";
 
 export const dynamic = "force-dynamic";
 
@@ -25,15 +32,46 @@ export const metadata: Metadata = {
   },
 };
 
-export default function LandingPage() {
+/**
+ * The founding organization's two newest ledger entries, reduced to what a
+ * public page may show: sequence, hash, domain and action — never a summary
+ * or its detail. A ledger that cannot be read leaves the hero without its
+ * chain rather than without the page.
+ */
+async function chainHead(): Promise<ChainHeadEntry[]> {
+  try {
+    const entries = await withFoundingOrg(() => listLedgerEntries(2));
+    return entries.map(({ seq, hash, domain, action }) => ({ seq, hash, domain, action }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * The public showcase reads the founding organization, named explicitly: a
+ * sandbox organization's demo data must never inflate its "live" figures.
+ * Every read starts here, inside that scope, and the sections take the
+ * results as props; the metrics stream in behind their own skeleton.
+ */
+export default async function LandingPage() {
+  const metrics = withFoundingOrg(() => getLandingMetrics());
+  // chainModes() still answers when the Circle credentials cannot be read (R12).
+  const [modes, head] = await Promise.all([withFoundingOrg(async () => chainModes()), chainHead()]);
+  const currentScreeningMode = screeningMode();
+  const provenance: ProvenanceLeg[] = [
+    { label: "Payments", detail: "Arc testnet", live: modes.mode === "live" },
+    { label: "Yield", detail: "USYC reserve", live: modes.earnMode === "live" },
+    { label: "Screening", detail: currentScreeningMode === "live" ? "OpenSanctions" : "bundled list", live: currentScreeningMode === "live" },
+  ];
+
   return (
     <div className="min-h-dvh overflow-x-clip bg-transparent">
       <SiteHeader landing />
 
       <main id="main">
-        <Hero />
-        <Credentials />
-        <LiveProof />
+        <Hero provenance={provenance} head={head} />
+        <Credentials screeningMode={currentScreeningMode} />
+        <LiveProof metrics={metrics} />
         <HowItWorks />
         <Claims />
         <FinalCta />
