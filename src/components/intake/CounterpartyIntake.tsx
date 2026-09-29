@@ -1,65 +1,62 @@
 "use client";
 
-import { useActionState, useEffect, useRef } from "react";
+import { ShieldCheck } from "lucide-react";
 import { createCounterpartyAction, type IntakeActionResult } from "@/app/actions/intake";
+import { Card } from "@/components/ui/Card";
+import { Field } from "@/components/ui/Field";
+import { FormMessage } from "@/components/ui/FormMessage";
+import { Input } from "@/components/ui/Input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
+import { SubmitButton } from "@/components/ui/SubmitButton";
+import { useActionForm } from "@/components/ui/useActionForm";
 
 const INITIAL: IntakeActionResult = { ok: false, message: "" };
-// 16px below `sm`: iOS zooms the page into any smaller field it focuses.
-const INPUT = "h-11 w-full rounded-xl border border-line-strong bg-surface px-3 text-base text-ink shadow-sm outline-none placeholder:text-ink-3 focus:border-agent focus:ring-2 focus:ring-agent-soft sm:h-10 sm:text-sm";
 
+/** A new counterparty is screened the moment it is saved; the toast carries the verdict. */
 export default function CounterpartyIntake({ orgSlug }: { orgSlug: string }) {
-  const formRef = useRef<HTMLFormElement>(null);
-  const [state, action, pending] = useActionState(createCounterpartyAction, INITIAL);
-
-  useEffect(() => {
-    if (state.ok) formRef.current?.reset();
-  }, [state]);
+  const { state, formProps } = useActionForm(createCounterpartyAction, INITIAL, { resetOnSuccess: true, toastOnSuccess: true });
 
   return (
-    <form ref={formRef} action={action} className="surface-shadow rounded-2xl border border-line bg-surface p-4 sm:p-6">
-      <input type="hidden" name="orgSlug" value={orgSlug} />
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <Field label="Legal or trading name" htmlFor="cp-name">
-          <input className={INPUT} id="cp-name" name="name" required maxLength={160} autoComplete="organization" />
-        </Field>
-        <Field label="Role" htmlFor="cp-role">
-          <select className={INPUT} id="cp-role" name="role" defaultValue="vendor">
-            <option value="vendor">Vendor</option>
-            <option value="contractor">Contractor</option>
-            <option value="client">Client</option>
-          </select>
-        </Field>
-        <Field label="Payment limit (USDC)" htmlFor="cp-limit" hint="May be blank for clients">
-          <input className={INPUT} id="cp-limit" name="paymentLimit" inputMode="decimal" placeholder="5000.00" />
-        </Field>
-        <Field label="Chain" htmlFor="cp-chain">
-          <input className={INPUT} id="cp-chain" name="chain" required maxLength={40} defaultValue="ARC-TESTNET" />
-        </Field>
-        <Field label="Payment address" htmlFor="cp-address" hint="Optional until payment setup">
-          <input className={INPUT} id="cp-address" name="address" maxLength={200} autoComplete="off" />
-        </Field>
-        <Field label="Jurisdiction" htmlFor="cp-jurisdiction" hint="ISO code or country name">
-          <input className={INPUT} id="cp-jurisdiction" name="jurisdiction" maxLength={80} placeholder="US" />
-        </Field>
-      </div>
-      <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <p aria-live="polite" className={`text-sm ${state.message && !state.ok ? "text-refused" : "text-ink-2"}`}>
-          {state.message || "The configured limit is preserved as the baseline; screening derives current payment authority."}
-        </p>
-        <button disabled={pending} className="brand-shadow h-10 shrink-0 rounded-xl bg-agent px-4 text-sm font-semibold text-on-agent transition-transform hover:-translate-y-0.5 disabled:opacity-60">
-          {pending ? "Adding and screening…" : "Add and screen"}
-        </button>
-      </div>
-    </form>
-  );
-}
-
-function Field({ label, htmlFor, hint, children }: { label: string; htmlFor: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <label htmlFor={htmlFor} className="block text-sm font-medium text-ink">
-      <span>{label}</span>
-      {hint && <span className="ml-1 font-normal text-ink-3">· {hint}</span>}
-      <span className="mt-1.5 block">{children}</span>
-    </label>
+    <Card asChild className="p-4 sm:p-6">
+      <form {...formProps}>
+        <input type="hidden" name="orgSlug" value={orgSlug} />
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <Field id="cp-name" label="Legal or trading name">
+            <Input name="name" required maxLength={160} autoComplete="organization" />
+          </Field>
+          <Field id="cp-role" label="Role">
+            <Select name="role" defaultValue="vendor">
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="vendor">Vendor</SelectItem>
+                <SelectItem value="contractor">Contractor</SelectItem>
+                <SelectItem value="client">Client</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field id="cp-limit" label="Payment limit (USDC)" description="May be blank for clients">
+            <Input name="paymentLimit" inputMode="decimal" placeholder="5000.00" />
+          </Field>
+          <Field id="cp-chain" label="Chain">
+            <Input name="chain" required maxLength={40} defaultValue="ARC-TESTNET" />
+          </Field>
+          <Field id="cp-address" label="Payment address" description="Optional until payment setup">
+            <Input name="address" maxLength={200} autoComplete="off" className="font-mono" />
+          </Field>
+          <Field id="cp-jurisdiction" label="Jurisdiction" description="ISO code or country name">
+            <Input name="jurisdiction" maxLength={80} placeholder="US" />
+          </Field>
+        </div>
+        <p className="mt-4 text-xs leading-relaxed text-ink-3">The configured limit is preserved as the baseline; screening derives current payment authority.</p>
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <FormMessage tone="error">{state.ok ? null : state.message}</FormMessage>
+          <SubmitButton icon={<ShieldCheck />} pendingLabel="Adding and screening…" className="shrink-0">
+            Add and screen
+          </SubmitButton>
+        </div>
+      </form>
+    </Card>
   );
 }

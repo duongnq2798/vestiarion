@@ -1,10 +1,14 @@
 import type { ComponentProps } from "react";
 import { cn } from "./cn";
 
-/** A data table that scrolls sideways inside its own frame on a narrow screen. */
-export function Table({ className, ...props }: ComponentProps<"table">) {
+/**
+ * A data table that scrolls sideways inside its own frame on a narrow screen.
+ * `containerClassName` styles that frame — give it a max height and
+ * `overflow-auto` for a sticky header over a long list.
+ */
+export function Table({ className, containerClassName, ...props }: ComponentProps<"table"> & { containerClassName?: string }) {
   return (
-    <div className="w-full overflow-x-auto">
+    <div className={cn("w-full overflow-x-auto", containerClassName)}>
       <table className={cn("w-full border-collapse text-left text-sm", className)} {...props} />
     </div>
   );

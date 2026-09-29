@@ -144,6 +144,21 @@ describe("Table", () => {
     expect(markup).toMatch(/^<div class="[^"]*overflow-x-auto/);
     expect(markup).toContain('scope="col"');
   });
+
+  it("lets its frame scroll both ways when asked, for a sticky header", () => {
+    const markup = html(
+      <Table containerClassName="max-h-72 overflow-auto">
+        <TableBody>
+          <TableRow>
+            <TableCell>row</TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+    );
+    expect(markup).toMatch(/^<div class="[^"]*max-h-72/);
+    expect(markup).toContain("overflow-auto");
+    expect(markup).not.toContain("overflow-x-auto");
+  });
 });
 
 describe("Card", () => {

@@ -1,8 +1,12 @@
+import { FileSpreadsheet, PenLine } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import AgentControls from "@/components/AgentControls";
 import InvoiceCsvImport from "@/components/intake/InvoiceCsvImport";
 import InvoiceIntake from "@/components/intake/InvoiceIntake";
+import { Callout } from "@/components/ui/Callout";
+import { Card } from "@/components/ui/Card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { DecisionCard } from "@/components/vx/DecisionCard";
 import { invoiceDecision } from "@/components/vx/map";
 import { SectionHead } from "@/components/vx/Primitives";
@@ -69,18 +73,29 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
         <section className="mb-8">
           <SectionHead title="Invoice intake" meta="manual entry or CSV preview and confirm" />
           {canWrite ? (
-            <div className="grid gap-4 xl:grid-cols-2">
-              <details open className="surface-shadow rounded-2xl border border-line bg-surface p-4 sm:p-6">
-                <summary className="cursor-pointer text-sm font-semibold text-ink">Enter one invoice</summary>
-                <div className="mt-4"><InvoiceIntake orgSlug={slug} counterparties={counterparties.map(({ id, name, role }) => ({ id, name, role }))} /></div>
-              </details>
-              <details className="surface-shadow rounded-2xl border border-line bg-surface p-4 sm:p-6">
-                <summary className="cursor-pointer text-sm font-semibold text-ink">Import CSV</summary>
-                <div className="mt-4"><InvoiceCsvImport orgSlug={slug} /></div>
-              </details>
-            </div>
+            <Card className="p-4 sm:p-6">
+              <Tabs defaultValue="manual">
+                <TabsList aria-label="Invoice intake">
+                  <TabsTrigger value="manual">
+                    <PenLine aria-hidden />
+                    Enter one invoice
+                  </TabsTrigger>
+                  <TabsTrigger value="csv">
+                    <FileSpreadsheet aria-hidden />
+                    Import CSV
+                  </TabsTrigger>
+                </TabsList>
+                {/* Both stay mounted, so switching tabs never loses what was typed. */}
+                <TabsContent value="manual" forceMount className="data-[state=inactive]:hidden">
+                  <InvoiceIntake orgSlug={slug} counterparties={counterparties.map(({ id, name, role }) => ({ id, name, role }))} />
+                </TabsContent>
+                <TabsContent value="csv" forceMount className="data-[state=inactive]:hidden">
+                  <InvoiceCsvImport orgSlug={slug} />
+                </TabsContent>
+              </Tabs>
+            </Card>
           ) : (
-            <p className="rounded-lg border border-dashed border-line-strong px-5 py-6 text-sm text-ink-2">Only an owner or admin of this workspace can add or import invoices.</p>
+            <Callout>Only an owner or admin of this workspace can add or import invoices.</Callout>
           )}
         </section>
 

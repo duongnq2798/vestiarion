@@ -1,11 +1,16 @@
 "use client";
 
-import { useActionState, useEffect, useRef } from "react";
+import { Plus } from "lucide-react";
 import { createInvoiceAction, type IntakeActionResult } from "@/app/actions/intake";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { Field } from "@/components/ui/Field";
+import { FormMessage } from "@/components/ui/FormMessage";
+import { Input } from "@/components/ui/Input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
+import { SubmitButton } from "@/components/ui/SubmitButton";
+import { useActionForm } from "@/components/ui/useActionForm";
 
 const INITIAL: IntakeActionResult = { ok: false, message: "" };
-// 16px below `sm`: iOS zooms the page into any smaller field it focuses.
-const INPUT = "h-11 w-full rounded-xl border border-line-strong bg-surface px-3 text-base text-ink shadow-sm outline-none placeholder:text-ink-3 focus:border-agent focus:ring-2 focus:ring-agent-soft sm:h-10 sm:text-sm";
 
 export interface IntakeCounterparty {
   id: string;
@@ -13,66 +18,61 @@ export interface IntakeCounterparty {
   role: string;
 }
 
+/** One invoice, typed in. The agent evaluates it on its next cycle. */
 export default function InvoiceIntake({ counterparties, orgSlug }: { counterparties: IntakeCounterparty[]; orgSlug: string }) {
-  const formRef = useRef<HTMLFormElement>(null);
-  const [state, action, pending] = useActionState(createInvoiceAction, INITIAL);
-
-  useEffect(() => {
-    if (state.ok) formRef.current?.reset();
-  }, [state]);
+  const { state, formProps } = useActionForm(createInvoiceAction, INITIAL, { resetOnSuccess: true, toastOnSuccess: true });
+  const none = counterparties.length === 0;
 
   return (
-    <form ref={formRef} action={action} className="space-y-4">
+    <form {...formProps} className="space-y-4">
       <input type="hidden" name="orgSlug" value={orgSlug} />
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Direction" htmlFor="invoice-direction">
-          <select className={INPUT} id="invoice-direction" name="direction" defaultValue="payable">
-            <option value="payable">Payable</option>
-            <option value="receivable">Receivable</option>
-          </select>
+        <Field id="invoice-direction" label="Direction">
+          <Select name="direction" defaultValue="payable">
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="payable">Payable</SelectItem>
+              <SelectItem value="receivable">Receivable</SelectItem>
+            </SelectContent>
+          </Select>
         </Field>
-        <Field label="Counterparty" htmlFor="invoice-counterparty">
-          <select className={INPUT} id="invoice-counterparty" name="counterpartyId" required defaultValue="">
-            <option value="" disabled>Select a counterparty</option>
-            {counterparties.map((counterparty) => (
-              <option key={counterparty.id} value={counterparty.id}>{counterparty.name} · {counterparty.role}</option>
-            ))}
-          </select>
+        <Field id="invoice-counterparty" label="Counterparty" description={none ? "Add a counterparty first — every invoice is against one." : undefined}>
+          <Select name="counterpartyId" required disabled={none}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select a counterparty" />
+            </SelectTrigger>
+            <SelectContent>
+              {counterparties.map((counterparty) => (
+                <SelectItem key={counterparty.id} value={counterparty.id}>
+                  {counterparty.name} · {counterparty.role}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </Field>
-        <Field label="Amount (USDC)" htmlFor="invoice-amount">
-          <input className={INPUT} id="invoice-amount" name="amount" required inputMode="decimal" placeholder="1250.00" />
+        <Field id="invoice-amount" label="Amount (USDC)">
+          <Input name="amount" required inputMode="decimal" placeholder="1250.00" />
         </Field>
-        <Field label="Due date" htmlFor="invoice-due">
-          <input className={INPUT} id="invoice-due" name="dueDate" required type="date" />
+        <Field id="invoice-due" label="Due date">
+          <Input name="dueDate" required type="date" />
         </Field>
-        <Field label="Memo" htmlFor="invoice-memo">
-          <input className={INPUT} id="invoice-memo" name="memo" maxLength={280} />
+        <Field id="invoice-memo" label="Memo" optional>
+          <Input name="memo" maxLength={280} />
         </Field>
-        <Field label="PO reference" htmlFor="invoice-po">
-          <input className={INPUT} id="invoice-po" name="poReference" maxLength={100} placeholder="PO-100" />
+        <Field id="invoice-po" label="PO reference" optional>
+          <Input name="poReference" maxLength={100} placeholder="PO-100" />
         </Field>
       </div>
-      <label className="flex items-center gap-2 text-sm text-ink">
-        <input type="checkbox" name="goodsReceived" className="size-4 accent-agent" />
-        Goods or services received
-      </label>
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <p aria-live="polite" className={`text-sm ${state.message && !state.ok ? "text-refused" : "text-ink-2"}`}>
-          {state.message || "The agent will evaluate this invoice on the next cycle."}
-        </p>
-        <button disabled={pending || counterparties.length === 0} className="brand-shadow h-10 shrink-0 rounded-xl bg-agent px-4 text-sm font-semibold text-on-agent transition-transform hover:-translate-y-0.5 disabled:opacity-60">
-          {pending ? "Adding…" : "Add invoice"}
-        </button>
+      <Checkbox name="goodsReceived" label="Goods or services received" />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <FormMessage tone="error">{state.ok ? null : state.message}</FormMessage>
+        <SubmitButton icon={<Plus />} disabled={none} pendingLabel="Adding…" className="shrink-0">
+          Add invoice
+        </SubmitButton>
       </div>
+      <p className="text-xs text-ink-3">The agent will evaluate this invoice on the next cycle.</p>
     </form>
-  );
-}
-
-function Field({ label, htmlFor, children }: { label: string; htmlFor: string; children: React.ReactNode }) {
-  return (
-    <label htmlFor={htmlFor} className="block text-sm font-medium text-ink">
-      {label}
-      <span className="mt-1.5 block">{children}</span>
-    </label>
   );
 }
