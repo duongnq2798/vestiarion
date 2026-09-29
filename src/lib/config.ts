@@ -293,6 +293,16 @@ export function configFromEnv(env: EnvLike = process.env): VestiarionConfig {
  * and API responses — which is the whole reason it exists separately from the
  * config itself.
  */
+/**
+ * Whether this deployment can offer a hosted testnet wallet (hosted wallets
+ * H2), as a boolean only (R4). The platform's config holds the pair itself;
+ * an organization's never does, only `orgConfig`'s `hostedAvailable`.
+ */
+export function hostedWalletsAvailable(config: VestiarionConfig): boolean {
+  const { hostedCircleApiKey, hostedCircleEntitySecret, hostedAvailable } = config.chain;
+  return Boolean(hostedAvailable || (hostedCircleApiKey && hostedCircleEntitySecret));
+}
+
 export function describeConfig(config: VestiarionConfig): Record<string, unknown> {
   return {
     businessName: config.businessName,

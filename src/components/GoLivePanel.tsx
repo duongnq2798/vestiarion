@@ -107,14 +107,20 @@ const STATUS_LINE: Record<GoLiveStatus["step"], { tone: StatusTone; label: strin
   live: { tone: "proof", label: "Live · paying on Arc testnet" },
 };
 
-const HOSTED_STATUS_LINE: Record<Exclude<GoLiveStatus["step"], "connect">, { tone: StatusTone; label: string }> = {
-  wallets: { tone: "held", label: "Sandbox · hosted testnet wallet" },
-  go_live: { tone: "held", label: "Sandbox · hosted testnet wallet" },
-  live: { tone: "proof", label: "Live · hosted testnet wallet on Arc" },
-};
+/**
+ * A hosted sandbox pays through the hosted pair once its wallets exist, as a
+ * connected one does through its own; before, there is nothing to pay from.
+ */
+function hostedStatusLine(status: GoLiveStatus): { tone: StatusTone; label: string } {
+  if (status.step === "live") return { tone: "proof", label: "Live · hosted testnet wallet on Arc" };
+  return {
+    tone: "held",
+    label: status.wallets.length > 0 ? "Sandbox · hosted testnet wallet — cycles you run by hand pay testnet USDC" : "Sandbox · hosted testnet wallet",
+  };
+}
 
-function StatusLine({ step, host }: { step: GoLiveStatus["step"]; host: GoLiveStatus["host"] }) {
-  const { tone, label } = host === "hosted" && step !== "connect" ? HOSTED_STATUS_LINE[step] : STATUS_LINE[step];
+function StatusLine({ status }: { status: GoLiveStatus }) {
+  const { tone, label } = status.host === "hosted" && status.step !== "connect" ? hostedStatusLine(status) : STATUS_LINE[status.step];
   return (
     // A long line wraps inside the badge at 360 px instead of overflowing the header.
     <Badge tone={tone} size="sm" dot className={cn(label.length > 30 && "whitespace-normal rounded-lg text-left")}>
@@ -447,7 +453,7 @@ export default function GoLivePanel({ orgSlug, status, canAdminister }: GoLivePa
 
   return (
     <section aria-labelledby="go-live-title">
-      <SectionHeader id="go-live-title" title="Go live" meta={<StatusLine step={status.step} host={status.host} />} />
+      <SectionHeader id="go-live-title" title="Go live" meta={<StatusLine status={status} />} />
       <div className="space-y-4">
         {body}
         {canReplace && <ReplaceCredentials orgSlug={orgSlug} status={status} />}

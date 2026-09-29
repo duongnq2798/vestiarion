@@ -281,6 +281,56 @@ describe("delete_sandbox_org (0030)", () => {
   });
 });
 
+describe("the wallet_host backfill (0030)", () => {
+  const setCredentials = (orgId: string) =>
+    db.query(
+      "update public.orgs set circle_api_key_enc = $2::jsonb, circle_entity_secret_enc = $2::jsonb, wallet_host = null where id = $1",
+      [orgId, JSON.stringify(ENVELOPE)]
+    );
+
+  it("marks a workspace holding its own Circle credentials 'own', and leaves every other workspace as it is", async () => {
+    await clearHosted();
+    const connectedOrg = await createOrg(db, "backfill-connected-co");
+    await setCredentials(connectedOrg);
+    const unchosen = await createOrg(db, "backfill-unchosen-co");
+    const hostedOrg = await createOrg(db, "backfill-hosted-co");
+    await choose(hostedOrg, 100);
+    const ownEmpty = await createOrg(db, "backfill-own-empty-co");
+    await db.query("update public.orgs set wallet_host = 'own' where id = $1", [ownEmpty]);
+
+    await applyMigrations(db);
+
+    expect(await hostOf(connectedOrg)).toBe("own");
+    expect(await hostOf(unchosen)).toBeNull();
+    expect(await hostOf(hostedOrg)).toBe("hosted");
+    expect(await hostOf(ownEmpty)).toBe("own");
+  });
+
+  it("is idempotent, and treats a backfilled workspace as the connected one it was", async () => {
+    await clearHosted();
+    const orgId = await createOrg(db, "backfill-replay-co");
+    await setCredentials(orgId);
+    await applyMigrations(db);
+    await applyMigrations(db);
+
+    expect(await hostOf(orgId)).toBe("own");
+    // As before the backfill: a connected workspace cannot turn hosted, and a
+    // connected sandbox is never deleted automatically (0029).
+    await expect(choose(orgId, 100)).rejects.toThrow(/hosted_not_allowed/);
+    await db.query("update public.orgs set last_active_at = now() - interval '400 days' where id = $1", [orgId]);
+    await expect(purge(orgId, new Date().toISOString())).rejects.toThrow(/has_circle_credentials/);
+  });
+
+  it("marks the founding workspace 'own': it holds its own Circle credentials", async () => {
+    // 0015 creates the founding workspace; its credentials are adopted later (org:adopt-env).
+    const founding = "00000000-0000-4000-8000-000000000001";
+    expect((await db.query("select 1 from public.orgs where id = $1", [founding])).rows).toHaveLength(1);
+    await setCredentials(founding);
+    await applyMigrations(db);
+    expect(await hostOf(founding)).toBe("own");
+  });
+});
+
 describe("replay (0030)", () => {
   it("returns a boolean after a replay, including over a database that has 0030's first, void version", async () => {
     await db.query("drop function public.choose_hosted_wallet(uuid, int)");

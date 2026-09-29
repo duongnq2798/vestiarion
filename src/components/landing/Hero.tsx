@@ -7,8 +7,10 @@ import { EvidenceReplay, type ChainHeadEntry } from "./hero/EvidenceReplay";
 /**
  * `head` is the live ledger's newest entries, reduced by the page to what a
  * public page may show; `provenance` says which legs run live.
+ * `hostedAvailable` is whether this deployment offers a hosted testnet wallet
+ * (hosted wallets H8): only then does the hero promise one.
  */
-export function Hero({ provenance, head }: { provenance: ProvenanceLeg[]; head: ChainHeadEntry[] }) {
+export function Hero({ provenance, head, hostedAvailable }: { provenance: ProvenanceLeg[]; head: ChainHeadEntry[]; hostedAvailable: boolean }) {
   return (
     <section aria-labelledby="hero-title" className="ledger-grid relative overflow-hidden border-b border-line bg-surface/30">
       <div aria-hidden className="absolute -left-36 top-8 size-[28rem] rounded-full bg-proof-soft/80 blur-3xl motion-safe:animate-drift" />
@@ -26,14 +28,16 @@ export function Hero({ provenance, head }: { provenance: ProvenanceLeg[]; head: 
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Button asChild size="lg">
-              <Link href={"/onboarding"}>Try it on Arc testnet</Link>
+              <Link href={"/onboarding"}>{hostedAvailable ? "Try it on Arc testnet" : "Try it with simulated money"}</Link>
             </Button>
             <Button asChild size="lg" variant="secondary" className="bg-surface/80">
               <a href="#how-it-works">How a decision is made</a>
             </Button>
           </div>
           <p className="mt-3 text-[0.8125rem] text-ink-3">
-            Email sign-in, a workspace of your own, and a real Arc testnet wallet in one click. Fund it with testnet USDC from Circle&apos;s faucet; no real money moves.
+            {hostedAvailable
+              ? "Email sign-in, a workspace of your own, and a real Arc testnet wallet in one click. Fund it with testnet USDC from Circle's faucet; no real money moves."
+              : "Email sign-in, then a sandbox workspace of your own. No wallet, no real funds."}
           </p>
           <div className="mt-8 border-t border-line/80 pt-5">
             <p className="mb-2.5 font-mono text-xs uppercase tracking-[0.14em] text-ink-3">What runs live right now</p>

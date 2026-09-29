@@ -280,6 +280,24 @@ describe("GoLivePanel, where the deployment offers hosted testnet wallets", () =
     }
   });
 
+  it.each([
+    ["wallets", status({ step: "wallets", host: "hosted", hostedAvailable: true, wallets: [WALLETS[0]] })],
+    ["go_live", HOSTED.go_live],
+  ] as const)("%s, hosted, once wallets exist: the status says cycles run by hand pay testnet USDC, and wraps", (_step, state) => {
+    for (const canAdminister of [true, false]) {
+      const markup = panel(state, canAdminister);
+      expect(text(markup)).toContain("Sandbox · hosted testnet wallet — cycles you run by hand pay testnet USDC");
+      // The long line wraps inside the badge at 360 px, like the connected one.
+      expect(markup).toMatch(/<span class="[^"]*whitespace-normal[^"]*"[^>]*>(?:(?!<\/span>).)*<\/span>Sandbox · hosted testnet wallet — /);
+    }
+  });
+
+  it("wallets, hosted, before any wallet exists: the status does not say cycles pay", () => {
+    const words = text(panel(HOSTED.wallets));
+    expect(words).toContain("Sandbox · hosted testnet wallet");
+    expect(words).not.toContain("cycles you run by hand");
+  });
+
   it("live, hosted: the status says Live · hosted testnet wallet on Arc", () => {
     const words = text(panel(HOSTED.live));
     expect(words).toContain("Live · hosted testnet wallet on Arc");

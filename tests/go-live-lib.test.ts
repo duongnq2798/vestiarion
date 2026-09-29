@@ -975,6 +975,14 @@ describe("goLiveStatus", () => {
     });
   });
 
+  it("shows the founding workspace the same once 0030 marks it 'own', but for its host", async () => {
+    const before = await database(founding()).inScope(() => goLiveStatus(ORG));
+    const state = founding();
+    state.org.wallet_host = "own";
+    const after = await database(state).inScope(() => goLiveStatus(ORG));
+    expect(after).toEqual({ ...before, host: "own" });
+  });
+
   it("reports stored credentials this deployment cannot read", async () => {
     const state = connected({ circle_api_key_enc: seal(OLD_API_KEY, "circle_api_key_enc", OTHER_MASTER_KEYS) });
     await expect(database(state).inScope(() => goLiveStatus(ORG))).resolves.toMatchObject({ connected: true, credentialsUnreadable: true });

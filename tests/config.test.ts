@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ConfigError, configFromEnv, describeConfig } from "@/lib/config";
+import { ConfigError, configFromEnv, describeConfig, hostedWalletsAvailable } from "@/lib/config";
 
 const minimal = {
   NEXT_PUBLIC_SUPABASE_URL: "https://proj.supabase.co",
@@ -165,6 +165,18 @@ describe("configFromEnv — the hosted Circle account (hosted wallets H2, H5)", 
     for (const raw of ["", "  ", "lots", "-5", "2.5", "1e3", "0x10", "2147483648"]) {
       expect(configFromEnv(env({ HOSTED_WORKSPACE_LIMIT: raw })).hostedWorkspaceLimit, raw).toBe(100);
     }
+  });
+
+  it("says whether the hosted wallet can be offered, as a boolean: both halves of the pair, or an organization's flag", () => {
+    const both = configFromEnv(env({ HOSTED_CIRCLE_API_KEY: "hosted-key", HOSTED_CIRCLE_ENTITY_SECRET: "hosted-secret" }));
+    expect(hostedWalletsAvailable(both)).toBe(true);
+    expect(hostedWalletsAvailable(configFromEnv(env({ HOSTED_CIRCLE_API_KEY: "hosted-key" })))).toBe(false);
+    expect(hostedWalletsAvailable(configFromEnv(env({ HOSTED_CIRCLE_ENTITY_SECRET: "hosted-secret" })))).toBe(false);
+    expect(hostedWalletsAvailable(configFromEnv(env()))).toBe(false);
+    // An organization's config never holds the pair, only orgConfig's boolean (R4).
+    const org = configFromEnv(env());
+    expect(hostedWalletsAvailable({ ...org, chain: { ...org.chain, hostedAvailable: true } })).toBe(true);
+    expect(hostedWalletsAvailable({ ...org, chain: { ...org.chain, hostedAvailable: false } })).toBe(false);
   });
 });
 

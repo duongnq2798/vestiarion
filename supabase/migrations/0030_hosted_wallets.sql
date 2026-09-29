@@ -20,6 +20,13 @@
 alter table public.orgs add column if not exists wallet_host text
   constraint orgs_wallet_host_check check (wallet_host in ('own', 'hosted'));
 
+-- Backfill: a workspace that already holds its own Circle credentials (the
+-- founding workspace, and any connected before this column) is 'own', as
+-- connectCircle now records. A hosted workspace never holds credentials, so
+-- only null rows change. A replay matches only a workspace given credentials
+-- outside connectCircle since (npm run org:adopt-env), which is 'own' too.
+update public.orgs set wallet_host = 'own' where wallet_host is null and circle_api_key_enc is not null;
+
 -- Marks a workspace hosted (H4, H5). Refused while the workspace holds Circle
 -- credentials or any account has a wallet: once wallets exist, the choice is
 -- fixed. A workspace already hosted is left as it is. Otherwise the platform

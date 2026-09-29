@@ -10,6 +10,8 @@ import type { ProvenanceLeg } from "@/components/vx/Provenance";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
 import { chainModes } from "@/lib/circle";
 import { screeningMode } from "@/lib/compliance";
+import { hostedWalletsAvailable } from "@/lib/config";
+import { currentConfig } from "@/lib/context";
 import { withFoundingOrg } from "@/lib/dal/scope";
 import { getLandingMetrics } from "@/lib/landing";
 import { listLedgerEntries } from "@/lib/ledger";
@@ -61,6 +63,8 @@ export default async function LandingPage() {
   // chainModes() still answers when the Circle credentials cannot be read (R12).
   const [modes, head] = await Promise.all([withFoundingOrg(async () => chainModes()), chainHead()]);
   const currentScreeningMode = screeningMode();
+  // The platform's config, outside any organization's scope: a boolean only, never the pair (R4).
+  const hostedAvailable = hostedWalletsAvailable(currentConfig());
   const provenance: ProvenanceLeg[] = [
     { label: "Payments", detail: "Arc testnet", live: modes.mode === "live" },
     { label: "Yield", detail: "USYC reserve", live: modes.earnMode === "live" },
@@ -72,12 +76,12 @@ export default async function LandingPage() {
       <SiteHeader landing />
 
       <main id="main">
-        <Hero provenance={provenance} head={head} />
+        <Hero provenance={provenance} head={head} hostedAvailable={hostedAvailable} />
         <Credentials screeningMode={currentScreeningMode} />
         <LiveProof metrics={metrics} />
         <HowItWorks />
         <Claims />
-        <FinalCta />
+        <FinalCta hostedAvailable={hostedAvailable} />
       </main>
 
       <SiteFooter />
