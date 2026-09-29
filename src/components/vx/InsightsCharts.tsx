@@ -405,7 +405,7 @@ function OutcomeChart({ runs }: { runs: CycleRunTelemetry[] }) {
           const total = totals[index];
           return <li key={run.id} className="grid grid-cols-[3.5rem_minmax(0,1fr)_2rem] items-center gap-2 text-xs">
             <span className="font-mono text-ink-3">#{index + 1}</span>
-            <div className="flex h-5 min-w-0 overflow-hidden rounded-md bg-raised" aria-label={`${total} outcomes`}>
+            <div className="flex h-5 min-w-0 overflow-hidden rounded-full bg-raised" aria-label={`${total} outcomes`}>
               {total === 0 ? <span className={`m-auto text-[0.625rem] ${run.status === "failed" || run.status === "partial" ? "text-refused" : "text-ink-3"}`}>{run.status === "failed" || run.status === "partial" ? `${run.status} — ${run.failedStage ?? "a stage"} failed` : run.status === "running" ? "still running" : "no outcomes"}</span> : outcomes.map((outcome) => {
                 const value = outcome.value(run);
                 return value > 0 ? <span key={outcome.key} title={`${outcome.label}: ${value}`} style={{ width: `${width(value)}%`, background: outcome.color }} /> : null;
@@ -434,7 +434,7 @@ function DecisionModeChart({ runs }: { runs: CycleRunTelemetry[] }) {
           const total = totals[index];
           return <li key={run.id} className="grid grid-cols-[3.5rem_minmax(0,1fr)_3.5rem] items-center gap-2 text-xs">
             <span className="font-mono text-ink-3">#{index + 1}</span>
-            <div className="flex h-5 min-w-0 overflow-hidden rounded-md bg-raised">
+            <div className="flex h-5 min-w-0 overflow-hidden rounded-full bg-raised">
               {total === 0 ? <span className="m-auto text-[0.625rem] text-ink-3">no decisions</span> : <>
                 {run.modelDecisionCount > 0 && <span title={`Model: ${run.modelDecisionCount}`} className="bg-agent" style={{ width: `${width(run.modelDecisionCount)}%` }} />}
                 {run.heuristicDecisionCount > 0 && <span title={`Heuristic: ${run.heuristicDecisionCount}`} className="bg-line-strong" style={{ width: `${width(run.heuristicDecisionCount)}%` }} />}
