@@ -84,7 +84,9 @@ src/components/ui/        The design system: Radix-based primitives styled from
                            the tokens in globals.css — buttons, fields, menus,
                            dialogs, sheets, tabs, toasts, the command palette.
                            /design shows every one in development
-src/components/vx/        Shared light-theme interface primitives and D3
+src/components/vx/        Vestiarion's domain components — decision cards, the
+                           audit ledger, treasury tiles, provenance, D3 charts —
+                           built only from src/components/ui
   Brand.tsx                Reusable vector Treasury Seal brand mark
   nav.ts                   The workspace's sections, in groups: one list feeds
                              the sidebar, the mobile drawer and page titles

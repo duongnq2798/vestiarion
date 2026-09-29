@@ -1,5 +1,4 @@
 import { ArrowUpRight } from "lucide-react";
-import type { ReactNode } from "react";
 import { Badge, type BadgeProps } from "@/components/ui/Badge";
 import { cn } from "@/components/ui/cn";
 import { OutcomeGlyph } from "./Glyphs";
@@ -112,46 +111,5 @@ export function Reasoning({ text, className }: { text: string; className?: strin
         )
       )}
     </p>
-  );
-}
-
-/** @deprecated Import `Eyebrow` from `@/components/ui/Eyebrow`. Deleted in Plan B2 Task 10. */
-export function Label({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return (
-    <span className={`font-mono text-[0.6875rem] font-semibold uppercase tracking-[0.11em] text-ink-3 ${className}`}>
-      {children}
-    </span>
-  );
-}
-
-/** @deprecated Import `Card` from `@/components/ui/Card`. Deleted in Plan B2 Task 10. */
-export function Card({
-  children,
-  className = "",
-  tone = "default",
-}: {
-  children: ReactNode;
-  className?: string;
-  tone?: "default" | "refused" | "held" | "simulated";
-}) {
-  const toneClass = {
-    default: "border-line bg-surface",
-    refused: "border-refused-line bg-surface",
-    held: "border-held-line bg-surface",
-    simulated: "border-dashed border-line-strong bg-surface",
-  }[tone];
-  return <section className={`surface-shadow rounded-xl border ${toneClass} ${className}`}>{children}</section>;
-}
-
-/** @deprecated Import `SectionHeader` from `@/components/ui/SectionHeader`. Deleted in Plan B2 Task 10. */
-export function SectionHead({ title, meta, action }: { title: string; meta?: ReactNode; action?: ReactNode }) {
-  return (
-    <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h2 className="text-base font-semibold tracking-tight text-ink">{title}</h2>
-        {meta && <span className="text-[0.8125rem] text-ink-3">{meta}</span>}
-      </div>
-      {action}
-    </div>
   );
 }

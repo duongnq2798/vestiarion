@@ -1,7 +1,6 @@
 import { Clock } from "lucide-react";
 import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/Badge";
-import { EmptyState as EmptyStateBase } from "@/components/ui/EmptyState";
 import { screeningMode } from "@/lib/compliance";
 import type { CycleClockMode } from "@/lib/clock";
 import { ProvenanceBar, type ProvenanceLeg } from "./Provenance";
@@ -72,9 +71,4 @@ export function PageHead({ title, sub, right }: { title: string; sub?: ReactNode
       {right}
     </div>
   );
-}
-
-/** Kept for the pages Plan B2 moves over; new code imports `EmptyState` from `@/components/ui/EmptyState`. */
-export function EmptyState({ title, body }: { title: string; body: ReactNode }) {
-  return <EmptyStateBase title={title} body={body} titleAs="h2" />;
 }
