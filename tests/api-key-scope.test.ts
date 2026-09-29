@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { currentOrgId, runWith } from "@/lib/context";
 import { apiError, guardApiRequest, handleApiRequest } from "@/lib/api/guard";
-import { authenticateApiKey, generateApiKey, touchApiKeyUsed, type AuthenticatedKey } from "@/lib/platform/api-keys";
+import { authenticateApiKey, generateApiKey, parseApiKey, touchApiKeyUsed, type AuthenticatedKey } from "@/lib/platform/api-keys";
 import { encryptSecret, parseMasterKeys } from "@/lib/secrets";
 import { GET as getCounterparties } from "@/app/api/v1/counterparties/route";
 import { GET as getCounterparty } from "@/app/api/v1/counterparties/[id]/route";
@@ -270,7 +270,7 @@ describe("a real key, end to end", () => {
     expect(((await response.json()) as { data: { businessName: string } }).data.businessName).toBe("Org B");
     const lookups = fake.requests.filter((request) => request.path === "/rest/v1/api_keys");
     expect(lookups).toHaveLength(1);
-    expect(lookups[0].params.toString()).not.toContain(token.split("_")[2]);
+    expect(lookups[0].params.toString()).not.toContain(parseApiKey(token)!.secret);
     for (const request of tenantRequests(fake)) expect(carriesOrg(request, ORG_B)).toBe(true);
   });
 
