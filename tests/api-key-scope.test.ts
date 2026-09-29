@@ -28,11 +28,25 @@ import { carriesOrg, fakeSupabase, type RecordedRequest } from "./support/fake-s
  * than left to a request scope that does not exist under test, so the
  * last-use update it defers can be run and observed.
  */
-const { deferred } = vi.hoisted(() => ({ deferred: [] as Array<() => unknown> }));
+const { deferred, afterThrowsOnce } = vi.hoisted(() => ({
+  deferred: [] as Array<() => unknown>,
+  afterThrowsOnce: { value: false },
+}));
 
 vi.mock("next/server", async (importOriginal) => {
   const actual = await importOriginal<typeof import("next/server")>();
-  return { ...actual, after: (task: () => unknown) => void deferred.push(task) };
+  return {
+    ...actual,
+    after: (task: () => unknown) => {
+      // A runtime with no `waitUntil` makes `after` throw (Next's docs on
+      // `after`); `afterThrowsOnce` simulates that for one call at a time.
+      if (afterThrowsOnce.value) {
+        afterThrowsOnce.value = false;
+        throw new Error("after() has no waitUntil in this runtime");
+      }
+      deferred.push(task);
+    },
+  };
 });
 
 vi.mock("@/lib/platform/api-keys", async (importOriginal) => {
@@ -126,6 +140,7 @@ afterEach(() => {
   vi.mocked(authenticateApiKey).mockClear();
   vi.mocked(touchApiKeyUsed).mockClear();
   deferred.length = 0;
+  afterThrowsOnce.value = false;
   vi.restoreAllMocks();
 });
 
@@ -153,6 +168,29 @@ describe.each(ROUTE_CASES)("GET %s", (url, _file, route) => {
     expect(await response.json()).toEqual(UNAUTHORIZED);
     expect(fake.requests).toEqual([]);
     expect(deferred).toEqual([]);
+  });
+
+  it("answers 401 to a well-formed key with an unknown prefix, the same body as no key at all", async () => {
+    // Well-formed and grammar-valid, but the fake's api_keys table is empty:
+    // this is the one 401 case that reaches the database (a single lookup by
+    // prefix) rather than being refused before ever asking.
+    const fake = fakeSupabase(database());
+    const response = await call(fake, route.handler, url, `Bearer ${PRESENTED}`);
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual(UNAUTHORIZED);
+    expect(tenantRequests(fake)).toEqual([]);
+    expect(deferred).toEqual([]);
+  });
+
+  it("records the key's use directly when after() throws, so a runtime without waitUntil still serves the request", async () => {
+    vi.mocked(authenticateApiKey).mockResolvedValueOnce(KEY_A);
+    afterThrowsOnce.value = true;
+    const fake = fakeSupabase(database());
+    const response = await call(fake, route.handler, url, `Bearer ${PRESENTED}`);
+
+    expect(response.status).toBe(route.ok);
+    expect(deferred).toEqual([]);
+    expect(vi.mocked(touchApiKeyUsed)).toHaveBeenCalledExactlyOnceWith(KEY_A.keyId);
   });
 
   it.each([
@@ -214,6 +252,7 @@ describe.each(ROUTE_CASES)("GET %s", (url, _file, route) => {
 describe("a real key, end to end", () => {
   const { token, prefix, secretHash } = generateApiKey();
   const stored = { id: KEY_B.keyId, org_id: ORG_B, secret_hash: secretHash, scopes: ["read"], revoked_at: null as string | null };
+  const NO_KEY_BODY = { error: { code: "unauthorized", message: "A valid API key is required." } };
 
   function withKey(row: typeof stored) {
     return fakeSupabase((request) =>
@@ -235,10 +274,20 @@ describe("a real key, end to end", () => {
     for (const request of tenantRequests(fake)) expect(carriesOrg(request, ORG_B)).toBe(true);
   });
 
-  it("answers 401 to a revoked key", async () => {
+  it("answers 401 to a revoked key, with the same body as no key at all", async () => {
     const fake = withKey({ ...stored, revoked_at: "2026-09-29T00:00:00Z" });
     const response = await call(fake, getStatus, "/api/v1/status", `Bearer ${token}`);
     expect(response.status).toBe(401);
+    expect(await response.json()).toEqual(NO_KEY_BODY);
+    expect(tenantRequests(fake)).toEqual([]);
+  });
+
+  it("answers 401 to an unknown prefix, with the same body as no key at all", async () => {
+    const fake = withKey(stored);
+    const other = generateApiKey();
+    const response = await call(fake, getStatus, "/api/v1/status", `Bearer ${other.token}`);
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual(NO_KEY_BODY);
     expect(tenantRequests(fake)).toEqual([]);
   });
 
@@ -378,5 +427,12 @@ describe("GET /api/v1/status", () => {
     const { body } = await status(orgRow(ORG_A));
     expect(body.data.businessName).toBe("Org A");
     expect(body.data.provenance).toEqual({ payments: "simulate", yield: "simulate", screening: "simulate" });
+  });
+
+  it("does not expose platform-level database configuration to a workspace", async () => {
+    const { body } = await status(orgRow(ORG_A));
+    const configuration = (body.data as unknown as { configuration: Record<string, unknown> }).configuration;
+    expect(configuration).not.toHaveProperty("database");
+    expect(JSON.stringify(configuration)).not.toContain("tests.supabase.invalid");
   });
 });

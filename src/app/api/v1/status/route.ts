@@ -1,4 +1,4 @@
-import { describeConfig } from "@/lib/config";
+import { describeConfig, type VestiarionConfig } from "@/lib/config";
 import { currentConfig } from "@/lib/context";
 import { chainModes } from "@/lib/circle";
 import { screeningMode } from "@/lib/compliance";
@@ -9,7 +9,7 @@ import type { ApiResource } from "@/lib/api/contract";
 export const dynamic = "force-dynamic";
 
 /**
- * What this instance is, and what it can actually do.
+ * What this workspace is, and what it can actually do.
  *
  * The first call any client should make. A bot needs to know whether payments
  * are live before it tells someone an invoice was settled, and an MCP server
@@ -36,6 +36,20 @@ export interface StatusPayload {
   totals: { decisionsLogged: number; totalPaidOut: number; flagged: number };
   configuration: Record<string, unknown>;
   apiVersion: "v1";
+}
+
+/**
+ * `describeConfig` also reports `database.*` — the Supabase project host and
+ * whether tenant access is set up. Those describe the deployment, not the
+ * workspace the calling key belongs to, so a workspace key must not see them
+ * (K6: this surface serves the key's own workspace and nothing platform-wide).
+ * `describeConfig` itself is unchanged; other callers still get the full
+ * shape.
+ */
+function describeWorkspaceConfig(config: VestiarionConfig): Record<string, unknown> {
+  const described = describeConfig(config);
+  delete described.database;
+  return described;
 }
 
 export async function GET(request: Request) {
@@ -71,7 +85,7 @@ export async function GET(request: Request) {
           totalPaidOut: snapshot.totalPaidOut,
           flagged: snapshot.flagged,
         },
-        configuration: describeConfig(config),
+        configuration: describeWorkspaceConfig(config),
         apiVersion: "v1",
       },
     };

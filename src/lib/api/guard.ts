@@ -38,7 +38,15 @@ function clientIp(request: Request): string {
 
 export interface GuardOptions {
   scope: ApiScope;
-  /** Reads are cheap; a cycle costs LLM calls and on-chain fees. */
+  /**
+   * Reads are cheap; a cycle costs LLM calls and on-chain fees.
+   *
+   * No `/api/v1` route sets this today. `takeAgentCycleToken` (`../rate-limit`)
+   * keys its bucket by IP, and this call passes the same `clientIp(request)`
+   * key that `/api/agent/tick` does — the two endpoints would share one
+   * bucket. Re-key it per API key before any v1 route turns this on, or one
+   * caller's reads would spend another caller's cycle-endpoint budget.
+   */
   rateLimited?: boolean;
 }
 
@@ -77,7 +85,14 @@ export async function guardApiRequest(
   }
 
   const keyId = key.keyId;
-  after(() => touchApiKeyUsed(keyId));
+  try {
+    after(() => touchApiKeyUsed(keyId));
+  } catch {
+    // `after` throws when this runtime provides no `waitUntil` (Next's `after`
+    // docs). Touch directly rather than lose the update; the request is still
+    // served either way, since `touchApiKeyUsed` never throws.
+    void touchApiKeyUsed(keyId);
+  }
   return { key };
 }
 

@@ -54,7 +54,7 @@ not hold, for example. A cycle refuses to pay in that state rather than fall
 back to simulation, so status does not report it as `simulate`.
 
 ```json
-{"data":{"businessName":"Vestiarion workspace","provenance":{"payments":"live","yield":"simulate","screening":"simulate"},"clock":{"mode":"simulate","day":25,"lastCycleAt":"2026-09-24T18:33:04.546517+00:00"},"totals":{"decisionsLogged":77,"totalPaidOut":4.815,"flagged":1},"configuration":{"businessName":"Vestiarion workspace","database":{"host":"your-project.supabase.co","tenantAccessConfigured":true},"chain":{"circleConfigured":true,"arcRpcConfigured":false},"llm":{"pinned":null,"available":["deepseek"]},"compliance":{"mode":"bundled","rescreenIntervalHours":0},"followUp":{"staleAfterDays":3,"reEscalateAfterDays":7},"ledgerSigningKeyProvided":false,"githubTokenProvided":false,"clockMode":"simulate"},"apiVersion":"v1"}}
+{"data":{"businessName":"Vestiarion workspace","provenance":{"payments":"live","yield":"simulate","screening":"simulate"},"clock":{"mode":"simulate","day":25,"lastCycleAt":"2026-09-24T18:33:04.546517+00:00"},"totals":{"decisionsLogged":77,"totalPaidOut":4.815,"flagged":1},"configuration":{"businessName":"Vestiarion workspace","chain":{"circleConfigured":true,"arcRpcConfigured":false},"llm":{"pinned":null,"available":["deepseek"]},"compliance":{"mode":"bundled","rescreenIntervalHours":0},"followUp":{"staleAfterDays":3,"reEscalateAfterDays":7},"ledgerSigningKeyProvided":false,"githubTokenProvided":false,"clockMode":"simulate"},"apiVersion":"v1"}}
 ```
 
 ## `GET /api/v1/ledger`
