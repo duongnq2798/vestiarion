@@ -26,6 +26,7 @@ const SECTION_KEYWORDS: Record<NavKey, string[]> = {
   compliance: ["screening", "sanctions", "risk", "limits"],
   audit: ["ledger", "log", "hash", "signatures", "chain"],
   members: ["team", "people", "invite", "roles"],
+  settings: ["api keys", "api", "tokens", "developer", "integrations"],
 };
 
 export function sectionTargets(slug: string): Array<CommandTarget & { key: NavKey }> {

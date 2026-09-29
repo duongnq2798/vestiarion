@@ -491,7 +491,16 @@ export default function DesignPage() {
               <Eyebrow>Milestone verification</Eyebrow>
               <MilestoneVerification orgSlug={DESIGN_SLUG} milestoneId="00000000-0000-4000-8000-00000000000a" verified={false} />
             </Card>
-            <MembersPanel orgSlug={DESIGN_SLUG} members={MEMBERS} invitations={INVITATIONS} viewerId="design-ada" viewerRole="owner" assignable={["owner", "admin", "approver", "viewer"]} />
+            <MembersPanel
+              orgSlug={DESIGN_SLUG}
+              members={MEMBERS}
+              invitations={INVITATIONS}
+              viewerId="design-ada"
+              viewerRole="owner"
+              assignable={["owner", "admin", "approver", "viewer"]}
+              canDecide
+              notifyEmail
+            />
           </Section>
         </main>
       </div>

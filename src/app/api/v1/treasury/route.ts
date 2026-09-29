@@ -6,11 +6,12 @@ import { mapTreasuryPayload, type TreasuryPayload } from "@/lib/api/treasury";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const denied = guardApiRequest(request, { scope: "read" });
-  if (denied) return denied;
+  const guard = await guardApiRequest(request, { scope: "read" });
+  if ("denied" in guard) return guard.denied;
 
   return handleApiRequest(
     "GET /api/v1/treasury",
+    guard.key,
     async (): Promise<ApiResource<TreasuryPayload>> => {
       const client = db();
       const [accountResult, snapshotResult, forecastResult, actionResult] = await Promise.all([

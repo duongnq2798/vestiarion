@@ -28,6 +28,7 @@ export const NAV_GROUPS = [
       { key: "compliance", path: "/compliance", label: "Compliance" },
       { key: "audit", path: "/audit", label: "Audit log" },
       { key: "members", path: "/members", label: "Members" },
+      { key: "settings", path: "/settings", label: "Settings" },
     ],
   },
 ] as const;

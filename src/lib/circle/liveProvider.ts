@@ -12,7 +12,17 @@ import type {
 } from "./types";
 import { ARC_FEE_USD } from "./types";
 import { fetchArcFeeUsd } from "./arcFees";
+import { awaitSettlement, FAILED_STATES, withDeadline } from "./settlement";
 import type { ChainConfig } from "../config";
+
+export type LiveProviderClient = Pick<
+  CircleDeveloperControlledWalletsClient,
+  "createTransaction" | "getWalletTokenBalance" | "getTransaction"
+>;
+
+const CREATE_TRANSACTION_DEADLINE_MS = 20_000;
+const BALANCE_READ_DEADLINE_MS = 15_000;
+const RECONCILE_TRANSFER_DEADLINE_MS = 15_000;
 
 interface AccountRow {
   id: string;
@@ -69,7 +79,7 @@ export class LiveProvider implements ChainProvider {
   readonly mode = "live" as const;
   readonly earnMode = "live" as const;
   readonly estimatedFeeUsd = ARC_FEE_USD;
-  private client: CircleDeveloperControlledWalletsClient;
+  private readonly client: LiveProviderClient;
   private usdcTokenId?: string;
 
   private readonly arcRpcUrl?: string;
@@ -79,11 +89,11 @@ export class LiveProvider implements ChainProvider {
    * sets of Circle wallets can then exist in one process, which a constructor
    * that consulted `process.env` made impossible.
    */
-  constructor(chain: ChainConfig) {
+  constructor(chain: ChainConfig, options: { client?: LiveProviderClient } = {}) {
     if (!chain.circleApiKey || !chain.circleEntitySecret) {
       throw new Error("LiveProvider requires a Circle API key and entity secret");
     }
-    this.client = initiateDeveloperControlledWalletsClient({
+    this.client = options.client ?? initiateDeveloperControlledWalletsClient({
       apiKey: chain.circleApiKey,
       entitySecret: chain.circleEntitySecret,
     });
@@ -109,7 +119,11 @@ export class LiveProvider implements ChainProvider {
 
   private async resolveUsdcTokenId(walletId: string): Promise<string> {
     if (this.usdcTokenId) return this.usdcTokenId;
-    const balances = await this.client.getWalletTokenBalance({ id: walletId });
+    const balances = await withDeadline(
+      this.client.getWalletTokenBalance({ id: walletId }),
+      BALANCE_READ_DEADLINE_MS,
+      `no answer from Circle getWalletTokenBalance within ${BALANCE_READ_DEADLINE_MS} ms`
+    );
     const usdc = balances.data?.tokenBalances?.find((b) => b.token?.symbol === "USDC");
     if (!usdc?.token?.id) {
       throw new Error(
@@ -131,48 +145,40 @@ export class LiveProvider implements ChainProvider {
     const tokenId = await this.resolveUsdcTokenId(account.walletId);
     const started = Date.now();
 
-    const created = await this.client.createTransaction({
-      walletId: account.walletId,
-      tokenId,
-      destinationAddress: params.toAddress,
-      amount: [params.amount.toFixed(6)],
-      idempotencyKey: params.idempotencyKey,
-      refId: params.memo,
-      fee: { type: "level", config: { feeLevel: "MEDIUM" } },
-    });
+    const created = await withDeadline(
+      this.client.createTransaction({
+        walletId: account.walletId,
+        tokenId,
+        destinationAddress: params.toAddress,
+        amount: [params.amount.toFixed(6)],
+        idempotencyKey: params.idempotencyKey,
+        refId: params.memo,
+        fee: { type: "level", config: { feeLevel: "MEDIUM" } },
+      }),
+      CREATE_TRANSACTION_DEADLINE_MS,
+      `Circle did not answer createTransaction within ${CREATE_TRANSACTION_DEADLINE_MS} ms; the transfer may or may not have been accepted`
+    );
 
     const txId = created.data?.id;
     if (!txId) throw new Error("Circle did not return a transaction id");
 
     // Arc settles in well under a second, but Circle's pipeline
     // (INITIATED -> CLEARED -> QUEUED -> SENT -> CONFIRMED -> COMPLETE) is
-    // asynchronous. The SDK polls for us and rejects on a terminal failure;
-    // the abort signal caps how long a cycle can block on one payment.
-    let status: TransferResult["status"] = "pending";
-    let txHash: string | undefined;
+    // asynchronous. awaitSettlement waits, with a deadline on every request so
+    // a cycle cannot block on one payment, and reports failed only when Circle
+    // itself reports a terminal state.
+    const { status, transaction } = await awaitSettlement(this.client, txId);
+    const txHash = transaction?.txHash;
     let feeUsd = ARC_FEE_USD;
     let feeSource: TransferResult["feeSource"] = "provider_estimate";
     let settledInMs: number | null = null;
-    try {
-      const settled = await this.client.getTransaction({
-        id: txId,
-        waitForState: "CONFIRMED",
-        signal: AbortSignal.timeout(45_000),
-      });
-      const transaction = settled.data?.transaction;
-      const state = transaction?.state;
-      txHash = transaction?.txHash;
-      status = state === "CONFIRMED" || state === "COMPLETE" ? "confirmed" : "pending";
-      const resolved = await resolveFee(this.arcRpcUrl, transaction?.networkFeeInUSD, txHash);
+    if (transaction) {
+      const resolved = await resolveFee(this.arcRpcUrl, transaction.networkFeeInUSD, txHash);
       feeUsd = resolved.feeUsd;
       feeSource = resolved.feeSource;
-      settledInMs = transaction ? measuredSettlementMs(transaction) : null;
-      if (status === "confirmed" && settledInMs == null) settledInMs = Date.now() - started;
-    } catch (err) {
-      // A timeout leaves the transfer in flight rather than failed, so those
-      // two cases are reported differently — the ledger records which.
-      status = (err as Error).name === "TimeoutError" ? "pending" : "failed";
+      settledInMs = measuredSettlementMs(transaction);
     }
+    if (status === "confirmed" && settledInMs == null) settledInMs = Date.now() - started;
 
     return {
       providerTxId: txId,
@@ -189,12 +195,16 @@ export class LiveProvider implements ChainProvider {
 
   async reconcileTransfer(providerTxId: string): Promise<TransferResult> {
     const started = Date.now();
-    const response = await this.client.getTransaction({ id: providerTxId });
+    const response = await withDeadline(
+      this.client.getTransaction({ id: providerTxId }),
+      RECONCILE_TRANSFER_DEADLINE_MS,
+      `no answer from Circle getTransaction during reconciliation within ${RECONCILE_TRANSFER_DEADLINE_MS} ms`
+    );
     const transaction = response.data?.transaction;
     if (!transaction) throw new Error(`Circle returned no transaction for ${providerTxId}`);
 
     const confirmed = transaction.state === "CONFIRMED" || transaction.state === "COMPLETE";
-    const failed = ["CANCELLED", "DENIED", "FAILED", "STUCK"].includes(transaction.state);
+    const failed = FAILED_STATES.includes(transaction.state);
     const txHash = transaction.txHash ?? null;
     // Reconciliation is also the backfill path: a transfer that settled before
     // its receipt was readable gets its real fee on the next pass.
@@ -226,7 +236,11 @@ export class LiveProvider implements ChainProvider {
 
   async getBalance(accountId: string): Promise<BalanceSnapshot> {
     const account = await this.account(accountId);
-    const balances = await this.client.getWalletTokenBalance({ id: account.walletId });
+    const balances = await withDeadline(
+      this.client.getWalletTokenBalance({ id: account.walletId }),
+      BALANCE_READ_DEADLINE_MS,
+      `no answer from Circle getWalletTokenBalance within ${BALANCE_READ_DEADLINE_MS} ms`
+    );
     const usdc = balances.data?.tokenBalances?.find((b) => b.token?.symbol === "USDC");
     return {
       accountId,

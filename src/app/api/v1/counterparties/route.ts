@@ -18,8 +18,8 @@ const SELECT =
   "id, name, role, address, chain, jurisdiction, risk_level, risk_notes, baseline_payment_limit, payment_limit, last_screened_at, performance_score, performance_inputs, created_at";
 
 export async function GET(request: Request) {
-  const denied = guardApiRequest(request, { scope: "read" });
-  if (denied) return denied;
+  const guard = await guardApiRequest(request, { scope: "read" });
+  if ("denied" in guard) return guard.denied;
 
   const url = new URL(request.url);
   const limitResult = parseLimit(url.searchParams.get("limit"));
@@ -44,6 +44,7 @@ export async function GET(request: Request) {
 
   return handleApiRequest(
     "GET /api/v1/counterparties",
+    guard.key,
     async (): Promise<ApiCollection<CounterpartyPayload>> => {
       // Newest first: this is a human-browsed book, not an append-only stream.
       let query = db()

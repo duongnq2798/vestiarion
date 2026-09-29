@@ -1,4 +1,4 @@
-import { ChartLine, FileText, Flag, Inbox, Landmark, ScrollText, ShieldCheck, UserCog, Users, type LucideIcon } from "lucide-react";
+import { ChartLine, FileText, Flag, Inbox, KeyRound, Landmark, ScrollText, ShieldCheck, UserCog, Users, type LucideIcon } from "lucide-react";
 import type { NavKey } from "./nav";
 
 /**
@@ -16,4 +16,5 @@ export const NAV_ICONS: Record<NavKey, LucideIcon> = {
   compliance: ShieldCheck,
   audit: ScrollText,
   members: UserCog,
+  settings: KeyRound,
 };

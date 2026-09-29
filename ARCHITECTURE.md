@@ -72,19 +72,21 @@ and `milestones.created_by` become null, and the invitations the person sent are
 
 **The permission map** (spec §7) lives as data in `src/lib/auth/roles.ts` — `PERMISSIONS` maps each
 of `workspace.read`, `agent.pause`, `approval.decide`, `records.write`, `agent.run_cycle`,
-`agent.resume`, `members.manage`, and `org.administer` to the roles that hold it — and is enforced
-at the boundary through `authorize(slug, permission)` (`src/lib/auth/authorize.ts`), which
-re-derives the caller's membership and role from the session rather than trusting anything the form
-claims; a page can call the read-only `viewerCan` to decide whether to render a control at all.
+`agent.resume`, `members.manage`, `api_keys.manage`, and `org.administer` to the roles that hold it
+— and is enforced at the boundary through `authorize(slug, permission)` (`src/lib/auth/authorize.ts`),
+which re-derives the caller's membership and role from the session rather than trusting anything the
+form claims; a page can call the read-only `viewerCan` to decide whether to render a control at all.
 Actions call it for `records.write` (`src/app/actions/intake.ts`, `src/app/actions/milestones.ts`),
 `agent.run_cycle`, `agent.pause` and `agent.resume` (`src/app/actions/agent.ts`), `approval.decide`
-(`src/app/actions/approvals.ts`), and `members.manage` (`src/app/actions/members.ts`, for inviting,
+(`src/app/actions/approvals.ts`), `members.manage` (`src/app/actions/members.ts`, for inviting,
 changing a role, revoking an invitation, and removing someone other than yourself — `owner` and
 `admin` hold it; leaving a workspace yourself needs only `workspace.read`, since it is open to every
-member). The remaining permissions — `workspace.read` (beyond the leaving case above) and
-`org.administer` — and `canAssignRole`'s rule that an admin may grant `approver` or `viewer` but
-nothing at its own rank or above while only an owner assigns `admin` or `owner`, are defined in
-`roles.ts` ahead of the feature that will call `org.administer`.
+member), and `api_keys.manage` (`src/app/actions/api-keys.ts`, for creating and revoking a
+workspace's own API keys — `owner` and `admin` hold it; every other member sees the list on
+`/o/[slug]/settings` without the controls). The remaining permissions — `workspace.read` (beyond
+the leaving case above) and `org.administer` — and `canAssignRole`'s rule that an admin may grant
+`approver` or `viewer` but nothing at its own rank or above while only an owner assigns `admin` or
+`owner`, are defined in `roles.ts` ahead of the feature that will call `org.administer`.
 
 **Members and invitations** (spec §7, §10 step 5b) go through service-role-only functions in
 migration `0021`, each told who is acting and re-deriving that person's role inside its own
@@ -183,6 +185,30 @@ could not be read, or an error before any result — leaves the invoice
 `matched` for the next cycle rather than demoting it. When no transfer
 exists yet and one could be resubmitted, the counterparty's risk level is
 read again first, and a counterparty now screened high risk is not paid.
+The contractor stage does the same for a `verified` milestone whose release is
+already in flight. It records `milestone_reconcile` rather than asking the
+model again, so a change of mind cannot record a released payment as held.
+Only a payment with something to reconcile is reconciled. An intent with no
+provider id that was never claimed, or whose submission failed before the
+provider returned an id, has no transfer to look up. So its invoice or
+milestone is decided again, through the model and the guardrails. If a lost
+submission did reach the provider, a resubmission reuses the same idempotency
+key.
+
+**Waiting for Circle never guesses.** Every Circle request made by the live
+provider carries a deadline, because the SDK has no HTTP timeout: transfer
+submission gets 20 seconds, and balance reads and reconciliation get 15
+seconds. The manually run operator scripts are outside this guarantee and do
+not add per-request deadlines. A submission deadline says the outcome is
+unknown; the intent keeps no provider id, and a later decision reuses the same
+idempotency key so Circle can deduplicate a request it accepted. After Circle
+accepts a transfer, it holds a transaction id, and the money may have moved.
+The live provider waits for confirmation, and the wait and its second read each
+carry their own deadline. On any rejection of that wait, whether a timeout, a
+dropped connection or a terminal state, it reads the transaction once more and
+takes Circle's answer. Only a state Circle reports as terminal makes a transfer
+failed. One it cannot read stays pending, and the next cycle reconciles it by id
+(`src/lib/circle/settlement.ts`).
 
 **The pause switch** stops one workspace's agent without touching
 credentials. `pause_agent` and `resume_agent` (migration `0025`) are
@@ -216,6 +242,45 @@ human act, not the agent's own move.
 `agent_paused`, and `agent_resumed` record every decision, pause, and resume,
 each carrying the acting person's user id, never an address.
 
+## Notifications
+
+**A digest tells the members who can decide a payable that it is waiting for
+them**, once per workspace per scheduled cycle. `notifyWaitingDecisions`
+(`src/lib/notifications/waiting.ts`) runs after `runScheduledCycle`
+(`src/lib/agent/cron.ts`), in the same workspace scope, for every `live`
+organization the cron did not skip — a cycle started from the console has a
+person watching it already, so only the unattended cron notifies.
+`waitingToNotify` selects the payables that are `held`, `flagged`, or
+`awaiting_info` and either have never been told (`invoices.notified_at` is
+null) or were escalated by the follow-up stage since they last were
+(`escalated_at > notified_at`, recorded as `invoice_escalated` by
+`applyFollowUp`) — so an escalation is news again. Recipients are the
+members with `approval.decide` (`owner`, `admin`, `approver`) whose own
+`memberships.notify_email` switch is on, at most 25 per workspace, the rest
+logged rather than emailed. Each recipient gets a message of their own —
+addresses are never shared between them — built by `waitingDigestEmail`
+(`src/lib/email/waiting-digest.ts`): the workspace name, up to 10 invoices
+(then "and N more"), each with the counterparty's name, amount, status, and
+the first sentence of the agent's reasoning (at most 140 characters), all HTML-escaped, with no
+counterparty address, wallet, or email. It is sent through the same
+`sendEmail` (Resend, `no-reply@vestiarion.xyz`) invitations use. Needs
+`RESEND_API_KEY`; without it, nothing is sent and nothing is marked, and the
+next scheduled cycle tries again. The invoices are marked `notified_at = now()`
+only once at least one recipient's send has succeeded — so a digest nobody
+received is retried, never lost — and the ledger records `notification_sent`,
+with `detail: { invoiceIds, escalatedIds, recipients: <count>, failed:
+<count> }`: ids and counts, never an address. A failure anywhere in this path
+is logged with the workspace id and never fails the cycle or the tick.
+
+**The switch** is the member's own: `memberships.notify_email` (migration
+`0026`), on by default. It changes only from the Members page
+(`/o/[slug]/members`), which shows it — "Email me when payments need a
+decision" — only to a member who holds `approval.decide`; a viewer sees
+nothing, because a viewer cannot decide and so receives nothing.
+`setNotifyEmailAction` (`src/app/actions/notifications.ts`) is gated on
+`workspace.read`, and writes only the row named by the session's own user id
+— a `userId` field in the form is never read.
+
 ## Read API
 
 The versioned read boundary lives under `src/app/api/v1/`:
@@ -234,7 +299,15 @@ insights/route.ts                unchanged insights telemetry read model
 
 `src/lib/api/contract.ts` owns the success/error envelopes, error codes,
 opaque cursors, page-size policy, and `limit + 1` pagination. Every v1 route
-passes through `src/lib/api/guard.ts` with read scope. Resource-specific pure
+passes through `guardApiRequest` (`src/lib/api/guard.ts`) with the `read`
+scope: it authenticates the bearer token as a workspace API key
+(`src/lib/platform/api-keys.ts`, migration `0027_api_keys.sql`) and, on
+success, `handleApiRequest` runs the route inside `withOrg(key.orgId)`, so a
+key serves exactly one workspace's data. A missing, malformed, unknown, or
+revoked key answers `401 unauthorized`; a key without the route's scope
+answers `403 forbidden`. `AGENT_API_TOKEN` does not authenticate this surface
+— it remains only the cron secret for `/api/agent/tick`,
+`/api/platform/cleanup`, and `/api/agent/reset`. Resource-specific pure
 mapping and validation live in `src/lib/api/counterparties.ts`,
 `src/lib/api/milestones.ts`, and `src/lib/api/treasury.ts` so null preservation
 and chain-hash rules can be tested without a database.
@@ -257,7 +330,9 @@ reported as zero.
 
 ## Verification
 
-Pure contract and payload behavior is covered by `tests/api-contract.test.ts`.
-`npm run verify` runs lockfile consistency, TypeScript, lint, and the complete
-Vitest suite. `npm run build` validates the production route graph. Live API
-checks use the local app plus a real `AGENT_API_TOKEN` and Supabase data.
+Pure contract and payload behavior is covered by `tests/api-contract.test.ts`;
+authentication and per-workspace scoping are covered by
+`tests/api-key-scope.test.ts`. `npm run verify` runs lockfile consistency,
+TypeScript, lint, and the complete Vitest suite. `npm run build` validates the
+production route graph. Live API checks use the local app plus a real
+workspace API key (created on `/o/<slug>/settings`) and Supabase data.

@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import { runLiveOrganizations } from "@/lib/agent/cron";
-import { runAgentCycle } from "@/lib/agent/orchestrator";
+import { runLiveOrganizations, runScheduledCycle } from "@/lib/agent/cron";
 import { hasValidAgentBearer } from "@/lib/agent-security";
 import { takeAgentCycleToken } from "@/lib/rate-limit";
+
+export const maxDuration = 300;
 
 function clientIp(request: Request): string {
   return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
@@ -31,9 +32,13 @@ export async function POST(request: Request) {
     //
     // Live organizations run sequentially in this one invocation, so the
     // tick's wall time is the sum of their cycles, not the slowest one.
-    // Today there is one live organization. Revisit `maxDuration` or running
-    // organizations in parallel once a second one goes live.
-    const results = await runLiveOrganizations(() => runAgentCycle());
+    // `maxDuration` is 300 seconds, while a fully hung payment can consume
+    // about 115 seconds across balance/token reads, submission and settlement.
+    // Revisit sequential execution before a second organization goes live.
+    //
+    // Each scheduled cycle is followed by the digest of payables waiting for
+    // a decision (notifications design N1, N2); it never changes the result.
+    const results = await runLiveOrganizations(runScheduledCycle);
     const organizations = results.map((result) => {
       if (!result.ok) {
         // Never echo more than the error's message: whatever else it

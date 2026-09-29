@@ -1,4 +1,4 @@
-import { describeConfig } from "@/lib/config";
+import { describeConfig, type VestiarionConfig } from "@/lib/config";
 import { currentConfig } from "@/lib/context";
 import { chainModes } from "@/lib/circle";
 import { screeningMode } from "@/lib/compliance";
@@ -9,7 +9,7 @@ import type { ApiResource } from "@/lib/api/contract";
 export const dynamic = "force-dynamic";
 
 /**
- * What this instance is, and what it can actually do.
+ * What this workspace is, and what it can actually do.
  *
  * The first call any client should make. A bot needs to know whether payments
  * are live before it tells someone an invoice was settled, and an MCP server
@@ -38,11 +38,25 @@ export interface StatusPayload {
   apiVersion: "v1";
 }
 
-export async function GET(request: Request) {
-  const denied = guardApiRequest(request, { scope: "read" });
-  if (denied) return denied;
+/**
+ * `describeConfig` also reports `database.*` — the Supabase project host and
+ * whether tenant access is set up. Those describe the deployment, not the
+ * workspace the calling key belongs to, so a workspace key must not see them
+ * (K6: this surface serves the key's own workspace and nothing platform-wide).
+ * `describeConfig` itself is unchanged; other callers still get the full
+ * shape.
+ */
+function describeWorkspaceConfig(config: VestiarionConfig): Record<string, unknown> {
+  const described = describeConfig(config);
+  delete described.database;
+  return described;
+}
 
-  return handleApiRequest("GET /api/v1/status", async (): Promise<ApiResource<StatusPayload>> => {
+export async function GET(request: Request) {
+  const guard = await guardApiRequest(request, { scope: "read" });
+  if ("denied" in guard) return guard.denied;
+
+  return handleApiRequest("GET /api/v1/status", guard.key, async (): Promise<ApiResource<StatusPayload>> => {
     const config = currentConfig();
     // Modes, not the provider: status must still answer when the
     // organization's Circle credentials cannot be read (R12). chainModes()
@@ -71,7 +85,7 @@ export async function GET(request: Request) {
           totalPaidOut: snapshot.totalPaidOut,
           flagged: snapshot.flagged,
         },
-        configuration: describeConfig(config),
+        configuration: describeWorkspaceConfig(config),
         apiVersion: "v1",
       },
     };

@@ -40,6 +40,7 @@ export const COUNTERPARTY_HISTORY_ACTIONS = [
   "ap_reconcile",
   "milestone_release",
   "milestone_hold",
+  "milestone_reconcile",
   "risk_level_changed",
 ] as const;
 
@@ -243,7 +244,12 @@ export function deriveCounterpartyHistories(
     }
     // A payment that was pending when decided and settled on a later cycle's
     // reconcile is a payment all the same.
-    if (entry.action === "ap_reconcile" && execution?.resultingStatus === "paid") subject.paid = true;
+    if (
+      (entry.action === "ap_reconcile" || entry.action === "milestone_reconcile") &&
+      execution?.resultingStatus === "paid"
+    ) {
+      subject.paid = true;
+    }
     if (entry.action === "ap_request_info") subject.informationRequested = true;
     if (entry.action === "ap_hold" || entry.action === "milestone_hold") {
       if (heldByOurConfiguration(entry)) subject.heldByOurPolicy = true;

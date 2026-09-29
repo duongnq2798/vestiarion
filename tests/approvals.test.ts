@@ -541,11 +541,20 @@ describe("returnInvoice", () => {
     expect(claim).toEqual({ p_org_id: ORG, p_invoice_id: INVOICE_ID, p_by: ACTOR, p_decision: "return" });
 
     const [update] = patchBodies(fake.requests, "/rest/v1/invoices");
-    expect(update).toEqual({ status: "pending", decided_at: null, escalated_at: null });
+    expect(update).toEqual({ status: "pending", decided_at: null, escalated_at: null, notified_at: null });
 
     const [append] = rpcBodies(fake.requests, "append_ledger_entry");
     expect(append.p_action).toBe("approval_returned");
     expect(append.p_detail).toEqual({ by: ACTOR, invoiceId: INVOICE_ID });
+  });
+
+  it("clears notified_at, so a returned payable is news again if the agent re-holds it", async () => {
+    const { fake, run } = approvalsFake();
+
+    await run(() => returnInvoice({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+
+    const [update] = patchBodies(fake.requests, "/rest/v1/invoices");
+    expect(update).toMatchObject({ notified_at: null });
   });
 
   it("maps self-approval from the claim to self_approval", async () => {

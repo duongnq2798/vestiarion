@@ -131,9 +131,18 @@ scripts/                  Tenant scripts require an organization slug
 src/app/                  Evidence-first landing page at `/`; working treasury
                            console at `/console`, plus AP/AR, Contractors,
                            Compliance, Audit Log, and database-backed Insights
-src/app/api/v1/           Authenticated read API for bots, MCP servers and
-                           anything else consuming Vestiarion
+src/app/api/v1/           Read API for bots, MCP servers and anything else
+                           consuming Vestiarion, authenticated with a
+                           workspace API key
+src/lib/platform/api-keys.ts  Key generation and hashing, listing and
+                               revocation; only sha256(secret) is ever stored
 ```
+
+Each workspace creates and revokes its own read-only API keys on
+`/o/<slug>/settings` (owner or admin only; see [docs/api.md](docs/api.md)). A
+key is shown once, in full, right after it is created, and authenticates
+`/api/v1` requests for that workspace alone — there is no shared or
+platform-wide credential on that surface.
 
 ## Running it
 
@@ -191,6 +200,16 @@ link after 7 days. Inviting the same address again withdraws the older invitatio
 revoked invitations are kept, marked withdrawn, and a workspace can send at most 50 invitations a
 day. Anyone can leave a workspace they belong to from the same page. Deleting an account keeps the
 workspaces it created and the members it invited; deleting a workspace's only owner is refused.
+
+When a scheduled cycle leaves payables waiting for a decision, everyone who can decide them —
+**owner**, **admin**, **approver** — and has not turned it off gets a digest email: the workspace
+name, up to 10 of the waiting payables (then "and N more"), each with the counterparty, amount,
+status and the first sentence of why the agent held it, and a link to the approvals inbox. A cycle
+run by hand from the console never sends one, since the person running it is already watching it;
+in practice this means only a `live` workspace's unattended cron cycles notify. An invoice already
+told about is not told again unless it was escalated since. Each member has their own switch — "Email
+me when payments need a decision" — on the Members page, on by default; this needs `RESEND_API_KEY`
+too.
 
 Only the **founding organization** — seeded ahead of any sign-in, in `live` mode — skips self-serve
 creation: it exists before anyone signs in, so no self-serve step ever generates it a ledger key.
