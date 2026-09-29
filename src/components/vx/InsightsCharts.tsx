@@ -8,7 +8,14 @@ import type {
   TransferTelemetry,
   TreasuryMoveTelemetry,
 } from "@/lib/insights";
-import { Card, fmt, Label } from "./Primitives";
+import { ChevronRight } from "lucide-react";
+import { Badge } from "@/components/ui/Badge";
+import { Card } from "@/components/ui/Card";
+import { Disclosure } from "@/components/ui/Disclosure";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { Eyebrow } from "@/components/ui/Eyebrow";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/Table";
+import { fmt } from "./Primitives";
 
 const utc = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -31,12 +38,10 @@ function modeLabel(modes: Array<"live" | "simulate">): "LIVE" | "SIMULATED" | "M
 
 function Provenance({ modes, detail }: { modes: Array<"live" | "simulate">; detail: string }) {
   const label = modeLabel(modes);
-  const live = label === "LIVE";
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded border px-2 py-1 font-mono text-[0.6875rem] font-semibold tracking-[0.08em] ${live ? "border-proof-line bg-proof-soft text-proof" : "hatch border-dashed border-line-strong text-ink-2"}`}>
-      <span aria-hidden className={`size-1.5 rounded-full ${live ? "bg-proof" : "border border-ink-3"}`} />
+    <Badge size="sm" shape="tag" dot tone={label === "LIVE" ? "proof" : "simulated"} className="shrink-0 font-mono tracking-[0.08em]">
       {detail} · {label}
-    </span>
+    </Badge>
   );
 }
 
@@ -47,21 +52,24 @@ function ChartCard({ title, description, provenance, children }: {
   children: ReactNode;
 }) {
   return (
-    <Card className="min-w-0 overflow-hidden p-5 sm:p-6">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight text-ink">{title}</h2>
-          <p className="mt-1 max-w-2xl text-sm leading-relaxed text-ink-2">{description}</p>
+    <Card asChild className="min-w-0 overflow-hidden p-5 sm:p-6">
+      <section>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight text-ink">{title}</h2>
+            <p className="mt-1 max-w-2xl text-sm leading-relaxed text-ink-2">{description}</p>
+          </div>
+          {provenance}
         </div>
-        {provenance}
-      </div>
-      <div className="mt-6">{children}</div>
+        <div className="mt-6">{children}</div>
+      </section>
     </Card>
   );
 }
 
-function EmptyChart({ children }: { children: ReactNode }) {
-  return <p className="hatch rounded-xl border border-dashed border-line-strong bg-ground/45 px-4 py-10 text-center text-sm text-ink-2">{children}</p>;
+/** A chart with nothing measured yet: what is missing, and how to get it. */
+function EmptyChart({ what }: { what: string }) {
+  return <EmptyState compact title={`No ${what} recorded yet`} body="Run an agent cycle to populate this." />;
 }
 
 function DetailsTable({ summary, headers, rows }: {
@@ -70,23 +78,41 @@ function DetailsTable({ summary, headers, rows }: {
   rows: ReactNode[][];
 }) {
   return (
-    <details className="mt-4 border-t border-line pt-3">
-      <summary className="cursor-pointer text-xs font-medium text-agent hover:underline">{summary}</summary>
-      <div className="mt-3 max-w-full overflow-x-auto">
-        <table className="w-full min-w-[34rem] border-collapse text-left text-xs">
-          <thead className="font-mono uppercase tracking-wide text-ink-3">
-            <tr>{headers.map((header) => <th key={header} className="border-b border-line px-2 py-2 font-medium">{header}</th>)}</tr>
-          </thead>
-          <tbody className="text-ink-2">
-            {rows.map((row, rowIndex) => (
-              <tr key={rowIndex} className="border-b border-line/60">
-                {row.map((cell, cellIndex) => <td key={cellIndex} className="whitespace-nowrap px-2 py-2 tabular-nums">{cell}</td>)}
-              </tr>
+    <Disclosure
+      variant="bare"
+      className="mt-4 border-t border-line pt-3"
+      summaryClassName="w-fit"
+      contentClassName="mt-3"
+      summary={
+        <span className="inline-flex items-center gap-1 text-xs font-medium text-agent transition-colors duration-150 ease-standard hover:underline">
+          <ChevronRight aria-hidden className="size-3.5 transition-transform duration-200 ease-standard group-open/disclosure:rotate-90" />
+          {summary}
+        </span>
+      }
+    >
+      <Table className="min-w-[34rem] text-xs">
+        <TableHeader>
+          <TableRow>
+            {headers.map((header) => (
+              <TableHead key={header} className="px-2 py-2">
+                {header}
+              </TableHead>
             ))}
-          </tbody>
-        </table>
-      </div>
-    </details>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((row, rowIndex) => (
+            <TableRow key={rowIndex}>
+              {row.map((cell, cellIndex) => (
+                <TableCell key={cellIndex} className="whitespace-nowrap px-2 py-2 tabular-nums text-ink-2">
+                  {cell}
+                </TableCell>
+              ))}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </Disclosure>
   );
 }
 
@@ -149,12 +175,12 @@ function MetricPlot({ values, label, unit, color, valueLabel }: {
   valueLabel: (value: number) => string;
 }) {
   if (values.length === 0) {
-    return <div className="flex min-h-40 items-center justify-center rounded-md border border-dashed border-line text-center text-xs text-ink-3">No confirmed measurement</div>;
+    return <div className="flex min-h-40 items-center justify-center rounded-xl border border-dashed border-line text-center text-xs text-ink-3">No confirmed measurement</div>;
   }
   return (
     <div className="min-w-0 rounded-xl border border-line bg-ground/35 p-3">
       <div className="flex items-baseline justify-between gap-2 px-1">
-        <Label>{label}</Label>
+        <Eyebrow>{label}</Eyebrow>
         <span className="font-mono text-[0.6875rem] text-ink-3">{unit}</span>
       </div>
       {FRAMES.map((frame) => <MetricSvg key={frame} frame={frame} values={values} label={label} color={color} valueLabel={valueLabel} />)}
@@ -236,7 +262,7 @@ function TransferChart({ transfers }: { transfers: TransferTelemetry[] }) {
   if (transfers.length === 0) {
     return (
       <ChartCard title="Settlement cost and speed" description="Fee and confirmation latency captured at the payment boundary, never reconstructed later.">
-        <EmptyChart>No measured transfers recorded yet — run an agent cycle to populate this.</EmptyChart>
+        <EmptyChart what="measured transfers" />
       </ChartCard>
     );
   }
@@ -274,7 +300,7 @@ function BalanceChart({ snapshots, moves }: { snapshots: CycleSnapshotTelemetry[
   if (snapshots.length === 0) {
     return (
       <ChartCard title="Treasury balance over time" description="Liquid and reserve positions captured after each completed cycle.">
-        <EmptyChart>No cycles recorded yet — run an agent cycle to populate this.</EmptyChart>
+        <EmptyChart what="cycles" />
       </ChartCard>
     );
   }
@@ -365,21 +391,21 @@ const outcomes: Array<{ key: OutcomeKey; label: string; color: string; value: (r
 
 function OutcomeChart({ runs }: { runs: CycleRunTelemetry[] }) {
   if (runs.length === 0) {
-    return <ChartCard title="Decision outcomes per cycle" description="Executed and refused outcomes counted where each decision occurs."><EmptyChart>No cycles recorded yet — run an agent cycle to populate this.</EmptyChart></ChartCard>;
+    return <ChartCard title="Decision outcomes per cycle" description="Executed and refused outcomes counted where each decision occurs."><EmptyChart what="cycles" /></ChartCard>;
   }
   const totals = runs.map((run) => outcomes.reduce((sum, outcome) => sum + outcome.value(run), 0));
   const width = scaleLinear().domain([0, Math.max(...totals, 1)]).range([0, 100]);
   return (
     <ChartCard title="Decision outcomes per cycle" description="Each horizontal bar is one cycle; segments are observed outcomes, not a fitted trend. A cycle that failed partway is marked as such, because its counts are real but stop where it stopped." provenance={<Provenance modes={runs.map((run) => run.chainMode)} detail="Cycles" />}>
       <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-ink-2">
-        {outcomes.map((outcome) => <span key={outcome.key}><span className="mr-1.5 inline-block size-2 rounded-sm" style={{ background: outcome.color }} />{outcome.label}</span>)}
+        {outcomes.map((outcome) => <span key={outcome.key}><span className="mr-1.5 inline-block size-2 rounded-full" style={{ background: outcome.color }} />{outcome.label}</span>)}
       </div>
       <ol className="mt-4 space-y-3">
         {runs.map((run, index) => {
           const total = totals[index];
           return <li key={run.id} className="grid grid-cols-[3.5rem_minmax(0,1fr)_2rem] items-center gap-2 text-xs">
             <span className="font-mono text-ink-3">#{index + 1}</span>
-            <div className="flex h-5 min-w-0 overflow-hidden rounded-sm bg-raised" aria-label={`${total} outcomes`}>
+            <div className="flex h-5 min-w-0 overflow-hidden rounded-md bg-raised" aria-label={`${total} outcomes`}>
               {total === 0 ? <span className={`m-auto text-[0.625rem] ${run.status === "failed" || run.status === "partial" ? "text-refused" : "text-ink-3"}`}>{run.status === "failed" || run.status === "partial" ? `${run.status} — ${run.failedStage ?? "a stage"} failed` : run.status === "running" ? "still running" : "no outcomes"}</span> : outcomes.map((outcome) => {
                 const value = outcome.value(run);
                 return value > 0 ? <span key={outcome.key} title={`${outcome.label}: ${value}`} style={{ width: `${width(value)}%`, background: outcome.color }} /> : null;
@@ -396,19 +422,19 @@ function OutcomeChart({ runs }: { runs: CycleRunTelemetry[] }) {
 
 function DecisionModeChart({ runs }: { runs: CycleRunTelemetry[] }) {
   if (runs.length === 0) {
-    return <ChartCard title="Model vs heuristic" description="Which decision engine actually returned each verdict."><EmptyChart>No cycles recorded yet — run an agent cycle to populate this.</EmptyChart></ChartCard>;
+    return <ChartCard title="Model vs heuristic" description="Which decision engine actually returned each verdict."><EmptyChart what="cycles" /></ChartCard>;
   }
   const totals = runs.map((run) => run.modelDecisionCount + run.heuristicDecisionCount);
   const width = scaleLinear().domain([0, Math.max(...totals, 1)]).range([0, 100]);
   return (
     <ChartCard title="Model vs heuristic" description="The model share and rule-based fallback are persisted by the orchestrator, including cycles where one side is zero. Where the model was consulted, its verdict is scored against the same written policy the fallback applies." provenance={<Provenance modes={runs.map((run) => run.chainMode)} detail="Cycles" />}>
-      <div className="flex gap-4 text-xs text-ink-2"><span><span className="mr-1.5 inline-block size-2 bg-agent" />Model</span><span><span className="mr-1.5 inline-block size-2 bg-line-strong" />Heuristic</span><span className="text-refused">&#9670; Departed from policy</span></div>
+      <div className="flex gap-4 text-xs text-ink-2"><span><span className="mr-1.5 inline-block size-2 rounded-full bg-agent" />Model</span><span><span className="mr-1.5 inline-block size-2 rounded-full bg-line-strong" />Heuristic</span><span className="text-refused">&#9670; Departed from policy</span></div>
       <ol className="mt-4 space-y-3">
         {runs.map((run, index) => {
           const total = totals[index];
           return <li key={run.id} className="grid grid-cols-[3.5rem_minmax(0,1fr)_3.5rem] items-center gap-2 text-xs">
             <span className="font-mono text-ink-3">#{index + 1}</span>
-            <div className="flex h-5 min-w-0 overflow-hidden rounded-sm bg-raised">
+            <div className="flex h-5 min-w-0 overflow-hidden rounded-md bg-raised">
               {total === 0 ? <span className="m-auto text-[0.625rem] text-ink-3">no decisions</span> : <>
                 {run.modelDecisionCount > 0 && <span title={`Model: ${run.modelDecisionCount}`} className="bg-agent" style={{ width: `${width(run.modelDecisionCount)}%` }} />}
                 {run.heuristicDecisionCount > 0 && <span title={`Heuristic: ${run.heuristicDecisionCount}`} className="bg-line-strong" style={{ width: `${width(run.heuristicDecisionCount)}%` }} />}
@@ -448,14 +474,14 @@ function screeningBatches(rows: ScreeningTelemetry[]): ScreeningBatch[] {
 
 function ScreeningChart({ screenings }: { screenings: ScreeningTelemetry[] }) {
   if (screenings.length === 0) {
-    return <ChartCard title="Screening coverage" description="Completed and failed counterparty checks, with observed tier transitions."><EmptyChart>No screening checks recorded yet — run an agent cycle to populate this.</EmptyChart></ChartCard>;
+    return <ChartCard title="Screening coverage" description="Completed and failed counterparty checks, with observed tier transitions."><EmptyChart what="screening checks" /></ChartCard>;
   }
   const batches = screeningBatches(screenings);
   return (
     <ChartCard title="Screening coverage" description="Consecutive checks within two minutes are displayed as one observed batch. A red segment is a failed lookup; the previous verdict stayed in force." provenance={<Provenance modes={screenings.map((row) => row.mode)} detail="Screening" />}>
       <div className="mt-1 flex flex-wrap gap-4 text-xs text-ink-2" aria-hidden>
-        <span><span className="mr-1.5 inline-block size-2 rounded-sm bg-proof" />Completed</span>
-        <span><span className="mr-1.5 inline-block size-2 rounded-sm bg-refused" />Failed lookup</span>
+        <span><span className="mr-1.5 inline-block size-2 rounded-full bg-proof" />Completed</span>
+        <span><span className="mr-1.5 inline-block size-2 rounded-full bg-refused" />Failed lookup</span>
         <span><span className="mr-1.5 text-held">◆</span>Tier change</span>
       </div>
       {FRAMES.map((frame) => <ScreeningSvg key={frame} frame={frame} batches={batches} checks={screenings.length} />)}
