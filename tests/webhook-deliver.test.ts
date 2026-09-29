@@ -569,11 +569,19 @@ describe("sendTestEvent", () => {
     expect(deliveries.get(queued.id)?.status).toBe("pending");
   });
 
-  it("reports a failed test with its status and reason, retried like any delivery", async () => {
+  it("reports a failed test with its status and reason, failed at once — never retried (R7)", async () => {
     endpoint();
 
     expect(await test(ENDPOINT, answering(500))).toEqual({ ok: false, status: 500, error: "HTTP 500" });
-    expect([...deliveries.values()][0]).toMatchObject({ status: "pending", attempts: 1 });
+    expect([...deliveries.values()][0]).toMatchObject({ status: "failed", attempts: 1, last_status: 500, last_error: "HTTP 500" });
+  });
+
+  it("still counts a failed test toward the endpoint's consecutive failures (R7)", async () => {
+    endpoint({ consecutive_failures: 2 });
+
+    await test(ENDPOINT, answering(500));
+
+    expect(endpoints.get(ENDPOINT)).toMatchObject({ consecutive_failures: 3 });
   });
 
   it("reports a refused destination without a status", async () => {

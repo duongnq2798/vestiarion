@@ -19,6 +19,7 @@ export const PERMISSIONS = {
   "agent.resume": ["owner", "admin"],
   "members.manage": ["owner", "admin"],
   "api_keys.manage": ["owner", "admin"],
+  "webhooks.manage": ["owner", "admin"],
   "org.administer": ["owner"],
 } as const satisfies Record<string, readonly OrgRole[]>;
 

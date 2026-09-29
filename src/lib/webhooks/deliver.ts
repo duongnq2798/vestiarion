@@ -211,7 +211,12 @@ async function succeeded(delivery: ClaimedDelivery, run: Run, status: number): P
 
 async function attemptFailed(delivery: ClaimedDelivery, run: Run, status: number | null, reason: string): Promise<Outcome> {
   const attempts = delivery.attempts + 1;
-  const final = attempts >= WEBHOOK_MAX_ATTEMPTS;
+  // R7: a webhook.test delivery gets a single attempt. Its failure is final at
+  // once, never retried later — a test is a check the person is watching, and
+  // a late retry of it would surprise the receiver (ruling R8). It still
+  // counts toward the endpoint's consecutive failures, below, like any other
+  // failed attempt.
+  const final = attempts >= WEBHOOK_MAX_ATTEMPTS || delivery.event_type === "webhook.test";
   const values: Record<string, unknown> = final
     ? { status: "failed", attempts, last_status: status, last_error: reason }
     : {
@@ -383,9 +388,10 @@ export interface TestEventResult {
 /**
  * Queues a `webhook.test` delivery for one of the workspace's active
  * endpoints, claims exactly that row and delivers it through the same path as
- * every other delivery, retries included. The row is inserted `pending` and
- * claimed through `claim_webhook_deliveries`, so it is never `sending` without
- * a claim (R6). Never throws.
+ * every other delivery — except that a failure is final at once, not retried
+ * (R7): `attemptFailed` treats every `webhook.test` attempt as the last. The
+ * row is inserted `pending` and claimed through `claim_webhook_deliveries`, so
+ * it is never `sending` without a claim (R6). Never throws.
  */
 export async function sendTestEvent(
   input: { orgId: string; endpointId: string },
