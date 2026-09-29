@@ -8,7 +8,7 @@ import { can } from "@/lib/auth/roles";
 import { chainModes } from "@/lib/circle";
 import { inOrg } from "@/lib/dal/scope";
 import { listApiKeys } from "@/lib/platform/api-keys";
-import { listWebhookEndpoints } from "@/lib/platform/webhooks";
+import { listWebhookEndpoints, toWebhookEndpointViews } from "@/lib/platform/webhooks";
 import { stats } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
@@ -36,7 +36,8 @@ export default async function SettingsPage({ params }: { params: Promise<{ slug:
         />
         <div className="space-y-12">
           <ApiKeysPanel orgSlug={slug} apiKeys={apiKeys} canManage={canManageKeys} />
-          <WebhooksPanel orgSlug={slug} endpoints={webhookEndpoints} canManage={canManageWebhooks} />
+          {/* The full URL never crosses into the client component for a non-manager — built server-side, not just hidden at render time. */}
+          <WebhooksPanel orgSlug={slug} endpoints={toWebhookEndpointViews(webhookEndpoints, canManageWebhooks)} canManage={canManageWebhooks} />
         </div>
       </ProductShell>
     );

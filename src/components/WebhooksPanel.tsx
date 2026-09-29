@@ -19,7 +19,7 @@ import { SubmitButton } from "@/components/ui/SubmitButton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/Table";
 import { MOTION } from "@/components/ui/tokens";
 import { useActionForm } from "@/components/ui/useActionForm";
-import type { WebhookEndpointRow } from "@/lib/platform/webhooks";
+import type { WebhookEndpointView } from "@/lib/platform/webhooks";
 
 const INITIAL: WebhookActionResult = { ok: false, message: "" };
 const EXIT = { duration: MOTION.duration.exit, ease: MOTION.ease.exit };
@@ -117,7 +117,7 @@ function AddEndpointDialog({ orgSlug }: { orgSlug: string }) {
   );
 }
 
-function SendTestForm({ orgSlug, endpoint }: { orgSlug: string; endpoint: WebhookEndpointRow }) {
+function SendTestForm({ orgSlug, endpoint }: { orgSlug: string; endpoint: WebhookEndpointView }) {
   const formId = `send-test-webhook-${endpoint.id}`;
   // A failed test says only that it was not delivered, and why — the same
   // reason a real delivery would have failed with, from `sendTestEvent`.
@@ -135,7 +135,7 @@ function SendTestForm({ orgSlug, endpoint }: { orgSlug: string; endpoint: Webhoo
   );
 }
 
-function RemoveEndpointForm({ orgSlug, endpoint }: { orgSlug: string; endpoint: WebhookEndpointRow }) {
+function RemoveEndpointForm({ orgSlug, endpoint }: { orgSlug: string; endpoint: WebhookEndpointView }) {
   const formId = `remove-webhook-${endpoint.id}`;
   const { state, pending, formProps } = useActionForm(removeWebhookEndpointAction, INITIAL, { toastOnSuccess: true });
 
@@ -159,7 +159,7 @@ function RemoveEndpointForm({ orgSlug, endpoint }: { orgSlug: string; endpoint: 
   );
 }
 
-export default function WebhooksPanel({ orgSlug, endpoints, canManage }: { orgSlug: string; endpoints: WebhookEndpointRow[]; canManage: boolean }) {
+export default function WebhooksPanel({ orgSlug, endpoints, canManage }: { orgSlug: string; endpoints: WebhookEndpointView[]; canManage: boolean }) {
   return (
     <div className="space-y-8">
       <section aria-labelledby="webhooks-title">
@@ -202,8 +202,8 @@ export default function WebhooksPanel({ orgSlug, endpoints, canManage }: { orgSl
                     const disabled = endpoint.disabledAt !== null;
                     return (
                       <m.tr key={endpoint.id} exit={{ opacity: 0 }} transition={EXIT}>
-                        {/* Only a manager sees the full URL (it may name a customer's own host); everyone else sees the host. */}
-                        <TableCell className="max-w-[20rem] truncate font-mono text-xs text-ink-2">{canManage ? endpoint.url : endpoint.host}</TableCell>
+                        {/* `endpoint.url` is present at all only for a manager (built server-side, `toWebhookEndpointViews`); it may name a customer's own host, so everyone else falls back to the bare host. */}
+                        <TableCell className="max-w-[20rem] truncate font-mono text-xs text-ink-2">{endpoint.url ?? endpoint.host}</TableCell>
                         <TableCell>
                           <Badge tone={disabled ? "refused" : "proof"} size="sm" dot>
                             {disabled ? "Disabled after failures" : "Active"}

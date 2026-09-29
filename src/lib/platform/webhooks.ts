@@ -40,6 +40,28 @@ export interface WebhookEndpointRow {
   lastFailureAt: string | null;
 }
 
+/**
+ * What a viewer's own request is allowed to carry: for a non-manager, `url`
+ * is not present at all — never an empty string, never `undefined`-but-set —
+ * because an RSC prop and a JSON response both serialize a present key, and
+ * an absent one is the only shape that can never smuggle the full URL past
+ * the render check that used to be the only thing hiding it.
+ */
+export type WebhookEndpointView = Omit<WebhookEndpointRow, "url"> & { url?: string };
+
+/**
+ * Builds the rows a page hands to its client component: the full URL only
+ * when `canManage`, the endpoint's host always. Do this server-side, before
+ * the rows cross into a client component — hiding `url` only at render time
+ * still ships it in the RSC payload to everyone.
+ */
+export function toWebhookEndpointViews(rows: WebhookEndpointRow[], canManage: boolean): WebhookEndpointView[] {
+  if (canManage) return rows.map((row) => ({ ...row }));
+  return rows.map(({ id, host, createdAt, disabledAt, consecutiveFailures, lastSuccessAt, lastFailureAt }) => ({
+    id, host, createdAt, disabledAt, consecutiveFailures, lastSuccessAt, lastFailureAt,
+  }));
+}
+
 export type WebhookErrorCode = "invalid_url" | "webhook_limit_reached" | "not_found";
 
 const MESSAGES: Record<Exclude<WebhookErrorCode, "invalid_url">, string> = {
@@ -68,12 +90,15 @@ interface StoredEndpoint {
   last_failure_at: string | null;
 }
 
+/** A row whose stored URL somehow fails to parse (it never should — `createWebhookEndpoint` validates it first) gets this fixed placeholder as its host, never the raw value: a host is shown to people who cannot see the full URL, so nothing here may leak it either. */
+const INVALID_URL_HOST = "invalid URL";
+
 /** The URL's own hostname — all a non-manager sees. Endpoints are always stored as a valid https URL, so this never fails in practice. */
 function hostOf(url: string): string {
   try {
     return new URL(url).hostname;
   } catch {
-    return url;
+    return INVALID_URL_HOST;
   }
 }
 

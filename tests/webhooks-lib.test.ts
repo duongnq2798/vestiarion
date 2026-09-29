@@ -7,6 +7,7 @@ import {
   createWebhookEndpoint,
   listWebhookEndpoints,
   removeWebhookEndpoint,
+  toWebhookEndpointViews,
   WebhookError,
   type WebhookEndpointRow,
 } from "@/lib/platform/webhooks";
@@ -255,6 +256,64 @@ describe("listWebhookEndpoints", () => {
     expect(listing?.params.get("org_id")).toBe(`eq.${ORG}`);
     expect(listing?.params.get("removed_at")).toBe("is.null");
     expect(listing?.params.get("select")).not.toContain("secret_enc");
+  });
+
+  it("gives a fixed placeholder host for a stored URL that fails to parse, never the raw value", async () => {
+    const malformed = "not a url, and definitely not one to leak";
+    const { run } = webhooksFake({
+      webhookEndpoints: () => ({
+        body: [{
+          id: ENDPOINT_ID, url: malformed, created_at: "2026-09-29T00:00:00Z", disabled_at: null,
+          consecutive_failures: 0, last_success_at: null, last_failure_at: null,
+        }],
+      }),
+    });
+
+    const rows = await run(() => listWebhookEndpoints(ORG));
+
+    expect(rows[0].host).toBe("invalid URL");
+    expect(rows[0].host).not.toContain(malformed);
+  });
+});
+
+describe("toWebhookEndpointViews", () => {
+  const row: WebhookEndpointRow = {
+    id: ENDPOINT_ID, host: "hooks.receiver.example", url: URL_TEXT, createdAt: "2026-09-29T00:00:00Z",
+    disabledAt: null, consecutiveFailures: 0, lastSuccessAt: null, lastFailureAt: null,
+  };
+
+  it("keeps the url for a manager", () => {
+    const [view] = toWebhookEndpointViews([row], true);
+
+    expect(view).toEqual(row);
+    expect(view.url).toBe(URL_TEXT);
+    expect(JSON.stringify([view])).toContain(URL_TEXT);
+  });
+
+  it("omits the url key entirely for a non-manager — not an empty string, not undefined-but-present", () => {
+    const [view] = toWebhookEndpointViews([row], false);
+
+    expect("url" in view).toBe(false);
+    expect(Object.keys(view)).not.toContain("url");
+    expect(view).toEqual({
+      id: row.id, host: row.host, createdAt: row.createdAt, disabledAt: row.disabledAt,
+      consecutiveFailures: row.consecutiveFailures, lastSuccessAt: row.lastSuccessAt, lastFailureAt: row.lastFailureAt,
+    });
+    // Serialized the way an RSC payload or a JSON response would carry it: the
+    // full URL string never appears — the host alone (part of the URL's own
+    // hostname) is exactly what a non-manager is meant to see.
+    expect(JSON.stringify([view])).not.toContain(URL_TEXT);
+    expect(JSON.stringify([view])).not.toContain("/vestiarion/in");
+  });
+
+  it("maps every row in the list the same way", () => {
+    const other: WebhookEndpointRow = { ...row, id: OTHER_ENDPOINT_ID, url: "https://second.example/private-path", host: "second.example" };
+
+    const views = toWebhookEndpointViews([row, other], false);
+
+    expect(views).toHaveLength(2);
+    for (const view of views) expect("url" in view).toBe(false);
+    expect(JSON.stringify(views)).not.toContain("/private-path");
   });
 });
 
