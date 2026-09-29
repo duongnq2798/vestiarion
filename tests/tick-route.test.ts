@@ -7,8 +7,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
  * the per-organization envelope.
  */
 
-const { runLiveOrganizations } = vi.hoisted(() => ({ runLiveOrganizations: vi.fn() }));
-vi.mock("@/lib/agent/cron", () => ({ runLiveOrganizations }));
+const { runLiveOrganizations, runScheduledCycle } = vi.hoisted(() => ({ runLiveOrganizations: vi.fn(), runScheduledCycle: vi.fn() }));
+vi.mock("@/lib/agent/cron", () => ({ runLiveOrganizations, runScheduledCycle }));
 
 const { POST } = await import("@/app/api/agent/tick/route");
 
@@ -80,5 +80,13 @@ describe("POST /api/agent/tick", () => {
         { slug: "b-corp", ok: true, skipped: "paused" },
       ],
     });
+  });
+
+  it("runs the scheduled cycle, which notifies after each cycle, in every live organization", async () => {
+    runLiveOrganizations.mockResolvedValueOnce([]);
+
+    await post();
+
+    expect(runLiveOrganizations).toHaveBeenLastCalledWith(runScheduledCycle);
   });
 });
