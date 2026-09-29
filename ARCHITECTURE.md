@@ -332,8 +332,10 @@ reaches them without polling. An `after insert` trigger on `ledger_entries`
 in the same transaction as the append. Enqueueing never fails the append: an
 enqueue error raises a warning and the entry is still appended. A dispatcher
 (`deliverPendingWebhooks`, `src/lib/webhooks/deliver.ts`) claims due rows and
-sends each one HMAC-signed, running right after every scheduled tick and
-again on a 10-minute schedule (`POST /api/platform/webhooks`). A
+sends each one HMAC-signed. It runs right after the request that appended
+an entry (`dispatchWebhooksSoon` schedules it with `after()` from
+`appendSigned`, one per burst), right after every scheduled tick, and on a
+10-minute schedule (`POST /api/platform/webhooks`) that sweeps up retries. A
 destination's host is resolved once, at connect time, and every address must
 pass the same public-only rule as when the endpoint was added; the connection
 is pinned to the addresses checked, which closes the DNS-rebinding gap a
