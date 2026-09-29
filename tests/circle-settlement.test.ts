@@ -119,6 +119,18 @@ describe("awaitSettlement", () => {
     expect(c.calls).toHaveLength(2);
     await vi.advanceTimersByTimeAsync(2_000);
     await expect(settled).resolves.toEqual({ status: "pending" });
+    expect(warn.mock.calls).toEqual([
+      [
+        "circle: settlement read failed",
+        "tx-1",
+        "no answer from Circle getTransaction while waiting for confirmation within 6000 ms",
+      ],
+      [
+        "circle: settlement read failed",
+        "tx-1",
+        "no answer from Circle getTransaction reread within 2000 ms",
+      ],
+    ]);
     expect(vi.getTimerCount()).toBe(0);
   });
 });
