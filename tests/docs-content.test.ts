@@ -1,7 +1,9 @@
-import { readdirSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { STATUS_FOR, type ApiErrorCode } from "@/lib/api/contract";
+import { DOCS_TARGET } from "@/components/vx/command-items";
+import { DOCS_LINK } from "@/components/vx/nav";
 import { OPERATIONS } from "@/lib/api/openapi";
 import sitemap from "@/app/sitemap";
 import { CONTENT_DIR, hasSource, NOTES_LOADERS, PAGE_LOADERS, publishedPages, readSource } from "@/lib/docs/content";
@@ -10,6 +12,7 @@ import { DOCS_NAV, flatPages, neighbours, slugOfPathname } from "@/lib/docs/nav"
 import { publicOrigin } from "@/lib/docs/origin";
 import { isPageHref } from "@/lib/docs/paths";
 import { ERROR_MEANINGS, referenceSectionIds } from "@/lib/docs/reference";
+import { parseApiKey } from "@/lib/platform/api-keys";
 
 /**
  * The docs' content and its navigation agree: every page in the nav has its
@@ -232,6 +235,65 @@ describe("every MDX file", () => {
 
   it.each(FILE_SLUGS.map((slug) => [slug || "index", slug] as const))("%s links only to pages and headings that exist", (_name, slug) => {
     expect(linkProblems(slug, readSource(slug), sourceOnDisk)).toEqual([]);
+  });
+});
+
+const SRC_DIR = path.join(process.cwd(), "src");
+const TSX_FILES = walk(SRC_DIR).filter((file) => file.endsWith(".tsx"));
+const relative = (file: string) => path.relative(process.cwd(), file).split(path.sep).join("/");
+
+/**
+ * The docs links a component writes as a literal: `href="/docs…"` or
+ * ``href={`/docs…`}`` with nothing interpolated. A link built at run time
+ * cannot be checked here, and is left to the page it is built from.
+ */
+function tsxDocsLinks(source: string): string[] {
+  return [...source.matchAll(/\bhref=(?:"(\/docs[^"]*)"|\{\s*`(\/docs[^`]*)`\s*\})/g)]
+    .map((match) => match[1] ?? match[2])
+    .filter((target) => !target.includes("${"));
+}
+
+describe("docs links written in components", () => {
+  const found = TSX_FILES.map((file) => [relative(file), tsxDocsLinks(readFileSync(file, "utf8"))] as const).filter(([, links]) => links.length > 0);
+
+  it("are found where the app links into the docs", () => {
+    const files = found.map(([file]) => file);
+    for (const file of ["src/components/docs/TryIt.tsx", "src/components/ApiKeysPanel.tsx", "src/components/WebhooksPanel.tsx", "src/app/docs/api/[operation]/page.tsx"]) {
+      expect(files, file).toContain(file);
+    }
+  });
+
+  it.each(found)("%s links only to pages and headings that exist", (_file, links) => {
+    expect(linkProblems("", links.map((link) => `<a href="${link}">`).join("\n"), sourceOnDisk)).toEqual([]);
+  });
+
+  it("include the console's Docs link and the palette's Developer docs", () => {
+    expect(linkProblems("", [DOCS_LINK.href, DOCS_TARGET.href].map((link) => `<a href="${link}">`).join("\n"), sourceOnDisk)).toEqual([]);
+  });
+
+  it("are read from both forms of literal, and not from a built one", () => {
+    expect(tsxDocsLinks('<Link href="/docs/webhooks">a</Link> <a href={`/docs/api#errors`}>b</a> <a href={`/docs/api/${id}`}>c</a> <a href="/login">d</a>')).toEqual([
+      "/docs/webhooks",
+      "/docs/api#errors",
+    ]);
+    expect(linkProblems("", '<a href="/docs/nope">', sourceOnDisk)).toEqual(['/docs/nope: no docs page "nope"']);
+  });
+});
+
+describe("an example API key", () => {
+  /** A whole key, not a placeholder such as `vxk_<prefix>_<secret>` or `vxk_...`. */
+  const KEY = /vxk_[a-z2-7]{8}_[A-Za-z0-9_-]+/g;
+  const EXAMPLE_KEY = "vxk_example2_NotARealKey_ExampleOnly_NotARealKey_Example";
+
+  it("is well-formed, and plainly invented", () => {
+    expect(parseApiKey(EXAMPLE_KEY)).toEqual({ prefix: "example2", secret: EXAMPLE_KEY.slice("vxk_example2_".length) });
+  });
+
+  it("is the one invented key wherever the docs or the app write a whole key", () => {
+    const files = [...walk(CONTENT_DIR), ...walk(SRC_DIR)].filter((file) => /\.(mdx?|tsx?)$/.test(file));
+    const keys = files.flatMap((file) => [...readFileSync(file, "utf8").matchAll(KEY)].map((match) => `${relative(file)}: ${match[0]}`));
+    expect(keys.length).toBeGreaterThan(0);
+    for (const key of keys) expect(key.slice(key.indexOf(": ") + 2), key).toBe(EXAMPLE_KEY);
   });
 });
 

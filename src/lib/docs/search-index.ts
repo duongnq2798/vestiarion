@@ -66,11 +66,29 @@ function sections(markdown: string): { intro: string; parts: Array<{ text: strin
 }
 
 /**
+ * The index, by origin, built the first time the layout asks for it rather
+ * than on every render (a request-time 404 renders the layout too). Skipped
+ * in development, so an edited page is searchable without a restart.
+ */
+const INDEX_CACHE = new Map<string, SearchEntry[]>();
+
+/**
  * One entry per published page and per heading on it, in nav order. A
  * heading the Markdown view does not carry ("Try it", the reference page's
- * form) is indexed by its title with no text.
+ * form) is indexed by its title with no text. Every caller gets the same
+ * array, so none may change it.
  */
 export function buildSearchIndex(origin: string = publicOrigin()): SearchEntry[] {
+  if (process.env.NODE_ENV === "development") return indexPages(origin);
+  let index = INDEX_CACHE.get(origin);
+  if (!index) {
+    index = indexPages(origin);
+    INDEX_CACHE.set(origin, index);
+  }
+  return index;
+}
+
+function indexPages(origin: string): SearchEntry[] {
   return publishedPages().flatMap((page) => {
     const section = findPage(page.slug)?.section ?? "";
     const markdown = pageMarkdown(page.slug, origin) ?? "";

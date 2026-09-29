@@ -90,6 +90,14 @@ const ALWAYS: ApiErrorCode[] = ["unauthorized", "forbidden", "internal"];
 /** A collection also refuses a bad `limit`, `cursor` or filter value. */
 const COLLECTION_ERRORS: ApiErrorCode[] = ["invalid_request", ...ALWAYS];
 
+/**
+ * Every `/api/v1` operation, as the docs and `/api/v1/openapi.json` describe it.
+ * A route's query parameters are documented only here: the route handlers read
+ * them from the URL themselves, and nothing derives this list from that code.
+ * A route that accepts a new query parameter must add it to its `params` here
+ * too, or the reference page, "Try it", the Markdown view and the OpenAPI
+ * document will not know it exists.
+ */
 export const OPERATIONS: readonly DocOperation[] = [
   {
     id: "get-status",

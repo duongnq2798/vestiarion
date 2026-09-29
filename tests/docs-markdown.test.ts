@@ -5,7 +5,7 @@ import { splitCodeSpans, stripFences } from "@/lib/docs/headings";
 import { llmsFull, llmsIndex, markdownHref, mdxToMarkdown, pageMarkdown } from "@/lib/docs/markdown";
 import { flatPages } from "@/lib/docs/nav";
 import { docsMarkdownPath } from "@/lib/docs/paths";
-import { generateStaticParams } from "@/app/docs-md/[[...slug]]/route";
+import { GET, generateStaticParams } from "@/app/docs-md/[[...slug]]/route";
 import nextConfig from "../next.config";
 
 /**
@@ -231,6 +231,21 @@ describe("llms.txt and llms-full.txt", () => {
 describe("the Markdown route and its rewrites", () => {
   it("prerenders one Markdown view per page", () => {
     expect(generateStaticParams()).toEqual(PAGES.map((page) => ({ slug: page.slug ? page.slug.split("/") : [] })));
+  });
+
+  it("asks search engines not to index any response, a page or a 404: the pages themselves are what gets indexed", async () => {
+    const answer = (slug: string[] | undefined) => GET(new Request("https://x.test/docs-md"), { params: Promise.resolve({ slug }) });
+    for (const slug of [undefined, ["api", "list-invoices"], ["get-started", "authentication"]]) {
+      const response = await answer(slug);
+      expect(response.status, String(slug)).toBe(200);
+      expect(response.headers.get("x-robots-tag"), String(slug)).toBe("noindex");
+    }
+    const missing = await answer(["nope"]);
+    expect(missing.status).toBe(404);
+    expect(missing.headers.get("x-robots-tag")).toBe("noindex");
+
+    // Next answers a path that is no page before the route runs; the config covers that 404.
+    expect(await nextConfig.headers!()).toContainEqual({ source: "/docs-md/:path*", headers: [{ key: "X-Robots-Tag", value: "noindex" }] });
   });
 
   it("names each page's .md path", () => {

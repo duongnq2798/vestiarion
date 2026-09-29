@@ -10,6 +10,11 @@ const nextConfig: NextConfig = {
   // by src/app/docs-md: the App Router has no suffix on a catch-all segment.
   // An array is applied after the pages, so a real page always wins; no docs
   // slug has a dot, and a `.md` that is not a page answers 404 from the route.
+  // The route sends `X-Robots-Tag: noindex` itself; this covers the 404 Next
+  // answers for a `/docs-md/…` path that is not a page, before the route runs.
+  async headers() {
+    return [{ source: "/docs-md/:path*", headers: [{ key: "X-Robots-Tag", value: "noindex" }] }];
+  },
   async rewrites() {
     return [
       { source: "/docs.md", destination: "/docs-md" },

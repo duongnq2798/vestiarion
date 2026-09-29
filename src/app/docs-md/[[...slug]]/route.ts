@@ -15,10 +15,17 @@ export function generateStaticParams() {
   return publishedPages().map((page) => ({ slug: page.slug ? page.slug.split("/") : [] }));
 }
 
+/**
+ * Every answer from here, `/docs-md/…` and the `.md` addresses rewritten to
+ * it alike, stays out of search results: each page is indexed as itself, and
+ * these views are for agents and tools.
+ */
+const NOINDEX = { "x-robots-tag": "noindex" };
+
 export async function GET(_request: Request, { params }: { params: Promise<{ slug?: string[] }> }) {
   const markdown = pageMarkdown(((await params).slug ?? []).join("/"), publicOrigin());
-  if (markdown === null) return new Response("Not found\n", { status: 404, headers: { "content-type": "text/plain; charset=utf-8" } });
+  if (markdown === null) return new Response("Not found\n", { status: 404, headers: { "content-type": "text/plain; charset=utf-8", ...NOINDEX } });
   return new Response(markdown, {
-    headers: { "content-type": "text/markdown; charset=utf-8", "cache-control": "public, max-age=300" },
+    headers: { "content-type": "text/markdown; charset=utf-8", "cache-control": "public, max-age=300", ...NOINDEX },
   });
 }

@@ -489,6 +489,14 @@ export function markdownHref(slug: string, origin: string): string {
 }
 
 /**
+ * Each page's Markdown, by origin and slug, built the first time it is asked
+ * for: the content is fixed once the app is built. Only slugs the nav has are
+ * kept, so the cache is bounded by the pages however many unknown addresses
+ * are asked for. Skipped in development, so an edited MDX file shows.
+ */
+const MARKDOWN_CACHE = new Map<string, string | null>();
+
+/**
  * The page at `slug` as Markdown: its title and description, then its MDX
  * converted, or for `api/<id>` its operation. Null for a slug the nav does
  * not have, and for a page whose MDX is not written yet.
@@ -497,13 +505,20 @@ export function pageMarkdown(slug: string, origin: string): string | null {
   const base = origin.replace(/\/+$/, "");
   const found = findPage(slug);
   if (!found) return null;
+  if (process.env.NODE_ENV === "development") return buildPageMarkdown(slug, base, found.page);
+  const key = `${base} ${slug}`;
+  if (!MARKDOWN_CACHE.has(key)) MARKDOWN_CACHE.set(key, buildPageMarkdown(slug, base, found.page));
+  return MARKDOWN_CACHE.get(key) ?? null;
+}
+
+function buildPageMarkdown(slug: string, base: string, page: { title: string; description: string }): string | null {
   if (slug.startsWith("api/")) {
     const op = operationById(slug.slice("api/".length));
     return op ? referenceMarkdown(op, base) : null;
   }
   if (!hasSource(slug)) return null;
   const body = mdxToMarkdown(readSource(slug), base);
-  return `# ${found.page.title}\n\n> ${found.page.description}\n${body ? `\n${body}` : ""}`;
+  return `# ${page.title}\n\n> ${page.description}\n${body ? `\n${body}` : ""}`;
 }
 
 const SUMMARY =
