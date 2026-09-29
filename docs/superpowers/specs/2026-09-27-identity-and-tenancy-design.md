@@ -104,6 +104,10 @@ reads **the founding organization only**. This is a stated, temporary binding wi
 tenancy rule: Tier 2 replaces the platform token on this surface with per-organization keys and
 removes the binding.
 
+This binding ended on 2026-09-29: `/api/v1/…` now authenticates with a workspace API key and serves
+that key's own workspace, and `AGENT_API_TOKEN` no longer opens it at all. See
+`docs/superpowers/specs/2026-09-29-api-keys-design.md`.
+
 ## 5. Data model and migration
 
 ### 5.1 New tables

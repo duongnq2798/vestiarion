@@ -48,8 +48,8 @@ const STATUSES = new Set([
 ]);
 
 export async function GET(request: Request) {
-  const denied = guardApiRequest(request, { scope: "read" });
-  if (denied) return denied;
+  const guard = await guardApiRequest(request, { scope: "read" });
+  if ("denied" in guard) return guard.denied;
 
   const url = new URL(request.url);
   const limitResult = parseLimit(url.searchParams.get("limit"));
@@ -78,6 +78,7 @@ export async function GET(request: Request) {
 
   return handleApiRequest(
     "GET /api/v1/invoices",
+    guard.key,
     async (): Promise<ApiCollection<InvoicePayload>> => {
       let query = db()
         .from("invoices")

@@ -5,11 +5,12 @@ import type { ApiResource } from "@/lib/api/contract";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const denied = guardApiRequest(request, { scope: "read" });
-  if (denied) return denied;
+  const guard = await guardApiRequest(request, { scope: "read" });
+  if ("denied" in guard) return guard.denied;
 
   return handleApiRequest(
     "GET /api/v1/insights",
+    guard.key,
     async (): Promise<ApiResource<InsightsData>> => ({
       // Return the read model intact: nullable comparisons and partial cycle
       // statuses carry meaning and must not be flattened for the API.

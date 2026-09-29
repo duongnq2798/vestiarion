@@ -277,17 +277,32 @@ describe("every component", () => {
 });
 
 describe("every /api/v1 route", () => {
-  it.each(V1_ROUTES.map(rel))("%s checks the bearer token before any work", (file) => {
+  it.each(V1_ROUTES.map(rel))("%s authenticates the API key before any work, and serves that key's workspace", (file) => {
     const source = read(path.join(ROOT, file));
     const handlers = source.split(/\n(?=export async function (?:GET|POST|PUT|PATCH|DELETE)\b)/).slice(1);
     expect(handlers.length).toBeGreaterThan(0);
     for (const handler of handlers) {
-      const guard = handler.indexOf("guardApiRequest(");
+      expect(awaitedNames(handler)[0]).toBe("guardApiRequest");
+      const guard = handler.indexOf('const guard = await guardApiRequest(request, { scope: "read" });\n  if ("denied" in guard) return guard.denied;');
       expect(guard).toBeGreaterThan(-1);
-      const firstWork = Math.min(
-        ...[handler.indexOf("await "), handler.indexOf("handleApiRequest(")].filter((index) => index >= 0)
-      );
-      expect(guard).toBeLessThan(firstWork);
+      const handle = handler.indexOf("handleApiRequest(");
+      expect(handle).toBeGreaterThan(guard);
+      expect(handler.slice(handle)).toMatch(/^handleApiRequest\(\s*"[^"]+",\s*guard\.key,/);
     }
+  });
+});
+
+describe("the v1 API's guard", () => {
+  const files = walk(path.join(ROOT, "src", "lib", "api")).filter((file) => file.endsWith(".ts"));
+
+  it("exists — the list is not empty", () => {
+    expect(files.map(rel)).toContain("src/lib/api/guard.ts");
+  });
+
+  it.each(files.map(rel))("%s neither enters the founding organization nor reads the platform token", (file) => {
+    const source = read(path.join(ROOT, file));
+    expect(source).not.toContain("withFoundingOrg");
+    expect(source).not.toContain("AGENT_API_TOKEN");
+    expect(source).not.toContain("hasValidAgentBearer");
   });
 });
