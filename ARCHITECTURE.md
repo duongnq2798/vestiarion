@@ -349,6 +349,24 @@ Monetary database values are `numeric(20,6)` and are converted to numbers only
 at the read boundary. Nullable measurements remain nullable; absence is not
 reported as zero.
 
+## Social previews
+
+Public links use Next.js file-based metadata routes: `src/app/opengraph-image.tsx`
+for Open Graph consumers such as Discord and Slack, and
+`src/app/twitter-image.tsx` for X. Both are static, 1200×630 PNGs rendered by the
+shared `src/app/_og/SocialPreview.tsx` frame from the committed Geist and
+Newsreader font files plus the application's real SVG mark. The renderer reads
+no request, tenant, database, Circle, or ledger data. Its palette comes from
+`src/components/ui/tokens.ts`, whose values are checked against `globals.css`.
+
+On the production Vercel deployment (`VERCEL_ENV=production`), the root
+metadata pins every canonical and image URL to `https://www.vestiarion.xyz`
+regardless of `SITE_URL`. Preview and local builds use `SITE_URL` when it is
+set, falling back to the same canonical origin when it is absent. Authentication
+links retain the separate, stricter `siteOrigin()` policy. The proxy excludes
+both metadata image paths, so a crawler fetching a preview never performs a
+Supabase session refresh.
+
 ## Verification
 
 Pure contract and payload behavior is covered by `tests/api-contract.test.ts`;

@@ -5,6 +5,7 @@ import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
 import { Toaster } from "@/components/ui/Toaster";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { THEME_COLOR } from "@/components/ui/tokens";
+import { publicOrigin } from "@/lib/public-origin";
 import "./globals.css";
 
 const sans = Geist({
@@ -30,12 +31,19 @@ const serif = Newsreader({
  * the web manifest from manifest.ts.
  */
 export const metadata: Metadata = {
+  metadataBase: new URL(publicOrigin()),
   title: {
     default: "Vestiarion — Autonomous Treasury Agent",
     template: "%s · Vestiarion",
   },
   description:
     "An autonomous treasury agent that screens, pays, allocates, and signs every decision into a verifiable audit chain.",
+  openGraph: {
+    siteName: "Vestiarion",
+    type: "website",
+    locale: "en_US",
+  },
+  twitter: { card: "summary_large_image" },
   applicationName: "Vestiarion",
   appleWebApp: { title: "Vestiarion" },
   // Amounts, hashes and sequence numbers must never turn into phone or address links.

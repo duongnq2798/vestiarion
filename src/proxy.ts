@@ -43,5 +43,7 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!api/|_next/static|_next/image|favicon.ico|icon.svg|apple-icon.png|manifest.webmanifest|icons/).*)"],
+  // Metadata image routes are public build artifacts; crawlers must never pay
+  // for a Supabase session refresh while fetching a link preview.
+  matcher: ["/((?!api/|_next/static|_next/image|favicon.ico|icon.svg|apple-icon.png|opengraph-image|twitter-image|manifest.webmanifest|icons/).*)"],
 };
