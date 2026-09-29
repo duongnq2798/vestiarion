@@ -148,6 +148,7 @@ Migration `0025_control.sql`. It is idempotent, and runs as `db:migrate` replays
 | `agent_paused` | `system` | `{ by, reason }` |
 | `agent_resumed` | `system` | `{ by, pausedFor: <seconds> }` |
 | `ap_reconcile` | `ap` | `{ invoiceId, counterpartyId, reconciled: true, previousStatus: "matched", execution }`: a `matched` payable with a payment intent, reconciled through `payInvoice` instead of decided again (added in the final fix pass) |
+| `milestone_reconcile` | `contractor` | `{ milestoneId, counterpartyId, reconciled, previousStatus: "verified", execution }`: the same for a `verified` milestone whose release is in flight (added after the rollout, with the live provider's settlement fix) |
 
 - **`OPEN_PAYABLE_STATUSES`** stays `pending`, `matched`, `held` and `awaiting_info`:
   - `processing` is transient and is not an obligation;
