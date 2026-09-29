@@ -6,6 +6,7 @@ import {
   parseLimit,
   type ApiCollection,
 } from "@/lib/api/contract";
+import { INVOICE_DIRECTIONS, INVOICE_STATUSES } from "@/lib/api/invoices";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +24,7 @@ export const dynamic = "force-dynamic";
  */
 export interface InvoicePayload {
   id: string;
-  direction: "payable" | "receivable";
+  direction: (typeof INVOICE_DIRECTIONS)[number];
   status: string;
   amount: number;
   currency: string;
@@ -42,10 +43,8 @@ export interface InvoicePayload {
   createdAt: string;
 }
 
-const DIRECTIONS = new Set(["payable", "receivable"]);
-const STATUSES = new Set([
-  "pending", "matched", "paid", "held", "flagged", "awaiting_info", "received", "rejected",
-]);
+const DIRECTIONS = new Set<string>(INVOICE_DIRECTIONS);
+const STATUSES = new Set<string>(INVOICE_STATUSES);
 
 export async function GET(request: Request) {
   const guard = await guardApiRequest(request, { scope: "read" });

@@ -150,7 +150,9 @@ describe("the routes under test", () => {
     const walk = (at: string): string[] =>
       readdirSync(at).flatMap((name) => (statSync(path.join(at, name)).isDirectory() ? walk(path.join(at, name)) : [path.join(at, name)]));
     const files = walk(dir).filter((file) => file.endsWith("route.ts")).map((file) => path.relative(dir, file).split(path.sep).join("/"));
-    expect(files.sort()).toEqual(Object.keys(ROUTES).sort());
+    // The OpenAPI document is the one public v1 route: it describes the
+    // surface, holds no workspace data and takes no key (tests/openapi.test.ts).
+    expect(files.filter((file) => file !== "openapi.json/route.ts").sort()).toEqual(Object.keys(ROUTES).sort());
   });
 });
 
