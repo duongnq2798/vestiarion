@@ -84,6 +84,37 @@ describe("runAgentCycleAction — the sandbox cap", () => {
   });
 });
 
+describe("runAgentCycleAction — a paused workspace", () => {
+  const config = configFromEnv({
+    NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid",
+    SUPABASE_SERVICE_ROLE_KEY: "k",
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: "test-anon-key",
+    SUPABASE_JWT_SECRET: "test-request-token-secret-at-least-32-characters",
+  });
+
+  it("returns the pause message when begin_cycle_run refuses it, and never sends advance_sim_day", async () => {
+    authorizeMock.mockResolvedValueOnce({ ok: true, user: { id: USER, email: null }, membership: membership("live") });
+    const fake = fakeSupabase((request) => {
+      if (request.path === "/rest/v1/orgs") return { body: orgRow("live") };
+      if (request.path === "/rest/v1/rpc/begin_cycle_run") {
+        return {
+          status: 400,
+          body: { code: "P0001", message: "agent_paused: the agent is paused" },
+        };
+      }
+      return { body: [] };
+    });
+
+    const result = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => runAgentCycleAction("northstar"));
+
+    expect(result).toEqual({
+      ok: false,
+      message: "The agent is paused. Resume it to run a cycle.",
+    });
+    expect(fake.requests.some((request) => request.path === "/rest/v1/rpc/advance_sim_day")).toBe(false);
+  });
+});
+
 describe("runAgentCycleAction — a live workspace", () => {
   const config = configFromEnv({
     NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid",

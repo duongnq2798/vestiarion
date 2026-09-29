@@ -34,13 +34,17 @@ export async function POST(request: Request) {
     // Today there is one live organization. Revisit `maxDuration` or running
     // organizations in parallel once a second one goes live.
     const results = await runLiveOrganizations(() => runAgentCycle());
-    const organizations = results.map((result) =>
-      result.ok
-        ? { slug: result.slug, ok: true as const, lines: result.result.lines.length }
-        // Never echo more than the error's message: whatever else it carries
-        // isn't this endpoint's to expose.
-        : { slug: result.slug, ok: false as const, error: result.error }
-    );
+    const organizations = results.map((result) => {
+      if (!result.ok) {
+        // Never echo more than the error's message: whatever else it
+        // carries isn't this endpoint's to expose.
+        return { slug: result.slug, ok: false as const, error: result.error };
+      }
+      if ("skipped" in result) {
+        return { slug: result.slug, ok: true as const, skipped: result.skipped };
+      }
+      return { slug: result.slug, ok: true as const, lines: result.result.lines.length };
+    });
     const status = results.every((result) => result.ok) ? 200 : 500;
     return NextResponse.json({ organizations }, { status });
   } catch (err) {

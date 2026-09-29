@@ -17,6 +17,7 @@ import { CycleJournal, messageOf, type CycleStage } from "./journal";
 import { decide } from "./decide";
 import { enforceApGuardrails } from "./guardrails";
 import { SandboxCapReachedError } from "./sandbox-cap";
+import { AgentPausedError, pausedPaymentNote } from "./pause";
 import {
   blockingDuplicate,
   duplicateMatchContext,
@@ -189,6 +190,7 @@ export async function runAgentCycle(
   } catch (err) {
     const message = messageOf(err);
     if (message.startsWith("sandbox_cap_reached")) throw new SandboxCapReachedError();
+    if (message.startsWith("agent_paused")) throw new AgentPausedError();
     throw err;
   }
 
@@ -706,20 +708,28 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
       if (guardrail.blocked) {
         // Refused by enforceApGuardrails before the provider can be called.
       } else {
-        const result = await payInvoice(
-          {
-            invoiceId: invoice.id,
-            counterpartyId: counterparty.id,
-            address: counterparty.address,
-            amount,
-          },
-          { provider, operating: operating ? { id: operating.id } : null }
-        );
-        status = result.status;
-        txRef = result.txRef;
-        paymentExecution = result.execution;
-        reasoning += result.note;
-        if (result.operatingBalance !== null) operatingBalance = result.operatingBalance;
+        const pauseNote = await pausedPaymentNote();
+        if (pauseNote) {
+          // Paused since the decision was made: hold rather than pay, and
+          // never reach payInvoice — no payment_intents claim, no transfer.
+          status = "held";
+          reasoning += pauseNote;
+        } else {
+          const result = await payInvoice(
+            {
+              invoiceId: invoice.id,
+              counterpartyId: counterparty.id,
+              address: counterparty.address,
+              amount,
+            },
+            { provider, operating: operating ? { id: operating.id } : null }
+          );
+          status = result.status;
+          txRef = result.txRef;
+          paymentExecution = result.execution;
+          reasoning += result.note;
+          if (result.operatingBalance !== null) operatingBalance = result.operatingBalance;
+        }
       }
     }
 
@@ -887,23 +897,31 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           ? " [guardrail override: contractor is high risk — release refused]"
           : ` [guardrail override: amount exceeds the ${limit} USDC limit — release refused]`;
       } else if (operating) {
-        try {
-          const result = await executePayment({
-            sourceType: "milestone",
-            sourceId: milestone.id,
-            fromAccountId: operating.id,
-            destination: payoutAddress(contractor.address, contractor.id),
-            amount,
-            memo: `Milestone ${milestone.id}`,
-          }, { provider });
-          paymentExecution = result;
-          txRef = result.txRef;
-          status = result.status === "confirmed" ? "paid" : result.status === "pending" ? "verified" : "held";
-          if (result.status === "failed") reasoning += ` [transfer failed: ${result.error ?? "provider reported failure"}]`;
-          else if (result.status === "pending") reasoning += " [transfer submitted; awaiting provider confirmation]";
-          else operatingBalance = await syncOperatingBalance(operating.id);
-        } catch (err) {
-          reasoning += ` [execution failed: ${(err as Error).message}]`;
+        const pauseNote = await pausedPaymentNote();
+        if (pauseNote) {
+          // Paused since the decision was made: status stays "held" (its
+          // initial value above), and executePayment is never reached — no
+          // payment_intents claim, no transfer.
+          reasoning += pauseNote;
+        } else {
+          try {
+            const result = await executePayment({
+              sourceType: "milestone",
+              sourceId: milestone.id,
+              fromAccountId: operating.id,
+              destination: payoutAddress(contractor.address, contractor.id),
+              amount,
+              memo: `Milestone ${milestone.id}`,
+            }, { provider });
+            paymentExecution = result;
+            txRef = result.txRef;
+            status = result.status === "confirmed" ? "paid" : result.status === "pending" ? "verified" : "held";
+            if (result.status === "failed") reasoning += ` [transfer failed: ${result.error ?? "provider reported failure"}]`;
+            else if (result.status === "pending") reasoning += " [transfer submitted; awaiting provider confirmation]";
+            else operatingBalance = await syncOperatingBalance(operating.id);
+          } catch (err) {
+            reasoning += ` [execution failed: ${(err as Error).message}]`;
+          }
         }
       }
     }
