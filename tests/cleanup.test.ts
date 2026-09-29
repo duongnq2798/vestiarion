@@ -87,23 +87,44 @@ describe("deleteExpiredWebhookDeliveries", () => {
 
   const RETENTION_CUTOFF_ISO = new Date(NOW.getTime() - WEBHOOK_DELIVERY_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
 
-  it("deletes delivered rows older than 30 days, and counts them", async () => {
+  /** Answers each DELETE with a count: 7 delivered rows, 4 failed ones. */
+  const deletes = (request: RecordedRequest): FakeReply => {
+    if (request.path !== "/rest/v1/webhook_deliveries" || request.method !== "DELETE") {
+      return { status: 404, body: { message: "unexpected" } };
+    }
+    const count = request.params.get("status") === "eq.delivered" ? 7 : 4;
+    return { status: 200, body: [], headers: { "content-range": `*/${count}` } };
+  };
+
+  it("deletes delivered rows delivered more than 30 days ago and failed rows created more than 30 days ago, and counts both", async () => {
     vi.spyOn(console, "log").mockImplementation(() => {});
-    const fake = fakeSupabase((request) =>
-      request.path === "/rest/v1/webhook_deliveries" && request.method === "DELETE"
-        ? { status: 200, body: [], headers: { "content-range": "*/7" } }
-        : { status: 404, body: { message: "unexpected" } });
+    const fake = fakeSupabase(deletes);
 
     const result = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => deleteExpiredWebhookDeliveries(NOW));
 
     expect(WEBHOOK_DELIVERY_RETENTION_DAYS).toBe(30);
-    expect(result).toEqual({ deleted: 7, failed: 0 });
-    const [request] = fake.requests;
-    expect(fake.requests).toHaveLength(1);
-    expect(request.method).toBe("DELETE");
-    expect(request.params.get("status")).toBe("eq.delivered");
-    expect(request.params.get("delivered_at")).toBe(`lt.${RETENTION_CUTOFF_ISO}`);
-    expect(request.headers.get("prefer")).toMatch(/count=exact/);
+    expect(result).toEqual({ deleted: 11, failed: 0 });
+    expect(fake.requests).toHaveLength(2);
+    for (const request of fake.requests) {
+      expect(request.method).toBe("DELETE");
+      expect(request.headers.get("prefer")).toMatch(/count=exact/);
+    }
+    const [delivered, failed] = fake.requests;
+    expect(delivered.params.get("status")).toBe("eq.delivered");
+    expect(delivered.params.get("delivered_at")).toBe(`lt.${RETENTION_CUTOFF_ISO}`);
+    expect(delivered.params.has("created_at")).toBe(false);
+    expect(failed.params.get("status")).toBe("eq.failed");
+    expect(failed.params.get("created_at")).toBe(`lt.${RETENTION_CUTOFF_ISO}`);
+    expect(failed.params.has("delivered_at")).toBe(false);
+  });
+
+  it("never touches pending or sending rows", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const fake = fakeSupabase(deletes);
+
+    await runWith({ config, db: fake.client, fetch: fake.fetch }, () => deleteExpiredWebhookDeliveries(NOW));
+
+    expect(fake.requests.map((request) => request.params.get("status"))).toEqual(["eq.delivered", "eq.failed"]);
   });
 
   it("never throws: a failed delete is logged and counted as failed", async () => {
@@ -112,7 +133,18 @@ describe("deleteExpiredWebhookDeliveries", () => {
 
     const result = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => deleteExpiredWebhookDeliveries(NOW));
 
-    expect(result).toEqual({ deleted: 0, failed: 1 });
+    expect(result).toEqual({ deleted: 0, failed: 2 });
     expect(error).toHaveBeenCalledWith("could not delete expired webhook deliveries", "boom");
+  });
+
+  it("still deletes the failed rows when deleting the delivered ones fails", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const fake = fakeSupabase((request) =>
+      request.params.get("status") === "eq.delivered" ? { status: 500, body: { message: "boom" } } : deletes(request));
+
+    const result = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => deleteExpiredWebhookDeliveries(NOW));
+
+    expect(result).toEqual({ deleted: 4, failed: 1 });
   });
 });

@@ -56,32 +56,48 @@ export async function deleteAbandonedSandboxes(now: Date = new Date()): Promise<
   return { deleted, failed };
 }
 
-/** W7: delivered webhook rows are kept this long, then deleted by the daily cleanup. */
+/** W7: delivered and failed webhook rows are kept this long, then deleted by the daily cleanup. */
 export const WEBHOOK_DELIVERY_RETENTION_DAYS = 30;
 
 /**
- * Deletes webhook deliveries that were delivered more than
- * `WEBHOOK_DELIVERY_RETENTION_DAYS` ago, and counts them. Best-effort: it
- * never throws; a failed delete is logged and counted in `failed`, and the
- * rows are simply deleted by a later run.
+ * Which finished deliveries expire, and from when: a delivered row from its
+ * delivery, a failed one from its creation (it records no time of failure).
+ * Pending and sending rows are never deleted here.
+ */
+const EXPIRING: { status: "delivered" | "failed"; since: "delivered_at" | "created_at" }[] = [
+  { status: "delivered", since: "delivered_at" },
+  { status: "failed", since: "created_at" },
+];
+
+/**
+ * Deletes webhook deliveries that finished more than
+ * `WEBHOOK_DELIVERY_RETENTION_DAYS` ago — delivered rows by `delivered_at`,
+ * failed rows by `created_at` — and counts them. Best-effort: it never throws;
+ * each failed delete is logged and counted in `failed`, does not stop the
+ * other, and its rows are simply deleted by a later run.
  */
 export async function deleteExpiredWebhookDeliveries(now: Date = new Date()): Promise<CleanupResult> {
   const cutoffIso = new Date(now.getTime() - WEBHOOK_DELIVERY_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
-  try {
-    const { count, error } = await platformDb()
-      .from("webhook_deliveries")
-      .delete({ count: "exact" })
-      .eq("status", "delivered")
-      .lt("delivered_at", cutoffIso);
-    if (error) {
-      console.error("could not delete expired webhook deliveries", error.message);
-      return { deleted: 0, failed: 1 };
+  let deleted = 0;
+  let failed = 0;
+  for (const { status, since } of EXPIRING) {
+    try {
+      const { count, error } = await platformDb()
+        .from("webhook_deliveries")
+        .delete({ count: "exact" })
+        .eq("status", status)
+        .lt(since, cutoffIso);
+      if (error) {
+        console.error("could not delete expired webhook deliveries", error.message);
+        failed += 1;
+        continue;
+      }
+      deleted += count ?? 0;
+    } catch (err) {
+      console.error("could not delete expired webhook deliveries", (err as Error).message);
+      failed += 1;
     }
-    const deleted = count ?? 0;
-    if (deleted > 0) console.log("deleted expired webhook deliveries", deleted);
-    return { deleted, failed: 0 };
-  } catch (err) {
-    console.error("could not delete expired webhook deliveries", (err as Error).message);
-    return { deleted: 0, failed: 1 };
   }
+  if (deleted > 0) console.log("deleted expired webhook deliveries", deleted);
+  return { deleted, failed };
 }

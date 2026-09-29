@@ -24,6 +24,7 @@ jobs:
           test -n "$VESTIARION_URL"
           test -n "$AGENT_API_TOKEN"
           curl --fail-with-body --silent --show-error \
+            --max-time 330 \
             --request POST \
             --header "Authorization: Bearer $AGENT_API_TOKEN" \
             "${VESTIARION_URL%/}/api/platform/webhooks"

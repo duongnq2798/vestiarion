@@ -1,3 +1,4 @@
+// PGlite is single-connection, so `for update skip locked` under true concurrency is not exercised here.
 import crypto from "node:crypto";
 import type { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -460,6 +461,45 @@ describe("deleting an organization", () => {
 });
 
 describe("replaying 0028", () => {
+  it("replaces an earlier draft's one-argument claim_webhook_deliveries, leaving no ambiguous call", async () => {
+    const fresh = await createDatabase();
+    try {
+      await applyMigrations(fresh);
+      await fresh.query("drop function public.claim_webhook_deliveries(int, uuid)");
+      // The earlier draft of 0028 defined the claim with one argument.
+      await fresh.query(`
+        create function public.claim_webhook_deliveries(p_limit int)
+        returns setof public.webhook_deliveries
+        language sql
+        as $$ select * from public.webhook_deliveries where false $$`);
+
+      await applyMigrations(fresh, (file) => file.startsWith("0028_"));
+
+      const { rows: overloads } = await fresh.query<{ args: string }>(
+        `select pg_get_function_identity_arguments(p.oid) as args
+           from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+          where n.nspname = 'public' and p.proname = 'claim_webhook_deliveries'`);
+      expect(overloads).toEqual([{ args: "p_limit integer, p_only uuid" }]);
+
+      const org = await createOrg(fresh, "upgrade-co");
+      const endpoint = (await asServiceRole(fresh, async (tx) =>
+        (await tx.query<{ id: string }>(
+          "select * from public.create_webhook_endpoint($1, $2, $3, $4::jsonb, $5)",
+          [crypto.randomUUID(), org, "https://hooks.example.com/in", JSON.stringify(ENVELOPE), null]
+        )).rows[0])).id;
+      const due = (await fresh.query<{ id: string }>(
+        `insert into public.webhook_deliveries (org_id, endpoint_id, event_type, next_attempt_at)
+         values ($1, $2, 'webhook.test', now() - interval '1 minute') returning id`, [org, endpoint])).rows[0].id;
+
+      // One argument resolves to the new function, which claims the due row.
+      const claimed = await asServiceRole(fresh, async (tx) =>
+        (await tx.query<{ id: string; status: string }>("select * from public.claim_webhook_deliveries(10)")).rows);
+      expect(claimed.map((row) => [row.id, row.status])).toEqual([[due, "sending"]]);
+    } finally {
+      await fresh.close();
+    }
+  }, 60_000);
+
   it("replays every migration twice without error, leaving one trigger on ledger_entries", async () => {
     const fresh = await createDatabase();
     try {
