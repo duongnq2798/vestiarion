@@ -1,4 +1,4 @@
--- Go live (spec L2, "The founding workspace" review focus; docs/superpowers/specs/2026-09-29-go-live-design.md).
+-- Go live (spec L7; docs/superpowers/specs/2026-09-29-go-live-design.md).
 --
 -- delete_sandbox_org: redefined from 0022 (still its latest definition; 0028
 -- did not touch it) with one added refusal — a sandbox that holds Circle
