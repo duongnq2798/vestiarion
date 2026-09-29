@@ -195,14 +195,20 @@ milestone is decided again, through the model and the guardrails. If a lost
 submission did reach the provider, a resubmission reuses the same idempotency
 key.
 
-**Waiting for Circle never guesses.** After Circle accepts a transfer, it holds
-a transaction id, and the money may have moved. The live provider waits for
-confirmation, and the wait and the second read each carry a deadline, because
-the SDK has no HTTP timeout. On any rejection of that wait, whether a timeout, a dropped
-connection or a terminal state, it reads the transaction once more and takes
-Circle's answer. Only a state Circle reports as terminal makes a transfer
-failed. One it cannot read stays pending, and the next cycle reconciles it by
-id (`src/lib/circle/settlement.ts`).
+**Waiting for Circle never guesses.** Every Circle request made by the live
+provider carries a deadline, because the SDK has no HTTP timeout: transfer
+submission gets 20 seconds, and balance reads and reconciliation get 15
+seconds. The manually run operator scripts are outside this guarantee and do
+not add per-request deadlines. A submission deadline says the outcome is
+unknown; the intent keeps no provider id, and a later decision reuses the same
+idempotency key so Circle can deduplicate a request it accepted. After Circle
+accepts a transfer, it holds a transaction id, and the money may have moved.
+The live provider waits for confirmation, and the wait and its second read each
+carry their own deadline. On any rejection of that wait, whether a timeout, a
+dropped connection or a terminal state, it reads the transaction once more and
+takes Circle's answer. Only a state Circle reports as terminal makes a transfer
+failed. One it cannot read stays pending, and the next cycle reconciles it by id
+(`src/lib/circle/settlement.ts`).
 
 **The pause switch** stops one workspace's agent without touching
 credentials. `pause_agent` and `resume_agent` (migration `0025`) are
