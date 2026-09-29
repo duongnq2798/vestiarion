@@ -17,6 +17,7 @@ import type { RiskTier } from "@/components/vx/types";
 import { requireMembership } from "@/lib/auth/membership";
 import { orgHref } from "@/lib/auth/org-paths";
 import { chainModes } from "@/lib/circle";
+import { screeningMode } from "@/lib/compliance";
 import { inOrg } from "@/lib/dal/scope";
 import { listLedgerEntries, listLedgerEntriesByDomain } from "@/lib/ledger";
 import { listCounterparties, stats } from "@/lib/queries";
@@ -52,7 +53,11 @@ export default async function CompliancePage({ params }: { params: Promise<{ slu
         />
 
         {lastSweep && (
-          <Callout tone={lastSweepComplete ? "proof" : "refused"} title="Latest continuous screening sweep" className="mb-6">
+          <Callout
+            tone={!lastSweepComplete ? "refused" : screeningMode() === "live" ? "proof" : "neutral"}
+            title="Latest continuous screening sweep"
+            className={lastSweepComplete && screeningMode() !== "live" ? "mb-6 hatch border-dashed" : "mb-6"}
+          >
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
                 <p className="text-ink">{lastSweep.summary}</p>

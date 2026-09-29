@@ -419,7 +419,7 @@ export default function DesignPage() {
               <StatTile label="Decisions logged" href="/design#domain" sub="Every entry is hash-linked and signed">
                 6
               </StatTile>
-              <StatTile label="Needs you" tone="held" href="/design#domain" sub="Waiting for a person's decision">
+              <StatTile label="Needs you" tone="held" href="/design#domain" sub="Waiting for a person’s decision">
                 2
               </StatTile>
             </div>

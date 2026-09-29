@@ -17,6 +17,15 @@ interface VerificationResponse {
   warnings?: string[];
 }
 
+/** Reads the verify endpoint's answer; a body that is not JSON (a proxy's error page) reads as "not checked". */
+export async function readVerification(response: Response): Promise<VerificationResponse> {
+  const type = response.headers.get("content-type") ?? "";
+  if (!type.includes("application/json")) {
+    return { valid: null, reason: `The server answered ${response.status}${response.statusText ? ` ${response.statusText}` : ""}` };
+  }
+  return (await response.json()) as VerificationResponse;
+}
+
 export interface Verdict {
   tone: "proof" | "refused" | "neutral";
   title: string;
@@ -53,7 +62,7 @@ export default function VerifyLedgerBadge({ orgSlug }: { orgSlug: string }) {
     startTransition(async () => {
       try {
         const response = await fetch(`/api/ledger/verify?org=${encodeURIComponent(orgSlug)}`);
-        setResult((await response.json()) as VerificationResponse);
+        setResult(await readVerification(response));
       } catch (error) {
         // A request that never arrived checked nothing. Calling that `false`
         // would accuse the chain of being broken because the network was.

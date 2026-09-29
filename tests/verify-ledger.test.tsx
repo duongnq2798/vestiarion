@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import VerifyLedgerBadge, { verificationVerdict } from "@/components/VerifyLedgerBadge";
+import VerifyLedgerBadge, { readVerification, verificationVerdict } from "@/components/VerifyLedgerBadge";
 
 describe("verificationVerdict", () => {
   it("has nothing to say before a check", () => {
@@ -35,6 +35,18 @@ describe("verificationVerdict", () => {
     expect(verdict?.tone).toBe("neutral");
     expect(verdict?.title).toBe("Not checked");
     expect(verdict?.body).toBe("Sign in to verify this ledger. This is not a finding about the chain.");
+  });
+});
+
+describe("readVerification", () => {
+  it("reads a proxy's HTML error page as not checked, naming the status", async () => {
+    const response = new Response("<!DOCTYPE html><p>Bad gateway</p>", { status: 502, statusText: "Bad Gateway", headers: { "content-type": "text/html" } });
+    expect(await readVerification(response)).toEqual({ valid: null, reason: "The server answered 502 Bad Gateway" });
+  });
+
+  it("passes a JSON answer through, refusals included", async () => {
+    const response = new Response(JSON.stringify({ error: "Sign in to verify this ledger." }), { status: 401, headers: { "content-type": "application/json" } });
+    expect(await readVerification(response)).toEqual({ error: "Sign in to verify this ledger." });
   });
 });
 

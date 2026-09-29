@@ -67,7 +67,7 @@ export function DialogContent({
           <DialogPrimitive.Title className="text-lg font-semibold tracking-tight text-ink">{title}</DialogPrimitive.Title>
           {description && <DialogPrimitive.Description className="text-sm leading-relaxed text-ink-2">{description}</DialogPrimitive.Description>}
         </div>
-        <div className={cn("-m-1 min-h-0 flex-1 overflow-y-auto p-1", bodyClassName)}>{children}</div>
+        <div className={cn("-m-1.5 min-h-0 flex-1 overflow-y-auto p-1.5", bodyClassName)}>{children}</div>
         {showClose && (
           <DialogPrimitive.Close asChild>
             <Button variant="ghost" size="icon-sm" aria-label="Close" className="absolute right-3 top-3">

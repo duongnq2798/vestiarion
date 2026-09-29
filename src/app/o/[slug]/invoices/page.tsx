@@ -1,4 +1,4 @@
-import { FileSpreadsheet, PenLine } from "lucide-react";
+import { FileSpreadsheet, ListFilter, PenLine } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import AgentControls from "@/components/AgentControls";
@@ -66,7 +66,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
         />
 
         {filter && (
-          <Callout tone="held" className="mb-6">
+          <Callout tone="held" icon={<ListFilter />} className="mb-6">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <span>
                 Showing status: <span className="font-mono">{filter}</span>
