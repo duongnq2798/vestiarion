@@ -5,6 +5,7 @@ import { DocsPage } from "@/components/docs/DocsShell";
 import { hasSource, loadPage, readSource } from "@/lib/docs/content";
 import { slugifyHeadings } from "@/lib/docs/headings";
 import { docsHref, findPage, flatPages } from "@/lib/docs/nav";
+import { docsSocialMetadata } from "@/lib/docs/social";
 
 type Props = { params: Promise<{ slug?: string[] }> };
 
@@ -33,6 +34,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title: { absolute: `${found.page.title} · Vestiarion docs` },
     description: found.page.description,
     alternates: { canonical: docsHref(found.page.slug) },
+    ...docsSocialMetadata(found.page),
   };
 }
 

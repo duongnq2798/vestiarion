@@ -379,8 +379,18 @@ metadata pins every canonical and image URL to `https://www.vestiarion.xyz`
 regardless of `SITE_URL`. Preview and local builds use `SITE_URL` when it is
 set, falling back to the same canonical origin when it is absent. Authentication
 links retain the separate, stricter `siteOrigin()` policy. The proxy excludes
-both metadata image paths, so a crawler fetching a preview never performs a
-Supabase session refresh.
+both metadata image paths and `og/`, so a crawler fetching a preview never
+performs a Supabase session refresh.
+
+Each docs page has its own image: its title, its summary, and either its
+section or, on a reference page, its request line, beside a card of the docs'
+sections with its own marked (`src/app/_og/DocsPreview.tsx`, in the same
+frame). Next.js allows no `opengraph-image` file after the optional catch-all
+`docs/[[...slug]]`, so the images are served by one route handler,
+`src/app/og/docs/[[...slug]]/route.ts`, prerendered for every page in the nav,
+and the docs pages point at them through `docsSocialMetadata()` in
+`src/lib/docs/social.ts`. A summary is cut short enough that it never reaches
+the footer, whether the title takes one line or two.
 
 ## Verification
 
