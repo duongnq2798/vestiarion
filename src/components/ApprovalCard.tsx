@@ -35,11 +35,16 @@ const STATUS: Record<WaitingPayable["status"], { label: string; tone: BadgeProps
   processing: { label: "Being decided", tone: "agent" },
 };
 
+/** A `processing` row whose claim did not finish, and which anyone may now decide again. */
+const UNFINISHED: { label: string; tone: BadgeProps["tone"] } = { label: "Unfinished decision", tone: "held" };
+
 /**
  * One payable the agent stopped on, and the three things a person can do
  * with it: pay it now, reject it, or hand it back to the agent's next cycle.
  * Someone without `approval.decide` sees the card and no buttons; a row
- * another person is deciding right now says so and offers nothing.
+ * another person is deciding right now says so and offers nothing. A claim
+ * that did not finish — the server marks it `reclaimable` once it is over 10
+ * minutes old — offers the three decisions again, and says why.
  *
  * Paying is refused here before the server refuses it — the person who
  * created the invoice cannot approve it, nor can anyone pay a counterparty
@@ -58,8 +63,9 @@ export default function ApprovalCard({
   viewerId: string;
   sandbox: boolean;
 }) {
-  const status = STATUS[payable.status];
-  const processing = payable.status === "processing";
+  const unfinished = payable.status === "processing" && payable.reclaimable;
+  const status = unfinished ? UNFINISHED : STATUS[payable.status];
+  const processing = payable.status === "processing" && !payable.reclaimable;
 
   return (
     <Card asChild tone={payable.status === "flagged" ? "refused" : processing ? "agent" : "held"}>
@@ -81,6 +87,11 @@ export default function ApprovalCard({
         </CardHeader>
         <CardContent>
           <p className="text-reasoning text-ink-2">{payable.reasoning?.trim() || "The agent recorded no reasoning."}</p>
+          {unfinished && (
+            <p className="mt-2 text-sm text-ink-2">
+              An earlier decision did not finish. If it was a payment, Approve and pay records it without paying twice.
+            </p>
+          )}
         </CardContent>
         {processing ? (
           <CardFooter>

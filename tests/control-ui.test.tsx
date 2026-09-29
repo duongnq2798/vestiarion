@@ -50,6 +50,7 @@ function payable(overrides: Partial<WaitingPayable> = {}): WaitingPayable {
     decidedAt: "2026-09-29T14:05:12.345+00:00",
     createdBy: CREATOR,
     reviewedAt: null,
+    reclaimable: false,
     ...overrides,
   };
 }
@@ -94,9 +95,25 @@ describe("ApprovalCard", () => {
   });
 
   it("says a claimed row is being decided, and offers nothing", () => {
-    const markup = card({ status: "processing" });
+    const markup = card({ status: "processing", reviewedAt: "2026-09-29T14:05:12Z", reclaimable: false });
     expect(markup).toContain("Being decided");
     expect(markup).not.toContain("Approve and pay");
+    expect(markup).not.toContain("<button");
+    expect(markup).not.toContain("An earlier decision did not finish");
+  });
+
+  it("offers the three decisions again on a claim that did not finish, and says so", () => {
+    const markup = card({ status: "processing", reviewedAt: "2026-09-29T13:00:00Z", reclaimable: true });
+    expect(markup).toContain("An earlier decision did not finish");
+    expect(markup).not.toContain("Being decided by someone else right now");
+    expect(markup).toContain("Approve and pay");
+    expect(markup).toContain("Reject");
+    expect(markup).toContain("Return to agent");
+    expect(markup).not.toMatch(APPROVE_DISABLED);
+  });
+
+  it("offers nothing on an unfinished claim to someone who may not decide", () => {
+    const markup = card({ status: "processing", reclaimable: true }, { canDecide: false });
     expect(markup).not.toContain("<button");
   });
 
@@ -223,9 +240,9 @@ describe("the new control screens, as source", () => {
     expect(read("src/app/o/[slug]/console/page.tsx")).toMatch(/label="Needs you"[^\n]*href=\{orgHref\(slug, "\/approvals"\)\}/);
   });
 
-  it("the console's Needs you tile counts what needs a person, not rows someone is already deciding", () => {
+  it("the console's Needs you tile counts what needs a person, not rows someone is already deciding, but an unfinished claim again", () => {
     const console_ = read("src/app/o/[slug]/console/page.tsx");
-    expect(console_).toContain('waiting.filter((payable) => payable.status !== "processing").length');
+    expect(console_).toContain('waiting.filter((payable) => payable.status !== "processing" || payable.reclaimable).length');
     expect(console_).toContain("Waiting for a person's decision");
   });
 

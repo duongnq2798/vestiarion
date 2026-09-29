@@ -82,8 +82,8 @@ export default async function DashboardPage({
     const executedReserveMoves = actionRows.slice(0, 2).map(treasuryActionDecision);
     const headSeq = headEntries[0]?.seq ?? 0;
     // What the approvals inbox holds for a person, so the tile and the page it links to agree. A row
-    // someone else is deciding right now does not need you.
-    const needsReview = waiting.filter((payable) => payable.status !== "processing").length;
+    // someone else is deciding right now does not need you; one whose claim did not finish does.
+    const needsReview = waiting.filter((payable) => payable.status !== "processing" || payable.reclaimable).length;
     const paused = pause !== null;
     const role = access.membership.role;
 

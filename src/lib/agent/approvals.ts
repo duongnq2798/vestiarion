@@ -14,8 +14,16 @@ import { payInvoice, syncOperatingBalance } from "./pay";
  * two people racing the same invoice cannot both act on it, and a person
  * cannot approve an invoice they created themselves. Everything checked
  * before that claim (self-approval, high risk, funds) is a refusal that
- * sends the claim at all, so a rejected attempt never even contends for the
- * row.
+ * never sends the claim at all, so a rejected attempt never even contends
+ * for the row.
+ *
+ * A claim that never finished — the request died, or the update after it
+ * failed — leaves the invoice `processing`. The claim lets anyone retake it
+ * once `reviewed_at` is 10 minutes old (or missing), and
+ * `listWaitingPayables` marks such a row `reclaimable` so the inbox offers
+ * the decisions again rather than leaving it stuck. A failed update after a
+ * claim is logged by invoice id, since on the approve path the transfer may
+ * already have moved.
  *
  * The ledger entry written after a decision commits is best effort, the same
  * pattern `src/lib/platform/members.ts` uses: the decision has already
@@ -95,6 +103,25 @@ function trimReason(reason: string | undefined): string | undefined {
 
 const WAITING_STATUSES = ["held", "flagged", "awaiting_info", "processing"] as const;
 
+/** How long a claim holds before anyone may retake it — `claim_invoice_decision`'s interval (migration 0025). */
+export const RECLAIM_AFTER_MS = 10 * 60 * 1000;
+
+/**
+ * Whether `claim_invoice_decision` would let a new decision retake this row:
+ * a `processing` claim whose `reviewed_at` is over 10 minutes old, or missing.
+ */
+function isReclaimable(status: string, reviewedAt: string | null, now: number): boolean {
+  if (status !== "processing") return false;
+  if (reviewedAt === null) return true;
+  const claimedAt = Date.parse(reviewedAt);
+  return Number.isNaN(claimedAt) || claimedAt < now - RECLAIM_AFTER_MS;
+}
+
+/** Logs a failed write after a claim went through, by invoice id: the row is left `processing` until it is reclaimed. */
+function logAfterClaim(invoiceId: string, what: string): void {
+  console.error("approval: invoice update failed after the claim", invoiceId, what);
+}
+
 export interface WaitingPayable {
   id: string;
   counterpartyId: string;
@@ -107,6 +134,8 @@ export interface WaitingPayable {
   decidedAt: string | null;
   createdBy: string | null;
   reviewedAt: string | null;
+  /** A `processing` row whose claim did not finish and may be decided again; false for every other status. */
+  reclaimable: boolean;
 }
 
 /** Every payable currently waiting for a person's decision — held, flagged, awaiting more information, or claimed by someone else right now. */
@@ -131,6 +160,7 @@ export async function listWaitingPayables(): Promise<WaitingPayable[]> {
     counterparties: { name: string; risk_level: string } | null;
   }>;
 
+  const now = Date.now();
   return rows.map((row) => ({
     id: row.id,
     counterpartyId: row.counterparty_id,
@@ -143,6 +173,7 @@ export async function listWaitingPayables(): Promise<WaitingPayable[]> {
     decidedAt: row.decided_at,
     createdBy: row.created_by,
     reviewedAt: row.reviewed_at,
+    reclaimable: isReclaimable(row.status, row.reviewed_at, now),
   }));
 }
 
@@ -202,6 +233,13 @@ async function operatingAccount(): Promise<{ id: string; balance: number } | nul
   return row ? { id: row.id, balance: num(row.balance) } : null;
 }
 
+/** The `approval_paid` entry's summary, which says what actually happened to the transfer. */
+function approvalPaidSummary(status: "paid" | "matched" | "held", amount: number, name: string): string {
+  if (status === "paid") return `Approved and paid ${amount} USDC to ${name}`;
+  if (status === "matched") return `Approved; payment of ${amount} USDC to ${name} submitted`;
+  return `Approved; payment of ${amount} USDC to ${name} failed`;
+}
+
 export async function approveAndPay(
   input: { actorId: string; invoiceId: string }
 ): Promise<{ status: "paid" | "matched" | "held"; txRef: string | null; note: string }> {
@@ -239,13 +277,18 @@ export async function approveAndPay(
     // Give the invoice back to the waiting queue rather than leave it stuck
     // as `processing` — the payment's own idempotency key (keyed on the
     // invoice) protects a retry from paying twice.
-    await db()
-      .from("invoices")
-      .update({
-        status: "held",
-        agent_reasoning: `${invoice.agentReasoning ?? ""} [approval interrupted: ${(err as Error).message}]`,
-      })
-      .eq("id", invoice.id);
+    try {
+      const rollback = await db()
+        .from("invoices")
+        .update({
+          status: "held",
+          agent_reasoning: `${invoice.agentReasoning ?? ""} [approval interrupted: ${(err as Error).message}]`,
+        })
+        .eq("id", invoice.id);
+      if (rollback.error) console.error("approval: rollback to held failed after the claim", invoice.id, rollback.error.message);
+    } catch (rollbackError) {
+      console.error("approval: rollback to held failed after the claim", invoice.id, (rollbackError as Error).message);
+    }
     throw err;
   }
 
@@ -260,14 +303,18 @@ export async function approveAndPay(
       tx_ref: result.txRef,
     })
     .eq("id", invoice.id);
-  if (update.error) throw new Error(update.error.message);
+  if (update.error) {
+    // The transfer may already have moved; this line is how to find the invoice.
+    logAfterClaim(invoice.id, result.status);
+    throw new Error(update.error.message);
+  }
 
   await recordLedgerEntry("approval_paid", orgId, () =>
     appendLedgerEntry({
       actor: "human",
       domain: "ap",
       action: "approval_paid",
-      summary: `Approved and paid ${invoice.amount} USDC to ${invoice.counterpartyName}`,
+      summary: approvalPaidSummary(result.status, invoice.amount, invoice.counterpartyName),
       detail: {
         by: input.actorId,
         invoiceId: invoice.id,
@@ -294,7 +341,10 @@ export async function rejectInvoice(input: { actorId: string; invoiceId: string;
     .from("invoices")
     .update({ status: "rejected", decided_at: new Date().toISOString() })
     .eq("id", input.invoiceId);
-  if (update.error) throw new Error(update.error.message);
+  if (update.error) {
+    logAfterClaim(input.invoiceId, "reject");
+    throw new Error(update.error.message);
+  }
 
   const reason = trimReason(input.reason);
   await recordLedgerEntry("approval_rejected", orgId, () =>
@@ -319,7 +369,10 @@ export async function returnInvoice(input: { actorId: string; invoiceId: string 
     .from("invoices")
     .update({ status: "pending", decided_at: null, escalated_at: null })
     .eq("id", input.invoiceId);
-  if (update.error) throw new Error(update.error.message);
+  if (update.error) {
+    logAfterClaim(input.invoiceId, "return");
+    throw new Error(update.error.message);
+  }
 
   await recordLedgerEntry("approval_returned", orgId, () =>
     appendLedgerEntry({

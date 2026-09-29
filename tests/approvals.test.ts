@@ -102,6 +102,8 @@ function approvalsFake(options: {
   invoice?: (request: RecordedRequest) => FakeReply | undefined;
   account?: (request: RecordedRequest) => FakeReply | undefined;
   claim?: (request: RecordedRequest) => FakeReply | undefined;
+  /** An invoice PATCH's reply; undefined falls through to success. */
+  invoicePatch?: (request: RecordedRequest) => FakeReply | undefined;
   ledgerFails?: boolean;
 } = {}) {
   const fake = fakeSupabase((request) => {
@@ -114,6 +116,8 @@ function approvalsFake(options: {
       return { body: [invoiceRow()] };
     }
     if (request.path === "/rest/v1/invoices" && request.method === "PATCH") {
+      const failure = options.invoicePatch?.(request);
+      if (failure) return failure;
       return { body: [] };
     }
     if (request.path === "/rest/v1/accounts" && request.method === "GET") {
@@ -314,6 +318,45 @@ describe("approveAndPay", () => {
     expect(rpcBodies(fake.requests, "append_ledger_entry")).toHaveLength(0);
   });
 
+  it("logs by invoice id, and still rethrows the payment's error, when the rollback to held also fails", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    payInvoiceMock.mockRejectedValue(new Error("provider unreachable"));
+    const { run } = approvalsFake({ invoicePatch: () => ({ status: 500, body: { message: "invoices update failed: connection reset" } }) });
+
+    await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).rejects.toThrow("provider unreachable");
+
+    expect(error).toHaveBeenCalledWith("approval: rollback to held failed after the claim", INVOICE_ID, "invoices update failed: connection reset");
+    error.mockRestore();
+  });
+
+  it("logs by invoice id and outcome, and rethrows, when the invoice update after the payment fails", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", operatingBalance: 350 });
+    const { fake, run } = approvalsFake({ invoicePatch: () => ({ status: 500, body: { message: "invoices update failed: connection reset" } }) });
+
+    await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).rejects.toThrow("invoices update failed: connection reset");
+
+    // The transfer may already have moved: the log is what lets someone find the invoice.
+    expect(error).toHaveBeenCalledWith("approval: invoice update failed after the claim", INVOICE_ID, "paid");
+    expect(rpcBodies(fake.requests, "append_ledger_entry")).toHaveLength(0);
+    error.mockRestore();
+  });
+
+  it.each([
+    ["paid", "0xhash", "Approved and paid 150 USDC to Acme Supplies"],
+    ["matched", "circle-tx-1", "Approved; payment of 150 USDC to Acme Supplies submitted"],
+    ["held", "circle-tx-1", "Approved; payment of 150 USDC to Acme Supplies failed"],
+  ] as const)("summarises a %s outcome truthfully in the approval_paid entry", async (status, txRef, summary) => {
+    payInvoiceMock.mockResolvedValue({ status, txRef, execution: null, note: "", operatingBalance: null });
+    const { fake, run } = approvalsFake();
+
+    await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+
+    const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(append.p_action).toBe("approval_paid");
+    expect(append.p_summary).toBe(summary);
+  });
+
   it("still returns the payment result, and logs by id, when the ledger append fails after a paid invoice", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", operatingBalance: 350 });
@@ -366,9 +409,31 @@ describe("rejectInvoice", () => {
     expect(patchBodies(fake.requests, "/rest/v1/invoices")).toHaveLength(0);
     expect(rpcBodies(fake.requests, "append_ledger_entry")).toHaveLength(0);
   });
+
+  it("logs by invoice id and action, and rethrows, when the update after the claim fails", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { fake, run } = approvalsFake({ invoicePatch: () => ({ status: 500, body: { message: "invoices update failed: connection reset" } }) });
+
+    await expect(run(() => rejectInvoice({ actorId: ACTOR, invoiceId: INVOICE_ID }))).rejects.toThrow("invoices update failed: connection reset");
+
+    expect(error).toHaveBeenCalledWith("approval: invoice update failed after the claim", INVOICE_ID, "reject");
+    expect(rpcBodies(fake.requests, "append_ledger_entry")).toHaveLength(0);
+    error.mockRestore();
+  });
 });
 
 describe("returnInvoice", () => {
+  it("logs by invoice id and action, and rethrows, when the update after the claim fails", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { fake, run } = approvalsFake({ invoicePatch: () => ({ status: 500, body: { message: "invoices update failed: connection reset" } }) });
+
+    await expect(run(() => returnInvoice({ actorId: ACTOR, invoiceId: INVOICE_ID }))).rejects.toThrow("invoices update failed: connection reset");
+
+    expect(error).toHaveBeenCalledWith("approval: invoice update failed after the claim", INVOICE_ID, "return");
+    expect(rpcBodies(fake.requests, "append_ledger_entry")).toHaveLength(0);
+    error.mockRestore();
+  });
+
   it("claims with return, resets the invoice to pending, and appends approval_returned", async () => {
     const { fake, run } = approvalsFake();
 
@@ -414,12 +479,33 @@ describe("listWaitingPayables", () => {
         decidedAt: null,
         createdBy: CREATOR,
         reviewedAt: null,
+        reclaimable: false,
       },
     ]);
     const listing = fake.requests.find((r) => r.path === "/rest/v1/invoices" && r.method === "GET" && !r.params.get("id"));
     expect(listing?.params.get("direction")).toBe("eq.payable");
     expect(listing?.params.get("status")).toBe("in.(held,flagged,awaiting_info,processing)");
     expect(listing?.params.get("order")).toBe("due_date.asc");
+  });
+
+  it("marks a processing row reclaimable once its claim is over 10 minutes old or has no reviewed_at, as the claim does", async () => {
+    const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
+    const rows = [
+      invoiceRow({ id: "stale", status: "processing", reviewed_at: minutesAgo(11) }),
+      invoiceRow({ id: "untimed", status: "processing", reviewed_at: null }),
+      invoiceRow({ id: "fresh", status: "processing", reviewed_at: minutesAgo(2) }),
+      invoiceRow({ id: "held-old", status: "held", reviewed_at: minutesAgo(60) }),
+    ];
+    const { run } = approvalsFake({ invoice: (r) => (r.params.get("id") ? undefined : { body: rows }) });
+
+    const listed = await run(() => listWaitingPayables());
+
+    expect(Object.fromEntries(listed.map((row) => [row.id, row.reclaimable]))).toEqual({
+      stale: true,
+      untimed: true,
+      fresh: false,
+      "held-old": false,
+    });
   });
 });
 
