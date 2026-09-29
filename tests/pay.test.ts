@@ -191,6 +191,27 @@ describe("payInvoice", () => {
     expect(provider.transfers[0].idempotencyKey).toBe(paymentIdempotencyKey("invoice", INVOICE_ID));
   });
 
+  it("stays paid, with its txRef and execution, when the balance sync fails after a confirmed transfer", async () => {
+    const provider = new FakeProvider();
+    provider.transferResults.push(transferResult("confirmed"));
+    const backend = paymentIntentsBackend();
+
+    const result = await inOrg((sent) => {
+      if (sent.path === "/rest/v1/accounts" && sent.method === "GET") {
+        return { status: 500, body: { message: "accounts read failed: connection reset" } };
+      }
+      return backend.respond(sent);
+    }, () => payInvoice(input, { provider, operating: { id: OPERATING_ACCOUNT_ID } }));
+
+    // The transfer is real and confirmed — a failure to sync the stored
+    // balance afterward must not understate that as "held": the money moved.
+    expect(result.status).toBe("paid");
+    expect(result.txRef).toBe("0xhash");
+    expect(result.execution?.status).toBe("confirmed");
+    expect(result.note).toBe(" [balance sync failed: accounts read failed: connection reset]");
+    expect(result.operatingBalance).toBeNull();
+  });
+
   it("reports matched, awaiting confirmation, on a pending transfer — without syncing a balance", async () => {
     const provider = new FakeProvider();
     provider.transferResults.push(transferResult("pending"));

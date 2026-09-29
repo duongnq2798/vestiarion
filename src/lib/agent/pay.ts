@@ -79,8 +79,9 @@ export async function payInvoice(
     };
   }
 
+  let result;
   try {
-    const result = await executePayment(
+    result = await executePayment(
       {
         sourceType: "invoice",
         sourceId: input.invoiceId,
@@ -91,20 +92,8 @@ export async function payInvoice(
       },
       { provider }
     );
-
-    const status = result.status === "confirmed" ? "paid" : result.status === "pending" ? "matched" : "held";
-    let note = "";
-    let operatingBalance: number | null = null;
-    if (result.status === "failed") {
-      note = ` [transfer failed: ${result.error ?? "provider reported failure"}]`;
-    } else if (result.status === "pending") {
-      note = " [transfer submitted; awaiting provider confirmation]";
-    } else {
-      operatingBalance = await syncOperatingBalance(operating.id);
-    }
-
-    return { status, txRef: result.txRef, execution: result, note, operatingBalance };
   } catch (err) {
+    // Nothing is known to have moved: no transfer result exists at all.
     return {
       status: "held",
       txRef: null,
@@ -113,4 +102,26 @@ export async function payInvoice(
       operatingBalance: null,
     };
   }
+
+  const status = result.status === "confirmed" ? "paid" : result.status === "pending" ? "matched" : "held";
+  let note = "";
+  let operatingBalance: number | null = null;
+  if (result.status === "failed") {
+    note = ` [transfer failed: ${result.error ?? "provider reported failure"}]`;
+  } else if (result.status === "pending") {
+    note = " [transfer submitted; awaiting provider confirmation]";
+  } else {
+    // The transfer is already confirmed — status, txRef and execution below
+    // are real regardless of what happens next. A sync failure here must not
+    // demote a confirmed payment back to "held": that would understate money
+    // that actually moved, and the agent would never look at this invoice
+    // again.
+    try {
+      operatingBalance = await syncOperatingBalance(operating.id);
+    } catch (err) {
+      note = ` [balance sync failed: ${(err as Error).message}]`;
+    }
+  }
+
+  return { status, txRef: result.txRef, execution: result, note, operatingBalance };
 }

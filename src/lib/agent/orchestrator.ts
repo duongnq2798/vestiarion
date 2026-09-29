@@ -194,8 +194,9 @@ export async function releaseMilestoneIfNotPaused(
       operatingBalance: null,
     };
   }
+  let result;
   try {
-    const result = await executePayment(
+    result = await executePayment(
       {
         sourceType: "milestone",
         sourceId: input.milestoneId,
@@ -206,14 +207,8 @@ export async function releaseMilestoneIfNotPaused(
       },
       { provider: deps.provider }
     );
-    const status = result.status === "confirmed" ? "paid" : result.status === "pending" ? "verified" : "held";
-    let reasoningSuffix = "";
-    let operatingBalance: number | null = null;
-    if (result.status === "failed") reasoningSuffix = ` [transfer failed: ${result.error ?? "provider reported failure"}]`;
-    else if (result.status === "pending") reasoningSuffix = " [transfer submitted; awaiting provider confirmation]";
-    else operatingBalance = await syncOperatingBalance(deps.operatingAccountId);
-    return { status, txRef: result.txRef, paymentExecution: result, reasoningSuffix, heldBecausePaused: false, operatingBalance };
   } catch (err) {
+    // Nothing is known to have moved: no transfer result exists at all.
     return {
       status: "held",
       txRef: null,
@@ -223,6 +218,26 @@ export async function releaseMilestoneIfNotPaused(
       operatingBalance: null,
     };
   }
+
+  const status = result.status === "confirmed" ? "paid" : result.status === "pending" ? "verified" : "held";
+  let reasoningSuffix = "";
+  let operatingBalance: number | null = null;
+  if (result.status === "failed") {
+    reasoningSuffix = ` [transfer failed: ${result.error ?? "provider reported failure"}]`;
+  } else if (result.status === "pending") {
+    reasoningSuffix = " [transfer submitted; awaiting provider confirmation]";
+  } else {
+    // The transfer is already confirmed — status, txRef and paymentExecution
+    // below are real regardless of what happens next. A sync failure here
+    // must not demote a confirmed release back to "held": see the identical
+    // comment in payInvoice (src/lib/agent/pay.ts).
+    try {
+      operatingBalance = await syncOperatingBalance(deps.operatingAccountId);
+    } catch (err) {
+      reasoningSuffix = ` [balance sync failed: ${(err as Error).message}]`;
+    }
+  }
+  return { status, txRef: result.txRef, paymentExecution: result, reasoningSuffix, heldBecausePaused: false, operatingBalance };
 }
 
 /** What the treasury stage's attempted move decided — mirrors `PayStepOutcome`
