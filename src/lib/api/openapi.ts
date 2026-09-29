@@ -273,7 +273,10 @@ function schemaName(id: string): string {
 
 /** A schema as it sits under `components.schemas`: JSON Schema 2020-12, which OpenAPI 3.1 uses, without its own `$schema`. */
 function jsonSchema(schema: z.ZodType): Record<string, unknown> {
-  const out = z.toJSONSchema(schema, { target: "draft-2020-12" }) as Record<string, unknown>;
+  // `io: "input"` leaves objects open (no `additionalProperties: false`): a
+  // field added to v1 later must not break a client that validates responses
+  // against this document. No schema here transforms, so the shapes are equal.
+  const out = z.toJSONSchema(schema, { target: "draft-2020-12", io: "input" }) as Record<string, unknown>;
   delete out.$schema;
   return out;
 }

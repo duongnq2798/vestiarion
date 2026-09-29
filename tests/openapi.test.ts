@@ -34,6 +34,10 @@ describe("the OpenAPI document", () => {
     expect(documented).toEqual(v1Routes().filter((p) => p !== "/api/v1/openapi.json").sort());
   });
 
+  it("never closes an object to new fields, so adding one to v1 breaks no validating client", () => {
+    expect(JSON.stringify(buildOpenApiDocument("https://example.test"))).not.toContain('"additionalProperties":false');
+  });
+
   it("is a structurally valid 3.1 document whose refs all resolve", () => {
     const doc = buildOpenApiDocument("https://example.test") as {
       openapi: string;
