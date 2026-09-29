@@ -283,14 +283,18 @@ describe("every component", () => {
  */
 const PUBLIC_V1_ROUTES = ["src/app/api/v1/openapi.json/route.ts"];
 
-/** Every src module a file loads at run time, followed through its imports. */
-function reachableModules(file: string, seen = new Set<string>()): Set<string> {
+/**
+ * Every src module a file loads at run time, followed through its imports.
+ * A module `stop` names is listed but not followed.
+ */
+function reachableModules(file: string, seen = new Set<string>(), stop: (module: string) => boolean = () => false): Set<string> {
   for (const { specifier } of valueImports(read(file))) {
     const target = moduleOf(specifier, file);
     if (!target || !target.startsWith("src/") || seen.has(target)) continue;
     seen.add(target);
+    if (stop(target)) continue;
     const source = [".ts", ".tsx", "/index.ts"].map((ext) => path.join(ROOT, target + ext)).find((candidate) => existsSync(candidate));
-    if (source) reachableModules(source, seen);
+    if (source) reachableModules(source, seen, stop);
   }
   return seen;
 }
@@ -318,6 +322,46 @@ describe("every /api/v1 route", () => {
       expect(handle).toBeGreaterThan(guard);
       expect(handler.slice(handle)).toMatch(/^handleApiRequest\(\s*"[^"]+",\s*guard\.key,/);
     }
+  });
+});
+
+/**
+ * The MCP server (docs/superpowers/specs/2026-09-30-mcp-server-design.md, M2
+ * and M3) is keyed like a v1 route and reads nothing itself: a tool call runs
+ * a keyed v1 route handler, which checks the key again and enters that key's
+ * workspace. It is named here by its exact file, like the public route above.
+ */
+const MCP_ROUTE = "src/app/api/mcp/route.ts";
+
+describe("the MCP route", () => {
+  const source = read(path.join(ROOT, MCP_ROUTE));
+  const handler = source.slice(source.indexOf("async function handler("));
+
+  it("authenticates the API key before handing the request to the MCP handler, for every method", () => {
+    expect(awaitedNames(handler)[0]).toBe("guardApiRequest");
+    const guard = handler.indexOf('const guard = await guardApiRequest(request, { scope: "read" });\n  if ("denied" in guard) {');
+    expect(guard).toBeGreaterThan(-1);
+    expect(handler.indexOf("return serve(request);")).toBeGreaterThan(guard);
+    expect(source.match(/serve\(/g)).toHaveLength(1);
+    expect(source).toMatch(/^export \{ handler as GET, handler as POST, handler as DELETE \};$/m);
+    expect(source).not.toMatch(/^export (async )?function/m);
+  });
+
+  it("never reads a key from the URL, and never enters an organization itself", () => {
+    for (const forbidden of ["searchParams", "nextUrl", "withOrg", "inOrg", "handleApiRequest", "withFoundingOrg", "AGENT_API_TOKEN", "hasValidAgentBearer"]) {
+      expect(source, forbidden).not.toContain(forbidden);
+    }
+  });
+
+  it("reaches tenant data only through the keyed /api/v1 route handlers", () => {
+    const keyed = V1_ROUTES.map(rel).filter((file) => !PUBLIC_V1_ROUTES.includes(file)).map((file) => file.replace(/\.ts$/, ""));
+    // The v1 routes and their guard are pinned above; the walk stops at them.
+    const boundary = (name: string) => name === "src/lib/api/guard" || name.startsWith("src/app/api/v1/");
+    const modules = [...reachableModules(path.join(ROOT, MCP_ROUTE), new Set(), boundary)];
+    // Without this, a walk that found nothing would pass the checks below.
+    expect(modules).toContain("src/lib/mcp/call");
+    expect(modules.filter(boundary).sort()).toEqual([...keyed, "src/lib/api/guard"].sort());
+    expect(modules.filter((name) => !boundary(name) && loadsTenantData(name))).toEqual([]);
   });
 });
 
