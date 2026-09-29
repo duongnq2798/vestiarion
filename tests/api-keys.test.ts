@@ -142,6 +142,15 @@ describe("generateApiKey and parseApiKey", () => {
     expect(random).toHaveBeenCalledWith(32);
   });
 
+  it("matches the RFC 4648 base32 test vector for a 5-byte prefix source", () => {
+    // "77777777" from all-0xff bytes cannot catch a bit-order bug: 0xff is
+    // invariant under any bit order. RFC 4648's own test vector pins it.
+    const random = vi.fn((n: number) => (n === 5 ? Buffer.from("fooba") : Buffer.alloc(n)));
+    const { prefix } = generateApiKey(random);
+    expect(prefix).toBe("mzxw6ytb");
+    expect(random).toHaveBeenCalledWith(5);
+  });
+
   it("gives a different key each time", () => {
     const tokens = new Set(Array.from({ length: 50 }, () => generateApiKey().token));
     expect(tokens.size).toBe(50);
@@ -206,6 +215,65 @@ describe("createApiKey", () => {
     for (const leaked of [token, parsed.secret, parsed.prefix, sha256Hex(parsed.secret), "deploy bot"]) {
       expect(appendJson).not.toContain(leaked);
     }
+  });
+
+  it("asks the create RPC for the list columns only, never the hash", async () => {
+    const { fake, run } = keysFake();
+
+    await run(() => withOrg(ORG, () => createApiKey({ orgId: ORG, actorId: ACTOR, name: "ci" })));
+
+    const [call] = fake.requests.filter((request) => request.path === "/rest/v1/rpc/create_api_key");
+    expect(call.params.get("select")).toBe("id,name,prefix,scopes,created_at,last_used_at,revoked_at");
+    expect(call.params.get("select")).not.toContain("secret_hash");
+  });
+
+  it("regenerates the key once when the prefix collides, and stores the regenerated one", async () => {
+    let calls = 0;
+    const { fake, run } = keysFake({
+      createApiKey: () => {
+        calls += 1;
+        if (calls > 1) return undefined;
+        return {
+          status: 409,
+          body: {
+            code: "23505",
+            message: 'duplicate key value violates unique constraint "api_keys_prefix_key"',
+            details: "Key (prefix)=(abcdefgh) already exists.",
+            hint: null,
+          },
+        };
+      },
+    });
+
+    const { key, token } = await run(() =>
+      withOrg(ORG, () => createApiKey({ orgId: ORG, actorId: ACTOR, name: "ci" })));
+
+    expect(calls).toBe(2);
+    const attempts = rpcBodies(fake.requests, "create_api_key");
+    expect(attempts).toHaveLength(2);
+    expect(attempts[0].p_prefix).not.toBe(attempts[1].p_prefix);
+    const parsed = parseApiKey(token)!;
+    expect(parsed.prefix).toBe(attempts[1].p_prefix);
+    expect(key.prefix).toBe(attempts[1].p_prefix);
+    expect(rpcBodies(fake.requests, "append_ledger_entry")).toHaveLength(1);
+  });
+
+  it("does not retry a second prefix collision", async () => {
+    const { run } = keysFake({
+      createApiKey: () => ({
+        status: 409,
+        body: {
+          code: "23505",
+          message: 'duplicate key value violates unique constraint "api_keys_prefix_key"',
+          details: "Key (prefix)=(abcdefgh) already exists.",
+          hint: null,
+        },
+      }),
+    });
+
+    const attempt = run(() => withOrg(ORG, () => createApiKey({ orgId: ORG, actorId: ACTOR, name: "ci" })));
+    await expect(attempt).rejects.toThrow(/api_keys_prefix_key/);
+    await expect(attempt).rejects.not.toBeInstanceOf(ApiKeyError);
   });
 
   it("enters the organization's scope for the ledger entry when called outside it", async () => {

@@ -141,24 +141,47 @@ function ledgerScope(orgId: string, actorId: string): { enterScope?: { userId: s
   return scoped === orgId ? {} : { enterScope: { userId: actorId } };
 }
 
+/** A unique violation on the prefix's own constraint (migration 0027), not any other. */
+function isPrefixClash(error: { code?: string; message: string; details?: string | null }): boolean {
+  return error.code === "23505" && `${error.message} ${error.details ?? ""}`.includes("api_keys_prefix_key");
+}
+
+function insertApiKey(input: { orgId: string; name: string; actorId: string; scopes: ApiKeyScope[] }) {
+  const generated = generateApiKey();
+  return {
+    generated,
+    result: platformDb()
+      .rpc("create_api_key", {
+        p_org_id: input.orgId,
+        p_name: input.name,
+        p_prefix: generated.prefix,
+        p_secret_hash: generated.secretHash,
+        p_scopes: input.scopes,
+        p_by: input.actorId,
+      })
+      // Only the list columns come back into the app; the hash never does.
+      .select(LIST_COLUMNS)
+      .single<StoredKey>(),
+  };
+}
+
 export async function createApiKey(input: { orgId: string; actorId: string; name: string }): Promise<{ key: ApiKeyRow; token: string }> {
   const name = input.name.trim();
   // Code points, as Postgres's char_length counts them.
   const length = [...name].length;
   if (length < 1 || length > NAME_MAX) throw new ApiKeyError("invalid_name");
 
-  const { token, prefix, secretHash } = generateApiKey();
   const scopes: ApiKeyScope[] = ["read"];
-  const result = await platformDb()
-    .rpc("create_api_key", {
-      p_org_id: input.orgId,
-      p_name: name,
-      p_prefix: prefix,
-      p_secret_hash: secretHash,
-      p_scopes: scopes,
-      p_by: input.actorId,
-    })
-    .single<StoredKey>();
+  let attempt = insertApiKey({ orgId: input.orgId, name, actorId: input.actorId, scopes });
+  let { generated } = attempt;
+  let result = await attempt.result;
+  if (result.error && isPrefixClash(result.error)) {
+    // 32^8 ≈ 1.1e12 possible prefixes; a second collision in the same call is
+    // not retried again — the generic error surfaces and a retry is a new call.
+    attempt = insertApiKey({ orgId: input.orgId, name, actorId: input.actorId, scopes });
+    generated = attempt.generated;
+    result = await attempt.result;
+  }
   if (result.error) {
     if (/^api_key_limit_reached:/.test(result.error.message)) throw new ApiKeyError("api_key_limit_reached");
     throw new Error(result.error.message);
@@ -177,7 +200,7 @@ export async function createApiKey(input: { orgId: string; actorId: string; name
     ledgerScope(input.orgId, input.actorId)
   );
 
-  return { key, token };
+  return { key, token: generated.token };
 }
 
 /** Every key of the organization, revoked ones included, newest first — never the hash. */
