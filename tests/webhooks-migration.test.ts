@@ -59,10 +59,18 @@ const createEndpoint = (org: string, url = "https://hooks.example.com/in", id: s
       "select * from public.create_webhook_endpoint($1, $2, $3, $4::jsonb, $5)", [id, org, url, JSON.stringify(ENVELOPE), by]
     )).rows[0]);
 
-const claim = (limit: number) =>
+const claim = (limit: number, only: string | null = null) =>
   asServiceRole(db, async (tx) =>
-    (await tx.query<{ id: string; status: string; claimed_at: Date | null }>(
-      "select * from public.claim_webhook_deliveries($1)", [limit])).rows);
+    (await tx.query<{ id: string; status: string; claimed_at: Date | null; attempts: number }>(
+      only === null
+        ? "select * from public.claim_webhook_deliveries($1)"
+        : "select * from public.claim_webhook_deliveries($1, $2::uuid)",
+      only === null ? [limit] : [limit, only])).rows);
+
+const recordFailure = (endpoint: string, disableAfter = 20) =>
+  asServiceRole(db, async (tx) =>
+    (await tx.query<{ n: number | null }>(
+      "select public.record_webhook_failure($1, $2) as n", [endpoint, disableAfter])).rows[0].n);
 
 const deliveriesOf = async (org: string) =>
   (await db.query<{ endpoint_id: string; ledger_entry_id: string | null; event_type: string; status: string; attempts: number; org_id: string }>(
@@ -169,9 +177,12 @@ describe("enqueueing on append", () => {
     const { rows } = await db.query<{ proname: string; prosecdef: boolean; proconfig: string[] | null }>(
       `select p.proname, p.prosecdef, p.proconfig from pg_proc p join pg_namespace n on n.oid = p.pronamespace
         where n.nspname = 'public'
-          and p.proname in ('enqueue_webhook_deliveries', 'create_webhook_endpoint', 'claim_webhook_deliveries')
+          and p.proname in ('enqueue_webhook_deliveries', 'create_webhook_endpoint', 'claim_webhook_deliveries',
+                            'record_webhook_failure')
         order by p.proname`);
-    expect(rows.map((row) => row.proname)).toEqual(["claim_webhook_deliveries", "create_webhook_endpoint", "enqueue_webhook_deliveries"]);
+    expect(rows.map((row) => row.proname)).toEqual([
+      "claim_webhook_deliveries", "create_webhook_endpoint", "enqueue_webhook_deliveries", "record_webhook_failure",
+    ]);
     for (const row of rows) {
       expect(row.prosecdef, row.proname).toBe(true);
       expect(row.proconfig, row.proname).toEqual(['search_path=""']);
@@ -192,12 +203,12 @@ describe("claim_webhook_deliveries", () => {
     await db.query("delete from public.webhook_deliveries");
   });
 
-  const insertDelivery = async (values: { status?: string; next?: string; claimed?: string | null }) =>
+  const insertDelivery = async (values: { status?: string; next?: string; claimed?: string | null; attempts?: number }) =>
     (await db.query<{ id: string }>(
-      `insert into public.webhook_deliveries (org_id, endpoint_id, event_type, status, next_attempt_at, claimed_at)
-       values ($1, $2, 'webhook.test', $3, now() + $4::interval, case when $5::text is null then null else now() + $5::interval end)
+      `insert into public.webhook_deliveries (org_id, endpoint_id, event_type, status, next_attempt_at, claimed_at, attempts)
+       values ($1, $2, 'webhook.test', $3, now() + $4::interval, case when $5::text is null then null else now() + $5::interval end, $6)
        returning id`,
-      [claimOrg, endpointId, values.status ?? "pending", values.next ?? "-1 minute", values.claimed ?? null]
+      [claimOrg, endpointId, values.status ?? "pending", values.next ?? "-1 minute", values.claimed ?? null, values.attempts ?? 0]
     )).rows[0].id;
 
   it("claims only due pending rows, up to the limit, oldest due first, and marks them sending", async () => {
@@ -232,9 +243,104 @@ describe("claim_webhook_deliveries", () => {
     expect(await claim(10)).toEqual([]);
   });
 
+  it("claims a sending row that has no claimed_at at all", async () => {
+    const orphan = await insertDelivery({ status: "sending", claimed: null });
+
+    const claimed = await claim(10);
+    expect(claimed.map((row) => row.id)).toEqual([orphan]);
+    expect(claimed[0].claimed_at).not.toBeNull();
+    expect(await claim(10)).toEqual([]);
+  });
+
+  it("counts taking over a stale or orphaned sending row as one attempt, and a pending claim as none", async () => {
+    const pending = await insertDelivery({ attempts: 2 });
+    const stale = await insertDelivery({ status: "sending", claimed: "-6 minutes", attempts: 3 });
+    const orphan = await insertDelivery({ status: "sending", claimed: null, attempts: 0 });
+
+    const claimed = await claim(10);
+    const attempts = Object.fromEntries(claimed.map((row) => [row.id, row.attempts]));
+    expect(attempts).toEqual({ [pending]: 2, [stale]: 4, [orphan]: 1 });
+    const stored = await db.query<{ id: string; attempts: number }>(
+      "select id, attempts from public.webhook_deliveries where id = any($1::uuid[])", [[pending, stale, orphan]]);
+    expect(Object.fromEntries(stored.rows.map((row) => [row.id, row.attempts]))).toEqual(attempts);
+  });
+
+  it("claims only the named delivery when one is given, and only while it is due", async () => {
+    const older = await insertDelivery({ next: "-3 minutes" });
+    const named = await insertDelivery({ next: "-1 minute" });
+    const later = await insertDelivery({ next: "5 minutes" });
+
+    expect((await claim(10, named)).map((row) => row.id)).toEqual([named]);
+    expect(await claim(10, named)).toEqual([]);
+    expect(await claim(10, later)).toEqual([]);
+    expect((await claim(10)).map((row) => row.id)).toEqual([older]);
+  });
+
   it("claims nothing for a limit of zero", async () => {
     await insertDelivery({});
     expect(await claim(0)).toEqual([]);
+  });
+});
+
+describe("record_webhook_failure", () => {
+  const endpointState = async (id: string) =>
+    (await db.query<{ consecutive_failures: number; last_failure_at: Date | null; disabled_at: Date | null }>(
+      "select consecutive_failures, last_failure_at, disabled_at from public.webhook_endpoints where id = $1", [id])).rows[0];
+
+  const deliveries = async (endpoint: string) =>
+    (await db.query<{ status: string; last_error: string | null }>(
+      "select status, last_error from public.webhook_deliveries where endpoint_id = $1 order by status", [endpoint])).rows;
+
+  it("counts one failure, stamps last_failure_at and returns the new count, below the threshold", async () => {
+    const org = await createOrg(db, "fail-count-co");
+    const endpoint = await createEndpoint(org);
+
+    expect(await recordFailure(endpoint.id, 3)).toBe(1);
+    expect(await recordFailure(endpoint.id, 3)).toBe(2);
+    const state = await endpointState(endpoint.id);
+    expect(state.consecutive_failures).toBe(2);
+    expect(state.last_failure_at).not.toBeNull();
+    expect(state.disabled_at).toBeNull();
+  });
+
+  it("disables the endpoint at the threshold and fails its pending deliveries, and no one else's", async () => {
+    const org = await createOrg(db, "fail-disable-co");
+    const endpoint = await createEndpoint(org);
+    const other = await createEndpoint(org, "https://other.example.com/");
+    for (const status of ["pending", "sending", "delivered"]) {
+      await db.query(
+        "insert into public.webhook_deliveries (org_id, endpoint_id, event_type, status) values ($1, $2, 'webhook.test', $3)",
+        [org, endpoint.id, status]);
+    }
+    await db.query(
+      "insert into public.webhook_deliveries (org_id, endpoint_id, event_type) values ($1, $2, 'webhook.test')", [org, other.id]);
+    await db.query("update public.webhook_endpoints set consecutive_failures = 19 where id = $1", [endpoint.id]);
+
+    expect(await recordFailure(endpoint.id, 20)).toBe(20);
+
+    expect((await endpointState(endpoint.id)).disabled_at).not.toBeNull();
+    expect(await deliveries(endpoint.id)).toEqual([
+      { status: "delivered", last_error: null },
+      { status: "failed", last_error: "endpoint disabled" },
+      { status: "sending", last_error: null },
+    ]);
+    expect(await deliveries(other.id)).toEqual([{ status: "pending", last_error: null }]);
+    expect((await endpointState(other.id)).disabled_at).toBeNull();
+  });
+
+  it("keeps the first disabled_at when failures keep arriving after the endpoint is disabled", async () => {
+    const org = await createOrg(db, "fail-again-co");
+    const endpoint = await createEndpoint(org);
+    await recordFailure(endpoint.id, 1);
+    const first = (await endpointState(endpoint.id)).disabled_at;
+    expect(first).not.toBeNull();
+    await db.query("select pg_sleep(0.01)");
+    expect(await recordFailure(endpoint.id, 1)).toBe(2);
+    expect((await endpointState(endpoint.id)).disabled_at).toEqual(first);
+  });
+
+  it("returns null for an unknown endpoint", async () => {
+    expect(await recordFailure(crypto.randomUUID())).toBeNull();
   });
 });
 
@@ -280,6 +386,7 @@ describe("who may read the tables or call the functions", () => {
     ["create_webhook_endpoint", "select * from public.create_webhook_endpoint($1, $2, $3, $4::jsonb, $5)",
       () => [crypto.randomUUID(), orgId, "https://x.example.com/", JSON.stringify(ENVELOPE), owner]],
     ["claim_webhook_deliveries", "select * from public.claim_webhook_deliveries($1)", () => [10]],
+    ["record_webhook_failure", "select public.record_webhook_failure($1, $2)", () => [crypto.randomUUID(), 20]],
   ];
 
   for (const table of tables) {
@@ -306,7 +413,7 @@ describe("who may read the tables or call the functions", () => {
     });
   }
 
-  it("no browser or tenant role holds execute on any of the three functions", async () => {
+  it("no browser or tenant role holds execute on any of the four functions", async () => {
     const { rows } = await db.query<{ fn: string; anon: boolean; auth: boolean; tenant: boolean }>(
       `select p.oid::regprocedure::text as fn,
               has_function_privilege('anon', p.oid, 'execute') as anon,
@@ -314,8 +421,9 @@ describe("who may read the tables or call the functions", () => {
               has_function_privilege('vestiarion_tenant', p.oid, 'execute') as tenant
          from pg_proc p join pg_namespace n on n.oid = p.pronamespace
         where n.nspname = 'public'
-          and p.proname in ('enqueue_webhook_deliveries', 'create_webhook_endpoint', 'claim_webhook_deliveries')`);
-    expect(rows).toHaveLength(3);
+          and p.proname in ('enqueue_webhook_deliveries', 'create_webhook_endpoint', 'claim_webhook_deliveries',
+                            'record_webhook_failure')`);
+    expect(rows).toHaveLength(4);
     expect(rows.filter((row) => row.anon || row.auth || row.tenant)).toEqual([]);
   });
 });

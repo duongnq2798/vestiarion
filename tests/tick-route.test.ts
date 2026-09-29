@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * `POST /api/agent/tick`'s own response shape: `runLiveOrganizations` is
@@ -9,11 +9,18 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const { runLiveOrganizations, runScheduledCycle } = vi.hoisted(() => ({ runLiveOrganizations: vi.fn(), runScheduledCycle: vi.fn() }));
 vi.mock("@/lib/agent/cron", () => ({ runLiveOrganizations, runScheduledCycle }));
+const { deliverPendingWebhooks } = vi.hoisted(() => ({ deliverPendingWebhooks: vi.fn() }));
+vi.mock("@/lib/webhooks/deliver", () => ({ deliverPendingWebhooks }));
 
 const { POST } = await import("@/app/api/agent/tick/route");
 
 const TOKEN = "tick-route-test-token";
 const previousToken = process.env.AGENT_API_TOKEN;
+
+beforeEach(() => {
+  deliverPendingWebhooks.mockReset();
+  deliverPendingWebhooks.mockResolvedValue({ delivered: 0, failed: 0, retried: 0 });
+});
 
 afterEach(() => {
   if (previousToken === undefined) delete process.env.AGENT_API_TOKEN;
@@ -80,6 +87,39 @@ describe("POST /api/agent/tick", () => {
         { slug: "b-corp", ok: true, skipped: "paused" },
       ],
     });
+  });
+
+  it("delivers pending webhooks after the cycles, with a 30-second deadline", async () => {
+    const order: string[] = [];
+    runLiveOrganizations.mockImplementationOnce(async () => {
+      order.push("cycles");
+      return [{ slug: "a-corp", ok: true, result: { lines: [{}] } }];
+    });
+    deliverPendingWebhooks.mockImplementationOnce(async () => {
+      order.push("webhooks");
+      return { delivered: 1, failed: 0, retried: 0 };
+    });
+
+    const response = await post();
+
+    expect(order).toEqual(["cycles", "webhooks"]);
+    expect(deliverPendingWebhooks).toHaveBeenCalledWith({ deadlineMs: 30_000 });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ organizations: [{ slug: "a-corp", ok: true, lines: 1 }] });
+  });
+
+  it.each([
+    ["200", [{ slug: "a-corp", ok: true, result: { lines: [{}] } }], 200, [{ slug: "a-corp", ok: true, lines: 1 }]],
+    ["500", [{ slug: "b-corp", ok: false, error: "boom" }], 500, [{ slug: "b-corp", ok: false, error: "boom" }]],
+  ])("keeps a %s tick's status and body when the webhook dispatch fails", async (_label, results, status, organizations) => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    runLiveOrganizations.mockResolvedValueOnce(results);
+    deliverPendingWebhooks.mockRejectedValueOnce(new Error("dispatch broke"));
+
+    const response = await post();
+
+    expect(response.status).toBe(status);
+    expect(await response.json()).toEqual({ organizations });
   });
 
   it("runs the scheduled cycle, which notifies after each cycle, in every live organization", async () => {

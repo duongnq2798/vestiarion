@@ -134,9 +134,24 @@ grant execute on function public.create_webhook_endpoint(uuid, uuid, text, jsonb
 
 -- Moves up to p_limit due deliveries into `sending` and returns them, oldest
 -- due first. Due means pending with next_attempt_at reached, or sending with a
--- claim more than 5 minutes old (a dispatch run that crashed). SKIP LOCKED
--- lets two overlapping runs claim disjoint rows.
-create or replace function public.claim_webhook_deliveries(p_limit int)
+-- claim more than 5 minutes old or no claim at all (a dispatch run that
+-- crashed, or a row written as sending by hand). SKIP LOCKED lets two
+-- overlapping runs claim disjoint rows.
+--
+-- Taking over a `sending` row counts one attempt: the run that held it may
+-- have sent it before it died, and a run that dies on the same row every time
+-- must still reach the attempt limit instead of looping forever. A pending
+-- row keeps its count; the dispatcher counts the attempt it makes.
+--
+-- p_only, when given, restricts the claim to that one delivery, still only
+-- while it is due: a test event is inserted pending and claimed by id, so it
+-- is never written as `sending` without a claim.
+--
+-- The one-argument form is dropped first, so a database that ran an earlier
+-- draft of this file is left with one function, not an ambiguous overload.
+drop function if exists public.claim_webhook_deliveries(int);
+
+create or replace function public.claim_webhook_deliveries(p_limit int, p_only uuid default null)
 returns setof public.webhook_deliveries
 language plpgsql
 security definer
@@ -147,14 +162,17 @@ begin
   with due as (
     select d.id
       from public.webhook_deliveries d
-     where (d.status = 'pending' and d.next_attempt_at <= now())
-        or (d.status = 'sending' and d.claimed_at < now() - interval '5 minutes')
+     where (p_only is null or d.id = p_only)
+       and ((d.status = 'pending' and d.next_attempt_at <= now())
+         or (d.status = 'sending' and (d.claimed_at is null or d.claimed_at < now() - interval '5 minutes')))
      order by d.next_attempt_at, d.created_at, d.id
      limit greatest(coalesce(p_limit, 0), 0)
      for update skip locked
   ), claimed as (
     update public.webhook_deliveries d
-       set status = 'sending', claimed_at = now()
+       set status = 'sending',
+           claimed_at = now(),
+           attempts = d.attempts + case when d.status = 'sending' then 1 else 0 end
       from due
      where d.id = due.id
     returning d.*
@@ -164,13 +182,53 @@ begin
 end;
 $$;
 
-revoke execute on function public.claim_webhook_deliveries(int) from public, anon, authenticated;
-grant execute on function public.claim_webhook_deliveries(int) to service_role;
+revoke execute on function public.claim_webhook_deliveries(int, uuid) from public, anon, authenticated;
+grant execute on function public.claim_webhook_deliveries(int, uuid) to service_role;
+
+-- Counts one failed attempt against an endpoint and returns its new
+-- consecutive failure count, or null for an unknown endpoint. At
+-- p_disable_after the endpoint is disabled (the first disabled_at is kept)
+-- and its pending deliveries are failed (W5). Plain UPDATEs, never SELECT …
+-- FOR UPDATE: an update of these non-key columns does not conflict with the
+-- key-share lock a ledger append's enqueue takes on the endpoint through the
+-- foreign key, so recording a failure never blocks an append. A success is
+-- recorded by the dispatcher with an ordinary update (consecutive_failures = 0).
+create or replace function public.record_webhook_failure(p_endpoint_id uuid, p_disable_after int)
+returns int
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_count int;
+begin
+  update public.webhook_endpoints
+     set consecutive_failures = consecutive_failures + 1,
+         last_failure_at = now()
+   where id = p_endpoint_id
+  returning consecutive_failures into v_count;
+
+  if v_count is not null and v_count >= p_disable_after then
+    update public.webhook_endpoints
+       set disabled_at = coalesce(disabled_at, now())
+     where id = p_endpoint_id;
+    update public.webhook_deliveries
+       set status = 'failed', last_error = 'endpoint disabled'
+     where endpoint_id = p_endpoint_id and status = 'pending';
+  end if;
+
+  return v_count;
+end;
+$$;
+
+revoke execute on function public.record_webhook_failure(uuid, int) from public, anon, authenticated;
+grant execute on function public.record_webhook_failure(uuid, int) to service_role;
 
 -- Rollback:
 -- drop trigger if exists ledger_entries_enqueue_webhooks on public.ledger_entries;
 -- drop function if exists public.enqueue_webhook_deliveries();
--- drop function if exists public.claim_webhook_deliveries(int);
+-- drop function if exists public.record_webhook_failure(uuid, int);
+-- drop function if exists public.claim_webhook_deliveries(int, uuid);
 -- drop function if exists public.create_webhook_endpoint(uuid, uuid, text, jsonb, uuid);
 -- drop table if exists public.webhook_deliveries;
 -- drop table if exists public.webhook_endpoints;

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { runLiveOrganizations, runScheduledCycle } from "@/lib/agent/cron";
 import { hasValidAgentBearer } from "@/lib/agent-security";
 import { takeAgentCycleToken } from "@/lib/rate-limit";
+import { deliverPendingWebhooks } from "@/lib/webhooks/deliver";
 
 export const maxDuration = 300;
 
@@ -39,6 +40,16 @@ export async function POST(request: Request) {
     // Each scheduled cycle is followed by the digest of payables waiting for
     // a decision (notifications design N1, N2); it never changes the result.
     const results = await runLiveOrganizations(runScheduledCycle);
+
+    // The cycles' ledger entries go out to webhook endpoints right away
+    // (webhooks design W3), within 30 seconds; the 10-minute schedule picks up
+    // the rest. Best-effort: it never changes the tick's status or body.
+    try {
+      await deliverPendingWebhooks({ deadlineMs: 30_000 });
+    } catch {
+      console.error("webhook dispatch after the tick failed");
+    }
+
     const organizations = results.map((result) => {
       if (!result.ok) {
         // Never echo more than the error's message: whatever else it

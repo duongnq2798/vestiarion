@@ -21,9 +21,14 @@ import { currentContext, currentOrgId } from "../context";
  * `platformDb()` reaches the tables that exist before any organization is
  * known — organizations, memberships, invitations — plus the workspace API
  * keys, which must be read before any organization is known (a request names
- * its organization only through its key), and the functions that write them,
- * and nothing else. It keeps the service role, because none of those rows
- * belong to one tenant.
+ * its organization only through its key), the webhook endpoints and delivery
+ * queue, which the dispatcher works through across every organization at once,
+ * and the functions that write them, and nothing else. It keeps the service
+ * role, because none of those rows belong to one tenant.
+ *
+ * One read reaches past those tables: the dispatcher embeds a delivery's own
+ * ledger entry (`webhook_deliveries` → `ledger_entries` by foreign key), so it
+ * can only ever see the entry that delivery was queued for.
  *
  * ESLint forbids the raw client outside this directory. See eslint.config.mjs.
  */
@@ -40,13 +45,16 @@ export const TENANT_RPCS = [
 ] as const;
 export type TenantRpc = (typeof TENANT_RPCS)[number];
 
-export const PLATFORM_TABLES = ["orgs", "memberships", "invitations", "api_keys"] as const;
+export const PLATFORM_TABLES = [
+  "orgs", "memberships", "invitations", "api_keys", "webhook_endpoints", "webhook_deliveries",
+] as const;
 export type PlatformTable = (typeof PLATFORM_TABLES)[number];
 
 export const PLATFORM_RPCS = [
   "create_org", "invite_member", "accept_invitation", "change_member_role", "remove_member",
   "revoke_invitation", "org_members", "touch_org_activity", "delete_sandbox_org",
   "pending_invitations_for", "accept_invitation_by_id", "pause_agent", "resume_agent", "create_api_key",
+  "claim_webhook_deliveries", "record_webhook_failure",
 ] as const;
 export type PlatformRpc = (typeof PLATFORM_RPCS)[number];
 
