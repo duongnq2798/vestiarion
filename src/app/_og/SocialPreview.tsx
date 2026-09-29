@@ -14,6 +14,29 @@ const [geistSemiBold, newsreaderItalic, iconSvg] = await Promise.all([
 const iconSrc = `data:image/svg+xml;base64,${Buffer.from(iconSvg).toString("base64")}`;
 
 export const SOCIAL_IMAGE_SIZE = { width: 1200, height: 630 } as const;
+export const SOCIAL_IMAGE_ALT = "Vestiarion — Money moves. Evidence remains. A signed decision ledger with screened, paid, held, and refused outcomes.";
+
+const LEDGER_CARD_WIDTH = 350;
+const LEDGER_CARD_HORIZONTAL_PADDING = 24;
+const LEDGER_CARD_BORDER = 2;
+const LEDGER_DOT_WIDTH = 14;
+const LEDGER_DOT_TO_BAR_GAP = 12;
+const LEDGER_PILL_WIDTH = 44;
+const LEDGER_MIN_BAR_TO_PILL_GAP = 20;
+const LEDGER_INNER_WIDTH = LEDGER_CARD_WIDTH
+  - 2 * LEDGER_CARD_HORIZONTAL_PADDING
+  - 2 * LEDGER_CARD_BORDER;
+const LEDGER_BAR_MAX_WIDTH = Math.min(
+  180,
+  LEDGER_INNER_WIDTH
+    - LEDGER_DOT_WIDTH
+    - LEDGER_DOT_TO_BAR_GAP
+    - LEDGER_PILL_WIDTH
+    - LEDGER_MIN_BAR_TO_PILL_GAP,
+);
+const ledgerBarWidths = [0.78, 1, 0.64].map((ratio) => Math.round(LEDGER_BAR_MAX_WIDTH * ratio));
+
+const SUPPORTING_COPY = "A model proposes each payment, code decides whether it may happen, and every outcome\u00a0— refusals included\u00a0— is signed into a chain you can verify.";
 
 const statusChips = [
   { label: "Screened", color: COLOR.proof, background: COLOR.proofSoft, border: COLOR.proofLine },
@@ -75,7 +98,7 @@ export function socialPreviewImage(): ImageResponse {
               textTransform: "uppercase",
             }}
           >
-            Autonomous treasury agent · Arc testnet
+            Autonomous treasury agent
           </div>
         </div>
 
@@ -116,19 +139,19 @@ export function socialPreviewImage(): ImageResponse {
                 lineHeight: 1.42,
               }}
             >
-              A model proposes each payment, code decides whether it may happen, and every outcome — refusals included — is signed into a chain you can verify.
+              {SUPPORTING_COPY}
             </div>
           </div>
 
           <div
             style={{
-              width: 350,
-              height: 326,
+              width: LEDGER_CARD_WIDTH,
+              height: 286,
               display: "flex",
               flexDirection: "column",
               position: "relative",
-              padding: "28px 28px 26px",
-              border: `2px solid ${COLOR.line}`,
+              padding: `24px ${LEDGER_CARD_HORIZONTAL_PADDING}px 22px`,
+              border: `${LEDGER_CARD_BORDER}px solid ${COLOR.line}`,
               borderRadius: 24,
               backgroundColor: COLOR.surface,
               boxShadow: `0 18px 48px ${COLOR.ink}1f`,
@@ -146,35 +169,35 @@ export function socialPreviewImage(): ImageResponse {
               Signed decision ledger
             </div>
 
-            {[154, 218, 124].map((width, index) => (
-              <div key={width} style={{ display: "flex", alignItems: "center", marginTop: index === 0 ? 28 : 18 }}>
+            {ledgerBarWidths.map((width, index) => (
+              <div key={width} style={{ display: "flex", alignItems: "center", marginTop: index === 0 ? 24 : 16 }}>
                 <div
                   style={{
-                    width: 14,
-                    height: 14,
+                    width: LEDGER_DOT_WIDTH,
+                    height: LEDGER_DOT_WIDTH,
                     display: "flex",
                     border: `3px solid ${COLOR.proof}`,
                     borderRadius: 999,
                     backgroundColor: COLOR.proofSoft,
                   }}
                 />
-                <div style={{ display: "flex", width, height: 10, marginLeft: 14, borderRadius: 999, backgroundColor: COLOR.line }} />
-                <div style={{ display: "flex", width: 44, height: 10, marginLeft: "auto", borderRadius: 999, backgroundColor: COLOR.agentSoft }} />
+                <div style={{ display: "flex", width, height: 10, marginLeft: LEDGER_DOT_TO_BAR_GAP, borderRadius: 999, backgroundColor: COLOR.line }} />
+                <div style={{ display: "flex", width: LEDGER_PILL_WIDTH, height: 10, marginLeft: "auto", borderRadius: 999, backgroundColor: COLOR.agentSoft }} />
               </div>
             ))}
 
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 9, marginTop: "auto" }}>
+            <div style={{ display: "flex", gap: 6, marginTop: "auto" }}>
               {statusChips.map((chip) => (
                 <div
                   key={chip.label}
                   style={{
                     display: "flex",
-                    padding: "7px 10px 6px",
+                    padding: "6px 7px 5px",
                     border: `1px solid ${chip.border}`,
                     borderRadius: 999,
                     color: chip.color,
                     backgroundColor: chip.background,
-                    fontSize: 15,
+                    fontSize: 14,
                   }}
                 >
                   {chip.label}

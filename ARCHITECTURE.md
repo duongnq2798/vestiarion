@@ -359,8 +359,11 @@ Newsreader font files plus the application's real SVG mark. The renderer reads
 no request, tenant, database, Circle, or ledger data. Its palette comes from
 `src/components/ui/tokens.ts`, whose values are checked against `globals.css`.
 
-The root metadata resolves every canonical and image URL against `SITE_URL`, or
-`https://www.vestiarion.xyz` when that variable is absent. The proxy excludes
+On the production Vercel deployment (`VERCEL_ENV=production`), the root
+metadata pins every canonical and image URL to `https://www.vestiarion.xyz`
+regardless of `SITE_URL`. Preview and local builds use `SITE_URL` when it is
+set, falling back to the same canonical origin when it is absent. Authentication
+links retain the separate, stricter `siteOrigin()` policy. The proxy excludes
 both metadata image paths, so a crawler fetching a preview never performs a
 Supabase session refresh.
 
