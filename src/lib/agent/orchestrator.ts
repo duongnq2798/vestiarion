@@ -234,6 +234,135 @@ export async function payApInvoiceIfNotPaused(
   };
 }
 
+/** The payment intent a payable already has: enough to tell whether a transfer exists. */
+export interface ExistingPaymentIntent {
+  providerTxId: string | null;
+  status: string;
+}
+
+/**
+ * The payment intent already recorded for each `matched` payable, by invoice
+ * id. A `matched` invoice with one has a payment in flight — the agent's own,
+ * or one a person approved from the inbox — and the AP stage reconciles it
+ * through `reconcileApInvoice` rather than deciding it again. A `pending`
+ * payable, or a `matched` one with no intent, is not in the map and is
+ * decided exactly as before.
+ */
+export async function existingPaymentIntents(
+  orgDb: OrgDb,
+  payables: Array<{ id: string; status: string }>
+): Promise<Map<string, ExistingPaymentIntent>> {
+  const matched = payables.filter((payable) => payable.status === "matched").map((payable) => payable.id);
+  if (matched.length === 0) return new Map();
+  const rows = unwrap(
+    await orgDb
+      .from("payment_intents")
+      .select("source_id, provider_tx_id, status")
+      .eq("source_type", "invoice")
+      .in("source_id", matched)
+  ) as Array<{ source_id: string; provider_tx_id: string | null; status: string }>;
+  return new Map(rows.map((row) => [row.source_id, { providerTxId: row.provider_tx_id, status: row.status }]));
+}
+
+/**
+ * The AP stage's step for a `matched` payable whose payment is already in
+ * flight: no model, no guardrails — those ruled when the payment was first
+ * decided, and running them again could turn a person's approval into a
+ * hold over a transfer that is pending or already confirmed on chain.
+ * Instead it calls `payInvoice`, whose idempotency key makes `executePayment`
+ * reconcile the existing intent (a confirmed intent is returned as is; one
+ * with a provider id is reconciled with the provider) rather than pay again.
+ *
+ * When a transfer already exists — a provider id, or a confirmed intent —
+ * nothing new can move, so the pause is not consulted. When none does yet
+ * (a submission that never recorded its provider id), `executePayment` may
+ * submit it, so that path goes through `payApInvoiceIfNotPaused` and holds
+ * while the agent is paused, as any agent payment does (D6).
+ *
+ * The invoice keeps its decision time and, when the reconciliation reports
+ * none, its recorded txRef; the reasoning gains a note only when the status
+ * moves on, so a payment still pending does not repeat its note every cycle.
+ * The ledger entry is `ap_reconcile` with `detail.reconciled: true` and no
+ * `observed` facts, so the follow-up stage keeps comparing against the
+ * decision itself.
+ */
+export async function reconcileApInvoice(
+  invoice: {
+    id: string;
+    amount: number;
+    counterpartyId: string;
+    counterpartyName: string;
+    address: string | null;
+    reasoning: string | null;
+    txRef: string | null;
+  },
+  intent: ExistingPaymentIntent,
+  deps: { db: OrgDb; provider: ChainProvider; operating: { id: string } | null }
+): Promise<{ status: string; operatingBalance: number | null; line: CycleLogLine }> {
+  const input = { invoiceId: invoice.id, counterpartyId: invoice.counterpartyId, address: invoice.address, amount: invoice.amount };
+  const transferExists = intent.providerTxId !== null || intent.status === "confirmed";
+
+  let outcome: PayStepOutcome;
+  if (transferExists) {
+    const result = await payInvoice(input, { provider: deps.provider, operating: deps.operating });
+    outcome = {
+      status: result.status,
+      txRef: result.txRef,
+      paymentExecution: result.execution,
+      reasoningSuffix: result.note,
+      heldBecausePaused: false,
+      operatingBalance: result.operatingBalance,
+    };
+  } else {
+    outcome = await payApInvoiceIfNotPaused(input, { provider: deps.provider, operating: deps.operating });
+  }
+
+  const status = outcome.status;
+  const txRef = outcome.txRef ?? invoice.txRef;
+  const reasoning = `${invoice.reasoning ?? ""}${status === "matched" ? "" : outcome.reasoningSuffix}`;
+  const now = new Date().toISOString();
+  const update = await deps.db
+    .from("invoices")
+    .update({ status, agent_reasoning: reasoning, settled_at: status === "paid" ? now : null, tx_ref: txRef })
+    .eq("id", invoice.id);
+  if (update.error) throw new Error(update.error.message);
+
+  const execution = outcome.paymentExecution;
+  await appendLedgerEntry({
+    actor: "agent",
+    domain: "ap",
+    action: "ap_reconcile",
+    summary: `RECONCILE invoice from ${invoice.counterpartyName} for ${invoice.amount} USDC: ${status}`,
+    detail: {
+      invoiceId: invoice.id,
+      counterpartyId: invoice.counterpartyId,
+      reconciled: true,
+      previousStatus: "matched",
+      execution: {
+        txRef,
+        chainMode: execution?.providerMode ?? deps.provider.mode,
+        resultingStatus: status,
+        settlementRequired: true,
+        feeUsd: execution?.feeUsd ?? null,
+        feeSource: execution?.feeSource ?? null,
+        settledInMs: execution?.settledInMs ?? null,
+        executedAt: execution?.executedAt ?? null,
+        reconciled: execution?.reconciled ?? false,
+        ...heldBecausePausedDetail(outcome.heldBecausePaused),
+      },
+    },
+  });
+
+  const message = outcome.heldBecausePaused
+    ? `${invoice.counterpartyName}: not paid, the agent was paused (${invoice.amount} USDC)`
+    : status === "paid"
+      ? `${invoice.counterpartyName}: reconciled an in-flight payment, now paid (${invoice.amount} USDC)`
+      : status === "matched"
+        ? `${invoice.counterpartyName}: reconciled an in-flight payment, still pending (${invoice.amount} USDC)`
+        : `${invoice.counterpartyName}: reconciled an in-flight payment, now held (${invoice.amount} USDC)`;
+  return { status, operatingBalance: outcome.operatingBalance, line: { domain: "ap", message } };
+}
+
 /**
  * The contractor stage's `decision.action === "release"` branch, once an
  * operating account exists and the guardrails have already let it through:
@@ -748,12 +877,15 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
       .in("status", ["pending", "matched"])
   ) as Array<{
     id: string;
+    status: string;
     amount: string;
     memo: string | null;
     po_reference: string | null;
     goods_received: boolean;
     due_date: string;
     counterparty_id: string;
+    agent_reasoning: string | null;
+    tx_ref: string | null;
     counterparties: {
       id: string;
       name: string;
@@ -794,9 +926,34 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
   });
   const history = payableHistory.map(asInvoiceLike);
 
+  // A `matched` payable with a payment intent already has a payment in
+  // flight: it is reconciled, not decided again (see reconcileApInvoice).
+  const inFlight = await existingPaymentIntents(db, payables);
+
   for (const invoice of payables) {
     const counterparty = invoice.counterparties;
     const amount = num(invoice.amount);
+
+    const intent = invoice.status === "matched" ? inFlight.get(invoice.id) : undefined;
+    if (intent) {
+      const reconciled = await reconcileApInvoice(
+        {
+          id: invoice.id,
+          amount,
+          counterpartyId: counterparty.id,
+          counterpartyName: counterparty.name,
+          address: counterparty.address,
+          reasoning: invoice.agent_reasoning,
+          txRef: invoice.tx_ref,
+        },
+        intent,
+        { db, provider, operating: operating ? { id: operating.id } : null }
+      );
+      if (reconciled.operatingBalance !== null) operatingBalance = reconciled.operatingBalance;
+      metrics.recordInvoice(reconciled.status, false);
+      lines.push(reconciled.line);
+      continue;
+    }
     const limit = counterparty.payment_limit == null ? null : num(counterparty.payment_limit);
     const overLimit = limit != null && amount > limit;
     const highRisk = counterparty.risk_level === "high";

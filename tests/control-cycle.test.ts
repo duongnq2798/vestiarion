@@ -4,7 +4,8 @@ import { configFromEnv, type FollowUpConfig } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { db } from "@/lib/dal";
 import { withOrg } from "@/lib/dal/scope";
-import { applyFollowUp } from "@/lib/agent/orchestrator";
+import { applyFollowUp, existingPaymentIntents, reconcileApInvoice } from "@/lib/agent/orchestrator";
+import type { ChainProvider } from "@/lib/circle";
 import { encryptSecret, parseMasterKeys } from "@/lib/secrets";
 import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 
@@ -39,6 +40,8 @@ vi.mock("@/lib/agent/guardrails", () => ({ enforceApGuardrails: guardrailsMock }
 
 const ORG = "5d0f3a2e-8c1b-4f7a-9e6d-00000000c1c1";
 const INVOICE_ID = "018f8ce0-1557-7b54-a931-4d777f6bc001";
+const COUNTERPARTY_ID = "018f8ce0-1557-7b54-a931-4d777f6bc002";
+const ACCOUNT_ID = "018f8ce0-1557-7b54-a931-4d777f6bc003";
 
 const config = configFromEnv({
   NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid",
@@ -148,5 +151,142 @@ describe("applyFollowUp — the follow-up stage's write is a compare-and-set", (
     await expect(
       run(() => applyFollowUp(db(), { id: INVOICE_ID, status: "held", amount: 150 }, reopen, FOLLOW_UP_CONFIG, Date.now()))
     ).rejects.toThrow("invoices update failed: connection reset");
+  });
+});
+
+describe("existingPaymentIntents — which payables the AP stage reconciles instead of deciding", () => {
+  it("looks up intents for matched payables only, keyed by invoice id", async () => {
+    const { fake, run } = cycleFake((r) =>
+      r.path === "/rest/v1/payment_intents" ? { body: [{ source_id: "matched-1", provider_tx_id: "circle-tx-1", status: "pending" }] } : undefined
+    );
+
+    const intents = await run(() =>
+      existingPaymentIntents(db(), [
+        { id: "pending-1", status: "pending" },
+        { id: "matched-1", status: "matched" },
+        { id: "matched-2", status: "matched" },
+      ])
+    );
+
+    expect([...intents.entries()]).toEqual([["matched-1", { providerTxId: "circle-tx-1", status: "pending" }]]);
+    const [lookup] = fake.requests.filter((r) => r.path === "/rest/v1/payment_intents");
+    expect(lookup.params.get("source_type")).toBe("eq.invoice");
+    expect(lookup.params.get("source_id")).toBe("in.(matched-1,matched-2)");
+  });
+
+  it("asks nothing when no payable is matched", async () => {
+    const { fake, run } = cycleFake();
+
+    const intents = await run(() => existingPaymentIntents(db(), [{ id: "pending-1", status: "pending" }]));
+
+    expect(intents.size).toBe(0);
+    expect(fake.requests.some((r) => r.path === "/rest/v1/payment_intents")).toBe(false);
+  });
+});
+
+describe("reconcileApInvoice — a matched payable with a payment in flight", () => {
+  const provider = { mode: "live", earnMode: "simulate", estimatedFeeUsd: 0.003 } as unknown as ChainProvider;
+  const invoice = {
+    id: INVOICE_ID,
+    amount: 150,
+    counterpartyId: COUNTERPARTY_ID,
+    counterpartyName: "Acme Supplies",
+    address: "0xdead",
+    reasoning: "Held for manual review. [approved and paid by a person] [transfer submitted; awaiting provider confirmation]",
+    txRef: "circle-tx-1",
+  };
+
+  it("goes to payInvoice without the model or the guardrails, and records paid with the txRef", async () => {
+    payInvoiceMock.mockResolvedValue({
+      status: "paid", txRef: "0xhash", note: "", operatingBalance: 350,
+      execution: { providerMode: "live", feeUsd: 0.003, feeSource: "chain_reported", settledInMs: 4000, executedAt: "2026-09-29T00:00:00Z", reconciled: true },
+    });
+    const { fake, run } = cycleFake();
+
+    const outcome = await run(() =>
+      reconcileApInvoice(invoice, { providerTxId: "circle-tx-1", status: "pending" }, { db: db(), provider, operating: { id: ACCOUNT_ID } })
+    );
+
+    expect(decideMock).not.toHaveBeenCalled();
+    expect(guardrailsMock).not.toHaveBeenCalled();
+    expect(payInvoiceMock).toHaveBeenCalledTimes(1);
+    expect(payInvoiceMock).toHaveBeenCalledWith(
+      { invoiceId: INVOICE_ID, counterpartyId: COUNTERPARTY_ID, address: "0xdead", amount: 150 },
+      { provider, operating: { id: ACCOUNT_ID } }
+    );
+    // A transfer already exists, so nothing new can move: the pause is not consulted.
+    expect(rpcBodies(fake.requests, "agent_paused")).toHaveLength(0);
+
+    const [patch] = invoicePatches(fake.requests);
+    expect(patch.params.get("id")).toBe(`eq.${INVOICE_ID}`);
+    const body = patch.body as Record<string, unknown>;
+    expect(body.status).toBe("paid");
+    expect(body.tx_ref).toBe("0xhash");
+    expect(typeof body.settled_at).toBe("string");
+    expect(body.agent_reasoning).toBe(invoice.reasoning);
+
+    const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(append.p_action).toBe("ap_reconcile");
+    expect(append.p_summary).toBe("RECONCILE invoice from Acme Supplies for 150 USDC: paid");
+    expect(append.p_detail).toMatchObject({
+      invoiceId: INVOICE_ID,
+      counterpartyId: COUNTERPARTY_ID,
+      reconciled: true,
+      previousStatus: "matched",
+      execution: { txRef: "0xhash", resultingStatus: "paid", reconciled: true },
+    });
+    // No `observed` facts: the follow-up stage keeps comparing against the decision itself.
+    expect(append.p_detail).not.toHaveProperty("observed");
+
+    expect(outcome).toEqual({
+      status: "paid",
+      operatingBalance: 350,
+      line: { domain: "ap", message: "Acme Supplies: reconciled an in-flight payment, now paid (150 USDC)" },
+    });
+  });
+
+  it("leaves a still-pending payment matched, keeps its txRef, and does not repeat the note", async () => {
+    payInvoiceMock.mockResolvedValue({
+      status: "matched", txRef: "circle-tx-1", note: " [transfer submitted; awaiting provider confirmation]", operatingBalance: null,
+      execution: { providerMode: "live", feeUsd: null, feeSource: null, settledInMs: null, executedAt: null, reconciled: true },
+    });
+    const { fake, run } = cycleFake();
+
+    await run(() => reconcileApInvoice(invoice, { providerTxId: "circle-tx-1", status: "pending" }, { db: db(), provider, operating: { id: ACCOUNT_ID } }));
+
+    const body = invoicePatches(fake.requests)[0].body as Record<string, unknown>;
+    expect(body.status).toBe("matched");
+    expect(body.tx_ref).toBe("circle-tx-1");
+    expect(body.settled_at).toBeNull();
+    expect(body.agent_reasoning).toBe(invoice.reasoning);
+  });
+
+  it("keeps the recorded txRef when the reconciliation itself reports none", async () => {
+    payInvoiceMock.mockResolvedValue({ status: "held", txRef: null, execution: null, note: " [execution failed: store unavailable]", operatingBalance: null });
+    const { fake, run } = cycleFake();
+
+    await run(() => reconcileApInvoice(invoice, { providerTxId: "circle-tx-1", status: "pending" }, { db: db(), provider, operating: { id: ACCOUNT_ID } }));
+
+    const body = invoicePatches(fake.requests)[0].body as Record<string, unknown>;
+    expect(body.status).toBe("held");
+    expect(body.tx_ref).toBe("circle-tx-1");
+    expect(body.agent_reasoning).toBe(`${invoice.reasoning} [execution failed: store unavailable]`);
+  });
+
+  it("holds without calling payInvoice when no transfer exists yet and the agent is paused", async () => {
+    const { fake, run } = cycleFake((r) => (r.path === "/rest/v1/rpc/agent_paused" ? { body: true } : undefined));
+
+    const outcome = await run(() =>
+      reconcileApInvoice({ ...invoice, txRef: null }, { providerTxId: null, status: "submitting" }, { db: db(), provider, operating: { id: ACCOUNT_ID } })
+    );
+
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+    expect(decideMock).not.toHaveBeenCalled();
+    expect(outcome.status).toBe("held");
+    const body = invoicePatches(fake.requests)[0].body as Record<string, unknown>;
+    expect(body.status).toBe("held");
+    expect(body.agent_reasoning).toBe(`${invoice.reasoning} [not paid: the agent was paused]`);
+    const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect((append.p_detail as { execution: Record<string, unknown> }).execution.heldBecause).toBe("agent_paused");
   });
 });
