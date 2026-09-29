@@ -1,0 +1,39 @@
+A workspace can register HTTPS endpoints that receive its ledger, pushed after each entry is appended, instead of polling [the ledger API](/docs/api/list-ledger-entries). Every request is signed, so a receiver can prove it came from Vestiarion without trusting the network.
+
+## Adding an endpoint
+
+An owner or an admin adds an endpoint on the workspace's Settings page, `/o/<slug>/settings`, under **Webhooks**. Other members see the list of endpoints but not the controls, and see only each endpoint's host: [Who sees what](/docs/webhooks/security#who-sees-what).
+
+The URL is checked on the spot against the [URL rules](/docs/webhooks/security#url-rules). When it passes, Vestiarion shows the endpoint's signing secret: `whsec_` followed by 32 random bytes, base64url-encoded. It is **shown once**. It is stored encrypted, bound to the workspace and the endpoint, and cannot be shown again. If you lose it, remove the endpoint and add it back, which issues a fresh secret.
+
+A workspace holds **at most 5 active endpoints**.
+
+The same panel can send a **test event** to an endpoint, and remove an endpoint. There is no re-enable: a [disabled endpoint](/docs/webhooks/retries#disabling-an-endpoint) is removed and added again, which also issues it a new secret.
+
+## Events
+
+| Event | When |
+| --- | --- |
+| `ledger.appended` | A new entry was appended to the workspace's ledger. The body carries the entry. |
+| `webhook.test` | Someone sent a test event from Settings. The body carries no entry. |
+
+[Payload and headers](/docs/webhooks/payload) shows both.
+
+## Timing
+
+Deliveries go out from two places, never inside an unrelated request:
+
+- **Right after each scheduled agent tick**, for the entries that tick just appended. The dispatch gets what is left of the tick's own time budget: at most 30 seconds, less when the tick's cycles used most of it, and none at all (the dispatch is skipped) when nothing is left.
+- **Every 10 minutes**, from a scheduled dispatcher, for everything still queued.
+
+A dispatch run is bounded by 60 seconds and 500 deliveries, claimed in batches of 25. No batch is claimed, and no request is started, with less than about 12 seconds left (one request's 10-second timeout plus a margin), so nothing is left half-sent when a run ends; a queue larger than one run is finished by the next. A tick with less than that left dispatches nothing and leaves the queue to the 10-minute run.
+
+**A test event is the one exception.** Sending it from Settings delivers it at once, inside that person's own request: a single attempt, at most about 10 seconds, with no retry whatever the result. Every other delivery is queued when its ledger entry is appended, and sent by the tick or the 10-minute dispatcher above.
+
+## In this section
+
+- [Payload and headers](/docs/webhooks/payload): the body and headers of every delivery.
+- [Verifying signatures](/docs/webhooks/verify): check the delivery's HMAC, and the ledger entry's own Ed25519 signature.
+- [Retries and disabling](/docs/webhooks/retries): the retry schedule, and when an endpoint is disabled.
+- [Security](/docs/webhooks/security): the URL rules, how long delivery records are kept, and who sees what.
+- [Delivery guarantees](/docs/webhooks/guarantees): at least once, not in order, and how a receiver handles both.

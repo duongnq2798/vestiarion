@@ -43,7 +43,8 @@ describe("pageMarkdown", () => {
     const md = pageMarkdown(slug, ORIGIN);
     expect(md).not.toBeNull();
     expect(prose(md!)).not.toMatch(/<[A-Z][A-Za-z]*[\s/>]/);
-    expect(md!).not.toMatch(/^\s*(?:import|export)\s/m);
+    // ESM is dropped; a code line that starts with `export`, such as a shell's, is code and stays.
+    expect(prose(md!)).not.toMatch(/^\s*(?:import|export)\s/m);
     expect(md!.startsWith(`# ${PAGES.find((page) => page.slug === slug)!.title}\n`)).toBe(true);
   });
 
@@ -105,8 +106,47 @@ describe("mdxToMarkdown", () => {
   });
 
   it("refuses a component it has no conversion for, naming it", () => {
-    expect(() => mdxToMarkdown("<Card title=\"x\" />", ORIGIN)).toThrow(/<Card>/);
+    expect(() => mdxToMarkdown("<Widget title=\"x\" />", ORIGIN)).toThrow(/<Widget>/);
     expect(() => mdxToMarkdown("<Callout>unclosed", ORIGIN)).toThrow(/<Callout>/);
+  });
+
+  it("drops an import or export only where a block starts: a line that continues a paragraph is prose", () => {
+    const source = ["Keys are read-only, and you can", "import them into any HTTP client.", "", "import { A } from \"a\";", "", "Done."].join("\n");
+    expect(mdxToMarkdown(source, ORIGIN)).toBe("Keys are read-only, and you can\nimport them into any HTTP client.\n\nDone.\n");
+    expect(mdxToMarkdown("export const x = 1;\n\nText.\n", ORIGIN)).toBe("Text.\n");
+    expect(mdxToMarkdown("Text,\nexport it.\n", ORIGIN)).toBe("Text,\nexport it.\n");
+  });
+
+  it("refuses a bare {expression} in prose, which MDX would evaluate and Markdown would show as braces", () => {
+    expect(() => mdxToMarkdown("The limit is {max}.", ORIGIN)).toThrow(/\{…\} expression/);
+    expect(() => mdxToMarkdown('<Callout title="T">\nA {value} inside.\n</Callout>', ORIGIN)).toThrow(/\{…\} expression/);
+    // Comments, escaped braces, code and attribute values are fine.
+    expect(mdxToMarkdown("A {/* note */}comment, an escaped \\{brace\\}, `{code}` and:\n\n```json\n{\"a\": 1}\n```\n", ORIGIN)).toBe(
+      "A comment, an escaped \\{brace\\}, `{code}` and:\n\n```json\n{\"a\": 1}\n```\n"
+    );
+    expect(mdxToMarkdown('<Callout title={"Braces"}>\nText.\n</Callout>', ORIGIN)).toBe("> **Braces** Text.\n");
+  });
+
+  it("refuses a Callout inside a paragraph: it is a block", () => {
+    expect(() => mdxToMarkdown("Text <Callout>inline</Callout> more.", ORIGIN)).toThrow(/<Callout> is a block/);
+    expect(() => mdxToMarkdown("<Callout>x</Callout> and more.", ORIGIN)).toThrow(/<Callout> is a block/);
+    expect(() => mdxToMarkdown("A paragraph line\n<Callout>x</Callout>", ORIGIN)).toThrow(/<Callout> is a block/);
+    expect(mdxToMarkdown("Before.\n\n<Callout>x</Callout>\n\nAfter.", ORIGIN)).toBe("Before.\n\n> x\n\nAfter.\n");
+  });
+
+  it("writes a card grid as a list of links, each with its description", () => {
+    const source = [
+      "<Cards>",
+      '  <Card title="Quickstart" href="/docs/get-started/quickstart">Your first request.</Card>',
+      '  <Card title="Spec" href="/api/v1/openapi.json">',
+      "    The OpenAPI document.",
+      "  </Card>",
+      "</Cards>",
+    ].join("\n");
+    expect(mdxToMarkdown(source, ORIGIN)).toBe(
+      "- [Quickstart](https://x.test/docs/get-started/quickstart): Your first request.\n- [Spec](https://x.test/api/v1/openapi.json): The OpenAPI document.\n"
+    );
+    expect(() => mdxToMarkdown('<Card title="No link">x</Card>', ORIGIN)).toThrow(/<Card> needs a title and an href/);
   });
 });
 

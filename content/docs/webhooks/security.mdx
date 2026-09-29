@@ -1,0 +1,24 @@
+Which endpoint URLs Vestiarion accepts, how long it keeps delivery records, and which members see what.
+
+## URL rules
+
+To keep webhooks from being turned against private networks (server-side request forgery, SSRF), the URL is checked when an endpoint is added, and again at send time:
+
+- `https:` only, port 443 or unspecified, no username or password in the URL, at most 500 characters.
+- Every address the destination has must be public. Refused: this-network, private (RFC 1918), CGNAT, loopback, link-local (including cloud metadata addresses), IETF protocol assignments, benchmarking, documentation, multicast and reserved ranges, and their IPv6 equivalents (unique local, link-local, documentation, Teredo). An address that carries an IPv4 one (IPv4-mapped, NAT64 or 6to4) is judged by that IPv4 address. Otherwise only global IPv6 unicast is accepted.
+- A host name is resolved once, at connect time, inside the request's 10-second timeout. Every answer must be public, and the connection is pinned to only the addresses just checked, so a name cannot answer with a public address for the check and a private one for the connection (DNS rebinding). An IP-literal host is never resolved; it is checked directly, when the endpoint is added and again before connecting.
+- Redirects are never followed.
+
+## Retention
+
+Delivery records are deleted by a daily cleanup job after 30 days: a `delivered` record 30 days after its delivery, a `failed` one 30 days after it was created. Records still pending or being sent are never deleted.
+
+## Who sees what
+
+Owners and admins (the `webhooks.manage` permission) can add an endpoint, send it a test event and remove it, and they are the only members shown each endpoint's full URL.
+
+Every other member of the workspace sees the endpoint list (status, last success, last failure and failure count) with only each endpoint's **host**, never its full URL, since a URL may name a customer's own system.
+
+## The signing secret
+
+Each endpoint has its own secret, shown once when the endpoint is added and stored encrypted, bound to the workspace and the endpoint. Keep it on your server, as you would an [API key](/docs/get-started/authentication#keeping-a-key-safe). If it leaks, remove the endpoint and add it back: the new endpoint gets a new secret.

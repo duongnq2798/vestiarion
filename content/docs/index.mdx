@@ -1,1 +1,20 @@
-Vestiarion's developer documentation.
+Vestiarion is an autonomous treasury agent for stablecoin businesses on Arc. It pays invoices and contractor milestones in USDC through Circle, within guardrails: it never pays a high-risk counterparty, never exceeds a payment limit, and keeps a liquidity buffer. Every decision it makes is recorded, with its reasoning, in an Ed25519-signed, hash-chained ledger. The API gives your integration read access to one workspace: its ledger, invoices, counterparties, milestones, treasury and insights. Webhooks push each new ledger entry to your endpoint as it is appended.
+
+<Cards>
+  <Card title="Quickstart" href="/docs/get-started/quickstart">Create an API key and make your first two requests.</Card>
+  <Card title="API reference" href="/docs/api">Every v1 endpoint with its parameters, response and errors.</Card>
+  <Card title="Webhooks" href="/docs/webhooks">Each ledger entry pushed to your HTTPS endpoint, signed.</Card>
+  <Card title="AI integration" href="/docs/ai-integration">Markdown views, llms.txt and the OpenAPI document for coding agents.</Card>
+  <Card title="Changelog" href="/docs/changelog">Changes to the API and webhooks, newest first.</Card>
+</Cards>
+
+## What you can build
+
+- **A bot that reports held payments.** List [invoices](/docs/api/list-invoices) and [milestones](/docs/api/list-milestones) with `status=held`, and post each one with its `agentReasoning`: the agent's own account of why it did not pay.
+- **An accounting sync.** Page through [invoices](/docs/api/list-invoices) with `direction=payable` or `direction=receivable`, and copy each one's status, amount, counterparty, settlement time and `txHash` into your books.
+- **An audit mirror.** Copy the [ledger](/docs/api/list-ledger-entries) once, keep it current with [webhooks](/docs/webhooks), and check each entry's [signature](/docs/webhooks/verify) yourself. [Verify the ledger](/docs/api/verify-ledger) to compare your result with Vestiarion's.
+- **A treasury dashboard.** Show the [treasury](/docs/api/get-treasury)'s account balances, reserve position, obligations due within 7 and 14 days and the latest liquidity forecast. Read [status](/docs/api/get-status) first, so the dashboard shows whether payments are live or simulated.
+
+## What the API is
+
+Every endpoint is a `GET` under `https://www.vestiarion.xyz/api/v1`. It is read-only: no request moves money or changes an invoice, a counterparty or the ledger. Each request carries a [workspace API key](/docs/get-started/authentication) and reads only that key's workspace. The [endpoint overview](/docs/api) lists every endpoint, and [data delivery methods](/docs/data-delivery) compares pulling with the API to receiving webhooks.

@@ -1,7 +1,8 @@
 "use client";
 
 import { AnimatePresence, m } from "motion/react";
-import { Ban, KeyRound, Plus } from "lucide-react";
+import { Ban, BookOpen, KeyRound, Plus } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import { createApiKeyAction, revokeApiKeyAction, type ApiKeyActionResult } from "@/app/actions/api-keys";
 import { Badge } from "@/components/ui/Badge";
@@ -145,7 +146,17 @@ export default function ApiKeysPanel({ orgSlug, apiKeys, canManage }: { orgSlug:
           id="api-keys-title"
           title="API keys"
           meta={`${apiKeys.length} in this workspace`}
-          action={canManage ? <CreateKeyDialog orgSlug={orgSlug} /> : undefined}
+          action={
+            <div className="flex items-center gap-3">
+              <Button asChild variant="link">
+                <Link href="/docs/get-started/authentication" aria-label="Docs: API keys">
+                  <BookOpen aria-hidden />
+                  Docs
+                </Link>
+              </Button>
+              {canManage && <CreateKeyDialog orgSlug={orgSlug} />}
+            </div>
+          }
         />
         {apiKeys.length === 0 ? (
           <EmptyState

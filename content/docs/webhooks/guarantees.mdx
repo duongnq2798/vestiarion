@@ -1,0 +1,22 @@
+Webhooks are delivered at least once, and not in order. This page says why, and how a receiver handles both.
+
+## At least once
+
+The same event can arrive more than once: for example, when your endpoint answered but the answer was lost, or a dispatch run stopped mid-request. Every retry of an event carries the same `Vestiarion-Event-Id` (and the same `id` in the body), so de-duplicate on it.
+
+## Not in order
+
+Deliveries can arrive out of order: a retry of an older entry can land after a newer one, and several dispatch runs may be at work. Each `ledger.appended` event carries the entry's `seq`. Order by `entry.seq`, which ascends within a workspace, with gaps: the hash chain, not `seq`, proves continuity.
+
+## A receiver, step by step
+
+1. Read the raw body, and [verify the signature](/docs/webhooks/verify#verifying-the-signature). Answer `401` or `400` to anything that fails, and stop.
+2. If you have already stored this `Vestiarion-Event-Id`, answer `200` and stop.
+3. Store the event, keyed by its id, and for `ledger.appended` by `entry.seq` too, so the ledger lands in order however the deliveries arrived.
+4. Answer `2xx` within 10 seconds. Do slow work after you answer, from your own queue, so a slow job does not turn into a timeout and a retry.
+
+## Reconciling with the ledger
+
+Webhooks can leave gaps: a delivery [fails for good](/docs/webhooks/retries) after 7 attempts, an endpoint is disabled, or an entry was appended before the endpoint existed. Queueing a delivery also never blocks the ledger: if it fails, the entry is still appended, with no delivery queued for it.
+
+The ledger itself has no gaps a cursor can miss. Now and then, resume [`GET /api/v1/ledger`](/docs/api/list-ledger-entries) from your stored cursor and store any entry whose `seq` you do not have yet. [Pagination](/docs/get-started/pagination#the-ledger-cursor-is-a-watermark) explains the cursor.

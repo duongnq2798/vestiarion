@@ -55,8 +55,9 @@ export function referenceSectionIds(notes: string | null): string[] {
 
 /**
  * When each error code is returned, for the errors table on every reference
- * page. The wording follows the "Error codes" table in `docs/api.md`; the
- * statuses are `STATUS_FOR` in `@/lib/api/contract`.
+ * page, and for the table on the Errors page (`content/docs/get-started/errors.mdx`,
+ * which the content test holds to this wording). The statuses are `STATUS_FOR`
+ * in `@/lib/api/contract`.
  */
 export const ERROR_MEANINGS: Record<ApiErrorCode, string> = {
   invalid_request: "An invalid `limit` or `cursor`, or a filter value outside its allowed values. The message lists the accepted values.",

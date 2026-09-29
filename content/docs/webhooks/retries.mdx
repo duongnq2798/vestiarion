@@ -1,0 +1,38 @@
+A failed attempt is retried on a fixed schedule. An endpoint that keeps failing is disabled.
+
+## Retries
+
+A non-2xx response, a timeout, or a redirect schedules a retry. Redirects are never followed: a 3xx counts as a failure, the same as any other non-2xx.
+
+**`webhook.test` never retries.** A test event's failure is final on its first and only attempt.
+
+For `ledger.appended` deliveries, up to 7 attempts are made in total, with these waits between them:
+
+| After attempt | Wait before the next |
+| --- | --- |
+| 1 | about 1 minute |
+| 2 | about 5 minutes |
+| 3 | about 30 minutes |
+| 4 | about 2 hours |
+| 5 | about 6 hours |
+| 6 | about 12 hours |
+
+After the 7th failed attempt the delivery is `failed` for good. Each request has a 10-second timeout, and at most 1 KB of the response body is read; neither the body nor the headers of the response are otherwise inspected.
+
+A retry goes out on the next dispatch after its wait is over, so it can leave later than the table says. Every retry of a delivery carries the same `Vestiarion-Event-Id`.
+
+## Disabling an endpoint
+
+Every failed attempt on the receiver's side, `webhook.test` included, counts against the endpoint's consecutive-failure count. After **20 consecutive failed attempts**, the endpoint is disabled and its still-pending deliveries are failed outright.
+
+There is no re-enabling in place: remove the endpoint and add it back, which also issues a fresh secret. Settings shows each endpoint's status, its last success, its last failure and its failure count, so you can see an endpoint heading for that limit.
+
+## Failures on Vestiarion's side
+
+A failure on Vestiarion's side, such as the endpoint's secret not being readable, or its stored URL no longer parsing or passing the [URL rules](/docs/webhooks/security#url-rules), is retried on the same schedule, and still ends the delivery `failed` after the 7th attempt. But it **never counts against your endpoint and never disables it**.
+
+A destination that is, or resolves to, a non-public address is not such a failure: it counts, like any other failed attempt.
+
+## Catching up after a failure
+
+A delivery that failed for good is not sent again. To fill the gap, resume the [ledger](/docs/api/list-ledger-entries) from your stored cursor: see [Delivery guarantees](/docs/webhooks/guarantees#reconciling-with-the-ledger).

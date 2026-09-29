@@ -1,0 +1,34 @@
+What the API bounds today, what it does not, and how fresh its data is.
+
+## Page size
+
+A collection returns 1 to 200 items per page. `limit` defaults to 50, and a larger value than 200 is capped at 200 rather than refused. Every page is bounded, so no single request reads a whole ledger. [Pagination](/docs/get-started/pagination) covers the rest.
+
+## Rate limits
+
+There is no rate limit per key today, and no `/api/v1` endpoint returns `429` or `503`. Still, write your client to back off on a `429` or a `503`: `rate_limited` and `unavailable` are defined [error codes](/docs/get-started/errors), and a client that handles them keeps working if a limit is introduced.
+
+- On a `429`, wait at least as long as the `Retry-After` header says, in seconds, before you try again.
+- On a `503`, retry with exponential backoff.
+
+Poll no more often than you need to. To react to each new ledger entry, [webhooks](/docs/webhooks) push it to you, so you do not need to poll the ledger quickly.
+
+## Keys and endpoints per workspace
+
+| Resource | Limit |
+| --- | --- |
+| Active API keys | 20 per workspace. Revoke one to create another. |
+| Active webhook endpoints | 5 per workspace. |
+
+## Freshness
+
+Data is read live on each request: responses are not cached, so an invoice, a decision or a payment is visible on the next request after it is recorded.
+
+Two endpoints report on the latest cycle rather than on this moment:
+
+- [Treasury](/docs/api/get-treasury)'s `obligations` come from the latest completed cycle snapshot, and are `null` until one exists.
+- [Insights](/docs/api/get-insights) reports the telemetry of recent cycles, transfers and screenings.
+
+## Response shapes
+
+Every endpoint answers with the documented envelope: `data`, plus `page` for a collection, or `error`. New fields can be added to v1 responses, so ignore fields you do not know rather than rejecting the response. A field is not removed from, or changed in, v1 without an entry in the [changelog](/docs/changelog).

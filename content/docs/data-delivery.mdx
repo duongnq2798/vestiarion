@@ -1,0 +1,26 @@
+Vestiarion gives you its data in two ways. You pull it with the REST API when you need it, or Vestiarion pushes each new ledger entry to you with a webhook. Most integrations that follow the ledger use both.
+
+## Compared
+
+| | REST API (pull) | Webhooks (push) |
+| --- | --- | --- |
+| What you get | Any resource: status, the ledger, invoices, counterparties, milestones, the treasury and insights | Each new ledger entry, as a `ledger.appended` event |
+| Who starts it | You send a `GET` request | Vestiarion sends a `POST` to your HTTPS endpoint |
+| Latency | Data is read live on each request, so it is as fresh as your last request | Right after the scheduled agent tick that appended the entry; any other entry goes out on the next dispatch, which runs every 10 minutes. A failed delivery is [retried](/docs/webhooks/retries) with backoff |
+| Authentication | A [workspace API key](/docs/get-started/authentication) in `Authorization: Bearer` | You [verify](/docs/webhooks/verify) the `Vestiarion-Signature` header with the endpoint's secret |
+| Ordering | The ledger is ascending by `seq`; the other collections are newest first | Not in order: sort by `entry.seq` |
+| Duplicates | Paging with the cursor never repeats a row, and a stored ledger cursor never goes back before its position | [At least once](/docs/webhooks/guarantees): de-duplicate on the event id |
+| Setup | An owner or admin creates a key in Settings | An owner or admin adds an endpoint in Settings, up to 5 per workspace |
+| Use it when | You need the books, counterparties, the treasury or insights; you backfill history; you cannot receive inbound HTTPS | You want to act on each decision as it is recorded, without polling |
+
+## Using both
+
+To follow the ledger without missing an entry:
+
+1. Backfill with [`GET /api/v1/ledger`](/docs/api/list-ledger-entries), paging with the cursor until `hasMore` is `false`. Store the last cursor.
+2. Receive new entries by [webhook](/docs/webhooks), and store each one keyed by its `seq`, so a duplicate or an out-of-order delivery lands in the right place.
+3. Now and then, resume the ledger from your stored cursor. It returns anything a webhook did not bring, such as an entry whose delivery [failed for good](/docs/webhooks/retries).
+
+## No WebSocket
+
+Vestiarion has no WebSocket or streaming endpoint: webhooks already push each ledger entry as it is appended.

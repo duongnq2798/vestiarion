@@ -86,7 +86,7 @@ workspace's own API keys — `owner` and `admin` hold it; every other member see
 `/o/[slug]/settings` without the controls), and `webhooks.manage` (`src/app/actions/webhooks.ts`,
 for adding, testing and removing a workspace's own webhook endpoints — `owner` and `admin` hold it;
 every other member sees the endpoint list with each URL reduced to its host — see
-[docs/webhooks.md](docs/webhooks.md)). The remaining permissions — `workspace.read` (beyond
+[Webhooks security](https://www.vestiarion.xyz/docs/webhooks/security#who-sees-what)). The remaining permissions — `workspace.read` (beyond
 the leaving case above) and `org.administer` — and `canAssignRole`'s rule that an admin may grant
 `approver` or `viewer` but nothing at its own rank or above while only an owner assigns `admin` or
 `owner`, are defined in `roles.ts` ahead of the feature that will call `org.administer`.
@@ -320,7 +320,8 @@ Collections intended for human browsing are newest first and use
 is ascending and, within one organization, a correct resume watermark even
 though it runs with gaps — continuity is proven by the hash chain, not by
 `seq`. The legacy `src/app/api/ledger/verify/route.ts` still serves the Audit
-page; it is member-only and takes `?org=<slug>` (see `docs/api.md`).
+page; it is member-only and takes `?org=<slug>` (see the
+[verify reference](https://www.vestiarion.xyz/docs/api/verify-ledger#the-public-key)).
 
 ## Webhooks
 
@@ -338,7 +339,21 @@ pass the same public-only rule as when the endpoint was added; the connection
 is pinned to the addresses checked, which closes the DNS-rebinding gap a
 separate check would leave. Full detail — the payload, retries, the endpoint
 limit, and how to verify both the delivery's signature and the ledger entry's
-own — is in [docs/webhooks.md](docs/webhooks.md).
+own — is in the [webhooks docs](https://www.vestiarion.xyz/docs/webhooks).
+
+## Developer docs
+
+The public docs at `/docs` are built in this app with `@next/mdx`. The written
+pages are MDX in `content/docs/`; the API reference pages are generated from
+the operations in `src/lib/api/openapi.ts`, which also serve
+`/api/v1/openapi.json`; `src/lib/docs/markdown.ts` writes each page's `.md`
+view, `/llms.txt` and `/llms-full.txt`; and `src/lib/docs/nav.ts` is the one
+list of pages. Tests hold the content to the code: every nav page has its MDX,
+every link and anchor resolves, the OpenAPI document covers every v1 route, and
+the webhook verification snippets run against the signing code. **A PR that
+changes `/api/v1` or webhooks adds a changelog entry** to
+`content/docs/changelog.mdx`: dated, newest first, saying what changed for an
+integrator.
 
 ## Data ownership
 

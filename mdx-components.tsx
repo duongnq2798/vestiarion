@@ -1,10 +1,12 @@
 import type { MDXComponents } from "mdx/types";
+import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { isValidElement, type ComponentProps, type ReactNode } from "react";
 import { CodeBlock } from "@/components/docs/CodeBlock";
 import { DocsHeading, textOf } from "@/components/docs/DocsHeading";
 import { EndpointTable } from "@/components/docs/EndpointTable";
 import { Callout } from "@/components/ui/Callout";
+import { Card } from "@/components/ui/Card";
 import { cn } from "@/components/ui/cn";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/Table";
 import { slugify } from "@/lib/docs/headings";
@@ -26,7 +28,8 @@ function Pre({ children }: { children?: ReactNode }) {
 
 function Anchor({ href = "", className, children, ...props }: ComponentProps<"a">) {
   const classes = cn("font-medium text-agent underline [overflow-wrap:anywhere] decoration-agent-line underline-offset-4 transition-colors duration-150 ease-standard hover:decoration-agent", className);
-  if (href.startsWith("/")) {
+  // A page is a client-side navigation; a document (a `.md` view, llms.txt, the OpenAPI JSON) is a plain link.
+  if (href.startsWith("/") && !href.startsWith("/api/") && !/\.(?:md|txt|json)(?:[?#]|$)/.test(href)) {
     return (
       <Link href={href} className={classes} {...props}>
         {children}
@@ -38,6 +41,29 @@ function Anchor({ href = "", className, children, ...props }: ComponentProps<"a"
     <a href={href} className={classes} {...(external ? { rel: "noreferrer" } : {})} {...props}>
       {children}
     </a>
+  );
+}
+
+/** A grid of `Card`s: one column on a phone, two from `sm`. */
+function Cards({ children }: { children?: ReactNode }) {
+  return <div className="my-6 grid gap-3 sm:grid-cols-2">{children}</div>;
+}
+
+/** A card that is one link: a title and a line on what is behind it. */
+function DocsCard({ title, href, children }: { title: string; href: string; children?: ReactNode }) {
+  const body = (
+    <>
+      <span className="flex items-center justify-between gap-3 text-[0.9375rem] font-semibold tracking-tight text-ink">
+        {title}
+        <ArrowRight aria-hidden className="size-4 shrink-0 text-ink-3" />
+      </span>
+      <span className="mt-1.5 block text-sm leading-relaxed text-ink-2 [&>p]:m-0">{children}</span>
+    </>
+  );
+  return (
+    <Card asChild interactive className="block p-5">
+      {href.startsWith("/docs/") || href === "/docs" ? <Link href={href}>{body}</Link> : <a href={href}>{body}</a>}
+    </Card>
   );
 }
 
@@ -75,6 +101,8 @@ const components: MDXComponents = {
   th: ({ children }) => <TableHead>{children}</TableHead>,
   td: ({ children }) => <TableCell className="align-top text-ink-2">{children}</TableCell>,
   EndpointTable,
+  Cards,
+  Card: DocsCard,
   Callout: (props: ComponentProps<typeof Callout>) => <Callout {...props} className={cn("my-6 [&_p]:my-1.5 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0", props.className)} />,
 };
 

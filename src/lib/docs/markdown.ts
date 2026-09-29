@@ -35,7 +35,26 @@ export interface ConvertContext {
 export const MDX_TO_MARKDOWN: Record<string, (attributes: JsxAttributes, children: string, context: ConvertContext) => string> = {
   Callout: (attributes, children, { convert }) => quote(typeof attributes.title === "string" ? attributes.title : undefined, convert(children)),
   EndpointTable: (_attributes, _children, { origin }) => endpointTables(origin),
+  // A grid of cards is a list: one line per card.
+  Cards: (_attributes, children, { convert }) =>
+    convert(children)
+      .split("\n")
+      .filter((line) => line.trim())
+      .join("\n"),
+  Card: (attributes, children, { convert }) => {
+    const { title, href } = attributes;
+    if (typeof title !== "string" || typeof href !== "string") throw new Error("<Card> needs a title and an href");
+    const description = convert(children).replace(/\s+/g, " ").trim();
+    return `- [${title}](${href})${description ? `: ${description}` : ""}`;
+  },
 };
+
+/**
+ * Components that render a block, a `div`: each stands in its own paragraph,
+ * on lines of its own after a blank line. Inside a paragraph MDX renders it
+ * inline, a `div` inside a `p`.
+ */
+const BLOCK_COMPONENTS = new Set(["Callout", "Cards", "EndpointTable"]);
 
 // Private-use characters hold code out of the conversion; the docs never contain them.
 const FENCE_TOKEN = "";
@@ -174,17 +193,36 @@ function release(text: string, held: Held): string {
     .replace(new RegExp(`${CODE_TOKEN}(\\d+)${CODE_TOKEN}`, "g"), (_match, index: string) => held.codes[Number(index)]);
 }
 
-/** Drops ESM: an `import` or `export` at the start of a line, through the end of its paragraph. */
+/**
+ * Drops ESM: an `import` or `export` that starts a block (the first line, or
+ * a line after a blank one), through the end of its paragraph. A line that
+ * continues a paragraph is prose, as MDX reads it, whatever its first word.
+ */
 function withoutEsm(text: string): string {
   let skipping = false;
+  let blockStart = true;
   return text
     .split("\n")
     .filter((line) => {
-      if (/^(?:import|export)\s/.test(line)) skipping = true;
-      else if (line.trim() === "") skipping = false;
+      const blank = line.trim() === "";
+      if (blockStart && /^(?:import|export)\s/.test(line)) skipping = true;
+      else if (blank) skipping = false;
+      blockStart = blank;
       return !skipping;
     })
     .join("\n");
+}
+
+/**
+ * Throws on a `{…}` expression left in prose: MDX evaluates one, and Markdown
+ * would show its braces as text. Comments are gone before this runs, and code
+ * and attribute values never reach it; a literal brace is written `\{`.
+ */
+function refuseExpressions(prose: string): string {
+  if (/(?:^|[^\\])\{/.test(prose)) {
+    throw new Error("A bare {…} expression in prose: MDX evaluates it, and Markdown would show it as text. Escape the brace as \\{, or put it in code.");
+  }
+  return prose;
 }
 
 /** The index just past the `}` that closes the `{` at `start`, skipping strings. */
@@ -287,14 +325,23 @@ function convertHeld(text: string, origin: string): string {
     }
     const toMarkdown = Object.hasOwn(MDX_TO_MARKDOWN, name) ? MDX_TO_MARKDOWN[name] : undefined;
     if (!toMarkdown) throw new Error(`No Markdown conversion for <${name}>: add one to MDX_TO_MARKDOWN in src/lib/docs/markdown.ts`);
-    const markdown = toMarkdown(tag.attributes, children, context);
     // A component on a line of its own is a block: it stands in its own paragraph.
     const lineStart = rest.lastIndexOf("\n", start - 1) + 1;
     const block = rest.slice(lineStart, start).trim() === "";
-    out += block ? `${rest.slice(0, lineStart)}\n\n${markdown}\n\n` : `${rest.slice(0, start)}${markdown}`;
+    if (BLOCK_COMPONENTS.has(name)) {
+      const previousLine = lineStart === 0 ? "" : rest.slice(rest.lastIndexOf("\n", lineStart - 2) + 1, lineStart - 1);
+      const lineEnd = rest.indexOf("\n", end);
+      const after = rest.slice(end, lineEnd < 0 ? rest.length : lineEnd);
+      if (!block || previousLine.trim() !== "" || after.trim() !== "") {
+        throw new Error(`<${name}> is a block: put it on lines of its own, after a blank line, not inside a paragraph`);
+      }
+    }
+    const markdown = toMarkdown(tag.attributes, children, context);
+    const before = refuseExpressions(rest.slice(0, block ? lineStart : start));
+    out += block ? `${before}\n\n${markdown}\n\n` : `${before}${markdown}`;
     rest = rest.slice(end);
   }
-  return (out + rest).replace(/\n[ \t]*(?:\n[ \t]*){2,}/g, "\n\n").trim();
+  return (out + refuseExpressions(rest)).replace(/\n[ \t]*(?:\n[ \t]*){2,}/g, "\n\n").trim();
 }
 
 /** Root links (`](/docs/…)`, `[r]: /docs/…`) made absolute on `origin`. */

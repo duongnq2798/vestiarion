@@ -52,7 +52,21 @@ type MdxModule = { default: ComponentType<MDXProps> };
  */
 export const PAGE_LOADERS: Record<string, () => Promise<MdxModule>> = {
   "": () => import("../../../content/docs/index.mdx"),
+  "data-delivery": () => import("../../../content/docs/data-delivery.mdx"),
+  "get-started/quickstart": () => import("../../../content/docs/get-started/quickstart.mdx"),
+  "get-started/authentication": () => import("../../../content/docs/get-started/authentication.mdx"),
+  "get-started/errors": () => import("../../../content/docs/get-started/errors.mdx"),
+  "get-started/pagination": () => import("../../../content/docs/get-started/pagination.mdx"),
+  "get-started/limits": () => import("../../../content/docs/get-started/limits.mdx"),
   api: () => import("../../../content/docs/api.mdx"),
+  webhooks: () => import("../../../content/docs/webhooks.mdx"),
+  "webhooks/payload": () => import("../../../content/docs/webhooks/payload.mdx"),
+  "webhooks/verify": () => import("../../../content/docs/webhooks/verify.mdx"),
+  "webhooks/retries": () => import("../../../content/docs/webhooks/retries.mdx"),
+  "webhooks/security": () => import("../../../content/docs/webhooks/security.mdx"),
+  "webhooks/guarantees": () => import("../../../content/docs/webhooks/guarantees.mdx"),
+  "ai-integration": () => import("../../../content/docs/ai-integration.mdx"),
+  changelog: () => import("../../../content/docs/changelog.mdx"),
 };
 
 /** The compiled page, or null when no MDX file is registered for `slug`. */
@@ -69,7 +83,11 @@ export async function loadPage(slug: string): Promise<{ Content: ComponentType<M
  * its notes only when it has a loader here; the content test checks that
  * every notes file has one and every loader its file.
  */
-export const NOTES_LOADERS: Record<string, () => Promise<MdxModule>> = {};
+export const NOTES_LOADERS: Record<string, () => Promise<MdxModule>> = {
+  "get-status": () => import("../../../content/docs/api/get-status.mdx"),
+  "list-ledger-entries": () => import("../../../content/docs/api/list-ledger-entries.mdx"),
+  "verify-ledger": () => import("../../../content/docs/api/verify-ledger.mdx"),
+};
 
 /** The MDX of an operation's notes, `content/docs/api/<id>.mdx`, or null when it has none. */
 export function notesSource(id: string): string | null {

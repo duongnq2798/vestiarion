@@ -1,0 +1,87 @@
+These docs are written to be read by coding agents as well as people. Every page has a Markdown version, the whole site is available as one text file, and the API is described by an OpenAPI document. None of them needs a key.
+
+## Markdown views
+
+Append `.md` to any docs URL to get the page as Markdown:
+
+- [`https://www.vestiarion.xyz/docs/get-started/quickstart.md`](/docs/get-started/quickstart.md)
+- [`https://www.vestiarion.xyz/docs/api/list-invoices.md`](/docs/api/list-invoices.md)
+- [`https://www.vestiarion.xyz/docs.md`](/docs.md), for the overview
+
+Each page's header also has **Copy page**, which copies the same Markdown, and a **Markdown** link to it. A reference page's Markdown has its request line, parameters, a cURL sample, the example response, the response fields and the errors. Links in the Markdown are absolute, so they still work once the text is pasted elsewhere.
+
+## llms.txt
+
+- [`/llms.txt`](/llms.txt) lists every page, with a one-line summary and a link to its Markdown view, following the llms.txt convention.
+- [`/llms-full.txt`](/llms-full.txt) is every page's Markdown in one file, in the order of the sidebar.
+
+Give an agent `llms-full.txt` when it needs the whole API at once, and `llms.txt` when it should fetch only the pages it needs.
+
+## The OpenAPI document
+
+[`/api/v1/openapi.json`](/api/v1/openapi.json) is an OpenAPI 3.1 document for every `/api/v1` endpoint: its parameters with their types, defaults and allowed values, its response schema, its errors, and the bearer authentication. It is built from the same schemas the API's tests check every endpoint's responses against. Use it to generate a client, or to give an agent exact types.
+
+## Setup for coding agents
+
+Each block below tells the agent where the docs are and how to handle the key. Add it to your project, and keep the key itself in the `VESTIARION_API_KEY` environment variable, never in the file.
+
+### Claude Code
+
+Add this to `CLAUDE.md` at the root of your project:
+
+```markdown
+## Vestiarion API
+
+- Read https://www.vestiarion.xyz/llms-full.txt before writing code that calls the Vestiarion API.
+- Take request and response types from https://www.vestiarion.xyz/api/v1/openapi.json.
+- Read the API key from the VESTIARION_API_KEY environment variable and send it as `Authorization: Bearer <key>`. Never hard-code it, log it, or put it in a URL or in client-side code.
+```
+
+### Codex
+
+Add this to `AGENTS.md` at the root of your project:
+
+```markdown
+## Vestiarion API
+
+- Read https://www.vestiarion.xyz/llms-full.txt before writing code that calls the Vestiarion API.
+- Take request and response types from https://www.vestiarion.xyz/api/v1/openapi.json.
+- Read the API key from the VESTIARION_API_KEY environment variable and send it as `Authorization: Bearer <key>`. Never hard-code it, log it, or put it in a URL or in client-side code.
+```
+
+### Cursor
+
+Add a project rule at `.cursor/rules/vestiarion.mdc`:
+
+```markdown
+---
+description: Calling the Vestiarion API
+alwaysApply: false
+---
+
+- Read https://www.vestiarion.xyz/llms-full.txt before writing code that calls the Vestiarion API.
+- Take request and response types from https://www.vestiarion.xyz/api/v1/openapi.json.
+- Read the API key from the VESTIARION_API_KEY environment variable and send it as `Authorization: Bearer <key>`. Never hard-code it, log it, or put it in a URL or in client-side code.
+```
+
+## Prompts to start from
+
+Paste one of these into your agent once it is set up.
+
+A webhook receiver:
+
+```text
+Write a webhook receiver in Node that verifies Vestiarion signatures and de-duplicates on the event id. Follow https://www.vestiarion.xyz/docs/webhooks/verify.md for the signature check, over the raw request body, and https://www.vestiarion.xyz/docs/webhooks/guarantees.md for de-duplication and ordering. Read the endpoint's secret from the VESTIARION_WEBHOOK_SECRET environment variable.
+```
+
+An invoice sync:
+
+```text
+Sync payable invoices into a spreadsheet, paging with the cursor. Use GET /api/v1/invoices?direction=payable from https://www.vestiarion.xyz/docs/api/list-invoices.md, pass page.nextCursor back unchanged until hasMore is false, and write one row per invoice with its id, status, amount, currency, counterparty name, due date, settlement time and txHash. Read the key from VESTIARION_API_KEY.
+```
+
+An alert on held payments:
+
+```text
+Alert when a payment is held, quoting the agent's reasoning. Poll GET /api/v1/invoices?status=held and GET /api/v1/milestones?status=held (see https://www.vestiarion.xyz/llms-full.txt), remember which ids you have already alerted on, and for each new one post its counterparty or contractor, its amount and its agentReasoning. Read the key from VESTIARION_API_KEY.
+```

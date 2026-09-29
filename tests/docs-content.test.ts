@@ -1,11 +1,14 @@
 import { readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { STATUS_FOR, type ApiErrorCode } from "@/lib/api/contract";
 import { OPERATIONS } from "@/lib/api/openapi";
-import { CONTENT_DIR, hasSource, NOTES_LOADERS, PAGE_LOADERS, readSource } from "@/lib/docs/content";
+import sitemap from "@/app/sitemap";
+import { CONTENT_DIR, hasSource, NOTES_LOADERS, PAGE_LOADERS, publishedPages, readSource } from "@/lib/docs/content";
 import { slugifyHeadings, splitCodeSpans, stripFences } from "@/lib/docs/headings";
 import { DOCS_NAV, flatPages, neighbours, slugOfPathname } from "@/lib/docs/nav";
-import { referenceSectionIds } from "@/lib/docs/reference";
+import { publicOrigin } from "@/lib/docs/origin";
+import { ERROR_MEANINGS, referenceSectionIds } from "@/lib/docs/reference";
 
 /**
  * The docs' content and its navigation agree: every page in the nav has its
@@ -31,28 +34,6 @@ const NAV_SLUGS = new Set(flatPages().map((page) => page.slug));
 const GENERATED_SLUGS = new Set(OPERATIONS.map((op) => `api/${op.id}`));
 /** Internal addresses outside /docs that a page may link to. */
 const OTHER_TARGETS = new Set(["/api/v1/openapi.json", "/llms.txt", "/llms-full.txt"]);
-
-/**
- * Pages whose MDX is written later: the endpoint overview comes with the
- * generated reference, the rest with the content. Until each file exists its
- * check is a todo; once it exists it is checked like any other page.
- */
-const WRITTEN_LATER = new Set([
-  "data-delivery",
-  "get-started/quickstart",
-  "get-started/authentication",
-  "get-started/errors",
-  "get-started/pagination",
-  "get-started/limits",
-  "webhooks",
-  "webhooks/payload",
-  "webhooks/verify",
-  "webhooks/retries",
-  "webhooks/security",
-  "webhooks/guarantees",
-  "ai-integration",
-  "changelog",
-]);
 
 /** Real app pages outside /docs that a docs page may link to. */
 const APP_ROUTES = new Set(["/", "/login", "/signup", "/onboarding"]);
@@ -192,19 +173,33 @@ describe("slugOfPathname", () => {
 });
 
 describe("every docs page has its MDX", () => {
-  it("names only real nav pages as written later", () => {
-    expect([...WRITTEN_LATER].filter((slug) => !NAV_SLUGS.has(slug))).toEqual([]);
+  const written = flatPages().filter((page) => !GENERATED_SLUGS.has(page.slug));
+  it.each(written.map((page) => [`/docs${page.slug ? `/${page.slug}` : ""}`, page.slug] as const))("%s has its MDX file", (_name, slug) => {
+    expect(hasSource(slug), `content/docs/${slug || "index"}.mdx`).toBe(true);
   });
 
-  const written = flatPages().filter((page) => !GENERATED_SLUGS.has(page.slug));
-  for (const page of written) {
-    const name = `/docs${page.slug ? `/${page.slug}` : ""} has content/docs/${page.slug || "index"}.mdx`;
-    if (WRITTEN_LATER.has(page.slug) && !hasSource(page.slug)) {
-      it.todo(name);
-    } else {
-      it(name, () => expect(hasSource(page.slug)).toBe(true));
+  it("publishes every page in the nav, so none is left out of search, the Markdown views, llms.txt or the sitemap", () => {
+    expect(publishedPages().map((page) => page.slug)).toEqual(flatPages().map((page) => page.slug));
+  });
+});
+
+describe("the Errors page", () => {
+  it("lists every error code with its status and the meaning the reference pages use", () => {
+    const source = readSource("get-started/errors");
+    for (const code of Object.keys(STATUS_FOR) as ApiErrorCode[]) {
+      expect(source, code).toContain(`| ${STATUS_FOR[code]} | \`${code}\` | ${ERROR_MEANINGS[code]} |`);
     }
-  }
+  });
+});
+
+describe("the sitemap", () => {
+  it("lists the landing page and every published docs page, each as an absolute URL, in nav order", () => {
+    const origin = publicOrigin();
+    const urls = sitemap().map((entry) => entry.url);
+    expect(urls).toEqual([`${origin}/`, ...publishedPages().map((page) => `${origin}${page.slug ? `/docs/${page.slug}` : "/docs"}`)]);
+    for (const url of urls) expect(url).toMatch(/^https?:\/\/[^/]+\//);
+    expect(new Set(urls).size).toBe(urls.length);
+  });
 });
 
 describe("every MDX file", () => {
