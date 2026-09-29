@@ -80,15 +80,6 @@ export function OutcomeGlyph({ outcome, className = "size-3.5" }: GlyphProps & {
   );
 }
 
-export function ShieldGlyph({ className = "size-5" }: GlyphProps) {
-  return (
-    <svg viewBox="0 0 20 20" className={`shrink-0 ${className}`} aria-hidden>
-      <path d="M10 1.8 3.2 4.4v5.1c0 4.1 2.9 7.3 6.8 8.7 3.9-1.4 6.8-4.6 6.8-8.7V4.4Z" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinejoin="round" />
-      <path d="M6.8 10h6.4" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" />
-    </svg>
-  );
-}
-
 export function ArrowGlyph({ className = "size-3" }: GlyphProps) {
   return (
     <svg viewBox="0 0 12 12" className={`shrink-0 ${className}`} aria-hidden>
@@ -105,18 +96,3 @@ export function ChevronGlyph({ className = "size-3" }: GlyphProps) {
   );
 }
 
-export function CheckGlyph({ className = "size-3" }: GlyphProps) {
-  return (
-    <svg viewBox="0 0 12 12" className={`shrink-0 ${className}`} aria-hidden>
-      <path d="m2.5 6.3 2.3 2.2 4.7-5" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-export function CrossGlyph({ className = "size-3" }: GlyphProps) {
-  return (
-    <svg viewBox="0 0 12 12" className={`shrink-0 ${className}`} aria-hidden>
-      <path d="m3 3 6 6M9 3 3 9" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />
-    </svg>
-  );
-}
