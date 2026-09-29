@@ -1,36 +1,30 @@
 "use client";
 
-import { useActionState } from "react";
+import { Plus } from "lucide-react";
 import { createWorkspaceAction, type CreateWorkspaceResult } from "@/app/onboarding/actions";
+import { Card } from "@/components/ui/Card";
+import { Field } from "@/components/ui/Field";
+import { FormMessage } from "@/components/ui/FormMessage";
+import { Input } from "@/components/ui/Input";
+import { SubmitButton } from "@/components/ui/SubmitButton";
+import { useActionForm } from "@/components/ui/useActionForm";
 
 const INITIAL: CreateWorkspaceResult = { ok: false, message: "" };
 
 /** Success navigates to the new workspace, so the only message shown here is a refusal. */
 export default function CreateWorkspaceForm() {
-  const [state, action, pending] = useActionState(createWorkspaceAction, INITIAL);
+  const { state, formProps } = useActionForm(createWorkspaceAction, INITIAL);
   return (
-    <form action={action} className="surface-shadow space-y-3 rounded-2xl border border-line bg-surface p-5 sm:p-6">
-      <label className="block text-sm font-medium text-ink" htmlFor="workspace-name">Workspace name</label>
-      {/* 16px below `sm`: iOS zooms the page into any smaller field it focuses. */}
-      <input
-        id="workspace-name"
-        name="name"
-        type="text"
-        required
-        maxLength={80}
-        autoComplete="organization"
-        className="h-11 w-full rounded-xl border border-line-strong bg-ground px-3 text-base text-ink outline-none focus:border-agent focus:ring-2 focus:ring-agent-soft sm:text-sm"
-      />
-      <button
-        type="submit"
-        disabled={pending}
-        className="brand-shadow h-11 w-full rounded-xl bg-agent px-3.5 text-sm font-semibold text-on-agent transition-transform hover:-translate-y-0.5 disabled:translate-y-0 disabled:opacity-70"
-      >
-        {pending ? "Creating…" : "Create workspace"}
-      </button>
-      {state.message && (
-        <p aria-live="polite" className={state.ok ? "text-sm text-ink-3" : "text-sm text-refused"}>{state.message}</p>
-      )}
-    </form>
+    <Card asChild className="space-y-4 p-5 sm:p-6">
+      <form {...formProps}>
+        <Field id="workspace-name" label="Workspace name" description="It starts as a sandbox: the money in it is simulated.">
+          <Input name="name" type="text" required maxLength={80} autoComplete="organization" />
+        </Field>
+        <SubmitButton icon={<Plus />} pendingLabel="Creating…" className="w-full">
+          Create workspace
+        </SubmitButton>
+        <FormMessage tone="error">{state.ok ? null : state.message}</FormMessage>
+      </form>
+    </Card>
   );
 }

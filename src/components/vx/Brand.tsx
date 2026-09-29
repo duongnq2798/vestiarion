@@ -13,12 +13,12 @@ export function BrandMark({ className = "size-9" }: { className?: string }) {
       <path
         d="m10.6 12.25 6.8 15.05c.68 1.5 2.77 1.67 3.68.29l8.32-12.58"
         fill="none"
-        stroke="var(--color-on-agent, #fffefa)"
+        stroke="var(--color-on-agent)"
         strokeWidth="3.35"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      <circle cx="29.45" cy="10.7" r="2.35" fill="var(--color-proof, #13845f)" />
+      <circle cx="29.45" cy="10.7" r="2.35" fill="var(--color-proof)" />
     </svg>
   );
 }

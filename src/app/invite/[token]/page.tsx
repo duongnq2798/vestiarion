@@ -1,5 +1,9 @@
 import type { Metadata } from "next";
+import { CircleCheck, Clock, Unlink } from "lucide-react";
+import Link from "next/link";
 import AcceptInvitationForm from "@/components/AcceptInvitationForm";
+import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
 import { verifySession } from "@/lib/auth/session";
 import { invitationPreview } from "@/lib/platform/members";
@@ -21,6 +25,11 @@ export default async function InvitePage({ params }: InvitePageProps) {
   const { token } = await params;
   const user = await verifySession(`/invite/${token}`);
   const invitation = await invitationPreview(token);
+  const workspaces = (
+    <Button asChild variant="secondary">
+      <Link href="/onboarding">Your workspaces</Link>
+    </Button>
+  );
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -28,15 +37,15 @@ export default async function InvitePage({ params }: InvitePageProps) {
       <main id="main" className="flex flex-1 items-center justify-center px-4 py-12 sm:py-16">
         <div className="w-full max-w-md">
           {!invitation ? (
-            <p className="text-sm text-ink-3">This invitation link is not valid.</p>
+            <EmptyState icon={<Unlink />} titleAs="h1" title="This invitation link is not valid" action={workspaces} />
           ) : invitation.state === "used" ? (
-            <p className="text-sm text-ink-3">This invitation has already been accepted.</p>
+            <EmptyState icon={<CircleCheck />} titleAs="h1" title="This invitation has already been accepted" action={workspaces} />
           ) : invitation.state === "expired" ? (
-            <p className="text-sm text-ink-3">This invitation has expired. Ask for a new one.</p>
+            <EmptyState icon={<Clock />} titleAs="h1" title="This invitation has expired" body="Ask for a new one." action={workspaces} />
           ) : (
             <>
               <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">
-                {"You're invited to join "}
+                {"You’re invited to join "}
                 <strong className="font-semibold">{invitation.orgName}</strong>
                 {` as ${invitation.role}.`}
               </h1>

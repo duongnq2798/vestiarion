@@ -1,35 +1,31 @@
 "use client";
 
-import { useActionState } from "react";
+import { Mail } from "lucide-react";
 import { signInWithEmail, type LoginState } from "@/app/login/actions";
+import { Field } from "@/components/ui/Field";
+import { FormMessage } from "@/components/ui/FormMessage";
+import { Input } from "@/components/ui/Input";
+import { SubmitButton } from "@/components/ui/SubmitButton";
+import { useActionForm } from "@/components/ui/useActionForm";
 
 const INITIAL: LoginState = { ok: false, message: "" };
 
+/**
+ * The address stays in the field after sending, so a mistyped one is visible
+ * next to the confirmation that names it.
+ */
 export default function LoginForm({ next }: { next: string }) {
-  const [state, action, pending] = useActionState(signInWithEmail, INITIAL);
+  const { state, formProps } = useActionForm(signInWithEmail, INITIAL);
   return (
-    <form action={action} className="space-y-3">
+    <form {...formProps} className="space-y-4">
       <input type="hidden" name="next" value={next} />
-      <label className="block text-sm font-medium text-ink" htmlFor="email">Work email</label>
-      {/* 16px below `sm`: iOS zooms the page into any smaller field it focuses. */}
-      <input
-        id="email"
-        name="email"
-        type="email"
-        autoComplete="email"
-        required
-        className="h-11 w-full rounded-xl border border-line-strong bg-ground px-3 text-base text-ink outline-none focus:border-agent focus:ring-2 focus:ring-agent-soft sm:text-sm"
-      />
-      <button
-        type="submit"
-        disabled={pending}
-        className="brand-shadow h-11 w-full rounded-xl bg-agent px-3.5 text-sm font-semibold text-on-agent transition-transform hover:-translate-y-0.5 disabled:translate-y-0 disabled:opacity-70"
-      >
-        {pending ? "Sending…" : "Email me a sign-in link"}
-      </button>
-      {state.message && (
-        <p aria-live="polite" className={state.ok ? "text-sm text-proof" : "text-sm text-refused"}>{state.message}</p>
-      )}
+      <Field id="email" label="Work email">
+        <Input name="email" type="email" autoComplete="email" required placeholder="name@company.com" />
+      </Field>
+      <SubmitButton icon={<Mail />} pendingLabel="Sending…" className="w-full">
+        Email me a sign-in link
+      </SubmitButton>
+      <FormMessage tone={state.message ? (state.ok ? "success" : "error") : "neutral"}>{state.message}</FormMessage>
     </form>
   );
 }

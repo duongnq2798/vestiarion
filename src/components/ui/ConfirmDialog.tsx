@@ -35,7 +35,7 @@ export function ConfirmDialog({ trigger, title, description, confirmLabel, cance
     <AlertDialogPrimitive.Root>
       <AlertDialogPrimitive.Trigger asChild>{trigger}</AlertDialogPrimitive.Trigger>
       <AlertDialogPrimitive.Portal>
-        <AlertDialogPrimitive.Overlay className={overlayBackdrop} />
+        <AlertDialogPrimitive.Overlay data-overlay-backdrop="" className={overlayBackdrop} />
         <AlertDialogPrimitive.Content className={cn(dialogPanel, dialogMotion, "max-w-md")}>
           <div className="flex gap-4">
             {danger && (

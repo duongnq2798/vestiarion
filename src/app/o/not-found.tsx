@@ -1,5 +1,9 @@
+import { LogOut } from "lucide-react";
 import Link from "next/link";
 import { signOut } from "@/app/login/actions";
+import { Button } from "@/components/ui/Button";
+import { Eyebrow } from "@/components/ui/Eyebrow";
+import { SubmitButton } from "@/components/ui/SubmitButton";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
 
 /**
@@ -16,19 +20,19 @@ export default function OrgNotFound() {
       <SiteHeader />
       <main id="main" className="flex flex-1 items-center justify-center px-4 py-12 sm:py-16">
         <div className="w-full max-w-md">
-          <p className="font-mono text-xs font-semibold uppercase tracking-[0.11em] text-agent">404</p>
-          <h1 className="mt-2 text-2xl font-semibold tracking-[-0.02em] text-ink">Workspace not found</h1>
-          <p className="mt-3 text-sm leading-relaxed text-ink-3">
-            This workspace does not exist, or your account is not a member of it.
+          <p>
+            <Eyebrow className="text-agent">404</Eyebrow>
           </p>
+          <h1 className="mt-2 text-2xl font-semibold tracking-[-0.02em] text-ink">Workspace not found</h1>
+          <p className="mt-3 text-sm leading-relaxed text-ink-3">This workspace does not exist, or your account is not a member of it.</p>
           <div className="mt-8 flex flex-wrap items-center gap-3">
-            <Link href="/onboarding" className="brand-shadow inline-flex h-10 items-center rounded-xl bg-agent px-4 text-sm font-semibold text-on-agent transition-transform hover:-translate-y-0.5">
-              Your workspaces
-            </Link>
+            <Button asChild>
+              <Link href="/onboarding">Your workspaces</Link>
+            </Button>
             <form action={signOut}>
-              <button type="submit" className="h-10 rounded-xl border border-line-strong px-4 text-sm font-medium text-ink-2 transition-colors hover:border-agent-line hover:text-ink">
+              <SubmitButton variant="secondary" icon={<LogOut />} pendingLabel="Signing out…">
                 Sign out
-              </button>
+              </SubmitButton>
             </form>
           </div>
         </div>

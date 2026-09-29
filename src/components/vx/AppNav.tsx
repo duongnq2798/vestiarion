@@ -1,13 +1,31 @@
 "use client";
 
+import { Check, ChevronsUpDown, LayoutGrid, LogOut, Menu, Plus, Search } from "lucide-react";
+import { LayoutGroup, m } from "motion/react";
 import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
+import { startTransition, useEffect, useId, useState } from "react";
+import { signOut } from "@/app/login/actions";
+import { Avatar } from "@/components/ui/Avatar";
+import { Button } from "@/components/ui/Button";
+import { cn } from "@/components/ui/cn";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/DropdownMenu";
+import { Kbd } from "@/components/ui/Kbd";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/Sheet";
+import { MOTION } from "@/components/ui/tokens";
 import { orgHref } from "@/lib/auth/org-paths";
-import type { OrgRole } from "@/lib/auth/roles";
 import { BrandMark } from "./Brand";
-import { CheckGlyph, CloseGlyph, MenuGlyph, NavGlyph, PlusGlyph, SelectorGlyph } from "./Glyphs";
+import { useCommandPalette, useShortcutLabel } from "./CommandPalette";
 import { HOME_PATH, NAV_GROUPS, navItemForPathname } from "./nav";
+import { NAV_ICONS } from "./nav-icons";
+import type { WorkspaceSummary } from "./workspace";
 
 /**
  * The client half of the workspace frame: what has to know the current URL
@@ -15,51 +33,58 @@ import { HOME_PATH, NAV_GROUPS, navItemForPathname } from "./nav";
  * memberships, which are platform data — never an organization's own rows.
  */
 
-export interface WorkspaceSummary {
-  slug: string;
-  name: string;
-  mode: "sandbox" | "live";
-  role: OrgRole;
-}
-
 /** Matches Tailwind's `lg`, where the sidebar replaces the drawer. */
 const WIDE = "(min-width: 64rem)";
 
-export function SectionNav({ orgSlug }: { orgSlug: string }) {
+/**
+ * The sections, grouped. The current one sits on a marker that glides to the
+ * next section when the page changes; each copy of the navigation (sidebar,
+ * drawer) has its own `layoutId` group, so the marker never flies between them.
+ */
+export function SectionNav({ orgSlug, layoutId }: { orgSlug: string; layoutId: string }) {
   const active = navItemForPathname(usePathname())?.key;
   const id = useId();
 
   return (
-    <nav aria-label="Workspace sections" className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-4 pt-1">
-      {NAV_GROUPS.map((group, index) => (
-        <div key={group.label} className={index === 0 ? "" : "mt-5"}>
-          <p id={`${id}-${index}`} className="px-3 pb-1.5 font-mono text-[0.625rem] font-semibold uppercase tracking-[0.14em] text-ink-3">
-            {group.label}
-          </p>
-          <ul aria-labelledby={`${id}-${index}`} className="space-y-0.5">
-            {group.items.map((item) => {
-              const current = item.key === active;
-              return (
-                <li key={item.key}>
-                  <Link
-                    href={orgHref(orgSlug, item.path)}
-                    aria-current={current ? "page" : undefined}
-                    className={`relative flex h-11 items-center gap-3 rounded-lg px-3 text-sm transition-colors lg:h-10 ${
-                      current ? "bg-agent-soft font-semibold text-agent" : "text-ink-2 hover:bg-raised/70 hover:text-ink"
-                    }`}
-                  >
-                    {current && <span aria-hidden className="absolute inset-y-2.5 -left-3 w-1 rounded-r-full bg-agent" />}
-                    <NavGlyph section={item.key} className="size-[1.125rem]" />
-                    <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                    <PendingHint />
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      ))}
-    </nav>
+    <LayoutGroup id={layoutId}>
+      <nav aria-label="Workspace sections" className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-4 pt-1">
+        {NAV_GROUPS.map((group, index) => (
+          <div key={group.label} className={index === 0 ? undefined : "mt-5"}>
+            <p id={`${id}-${index}`} className="px-3 pb-1.5 font-mono text-[0.625rem] font-semibold uppercase tracking-[0.14em] text-ink-3">
+              {group.label}
+            </p>
+            <ul aria-labelledby={`${id}-${index}`} className="space-y-0.5">
+              {group.items.map((item) => {
+                const current = item.key === active;
+                const Icon = NAV_ICONS[item.key];
+                return (
+                  <li key={item.key}>
+                    <Link
+                      href={orgHref(orgSlug, item.path)}
+                      aria-current={current ? "page" : undefined}
+                      className={cn(
+                        "relative flex h-11 items-center gap-3 rounded-lg px-3 text-sm transition-colors duration-150 ease-standard lg:h-10",
+                        current ? "font-semibold text-agent" : "text-ink-2 hover:bg-raised/70 hover:text-ink"
+                      )}
+                    >
+                      {current && (
+                        <>
+                          <m.span layoutId="current-section" transition={MOTION.spring} aria-hidden className="absolute inset-0 rounded-lg bg-agent-soft" />
+                          <m.span layoutId="current-section-bar" transition={MOTION.spring} aria-hidden className="absolute inset-y-2.5 -left-3 w-1 rounded-r-full bg-agent" />
+                        </>
+                      )}
+                      <Icon aria-hidden strokeWidth={1.75} className="relative size-[1.125rem] shrink-0" />
+                      <span className="relative min-w-0 flex-1 truncate">{item.label}</span>
+                      <PendingHint />
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
+      </nav>
+    </LayoutGroup>
   );
 }
 
@@ -69,24 +94,16 @@ function PendingHint() {
   return (
     <span
       aria-hidden
-      className={`size-1.5 shrink-0 rounded-full bg-agent transition-opacity duration-200 ${pending ? "opacity-100 motion-safe:animate-pulse" : "opacity-0"}`}
+      className={cn("relative size-1.5 shrink-0 rounded-full bg-agent transition-opacity duration-200", pending ? "opacity-100 motion-safe:animate-pulse" : "opacity-0")}
     />
-  );
-}
-
-function WorkspaceBadge({ workspace, className = "size-9" }: { workspace: WorkspaceSummary; className?: string }) {
-  return (
-    <span aria-hidden className={`grid shrink-0 place-items-center rounded-lg border border-agent-line bg-agent-soft text-sm font-semibold text-agent ${className}`}>
-      {workspace.name.trim().charAt(0).toUpperCase() || "W"}
-    </span>
   );
 }
 
 function WorkspaceMeta({ workspace }: { workspace: WorkspaceSummary }) {
   const live = workspace.mode === "live";
   return (
-    <span className="flex items-center gap-1.5 text-xs text-ink-3">
-      <span aria-hidden className={`size-1.5 rounded-full ${live ? "bg-proof" : "border border-dashed border-ink-3"}`} />
+    <span className="flex items-center gap-1.5 text-xs font-normal text-ink-3">
+      <span aria-hidden className={cn("size-1.5 rounded-full", live ? "bg-proof" : "border border-dashed border-ink-3")} />
       <span className={live ? "text-proof" : undefined}>{live ? "Live" : "Sandbox"}</span>
       <span aria-hidden>·</span>
       <span className="capitalize">{workspace.role}</span>
@@ -95,174 +112,228 @@ function WorkspaceMeta({ workspace }: { workspace: WorkspaceSummary }) {
 }
 
 /**
- * The workspace in view, and a list to move between workspaces — landing on
+ * The workspace in view, and a menu to move between workspaces — landing on
  * the same section of the other one — or to create another. Open even with a
  * single workspace: creating the second one starts here.
  */
 export function WorkspaceSwitcher({ current, workspaces }: { current: WorkspaceSummary; workspaces: WorkspaceSummary[] }) {
-  const pathname = usePathname();
-  // Opened for one URL: navigating anywhere closes it without an effect.
-  const [openAt, setOpenAt] = useState<string | null>(null);
-  const open = openAt === pathname;
-  const root = useRef<HTMLDivElement>(null);
-  const button = useRef<HTMLButtonElement>(null);
-  const listId = useId();
-
-  useEffect(() => {
-    if (!open) return;
-    function onPointerDown(event: PointerEvent) {
-      if (!root.current?.contains(event.target as Node)) setOpenAt(null);
-    }
-    document.addEventListener("pointerdown", onPointerDown);
-    return () => document.removeEventListener("pointerdown", onPointerDown);
-  }, [open]);
-
-  const section = navItemForPathname(pathname)?.path ?? HOME_PATH;
-  // The current workspace's own link leads to the URL already open, which would not close it.
-  const close = () => setOpenAt(null);
-
-  function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (event.key !== "Escape" || !open) return;
-    // Inside the drawer, Escape would also close the drawer; one press closes one thing.
-    event.preventDefault();
-    event.stopPropagation();
-    close();
-    button.current?.focus();
-  }
+  const section = navItemForPathname(usePathname())?.path ?? HOME_PATH;
 
   return (
-    <div ref={root} className="relative" onKeyDown={onKeyDown}>
-      <button
-        ref={button}
-        type="button"
-        aria-expanded={open}
-        aria-controls={listId}
-        onClick={() => setOpenAt(open ? null : pathname)}
-        className={`flex w-full items-center gap-3 rounded-xl border px-2.5 py-2 transition-colors ${open ? "border-agent-line bg-surface" : "border-line bg-surface/80 hover:border-line-strong hover:bg-surface"}`}
-      >
-        <WorkspaceBadge workspace={current} />
-        <span className="min-w-0 flex-1 text-left">
-          <span className="block truncate text-sm font-semibold text-ink">{current.name}</span>
-          <WorkspaceMeta workspace={current} />
-        </span>
-        <SelectorGlyph className="size-4 text-ink-3" />
-        <span className="sr-only">Switch workspace</span>
-      </button>
-      <div
-        id={listId}
-        hidden={!open}
-        className="surface-shadow absolute inset-x-0 top-full z-50 mt-1.5 rounded-xl border border-line bg-surface p-1.5 motion-safe:animate-arrive"
-      >
-        <p className="px-2.5 pb-1 pt-1.5 font-mono text-[0.625rem] font-semibold uppercase tracking-[0.14em] text-ink-3">Workspaces</p>
-        <ul className="max-h-64 overflow-y-auto">
-          {workspaces.map((workspace) => {
-            const isCurrent = workspace.slug === current.slug;
-            return (
-              <li key={workspace.slug}>
-                <Link
-                  href={orgHref(workspace.slug, section)}
-                  onClick={close}
-                  className={`flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm hover:bg-raised/70 ${isCurrent ? "text-ink" : "text-ink-2 hover:text-ink"}`}
-                >
-                  <WorkspaceBadge workspace={workspace} className="size-7 text-xs" />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate font-medium">{workspace.name}</span>
-                    <WorkspaceMeta workspace={workspace} />
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="secondary"
+          className="h-auto w-full justify-start gap-3 px-2.5 py-2 text-left font-normal shadow-none hover:text-ink active:scale-100 sm:h-auto data-[state=open]:border-agent-line"
+        >
+          <Avatar name={current.name} tone="agent" shape="square" size="lg" />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-semibold text-ink">{current.name}</span>
+            <WorkspaceMeta workspace={current} />
+          </span>
+          <ChevronsUpDown aria-hidden className="text-ink-3" />
+          <span className="sr-only">Switch workspace</span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent className="w-(--radix-dropdown-menu-trigger-width) min-w-64">
+        <DropdownMenuLabel>Workspaces</DropdownMenuLabel>
+        {workspaces.map((workspace) => {
+          const isCurrent = workspace.slug === current.slug;
+          return (
+            <DropdownMenuItem key={workspace.slug} asChild>
+              <Link href={orgHref(workspace.slug, section)} aria-current={isCurrent ? "page" : undefined} className="py-2">
+                <Avatar name={workspace.name} tone="agent" shape="square" size="sm" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-medium text-ink">{workspace.name}</span>
+                  <WorkspaceMeta workspace={workspace} />
+                </span>
+                {isCurrent && (
+                  <span aria-hidden className="text-agent">
+                    <Check />
                   </span>
-                  {isCurrent && (
-                    <>
-                      <CheckGlyph className="size-4 text-agent" />
-                      <span className="sr-only">(current)</span>
-                    </>
-                  )}
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-        {/* `?new` keeps /onboarding from sending a one-workspace person straight back here. */}
-        <div className="mt-1 border-t border-line pt-1">
-          <Link href="/onboarding?new#create-workspace" onClick={close} className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-agent hover:bg-raised/70">
-            <PlusGlyph className="size-4" />
+                )}
+              </Link>
+            </DropdownMenuItem>
+          );
+        })}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          {/* `?new` keeps /onboarding from sending a one-workspace person straight back here. */}
+          <Link href="/onboarding?new#create-workspace" className="text-agent [&>svg]:text-agent">
+            <Plus aria-hidden />
             Create workspace
           </Link>
-          <Link href="/onboarding?new" onClick={close} className="flex items-center rounded-lg px-2.5 py-2 text-sm text-ink-2 hover:bg-raised/70 hover:text-ink">
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href="/onboarding?new">
+            <LayoutGrid aria-hidden />
             All workspaces
           </Link>
-        </div>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/** Who is signed in, and the way out. */
+export function AccountMenu({ email }: { email: string | null }) {
+  const label = email ?? "this account";
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" className="h-auto w-full justify-start gap-3 px-2 py-1.5 text-left font-normal sm:h-auto">
+          <Avatar name={email ?? "?"} />
+          <span className="min-w-0 flex-1">
+            <span className="block text-xs text-ink-3">Signed in as</span>
+            <span className="block truncate text-sm font-medium text-ink" title={email ?? undefined}>
+              {label}
+            </span>
+          </span>
+          <ChevronsUpDown aria-hidden className="text-ink-3" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent side="top" align="start" className="w-(--radix-dropdown-menu-trigger-width) min-w-56">
+        <DropdownMenuLabel className="truncate font-sans text-xs font-normal normal-case tracking-normal">{label}</DropdownMenuLabel>
+        <DropdownMenuItem asChild>
+          <Link href="/onboarding?new">
+            <LayoutGrid aria-hidden />
+            All workspaces
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href="/onboarding?new#create-workspace">
+            <Plus aria-hidden />
+            Create workspace
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          tone="danger"
+          onSelect={() =>
+            startTransition(async () => {
+              await signOut();
+            })
+          }
+        >
+          <LogOut aria-hidden />
+          Sign out
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function SearchButton() {
+  const palette = useCommandPalette();
+  const shortcut = useShortcutLabel();
+  return (
+    <Button variant="secondary" onClick={palette.open} className="w-full justify-start gap-2.5 px-3 font-normal text-ink-3 shadow-none hover:text-ink">
+      <Search aria-hidden />
+      <span className="flex-1 text-left">Search or jump to…</span>
+      <Kbd className="hidden lg:inline-flex">{shortcut}</Kbd>
+    </Button>
+  );
+}
+
+/** Everything in the sidebar — and, below `lg`, in the drawer. */
+export function NavPanel({
+  home,
+  workspace,
+  workspaces,
+  email,
+  layoutId,
+}: {
+  home: string;
+  workspace: WorkspaceSummary;
+  workspaces: WorkspaceSummary[];
+  email: string | null;
+  layoutId: string;
+}) {
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex h-16 shrink-0 items-center px-5">
+        <Link href={home} className="group inline-flex items-center gap-2.5 font-mono text-[0.8125rem] font-semibold uppercase tracking-[0.2em] text-ink hover:text-agent">
+          <BrandMark className="size-8 shrink-0 text-agent drop-shadow-logo transition-transform duration-150 ease-standard group-hover:-rotate-6 group-hover:scale-105" />
+          <span>Vestiarion</span>
+        </Link>
+      </div>
+      <div className="shrink-0 space-y-2 px-3 pb-4">
+        <WorkspaceSwitcher current={workspace} workspaces={workspaces} />
+        <SearchButton />
+      </div>
+      <SectionNav orgSlug={workspace.slug} layoutId={layoutId} />
+      <div className="shrink-0 border-t border-line p-3">
+        <AccountMenu email={email} />
       </div>
     </div>
   );
 }
 
 /**
- * Below `lg`: a compact bar naming the section and workspace, and a drawer
- * holding the same navigation the sidebar shows. The drawer is a modal
- * <dialog>, so the browser supplies the focus trap, the inert page behind it,
- * Escape to close and focus returning to the menu button.
+ * Below `lg`: a compact bar naming the section and workspace, a drawer with
+ * the same panel the sidebar shows, and the command palette's search button.
+ * The drawer is open for one URL: following any link closes it without an
+ * effect, and so does growing the window past `lg`.
  */
-export function MobileNav({ home, workspaceName, children }: { home: string; workspaceName: string; children: ReactNode }) {
-  const drawer = useRef<HTMLDialogElement>(null);
+export function MobileNav({
+  home,
+  workspace,
+  workspaces,
+  email,
+}: {
+  home: string;
+  workspace: WorkspaceSummary;
+  workspaces: WorkspaceSummary[];
+  email: string | null;
+}) {
   const pathname = usePathname();
   const section = navItemForPathname(pathname);
-  const drawerId = useId();
-
-  useEffect(() => {
-    drawer.current?.close();
-  }, [pathname]);
+  const palette = useCommandPalette();
+  const [openAt, setOpenAt] = useState<string | null>(null);
+  const open = openAt === pathname;
 
   useEffect(() => {
     const wide = window.matchMedia(WIDE);
     const closeWhenWide = () => {
-      if (wide.matches) drawer.current?.close();
+      if (wide.matches) setOpenAt(null);
     };
     wide.addEventListener("change", closeWhenWide);
     return () => wide.removeEventListener("change", closeWhenWide);
   }, []);
 
-  function onDrawerClick(event: MouseEvent<HTMLDialogElement>) {
-    const target = event.target as Element;
-    // A click on the dialog itself landed on its backdrop; a click on a link is a navigation.
-    if (target === event.currentTarget || target.closest("a[href]")) event.currentTarget.close();
-  }
-
   return (
-    <>
-      <header className="sticky top-0 z-40 border-b border-line/80 bg-surface/90 backdrop-blur-xl lg:hidden">
-        <div className="flex h-14 items-center gap-1 px-2 sm:px-4">
-          <button
-            type="button"
-            aria-label="Open navigation"
-            aria-haspopup="dialog"
-            aria-controls={drawerId}
-            onClick={() => drawer.current?.showModal()}
-            className="grid size-11 shrink-0 place-items-center rounded-xl text-ink-2 transition-colors hover:bg-raised hover:text-ink"
+    <header className="sticky top-0 z-40 border-b border-line/80 bg-surface/90 backdrop-blur-xl lg:hidden">
+      <div className="flex h-14 items-center gap-1 px-2 sm:px-4">
+        <Sheet open={open} onOpenChange={(next) => setOpenAt(next ? pathname : null)}>
+          <SheetTrigger asChild>
+            <Button variant="ghost" size="icon" aria-label="Open navigation">
+              <Menu />
+            </Button>
+          </SheetTrigger>
+          <SheetContent
+            side="left"
+            title="Navigation"
+            hideHeader
+            onClick={(event) => {
+              // A link to the page already open changes no URL; close anyway.
+              if ((event.target as Element).closest("a[href]")) setOpenAt(null);
+            }}
           >
-            <MenuGlyph className="size-[1.375rem]" />
-          </button>
-          <Link href={home} className="grid size-11 shrink-0 place-items-center rounded-xl">
-            <BrandMark className="size-7 text-agent" />
-            <span className="sr-only">Vestiarion — {workspaceName} home</span>
-          </Link>
-          <div className="min-w-0 flex-1 pl-1">
-            <p className="truncate text-[0.9375rem] font-semibold leading-5 text-ink">{section?.label ?? workspaceName}</p>
-            {section && <p className="truncate text-xs leading-4 text-ink-3">{workspaceName}</p>}
-          </div>
+            <NavPanel home={home} workspace={workspace} workspaces={workspaces} email={email} layoutId="drawer" />
+          </SheetContent>
+        </Sheet>
+        <Link href={home} className="grid size-11 shrink-0 place-items-center rounded-xl">
+          <BrandMark className="size-7 text-agent" />
+          <span className="sr-only">Vestiarion — {workspace.name} home</span>
+        </Link>
+        <div className="min-w-0 flex-1 pl-1">
+          <p className="truncate text-[0.9375rem] font-semibold leading-5 text-ink">{section?.label ?? workspace.name}</p>
+          {section && <p className="truncate text-xs leading-4 text-ink-3">{workspace.name}</p>}
         </div>
-      </header>
-      <dialog ref={drawer} id={drawerId} aria-label="Navigation" className="nav-drawer" onClick={onDrawerClick}>
-        <div className="relative h-full">
-          <button
-            type="button"
-            aria-label="Close navigation"
-            onClick={() => drawer.current?.close()}
-            className="absolute right-3 top-3 z-10 grid size-10 place-items-center rounded-xl text-ink-2 transition-colors hover:bg-raised hover:text-ink"
-          >
-            <CloseGlyph />
-          </button>
-          {children}
-        </div>
-      </dialog>
-    </>
+        <Button variant="ghost" size="icon" aria-label="Search or jump to" onClick={palette.open}>
+          <Search />
+        </Button>
+      </div>
+    </header>
   );
 }

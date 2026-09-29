@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import LoginForm from "@/components/auth/LoginForm";
+import { Callout } from "@/components/ui/Callout";
+import { Card } from "@/components/ui/Card";
+import { SubmitButton } from "@/components/ui/SubmitButton";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
 import { loginErrorMessage } from "@/lib/auth/messages";
 import { safeNext } from "@/lib/auth/routes";
@@ -28,18 +31,22 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         <div className="w-full max-w-sm">
           <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">Sign in to Vestiarion</h1>
           <p className="mt-2 text-sm text-ink-3">We email you a link. No password to remember or leak.</p>
-          {error && <p role="alert" className="mt-4 rounded-lg border border-refused-line bg-refused-soft p-3 text-sm text-refused">{error}</p>}
-          <div className="surface-shadow mt-6 rounded-2xl border border-line bg-surface p-5 sm:p-6">
+          {error && (
+            <Callout tone="refused" role="alert" className="mt-4">
+              {error}
+            </Callout>
+          )}
+          <Card className="mt-6 p-5 sm:p-6">
             <LoginForm next={next} />
             {googleSignInEnabled() && (
               <form action={signInWithGoogle} className="mt-4 border-t border-line pt-4">
                 <input type="hidden" name="next" value={next} />
-                <button type="submit" className="h-11 w-full rounded-xl border border-line-strong px-3.5 text-sm font-medium text-ink transition-colors hover:bg-raised">
+                <SubmitButton variant="secondary" pendingLabel="Opening Google…" className="w-full">
                   Continue with Google
-                </button>
+                </SubmitButton>
               </form>
             )}
-          </div>
+          </Card>
           <p className="mt-5 text-center text-xs leading-relaxed text-ink-3">No account yet? The same link creates one.</p>
         </div>
       </main>

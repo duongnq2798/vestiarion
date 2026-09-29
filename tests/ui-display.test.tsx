@@ -74,6 +74,10 @@ describe("EmptyState", () => {
     expect(html(<EmptyState title="No invoices" titleAs="h2" />)).toContain("<h2");
     expect(html(<EmptyState title="No invoices" />)).toContain("<h3");
   });
+
+  it("can be a page's main heading", () => {
+    expect(html(<EmptyState title="This invitation has expired" titleAs="h1" />)).toContain("<h1");
+  });
 });
 
 describe("Avatar", () => {
@@ -139,6 +143,23 @@ describe("Table", () => {
     );
     expect(markup).toMatch(/^<div class="[^"]*overflow-x-auto/);
     expect(markup).toContain('scope="col"');
+    // Screen-reader-only text and hidden form controls in cells must scroll with the table, not widen the page.
+    expect(markup).toMatch(/^<div class="[^"]*\brelative\b/);
+  });
+
+  it("lets its frame scroll both ways when asked, for a sticky header", () => {
+    const markup = html(
+      <Table containerClassName="max-h-72 overflow-auto">
+        <TableBody>
+          <TableRow>
+            <TableCell>row</TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+    );
+    expect(markup).toMatch(/^<div class="[^"]*max-h-72/);
+    expect(markup).toContain("overflow-auto");
+    expect(markup).not.toContain("overflow-x-auto");
   });
 });
 

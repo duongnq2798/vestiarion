@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { AgentPausedBanner, pausedBanner } from "@/components/AgentPausedBanner";
 import { AppFrame } from "@/components/vx/AppFrame";
-import type { WorkspaceSummary } from "@/components/vx/AppNav";
+import type { WorkspaceSummary } from "@/components/vx/workspace";
 import { membershipFor, membershipsOf, requireMembership, type OrgMembership } from "@/lib/auth/membership";
 import { getSessionUser } from "@/lib/auth/session";
 
