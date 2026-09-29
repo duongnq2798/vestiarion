@@ -567,8 +567,9 @@ describe("the deadline", () => {
       return { status: 200 };
     };
 
-    // Two batches fill 50 seconds; with 10 seconds left no third batch is claimed.
-    expect(await dispatch(oneSecondEach, { deadlineMs: 60_000 })).toEqual({ delivered: 50, failed: 0, retried: 0 });
+    // Two batches fill 50 seconds (the 50th send starts with exactly the 12 s
+    // margin left); with 11 seconds left no third batch is claimed.
+    expect(await dispatch(oneSecondEach, { deadlineMs: 61_000 })).toEqual({ delivered: 50, failed: 0, retried: 0 });
 
     expect(fake.requests.filter((r) => r.path === "/rest/v1/rpc/claim_webhook_deliveries")).toHaveLength(2);
     const left = [...deliveries.values()].filter((d) => d.status !== "delivered");
@@ -599,6 +600,24 @@ describe("the deadline", () => {
     // At 52 s only 8 s were left, less than one request's timeout.
     expect(deliveries.get(third.id)).toMatchObject({ status: "pending", attempts: 2, claimed_at: null });
     expect(releasedAt).toBe(START + 52_000);
+  });
+
+  it("keeps the claim margin before each send too, so the database work around a request stays inside the deadline", async () => {
+    endpoint();
+    const first = delivery();
+    const second = delivery();
+    const third = delivery();
+    const slow: WebhookSender = async (request) => {
+      sent.push(request);
+      clock.t += 24_500;
+      return { status: 200 };
+    };
+
+    expect(await dispatch(slow, { deadlineMs: 60_000 })).toEqual({ delivered: 2, failed: 0, retried: 0 });
+
+    // At 49 s, 11 s were left: more than one request's timeout, less than the margin.
+    expect(sent.map((r) => r.headers["Vestiarion-Event-Id"])).toEqual([first.id, second.id]);
+    expect(deliveries.get(third.id)).toMatchObject({ status: "pending", claimed_at: null });
   });
 
   it("claims nothing when the deadline has already passed", async () => {

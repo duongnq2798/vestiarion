@@ -231,9 +231,9 @@ async function attemptFailed(
   const attempts = delivery.attempts + 1;
   // R7: a webhook.test delivery gets a single attempt. Its failure is final at
   // once, never retried later — a test is a check the person is watching, and
-  // a late retry of it would surprise the receiver (ruling R8). It still
-  // counts toward the endpoint's consecutive failures, below, like any other
-  // failed attempt.
+  // a late retry of it would surprise the receiver (ruling R8). A receiver-side
+  // failure still counts toward the endpoint's consecutive failures, below;
+  // a platform-side one never does.
   const final = attempts >= WEBHOOK_MAX_ATTEMPTS || delivery.event_type === "webhook.test";
   const values: Record<string, unknown> = final
     ? { status: "failed", attempts, last_status: status, last_error: reason }
@@ -360,8 +360,9 @@ function tally(result: DeliverResult, outcome: Outcome): void {
  * Claims due deliveries in batches of `CLAIM_BATCH` and sends them, until
  * `limit` (`WEBHOOK_RUN_LIMIT` by default) have been taken, a batch comes back
  * empty, or the deadline is near: no batch is claimed with less than
- * `CLAIM_MARGIN_MS` left, and no send is started with less than one request's
- * timeout left, so a claimed row is never left `sending` past the deadline.
+ * `CLAIM_MARGIN_MS` left, and no send is started with less than that margin
+ * left either (one request's timeout plus room for its reads and writes), so a
+ * claimed row is not left `sending` past the deadline.
  * A claimed delivery not started in time goes back to pending with its
  * attempt count. Never throws.
  */
@@ -387,7 +388,7 @@ export async function deliverPendingWebhooks(options: DeliverOptions = {}): Prom
       taken += claimed.length;
 
       for (const delivery of claimed) {
-        if (left() < WEBHOOK_TIMEOUT_MS) {
+        if (left() < CLAIM_MARGIN_MS) {
           try {
             await release(delivery, run, 0, "deadline");
           } catch {

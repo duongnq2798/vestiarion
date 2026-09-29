@@ -37,10 +37,11 @@ Deliveries go out from two places, never inside an unrelated request:
 
 A run is bounded by 60 seconds and 500 deliveries (`WEBHOOK_RUN_DEADLINE_MS`,
 `WEBHOOK_RUN_LIMIT` in `src/lib/webhooks/deliver.ts`), claimed in batches of
-25. No batch is claimed with less than about 12 seconds left, and no request
-is started that its 10-second timeout could carry past the deadline, so
-nothing is left half-sent when a run ends; a queue larger than one run is
-finished by the next.
+25. No batch is claimed, and no request is started, with less than about 12
+seconds left (one request's 10-second timeout plus a margin), so nothing is
+left half-sent when a run ends; a queue larger than one run is finished by the
+next. A tick with less than that left dispatches nothing and leaves the queue
+to the 10-minute run.
 
 **A test event is the one exception.** Sending it from the Settings page
 (`sendTestEvent`, `src/lib/webhooks/deliver.ts`) delivers it synchronously,
@@ -185,18 +186,18 @@ hours, 6 hours and 12 hours between them (`WEBHOOK_BACKOFF_MS`,
 the response body is read (neither the body nor headers of the response are
 otherwise inspected).
 
-Every failed attempt, `webhook.test` included, counts against the endpoint's
-consecutive-failure count. After **20 consecutive failed attempts**, the
+Every failed attempt on the receiver's side, `webhook.test` included, counts
+against the endpoint's consecutive-failure count. After **20 consecutive failed attempts**, the
 endpoint is disabled and its still-pending deliveries are failed outright.
 There is no re-enabling in place — remove the endpoint and add it back, which
 also issues a fresh secret.
 
 A failure on Vestiarion's side — the endpoint's secret cannot be read, or its
-stored URL no longer passes the rules below — is retried on the same
-schedule and still ends the delivery `failed` after the 7th attempt, but it
-**never counts against your endpoint and never disables it**. A host that
-resolves to a non-public address is not such a failure: it counts, like any
-other failed attempt.
+stored URL no longer parses or passes the syntax rules below — is retried on
+the same schedule and still ends the delivery `failed` after the 7th attempt,
+but it **never counts against your endpoint and never disables it**. A
+destination that is, or resolves to, a non-public address is not such a
+failure: it counts, like any other failed attempt.
 
 ## Delivery guarantees
 
