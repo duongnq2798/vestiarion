@@ -203,13 +203,21 @@ describe("GoLivePanel, for anyone who is not an owner", () => {
 });
 
 describe("GoLivePanel, with credentials this deployment cannot read", () => {
-  it.each([true, false])("warns, and shows no step (owner: %s)", (canAdminister) => {
-    const markup = panel(status({ step: "live", connected: true, wallets: WALLETS, credentialsUnreadable: true }), canAdminister);
+  it("warns a non-owner, and shows no step or form", () => {
+    const markup = panel(status({ step: "live", connected: true, wallets: WALLETS, credentialsUnreadable: true }), false);
     const words = text(markup);
     expect(words).toContain("Circle credentials cannot be read");
     expect(markup).not.toContain("<form");
     expect(markup).not.toContain("<input");
     expect(words).not.toContain("Replace Circle credentials");
+    expect(words).not.toContain(OPERATING);
+  });
+
+  it("warns an owner, and offers the reconnect form the message asks for", () => {
+    const markup = panel(status({ step: "live", connected: true, wallets: WALLETS, credentialsUnreadable: true }), true);
+    const words = text(markup);
+    expect(words).toContain("Circle credentials cannot be read");
+    expect(words).toContain("Replace Circle credentials");
     expect(words).not.toContain(OPERATING);
   });
 });

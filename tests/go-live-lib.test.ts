@@ -272,7 +272,7 @@ describe("GoLiveError", () => {
     ["invalid", "Paste both the API key and the entity secret."],
     ["key_rejected", "Circle did not accept this API key."],
     ["unreachable", "Could not reach Circle; try again."],
-    ["different_entity", "This workspace is live; its wallets belong to the connected Circle account."],
+    ["different_entity", "This workspace's wallets belong to the connected Circle account; use its credentials."],
     ["not_connected", "Connect Circle first."],
     ["entity_secret_rejected", "Circle did not accept the entity secret; reconnect with the right one."],
     ["no_wallets", "Create the treasury wallets first."],
@@ -462,7 +462,7 @@ describe("connectCircle", () => {
         );
 
         expect(error.code).toBe("different_entity");
-        expect(error.message).toBe("This workspace is live; its wallets belong to the connected Circle account.");
+        expect(error.message).toBe("This workspace's wallets belong to the connected Circle account; use its credentials.");
         expect(orgPatches(fake)).toEqual([]);
         expect(state.org).toEqual(before);
         expect(appends(fake)).toEqual([]);

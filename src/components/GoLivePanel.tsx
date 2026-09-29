@@ -327,7 +327,7 @@ export default function GoLivePanel({ orgSlug, status, canAdminister }: GoLivePa
   if (status.credentialsUnreadable) {
     body = (
       <Callout tone="refused" title="Circle credentials cannot be read">
-        This workspace&apos;s Circle credentials are stored, but this deployment cannot decrypt them, so it pays nothing until they can be read again.
+        This workspace&apos;s Circle credentials are stored, but this deployment cannot decrypt them, so it pays nothing until they can be read again. An owner can reconnect below.
       </Callout>
     );
   } else if (live) {
@@ -342,7 +342,9 @@ export default function GoLivePanel({ orgSlug, status, canAdminister }: GoLivePa
     body = <GoLiveStep orgSlug={orgSlug} status={status} />;
   }
 
-  const canReplace = canAdminister && !status.credentialsUnreadable && status.step !== "connect";
+  // With unreadable credentials the warning asks an owner to reconnect, so the
+  // form is offered then too; the new pair still has to pass the same checks.
+  const canReplace = canAdminister && (status.credentialsUnreadable || status.step !== "connect");
 
   return (
     <section aria-labelledby="go-live-title">

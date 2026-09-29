@@ -175,7 +175,7 @@ describe("connectCircleAction", () => {
   it.each([
     ["key_rejected", "Circle did not accept this API key."],
     ["unreachable", "Could not reach Circle; try again."],
-    ["different_entity", "This workspace is live; its wallets belong to the connected Circle account."],
+    ["different_entity", "This workspace's wallets belong to the connected Circle account; use its credentials."],
   ] as const)("returns %s's message without the pasted values", async (code, message) => {
     authorizeMock.mockResolvedValueOnce(owner());
     connectCircleMock.mockRejectedValueOnce(new GoLiveError(code));
@@ -232,7 +232,7 @@ describe("goLiveAction", () => {
     ["not_connected", "Connect Circle first."],
     ["no_wallets", "Create the treasury wallets first."],
     ["already_live", "This workspace is already live."],
-    ["different_entity", "This workspace is live; its wallets belong to the connected Circle account."],
+    ["different_entity", "This workspace's wallets belong to the connected Circle account; use its credentials."],
     ["unreachable", "Could not reach Circle; try again."],
     ["credentials_unreadable", "The stored Circle credentials cannot be read; reconnect."],
   ] as const)("returns %s's message", async (code, message) => {
