@@ -103,7 +103,11 @@ The claim also sets `reviewed_by` and `reviewed_at`. An invoice left in `process
 While a workspace is paused:
 - **The cron skips it.** The tick response says `{"slug":…, "ok":true, "skipped":"paused"}` for it, and nothing is written to its ledger.
 - **The console's Run button is disabled.** The action refuses with "The agent is paused." The agent also refuses a cycle that starts anyway: `begin_cycle_run` raises `agent_paused`.
-- **A cycle already running stops moving money.** Before each payment, the AP and contractor stages re-read the pause flag. A paused workspace's pending payment is recorded as `held`, with "[not paid: the agent was paused]", and the ledger says so.
+- **A cycle already running stops moving money.**
+  - Before each payment, the AP and contractor stages re-read the pause flag. A paused workspace's pending payment is recorded as `held`, with "[not paid: the agent was paused]".
+  - Before each deposit to or withdrawal from the reserve, the treasury stage re-reads the flag too. A paused workspace's move is recorded as not executed, with "[not moved: the agent was paused]".
+  - Each of these ledger entries carries `heldBecause: "agent_paused"`.
+  - A failure to read the flag stops the stage rather than paying.
 
 Human decisions in the inbox continue while the agent is paused. Pausing is how you stop the automation, and an approval is a person's own deliberate act. Stopping people as well would make the switch unusable during exactly the incident it exists for, when someone must still pay the one bill that matters.
 
