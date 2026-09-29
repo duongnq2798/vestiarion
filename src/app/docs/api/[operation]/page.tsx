@@ -15,6 +15,7 @@ import { Eyebrow } from "@/components/ui/Eyebrow";
 import { jsonSchema, OPERATIONS, operationById } from "@/lib/api/openapi";
 import { loadNotes } from "@/lib/docs/content";
 import { docsHref, findPage } from "@/lib/docs/nav";
+import { docsSocialMetadata } from "@/lib/docs/social";
 import { publicOrigin } from "@/lib/public-origin";
 import { notesHeadings, REFERENCE_SECTIONS, referenceHeadings, sectionId, type ReferenceSection } from "@/lib/docs/reference";
 import { sampleRequest } from "@/lib/docs/samples";
@@ -41,6 +42,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title: { absolute: `${found.page.title} · Vestiarion docs` },
     description: found.page.description,
     alternates: { canonical: docsHref(found.page.slug) },
+    ...docsSocialMetadata(found.page),
   };
 }
 

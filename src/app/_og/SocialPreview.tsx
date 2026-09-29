@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { ImageResponse } from "next/og";
+import type { ReactNode } from "react";
 import { COLOR } from "@/components/ui/tokens";
 
 const OG_ASSET_DIR = join(process.cwd(), "src", "app", "_og");
@@ -45,8 +46,12 @@ const statusChips = [
   { label: "Refused", color: COLOR.refused, background: COLOR.refusedSoft, border: COLOR.refusedLine },
 ] as const;
 
-/** One static, brand-matched image shared by the Open Graph and X routes. */
-export function socialPreviewImage(): ImageResponse {
+/**
+ * The frame every social image shares: the paper ground, the agent-blue rule,
+ * the mark and wordmark with a badge, and the footer line. `children` fills
+ * the middle, and `footer` names where the page lives.
+ */
+export function renderSocialImage({ badge, footer, children }: { badge: string; footer: string; children: ReactNode }): ImageResponse {
   return new ImageResponse(
     (
       <div
@@ -98,117 +103,14 @@ export function socialPreviewImage(): ImageResponse {
               textTransform: "uppercase",
             }}
           >
-            Autonomous treasury agent
+            {badge}
           </div>
         </div>
 
-        <div style={{ display: "flex", flex: 1, alignItems: "center", marginTop: 26 }}>
-          <div style={{ display: "flex", flexDirection: "column", width: 696, paddingRight: 32 }}>
-            <div
-              style={{
-                display: "flex",
-                fontSize: 82,
-                lineHeight: 0.94,
-                letterSpacing: -4.6,
-              }}
-            >
-              Money moves.
-            </div>
-            <div
-              style={{
-                display: "flex",
-                marginTop: 4,
-                color: COLOR.agent,
-                fontFamily: "Newsreader",
-                fontSize: 82,
-                fontStyle: "italic",
-                fontWeight: 400,
-                lineHeight: 0.94,
-                letterSpacing: -3.5,
-              }}
-            >
-              Evidence remains.
-            </div>
-            <div
-              style={{
-                display: "flex",
-                maxWidth: 650,
-                marginTop: 26,
-                color: COLOR.ink2,
-                fontSize: 24,
-                lineHeight: 1.42,
-              }}
-            >
-              {SUPPORTING_COPY}
-            </div>
-          </div>
-
-          <div
-            style={{
-              width: LEDGER_CARD_WIDTH,
-              height: 286,
-              display: "flex",
-              flexDirection: "column",
-              position: "relative",
-              padding: `24px ${LEDGER_CARD_HORIZONTAL_PADDING}px 22px`,
-              border: `${LEDGER_CARD_BORDER}px solid ${COLOR.line}`,
-              borderRadius: 24,
-              backgroundColor: COLOR.surface,
-              boxShadow: `0 18px 48px ${COLOR.ink}1f`,
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                color: COLOR.ink3,
-                fontSize: 15,
-                letterSpacing: 2.2,
-                textTransform: "uppercase",
-              }}
-            >
-              Signed decision ledger
-            </div>
-
-            {ledgerBarWidths.map((width, index) => (
-              <div key={width} style={{ display: "flex", alignItems: "center", marginTop: index === 0 ? 24 : 16 }}>
-                <div
-                  style={{
-                    width: LEDGER_DOT_WIDTH,
-                    height: LEDGER_DOT_WIDTH,
-                    display: "flex",
-                    border: `3px solid ${COLOR.proof}`,
-                    borderRadius: 999,
-                    backgroundColor: COLOR.proofSoft,
-                  }}
-                />
-                <div style={{ display: "flex", width, height: 10, marginLeft: LEDGER_DOT_TO_BAR_GAP, borderRadius: 999, backgroundColor: COLOR.line }} />
-                <div style={{ display: "flex", width: LEDGER_PILL_WIDTH, height: 10, marginLeft: "auto", borderRadius: 999, backgroundColor: COLOR.agentSoft }} />
-              </div>
-            ))}
-
-            <div style={{ display: "flex", gap: 6, marginTop: "auto" }}>
-              {statusChips.map((chip) => (
-                <div
-                  key={chip.label}
-                  style={{
-                    display: "flex",
-                    padding: "6px 7px 5px",
-                    border: `1px solid ${chip.border}`,
-                    borderRadius: 999,
-                    color: chip.color,
-                    backgroundColor: chip.background,
-                    fontSize: 14,
-                  }}
-                >
-                  {chip.label}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        {children}
 
         <div style={{ display: "flex", alignItems: "center", color: COLOR.ink3, fontSize: 18 }}>
-          <div style={{ display: "flex" }}>vestiarion.xyz</div>
+          <div style={{ display: "flex" }}>{footer}</div>
           <div style={{ display: "flex", margin: "0 12px", color: COLOR.lineStrong }}>·</div>
           <div style={{ display: "flex" }}>Arc testnet</div>
           <div style={{ display: "flex", flex: 1, height: 1, marginLeft: 20, backgroundColor: COLOR.line }} />
@@ -223,4 +125,118 @@ export function socialPreviewImage(): ImageResponse {
       ],
     },
   );
+}
+
+/** One static, brand-matched image shared by the Open Graph and X routes. */
+export function socialPreviewImage(): ImageResponse {
+  return renderSocialImage({
+    badge: "Autonomous treasury agent",
+    footer: "vestiarion.xyz",
+    children: (
+      <div style={{ display: "flex", flex: 1, alignItems: "center", marginTop: 26 }}>
+        <div style={{ display: "flex", flexDirection: "column", width: 696, paddingRight: 32 }}>
+          <div
+            style={{
+              display: "flex",
+              fontSize: 82,
+              lineHeight: 0.94,
+              letterSpacing: -4.6,
+            }}
+          >
+            Money moves.
+          </div>
+          <div
+            style={{
+              display: "flex",
+              marginTop: 4,
+              color: COLOR.agent,
+              fontFamily: "Newsreader",
+              fontSize: 82,
+              fontStyle: "italic",
+              fontWeight: 400,
+              lineHeight: 0.94,
+              letterSpacing: -3.5,
+            }}
+          >
+            Evidence remains.
+          </div>
+          <div
+            style={{
+              display: "flex",
+              maxWidth: 650,
+              marginTop: 26,
+              color: COLOR.ink2,
+              fontSize: 24,
+              lineHeight: 1.42,
+            }}
+          >
+            {SUPPORTING_COPY}
+          </div>
+        </div>
+
+        <div
+          style={{
+            width: LEDGER_CARD_WIDTH,
+            height: 286,
+            display: "flex",
+            flexDirection: "column",
+            position: "relative",
+            padding: `24px ${LEDGER_CARD_HORIZONTAL_PADDING}px 22px`,
+            border: `${LEDGER_CARD_BORDER}px solid ${COLOR.line}`,
+            borderRadius: 24,
+            backgroundColor: COLOR.surface,
+            boxShadow: `0 18px 48px ${COLOR.ink}1f`,
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              color: COLOR.ink3,
+              fontSize: 15,
+              letterSpacing: 2.2,
+              textTransform: "uppercase",
+            }}
+          >
+            Signed decision ledger
+          </div>
+
+          {ledgerBarWidths.map((width, index) => (
+            <div key={width} style={{ display: "flex", alignItems: "center", marginTop: index === 0 ? 24 : 16 }}>
+              <div
+                style={{
+                  width: LEDGER_DOT_WIDTH,
+                  height: LEDGER_DOT_WIDTH,
+                  display: "flex",
+                  border: `3px solid ${COLOR.proof}`,
+                  borderRadius: 999,
+                  backgroundColor: COLOR.proofSoft,
+                }}
+              />
+              <div style={{ display: "flex", width, height: 10, marginLeft: LEDGER_DOT_TO_BAR_GAP, borderRadius: 999, backgroundColor: COLOR.line }} />
+              <div style={{ display: "flex", width: LEDGER_PILL_WIDTH, height: 10, marginLeft: "auto", borderRadius: 999, backgroundColor: COLOR.agentSoft }} />
+            </div>
+          ))}
+
+          <div style={{ display: "flex", gap: 6, marginTop: "auto" }}>
+            {statusChips.map((chip) => (
+              <div
+                key={chip.label}
+                style={{
+                  display: "flex",
+                  padding: "6px 7px 5px",
+                  border: `1px solid ${chip.border}`,
+                  borderRadius: 999,
+                  color: chip.color,
+                  backgroundColor: chip.background,
+                  fontSize: 14,
+                }}
+              >
+                {chip.label}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    ),
+  });
 }
