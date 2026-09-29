@@ -36,4 +36,4 @@ export const menuItemBase =
   "relative flex min-h-11 cursor-default select-none items-center gap-2.5 rounded-lg px-2.5 text-sm text-ink-2 outline-hidden transition-colors duration-150 ease-standard sm:min-h-9 [&_svg]:size-4 [&_svg]:shrink-0 [&>svg]:text-ink-3";
 
 /** A Radix menu or select row: Radix marks the row under the pointer or the arrow keys `data-highlighted`. */
-export const menuItem = `${menuItemBase} data-[highlighted]:bg-raised/80 data-[highlighted]:text-ink data-[disabled]:pointer-events-none data-[disabled]:opacity-50`;
+export const menuItem = `${menuItemBase} data-[highlighted]:bg-raised/70 data-[highlighted]:text-ink data-[disabled]:pointer-events-none data-[disabled]:opacity-50`;

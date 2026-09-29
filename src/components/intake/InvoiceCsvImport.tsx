@@ -78,7 +78,7 @@ export default function InvoiceCsvImport({ orgSlug }: { orgSlug: string }) {
           <input type="hidden" name="orgSlug" value={orgSlug} />
           <input type="hidden" name="rowsJson" value={JSON.stringify(rows)} />
           <Table label="Invoices to import" containerClassName="max-h-72 overflow-auto rounded-xl border border-line" className="min-w-[48rem] text-xs">
-            <TableHeader className="sticky top-0 z-10 bg-raised">
+            <TableHeader className="sticky top-0 z-10 bg-ground">
               <TableRow>
                 {HEADINGS.map((heading) => (
                   <TableHead key={heading} className="px-3 py-2">

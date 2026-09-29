@@ -403,15 +403,16 @@ function OutcomeChart({ runs }: { runs: CycleRunTelemetry[] }) {
       <ol className="mt-4 space-y-3">
         {runs.map((run, index) => {
           const total = totals[index];
+          const failed = run.status === "failed" || run.status === "partial";
           return <li key={run.id} className="grid grid-cols-[3.5rem_minmax(0,1fr)_2rem] items-center gap-2 text-xs">
             <span className="font-mono text-ink-3">#{index + 1}</span>
-            <div className="flex h-5 min-w-0 overflow-hidden rounded-full bg-raised" aria-label={`${total} outcomes`}>
-              {total === 0 ? <span className={`m-auto text-[0.625rem] ${run.status === "failed" || run.status === "partial" ? "text-refused" : "text-ink-3"}`}>{run.status === "failed" || run.status === "partial" ? `${run.status} — ${run.failedStage ?? "a stage"} failed` : run.status === "running" ? "still running" : "no outcomes"}</span> : outcomes.map((outcome) => {
+            <div className={`flex h-5 min-w-0 overflow-hidden rounded-full ${failed && total === 0 ? "bg-refused-soft" : "bg-raised"}`} aria-label={`${total} outcomes`}>
+              {total === 0 ? <span className={`m-auto text-[0.625rem] ${failed ? "text-refused" : "text-ink-2"}`}>{failed ? `${run.status} — ${run.failedStage ?? "a stage"} failed` : run.status === "running" ? "still running" : "no outcomes"}</span> : outcomes.map((outcome) => {
                 const value = outcome.value(run);
                 return value > 0 ? <span key={outcome.key} title={`${outcome.label}: ${value}`} style={{ width: `${width(value)}%`, background: outcome.color }} /> : null;
               })}
             </div>
-            <span className="text-right tabular-nums text-ink-2">{total}{(run.status === "failed" || run.status === "partial") && total > 0 && <span className="ml-1 text-refused" title={`Partial: the cycle failed at ${run.failedStage ?? "an unnamed stage"}`}>&#9670;</span>}</span>
+            <span className="text-right tabular-nums text-ink-2">{total}{failed && total > 0 && <span className="ml-1 text-refused" title={`Partial: the cycle failed at ${run.failedStage ?? "an unnamed stage"}`}>&#9670;</span>}</span>
           </li>;
         })}
       </ol>
@@ -435,7 +436,7 @@ function DecisionModeChart({ runs }: { runs: CycleRunTelemetry[] }) {
           return <li key={run.id} className="grid grid-cols-[3.5rem_minmax(0,1fr)_3.5rem] items-center gap-2 text-xs">
             <span className="font-mono text-ink-3">#{index + 1}</span>
             <div className="flex h-5 min-w-0 overflow-hidden rounded-full bg-raised">
-              {total === 0 ? <span className="m-auto text-[0.625rem] text-ink-3">no decisions</span> : <>
+              {total === 0 ? <span className="m-auto text-[0.625rem] text-ink-2">no decisions</span> : <>
                 {run.modelDecisionCount > 0 && <span title={`Model: ${run.modelDecisionCount}`} className="bg-agent" style={{ width: `${width(run.modelDecisionCount)}%` }} />}
                 {run.heuristicDecisionCount > 0 && <span title={`Heuristic: ${run.heuristicDecisionCount}`} className="bg-line-strong" style={{ width: `${width(run.heuristicDecisionCount)}%` }} />}
               </>}
