@@ -349,6 +349,21 @@ Monetary database values are `numeric(20,6)` and are converted to numbers only
 at the read boundary. Nullable measurements remain nullable; absence is not
 reported as zero.
 
+## Social previews
+
+Public links use Next.js file-based metadata routes: `src/app/opengraph-image.tsx`
+for Open Graph consumers such as Discord and Slack, and
+`src/app/twitter-image.tsx` for X. Both are static, 1200×630 PNGs rendered by the
+shared `src/app/_og/SocialPreview.tsx` frame from the committed Geist and
+Newsreader font files plus the application's real SVG mark. The renderer reads
+no request, tenant, database, Circle, or ledger data. Its palette comes from
+`src/components/ui/tokens.ts`, whose values are checked against `globals.css`.
+
+The root metadata resolves every canonical and image URL against `SITE_URL`, or
+`https://www.vestiarion.xyz` when that variable is absent. The proxy excludes
+both metadata image paths, so a crawler fetching a preview never performs a
+Supabase session refresh.
+
 ## Verification
 
 Pure contract and payload behavior is covered by `tests/api-contract.test.ts`;

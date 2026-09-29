@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { MOTION, THEME_COLOR } from "@/components/ui/tokens";
+import { COLOR, MOTION, THEME_COLOR } from "@/components/ui/tokens";
 
 /**
  * The few token values TypeScript needs are copies of CSS custom properties.
@@ -18,6 +18,13 @@ function token(name: string): string | undefined {
 describe("design tokens shared with TypeScript", () => {
   it("THEME_COLOR is the surface colour", () => {
     expect(token("color-surface")).toBe(THEME_COLOR);
+  });
+
+  it.each(Object.entries(COLOR))("the %s colour matches its CSS token", (name, value) => {
+    const cssName = name
+      .replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)
+      .replace(/([a-z])(\d)/, "$1-$2");
+    expect(token(`color-${cssName}`)).toBe(value);
   });
 
   it.each(Object.entries(MOTION.ease))("the %s easing matches its CSS token", (name, curve) => {

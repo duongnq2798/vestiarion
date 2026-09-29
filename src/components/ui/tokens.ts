@@ -3,8 +3,32 @@
  * `tests/ui-tokens.test.ts` reads both and fails if they drift apart.
  */
 
+/** CSS palette values needed by non-CSS renderers such as `next/og`. */
+export const COLOR = {
+  ground: "#f3f0e7",
+  surface: "#fffefa",
+  raised: "#e9e5d9",
+  line: "#ddd8ca",
+  lineStrong: "#bbb5a7",
+  ink: "#18211c",
+  ink2: "#4d5a53",
+  ink3: "#646c67",
+  agent: "#3048c9",
+  agentSoft: "#e9edff",
+  agentLine: "#aeb9f6",
+  proof: "#11765a",
+  proofSoft: "#e2f4ec",
+  proofLine: "#9bcfbd",
+  held: "#9f5b08",
+  heldSoft: "#fff1cf",
+  heldLine: "#e2bd70",
+  refused: "#bc3e2f",
+  refusedSoft: "#ffe8e2",
+  refusedLine: "#efa69a",
+} as const;
+
 /** `--color-surface`: the browser chrome colour on phones. */
-export const THEME_COLOR = "#fffefa";
+export const THEME_COLOR = COLOR.surface;
 
 export const MOTION = {
   /** `--ease-*`, as cubic-bezier control points. */
