@@ -38,7 +38,10 @@ alter table public.orgs
   add column if not exists agent_pause_reason text;
 do $$
 begin
-  if not exists (select 1 from pg_constraint where conname = 'orgs_agent_pause_reason_length') then
+  if not exists (
+    select 1 from pg_constraint
+     where conname = 'orgs_agent_pause_reason_length' and conrelid = 'public.orgs'::regclass
+  ) then
     alter table public.orgs add constraint orgs_agent_pause_reason_length
       check (agent_pause_reason is null or char_length(agent_pause_reason) <= 280);
   end if;
@@ -65,7 +68,7 @@ begin
      set status = 'processing', reviewed_by = p_by, reviewed_at = now()
    where id = p_invoice_id and org_id = p_org_id and direction = 'payable'
      and (status in ('held', 'flagged', 'awaiting_info')
-          or (status = 'processing' and reviewed_at < now() - interval '10 minutes'))
+          or (status = 'processing' and coalesce(reviewed_at, '-infinity'::timestamptz) < now() - interval '10 minutes'))
      and (p_decision <> 'approve' or created_by is distinct from p_by)
   returning * into v;
   if found then
@@ -76,7 +79,10 @@ begin
   if not found then
     raise exception 'invoice_not_found: no payable with that id in this organization';
   end if;
-  if p_decision = 'approve' and v.created_by = p_by and v.status in ('held', 'flagged', 'awaiting_info') then
+  if p_decision = 'approve' and v.created_by = p_by and (
+       v.status in ('held', 'flagged', 'awaiting_info')
+       or (v.status = 'processing' and coalesce(v.reviewed_at, '-infinity'::timestamptz) < now() - interval '10 minutes')
+     ) then
     raise exception 'self_approval: the person who created an invoice cannot approve it';
   end if;
   raise exception 'already_decided: the invoice is % now', v.status;
@@ -84,13 +90,18 @@ end;
 $$;
 
 -- 4. Is the organization's agent paused? Definer, because the tenant role has
---    no access to orgs; it reveals one boolean.
+--    no access to orgs; it reveals one boolean, and only for the caller's own
+--    organization — a tenant token names one org, and the service role's
+--    absent claim (request_org_id() null) is let through for every org.
 create or replace function public.agent_paused(p_org_id uuid) returns boolean
 language sql stable
 security definer
 set search_path = ''
 as $$
-  select coalesce((select agent_paused_at is not null from public.orgs where id = p_org_id), false)
+  select coalesce(
+    (select agent_paused_at is not null from public.orgs
+      where id = p_org_id and (public.request_org_id() is null or id = public.request_org_id())),
+    false)
 $$;
 
 -- 5. Pause and resume, told who is acting (the 0021 pattern). Anyone who can

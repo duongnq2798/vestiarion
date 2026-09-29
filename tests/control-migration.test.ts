@@ -118,58 +118,100 @@ describe("claim_invoice_decision", () => {
     await expect(claim(orgId, approver, id, "pay")).rejects.toThrow(/invalid_decision/);
   });
 
-  it("hides another organization's invoice behind RLS", async () => {
+  it("hides another organization's invoice behind RLS, leaving the row unchanged", async () => {
     const id = await invoice("held");
-    await expect(claim(otherOrgId, outsider, id, "approve")).rejects.toThrow(/invoice_not_found/);
+    // p_org_id is the invoice's real organization (what a well-formed call
+    // would pass); only the tenant token names the other organization. If
+    // this raised invoice_not_found because of the function's own
+    // `org_id = p_org_id` predicate, that predicate alone would already
+    // explain it — routing the token through otherOrgId is what proves RLS,
+    // not the predicate, is what hides the row.
+    await expect(
+      asTenant(db, otherOrgId, (tx) =>
+        tx.query("select * from public.claim_invoice_decision($1, $2, $3, $4)", [orgId, id, outsider, "approve"]))
+    ).rejects.toThrow(/invoice_not_found/);
+    expect(await rowOf(id)).toMatchObject({ status: "held", reviewed_by: null });
+  });
+
+  it("raises self_approval, not already_decided, when the creator reclaims their own stale processing invoice", async () => {
+    const id = await invoice("processing", { createdBy: approver });
+    await db.query("update public.invoices set reviewed_at = now() - interval '11 minutes' where id = $1", [id]);
+    await expect(claim(orgId, approver, id, "approve")).rejects.toThrow(/self_approval/);
+  });
+
+  it("treats a null reviewed_at as stale, so a processing row with none can be reclaimed", async () => {
+    const id = await invoice("processing");
+    const row = await claim(orgId, admin, id, "approve");
+    expect(row).toMatchObject({ id, status: "processing", reviewed_by: admin });
   });
 });
 
 describe("pause_agent and resume_agent", () => {
-  const pause = (actor: string, reason: string | null) =>
+  let pauseOrgCounter = 0;
+
+  /** A fresh organization with the same four roles, so each scenario starts unpaused and unaffected by any other. */
+  async function newPausableOrg(): Promise<string> {
+    const org = await createOrg(db, `pause-${++pauseOrgCounter}-co`);
+    for (const [user, role] of [[owner, "owner"], [admin, "admin"], [approver, "approver"], [viewer, "viewer"]] as const) {
+      await db.query("insert into public.memberships (org_id, user_id, role) values ($1, $2, $3)", [org, user, role]);
+    }
+    return org;
+  }
+
+  const pause = (org: string, actor: string, reason: string | null) =>
     asServiceRole(db, async (tx) =>
-      (await tx.query<Record<string, unknown>>("select * from public.pause_agent($1, $2, $3)", [orgId, actor, reason])).rows[0]);
-  const resume = (actor: string) =>
+      (await tx.query<Record<string, unknown>>("select * from public.pause_agent($1, $2, $3)", [org, actor, reason])).rows[0]);
+  const resume = (org: string, actor: string) =>
     asServiceRole(db, async (tx) =>
-      (await tx.query<{ resume_agent: Date }>("select public.resume_agent($1, $2)", [orgId, actor])).rows[0].resume_agent);
+      (await tx.query<{ resume_agent: Date }>("select public.resume_agent($1, $2)", [org, actor])).rows[0].resume_agent);
 
   it("refuses a viewer and a non-member", async () => {
-    await expect(pause(viewer, null)).rejects.toThrow(/pause_not_permitted: a viewer cannot pause the agent/);
-    await expect(pause(outsider, null)).rejects.toThrow(/not_a_member/);
+    const org = await newPausableOrg();
+    await expect(pause(org, viewer, null)).rejects.toThrow(/pause_not_permitted: a viewer cannot pause the agent/);
+    await expect(pause(org, outsider, null)).rejects.toThrow(/not_a_member/);
   });
 
   it("lets an approver pause, setting the paused-at, paused-by and trimmed reason", async () => {
-    const row = await pause(approver, "  investigating a mismatch  ");
+    const org = await newPausableOrg();
+    const row = await pause(org, approver, "  investigating a mismatch  ");
     expect(row).toMatchObject({ agent_paused_by: approver, agent_pause_reason: "investigating a mismatch" });
     expect(row.agent_paused_at).toBeTruthy();
   });
 
   it("refuses a second pause", async () => {
-    await expect(pause(admin, null)).rejects.toThrow(/already_paused/);
+    const org = await newPausableOrg();
+    await pause(org, approver, null);
+    await expect(pause(org, admin, null)).rejects.toThrow(/already_paused/);
   });
 
-  it("refuses a 281-character reason", async () => {
-    const orgId2 = await createOrg(db, "reason-co");
-    await db.query("insert into public.memberships (org_id, user_id, role) values ($1, $2, 'approver')", [orgId2, approver]);
-    await expect(
-      asServiceRole(db, (tx) => tx.query("select public.pause_agent($1, $2, $3)", [orgId2, approver, "x".repeat(281)]))
-    ).rejects.toThrow();
+  it("refuses a 281-character reason by the column check, and accepts 280", async () => {
+    const org = await newPausableOrg();
+    await expect(pause(org, approver, "x".repeat(281))).rejects.toThrow(/orgs_agent_pause_reason_length/);
+    await expect(pause(org, approver, "x".repeat(280))).resolves.toMatchObject({ agent_pause_reason: "x".repeat(280) });
   });
 
   it("refuses resume by an approver", async () => {
-    await expect(resume(approver)).rejects.toThrow(/resume_not_permitted: a approver cannot resume the agent/);
+    const org = await newPausableOrg();
+    await pause(org, approver, null);
+    await expect(resume(org, approver)).rejects.toThrow(/resume_not_permitted: a approver cannot resume the agent/);
   });
 
   it("lets the owner resume, clearing all three columns and returning the paused-since time", async () => {
-    const since = await resume(owner);
+    const org = await newPausableOrg();
+    await pause(org, approver, null);
+    const since = await resume(org, owner);
     expect(since).toBeTruthy();
     const row = (await db.query<{ agent_paused_at: Date | null; agent_paused_by: string | null; agent_pause_reason: string | null }>(
-      "select agent_paused_at, agent_paused_by, agent_pause_reason from public.orgs where id = $1", [orgId]
+      "select agent_paused_at, agent_paused_by, agent_pause_reason from public.orgs where id = $1", [org]
     )).rows[0];
     expect(row).toEqual({ agent_paused_at: null, agent_paused_by: null, agent_pause_reason: null });
   });
 
   it("refuses a second resume", async () => {
-    await expect(resume(owner)).rejects.toThrow(/not_paused/);
+    const org = await newPausableOrg();
+    await pause(org, approver, null);
+    await resume(org, owner);
+    await expect(resume(org, owner)).rejects.toThrow(/not_paused/);
   });
 });
 
@@ -191,6 +233,17 @@ describe("agent_paused", () => {
     await asServiceRole(db, (tx) => tx.query("select public.resume_agent($1, $2)", [org, owner]));
     expect((await paused()).rows[0].agent_paused).toBe(false);
     expect((await pausedAsService()).rows[0].agent_paused).toBe(false);
+  });
+
+  it("does not reveal another organization's paused state to a tenant", async () => {
+    const orgA = await createOrg(db, "isolated-a-co");
+    const orgB = await createOrg(db, "isolated-b-co");
+    await db.query("insert into public.memberships (org_id, user_id, role) values ($1, $2, 'owner')", [orgA, owner]);
+    await asServiceRole(db, (tx) => tx.query("select public.pause_agent($1, $2, $3)", [orgA, owner, null]));
+
+    const asOtherTenant = await asTenant(db, orgB, (tx) =>
+      tx.query<{ agent_paused: boolean }>("select public.agent_paused($1) as agent_paused", [orgA]));
+    expect(asOtherTenant.rows[0].agent_paused).toBe(false);
   });
 });
 
