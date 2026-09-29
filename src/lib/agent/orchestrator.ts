@@ -234,6 +234,16 @@ export async function payApInvoiceIfNotPaused(
   };
 }
 
+/** Appended to a held invoice's reasoning when a resubmission was refused because screening now says high risk. */
+const NOT_RESUBMITTED_HIGH_RISK_NOTE = " [not resubmitted: counterparty now screened high risk]";
+
+/** The counterparty's risk level as it stands now, read fresh; thrown on a failed read, so a resubmission fails closed. */
+async function currentRiskLevel(orgDb: OrgDb, counterpartyId: string): Promise<string | null> {
+  const result = await orgDb.from("counterparties").select("risk_level").eq("id", counterpartyId).maybeSingle();
+  if (result.error) throw new Error(result.error.message);
+  return (result.data as { risk_level: string } | null)?.risk_level ?? null;
+}
+
 /** The payment intent a payable already has: enough to tell whether a transfer exists. */
 export interface ExistingPaymentIntent {
   providerTxId: string | null;
@@ -279,12 +289,22 @@ export async function existingPaymentIntents(
  * submit it, so that path goes through `payApInvoiceIfNotPaused` and holds
  * while the agent is paused, as any agent payment does (D6).
  *
+ * Before a possible resubmission, the counterparty's current risk level is
+ * read again: a counterparty screened high risk since the payment was
+ * decided is not paid, and the invoice is held with a note instead.
+ *
+ * A reconcile that did not complete is not an outcome: when there is no
+ * operating account to reconcile against, when the reconcile could not read
+ * the provider (an error recorded with the provider id), or when it threw
+ * before any result, the invoice stays `matched` for the next cycle rather
+ * than being demoted to `held` over a transfer that may well have settled.
+ *
  * The invoice keeps its decision time and, when the reconciliation reports
  * none, its recorded txRef; the reasoning gains a note only when the status
  * moves on, so a payment still pending does not repeat its note every cycle.
- * The ledger entry is `ap_reconcile` with `detail.reconciled: true` and no
- * `observed` facts, so the follow-up stage keeps comparing against the
- * decision itself.
+ * The ledger entry is `ap_reconcile` — `detail.reconciled: true`, or `false`
+ * with `reconcileError` when it did not complete — and no `observed` facts,
+ * so the follow-up stage keeps comparing against the decision itself.
  */
 export async function reconcileApInvoice(
   invoice: {
@@ -301,17 +321,70 @@ export async function reconcileApInvoice(
 ): Promise<{ status: string; operatingBalance: number | null; line: CycleLogLine }> {
   const input = { invoiceId: invoice.id, counterpartyId: invoice.counterpartyId, address: invoice.address, amount: invoice.amount };
   const transferExists = intent.providerTxId !== null || intent.status === "confirmed";
+  const name = invoice.counterpartyName;
+
+  if (transferExists && !deps.operating) {
+    return {
+      status: "matched",
+      operatingBalance: null,
+      line: { domain: "ap", message: `${name}: in-flight payment left pending, no operating account to reconcile it against (${invoice.amount} USDC)` },
+    };
+  }
 
   let outcome: PayStepOutcome;
+  let notResubmitted = false;
   if (transferExists) {
     const result = await payInvoice(input, { provider: deps.provider, operating: deps.operating });
+    const execution = result.execution;
+    const incomplete =
+      execution === null
+        ? result.note.trim().replace(/^\[(.*)\]$/, "$1")
+        : execution.status === "failed" && execution.error != null && execution.providerTxId != null
+          ? execution.error
+          : null;
+    if (incomplete !== null) {
+      await appendLedgerEntry({
+        actor: "agent",
+        domain: "ap",
+        action: "ap_reconcile",
+        summary: `RECONCILE invoice from ${name} for ${invoice.amount} USDC: not completed, left pending`,
+        detail: {
+          invoiceId: invoice.id,
+          counterpartyId: invoice.counterpartyId,
+          reconciled: false,
+          reconcileError: incomplete,
+          previousStatus: "matched",
+          execution: {
+            txRef: invoice.txRef ?? execution?.txRef ?? null,
+            chainMode: execution?.providerMode ?? deps.provider.mode,
+            resultingStatus: "matched",
+            settlementRequired: true,
+          },
+        },
+      });
+      return {
+        status: "matched",
+        operatingBalance: null,
+        line: { domain: "ap", message: `${name}: could not reconcile the in-flight payment, left pending for the next cycle (${invoice.amount} USDC)` },
+      };
+    }
     outcome = {
       status: result.status,
       txRef: result.txRef,
-      paymentExecution: result.execution,
+      paymentExecution: execution,
       reasoningSuffix: result.note,
       heldBecausePaused: false,
       operatingBalance: result.operatingBalance,
+    };
+  } else if ((await currentRiskLevel(deps.db, invoice.counterpartyId)) === "high") {
+    notResubmitted = true;
+    outcome = {
+      status: "held",
+      txRef: null,
+      paymentExecution: null,
+      reasoningSuffix: NOT_RESUBMITTED_HIGH_RISK_NOTE,
+      heldBecausePaused: false,
+      operatingBalance: null,
     };
   } else {
     outcome = await payApInvoiceIfNotPaused(input, { provider: deps.provider, operating: deps.operating });
@@ -338,6 +411,7 @@ export async function reconcileApInvoice(
       counterpartyId: invoice.counterpartyId,
       reconciled: true,
       previousStatus: "matched",
+      ...(notResubmitted ? { notResubmittedBecause: "counterparty.high_risk" } : {}),
       execution: {
         txRef,
         chainMode: execution?.providerMode ?? deps.provider.mode,
@@ -355,7 +429,9 @@ export async function reconcileApInvoice(
 
   const message = outcome.heldBecausePaused
     ? `${invoice.counterpartyName}: not paid, the agent was paused (${invoice.amount} USDC)`
-    : status === "paid"
+    : notResubmitted
+      ? `${name}: not resubmitted, the counterparty is now screened high risk (${invoice.amount} USDC)`
+      : status === "paid"
       ? `${invoice.counterpartyName}: reconciled an in-flight payment, now paid (${invoice.amount} USDC)`
       : status === "matched"
         ? `${invoice.counterpartyName}: reconciled an in-flight payment, still pending (${invoice.amount} USDC)`

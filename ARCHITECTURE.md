@@ -164,7 +164,12 @@ payment intent's idempotency key (`paymentIdempotencyKey("invoice", id)` in
 `processing` invoice a crashed request never finished can be reclaimed ten
 minutes after `reviewed_at`, and a failed update after a claim is logged by
 invoice id. All three server actions (`src/app/actions/approvals.ts`)
-require `approval.decide`.
+require `approval.decide`. An invoice whose payment was already sent — its
+intent confirmed, pending or submitting, or holding a provider id with an
+unread reconcile error — can only be approved: Reject and Return are refused
+with `payment_in_flight` before the claim, the card offers only Approve and
+pay, and Approve skips its funds check when a transfer already exists, since
+it reconciles rather than pays again.
 
 **A payment still in flight is reconciled, not decided again.** An approval
 whose transfer is still pending leaves the invoice `matched`, which the AP
@@ -173,6 +178,11 @@ stage skips the model and the guardrails and calls `payInvoice`, which
 reconciles the existing intent through its idempotency key and records
 `ap_reconcile` with `detail.reconciled: true`; otherwise a guardrail the
 person deliberately overrode could hold the invoice over a real transfer.
+A reconcile that did not complete — no operating account, a provider that
+could not be read, or an error before any result — leaves the invoice
+`matched` for the next cycle rather than demoting it. When no transfer
+exists yet and one could be resubmitted, the counterparty's risk level is
+read again first, and a counterparty now screened high risk is not paid.
 
 **The pause switch** stops one workspace's agent without touching
 credentials. `pause_agent` and `resume_agent` (migration `0025`) are

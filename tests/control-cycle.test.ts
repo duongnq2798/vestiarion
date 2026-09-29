@@ -261,16 +261,133 @@ describe("reconcileApInvoice — a matched payable with a payment in flight", ()
     expect(body.agent_reasoning).toBe(invoice.reasoning);
   });
 
-  it("keeps the recorded txRef when the reconciliation itself reports none", async () => {
-    payInvoiceMock.mockResolvedValue({ status: "held", txRef: null, execution: null, note: " [execution failed: store unavailable]", operatingBalance: null });
+  it("records a provider-reported failure as held, keeping the txRef and noting why", async () => {
+    payInvoiceMock.mockResolvedValue({
+      status: "held", txRef: "circle-tx-1", note: " [transfer failed: provider reported failure]", operatingBalance: null,
+      execution: { status: "failed", error: null, providerTxId: "circle-tx-1", providerMode: "live", reconciled: true },
+    });
     const { fake, run } = cycleFake();
 
-    await run(() => reconcileApInvoice(invoice, { providerTxId: "circle-tx-1", status: "pending" }, { db: db(), provider, operating: { id: ACCOUNT_ID } }));
+    const outcome = await run(() =>
+      reconcileApInvoice(invoice, { providerTxId: "circle-tx-1", status: "pending" }, { db: db(), provider, operating: { id: ACCOUNT_ID } })
+    );
 
+    expect(outcome.status).toBe("held");
     const body = invoicePatches(fake.requests)[0].body as Record<string, unknown>;
     expect(body.status).toBe("held");
     expect(body.tx_ref).toBe("circle-tx-1");
-    expect(body.agent_reasoning).toBe(`${invoice.reasoning} [execution failed: store unavailable]`);
+    expect(body.agent_reasoning).toBe(`${invoice.reasoning} [transfer failed: provider reported failure]`);
+  });
+
+  it("leaves the payment matched, and says so, when the reconcile itself could not read the provider", async () => {
+    // executePayment's reconcile catch: the intent keeps its provider id and records our own error.
+    payInvoiceMock.mockResolvedValue({
+      status: "held", txRef: "circle-tx-1", note: " [transfer failed: provider unreachable]", operatingBalance: null,
+      execution: { status: "failed", error: "provider unreachable", providerTxId: "circle-tx-1", providerMode: "live", reconciled: true },
+    });
+    const { fake, run } = cycleFake();
+
+    const outcome = await run(() =>
+      reconcileApInvoice(invoice, { providerTxId: "circle-tx-1", status: "pending" }, { db: db(), provider, operating: { id: ACCOUNT_ID } })
+    );
+
+    expect(outcome).toEqual({
+      status: "matched",
+      operatingBalance: null,
+      line: { domain: "ap", message: "Acme Supplies: could not reconcile the in-flight payment, left pending for the next cycle (150 USDC)" },
+    });
+    expect(invoicePatches(fake.requests)).toHaveLength(0);
+    const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(append.p_action).toBe("ap_reconcile");
+    expect(append.p_summary).toBe("RECONCILE invoice from Acme Supplies for 150 USDC: not completed, left pending");
+    expect(append.p_detail).toMatchObject({
+      invoiceId: INVOICE_ID,
+      reconciled: false,
+      reconcileError: "provider unreachable",
+      execution: { txRef: "circle-tx-1", resultingStatus: "matched" },
+    });
+  });
+
+  it("leaves the payment matched when the reconcile threw before any result", async () => {
+    payInvoiceMock.mockResolvedValue({ status: "held", txRef: null, execution: null, note: " [execution failed: store unavailable]", operatingBalance: null });
+    const { fake, run } = cycleFake();
+
+    const outcome = await run(() =>
+      reconcileApInvoice(invoice, { providerTxId: "circle-tx-1", status: "pending" }, { db: db(), provider, operating: { id: ACCOUNT_ID } })
+    );
+
+    expect(outcome.status).toBe("matched");
+    expect(invoicePatches(fake.requests)).toHaveLength(0);
+    const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(append.p_detail).toMatchObject({ reconciled: false, reconcileError: "execution failed: store unavailable" });
+  });
+
+  it("leaves the payment matched, without calling payInvoice, when there is no operating account", async () => {
+    const { fake, run } = cycleFake();
+
+    const outcome = await run(() =>
+      reconcileApInvoice(invoice, { providerTxId: "circle-tx-1", status: "pending" }, { db: db(), provider, operating: null })
+    );
+
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+    expect(outcome).toEqual({
+      status: "matched",
+      operatingBalance: null,
+      line: { domain: "ap", message: "Acme Supplies: in-flight payment left pending, no operating account to reconcile it against (150 USDC)" },
+    });
+    expect(invoicePatches(fake.requests)).toHaveLength(0);
+  });
+
+  it("does not resubmit to a counterparty now screened high risk, and holds with a note", async () => {
+    const { fake, run } = cycleFake((r) => {
+      if (r.path === "/rest/v1/counterparties" && r.method === "GET") return { body: { risk_level: "high" } };
+      if (r.path === "/rest/v1/rpc/agent_paused") return { body: false };
+      return undefined;
+    });
+
+    const outcome = await run(() =>
+      reconcileApInvoice({ ...invoice, txRef: null }, { providerTxId: null, status: "submitting" }, { db: db(), provider, operating: { id: ACCOUNT_ID } })
+    );
+
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+    expect(decideMock).not.toHaveBeenCalled();
+    const [lookup] = fake.requests.filter((r) => r.path === "/rest/v1/counterparties");
+    expect(lookup.params.get("id")).toBe(`eq.${COUNTERPARTY_ID}`);
+    expect(outcome.status).toBe("held");
+    expect(outcome.line.message).toBe("Acme Supplies: not resubmitted, the counterparty is now screened high risk (150 USDC)");
+    const body = invoicePatches(fake.requests)[0].body as Record<string, unknown>;
+    expect(body.status).toBe("held");
+    expect(body.tx_ref).toBeNull();
+    expect(body.agent_reasoning).toBe(`${invoice.reasoning} [not resubmitted: counterparty now screened high risk]`);
+    const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(append.p_detail).toMatchObject({ notResubmittedBecause: "counterparty.high_risk", execution: { resultingStatus: "held" } });
+  });
+
+  it("resubmits through payInvoice when the counterparty is not high risk and the agent is not paused", async () => {
+    payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", operatingBalance: 200 });
+    const { run } = cycleFake((r) => {
+      if (r.path === "/rest/v1/counterparties" && r.method === "GET") return { body: { risk_level: "low" } };
+      if (r.path === "/rest/v1/rpc/agent_paused") return { body: false };
+      return undefined;
+    });
+
+    const outcome = await run(() =>
+      reconcileApInvoice({ ...invoice, txRef: null }, { providerTxId: null, status: "submitting" }, { db: db(), provider, operating: { id: ACCOUNT_ID } })
+    );
+
+    expect(payInvoiceMock).toHaveBeenCalledTimes(1);
+    expect(outcome.status).toBe("paid");
+  });
+
+  it("fails closed when the counterparty's risk level cannot be read", async () => {
+    const { run } = cycleFake((r) =>
+      r.path === "/rest/v1/counterparties" ? { status: 500, body: { message: "counterparties read failed: connection reset" } } : undefined
+    );
+
+    await expect(
+      run(() => reconcileApInvoice({ ...invoice, txRef: null }, { providerTxId: null, status: "submitting" }, { db: db(), provider, operating: { id: ACCOUNT_ID } }))
+    ).rejects.toThrow("counterparties read failed: connection reset");
+    expect(payInvoiceMock).not.toHaveBeenCalled();
   });
 
   it("holds without calling payInvoice when no transfer exists yet and the agent is paused", async () => {

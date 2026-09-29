@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  COUNTERPARTY_HISTORY_ACTIONS,
   deriveCounterpartyHistories,
   derivePerformanceScore,
   emptyCounterpartyHistory,
@@ -142,5 +143,30 @@ describe("deriveCounterpartyHistories", () => {
         riskTierChanges: 1,
       })
     );
+  });
+
+  it("counts a payment the reconcile later confirmed as paid, and one still pending as nothing yet", () => {
+    const histories = deriveCounterpartyHistories(
+      [
+        // Paid by the agent, pending at first, confirmed by a later cycle's reconcile.
+        { domain: "ap", action: "ap_pay", detail: { invoiceId: "settled-later", execution: { resultingStatus: "matched" }, guardrailBlocked: false } },
+        { domain: "ap", action: "ap_reconcile", detail: { invoiceId: "settled-later", reconciled: true, execution: { resultingStatus: "paid" } } },
+        // Still in flight.
+        { domain: "ap", action: "ap_reconcile", detail: { invoiceId: "in-flight", reconciled: true, execution: { resultingStatus: "matched" } } },
+      ],
+      {
+        invoiceCounterparty: new Map([
+          ["settled-later", "cp-1"],
+          ["in-flight", "cp-1"],
+        ]),
+        milestoneCounterparty: new Map(),
+      }
+    );
+
+    expect(histories.get("cp-1")).toEqual(inputs({ paidWithoutIntervention: 1 }));
+  });
+
+  it("reads ap_reconcile entries from the ledger", () => {
+    expect(COUNTERPARTY_HISTORY_ACTIONS).toContain("ap_reconcile");
   });
 });
