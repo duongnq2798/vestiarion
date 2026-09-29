@@ -9,7 +9,7 @@ import sitemap from "@/app/sitemap";
 import { CONTENT_DIR, hasSource, NOTES_LOADERS, PAGE_LOADERS, publishedPages, readSource } from "@/lib/docs/content";
 import { slugifyHeadings, splitCodeSpans, stripFences } from "@/lib/docs/headings";
 import { DOCS_NAV, flatPages, neighbours, slugOfPathname } from "@/lib/docs/nav";
-import { publicOrigin } from "@/lib/docs/origin";
+import { publicOrigin } from "@/lib/public-origin";
 import { isPageHref } from "@/lib/docs/paths";
 import { ERROR_MEANINGS, referenceSectionIds } from "@/lib/docs/reference";
 import { parseApiKey } from "@/lib/platform/api-keys";
