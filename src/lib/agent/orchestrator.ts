@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { db, unwrap, type OrgDb } from "../dal";
 import { appendLedgerEntry } from "../ledger";
-import { getChainProvider } from "../circle";
+import { getChainProvider, type ChainProvider } from "../circle";
 import { cycleClockMode, type CycleClockMode } from "../clock";
 import { runComplianceSweep, screeningMode as complianceScreeningMode } from "../compliance";
 import { refreshGitHubMilestones } from "../milestone-verification";
@@ -17,7 +17,7 @@ import { CycleJournal, messageOf, type CycleStage } from "./journal";
 import { decide } from "./decide";
 import { enforceApGuardrails } from "./guardrails";
 import { SandboxCapReachedError } from "./sandbox-cap";
-import { AgentPausedError, pausedPaymentNote } from "./pause";
+import { AgentPausedError, heldBecausePausedDetail, pausedPaymentNote, pausedTreasuryNote } from "./pause";
 import {
   blockingDuplicate,
   duplicateMatchContext,
@@ -113,6 +113,183 @@ function performanceEvidence(
     inputs: inputs ?? emptyCounterpartyHistory(),
     note: "Historical evidence for closer review, not a verdict or payment guardrail.",
   };
+}
+
+/** What a paused-or-not payment step in the AP or contractor stage decided,
+ * in the shape each stage already carries as local variables — so wiring
+ * one in is an assignment, not a restructure. */
+interface PayStepOutcome {
+  status: string;
+  txRef: string | null;
+  paymentExecution: PaymentExecution | null;
+  /** Appended to the stage's `reasoning` verbatim, exactly as before. */
+  reasoningSuffix: string;
+  /** True only when the pause is why nothing moved — the ledger's
+   * `execution.heldBecause` marker (D6) is set from this, not re-derived
+   * from `status`, because a guardrail or a failed transfer also lands on
+   * `"held"` for reasons that are not the pause. */
+  heldBecausePaused: boolean;
+  operatingBalance: number | null;
+}
+
+/**
+ * The AP stage's `decision.action === "pay"` branch, once the guardrails
+ * have already let it through: hold if the agent is paused since the
+ * decision was made — `payInvoice` is never called, so no `payment_intents`
+ * claim and no transfer — otherwise pay exactly as `payInvoice` always did.
+ *
+ * Extracted, and exported, so this exact call site — not only the
+ * `pausedPaymentNote()` helper it uses — is unit-testable directly. Driving
+ * it through a full `runAgentCycle()` would mean faking every stage ahead of
+ * the AP loop first (reconcile, compliance, follow-up); see
+ * `tests/pause-cycle.test.ts` for why that is out of proportion to what this
+ * one branch does.
+ */
+export async function payApInvoiceIfNotPaused(
+  input: { invoiceId: string; counterpartyId: string; address: string | null; amount: number },
+  deps: { provider: ChainProvider; operating: { id: string } | null }
+): Promise<PayStepOutcome> {
+  const pauseNote = await pausedPaymentNote();
+  if (pauseNote) {
+    return {
+      status: "held",
+      txRef: null,
+      paymentExecution: null,
+      reasoningSuffix: pauseNote,
+      heldBecausePaused: true,
+      operatingBalance: null,
+    };
+  }
+  const result = await payInvoice(input, deps);
+  return {
+    status: result.status,
+    txRef: result.txRef,
+    paymentExecution: result.execution,
+    reasoningSuffix: result.note,
+    heldBecausePaused: false,
+    operatingBalance: result.operatingBalance,
+  };
+}
+
+/**
+ * The contractor stage's `decision.action === "release"` branch, once an
+ * operating account exists and the guardrails have already let it through:
+ * hold — `status` stays at the caller's `"held"` default — if the agent is
+ * paused, `executePayment` never called, otherwise release exactly as
+ * `executePayment` always did. Mirrors `payApInvoiceIfNotPaused` above for
+ * the same reason: this call site is directly testable without a full cycle.
+ */
+export async function releaseMilestoneIfNotPaused(
+  input: { milestoneId: string; destination: string; amount: number },
+  deps: { provider: ChainProvider; operatingAccountId: string }
+): Promise<PayStepOutcome> {
+  const pauseNote = await pausedPaymentNote();
+  if (pauseNote) {
+    return {
+      status: "held",
+      txRef: null,
+      paymentExecution: null,
+      reasoningSuffix: pauseNote,
+      heldBecausePaused: true,
+      operatingBalance: null,
+    };
+  }
+  try {
+    const result = await executePayment(
+      {
+        sourceType: "milestone",
+        sourceId: input.milestoneId,
+        fromAccountId: deps.operatingAccountId,
+        destination: input.destination,
+        amount: input.amount,
+        memo: `Milestone ${input.milestoneId}`,
+      },
+      { provider: deps.provider }
+    );
+    const status = result.status === "confirmed" ? "paid" : result.status === "pending" ? "verified" : "held";
+    let reasoningSuffix = "";
+    let operatingBalance: number | null = null;
+    if (result.status === "failed") reasoningSuffix = ` [transfer failed: ${result.error ?? "provider reported failure"}]`;
+    else if (result.status === "pending") reasoningSuffix = " [transfer submitted; awaiting provider confirmation]";
+    else operatingBalance = await syncOperatingBalance(deps.operatingAccountId);
+    return { status, txRef: result.txRef, paymentExecution: result, reasoningSuffix, heldBecausePaused: false, operatingBalance };
+  } catch (err) {
+    return {
+      status: "held",
+      txRef: null,
+      paymentExecution: null,
+      reasoningSuffix: ` [execution failed: ${(err as Error).message}]`,
+      heldBecausePaused: false,
+      operatingBalance: null,
+    };
+  }
+}
+
+/** What the treasury stage's attempted move decided — mirrors `PayStepOutcome`
+ * but in the treasury stage's own vocabulary (`executed`/`executionNote`,
+ * already what it recorded before this existed). */
+interface TreasuryMoveOutcome {
+  executed: boolean;
+  executionNote: string | null;
+  heldBecausePaused: boolean;
+}
+
+/**
+ * The treasury stage's move, once a sweep or redemption has actually been
+ * decided (a `"hold"` decision, or one with a non-positive amount, never
+ * reaches here and is reported as not executed with no note, exactly as
+ * before): hold — nothing moves — if the agent is paused since the decision
+ * was made, `provider.depositToEarn`/`withdrawFromEarn` never called;
+ * otherwise move and update the reserve balance exactly as before.
+ *
+ * Mirrors `payApInvoiceIfNotPaused`/`releaseMilestoneIfNotPaused` above for
+ * the same reason (ruling R5): this exact call site is unit-testable without
+ * a full cycle.
+ */
+export async function moveTreasuryIfNotPaused(
+  decision: TreasuryDecision,
+  ctx: {
+    db: OrgDb;
+    provider: ChainProvider;
+    operatingAccountId: string;
+    reserveAccountId: string;
+    operatingBalance: number;
+    reserveBalance: number;
+  }
+): Promise<TreasuryMoveOutcome> {
+  const wouldMove =
+    (decision.action === "sweep_to_usyc" || decision.action === "redeem_from_usyc") && decision.amount > 0;
+  if (!wouldMove) {
+    return { executed: false, executionNote: null, heldBecausePaused: false };
+  }
+
+  const pauseNote = await pausedTreasuryNote();
+  if (pauseNote) {
+    return { executed: false, executionNote: pauseNote, heldBecausePaused: true };
+  }
+
+  try {
+    if (decision.action === "sweep_to_usyc") {
+      const amount = Math.min(decision.amount, ctx.operatingBalance);
+      await ctx.provider.depositToEarn({ accountId: ctx.operatingAccountId, amount });
+      const res = await ctx.db
+        .from("accounts")
+        .update({ balance: Number((ctx.reserveBalance + amount).toFixed(6)) })
+        .eq("id", ctx.reserveAccountId);
+      if (res.error) throw new Error(res.error.message);
+    } else {
+      const amount = Math.min(decision.amount, ctx.reserveBalance);
+      await ctx.provider.withdrawFromEarn({ accountId: ctx.operatingAccountId, amount });
+      const res = await ctx.db
+        .from("accounts")
+        .update({ balance: Number((ctx.reserveBalance - amount).toFixed(6)) })
+        .eq("id", ctx.reserveAccountId);
+      if (res.error) throw new Error(res.error.message);
+    }
+    return { executed: true, executionNote: null, heldBecausePaused: false };
+  } catch (err) {
+    return { executed: false, executionNote: `execution failed: ${(err as Error).message}`, heldBecausePaused: false };
+  }
 }
 
 /**
@@ -700,6 +877,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     let paymentExecution: PaymentExecution | null = null;
     let reasoning = guardrail.reasoning;
     const guardrailBlocked = guardrail.blocked;
+    let heldBecausePaused = false;
 
     if (decision.action === "pay") {
       // The guardrails are enforced here, after the model has spoken. A
@@ -708,28 +886,21 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
       if (guardrail.blocked) {
         // Refused by enforceApGuardrails before the provider can be called.
       } else {
-        const pauseNote = await pausedPaymentNote();
-        if (pauseNote) {
-          // Paused since the decision was made: hold rather than pay, and
-          // never reach payInvoice — no payment_intents claim, no transfer.
-          status = "held";
-          reasoning += pauseNote;
-        } else {
-          const result = await payInvoice(
-            {
-              invoiceId: invoice.id,
-              counterpartyId: counterparty.id,
-              address: counterparty.address,
-              amount,
-            },
-            { provider, operating: operating ? { id: operating.id } : null }
-          );
-          status = result.status;
-          txRef = result.txRef;
-          paymentExecution = result.execution;
-          reasoning += result.note;
-          if (result.operatingBalance !== null) operatingBalance = result.operatingBalance;
-        }
+        const outcome = await payApInvoiceIfNotPaused(
+          {
+            invoiceId: invoice.id,
+            counterpartyId: counterparty.id,
+            address: counterparty.address,
+            amount,
+          },
+          { provider, operating: operating ? { id: operating.id } : null }
+        );
+        status = outcome.status;
+        txRef = outcome.txRef;
+        paymentExecution = outcome.paymentExecution;
+        reasoning += outcome.reasoningSuffix;
+        heldBecausePaused = outcome.heldBecausePaused;
+        if (outcome.operatingBalance !== null) operatingBalance = outcome.operatingBalance;
       }
     }
 
@@ -798,13 +969,19 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           settledInMs: paymentExecution?.settledInMs ?? null,
           executedAt: paymentExecution?.executedAt ?? null,
           reconciled: paymentExecution?.reconciled ?? false,
+          // D6: the ledger says the pause is why this held, not just the
+          // reasoning text — set only when it is, so it is unambiguous from
+          // a hold for a missing operating account or a failed transfer.
+          ...heldBecausePausedDetail(heldBecausePaused),
         },
       },
     });
 
     lines.push({
       domain: "ap",
-      message: `${counterparty.name}: ${decision.action} (${amount} USDC)`,
+      message: heldBecausePaused
+        ? `${counterparty.name}: not paid, the agent was paused (${amount} USDC)`
+        : `${counterparty.name}: ${decision.action} (${amount} USDC)`,
     });
   }
 
@@ -889,6 +1066,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     let paymentExecution: PaymentExecution | null = null;
     let reasoning = decision.reasoning;
     let guardrailBlocked = false;
+    let heldBecausePaused = false;
 
     if (decision.action === "release") {
       if (highRisk || overLimit) {
@@ -897,32 +1075,16 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           ? " [guardrail override: contractor is high risk — release refused]"
           : ` [guardrail override: amount exceeds the ${limit} USDC limit — release refused]`;
       } else if (operating) {
-        const pauseNote = await pausedPaymentNote();
-        if (pauseNote) {
-          // Paused since the decision was made: status stays "held" (its
-          // initial value above), and executePayment is never reached — no
-          // payment_intents claim, no transfer.
-          reasoning += pauseNote;
-        } else {
-          try {
-            const result = await executePayment({
-              sourceType: "milestone",
-              sourceId: milestone.id,
-              fromAccountId: operating.id,
-              destination: payoutAddress(contractor.address, contractor.id),
-              amount,
-              memo: `Milestone ${milestone.id}`,
-            }, { provider });
-            paymentExecution = result;
-            txRef = result.txRef;
-            status = result.status === "confirmed" ? "paid" : result.status === "pending" ? "verified" : "held";
-            if (result.status === "failed") reasoning += ` [transfer failed: ${result.error ?? "provider reported failure"}]`;
-            else if (result.status === "pending") reasoning += " [transfer submitted; awaiting provider confirmation]";
-            else operatingBalance = await syncOperatingBalance(operating.id);
-          } catch (err) {
-            reasoning += ` [execution failed: ${(err as Error).message}]`;
-          }
-        }
+        const outcome = await releaseMilestoneIfNotPaused(
+          { milestoneId: milestone.id, destination: payoutAddress(contractor.address, contractor.id), amount },
+          { provider, operatingAccountId: operating.id }
+        );
+        status = outcome.status;
+        txRef = outcome.txRef;
+        paymentExecution = outcome.paymentExecution;
+        reasoning += outcome.reasoningSuffix;
+        heldBecausePaused = outcome.heldBecausePaused;
+        if (outcome.operatingBalance !== null) operatingBalance = outcome.operatingBalance;
       }
     }
 
@@ -973,13 +1135,18 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           settledInMs: paymentExecution?.settledInMs ?? null,
           executedAt: paymentExecution?.executedAt ?? null,
           reconciled: paymentExecution?.reconciled ?? false,
+          // D6: same marker as the AP stage, for the same reason — see the
+          // comment there.
+          ...heldBecausePausedDetail(heldBecausePaused),
         },
       },
     });
 
     lines.push({
       domain: "contractor",
-      message: `${contractor.name}: ${decision.action} "${milestone.title}"`,
+      message: heldBecausePaused
+        ? `${contractor.name}: not paid, the agent was paused (${amount} USDC)`
+        : `${contractor.name}: ${decision.action} "${milestone.title}"`,
     });
   }
 
@@ -1082,32 +1249,17 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     });
     metrics.recordDecisionMode(mode, agreedWithReference);
 
-    let executed = false;
-    let executionNote: string | null = null;
-
-    try {
-      if (decision.action === "sweep_to_usyc" && decision.amount > 0) {
-        const amount = Math.min(decision.amount, operatingBalance);
-        await provider.depositToEarn({ accountId: operatingNow.id, amount });
-        const res = await db
-          .from("accounts")
-          .update({ balance: Number((reserveBalance + amount).toFixed(6)) })
-          .eq("id", reserveNow.id);
-        if (res.error) throw new Error(res.error.message);
-        executed = true;
-      } else if (decision.action === "redeem_from_usyc" && decision.amount > 0) {
-        const amount = Math.min(decision.amount, reserveBalance);
-        await provider.withdrawFromEarn({ accountId: operatingNow.id, amount });
-        const res = await db
-          .from("accounts")
-          .update({ balance: Number((reserveBalance - amount).toFixed(6)) })
-          .eq("id", reserveNow.id);
-        if (res.error) throw new Error(res.error.message);
-        executed = true;
-      }
-    } catch (err) {
-      executionNote = `execution failed: ${(err as Error).message}`;
-    }
+    const moveOutcome = await moveTreasuryIfNotPaused(decision, {
+      db,
+      provider,
+      operatingAccountId: operatingNow.id,
+      reserveAccountId: reserveNow.id,
+      operatingBalance,
+      reserveBalance,
+    });
+    const executed = moveOutcome.executed;
+    const executionNote = moveOutcome.executionNote;
+    const heldBecausePaused = moveOutcome.heldBecausePaused;
 
     if (executed) {
       const res = await db.from("treasury_actions").insert({
@@ -1132,6 +1284,9 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
         agreedWithReference,
         executed,
         executionNote,
+        // D6: same marker as the AP and contractor stages (see the comment
+        // there). No `execution` sub-object here, so it sits at the top.
+        ...heldBecausePausedDetail(heldBecausePaused),
         // The USYC leg is simulated until EarnKit is wired up; recording that
         // here means the audit trail never overstates what actually happened.
         earnMode: provider.earnMode,
@@ -1157,7 +1312,9 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
 
     lines.push({
       domain: "treasury",
-      message: `${decision.action} ${decision.amount} USDC${executionNote ? ` (${executionNote})` : ""}`,
+      message: heldBecausePaused
+        ? `${decision.action}: not moved, the agent was paused (${decision.amount} USDC)`
+        : `${decision.action} ${decision.amount} USDC${executionNote ? ` (${executionNote})` : ""}`,
     });
   }
 
