@@ -53,41 +53,41 @@ describe("POST /api/platform/cleanup", () => {
   });
 
   it("returns 200 with the counts when nothing failed", async () => {
-    deleteAbandonedSandboxes.mockResolvedValueOnce({ deleted: 2, failed: 0 });
+    deleteAbandonedSandboxes.mockResolvedValueOnce({ deleted: 2, failed: 0, hostedUsed: 3, hostedLimit: 100 });
 
     const response = await post(`Bearer ${TOKEN}`);
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ deleted: 2, failed: 0, webhookDeliveriesDeleted: 0 });
+    expect(await response.json()).toEqual({ deleted: 2, failed: 0, webhookDeliveriesDeleted: 0, hostedUsed: 3, hostedLimit: 100 });
   });
 
   it("returns 500 with the counts when any deletion failed", async () => {
-    deleteAbandonedSandboxes.mockResolvedValueOnce({ deleted: 0, failed: 1 });
+    deleteAbandonedSandboxes.mockResolvedValueOnce({ deleted: 0, failed: 1, hostedUsed: null, hostedLimit: 100 });
 
     const response = await post(`Bearer ${TOKEN}`);
 
     expect(response.status).toBe(500);
-    expect(await response.json()).toEqual({ deleted: 0, failed: 1, webhookDeliveriesDeleted: 0 });
+    expect(await response.json()).toEqual({ deleted: 0, failed: 1, webhookDeliveriesDeleted: 0, hostedUsed: null, hostedLimit: 100 });
   });
 
   it("also deletes expired webhook deliveries, and reports how many", async () => {
-    deleteAbandonedSandboxes.mockResolvedValueOnce({ deleted: 1, failed: 0 });
+    deleteAbandonedSandboxes.mockResolvedValueOnce({ deleted: 1, failed: 0, hostedUsed: null, hostedLimit: 100 });
     deleteExpiredWebhookDeliveries.mockResolvedValueOnce({ deleted: 12, failed: 0 });
 
     const response = await post(`Bearer ${TOKEN}`);
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ deleted: 1, failed: 0, webhookDeliveriesDeleted: 12 });
+    expect(await response.json()).toEqual({ deleted: 1, failed: 0, webhookDeliveriesDeleted: 12, hostedUsed: null, hostedLimit: 100 });
   });
 
   it("counts a failed webhook retention delete as a failure, and still deletes sandboxes", async () => {
-    deleteAbandonedSandboxes.mockResolvedValueOnce({ deleted: 1, failed: 0 });
+    deleteAbandonedSandboxes.mockResolvedValueOnce({ deleted: 1, failed: 0, hostedUsed: null, hostedLimit: 100 });
     deleteExpiredWebhookDeliveries.mockResolvedValueOnce({ deleted: 0, failed: 1 });
 
     const response = await post(`Bearer ${TOKEN}`);
 
     expect(response.status).toBe(500);
-    expect(await response.json()).toEqual({ deleted: 1, failed: 1, webhookDeliveriesDeleted: 0 });
+    expect(await response.json()).toEqual({ deleted: 1, failed: 1, webhookDeliveriesDeleted: 0, hostedUsed: null, hostedLimit: 100 });
     expect(deleteAbandonedSandboxes).toHaveBeenCalled();
   });
 

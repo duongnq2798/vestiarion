@@ -22,7 +22,10 @@ type WalletAccount = OperatingAccount & { kind: string };
  * Go live (docs/superpowers/specs/2026-09-29-go-live-design.md): an owner
  * connects the workspace's own Circle entity, creates its treasury wallets,
  * and turns it live. The server actions in `src/app/actions/go-live.ts` gate
- * each step on `org.administer`; this module does the work.
+ * each step on `org.administer`; this module does the work. Instead of
+ * connecting, an owner may choose a hosted testnet wallet
+ * (2026-09-30-hosted-wallets-design.md): its wallets are then created in the
+ * platform's hosted Circle account, whose pair only `orgConfig` hands out.
  *
  * The API key and entity secret exist in plaintext only between the form and
  * `encryptSecret`, and in the Circle client built from them. They are never
@@ -35,8 +38,15 @@ export type GoLiveStep = "connect" | "wallets" | "go_live" | "live";
 
 export interface GoLiveStatus {
   step: GoLiveStep;
-  /** Both credentials are stored. Whether they can be read is `credentialsUnreadable`. */
+  /**
+   * Both of the workspace's own credentials are stored. Whether they can be
+   * read is `credentialsUnreadable`. A hosted workspace stores none: `host` says so.
+   */
   connected: boolean;
+  /** Whose Circle account holds the wallets: the workspace's own, Vestiarion's hosted one, or not chosen yet (0030). */
+  host: "own" | "hosted" | null;
+  /** This deployment has the hosted pair, so the hosted choice can be offered. A boolean only (R4). */
+  hostedAvailable: boolean;
   /** The accounts that have a Circle wallet, operating first. */
   wallets: Array<{ accountName: string; kind: string; address: string }>;
   /** When `workspace_went_live` was recorded; null before, and for the founding workspace, which predates it. */
@@ -55,7 +65,11 @@ export type GoLiveErrorCode =
   | "already_live"
   | "credentials_unreadable"
   | "credentials_changed"
-  | "no_operating_wallet";
+  | "no_operating_wallet"
+  | "hosted_unavailable"
+  | "hosted_not_allowed"
+  | "hosted_limit_reached"
+  | "hosted_has_wallets";
 
 const MESSAGES: Record<GoLiveErrorCode, string> = {
   invalid: "Paste both the API key and the entity secret.",
@@ -69,6 +83,10 @@ const MESSAGES: Record<GoLiveErrorCode, string> = {
   credentials_unreadable: "The stored Circle credentials cannot be read; reconnect.",
   credentials_changed: "The Circle credentials changed while going live; try again.",
   no_operating_wallet: "This workspace has no operating wallet; it cannot take new credentials.",
+  hosted_unavailable: "Hosted testnet wallets are not available on this deployment.",
+  hosted_not_allowed: "A workspace with its own Circle account or wallets cannot switch to a hosted wallet.",
+  hosted_limit_reached: "All hosted testnet wallets are taken; connect your own Circle account instead.",
+  hosted_has_wallets: "This workspace's wallets are hosted by Vestiarion; start a new workspace to use your own Circle account.",
 };
 
 export class GoLiveError extends Error {
@@ -87,24 +105,27 @@ interface OrgState {
   entitySecretStored: boolean;
   /** The stored API key envelope's IV: fresh on every encryption, so it names this one envelope. */
   apiKeyIv: string | null;
+  /** `orgs.wallet_host` (0030). */
+  walletHost: "own" | "hosted" | null;
 }
 
 /**
- * The organization's mode, and whether each credential is stored. Only the
- * envelope's master-key id and IV are selected (`->>k`, `->>iv`, null when
- * the column is), so not even the ciphertext is read here.
+ * The organization's mode, its wallet host, and whether each credential is
+ * stored. Only the envelope's master-key id and IV are selected (`->>k`,
+ * `->>iv`, null when the column is), so not even the ciphertext is read here.
  */
 async function orgState(orgId: string): Promise<OrgState> {
   const result = await platformDb()
     .from("orgs")
     .select(
-      "mode, api_key_stored:circle_api_key_enc->>k, entity_secret_stored:circle_entity_secret_enc->>k, api_key_iv:circle_api_key_enc->>iv"
+      "mode, wallet_host, api_key_stored:circle_api_key_enc->>k, entity_secret_stored:circle_entity_secret_enc->>k, api_key_iv:circle_api_key_enc->>iv"
     )
     .eq("id", orgId)
     .maybeSingle();
   if (result.error) throw new Error(result.error.message);
   const row = result.data as {
     mode: "sandbox" | "live";
+    wallet_host?: "own" | "hosted" | null;
     api_key_stored: string | null;
     entity_secret_stored: string | null;
     api_key_iv: string | null;
@@ -115,10 +136,12 @@ async function orgState(orgId: string): Promise<OrgState> {
     apiKeyStored: row.api_key_stored !== null,
     entitySecretStored: row.entity_secret_stored !== null,
     apiKeyIv: row.api_key_iv,
+    walletHost: row.wallet_host === "hosted" || row.wallet_host === "own" ? row.wallet_host : null,
   };
 }
 
 const isConnected = (state: OrgState) => state.apiKeyStored && state.entitySecretStored;
+const isHosted = (state: OrgState) => state.walletHost === "hosted";
 
 /** The organization in scope, or null outside every scope. */
 function scopedOrgId(): string | null {
@@ -221,10 +244,17 @@ function validSecret(value: string): boolean {
  * workspace with no operating wallet is refused (`no_operating_wallet`): it
  * cannot pay, and has no wallet to prove new credentials against.
  *
- * The update is conditional on the mode read at the start: a workspace that
- * went live meanwhile is asked to try again. A wallet created meanwhile, by a
+ * The update is conditional on the mode and the wallet host read at the
+ * start: a workspace that went live, or chose a hosted wallet, meanwhile is
+ * asked to try again. A wallet created meanwhile, by a
  * concurrent "Create wallets" under the old credentials, is caught by
  * `goLive`, which proves the stored credentials again.
+ *
+ * The same update marks the workspace `wallet_host = 'own'` (hosted wallets
+ * H4). A hosted workspace may switch to its own account this way only while
+ * it has no wallets: its wallets live in the platform's hosted entity, which
+ * no credentials of its own can reach, so once one exists it is refused
+ * (`hosted_has_wallets`) before Circle is asked anything.
  */
 export async function connectCircle(input: {
   orgId: string;
@@ -242,6 +272,11 @@ export async function connectCircle(input: {
   const state = await orgState(input.orgId);
   const factory = input.client ?? defaultCircleClient;
 
+  if (isHosted(state)) {
+    const hostedAccounts = await inScopeOf(input.orgId, input.actorId, walletAccounts);
+    if (hostedAccounts.some((account) => account.circle_wallet_id)) throw new GoLiveError("hosted_has_wallets");
+  }
+
   const verdict = await (input.check ?? checkCircleApiKey)(apiKey, entitySecret, factory);
   if (verdict === "rejected") throw new GoLiveError("key_rejected");
   if (verdict === "unreachable") throw new GoLiveError("unreachable");
@@ -250,18 +285,24 @@ export async function connectCircle(input: {
   const operating = accounts.find((account) => account.kind === "operating");
   if (state.mode === "live" && !operating?.circle_wallet_id) throw new GoLiveError("no_operating_wallet");
   const provisioned = accounts.filter((account) => account.circle_wallet_id);
-  if (provisioned.length > 0) await proveSameEntity(factory({ apiKey, entitySecret }), provisioned);
+  if (provisioned.length > 0) {
+    // A hosted wallet created while the key was being checked: the same refusal, not a proof that could only fail.
+    if (isHosted(state)) throw new GoLiveError("hosted_has_wallets");
+    await proveSameEntity(factory({ apiKey, entitySecret }), provisioned);
+  }
 
+  const update = platformDb()
+    .from("orgs")
+    .update({
+      circle_api_key_enc: encryptSecret(apiKey, { orgId: input.orgId, column: "circle_api_key_enc" }, keys),
+      circle_entity_secret_enc: encryptSecret(entitySecret, { orgId: input.orgId, column: "circle_entity_secret_enc" }, keys),
+      wallet_host: "own",
+    })
+    .eq("id", input.orgId)
+    .eq("mode", state.mode);
+  // Bound to the host read at the start too: a hosted choice landing meanwhile is not overwritten.
   const written = unwrap(
-    await platformDb()
-      .from("orgs")
-      .update({
-        circle_api_key_enc: encryptSecret(apiKey, { orgId: input.orgId, column: "circle_api_key_enc" }, keys),
-        circle_entity_secret_enc: encryptSecret(entitySecret, { orgId: input.orgId, column: "circle_entity_secret_enc" }, keys),
-      })
-      .eq("id", input.orgId)
-      .eq("mode", state.mode)
-      .select("id")
+    await (state.walletHost === null ? update.is("wallet_host", null) : update.eq("wallet_host", state.walletHost)).select("id")
   ) as Array<{ id: string }>;
   if (written.length === 0) throw new Error("the workspace changed while Circle was being connected; nothing was stored");
 
@@ -285,6 +326,11 @@ export async function connectCircle(input: {
  * It always enters a fresh scope, so the configuration it pays with is
  * decrypted from the row as it is now — credentials connected a moment ago,
  * even in a scope entered before they were, are the ones used.
+ *
+ * A hosted workspace stores no credentials: its scope holds the platform's
+ * hosted pair (`orgConfig`, H1), and provisioning puts its wallets in a set of
+ * its own (H3). On a deployment without that pair it is refused
+ * (`hosted_unavailable`), never simulated.
  */
 export async function createWallets(input: {
   orgId: string;
@@ -292,12 +338,17 @@ export async function createWallets(input: {
   client?: CircleClientFactory;
 }): Promise<ProvisionResult> {
   const state = await orgState(input.orgId);
-  if (!isConnected(state)) throw new GoLiveError("not_connected");
+  if (!isHosted(state) && !isConnected(state)) throw new GoLiveError("not_connected");
 
   return withOrg(
     input.orgId,
     async () => {
-      if (currentOrgConfig().chain.credentialsUnreadable) throw new GoLiveError("credentials_unreadable");
+      const chain = currentOrgConfig().chain;
+      // Read as its own account, now hosted: never mint with a pair the check above did not see.
+      if (!isHosted(state) && chain.walletHost === "hosted") throw new GoLiveError("credentials_changed");
+      if (chain.credentialsUnreadable) {
+        throw new GoLiveError(chain.walletHost === "hosted" ? "hosted_unavailable" : "credentials_unreadable");
+      }
       let result: ProvisionResult;
       try {
         result = await createTreasuryWallets({ client: input.client });
@@ -334,34 +385,44 @@ export async function createWallets(input: {
  * and the owner is told the credentials changed (`credentials_changed`)
  * rather than going live on credentials nobody proved. Zero rows with the
  * workspace already live means someone else went live first.
+ *
+ * A hosted workspace (hosted wallets H3) is not proven: its entity is the
+ * platform's by construction, and its wallets are its own `accounts` rows.
+ * The scope must hold the hosted pair (`hosted_unavailable` otherwise) and the
+ * operating account a wallet; the update is then bound to `wallet_host =
+ * 'hosted'` instead of an envelope it does not have, so a workspace that
+ * switched to its own account meanwhile does not go live on it unproven.
  */
 export async function goLive(input: { orgId: string; actorId: string; client?: CircleClientFactory }): Promise<void> {
   const state = await orgState(input.orgId);
   if (state.mode === "live") throw new GoLiveError("already_live");
-  if (!isConnected(state)) throw new GoLiveError("not_connected");
+  const hosted = isHosted(state);
+  if (!hosted && !isConnected(state)) throw new GoLiveError("not_connected");
 
   await withOrg(
     input.orgId,
     async () => {
       const chain = currentOrgConfig().chain;
-      if (chain.credentialsUnreadable) throw new GoLiveError("credentials_unreadable");
+      // The host changed between the state read and this scope, either way: the checks below would be the wrong ones.
+      if (hosted !== (chain.walletHost === "hosted")) throw new GoLiveError("credentials_changed");
+      if (chain.credentialsUnreadable) throw new GoLiveError(hosted ? "hosted_unavailable" : "credentials_unreadable");
       if (!chain.circleApiKey || !chain.circleEntitySecret) throw new GoLiveError("not_connected");
       const accounts = await walletAccounts();
       if (!accounts.find((account) => account.kind === "operating")?.circle_wallet_id) throw new GoLiveError("no_wallets");
-      const factory = input.client ?? defaultCircleClient;
-      await proveSameEntity(
-        factory({ apiKey: chain.circleApiKey, entitySecret: chain.circleEntitySecret }),
-        accounts.filter((account) => account.circle_wallet_id)
-      );
+      if (!hosted) {
+        const factory = input.client ?? defaultCircleClient;
+        await proveSameEntity(
+          factory({ apiKey: chain.circleApiKey, entitySecret: chain.circleEntitySecret }),
+          accounts.filter((account) => account.circle_wallet_id)
+        );
+      }
 
+      const update = platformDb().from("orgs").update({ mode: "live" }).eq("id", input.orgId).eq("mode", "sandbox");
       const written = unwrap(
-        await platformDb()
-          .from("orgs")
-          .update({ mode: "live" })
-          .eq("id", input.orgId)
-          .eq("mode", "sandbox")
-          .eq("circle_api_key_enc->>iv", state.apiKeyIv as string)
-          .select("id")
+        await (hosted
+          ? update.eq("wallet_host", "hosted")
+          : update.eq("circle_api_key_enc->>iv", state.apiKeyIv as string)
+        ).select("id")
       ) as Array<{ id: string }>;
       if (written.length === 0) {
         throw new GoLiveError((await orgState(input.orgId)).mode === "live" ? "already_live" : "credentials_changed");
@@ -416,21 +477,63 @@ export async function goLiveStatus(orgId: string): Promise<GoLiveStatus> {
 
     const connected = isConnected(state);
     const operatingReady = provisioned.some((account) => account.kind === "operating");
+    // Choosing the hosted wallet is a hosted workspace's connect step.
     const step: GoLiveStep =
       state.mode === "live"
         ? "live"
-        : !connected
+        : !connected && !isHosted(state)
           ? "connect"
           : !operatingReady || provisioned.length < accounts.length
             ? "wallets"
             : "go_live";
 
+    const chain = currentOrgConfig().chain;
     return {
       step,
       connected,
+      host: state.walletHost,
+      hostedAvailable: Boolean(chain.hostedAvailable),
       wallets,
       liveSince: latest[0]?.ts ?? null,
-      credentialsUnreadable: Boolean(currentOrgConfig().chain.credentialsUnreadable),
+      credentialsUnreadable: Boolean(chain.credentialsUnreadable),
     };
+  });
+}
+
+/**
+ * The connect step's other choice (hosted wallets H4, H5): the workspace's
+ * wallets will be created in the platform's hosted Circle testnet account.
+ *
+ * Offered only where the deployment has the hosted pair (`hosted_unavailable`
+ * otherwise). `choose_hosted_wallet` (0030) does the rest under one advisory
+ * lock: it refuses a workspace holding Circle credentials or any wallet
+ * (`hosted_not_allowed`), holds the platform to `HOSTED_WORKSPACE_LIMIT`
+ * hosted workspaces (`hosted_limit_reached`), and leaves one already hosted
+ * as it is. It answers whether it marked the workspace hosted, and only then
+ * is `hosted_wallet_chosen` recorded, with ids only: choosing again, or a
+ * second owner choosing at the same moment, records nothing.
+ */
+export async function chooseHostedWallet(input: { orgId: string; actorId: string }): Promise<void> {
+  const platform = await inScopeOf(input.orgId, input.actorId, async () => {
+    const config = currentOrgConfig();
+    return { available: Boolean(config.chain.hostedAvailable), limit: config.hostedWorkspaceLimit };
+  });
+  if (!platform.available) throw new GoLiveError("hosted_unavailable");
+
+  const { data: changed, error } = await platformDb().rpc("choose_hosted_wallet", {
+    p_org_id: input.orgId,
+    p_limit: platform.limit,
+  });
+  if (error) {
+    if (error.message.includes("hosted_not_allowed")) throw new GoLiveError("hosted_not_allowed");
+    if (error.message.includes("hosted_limit_reached")) throw new GoLiveError("hosted_limit_reached");
+    throw new Error(error.message);
+  }
+  if (changed !== true) return;
+
+  await record(input.orgId, input.actorId, {
+    action: "hosted_wallet_chosen",
+    summary: "A hosted testnet wallet was chosen",
+    detail: { by: input.actorId },
   });
 }

@@ -153,6 +153,17 @@ every error an action returns is a fixed string, and a sandbox holding Circle cr
 deleted by the cleanup (migration `0029`). The step between wallets and going live reads the
 operating wallet's on-chain balance through `refreshBalanceAction`, which returns the number alone.
 
+**Hosted testnet wallets** (`docs/superpowers/specs/2026-09-30-hosted-wallets-design.md`) are an
+explicit choice, never a fallback: `orgConfig` hands a workspace the platform's hosted pair
+(`HOSTED_CIRCLE_API_KEY`, `HOSTED_CIRCLE_ENTITY_SECRET`, read only in `src/lib/config.ts`) only when
+its own row says `wallet_host = 'hosted'`, which an owner sets through `chooseHostedWalletAction`
+(`choose_hosted_wallet`, migration `0030`, under the platform limit and only while the workspace
+has no credentials and no wallets). An own-account workspace whose credentials are missing or
+unreadable never gets the hosted pair, and a hosted workspace on a deployment without the pair
+reports `credentialsUnreadable` and pays nothing. Inside the shared hosted entity each workspace has
+a wallet set of its own, `vestiarion-<orgId>`, and it can pay only from its own `accounts` rows,
+which RLS scopes to the organization, so one hosted workspace cannot spend another's wallet.
+
 ## Approvals and the pause switch
 
 **The approval inbox** (`/o/[slug]/approvals`, spec §5) lists every payable a

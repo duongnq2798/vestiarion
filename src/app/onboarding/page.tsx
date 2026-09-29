@@ -119,7 +119,7 @@ export default async function OnboardingPage({ searchParams }: OnboardingPagePro
             </>
           ) : (
             <>
-              <p className="mt-3 text-sm leading-relaxed text-ink-3">Create a workspace to try Vestiarion with simulated money. A teammate can also invite you to theirs.</p>
+              <p className="mt-3 text-sm leading-relaxed text-ink-3">Create a workspace to try Vestiarion. It starts with simulated money; an owner can add a real Arc testnet wallet from Settings. A teammate can also invite you to theirs.</p>
               <div id="create-workspace" className="mt-6 scroll-mt-24">
                 <CreateWorkspaceForm />
               </div>

@@ -44,6 +44,21 @@ export function StatTile({
 }
 
 /**
+ * Which wording the balance tile uses: on-chain only when payments are live
+ * and the operating account holds a real wallet. The workspace's mode is not
+ * the test — a sandbox that connected Circle or took a hosted wallet pays for
+ * real on a hand-run cycle, while one connected but not yet provisioned still
+ * holds only simulated balances.
+ */
+export function balanceTileMode(
+  chainMode: "live" | "simulate",
+  accounts: ReadonlyArray<{ kind: string; circle_wallet_id?: string | null }>
+): "sandbox" | "live" {
+  const operatingHasWallet = accounts.some((account) => account.kind === "operating" && !!account.circle_wallet_id);
+  return chainMode === "live" && operatingHasWallet ? "live" : "sandbox";
+}
+
+/**
  * The balance tile's label and sub-line, pinned as a pure function: a
  * sandbox workspace's funds are simulated money end to end, so it always
  * gets the fixed sandbox wording, regardless of the simulated reserve

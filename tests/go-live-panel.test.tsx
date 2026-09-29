@@ -13,6 +13,7 @@ import type { GoLiveStatus } from "@/lib/platform/go-live";
  */
 
 vi.mock("@/app/actions/go-live", () => ({
+  chooseHostedWalletAction: vi.fn(),
   connectCircleAction: vi.fn(),
   createWalletsAction: vi.fn(),
   goLiveAction: vi.fn(),
@@ -21,7 +22,7 @@ vi.mock("@/app/actions/go-live", () => ({
 
 const html = (node: ReactElement) => renderToStaticMarkup(<TooltipProvider>{node}</TooltipProvider>);
 /** The text a reader sees, tags dropped. */
-const text = (markup: string) => markup.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+const text = (markup: string) => markup.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").replace(/&#x27;/g, "'");
 
 const OPERATING = "0x" + "ab".repeat(20);
 const RESERVE = "0x" + "cd".repeat(20);
@@ -31,7 +32,10 @@ const WALLETS: GoLiveStatus["wallets"] = [
 ];
 
 function status(overrides: Partial<GoLiveStatus> = {}): GoLiveStatus {
-  return { step: "connect", connected: false, wallets: [], liveSince: null, credentialsUnreadable: false, ...overrides };
+  return {
+    step: "connect", connected: false, host: null, hostedAvailable: false, wallets: [], liveSince: null, credentialsUnreadable: false,
+    ...overrides,
+  };
 }
 
 const STEPS: Record<GoLiveStatus["step"], GoLiveStatus> = {
@@ -219,6 +223,145 @@ describe("GoLivePanel, with credentials this deployment cannot read", () => {
     expect(words).toContain("Circle credentials cannot be read");
     expect(words).toContain("Replace Circle credentials");
     expect(words).not.toContain(OPERATING);
+  });
+});
+
+const HOSTED_LABEL = "Hosted by Vestiarion · Arc testnet · no real money";
+
+const HOSTED: Record<Exclude<GoLiveStatus["step"], "connect">, GoLiveStatus> = {
+  wallets: status({ step: "wallets", host: "hosted", hostedAvailable: true }),
+  go_live: status({ step: "go_live", host: "hosted", hostedAvailable: true, wallets: WALLETS }),
+  live: status({ step: "live", host: "hosted", hostedAvailable: true, wallets: WALLETS, liveSince: "2026-09-30T09:00:00Z" }),
+};
+
+describe("GoLivePanel, where the deployment offers hosted testnet wallets", () => {
+  const offered = status({ hostedAvailable: true });
+
+  it("connect: the hosted wallet first, recommended and labelled, as one button, then the own-account form", () => {
+    const markup = panel(offered);
+    const words = text(markup);
+    expect(words).toContain(HOSTED_LABEL);
+    expect(words).toContain("Recommended");
+    const hosted = markup.search(/<button[^>]*type="submit"[^>]*>(?:(?!<\/button>).)*Use a Vestiarion testnet wallet<\/button>/);
+    const own = markup.search(/<summary[^>]*>(?:(?!<\/summary>).)*Connect your own Circle account/);
+    expect(hosted).toBeGreaterThan(-1);
+    expect(own).toBeGreaterThan(hosted);
+    // The hosted choice is its own form: the org, and nothing else.
+    const hostedForm = markup.slice(markup.lastIndexOf("<form", hosted), hosted);
+    expect(hostedForm).toContain('<input type="hidden" name="orgSlug" value="acme"/>');
+    expect(hostedForm).not.toContain('name="apiKey"');
+    // The own-account form is still there, unchanged.
+    expectIgnoredByPasswordManagers(markup);
+    expect(markup).toMatch(/<button[^>]*type="submit"[^>]*>(?:(?!<\/button>).)*Connect Circle<\/button>/);
+    expect(words).toContain("never shown again");
+  });
+
+  it("connect, without the platform pair: no hosted choice, only the existing form", () => {
+    const words = text(panel("connect"));
+    expect(words).not.toContain("Vestiarion testnet wallet");
+    expect(words).not.toContain(HOSTED_LABEL);
+    expect(words).not.toContain("Recommended");
+    expect(words).not.toContain("Connect your own Circle account");
+    expect(words).toContain("Connect your Circle account");
+    expectIgnoredByPasswordManagers(panel("connect"));
+  });
+
+  it("connect, for a non-owner: no choice and no form", () => {
+    const markup = panel(offered, false);
+    expect(markup).not.toContain("<form");
+    expect(text(markup)).not.toContain("Use a Vestiarion testnet wallet");
+  });
+
+  it.each(["wallets", "go_live"] as const)("%s, hosted: the status says Sandbox · hosted testnet wallet", (step) => {
+    for (const canAdminister of [true, false]) {
+      const words = text(panel(HOSTED[step], canAdminister));
+      expect(words).toContain("Sandbox · hosted testnet wallet");
+      expect(words).not.toContain("connected to Circle");
+    }
+  });
+
+  it.each([
+    ["wallets", status({ step: "wallets", host: "hosted", hostedAvailable: true, wallets: [WALLETS[0]] })],
+    ["go_live", HOSTED.go_live],
+  ] as const)("%s, hosted, once wallets exist: the status says cycles run by hand pay testnet USDC, and wraps", (_step, state) => {
+    for (const canAdminister of [true, false]) {
+      const markup = panel(state, canAdminister);
+      expect(text(markup)).toContain("Sandbox · hosted testnet wallet — cycles you run by hand pay testnet USDC");
+      // The long line wraps inside the badge at 360 px, like the connected one.
+      expect(markup).toMatch(/<span class="[^"]*whitespace-normal[^"]*"[^>]*>(?:(?!<\/span>).)*<\/span>Sandbox · hosted testnet wallet — /);
+    }
+  });
+
+  it("wallets, hosted, before any wallet exists: the status does not say cycles pay", () => {
+    const words = text(panel(HOSTED.wallets));
+    expect(words).toContain("Sandbox · hosted testnet wallet");
+    expect(words).not.toContain("cycles you run by hand");
+  });
+
+  it("live, hosted: the status says Live · hosted testnet wallet on Arc", () => {
+    const words = text(panel(HOSTED.live));
+    expect(words).toContain("Live · hosted testnet wallet on Arc");
+    expect(words).not.toContain("Live · paying on Arc testnet");
+  });
+
+  it("wallets, hosted: the wallets are created in Vestiarion's testnet account", () => {
+    const words = text(panel(HOSTED.wallets));
+    expect(words).toContain("in Vestiarion's testnet account");
+    expect(words).not.toContain("in a wallet set in your own Circle account");
+    expect(words).not.toContain("proves the entity secret");
+  });
+
+  it.each(["go_live", "live"] as const)("%s, hosted: no Replace Circle credentials, one line saying to start a new workspace", (step) => {
+    const markup = panel(HOSTED[step]);
+    const words = text(markup);
+    expect(words).not.toContain("Replace Circle credentials");
+    expect(secretInputs(markup)).toHaveLength(0);
+    expect(words).toContain("To use your own Circle account, start a new workspace.");
+  });
+
+  it("wallets, hosted, before any wallet exists: the owner may still switch to their own account (H4)", () => {
+    const markup = panel(HOSTED.wallets);
+    const words = text(markup);
+    expect(words).not.toContain("Replace Circle credentials");
+    expect(words).not.toContain("start a new workspace");
+    expect(markup).toMatch(/<summary[^>]*>(?:(?!<\/summary>).)*Connect your own Circle account instead/);
+    expectIgnoredByPasswordManagers(markup);
+  });
+
+  it("wallets, hosted, once a wallet exists: the choice is fixed", () => {
+    const markup = panel(status({ step: "wallets", host: "hosted", hostedAvailable: true, wallets: [WALLETS[0]] }));
+    expect(text(markup)).toContain("To use your own Circle account, start a new workspace.");
+    expect(secretInputs(markup)).toHaveLength(0);
+  });
+
+  it("hosted, for a non-owner: neither the line nor a form", () => {
+    const markup = panel(HOSTED.go_live, false);
+    expect(markup).not.toContain("<form");
+    expect(text(markup)).not.toContain("start a new workspace");
+  });
+});
+
+describe("GoLivePanel, hosted on a deployment without the platform pair", () => {
+  const unreadable = (step: "wallets" | "live") =>
+    status({ step, host: "hosted", hostedAvailable: false, wallets: step === "live" ? WALLETS : [], credentialsUnreadable: true });
+
+  it.each([true, false])("warns that the hosted testnet wallet is unavailable, without asking for a reconnect (owner: %s)", (canAdminister) => {
+    const markup = panel(unreadable("live"), canAdminister);
+    const words = text(markup);
+    expect(words).toContain("Hosted testnet wallet unavailable");
+    expect(words).toContain("unavailable on this deployment");
+    expect(words).not.toContain("reconnect");
+    expect(words).not.toContain("Circle credentials cannot be read");
+    expect(words).not.toContain("Replace Circle credentials");
+    expect(words).not.toContain(OPERATING);
+    expect(markup).not.toContain('id="go-live-form"');
+    expect(secretInputs(markup)).toHaveLength(0);
+  });
+
+  it("shows no step while the pair is missing", () => {
+    const words = text(panel(unreadable("wallets")));
+    expect(words).toContain("Hosted testnet wallet unavailable");
+    expect(words).not.toContain("Create treasury wallets");
   });
 });
 

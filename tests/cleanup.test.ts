@@ -29,6 +29,7 @@ const CUTOFF_ISO = new Date(NOW.getTime() - SANDBOX_IDLE_DAYS * 24 * 60 * 60 * 1
 
 function sandboxesDatabase(request: RecordedRequest): FakeReply {
   if (request.path === "/rest/v1/orgs") {
+    if (request.params.get("id")) throw new Error("a sandbox that is not hosted is never checked for wallets");
     return { body: [
       { id: DELETED, slug: "deleted-co" },
       { id: SURVIVED, slug: "survived-co" },
@@ -54,18 +55,22 @@ describe("deleteAbandonedSandboxes", () => {
 
     const result = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => deleteAbandonedSandboxes(NOW));
 
-    expect(result).toEqual({ deleted: 1, failed: 1 });
+    expect(result).toMatchObject({ deleted: 1, failed: 1 });
     // Per-organization detail goes to the server log by id only; no slug
     // (derived from a workspace name) appears in the result or the logs.
     expect(log).toHaveBeenCalledWith("deleted abandoned sandbox", DELETED);
     expect(error).toHaveBeenCalledWith("could not delete abandoned sandbox", BROKEN, "boom");
     expect(JSON.stringify([result, log.mock.calls, error.mock.calls])).not.toMatch(/-co/);
 
-    const listing = fake.requests.find((request) => request.path === "/rest/v1/orgs");
+    const listing = fake.requests.find((request) => request.path === "/rest/v1/orgs" && request.method === "GET");
     expect(listing?.params.get("mode")).toBe("eq.sandbox");
     expect(listing?.params.get("last_active_at")).toBe(`lt.${CUTOFF_ISO}`);
     // Migration 0029: a sandbox holding Circle credentials is never listed for deletion.
     expect(listing?.params.get("circle_api_key_enc")).toBe("is.null");
+    // R6: hosted sandboxes are listed too, with their host, so an abandoned
+    // one with no wallet frees its hosted slot.
+    expect(listing?.params.get("or")).toBeNull();
+    expect(listing?.params.get("select")?.split(",").map((column) => column.trim())).toEqual(["id", "wallet_host"]);
 
     const rpcCalls = fake.requests.filter((request) => request.path === "/rest/v1/rpc/delete_sandbox_org");
     expect(rpcCalls).toHaveLength(3);
@@ -79,8 +84,134 @@ describe("deleteAbandonedSandboxes", () => {
 
     const result = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => deleteAbandonedSandboxes(NOW));
 
-    expect(result).toEqual({ deleted: 0, failed: 0 });
+    expect(result).toMatchObject({ deleted: 0, failed: 0 });
     expect(fake.requests.some((request) => request.path === "/rest/v1/rpc/delete_sandbox_org")).toBe(false);
+  });
+});
+
+describe("deleteAbandonedSandboxes — hosted sandboxes (R6, hosted wallets H6)", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  const HOSTED_EMPTY = "5d0f3a2e-8c1b-4f7a-9e6d-000000000e01";
+  const HOSTED_WALLETED = "5d0f3a2e-8c1b-4f7a-9e6d-000000000e02";
+  const HOSTED_UNCHECKABLE = "5d0f3a2e-8c1b-4f7a-9e6d-000000000e03";
+  const OWN = "5d0f3a2e-8c1b-4f7a-9e6d-000000000e04";
+  const UNCHOSEN = "5d0f3a2e-8c1b-4f7a-9e6d-000000000e05";
+
+  const idOf = (request: RecordedRequest) => request.params.get("id")?.replace(/^eq\./, "");
+
+  function hostedDatabase(request: RecordedRequest): FakeReply {
+    if (request.path === "/rest/v1/orgs" && !request.params.get("id")) {
+      return { body: [
+        { id: HOSTED_EMPTY, wallet_host: "hosted" },
+        { id: HOSTED_WALLETED, wallet_host: "hosted" },
+        { id: HOSTED_UNCHECKABLE, wallet_host: "hosted" },
+        { id: OWN, wallet_host: "own" },
+        { id: UNCHOSEN, wallet_host: null },
+      ] };
+    }
+    if (request.path === "/rest/v1/orgs") {
+      // The wallet check: the org, only if one of its accounts has a wallet.
+      if (idOf(request) === HOSTED_UNCHECKABLE) return { status: 500, body: { message: "check failed" } };
+      return { body: idOf(request) === HOSTED_WALLETED ? [{ id: HOSTED_WALLETED }] : [] };
+    }
+    if (request.path === "/rest/v1/rpc/delete_sandbox_org") return { body: true };
+    return { body: [] };
+  }
+
+  async function run() {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const fake = fakeSupabase(hostedDatabase);
+    const result = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => deleteAbandonedSandboxes(NOW));
+    const checks = fake.requests.filter((request) => request.path === "/rest/v1/orgs" && request.params.get("id"));
+    const deletes = fake.requests
+      .filter((request) => request.path === "/rest/v1/rpc/delete_sandbox_org")
+      .map((request) => (request.body as { p_org_id: string }).p_org_id);
+    return { result, log, error, checks, deletes };
+  }
+
+  it("deletes a hosted sandbox with no wallet, freeing its slot, and skips one with a wallet without calling delete", async () => {
+    const { result, log, deletes } = await run();
+    expect(deletes).toContain(HOSTED_EMPTY);
+    expect(deletes).not.toContain(HOSTED_WALLETED);
+    expect(log).toHaveBeenCalledWith("deleted abandoned sandbox", HOSTED_EMPTY);
+    expect(log).toHaveBeenCalledWith("kept abandoned hosted sandbox with wallets", HOSTED_WALLETED);
+    expect(result).toMatchObject({ deleted: 3, failed: 1 });
+  });
+
+  it("checks each hosted candidate's accounts for a wallet through the orgs table, by id", async () => {
+    const { checks } = await run();
+    expect(checks.map(idOf)).toEqual([HOSTED_EMPTY, HOSTED_WALLETED, HOSTED_UNCHECKABLE]);
+    for (const check of checks) {
+      expect(check.method).toBe("GET");
+      expect(check.params.get("select")).toBe("id,accounts!inner(id)");
+      expect(check.params.get("accounts.circle_wallet_id")).toBe("not.is.null");
+      expect(check.params.get("limit")).toBe("1");
+    }
+  });
+
+  it("counts a hosted sandbox whose check fails as failed, and does not delete it", async () => {
+    const { result, error, deletes } = await run();
+    expect(deletes).not.toContain(HOSTED_UNCHECKABLE);
+    expect(error).toHaveBeenCalledWith("could not check abandoned hosted sandbox for wallets", HOSTED_UNCHECKABLE, "check failed");
+    expect(result.failed).toBe(1);
+  });
+
+  it("leaves own and unchosen sandboxes as before: no check, straight to delete_sandbox_org", async () => {
+    const { checks, deletes } = await run();
+    expect(checks.map(idOf)).not.toContain(OWN);
+    expect(checks.map(idOf)).not.toContain(UNCHOSEN);
+    expect(deletes).toEqual([HOSTED_EMPTY, OWN, UNCHOSEN]);
+  });
+});
+
+describe("deleteAbandonedSandboxes — the hosted count against the limit (hosted wallets H5)", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  const hostedCount = (request: RecordedRequest) => request.path === "/rest/v1/orgs" && request.method === "HEAD";
+
+  function counting(count: number | "broken") {
+    return (request: RecordedRequest): FakeReply => {
+      if (hostedCount(request)) {
+        if (count === "broken") return { status: 500, body: { message: "count failed" } };
+        return { status: 200, body: [], headers: { "content-range": `*/${count}` } };
+      }
+      if (request.path === "/rest/v1/orgs") return { body: [] };
+      return { body: [] };
+    };
+  }
+
+  const limited = (limit: string) =>
+    configFromEnv({
+      NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid",
+      SUPABASE_SERVICE_ROLE_KEY: "k",
+      HOSTED_WORKSPACE_LIMIT: limit,
+    });
+
+  it("reports how many workspaces are hosted, after the deletes, and the platform's limit", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const fake = fakeSupabase(counting(7));
+
+    const result = await runWith({ config: limited("25"), db: fake.client, fetch: fake.fetch }, () => deleteAbandonedSandboxes(NOW));
+
+    expect(result).toEqual({ deleted: 0, failed: 0, hostedUsed: 7, hostedLimit: 25 });
+    const count = fake.requests.find(hostedCount);
+    expect(count?.params.get("wallet_host")).toBe("eq.hosted");
+    expect(count?.headers.get("prefer")).toMatch(/count=exact/);
+    // Counted after the deletes, so a freed slot shows in the same run.
+    expect(fake.requests.indexOf(count!)).toBe(fake.requests.length - 1);
+  });
+
+  it("reports the count as unknown when it cannot be read, without failing the cleanup", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const fake = fakeSupabase(counting("broken"));
+
+    const result = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => deleteAbandonedSandboxes(NOW));
+
+    expect(result).toEqual({ deleted: 0, failed: 0, hostedUsed: null, hostedLimit: 100 });
+    expect(error).toHaveBeenCalledWith("could not count hosted workspaces", expect.any(String));
   });
 });
 

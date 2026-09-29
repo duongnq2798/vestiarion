@@ -1,3 +1,4 @@
+import { currentConfig } from "../context";
 import { platformDb, unwrap } from "../dal";
 
 /** Spec §6 "Abandoned sandboxes": a sandbox with no activity this long is deleted by the daily cleanup. */
@@ -5,6 +6,23 @@ export const SANDBOX_IDLE_DAYS = 60;
 
 interface SandboxRow {
   id: string;
+  wallet_host: "own" | "hosted" | null;
+}
+
+/**
+ * Whether any account of the organization has a Circle wallet, read through
+ * the platform's `orgs` table: the org comes back only if an embedded account
+ * with a wallet matches (`!inner`).
+ */
+async function hasWallet(orgId: string): Promise<{ wallet: boolean; error?: string }> {
+  const { data, error } = await platformDb()
+    .from("orgs")
+    .select("id, accounts!inner(id)")
+    .eq("id", orgId)
+    .not("accounts.circle_wallet_id", "is", null)
+    .limit(1);
+  if (error) return { wallet: false, error: error.message };
+  return { wallet: (data ?? []).length > 0 };
 }
 
 /**
@@ -18,6 +36,26 @@ export interface CleanupResult {
 }
 
 /**
+ * The sandbox cleanup's counts, and how many workspaces hold a hosted slot
+ * after it against `HOSTED_WORKSPACE_LIMIT` (hosted wallets H5): numbers only.
+ * `hostedUsed` is null when the count could not be read, which is reported,
+ * not counted as a failed deletion.
+ */
+export interface SandboxCleanupResult extends CleanupResult {
+  hostedUsed: number | null;
+  hostedLimit: number;
+}
+
+async function countHosted(): Promise<number | null> {
+  const { count, error } = await platformDb().from("orgs").select("id", { count: "exact", head: true }).eq("wallet_host", "hosted");
+  if (error || count === null) {
+    console.error("could not count hosted workspaces", error?.message ?? "no count returned");
+    return null;
+  }
+  return count;
+}
+
+/**
  * Deletes every sandbox organization that has been inactive since the
  * cutoff. Each organization is its own call to `delete_sandbox_org`
  * (migration 0022), so one organization's failure never stops the rest: it
@@ -25,15 +63,25 @@ export interface CleanupResult {
  * re-checks `last_active_at` against the cutoff it is given, so a sandbox
  * that became active between the listing and the delete survives — that call
  * simply returns `false`, and the organization is counted nowhere.
+ *
+ * Hosted sandboxes are listed too (R6), so an abandoned one frees its place
+ * under `HOSTED_WORKSPACE_LIMIT`. Each is first checked for a wallet: one with
+ * a wallet may hold faucet funds its owner is using, so it is kept without a
+ * call (counted nowhere), and one whose check fails is counted in `failed`.
+ * `delete_sandbox_org`'s own `has_hosted_wallet` refusal stays the authority
+ * for a wallet created between the check and the delete.
+ *
+ * Last, it counts the hosted workspaces left, so the run reports how close
+ * the platform is to its hosted limit, freed slots included.
  */
-export async function deleteAbandonedSandboxes(now: Date = new Date()): Promise<CleanupResult> {
+export async function deleteAbandonedSandboxes(now: Date = new Date()): Promise<SandboxCleanupResult> {
   const cutoff = new Date(now.getTime() - SANDBOX_IDLE_DAYS * 24 * 60 * 60 * 1000);
   const cutoffIso = cutoff.toISOString();
 
   const sandboxes = unwrap(
     await platformDb()
       .from("orgs")
-      .select("id")
+      .select("id, wallet_host")
       .eq("mode", "sandbox")
       .lt("last_active_at", cutoffIso)
       .is("circle_api_key_enc", null)
@@ -43,6 +91,18 @@ export async function deleteAbandonedSandboxes(now: Date = new Date()): Promise<
   let failed = 0;
 
   for (const org of sandboxes) {
+    if (org.wallet_host === "hosted") {
+      const check = await hasWallet(org.id);
+      if (check.error) {
+        failed += 1;
+        console.error("could not check abandoned hosted sandbox for wallets", org.id, check.error);
+        continue;
+      }
+      if (check.wallet) {
+        console.log("kept abandoned hosted sandbox with wallets", org.id);
+        continue;
+      }
+    }
     const { data, error } = await platformDb().rpc("delete_sandbox_org", {
       p_org_id: org.id,
       p_inactive_before: cutoffIso,
@@ -58,7 +118,10 @@ export async function deleteAbandonedSandboxes(now: Date = new Date()): Promise<
     }
   }
 
-  return { deleted, failed };
+  const hostedUsed = await countHosted();
+  const hostedLimit = currentConfig().hostedWorkspaceLimit;
+  console.log("hosted workspaces", hostedUsed, "of", hostedLimit);
+  return { deleted, failed, hostedUsed, hostedLimit };
 }
 
 /** W7: delivered and failed webhook rows are kept this long, then deleted by the daily cleanup. */

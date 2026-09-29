@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ConfigError, configFromEnv, describeConfig } from "@/lib/config";
+import { ConfigError, configFromEnv, describeConfig, hostedWalletsAvailable } from "@/lib/config";
 
 const minimal = {
   NEXT_PUBLIC_SUPABASE_URL: "https://proj.supabase.co",
@@ -131,6 +131,55 @@ describe("configFromEnv — defaults that encode a policy", () => {
   });
 });
 
+describe("configFromEnv — the hosted Circle account (hosted wallets H2, H5)", () => {
+  it("reads the hosted pair, trimmed", () => {
+    const config = configFromEnv(env({
+      HOSTED_CIRCLE_API_KEY: "  hosted-key  ",
+      HOSTED_CIRCLE_ENTITY_SECRET: "\thosted-secret\n",
+    }));
+    expect(config.chain.hostedCircleApiKey).toBe("hosted-key");
+    expect(config.chain.hostedCircleEntitySecret).toBe("hosted-secret");
+  });
+
+  it("treats a blank hosted pair as absent, and never borrows the platform's own Circle pair", () => {
+    const config = configFromEnv(env({
+      CIRCLE_API_KEY: "platform-key",
+      CIRCLE_ENTITY_SECRET: "platform-secret",
+      HOSTED_CIRCLE_API_KEY: "   ",
+    }));
+    expect(config.chain.hostedCircleApiKey).toBeUndefined();
+    expect(config.chain.hostedCircleEntitySecret).toBeUndefined();
+    expect(config.chain.circleApiKey).toBe("platform-key");
+  });
+
+  it("limits hosted workspaces to 100 by default", () => {
+    expect(configFromEnv(env()).hostedWorkspaceLimit).toBe(100);
+  });
+
+  it("reads HOSTED_WORKSPACE_LIMIT as a whole number, trimmed, zero meaning none", () => {
+    expect(configFromEnv(env({ HOSTED_WORKSPACE_LIMIT: " 25 " })).hostedWorkspaceLimit).toBe(25);
+    expect(configFromEnv(env({ HOSTED_WORKSPACE_LIMIT: "0" })).hostedWorkspaceLimit).toBe(0);
+  });
+
+  it("falls back to 100 on a value that is not a whole number of workspaces", () => {
+    for (const raw of ["", "  ", "lots", "-5", "2.5", "1e3", "0x10", "2147483648"]) {
+      expect(configFromEnv(env({ HOSTED_WORKSPACE_LIMIT: raw })).hostedWorkspaceLimit, raw).toBe(100);
+    }
+  });
+
+  it("says whether the hosted wallet can be offered, as a boolean: both halves of the pair, or an organization's flag", () => {
+    const both = configFromEnv(env({ HOSTED_CIRCLE_API_KEY: "hosted-key", HOSTED_CIRCLE_ENTITY_SECRET: "hosted-secret" }));
+    expect(hostedWalletsAvailable(both)).toBe(true);
+    expect(hostedWalletsAvailable(configFromEnv(env({ HOSTED_CIRCLE_API_KEY: "hosted-key" })))).toBe(false);
+    expect(hostedWalletsAvailable(configFromEnv(env({ HOSTED_CIRCLE_ENTITY_SECRET: "hosted-secret" })))).toBe(false);
+    expect(hostedWalletsAvailable(configFromEnv(env()))).toBe(false);
+    // An organization's config never holds the pair, only orgConfig's boolean (R4).
+    const org = configFromEnv(env());
+    expect(hostedWalletsAvailable({ ...org, chain: { ...org.chain, hostedAvailable: true } })).toBe(true);
+    expect(hostedWalletsAvailable({ ...org, chain: { ...org.chain, hostedAvailable: false } })).toBe(false);
+  });
+});
+
 describe("describeConfig", () => {
   const full = () =>
     configFromEnv(env({
@@ -139,6 +188,8 @@ describe("describeConfig", () => {
       DEEPSEEK_API_KEY: "sk-deep-secret",
       CIRCLE_API_KEY: "circle-secret",
       CIRCLE_ENTITY_SECRET: "entity-secret",
+      HOSTED_CIRCLE_API_KEY: "hosted-key-should-not-leak",
+      HOSTED_CIRCLE_ENTITY_SECRET: "hosted-secret-should-not-leak",
       OPENSANCTIONS_API_URL: "http://yente:8000",
       OPENSANCTIONS_API_KEY: "os-secret",
       GITHUB_TOKEN: "ghp-secret",
@@ -155,6 +206,7 @@ describe("describeConfig", () => {
       "sk-ant-secret", "sk-deep-secret", "circle-secret", "entity-secret",
       "os-secret", "ghp-secret", "service-role", "BEGIN PRIVATE KEY",
       "anon-key-should-not-leak", "jwt-secret-should-not-leak",
+      "hosted-key-should-not-leak", "hosted-secret-should-not-leak",
     ]) {
       expect(json, `leaked ${secret}`).not.toContain(secret);
     }

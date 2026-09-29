@@ -20,10 +20,11 @@ export async function POST(request: Request) {
     const webhooks = await deleteExpiredWebhookDeliveries();
     // Counts only: this body is printed into the workflow's log, and sandbox
     // slugs derive from workspace names. The detail is in the server log.
-    const { deleted, failed } = await deleteAbandonedSandboxes();
+    const { deleted, failed, hostedUsed, hostedLimit } = await deleteAbandonedSandboxes();
     const failures = failed + webhooks.failed;
     return NextResponse.json(
-      { deleted, failed: failures, webhookDeliveriesDeleted: webhooks.deleted },
+      // The hosted slots in use against the platform's limit (hosted wallets H5): counts only.
+      { deleted, failed: failures, webhookDeliveriesDeleted: webhooks.deleted, hostedUsed, hostedLimit },
       { status: failures > 0 ? 500 : 200 }
     );
   } catch (err) {

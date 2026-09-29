@@ -5,11 +5,12 @@ import "server-only";
 import { authorize } from "@/lib/auth/authorize";
 import { revalidateOrgPages } from "@/lib/auth/revalidate";
 import { inOrg } from "@/lib/dal/scope";
-import { connectCircle, createWallets, goLive, GoLiveError, operatingBalance } from "@/lib/platform/go-live";
+import { chooseHostedWallet, connectCircle, createWallets, goLive, GoLiveError, operatingBalance } from "@/lib/platform/go-live";
 
 /**
- * The three Go live steps (docs/superpowers/specs/2026-09-29-go-live-design.md),
- * owner only (L1). The Circle credentials arrive in form data, go straight to
+ * The three Go live steps (docs/superpowers/specs/2026-09-29-go-live-design.md)
+ * and the hosted-wallet choice (2026-09-30-hosted-wallets-design.md), owner
+ * only (L1). The Circle credentials arrive in form data, go straight to
  * `connectCircle`, and are never returned, logged or revalidated into a page:
  * the result is only ever `{ ok, message }` with a fixed message.
  */
@@ -57,6 +58,25 @@ export async function connectCircleAction(_previous: GoLiveActionResult, formDat
       return { ok: true, message: "Circle is connected." };
     } catch (error) {
       return fail("connectCircleAction", error);
+    }
+  });
+}
+
+/**
+ * Form fields: `orgSlug`. The connect step's other choice (hosted wallets H4):
+ * the workspace's wallets will live in Vestiarion's hosted Circle testnet
+ * account. It takes no credentials, and returns none.
+ */
+export async function chooseHostedWalletAction(_previous: GoLiveActionResult, formData: FormData): Promise<GoLiveActionResult> {
+  const auth = await authorize(formData.get("orgSlug"), "org.administer");
+  if (!auth.ok) return { ok: false, message: auth.message };
+  return inOrg(auth, async () => {
+    try {
+      await chooseHostedWallet({ orgId: auth.membership.orgId, actorId: auth.user.id });
+      revalidateOrgPages();
+      return { ok: true, message: "This workspace will use a Vestiarion testnet wallet; create its treasury wallets next." };
+    } catch (error) {
+      return fail("chooseHostedWalletAction", error);
     }
   });
 }
