@@ -8,7 +8,7 @@ const HOME = "/design#screens";
 
 /**
  * The real workspace navigation, in frames: the sidebar panel, and — below
- * <code className="rounded-md bg-raised px-1.5 py-0.5 font-mono text-xs">lg</code> — the phone top bar with its drawer. ⌘K / Ctrl K opens this demo's
+ * `lg` — the phone top bar with its drawer. ⌘K / Ctrl K opens this demo's
  * command palette anywhere on the page. Its links lead to a workspace that
  * does not exist; use the keyboard and the menus, not the links.
  */
