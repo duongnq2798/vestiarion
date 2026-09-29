@@ -95,7 +95,7 @@ export function CommandItem({ className, ...props }: ComponentProps<typeof Comma
     <CommandPrimitive.Item
       className={cn(
         menuItemBase,
-        "data-[selected=true]:bg-raised/70 data-[selected=true]:text-ink data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50",
+        "data-[selected=true]:bg-raised/70 data-[selected=true]:text-ink data-[selected=true]:before:opacity-100 data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50",
         className
       )}
       {...props}
