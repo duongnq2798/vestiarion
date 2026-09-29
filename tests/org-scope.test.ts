@@ -9,13 +9,17 @@ import { fakeSupabase, type RecordedRequest } from "./support/fake-supabase";
 
 const ORG = "5d0f3a2e-8c1b-4f7a-9e6d-00000000beef";
 const SEALED_ORG = "5d0f3a2e-8c1b-4f7a-9e6d-00000000feed";
+const HOSTED_ORG = "5d0f3a2e-8c1b-4f7a-9e6d-00000000a0a0";
 const base = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k", NEXT_PUBLIC_SUPABASE_ANON_KEY: "test-anon-key", SUPABASE_JWT_SECRET: "test-request-token-secret-at-least-32-characters" });
 
 const sealingKeys = parseMasterKeys(`w1:${crypto.randomBytes(32).toString("base64")}`);
 const sealedLedgerKey = "sealed-ledger-key-must-not-leak";
 
-function orgRow(id: string, slug: string) {
-  return { id, slug, name: `Org ${slug}`, mode: "sandbox", ledger_signing_key_enc: null, circle_api_key_enc: null, circle_entity_secret_enc: null };
+function orgRow(id: string, slug: string, walletHost: "own" | "hosted" | null = null) {
+  return {
+    id, slug, name: `Org ${slug}`, mode: "sandbox",
+    ledger_signing_key_enc: null, circle_api_key_enc: null, circle_entity_secret_enc: null, wallet_host: walletHost,
+  };
 }
 
 /** An organization row with a real envelope sealed under `sealingKeys`, for exercising the warnings wiring end to end. */
@@ -28,6 +32,7 @@ function sealedOrgRow() {
     ledger_signing_key_enc: encryptSecret(sealedLedgerKey, { orgId: SEALED_ORG, column: "ledger_signing_key_enc" }, sealingKeys),
     circle_api_key_enc: null,
     circle_entity_secret_enc: null,
+    wallet_host: null,
   };
 }
 
@@ -38,6 +43,7 @@ function orgsTable(request: RecordedRequest) {
   if (id === ORG || slug === "northstar") return { body: orgRow(ORG, "northstar") };
   if (id === FOUNDING_ORG_ID) return { body: orgRow(FOUNDING_ORG_ID, "founding") };
   if (id === SEALED_ORG) return { body: sealedOrgRow() };
+  if (id === HOSTED_ORG) return { body: orgRow(HOSTED_ORG, "hosted", "hosted") };
   return { status: 406, body: { code: "PGRST116", message: "JSON object requested, multiple (or no) rows returned" } };
 }
 
@@ -107,6 +113,35 @@ describe("nested scopes", () => {
       withOrg(ORG, () => withFoundingOrg(async () => currentConfig().ledgerRetiredPublicKeys))
     );
     expect(result).toBe(platformConfig.ledgerRetiredPublicKeys);
+  });
+});
+
+describe("hosted wallets (H1, H7)", () => {
+  const hostedPlatform = configFromEnv({
+    NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid",
+    SUPABASE_SERVICE_ROLE_KEY: "k",
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: "test-anon-key",
+    SUPABASE_JWT_SECRET: "test-request-token-secret-at-least-32-characters",
+    HOSTED_CIRCLE_API_KEY: "hosted-key",
+    HOSTED_CIRCLE_ENTITY_SECRET: "hosted-secret",
+  });
+  const inHostedPlatform = <T>(fn: () => Promise<T>) => {
+    const fake = fakeSupabase(orgsTable);
+    return { fake, run: () => runWith({ config: hostedPlatform, db: fake.client, fetch: fake.fetch }, fn) };
+  };
+
+  it("reads each organization's wallet_host with its row", async () => {
+    const { fake, run } = inHostedPlatform(() => withOrg(ORG, async () => null));
+    await run();
+    expect(fake.requests[0].params.get("select")?.split(",")).toContain("wallet_host");
+  });
+
+  it("gives a hosted organization the hosted pair, and one that has not chosen none", async () => {
+    const { run } = inHostedPlatform(async () => [
+      await withOrg(HOSTED_ORG, async () => currentOrgConfig().chain.circleApiKey),
+      await withOrg(ORG, async () => currentOrgConfig().chain.circleApiKey),
+    ]);
+    expect(await run()).toEqual(["hosted-key", undefined]);
   });
 });
 

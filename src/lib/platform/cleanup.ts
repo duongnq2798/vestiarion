@@ -37,6 +37,11 @@ export async function deleteAbandonedSandboxes(now: Date = new Date()): Promise<
       .eq("mode", "sandbox")
       .lt("last_active_at", cutoffIso)
       .is("circle_api_key_enc", null)
+      // 0030 (hosted wallets H6): no hosted sandbox is listed. Only a hosted
+      // sandbox with wallets must be kept, but keeping every hosted one costs
+      // nothing, and delete_sandbox_org's own refusal stays authoritative.
+      // Not `.neq("wallet_host", "hosted")` alone: in SQL that drops nulls too.
+      .or("wallet_host.is.null,wallet_host.neq.hosted")
   ) as unknown as SandboxRow[];
 
   let deleted = 0;

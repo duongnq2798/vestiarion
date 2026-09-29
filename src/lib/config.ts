@@ -53,6 +53,16 @@ export interface ChainConfig {
    * simulate a live organization's payments (spec §5.4).
    */
   credentialsUnreadable?: string;
+  /**
+   * The platform's hosted Circle testnet account (HOSTED_CIRCLE_API_KEY and
+   * HOSTED_CIRCLE_ENTITY_SECRET; hosted wallets H2), separate from the pair
+   * above. `orgConfig` gives it to an organization only when that
+   * organization's own row says `wallet_host = 'hosted'` — never as a fallback
+   * for one with no credentials of its own (H1). Unset, the hosted choice is
+   * not offered.
+   */
+  hostedCircleApiKey?: string;
+  hostedCircleEntitySecret?: string;
 }
 
 export interface LlmConfig {
@@ -113,6 +123,12 @@ export interface VestiarionConfig {
   clockMode: "real" | "simulate";
   /** Multiplies seeded demo amounts. Only the demo seeder consults it. */
   seedScale?: number;
+  /**
+   * At most this many workspaces may choose a hosted testnet wallet
+   * (HOSTED_WORKSPACE_LIMIT, default 100; hosted wallets H5). Enforced by
+   * `choose_hosted_wallet()` under an advisory lock; 0 admits none.
+   */
+  hostedWorkspaceLimit: number;
 }
 
 /** Reads a positive number, falling back when absent or nonsense. */
@@ -125,6 +141,17 @@ function positiveNumber(raw: string | undefined, fallback: number): number {
 function nonNegativeNumber(raw: string | undefined, fallback: number): number {
   const value = Number(raw);
   return Number.isFinite(value) && value >= 0 ? value : fallback;
+}
+
+/**
+ * Reads a whole number, zero included, falling back when absent or nonsense.
+ * Capped at a Postgres `int`, since it is passed to a function taking one.
+ */
+function nonNegativeInteger(raw: string | undefined, fallback: number): number {
+  const text = trimmed(raw);
+  if (!text || !/^\d+$/.test(text)) return fallback;
+  const value = Number(text);
+  return value <= 2_147_483_647 ? value : fallback;
 }
 
 function trimmed(raw: string | undefined): string | undefined {
@@ -215,6 +242,8 @@ export function configFromEnv(env: EnvLike = process.env): VestiarionConfig {
       circleEntitySecret: trimmed(env.CIRCLE_ENTITY_SECRET),
       usdcTokenId: trimmed(env.CIRCLE_USDC_TOKEN_ID),
       arcRpcUrl: trimmed(env.ARC_RPC_URL),
+      hostedCircleApiKey: trimmed(env.HOSTED_CIRCLE_API_KEY),
+      hostedCircleEntitySecret: trimmed(env.HOSTED_CIRCLE_ENTITY_SECRET),
     },
     llm,
     compliance: {
@@ -243,6 +272,7 @@ export function configFromEnv(env: EnvLike = process.env): VestiarionConfig {
     // have quietly changed how the demo behaves for everyone running locally.
     clockMode: clockModeFrom(env),
     seedScale: env.SEED_SCALE == null ? undefined : Number(env.SEED_SCALE),
+    hostedWorkspaceLimit: nonNegativeInteger(env.HOSTED_WORKSPACE_LIMIT, 100),
   };
 }
 

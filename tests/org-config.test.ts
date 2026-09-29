@@ -20,7 +20,13 @@ const base = configFromEnv({
   CIRCLE_ENTITY_SECRET: "env-circle-secret-must-not-leak",
 });
 
-function row(orgId: string, sealed: Partial<Record<"ledger" | "apiKey" | "entity", string>> = {}, sealWith = keys, sealFor = orgId): OrgRow {
+function row(
+  orgId: string,
+  sealed: Partial<Record<"ledger" | "apiKey" | "entity", string>> = {},
+  sealWith = keys,
+  sealFor = orgId,
+  walletHost: OrgRow["wallet_host"] = null
+): OrgRow {
   const seal = (value: string | undefined, column: string) =>
     value ? encryptSecret(value, { orgId: sealFor, column }, sealWith) : null;
   return {
@@ -31,6 +37,7 @@ function row(orgId: string, sealed: Partial<Record<"ledger" | "apiKey" | "entity
     ledger_signing_key_enc: seal(sealed.ledger, "ledger_signing_key_enc"),
     circle_api_key_enc: seal(sealed.apiKey, "circle_api_key_enc"),
     circle_entity_secret_enc: seal(sealed.entity, "circle_entity_secret_enc"),
+    wallet_host: walletHost,
   };
 }
 
@@ -128,5 +135,140 @@ describe("orgConfig — credentialsUnreadable (R12)", () => {
     expect(config.chain.circleApiKey).toBe("org-key");
     expect(config.chain.circleEntitySecret).toBe("org-secret");
     expect(config.chain.credentialsUnreadable).toBeUndefined();
+  });
+});
+
+describe("orgConfig — hosted wallets (H1, H7; Review Focus 1 and 5)", () => {
+  // The hosted pair is given only to a workspace whose own row says
+  // wallet_host = 'hosted'. It is never a fallback: an own-account workspace
+  // (or one that has not chosen) whose own credentials are missing or
+  // unreadable must never pay with it.
+  const HOSTED_KEY = "hosted-circle-key";
+  const HOSTED_SECRET = "hosted-circle-secret";
+  const hostedBase = configFromEnv({
+    NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid",
+    SUPABASE_SERVICE_ROLE_KEY: "test-service-role",
+    CIRCLE_API_KEY: "env-circle-key",
+    CIRCLE_ENTITY_SECRET: "env-circle-secret",
+    HOSTED_CIRCLE_API_KEY: HOSTED_KEY,
+    HOSTED_CIRCLE_ENTITY_SECRET: HOSTED_SECRET,
+  });
+  const noHostedPair = { ...hostedBase, chain: { ...hostedBase.chain, hostedCircleApiKey: undefined, hostedCircleEntitySecret: undefined } };
+  const NOT_CONFIGURED = "the hosted Circle account is not configured on this deployment";
+
+  const expectNoHostedPair = (config: { chain: { circleApiKey?: string; circleEntitySecret?: string } }) => {
+    expect(config.chain.circleApiKey).not.toBe(HOSTED_KEY);
+    expect(config.chain.circleEntitySecret).not.toBe(HOSTED_SECRET);
+  };
+
+  it("own: an own-account workspace uses its own credentials, not the hosted pair", () => {
+    const { config, warnings } = orgConfig(hostedBase, row(OTHER_ORG, { apiKey: "org-key", entity: "org-secret" }, keys, OTHER_ORG, "own"), keys);
+    expect(warnings).toEqual([]);
+    expect(config.chain.circleApiKey).toBe("org-key");
+    expect(config.chain.circleEntitySecret).toBe("org-secret");
+    expect(config.chain.credentialsUnreadable).toBeUndefined();
+  });
+
+  it("own-missing: an own-account workspace with no credentials gets none, not the hosted pair", () => {
+    const { config, warnings } = orgConfig(hostedBase, row(OTHER_ORG, {}, keys, OTHER_ORG, "own"), keys);
+    expect(warnings).toEqual([]);
+    expect(config.chain.circleApiKey).toBeUndefined();
+    expect(config.chain.circleEntitySecret).toBeUndefined();
+    expect(config.chain.credentialsUnreadable).toBeUndefined();
+  });
+
+  it("own-unreadable: an own-account workspace whose credentials cannot be opened refuses, and never gets the hosted pair", () => {
+    const { config } = orgConfig(
+      hostedBase, row(OTHER_ORG, { apiKey: "org-key", entity: "org-secret" }, strangerKeys, OTHER_ORG, "own"), keys
+    );
+    expect(config.chain.circleApiKey).toBeUndefined();
+    expect(config.chain.circleEntitySecret).toBeUndefined();
+    expect(config.chain.credentialsUnreadable).toContain("circle_api_key_enc");
+    expectNoHostedPair(config);
+  });
+
+  it("own-unreadable: the same with no master keys at all", () => {
+    const { config } = orgConfig(hostedBase, row(OTHER_ORG, { apiKey: "org-key", entity: "org-secret" }, keys, OTHER_ORG, "own"), null);
+    expect(config.chain.credentialsUnreadable).toBeDefined();
+    expectNoHostedPair(config);
+  });
+
+  it("hosted: a hosted workspace gets the platform's hosted pair", () => {
+    const { config, warnings } = orgConfig(hostedBase, row(OTHER_ORG, {}, keys, OTHER_ORG, "hosted"), keys);
+    expect(warnings).toEqual([]);
+    expect(config.chain.circleApiKey).toBe(HOSTED_KEY);
+    expect(config.chain.circleEntitySecret).toBe(HOSTED_SECRET);
+    expect(config.chain.credentialsUnreadable).toBeUndefined();
+    // Never the platform's own (founding) Circle pair.
+    expect(config.chain.circleApiKey).not.toBe("env-circle-key");
+  });
+
+  it("hosted: the hosted pair replaces any credentials stored on the row, which are not opened", () => {
+    const { config, warnings } = orgConfig(
+      hostedBase, row(OTHER_ORG, { apiKey: "org-key", entity: "org-secret" }, strangerKeys, OTHER_ORG, "hosted"), keys
+    );
+    expect(config.chain.circleApiKey).toBe(HOSTED_KEY);
+    expect(config.chain.circleEntitySecret).toBe(HOSTED_SECRET);
+    expect(config.chain.credentialsUnreadable).toBeUndefined();
+    expect(warnings).toEqual([]);
+  });
+
+  it("hosted: the hosted pair is used even when the master keys are missing, since nothing is sealed", () => {
+    const { config } = orgConfig(hostedBase, row(OTHER_ORG, {}, keys, OTHER_ORG, "hosted"), null);
+    expect(config.chain.circleApiKey).toBe(HOSTED_KEY);
+    expect(config.chain.credentialsUnreadable).toBeUndefined();
+  });
+
+  it("hosted-missing: a hosted workspace on a deployment without the hosted pair refuses to pay, never simulates", () => {
+    const { config, warnings } = orgConfig(noHostedPair, row(OTHER_ORG, {}, keys, OTHER_ORG, "hosted"), keys);
+    expect(config.chain.circleApiKey).toBeUndefined();
+    expect(config.chain.circleEntitySecret).toBeUndefined();
+    expect(config.chain.credentialsUnreadable).toBe(NOT_CONFIGURED);
+    expect(warnings).toEqual([NOT_CONFIGURED]);
+  });
+
+  it("hosted-missing: half a hosted pair is as good as none", () => {
+    for (const half of [
+      { ...hostedBase, chain: { ...hostedBase.chain, hostedCircleApiKey: undefined } },
+      { ...hostedBase, chain: { ...hostedBase.chain, hostedCircleEntitySecret: undefined } },
+    ]) {
+      const { config, warnings } = orgConfig(half, row(OTHER_ORG, {}, keys, OTHER_ORG, "hosted"), keys);
+      expect(config.chain.circleApiKey).toBeUndefined();
+      expect(config.chain.circleEntitySecret).toBeUndefined();
+      expect(config.chain.credentialsUnreadable).toBe(NOT_CONFIGURED);
+      expect(warnings).toEqual([NOT_CONFIGURED]);
+    }
+  });
+
+  it("hosted: the warning names no secret", () => {
+    const { warnings } = orgConfig(
+      { ...hostedBase, chain: { ...hostedBase.chain, hostedCircleEntitySecret: undefined } },
+      row(OTHER_ORG, {}, keys, OTHER_ORG, "hosted"),
+      keys
+    );
+    expect(JSON.stringify(warnings)).not.toContain(HOSTED_KEY);
+    expect(JSON.stringify(warnings)).not.toContain("env-circle");
+  });
+
+  it("null: a workspace that has not chosen never gets the hosted pair", () => {
+    for (const orgId of [OTHER_ORG, FOUNDING_ORG_ID]) {
+      const { config } = orgConfig(hostedBase, row(orgId, {}, keys, orgId, null), keys);
+      expect(config.chain.circleApiKey).toBeUndefined();
+      expect(config.chain.circleEntitySecret).toBeUndefined();
+      expect(config.chain.credentialsUnreadable).toBeUndefined();
+    }
+  });
+
+  it("null: nor when its own credentials cannot be read", () => {
+    const { config } = orgConfig(hostedBase, row(OTHER_ORG, { apiKey: "org-key" }, strangerKeys, OTHER_ORG, null), keys);
+    expect(config.chain.credentialsUnreadable).toContain("circle_api_key_enc");
+    expectNoHostedPair(config);
+  });
+
+  it("null: a row read without the column at all is treated as not hosted", () => {
+    const legacy = { ...row(OTHER_ORG), wallet_host: undefined } as unknown as OrgRow;
+    const { config } = orgConfig(hostedBase, legacy, keys);
+    expectNoHostedPair(config);
+    expect(config.chain.circleApiKey).toBeUndefined();
   });
 });
