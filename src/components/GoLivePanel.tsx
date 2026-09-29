@@ -4,6 +4,7 @@ import { ArrowUpRight, Rocket, Wallet } from "lucide-react";
 import Link from "next/link";
 import { startTransition, useActionState, useEffect, useRef, type ReactNode } from "react";
 import {
+  chooseHostedWalletAction,
   connectCircleAction,
   createWalletsAction,
   goLiveAction,
@@ -37,6 +38,10 @@ import type { GoLiveStatus } from "@/lib/platform/go-live";
  * are `goLiveStatus`'s, which carry no credential and no wallet id, and the
  * two credential inputs start empty, are never filled back in, and are
  * cleared once Circle accepts them.
+ *
+ * Where the deployment has the hosted pair (`status.hostedAvailable`), step 1
+ * offers a hosted testnet wallet first and the own-account form second
+ * (2026-09-30-hosted-wallets-design.md); without it the step is the form alone.
  */
 export interface GoLivePanelProps {
   orgSlug: string;
@@ -87,23 +92,32 @@ function ExternalLink({ href, children }: { href: string; children: ReactNode })
   );
 }
 
+type StatusTone = "proof" | "held" | "simulated";
+
 /**
  * Once Circle is connected, a sandbox's own cycles already pay through it
  * (`getChainProvider` goes live on stored credentials); only the schedule
- * waits for Go live. The line says so rather than "simulated".
+ * waits for Go live. The line says so rather than "simulated". A hosted
+ * workspace says whose wallet it is instead (hosted wallets H5).
  */
-const STATUS_LINE: Record<GoLiveStatus["step"], { tone: "proof" | "held" | "simulated"; label: string }> = {
+const STATUS_LINE: Record<GoLiveStatus["step"], { tone: StatusTone; label: string }> = {
   connect: { tone: "simulated", label: "Sandbox · simulated payments" },
   wallets: { tone: "held", label: "Sandbox · connected to Circle — cycles you run by hand pay for real" },
   go_live: { tone: "held", label: "Sandbox · connected to Circle — cycles you run by hand pay for real" },
   live: { tone: "proof", label: "Live · paying on Arc testnet" },
 };
 
-function StatusLine({ step }: { step: GoLiveStatus["step"] }) {
-  const { tone, label } = STATUS_LINE[step];
+const HOSTED_STATUS_LINE: Record<Exclude<GoLiveStatus["step"], "connect">, { tone: StatusTone; label: string }> = {
+  wallets: { tone: "held", label: "Sandbox · hosted testnet wallet" },
+  go_live: { tone: "held", label: "Sandbox · hosted testnet wallet" },
+  live: { tone: "proof", label: "Live · hosted testnet wallet on Arc" },
+};
+
+function StatusLine({ step, host }: { step: GoLiveStatus["step"]; host: GoLiveStatus["host"] }) {
+  const { tone, label } = host === "hosted" && step !== "connect" ? HOSTED_STATUS_LINE[step] : STATUS_LINE[step];
   return (
-    // The connected line is long: at 360 px it wraps inside the badge instead of overflowing the header.
-    <Badge tone={tone} size="sm" dot className={cn(step !== "connect" && step !== "live" && "whitespace-normal rounded-lg text-left")}>
+    // A long line wraps inside the badge at 360 px instead of overflowing the header.
+    <Badge tone={tone} size="sm" dot className={cn(label.length > 30 && "whitespace-normal rounded-lg text-left")}>
       {label}
     </Badge>
   );
@@ -185,16 +199,85 @@ function ReplaceCredentials({ orgSlug, status }: { orgSlug: string; status: GoLi
   );
 }
 
-function ConnectStep({ orgSlug }: { orgSlug: string }) {
+function ConnectIntro() {
+  return (
+    <p className="text-sm leading-relaxed text-ink-2">
+      Paste an API key and your entity secret from the Circle developer console (<ExternalLink href={CIRCLE_CONSOLE}>console.circle.com</ExternalLink>). Circle
+      checks the key first; both values are then encrypted and never shown again.
+    </p>
+  );
+}
+
+/** The hosted choice (hosted wallets H4, H5): one button, no Circle account needed. */
+function HostedChoice({ orgSlug }: { orgSlug: string }) {
+  const { state, formProps } = useActionForm(chooseHostedWalletAction, INITIAL, { toastOnSuccess: true });
+  return (
+    <div className="space-y-3 rounded-xl border border-agent-line bg-agent-soft/40 p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <h4 className="text-sm font-semibold text-ink">A testnet wallet, no Circle account needed</h4>
+        <Badge tone="agent" size="sm">
+          Recommended
+        </Badge>
+      </div>
+      <p className="text-sm leading-relaxed text-ink-2">
+        Vestiarion creates this workspace&apos;s wallets in its own Circle testnet account, and you fund them with testnet USDC from Circle&apos;s faucet. Once the
+        wallets exist, the choice is fixed.
+      </p>
+      <form {...formProps} className="grid gap-2">
+        <input type="hidden" name="orgSlug" value={orgSlug} />
+        <div>
+          <SubmitButton icon={<Wallet />} pendingLabel="Choosing…">
+            Use a Vestiarion testnet wallet
+          </SubmitButton>
+        </div>
+        <p className="text-xs text-ink-3">Hosted by Vestiarion · Arc testnet · no real money</p>
+        <FormMessage tone={state.message && !state.ok ? "error" : "neutral"}>{state.ok ? null : state.message}</FormMessage>
+      </form>
+    </div>
+  );
+}
+
+function ConnectStep({ orgSlug, hostedAvailable }: { orgSlug: string; hostedAvailable: boolean }) {
+  if (!hostedAvailable) {
+    return (
+      <Card className="space-y-4 p-5">
+        <StepHeading n={1}>Connect your Circle account</StepHeading>
+        <ConnectIntro />
+        <ConnectForm orgSlug={orgSlug} idPrefix="go-live-connect" replacing={false} />
+      </Card>
+    );
+  }
   return (
     <Card className="space-y-4 p-5">
-      <StepHeading n={1}>Connect your Circle account</StepHeading>
-      <p className="text-sm leading-relaxed text-ink-2">
-        Paste an API key and your entity secret from the Circle developer console (<ExternalLink href={CIRCLE_CONSOLE}>console.circle.com</ExternalLink>). Circle
-        checks the key first; both values are then encrypted and never shown again.
-      </p>
-      <ConnectForm orgSlug={orgSlug} idPrefix="go-live-connect" replacing={false} />
+      <StepHeading n={1}>Choose where the wallets live</StepHeading>
+      <HostedChoice orgSlug={orgSlug} />
+      <Disclosure summary="Connect your own Circle account">
+        <div className="space-y-4">
+          <ConnectIntro />
+          <ConnectForm orgSlug={orgSlug} idPrefix="go-live-connect" replacing={false} />
+        </div>
+      </Disclosure>
     </Card>
+  );
+}
+
+/**
+ * Below a hosted workspace's steps (hosted wallets H4): until its wallets
+ * exist the owner may still move to their own Circle account; after, the
+ * choice is fixed (`hosted_has_wallets`), and one line says what to do.
+ */
+function HostedOwnAccount({ orgSlug, status }: { orgSlug: string; status: GoLiveStatus }) {
+  if (status.wallets.length > 0 || status.step === "go_live" || status.step === "live") {
+    return <p className="text-sm text-ink-2">To use your own Circle account, start a new workspace.</p>;
+  }
+  return (
+    <Disclosure summary="Connect your own Circle account instead">
+      <div className="space-y-4">
+        <p className="text-sm leading-relaxed text-ink-2">Possible until this workspace&apos;s wallets are created; after that, the hosted wallet stays.</p>
+        <ConnectIntro />
+        <ConnectForm orgSlug={orgSlug} idPrefix="go-live-own" replacing={false} />
+      </div>
+    </Disclosure>
   );
 }
 
@@ -204,8 +287,9 @@ function WalletsStep({ orgSlug, status }: { orgSlug: string; status: GoLiveStatu
     <Card className="space-y-4 p-5">
       <StepHeading n={2}>Create treasury wallets</StepHeading>
       <p className="text-sm leading-relaxed text-ink-2">
-        One wallet on Arc testnet for each of this workspace&apos;s accounts, in a wallet set in your own Circle account. Creating them also proves the entity
-        secret.
+        {status.host === "hosted"
+          ? "One wallet on Arc testnet for each of this workspace's accounts, created in Vestiarion's testnet account, in a wallet set of this workspace's own."
+          : "One wallet on Arc testnet for each of this workspace's accounts, in a wallet set in your own Circle account. Creating them also proves the entity secret."}
       </p>
       {status.wallets.length > 0 && <WalletList wallets={status.wallets} />}
       <form {...formProps} className="grid gap-3">
@@ -323,8 +407,18 @@ function LiveDetails({ orgSlug, status }: { orgSlug: string; status: GoLiveStatu
 export default function GoLivePanel({ orgSlug, status, canAdminister }: GoLivePanelProps) {
   const live = status.step === "live";
 
+  const hosted = status.host === "hosted";
+
   let body: ReactNode;
-  if (status.credentialsUnreadable) {
+  if (status.credentialsUnreadable && hosted) {
+    // Nothing to reconnect: the hosted pair is the deployment's, not the workspace's (hosted wallets H1).
+    body = (
+      <Callout tone="refused" title="Hosted testnet wallet unavailable">
+        This workspace&apos;s wallets are hosted by Vestiarion, and the hosted testnet wallet is unavailable on this deployment, so it pays nothing until it is
+        available again.
+      </Callout>
+    );
+  } else if (status.credentialsUnreadable) {
     body = (
       <Callout tone="refused" title="Circle credentials cannot be read">
         This workspace&apos;s Circle credentials are stored, but this deployment cannot decrypt them, so it pays nothing until they can be read again. An owner can reconnect below.
@@ -333,9 +427,13 @@ export default function GoLivePanel({ orgSlug, status, canAdminister }: GoLivePa
   } else if (live) {
     body = <LiveDetails orgSlug={orgSlug} status={status} />;
   } else if (!canAdminister) {
-    body = <p className="text-sm text-ink-2">An owner can connect Circle and take this workspace live from here.</p>;
+    body = (
+      <p className="text-sm text-ink-2">
+        {hosted ? "An owner can create the wallets and take this workspace live from here." : "An owner can connect Circle and take this workspace live from here."}
+      </p>
+    );
   } else if (status.step === "connect") {
-    body = <ConnectStep orgSlug={orgSlug} />;
+    body = <ConnectStep orgSlug={orgSlug} hostedAvailable={status.hostedAvailable} />;
   } else if (status.step === "wallets") {
     body = <WalletsStep orgSlug={orgSlug} status={status} />;
   } else {
@@ -344,14 +442,16 @@ export default function GoLivePanel({ orgSlug, status, canAdminister }: GoLivePa
 
   // With unreadable credentials the warning asks an owner to reconnect, so the
   // form is offered then too; the new pair still has to pass the same checks.
-  const canReplace = canAdminister && (status.credentialsUnreadable || status.step !== "connect");
+  // A hosted workspace has no credentials of its own to replace.
+  const canReplace = canAdminister && !hosted && (status.credentialsUnreadable || status.step !== "connect");
 
   return (
     <section aria-labelledby="go-live-title">
-      <SectionHeader id="go-live-title" title="Go live" meta={<StatusLine step={status.step} />} />
+      <SectionHeader id="go-live-title" title="Go live" meta={<StatusLine step={status.step} host={status.host} />} />
       <div className="space-y-4">
         {body}
         {canReplace && <ReplaceCredentials orgSlug={orgSlug} status={status} />}
+        {canAdminister && hosted && <HostedOwnAccount orgSlug={orgSlug} status={status} />}
       </div>
     </section>
   );

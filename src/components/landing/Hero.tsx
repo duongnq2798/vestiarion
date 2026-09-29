@@ -32,7 +32,9 @@ export function Hero({ provenance, head }: { provenance: ProvenanceLeg[]; head: 
               <a href="#how-it-works">How a decision is made</a>
             </Button>
           </div>
-          <p className="mt-3 text-[0.8125rem] text-ink-3">Email sign-in, then a sandbox workspace of your own. No wallet, no real funds.</p>
+          <p className="mt-3 text-[0.8125rem] text-ink-3">
+            Email sign-in, a workspace of your own, and a real Arc testnet wallet in one click. Fund it with testnet USDC from Circle&apos;s faucet; no real money moves.
+          </p>
           <div className="mt-8 border-t border-line/80 pt-5">
             <p className="mb-2.5 font-mono text-xs uppercase tracking-[0.14em] text-ink-3">What runs live right now</p>
             <ProvenanceBar legs={provenance} />

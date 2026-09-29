@@ -370,6 +370,16 @@ live), new credentials are accepted only if they reach every one of the workspac
 the Circle account that holds them; **Go live** checks the stored credentials the same way just
 before switching. To stop a live workspace paying, pause the agent from the console.
 
+**Hosted testnet wallets.** An owner without a Circle account can choose **Use a Vestiarion
+testnet wallet** instead of step 1 (labelled "Hosted by Vestiarion · Arc testnet · no real
+money"). Steps 2 and 3 are unchanged, except that the wallets are created in the platform's own
+Circle testnet account, in a wallet set named for the workspace; the owner funds them from the
+faucet as above. The choice is offered only where the deployment sets `HOSTED_CIRCLE_API_KEY` and
+`HOSTED_CIRCLE_ENTITY_SECRET` (ideally a Circle testnet account separate from the founding
+workspace's), and at most `HOSTED_WORKSPACE_LIMIT` workspaces (100 by default) may take it. Once a
+workspace's wallets exist, its choice is fixed: to use your own Circle account, start a new
+workspace.
+
 ### The founding workspace and the demo seed
 
 The founding organization predates this flow, and the demo seed creates counterparty wallets too,
