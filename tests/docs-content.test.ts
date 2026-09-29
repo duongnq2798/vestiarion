@@ -3,8 +3,8 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { OPERATIONS } from "@/lib/api/openapi";
 import { CONTENT_DIR, hasSource, PAGE_LOADERS, readSource } from "@/lib/docs/content";
-import { slugifyHeadings } from "@/lib/docs/headings";
-import { DOCS_NAV, flatPages, neighbours } from "@/lib/docs/nav";
+import { slugifyHeadings, splitCodeSpans, stripFences } from "@/lib/docs/headings";
+import { DOCS_NAV, flatPages, neighbours, slugOfPathname } from "@/lib/docs/nav";
 
 /**
  * The docs' content and its navigation agree: every page in the nav has its
@@ -54,36 +54,68 @@ const WRITTEN_LATER = new Set([
   "changelog",
 ]);
 
-/** The source without its fenced code blocks, where a link is an example, not a link. */
+/** Real app pages outside /docs that a docs page may link to. */
+const APP_ROUTES = new Set(["/", "/login", "/signup", "/onboarding"]);
+
+/** The source without code: fenced blocks and inline code spans, where a link is an example, not a link. */
 function withoutCode(source: string): string {
-  return source.replace(/^ {0,3}(`{3,}|~{3,})[^\n]*\n[\s\S]*?^ {0,3}\1[`~]*[ \t]*$/gm, "");
+  return stripFences(source)
+    .split(/(\n[ \t]*\n)/)
+    .map((block) =>
+      splitCodeSpans(block)
+        .filter((piece) => !piece.code)
+        .map((piece) => piece.text)
+        .join(" ")
+    )
+    .join("");
 }
 
-/** Where each internal link in `source` points: `](/docs/x#y)`, `href="/docs/x"`, `](#y)`. */
-function internalLinks(source: string): string[] {
+/**
+ * Every link target in `source`, in document order: inline links `](x)`,
+ * reference definitions `[r]: x` and JSX `href="x"` or `href={"x"}`.
+ */
+function linkTargets(source: string): string[] {
   const text = withoutCode(source);
-  const markdown = [...text.matchAll(/\]\((\/[^)\s]*|#[^)\s]*)(?:\s+"[^"]*")?\)/g)].map((match) => match[1]);
-  const jsx = [...text.matchAll(/href=["'{`]+(\/[^"'`}\s]*|#[^"'`}\s]*)/g)].map((match) => match[1]);
-  return [...markdown, ...jsx];
+  const found: Array<{ at: number; target: string }> = [];
+  const add = (matches: IterableIterator<RegExpMatchArray>) => {
+    for (const match of matches) {
+      const target = match.slice(1).find((group) => group !== undefined) ?? "";
+      found.push({ at: match.index ?? 0, target: target.replace(/^<|>$/g, "") });
+    }
+  };
+  add(text.matchAll(/\]\(\s*(<[^>]*>|[^)\s]*)/g));
+  add(text.matchAll(/^ {0,3}\[[^\]]+\]:\s*(<[^>]*>|\S+)/gm));
+  add(text.matchAll(/\bhref=(?:"([^"]*)"|'([^']*)'|\{\s*["'`]([^"'`]*)["'`]\s*\})/g));
+  return found.sort((a, b) => a.at - b.at).map((link) => link.target);
 }
 
-/** What is wrong with each internal link on the page at `slug`; empty when every link lands. */
+/** What is wrong with each link on the page at `slug`; empty when every link lands. */
 function linkProblems(slug: string, source: string, sourceOf: (slug: string) => string | null): string[] {
   const problems: string[] = [];
-  for (const link of internalLinks(source)) {
+  for (const link of linkTargets(source)) {
+    // Another site, or mail: not ours to check.
+    if (/^[a-z][a-z0-9+.-]*:/i.test(link) || link.startsWith("//")) continue;
+    if (!link.startsWith("/") && !link.startsWith("#")) {
+      problems.push(`${link}: a relative link; docs links are absolute, /docs/…`);
+      continue;
+    }
+
     const [target, anchor] = link.split("#", 2) as [string, string | undefined];
-    const pathOnly = target.replace(/\/$/, "");
+    const pathOnly = target.replace(/\?.*$/, "");
+    const trimmed = pathOnly.length > 1 ? pathOnly.replace(/\/$/, "") : pathOnly;
 
     let targetSlug: string;
-    if (pathOnly === "") {
+    if (trimmed === "") {
       targetSlug = slug;
-    } else if (pathOnly === "/docs" || pathOnly === "/docs.md") {
+    } else if (trimmed === "/docs" || trimmed === "/docs.md") {
       targetSlug = "";
-    } else if (pathOnly.startsWith("/docs/")) {
-      targetSlug = pathOnly.slice("/docs/".length).replace(/\.md$/, "");
+    } else if (trimmed.startsWith("/docs/")) {
+      targetSlug = trimmed.slice("/docs/".length).replace(/\.md$/, "");
     } else {
-      if ((pathOnly.startsWith("/api/") || pathOnly.startsWith("/llms")) && !OTHER_TARGETS.has(pathOnly)) {
-        problems.push(`${link}: no such public document`);
+      if (trimmed.startsWith("/api/") || trimmed.startsWith("/llms")) {
+        if (!OTHER_TARGETS.has(trimmed)) problems.push(`${link}: no such public document`);
+      } else if (!APP_ROUTES.has(trimmed)) {
+        problems.push(`${link}: not a docs page, a public document or a known app page`);
       }
       continue;
     }
@@ -131,7 +163,23 @@ describe("the docs navigation", () => {
   });
 });
 
+describe("slugOfPathname", () => {
+  it("reads the docs slug from a pathname, and nothing outside /docs", () => {
+    expect(slugOfPathname("/docs")).toBe("");
+    expect(slugOfPathname("/docs/")).toBe("");
+    expect(slugOfPathname("/docs/get-started/quickstart")).toBe("get-started/quickstart");
+    expect(slugOfPathname("/docs/webhooks/verify/")).toBe("webhooks/verify");
+    expect(slugOfPathname("/docsfoo")).toBeNull();
+    expect(slugOfPathname("/o/acme/docs")).toBeNull();
+    expect(slugOfPathname("/")).toBeNull();
+  });
+});
+
 describe("every docs page has its MDX", () => {
+  it("names only real nav pages as written later", () => {
+    expect([...WRITTEN_LATER].filter((slug) => !NAV_SLUGS.has(slug))).toEqual([]);
+  });
+
   const written = flatPages().filter((page) => !GENERATED_SLUGS.has(page.slug));
   for (const page of written) {
     const name = `/docs${page.slug ? `/${page.slug}` : ""} has content/docs/${page.slug || "index"}.mdx`;
@@ -173,8 +221,12 @@ describe("the link check", () => {
     const page = [
       "[home](/docs) [verify](/docs/webhooks/verify#example-2) [same](#start-here)",
       `[ref](/docs/api/${OPERATIONS[0].id}) [md](/docs/webhooks/verify.md) [spec](/api/v1/openapi.json)`,
-      '<a href="/llms.txt">llms</a> <Link href="/docs/webhooks/verify#node">node</Link>',
+      '<a href="/llms.txt">llms</a> <Link href="/docs/webhooks/verify#node">node</Link> <a href={"/docs"}>docs</a>',
+      "[console](/onboarding) [home](/) [site](https://www.vestiarion.xyz/x) [mail](mailto:a@b.test) [by ref][r]",
+      "Code is not a link: `[in code](/docs/nope)` and ``[also](errors)``.",
       "```md\n[in code](/docs/nope)\n```",
+      "",
+      "[r]: /docs/webhooks/verify#node",
     ].join("\n");
     expect(linkProblems("", `## Start here\n\n${page}`, sourceOf)).toEqual([]);
   });
@@ -187,5 +239,24 @@ describe("the link check", () => {
       "/api/v1/status: no such public document",
       '#nowhere: no heading #nowhere on ""',
     ]);
+  });
+
+  it("reports a relative link: docs links are absolute", () => {
+    expect(linkProblems("", '[a](errors) [b](../webhooks) <Link href="verify">c</Link>', sourceOf)).toEqual([
+      "errors: a relative link; docs links are absolute, /docs/…",
+      "../webhooks: a relative link; docs links are absolute, /docs/…",
+      "verify: a relative link; docs links are absolute, /docs/…",
+    ]);
+  });
+
+  it("reports a root link outside /docs, /api and /llms that is not a known app page", () => {
+    expect(linkProblems("", "[a](/o/acme/settings) [b](/login) [c](/pricing)", sourceOf)).toEqual([
+      "/o/acme/settings: not a docs page, a public document or a known app page",
+      "/pricing: not a docs page, a public document or a known app page",
+    ]);
+  });
+
+  it("checks the target of a reference definition", () => {
+    expect(linkProblems("", "[a][r]\n\n[r]: /docs/nope\n", sourceOf)).toEqual(['/docs/nope: no docs page "nope"']);
   });
 });

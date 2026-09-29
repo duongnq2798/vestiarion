@@ -24,7 +24,7 @@ function Pre({ children }: { children?: ReactNode }) {
 }
 
 function Anchor({ href = "", className, children, ...props }: ComponentProps<"a">) {
-  const classes = cn("font-medium text-agent underline decoration-agent-line underline-offset-4 transition-colors duration-150 ease-standard hover:decoration-agent", className);
+  const classes = cn("font-medium text-agent underline [overflow-wrap:anywhere] decoration-agent-line underline-offset-4 transition-colors duration-150 ease-standard hover:decoration-agent", className);
   if (href.startsWith("/")) {
     return (
       <Link href={href} className={classes} {...props}>
@@ -51,12 +51,12 @@ const components: MDXComponents = {
       {children}
     </DocsHeading>
   ),
-  p: ({ children }) => <p className="my-4 leading-7 text-ink-2">{children}</p>,
+  p: ({ children }) => <p className="my-4 leading-7 text-ink-2 [overflow-wrap:anywhere]">{children}</p>,
   a: Anchor,
   strong: ({ children }) => <strong className="font-semibold text-ink">{children}</strong>,
   ul: ({ children }) => <ul className="my-4 list-disc space-y-2 pl-6 leading-7 text-ink-2 marker:text-ink-3">{children}</ul>,
   ol: ({ children }) => <ol className="my-4 list-decimal space-y-2 pl-6 leading-7 text-ink-2 marker:text-ink-3">{children}</ol>,
-  li: ({ children }) => <li className="pl-1 [&>p]:my-2">{children}</li>,
+  li: ({ children }) => <li className="pl-1 [overflow-wrap:anywhere] [&>p]:my-2">{children}</li>,
   blockquote: ({ children }) => <blockquote className="my-6 border-l-2 border-line-strong pl-4 text-ink-2 [&>p]:my-2">{children}</blockquote>,
   hr: () => <hr className="my-10 border-line" />,
   code: ({ children }) => (

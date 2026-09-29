@@ -7,16 +7,10 @@ import { useEffect, useId, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/components/ui/cn";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/Sheet";
-import { DOCS_NAV, docsHref } from "@/lib/docs/nav";
+import { DOCS_NAV, docsHref, slugOfPathname } from "@/lib/docs/nav";
 
 /** Matches Tailwind's `lg`, where the sidebar replaces the drawer. */
 const WIDE = "(min-width: 64rem)";
-
-/** The docs slug of a pathname: `/docs` is `""`, `/docs/webhooks/verify/` is `webhooks/verify`. */
-export function slugOfPathname(pathname: string): string | null {
-  const match = /^\/docs(?:\/(.*?))?\/?$/.exec(pathname);
-  return match ? (match[1] ?? "") : null;
-}
 
 /** Every section of the docs and its pages, the current one marked. */
 export function DocsSidebar({ onNavigate, className }: { onNavigate?: () => void; className?: string }) {

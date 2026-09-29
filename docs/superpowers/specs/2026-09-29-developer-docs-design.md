@@ -61,7 +61,7 @@ The site documents exactly that, at the same level of care.
   - *Rejected:* Mintlify, CoinGecko's host. It needs a hosted account, lives in a separate styling world, and cannot import our schemas.
   - *Rejected:* Fumadocs. Its own UI kit and Tailwind preset would sit beside ours, and its OpenAPI playground pulls in the Scalar client.
   - *Cost:* we build search, the sidebar and the table of contents ourselves. That is a few small components on primitives we already have (`Command`, `Sheet`, `Tabs`, `CopyButton`).
-  - New dependencies: `@next/mdx`, `@mdx-js/loader`, `@mdx-js/react`, `@types/mdx`, and `shiki` for build-time highlighting.
+  - New dependencies: `@next/mdx`, `@mdx-js/loader`, `@mdx-js/react`, `@types/mdx`, `shiki` for build-time highlighting, and `remark-gfm`, because MDX parses Markdown tables only with it (named by string in `next.config.ts`, the form Turbopack accepts).
 - **D2. Zod schemas are the single source of truth for the API's shapes.**
   - `src/lib/api/schemas.ts` declares a Zod schema for each response payload, next to the existing TypeScript interfaces.
   - A type-level test proves each `z.infer<…>` equals its interface, so neither can change alone.

@@ -86,3 +86,9 @@ export function findPage(slug: string): { page: NavPage; section: string } | und
   }
   return undefined;
 }
+
+/** The docs slug of a pathname: `/docs` is `""`, `/docs/webhooks/verify/` is `webhooks/verify`; null outside /docs. */
+export function slugOfPathname(pathname: string): string | null {
+  const match = /^\/docs(?:\/(.*?))?\/?$/.exec(pathname);
+  return match ? (match[1] ?? "") : null;
+}

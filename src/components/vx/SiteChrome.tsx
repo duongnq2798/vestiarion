@@ -58,10 +58,10 @@ export function SiteHeader({
         {landing && (
           <nav aria-label="Site" className="mx-auto hidden md:block">
             <ul className="flex items-center gap-1">
-              {LANDING_SECTIONS.map((section) => (
-                <li key={section.href}>
-                  <a href={section.href} className="rounded-lg px-3 py-2 text-sm text-ink-2 transition-colors duration-150 ease-standard hover:bg-raised/70 hover:text-ink">
-                    {section.label}
+              {LANDING_SECTIONS.map((link) => (
+                <li key={link.href}>
+                  <a href={link.href} className="rounded-lg px-3 py-2 text-sm text-ink-2 transition-colors duration-150 ease-standard hover:bg-raised/70 hover:text-ink">
+                    {link.label}
                   </a>
                 </li>
               ))}
