@@ -44,7 +44,9 @@ const UNFINISHED: { label: string; tone: BadgeProps["tone"] } = { label: "Unfini
  * Someone without `approval.decide` sees the card and no buttons; a row
  * another person is deciding right now says so and offers nothing. A claim
  * that did not finish — the server marks it `reclaimable` once it is over 10
- * minutes old — offers the three decisions again, and says why.
+ * minutes old — offers the three decisions again, and says why. A row whose
+ * payment was already sent offers only Approve and pay, which records it; the
+ * server refuses Reject and Return for it too.
  *
  * Paying is refused here before the server refuses it — the person who
  * created the invoice cannot approve it, nor can anyone pay a counterparty
@@ -92,6 +94,7 @@ export default function ApprovalCard({
               An earlier decision did not finish. If it was a payment, Approve and pay records it without paying twice.
             </p>
           )}
+          {payable.paymentSent && <p className="mt-2 text-sm text-ink-2">A payment was already sent; Approve and pay records it.</p>}
         </CardContent>
         {processing ? (
           <CardFooter>
@@ -149,23 +152,27 @@ function Decisions({ orgSlug, payable, viewerId, sandbox }: { orgSlug: string; p
           description="The transfer starts as soon as you confirm, and the ledger records who approved it."
           confirmLabel="Pay now"
         />
-        <RejectDialog orgSlug={orgSlug} payable={payable} />
-        <form id={returnId} className="contents" {...returnForm.formProps} onSubmit={submitting("return", returnForm.formProps.onSubmit)}>
-          <input type="hidden" name="orgSlug" value={orgSlug} />
-          <input type="hidden" name="invoiceId" value={payable.id} />
-        </form>
-        <ConfirmDialog
-          formId={returnId}
-          tone="primary"
-          trigger={
-            <Button size="sm" variant="ghost" icon={<Undo2 />} loading={returnForm.pending}>
-              Return to agent
-            </Button>
-          }
-          title={`Return ${payable.counterpartyName}'s invoice to the agent?`}
-          description="It goes back to pending, and the agent's next cycle decides it again."
-          confirmLabel="Return to agent"
-        />
+        {!payable.paymentSent && (
+          <>
+            <RejectDialog orgSlug={orgSlug} payable={payable} />
+            <form id={returnId} className="contents" {...returnForm.formProps} onSubmit={submitting("return", returnForm.formProps.onSubmit)}>
+              <input type="hidden" name="orgSlug" value={orgSlug} />
+              <input type="hidden" name="invoiceId" value={payable.id} />
+            </form>
+            <ConfirmDialog
+              formId={returnId}
+              tone="primary"
+              trigger={
+                <Button size="sm" variant="ghost" icon={<Undo2 />} loading={returnForm.pending}>
+                  Return to agent
+                </Button>
+              }
+              title={`Return ${payable.counterpartyName}'s invoice to the agent?`}
+              description="It goes back to pending, and the agent's next cycle decides it again."
+              confirmLabel="Return to agent"
+            />
+          </>
+        )}
       </div>
     </CardFooter>
   );

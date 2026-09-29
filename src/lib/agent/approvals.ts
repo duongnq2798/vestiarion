@@ -25,6 +25,13 @@ import { payInvoice, syncOperatingBalance } from "./pay";
  * claim is logged by invoice id, since on the approve path the transfer may
  * already have moved.
  *
+ * An invoice whose payment was already sent — a crash after a confirmed
+ * transfer, or a held row with a live transfer behind it — can only be
+ * approved: Approve and pay records it (the payment's idempotency key
+ * reconciles, it never pays twice), while Reject and Return are refused with
+ * `payment_in_flight` before any claim, since either would record a real
+ * transfer as something that did not happen.
+ *
  * The ledger entry written after a decision commits is best effort, the same
  * pattern `src/lib/platform/members.ts` uses: the decision has already
  * happened and must be reported as done even if the entry fails to append.
@@ -36,7 +43,8 @@ export type ApprovalErrorCode =
   | "self_approval"
   | "high_risk"
   | "insufficient_funds"
-  | "no_operating_account";
+  | "no_operating_account"
+  | "payment_in_flight";
 
 /** Every message except `insufficient_funds`, whose text names the actual balance. */
 const MESSAGES: Record<Exclude<ApprovalErrorCode, "insufficient_funds">, string> = {
@@ -45,6 +53,7 @@ const MESSAGES: Record<Exclude<ApprovalErrorCode, "insufficient_funds">, string>
   high_risk: "This counterparty is screened high risk. Clear it in Compliance first.",
   no_operating_account: "This workspace has no operating account.",
   invoice_not_found: "That invoice is not waiting for a decision.",
+  payment_in_flight: "A payment for this invoice was already sent. Approve and pay records it.",
 };
 
 export class ApprovalError extends Error {
@@ -117,6 +126,49 @@ function isReclaimable(status: string, reviewedAt: string | null, now: number): 
   return Number.isNaN(claimedAt) || claimedAt < now - RECLAIM_AFTER_MS;
 }
 
+/** The columns of an invoice's payment intent (`payment_intents`, see `src/lib/payments.ts`) these rules read. */
+interface IntentState {
+  status: string;
+  provider_tx_id: string | null;
+  last_error: string | null;
+}
+
+/**
+ * Whether a payment for the invoice was already sent, so that rejecting or
+ * returning it would misrecord a real transfer: the intent is confirmed,
+ * pending or being submitted, or it has a provider id and a recorded error —
+ * a reconcile that could not read the provider, not a failure the provider
+ * reported. A provider-reported failure (`failed`, no error of our own) or no
+ * intent at all means nothing moved.
+ */
+function paymentWasSent(intent: IntentState | null): boolean {
+  if (!intent) return false;
+  if (intent.status === "confirmed" || intent.status === "pending" || intent.status === "submitting") return true;
+  return intent.provider_tx_id !== null && intent.last_error !== null;
+}
+
+/** Whether `executePayment` would reconcile rather than transfer: a confirmed intent, or one with a provider id. */
+function transferExists(intent: IntentState | null): boolean {
+  return intent !== null && (intent.status === "confirmed" || intent.provider_tx_id !== null);
+}
+
+/** The invoice's payment intent, keyed as `executePayment` keys it (source type and id), or null. */
+async function paymentIntentOf(invoiceId: string): Promise<IntentState | null> {
+  const result = await db()
+    .from("payment_intents")
+    .select("status, provider_tx_id, last_error")
+    .eq("source_type", "invoice")
+    .eq("source_id", invoiceId)
+    .maybeSingle();
+  if (result.error) throw new Error(result.error.message);
+  return (result.data as IntentState | null) ?? null;
+}
+
+/** Reject and Return refuse, before any claim, an invoice whose payment was already sent. */
+async function refuseIfPaymentSent(invoiceId: string): Promise<void> {
+  if (paymentWasSent(await paymentIntentOf(invoiceId))) raise("payment_in_flight");
+}
+
 /** Logs a failed write after a claim went through, by invoice id: the row is left `processing` until it is reclaimed. */
 function logAfterClaim(invoiceId: string, what: string): void {
   console.error("approval: invoice update failed after the claim", invoiceId, what);
@@ -136,6 +188,8 @@ export interface WaitingPayable {
   reviewedAt: string | null;
   /** A `processing` row whose claim did not finish and may be decided again; false for every other status. */
   reclaimable: boolean;
+  /** A payment was already sent: only Approve and pay may record it, Reject and Return are refused. */
+  paymentSent: boolean;
 }
 
 /** Every payable currently waiting for a person's decision — held, flagged, awaiting more information, or claimed by someone else right now. */
@@ -160,6 +214,18 @@ export async function listWaitingPayables(): Promise<WaitingPayable[]> {
     counterparties: { name: string; risk_level: string } | null;
   }>;
 
+  const intents = new Map<string, IntentState>();
+  if (rows.length > 0) {
+    const found = unwrap(
+      await db()
+        .from("payment_intents")
+        .select("source_id, status, provider_tx_id, last_error")
+        .eq("source_type", "invoice")
+        .in("source_id", rows.map((row) => row.id))
+    ) as Array<IntentState & { source_id: string }>;
+    for (const intent of found) intents.set(intent.source_id, intent);
+  }
+
   const now = Date.now();
   return rows.map((row) => ({
     id: row.id,
@@ -174,6 +240,7 @@ export async function listWaitingPayables(): Promise<WaitingPayable[]> {
     createdBy: row.created_by,
     reviewedAt: row.reviewed_at,
     reclaimable: isReclaimable(row.status, row.reviewed_at, now),
+    paymentSent: paymentWasSent(intents.get(row.id) ?? null),
   }));
 }
 
@@ -253,10 +320,14 @@ export async function approveAndPay(
   const operating = await operatingAccount();
   if (!operating) raise("no_operating_account");
 
+  // A transfer that already exists is reconciled, never sent again, so the
+  // balance — already lower by this very payment — is not the question.
   const provider = getChainProvider();
-  const balance = provider.mode === "live" ? await syncOperatingBalance(operating.id) : operating.balance;
-  if (balance < invoice.amount) {
-    throw new ApprovalError("insufficient_funds", `The operating account holds ${balance} USDC, less than this invoice.`);
+  if (!transferExists(await paymentIntentOf(invoice.id))) {
+    const balance = provider.mode === "live" ? await syncOperatingBalance(operating.id) : operating.balance;
+    if (balance < invoice.amount) {
+      throw new ApprovalError("insufficient_funds", `The operating account holds ${balance} USDC, less than this invoice.`);
+    }
   }
 
   const claim = await db()
@@ -332,6 +403,7 @@ export async function approveAndPay(
 
 export async function rejectInvoice(input: { actorId: string; invoiceId: string; reason?: string }): Promise<void> {
   const orgId = currentOrgId();
+  await refuseIfPaymentSent(input.invoiceId);
   const claim = await db()
     .rpc("claim_invoice_decision", { p_invoice_id: input.invoiceId, p_by: input.actorId, p_decision: "reject" })
     .single();
@@ -360,6 +432,7 @@ export async function rejectInvoice(input: { actorId: string; invoiceId: string;
 
 export async function returnInvoice(input: { actorId: string; invoiceId: string }): Promise<void> {
   const orgId = currentOrgId();
+  await refuseIfPaymentSent(input.invoiceId);
   const claim = await db()
     .rpc("claim_invoice_decision", { p_invoice_id: input.invoiceId, p_by: input.actorId, p_decision: "return" })
     .single();

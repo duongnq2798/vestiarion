@@ -104,6 +104,8 @@ function approvalsFake(options: {
   claim?: (request: RecordedRequest) => FakeReply | undefined;
   /** An invoice PATCH's reply; undefined falls through to success. */
   invoicePatch?: (request: RecordedRequest) => FakeReply | undefined;
+  /** The invoice's payment intent, or none; for the listing, every row's intent. */
+  intents?: Array<Record<string, unknown>>;
   ledgerFails?: boolean;
 } = {}) {
   const fake = fakeSupabase((request) => {
@@ -119,6 +121,12 @@ function approvalsFake(options: {
       const failure = options.invoicePatch?.(request);
       if (failure) return failure;
       return { body: [] };
+    }
+    if (request.path === "/rest/v1/payment_intents" && request.method === "GET") {
+      const intents = options.intents ?? [];
+      const one = request.params.get("source_id")?.match(/^eq\.(.+)$/)?.[1];
+      if (one !== undefined) return { body: intents.find((intent) => intent.source_id === one) ?? null };
+      return { body: intents };
     }
     if (request.path === "/rest/v1/accounts" && request.method === "GET") {
       const failure = options.account?.(request);
@@ -192,6 +200,55 @@ describe("approveAndPay", () => {
     await expect(attempt).rejects.toBeInstanceOf(ApprovalError);
     await expect(attempt).rejects.toThrow("The operating account holds 40 USDC, less than this invoice.");
     expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+  });
+
+  it("skips the funds check, and reaches payInvoice, when this invoice's transfer is already confirmed", async () => {
+    payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", operatingBalance: 0 });
+    const { fake, run } = approvalsFake({
+      account: () => ({ body: accountRow("40") }),
+      intents: [{ source_id: INVOICE_ID, status: "confirmed", provider_tx_id: "circle-tx-1", last_error: null }],
+    });
+
+    const result = await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+
+    expect(result.status).toBe("paid");
+    expect(payInvoiceMock).toHaveBeenCalledTimes(1);
+    const [lookup] = fake.requests.filter((r) => r.path === "/rest/v1/payment_intents");
+    expect(lookup.params.get("source_type")).toBe("eq.invoice");
+    expect(lookup.params.get("source_id")).toBe(`eq.${INVOICE_ID}`);
+  });
+
+  it("skips the funds check when a transfer exists with a provider id, still pending", async () => {
+    payInvoiceMock.mockResolvedValue({ status: "matched", txRef: "circle-tx-1", execution: null, note: "", operatingBalance: null });
+    const { run } = approvalsFake({
+      account: () => ({ body: accountRow("40") }),
+      intents: [{ source_id: INVOICE_ID, status: "pending", provider_tx_id: "circle-tx-1", last_error: null }],
+    });
+
+    await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+
+    expect(payInvoiceMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("still refuses insufficient funds when the only intent is a provider-reported failure", async () => {
+    const { run } = approvalsFake({
+      account: () => ({ body: accountRow("40") }),
+      intents: [{ source_id: INVOICE_ID, status: "failed", provider_tx_id: null, last_error: null }],
+    });
+
+    await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).rejects.toThrow(
+      "The operating account holds 40 USDC, less than this invoice."
+    );
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps the self-approval refusal even when the transfer already moved", async () => {
+    const { run } = approvalsFake({ intents: [{ source_id: INVOICE_ID, status: "confirmed", provider_tx_id: "circle-tx-1", last_error: null }] });
+
+    await expect(run(() => approveAndPay({ actorId: CREATOR, invoiceId: INVOICE_ID }))).rejects.toThrow(
+      "You created this invoice, so someone else must approve it."
+    );
     expect(payInvoiceMock).not.toHaveBeenCalled();
   });
 
@@ -410,6 +467,31 @@ describe("rejectInvoice", () => {
     expect(rpcBodies(fake.requests, "append_ledger_entry")).toHaveLength(0);
   });
 
+  it.each([
+    ["confirmed", { status: "confirmed", provider_tx_id: "circle-tx-1", last_error: null }],
+    ["pending", { status: "pending", provider_tx_id: "circle-tx-1", last_error: null }],
+    ["submitting", { status: "submitting", provider_tx_id: null, last_error: null }],
+    ["unreadable at the provider", { status: "failed", provider_tx_id: "circle-tx-1", last_error: "provider unreachable" }],
+  ] as const)("refuses with payment_in_flight, before any claim, when the payment is %s", async (_label, intent) => {
+    const { fake, run } = approvalsFake({ intents: [{ source_id: INVOICE_ID, ...intent }] });
+
+    const attempt = run(() => rejectInvoice({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+    await expect(attempt).rejects.toBeInstanceOf(ApprovalError);
+    await expect(attempt).rejects.toMatchObject({ code: "payment_in_flight" });
+    await expect(attempt).rejects.toThrow("A payment for this invoice was already sent. Approve and pay records it.");
+    expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
+    expect(patchBodies(fake.requests, "/rest/v1/invoices")).toHaveLength(0);
+  });
+
+  it("still rejects when the provider itself reported the transfer failed", async () => {
+    const { fake, run } = approvalsFake({ intents: [{ source_id: INVOICE_ID, status: "failed", provider_tx_id: "circle-tx-1", last_error: null }] });
+
+    await run(() => rejectInvoice({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+
+    expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(1);
+    expect(patchBodies(fake.requests, "/rest/v1/invoices")[0].status).toBe("rejected");
+  });
+
   it("logs by invoice id and action, and rethrows, when the update after the claim fails", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     const { fake, run } = approvalsFake({ invoicePatch: () => ({ status: 500, body: { message: "invoices update failed: connection reset" } }) });
@@ -423,6 +505,22 @@ describe("rejectInvoice", () => {
 });
 
 describe("returnInvoice", () => {
+  it("refuses with payment_in_flight, before any claim, when the transfer is confirmed", async () => {
+    const { fake, run } = approvalsFake({ intents: [{ source_id: INVOICE_ID, status: "confirmed", provider_tx_id: "circle-tx-1", last_error: null }] });
+
+    await expect(run(() => returnInvoice({ actorId: ACTOR, invoiceId: INVOICE_ID }))).rejects.toMatchObject({ code: "payment_in_flight" });
+    expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
+    expect(patchBodies(fake.requests, "/rest/v1/invoices")).toHaveLength(0);
+  });
+
+  it("still returns an invoice with no payment intent", async () => {
+    const { fake, run } = approvalsFake();
+
+    await run(() => returnInvoice({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+
+    expect(patchBodies(fake.requests, "/rest/v1/invoices")[0].status).toBe("pending");
+  });
+
   it("logs by invoice id and action, and rethrows, when the update after the claim fails", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     const { fake, run } = approvalsFake({ invoicePatch: () => ({ status: 500, body: { message: "invoices update failed: connection reset" } }) });
@@ -480,6 +578,7 @@ describe("listWaitingPayables", () => {
         createdBy: CREATOR,
         reviewedAt: null,
         reclaimable: false,
+        paymentSent: false,
       },
     ]);
     const listing = fake.requests.find((r) => r.path === "/rest/v1/invoices" && r.method === "GET" && !r.params.get("id"));
@@ -506,6 +605,39 @@ describe("listWaitingPayables", () => {
       fresh: false,
       "held-old": false,
     });
+  });
+
+  it("marks a row paymentSent under the same rule Reject and Return refuse by", async () => {
+    const rows = ["sent", "pending", "unreadable", "provider-failed", "none"].map((id) => invoiceRow({ id }));
+    const { fake, run } = approvalsFake({
+      invoice: (r) => (r.params.get("id") ? undefined : { body: rows }),
+      intents: [
+        { source_id: "sent", status: "confirmed", provider_tx_id: "tx-1", last_error: null },
+        { source_id: "pending", status: "pending", provider_tx_id: "tx-2", last_error: null },
+        { source_id: "unreadable", status: "failed", provider_tx_id: "tx-3", last_error: "provider unreachable" },
+        { source_id: "provider-failed", status: "failed", provider_tx_id: "tx-4", last_error: null },
+      ],
+    });
+
+    const listed = await run(() => listWaitingPayables());
+
+    expect(Object.fromEntries(listed.map((row) => [row.id, row.paymentSent]))).toEqual({
+      sent: true,
+      pending: true,
+      unreadable: true,
+      "provider-failed": false,
+      none: false,
+    });
+    const [lookup] = fake.requests.filter((r) => r.path === "/rest/v1/payment_intents");
+    expect(lookup.params.get("source_type")).toBe("eq.invoice");
+    expect(lookup.params.get("source_id")).toBe("in.(sent,pending,unreadable,provider-failed,none)");
+  });
+
+  it("asks for no payment intents when nothing is waiting", async () => {
+    const { fake, run } = approvalsFake({ invoice: (r) => (r.params.get("id") ? undefined : { body: [] }) });
+
+    await expect(run(() => listWaitingPayables())).resolves.toEqual([]);
+    expect(fake.requests.some((r) => r.path === "/rest/v1/payment_intents")).toBe(false);
   });
 });
 

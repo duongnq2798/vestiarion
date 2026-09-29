@@ -51,6 +51,7 @@ function payable(overrides: Partial<WaitingPayable> = {}): WaitingPayable {
     createdBy: CREATOR,
     reviewedAt: null,
     reclaimable: false,
+    paymentSent: false,
     ...overrides,
   };
 }
@@ -110,6 +111,25 @@ describe("ApprovalCard", () => {
     expect(markup).toContain("Reject");
     expect(markup).toContain("Return to agent");
     expect(markup).not.toMatch(APPROVE_DISABLED);
+  });
+
+  it("offers only Approve and pay when a payment was already sent, and says so", () => {
+    const markup = card({ status: "processing", reclaimable: true, paymentSent: true });
+    expect(markup).toContain("A payment was already sent; Approve and pay records it.");
+    expect(markup).toContain("Approve and pay");
+    expect(markup).not.toMatch(APPROVE_DISABLED);
+    expect(markup).not.toContain("Reject");
+    expect(markup).not.toContain("Return to agent");
+  });
+
+  it("does the same for a held row whose payment was already sent", () => {
+    const markup = card({ status: "held", paymentSent: true });
+    expect(markup).toContain("A payment was already sent; Approve and pay records it.");
+    expect(markup).not.toContain("Return to agent");
+  });
+
+  it("does not mention a sent payment otherwise", () => {
+    expect(card()).not.toContain("A payment was already sent");
   });
 
   it("offers nothing on an unfinished claim to someone who may not decide", () => {
