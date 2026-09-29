@@ -23,7 +23,7 @@ import { MOTION } from "@/components/ui/tokens";
 import { orgHref } from "@/lib/auth/org-paths";
 import { BrandMark } from "./Brand";
 import { useCommandPalette, useShortcutLabel } from "./CommandPalette";
-import { HOME_PATH, NAV_GROUPS, navItemForPathname } from "./nav";
+import { NAV_GROUPS, navItemForPathname, sectionPathOf } from "./nav";
 import { NAV_ICONS } from "./nav-icons";
 import type { WorkspaceSummary } from "./workspace";
 
@@ -117,7 +117,7 @@ function WorkspaceMeta({ workspace }: { workspace: WorkspaceSummary }) {
  * single workspace: creating the second one starts here.
  */
 export function WorkspaceSwitcher({ current, workspaces }: { current: WorkspaceSummary; workspaces: WorkspaceSummary[] }) {
-  const section = navItemForPathname(usePathname())?.path ?? HOME_PATH;
+  const section = sectionPathOf(usePathname());
 
   return (
     <DropdownMenu>

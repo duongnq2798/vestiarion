@@ -46,6 +46,11 @@ export function navItemForPathname(pathname: string): NavItem | undefined {
   return NAV_ITEMS.find((item) => item.path === section);
 }
 
+/** The section the URL is in, or the workspace's home — where a switch to another workspace lands. */
+export function sectionPathOf(pathname: string): string {
+  return navItemForPathname(pathname)?.path ?? HOME_PATH;
+}
+
 /** A section's label, which is also its page title. */
 export function sectionTitle(key: NavKey): string {
   const item = NAV_ITEMS.find((candidate) => candidate.key === key);

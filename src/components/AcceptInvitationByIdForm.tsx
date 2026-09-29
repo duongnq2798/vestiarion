@@ -12,7 +12,7 @@ export default function AcceptInvitationByIdForm({ invitationId }: { invitationI
   return (
     <form {...formProps} className="flex shrink-0 flex-col items-end gap-1">
       <input type="hidden" name="invitationId" value={invitationId} />
-      <SubmitButton size="sm" pendingLabel="Accepting…">
+      <SubmitButton pendingLabel="Accepting…">
         Accept
       </SubmitButton>
       {!state.ok && state.message && (

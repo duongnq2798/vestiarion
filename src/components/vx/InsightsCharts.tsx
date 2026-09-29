@@ -90,7 +90,7 @@ function DetailsTable({ summary, headers, rows }: {
         </span>
       }
     >
-      <Table className="min-w-[34rem] text-xs">
+      <Table label={summary} className="min-w-[34rem] text-xs">
         <TableHeader>
           <TableRow>
             {headers.map((header) => (

@@ -60,14 +60,19 @@ export function DialogContent({
         }}
         {...props}
       >
-        <div className={cn("space-y-1.5", showClose && "pr-10", hideHeader && "sr-only")}>
+        <div className={cn("space-y-1.5", "col-start-1 row-start-1", showClose && "pr-10", hideHeader && "sr-only")}>
           <DialogPrimitive.Title className="text-lg font-semibold tracking-tight text-ink">{title}</DialogPrimitive.Title>
           {description && <DialogPrimitive.Description className="text-sm leading-relaxed text-ink-2">{description}</DialogPrimitive.Description>}
         </div>
         {children}
         {showClose && (
           <DialogPrimitive.Close asChild>
-            <Button variant="ghost" size="icon-sm" aria-label="Close" className="absolute right-3 top-3">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Close"
+              className="sticky top-0 z-10 col-start-1 row-start-1 -mr-2 -mt-2 justify-self-end sm:-mr-3 sm:-mt-3"
+            >
               <X />
             </Button>
           </DialogPrimitive.Close>

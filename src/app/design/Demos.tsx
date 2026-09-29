@@ -235,7 +235,7 @@ export function OverlayDemo() {
           <CardTitle>Dialog</CardTitle>
           <CardDescription>A modal panel with a required title. Escape, the close button or a click outside closes it.</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-wrap gap-2">
           <Dialog>
             <DialogTrigger asChild>
               <Button variant="secondary" icon={<Plus />}>
@@ -254,6 +254,18 @@ export function OverlayDemo() {
                   <Button>Add and screen</Button>
                 </DialogClose>
               </DialogFooter>
+            </DialogContent>
+          </Dialog>
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="secondary">A long dialog</Button>
+            </DialogTrigger>
+            <DialogContent title="A long dialog">
+              {Array.from({ length: 12 }, (_, index) => (
+                <p key={index} className="text-sm leading-relaxed text-ink-2">
+                  A modal panel with a required title. Escape, the close button or a click outside closes it.
+                </p>
+              ))}
             </DialogContent>
           </Dialog>
         </CardContent>
