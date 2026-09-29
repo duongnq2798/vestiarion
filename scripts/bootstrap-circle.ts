@@ -14,10 +14,12 @@
  * would mint another organization's wallets in the founding organization's
  * Circle entity.
  *
- * Counterparties get wallets here so the demo is verifiable: when the agent
- * pays Priya, you can watch the USDC land at a real Arc-testnet address. A
- * real deployment would store the address the counterparty gives you instead
- * of minting one on their behalf.
+ * The accounts are provisioned by `createTreasuryWallets`
+ * (src/lib/circle/provision.ts), the same library an owner's "Create wallets"
+ * runs. Counterparties get wallets here only, so the demo is verifiable: when
+ * the agent pays Priya, you can watch the USDC land at a real Arc-testnet
+ * address. A real deployment would store the address the counterparty gives
+ * you instead of minting one on their behalf.
  *
  * Safe to re-run — it skips anything already provisioned.
  */
@@ -28,8 +30,6 @@ import { orgSlugFromArgv } from "./lib/org-arg";
 
 config({ path: [".env.local", ".env"], quiet: true });
 
-const SET_NAME = "vestiarion-treasury";
-
 type ApiError = { response?: { data?: unknown }; message?: string };
 const explain = (e: unknown) =>
   JSON.stringify((e as ApiError)?.response?.data ?? (e as ApiError)?.message ?? e);
@@ -39,93 +39,47 @@ async function main() {
   const { withOrgSlug } = await import("../src/lib/dal/scope");
   await withOrgSlug(slug, async () => {
     const { currentOrgConfig } = await import("../src/lib/context");
+    // Checked here as well as in the library, for its messages naming the organization.
     const { apiKey, entitySecret } = circleCredentialsFrom(currentOrgConfig().chain, slug);
 
     const { db, unwrap } = await import("../src/lib/dal");
+    const { createTreasuryWallets, createScaWallet, treasuryWalletSetId } = await import("../src/lib/circle/provision");
     const orgDb = db();
-    const client = initiateDeveloperControlledWalletsClient({ apiKey, entitySecret });
-
-    // The SDK types wallet sets as a union whose end-user variant has no
-    // `name`; developer-controlled sets always do.
-    const sets = ((await client.listWalletSets()).data?.walletSets ?? []) as Array<{
-      id: string;
-      name?: string;
-    }>;
-    let walletSetId = sets.find((s) => s.name === SET_NAME)?.id;
-    if (!walletSetId) {
-      walletSetId = (await client.createWalletSet({ name: SET_NAME })).data?.walletSet?.id;
-      console.log(`created wallet set ${walletSetId}`);
-    } else {
-      console.log(`reusing wallet set ${walletSetId}`);
-    }
-    if (!walletSetId) throw new Error("could not resolve a wallet set id");
-
-    async function provision(chain: string): Promise<{ id: string; address: string }> {
-      const created = await client.createWallets({
-        blockchains: [chain as never],
-        count: 1,
-        walletSetId: walletSetId!,
-        accountType: "SCA",
-      });
-      const wallet = created.data?.wallets?.[0];
-      if (!wallet?.id || !wallet.address) throw new Error(`no wallet returned for ${chain}`);
-      return { id: wallet.id, address: wallet.address };
-    }
 
     // ------------------------------------------------------------- accounts
-    const accounts = unwrap(
-      await orgDb.from("accounts").select("id, name, chain, circle_wallet_id, kind")
-    ) as Array<{
-      id: string;
-      name: string;
-      chain: string;
-      circle_wallet_id: string | null;
-      kind: string;
-    }>;
-
-    for (const account of accounts) {
-      if (account.circle_wallet_id) {
-        console.log(`skip  ${account.name} (already provisioned)`);
-        continue;
-      }
-      const wallet = await provision(account.chain);
-      const res = await orgDb
-        .from("accounts")
-        .update({ circle_wallet_id: wallet.id, address: wallet.address })
-        .eq("id", account.id);
-      if (res.error) throw new Error(res.error.message);
-      console.log(`ok    ${account.name} (${account.chain}) -> ${wallet.address}`);
-    }
+    const accounts = await createTreasuryWallets();
+    console.log(`accounts: ${accounts.created} wallet(s) created, ${accounts.skipped} already provisioned`);
 
     // ------------------------------------------------------- counterparties
     const counterparties = unwrap(
       await orgDb.from("counterparties").select("id, name, chain, address")
     ) as Array<{ id: string; name: string; chain: string | null; address: string | null }>;
 
+    const pending = counterparties.filter((counterparty) => !counterparty.address);
     for (const counterparty of counterparties) {
-      if (counterparty.address) {
-        console.log(`skip  ${counterparty.name} (already has an address)`);
-        continue;
+      if (counterparty.address) console.log(`skip  ${counterparty.name} (already has an address)`);
+    }
+    if (pending.length > 0) {
+      const client = initiateDeveloperControlledWalletsClient({ apiKey, entitySecret });
+      const walletSetId = await treasuryWalletSetId(client);
+      for (const counterparty of pending) {
+        const wallet = await createScaWallet(client, walletSetId, counterparty.chain ?? "ARC-TESTNET");
+        const res = await orgDb
+          .from("counterparties")
+          .update({ address: wallet.address })
+          .eq("id", counterparty.id);
+        if (res.error) throw new Error(res.error.message);
+        console.log(`ok    ${counterparty.name} -> ${wallet.address}`);
       }
-      const wallet = await provision(counterparty.chain ?? "ARC-TESTNET");
-      const res = await orgDb
-        .from("counterparties")
-        .update({ address: wallet.address })
-        .eq("id", counterparty.id);
-      if (res.error) throw new Error(res.error.message);
-      console.log(`ok    ${counterparty.name} -> ${wallet.address}`);
     }
 
-    const operating = accounts.find((a) => a.kind === "operating");
-    const refreshed = operating
-      ? ((
-          await orgDb.from("accounts").select("address").eq("id", operating.id).single()
-        ).data as { address: string | null } | null)
-      : null;
+    const operating = (
+      await orgDb.from("accounts").select("address").eq("kind", "operating").limit(1).maybeSingle()
+    ).data as { address: string | null } | null;
 
     console.log("\nNext: fund the operating wallet with testnet USDC.");
-    if (refreshed?.address) {
-      console.log(`  Address: ${refreshed.address}`);
+    if (operating?.address) {
+      console.log(`  Address: ${operating.address}`);
       console.log("  Faucet:  https://faucet.circle.com  (select Arc Testnet, 20 USDC / 2h)");
     }
     console.log(`Then run \`npm run circle:doctor -- ${slug}\` to confirm the balance landed.`);
