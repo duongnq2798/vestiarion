@@ -1,8 +1,18 @@
+import { OPERATIONS, type DocOperation } from "@/lib/api/openapi";
+import { docsHref, slugOfPathname } from "./paths";
+
+export { docsHref, slugOfPathname };
+
 /**
  * The developer docs' navigation: the one list the sidebar, the pager, the
  * static pages, search, the Markdown views and `llms.txt` are all built from.
  * A page exists when it is here and its MDX file is in `content/docs`; the
- * content test checks both directions.
+ * content test checks both directions. The API reference pages are the
+ * exception: they are generated from `OPERATIONS`, one per operation, in its
+ * order, and need no MDX.
+ *
+ * This module imports the operations and their schemas, so client components
+ * take the nav as a prop from the server and import `./paths` for URLs.
  */
 
 export interface NavPage {
@@ -15,6 +25,12 @@ export interface NavPage {
 export interface NavSection {
   title: string;
   pages: NavPage[];
+}
+
+/** An operation's description, cut to its first sentence: the reference page's summary line. */
+function firstSentence(op: DocOperation): string {
+  const paragraph = op.description.split(/\n\s*\n/)[0].trim();
+  return /^.*?[.!?](?=\s|$)/s.exec(paragraph)?.[0] ?? paragraph;
 }
 
 export const DOCS_NAV: NavSection[] = [
@@ -37,7 +53,10 @@ export const DOCS_NAV: NavSection[] = [
   },
   {
     title: "API reference",
-    pages: [{ slug: "api", title: "Endpoint overview", description: "Every v1 endpoint, what it answers, and the conventions they share." }],
+    pages: [
+      { slug: "api", title: "Endpoint overview", description: "Every v1 endpoint, what it answers, and the conventions they share." },
+      ...OPERATIONS.map((op) => ({ slug: `api/${op.id}`, title: op.summary, description: firstSentence(op) })),
+    ],
   },
   {
     title: "Webhooks",
@@ -73,11 +92,6 @@ export function neighbours(slug: string): { prev?: NavPage; next?: NavPage } {
   return { prev: pages[index - 1], next: pages[index + 1] };
 }
 
-/** The URL path of a docs page. */
-export function docsHref(slug: string): string {
-  return slug ? `/docs/${slug}` : "/docs";
-}
-
 /** The page at `slug` and the title of its section, or undefined when the nav has no such page. */
 export function findPage(slug: string): { page: NavPage; section: string } | undefined {
   for (const section of DOCS_NAV) {
@@ -85,10 +99,4 @@ export function findPage(slug: string): { page: NavPage; section: string } | und
     if (page) return { page, section: section.title };
   }
   return undefined;
-}
-
-/** The docs slug of a pathname: `/docs` is `""`, `/docs/webhooks/verify/` is `webhooks/verify`; null outside /docs. */
-export function slugOfPathname(pathname: string): string | null {
-  const match = /^\/docs(?:\/(.*?))?\/?$/.exec(pathname);
-  return match ? (match[1] ?? "") : null;
 }

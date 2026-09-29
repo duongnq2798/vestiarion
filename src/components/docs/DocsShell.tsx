@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
 import type { Heading } from "@/lib/docs/headings";
+import { DOCS_NAV } from "@/lib/docs/nav";
 import { DocsPager } from "./DocsPager";
 import { DocsMobileNav, DocsSidebar } from "./DocsSidebar";
 import { DocsToc } from "./DocsToc";
@@ -20,11 +21,11 @@ export function DocsShell({ children }: { children: ReactNode }) {
         <Button asChild variant="ghost" className="hidden sm:inline-flex">
           <Link href="/onboarding">Open console</Link>
         </Button>
-        <DocsMobileNav />
+        <DocsMobileNav sections={DOCS_NAV} />
       </SiteHeader>
       <div className="mx-auto flex w-full max-w-[88rem] flex-1">
         <aside className="sticky top-16 hidden h-[calc(100dvh-4rem)] w-64 shrink-0 overflow-y-auto overscroll-contain border-r border-line/80 lg:block">
-          <DocsSidebar />
+          <DocsSidebar sections={DOCS_NAV} />
         </aside>
         <main id="main" tabIndex={-1} className="min-w-0 flex-1 px-4 outline-none sm:px-6 lg:px-10">
           {children}

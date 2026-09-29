@@ -2,9 +2,10 @@ import { readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { OPERATIONS } from "@/lib/api/openapi";
-import { CONTENT_DIR, hasSource, PAGE_LOADERS, readSource } from "@/lib/docs/content";
+import { CONTENT_DIR, hasSource, NOTES_LOADERS, PAGE_LOADERS, readSource } from "@/lib/docs/content";
 import { slugifyHeadings, splitCodeSpans, stripFences } from "@/lib/docs/headings";
 import { DOCS_NAV, flatPages, neighbours, slugOfPathname } from "@/lib/docs/nav";
+import { referenceSectionIds } from "@/lib/docs/reference";
 
 /**
  * The docs' content and its navigation agree: every page in the nav has its
@@ -26,7 +27,7 @@ const FILE_SLUGS = walk(CONTENT_DIR)
   .map((slug) => (slug === "index" ? "" : slug));
 
 const NAV_SLUGS = new Set(flatPages().map((page) => page.slug));
-/** Generated from the OpenAPI operations; they need no MDX file. */
+/** Generated from the OpenAPI operations; they need no MDX file, and may have a notes file. */
 const GENERATED_SLUGS = new Set(OPERATIONS.map((op) => `api/${op.id}`));
 /** Internal addresses outside /docs that a page may link to. */
 const OTHER_TARGETS = new Set(["/api/v1/openapi.json", "/llms.txt", "/llms-full.txt"]);
@@ -43,7 +44,6 @@ const WRITTEN_LATER = new Set([
   "get-started/errors",
   "get-started/pagination",
   "get-started/limits",
-  "api",
   "webhooks",
   "webhooks/payload",
   "webhooks/verify",
@@ -126,6 +126,11 @@ function linkProblems(slug: string, source: string, sourceOf: (slug: string) => 
     }
     if (anchor === undefined) continue;
     const targetSource = sourceOf(targetSlug);
+    if (GENERATED_SLUGS.has(targetSlug)) {
+      // A reference page's headings are its fixed sections, then its notes' headings.
+      if (!referenceSectionIds(targetSource).includes(anchor)) problems.push(`${link}: no section #${anchor} on "${targetSlug}"`);
+      continue;
+    }
     if (targetSource === null) {
       problems.push(`${link}: "${targetSlug}" has no MDX source to check the anchor against`);
       continue;
@@ -144,6 +149,17 @@ describe("the docs navigation", () => {
     const slugs = flatPages().map((page) => page.slug);
     expect(new Set(slugs).size).toBe(slugs.length);
     expect(DOCS_NAV.map((section) => section.title)).toEqual(["Overview", "Get started", "API reference", "Webhooks", "AI integration", "Changelog"]);
+  });
+
+  it("lists the endpoint overview, then one generated page per operation in table order, titled with its summary", () => {
+    const api = DOCS_NAV.find((section) => section.title === "API reference")!;
+    expect(api.pages.map((page) => [page.slug, page.title])).toEqual([
+      ["api", "Endpoint overview"],
+      ...OPERATIONS.map((op) => [`api/${op.id}`, op.summary]),
+    ]);
+    expect(api.pages.find((page) => page.slug === "api/get-counterparty")?.description).toBe(
+      "One counterparty, with up to 20 recent compliance screenings, newest first."
+    );
   });
 
   it("gives every page a title and a description", () => {
@@ -197,7 +213,11 @@ describe("every MDX file", () => {
   });
 
   it("has a loader, so the bundler compiles it, and every loader has its file", () => {
-    expect([...FILE_SLUGS].sort()).toEqual(Object.keys(PAGE_LOADERS).sort());
+    expect(FILE_SLUGS.filter((slug) => !GENERATED_SLUGS.has(slug)).sort()).toEqual(Object.keys(PAGE_LOADERS).sort());
+  });
+
+  it("of a reference page's notes has a notes loader, and every notes loader has its file", () => {
+    expect(FILE_SLUGS.filter((slug) => GENERATED_SLUGS.has(slug)).sort()).toEqual(Object.keys(NOTES_LOADERS).map((id) => `api/${id}`).sort());
   });
 
   it.each(FILE_SLUGS.map((slug) => [slug || "index"] as const))("%s leaves the page title to the nav: no `#` heading", (name) => {
@@ -229,6 +249,20 @@ describe("the link check", () => {
       "[r]: /docs/webhooks/verify#node",
     ].join("\n");
     expect(linkProblems("", `## Start here\n\n${page}`, sourceOf)).toEqual([]);
+  });
+
+  it("checks an anchor into a reference page against its fixed sections, and its notes' headings when it has notes", () => {
+    const [plain, noted] = [OPERATIONS[0].id, OPERATIONS[1].id];
+    const withNotes = (slug: string) => (slug === `api/${noted}` ? "## Watermark cursor\n" : sourceOf(slug));
+    const page = [
+      `[a](/docs/api/${plain}#parameters) [b](/docs/api/${plain}#code-samples) [c](/docs/api/${plain}#response) [d](/docs/api/${plain}#errors)`,
+      `[e](/docs/api/${noted}#notes) [f](/docs/api/${noted}#watermark-cursor)`,
+      `[g](/docs/api/${plain}#notes) [h](/docs/api/${plain}#nowhere)`,
+    ].join("\n");
+    expect(linkProblems("", page, withNotes)).toEqual([
+      `/docs/api/${plain}#notes: no section #notes on "api/${plain}"`,
+      `/docs/api/${plain}#nowhere: no section #nowhere on "api/${plain}"`,
+    ]);
   });
 
   it("reports a missing page, a missing anchor and an unknown public document", () => {

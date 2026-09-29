@@ -7,19 +7,24 @@ import { useEffect, useId, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/components/ui/cn";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/Sheet";
-import { DOCS_NAV, docsHref, slugOfPathname } from "@/lib/docs/nav";
+import type { NavSection } from "@/lib/docs/nav";
+import { docsHref, slugOfPathname } from "@/lib/docs/paths";
 
 /** Matches Tailwind's `lg`, where the sidebar replaces the drawer. */
 const WIDE = "(min-width: 64rem)";
 
-/** Every section of the docs and its pages, the current one marked. */
-export function DocsSidebar({ onNavigate, className }: { onNavigate?: () => void; className?: string }) {
+/**
+ * Every section of the docs and its pages, the current one marked. The
+ * sections come from the server (`DOCS_NAV`), which keeps the API operations
+ * they are partly built from out of the browser bundle.
+ */
+export function DocsSidebar({ sections, onNavigate, className }: { sections: NavSection[]; onNavigate?: () => void; className?: string }) {
   const active = slugOfPathname(usePathname());
   const id = useId();
 
   return (
     <nav aria-label="Documentation" className={cn("px-3 py-6", className)}>
-      {DOCS_NAV.map((section, index) => (
+      {sections.map((section, index) => (
         <div key={section.title} className={index === 0 ? undefined : "mt-6"}>
           <p id={`${id}-${index}`} className="px-3 pb-1.5 font-mono text-[0.625rem] font-semibold uppercase tracking-[0.14em] text-ink-3">
             {section.title}
@@ -56,7 +61,7 @@ export function DocsSidebar({ onNavigate, className }: { onNavigate?: () => void
  * It closes on a link, on Escape, on a click outside, and when the window
  * grows wide enough to show the sidebar.
  */
-export function DocsMobileNav() {
+export function DocsMobileNav({ sections }: { sections: NavSection[] }) {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -76,7 +81,7 @@ export function DocsMobileNav() {
         </Button>
       </SheetTrigger>
       <SheetContent side="left" title="Documentation">
-        <DocsSidebar onNavigate={() => setOpen(false)} className="py-4" />
+        <DocsSidebar sections={sections} onNavigate={() => setOpen(false)} className="py-4" />
       </SheetContent>
     </Sheet>
   );

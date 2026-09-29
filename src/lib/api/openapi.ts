@@ -271,8 +271,12 @@ function schemaName(id: string): string {
     .join("")}Response`;
 }
 
-/** A schema as it sits under `components.schemas`: JSON Schema 2020-12, which OpenAPI 3.1 uses, without its own `$schema`. */
-function jsonSchema(schema: z.ZodType): Record<string, unknown> {
+/**
+ * A schema as it sits under `components.schemas`: JSON Schema 2020-12, which
+ * OpenAPI 3.1 uses, without its own `$schema`. The reference pages build their
+ * response trees from this too, so a page and the document cannot disagree.
+ */
+export function jsonSchema(schema: z.ZodType): Record<string, unknown> {
   // `io: "input"` leaves objects open (no `additionalProperties: false`): a
   // field added to v1 later must not break a client that validates responses
   // against this document. No schema here transforms, so the shapes are equal.

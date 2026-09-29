@@ -33,6 +33,7 @@ type MdxModule = { default: ComponentType<MDXProps> };
  */
 export const PAGE_LOADERS: Record<string, () => Promise<MdxModule>> = {
   "": () => import("../../../content/docs/index.mdx"),
+  api: () => import("../../../content/docs/api.mdx"),
 };
 
 /** The compiled page, or null when no MDX file is registered for `slug`. */
@@ -41,4 +42,20 @@ export async function loadPage(slug: string): Promise<{ Content: ComponentType<M
   if (!load) return null;
   const mod = await load();
   return { Content: mod.default };
+}
+
+/**
+ * One loader per notes file, `content/docs/api/<id>.mdx`, keyed by operation
+ * id: what a reference page says beyond its schema. A reference page renders
+ * its notes only when it has a loader here; the content test checks that
+ * every notes file has one and every loader its file.
+ */
+export const NOTES_LOADERS: Record<string, () => Promise<MdxModule>> = {};
+
+/** The compiled notes for an operation's reference page, and their source; null when it has none. */
+export async function loadNotes(id: string): Promise<{ Content: ComponentType<MDXProps>; source: string } | null> {
+  const load = Object.hasOwn(NOTES_LOADERS, id) ? NOTES_LOADERS[id] : undefined;
+  if (!load) return null;
+  const mod = await load();
+  return { Content: mod.default, source: readSource(`api/${id}`) };
 }
