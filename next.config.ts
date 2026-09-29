@@ -6,6 +6,16 @@ const nextConfig: NextConfig = {
   async redirects() {
     return legacyRedirects();
   },
+  // Each docs page's Markdown view, `/docs.md` and `/docs/<slug>.md`, is served
+  // by src/app/docs-md: the App Router has no suffix on a catch-all segment.
+  // An array is applied after the pages, so a real page always wins; no docs
+  // slug has a dot, and a `.md` that is not a page answers 404 from the route.
+  async rewrites() {
+    return [
+      { source: "/docs.md", destination: "/docs-md" },
+      { source: "/docs/:path+\\.md", destination: "/docs-md/:path+" },
+    ];
+  },
 };
 
 // The docs' MDX in `content/docs` is imported by the /docs pages, not routed,

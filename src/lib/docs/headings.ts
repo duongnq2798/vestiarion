@@ -38,24 +38,31 @@ const DEFINITION = /^ {0,3}\[((?:[^\]\\]|\\.)+)\]:/;
  * An unclosed fence runs to the end, as in CommonMark.
  */
 export function stripFences(markdown: string): string {
+  const lines = markdown.split(/\r?\n/);
+  const fenced = fencedLines(lines);
+  return lines.map((line, index) => (fenced[index] ? "" : line)).join("\n");
+}
+
+/**
+ * Which of `lines` belong to a fenced code block, the fences included. An
+ * unclosed fence runs to the end, as in CommonMark.
+ */
+export function fencedLines(lines: string[]): boolean[] {
   let fence: { char: string; length: number } | null = null;
-  return markdown
-    .split(/\r?\n/)
-    .map((line) => {
-      const match = FENCE.exec(line);
-      if (fence) {
-        // A closing fence is the same character, at least as long, and carries no info string.
-        if (match && match[1][0] === fence.char && match[1].length >= fence.length && match[2].trim() === "") fence = null;
-        return "";
-      }
-      // A backtick fence's info string may not contain a backtick; that line is a code span instead.
-      if (match && !(match[1][0] === "`" && match[2].includes("`"))) {
-        fence = { char: match[1][0], length: match[1].length };
-        return "";
-      }
-      return line;
-    })
-    .join("\n");
+  return lines.map((line) => {
+    const match = FENCE.exec(line);
+    if (fence) {
+      // A closing fence is the same character, at least as long, and carries no info string.
+      if (match && match[1][0] === fence.char && match[1].length >= fence.length && match[2].trim() === "") fence = null;
+      return true;
+    }
+    // A backtick fence's info string may not contain a backtick; that line is a code span instead.
+    if (match && !(match[1][0] === "`" && match[2].includes("`"))) {
+      fence = { char: match[1][0], length: match[1].length };
+      return true;
+    }
+    return false;
+  });
 }
 
 /** A piece of inline markdown: text, or a code span's content (already normalised, as MDX renders it). */

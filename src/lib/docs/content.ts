@@ -2,6 +2,10 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import type { ComponentType } from "react";
 import type { MDXProps } from "mdx/types";
+import { operationById } from "@/lib/api/openapi";
+import { slugifyHeadings, type Heading } from "./headings";
+import { flatPages, type NavPage } from "./nav";
+import { referenceHeadings } from "./reference";
 
 /**
  * The docs pages' MDX, in `content/docs`: `""` is `index.mdx`, and
@@ -22,6 +26,21 @@ export function readSource(slug: string): string {
 
 export function hasSource(slug: string): boolean {
   return existsSync(sourcePath(slug));
+}
+
+/** Whether `slug` is a generated API reference page, `api/<operation id>`. */
+export function isReferenceSlug(slug: string): boolean {
+  return slug.startsWith("api/") && operationById(slug.slice("api/".length)) !== undefined;
+}
+
+/**
+ * The pages that are served, in nav order: every generated reference page,
+ * and every other page whose MDX is written. The nav also lists pages still
+ * to be written; the Markdown views, `llms.txt`, search and the sitemap
+ * leave those out, so none of them points at a 404.
+ */
+export function publishedPages(): NavPage[] {
+  return flatPages().filter((page) => isReferenceSlug(page.slug) || hasSource(page.slug));
 }
 
 type MdxModule = { default: ComponentType<MDXProps> };
@@ -51,6 +70,16 @@ export async function loadPage(slug: string): Promise<{ Content: ComponentType<M
  * every notes file has one and every loader its file.
  */
 export const NOTES_LOADERS: Record<string, () => Promise<MdxModule>> = {};
+
+/** The MDX of an operation's notes, `content/docs/api/<id>.mdx`, or null when it has none. */
+export function notesSource(id: string): string | null {
+  return Object.hasOwn(NOTES_LOADERS, id) ? readSource(`api/${id}`) : null;
+}
+
+/** The `##` and `###` headings a published page renders, with their anchors: its MDX's, or a reference page's sections and notes. */
+export function pageHeadings(slug: string): Heading[] {
+  return isReferenceSlug(slug) ? referenceHeadings(notesSource(slug.slice("api/".length))) : slugifyHeadings(readSource(slug));
+}
 
 /** The compiled notes for an operation's reference page, and their source; null when it has none. */
 export async function loadNotes(id: string): Promise<{ Content: ComponentType<MDXProps>; source: string } | null> {

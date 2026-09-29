@@ -19,6 +19,11 @@ export const LANDING_SECTIONS = [
   { href: "#proof", label: "Proof" },
 ] as const;
 
+/** The landing header's links, in its bar and its menu: its own sections, then the developer docs. */
+export const LANDING_LINKS = [...LANDING_SECTIONS, { href: "/docs", label: "Docs" }] as const;
+
+const HEADER_LINK = "whitespace-nowrap rounded-lg px-3 py-2 text-sm text-ink-2 transition-colors duration-150 ease-standard hover:bg-raised/70 hover:text-ink";
+
 function Wordmark() {
   return (
     <Link href="/" className="group inline-flex shrink-0 items-center gap-2.5 font-mono text-[0.8125rem] font-semibold uppercase tracking-[0.2em] text-ink">
@@ -56,19 +61,25 @@ export function SiteHeader({
           </Link>
         )}
         {landing && (
-          <nav aria-label="Site" className="mx-auto hidden md:block">
+          <nav aria-label="Site" className="mx-auto hidden lg:block">
             <ul className="flex items-center gap-1">
-              {LANDING_SECTIONS.map((link) => (
+              {LANDING_LINKS.map((link) => (
                 <li key={link.href}>
-                  <a href={link.href} className="rounded-lg px-3 py-2 text-sm text-ink-2 transition-colors duration-150 ease-standard hover:bg-raised/70 hover:text-ink">
-                    {link.label}
-                  </a>
+                  {link.href.startsWith("#") ? (
+                    <a href={link.href} className={HEADER_LINK}>
+                      {link.label}
+                    </a>
+                  ) : (
+                    <Link href={link.href} className={HEADER_LINK}>
+                      {link.label}
+                    </Link>
+                  )}
                 </li>
               ))}
             </ul>
           </nav>
         )}
-        <div className={landing ? "ml-auto flex items-center gap-2 md:ml-0" : "ml-auto flex items-center gap-2"}>
+        <div className={landing ? "ml-auto flex items-center gap-2 lg:ml-0" : "ml-auto flex items-center gap-2"}>
           {landing ? (
             <>
               <Button asChild variant="ghost" className="hidden md:inline-flex">
@@ -77,7 +88,7 @@ export function SiteHeader({
               <Button asChild className="hidden min-[375px]:inline-flex">
                 <Link href="/onboarding">Open console</Link>
               </Button>
-              <SiteMenu links={LANDING_SECTIONS} />
+              <SiteMenu links={LANDING_LINKS} />
             </>
           ) : (
             children

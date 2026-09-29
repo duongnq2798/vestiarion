@@ -3,21 +3,15 @@ import { Badge } from "@/components/ui/Badge";
 import { cn } from "@/components/ui/cn";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/Table";
-import { OPERATIONS, type DocOperation } from "@/lib/api/openapi";
+import { operationsByTag } from "@/lib/docs/nav";
 import { docsHref } from "@/lib/docs/paths";
 import { LINK_CLASS, PathText } from "./InlineText";
-
-/** The operations grouped by tag, tags in the order they first appear. */
-export function operationsByTag(): Array<{ tag: DocOperation["tag"]; operations: DocOperation[] }> {
-  const groups = new Map<DocOperation["tag"], DocOperation[]>();
-  for (const op of OPERATIONS) groups.set(op.tag, [...(groups.get(op.tag) ?? []), op]);
-  return [...groups].map(([tag, operations]) => ({ tag, operations }));
-}
 
 /**
  * Every v1 endpoint, one table per tag: its path, linked to its reference
  * page, and its summary. Rendered from `OPERATIONS`, so the overview lists
- * exactly the endpoints the reference pages and the OpenAPI document do.
+ * exactly the endpoints the reference pages and the OpenAPI document do. The
+ * Markdown view writes the same tables from `operationsByTag()`.
  */
 export function EndpointTable() {
   return (

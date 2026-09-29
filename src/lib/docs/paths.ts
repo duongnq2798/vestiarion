@@ -9,6 +9,15 @@ export function docsHref(slug: string): string {
   return slug ? `/docs/${slug}` : "/docs";
 }
 
+/**
+ * The URL path of a page's Markdown view: `/docs.md`, `/docs/api/list-invoices.md`.
+ * A rewrite in `next.config.ts` serves it from `/docs-md/…`; a plain `<a>`
+ * links it, since it is a document, not a page to navigate to.
+ */
+export function docsMarkdownPath(slug: string): string {
+  return `${docsHref(slug)}.md`;
+}
+
 /** The docs slug of a pathname: `/docs` is `""`, `/docs/webhooks/verify/` is `webhooks/verify`; null outside /docs. */
 export function slugOfPathname(pathname: string): string | null {
   const match = /^\/docs(?:\/(.*?))?\/?$/.exec(pathname);

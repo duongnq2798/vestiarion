@@ -79,6 +79,13 @@ export const DOCS_NAV: NavSection[] = [
   },
 ];
 
+/** The operations grouped by tag, tags in the order they first appear: the endpoint overview's tables. */
+export function operationsByTag(): Array<{ tag: DocOperation["tag"]; operations: DocOperation[] }> {
+  const groups = new Map<DocOperation["tag"], DocOperation[]>();
+  for (const op of OPERATIONS) groups.set(op.tag, [...(groups.get(op.tag) ?? []), op]);
+  return [...groups].map(([tag, operations]) => ({ tag, operations }));
+}
+
 /** Every page, in nav order. */
 export function flatPages(): NavPage[] {
   return DOCS_NAV.flatMap((section) => section.pages);

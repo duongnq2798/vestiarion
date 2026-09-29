@@ -6,11 +6,13 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Sheet, SheetClose, SheetContent, SheetTrigger } from "@/components/ui/Sheet";
 
-/** Matches Tailwind's `md`, where the header shows its links inline. */
-const WIDE = "(min-width: 48rem)";
+/** Matches Tailwind's `lg`, where the header shows its links inline. */
+const WIDE = "(min-width: 64rem)";
+
+const MENU_LINK = "flex h-12 items-center rounded-lg px-3 text-base font-medium text-ink transition-colors duration-150 ease-standard hover:bg-raised/70";
 
 /**
- * The landing page's links below `md`: a sheet from the top. It closes on a
+ * The landing page's links below `lg`: a sheet from the top. It closes on a
  * link, on Escape, on a click outside, and when the window grows wide enough
  * to show the links inline.
  */
@@ -29,7 +31,7 @@ export function SiteMenu({ links }: { links: ReadonlyArray<{ href: string; label
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
-        <Button variant="secondary" size="icon" aria-label="Menu" className="md:hidden">
+        <Button variant="secondary" size="icon" aria-label="Menu" className="lg:hidden">
           <Menu />
         </Button>
       </SheetTrigger>
@@ -39,9 +41,15 @@ export function SiteMenu({ links }: { links: ReadonlyArray<{ href: string; label
             {links.map((link) => (
               <li key={link.href}>
                 <SheetClose asChild>
-                  <a href={link.href} className="flex h-12 items-center rounded-lg px-3 text-base font-medium text-ink transition-colors duration-150 ease-standard hover:bg-raised/70">
-                    {link.label}
-                  </a>
+                  {link.href.startsWith("#") ? (
+                    <a href={link.href} className={MENU_LINK}>
+                      {link.label}
+                    </a>
+                  ) : (
+                    <Link href={link.href} className={MENU_LINK}>
+                      {link.label}
+                    </Link>
+                  )}
                 </SheetClose>
               </li>
             ))}
