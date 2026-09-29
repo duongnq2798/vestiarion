@@ -1,7 +1,10 @@
 "use client";
 
+import { AnimatePresence, m } from "motion/react";
+import { LogOut, MailCheck, Send, UserMinus, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useActionState, useEffect, useState } from "react";
+import { useState } from "react";
+import { flushSync } from "react-dom";
 import {
   changeMemberRoleAction,
   inviteMemberAction,
@@ -9,12 +12,27 @@ import {
   revokeInvitationAction,
   type MemberActionResult,
 } from "@/app/actions/members";
-import { Card, Label, SectionHead } from "@/components/vx/Primitives";
-import { canAssignRole } from "@/lib/auth/roles";
-import type { OrgRole } from "@/lib/auth/roles";
+import { Avatar } from "@/components/ui/Avatar";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { Field } from "@/components/ui/Field";
+import { FormMessage } from "@/components/ui/FormMessage";
+import { Input } from "@/components/ui/Input";
+import { SectionHeader } from "@/components/ui/SectionHeader";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
+import { SubmitButton } from "@/components/ui/SubmitButton";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/Table";
+import { MOTION } from "@/components/ui/tokens";
+import { useActionForm } from "@/components/ui/useActionForm";
+import { canAssignRole, type OrgRole } from "@/lib/auth/roles";
 import type { Member, OpenInvitation } from "@/lib/platform/members";
 
 const INITIAL: MemberActionResult = { ok: false, message: "" };
+const EXIT = { duration: MOTION.duration.exit, ease: MOTION.ease.exit };
 
 const dateFormat = new Intl.DateTimeFormat("en-US", { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" });
 
@@ -22,194 +40,215 @@ function joined(iso: string): string {
   return dateFormat.format(new Date(iso));
 }
 
-function RoleCell({ orgSlug, member, canChange, assignable }: { orgSlug: string; member: Member; canChange: boolean; assignable: readonly OrgRole[] }) {
-  const [state, action, pending] = useActionState(changeMemberRoleAction, INITIAL);
-
-  if (!canChange) return <span className="capitalize text-ink">{member.role}</span>;
-
+function RowError({ state }: { state: MemberActionResult }) {
+  if (state.ok || !state.message) return null;
   return (
-    <form action={action} className="inline-flex flex-col gap-1">
-      <input type="hidden" name="orgSlug" value={orgSlug} />
-      <input type="hidden" name="userId" value={member.userId} />
-      <select
-        name="role"
-        defaultValue={member.role}
-        disabled={pending}
-        onChange={(event) => event.currentTarget.form?.requestSubmit()}
-        className="h-8 rounded-lg border border-line-strong bg-ground px-2 text-sm capitalize text-ink outline-none focus:border-agent focus:ring-2 focus:ring-agent-soft"
-      >
-        {assignable.map((role) => (
-          <option key={role} value={role}>{role}</option>
-        ))}
-      </select>
-      {!state.ok && state.message && <span className="text-xs text-refused">{state.message}</span>}
-    </form>
-  );
-}
-
-/** Removing someone else. The viewer's own row uses `LeaveCell` instead — see the note on that component. */
-function RemoveButton({ orgSlug, member }: { orgSlug: string; member: Member }) {
-  const [state, action, pending] = useActionState(removeMemberAction, INITIAL);
-
-  return (
-    <form action={action} className="inline-flex flex-col items-end gap-1">
-      <input type="hidden" name="orgSlug" value={orgSlug} />
-      <input type="hidden" name="userId" value={member.userId} />
-      <button
-        type="submit"
-        disabled={pending}
-        className="rounded-md border border-refused-line px-2.5 py-1 text-xs font-medium text-refused transition-colors hover:bg-refused-soft disabled:opacity-60"
-      >
-        {pending ? "Removing…" : "Remove"}
-      </button>
-      {!state.ok && state.message && <span className="text-xs text-refused">{state.message}</span>}
-    </form>
+    <p role="alert" className="text-xs text-refused">
+      {state.message}
+    </p>
   );
 }
 
 /**
- * The viewer's own row. Self-removal does not revalidate the route (see
- * `removeMemberAction`), specifically so this state and its redirect live in
- * `MembersPanel` — a component that is not part of whatever re-renders once
- * membership changes — rather than in a per-row component that a revalidation
- * could unmount before its effect runs.
+ * A role that saves itself when changed. While the change is on its way the
+ * select shows the new role; afterwards it shows the server's answer — the
+ * new role once saved, the old one if the change was refused.
  */
-function LeaveCell({
-  orgSlug,
-  userId,
-  action,
-  state,
-  pending,
-}: {
-  orgSlug: string;
-  userId: string;
-  action: (formData: FormData) => void;
-  state: MemberActionResult;
-  pending: boolean;
-}) {
+function RoleCell({ orgSlug, member, assignable }: { orgSlug: string; member: Member; assignable: readonly OrgRole[] }) {
+  const [requested, setRequested] = useState<string>(member.role);
+  const { state, pending, formProps } = useActionForm(changeMemberRoleAction, INITIAL, { toastOnSuccess: true });
+
   return (
-    <form action={action} className="inline-flex flex-col items-end gap-1">
+    <form {...formProps} className="inline-flex flex-col gap-1">
+      <input type="hidden" name="orgSlug" value={orgSlug} />
+      <input type="hidden" name="userId" value={member.userId} />
+      <input type="hidden" name="role" value={requested} />
+      <Select
+        value={pending ? requested : member.role}
+        disabled={pending}
+        onValueChange={(role) => {
+          // The hidden input must hold the new role before the form reads it.
+          flushSync(() => setRequested(role));
+          formProps.ref.current?.requestSubmit();
+        }}
+      >
+        <SelectTrigger size="sm" aria-label={`Role of ${member.email}`} className="w-32 capitalize">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {assignable.map((role) => (
+            <SelectItem key={role} value={role} className="capitalize">
+              {role}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <RowError state={state} />
+    </form>
+  );
+}
+
+/** Removing someone else. The viewer's own row uses `LeaveWorkspace` instead — see the note on that component. */
+function RemoveMember({ orgSlug, member }: { orgSlug: string; member: Member }) {
+  const formId = `remove-${member.userId}`;
+  const { state, pending, formProps } = useActionForm(removeMemberAction, INITIAL, { toastOnSuccess: true });
+
+  return (
+    <form id={formId} {...formProps} className="inline-flex flex-col items-end gap-1">
+      <input type="hidden" name="orgSlug" value={orgSlug} />
+      <input type="hidden" name="userId" value={member.userId} />
+      <ConfirmDialog
+        formId={formId}
+        trigger={
+          <Button variant="danger" size="sm" icon={<UserMinus />} loading={pending}>
+            Remove
+          </Button>
+        }
+        title={`Remove ${member.email}?`}
+        description="They lose access to this workspace at once. The removal is recorded in the audit log, and you can invite them again later."
+        confirmLabel="Remove member"
+      />
+      <RowError state={state} />
+    </form>
+  );
+}
+
+type LeaveForm = ReturnType<typeof useActionForm<MemberActionResult>>;
+
+/**
+ * The viewer's own row. Self-removal does not revalidate the route (see
+ * `removeMemberAction`), specifically so the form's state and its redirect
+ * live in `MembersPanel` — a component that is not part of whatever
+ * re-renders once membership changes — rather than in a per-row component
+ * that a revalidation could unmount first.
+ */
+function LeaveWorkspace({ orgSlug, userId, form }: { orgSlug: string; userId: string; form: LeaveForm }) {
+  const formId = "leave-workspace";
+  return (
+    <form id={formId} {...form.formProps} className="inline-flex flex-col items-end gap-1">
       <input type="hidden" name="orgSlug" value={orgSlug} />
       <input type="hidden" name="userId" value={userId} />
-      <button
-        type="submit"
-        disabled={pending}
-        className="rounded-md border border-refused-line px-2.5 py-1 text-xs font-medium text-refused transition-colors hover:bg-refused-soft disabled:opacity-60"
-      >
-        {pending ? "Leaving…" : "Leave"}
-      </button>
-      {!state.ok && state.message && <span className="text-xs text-refused">{state.message}</span>}
+      <ConfirmDialog
+        formId={formId}
+        trigger={
+          <Button variant="danger" size="sm" icon={<LogOut />} loading={form.pending}>
+            Leave
+          </Button>
+        }
+        title="Leave this workspace?"
+        description="You lose access at once. An owner or admin can invite you back."
+        confirmLabel="Leave workspace"
+      />
+      <RowError state={form.state} />
     </form>
   );
 }
 
 function InviteForm({ orgSlug, assignable }: { orgSlug: string; assignable: readonly OrgRole[] }) {
-  const [state, action, pending] = useActionState(inviteMemberAction, INITIAL);
-  const [copied, setCopied] = useState(false);
-
-  async function copyLink() {
-    if (!state.link) return;
-    try {
-      await navigator.clipboard.writeText(state.link);
-      setCopied(true);
-    } catch {
-      setCopied(false);
-    }
-  }
+  const { state, formProps } = useActionForm(inviteMemberAction, INITIAL, { resetOnSuccess: true, toastOnSuccess: true });
 
   return (
-    <form
-      action={action}
-      onSubmit={() => setCopied(false)}
-      className="surface-shadow flex flex-col gap-3 rounded-2xl border border-line bg-surface p-4 sm:p-5"
-    >
-      <input type="hidden" name="orgSlug" value={orgSlug} />
-      {/* The fields share one row; the result sits below it, so the email field keeps the row's free width. */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-        <div className="min-w-0 flex-1">
-          <label htmlFor="invite-email" className="block text-sm font-medium text-ink">Email</label>
-          <input
-            id="invite-email"
-            name="email"
-            type="email"
-            required
-            autoComplete="email"
-            placeholder="name@company.com"
-            className="mt-1 h-10 w-full rounded-lg border border-line-strong bg-ground px-3 text-sm text-ink outline-none placeholder:text-ink-3 focus:border-agent focus:ring-2 focus:ring-agent-soft"
-          />
+    <Card asChild className="space-y-3 p-4 sm:p-5">
+      <form {...formProps}>
+        <input type="hidden" name="orgSlug" value={orgSlug} />
+        {/* The fields share one row; the result sits below it, so the email field keeps the row's free width. */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <Field id="invite-email" label="Email" className="min-w-0 flex-1">
+            <Input name="email" type="email" required autoComplete="email" placeholder="name@company.com" />
+          </Field>
+          <Field id="invite-role" label="Role" className="sm:w-40">
+            <Select name="role" defaultValue={assignable[assignable.length - 1]}>
+              <SelectTrigger className="capitalize">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {assignable.map((role) => (
+                  <SelectItem key={role} value={role} className="capitalize">
+                    {role}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          <SubmitButton icon={<Send />} pendingLabel="Inviting…" className="shrink-0">
+            Invite
+          </SubmitButton>
         </div>
-        <div>
-          <label htmlFor="invite-role" className="block text-sm font-medium text-ink">Role</label>
-          <select
-            id="invite-role"
-            name="role"
-            defaultValue={assignable[assignable.length - 1]}
-            className="mt-1 h-10 w-full rounded-lg border border-line-strong bg-ground px-3 text-sm capitalize text-ink outline-none focus:border-agent focus:ring-2 focus:ring-agent-soft sm:w-auto"
-          >
-            {assignable.map((role) => (
-              <option key={role} value={role}>{role}</option>
-            ))}
-          </select>
-        </div>
-        <button
-          type="submit"
-          disabled={pending}
-          className="brand-shadow h-10 rounded-xl bg-agent px-4 text-sm font-semibold text-on-agent transition-transform hover:-translate-y-0.5 disabled:translate-y-0 disabled:opacity-70"
-        >
-          {pending ? "Inviting…" : "Invite"}
-        </button>
-      </div>
-      <div className="empty:hidden">
-        {state.message && (
-          <p aria-live="polite" className={`text-sm ${state.ok ? "text-ink-3" : "text-refused"}`}>{state.message}</p>
-        )}
-        {state.link && (
-          <div className="mt-2 flex items-center gap-2">
-            <input
-              readOnly
-              value={state.link}
-              onFocus={(event) => event.currentTarget.select()}
-              className="h-9 flex-1 rounded-lg border border-line-strong bg-ground px-3 font-mono text-xs text-ink-2"
-            />
-            <button
-              type="button"
-              onClick={copyLink}
-              className="h-9 rounded-lg border border-line-strong px-3 text-xs font-medium text-ink-2 hover:bg-raised"
-            >
-              {copied ? "Copied" : "Copy"}
-            </button>
+        <FormMessage tone="error">{state.ok ? null : state.message}</FormMessage>
+        {state.ok && state.link && (
+          <div className="rounded-xl border border-agent-line bg-agent-soft p-3">
+            <p className="text-xs font-medium text-agent">{state.message}</p>
+            <div className="mt-2 flex items-center gap-2">
+              <Input readOnly value={state.link} size="sm" aria-label="Invitation link" onFocus={(event) => event.currentTarget.select()} className="font-mono text-xs" />
+              <CopyButton value={state.link} variant="secondary">
+                Copy link
+              </CopyButton>
+            </div>
           </div>
         )}
+      </form>
+    </Card>
+  );
+}
+
+function InvitationRow({ orgSlug, invitation, onRevoked }: { orgSlug: string; invitation: OpenInvitation; onRevoked: () => void }) {
+  const formId = `revoke-${invitation.id}`;
+  const { state, pending, formProps } = useActionForm(revokeInvitationAction, INITIAL, { toastOnSuccess: true, onSuccess: onRevoked });
+
+  return (
+    <form id={formId} {...formProps} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+      <input type="hidden" name="orgSlug" value={orgSlug} />
+      <input type="hidden" name="invitationId" value={invitation.id} />
+      <div className="flex min-w-0 items-center gap-3">
+        <Avatar name={invitation.email} tone="agent" size="sm" />
+        <div className="min-w-0">
+          <p className="truncate text-sm text-ink">{invitation.email}</p>
+          <p className="text-xs capitalize text-ink-3">
+            {invitation.role} · expires {joined(invitation.expiresAt)}
+          </p>
+        </div>
+      </div>
+      <ConfirmDialog
+        formId={formId}
+        trigger={
+          <Button variant="danger" size="sm" icon={<X />} loading={pending}>
+            Revoke
+          </Button>
+        }
+        title={`Revoke the invitation for ${invitation.email}?`}
+        description="The link stops working at once. You can send a new invitation later."
+        confirmLabel="Revoke invitation"
+      />
+      <div className="w-full empty:hidden">
+        <RowError state={state} />
       </div>
     </form>
   );
 }
 
-function InvitationRow({ orgSlug, invitation }: { orgSlug: string; invitation: OpenInvitation }) {
-  const [state, action, pending] = useActionState(revokeInvitationAction, INITIAL);
-  const revoked = state.ok;
-
-  if (revoked) return null;
+function OpenInvitations({ orgSlug, invitations }: { orgSlug: string; invitations: OpenInvitation[] }) {
+  const [revoked, setRevoked] = useState<string[]>([]);
+  const shown = invitations.filter((invitation) => !revoked.includes(invitation.id));
 
   return (
-    <li className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-      <div className="min-w-0">
-        <p className="truncate text-sm text-ink">{invitation.email}</p>
-        <p className="text-xs capitalize text-ink-3">{invitation.role} · expires {joined(invitation.expiresAt)}</p>
-      </div>
-      <form action={action} className="flex items-center gap-2">
-        <input type="hidden" name="orgSlug" value={orgSlug} />
-        <input type="hidden" name="invitationId" value={invitation.id} />
-        <button
-          type="submit"
-          disabled={pending}
-          className="rounded-md border border-refused-line px-2.5 py-1 text-xs font-medium text-refused transition-colors hover:bg-refused-soft disabled:opacity-60"
-        >
-          {pending ? "Revoking…" : "Revoke"}
-        </button>
-      </form>
-      {!state.ok && state.message && <span className="text-xs text-refused">{state.message}</span>}
-    </li>
+    <section aria-labelledby="open-invitations-title">
+      <SectionHeader id="open-invitations-title" title="Open invitations" meta={`${shown.length} pending`} />
+      {shown.length === 0 ? (
+        <EmptyState compact icon={<MailCheck />} title="No invitations are waiting on a reply." />
+      ) : (
+        <Card className="overflow-hidden">
+          <ul className="divide-y divide-line">
+            <AnimatePresence initial={false}>
+              {shown.map((invitation) => (
+                <m.li key={invitation.id} layout exit={{ opacity: 0, x: -12 }} transition={EXIT}>
+                  <InvitationRow orgSlug={orgSlug} invitation={invitation} onRevoked={() => setRevoked((list) => [...list, invitation.id])} />
+                </m.li>
+              ))}
+            </AnimatePresence>
+          </ul>
+        </Card>
+      )}
+    </section>
   );
 }
 
@@ -230,73 +269,71 @@ export default function MembersPanel({
 }) {
   const isManager = assignable.length > 0;
   const router = useRouter();
-  const [leaveState, leaveAction, leavePending] = useActionState(removeMemberAction, INITIAL);
-
-  useEffect(() => {
-    if (leaveState.left) router.replace("/onboarding");
-  }, [leaveState.left, router]);
+  const leave = useActionForm(removeMemberAction, INITIAL, {
+    onSuccess: (result) => {
+      if (result.left) router.replace("/onboarding");
+    },
+  });
 
   return (
     <div className="space-y-8">
-      <section>
-        <SectionHead title="Members" meta={`${members.length} in this workspace`} />
-        <Card className="overflow-x-auto">
-          <table className="w-full min-w-[560px] text-left text-sm">
-            <thead>
-              <tr className="border-b border-line">
-                <th className="px-4 py-3"><Label>Email</Label></th>
-                <th className="px-4 py-3"><Label>Role</Label></th>
-                <th className="px-4 py-3"><Label>Joined</Label></th>
-                <th className="px-4 py-3" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-line">
-              {members.map((member) => {
-                const isSelf = member.userId === viewerId;
-                const canChange = !isSelf && canAssignRole(viewerRole, member.role);
-                return (
-                  <tr key={member.userId}>
-                    <td className="max-w-[240px] truncate px-4 py-3 text-ink">{member.email}</td>
-                    <td className="px-4 py-3">
-                      <RoleCell orgSlug={orgSlug} member={member} canChange={canChange} assignable={assignable} />
-                    </td>
-                    <td className="px-4 py-3 text-ink-2">{joined(member.joinedAt)}</td>
-                    <td className="px-4 py-3 text-right">
-                      {isSelf ? (
-                        <LeaveCell orgSlug={orgSlug} userId={member.userId} action={leaveAction} state={leaveState} pending={leavePending} />
-                      ) : canChange ? (
-                        <RemoveButton orgSlug={orgSlug} member={member} />
-                      ) : null}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+      <section aria-labelledby="members-title">
+        <SectionHeader id="members-title" title="Members" meta={`${members.length} in this workspace`} />
+        <Card className="overflow-hidden">
+          <Table className="min-w-[36rem]">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Member</TableHead>
+                <TableHead>Role</TableHead>
+                <TableHead>Joined</TableHead>
+                <TableHead>
+                  <span className="sr-only">Actions</span>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <AnimatePresence initial={false}>
+                {members.map((member) => {
+                  const isSelf = member.userId === viewerId;
+                  const canChange = !isSelf && canAssignRole(viewerRole, member.role);
+                  return (
+                    <m.tr key={member.userId} exit={{ opacity: 0 }} transition={EXIT}>
+                      <TableCell className="max-w-[20rem]">
+                        <span className="flex min-w-0 items-center gap-2.5">
+                          <Avatar name={member.email} size="sm" />
+                          <span className="truncate">{member.email}</span>
+                          {isSelf && (
+                            <Badge size="sm" tone="agent">
+                              You
+                            </Badge>
+                          )}
+                        </span>
+                      </TableCell>
+                      <TableCell>{canChange ? <RoleCell orgSlug={orgSlug} member={member} assignable={assignable} /> : <span className="capitalize">{member.role}</span>}</TableCell>
+                      <TableCell className="whitespace-nowrap text-ink-2">{joined(member.joinedAt)}</TableCell>
+                      <TableCell className="text-right">
+                        {isSelf ? (
+                          <LeaveWorkspace orgSlug={orgSlug} userId={member.userId} form={leave} />
+                        ) : canChange ? (
+                          <RemoveMember orgSlug={orgSlug} member={member} />
+                        ) : null}
+                      </TableCell>
+                    </m.tr>
+                  );
+                })}
+              </AnimatePresence>
+            </TableBody>
+          </Table>
         </Card>
       </section>
 
       {isManager && (
         <>
-          <section>
-            <SectionHead title="Invite someone" meta="the link is shown once, right after sending" />
+          <section aria-labelledby="invite-title">
+            <SectionHeader id="invite-title" title="Invite someone" meta="the link is shown once, right after sending" />
             <InviteForm orgSlug={orgSlug} assignable={assignable} />
           </section>
-
-          <section>
-            <SectionHead title="Open invitations" meta={`${invitations.length} pending`} />
-            {invitations.length === 0 ? (
-              <p className="rounded-lg border border-dashed border-line-strong px-5 py-6 text-sm text-ink-2">No invitations are waiting on a reply.</p>
-            ) : (
-              <Card>
-                <ul className="divide-y divide-line">
-                  {invitations.map((invitation) => (
-                    <InvitationRow key={invitation.id} orgSlug={orgSlug} invitation={invitation} />
-                  ))}
-                </ul>
-              </Card>
-            )}
-          </section>
+          <OpenInvitations orgSlug={orgSlug} invitations={invitations} />
         </>
       )}
     </div>
