@@ -26,7 +26,7 @@ export function Hero({ provenance, head }: { provenance: ProvenanceLeg[]; head: 
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Button asChild size="lg">
-              <Link href={"/onboarding"}>Try it with simulated money</Link>
+              <Link href={"/onboarding"}>Try it on Arc testnet</Link>
             </Button>
             <Button asChild size="lg" variant="secondary" className="bg-surface/80">
               <a href="#how-it-works">How a decision is made</a>
