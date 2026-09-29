@@ -21,7 +21,7 @@ function Credential({
   return (
     <Link
       href={href}
-      className="group min-w-0 px-3 py-4 first:pl-0 even:border-l even:border-line min-[440px]:px-5 lg:border-l lg:first:border-l-0 lg:first:pl-0"
+      className="group min-w-0 border-line px-3 py-4 first:pl-0 even:border-l min-[440px]:px-5 lg:border-l lg:first:border-l-0 lg:first:pl-0"
       {...(external ? { target: "_blank", rel: "noreferrer" } : {})}
     >
       <Verdict tone={tone}>{badge}</Verdict>

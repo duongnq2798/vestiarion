@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { HashText, Receipt, Seal, Verdict } from "@/components/landing/evidence/Evidence";
+import { Receipt, Seal, Verdict } from "@/components/landing/evidence/Evidence";
 import { cn } from "@/components/ui/cn";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { Reveal } from "@/components/ui/Reveal";
@@ -84,9 +84,7 @@ function ClaimArtifact({ index }: { index: number }) {
       <div className="min-w-0">
         <Verdict tone="proof">signed</Verdict>
         <p className="mt-3 font-mono text-xs font-semibold text-ink">Ed25519 · SHA-256</p>
-        <p className="mt-1 truncate text-xs text-ink-3">
-          <HashText value="sha256(prev_hash + body_hash + signature)" head={6} tail={9} />
-        </p>
+        <p className="mt-1 font-mono text-xs leading-relaxed text-ink-3">hash = sha256(prev ‖ body ‖ signature)</p>
       </div>
     </Receipt>
   );

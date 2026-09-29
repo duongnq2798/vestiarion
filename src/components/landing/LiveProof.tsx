@@ -119,7 +119,7 @@ async function LiveMetrics({ source }: { source: Promise<LandingMetrics> }) {
             <div className="min-w-0">
               <p className="font-mono text-xs font-semibold uppercase tracking-[0.1em] text-ink-3">Signed ledger height</p>
               <p className="mt-2 font-serif text-2xl leading-tight text-ink">
-                {hasLedger ? `Receipt #${metrics.ledgerHeight} heads the chain.` : "No receipt heads the chain yet."}
+                {hasLedger ? `${metrics.ledgerHeight} signed receipts in the chain.` : "No receipt heads the chain yet."}
               </p>
             </div>
             <Verdict tone={hasLedger ? "proof" : "held"}>{hasLedger ? "signed" : "empty"}</Verdict>
