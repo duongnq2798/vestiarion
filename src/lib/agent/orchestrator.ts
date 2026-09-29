@@ -24,7 +24,7 @@ import {
   findDuplicates,
   type InvoiceLike,
 } from "./duplicates";
-import { followUpConfig, planFollowUp, type DecisionFacts } from "./follow-up";
+import { followUpConfig, planFollowUp, type DecisionFacts, type FollowUpConfig, type FollowUpPlan } from "./follow-up";
 import { OPEN_PAYABLE_STATUSES, summarizePayableObligations } from "./obligations";
 import { planTreasury, type TreasuryDecision } from "./treasury";
 import { plural } from "../copy";
@@ -112,6 +112,69 @@ function performanceEvidence(
     status: score == null ? "no_history_yet" : "measured_from_ledger",
     inputs: inputs ?? emptyCounterpartyHistory(),
     note: "Historical evidence for closer review, not a verdict or payment guardrail.",
+  };
+}
+
+/**
+ * The follow-up stage's write for one frozen invoice it chose to reopen or
+ * escalate, its ledger entry and its cycle line — or nothing at all when the
+ * invoice no longer has the status the stage read it with.
+ *
+ * The write is a compare-and-set on that status (spec D5): a person may have
+ * claimed the invoice from the approvals inbox between the stage's read and
+ * this write, and an unconditional update would put a `processing` row back
+ * to `pending` for the AP stage to decide over the person's own decision.
+ * When no row matches, the person's decision stands, and the stage records
+ * nothing for that invoice. Exported so this seam is testable without a full
+ * cycle, like `payApInvoiceIfNotPaused` below.
+ */
+export async function applyFollowUp(
+  orgDb: OrgDb,
+  row: { id: string; status: string; amount: number },
+  plan: FollowUpPlan,
+  followUp: FollowUpConfig,
+  now: number
+): Promise<CycleLogLine | null> {
+  if (plan.action === "wait") return null;
+
+  const changed = unwrap(
+    await orgDb
+      .from("invoices")
+      .update(plan.action === "reopen" ? { status: "pending" } : { escalated_at: new Date(now).toISOString() })
+      .eq("id", row.id)
+      .eq("status", row.status)
+      .select("id")
+  ) as Array<{ id: string }>;
+  if (changed.length === 0) return null;
+
+  await appendLedgerEntry({
+    actor: "agent",
+    domain: "ap",
+    action: plan.action === "reopen" ? "invoice_reopened" : "invoice_escalated",
+    summary:
+      plan.action === "reopen"
+        ? `Reopened ${row.status.replace("_", " ")} invoice for ${row.amount} USDC: evidence changed`
+        : `Escalated ${row.status.replace("_", " ")} invoice for ${row.amount} USDC to a human`,
+    detail: {
+      invoiceId: row.id,
+      followUp: {
+        action: plan.action,
+        reason: plan.reason,
+        changes: plan.changes,
+        ageDays: plan.ageDays == null ? null : Number(plan.ageDays.toFixed(2)),
+        pastDue: plan.pastDue,
+        staleAfterDays: followUp.staleAfterDays,
+      },
+      previousStatus: row.status,
+    },
+  });
+
+  return {
+    domain: "ap",
+    message:
+      plan.action === "reopen"
+        ? `Reopened ${row.amount} USDC invoice: ${plan.changes.join("; ") || "no recorded decision facts"}`
+        : `Escalated ${row.amount} USDC invoice for human review`,
   };
 }
 
@@ -655,41 +718,8 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
 
       if (plan.action === "wait") continue;
 
-      const update =
-        plan.action === "reopen"
-          ? await db.from("invoices").update({ status: "pending" }).eq("id", row.id)
-          : await db.from("invoices").update({ escalated_at: new Date(now).toISOString() }).eq("id", row.id);
-      if (update.error) throw new Error(update.error.message);
-
-      await appendLedgerEntry({
-        actor: "agent",
-        domain: "ap",
-        action: plan.action === "reopen" ? "invoice_reopened" : "invoice_escalated",
-        summary:
-          plan.action === "reopen"
-            ? `Reopened ${row.status.replace("_", " ")} invoice for ${num(row.amount)} USDC: evidence changed`
-            : `Escalated ${row.status.replace("_", " ")} invoice for ${num(row.amount)} USDC to a human`,
-        detail: {
-          invoiceId: row.id,
-          followUp: {
-            action: plan.action,
-            reason: plan.reason,
-            changes: plan.changes,
-            ageDays: plan.ageDays == null ? null : Number(plan.ageDays.toFixed(2)),
-            pastDue: plan.pastDue,
-            staleAfterDays: followUp.staleAfterDays,
-          },
-          previousStatus: row.status,
-        },
-      });
-
-      lines.push({
-        domain: "ap",
-        message:
-          plan.action === "reopen"
-            ? `Reopened ${num(row.amount)} USDC invoice: ${plan.changes.join("; ") || "no recorded decision facts"}`
-            : `Escalated ${num(row.amount)} USDC invoice for human review`,
-      });
+      const line = await applyFollowUp(db, { id: row.id, status: row.status, amount: num(row.amount) }, plan, followUp, now);
+      if (line) lines.push(line);
     }
   }
 

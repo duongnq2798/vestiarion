@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { currentOrgId, runWith } from "@/lib/context";
 import { runLiveOrganizations } from "@/lib/agent/cron";
+import { AgentPausedError } from "@/lib/agent/pause";
 import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 
 const A = "5d0f3a2e-8c1b-4f7a-9e6d-00000000a000";
@@ -96,5 +97,23 @@ describe("runLiveOrganizations", () => {
     ]);
     // c-corp's scope was never entered: run only ever saw A.
     expect(seen).toEqual([A]);
+  });
+
+  it("reports an organization paused between the listing and begin_cycle_run as skipped, not failed", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const fake = fakeSupabase(liveOrgsDatabase);
+    const run = async () => {
+      // begin_cycle_run refuses once the pause has landed; runAgentCycle raises this.
+      if (currentOrgId() === B) throw new AgentPausedError();
+      return "ok";
+    };
+
+    const results = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => runLiveOrganizations(run));
+
+    expect(results).toEqual([
+      { slug: "a-corp", ok: true, result: "ok" },
+      { slug: "b-corp", ok: true, skipped: "paused" },
+    ]);
+    expect(error).not.toHaveBeenCalled();
   });
 });

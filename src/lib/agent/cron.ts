@@ -1,5 +1,6 @@
 import { platformDb, unwrap } from "../dal";
 import { withOrg } from "../dal/scope";
+import { AgentPausedError } from "./pause";
 
 /** The `orgs` columns the cron needs to enter each organization's scope,
  * name it in a result, and tell whether its agent is paused. */
@@ -23,7 +24,9 @@ export type CronRunResult<T> =
  * A paused organization is skipped outright — `run` never executes and its
  * scope is never entered — rather than relying on `begin_cycle_run` to
  * refuse it: the pause must stop the cron from doing anything, not merely
- * from opening a run.
+ * from opening a run. A pause that lands after this listing but before
+ * `begin_cycle_run` is refused there instead; that `AgentPausedError` is the
+ * same correct refusal, so it is reported as skipped, not as a failure.
  */
 export async function runLiveOrganizations<T>(run: () => Promise<T>): Promise<CronRunResult<T>[]> {
   const orgs = unwrap(
@@ -40,6 +43,10 @@ export async function runLiveOrganizations<T>(run: () => Promise<T>): Promise<Cr
       const result = await withOrg(org.id, run);
       results.push({ slug: org.slug, ok: true, result });
     } catch (error) {
+      if (error instanceof AgentPausedError) {
+        results.push({ slug: org.slug, ok: true, skipped: "paused" });
+        continue;
+      }
       console.error("cycle failed for", org.slug, error);
       results.push({ slug: org.slug, ok: false, error: error instanceof Error ? error.message : String(error) });
     }
