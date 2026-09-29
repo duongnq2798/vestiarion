@@ -18,6 +18,7 @@ describe("a reference page's sections", () => {
   it("are the fixed sections in page order, with their ids", () => {
     expect(referenceHeadings(null).map((heading) => [heading.text, heading.id])).toEqual([
       ["Parameters", "parameters"],
+      ["Try it", "try-it"],
       ["Code samples", "code-samples"],
       ["Response", "response"],
       ["Errors", "errors"],
@@ -28,7 +29,7 @@ describe("a reference page's sections", () => {
 
   it("add Notes and the notes' headings, numbered as one page so no id repeats", () => {
     const headings = referenceHeadings("Some notes.\n\n## Response\n\n### The `cursor`\n");
-    expect(headings.map((heading) => heading.id)).toEqual(["parameters", "code-samples", "response", "errors", "notes", "response-2", "the-cursor"]);
+    expect(headings.map((heading) => heading.id)).toEqual(["parameters", "try-it", "code-samples", "response", "errors", "notes", "response-2", "the-cursor"]);
     expect(notesHeadings(headings).map((heading) => heading.id)).toEqual(["response-2", "the-cursor"]);
   });
 });

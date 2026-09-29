@@ -10,6 +10,7 @@ import { ErrorTable } from "@/components/docs/ErrorTable";
 import { CODE_CLASS, LINK_CLASS, Paragraphs } from "@/components/docs/InlineText";
 import { ParamTable } from "@/components/docs/ParamTable";
 import { SchemaTree } from "@/components/docs/SchemaTree";
+import TryIt from "@/components/docs/TryIt";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { jsonSchema, OPERATIONS, operationById } from "@/lib/api/openapi";
 import { loadNotes } from "@/lib/docs/content";
@@ -77,7 +78,8 @@ export default async function ApiReferencePage({ params }: Props) {
       <Section section="parameters" />
       <ParamTable params={op.params} />
 
-      {/* "Try it" goes here, between the parameters and the samples; its heading joins the sections in @/lib/docs/reference with it. */}
+      <Section section="tryIt" />
+      <TryIt op={{ id: op.id, path: op.path, params: op.params }} />
 
       <Section section="samples" />
       <CodeSamples samples={sampleRequest(op, publicOrigin())} />

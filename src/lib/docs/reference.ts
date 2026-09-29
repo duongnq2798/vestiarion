@@ -11,6 +11,7 @@ import { slugify, slugifyHeadings, type Heading } from "./headings";
 
 export const REFERENCE_SECTIONS = {
   parameters: "Parameters",
+  tryIt: "Try it",
   samples: "Code samples",
   response: "Response",
   errors: "Errors",
@@ -23,7 +24,7 @@ export type ReferenceSection = keyof typeof REFERENCE_SECTIONS;
  * The sections every reference page has, in page order; "Notes" follows only
  * when there are notes. A section joins this list when the page renders it.
  */
-const ALWAYS: ReferenceSection[] = ["parameters", "samples", "response", "errors"];
+const ALWAYS: ReferenceSection[] = ["parameters", "tryIt", "samples", "response", "errors"];
 
 /** A section's anchor. The fixed sections come first and are distinct, so each keeps its plain slug. */
 export function sectionId(section: ReferenceSection): string {
