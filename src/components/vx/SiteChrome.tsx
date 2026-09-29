@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
+import { cn } from "@/components/ui/cn";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { BrandMark } from "./Brand";
 import { SiteMenu } from "./SiteMenu";
@@ -27,12 +28,33 @@ function Wordmark() {
   );
 }
 
-/** `landing` adds the section links, sign-in and the console call to action; `children` fill the right side otherwise. */
-export function SiteHeader({ landing = false, children }: { landing?: boolean; children?: ReactNode }) {
+/**
+ * `landing` adds the section links, sign-in and the console call to action; `children` fill the right side otherwise.
+ * `section` names the part of the site beside the wordmark ("Docs"); `wide` matches a page wider than the landing column.
+ */
+export function SiteHeader({
+  landing = false,
+  section,
+  wide = false,
+  children,
+}: {
+  landing?: boolean;
+  section?: { href: string; label: string };
+  wide?: boolean;
+  children?: ReactNode;
+}) {
   return (
     <header className="sticky top-0 z-50 border-b border-line/80 bg-surface/88 backdrop-blur-xl">
-      <div className="mx-auto flex h-16 max-w-6xl items-center gap-3 px-4 sm:px-6">
+      <div className={cn("mx-auto flex h-16 items-center gap-3 px-4 sm:px-6", wide ? "max-w-[88rem]" : "max-w-6xl")}>
         <Wordmark />
+        {section && (
+          <Link
+            href={section.href}
+            className="border-l border-line pl-3 font-mono text-[0.8125rem] font-semibold uppercase tracking-[0.2em] text-agent transition-colors duration-150 ease-standard hover:text-ink"
+          >
+            {section.label}
+          </Link>
+        )}
         {landing && (
           <nav aria-label="Site" className="mx-auto hidden md:block">
             <ul className="flex items-center gap-1">
