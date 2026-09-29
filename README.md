@@ -129,9 +129,18 @@ scripts/                  Tenant scripts require an organization slug
 src/app/                  Evidence-first landing page at `/`; working treasury
                            console at `/console`, plus AP/AR, Contractors,
                            Compliance, Audit Log, and database-backed Insights
-src/app/api/v1/           Authenticated read API for bots, MCP servers and
-                           anything else consuming Vestiarion
+src/app/api/v1/           Read API for bots, MCP servers and anything else
+                           consuming Vestiarion, authenticated with a
+                           workspace API key
+src/lib/platform/api-keys.ts  Key generation and hashing, listing and
+                               revocation; only sha256(secret) is ever stored
 ```
+
+Each workspace creates and revokes its own read-only API keys on
+`/o/<slug>/settings` (owner or admin only; see [docs/api.md](docs/api.md)). A
+key is shown once, in full, right after it is created, and authenticates
+`/api/v1` requests for that workspace alone — there is no shared or
+platform-wide credential on that surface.
 
 ## Running it
 

@@ -1,11 +1,25 @@
 # Vestiarion read API
 
-The read API is served under `/api/v1`. Every request requires the configured
-agent token:
+The read API is served under `/api/v1`. Every request authenticates with a
+workspace API key — an owner or admin creates one on that workspace's Settings
+page (`/o/<slug>/settings`), where it is shown once, in full, right after
+creation. A key reads only the workspace it belongs to; there is no
+cross-workspace or platform-wide credential on this surface.
 
 ```http
-Authorization: Bearer <AGENT_API_TOKEN>
+Authorization: Bearer vxk_<prefix>_<secret>
 ```
+
+```bash
+curl -H "Authorization: Bearer vxk_kg7n2pqa_hZ2m1s0Vw3fJ9k…" \
+  https://your-deployment.example/api/v1/status
+```
+
+A missing, malformed, unknown, or revoked key all answer the same
+`401 unauthorized` — with no detail about which, so a caller cannot use the
+error to enumerate keys. A key whose scopes do not cover the route answers
+`403 forbidden`; today every key is issued with the single `read` scope, so
+this is future-facing rather than a case a normal key hits.
 
 Successes use `{ "data": ... }`. Collections also include a `page` object.
 Errors use `{ "error": { "code": "...", "message": "..." } }`. All examples
@@ -34,11 +48,10 @@ No parameters. Reports safe configuration descriptors and operating modes;
 secrets are never included.
 
 `provenance.payments` and `provenance.yield` are each `live`, `simulate`, or
-`unavailable`. `unavailable` means the founding organization's Circle
-credentials are stored but cannot be read — sealed under a master key this
-deployment does not hold, for example. A cycle refuses to pay in that state
-rather than fall back to simulation, so status does not report it as
-`simulate`.
+`unavailable`. `unavailable` means the workspace's Circle credentials are
+stored but cannot be read — sealed under a master key this deployment does
+not hold, for example. A cycle refuses to pay in that state rather than fall
+back to simulation, so status does not report it as `simulate`.
 
 ```json
 {"data":{"businessName":"Vestiarion workspace","provenance":{"payments":"live","yield":"simulate","screening":"simulate"},"clock":{"mode":"simulate","day":25,"lastCycleAt":"2026-09-24T18:33:04.546517+00:00"},"totals":{"decisionsLogged":77,"totalPaidOut":4.815,"flagged":1},"configuration":{"businessName":"Vestiarion workspace","database":{"host":"your-project.supabase.co","tenantAccessConfigured":true},"chain":{"circleConfigured":true,"arcRpcConfigured":false},"llm":{"pinned":null,"available":["deepseek"]},"compliance":{"mode":"bundled","rescreenIntervalHours":0},"followUp":{"staleAfterDays":3,"reEscalateAfterDays":7},"ledgerSigningKeyProvided":false,"githubTokenProvided":false,"clockMode":"simulate"},"apiVersion":"v1"}}
@@ -75,7 +88,7 @@ never silently restarts from the beginning.
 ## `GET /api/v1/ledger/verify`
 
 No parameters. Replays signatures, body hashes, and hash-chain continuity for
-the founding organization, the one this token reads (§4.5).
+the workspace the calling key belongs to.
 
 ```json
 {"data":{"valid":true,"checkedEntries":99}}
@@ -83,8 +96,8 @@ the founding organization, the one this token reads (§4.5).
 
 `valid` has three values, not two. `true` verified and `false` broken are
 findings about the chain; **`null` means no verdict was produced** — the
-founding organization has no ledger public key to check against, so
-authorship was never checked. A consumer that treats `null` as a failure will
+workspace has no ledger public key to check against, so authorship was never
+checked. A consumer that treats `null` as a failure will
 report a tampered audit trail because a key was never adopted onto the
 organization. `reason` says which case it is, and `brokenAt` is absent
 whenever `valid` is `null`.
@@ -110,16 +123,17 @@ different: signing has no fallback, so a cycle still fails loudly on the same
 broken key.
 
 Every organization's ledger signing key lives encrypted on its own `orgs` row,
-decrypted with `VESTIARION_MASTER_KEYS` (§5.4) — adopted once with
-`npm run org:adopt-env -- founding --expect-key-id 9b03458d9a617871`, never
-read from `LEDGER_PUBLIC_KEY` or `LEDGER_SIGNING_KEY` directly. `GET
-/api/v1/status` reports the founding organization's own configuration:
+decrypted with `VESTIARION_MASTER_KEYS` (§5.4) — adopted once per workspace
+with `npm run org:adopt-env -- <org-slug> --expect-key-id <id>`, never read
+from `LEDGER_PUBLIC_KEY` or `LEDGER_SIGNING_KEY` directly. `GET
+/api/v1/status` reports the calling key's own workspace configuration:
 `ledgerSigningKeyProvided` is the flag that reflects whether its stored key
 was read; `ledgerPublicKeyProvided` is always `false` inside an organization,
 because the public half is derived from the stored signing key rather than
 configured on its own. `ledgerRetiredKeyCount` says how many earlier keys the
-founding organization still accepts — `LEDGER_RETIRED_PUBLIC_KEYS` is still
-read from the environment, and applies to the founding organization only.
+workspace still accepts — `LEDGER_RETIRED_PUBLIC_KEYS` is a deployment-wide
+environment setting, applied the same way to every organization's
+verification.
 
 ### Key identity and rotation
 
@@ -243,8 +257,8 @@ response contained additional transfer, run, snapshot, and screening rows.
 | HTTP | Code | Meaning |
 | --- | --- | --- |
 | 400 | `invalid_request` | Invalid limit, cursor, or enumerated filter. The message lists accepted enum values. |
-| 401 | `unauthorized` | Missing or invalid bearer token. |
-| 403 | `forbidden` | The authenticated token lacks the required scope. Reserved for scoped-token deployments. |
+| 401 | `unauthorized` | No key, or a malformed, unknown, or revoked one. "A valid API key is required." |
+| 403 | `forbidden` | The key's scopes do not cover the route. "This key cannot do that." |
 | 404 | `not_found` | A requested singleton-by-ID resource does not exist. |
 | 429 | `rate_limited` | Request quota exceeded; inspect `Retry-After`. |
 | 503 | `unavailable` | A required upstream service is unavailable. |

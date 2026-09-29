@@ -72,19 +72,21 @@ and `milestones.created_by` become null, and the invitations the person sent are
 
 **The permission map** (spec §7) lives as data in `src/lib/auth/roles.ts` — `PERMISSIONS` maps each
 of `workspace.read`, `agent.pause`, `approval.decide`, `records.write`, `agent.run_cycle`,
-`agent.resume`, `members.manage`, and `org.administer` to the roles that hold it — and is enforced
-at the boundary through `authorize(slug, permission)` (`src/lib/auth/authorize.ts`), which
-re-derives the caller's membership and role from the session rather than trusting anything the form
-claims; a page can call the read-only `viewerCan` to decide whether to render a control at all.
+`agent.resume`, `members.manage`, `api_keys.manage`, and `org.administer` to the roles that hold it
+— and is enforced at the boundary through `authorize(slug, permission)` (`src/lib/auth/authorize.ts`),
+which re-derives the caller's membership and role from the session rather than trusting anything the
+form claims; a page can call the read-only `viewerCan` to decide whether to render a control at all.
 Actions call it for `records.write` (`src/app/actions/intake.ts`, `src/app/actions/milestones.ts`),
 `agent.run_cycle`, `agent.pause` and `agent.resume` (`src/app/actions/agent.ts`), `approval.decide`
-(`src/app/actions/approvals.ts`), and `members.manage` (`src/app/actions/members.ts`, for inviting,
+(`src/app/actions/approvals.ts`), `members.manage` (`src/app/actions/members.ts`, for inviting,
 changing a role, revoking an invitation, and removing someone other than yourself — `owner` and
 `admin` hold it; leaving a workspace yourself needs only `workspace.read`, since it is open to every
-member). The remaining permissions — `workspace.read` (beyond the leaving case above) and
-`org.administer` — and `canAssignRole`'s rule that an admin may grant `approver` or `viewer` but
-nothing at its own rank or above while only an owner assigns `admin` or `owner`, are defined in
-`roles.ts` ahead of the feature that will call `org.administer`.
+member), and `api_keys.manage` (`src/app/actions/api-keys.ts`, for creating and revoking a
+workspace's own API keys — `owner` and `admin` hold it; every other member sees the list on
+`/o/[slug]/settings` without the controls). The remaining permissions — `workspace.read` (beyond
+the leaving case above) and `org.administer` — and `canAssignRole`'s rule that an admin may grant
+`approver` or `viewer` but nothing at its own rank or above while only an owner assigns `admin` or
+`owner`, are defined in `roles.ts` ahead of the feature that will call `org.administer`.
 
 **Members and invitations** (spec §7, §10 step 5b) go through service-role-only functions in
 migration `0021`, each told who is acting and re-deriving that person's role inside its own
@@ -291,7 +293,15 @@ insights/route.ts                unchanged insights telemetry read model
 
 `src/lib/api/contract.ts` owns the success/error envelopes, error codes,
 opaque cursors, page-size policy, and `limit + 1` pagination. Every v1 route
-passes through `src/lib/api/guard.ts` with read scope. Resource-specific pure
+passes through `guardApiRequest` (`src/lib/api/guard.ts`) with the `read`
+scope: it authenticates the bearer token as a workspace API key
+(`src/lib/platform/api-keys.ts`, migration `0027_api_keys.sql`) and, on
+success, `handleApiRequest` runs the route inside `withOrg(key.orgId)`, so a
+key serves exactly one workspace's data. A missing, malformed, unknown, or
+revoked key answers `401 unauthorized`; a key without the route's scope
+answers `403 forbidden`. `AGENT_API_TOKEN` does not authenticate this surface
+— it remains only the cron secret for `/api/agent/tick`,
+`/api/platform/cleanup`, and `/api/agent/reset`. Resource-specific pure
 mapping and validation live in `src/lib/api/counterparties.ts`,
 `src/lib/api/milestones.ts`, and `src/lib/api/treasury.ts` so null preservation
 and chain-hash rules can be tested without a database.
@@ -314,7 +324,9 @@ reported as zero.
 
 ## Verification
 
-Pure contract and payload behavior is covered by `tests/api-contract.test.ts`.
-`npm run verify` runs lockfile consistency, TypeScript, lint, and the complete
-Vitest suite. `npm run build` validates the production route graph. Live API
-checks use the local app plus a real `AGENT_API_TOKEN` and Supabase data.
+Pure contract and payload behavior is covered by `tests/api-contract.test.ts`;
+authentication and per-workspace scoping are covered by
+`tests/api-key-scope.test.ts`. `npm run verify` runs lockfile consistency,
+TypeScript, lint, and the complete Vitest suite. `npm run build` validates the
+production route graph. Live API checks use the local app plus a real
+workspace API key (created on `/o/<slug>/settings`) and Supabase data.
