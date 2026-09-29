@@ -75,9 +75,14 @@ const PALETTE_UTILITY = new RegExp(`(?<![\\w-])(?:${COLOUR_UTILITY})-(?:(?:${PAL
  */
 const OFF_SCALE_RADIUS = /(?<![\w-])rounded(?:-(?:t|r|b|l|s|e|tl|tr|br|bl|ss|se|ee|es))?(?:-xs|-sm|-3xl|-4xl|-\[[^\]]*\])?(?![\w-])/g;
 
-/** The radius scan's rule: a match counts only when it sits inside a quoted string on its line (a `className` or a `cva` entry) — an odd number of quote characters before it, not the English word in prose. */
+/**
+ * The radius scan's rule: a match counts only when it sits inside a quoted string on its line (a `className` or a
+ * `cva` entry) — an odd number of double quotes or backticks before it, not the English word in prose. Class
+ * strings here are always double-quoted or templated, so an apostrophe in an earlier attribute or in a comment
+ * does not flip the count.
+ */
 function insideQuotedString(lineBefore: string): boolean {
-  return (lineBefore.match(/["'`]/g)?.length ?? 0) % 2 === 1;
+  return (lineBefore.match(/["`]/g)?.length ?? 0) % 2 === 1;
 }
 
 /** Mirrors the radius scan's combined rule (pattern match, then the quoted-string keep) against a single line, for probing without touching the filesystem. */
@@ -197,6 +202,8 @@ describe("the patterns themselves", () => {
     expect(radiusOffence(">Figures are rounded to the cent<")).toBe(false);
     expect(radiusOffence('className="rounded p-2"')).toBe(true);
     expect(radiusOffence('cn("rounded-sm")')).toBe(true);
+    expect(radiusOffence(`<button title="Editor's picks" className="rounded">Save</button>`)).toBe(true);
+    expect(radiusOffence("// A borrower's payment is rounded to the cent.")).toBe(false);
   });
 
   it("REMOVED_UTILITY catches a removed shadow utility, and leaves its replacement tokens alone", () => {
