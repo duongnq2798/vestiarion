@@ -32,7 +32,12 @@ export function firstSentence(text: string | null, max: number = DIGEST_REASON_M
   if (text === null) return null;
   const withoutBrackets = text.replace(/\s*\[[^\]]*\]/g, "").replace(/\s+/g, " ").trim();
   if (withoutBrackets === "") return null;
-  const match = withoutBrackets.match(/^[^.!?]*[.!?]?/);
+  // A sentence ends at `.`, `!` or `?` followed by whitespace or the end of
+  // the text — not at any `.`, so a decimal amount ("150.5 USDC") doesn't
+  // end it. An abbreviation followed by a space ("Corp. is") still reads as
+  // an ending here; accepted, since there is no reliable way to tell the two
+  // apart from the text alone.
+  const match = withoutBrackets.match(/^.*?[.!?](?=\s|$)/s);
   const sentence = (match ? match[0] : withoutBrackets).trim();
   if (sentence.length <= max) return sentence;
   return `${sentence.slice(0, Math.max(0, max - 1)).trimEnd()}…`;

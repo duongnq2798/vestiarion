@@ -41,6 +41,28 @@ describe("firstSentence", () => {
     const result = firstSentence(long);
     expect((result as string).length).toBe(DIGEST_REASON_MAX);
   });
+
+  it("does not cut at a decimal point", () => {
+    const reason = "Invoice amount 150.5 USDC exceeds Acme Supplies's payment limit of 100 USDC.";
+    expect(firstSentence(reason)).toBe(reason);
+  });
+
+  it("does not cut at a decimal point earlier in the sentence", () => {
+    const reason = "Invoice amount 1250 USDC exceeds Acme's payment limit of 1000.25 USDC. Held.";
+    expect(firstSentence(reason)).toBe("Invoice amount 1250 USDC exceeds Acme's payment limit of 1000.25 USDC.");
+  });
+
+  // A sentence ends at a terminator followed by whitespace or the end of the
+  // text, so `Corp.` followed by a space still counts as an ending — an
+  // abbreviation mid-sentence is still cut short here. Accepted trade-off.
+  it("still cuts short at an abbreviation followed by a space", () => {
+    expect(firstSentence("Acme Corp. is flagged high risk by compliance screening.")).toBe("Acme Corp.");
+  });
+
+  it("returns the whole string when there is no terminator", () => {
+    const reason = "Held for review pending more information";
+    expect(firstSentence(reason)).toBe(reason);
+  });
 });
 
 describe("waitingDigestEmail", () => {
@@ -140,5 +162,17 @@ describe("waitingDigestEmail", () => {
     const email = waitingDigestEmail({ orgName: `<b>Acme</b>`, items: [item()], link, origin });
     expect(email.html).not.toContain("<b>Acme</b>");
     expect(email.html).toContain("&lt;b&gt;Acme&lt;/b&gt;");
+  });
+
+  it("escapes the reason line in the HTML", () => {
+    const email = waitingDigestEmail({
+      orgName: "Acme",
+      items: [item({ reason: "Flagged: <b>suspicious</b> counterparty." })],
+      link,
+      origin,
+    });
+    expect(email.html).not.toContain("<b>suspicious</b>");
+    expect(email.html).toContain("&lt;b&gt;suspicious&lt;/b&gt;");
+    expect(email.text).toContain("Flagged: <b>suspicious</b> counterparty.");
   });
 });
