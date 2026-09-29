@@ -28,7 +28,7 @@ Decided on 2026-09-29 by the implementer under the partner's standing instructio
   - Right after each scheduled tick finishes its cycles.
   - By a GitHub Actions schedule every 10 minutes, which calls `POST /api/platform/webhooks` with the platform token. The token is still the cron secret.
   - Latency is therefore at most about 10 minutes, and usually less for cycle events.
-  - No sending happens inside a person's request.
+  - The one exception is a test event: a person asks for it and waits on it, so it is sent inside their own request, as a single attempt of up to about 10 seconds, never retried.
 - **W4. The signature.** Each request carries these headers:
   - `Vestiarion-Event-Id: <uuid>`, one per event, the same on every retry;
   - `Vestiarion-Event-Type`;

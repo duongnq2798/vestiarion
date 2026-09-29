@@ -72,7 +72,7 @@ and `milestones.created_by` become null, and the invitations the person sent are
 
 **The permission map** (spec §7) lives as data in `src/lib/auth/roles.ts` — `PERMISSIONS` maps each
 of `workspace.read`, `agent.pause`, `approval.decide`, `records.write`, `agent.run_cycle`,
-`agent.resume`, `members.manage`, `api_keys.manage`, and `org.administer` to the roles that hold it
+`agent.resume`, `members.manage`, `api_keys.manage`, `webhooks.manage`, and `org.administer` to the roles that hold it
 — and is enforced at the boundary through `authorize(slug, permission)` (`src/lib/auth/authorize.ts`),
 which re-derives the caller's membership and role from the session rather than trusting anything the
 form claims; a page can call the read-only `viewerCan` to decide whether to render a control at all.
@@ -81,9 +81,12 @@ Actions call it for `records.write` (`src/app/actions/intake.ts`, `src/app/actio
 (`src/app/actions/approvals.ts`), `members.manage` (`src/app/actions/members.ts`, for inviting,
 changing a role, revoking an invitation, and removing someone other than yourself — `owner` and
 `admin` hold it; leaving a workspace yourself needs only `workspace.read`, since it is open to every
-member), and `api_keys.manage` (`src/app/actions/api-keys.ts`, for creating and revoking a
+member), `api_keys.manage` (`src/app/actions/api-keys.ts`, for creating and revoking a
 workspace's own API keys — `owner` and `admin` hold it; every other member sees the list on
-`/o/[slug]/settings` without the controls). The remaining permissions — `workspace.read` (beyond
+`/o/[slug]/settings` without the controls), and `webhooks.manage` (`src/app/actions/webhooks.ts`,
+for adding, testing and removing a workspace's own webhook endpoints — `owner` and `admin` hold it;
+every other member sees the endpoint list with each URL reduced to its host — see
+[docs/webhooks.md](docs/webhooks.md)). The remaining permissions — `workspace.read` (beyond
 the leaving case above) and `org.administer` — and `canAssignRole`'s rule that an admin may grant
 `approver` or `viewer` but nothing at its own rank or above while only an owner assigns `admin` or
 `owner`, are defined in `roles.ts` ahead of the feature that will call `org.administer`.
@@ -318,6 +321,23 @@ is ascending and, within one organization, a correct resume watermark even
 though it runs with gaps — continuity is proven by the hash chain, not by
 `seq`. The legacy `src/app/api/ledger/verify/route.ts` still serves the Audit
 page; it is member-only and takes `?org=<slug>` (see `docs/api.md`).
+
+## Webhooks
+
+Where the read API is pulled, webhooks push: a workspace registers its own
+HTTPS endpoints (`webhooks.manage`, above) and each new `ledger_entries` row
+reaches them without polling. An `after insert` trigger on `ledger_entries`
+(migration `0028`) enqueues one `webhook_deliveries` row per active endpoint,
+in the same transaction as the append, so enqueueing can never be skipped or
+duplicated relative to the entry it is for. A dispatcher
+(`deliverPendingWebhooks`, `src/lib/webhooks/deliver.ts`) claims due rows and
+sends each one HMAC-signed, running right after every scheduled tick and
+again on a 10-minute schedule (`POST /api/platform/webhooks`). Every address a
+destination resolves to is checked against the same public-only rule at send
+time as when the endpoint was added, which closes the DNS-rebinding gap a
+one-time check would leave. Full detail — the payload, retries, the endpoint
+limit, and how to verify both the delivery's signature and the ledger entry's
+own — is in [docs/webhooks.md](docs/webhooks.md).
 
 ## Data ownership
 
