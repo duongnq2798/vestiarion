@@ -186,6 +186,27 @@ A test event has `"type": "webhook.test"` and no `entry`.
    - the entry's Ed25519 signature verifies.
 3. Record the outcome here.
 
+### Rollout record (2026-09-29)
+
+- **Before the merge.** `0028` was applied to production. The probe showed:
+  - RLS on both tables with no policies;
+  - the tables and all four functions reachable by the service role only (tenant, authenticated and anon refused);
+  - every function `security definer` with an empty `search_path`;
+  - the trigger `ledger_entries_enqueue_webhooks` attached;
+  - no endpoints.
+- **Merged** as #35 with CI green. After the deploy, `POST /api/platform/webhooks` answers 401 with no token and with a wrong one.
+- **The test event.** An endpoint was added in `note-one`, pointing at a webhook.site inbox the partner controls. The test event arrived at once (`Vestiarion-Event-Type: webhook.test`, `User-Agent: Vestiarion-Webhooks/1`).
+- **Ledger events.** Instead of a cycle, the partner resumed and paused the agent, since `note-one` stays paused. That appended entries, including `agent_paused` at seq 293.
+  - The 10-minute schedule had not fired yet: GitHub runs a newly added schedule only after a delay. So the dispatcher workflow was started once by hand, and it reported `{"delivered":7,"failed":0,"retried":0}`.
+  - All 7 `ledger.appended` deliveries were delivered on the first attempt, and each arrived at the inbox.
+- **Signatures.**
+  - **Ed25519.** The payload of seq 293 matches the production row field for field: `bodyHash`, `hash`, `signature` and `signingKeyId`. That row is part of the chain the Audit page verifies.
+  - **HMAC.** The partner verified a test delivery's `Vestiarion-Signature` with the Node snippet from `docs/webhooks.md`, and both the 5-minute check and the ageless check returned `true`.
+- **Removing and re-adding** (the path a lost secret takes) worked:
+  - `webhook_endpoint_created` ×2 and `webhook_endpoint_removed` ×1 were recorded, with no URL in any entry's detail;
+  - the removed endpoint received nothing more.
+- **Open.** The first scheduled run of `webhooks.yml` was still pending when this was recorded. One delivery, the second endpoint's own `webhook_endpoint_created`, was waiting for it.
+
 ## 9. Out of scope
 
 - Per-endpoint event filters.
