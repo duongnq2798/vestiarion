@@ -4,8 +4,16 @@ import AgentControls from "@/components/AgentControls";
 import VerifyLedgerBadge from "@/components/VerifyLedgerBadge";
 import { AuditLedger, DomainFilter, pad } from "@/components/vx/AuditLedger";
 import { DOMAINS } from "@/components/vx/Glyphs";
-import { Hash, Label } from "@/components/vx/Primitives";
-import { EmptyState, PageHead, ProductShell } from "@/components/vx/Shell";
+import { ArrowRight, ScrollText, SearchX } from "lucide-react";
+import { Button } from "@/components/ui/Button";
+import { Callout } from "@/components/ui/Callout";
+import { Card } from "@/components/ui/Card";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { Disclosure } from "@/components/ui/Disclosure";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { Eyebrow } from "@/components/ui/Eyebrow";
+import { Hash } from "@/components/vx/Primitives";
+import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { sectionTitle } from "@/components/vx/nav";
 import type { Domain } from "@/components/vx/types";
 import { requireMembership } from "@/lib/auth/membership";
@@ -62,36 +70,70 @@ export default async function AuditPage({ params, searchParams }: AuditPageProps
           right={<AgentControls orgSlug={slug} nextDay={dashboardStats.day + 1} headSeq={head?.seq ?? 0} clockMode={dashboardStats.clockMode} />}
         />
 
-        <section aria-label="Hash chain" className="surface-shadow mb-6 rounded-2xl border border-line bg-surface p-4 sm:p-6">
-          <dl className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
-            <div><dt><Label>Entries</Label></dt><dd className="mt-1 text-xl font-semibold tabular-nums text-ink">{totalEntries}</dd></div>
-            <div><dt><Label>Head</Label></dt><dd className="mt-1.5 font-mono text-[0.8125rem] text-ink">{head ? `#${pad(head.seq)}` : "—"}</dd></div>
-            <div className="col-span-2 min-w-0"><dt><Label>Head hash</Label></dt><dd className="mt-1.5">{head ? <Hash value={head.hash} className="text-ink-2" /> : <span className="text-ink-3">—</span>}</dd></div>
-          </dl>
-          <div className="mt-4 border-t border-line pt-4"><VerifyLedgerBadge orgSlug={slug} /></div>
-        </section>
+        <Card asChild className="mb-6 p-4 sm:p-6">
+          <section aria-label="Hash chain">
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
+              <div>
+                <dt><Eyebrow>Entries</Eyebrow></dt>
+                <dd className="mt-1 text-xl font-semibold tabular-nums text-ink">{totalEntries}</dd>
+              </div>
+              <div>
+                <dt><Eyebrow>Head</Eyebrow></dt>
+                <dd className="mt-1.5 font-mono text-[0.8125rem] text-ink">{head ? `#${pad(head.seq)}` : "—"}</dd>
+              </div>
+              <div className="col-span-2 min-w-0">
+                <dt><Eyebrow>Head hash</Eyebrow></dt>
+                <dd className="mt-1 flex items-center gap-1">
+                  {head ? (
+                    <>
+                      <Hash value={head.hash} className="text-ink-2" />
+                      <CopyButton value={head.hash} label="Copy the head hash" />
+                    </>
+                  ) : (
+                    <span className="text-ink-3">—</span>
+                  )}
+                </dd>
+              </div>
+            </dl>
+            <div className="mt-4 border-t border-line pt-4">
+              <VerifyLedgerBadge orgSlug={slug} />
+            </div>
+          </section>
+        </Card>
 
         {keyWarnings.length > 0 && (
-          <section role="alert" aria-label="Ledger key configuration" className="surface-shadow mb-6 rounded-2xl border border-refused bg-surface p-4 text-sm sm:p-6">
-            <p className="font-medium text-refused">Ledger key configuration needs attention</p>
-            <ul className="mt-2 list-disc space-y-1 pl-5 font-mono text-xs text-refused">
-              {keyWarnings.map((warning) => <li key={warning}>{warning}</li>)}
+          <Callout tone="refused" title="Ledger key configuration needs attention" className="mb-6">
+            <ul className="mt-1 list-disc space-y-1 pl-5 font-mono text-xs text-refused">
+              {keyWarnings.map((warning) => (
+                <li key={warning}>{warning}</li>
+              ))}
             </ul>
-            <p className="mt-3 text-ink-3">
+            <p className="mt-3 text-ink-2">
               The entries below are shown from the database regardless. A key that cannot be read is a
               configuration problem, not a finding about the chain.
             </p>
-          </section>
+          </Callout>
         )}
 
-        <details className="surface-shadow mb-6 rounded-2xl border border-line bg-surface p-4 text-xs text-ink-3">
-          <summary className="cursor-pointer font-medium text-ink-2 hover:text-ink">
-            Ledger signing public key{keyId ? <> · <span className="font-mono text-ink-2">{keyId}</span></> : null}
-          </summary>
+        <Disclosure
+          className="mb-6"
+          summary={
+            <span>
+              Ledger signing public key
+              {keyId ? (
+                <>
+                  {" "}
+                  · <span className="font-mono text-ink-2">{keyId}</span>
+                </>
+              ) : null}
+            </span>
+          }
+          contentClassName="text-xs text-ink-3"
+        >
           {publicKey ? (
-            <pre className="mt-3 overflow-x-auto whitespace-pre-wrap rounded-md bg-ground p-3 font-mono text-ink-2">{publicKey}</pre>
+            <pre className="overflow-x-auto whitespace-pre-wrap rounded-xl bg-ground p-3 font-mono text-ink-2">{publicKey}</pre>
           ) : (
-            <p className="mt-3 rounded-md bg-ground p-3">
+            <p className="rounded-xl bg-ground p-3">
               This organization has no readable ledger key, so signatures on the entries below cannot
               be checked here. The key that signed them has to be stored on the organization — for the
               founding organization, <span className="font-mono text-ink-2">npm run org:adopt-env</span>.
@@ -99,12 +141,12 @@ export default async function AuditPage({ params, searchParams }: AuditPageProps
               statement.
             </p>
           )}
-        </details>
+        </Disclosure>
 
         {totalEntries === 0 ? (
-          <EmptyState title="The chain is empty" body={<>The first cycle writes entry <span className="font-mono text-ink">#0001</span>, links it to a genesis hash of zeros, and signs it with this deployment’s Ed25519 key.</>} />
+          <EmptyState titleAs="h2" icon={<ScrollText />} title="The chain is empty" body={<>The first cycle writes entry <span className="font-mono text-ink">#0001</span>, links it to a genesis hash of zeros, and signs it with this deployment’s Ed25519 key.</>} />
         ) : shown.length === 0 ? (
-          <EmptyState title="No entries in this view" body="Choose another domain or return to the newest entries." />
+          <EmptyState titleAs="h2" icon={<SearchX />} title="No entries in this view" body="Choose another domain or return to the newest entries." />
         ) : (
           <>
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
@@ -114,7 +156,12 @@ export default async function AuditPage({ params, searchParams }: AuditPageProps
             <AuditLedger entries={shown} since={since} />
             {hasOlder && (
               <div className="mt-4 flex justify-center">
-                <Link href={orgHref(slug, `/audit?before=${entries.at(-1)!.seq}${domain ? `&domain=${domain}` : ""}`)} className="rounded-md border border-line-strong px-4 py-2 text-sm text-agent hover:bg-raised">Older entries →</Link>
+                <Button asChild variant="secondary" size="sm">
+                  <Link href={orgHref(slug, `/audit?before=${entries.at(-1)!.seq}${domain ? `&domain=${domain}` : ""}`)}>
+                    Older entries
+                    <ArrowRight aria-hidden />
+                  </Link>
+                </Button>
               </div>
             )}
           </>

@@ -1,7 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import AgentControls from "@/components/AgentControls";
-import { Card, Label, Money, SectionHead } from "@/components/vx/Primitives";
+import { Callout } from "@/components/ui/Callout";
+import { Card } from "@/components/ui/Card";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { Eyebrow } from "@/components/ui/Eyebrow";
+import { SectionHeader } from "@/components/ui/SectionHeader";
+import { pad } from "@/components/vx/AuditLedger";
+import { Money } from "@/components/vx/Primitives";
+import { MoreLink } from "@/components/vx/Treasury";
 import { PerformanceHistory } from "@/components/vx/PerformanceHistory";
 import { RiskDial } from "@/components/vx/RiskDial";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
@@ -45,20 +52,19 @@ export default async function CompliancePage({ params }: { params: Promise<{ slu
         />
 
         {lastSweep && (
-          <section className={`hatch mb-6 rounded-lg border border-dashed px-4 py-3 ${lastSweepComplete ? "border-line-strong" : "border-refused-line bg-refused-soft"}`} aria-label="Latest screening sweep">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <Label>Latest continuous screening sweep</Label>
-                <p className="mt-1 text-sm text-ink">{lastSweep.summary}</p>
+          <Callout tone={lastSweepComplete ? "proof" : "refused"} title="Latest continuous screening sweep" className="mb-6">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-ink">{lastSweep.summary}</p>
                 {!lastSweepComplete && <p className="mt-1 text-xs text-refused">Incomplete — no failed lookup was treated as clear, and every previous verdict remains in force.</p>}
               </div>
-              <Link href={orgHref(slug, `/audit#seq-${lastSweep.seq}`)} className="font-mono text-xs text-agent hover:underline">audit #{String(lastSweep.seq).padStart(4, "0")} →</Link>
+              <MoreLink href={orgHref(slug, `/audit#seq-${lastSweep.seq}`)}>audit #{pad(lastSweep.seq)}</MoreLink>
             </div>
-          </section>
+          </Callout>
         )}
 
         <section>
-          <SectionHead title="Counterparties" meta={`${counterparties.length} continuously screened`} />
+          <SectionHeader title="Counterparties" meta={`${counterparties.length} continuously screened`} />
           <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
             {counterparties.map((counterparty) => (
               <Card key={counterparty.id} className="p-4 sm:p-5" tone={counterparty.risk_level === "high" ? "refused" : counterparty.risk_level === "medium" ? "held" : "default"}>
@@ -67,7 +73,7 @@ export default async function CompliancePage({ params }: { params: Promise<{ slu
                     <h2 className="font-semibold text-ink">{counterparty.name}</h2>
                     <p className="mt-0.5 text-sm capitalize text-ink-3">{counterparty.role}</p>
                   </div>
-                  <Label>{counterparty.last_screened_at ? `Screened ${new Date(counterparty.last_screened_at).toLocaleString("en-US")}` : "Never screened"}</Label>
+                  <Eyebrow>{counterparty.last_screened_at ? `Screened ${new Date(counterparty.last_screened_at).toLocaleString("en-US")}` : "Never screened"}</Eyebrow>
                 </div>
                 <div className="mt-4 border-y border-line py-3">
                   <RiskDial risk={riskTier(counterparty.risk_level)} baseline={counterparty.baseline_payment_limit} effective={counterparty.payment_limit} />
@@ -82,7 +88,7 @@ export default async function CompliancePage({ params }: { params: Promise<{ slu
                   )}
                 </div>
                 <div className="mt-3">
-                  <Label>Screening evidence</Label>
+                  <Eyebrow>Screening evidence</Eyebrow>
                   <p className="mt-1 text-sm leading-relaxed text-ink-2">{counterparty.risk_notes ?? "No screening notes recorded."}</p>
                 </div>
               </Card>
@@ -91,18 +97,22 @@ export default async function CompliancePage({ params }: { params: Promise<{ slu
         </section>
 
         <section className="mt-8">
-          <SectionHead title="Risk-level changes" meta="events where screening changed authority" action={<Link href={orgHref(slug, "/audit?domain=compliance")} className="text-[0.8125rem] text-agent hover:underline">Compliance audit →</Link>} />
+          <SectionHeader title="Risk-level changes" meta="events where screening changed authority" action={<MoreLink href={orgHref(slug, "/audit?domain=compliance")}>Compliance audit</MoreLink>} />
           {riskChanges.length === 0 ? (
-            <p className="rounded-lg border border-line bg-surface p-4 text-sm text-ink-2">No risk tier changed after initial screening. The sweep above still proves screening ran.</p>
+            <EmptyState compact title="No risk tier changed after initial screening" body="The sweep above still proves screening ran." />
           ) : (
-            <ol className="divide-y divide-line rounded-lg border border-held-line bg-surface">
-              {riskChanges.map((entry) => (
-                <li key={entry.id} className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                  <span className="text-sm text-held">{entry.summary}</span>
-                  <Link href={orgHref(slug, `/audit#seq-${entry.seq}`)} className="font-mono text-xs text-agent hover:underline">#{String(entry.seq).padStart(4, "0")}</Link>
-                </li>
-              ))}
-            </ol>
+            <Card asChild tone="held" className="overflow-hidden">
+              <ol className="divide-y divide-line">
+                {riskChanges.map((entry) => (
+                  <li key={entry.id} className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <span className="text-sm text-held">{entry.summary}</span>
+                    <Link href={orgHref(slug, `/audit#seq-${entry.seq}`)} className="font-mono text-xs text-agent transition-colors duration-150 ease-standard hover:underline">
+                      #{pad(entry.seq)}
+                    </Link>
+                  </li>
+                ))}
+              </ol>
+            </Card>
           )}
         </section>
       </ProductShell>
