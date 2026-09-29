@@ -8,12 +8,15 @@ export default async function AgentControls({
   nextDay,
   headSeq,
   clockMode = "simulate",
+  paused = false,
 }: {
   orgSlug: string;
   nextDay: number;
   headSeq?: number;
   clockMode?: CycleClockMode;
+  /** A paused agent runs no cycle: the button stays, disabled, and says why. */
+  paused?: boolean;
 }) {
   if (!(await viewerCan(orgSlug, "agent.run_cycle"))) return null;
-  return <AgentControlsClient orgSlug={orgSlug} nextDay={nextDay} headSeq={headSeq} clockMode={clockMode} />;
+  return <AgentControlsClient orgSlug={orgSlug} nextDay={nextDay} headSeq={headSeq} clockMode={clockMode} paused={paused} />;
 }

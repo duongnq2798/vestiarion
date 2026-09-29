@@ -8,7 +8,7 @@ import { orgHref } from "@/lib/auth/org-paths";
 
 const STEPS = ["reading invoices", "screening counterparties", "checking milestones", "testing treasury economics"];
 
-export default function AgentControlsClient({ orgSlug, nextDay, headSeq, clockMode }: { orgSlug: string; nextDay: number; headSeq?: number; clockMode: CycleClockMode }) {
+export default function AgentControlsClient({ orgSlug, nextDay, headSeq, clockMode, paused = false }: { orgSlug: string; nextDay: number; headSeq?: number; clockMode: CycleClockMode; paused?: boolean }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [busy, setBusy] = useState(false);
@@ -44,7 +44,7 @@ export default function AgentControlsClient({ orgSlug, nextDay, headSeq, clockMo
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          disabled={busy}
+          disabled={busy || paused}
           onClick={runCycle}
           className="brand-shadow relative inline-flex h-10 items-center justify-center gap-2 overflow-hidden whitespace-nowrap rounded-xl bg-agent px-4 text-sm font-semibold text-on-agent transition-transform hover:-translate-y-0.5 disabled:cursor-progress disabled:opacity-70"
         >
@@ -54,7 +54,7 @@ export default function AgentControlsClient({ orgSlug, nextDay, headSeq, clockMo
         </button>
       </div>
       <p aria-live="polite" className={`min-h-4 text-xs ${failed ? "text-refused" : "text-ink-2"}`}>
-        {running ? `Agent is ${STEPS.join(" · ")}.` : message}
+        {running ? `Agent is ${STEPS.join(" · ")}.` : (message ?? (paused ? "The agent is paused. Resume it to run a cycle." : null))}
       </p>
     </div>
   );

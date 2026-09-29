@@ -2,10 +2,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { currentOrgId, runWith } from "@/lib/context";
 import { runLiveOrganizations } from "@/lib/agent/cron";
+import { AgentPausedError } from "@/lib/agent/pause";
 import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 
 const A = "5d0f3a2e-8c1b-4f7a-9e6d-00000000a000";
 const B = "5d0f3a2e-8c1b-4f7a-9e6d-00000000b000";
+const C = "5d0f3a2e-8c1b-4f7a-9e6d-00000000c000";
 const config = configFromEnv({
   NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid",
   SUPABASE_SERVICE_ROLE_KEY: "k",
@@ -64,5 +66,54 @@ describe("runLiveOrganizations", () => {
     );
     expect(results).toEqual([]);
     expect(ran).toBe(false);
+  });
+
+  it("skips a paused organization and runs the others, without entering its scope", async () => {
+    const fake = fakeSupabase((request) => {
+      if (request.path !== "/rest/v1/orgs") return { body: [] };
+      if (request.params.get("mode") === "eq.live") {
+        return {
+          body: [
+            { id: A, slug: "a-corp", agent_paused_at: null },
+            { id: C, slug: "c-corp", agent_paused_at: "2026-09-29T00:00:00.000Z" },
+          ],
+        };
+      }
+      const id = request.params.get("id")?.replace(/^eq\./, "");
+      if (id === A) return { body: orgRow(A, "a-corp") };
+      return { status: 406, body: { code: "PGRST116", message: "JSON object requested, multiple (or no) rows returned" } };
+    });
+    const seen: string[] = [];
+    const run = async () => {
+      seen.push(currentOrgId());
+      return "ok";
+    };
+
+    const results = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => runLiveOrganizations(run));
+
+    expect(results).toEqual([
+      { slug: "a-corp", ok: true, result: "ok" },
+      { slug: "c-corp", ok: true, skipped: "paused" },
+    ]);
+    // c-corp's scope was never entered: run only ever saw A.
+    expect(seen).toEqual([A]);
+  });
+
+  it("reports an organization paused between the listing and begin_cycle_run as skipped, not failed", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const fake = fakeSupabase(liveOrgsDatabase);
+    const run = async () => {
+      // begin_cycle_run refuses once the pause has landed; runAgentCycle raises this.
+      if (currentOrgId() === B) throw new AgentPausedError();
+      return "ok";
+    };
+
+    const results = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => runLiveOrganizations(run));
+
+    expect(results).toEqual([
+      { slug: "a-corp", ok: true, result: "ok" },
+      { slug: "b-corp", ok: true, skipped: "paused" },
+    ]);
+    expect(error).not.toHaveBeenCalled();
   });
 });

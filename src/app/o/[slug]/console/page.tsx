@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import AgentControls from "@/components/AgentControls";
+import AgentPauseControl from "@/components/AgentPauseControl";
 import { CycleReport } from "@/components/vx/CycleReport";
 import { DecisionCard } from "@/components/vx/DecisionCard";
 import { invoiceDecision, treasuryActionDecision, treasuryLedgerDecision } from "@/components/vx/map";
@@ -8,11 +9,14 @@ import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { sectionTitle } from "@/components/vx/nav";
 import { AccountsList, BalanceTile, ForecastPanel, MoreLink, StatTile } from "@/components/vx/Treasury";
 import type { Account, Forecast } from "@/components/vx/types";
+import { listWaitingPayables } from "@/lib/agent/approvals";
 import { requireMembership } from "@/lib/auth/membership";
 import { orgHref } from "@/lib/auth/org-paths";
+import { can } from "@/lib/auth/roles";
 import { chainModes } from "@/lib/circle";
 import { inOrg } from "@/lib/dal/scope";
 import { listLedgerEntries, listLedgerEntriesAfter, listLedgerEntriesByDomain, listLedgerEntriesForTargets } from "@/lib/ledger";
+import { pauseStateOf } from "@/lib/platform/pause";
 import { latestForecast, listAccounts, listCounterparties, listInvoices, listTreasuryActions, stats } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
@@ -30,7 +34,7 @@ export default async function DashboardPage({
   const access = await requireMembership(slug);
   return inOrg(access, async () => {
     const query = await searchParams;
-    const [accountsRows, actionRows, forecastRow, dashboardStats, invoices, counterparties, headEntries] = await Promise.all([
+    const [accountsRows, actionRows, forecastRow, dashboardStats, invoices, counterparties, headEntries, waiting, pause] = await Promise.all([
       listAccounts(),
       listTreasuryActions(),
       latestForecast(),
@@ -38,6 +42,13 @@ export default async function DashboardPage({
       listInvoices(),
       listCounterparties(),
       listLedgerEntries(1),
+      listWaitingPayables(),
+      // Best effort, as in the layout: an unreadable pause shows the agent as running. A cycle is still
+      // refused server-side while paused, so this only affects which buttons show.
+      pauseStateOf(access.membership.orgId).catch((error: unknown) => {
+        console.error("console: pause state not loaded", access.membership.orgId, error);
+        return null;
+      }),
     ]);
     // Modes, not the provider: the page must still render when the
     // organization's Circle credentials cannot be read (R12).
@@ -70,14 +81,23 @@ export default async function DashboardPage({
     const treasuryDecisions = treasuryEntries.map(treasuryLedgerDecision);
     const executedReserveMoves = actionRows.slice(0, 2).map(treasuryActionDecision);
     const headSeq = headEntries[0]?.seq ?? 0;
-    const needsReview = stopped.length;
+    // What the approvals inbox holds for a person, so the tile and the page it links to agree. A row
+    // someone else is deciding right now does not need you; one whose claim did not finish does.
+    const needsReview = waiting.filter((payable) => payable.status !== "processing" || payable.reclaimable).length;
+    const paused = pause !== null;
+    const role = access.membership.role;
 
     return (
       <ProductShell day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={modes}>
         <PageHead
           title={sectionTitle("treasury")}
           sub="What the agent holds, what it decided, and why."
-          right={<AgentControls orgSlug={slug} nextDay={dashboardStats.day + 1} headSeq={headSeq} clockMode={dashboardStats.clockMode} />}
+          right={
+            <div className="flex flex-wrap items-start gap-2 md:justify-end">
+              <AgentPauseControl orgSlug={slug} paused={paused} canPause={can(role, "agent.pause")} canResume={can(role, "agent.resume")} />
+              <AgentControls orgSlug={slug} nextDay={dashboardStats.day + 1} headSeq={headSeq} clockMode={dashboardStats.clockMode} paused={paused} />
+            </div>
+          }
         />
 
         {since != null && <CycleReport entries={cycleEntries} day={dashboardStats.day} since={since} clockMode={dashboardStats.clockMode} completedAt={dashboardStats.lastCycleAt} orgSlug={slug} />}
@@ -90,7 +110,7 @@ export default async function DashboardPage({
           <StatTile label="Decisions logged" href={orgHref(slug, "/audit")} sub="Every entry is hash-linked and signed">
             <span className="tabular-nums">{dashboardStats.decisionsLogged}</span>
           </StatTile>
-          <StatTile label="Needs you" tone={needsReview > 0 ? "held" : "default"} href={orgHref(slug, "/invoices")} sub={needsReview > 0 ? "Held or flagged — the agent will not act alone" : "Nothing waiting"}>
+          <StatTile label="Needs you" tone={needsReview > 0 ? "held" : "default"} href={orgHref(slug, "/approvals")} sub={needsReview > 0 ? "Waiting for a person's decision" : "Nothing waiting"}>
             <span className="tabular-nums">{needsReview}</span>
           </StatTile>
         </div>

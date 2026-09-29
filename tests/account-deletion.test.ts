@@ -102,9 +102,11 @@ describe("0023 is idempotent", () => {
       expect(keys.rows).toEqual([
         { tbl: "invitations", col: "invited_by", action: "c" },
         { tbl: "invoices", col: "created_by", action: "n" },
+        { tbl: "invoices", col: "reviewed_by", action: "n" },
         { tbl: "memberships", col: "invited_by", action: "n" },
         { tbl: "memberships", col: "user_id", action: "c" },
         { tbl: "milestones", col: "created_by", action: "n" },
+        { tbl: "orgs", col: "agent_paused_by", action: "n" },
         { tbl: "orgs", col: "created_by", action: "n" },
       ]);
     } finally {

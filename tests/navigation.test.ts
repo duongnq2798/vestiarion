@@ -32,6 +32,13 @@ describe("the workspace navigation", () => {
     for (const legacy of LEGACY_PRODUCT_PATHS) expect(NAV_ITEMS.map((item) => item.path)).toContain(legacy);
   });
 
+  it("lists Approvals in Controls, first, before Compliance", () => {
+    const controls = NAV_GROUPS.find((group) => group.label === "Controls");
+    expect(controls?.items.map((item) => item.key)).toEqual(["approvals", "compliance", "audit", "members"]);
+    expect(sectionTitle("approvals")).toBe("Approvals");
+    expect(NAV_ITEMS.find((item) => item.key === "approvals")?.path).toBe("/approvals");
+  });
+
   it("opens a workspace on its first section, the treasury", () => {
     expect(HOME_PATH).toBe("/console");
     expect(sectionTitle("treasury")).toBe("Treasury");
@@ -54,6 +61,7 @@ describe("navItemForPathname — which section the current URL is in", () => {
     ["/o/founding/invoices", "invoices"],
     ["/o/acme/audit/anything-deeper", "audit"],
     ["/o/x/members", "members"],
+    ["/o/acme/approvals", "approvals"],
   ])("%s → %s", (pathname, key) => {
     expect(navItemForPathname(pathname)?.key).toBe(key);
   });

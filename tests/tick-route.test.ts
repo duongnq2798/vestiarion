@@ -21,11 +21,17 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+// The rate limiter (src/lib/rate-limit.ts) is a module-level bucket keyed by
+// client IP, capacity 2, shared across every test in this file. A distinct
+// x-forwarded-for per test keeps them from exhausting one another's tokens.
+let ipCounter = 0;
+
 function post(): Promise<Response> {
   process.env.AGENT_API_TOKEN = TOKEN;
+  ipCounter += 1;
   const request = new Request("https://vestiarion.invalid/api/agent/tick", {
     method: "POST",
-    headers: { authorization: `Bearer ${TOKEN}` },
+    headers: { authorization: `Bearer ${TOKEN}`, "x-forwarded-for": `10.0.0.${ipCounter}` },
   });
   return POST(request);
 }
@@ -57,5 +63,22 @@ describe("POST /api/agent/tick", () => {
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ organizations: [{ slug: "a-corp", ok: true, lines: 1 }] });
+  });
+
+  it("shapes a skipped, paused organization as ok, and still reports 200", async () => {
+    runLiveOrganizations.mockResolvedValueOnce([
+      { slug: "a-corp", ok: true, result: { lines: [{}] } },
+      { slug: "b-corp", ok: true, skipped: "paused" },
+    ]);
+
+    const response = await post();
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      organizations: [
+        { slug: "a-corp", ok: true, lines: 1 },
+        { slug: "b-corp", ok: true, skipped: "paused" },
+      ],
+    });
   });
 });

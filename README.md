@@ -37,6 +37,21 @@ is hard-coded into the interface:
 5. **Continuous audit trail** — every decision above is appended to a hash-chained, Ed25519-signed
    ledger (`/audit`). A reviewer can verify the whole chain in one click and read *why* the agent
    acted, not just that a balance moved.
+6. **Human oversight** — a payable the agent held, flagged, or left awaiting information waits in
+   an approvals inbox (`/o/<slug>/approvals`) for a person to decide: **approve and pay** it now,
+   through the very payment step the agent itself uses, so a person's payment and the agent's
+   cannot disagree about what happened; **reject** it, closing the obligation; or **return** it for
+   the agent's next cycle to decide again. No one approves an invoice they created, and no one —
+   however they click — can approve paying a counterparty screened high risk; only Compliance
+   clears that. A claim on the row makes one person's decision exclusive, however many people
+   click; the payment intent's idempotency key, keyed on the invoice, is what keeps an invoice from
+   being paid twice, whether by two people or by a person and the agent's own cycle. A payment
+   still pending is reconciled by the next cycle, never decided again, so the agent cannot undo a
+   person's approval. Anyone who can approve a payment can also pause the
+   agent for the whole workspace, with a reason shown on every page until someone resumes it, and
+   only an owner or admin may resume it. Pausing stops the agent's own cycles and the money it would
+   move mid-cycle, including reserve sweeps and redemptions; it never stops a person's own decision
+   in the approvals inbox.
 
 Every decision is made by asking an LLM for a structured `{action, reasoning, confidence}` verdict
 under an explicit guardrail policy (never pay a high-risk counterparty, never exceed a payment
@@ -97,6 +112,13 @@ src/lib/agent/
                              -> treasury -> forecast, all logged to the ledger
   cycle-metrics.ts           Counts outcomes, decision sources, and code-level
                              guardrail overrides at the point they occur
+  pay.ts                    payInvoice: the one payment step a cycle's AP
+                             stage and a person's approval both call
+  approvals.ts               Lets a person approve and pay, reject, or return
+                             a payable the agent held, claimed in the database
+                             first so two deciders cannot race the same row
+  pause.ts                   The per-workspace pause a cycle re-reads before
+                             every payment and every reserve move it makes
 tests/                    Vitest. Every money path that can be tested without
                            a network: the hash chain and its tamper cases,
                            risk tiering, the treasury economics, provider
@@ -148,15 +170,15 @@ lists the workspaces you belong to and moves between them; its **Create workspac
 workspaces** links (`/onboarding?new`) let you create another.
 
 Every member of a workspace has one role. **Owner** and **admin** add counterparties, invoices, and
-milestones, can run a cycle by hand, and can invite and manage members; **approver** and **viewer**
-read everything — the console, the ledger, past cycles — and change nothing, so an approver cannot
-create the records it may one day approve, keeping maker separate from checker from the start. A
-workspace always keeps at least one owner: the database itself refuses to remove or demote the last
-one. A sandbox workspace is capped at 20 agent cycles per UTC day, counted in the database so the
-cap holds however many server instances are running, which bounds how much a trial workspace can
-spend on LLM calls, and a sandbox that sits inactive for 60 days is deleted by a daily cleanup job.
-The rest of the role distinctions the product will eventually make — pausing the agent, deciding
-approvals — are defined in the permission map already, ahead of the features that will use them.
+milestones, can run a cycle by hand, and can invite and manage members; **approver** cannot create
+those records — keeping maker separate from checker from the start — but decides the payables the
+agent would not pay on its own, from the approvals inbox, and can pause the agent; **viewer** reads
+everything — the console, the ledger, past cycles — and changes nothing. A workspace always keeps at
+least one owner: the database itself refuses to remove or demote the last one. Only an owner or
+admin can resume an agent someone paused. A sandbox workspace is capped at 20 agent cycles per UTC
+day, counted in the database so the cap holds however many server instances are running, which
+bounds how much a trial workspace can spend on LLM calls, and a sandbox that sits inactive for 60
+days is deleted by a daily cleanup job.
 
 An **owner** or **admin** invites someone from the workspace's **Members** page
 (`/o/<slug>/members`), by email and role; an owner may grant any role, an admin only **approver** or

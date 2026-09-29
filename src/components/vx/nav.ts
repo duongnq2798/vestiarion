@@ -24,6 +24,7 @@ export const NAV_GROUPS = [
   {
     label: "Controls",
     items: [
+      { key: "approvals", path: "/approvals", label: "Approvals" },
       { key: "compliance", path: "/compliance", label: "Compliance" },
       { key: "audit", path: "/audit", label: "Audit log" },
       { key: "members", path: "/members", label: "Members" },
