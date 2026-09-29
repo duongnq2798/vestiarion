@@ -7,7 +7,8 @@ import { Spinner } from "./Spinner";
 /**
  * One button for the whole product. Variants name intent, not colour:
  * `primary` is the one thing a screen wants done, `danger` removes or
- * refuses, `inverse` sits on an agent-blue band, `link` reads as text.
+ * refuses, `inverse` sits on an agent-blue band (give the band
+ * `focus-inverse` so the focus ring shows on it), `link` reads as text.
  */
 export const buttonVariants = cva(
   [

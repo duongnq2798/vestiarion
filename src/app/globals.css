@@ -105,6 +105,12 @@
   background-size: 32px 32px;
 }
 
+/* For a region painted agent-blue: focus rings inside it turn white, where an
+   agent-blue ring would disappear into the band. */
+@utility focus-inverse {
+  --focus-ring: var(--color-on-agent);
+}
+
 /* A loading placeholder: the raised colour with a slow band of light across it. */
 @utility skeleton {
   background-color: var(--color-raised);
@@ -174,8 +180,10 @@
     -webkit-tap-highlight-color: transparent;
   }
 
+  /* The one focus ring. Controls that draw their own (fields) change their
+     border to agent as well, so focus never rests on the soft halo alone. */
   :focus-visible {
-    outline: 2px solid var(--color-agent);
+    outline: 2px solid var(--focus-ring, var(--color-agent));
     outline-offset: 3px;
     border-radius: 4px;
   }
