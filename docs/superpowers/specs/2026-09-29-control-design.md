@@ -209,6 +209,31 @@ The pages use the component system from `2026-09-28-component-system-design.md`:
    - pause `note-one`: Run cycle is refused, and the banner shows; resume it.
 3. Record the outcome in this spec.
 
+### Rollout record
+
+Shipped on 2026-09-29 as PR #25. `0025` was applied to production at 02:45 UTC, before the merge. The database then showed:
+- `claim_invoice_decision`, `agent_paused` and `begin_cycle_run` are executable by the service role and `vestiarion_tenant` only;
+- `pause_agent` and `resume_agent` are executable by the service role only;
+- the one status check on `invoices` includes `processing` and keeps `rejected`;
+- the review and pause columns exist;
+- `agent_paused(founding)` is false.
+
+After the deploy:
+- the scheduled cycle answered `{"organizations":[{"slug":"founding","ok":true}]}`;
+- the ledger reported `valid: true` (169 entries).
+
+The partner paused and resumed `note-one` from its console:
+- #264 `agent_paused` and #268 `agent_resumed` (`pausedFor: 884` seconds) are signed by `note-one`'s key and carry ids only;
+- no cycle ran in `note-one` while it was paused, and the next one started after the resume.
+
+`note-one` holds no payables, so Approve and pay has not yet been exercised in production. Its rules are covered by the PGlite tests of `0025` and by the library and action tests.
+
+PR #28 followed on the same day:
+- **Timeouts.** The live Circle provider had recorded every transfer slower than 45 seconds as failed: the SDK signals a timeout with an `AbortError`, which the old check never matched.
+- **Rejections.** Any rejection of the wait now leads to a second read, and Circle's state decides.
+- **Milestones.** A `verified` milestone whose release is in flight is reconciled (`milestone_reconcile`) rather than decided again.
+- **What gets reconciled.** Only intents with a transfer to reconcile by. One that was never claimed, or failed before Circle returned an id, is decided again with the guardrails.
+
 ## 9. Out of scope, for later
 
 - **Contractor milestones** that are held. Their verification has its own path (`manualMilestoneVerificationAction`), and it is already a human override.
