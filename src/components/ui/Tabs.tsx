@@ -42,7 +42,7 @@ export function Tabs({ defaultValue, onValueChange, className, children, ...prop
 /** Tabs that do not fit scroll sideways inside the list, never the page. */
 export function TabsList({ className, children, ...props }: ComponentProps<typeof TabsPrimitive.List>) {
   return (
-    <TabsPrimitive.List asChild {...props}>
+    <TabsPrimitive.List {...props} asChild>
       {/* `layoutScroll` lets the gliding marker account for the list's own scroll offset. */}
       <m.div
         layoutScroll
