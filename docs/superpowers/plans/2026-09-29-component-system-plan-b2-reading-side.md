@@ -2130,7 +2130,7 @@ Make exactly these replacements in the same file:
 | `inline-block size-2 rounded-sm` (every legend swatch) | `inline-block size-2 rounded-full` |
 | `<span className="mr-1.5 inline-block size-2 bg-agent" />Model` | `<span className="mr-1.5 inline-block size-2 rounded-full bg-agent" />Model` |
 | `<span className="mr-1.5 inline-block size-2 bg-line-strong" />Heuristic` | `<span className="mr-1.5 inline-block size-2 rounded-full bg-line-strong" />Heuristic` |
-| `flex h-5 min-w-0 overflow-hidden rounded-sm bg-raised` (both bar tracks) | `flex h-5 min-w-0 overflow-hidden rounded-md bg-raised` |
+| `flex h-5 min-w-0 overflow-hidden rounded-sm bg-raised` (both bar tracks) | `flex h-5 min-w-0 overflow-hidden rounded-full bg-raised` |
 
 Run: `grep -n "rounded-sm\|rounded border\|<Label\|EmptyChart>" src/components/vx/InsightsCharts.tsx` — Expected: no output.
 
