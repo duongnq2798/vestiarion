@@ -147,6 +147,14 @@ describe("the docs navigation", () => {
     );
   });
 
+  it("lists the MCP server right after the AI integration page", () => {
+    const section = DOCS_NAV.find((candidate) => candidate.title === "AI integration")!;
+    expect(section.pages.map((page) => [page.slug, page.title])).toEqual([
+      ["ai-integration", "AI integration"],
+      ["ai-integration/mcp", "MCP server"],
+    ]);
+  });
+
   it("gives every page a title and a description", () => {
     for (const page of flatPages()) {
       expect(page.title.trim(), page.slug).not.toBe("");

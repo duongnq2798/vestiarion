@@ -1,5 +1,6 @@
 import { STATUS_FOR } from "@/lib/api/contract";
 import { jsonSchema, operationById, type DocOperation, type DocParam } from "@/lib/api/openapi";
+import { MCP_TOOLS } from "@/lib/mcp/tools";
 import { hasSource, notesSource, publishedPages, readSource } from "./content";
 import { fencedLines } from "./headings";
 import { findPage, operationsByTag } from "./nav";
@@ -35,6 +36,7 @@ export interface ConvertContext {
 export const MDX_TO_MARKDOWN: Record<string, (attributes: JsxAttributes, children: string, context: ConvertContext) => string> = {
   Callout: (attributes, children, { convert }) => quote(typeof attributes.title === "string" ? attributes.title : undefined, convert(children)),
   EndpointTable: (_attributes, _children, { origin }) => endpointTables(origin),
+  McpToolTable: (_attributes, _children, { origin }) => mcpToolTable(origin),
   // A grid of cards is a list: one line per card.
   Cards: (_attributes, children, { convert }) =>
     convert(children)
@@ -63,7 +65,7 @@ export const MDX_TO_MARKDOWN: Record<string, (attributes: JsxAttributes, childre
  *   table row it would be a cell; after a quote, a list item or text, and
  *   before text, it would continue a paragraph.
  */
-const BLOCK_COMPONENTS = new Set(["Callout", "Cards", "Card", "EndpointTable"]);
+const BLOCK_COMPONENTS = new Set(["Callout", "Cards", "Card", "EndpointTable", "McpToolTable"]);
 
 /** Components that belong only inside another: a `Card` is one cell of a `Cards` grid. */
 const PARENT_OF: Record<string, string> = { Card: "Cards" };
@@ -152,6 +154,27 @@ function endpointTables(origin: string): string {
       ].join("\n\n")
     )
     .join("\n\n");
+}
+
+/**
+ * The MCP page's tool table, as `McpToolTable` renders it: each tool with its
+ * arguments, its operation's summary, and the endpoint's reference page. The
+ * full description is on that page and in `tools/list`.
+ */
+function mcpToolTable(origin: string): string {
+  return table(
+    ["Tool", "What it answers", "Reference"],
+    MCP_TOOLS.map((tool) => {
+      const args = Object.keys(tool.inputSchema.shape);
+      const op = operationById(tool.operationId);
+      const endpoint = op ? code(`${op.method.toUpperCase()} ${op.path}`) : tool.title;
+      return [
+        `${code(tool.name)}${args.length > 0 ? ` (arguments: ${args.map(code).join(", ")})` : ""}`,
+        tool.title,
+        `[${endpoint}](${origin}${docsHref(`api/${tool.operationId}`)})`,
+      ];
+    })
+  );
 }
 
 // ---------------------------------------------------------------------------

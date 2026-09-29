@@ -5,6 +5,7 @@ import { isValidElement, type ComponentProps, type ReactNode } from "react";
 import { CodeBlock } from "@/components/docs/CodeBlock";
 import { DocsHeading, textOf } from "@/components/docs/DocsHeading";
 import { EndpointTable } from "@/components/docs/EndpointTable";
+import { McpToolTable } from "@/components/docs/McpToolTable";
 import { Callout } from "@/components/ui/Callout";
 import { Card } from "@/components/ui/Card";
 import { cn } from "@/components/ui/cn";
@@ -103,6 +104,7 @@ const components: MDXComponents = {
   th: ({ children }) => <TableHead>{children}</TableHead>,
   td: ({ children }) => <TableCell className="align-top text-ink-2">{children}</TableCell>,
   EndpointTable,
+  McpToolTable,
   Cards,
   Card: DocsCard,
   Callout: (props: ComponentProps<typeof Callout>) => <Callout {...props} className={cn("my-6 [&_p]:my-1.5 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0", props.className)} />,

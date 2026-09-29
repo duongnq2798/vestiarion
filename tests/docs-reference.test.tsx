@@ -2,12 +2,14 @@ import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { EndpointTable } from "@/components/docs/EndpointTable";
+import { McpToolTable } from "@/components/docs/McpToolTable";
 import { ErrorTable } from "@/components/docs/ErrorTable";
 import { ParamTable } from "@/components/docs/ParamTable";
 import { SchemaTree } from "@/components/docs/SchemaTree";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { STATUS_FOR } from "@/lib/api/contract";
 import { jsonSchema, OPERATIONS, operationById } from "@/lib/api/openapi";
+import { MCP_TOOLS } from "@/lib/mcp/tools";
 import { notesHeadings, referenceHeadings, referenceSectionIds, sectionId } from "@/lib/docs/reference";
 import { schemaTree } from "@/lib/docs/schema-tree";
 import { generateStaticParams } from "@/app/docs/api/[operation]/page";
@@ -110,5 +112,24 @@ describe("EndpointTable", () => {
     for (const tag of tags) expect(markup).toContain(`aria-label="${tag}"`);
     // A path wraps only after a slash, never inside a segment.
     expect(markup).toContain("/<wbr/>api/<wbr/>v1/<wbr/>counterparties/<wbr/>{id}");
+  });
+});
+
+describe("McpToolTable", () => {
+  it("lists every MCP tool by name, with its arguments and what it answers, linked to its reference page", () => {
+    const markup = html(<McpToolTable />);
+    expect(MCP_TOOLS.length).toBe(OPERATIONS.length);
+    for (const tool of MCP_TOOLS) {
+      const op = operationById(tool.operationId)!;
+      expect(markup).toContain(`>${tool.name}</code>`);
+      expect(markup).toContain(`>${tool.title}<`);
+      expect(markup).toContain(`href="/docs/api/${tool.operationId}"`);
+      expect(markup).toContain(`>GET ${op.path}</code>`);
+      for (const argument of Object.keys(tool.inputSchema.shape)) expect(markup, `${tool.name} ${argument}`).toContain(`>${argument}</code>`);
+    }
+    expect(markup.match(/<tr>/g)).toHaveLength(MCP_TOOLS.length + 1);
+    // The summary, not the full description: that stays on the reference pages and in tools/list.
+    expect(markup).not.toContain("Replays signatures, body hashes and hash-chain continuity");
+    expect(markup).not.toContain("page.nextCursor");
   });
 });

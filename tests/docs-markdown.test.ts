@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { OPERATIONS } from "@/lib/api/openapi";
+import { MCP_TOOLS } from "@/lib/mcp/tools";
 import { hasSource, publishedPages } from "@/lib/docs/content";
 import { splitCodeSpans, stripFences } from "@/lib/docs/headings";
 import { llmsFull, llmsIndex, markdownHref, mdxToMarkdown, pageMarkdown } from "@/lib/docs/markdown";
@@ -77,6 +78,21 @@ describe("pageMarkdown", () => {
   it("writes the endpoint table as Markdown tables linking each reference page", () => {
     const md = pageMarkdown("api", ORIGIN)!;
     for (const op of OPERATIONS) expect(md).toContain(`| [\`GET ${op.path}\`](${ORIGIN}/docs/api/${op.id}) | ${op.summary} |`);
+  });
+});
+
+describe("the MCP page's Markdown", () => {
+  it("writes the tool table as a Markdown table: every tool with its arguments, what it answers and its reference page", () => {
+    const md = pageMarkdown("ai-integration/mcp", ORIGIN)!;
+    expect(md).toContain("| Tool | What it answers | Reference |");
+    for (const tool of MCP_TOOLS) {
+      const op = OPERATIONS.find((candidate) => candidate.id === tool.operationId)!;
+      expect(md).toContain(`| \`${tool.name}\``);
+      // What it answers is the summary; the full description stays on the reference page.
+      expect(md).toContain(` | ${op.summary} | [\`GET ${op.path}\`](${ORIGIN}/docs/api/${op.id}) |`);
+    }
+    expect(md).not.toContain("Replays signatures, body hashes and hash-chain continuity");
+    expect(md).toContain("https://www.vestiarion.xyz/api/mcp");
   });
 });
 

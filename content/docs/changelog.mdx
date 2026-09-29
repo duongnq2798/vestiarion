@@ -1,5 +1,13 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-09-29: MCP server
+
+- A remote MCP server at `https://www.vestiarion.xyz/api/mcp`, over Streamable HTTP. An AI agent connects with a workspace API key, sent as `Authorization: Bearer <key>`, and reads that workspace's records through one tool per `/api/v1` read operation. A tool returns the operation's JSON exactly. See [MCP server](/docs/ai-integration/mcp).
+- A missing, malformed, unknown or revoked key answers `401` with a `WWW-Authenticate` header; a key without the `read` scope answers `403`.
+- There are no write tools, and no OAuth.
+
+No `/api/v1` endpoint, parameter or response changed.
+
 ## 2026-09-29: Webhooks sent right after each append
 
 - A `ledger.appended` delivery now goes out right after the request that appended its entry (approving a payment, pausing the agent, changing a member, a key or an endpoint), not on the next scheduled dispatch. Entries appended by the agent's scheduled run still go out right after that run. The 10-minute schedule remains for retries. See [Timing](/docs/webhooks#timing).
