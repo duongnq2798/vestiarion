@@ -138,7 +138,7 @@ Migration `0025_control.sql`. It is idempotent, and runs as `db:migrate` replays
 
 | Action | Domain | detail |
 |---|---|---|
-| `approval_paid` | `ap` | `{ by, invoiceId, counterpartyId, amount, overrode: <guardrail rule or model action>, txRef, status }` |
+| `approval_paid` | `ap` | `{ by, invoiceId, counterpartyId, amount, overrode: <the status it waited in: held, flagged or awaiting_info>, txRef, status }` |
 | `approval_rejected` | `ap` | `{ by, invoiceId, reason? }` |
 | `approval_returned` | `ap` | `{ by, invoiceId }` |
 | `agent_paused` | `system` | `{ by, reason }` |
