@@ -4,7 +4,9 @@ import AgentPauseControl from "@/components/AgentPauseControl";
 import { CycleReport } from "@/components/vx/CycleReport";
 import { DecisionCard } from "@/components/vx/DecisionCard";
 import { invoiceDecision, treasuryActionDecision, treasuryLedgerDecision } from "@/components/vx/map";
-import { Money, SectionHead } from "@/components/vx/Primitives";
+import { Money } from "@/components/vx/Primitives";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { SectionHeader } from "@/components/ui/SectionHeader";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { sectionTitle } from "@/components/vx/nav";
 import { AccountsList, BalanceTile, ForecastPanel, MoreLink, StatTile } from "@/components/vx/Treasury";
@@ -123,15 +125,15 @@ export default async function DashboardPage({
           <div className="min-w-0 space-y-8">
             {stopped.length > 0 && (
               <section>
-                <SectionHead title="Stopped" meta="refused by code, or waiting for you" />
+                <SectionHeader title="Stopped" meta="refused by code, or waiting for you" />
                 <div className="space-y-4">{stopped.slice(0, 3).map((decision) => <DecisionCard key={decision.id} decision={decision} orgSlug={slug} />)}</div>
               </section>
             )}
 
             <section>
-              <SectionHead title="Treasury decisions" meta="yield moves include their economics" action={<MoreLink href={orgHref(slug, "/audit?domain=treasury")}>Full audit log</MoreLink>} />
+              <SectionHeader title="Treasury decisions" meta="yield moves include their economics" action={<MoreLink href={orgHref(slug, "/audit?domain=treasury")}>Full audit log</MoreLink>} />
               {treasuryDecisions.length === 0 ? (
-                <p className="rounded-lg border border-dashed border-line-strong p-5 text-sm text-ink-2">Run an agent cycle to see why cash was swept, redeemed, or held liquid.</p>
+                <EmptyState compact title="No treasury decisions yet" body="Run an agent cycle to see why cash was swept, redeemed, or held liquid." />
               ) : (
                 <div className="space-y-4">{treasuryDecisions.map((decision) => <DecisionCard key={decision.id} decision={decision} orgSlug={slug} />)}</div>
               )}
@@ -139,7 +141,7 @@ export default async function DashboardPage({
 
             {executedReserveMoves.length > 0 && (
               <section>
-                <SectionHead title="Executed reserve movements" meta="recorded treasury actions" />
+                <SectionHeader title="Executed reserve movements" meta="recorded treasury actions" />
                 <div className="space-y-4">{executedReserveMoves.map((decision) => <DecisionCard key={decision.id} decision={decision} compact orgSlug={slug} />)}</div>
               </section>
             )}

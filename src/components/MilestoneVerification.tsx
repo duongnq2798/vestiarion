@@ -10,7 +10,7 @@ const INITIAL: MilestoneActionResult = { ok: false, message: "" };
 
 /** A person's own check of a milestone, recorded with a note; the agent pays verified milestones. */
 export default function MilestoneVerification({ milestoneId, verified, disabled, orgSlug }: { milestoneId: string; verified: boolean; disabled?: boolean; orgSlug: string }) {
-  const { state, formProps } = useActionForm(manualMilestoneVerificationAction, INITIAL, { resetOnSuccess: true, toastOnSuccess: true });
+  const { state, pending, formProps } = useActionForm(manualMilestoneVerificationAction, INITIAL, { resetOnSuccess: true, toastOnSuccess: true });
   const noteId = `milestone-note-${milestoneId}`;
 
   return (
@@ -28,7 +28,7 @@ export default function MilestoneVerification({ milestoneId, verified, disabled,
           required
           minLength={3}
           maxLength={280}
-          disabled={disabled}
+          disabled={disabled || pending}
           placeholder={verified ? "Reason for revoking verification" : "Evidence checked or approver note"}
           className="h-11 sm:h-8"
         />

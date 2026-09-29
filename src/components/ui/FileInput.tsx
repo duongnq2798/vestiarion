@@ -44,7 +44,10 @@ export function FileInput({ id, name, accept, label, description, disabled = fal
     <label
       htmlFor={id}
       onDragOver={onDragOver}
-      onDragLeave={() => setDragging(false)}
+      onDragLeave={(event) => {
+        // Moving over the zone's own label or icon fires dragleave on the zone; only leaving it counts.
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false);
+      }}
       onDrop={onDrop}
       className={cn(
         "group flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-line-strong bg-surface/60 px-6 py-8 text-center",

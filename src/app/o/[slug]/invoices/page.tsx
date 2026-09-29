@@ -1,4 +1,4 @@
-import { FileSpreadsheet, PenLine } from "lucide-react";
+import { FileSpreadsheet, ListFilter, PenLine } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import AgentControls from "@/components/AgentControls";
@@ -9,8 +9,10 @@ import { Card } from "@/components/ui/Card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { DecisionCard } from "@/components/vx/DecisionCard";
 import { invoiceDecision } from "@/components/vx/map";
-import { SectionHead } from "@/components/vx/Primitives";
-import { EmptyState, PageHead, ProductShell } from "@/components/vx/Shell";
+import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { SectionHeader } from "@/components/ui/SectionHeader";
+import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { sectionTitle } from "@/components/vx/nav";
 import { viewerCan } from "@/lib/auth/authorize";
 import { requireMembership } from "@/lib/auth/membership";
@@ -64,14 +66,20 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
         />
 
         {filter && (
-          <div className="mb-6 flex items-center gap-3 rounded-md border border-held-line bg-held-soft px-3 py-2 text-sm text-held">
-            Showing status: <span className="font-mono">{filter}</span>
-            <Link href={orgHref(slug, "/invoices")} className="ml-auto text-ink-2 underline hover:text-ink">Clear filter</Link>
-          </div>
+          <Callout tone="held" icon={<ListFilter />} className="mb-6">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span>
+                Showing status: <span className="font-mono">{filter}</span>
+              </span>
+              <Button asChild variant="link" className="ml-auto">
+                <Link href={orgHref(slug, "/invoices")}>Clear filter</Link>
+              </Button>
+            </div>
+          </Callout>
         )}
 
         <section className="mb-8">
-          <SectionHead title="Invoice intake" meta="manual entry or CSV preview and confirm" />
+          <SectionHeader title="Invoice intake" meta="manual entry or CSV preview and confirm" />
           {canWrite ? (
             <Card className="p-4 sm:p-6">
               <Tabs defaultValue="manual">
@@ -102,7 +110,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
         <div className="space-y-8">
           {refused.length > 0 && (
             <section>
-              <SectionHead title="Guardrail overrides" meta="the model said pay; code stopped execution" />
+              <SectionHeader title="Guardrail overrides" meta="the model said pay; code stopped execution" />
               <div className="space-y-4">{refused.map((decision) => <DecisionCard key={decision.id} decision={decision} orgSlug={slug} />)}</div>
             </section>
           )}
@@ -117,9 +125,9 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
 function InvoiceSection({ title, meta, decisions, orgSlug }: { title: string; meta: string; decisions: ReturnType<typeof invoiceDecision>[]; orgSlug: string }) {
   return (
     <section>
-      <SectionHead title={title} meta={meta} />
+      <SectionHeader title={title} meta={meta} />
       {decisions.length === 0 ? (
-        <EmptyState title={`No ${title.toLowerCase()} here`} body="There are no records in this view." />
+        <EmptyState compact title={`No ${title.toLowerCase()} here`} body="There are no records in this view." />
       ) : (
         <div className="space-y-4">{decisions.map((decision) => <DecisionCard key={decision.id} decision={decision} orgSlug={orgSlug} />)}</div>
       )}

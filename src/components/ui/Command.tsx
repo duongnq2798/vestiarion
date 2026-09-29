@@ -38,6 +38,7 @@ export function CommandDialog({
         hideHeader
         showClose={false}
         className="top-[12dvh] max-w-xl translate-y-0 gap-0 overflow-hidden p-0 sm:top-[18dvh] sm:p-0"
+        bodyClassName="m-0 p-0 overflow-visible"
       >
         <Command label={title} loop>
           {children}

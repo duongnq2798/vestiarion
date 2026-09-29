@@ -1,6 +1,8 @@
-import type { ReactNode } from "react";
-import type { Outcome } from "./types";
+import { ArrowUpRight } from "lucide-react";
+import { Badge, type BadgeProps } from "@/components/ui/Badge";
+import { cn } from "@/components/ui/cn";
 import { OutcomeGlyph } from "./Glyphs";
+import type { Outcome } from "./types";
 
 export function fmt(value: number) {
   return new Intl.NumberFormat("en-US", {
@@ -15,7 +17,7 @@ export function Money({
   sign,
   simulated,
   struck,
-  className = "",
+  className,
 }: {
   value: number;
   token?: string;
@@ -25,10 +27,8 @@ export function Money({
   className?: string;
 }) {
   return (
-    <span className={`whitespace-nowrap tabular-nums ${className}`}>
-      <span
-        className={`${simulated ? "underline decoration-dashed decoration-ink-3 underline-offset-4" : ""} ${struck ? "line-through decoration-refused decoration-2" : ""}`}
-      >
+    <span className={cn("whitespace-nowrap tabular-nums", className)}>
+      <span className={cn(simulated && "underline decoration-dashed decoration-ink-3 underline-offset-4", struck && "line-through decoration-refused decoration-2")}>
         {sign && <span className="mr-0.5 text-ink-3">{sign}</span>}
         {fmt(Math.abs(value))}
       </span>
@@ -37,53 +37,58 @@ export function Money({
   );
 }
 
-export function Label({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return (
-    <span className={`font-mono text-[0.6875rem] font-semibold uppercase tracking-[0.11em] text-ink-3 ${className}`}>
-      {children}
-    </span>
-  );
-}
-
-const OUTCOMES: Record<Outcome, { word: string; className: string }> = {
-  settled: { word: "Settled on Arc", className: "border-proof-line bg-proof-soft text-proof" },
-  scheduled: { word: "Scheduled", className: "border-line-strong text-ink-2" },
-  recorded: { word: "Recorded", className: "border-line-strong text-ink-2" },
-  held: { word: "Held for you", className: "border-held-line bg-held-soft text-held" },
-  refused: { word: "Refused by guardrail", className: "border-refused-line bg-refused-soft text-refused" },
-  simulated: { word: "Simulated", className: "hatch border-dashed border-line-strong text-ink-2" },
+const OUTCOMES: Record<Outcome, { word: string; tone: NonNullable<BadgeProps["tone"]> }> = {
+  settled: { word: "Settled on Arc", tone: "proof" },
+  scheduled: { word: "Scheduled", tone: "neutral" },
+  recorded: { word: "Recorded", tone: "neutral" },
+  held: { word: "Held for you", tone: "held" },
+  refused: { word: "Refused by guardrail", tone: "refused" },
+  simulated: { word: "Simulated", tone: "simulated" },
 };
 
+/** What happened to a decision, in words and in its tone, with the outcome's own glyph. */
 export function OutcomeBadge({ outcome, label }: { outcome: Outcome; label?: string }) {
   const item = OUTCOMES[outcome];
   return (
-    <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-semibold ${item.className}`}>
-      <OutcomeGlyph outcome={outcome} className="size-3" />
+    <Badge tone={item.tone} icon={<OutcomeGlyph outcome={outcome} />}>
       {label ?? item.word}
-    </span>
+    </Badge>
   );
 }
 
+/** Which engine decided: the model, or the rule-based fallback. */
 export function ModeBadge({ mode }: { mode?: string }) {
   if (!mode) return null;
   return (
-    <span className="rounded-full border border-agent-line bg-agent-soft px-2 py-0.5 font-mono text-[0.6875rem] font-semibold uppercase tracking-wide text-agent">
+    <Badge tone="agent" size="sm" className="font-mono uppercase tracking-wide">
       {mode}
-    </span>
+    </Badge>
   );
 }
 
-export function Hash({ value, href, className = "" }: { value: string; href?: string; className?: string }) {
-  const short = value.length > 14 ? `${value.slice(0, 6)}…${value.slice(-4)}` : value;
-  const body = <span>{short}</span>;
-  const common = `inline-flex items-center gap-1 font-mono text-xs tabular-nums ${className}`;
+export function shortHash(value: string): string {
+  return value.length > 14 ? `${value.slice(0, 6)}…${value.slice(-4)}` : value;
+}
+
+/** A hash, shortened for reading; the full value is in the title, and a link opens the explorer in a new tab. */
+export function Hash({ value, href, className }: { value: string; href?: string; className?: string }) {
+  const short = shortHash(value);
   return href ? (
-    <a href={href} title={value} target="_blank" rel="noreferrer" className={`${common} text-proof hover:underline`}>
-      {body}
-      <span aria-hidden>↗</span>
+    <a
+      href={href}
+      title={value}
+      target="_blank"
+      rel="noreferrer"
+      className={cn("inline-flex items-center gap-1 font-mono text-xs tabular-nums text-proof transition-colors duration-150 ease-standard hover:underline", className)}
+    >
+      <span>{short}</span>
+      <ArrowUpRight aria-hidden className="size-3" />
+      <span className="sr-only">(opens in a new tab)</span>
     </a>
   ) : (
-    <span title={value} className={`${common} text-ink-3`}>{body}</span>
+    <span title={value} className={cn("inline-flex items-center gap-1 font-mono text-xs tabular-nums text-ink-3", className)}>
+      {short}
+    </span>
   );
 }
 
@@ -91,47 +96,20 @@ export const explorerTx = (hash: string) => `https://testnet.arcscan.app/tx/${ha
 
 const FACT = /(\b[a-z]+-pr#\d+\b|\b\d[\d,]*(?:\.\d+)?\s?(?:USDC|USYC)\b|\bPO[-#]?[A-Z0-9-]+\b|\bINV[-#]?[A-Z0-9-]+\b|\b0x[0-9a-fA-F]{6,}\b|\b\d+(?:\.\d+)?%|\bday \d+\b|#\d+\b)/gi;
 
-export function Reasoning({ text, className = "" }: { text: string; className?: string }) {
+/** The agent's reasoning in the serif face, with the facts a reader checks set in mono. */
+export function Reasoning({ text, className }: { text: string; className?: string }) {
   const parts = text.split(FACT);
   return (
-    <p className={`max-w-[70ch] text-pretty font-serif text-reasoning text-ink ${className}`}>
+    <p className={cn("max-w-[70ch] text-pretty font-serif text-reasoning text-ink", className)}>
       {parts.map((part, index) =>
         index % 2 === 1 ? (
-          <span key={`${part}-${index}`} className="rounded-sm bg-raised px-1 font-mono text-[0.84em] text-ink">
+          <span key={`${part}-${index}`} className="rounded-md bg-raised px-1 font-mono text-[0.84em] text-ink">
             {part}
           </span>
-        ) : part
+        ) : (
+          part
+        )
       )}
     </p>
-  );
-}
-
-export function Card({
-  children,
-  className = "",
-  tone = "default",
-}: {
-  children: ReactNode;
-  className?: string;
-  tone?: "default" | "refused" | "held" | "simulated";
-}) {
-  const toneClass = {
-    default: "border-line bg-surface",
-    refused: "border-refused-line bg-surface",
-    held: "border-held-line bg-surface",
-    simulated: "border-dashed border-line-strong bg-surface",
-  }[tone];
-  return <section className={`surface-shadow rounded-xl border ${toneClass} ${className}`}>{children}</section>;
-}
-
-export function SectionHead({ title, meta, action }: { title: string; meta?: ReactNode; action?: ReactNode }) {
-  return (
-    <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h2 className="text-base font-semibold tracking-tight text-ink">{title}</h2>
-        {meta && <span className="text-[0.8125rem] text-ink-3">{meta}</span>}
-      </div>
-      {action}
-    </div>
   );
 }

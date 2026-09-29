@@ -1,5 +1,5 @@
 import { orgHref } from "@/lib/auth/org-paths";
-import { HOME_PATH, NAV_ITEMS, navItemForPathname, type NavKey } from "./nav";
+import { NAV_ITEMS, sectionPathOf, type NavKey } from "./nav";
 import type { WorkspaceSummary } from "./workspace";
 
 /**
@@ -41,7 +41,7 @@ export function sectionTargets(slug: string): Array<CommandTarget & { key: NavKe
 
 /** Every other workspace, opened on the section the person is looking at now. */
 export function workspaceTargets(current: WorkspaceSummary, workspaces: readonly WorkspaceSummary[], pathname: string): CommandTarget[] {
-  const section = navItemForPathname(pathname)?.path ?? HOME_PATH;
+  const section = sectionPathOf(pathname);
   return workspaces
     .filter((workspace) => workspace.slug !== current.slug)
     .map((workspace) => ({

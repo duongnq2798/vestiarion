@@ -1,7 +1,5 @@
-import {
-  emptyCounterpartyHistory,
-  type CounterpartyHistoryInputs,
-} from "@/lib/agent/counterparty-history";
+import { Disclosure } from "@/components/ui/Disclosure";
+import { emptyCounterpartyHistory, type CounterpartyHistoryInputs } from "@/lib/agent/counterparty-history";
 
 export function PerformanceHistory({
   score,
@@ -18,8 +16,12 @@ export function PerformanceHistory({
   return (
     <div className={compact ? "mt-2" : "mt-3"}>
       <p className="text-xs font-medium text-ink">Performance history · {label}</p>
-      <details className="mt-1 text-xs text-ink-3">
-        <summary className="cursor-pointer select-none hover:text-ink-2">Score inputs</summary>
+      <Disclosure
+        variant="bare"
+        summary="Score inputs"
+        className="mt-1 text-xs text-ink-3"
+        summaryClassName="w-fit transition-colors duration-150 ease-standard hover:text-ink-2"
+      >
         <p className="mt-1 max-w-md leading-relaxed">
           {facts.paidWithoutIntervention} clean payment(s) · {facts.informationRequested} information
           request(s) · {facts.heldOrFlagged} held/flagged · {facts.duplicateSubmissions} confirmed
@@ -39,7 +41,7 @@ export function PerformanceHistory({
           Pulled toward 50% until there is enough history to leave it, so a single outcome cannot
           read as a verdict. Evidence for closer review, never a payment guardrail.
         </p>
-      </details>
+      </Disclosure>
     </div>
   );
 }

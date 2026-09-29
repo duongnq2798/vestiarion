@@ -161,6 +161,21 @@ describe("Table", () => {
     expect(markup).toContain("overflow-auto");
     expect(markup).not.toContain("overflow-x-auto");
   });
+
+  it("becomes a named, focusable region when it has a label, so the keyboard can scroll it", () => {
+    const markup = html(
+      <Table label="Invoices to import">
+        <TableBody>
+          <TableRow>
+            <TableCell>row</TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+    );
+    expect(markup).toContain('role="region"');
+    expect(markup).toContain('aria-label="Invoices to import"');
+    expect(markup).toContain('tabindex="0"');
+  });
 });
 
 describe("Card", () => {

@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { HOME_PATH, NAV_GROUPS, NAV_ITEMS, navItemForPathname, sectionTitle } from "@/components/vx/nav";
+import { HOME_PATH, NAV_GROUPS, NAV_ITEMS, navItemForPathname, sectionPathOf, sectionTitle } from "@/components/vx/nav";
 import { LEGACY_PRODUCT_PATHS } from "@/lib/auth/org-paths";
 
 /**
@@ -70,5 +70,15 @@ describe("navItemForPathname — which section the current URL is in", () => {
 
   it.each(["/o/acme", "/o/acme/", "/audit", "/o/acme/consoles", "/onboarding", "/"])("%s is no section", (pathname) => {
     expect(navItemForPathname(pathname)).toBeUndefined();
+  });
+});
+
+describe("sectionPathOf", () => {
+  it("keeps the section a person is in", () => {
+    expect(sectionPathOf("/o/acme/audit/anything-deeper")).toBe("/audit");
+  });
+
+  it("falls back to the workspace's home", () => {
+    expect(sectionPathOf("/o/acme")).toBe(HOME_PATH);
   });
 });

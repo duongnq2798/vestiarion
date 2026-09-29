@@ -105,22 +105,6 @@
   background-size: 32px 32px;
 }
 
-@utility surface-shadow {
-  box-shadow:
-    0 1px 0 rgb(24 33 28 / 0.04),
-    0 14px 40px rgb(43 54 47 / 0.07);
-}
-
-@utility brand-shadow {
-  box-shadow:
-    0 12px 28px rgb(48 72 201 / 0.18),
-    inset 0 1px 0 rgb(255 255 255 / 0.26);
-}
-
-@utility logo-shadow {
-  filter: drop-shadow(0 8px 14px rgb(48 72 201 / 0.2));
-}
-
 /* A loading placeholder: the raised colour with a slow band of light across it. */
 @utility skeleton {
   background-color: var(--color-raised);

@@ -1,6 +1,9 @@
 "use client";
 
+import { ShieldCheck } from "lucide-react";
 import { useState, useTransition } from "react";
+import { Button } from "@/components/ui/Button";
+import { Callout } from "@/components/ui/Callout";
 
 interface VerificationResponse {
   /** `null` is "not checked" — see `VerificationResult` in `lib/ledger`. */
@@ -8,8 +11,47 @@ interface VerificationResponse {
   checkedEntries?: number;
   brokenAt?: number;
   reason?: string;
+  /** What the API route sends for a refused request (401/404/500), instead of `reason`. */
+  error?: string;
   /** Configuration problems met on the way to the verdict; not about the chain. */
   warnings?: string[];
+}
+
+/** Reads the verify endpoint's answer; a body that is not JSON (a proxy's error page) reads as "not checked". */
+export async function readVerification(response: Response): Promise<VerificationResponse> {
+  const type = response.headers.get("content-type") ?? "";
+  if (!type.includes("application/json")) {
+    return { valid: null, reason: `The server answered ${response.status}${response.statusText ? ` ${response.statusText}` : ""}` };
+  }
+  return (await response.json()) as VerificationResponse;
+}
+
+export interface Verdict {
+  tone: "proof" | "refused" | "neutral";
+  title: string;
+  body: string;
+}
+
+/**
+ * What a verification response says, pinned as a pure function. A request that
+ * never reached a verdict is "not checked" — neutral, never "broken": calling
+ * it broken would accuse the chain because the network or a key failed.
+ */
+export function verificationVerdict(result: VerificationResponse | null): Verdict | null {
+  if (!result) return null;
+  if (result.valid === true) {
+    const entries = result.checkedEntries ?? 0;
+    return { tone: "proof", title: "Chain intact", body: `${entries} signatures and ${Math.max(entries - 1, 0)} links verified.` };
+  }
+  if (result.valid === false) {
+    return {
+      tone: "refused",
+      title: `Chain broken${result.brokenAt ? ` at #${String(result.brokenAt).padStart(4, "0")}` : ""}`,
+      body: result.reason ?? "verification failed",
+    };
+  }
+  const cause = (result.reason ?? result.error ?? "no verdict was produced").replace(/\.$/, "");
+  return { tone: "neutral", title: "Not checked", body: `${cause}. This is not a finding about the chain.` };
 }
 
 export default function VerifyLedgerBadge({ orgSlug }: { orgSlug: string }) {
@@ -20,7 +62,7 @@ export default function VerifyLedgerBadge({ orgSlug }: { orgSlug: string }) {
     startTransition(async () => {
       try {
         const response = await fetch(`/api/ledger/verify?org=${encodeURIComponent(orgSlug)}`);
-        setResult((await response.json()) as VerificationResponse);
+        setResult(await readVerification(response));
       } catch (error) {
         // A request that never arrived checked nothing. Calling that `false`
         // would accuse the chain of being broken because the network was.
@@ -29,26 +71,27 @@ export default function VerifyLedgerBadge({ orgSlug }: { orgSlug: string }) {
     });
   }
 
+  const verdict = verificationVerdict(result);
+
   return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-      <button
-        type="button"
-        disabled={pending}
-        onClick={verify}
-        className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md border border-ink-3 px-3.5 text-[0.8125rem] font-medium text-ink hover:bg-raised disabled:opacity-70"
-      >
-        <span aria-hidden className={pending ? "motion-safe:animate-spin" : ""}>✦</span>
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+      <Button variant="secondary" icon={<ShieldCheck />} loading={pending} onClick={verify} className="shrink-0">
         {pending ? "Checking every signature…" : result ? "Verify again" : "Verify hash chain"}
-      </button>
-      <p aria-live="polite" className="min-h-5 text-[0.8125rem]">
-        {result?.valid === true && <span className="text-proof">Chain intact — {result.checkedEntries ?? 0} signatures and {Math.max((result.checkedEntries ?? 0) - 1, 0)} links verified.</span>}
-        {result?.valid === false && <span className="text-refused">Chain broken{result.brokenAt ? ` at #${String(result.brokenAt).padStart(4, "0")}` : ""}: {result.reason ?? "verification failed"}</span>}
-        {result != null && result.valid == null && <span className="text-ink-3">Not checked — {result.reason ?? "no verdict was produced"}. This is not a finding about the chain.</span>}
-        {!result && !pending && <span className="text-ink-3">Not yet verified in this session.</span>}
-        {result?.warnings?.map((warning) => (
-          <span key={warning} className="block text-refused">Configuration: {warning}</span>
-        ))}
-      </p>
+      </Button>
+      <div aria-live="polite" className="min-w-0 flex-1">
+        {verdict ? (
+          <Callout tone={verdict.tone} title={verdict.title}>
+            {verdict.body}
+            {result?.warnings?.map((warning) => (
+              <span key={warning} className="mt-1 block text-refused">
+                Configuration: {warning}
+              </span>
+            ))}
+          </Callout>
+        ) : (
+          !pending && <p className="py-2 text-[0.8125rem] text-ink-3">Not yet verified in this session.</p>
+        )}
+      </div>
     </div>
   );
 }

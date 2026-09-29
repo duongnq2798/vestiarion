@@ -28,9 +28,19 @@ import AgentControlsClient from "@/components/AgentControlsClient";
 import AgentPauseControl from "@/components/AgentPauseControl";
 import MembersPanel from "@/components/MembersPanel";
 import MilestoneVerification from "@/components/MilestoneVerification";
+import VerifyLedgerBadge from "@/components/VerifyLedgerBadge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
+import { AuditLedger, DomainFilter } from "@/components/vx/AuditLedger";
+import { CycleReport } from "@/components/vx/CycleReport";
+import { DecisionCard } from "@/components/vx/DecisionCard";
+import { InsightsCharts } from "@/components/vx/InsightsCharts";
+import { PerformanceHistory } from "@/components/vx/PerformanceHistory";
+import { ProvenanceBar } from "@/components/vx/Provenance";
+import { RiskDial } from "@/components/vx/RiskDial";
+import { AccountsList, BalanceTile, ForecastPanel, StatTile } from "@/components/vx/Treasury";
+import { derivePerformanceScore } from "@/lib/agent/counterparty-history";
 import { PageHead } from "@/components/vx/Shell";
-import { COUNTERPARTIES, DESIGN_SLUG, INVITATIONS, MEMBERS } from "./fixtures";
+import { ACCOUNTS, COUNTERPARTIES, DECISIONS, DESIGN_SLUG, FORECAST, HISTORY, INSIGHTS, INVITATIONS, LEDGER, MEMBERS, PROVENANCE } from "./fixtures";
 import { FeedbackDemo, FormLab, OverlayDemo, TabsDemo } from "./Demos";
 import { FrameDemo } from "./Screens";
 
@@ -49,6 +59,7 @@ const SECTIONS = [
   ["forms", "Forms"],
   ["overlays", "Overlays"],
   ["feedback", "Feedback and motion"],
+  ["domain", "Domain components"],
   ["screens", "Screens"],
 ] as const;
 
@@ -396,6 +407,46 @@ export default function DesignPage() {
                 </Reveal>
               ))}
             </div>
+          </Section>
+
+          <Section id="domain" title="Domain components" description="decisions, treasury, ledger and charts, from fixtures">
+            <ProvenanceBar legs={PROVENANCE} />
+            <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 xl:grid-cols-4">
+              <BalanceTile accounts={ACCOUNTS} mode="live" />
+              <StatTile label="Paid out to date" sub="2 settled on-chain">
+                1,250.00
+              </StatTile>
+              <StatTile label="Decisions logged" href="/design#domain" sub="Every entry is hash-linked and signed">
+                6
+              </StatTile>
+              <StatTile label="Needs you" tone="held" href="/design#domain" sub="Waiting for a person’s decision">
+                2
+              </StatTile>
+            </div>
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+              <AccountsList accounts={ACCOUNTS} />
+              <ForecastPanel forecast={FORECAST} />
+            </div>
+            <div className="space-y-4">
+              {DECISIONS.map((decision) => (
+                <DecisionCard key={decision.id} decision={decision} orgSlug={DESIGN_SLUG} />
+              ))}
+            </div>
+            <CycleReport entries={LEDGER} day={27} since={3} clockMode="simulate" completedAt={null} orgSlug={DESIGN_SLUG} />
+            <DomainFilter orgSlug={DESIGN_SLUG} active="ap" />
+            <AuditLedger entries={LEDGER} since={5} />
+            <Card className="p-4 sm:p-6">
+              <VerifyLedgerBadge orgSlug={DESIGN_SLUG} />
+            </Card>
+            <Card className="space-y-4 p-4 sm:p-6">
+              <RiskDial risk="unscreened" baseline={null} effective={null} />
+              <RiskDial risk="clear" baseline={5000} effective={5000} />
+              <RiskDial risk="medium" baseline={5000} effective={2500} />
+              <RiskDial risk="high" baseline={5000} effective={0} />
+              <PerformanceHistory score={derivePerformanceScore(HISTORY).score} inputs={HISTORY} />
+            </Card>
+            <InsightsCharts data={INSIGHTS} />
+            <InsightsCharts data={{ transfers: [], runs: [], snapshots: [], treasuryMoves: [], screenings: [] }} />
           </Section>
 
           <Section id="screens" title="Screens" description="the real components with made-up data — nothing here is saved">
