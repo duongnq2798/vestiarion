@@ -1,5 +1,8 @@
+import { currentOrgId } from "../context";
 import { platformDb, unwrap } from "../dal";
 import { withOrg } from "../dal/scope";
+import { notifyWaitingDecisions } from "../notifications/waiting";
+import { runAgentCycle, type CycleResult } from "./orchestrator";
 import { AgentPausedError } from "./pause";
 
 /** The `orgs` columns the cron needs to enter each organization's scope,
@@ -52,4 +55,26 @@ export async function runLiveOrganizations<T>(run: () => Promise<T>): Promise<Cr
     }
   }
   return results;
+}
+
+/**
+ * One scheduled cycle for the organization in scope: the cycle, then the
+ * digest of payables waiting for a decision (notifications design N1, N2).
+ * Only the cron runs this; a cycle started from the console has a person
+ * watching it and sends nothing.
+ *
+ * A cycle that throws is never followed by a digest, and a paused one throws
+ * `AgentPausedError`, so neither notifies. Notifying never changes the
+ * cycle's result: `notifyWaitingDecisions` does not throw, and if it ever
+ * did, the error is logged here by organization id and the result still
+ * returned.
+ */
+export async function runScheduledCycle(): Promise<CycleResult> {
+  const result = await runAgentCycle();
+  try {
+    await notifyWaitingDecisions();
+  } catch (error) {
+    console.error("notifications failed after the cycle", currentOrgId(), error instanceof Error ? error.message : String(error));
+  }
+  return result;
 }

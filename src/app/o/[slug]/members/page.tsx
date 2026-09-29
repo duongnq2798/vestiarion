@@ -5,6 +5,7 @@ import { sectionTitle } from "@/components/vx/nav";
 import { requireMembership } from "@/lib/auth/membership";
 import { can, canAssignRole, ORG_ROLES } from "@/lib/auth/roles";
 import { chainModes } from "@/lib/circle";
+import { platformDb, unwrap } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
 import { listMembers, listOpenInvitations } from "@/lib/platform/members";
 import { stats } from "@/lib/queries";
@@ -19,12 +20,19 @@ export default async function MembersPage({ params }: { params: Promise<{ slug: 
   return inOrg(access, async () => {
     const { user, membership } = access;
     const canManage = can(membership.role, "members.manage");
-    const [members, invitations, dashboardStats] = await Promise.all([
+    const canDecide = can(membership.role, "approval.decide");
+    const [members, invitations, dashboardStats, notifySwitch] = await Promise.all([
       listMembers(membership.orgId),
       canManage ? listOpenInvitations(membership.orgId) : Promise.resolve([]),
       stats(),
+      // Only a member who can decide payments has anything to switch; a
+      // viewer receives nothing, so their own row is never read.
+      canDecide
+        ? platformDb().from("memberships").select("notify_email").eq("org_id", membership.orgId).eq("user_id", user.id).single()
+        : Promise.resolve(null),
     ]);
     const assignable = ORG_ROLES.filter((role) => canAssignRole(membership.role, role));
+    const notifyEmail = notifySwitch ? (unwrap(notifySwitch) as { notify_email: boolean }).notify_email : false;
 
     return (
       <ProductShell day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()}>
@@ -39,6 +47,8 @@ export default async function MembersPage({ params }: { params: Promise<{ slug: 
           viewerId={user.id}
           viewerRole={membership.role}
           assignable={assignable}
+          canDecide={canDecide}
+          notifyEmail={notifyEmail}
         />
       </ProductShell>
     );

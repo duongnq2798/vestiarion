@@ -3,10 +3,9 @@ import { siteOrigin } from "../auth/env";
 import type { OrgRole } from "../auth/roles";
 import { currentOrgId } from "../context";
 import { platformDb, unwrap } from "../dal";
-import { withOrg } from "../dal/scope";
 import { invitationEmail } from "../email/invitation";
 import { sendEmail } from "../email/send";
-import { appendLedgerEntry } from "../ledger";
+import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 
 /**
  * Members and invitations (spec §7, §10 step 5b). Every change goes through a
@@ -16,7 +15,7 @@ import { appendLedgerEntry } from "../ledger";
  *
  * The ledger entry is appended after the function has committed, in its own
  * transaction, so it is best effort: if it fails, the change it describes has
- * still happened, and is reported as done (see `recordLedgerEntry`).
+ * still happened, and is reported as done (see `appendLedgerEntryBestEffort`).
  */
 
 export type MemberErrorCode =
@@ -59,21 +58,6 @@ function raise(error: { message: string }): never {
 
 export function hashInvitationToken(token: string): string {
   return crypto.createHash("sha256").update(token).digest("hex");
-}
-
-/**
- * Appends the ledger entry for a change that has already committed. A failure
- * here (an unreadable signing key, a transient error) must not turn a done
- * change into a reported failure: a retry would then be refused, or repeat
- * it. So it is logged by action and organization id only, never an address
- * or a token, and swallowed.
- */
-async function recordLedgerEntry(action: string, orgId: string, append: () => Promise<unknown>): Promise<void> {
-  try {
-    await append();
-  } catch {
-    console.error("ledger entry not recorded", action, orgId);
-  }
 }
 
 /** The row `invite_member` returns — `public.invitations` (migration 0021). */
@@ -132,15 +116,13 @@ export async function inviteMember(input: {
   if (result.error) raise(result.error);
   const row = result.data as InvitationRow;
 
-  await recordLedgerEntry("member_invited", orgId, () =>
-    appendLedgerEntry({
-      actor: "human",
-      domain: "system",
-      action: "member_invited",
-      summary: `Invitation sent for the ${input.role} role`,
-      detail: { by: input.actorId, invitationId: row.id, role: input.role },
-    })
-  );
+  await appendLedgerEntryBestEffort(orgId, {
+    actor: "human",
+    domain: "system",
+    action: "member_invited",
+    summary: `Invitation sent for the ${input.role} role`,
+    detail: { by: input.actorId, invitationId: row.id, role: input.role },
+  });
 
   const link = `${siteOrigin()}/invite/${token}`;
   const email = invitationEmail({
@@ -174,19 +156,16 @@ interface AcceptedInvitationRow {
  * returns, after which the ledger entry is appended inside its own scope.
  */
 async function finishAcceptance(row: AcceptedInvitationRow, userId: string): Promise<{ orgId: string; slug: string; role: OrgRole }> {
-  await recordLedgerEntry("member_joined", row.org_id, () =>
-    withOrg(
-      row.org_id,
-      () =>
-        appendLedgerEntry({
-          actor: "human",
-          domain: "system",
-          action: "member_joined",
-          summary: `A member joined with the ${row.role} role`,
-          detail: { by: userId, role: row.role, invitationId: row.invitation_id },
-        }),
-      { userId }
-    )
+  await appendLedgerEntryBestEffort(
+    row.org_id,
+    {
+      actor: "human",
+      domain: "system",
+      action: "member_joined",
+      summary: `A member joined with the ${row.role} role`,
+      detail: { by: userId, role: row.role, invitationId: row.invitation_id },
+    },
+    { enterScope: { userId } }
   );
 
   return { orgId: row.org_id, slug: row.slug, role: row.role };
@@ -265,15 +244,13 @@ export async function changeMemberRole(input: { actorId: string; userId: string;
   if (result.error) raise(result.error);
   const from = result.data as OrgRole;
 
-  await recordLedgerEntry("member_role_changed", orgId, () =>
-    appendLedgerEntry({
-      actor: "human",
-      domain: "system",
-      action: "member_role_changed",
-      summary: `A member's role changed from ${from} to ${input.role}`,
-      detail: { by: input.actorId, member: input.userId, from, to: input.role },
-    })
-  );
+  await appendLedgerEntryBestEffort(orgId, {
+    actor: "human",
+    domain: "system",
+    action: "member_role_changed",
+    summary: `A member's role changed from ${from} to ${input.role}`,
+    detail: { by: input.actorId, member: input.userId, from, to: input.role },
+  });
 }
 
 /** Runs in scope: `p_org_id` comes from `currentOrgId()`. */
@@ -286,25 +263,21 @@ export async function removeMember(input: { actorId: string; userId: string }): 
   const role = result.data as OrgRole;
 
   if (input.actorId === input.userId) {
-    await recordLedgerEntry("member_left", orgId, () =>
-      appendLedgerEntry({
-        actor: "human",
-        domain: "system",
-        action: "member_left",
-        summary: `A member with the ${role} role left the workspace`,
-        detail: { by: input.actorId, role },
-      })
-    );
+    await appendLedgerEntryBestEffort(orgId, {
+      actor: "human",
+      domain: "system",
+      action: "member_left",
+      summary: `A member with the ${role} role left the workspace`,
+      detail: { by: input.actorId, role },
+    });
   } else {
-    await recordLedgerEntry("member_removed", orgId, () =>
-      appendLedgerEntry({
-        actor: "human",
-        domain: "system",
-        action: "member_removed",
-        summary: `A member with the ${role} role was removed`,
-        detail: { by: input.actorId, member: input.userId, role },
-      })
-    );
+    await appendLedgerEntryBestEffort(orgId, {
+      actor: "human",
+      domain: "system",
+      action: "member_removed",
+      summary: `A member with the ${role} role was removed`,
+      detail: { by: input.actorId, member: input.userId, role },
+    });
   }
 }
 
@@ -318,15 +291,13 @@ export async function revokeInvitation(input: { actorId: string; invitationId: s
   });
   if (result.error) raise(result.error);
 
-  await recordLedgerEntry("invitation_revoked", orgId, () =>
-    appendLedgerEntry({
-      actor: "human",
-      domain: "system",
-      action: "invitation_revoked",
-      summary: "An invitation was revoked",
-      detail: { by: input.actorId, invitationId: input.invitationId },
-    })
-  );
+  await appendLedgerEntryBestEffort(orgId, {
+    actor: "human",
+    domain: "system",
+    action: "invitation_revoked",
+    summary: "An invitation was revoked",
+    detail: { by: input.actorId, invitationId: input.invitationId },
+  });
 }
 
 export async function listMembers(orgId: string): Promise<Member[]> {

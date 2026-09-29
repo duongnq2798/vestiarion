@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { runLiveOrganizations } from "@/lib/agent/cron";
-import { runAgentCycle } from "@/lib/agent/orchestrator";
+import { runLiveOrganizations, runScheduledCycle } from "@/lib/agent/cron";
 import { hasValidAgentBearer } from "@/lib/agent-security";
 import { takeAgentCycleToken } from "@/lib/rate-limit";
 
@@ -33,7 +32,10 @@ export async function POST(request: Request) {
     // tick's wall time is the sum of their cycles, not the slowest one.
     // Today there is one live organization. Revisit `maxDuration` or running
     // organizations in parallel once a second one goes live.
-    const results = await runLiveOrganizations(() => runAgentCycle());
+    //
+    // Each scheduled cycle is followed by the digest of payables waiting for
+    // a decision (notifications design N1, N2); it never changes the result.
+    const results = await runLiveOrganizations(runScheduledCycle);
     const organizations = results.map((result) => {
       if (!result.ok) {
         // Never echo more than the error's message: whatever else it

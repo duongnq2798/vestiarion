@@ -16,6 +16,13 @@ export type SendResult = { sent: true; id: string } | { sent: false; reason: str
 const DEFAULT_FROM = "Vestiarion <no-reply@vestiarion.xyz>";
 
 /**
+ * How long one send may wait for Resend before it is given up as failed. The
+ * cron sends its digests inside the tick, one after another, so a slow
+ * Resend must not hold the tick open.
+ */
+export const SEND_TIMEOUT_MS = 10_000;
+
+/**
  * A sender on vestiarion.xyz: either a bare address, or `Name <address>` with
  * exactly one address, inside the angle brackets. Anything else (another
  * domain, a lookalike such as `vestiarion.xyz.example.com`, a second address)
@@ -47,11 +54,13 @@ export async function sendEmail(
       method: "POST",
       headers: { authorization: `Bearer ${settings.apiKey}`, "content-type": "application/json" },
       body: JSON.stringify({ from: settings.from, to: [message.to], subject: message.subject, html: message.html, text: message.text }),
+      signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
     });
     if (!response.ok) return { sent: false, reason: `status ${response.status}` };
     const body = (await response.json()) as { id?: string };
     return { sent: true, id: body.id ?? "" };
   } catch (error) {
+    if (error instanceof Error && error.name === "TimeoutError") return { sent: false, reason: "timeout" };
     return { sent: false, reason: error instanceof Error ? error.message : "network error" };
   }
 }

@@ -190,6 +190,16 @@ revoked invitations are kept, marked withdrawn, and a workspace can send at most
 day. Anyone can leave a workspace they belong to from the same page. Deleting an account keeps the
 workspaces it created and the members it invited; deleting a workspace's only owner is refused.
 
+When a scheduled cycle leaves payables waiting for a decision, everyone who can decide them —
+**owner**, **admin**, **approver** — and has not turned it off gets a digest email: the workspace
+name, up to 10 of the waiting payables (then "and N more"), each with the counterparty, amount,
+status and the first sentence of why the agent held it, and a link to the approvals inbox. A cycle
+run by hand from the console never sends one, since the person running it is already watching it;
+in practice this means only a `live` workspace's unattended cron cycles notify. An invoice already
+told about is not told again unless it was escalated since. Each member has their own switch — "Email
+me when payments need a decision" — on the Members page, on by default; this needs `RESEND_API_KEY`
+too.
+
 Only the **founding organization** — seeded ahead of any sign-in, in `live` mode — skips self-serve
 creation: it exists before anyone signs in, so no self-serve step ever generates it a ledger key.
 Becoming its operator still means granting yourself ownership by hand:

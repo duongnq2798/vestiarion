@@ -234,6 +234,45 @@ human act, not the agent's own move.
 `agent_paused`, and `agent_resumed` record every decision, pause, and resume,
 each carrying the acting person's user id, never an address.
 
+## Notifications
+
+**A digest tells the members who can decide a payable that it is waiting for
+them**, once per workspace per scheduled cycle. `notifyWaitingDecisions`
+(`src/lib/notifications/waiting.ts`) runs after `runScheduledCycle`
+(`src/lib/agent/cron.ts`), in the same workspace scope, for every `live`
+organization the cron did not skip — a cycle started from the console has a
+person watching it already, so only the unattended cron notifies.
+`waitingToNotify` selects the payables that are `held`, `flagged`, or
+`awaiting_info` and either have never been told (`invoices.notified_at` is
+null) or were escalated by the follow-up stage since they last were
+(`escalated_at > notified_at`, recorded as `invoice_escalated` by
+`applyFollowUp`) — so an escalation is news again. Recipients are the
+members with `approval.decide` (`owner`, `admin`, `approver`) whose own
+`memberships.notify_email` switch is on, at most 25 per workspace, the rest
+logged rather than emailed. Each recipient gets a message of their own —
+addresses are never shared between them — built by `waitingDigestEmail`
+(`src/lib/email/waiting-digest.ts`): the workspace name, up to 10 invoices
+(then "and N more"), each with the counterparty's name, amount, status, and
+the first sentence of the agent's reasoning (at most 140 characters), all HTML-escaped, with no
+counterparty address, wallet, or email. It is sent through the same
+`sendEmail` (Resend, `no-reply@vestiarion.xyz`) invitations use. Needs
+`RESEND_API_KEY`; without it, nothing is sent and nothing is marked, and the
+next scheduled cycle tries again. The invoices are marked `notified_at = now()`
+only once at least one recipient's send has succeeded — so a digest nobody
+received is retried, never lost — and the ledger records `notification_sent`,
+with `detail: { invoiceIds, escalatedIds, recipients: <count>, failed:
+<count> }`: ids and counts, never an address. A failure anywhere in this path
+is logged with the workspace id and never fails the cycle or the tick.
+
+**The switch** is the member's own: `memberships.notify_email` (migration
+`0026`), on by default. It changes only from the Members page
+(`/o/[slug]/members`), which shows it — "Email me when payments need a
+decision" — only to a member who holds `approval.decide`; a viewer sees
+nothing, because a viewer cannot decide and so receives nothing.
+`setNotifyEmailAction` (`src/app/actions/notifications.ts`) is gated on
+`workspace.read`, and writes only the row named by the session's own user id
+— a `userId` field in the form is never read.
+
 ## Read API
 
 The versioned read boundary lives under `src/app/api/v1/`:
