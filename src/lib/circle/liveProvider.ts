@@ -12,6 +12,7 @@ import type {
 } from "./types";
 import { ARC_FEE_USD } from "./types";
 import { fetchArcFeeUsd } from "./arcFees";
+import { awaitSettlement, FAILED_STATES } from "./settlement";
 import type { ChainConfig } from "../config";
 
 interface AccountRow {
@@ -146,33 +147,20 @@ export class LiveProvider implements ChainProvider {
 
     // Arc settles in well under a second, but Circle's pipeline
     // (INITIATED -> CLEARED -> QUEUED -> SENT -> CONFIRMED -> COMPLETE) is
-    // asynchronous. The SDK polls for us and rejects on a terminal failure;
-    // the abort signal caps how long a cycle can block on one payment.
-    let status: TransferResult["status"] = "pending";
-    let txHash: string | undefined;
+    // asynchronous. awaitSettlement waits (capped, so a cycle cannot block on
+    // one payment) and reports failed only when Circle itself says so.
+    const { status, transaction } = await awaitSettlement(this.client, txId);
+    const txHash = transaction?.txHash;
     let feeUsd = ARC_FEE_USD;
     let feeSource: TransferResult["feeSource"] = "provider_estimate";
     let settledInMs: number | null = null;
-    try {
-      const settled = await this.client.getTransaction({
-        id: txId,
-        waitForState: "CONFIRMED",
-        signal: AbortSignal.timeout(45_000),
-      });
-      const transaction = settled.data?.transaction;
-      const state = transaction?.state;
-      txHash = transaction?.txHash;
-      status = state === "CONFIRMED" || state === "COMPLETE" ? "confirmed" : "pending";
-      const resolved = await resolveFee(this.arcRpcUrl, transaction?.networkFeeInUSD, txHash);
+    if (transaction) {
+      const resolved = await resolveFee(this.arcRpcUrl, transaction.networkFeeInUSD, txHash);
       feeUsd = resolved.feeUsd;
       feeSource = resolved.feeSource;
-      settledInMs = transaction ? measuredSettlementMs(transaction) : null;
-      if (status === "confirmed" && settledInMs == null) settledInMs = Date.now() - started;
-    } catch (err) {
-      // A timeout leaves the transfer in flight rather than failed, so those
-      // two cases are reported differently — the ledger records which.
-      status = (err as Error).name === "TimeoutError" ? "pending" : "failed";
+      settledInMs = measuredSettlementMs(transaction);
     }
+    if (status === "confirmed" && settledInMs == null) settledInMs = Date.now() - started;
 
     return {
       providerTxId: txId,
@@ -194,7 +182,7 @@ export class LiveProvider implements ChainProvider {
     if (!transaction) throw new Error(`Circle returned no transaction for ${providerTxId}`);
 
     const confirmed = transaction.state === "CONFIRMED" || transaction.state === "COMPLETE";
-    const failed = ["CANCELLED", "DENIED", "FAILED", "STUCK"].includes(transaction.state);
+    const failed = FAILED_STATES.includes(transaction.state);
     const txHash = transaction.txHash ?? null;
     // Reconciliation is also the backfill path: a transfer that settled before
     // its receipt was readable gets its real fee on the next pass.
