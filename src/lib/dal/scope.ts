@@ -109,11 +109,12 @@ export async function withOrgSlug<T>(slug: string, fn: () => Promise<T>): Promis
 }
 
 /**
- * The founding organization, for the places the spec binds to it: the v1 API
- * until scoped keys exist (§4.5), the public landing page, and the demo
- * reset. The cron used to be a fourth (§10.3), before step 5 of the rollout
- * moved it to `runLiveOrganizations` over every `live` organization (§4.4).
- * Nothing else may use this as a default.
+ * The founding organization, for the places the spec binds to it: the public
+ * landing page and the demo reset. The cron used to be one (§10.3), before
+ * step 5 of the rollout moved it to `runLiveOrganizations` over every `live`
+ * organization (§4.4); the v1 API was another (§4.5), until workspace API keys
+ * made each request serve its key's own workspace. Nothing else may use this
+ * as a default.
  */
 export function withFoundingOrg<T>(fn: () => Promise<T>): Promise<T> {
   return withOrg(FOUNDING_ORG_ID, fn);

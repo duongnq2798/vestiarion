@@ -15,8 +15,8 @@ import {
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const denied = guardApiRequest(request, { scope: "read" });
-  if (denied) return denied;
+  const guard = await guardApiRequest(request, { scope: "read" });
+  if ("denied" in guard) return guard.denied;
 
   const url = new URL(request.url);
   const limitResult = parseLimit(url.searchParams.get("limit"));
@@ -38,6 +38,7 @@ export async function GET(request: Request) {
 
   return handleApiRequest(
     "GET /api/v1/milestones",
+    guard.key,
     async (): Promise<ApiCollection<MilestonePayload>> => {
       // Newest first: callers inspect current work; this is not a resumable log.
       let query = db()

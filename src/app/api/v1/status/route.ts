@@ -39,10 +39,10 @@ export interface StatusPayload {
 }
 
 export async function GET(request: Request) {
-  const denied = guardApiRequest(request, { scope: "read" });
-  if (denied) return denied;
+  const guard = await guardApiRequest(request, { scope: "read" });
+  if ("denied" in guard) return guard.denied;
 
-  return handleApiRequest("GET /api/v1/status", async (): Promise<ApiResource<StatusPayload>> => {
+  return handleApiRequest("GET /api/v1/status", guard.key, async (): Promise<ApiResource<StatusPayload>> => {
     const config = currentConfig();
     // Modes, not the provider: status must still answer when the
     // organization's Circle credentials cannot be read (R12). chainModes()
