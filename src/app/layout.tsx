@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { Geist, Geist_Mono, Newsreader } from "next/font/google";
+import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
 import { Toaster } from "@/components/ui/Toaster";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { THEME_COLOR } from "@/components/ui/tokens";
@@ -51,6 +52,8 @@ type RootLayoutProps = {
 };
 
 export default function RootLayout({ children }: RootLayoutProps) {
+  const gaMeasurementId = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID?.trim();
+
   return (
     <html lang="en" data-scroll-behavior="smooth" className={`${sans.variable} ${mono.variable} ${serif.variable}`}>
       <body>
@@ -64,6 +67,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
           {children}
         </TooltipProvider>
         <Toaster />
+        {gaMeasurementId ? <GoogleAnalytics measurementId={gaMeasurementId} /> : null}
       </body>
     </html>
   );
