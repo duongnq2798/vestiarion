@@ -3,6 +3,7 @@ import { runLiveOrganizations, runScheduledCycle } from "@/lib/agent/cron";
 import { hasValidAgentBearer } from "@/lib/agent-security";
 import { takeAgentCycleToken } from "@/lib/rate-limit";
 import { deliverPendingWebhooks } from "@/lib/webhooks/deliver";
+import { withoutDispatchSoon } from "@/lib/webhooks/dispatch-soon";
 
 export const maxDuration = 300;
 
@@ -45,7 +46,10 @@ export async function POST(request: Request) {
     //
     // Each scheduled cycle is followed by the digest of payables waiting for
     // a decision (notifications design N1, N2); it never changes the result.
-    const results = await runLiveOrganizations(runScheduledCycle);
+    // Dispatch-soon is off for the cycles: the dispatch below sends what they
+    // queued within the tick's own budget, and one scheduled after the
+    // response could run into `maxDuration` when that budget is spent.
+    const results = await withoutDispatchSoon(() => runLiveOrganizations(runScheduledCycle));
 
     // The cycles' ledger entries go out to webhook endpoints right away
     // (webhooks design W3), within what is left of this invocation: at most

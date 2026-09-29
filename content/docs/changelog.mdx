@@ -11,7 +11,6 @@ No payload, header or signature changed.
 - These docs, at [`/docs`](/docs): a quickstart, guides, and a [reference page](/docs/api) for every endpoint, with a **Try it** panel that sends a real request with your key.
 - [`GET /api/v1/openapi.json`](/api/v1/openapi.json): an OpenAPI 3.1 document for every `/api/v1` endpoint. It is public and needs no key.
 - A Markdown view of every page at its URL plus `.md`, and [`/llms.txt`](/llms.txt) and [`/llms-full.txt`](/llms-full.txt): see [AI integration](/docs/ai-integration).
-
 - **Cursors are checked per endpoint.** A `cursor` that the endpoint could not have issued, such as a ledger cursor sent to `/invoices` or an altered one, now answers `400 invalid_request`. It could reach the database before and answer `500`. See [Pagination](/docs/get-started/pagination).
 
 No other endpoint, parameter or response changed.

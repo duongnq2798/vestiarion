@@ -6,7 +6,7 @@ Vestiarion gives you its data in two ways. You pull it with the REST API when yo
 | --- | --- | --- |
 | What you get | Any resource: status, the ledger, invoices, counterparties, milestones, the treasury and insights | Each new ledger entry, as a `ledger.appended` event |
 | Who starts it | You send a `GET` request | Vestiarion sends a `POST` to your HTTPS endpoint |
-| Latency | Data is read live on each request, so it is as fresh as your last request | Right after the request or the agent tick that appended the entry, within seconds. A failed delivery is [retried](/docs/webhooks/retries) with backoff; see [Timing](/docs/webhooks#timing) |
+| Latency | Data is read live on each request, so it is as fresh as your last request | Right after the request or the agent tick that appended the entry. A failed delivery is [retried](/docs/webhooks/retries) with backoff; see [Timing](/docs/webhooks#timing) |
 | Authentication | A [workspace API key](/docs/get-started/authentication) in `Authorization: Bearer` | You [verify](/docs/webhooks/verify) the `Vestiarion-Signature` header with the endpoint's secret |
 | Ordering | The ledger is ascending by `seq`; the other collections are newest first | Not in order: sort by `entry.seq` |
 | Duplicates | Paging with the cursor never repeats a row, and a stored ledger cursor never goes back before its position | [At least once](/docs/webhooks/guarantees): de-duplicate on the event id |
