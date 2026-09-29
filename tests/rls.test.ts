@@ -266,7 +266,7 @@ describe("the tenant RPCs under the tenant role", () => {
 });
 
 describe("platform tables", () => {
-  it.each(["orgs", "memberships", "invitations"])("%s is closed to the tenant role", async (table) => {
+  it.each(["orgs", "memberships", "invitations", "api_keys"])("%s is closed to the tenant role", async (table) => {
     await expect(asTenant(db, A, (tx) => count(tx, table))).rejects.toThrow(/permission denied/);
   });
 });
