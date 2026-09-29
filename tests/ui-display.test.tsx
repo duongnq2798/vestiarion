@@ -74,6 +74,10 @@ describe("EmptyState", () => {
     expect(html(<EmptyState title="No invoices" titleAs="h2" />)).toContain("<h2");
     expect(html(<EmptyState title="No invoices" />)).toContain("<h3");
   });
+
+  it("can be a page's main heading", () => {
+    expect(html(<EmptyState title="This invitation has expired" titleAs="h1" />)).toContain("<h1");
+  });
 });
 
 describe("Avatar", () => {

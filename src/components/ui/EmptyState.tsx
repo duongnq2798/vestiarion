@@ -16,7 +16,7 @@ export function EmptyState({
   icon?: ReactNode;
   action?: ReactNode;
   compact?: boolean;
-  titleAs?: "h2" | "h3";
+  titleAs?: "h1" | "h2" | "h3";
   className?: string;
 }) {
   return (

@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
+import { ChevronRight, LogOut } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { signOut } from "@/app/login/actions";
 import AcceptInvitationByIdForm from "@/components/AcceptInvitationByIdForm";
 import CreateWorkspaceForm from "@/components/CreateWorkspaceForm";
-import { ChevronGlyph } from "@/components/vx/Glyphs";
+import { Avatar } from "@/components/ui/Avatar";
+import { Card } from "@/components/ui/Card";
+import { SubmitButton } from "@/components/ui/SubmitButton";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
 import { HOME_PATH } from "@/components/vx/nav";
 import { membershipsOf } from "@/lib/auth/membership";
@@ -55,34 +58,33 @@ export default async function OnboardingPage({ searchParams }: OnboardingPagePro
       <SiteHeader>
         {user.email && <span className="hidden max-w-[16rem] truncate text-sm text-ink-3 sm:block">{user.email}</span>}
         <form action={signOut}>
-          <button type="submit" className="h-10 rounded-lg px-3 text-sm font-medium text-ink-2 transition-colors hover:bg-raised/70 hover:text-ink">
+          <SubmitButton variant="ghost" icon={<LogOut />} pendingLabel="Signing out…">
             Sign out
-          </button>
+          </SubmitButton>
         </form>
       </SiteHeader>
       <main id="main" className="flex flex-1 items-center justify-center px-4 py-12 sm:py-16">
         <div className="w-full max-w-md">
-          <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">
-            {memberships.length ? "Choose a workspace" : "No workspace yet"}
-          </h1>
+          <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">{memberships.length ? "Choose a workspace" : "No workspace yet"}</h1>
           {invitations.length > 0 && (
-            <section className="mt-6">
-              <h2 className="text-lg font-semibold text-ink">Invitations for you</h2>
+            <section aria-labelledby="invitations-title" className="mt-6">
+              <h2 id="invitations-title" className="text-lg font-semibold text-ink">
+                Invitations for you
+              </h2>
               <ul className="mt-4 space-y-2">
                 {invitations.map((invitation) => (
-                  <li
-                    key={invitation.invitationId}
-                    className="surface-shadow flex items-center justify-between gap-3 rounded-xl border border-line bg-surface px-4 py-3"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate font-medium text-ink">{invitation.orgName}</p>
-                      <p className="text-xs text-ink-3">
-                        Invited as <span className="capitalize">{invitation.role}</span> · expires{" "}
-                        {expiresFormat.format(new Date(invitation.expiresAt))}
-                      </p>
-                    </div>
-                    <AcceptInvitationByIdForm invitationId={invitation.invitationId} />
-                  </li>
+                  <Card asChild key={invitation.invitationId} tone="agent">
+                    <li className="flex items-center gap-3 px-4 py-3">
+                      <Avatar name={invitation.orgName} tone="agent" shape="square" size="lg" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium text-ink">{invitation.orgName}</p>
+                        <p className="text-xs text-ink-3">
+                          Invited as <span className="capitalize">{invitation.role}</span> · expires {expiresFormat.format(new Date(invitation.expiresAt))}
+                        </p>
+                      </div>
+                      <AcceptInvitationByIdForm invitationId={invitation.invitationId} />
+                    </li>
+                  </Card>
                 ))}
               </ul>
             </section>
@@ -93,32 +95,31 @@ export default async function OnboardingPage({ searchParams }: OnboardingPagePro
               <ul className="mt-6 space-y-2">
                 {memberships.map((membership) => (
                   <li key={membership.orgId}>
-                    <Link
-                      href={orgHref(membership.slug, HOME_PATH)}
-                      className="surface-shadow group flex items-center gap-3 rounded-xl border border-line bg-surface px-4 py-3 text-ink transition-colors hover:border-agent-line"
-                    >
-                      <span aria-hidden className="grid size-9 shrink-0 place-items-center rounded-lg border border-agent-line bg-agent-soft text-sm font-semibold text-agent">
-                        {membership.name.trim().charAt(0).toUpperCase() || "W"}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate font-medium">{membership.name}</span>
-                        <span className="block font-mono text-xs capitalize text-ink-3">{membership.role} · {membership.mode}</span>
-                      </span>
-                      <ChevronGlyph className="size-4 text-ink-3 transition-transform group-hover:translate-x-0.5 group-hover:text-agent" />
-                    </Link>
+                    <Card asChild interactive>
+                      <Link href={orgHref(membership.slug, HOME_PATH)} className="group flex items-center gap-3 px-4 py-3 text-ink">
+                        <Avatar name={membership.name} tone="agent" shape="square" size="lg" />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate font-medium">{membership.name}</span>
+                          <span className="block font-mono text-xs capitalize text-ink-3">
+                            {membership.role} · {membership.mode}
+                          </span>
+                        </span>
+                        <ChevronRight aria-hidden className="size-4 shrink-0 text-ink-3 transition-transform duration-150 ease-standard group-hover:translate-x-0.5 group-hover:text-agent" />
+                      </Link>
+                    </Card>
                   </li>
                 ))}
               </ul>
-              <h2 id="create-workspace" className="mt-10 scroll-mt-24 text-lg font-semibold text-ink">Create another workspace</h2>
+              <h2 id="create-workspace" className="mt-10 scroll-mt-24 text-lg font-semibold text-ink">
+                Create another workspace
+              </h2>
               <div className="mt-4">
                 <CreateWorkspaceForm />
               </div>
             </>
           ) : (
             <>
-              <p className="mt-3 text-sm leading-relaxed text-ink-3">
-                Create a workspace to try Vestiarion with simulated money. A teammate can also invite you to theirs.
-              </p>
+              <p className="mt-3 text-sm leading-relaxed text-ink-3">Create a workspace to try Vestiarion with simulated money. A teammate can also invite you to theirs.</p>
               <div id="create-workspace" className="mt-6 scroll-mt-24">
                 <CreateWorkspaceForm />
               </div>
