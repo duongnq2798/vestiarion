@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { AgentPausedBanner, pausedBanner } from "@/components/AgentPausedBanner";
 import { AppFrame } from "@/components/vx/AppFrame";
 import type { WorkspaceSummary } from "@/components/vx/workspace";
 import { membershipFor, membershipsOf, requireMembership, type OrgMembership } from "@/lib/auth/membership";
@@ -49,14 +50,18 @@ function summary(membership: OrgMembership): WorkspaceSummary {
  * The navigation frame is drawn here so it persists across pages, and from
  * platform data only — the membership just checked and the viewer's other
  * memberships. No organization's own rows are read in this layout.
+ *
+ * The paused banner is platform data too: the pause lives on the
+ * organization row, and the pauser's address comes from its member list.
  */
 export default async function OrgLayout({ children, params }: OrgLayoutProps) {
   const { slug } = await params;
   const { user, membership } = await requireMembership(slug);
-  const memberships = await membershipsOf(user.id);
+  const [memberships, paused] = await Promise.all([membershipsOf(user.id), pausedBanner(membership.orgId)]);
 
   return (
     <AppFrame workspace={summary(membership)} workspaces={memberships.map(summary)} email={user.email}>
+      {paused && <AgentPausedBanner pause={paused.pause} members={paused.members} />}
       {children}
     </AppFrame>
   );

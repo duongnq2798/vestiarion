@@ -37,6 +37,7 @@ export const COUNTERPARTY_HISTORY_ACTIONS = [
   "ap_hold",
   "ap_flag_fraud",
   "ap_request_info",
+  "ap_reconcile",
   "milestone_release",
   "milestone_hold",
   "risk_level_changed",
@@ -240,6 +241,9 @@ export function deriveCounterpartyHistories(
     ) {
       subject.paid = true;
     }
+    // A payment that was pending when decided and settled on a later cycle's
+    // reconcile is a payment all the same.
+    if (entry.action === "ap_reconcile" && execution?.resultingStatus === "paid") subject.paid = true;
     if (entry.action === "ap_request_info") subject.informationRequested = true;
     if (entry.action === "ap_hold" || entry.action === "milestone_hold") {
       if (heldByOurConfiguration(entry)) subject.heldByOurPolicy = true;
