@@ -4,6 +4,7 @@ import { withOrg } from "../dal/scope";
 import type { LedgerEntryInput } from "../ledger";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { encryptSecret, masterKeysFromEnv } from "../secrets";
+import { getChainProvider, type ChainProvider } from "../circle";
 import { checkCircleApiKey, defaultCircleClient, type CircleClient, type CircleClientFactory } from "../circle/check";
 import {
   circleCall,
@@ -122,10 +123,10 @@ function record(orgId: string, actorId: string, entry: Omit<LedgerEntryInput, "a
   );
 }
 
-async function operatingAccount(): Promise<{ circle_wallet_id: string | null; address: string | null } | null> {
-  const result = await db().from("accounts").select("circle_wallet_id, address").eq("kind", "operating").maybeSingle();
+async function operatingAccount(): Promise<{ id: string; circle_wallet_id: string | null; address: string | null } | null> {
+  const result = await db().from("accounts").select("id, circle_wallet_id, address").eq("kind", "operating").maybeSingle();
   if (result.error) throw new Error(result.error.message);
-  return result.data as { circle_wallet_id: string | null; address: string | null } | null;
+  return result.data as { id: string; circle_wallet_id: string | null; address: string | null } | null;
 }
 
 /** No answer, a rate limit or a server error says nothing about which entity the key belongs to. */
@@ -287,6 +288,22 @@ export async function goLive(input: { orgId: string; actorId: string }): Promise
     summary: "The workspace went live",
     detail: { by: input.actorId },
   });
+}
+
+/**
+ * The operating wallet's USDC balance on chain, for the Go live step, read in
+ * the organization's scope already entered. The provider's `getBalance` runs
+ * Circle's read under its own deadline. Only a live provider is asked: a
+ * simulated one would answer with the stored, simulated balance, which is not
+ * what the owner is funding.
+ */
+export async function operatingBalance(provider?: Pick<ChainProvider, "mode" | "getBalance">): Promise<number> {
+  const operating = await operatingAccount();
+  if (!operating?.circle_wallet_id) throw new GoLiveError("no_wallets");
+  const chain = provider ?? getChainProvider();
+  if (chain.mode !== "live") throw new GoLiveError("not_connected");
+  const snapshot = await chain.getBalance(operating.id);
+  return snapshot.balance;
 }
 
 /** What the Go live panel shows: the step the workspace is on, and nothing secret. */

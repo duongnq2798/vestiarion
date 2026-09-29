@@ -11,7 +11,7 @@ import { runWith } from "@/lib/context";
 import { withOrg } from "@/lib/dal/scope";
 import type { CircleClient, CircleClientFactory } from "@/lib/circle/check";
 import { TREASURY_WALLET_SET } from "@/lib/circle/provision";
-import { connectCircle, createWallets, goLive, GoLiveError, goLiveStatus } from "@/lib/platform/go-live";
+import { connectCircle, createWallets, goLive, GoLiveError, goLiveStatus, operatingBalance } from "@/lib/platform/go-live";
 import { decryptSecret, encryptSecret, parseMasterKeys, type SecretEnvelope } from "@/lib/secrets";
 import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 
@@ -673,5 +673,32 @@ describe("goLiveStatus", () => {
 
   it("enters the organization's scope itself when called from outside one", async () => {
     await expect(database(founding()).unscoped(() => goLiveStatus(ORG))).resolves.toMatchObject({ step: "live" });
+  });
+});
+
+describe("operatingBalance", () => {
+  const liveProvider = (balance = 12.5) => ({
+    mode: "live" as const,
+    getBalance: vi.fn(async (accountId: string) => ({ accountId, chain: "ARC-TESTNET", token: "USDC", balance })),
+  });
+
+  it("reads the operating account's balance through a live provider, and returns only the number", async () => {
+    const provider = liveProvider(12.5);
+    await expect(database(withWallets(connected())).inScope(() => operatingBalance(provider))).resolves.toBe(12.5);
+    expect(provider.getBalance).toHaveBeenCalledExactlyOnceWith("acct-operating");
+  });
+
+  it("refuses when the operating account has no wallet, without asking the provider", async () => {
+    const provider = liveProvider();
+    const error = await refusal(database(connected()).inScope(() => operatingBalance(provider)));
+    expect(error.code).toBe("no_wallets");
+    expect(provider.getBalance).not.toHaveBeenCalled();
+  });
+
+  it("refuses a simulated provider, whose balance is not the one on chain", async () => {
+    const provider = { ...liveProvider(), mode: "simulate" as const };
+    const error = await refusal(database(withWallets(connected())).inScope(() => operatingBalance(provider)));
+    expect(error.code).toBe("not_connected");
+    expect(provider.getBalance).not.toHaveBeenCalled();
   });
 });

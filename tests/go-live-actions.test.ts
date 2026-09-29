@@ -2,7 +2,7 @@ import { inspect } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
-import { connectCircleAction, createWalletsAction, goLiveAction, type GoLiveActionResult } from "@/app/actions/go-live";
+import { connectCircleAction, createWalletsAction, goLiveAction, refreshBalanceAction, type BalanceActionResult, type GoLiveActionResult } from "@/app/actions/go-live";
 import { GoLiveError } from "@/lib/platform/go-live";
 import { fakeSupabase } from "./support/fake-supabase";
 
@@ -30,14 +30,15 @@ vi.mock("next/cache", () => ({ revalidatePath: revalidatePathMock }));
 const { authorizeMock } = vi.hoisted(() => ({ authorizeMock: vi.fn() }));
 vi.mock("@/lib/auth/authorize", () => ({ authorize: authorizeMock }));
 
-const { connectCircleMock, createWalletsMock, goLiveMock } = vi.hoisted(() => ({
+const { connectCircleMock, createWalletsMock, goLiveMock, operatingBalanceMock } = vi.hoisted(() => ({
   connectCircleMock: vi.fn(),
   createWalletsMock: vi.fn(),
   goLiveMock: vi.fn(),
+  operatingBalanceMock: vi.fn(),
 }));
 vi.mock("@/lib/platform/go-live", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/platform/go-live")>();
-  return { ...actual, connectCircle: connectCircleMock, createWallets: createWalletsMock, goLive: goLiveMock };
+  return { ...actual, connectCircle: connectCircleMock, createWallets: createWalletsMock, goLive: goLiveMock, operatingBalance: operatingBalanceMock };
 });
 
 const config = configFromEnv({
@@ -235,5 +236,43 @@ describe("goLiveAction", () => {
     authorizeMock.mockResolvedValueOnce(owner());
     goLiveMock.mockRejectedValueOnce(new GoLiveError(code));
     await expect(run(() => goLiveAction(INITIAL, form()))).resolves.toEqual({ ok: false, message });
+  });
+});
+
+describe("refreshBalanceAction", () => {
+  const BALANCE_INITIAL: BalanceActionResult = { ok: false, message: "", balance: null };
+
+  it("uses the owner-only permission literal org.administer, and returns the refusal", async () => {
+    authorizeMock.mockResolvedValueOnce({ ok: false, message: "refused" });
+    const result = await refreshBalanceAction(BALANCE_INITIAL, form());
+    expect(authorizeMock).toHaveBeenCalledWith("northstar", "org.administer");
+    expect(result).toEqual({ ok: false, message: "refused", balance: null });
+    expect(operatingBalanceMock).not.toHaveBeenCalled();
+  });
+
+  it("returns the number and nothing else, and revalidates nothing: it only reads", async () => {
+    authorizeMock.mockResolvedValueOnce(owner());
+    operatingBalanceMock.mockResolvedValueOnce(12.5);
+    const result = await run(() => refreshBalanceAction(BALANCE_INITIAL, form()));
+    expect(result).toEqual({ ok: true, message: "", balance: 12.5 });
+    expect(operatingBalanceMock).toHaveBeenCalledOnce();
+    expect(revalidatePathMock).not.toHaveBeenCalled();
+  });
+
+  it("returns a GoLiveError's own message", async () => {
+    authorizeMock.mockResolvedValueOnce(owner());
+    operatingBalanceMock.mockRejectedValueOnce(new GoLiveError("no_wallets"));
+    const result = await run(() => refreshBalanceAction(BALANCE_INITIAL, form()));
+    expect(result).toEqual({ ok: false, message: "Create the treasury wallets first.", balance: null });
+    expect(logged).toEqual([]);
+  });
+
+  it("returns a fixed message for anything else, logging the action's name only", async () => {
+    authorizeMock.mockResolvedValueOnce(owner());
+    operatingBalanceMock.mockRejectedValueOnce(new Error(`request failed: Bearer ${API_KEY} ${ENTITY_SECRET}`));
+    const result = await run(() => refreshBalanceAction(BALANCE_INITIAL, form()));
+    expect(result).toEqual({ ok: false, message: "Could not read the balance from Circle; try again.", balance: null });
+    expect(JSON.stringify(result)).not.toContain(API_KEY);
+    expect(logged).toEqual(["go-live: refreshBalanceAction failed"]);
   });
 });

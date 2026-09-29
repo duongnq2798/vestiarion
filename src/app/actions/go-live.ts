@@ -5,7 +5,7 @@ import "server-only";
 import { authorize } from "@/lib/auth/authorize";
 import { revalidateOrgPages } from "@/lib/auth/revalidate";
 import { inOrg } from "@/lib/dal/scope";
-import { connectCircle, createWallets, goLive, GoLiveError } from "@/lib/platform/go-live";
+import { connectCircle, createWallets, goLive, GoLiveError, operatingBalance } from "@/lib/platform/go-live";
 
 /**
  * The three Go live steps (docs/superpowers/specs/2026-09-29-go-live-design.md),
@@ -17,6 +17,11 @@ import { connectCircle, createWallets, goLive, GoLiveError } from "@/lib/platfor
 export interface GoLiveActionResult {
   ok: boolean;
   message: string;
+}
+
+/** The Go live step's balance line: the operating wallet's USDC on chain, or null when it could not be read. */
+export interface BalanceActionResult extends GoLiveActionResult {
+  balance: number | null;
 }
 
 const GENERIC = "Something went wrong; try again.";
@@ -87,6 +92,25 @@ export async function goLiveAction(_previous: GoLiveActionResult, formData: Form
       return { ok: true, message: "This workspace is live." };
     } catch (error) {
       return fail("goLiveAction", error);
+    }
+  });
+}
+
+/**
+ * Form fields: `orgSlug`. Reads the operating wallet's USDC balance on chain
+ * for the Go live step, and writes nothing, so it revalidates nothing. The
+ * result carries the number only: no wallet id, and no error of Circle's.
+ */
+export async function refreshBalanceAction(_previous: BalanceActionResult, formData: FormData): Promise<BalanceActionResult> {
+  const auth = await authorize(formData.get("orgSlug"), "org.administer");
+  if (!auth.ok) return { ok: false, message: auth.message, balance: null };
+  return inOrg(auth, async () => {
+    try {
+      return { ok: true, message: "", balance: await operatingBalance() };
+    } catch (error) {
+      if (error instanceof GoLiveError) return { ok: false, message: error.message, balance: null };
+      console.error("go-live: refreshBalanceAction failed");
+      return { ok: false, message: "Could not read the balance from Circle; try again.", balance: null };
     }
   });
 }
