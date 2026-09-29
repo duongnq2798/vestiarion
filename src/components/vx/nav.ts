@@ -38,6 +38,12 @@ export type NavKey = NavItem["key"];
 
 export const NAV_ITEMS: readonly NavItem[] = NAV_GROUPS.flatMap<NavItem>((group) => group.items);
 
+/**
+ * The public developer docs: not a workspace section, so outside `NAV_GROUPS`,
+ * and linked quietly at the foot of the navigation panel.
+ */
+export const DOCS_LINK = { href: "/docs", label: "Docs" } as const;
+
 /** Where a workspace opens: its first section. */
 export const HOME_PATH = NAV_ITEMS[0].path;
 

@@ -1,0 +1,35 @@
+### `valid` has three values
+
+`true` (verified) and `false` (broken) are findings about the chain. **`null` means no verdict was produced**: the workspace has no ledger public key to check against, so authorship was never checked. A consumer that treats `null` as a failure will report a tampered audit trail when a key was never set up for the workspace. `reason` says which case it is, and `brokenAt` is absent whenever `valid` is `null`.
+
+```json
+{"data":{"valid":null,"checkedEntries":99,"reason":"no ledger public key is configured, so authorship was not checked"}}
+```
+
+### A key that cannot be read
+
+A key that is stored but cannot be read, such as a PEM whose newlines were lost, is a **configuration problem, not a finding about the chain**, and the two are kept apart. Verification never fails over a bad key: it verifies with whatever it could read, and reports what it could not in `warnings`:
+
+```json
+{"data":{"valid":true,"checkedEntries":105,"warnings":["The ledger signing key is not a readable private key: error:1E08010C:DECODER routines::unsupported"]}}
+```
+
+When a broken key is the reason no key is available at all, `reason` names it, instead of saying "no ledger public key is configured".
+
+### Key identity and rotation
+
+Every entry written since signing key ids were introduced carries `signingKeyId`; older entries carry `null`. Verification accepts a **keyring**: the workspace's current key plus the earlier public keys the deployment still accepts. A labeled entry is checked against the key it names, and an unlabeled one against any key in the ring. So a rotated key keeps the history it signed verifiable, and a label the ring does not know is reported as its own case, again with `valid: null`:
+
+```json
+{"data":{"valid":null,"checkedEntries":112,"reason":"entry #104 was signed by key 4f2a9c1e88b30d57, which is not in this deployment's keyring (a71b0e6640cc2f93), so its authorship was not checked"}}
+```
+
+That message names the missing key and the ones the deployment has: the difference between a suspected forgery and a retired key that was never added to the keyring.
+
+A rotation is recorded in the ledger itself. The first append under a new key first writes a `system` entry with `action: "ledger_key_rotated"`, signed by the new key, whose `detail` is `{"from": "<old id>", "to": "<new id>"}`. A consumer following the ledger sees the change of authority as an entry.
+
+### The public key
+
+This endpoint reports whether the chain checks out; it does not return the public key. To check signatures yourself, take the PEM and its key id from the workspace's Audit page, `/o/<slug>/audit`, under "Ledger signing public key". [Verifying a ledger entry's signature](/docs/webhooks/verify#verifying-a-ledger-entry-s-ed25519-signature) shows how.
+
+The Audit page itself calls a separate route, `GET /api/ledger/verify?org=<slug>`, which takes a signed-in member's session rather than an API key and answers in a legacy bare shape. It is not part of the v1 API; integrations use this endpoint.

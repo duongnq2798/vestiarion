@@ -22,12 +22,15 @@ export function CommandDialog({
   onOpenChange,
   title,
   description,
+  shouldFilter,
   children,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
   description?: string;
+  /** `false` when the caller filters and orders the items itself. */
+  shouldFilter?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -40,7 +43,7 @@ export function CommandDialog({
         className="top-[12dvh] max-w-xl translate-y-0 gap-0 overflow-hidden p-0 sm:top-[18dvh] sm:p-0"
         bodyClassName="m-0 p-0 overflow-visible"
       >
-        <Command label={title} loop>
+        <Command label={title} loop shouldFilter={shouldFilter}>
           {children}
         </Command>
         <div className="hidden items-center gap-3 border-t border-line bg-ground/60 px-4 py-2 text-[0.6875rem] text-ink-3 sm:flex">

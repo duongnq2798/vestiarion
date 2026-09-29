@@ -1,0 +1,53 @@
+Every delivery is a `POST` with `Content-Type: application/json`, the headers below, and a JSON body.
+
+## Headers
+
+| Header | Value |
+| --- | --- |
+| `User-Agent` | `Vestiarion-Webhooks/1` |
+| `Vestiarion-Event-Id` | The delivery's id (a UUID): the same on every retry of the same delivery. |
+| `Vestiarion-Event-Type` | `ledger.appended` or `webhook.test`. |
+| `Vestiarion-Signature` | `t=<unix seconds>,v1=<hex HMAC-SHA256(secret, "<t>.<raw body>")>`. See [Verifying the signature](/docs/webhooks/verify#verifying-the-signature). |
+
+## Body
+
+The body is one JSON object:
+
+```json
+{
+  "id": "3fa1e2b0-...",
+  "type": "ledger.appended",
+  "createdAt": "2026-09-29T11:55:00.370366+00:00",
+  "workspace": { "slug": "acme" },
+  "entry": {
+    "seq": 82,
+    "ts": "2026-09-29T11:55:00.370366+00:00",
+    "actor": "agent",
+    "domain": "treasury",
+    "action": "sweep_to_reserve",
+    "summary": "Swept idle cash to the yield reserve",
+    "detail": { "amount": 1000.5 },
+    "bodyHash": "8780d07cb3d0...",
+    "prevHash": "0000...0000",
+    "hash": "b0ac72908868...",
+    "signature": "c14f06b7...",
+    "signingKeyId": "97a8a48af020f908"
+  }
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `id` | The delivery's id, the same as the `Vestiarion-Event-Id` header. De-duplicate on it. |
+| `type` | `ledger.appended` or `webhook.test`, the same as the `Vestiarion-Event-Type` header. |
+| `createdAt` | For `ledger.appended`, the entry's time; for `webhook.test`, the time the test was queued. |
+| `workspace.slug` | The workspace the event belongs to. |
+| `entry` | The ledger entry. `ledger.appended` only. |
+
+`entry` carries the same fields as [`GET /api/v1/ledger`](/docs/api/list-ledger-entries) reports for that row, without the row `id`, so a receiver already reading that API recognizes the shape. `signingKeyId` is `null` on entries written before key ids were recorded.
+
+A `webhook.test` delivery has no `entry` at all: only `id`, `type`, `createdAt` (the queued time) and `workspace`.
+
+## Your response
+
+Answer with any `2xx` status, within 10 seconds. Vestiarion reads at most 1 KB of your response body and does not otherwise inspect the body or the headers. Any other status, a timeout or a redirect is a failed attempt: see [Retries and disabling](/docs/webhooks/retries).

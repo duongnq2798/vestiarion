@@ -1,0 +1,34 @@
+A request that fails answers with an HTTP status and a JSON body that names the error with a code. Branch on the code, not on the message: the codes are a closed set, and the message is written for a person.
+
+## The error body
+
+```json
+{"error":{"code":"invalid_request","message":"riskLevel must be one of unscreened, clear, medium, high."}}
+```
+
+- `error.code` is one of the codes below.
+- `error.message` says what went wrong. For `invalid_request` it names the parameter and, for a filter, the values it accepts. It never carries implementation details such as a database error.
+
+## Codes
+
+| HTTP | Code | Meaning | Retry? |
+| --- | --- | --- | --- |
+| 400 | `invalid_request` | An invalid `limit` or `cursor`, or a filter value outside its allowed values. The message lists the accepted values. | No. Fix the request. |
+| 401 | `unauthorized` | No key, or a malformed, unknown or revoked one: "A valid API key is required." | No. Check the key. |
+| 403 | `forbidden` | The key's scopes do not cover this route: "This key cannot do that." | No. |
+| 404 | `not_found` | The requested resource does not exist in the key's workspace. | No. |
+| 429 | `rate_limited` | Too many requests; wait as long as `Retry-After` says before trying again. | Yes, after `Retry-After` seconds. |
+| 503 | `unavailable` | A service the request depends on is unavailable. | Yes, with backoff. |
+| 500 | `internal` | An unexpected server error. Implementation details are not exposed. | Yes, with backoff, a few times. |
+
+Each [reference page](/docs/api) lists, [under Errors](/docs/api/list-invoices#errors), the codes that endpoint can return.
+
+## Which errors to retry
+
+- **Do not retry** a `400`, `401`, `403` or `404` unchanged: the same request gets the same answer.
+- **Retry** a `429`, `503` or `500` with exponential backoff: wait, then double the wait each time, with some random jitter, and give up after a few attempts. On a `429`, wait at least as long as the `Retry-After` header says. [Limits](/docs/get-started/limits) says when these codes can occur today.
+- **A `401` after a `500`** is about the key; a `500` alone is not. Never discard a key because of a `500`.
+
+## Errors outside the envelope
+
+Every `/api/v1` error uses the body above. An error from outside `/api/v1`, such as a request for a path that does not exist, is not an API error and does not have that body. Check the status code before you read `error.code`.

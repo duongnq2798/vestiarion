@@ -1,0 +1,24 @@
+### Resuming from a cursor
+
+Persist `page.nextCursor` only after processing every entry in that response, and pass it back unchanged:
+
+```text
+GET /api/v1/ledger?limit=100
+GET /api/v1/ledger?limit=100&cursor=<previous page.nextCursor>
+```
+
+Continue until `hasMore` is `false` and `nextCursor` is `null`. On the next poll, reuse the last non-null cursor you processed: it returns the entries after it, starting with the last page you read, then everything appended since, and never an entry before it. Store entries keyed by `seq` and skip the ones you already have. [Pagination](/docs/get-started/pagination#the-ledger-cursor-is-a-watermark) walks through it.
+
+A malformed cursor answers `400 invalid_request`. The API never silently restarts from the beginning.
+
+### `seq` and the hash chain
+
+`seq` is a global identity column, so within one workspace it rises but is not gap-free. Continuity is proven by the hash chain, not by `seq` running without gaps: each entry's `prevHash` is the `hash` of the entry before it, and the first entry's `prevHash` is 64 zeros. [Verify the ledger](/docs/api/verify-ledger) replays the chain and the signatures for you.
+
+### Filters
+
+`domain` and `actor` match exactly. Unlike the enumerated filters on other endpoints, they accept any value: a value no entry has returns an empty page, not an error.
+
+### `signingKeyId`
+
+Each entry names the key that signed it in `signingKeyId`: the first 16 hex characters of SHA-256 over the signing key's SPKI DER. Older entries carry `null`. The label is outside both the body hash and the chain hash: it selects which key to check against, and proves nothing by itself. [Verifying a ledger entry's signature](/docs/webhooks/verify#verifying-a-ledger-entry-s-ed25519-signature) shows the check.

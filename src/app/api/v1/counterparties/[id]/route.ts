@@ -11,7 +11,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-interface CounterpartyDetailPayload extends CounterpartyPayload {
+export interface CounterpartyDetailPayload extends CounterpartyPayload {
   screeningHistory: ScreeningHistoryPayload[];
 }
 

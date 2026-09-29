@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { sectionTargets, shortcutLabel, workspaceTargets } from "@/components/vx/command-items";
-import { NAV_ITEMS } from "@/components/vx/nav";
+import { DOCS_TARGET, sectionTargets, shortcutLabel, workspaceTargets } from "@/components/vx/command-items";
+import { DOCS_LINK, NAV_ITEMS } from "@/components/vx/nav";
 import type { WorkspaceSummary } from "@/components/vx/workspace";
 
 const acme: WorkspaceSummary = { slug: "acme", name: "Acme", mode: "live", role: "owner" };
@@ -36,6 +36,21 @@ describe("workspaceTargets — switching workspace from the palette", () => {
 
   it("offers nothing when the current workspace is the only one", () => {
     expect(workspaceTargets(acme, [acme], "/o/acme/console")).toEqual([]);
+  });
+});
+
+describe("DOCS_TARGET — the developer docs from the palette", () => {
+  it("opens /docs, the same place as the navigation's Docs link", () => {
+    expect(DOCS_TARGET).toMatchObject({ label: "Developer docs", href: "/docs" });
+    expect(DOCS_TARGET.href).toBe(DOCS_LINK.href);
+  });
+
+  it("is found by the words people use for API documentation", () => {
+    expect(DOCS_TARGET.keywords).toEqual(expect.arrayContaining(["docs", "api", "reference", "webhooks"]));
+  });
+
+  it("does not take the id of a section or a workspace", () => {
+    expect(DOCS_TARGET.id).not.toMatch(/^(section|workspace):/);
   });
 });
 

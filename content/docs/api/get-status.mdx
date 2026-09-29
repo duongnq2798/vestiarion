@@ -1,0 +1,19 @@
+### Provenance
+
+`provenance` says what the workspace's actions are backed by, per leg:
+
+| Field | Values | Meaning |
+| --- | --- | --- |
+| `payments` | `live`, `simulate`, `unavailable` | Whether invoice and milestone payments settle on chain through Circle, or are simulated. |
+| `yield` | `live`, `simulate`, `unavailable` | The same, for moves to and from the yield reserve. |
+| `screening` | `live`, `simulate` | Whether counterparties are screened against a live sanctions source (OpenSanctions) or the bundled, simulated watchlist. |
+
+`unavailable` means the workspace's Circle credentials are stored but cannot be read, for example because they are sealed under a master key this deployment does not hold. A cycle refuses to pay in that state rather than fall back to simulation, so status does not report it as `simulate`. Check `provenance.payments` before you treat a `paid` invoice as money that moved.
+
+### Configuration
+
+`configuration` describes the workspace's setup as flags and modes, and never carries a secret. Treat it as informational: its keys can grow. Three fields describe the ledger signing key; the example above was captured before the last two were added:
+
+- `ledgerSigningKeyProvided`: whether the workspace's stored signing key could be read.
+- `ledgerPublicKeyProvided`: always `false` inside a workspace, because the public half is derived from the stored signing key rather than configured on its own.
+- `ledgerRetiredKeyCount`: how many earlier public keys the deployment still accepts when [verifying the ledger](/docs/api/verify-ledger#key-identity-and-rotation).

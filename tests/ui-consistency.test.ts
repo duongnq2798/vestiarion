@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { stripFences } from "@/lib/docs/headings";
 
 /**
  * Keeps every screen on the design system (spec §8): a new file that renders a
@@ -20,13 +21,22 @@ function walk(dir: string, keep: RegExp): string[] {
   });
 }
 
-const TSX = walk(SRC, /\.tsx$/);
+/** The MDX components live at the project root, as the App Router requires; they style the docs like any screen. */
+const MDX_COMPONENTS = path.join(ROOT, "mdx-components.tsx");
+const TSX = [...walk(SRC, /\.tsx$/), MDX_COMPONENTS];
 const OUTSIDE_UI = TSX.filter((file) => !file.startsWith(UI));
 const STYLES = walk(SRC, /\.(tsx|ts|css)$/);
+/** The docs' pages: JSX in them is styled too. Fenced code is left out — a code sample is not styling. */
+const DOCS_MDX = walk(path.join(ROOT, "content", "docs"), /\.mdx$/);
 
-function offences(files: string[], pattern: RegExp, keep: (match: string, lineBefore: string, line: string) => boolean = () => true): string[] {
+function offences(
+  files: string[],
+  pattern: RegExp,
+  keep: (match: string, lineBefore: string, line: string) => boolean = () => true,
+  read: (file: string) => string = (file) => readFileSync(file, "utf8")
+): string[] {
   return files.flatMap((file) => {
-    const source = readFileSync(file, "utf8");
+    const source = read(file);
     return [...source.matchAll(pattern)]
       .filter((match) => {
         const index = match.index ?? 0;
@@ -130,6 +140,14 @@ describe("the design system holds", () => {
 
   it("uses no default-palette or white/black colour utility", () => {
     expect(offences(TSX, PALETTE_UTILITY)).toEqual([]);
+  });
+
+  it("hard-codes no colour in the docs' MDX, outside code samples", () => {
+    const outsideCode = (file: string) => stripFences(readFileSync(file, "utf8"));
+    expect(DOCS_MDX.length).toBeGreaterThan(0);
+    expect(TSX).toContain(MDX_COMPONENTS);
+    expect(offences(DOCS_MDX, COLOUR_LITERAL, undefined, outsideCode)).toEqual([]);
+    expect(offences(DOCS_MDX, PALETTE_UTILITY, undefined, outsideCode)).toEqual([]);
   });
 
   it("uses no radius off the scale outside src/components/ui", () => {

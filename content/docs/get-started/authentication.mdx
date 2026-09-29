@@ -1,0 +1,73 @@
+Every request to `/api/v1` authenticates with a workspace API key. There is no other credential for this API: no shared or platform-wide token, and no sign-in session.
+
+## Sending the key
+
+Send the key in the `Authorization` header, as a bearer token:
+
+```http
+GET /api/v1/status HTTP/1.1
+Host: www.vestiarion.xyz
+Authorization: Bearer vxk_example2_NotARealKey_ExampleOnly_NotARealKey_Example
+```
+
+The API reads the key from this header only.
+
+## The key format
+
+A key looks like `vxk_<prefix>_<secret>`:
+
+- `vxk_` marks it as a Vestiarion key.
+- `<prefix>` is eight characters, `a` to `z` and `2` to `7`. It identifies the key, and Settings shows it in the list of keys, as `vxk_<prefix>_…`, so you can tell keys apart.
+- `<secret>` is 32 random bytes, base64url-encoded: 43 characters.
+
+Vestiarion stores the prefix and a SHA-256 hash of the secret, never the key itself. That is why a key is shown once, right after it is created, and cannot be shown again. If you lose one, create another and revoke the lost one.
+
+## One key, one workspace
+
+A key belongs to the workspace it was created in, and reads that workspace's data and no other. To read two workspaces, use two keys. Asking for another workspace's counterparty by its id answers `404`, as if it did not exist.
+
+## Creating a key
+
+An owner or an admin creates keys on the workspace's Settings page, `/o/<slug>/settings`, under **API keys**. A key's name is 1 to 60 characters. A workspace holds at most 20 active keys; revoke one to make room for another. Every other member of the workspace sees the list of keys, without the controls to create or revoke one. The [Quickstart](/docs/get-started/quickstart#1-create-an-api-key) walks through it.
+
+## Scope
+
+Every key has one scope, `read`, which covers every `/api/v1` endpoint. A key whose scopes do not cover a route answers `403 forbidden`. No key issued today gets that answer, but handle it anyway: it is part of the error contract.
+
+## Last used
+
+Settings shows when each key was last used. The time is recorded after the response is sent, at most once a minute per key, so it can trail your latest request by up to a minute. A key that shows "never", or a date long past, is a candidate to revoke.
+
+## Revoking a key
+
+An owner or an admin revokes a key from the same list. Revoking takes effect at once and cannot be undone: from then on the key answers exactly like a key that never existed. The list keeps it, marked **Revoked**.
+
+Creating and revoking a key each add an entry to the workspace's ledger, `api_key_created` or `api_key_revoked`. The entry names the key by its id; the key itself is never written to the ledger.
+
+To rotate a key without downtime, create the new key, deploy it, check that its **Last used** time moves, and then revoke the old one.
+
+## When authentication fails
+
+A missing key, a malformed one, an unknown one and a revoked one all get the same answer:
+
+```http
+HTTP/1.1 401 Unauthorized
+Content-Type: application/json
+
+{"error":{"code":"unauthorized","message":"A valid API key is required."}}
+```
+
+The answer does not say which of the four it was, so it cannot be used to find out whether a key exists.
+
+If Vestiarion cannot look the key up at all, because of a database error, it answers `500 internal` rather than `401`. A `500` says nothing about your key, so do not discard the key on one: retry later. [Errors](/docs/get-started/errors) lists every code.
+
+## Keeping a key safe
+
+A key reads the whole workspace: its invoices, counterparties, treasury and ledger.
+
+- **Never put a key in a URL.** URLs end up in server logs, browser history and proxies. The API does not read a key from a query string anyway.
+- **Never put a key in client-side code**, such as a web page, a browser extension or a mobile app. Anyone who has the code can read the key. Call the API from your server, and pass on only what the client needs.
+- **Keep it in a secret store** or an environment variable, such as `VESTIARION_API_KEY`, not in source control.
+- **Use one key per integration**, named after it, so you can revoke one without stopping the others.
+
+The **Try it** panel on each [reference page](/docs/api) keeps the key you paste in the page's memory only. It is not stored in the browser, and it is sent only in the `Authorization` header of the request you make, to this site's `/api/v1`.

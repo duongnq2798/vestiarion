@@ -84,6 +84,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Git worktrees other sessions keep inside the checkout.
+    ".worktrees/**",
   ]),
 ]);
 

@@ -1,7 +1,8 @@
 "use client";
 
 import { AnimatePresence, m } from "motion/react";
-import { Plus, Send, Trash2, Webhook } from "lucide-react";
+import { BookOpen, Plus, Send, Trash2, Webhook } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import { createWebhookEndpointAction, removeWebhookEndpointAction, sendTestWebhookAction, type WebhookActionResult } from "@/app/actions/webhooks";
 import { Badge } from "@/components/ui/Badge";
@@ -167,7 +168,17 @@ export default function WebhooksPanel({ orgSlug, endpoints, canManage }: { orgSl
           id="webhooks-title"
           title="Webhooks"
           meta={`${endpoints.length} in this workspace`}
-          action={canManage ? <AddEndpointDialog orgSlug={orgSlug} /> : undefined}
+          action={
+            <div className="flex items-center gap-3">
+              <Button asChild variant="link">
+                <Link href="/docs/webhooks" aria-label="Docs: webhooks">
+                  <BookOpen aria-hidden />
+                  Docs
+                </Link>
+              </Button>
+              {canManage && <AddEndpointDialog orgSlug={orgSlug} />}
+            </div>
+          }
         />
         {endpoints.length === 0 ? (
           <EmptyState

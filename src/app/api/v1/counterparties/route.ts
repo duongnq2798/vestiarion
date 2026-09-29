@@ -2,6 +2,7 @@ import { db, unwrap } from "@/lib/dal";
 import { apiError, guardApiRequest, handleApiRequest } from "@/lib/api/guard";
 import {
   decodeCursor,
+  isTimestampCursor,
   paginate,
   parseLimit,
   type ApiCollection,
@@ -30,7 +31,7 @@ export async function GET(request: Request) {
   if (rawCursor && !cursor) {
     return apiError("invalid_request", "cursor is not a cursor this API issued.");
   }
-  if (cursor && (typeof cursor.k !== "string" || !cursor.id)) {
+  if (cursor && !isTimestampCursor(cursor)) {
     return apiError("invalid_request", "cursor is not valid for this endpoint.");
   }
 

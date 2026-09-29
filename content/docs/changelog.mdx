@@ -1,0 +1,22 @@
+Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
+
+## 2026-09-29: Developer docs, OpenAPI document and llms.txt
+
+- These docs, at [`/docs`](/docs): a quickstart, guides, and a [reference page](/docs/api) for every endpoint, with a **Try it** panel that sends a real request with your key.
+- [`GET /api/v1/openapi.json`](/api/v1/openapi.json): an OpenAPI 3.1 document for every `/api/v1` endpoint. It is public and needs no key.
+- A Markdown view of every page at its URL plus `.md`, and [`/llms.txt`](/llms.txt) and [`/llms-full.txt`](/llms-full.txt): see [AI integration](/docs/ai-integration).
+
+No endpoint, parameter or response changed.
+
+## 2026-09-29: Signed webhooks
+
+- An owner or an admin can add up to 5 HTTPS endpoints per workspace in Settings. Each one receives a `ledger.appended` event for every new ledger entry, and a `webhook.test` event on demand. See [Webhooks](/docs/webhooks).
+- Every delivery is signed with HMAC-SHA256 in the `Vestiarion-Signature` header, using the endpoint's own secret, shown once when it is added. See [Verifying signatures](/docs/webhooks/verify).
+- Delivery is at least once and not in order. A failed delivery is retried up to 7 attempts in total, and an endpoint is disabled after 20 consecutive failed attempts. See [Retries and disabling](/docs/webhooks/retries).
+
+## 2026-09-29: Workspace API keys
+
+- `/api/v1` now authenticates with a workspace API key, `vxk_<prefix>_<secret>`, sent as `Authorization: Bearer <key>`. An owner or an admin creates keys on the workspace's Settings page; each key is shown once and reads only its own workspace. See [Authentication](/docs/get-started/authentication).
+- **Breaking:** the platform token, `AGENT_API_TOKEN`, no longer opens `/api/v1`, and answers `401`. It had read only the founding workspace. Move any caller that used it to a workspace key.
+- A missing, malformed, unknown or revoked key answers the same `401 unauthorized`. A key whose scopes do not cover a route answers `403 forbidden`.
+- `GET /api/v1/status` reports the calling key's own workspace, and its `configuration` no longer includes the deployment's `database` block.

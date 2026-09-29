@@ -1,12 +1,12 @@
 "use client";
 
-import { LayoutGrid, LogOut, Plus } from "lucide-react";
+import { BookOpen, LayoutGrid, LogOut, Plus } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { createContext, startTransition, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { signOut } from "@/app/login/actions";
 import { Avatar } from "@/components/ui/Avatar";
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from "@/components/ui/Command";
-import { sectionTargets, shortcutLabel, workspaceTargets } from "./command-items";
+import { DOCS_TARGET, sectionTargets, shortcutLabel, workspaceTargets } from "./command-items";
 import { NAV_ICONS } from "./nav-icons";
 import type { WorkspaceSummary } from "./workspace";
 
@@ -29,7 +29,7 @@ export function useShortcutLabel(): string {
 /**
  * The workspace's command palette: ⌘K or Ctrl K from anywhere in the frame,
  * or a search button. It goes somewhere — a section, another workspace, the
- * workspace list — or signs out; nothing in it moves money.
+ * workspace list, the developer docs — or signs out; nothing in it moves money.
  */
 export function CommandPaletteProvider({
   workspace,
@@ -92,6 +92,12 @@ export function CommandPaletteProvider({
               ))}
             </CommandGroup>
           )}
+          <CommandGroup heading="Help">
+            <CommandItem value={DOCS_TARGET.id} keywords={[DOCS_TARGET.label, ...DOCS_TARGET.keywords]} onSelect={() => go(DOCS_TARGET.href)}>
+              <BookOpen aria-hidden />
+              {DOCS_TARGET.label}
+            </CommandItem>
+          </CommandGroup>
           <CommandSeparator />
           <CommandGroup heading="Account">
             <CommandItem value="create-workspace" keywords={["Create workspace", "new", "sandbox"]} onSelect={() => go("/onboarding?new#create-workspace")}>

@@ -276,8 +276,37 @@ describe("every component", () => {
   });
 });
 
+/**
+ * The one v1 route that takes no key: the OpenAPI document describes the
+ * surface and holds no workspace data. It is named here, not matched by
+ * pattern, so a second public route is a deliberate edit to this list.
+ */
+const PUBLIC_V1_ROUTES = ["src/app/api/v1/openapi.json/route.ts"];
+
+/** Every src module a file loads at run time, followed through its imports. */
+function reachableModules(file: string, seen = new Set<string>()): Set<string> {
+  for (const { specifier } of valueImports(read(file))) {
+    const target = moduleOf(specifier, file);
+    if (!target || !target.startsWith("src/") || seen.has(target)) continue;
+    seen.add(target);
+    const source = [".ts", ".tsx", "/index.ts"].map((ext) => path.join(ROOT, target + ext)).find((candidate) => existsSync(candidate));
+    if (source) reachableModules(source, seen);
+  }
+  return seen;
+}
+
+describe("the public /api/v1 routes", () => {
+  it.each(PUBLIC_V1_ROUTES)("%s exists, and loads no module that reads tenant data or checks a key", (file) => {
+    expect(V1_ROUTES.map(rel)).toContain(file);
+    const modules = [...reachableModules(path.join(ROOT, file))];
+    // Without this, a walk that found nothing would pass the check below.
+    expect(modules).toContain("src/lib/api/openapi");
+    expect(modules.filter((name) => loadsTenantData(name) || name === "src/lib/api/guard")).toEqual([]);
+  });
+});
+
 describe("every /api/v1 route", () => {
-  it.each(V1_ROUTES.map(rel))("%s authenticates the API key before any work, and serves that key's workspace", (file) => {
+  it.each(V1_ROUTES.map(rel).filter((file) => !PUBLIC_V1_ROUTES.includes(file)))("%s authenticates the API key before any work, and serves that key's workspace", (file) => {
     const source = read(path.join(ROOT, file));
     const handlers = source.split(/\n(?=export async function (?:GET|POST|PUT|PATCH|DELETE)\b)/).slice(1);
     expect(handlers.length).toBeGreaterThan(0);

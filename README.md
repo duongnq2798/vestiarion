@@ -63,7 +63,7 @@ path produced it.
 ## Architecture
 
 The layout below is the short version. [ARCHITECTURE.md](ARCHITECTURE.md) goes further, and
-[docs/api.md](docs/api.md) documents the read API.
+the [developer docs](https://www.vestiarion.xyz/docs) document the read API and webhooks.
 
 ```
 supabase/migrations/      Postgres schema. Money is numeric(20,6), never a
@@ -143,14 +143,15 @@ src/lib/webhooks/         Signing, SSRF-safe sending, and the retry/disable
 ```
 
 Each workspace creates and revokes its own read-only API keys on
-`/o/<slug>/settings` (owner or admin only; see [docs/api.md](docs/api.md)). A
+`/o/<slug>/settings` (owner or admin only; see
+[Authentication](https://www.vestiarion.xyz/docs/get-started/authentication)). A
 key is shown once, in full, right after it is created, and authenticates
 `/api/v1` requests for that workspace alone — there is no shared or
 platform-wide credential on that surface.
 
 The same page lets an owner or admin (`webhooks.manage`) register up to 5
 HTTPS endpoints that receive the workspace's ledger, signed, as it happens —
-pushed rather than polled. See [docs/webhooks.md](docs/webhooks.md).
+pushed rather than polled. See [Webhooks](https://www.vestiarion.xyz/docs/webhooks).
 
 ## Running it
 

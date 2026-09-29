@@ -1,0 +1,75 @@
+Four endpoints return collections: [ledger entries](/docs/api/list-ledger-entries), [invoices](/docs/api/list-invoices), [counterparties](/docs/api/list-counterparties) and [milestones](/docs/api/list-milestones). Each returns one page at a time, and you ask for the next page with a cursor.
+
+## Parameters
+
+| Parameter | Meaning |
+| --- | --- |
+| `limit` | How many items to return: a positive integer. Defaults to 50; a larger value than 200 is capped at 200. `0`, a negative number or a non-integer answers `400 invalid_request`. |
+| `cursor` | The previous response's `page.nextCursor`, passed back unchanged. |
+
+## The page object
+
+A collection's response carries its items in `data` and describes the page in `page`. This is the `page` of the ledger response in the [Quickstart](/docs/get-started/quickstart#3-read-the-ledger):
+
+```json
+{"nextCursor":"eyJrIjo4Mn0","hasMore":true,"count":1}
+```
+
+- `count` is how many items this response carries.
+- `hasMore` is `true` when there is at least one more item after this page. Vestiarion reads one row more than `limit` to know, so it is a fact, not a guess.
+- `nextCursor` is the cursor for the next page, or `null` when `hasMore` is `false`.
+
+## Cursors are opaque
+
+Pass a cursor back exactly as you received it. Do not decode it, build one, or change it: its contents can change without notice. A cursor this endpoint could not have issued, such as a malformed one or a ledger cursor sent to `/invoices`, answers `400 invalid_request`; the API never quietly starts again from the beginning.
+
+A cursor continues the request that produced it. Send it to the same endpoint, with the same filters. To change a filter, start again without a cursor.
+
+## Order
+
+- **Invoices, counterparties and milestones** are newest first, by creation time, with the row id breaking a tie.
+- **The ledger** is oldest first, ascending by `seq`, because it is an append-only stream.
+
+## The ledger cursor is a watermark
+
+Because the ledger only grows at the end, a ledger cursor marks a position you can come back to:
+
+1. Read pages until `hasMore` is `false`.
+2. Store the last non-null `nextCursor`, but only after you have processed every entry in the responses you read.
+3. On your next poll, pass the stored cursor. You get every entry after it: the entries of the last page you read, which had no `nextCursor` of its own, and then everything appended since. No entry before the cursor is ever replayed.
+4. Skip any entry whose `seq` you have already stored. Keying your copy by `seq` does this for you.
+
+`seq` rises within a workspace, but it has gaps, so do not use a gap to detect a missing entry. The hash chain proves continuity: each entry's `prevHash` is the previous entry's `hash`. The [list ledger entries reference](/docs/api/list-ledger-entries#notes) has the details.
+
+## A paging loop in JavaScript
+
+This reads every payable invoice, one page of 200 at a time. It runs on Node 18 or later, which has `fetch`:
+
+```js
+const BASE = "https://www.vestiarion.xyz/api/v1";
+
+async function listAll(path, params = {}) {
+  const items = [];
+  let cursor = null;
+  do {
+    const query = new URLSearchParams({ ...params, limit: "200" });
+    if (cursor) query.set("cursor", cursor);
+    const response = await fetch(`${BASE}${path}?${query}`, {
+      headers: { Authorization: `Bearer ${process.env.VESTIARION_API_KEY}` },
+    });
+    if (!response.ok) {
+      // Read the body as text: an error from outside /api/v1 has no JSON error body.
+      throw new Error(`${response.status}: ${(await response.text()).slice(0, 200)}`);
+    }
+    const body = await response.json();
+    items.push(...body.data);
+    cursor = body.page.nextCursor;
+  } while (cursor);
+  return items;
+}
+
+const payables = await listAll("/invoices", { direction: "payable" });
+console.log(`${payables.length} payable invoices`);
+```
+
+To follow the ledger, keep the last non-null `nextCursor` after each page instead of collecting the items, and start the next poll from it. Never replace it with the final page's `null`: a poll without a cursor starts again from the first entry.

@@ -1,0 +1,55 @@
+Check every delivery's signature before you act on it. A `ledger.appended` entry also carries its own Ed25519 signature, which you can check as well.
+
+## Verifying the signature
+
+Recompute the HMAC over the exact raw request body you received (not a re-serialized copy of it: whitespace and key order must match byte for byte), reject anything outside a 5-minute window, and compare in constant time:
+
+```js
+const crypto = require("node:crypto");
+
+function verifyVestiarionSignature(secret, rawBody, header, toleranceS = 300) {
+  const parts = Object.fromEntries(header.split(",").map((p) => p.split("=")));
+  const t = Number(parts.t);
+  if (!Number.isFinite(t) || Math.abs(Date.now() / 1000 - t) > toleranceS) {
+    return false; // missing/malformed timestamp, or too old
+  }
+  const expected = crypto
+    .createHmac("sha256", secret)
+    .update(`${t}.${rawBody}`, "utf8")
+    .digest();
+  const given = Buffer.from(parts.v1 ?? "", "hex");
+  return given.length === expected.length && crypto.timingSafeEqual(given, expected);
+}
+
+// verifyVestiarionSignature(secret, rawBody, request.headers["vestiarion-signature"])
+```
+
+`secret` is the full string shown at creation, `whsec_` prefix included: it is the HMAC key as-is, not decoded first. This was run against the repository's own `signWebhook` (`src/lib/webhooks/sign.ts`): a genuine signature verifies, a tampered body is rejected, and a timestamp older than the tolerance is rejected.
+
+Read the raw body before any JSON parser touches it. In Express, for example, mount `express.raw({ type: "application/json" })` on the webhook route and pass `request.body.toString("utf8")` as `rawBody`.
+
+## Verifying a ledger entry's Ed25519 signature
+
+The HMAC above proves the request came from Vestiarion. The `entry` inside it carries its own, independent signature, the same one the audit chain uses, so a receiver can also check that the entry itself is authentic, apart from the delivery.
+
+What is signed is **not** the entry, and **not** the `bodyHash` string: it is the 32 raw bytes you get by hex-decoding `bodyHash`. `bodyHash` is `sha256(canonicalJson({actor, domain, action, summary, detail}))`, where `canonicalJson` sorts object keys at every level (`src/lib/ledger.ts`). If you want to confirm the entry's content matches its `bodyHash` too, rather than only checking the signature, you need that same canonicalization. Checking the signature alone does not require it: `bodyHash` is already given.
+
+The public key is not returned by either verify endpoint's JSON ([`GET /api/v1/ledger/verify`](/docs/api/verify-ledger), or the legacy `GET /api/ledger/verify?org=` the Audit page uses): both report only whether the chain checks out. The PEM itself, and the `signingKeyId` it matches, are shown to any signed-in member on the workspace's Audit page (`/o/<slug>/audit`, under "Ledger signing public key"). Match `entry.signingKeyId` against the id shown there before trusting a signature: a workspace that has rotated its key may have entries signed by more than one.
+
+```js
+const crypto = require("node:crypto");
+
+function verifyLedgerEntrySignature(entry, publicKeyPem) {
+  const key = crypto.createPublicKey(publicKeyPem);
+  return crypto.verify(
+    null, // Ed25519: no separate digest algorithm
+    Buffer.from(entry.bodyHash, "hex"),
+    key,
+    Buffer.from(entry.signature, "hex")
+  );
+}
+
+// verifyLedgerEntrySignature(payload.entry, pemFromTheAuditPage)
+```
+
+This was run against the repository's own signing path: an entry built and signed with `bodyHashOf`, `crypto.sign(null, ...)` and `ledgerKeyId` exactly as `src/lib/ledger.ts` does it, then checked with the snippet above. A genuine entry verifies, a tampered `detail` fails (because the recomputed `bodyHash` no longer matches, so the signature, over the original hash, no longer matches the entry either), and the wrong public key is rejected.

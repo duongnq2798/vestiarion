@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronsUpDown, LayoutGrid, LogOut, Menu, Plus, Search } from "lucide-react";
+import { BookOpen, Check, ChevronsUpDown, LayoutGrid, LogOut, Menu, Plus, Search } from "lucide-react";
 import { LayoutGroup, m } from "motion/react";
 import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
@@ -23,7 +23,7 @@ import { MOTION } from "@/components/ui/tokens";
 import { orgHref } from "@/lib/auth/org-paths";
 import { BrandMark } from "./Brand";
 import { useCommandPalette, useShortcutLabel } from "./CommandPalette";
-import { NAV_GROUPS, navItemForPathname, sectionPathOf } from "./nav";
+import { DOCS_LINK, NAV_GROUPS, navItemForPathname, sectionPathOf } from "./nav";
 import { NAV_ICONS } from "./nav-icons";
 import type { WorkspaceSummary } from "./workspace";
 
@@ -262,7 +262,14 @@ export function NavPanel({
         <SearchButton />
       </div>
       <SectionNav orgSlug={workspace.slug} layoutId={layoutId} />
-      <div className="shrink-0 border-t border-line p-3">
+      <div className="shrink-0 space-y-1 border-t border-line p-3">
+        <Link
+          href={DOCS_LINK.href}
+          className="flex h-9 items-center gap-2.5 rounded-lg px-2.5 text-xs text-ink-3 transition-colors duration-150 ease-standard hover:bg-raised/70 hover:text-ink"
+        >
+          <BookOpen aria-hidden strokeWidth={1.75} className="size-4 shrink-0" />
+          {DOCS_LINK.label}
+        </Link>
         <AccountMenu email={email} />
       </div>
     </div>

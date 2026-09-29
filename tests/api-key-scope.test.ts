@@ -150,7 +150,9 @@ describe("the routes under test", () => {
     const walk = (at: string): string[] =>
       readdirSync(at).flatMap((name) => (statSync(path.join(at, name)).isDirectory() ? walk(path.join(at, name)) : [path.join(at, name)]));
     const files = walk(dir).filter((file) => file.endsWith("route.ts")).map((file) => path.relative(dir, file).split(path.sep).join("/"));
-    expect(files.sort()).toEqual(Object.keys(ROUTES).sort());
+    // The OpenAPI document is the one public v1 route: it describes the
+    // surface, holds no workspace data and takes no key (tests/openapi.test.ts).
+    expect(files.filter((file) => file !== "openapi.json/route.ts").sort()).toEqual(Object.keys(ROUTES).sort());
   });
 });
 
@@ -434,5 +436,42 @@ describe("GET /api/v1/status", () => {
     const configuration = (body.data as unknown as { configuration: Record<string, unknown> }).configuration;
     expect(configuration).not.toHaveProperty("database");
     expect(JSON.stringify(configuration)).not.toContain("tests.supabase.invalid");
+  });
+});
+
+describe("a cursor this endpoint did not issue", () => {
+  const cursorOf = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
+  const INVOICE_CURSOR = cursorOf({ k: "2026-09-24T15:22:50.176754+00:00", id: "9440f32c-000d-4a63-97f1-4eb6bf78439f" });
+  const LEDGER_CURSOR = cursorOf({ k: 82 });
+  const INVALID = { error: { code: "invalid_request", message: "cursor is not valid for this endpoint." } };
+
+  const collections: Array<[string, (request: Request) => Promise<Response>, string[]]> = [
+    ["/api/v1/ledger", getLedger, [INVOICE_CURSOR, cursorOf({ k: "abc" }), cursorOf({ k: -1 }), cursorOf({ k: 1.5 }), cursorOf({ k: "82" })]],
+    ["/api/v1/invoices", getInvoices, [LEDGER_CURSOR, cursorOf({ k: "abc", id: "x" }), cursorOf({ k: "2026-09-24T15:22:50Z", id: "not-a-uuid" }), cursorOf({ k: "2026-09-24T15:22:50Z),id.gt.(0", id: "9440f32c-000d-4a63-97f1-4eb6bf78439f" })]],
+    ["/api/v1/counterparties", getCounterparties, [LEDGER_CURSOR, cursorOf({ k: "abc", id: "x" })]],
+    ["/api/v1/milestones", getMilestones, [LEDGER_CURSOR, cursorOf({ k: "abc", id: "x" })]],
+  ];
+
+  it.each(collections)("%s answers 400 to a foreign or forged cursor, and never reaches the tenant database", async (url, handler, cursors) => {
+    for (const cursor of cursors) {
+      vi.mocked(authenticateApiKey).mockResolvedValueOnce(KEY_A);
+      const fake = fakeSupabase(database());
+      const response = await call(fake, handler, `${url}?cursor=${cursor}`, `Bearer ${PRESENTED}`);
+      expect(response.status, cursor).toBe(400);
+      expect(await response.json()).toEqual(INVALID);
+      expect(tenantRequests(fake), cursor).toEqual([]);
+    }
+  });
+
+  it.each([
+    ["/api/v1/ledger", getLedger, LEDGER_CURSOR],
+    ["/api/v1/invoices", getInvoices, INVOICE_CURSOR],
+    ["/api/v1/counterparties", getCounterparties, INVOICE_CURSOR],
+    ["/api/v1/milestones", getMilestones, INVOICE_CURSOR],
+  ] as const)("%s still accepts a cursor of its own shape", async (url, handler, cursor) => {
+    vi.mocked(authenticateApiKey).mockResolvedValueOnce(KEY_A);
+    const fake = fakeSupabase(database());
+    const response = await call(fake, handler, `${url}?cursor=${cursor}`, `Bearer ${PRESENTED}`);
+    expect(response.status).toBe(200);
   });
 });

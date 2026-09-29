@@ -1,0 +1,141 @@
+This page takes you from no key to reading a workspace's ledger. You need a Vestiarion workspace in which you are an owner or an admin, and `curl`.
+
+## 1. Create an API key
+
+1. Open your workspace and go to **Settings**, at `/o/<slug>/settings`.
+2. Under **API keys**, choose **Create key**, and give the key a name that says what will use it, such as "Reporting integration".
+3. Copy the key. It is shown once, in full, right after you create it, and never again.
+
+Only an owner or an admin can create a key; every other member sees the list of keys without the controls. A workspace holds at most 20 active keys.
+
+Keep the key in an environment variable rather than in your code:
+
+```bash
+export VESTIARION_API_KEY="vxk_..."
+```
+
+<Callout title="The key reads the whole workspace">
+Treat it as a password. Never put it in a URL or in code that runs in a browser. [Authentication](/docs/get-started/authentication#keeping-a-key-safe) says why.
+</Callout>
+
+## 2. Check the workspace
+
+Your first request asks for the workspace's status:
+
+```bash
+curl https://www.vestiarion.xyz/api/v1/status \
+  -H "Authorization: Bearer $VESTIARION_API_KEY"
+```
+
+A real response looks like this:
+
+```json
+{
+  "data": {
+    "businessName": "Vestiarion workspace",
+    "provenance": {
+      "payments": "live",
+      "yield": "simulate",
+      "screening": "simulate"
+    },
+    "clock": {
+      "mode": "simulate",
+      "day": 25,
+      "lastCycleAt": "2026-09-24T18:33:04.546517+00:00"
+    },
+    "totals": {
+      "decisionsLogged": 77,
+      "totalPaidOut": 4.815,
+      "flagged": 1
+    },
+    "configuration": {
+      "businessName": "Vestiarion workspace",
+      "chain": {
+        "circleConfigured": true,
+        "arcRpcConfigured": false
+      },
+      "llm": {
+        "pinned": null,
+        "available": [
+          "deepseek"
+        ]
+      },
+      "compliance": {
+        "mode": "bundled",
+        "rescreenIntervalHours": 0
+      },
+      "followUp": {
+        "staleAfterDays": 3,
+        "reEscalateAfterDays": 7
+      },
+      "ledgerSigningKeyProvided": false,
+      "githubTokenProvided": false,
+      "clockMode": "simulate"
+    },
+    "apiVersion": "v1"
+  }
+}
+```
+
+Every success carries its result in `data`. `provenance` tells you whether this workspace's payments and yield are `live`, `simulate` or `unavailable`, so check it before you treat a payment as real. The [status reference](/docs/api/get-status) describes every field.
+
+If you get `401` instead, the key is missing, mistyped or revoked: see [Errors](/docs/get-started/errors).
+
+## 3. Read the ledger
+
+The ledger is the workspace's signed, hash-chained record: each decision the agent made, and each action a person took, is an entry. Ask for the five oldest entries:
+
+```bash
+curl "https://www.vestiarion.xyz/api/v1/ledger?limit=5" \
+  -H "Authorization: Bearer $VESTIARION_API_KEY"
+```
+
+The response below is real, captured with `limit=1`, so it holds one entry. With `limit=5`, `data` holds up to five, and `page.count` says how many:
+
+```json
+{
+  "data": [
+    {
+      "seq": 82,
+      "id": "4566714f-a9f0-42c8-bcd4-d89adf830806",
+      "ts": "2026-09-24T11:55:00.370366+00:00",
+      "actor": "system",
+      "domain": "system",
+      "action": "seed",
+      "summary": "Seeded demo business: Northstar Studio",
+      "detail": {
+        "accounts": 3,
+        "invoices": 6,
+        "milestones": 3,
+        "amountScale": 0.001,
+        "counterparties": 7
+      },
+      "bodyHash": "8780d07cb3d083d359119e58fd4783f5e4b32aac14e0a8d9f7a5bb13365a4537",
+      "signature": "c14f06b751d31be6566ed11676d60d2db731ab8bbc5972f79d0a0c131e9e37200303d5b3ad04993b7973b1ce7200e7214e5a9b511306fa30538f072eb0d34705",
+      "prevHash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "hash": "b0ac72908868ddd5ed4722fd8a14ff4a844eee4dad382c5c85288bca73737669",
+      "signingKeyId": null
+    }
+  ],
+  "page": {
+    "nextCursor": "eyJrIjo4Mn0",
+    "hasMore": true,
+    "count": 1
+  }
+}
+```
+
+`hasMore` is `true`, so there are more entries. To get them, send `page.nextCursor` back unchanged as `cursor`:
+
+```bash
+curl "https://www.vestiarion.xyz/api/v1/ledger?limit=5&cursor=eyJrIjo4Mn0" \
+  -H "Authorization: Bearer $VESTIARION_API_KEY"
+```
+
+## Next steps
+
+- [Pagination](/docs/get-started/pagination): page through a collection, and follow the ledger with a stored cursor.
+- [The endpoint overview](/docs/api): every endpoint. Each reference page has a [Try it](/docs/api/list-invoices#try-it) panel that sends a real request with your key.
+- [Webhooks](/docs/webhooks): receive each new ledger entry without polling.
+- [Errors](/docs/get-started/errors) and [Limits](/docs/get-started/limits): what to retry, and when to back off.
+- [AI integration](/docs/ai-integration): point a coding agent at these docs.
