@@ -38,6 +38,11 @@ function withDeadline<T>(work: Promise<T>, ms: number): Promise<T> {
   return Promise.race([work, deadline]).finally(() => clearTimeout(timer));
 }
 
+/** Logs only the transaction id and the error's message — never the request or the SDK's error object. */
+function warnReadFailed(txId: string, error: unknown): void {
+  console.warn("circle: settlement read failed", txId, error instanceof Error ? error.message : String(error));
+}
+
 /**
  * What became of a transfer Circle has accepted — it holds a transaction id.
  *
@@ -64,15 +69,17 @@ export async function awaitSettlement(
     );
     const transaction = settled.data?.transaction;
     return transaction ? { status: statusOf(transaction), transaction } : { status: "pending" };
-  } catch {
+  } catch (error) {
     // Fall through: the rejection says nothing reliable about the transfer.
+    warnReadFailed(txId, error);
   }
 
   try {
     const reread = await withDeadline(client.getTransaction({ id: txId }), options.rereadMs ?? REREAD_MS);
     const transaction = reread.data?.transaction;
     return transaction ? { status: statusOf(transaction), transaction } : { status: "pending" };
-  } catch {
+  } catch (error) {
+    warnReadFailed(txId, error);
     return { status: "pending" };
   }
 }

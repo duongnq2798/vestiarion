@@ -295,7 +295,21 @@ async function paymentIntentsFor(
       .eq("source_type", sourceType)
       .in("source_id", ids)
   ) as Array<{ source_id: string; provider_tx_id: string | null; status: string }>;
-  return new Map(rows.map((row) => [row.source_id, { providerTxId: row.provider_tx_id, status: row.status }]));
+  // A submission that failed before the provider returned an id moved no
+  // money and is not in flight: `executePayment` would claim it again and
+  // transfer. Left out, its source is decided again — model and guardrails —
+  // so a payment limit cut or a risk change since is respected. A `failed`
+  // intent with a provider id is a real transfer the provider reported on,
+  // and is still reconciled by that id.
+  const inFlight = rows.filter((row) => !(row.status === "failed" && row.provider_tx_id === null));
+  return new Map(inFlight.map((row) => [row.source_id, { providerTxId: row.provider_tx_id, status: row.status }]));
+}
+
+/** `reasoning` with `note` appended, unless it already ends with it — a
+ * source that churns through the same outcome every cycle does not repeat it. */
+function withNote(reasoning: string | null, note: string): string {
+  const base = reasoning ?? "";
+  return note !== "" && base.endsWith(note) ? base : `${base}${note}`;
 }
 
 /**
@@ -416,7 +430,7 @@ export async function reconcileApInvoice(
 
   const status = outcome.status;
   const txRef = outcome.txRef ?? invoice.txRef;
-  const reasoning = `${invoice.reasoning ?? ""}${status === "matched" ? "" : outcome.reasoningSuffix}`;
+  const reasoning = withNote(invoice.reasoning, status === "matched" ? "" : outcome.reasoningSuffix);
   const now = new Date().toISOString();
   const update = await deps.db
     .from("invoices")
@@ -667,7 +681,7 @@ export async function reconcileMilestone(
 
   const status = outcome.status;
   const txRef = outcome.txRef ?? milestone.txRef;
-  const reasoning = `${milestone.reasoning ?? ""}${status === "verified" ? "" : outcome.reasoningSuffix}`;
+  const reasoning = withNote(milestone.reasoning, status === "verified" ? "" : outcome.reasoningSuffix);
   const now = new Date().toISOString();
   const update = await deps.db
     .from("milestones")

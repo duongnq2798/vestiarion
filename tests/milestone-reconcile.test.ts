@@ -154,6 +154,36 @@ describe("existingMilestoneIntents — which milestones the contractor stage rec
     expect(lookup.params.get("source_id")).toBe("in.(verified-1,verified-2)");
   });
 
+  it("leaves out a release that failed before Circle returned an id, so the milestone is decided again", async () => {
+    // payments.ts records a submission that threw as `failed` with no provider id,
+    // the milestone is held, and the GitHub refresh puts it back to `verified`.
+    const { run } = cycleFake((r) =>
+      r.path === "/rest/v1/payment_intents"
+        ? {
+            body: [
+              { source_id: "failed-no-id", provider_tx_id: null, status: "failed" },
+              { source_id: "failed-by-circle", provider_tx_id: "circle-tx-2", status: "failed" },
+              { source_id: "submitting", provider_tx_id: null, status: "submitting" },
+            ],
+          }
+        : undefined
+    );
+
+    const intents = await run(() =>
+      existingMilestoneIntents(db(), [
+        { id: "failed-no-id", status: "verified" },
+        { id: "failed-by-circle", status: "verified" },
+        { id: "submitting", status: "verified" },
+      ])
+    );
+
+    // Nothing moved: it goes back through the model and the limit and risk guardrails.
+    expect(intents.has("failed-no-id")).toBe(false);
+    // A transfer Circle reported failed is a real transfer, still reconciled by its id.
+    expect(intents.get("failed-by-circle")).toEqual({ providerTxId: "circle-tx-2", status: "failed" });
+    expect(intents.get("submitting")).toEqual({ providerTxId: null, status: "submitting" });
+  });
+
   it("asks nothing when no milestone is verified", async () => {
     const { fake, run } = cycleFake();
 
@@ -265,6 +295,22 @@ describe("reconcileMilestone — a verified milestone with a release in flight",
     expect(body.status).toBe("held");
     expect(body.tx_ref).toBe("circle-tx-1");
     expect(body.agent_reasoning).toBe(`${milestone.reasoning} [transfer failed: provider reported failure]`);
+  });
+
+  it("does not append a note the reasoning already ends with, when a failed release churns back through verified", async () => {
+    // Circle reported the transfer failed; the GitHub refresh puts the held milestone back
+    // to `verified` every cycle, and each reconcile holds it again with the same note.
+    executePaymentMock.mockResolvedValue(execution({ status: "failed", error: null }));
+    const { fake, run } = cycleFake();
+    const reasoning = `${milestone.reasoning} [transfer failed: provider reported failure]`;
+
+    await run(() =>
+      reconcileMilestone({ ...milestone, reasoning }, { providerTxId: "circle-tx-1", status: "failed" }, { db: db(), provider, operating: { id: ACCOUNT_ID } })
+    );
+
+    const body = milestonePatches(fake.requests)[0].body as Record<string, unknown>;
+    expect(body.status).toBe("held");
+    expect(body.agent_reasoning).toBe(reasoning);
   });
 
   it("leaves the release verified, and says so, when the reconcile could not read the provider", async () => {

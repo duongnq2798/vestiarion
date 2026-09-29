@@ -186,11 +186,14 @@ read again first, and a counterparty now screened high risk is not paid.
 The contractor stage does the same for a `verified` milestone whose release is
 already in flight. It records `milestone_reconcile` rather than asking the
 model again, so a change of mind cannot record a released payment as held.
+Only a payment actually in flight is reconciled: a submission that failed
+before the provider returned an id moved no money, so its invoice or milestone
+is decided again, through the model and the guardrails.
 
 **Waiting for Circle never guesses.** After Circle accepts a transfer, it holds
 a transaction id, and the money may have moved. The live provider waits for
-confirmation with a deadline on every request, because the SDK has no HTTP
-timeout. On any rejection of that wait, whether a timeout, a dropped
+confirmation, and the wait and the second read each carry a deadline, because
+the SDK has no HTTP timeout. On any rejection of that wait, whether a timeout, a dropped
 connection or a terminal state, it reads the transaction once more and takes
 Circle's answer. Only a state Circle reports as terminal makes a transfer
 failed. One it cannot read stays pending, and the next cycle reconciles it by

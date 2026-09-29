@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { awaitSettlement, type SettlementClient } from "@/lib/circle/settlement";
 
 /**
@@ -44,8 +44,13 @@ function client(wait: () => Promise<unknown>, reread?: () => Promise<unknown>): 
 
 const never = () => new Promise<never>(() => {});
 
+let warn: ReturnType<typeof vi.spyOn>;
+beforeEach(() => {
+  warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+});
 afterEach(() => {
   vi.useRealTimers();
+  warn.mockRestore();
 });
 
 describe("awaitSettlement", () => {
@@ -92,6 +97,11 @@ describe("awaitSettlement", () => {
   it("is pending when the transfer's state cannot be read at all", async () => {
     const c = client(async () => { throw new TypeError("fetch failed"); }, async () => { throw new TypeError("fetch failed"); });
     expect((await awaitSettlement(c, "tx-1")).status).toBe("pending");
+    // Each failed read is logged with the transaction id and the error's message only.
+    expect(warn.mock.calls).toEqual([
+      ["circle: settlement read failed", "tx-1", "fetch failed"],
+      ["circle: settlement read failed", "tx-1", "fetch failed"],
+    ]);
   });
 
   it("is pending when the second read returns no transaction", async () => {
@@ -103,9 +113,12 @@ describe("awaitSettlement", () => {
     vi.useFakeTimers();
     const c = client(never, never);
     const settled = awaitSettlement(c, "tx-1", { waitMs: 1_000, rereadMs: 2_000 });
-    await vi.advanceTimersByTimeAsync(1_000 + 5_000);
+    await vi.advanceTimersByTimeAsync(1_000 + 5_000 - 1);
+    expect(c.calls).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1);
     expect(c.calls).toHaveLength(2);
     await vi.advanceTimersByTimeAsync(2_000);
     await expect(settled).resolves.toEqual({ status: "pending" });
+    expect(vi.getTimerCount()).toBe(0);
   });
 });
