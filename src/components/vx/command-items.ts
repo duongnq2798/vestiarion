@@ -17,11 +17,12 @@ export interface CommandTarget {
 
 /** The words people use for a section when its label is not the word in their head. */
 const SECTION_KEYWORDS: Record<NavKey, string[]> = {
-  treasury: ["home", "console", "balance", "cash", "reserve", "forecast"],
+  treasury: ["home", "console", "balance", "cash", "reserve", "forecast", "pause", "resume"],
   insights: ["charts", "metrics", "measurements", "fees", "settlement"],
   invoices: ["invoices", "payables", "receivables", "bills", "ap", "ar"],
   counterparties: ["vendors", "clients", "suppliers", "payees"],
   contractors: ["milestones", "freelancers", "work"],
+  approvals: ["inbox", "held", "approve", "pay", "reject", "return", "decide"],
   compliance: ["screening", "sanctions", "risk", "limits"],
   audit: ["ledger", "log", "hash", "signatures", "chain"],
   members: ["team", "people", "invite", "roles"],

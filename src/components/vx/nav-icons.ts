@@ -1,4 +1,4 @@
-import { ChartLine, FileText, Flag, Landmark, ScrollText, ShieldCheck, UserCog, Users, type LucideIcon } from "lucide-react";
+import { ChartLine, FileText, Flag, Inbox, Landmark, ScrollText, ShieldCheck, UserCog, Users, type LucideIcon } from "lucide-react";
 import type { NavKey } from "./nav";
 
 /**
@@ -12,6 +12,7 @@ export const NAV_ICONS: Record<NavKey, LucideIcon> = {
   invoices: FileText,
   counterparties: Users,
   contractors: Flag,
+  approvals: Inbox,
   compliance: ShieldCheck,
   audit: ScrollText,
   members: UserCog,
