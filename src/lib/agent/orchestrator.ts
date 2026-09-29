@@ -831,6 +831,20 @@ interface CycleContext {
 }
 
 /**
+ * The operating account in live mode while the USYC leg is simulated: the
+ * reserve is a notional carve-out of the USDC in the operating wallet, so
+ * `spendable + reserve` is what is on chain. The carve-out is clamped to that
+ * amount: a reserve larger than the money that exists (a simulated one
+ * carried over, or funds moved out of the wallet) never claims more than is
+ * there.
+ */
+export function liveOperatingBalance(onChain: number, notionalReserve: number): { spendable: number; reserve: number } {
+  const available = Math.max(0, onChain);
+  const reserve = Math.min(Math.max(0, notionalReserve), available);
+  return { spendable: Number((available - reserve).toFixed(6)), reserve };
+}
+
+/**
  * Opens the cycle's record before doing anything, and closes it whichever way
  * the cycle ends.
  *
@@ -994,8 +1008,10 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     for (const account of rows.filter((a) => a.kind !== "reserve")) {
       try {
         const snapshot = await provider.getBalance(account.id);
-        const carveOut = account.kind === "operating" ? notionalReserve : 0;
-        const spendable = Math.max(0, Number((snapshot.balance - carveOut).toFixed(6)));
+        const { spendable, reserve: carveOut } = liveOperatingBalance(
+          snapshot.balance,
+          account.kind === "operating" ? notionalReserve : 0
+        );
         const stored = num(account.balance);
         if (Math.abs(spendable - stored) < 0.000001) continue;
 

@@ -354,7 +354,8 @@ by the one before:
    encrypts both onto the workspace's row in `orgs`; they are never shown again, logged, or sent
    back to the browser.
 2. **Create treasury wallets.** One click creates, in your own Circle account, a wallet set and an
-   Arc-testnet wallet for each account that has none, and drops "(simulated)" from their names.
+   Arc-testnet wallet for each account that has none, drops "(simulated)" from their names, and
+   starts each new wallet's balance at zero: nothing simulated carries into live mode.
    Counterparties are paid only at a real address: set each one's address on the Counterparties
    page, or its payments are held.
 3. **Go live.** Copy the operating wallet's address, fund it at
@@ -364,8 +365,10 @@ by the one before:
    deleted when inactive — and then switches the workspace to `live`.
 
 Every member sees the workspace's status there; only an owner sees the steps. Credentials can be
-replaced later from the same section; a live workspace accepts only credentials for the Circle
-account that holds its wallets. To stop a live workspace paying, pause the agent from the console.
+replaced later from the same section. Once the operating wallet exists, in any mode (sandbox or
+live), new credentials are accepted only if they reach every one of the workspace's wallets, in
+the Circle account that holds them; **Go live** checks the stored credentials the same way just
+before switching. To stop a live workspace paying, pause the agent from the console.
 
 ### The founding workspace and the demo seed
 

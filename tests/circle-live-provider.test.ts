@@ -186,3 +186,31 @@ describe("LiveProvider Circle request deadlines", () => {
     expect(getTransaction).toHaveBeenCalledOnce();
   });
 });
+
+describe("LiveProvider refusals name the fix in the product, not a script", () => {
+  it("a counterparty without an address points to the Counterparties page", async () => {
+    const createTransaction = vi.fn();
+    const provider = new LiveProvider(CHAIN, { client: fakeClient({ createTransaction: createTransaction as unknown as LiveProviderClient["createTransaction"] }) });
+
+    const error = (await provider.transfer({ ...TRANSFER, toAddress: "sim:acme-supplies" }).then(() => undefined, (e: unknown) => e)) as Error;
+
+    expect(error.message).toBe("Counterparty has no on-chain address (sim:acme-supplies). Add this counterparty's Arc address on the Counterparties page.");
+    expect(error.message).not.toContain("bootstrap");
+    expect(createTransaction).not.toHaveBeenCalled();
+  });
+
+  it("an account without a wallet points to Settings → Go live", async () => {
+    accountSingle.mockResolvedValueOnce({
+      data: { id: "account-1", chain: "ARC-TESTNET", token: "USDC", circle_wallet_id: null },
+      error: null,
+    });
+    const createTransaction = vi.fn();
+    const provider = new LiveProvider(CHAIN, { client: fakeClient({ createTransaction: createTransaction as unknown as LiveProviderClient["createTransaction"] }) });
+
+    const error = (await provider.transfer(TRANSFER).then(() => undefined, (e: unknown) => e)) as Error;
+
+    expect(error.message).toBe("Account account-1 has no Circle wallet. Create the treasury wallets in Settings → Go live.");
+    expect(error.message).not.toContain("bootstrap");
+    expect(createTransaction).not.toHaveBeenCalled();
+  });
+});

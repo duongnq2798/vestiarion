@@ -71,7 +71,8 @@ async function resolveFee(
  * CIRCLE_ENTITY_SECRET are set.
  *
  * Per-account Circle wallet ids come from the `accounts` table, populated by
- * `npm run bootstrap:circle`. The USDC token id is discovered from the
+ * "Create treasury wallets" in Settings → Go live (or, for the demo seed,
+ * `npm run bootstrap:circle`). The USDC token id is discovered from the
  * wallet's own balances the first time it is needed, so no hand-copied UUID
  * has to stay in sync with the environment.
  */
@@ -111,7 +112,7 @@ export class LiveProvider implements ChainProvider {
     );
     if (!row.circle_wallet_id) {
       throw new Error(
-        `Account ${accountId} has no circle_wallet_id — run \`npm run bootstrap:circle -- <org-slug>\` first`
+        `Account ${accountId} has no Circle wallet. Create the treasury wallets in Settings → Go live.`
       );
     }
     return { ...row, walletId: row.circle_wallet_id };
@@ -137,7 +138,7 @@ export class LiveProvider implements ChainProvider {
   async transfer(params: TransferParams): Promise<TransferResult> {
     if (params.toAddress.startsWith("sim:")) {
       throw new Error(
-        `Counterparty has no on-chain address (${params.toAddress}). Run \`npm run bootstrap:circle -- <org-slug>\` to give every counterparty a wallet.`
+        `Counterparty has no on-chain address (${params.toAddress}). Add this counterparty's Arc address on the Counterparties page.`
       );
     }
 

@@ -138,6 +138,12 @@ function database(state: State, options: { orgUpdateMatchesNothing?: boolean } =
     if (request.path === "/rest/v1/orgs" && request.method === "PATCH") {
       const mode = eqValue(request, "mode");
       if (options.orgUpdateMatchesNothing || eqValue(request, "id") !== ORG || (mode && mode !== state.org.mode)) return { body: [] };
+      for (const [filter, value] of request.params) {
+        const json = /^(\w+)->>(\w+)$/.exec(filter);
+        if (!json) continue;
+        const envelope = (state.org as Record<string, unknown>)[json[1]] as Record<string, unknown> | null;
+        if (`eq.${envelope?.[json[2]] ?? ""}` !== value) return { body: [] };
+      }
       Object.assign(state.org, request.body);
       return { body: [{ id: ORG }] };
     }
@@ -220,9 +226,13 @@ function circle(options: {
 }
 
 /** The same Circle entity as the one the fixtures' wallets were created in: its operating wallet, in its treasury set. */
+const RESERVE_ADDRESS = "0x" + "cd".repeat(20);
 const SAME_ENTITY = {
   sets: [{ id: "set-other", name: "something-else" }, { id: "set-treasury", name: TREASURY_WALLET_SET }],
-  wallets: { "wallet-operating": { id: "wallet-operating", walletSetId: "set-treasury", address: OPERATING_ADDRESS.toUpperCase().replace("0X", "0x") } },
+  wallets: {
+    "wallet-operating": { id: "wallet-operating", walletSetId: "set-treasury", address: OPERATING_ADDRESS.toUpperCase().replace("0X", "0x") },
+    "wallet-reserve": { id: "wallet-reserve", walletSetId: "set-treasury", address: RESERVE_ADDRESS },
+  },
   walletSets: { "set-other": { id: "set-other", name: "something-else" }, "set-treasury": { id: "set-treasury", name: TREASURY_WALLET_SET } },
 };
 
@@ -278,6 +288,8 @@ describe("GoLiveError", () => {
     ["no_wallets", "Create the treasury wallets first."],
     ["already_live", "This workspace is already live."],
     ["credentials_unreadable", "The stored Circle credentials cannot be read; reconnect."],
+    ["credentials_changed", "The Circle credentials changed while going live; try again."],
+    ["no_operating_wallet", "This workspace has no operating wallet; it cannot take new credentials."],
   ] as const)("%s says %j", (code, message) => {
     const error = new GoLiveError(code);
     expect(error.code).toBe(code);
@@ -415,7 +427,7 @@ describe("connectCircle", () => {
 
       // Every Circle call used the new credentials.
       for (const given of fakeCircle.credentials) expect(given).toEqual({ apiKey: API_KEY, entitySecret: ENTITY_SECRET });
-      expect(fakeCircle.getWallet).toHaveBeenCalledWith({ id: "wallet-operating" });
+      expect(fakeCircle.getWallet.mock.calls.map(([input]) => input)).toEqual([{ id: "wallet-operating" }, { id: "wallet-reserve" }]);
       expect(fakeCircle.getWalletSet).toHaveBeenCalledWith({ id: "set-treasury" });
       // The set is looked up by the wallet's own set id, not found in one page of a listing: the key check is the only listing.
       expect(fakeCircle.listWalletSets).toHaveBeenCalledTimes(1);
@@ -437,11 +449,23 @@ describe("connectCircle", () => {
       ],
       [
         "the operating wallet is in another set",
-        { ...SAME_ENTITY, wallets: { "wallet-operating": { id: "wallet-operating", walletSetId: "set-other", address: OPERATING_ADDRESS } } },
+        { ...SAME_ENTITY, wallets: { ...SAME_ENTITY.wallets, "wallet-operating": { id: "wallet-operating", walletSetId: "set-other", address: OPERATING_ADDRESS } } },
       ],
       [
         "the wallet's address is not the stored one",
-        { ...SAME_ENTITY, wallets: { "wallet-operating": { id: "wallet-operating", walletSetId: "set-treasury", address: "0x" + "99".repeat(20) } } },
+        { ...SAME_ENTITY, wallets: { ...SAME_ENTITY.wallets, "wallet-operating": { id: "wallet-operating", walletSetId: "set-treasury", address: "0x" + "99".repeat(20) } } },
+      ],
+      [
+        "the reserve's wallet is not found in the new entity",
+        { ...SAME_ENTITY, wallets: { "wallet-operating": SAME_ENTITY.wallets["wallet-operating"] } },
+      ],
+      [
+        "the reserve's wallet is in another set",
+        { ...SAME_ENTITY, wallets: { ...SAME_ENTITY.wallets, "wallet-reserve": { id: "wallet-reserve", walletSetId: "set-other", address: RESERVE_ADDRESS } } },
+      ],
+      [
+        "the reserve's wallet is at another address",
+        { ...SAME_ENTITY, wallets: { ...SAME_ENTITY.wallets, "wallet-reserve": { id: "wallet-reserve", walletSetId: "set-treasury", address: "0x" + "77".repeat(20) } } },
       ],
       [
         "Circle refuses to read the wallet (401)",
@@ -472,10 +496,37 @@ describe("connectCircle", () => {
     it("refuses a live workspace whose operating account has no wallet to prove the entity with", async () => {
       const state = connected({ mode: "live" });
       const { fake, inScope } = database(state);
+      const fakeCircle = circle(SAME_ENTITY);
+      const error = await refusal(
+        inScope(() => connectCircle({ orgId: ORG, actorId: ACTOR, apiKey: API_KEY, entitySecret: ENTITY_SECRET, client: fakeCircle.factory }))
+      );
+      expect(error.code).toBe("no_operating_wallet");
+      expect(error.message).toBe("This workspace has no operating wallet; it cannot take new credentials.");
+      expect(fakeCircle.getWallet).not.toHaveBeenCalled();
+      expect(orgPatches(fake)).toEqual([]);
+    });
+
+    it("refuses a live workspace with only a reserve wallet as having no operating wallet", async () => {
+      const state = withWallets(connected({ mode: "live" }));
+      state.accounts[0] = { ...state.accounts[0], circle_wallet_id: null, address: null };
+      const { fake, inScope } = database(state);
       const error = await refusal(
         inScope(() => connectCircle({ orgId: ORG, actorId: ACTOR, apiKey: API_KEY, entitySecret: ENTITY_SECRET, client: circle(SAME_ENTITY).factory }))
       );
+      expect(error.code).toBe("no_operating_wallet");
+      expect(orgPatches(fake)).toEqual([]);
+    });
+
+    it("proves a sandbox with only a reserve wallet against that wallet", async () => {
+      const state = withWallets(connected());
+      state.accounts[0] = { ...state.accounts[0], circle_wallet_id: null, address: null };
+      const { fake, inScope } = database(state);
+      const fakeCircle = circle({ ...SAME_ENTITY, wallets: {} });
+      const error = await refusal(
+        inScope(() => connectCircle({ orgId: ORG, actorId: ACTOR, apiKey: API_KEY, entitySecret: ENTITY_SECRET, client: fakeCircle.factory }))
+      );
       expect(error.code).toBe("different_entity");
+      expect(fakeCircle.getWallet).toHaveBeenCalledWith({ id: "wallet-reserve" });
       expect(orgPatches(fake)).toEqual([]);
     });
 
@@ -634,15 +685,17 @@ describe("goLive", () => {
 
     await inScope(() => goLive({ orgId: ORG, actorId: ACTOR, client: fakeCircle.factory }));
 
-    // The proof ran with what is stored, not with anything the caller supplied.
+    // The proof ran with what is stored, not with anything the caller supplied, against every provisioned account.
     expect(fakeCircle.credentials).toEqual([{ apiKey: OLD_API_KEY, entitySecret: OLD_ENTITY_SECRET }]);
-    expect(fakeCircle.getWallet).toHaveBeenCalledWith({ id: "wallet-operating" });
+    expect(fakeCircle.getWallet.mock.calls.map(([input]) => input)).toEqual([{ id: "wallet-operating" }, { id: "wallet-reserve" }]);
     expect(fakeCircle.getWalletSet).toHaveBeenCalledWith({ id: "set-treasury" });
     const [update, ...others] = orgPatches(fake);
     expect(others).toEqual([]);
     expect(update.body).toEqual({ mode: "live" });
     expect(update.params.get("id")).toBe(`eq.${ORG}`);
     expect(update.params.get("mode")).toBe("eq.sandbox");
+    // Bound to the envelope that was proven: its nonce, which every re-encryption changes.
+    expect(update.params.get("circle_api_key_enc->>iv")).toBe(`eq.${state.org.circle_api_key_enc!.iv}`);
     expect(state.org.mode).toBe("live");
     expect(appends(fake).map((entry) => [entry.p_action, entry.p_detail])).toEqual([["workspace_went_live", { by: ACTOR }]]);
   });
@@ -660,6 +713,37 @@ describe("goLive", () => {
     expect(fakeCircle.credentials.at(-1)).toEqual({ apiKey: API_KEY, entitySecret: ENTITY_SECRET });
     expect(state.org.mode).toBe("live");
     expect(appends(fake).map((entry) => entry.p_action)).toEqual(["circle_reconnected", "workspace_went_live"]);
+  });
+
+  it("answers credentials_changed when a connect lands between the proof and the update (Minor 3)", async () => {
+    const state = withWallets(connected());
+    const { fake, inScope } = database(state);
+    const fakeCircle = circle({
+      ...SAME_ENTITY,
+      // The proof reads the set last; another owner's connect stores new credentials right then.
+      getWalletSet: async (id: string) => {
+        state.org.circle_api_key_enc = seal(API_KEY, "circle_api_key_enc");
+        state.org.circle_entity_secret_enc = seal(ENTITY_SECRET, "circle_entity_secret_enc");
+        return { data: { walletSet: SAME_ENTITY.walletSets[id as keyof typeof SAME_ENTITY.walletSets] } };
+      },
+    });
+
+    const error = await refusal(inScope(() => goLive({ orgId: ORG, actorId: ACTOR, client: fakeCircle.factory })));
+
+    expect(error.code).toBe("credentials_changed");
+    expect(error.message).toBe("The Circle credentials changed while going live; try again.");
+    expect(orgPatches(fake)).toHaveLength(1);
+    expect(state.org.mode).toBe("sandbox");
+    expect(appends(fake)).toEqual([]);
+  });
+
+  it("refuses when a provisioned reserve wallet is not in the stored credentials' entity (Minor 4)", async () => {
+    const state = withWallets(connected());
+    const { fake, inScope } = database(state);
+    const fakeCircle = circle({ ...SAME_ENTITY, wallets: { "wallet-operating": SAME_ENTITY.wallets["wallet-operating"] } });
+    expect((await refusal(inScope(() => goLive({ orgId: ORG, actorId: ACTOR, client: fakeCircle.factory })))).code).toBe("different_entity");
+    expect(orgPatches(fake)).toEqual([]);
+    expect(state.org.mode).toBe("sandbox");
   });
 
   it("refuses when the stored credentials open a different entity than the wallets' (R4)", async () => {
@@ -724,9 +808,16 @@ describe("goLive", () => {
     expect(appends(fake)).toEqual([]);
   });
 
-  it("reports already_live when the conditional update matches no row (another owner won)", async () => {
-    const { fake, inScope } = database(withWallets(connected()), { orgUpdateMatchesNothing: true });
-    const fakeCircle = circle(SAME_ENTITY);
+  it("reports already_live when another owner went live between the proof and the update", async () => {
+    const state = withWallets(connected());
+    const { fake, inScope } = database(state);
+    const fakeCircle = circle({
+      ...SAME_ENTITY,
+      getWalletSet: async (id: string) => {
+        state.org.mode = "live";
+        return { data: { walletSet: SAME_ENTITY.walletSets[id as keyof typeof SAME_ENTITY.walletSets] } };
+      },
+    });
     expect((await refusal(inScope(() => goLive({ orgId: ORG, actorId: ACTOR, client: fakeCircle.factory })))).code).toBe("already_live");
     expect(orgPatches(fake)).toHaveLength(1);
     expect(appends(fake)).toEqual([]);

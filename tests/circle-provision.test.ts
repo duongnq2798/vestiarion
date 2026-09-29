@@ -122,8 +122,11 @@ describe("createTreasuryWallets", () => {
 
     const writes = patches(fake);
     expect(writes).toHaveLength(2);
-    expect(writes[0].body).toEqual({ circle_wallet_id: "wallet-1", address: `0x${"1".padStart(40, "0")}`, name: "Operating" });
-    expect(writes[1].body).toEqual({ circle_wallet_id: "wallet-2", address: `0x${"2".padStart(40, "0")}`, name: "Reserve" });
+    // A new wallet holds nothing yet: the simulated balance is zeroed, so it never funds a live payment
+    // or a notional reserve. The already-provisioned account is not written at all, balance included.
+    expect(writes[0].body).toEqual({ circle_wallet_id: "wallet-1", address: `0x${"1".padStart(40, "0")}`, name: "Operating", balance: 0 });
+    expect(writes[1].body).toEqual({ circle_wallet_id: "wallet-2", address: `0x${"2".padStart(40, "0")}`, name: "Reserve", balance: 0 });
+    expect(writes.map((write) => write.params.get("id"))).not.toContain(`eq.${PROVISIONED.id}`);
     for (const [index, write] of writes.entries()) {
       expect(write.params.get("id")).toBe(`eq.${[OPERATING, RESERVE][index].id}`);
       expect(write.params.get("org_id")).toBe(`eq.${ORG}`);

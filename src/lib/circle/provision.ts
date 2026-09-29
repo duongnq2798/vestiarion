@@ -152,7 +152,10 @@ function withoutSimulated(name: string): string {
 /**
  * Gives every treasury account of the organization in scope a Circle
  * developer-controlled wallet on its chain, minted with the organization's
- * own credentials, and drops " (simulated)" from the account's name.
+ * own credentials, drops " (simulated)" from the account's name, and zeroes
+ * its balance: the stored balance was the simulation's, and the new wallet
+ * holds nothing until it is funded, so a simulated balance (or a simulated
+ * reserve) never carries into live mode. Reconcile reads the real one.
  *
  * Idempotent: an account with a wallet is skipped. Each wallet is written as
  * soon as it exists, so a failure part-way keeps the wallets already made,
@@ -190,7 +193,7 @@ export async function createTreasuryWallets(options: { client?: CircleClientFact
     const written = unwrap(
       await orgDb
         .from("accounts")
-        .update({ circle_wallet_id: wallet.id, address: wallet.address, name: withoutSimulated(account.name) })
+        .update({ circle_wallet_id: wallet.id, address: wallet.address, name: withoutSimulated(account.name), balance: 0 })
         .eq("id", account.id)
         .is("circle_wallet_id", null)
         .select("id")
@@ -198,11 +201,14 @@ export async function createTreasuryWallets(options: { client?: CircleClientFact
 
     if (written.length === 0) {
       // Another run gave this account a wallet between our read and this
-      // write, and the condition kept its wallet. Under the shared
-      // idempotency key that is normally this same wallet. If it is not (the
-      // two runs found different wallet sets, or Circle's key had expired),
-      // the one just created is left unused in its set; it was never funded,
-      // so nothing is lost.
+      // write, and the condition kept its wallet (and its balance). Under the
+      // shared idempotency key that is normally this same wallet. If Circle's
+      // key had expired, the one just created is a second wallet, left unused
+      // in its set; it was never funded, so nothing is lost. (Two runs that
+      // found different wallet sets send the same key with a different
+      // `walletSetId`, which Circle may reject instead: that run then fails
+      // with CircleCallFailed, and a retry skips the account, already
+      // provisioned by the other run.)
       console.warn("circle: account already provisioned by another run", account.id, wallet.id);
       result.skipped += 1;
       continue;
