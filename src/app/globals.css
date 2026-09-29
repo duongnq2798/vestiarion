@@ -151,6 +151,19 @@
     margin-right: 0 !important;
   }
 
+  /* The reserved column shows the root's background, which no backdrop can
+     cover: while a dialog or sheet is open it takes the backdrop's tint
+     (`overlayBackdrop` in components/ui/overlay.ts, bg-ink/40). */
+  html:has(body [role="dialog"][data-state="open"], body [role="alertdialog"][data-state="open"]) {
+    background-color: color-mix(in srgb, var(--color-ink) 40%, var(--color-ground));
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    html {
+      transition: background-color 200ms var(--ease-emphasized);
+    }
+  }
+
   * {
     scrollbar-width: thin;
     scrollbar-color: var(--color-line-strong) transparent;
