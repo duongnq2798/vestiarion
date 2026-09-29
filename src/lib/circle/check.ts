@@ -5,12 +5,13 @@ import {
 import { withDeadline } from "./settlement";
 
 /**
- * The Circle calls that checking a key, provisioning wallets and proving a
- * replacement key belongs to the same entity (`getWallet`) make.
+ * The Circle calls that checking a key, provisioning wallets and proving
+ * credentials belong to the entity that holds the wallets (`getWallet`,
+ * `getWalletSet`) make.
  */
 export type CircleClient = Pick<
   CircleDeveloperControlledWalletsClient,
-  "listWalletSets" | "createWalletSet" | "createWallets" | "getWallet"
+  "listWalletSets" | "createWalletSet" | "createWallets" | "getWallet" | "getWalletSet"
 >;
 
 /** Builds a Circle client from one organization's credentials. Tests pass a fake; production uses the SDK's. */

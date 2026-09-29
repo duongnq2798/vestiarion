@@ -9,7 +9,7 @@ import {
 import { configFromEnv, type VestiarionConfig } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import type { CircleClient, CircleClientFactory } from "@/lib/circle/check";
-import { createTreasuryWallets, EntitySecretRejected, TREASURY_WALLET_SET } from "@/lib/circle/provision";
+import { createTreasuryWallets, EntitySecretRejected, TREASURY_WALLET_SET, walletIdempotencyKey } from "@/lib/circle/provision";
 import { fakeSupabase, orgTestContext, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 
 /**
@@ -114,8 +114,10 @@ describe("createTreasuryWallets", () => {
     expect(result).toEqual({ created: 2, skipped: 1 });
     expect(fakeCircle.createWalletSet).not.toHaveBeenCalled();
     expect(fakeCircle.createWallets).toHaveBeenCalledTimes(2);
-    for (const [input] of fakeCircle.createWallets.mock.calls) {
+    for (const [index, [input]] of fakeCircle.createWallets.mock.calls.entries()) {
       expect(input).toMatchObject({ blockchains: ["ARC-TESTNET"], count: 1, walletSetId: "set-treasury", accountType: "SCA" });
+      // Deterministic per (organization, account): a retried or concurrent run gets the same wallet back from Circle.
+      expect(input).toMatchObject({ idempotencyKey: walletIdempotencyKey(ORG, [OPERATING, RESERVE][index].id) });
     }
 
     const writes = patches(fake);
@@ -249,5 +251,40 @@ describe("createTreasuryWallets", () => {
       expect(fakeCircle.factory).not.toHaveBeenCalled();
       expect(fake.requests).toEqual([]);
     }
+  });
+});
+
+describe("walletIdempotencyKey", () => {
+  const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+  it("is a version-4-format UUID, the format Circle requires", () => {
+    for (const account of ["acct-operating", "acct-reserve", "5d0f3a2e-8c1b-4f7a-9e6d-0000000000b9"]) {
+      expect(walletIdempotencyKey(ORG, account)).toMatch(UUID_V4);
+    }
+  });
+
+  it("is stable for the same organization and account", () => {
+    expect(walletIdempotencyKey(ORG, "acct-operating")).toBe(walletIdempotencyKey(ORG, "acct-operating"));
+    // Pinned, so a change to the derivation (which would mint a second wallet for a retried account) fails here.
+    expect(walletIdempotencyKey("org-1", "account-1")).toBe("79149f9e-db49-43cf-833e-940d8a6f7a79");
+  });
+
+  it("differs by account and by organization", () => {
+    const keys = new Set([
+      walletIdempotencyKey(ORG, "acct-operating"),
+      walletIdempotencyKey(ORG, "acct-reserve"),
+      walletIdempotencyKey("0b6c1c9e-4a4f-4a7e-9b1e-000000000c1d", "acct-operating"),
+    ]);
+    expect(keys.size).toBe(3);
+  });
+
+  it("is derived from sha256 of vestiarion-wallet:<org>:<account>", async () => {
+    const { createHash } = await import("node:crypto");
+    const hex = createHash("sha256").update(`vestiarion-wallet:${ORG}:acct-operating`).digest("hex").slice(0, 32).split("");
+    hex[12] = "4";
+    hex[16] = ((parseInt(hex[16], 16) & 0x3) | 0x8).toString(16);
+    const joined = hex.join("");
+    const expected = `${joined.slice(0, 8)}-${joined.slice(8, 12)}-${joined.slice(12, 16)}-${joined.slice(16, 20)}-${joined.slice(20)}`;
+    expect(walletIdempotencyKey(ORG, "acct-operating")).toBe(expected);
   });
 });

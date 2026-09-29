@@ -15,6 +15,8 @@ import {
   type ProvisionResult,
 } from "../circle/provision";
 
+type OperatingAccount = { id: string; circle_wallet_id: string | null; address: string | null };
+
 /**
  * Go live (docs/superpowers/specs/2026-09-29-go-live-design.md): an owner
  * connects the workspace's own Circle entity, creates its treasury wallets,
@@ -49,7 +51,8 @@ export type GoLiveErrorCode =
   | "not_connected"
   | "entity_secret_rejected"
   | "no_wallets"
-  | "already_live";
+  | "already_live"
+  | "credentials_unreadable";
 
 const MESSAGES: Record<GoLiveErrorCode, string> = {
   invalid: "Paste both the API key and the entity secret.",
@@ -60,6 +63,7 @@ const MESSAGES: Record<GoLiveErrorCode, string> = {
   entity_secret_rejected: "Circle did not accept the entity secret; reconnect with the right one.",
   no_wallets: "Create the treasury wallets first.",
   already_live: "This workspace is already live.",
+  credentials_unreadable: "The stored Circle credentials cannot be read; reconnect.",
 };
 
 export class GoLiveError extends Error {
@@ -123,10 +127,10 @@ function record(orgId: string, actorId: string, entry: Omit<LedgerEntryInput, "a
   );
 }
 
-async function operatingAccount(): Promise<{ id: string; circle_wallet_id: string | null; address: string | null } | null> {
+async function operatingAccount(): Promise<OperatingAccount | null> {
   const result = await db().from("accounts").select("id, circle_wallet_id, address").eq("kind", "operating").maybeSingle();
   if (result.error) throw new Error(result.error.message);
-  return result.data as { id: string; circle_wallet_id: string | null; address: string | null } | null;
+  return result.data as OperatingAccount | null;
 }
 
 /** No answer, a rate limit or a server error says nothing about which entity the key belongs to. */
@@ -136,37 +140,42 @@ function isTransient(error: unknown): boolean {
 }
 
 /**
- * Review Focus 5: a live workspace's wallets belong to the Circle entity it
- * connected. New credentials are accepted only if they reach those wallets:
- * the entity they open lists the treasury wallet set, and reads the operating
- * account's wallet — by its stored id — in that set, at its stored address.
- * Anything short of that is refused, since payments from the existing wallets
- * would fail under another entity's key.
+ * Review Focus 5 and R4: the workspace's wallets belong to the Circle entity
+ * that created them. Credentials are accepted for those wallets only if they
+ * reach them: the entity they open reads the operating account's wallet, by
+ * its stored id, at its stored address, and that wallet's own set (read by
+ * its id, so no listing page can miss it) is the treasury set. Anything short
+ * of that is refused as `different_entity`, since payments from the existing
+ * wallets would fail under another entity's key; a Circle that did not
+ * answer (no answer in 15 s, a 429, a 5xx) is `unreachable` instead, since it
+ * says nothing about the entity.
+ *
+ * The entity secret is not proven here: a read does not use it (R5).
  */
-async function proveSameEntity(orgId: string, actorId: string, client: CircleClient): Promise<void> {
-  const operating = await inScopeOf(orgId, actorId, operatingAccount);
-  if (!operating?.circle_wallet_id || !operating.address) throw new GoLiveError("different_entity");
+async function proveSameEntity(client: CircleClient, operating: OperatingAccount): Promise<void> {
   const walletId = operating.circle_wallet_id;
+  const storedAddress = operating.address;
+  if (!walletId || !storedAddress) throw new GoLiveError("different_entity");
 
-  let treasurySets: string[];
   let wallet: { walletSetId?: string; address?: string } | undefined;
+  let setName: string | undefined;
   try {
-    const listed = await circleCall("listWalletSets", () => client.listWalletSets({ pageSize: 50 }), false);
-    // Developer-controlled sets always carry a name; see `treasuryWalletSetId`.
-    const sets = (listed.data?.walletSets ?? []) as Array<{ id: string; name?: string }>;
-    treasurySets = sets.filter((set) => set.name === TREASURY_WALLET_SET).map((set) => set.id);
-    if (treasurySets.length === 0) throw new GoLiveError("different_entity");
     const read = await circleCall("getWallet", () => client.getWallet({ id: walletId }), false);
     wallet = read.data?.wallet;
+    const setId = wallet?.walletSetId;
+    if (!setId) throw new GoLiveError("different_entity");
+    const set = await circleCall("getWalletSet", () => client.getWalletSet({ id: setId }), false);
+    // The SDK types wallet sets as a union whose end-user variant has no
+    // `name`; developer-controlled sets always have one.
+    setName = (set.data?.walletSet as { name?: string } | undefined)?.name;
   } catch (error) {
     if (error instanceof GoLiveError) throw error;
-    // A 404, 400 or 401 for a wallet this workspace owns: the key opens some other entity.
+    // A 404, 400 or 401 for a wallet or set this workspace owns: the key opens some other entity.
     throw new GoLiveError(isTransient(error) ? "unreachable" : "different_entity");
   }
 
-  const sameSet = !!wallet?.walletSetId && treasurySets.includes(wallet.walletSetId);
-  const sameAddress = wallet?.address?.toLowerCase() === operating.address.toLowerCase();
-  if (!sameSet || !sameAddress) throw new GoLiveError("different_entity");
+  const sameAddress = wallet?.address?.toLowerCase() === storedAddress.toLowerCase();
+  if (setName !== TREASURY_WALLET_SET || !sameAddress) throw new GoLiveError("different_entity");
 }
 
 function validSecret(value: string): boolean {
@@ -179,9 +188,16 @@ function validSecret(value: string): boolean {
  * Step 1: checks the API key with Circle, and stores both credentials,
  * encrypted and bound to the organization and their column, in one update.
  *
+ * Once the operating account has a wallet, in any mode, the new credentials
+ * must reach it (`proveSameEntity`, R4): a sandbox holding one entity's
+ * wallets cannot be pointed at another entity and then taken live. A live
+ * workspace with no operating wallet has nothing to prove them against, and
+ * is refused.
+ *
  * The update is conditional on the mode read at the start: a workspace that
- * went live meanwhile must have its new credentials proven against its
- * wallets first, so the owner is asked to try again instead.
+ * went live meanwhile is asked to try again. A wallet created meanwhile, by a
+ * concurrent "Create wallets" under the old credentials, is caught by
+ * `goLive`, which proves the stored credentials again.
  */
 export async function connectCircle(input: {
   orgId: string;
@@ -203,7 +219,12 @@ export async function connectCircle(input: {
   if (verdict === "rejected") throw new GoLiveError("key_rejected");
   if (verdict === "unreachable") throw new GoLiveError("unreachable");
 
-  if (state.mode === "live") await proveSameEntity(input.orgId, input.actorId, factory({ apiKey, entitySecret }));
+  const operating = await inScopeOf(input.orgId, input.actorId, operatingAccount);
+  if (operating?.circle_wallet_id) {
+    await proveSameEntity(factory({ apiKey, entitySecret }), operating);
+  } else if (state.mode === "live") {
+    throw new GoLiveError("different_entity");
+  }
 
   const written = unwrap(
     await platformDb()
@@ -230,6 +251,11 @@ export async function connectCircle(input: {
  * Step 2: a Circle wallet for every account that has none, in the
  * organization's own entity (`createTreasuryWallets`).
  *
+ * Fill-only, in any mode (R6): an account that has a wallet keeps it, since
+ * the write is conditional on `circle_wallet_id is null`. A live workspace
+ * can so gain a wallet for an account that lacks one; one whose accounts all
+ * have wallets, like the founding workspace, makes no Circle call at all.
+ *
  * It always enters a fresh scope, so the configuration it pays with is
  * decrypted from the row as it is now — credentials connected a moment ago,
  * even in a scope entered before they were, are the ones used.
@@ -240,12 +266,12 @@ export async function createWallets(input: {
   client?: CircleClientFactory;
 }): Promise<ProvisionResult> {
   const state = await orgState(input.orgId);
-  if (state.mode === "live") throw new GoLiveError("already_live");
   if (!isConnected(state)) throw new GoLiveError("not_connected");
 
   return withOrg(
     input.orgId,
     async () => {
+      if (currentOrgConfig().chain.credentialsUnreadable) throw new GoLiveError("credentials_unreadable");
       let result: ProvisionResult;
       try {
         result = await createTreasuryWallets({ client: input.client });
@@ -268,26 +294,42 @@ export async function createWallets(input: {
 
 /**
  * Step 3 (L6): one conditional update, `mode = 'live'` where it is still
- * `sandbox`, after checking the credentials are stored and the operating
- * account has a wallet. Zero rows means someone else already did it.
+ * `sandbox`. Zero rows means someone else already did it.
+ *
+ * Immediately before it, in a fresh scope so the credentials are the ones
+ * stored now: they must be stored and readable, the operating account must
+ * have a wallet, and those credentials must reach it (`proveSameEntity`,
+ * R4) — whatever was connected or created since the last check.
  */
-export async function goLive(input: { orgId: string; actorId: string }): Promise<void> {
+export async function goLive(input: { orgId: string; actorId: string; client?: CircleClientFactory }): Promise<void> {
   const state = await orgState(input.orgId);
   if (state.mode === "live") throw new GoLiveError("already_live");
   if (!isConnected(state)) throw new GoLiveError("not_connected");
-  const operating = await inScopeOf(input.orgId, input.actorId, operatingAccount);
-  if (!operating?.circle_wallet_id) throw new GoLiveError("no_wallets");
 
-  const written = unwrap(
-    await platformDb().from("orgs").update({ mode: "live" }).eq("id", input.orgId).eq("mode", "sandbox").select("id")
-  ) as Array<{ id: string }>;
-  if (written.length === 0) throw new GoLiveError("already_live");
+  await withOrg(
+    input.orgId,
+    async () => {
+      const chain = currentOrgConfig().chain;
+      if (chain.credentialsUnreadable) throw new GoLiveError("credentials_unreadable");
+      if (!chain.circleApiKey || !chain.circleEntitySecret) throw new GoLiveError("not_connected");
+      const operating = await operatingAccount();
+      if (!operating?.circle_wallet_id) throw new GoLiveError("no_wallets");
+      const factory = input.client ?? defaultCircleClient;
+      await proveSameEntity(factory({ apiKey: chain.circleApiKey, entitySecret: chain.circleEntitySecret }), operating);
 
-  await record(input.orgId, input.actorId, {
-    action: "workspace_went_live",
-    summary: "The workspace went live",
-    detail: { by: input.actorId },
-  });
+      const written = unwrap(
+        await platformDb().from("orgs").update({ mode: "live" }).eq("id", input.orgId).eq("mode", "sandbox").select("id")
+      ) as Array<{ id: string }>;
+      if (written.length === 0) throw new GoLiveError("already_live");
+
+      await record(input.orgId, input.actorId, {
+        action: "workspace_went_live",
+        summary: "The workspace went live",
+        detail: { by: input.actorId },
+      });
+    },
+    { userId: input.actorId }
+  );
 }
 
 /**

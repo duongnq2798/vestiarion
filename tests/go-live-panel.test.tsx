@@ -53,7 +53,9 @@ function expectIgnoredByPasswordManagers(markup: string) {
   expect(inputs).toHaveLength(2);
   for (const input of inputs) {
     expect(input).toContain('type="password"');
-    expect(input).toContain('autoComplete="off"');
+    // Browsers ignore autocomplete="off" on a password field; a one-time code is neither saved nor filled (as in TryIt).
+    expect(input).toContain('autoComplete="one-time-code"');
+    expect(input).not.toContain('autoComplete="off"');
     expect(input).toContain('data-1p-ignore="true"');
     expect(input).toContain('data-lpignore="true"');
     expect(input).toContain('data-bwignore="true"');
@@ -70,9 +72,17 @@ describe("GoLivePanel, for every viewer", () => {
     expect(markup).toMatch(/<h2 id="go-live-title"[^>]*>Go live<\/h2>/);
   });
 
-  it.each(["connect", "wallets", "go_live"] as const)("says a %s workspace is a sandbox", (step) => {
-    expect(text(panel(step))).toContain("Sandbox · simulated payments");
-    expect(text(panel(step, false))).toContain("Sandbox · simulated payments");
+  it("says a workspace that has not connected Circle is a sandbox with simulated payments", () => {
+    expect(text(panel("connect"))).toContain("Sandbox · simulated payments");
+    expect(text(panel("connect", false))).toContain("Sandbox · simulated payments");
+  });
+
+  it.each(["wallets", "go_live"] as const)("says a connected %s sandbox pays for real when a cycle is run by hand", (step) => {
+    for (const canAdminister of [true, false]) {
+      const words = text(panel(step, canAdminister));
+      expect(words).toContain("Sandbox · connected to Circle — cycles you run by hand pay for real");
+      expect(words).not.toContain("simulated payments");
+    }
   });
 
   it("says a live workspace is live", () => {
@@ -154,6 +164,16 @@ describe("GoLivePanel, for an owner", () => {
 
   it("live: the replace form warns that the credentials must open the same Circle account", () => {
     expect(text(panel("live"))).toContain("same Circle account");
+  });
+
+  it.each(["wallets", "go_live", "live"] as const)("%s: once the operating wallet exists, the replace form says another account is refused (R4)", (step) => {
+    expect(text(panel(step))).toContain("Credentials for another account are refused.");
+  });
+
+  it.each(["wallets", "go_live", "live"] as const)("%s: the replace form says the entity secret cannot be confirmed once wallets exist (R5)", (step) => {
+    expect(text(panel(step))).toContain(
+      "Vestiarion can confirm the API key and the wallets, but not the entity secret once wallets exist; if payments start failing with the entity secret rejected, pause the agent and reconnect with the right one."
+    );
   });
 });
 

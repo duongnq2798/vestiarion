@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   InternalServerError,
   NotFoundError,
+  RatelimitError,
   UnauthorizedError,
 } from "@circle-fin/developer-controlled-wallets";
 import { configFromEnv } from "@/lib/config";
@@ -175,7 +176,9 @@ function database(state: State, options: { orgUpdateMatchesNothing?: boolean } =
 function circle(options: {
   sets?: Array<{ id: string; name?: string }>;
   wallets?: Record<string, { id: string; walletSetId: string; address: string }>;
+  walletSets?: Record<string, { id: string; name?: string }>;
   getWallet?: (id: string) => Promise<unknown>;
+  getWalletSet?: (id: string) => Promise<unknown>;
   listWalletSets?: () => Promise<unknown>;
   createWallets?: () => Promise<unknown>;
 } = {}) {
@@ -199,18 +202,28 @@ function circle(options: {
           return { data: { wallet } };
         }
   );
-  const client = { listWalletSets, createWalletSet, createWallets, getWallet } as unknown as CircleClient;
+  const getWalletSet = vi.fn(
+    options.getWalletSet
+      ? ({ id }: { id: string }) => options.getWalletSet!(id)
+      : async ({ id }: { id: string }) => {
+          const walletSet = options.walletSets?.[id];
+          if (!walletSet) throw new NotFoundError({ ...REQUEST, status: 404, message: LEAKY });
+          return { data: { walletSet } };
+        }
+  );
+  const client = { listWalletSets, createWalletSet, createWallets, getWallet, getWalletSet } as unknown as CircleClient;
   const factory = vi.fn((given: { apiKey: string; entitySecret: string }) => {
     credentials.push(given);
     return client;
   }) as unknown as CircleClientFactory;
-  return { factory, credentials, listWalletSets, createWalletSet, createWallets, getWallet };
+  return { factory, credentials, listWalletSets, createWalletSet, createWallets, getWallet, getWalletSet };
 }
 
-/** The same Circle entity as the founding workspace's: its treasury set, and its operating wallet in it. */
+/** The same Circle entity as the one the fixtures' wallets were created in: its operating wallet, in its treasury set. */
 const SAME_ENTITY = {
   sets: [{ id: "set-other", name: "something-else" }, { id: "set-treasury", name: TREASURY_WALLET_SET }],
   wallets: { "wallet-operating": { id: "wallet-operating", walletSetId: "set-treasury", address: OPERATING_ADDRESS.toUpperCase().replace("0X", "0x") } },
+  walletSets: { "set-other": { id: "set-other", name: "something-else" }, "set-treasury": { id: "set-treasury", name: TREASURY_WALLET_SET } },
 };
 
 const orgPatches = (fake: ReturnType<typeof fakeSupabase>) =>
@@ -264,6 +277,7 @@ describe("GoLiveError", () => {
     ["entity_secret_rejected", "Circle did not accept the entity secret; reconnect with the right one."],
     ["no_wallets", "Create the treasury wallets first."],
     ["already_live", "This workspace is already live."],
+    ["credentials_unreadable", "The stored Circle credentials cannot be read; reconnect."],
   ] as const)("%s says %j", (code, message) => {
     const error = new GoLiveError(code);
     expect(error.code).toBe(code);
@@ -387,9 +401,13 @@ describe("connectCircle", () => {
     expect(appends(fake)).toEqual([]);
   });
 
-  describe("on a live workspace (Review Focus 5)", () => {
-    it("allows the same Circle entity: the treasury set is listed and the operating wallet is readable, and in it", async () => {
-      const state = founding();
+  describe("once the operating account has a wallet, in any mode (Review Focus 5, R4)", () => {
+    it.each([
+      ["a live workspace", founding],
+      ["a sandbox that already created its wallets", () => withWallets(connected())],
+    ])("allows the same Circle entity on %s: the operating wallet reads back, at its address, in the treasury set", async (_label, make) => {
+      const state = make();
+      const mode = state.org.mode;
       const { fake, inScope } = database(state);
       const fakeCircle = circle(SAME_ENTITY);
 
@@ -398,18 +416,25 @@ describe("connectCircle", () => {
       // Every Circle call used the new credentials.
       for (const given of fakeCircle.credentials) expect(given).toEqual({ apiKey: API_KEY, entitySecret: ENTITY_SECRET });
       expect(fakeCircle.getWallet).toHaveBeenCalledWith({ id: "wallet-operating" });
+      expect(fakeCircle.getWalletSet).toHaveBeenCalledWith({ id: "set-treasury" });
+      // The set is looked up by the wallet's own set id, not found in one page of a listing: the key check is the only listing.
+      expect(fakeCircle.listWalletSets).toHaveBeenCalledTimes(1);
       expect(fakeCircle.createWalletSet).not.toHaveBeenCalled();
       expect(fakeCircle.createWallets).not.toHaveBeenCalled();
       const [update] = orgPatches(fake);
-      expect(update.params.get("mode")).toBe("eq.live");
-      expect(state.org.mode).toBe("live");
+      expect(update.params.get("mode")).toBe(`eq.${mode}`);
+      expect(state.org.mode).toBe(mode);
       expect(decryptSecret(state.org.circle_api_key_enc!, { orgId: ORG, column: "circle_api_key_enc" }, parseMasterKeys(MASTER_KEYS))).toBe(API_KEY);
       expect(appends(fake).map((entry) => [entry.p_action, entry.p_detail])).toEqual([["circle_reconnected", { by: ACTOR }]]);
     });
 
     it.each([
       ["the operating wallet is not found in the new entity", { ...SAME_ENTITY, wallets: {} }],
-      ["the new entity has no treasury wallet set", { ...SAME_ENTITY, sets: [{ id: "set-other", name: "something-else" }] }],
+      ["the wallet's set is not found", { ...SAME_ENTITY, walletSets: {} }],
+      [
+        "the wallet's set is not the treasury set",
+        { ...SAME_ENTITY, walletSets: { "set-treasury": { id: "set-treasury", name: "something-else" } } },
+      ],
       [
         "the operating wallet is in another set",
         { ...SAME_ENTITY, wallets: { "wallet-operating": { id: "wallet-operating", walletSetId: "set-other", address: OPERATING_ADDRESS } } },
@@ -419,26 +444,32 @@ describe("connectCircle", () => {
         { ...SAME_ENTITY, wallets: { "wallet-operating": { id: "wallet-operating", walletSetId: "set-treasury", address: "0x" + "99".repeat(20) } } },
       ],
       [
-        "Circle refuses to read the wallet",
+        "Circle refuses to read the wallet (401)",
         { ...SAME_ENTITY, getWallet: () => Promise.reject(new UnauthorizedError({ ...REQUEST, status: 401, message: LEAKY })) },
       ],
-    ])("refuses a different entity when %s, storing nothing", async (_label, entity) => {
-      const state = founding();
-      const before = { ...state.org };
-      const { fake, inScope } = database(state);
+      [
+        "Circle refuses to read the wallet set (401)",
+        { ...SAME_ENTITY, getWalletSet: () => Promise.reject(new UnauthorizedError({ ...REQUEST, status: 401, message: LEAKY })) },
+      ],
+    ])("refuses a different entity when %s, storing nothing, live or sandbox", async (_label, entity) => {
+      for (const make of [founding, () => withWallets(connected())]) {
+        const state = make();
+        const before = structuredClone(state.org);
+        const { fake, inScope } = database(state);
 
-      const error = await refusal(
-        inScope(() => connectCircle({ orgId: ORG, actorId: ACTOR, apiKey: API_KEY, entitySecret: ENTITY_SECRET, client: circle(entity).factory }))
-      );
+        const error = await refusal(
+          inScope(() => connectCircle({ orgId: ORG, actorId: ACTOR, apiKey: API_KEY, entitySecret: ENTITY_SECRET, client: circle(entity).factory }))
+        );
 
-      expect(error.code).toBe("different_entity");
-      expect(error.message).toBe("This workspace is live; its wallets belong to the connected Circle account.");
-      expect(orgPatches(fake)).toEqual([]);
-      expect(state.org).toEqual(before);
-      expect(appends(fake)).toEqual([]);
+        expect(error.code).toBe("different_entity");
+        expect(error.message).toBe("This workspace is live; its wallets belong to the connected Circle account.");
+        expect(orgPatches(fake)).toEqual([]);
+        expect(state.org).toEqual(before);
+        expect(appends(fake)).toEqual([]);
+      }
     });
 
-    it("refuses when the operating account has no wallet to prove the entity with", async () => {
+    it("refuses a live workspace whose operating account has no wallet to prove the entity with", async () => {
       const state = connected({ mode: "live" });
       const { fake, inScope } = database(state);
       const error = await refusal(
@@ -448,12 +479,18 @@ describe("connectCircle", () => {
       expect(orgPatches(fake)).toEqual([]);
     });
 
-    it("says unreachable, and stores nothing, when Circle fails to answer the proof", async () => {
-      const { fake, inScope } = database(founding());
-      const fakeCircle = circle({
-        ...SAME_ENTITY,
-        getWallet: () => Promise.reject(new InternalServerError({ ...REQUEST, status: 500, message: LEAKY })),
-      });
+    it.each([
+      ["getWallet answers 500", { getWallet: () => Promise.reject(new InternalServerError({ ...REQUEST, status: 500, message: LEAKY })) }],
+      ["getWallet answers 429", { getWallet: () => Promise.reject(new RatelimitError({ ...REQUEST, status: 429, message: LEAKY })) }],
+      ["getWalletSet answers 500", { getWalletSet: () => Promise.reject(new InternalServerError({ ...REQUEST, status: 500, message: LEAKY })) }],
+      ["getWalletSet answers 429", { getWalletSet: () => Promise.reject(new RatelimitError({ ...REQUEST, status: 429, message: LEAKY })) }],
+      [
+        "listWalletSets (the key check) answers 500",
+        { listWalletSets: () => Promise.reject(new InternalServerError({ ...REQUEST, status: 500, message: LEAKY })) },
+      ],
+    ])("says unreachable, and stores nothing, when %s", async (_label, failure) => {
+      const { fake, inScope } = database(withWallets(connected()));
+      const fakeCircle = circle({ ...SAME_ENTITY, ...failure });
       const error = await refusal(
         inScope(() => connectCircle({ orgId: ORG, actorId: ACTOR, apiKey: API_KEY, entitySecret: ENTITY_SECRET, client: fakeCircle.factory }))
       );
@@ -499,13 +536,38 @@ describe("createWallets", () => {
     expect(fake.requests.filter((request) => request.method === "PATCH")).toEqual([]);
   });
 
-  it("refuses the founding workspace (live) without re-provisioning", async () => {
+  it("is a no-op on the founding workspace, whose every account has a wallet: no Circle call, no write, no entry", async () => {
     const { fake, inScope } = database(founding());
     const fakeCircle = circle();
-    const error = await refusal(inScope(() => createWallets({ orgId: ORG, actorId: ACTOR, client: fakeCircle.factory })));
-    expect(error.code).toBe("already_live");
+    await expect(inScope(() => createWallets({ orgId: ORG, actorId: ACTOR, client: fakeCircle.factory }))).resolves.toEqual({
+      created: 0,
+      skipped: 2,
+    });
     expect(fakeCircle.factory).not.toHaveBeenCalled();
     expect(fake.requests.filter((request) => request.method === "PATCH")).toEqual([]);
+    expect(appends(fake)).toEqual([]);
+  });
+
+  it("fills only the missing wallet on a live workspace (R6), under circle_wallet_id is null", async () => {
+    const state = founding();
+    state.accounts[1] = { ...state.accounts[1], name: "Reserve (simulated)", circle_wallet_id: null, address: null };
+    const { fake, inScope } = database(state);
+    const fakeCircle = circle({ sets: [{ id: "set-treasury", name: TREASURY_WALLET_SET }] });
+
+    await expect(inScope(() => createWallets({ orgId: ORG, actorId: ACTOR, client: fakeCircle.factory }))).resolves.toEqual({
+      created: 1,
+      skipped: 1,
+    });
+
+    expect(fakeCircle.credentials).toEqual([{ apiKey: OLD_API_KEY, entitySecret: OLD_ENTITY_SECRET }]);
+    const writes = fake.requests.filter((request) => request.method === "PATCH");
+    expect(writes).toHaveLength(1);
+    expect(writes[0].path).toBe("/rest/v1/accounts");
+    expect(writes[0].params.get("id")).toBe("eq.acct-reserve");
+    expect(writes[0].params.get("circle_wallet_id")).toBe("is.null");
+    expect(state.accounts[0].circle_wallet_id).toBe("wallet-operating");
+    expect(state.org.mode).toBe("live");
+    expect(appends(fake).map((entry) => [entry.p_action, entry.p_detail])).toEqual([["treasury_wallets_created", { by: ACTOR, accounts: 1 }]]);
   });
 
   it("uses credentials stored moments earlier, even from a scope entered before they were", async () => {
@@ -552,15 +614,30 @@ describe("createWallets", () => {
     expect(state.org.circle_api_key_enc).not.toBeNull();
     expect(appends(fake)).toEqual([]);
   });
+
+  it("says the stored credentials cannot be read, before any Circle call", async () => {
+    const { fake, inScope } = database(connected({ circle_entity_secret_enc: seal(OLD_ENTITY_SECRET, "circle_entity_secret_enc", OTHER_MASTER_KEYS) }));
+    const fakeCircle = circle();
+    const error = await refusal(inScope(() => createWallets({ orgId: ORG, actorId: ACTOR, client: fakeCircle.factory })));
+    expect(error.code).toBe("credentials_unreadable");
+    expect(error.message).toBe("The stored Circle credentials cannot be read; reconnect.");
+    expect(fakeCircle.factory).not.toHaveBeenCalled();
+    expect(fake.requests.filter((request) => request.method === "PATCH")).toEqual([]);
+  });
 });
 
 describe("goLive", () => {
-  it("sets mode to live only where it is still sandbox, and records workspace_went_live with ids only", async () => {
+  it("re-proves the stored credentials, sets mode to live only where it is still sandbox, and records ids only", async () => {
     const state = withWallets(connected());
     const { fake, inScope } = database(state);
+    const fakeCircle = circle(SAME_ENTITY);
 
-    await inScope(() => goLive({ orgId: ORG, actorId: ACTOR }));
+    await inScope(() => goLive({ orgId: ORG, actorId: ACTOR, client: fakeCircle.factory }));
 
+    // The proof ran with what is stored, not with anything the caller supplied.
+    expect(fakeCircle.credentials).toEqual([{ apiKey: OLD_API_KEY, entitySecret: OLD_ENTITY_SECRET }]);
+    expect(fakeCircle.getWallet).toHaveBeenCalledWith({ id: "wallet-operating" });
+    expect(fakeCircle.getWalletSet).toHaveBeenCalledWith({ id: "set-treasury" });
     const [update, ...others] = orgPatches(fake);
     expect(others).toEqual([]);
     expect(update.body).toEqual({ mode: "live" });
@@ -570,11 +647,60 @@ describe("goLive", () => {
     expect(appends(fake).map((entry) => [entry.p_action, entry.p_detail])).toEqual([["workspace_went_live", { by: ACTOR }]]);
   });
 
+  it("proves with credentials replaced a moment earlier, even from a scope entered before they were", async () => {
+    const state = withWallets(connected());
+    const { fake, inScope } = database(state);
+    const fakeCircle = circle(SAME_ENTITY);
+
+    await inScope(async () => {
+      await connectCircle({ orgId: ORG, actorId: ACTOR, apiKey: API_KEY, entitySecret: ENTITY_SECRET, client: fakeCircle.factory });
+      await goLive({ orgId: ORG, actorId: ACTOR, client: fakeCircle.factory });
+    });
+
+    expect(fakeCircle.credentials.at(-1)).toEqual({ apiKey: API_KEY, entitySecret: ENTITY_SECRET });
+    expect(state.org.mode).toBe("live");
+    expect(appends(fake).map((entry) => entry.p_action)).toEqual(["circle_reconnected", "workspace_went_live"]);
+  });
+
+  it("refuses when the stored credentials open a different entity than the wallets' (R4)", async () => {
+    const state = withWallets(connected());
+    const { fake, inScope } = database(state);
+    const fakeCircle = circle({ ...SAME_ENTITY, wallets: {} });
+
+    const error = await refusal(inScope(() => goLive({ orgId: ORG, actorId: ACTOR, client: fakeCircle.factory })));
+
+    expect(error.code).toBe("different_entity");
+    expect(orgPatches(fake)).toEqual([]);
+    expect(state.org.mode).toBe("sandbox");
+    expect(appends(fake)).toEqual([]);
+  });
+
+  it("says unreachable, and stays a sandbox, when Circle cannot answer the proof", async () => {
+    const state = withWallets(connected());
+    const { fake, inScope } = database(state);
+    const fakeCircle = circle({ ...SAME_ENTITY, getWalletSet: () => Promise.reject(new RatelimitError({ ...REQUEST, status: 429, message: LEAKY })) });
+    expect((await refusal(inScope(() => goLive({ orgId: ORG, actorId: ACTOR, client: fakeCircle.factory })))).code).toBe("unreachable");
+    expect(orgPatches(fake)).toEqual([]);
+    expect(state.org.mode).toBe("sandbox");
+  });
+
+  it("refuses stored credentials this deployment cannot read, before any Circle call", async () => {
+    const state = withWallets(connected({ circle_api_key_enc: seal(OLD_API_KEY, "circle_api_key_enc", OTHER_MASTER_KEYS) }));
+    const { fake, inScope } = database(state);
+    const fakeCircle = circle(SAME_ENTITY);
+    const error = await refusal(inScope(() => goLive({ orgId: ORG, actorId: ACTOR, client: fakeCircle.factory })));
+    expect(error.code).toBe("credentials_unreadable");
+    expect(fakeCircle.factory).not.toHaveBeenCalled();
+    expect(orgPatches(fake)).toEqual([]);
+  });
+
   it("refuses without credentials", async () => {
     const state = sandbox();
     state.accounts = withWallets(sandbox()).accounts;
     const { fake, inScope } = database(state);
-    expect((await refusal(inScope(() => goLive({ orgId: ORG, actorId: ACTOR })))).code).toBe("not_connected");
+    const fakeCircle = circle(SAME_ENTITY);
+    expect((await refusal(inScope(() => goLive({ orgId: ORG, actorId: ACTOR, client: fakeCircle.factory })))).code).toBe("not_connected");
+    expect(fakeCircle.factory).not.toHaveBeenCalled();
     expect(orgPatches(fake)).toEqual([]);
   });
 
@@ -582,21 +708,26 @@ describe("goLive", () => {
     const state = connected();
     state.accounts[1] = { ...state.accounts[1], circle_wallet_id: "wallet-reserve", address: "0x" + "cd".repeat(20) };
     const { fake, inScope } = database(state);
-    expect((await refusal(inScope(() => goLive({ orgId: ORG, actorId: ACTOR })))).code).toBe("no_wallets");
+    const fakeCircle = circle(SAME_ENTITY);
+    expect((await refusal(inScope(() => goLive({ orgId: ORG, actorId: ACTOR, client: fakeCircle.factory })))).code).toBe("no_wallets");
+    expect(fakeCircle.factory).not.toHaveBeenCalled();
     expect(orgPatches(fake)).toEqual([]);
   });
 
   it("refuses the founding workspace, and cannot change its mode", async () => {
     const state = founding();
     const { fake, inScope } = database(state);
-    expect((await refusal(inScope(() => goLive({ orgId: ORG, actorId: ACTOR })))).code).toBe("already_live");
+    const fakeCircle = circle(SAME_ENTITY);
+    expect((await refusal(inScope(() => goLive({ orgId: ORG, actorId: ACTOR, client: fakeCircle.factory })))).code).toBe("already_live");
+    expect(fakeCircle.factory).not.toHaveBeenCalled();
     expect(orgPatches(fake)).toEqual([]);
     expect(appends(fake)).toEqual([]);
   });
 
   it("reports already_live when the conditional update matches no row (another owner won)", async () => {
     const { fake, inScope } = database(withWallets(connected()), { orgUpdateMatchesNothing: true });
-    expect((await refusal(inScope(() => goLive({ orgId: ORG, actorId: ACTOR })))).code).toBe("already_live");
+    const fakeCircle = circle(SAME_ENTITY);
+    expect((await refusal(inScope(() => goLive({ orgId: ORG, actorId: ACTOR, client: fakeCircle.factory })))).code).toBe("already_live");
     expect(orgPatches(fake)).toHaveLength(1);
     expect(appends(fake)).toEqual([]);
   });

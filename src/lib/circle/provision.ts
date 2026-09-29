@@ -1,4 +1,5 @@
-import { currentOrgConfig } from "../context";
+import crypto from "node:crypto";
+import { currentOrgConfig, currentOrgId } from "../context";
 import { db, unwrap } from "../dal";
 import { withDeadline } from "./settlement";
 import {
@@ -100,15 +101,43 @@ export async function treasuryWalletSetId(client: CircleClient): Promise<string>
   return id;
 }
 
-/** One new SCA wallet on `chain`, in the given set. */
+/**
+ * The idempotency key for one account's treasury wallet: the same for every
+ * run that provisions that account of that organization, so Circle answers a
+ * retried or concurrent `createWallets` with the wallet it already made
+ * instead of minting another. Circle requires the version-4 UUID format; this
+ * is the first 16 bytes of sha256(`vestiarion-wallet:<orgId>:<accountId>`)
+ * with the version nibble set to 4 and the RFC 4122 variant bits set.
+ */
+export function walletIdempotencyKey(orgId: string, accountId: string): string {
+  const bytes = crypto.createHash("sha256").update(`vestiarion-wallet:${orgId}:${accountId}`, "utf8").digest().subarray(0, 16);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = bytes.toString("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+/**
+ * One new SCA wallet on `chain`, in the given set. With an `idempotencyKey`
+ * Circle returns the wallet an earlier call with that key created; without
+ * one the SDK generates a fresh key, so every call mints a wallet.
+ */
 export async function createScaWallet(
   client: CircleClient,
   walletSetId: string,
-  chain: string
+  chain: string,
+  idempotencyKey?: string
 ): Promise<{ id: string; address: string }> {
   const created = await circleCall(
     "createWallets",
-    () => client.createWallets({ blockchains: [chain as never], count: 1, walletSetId, accountType: "SCA" }),
+    () =>
+      client.createWallets({
+        blockchains: [chain as never],
+        count: 1,
+        walletSetId,
+        accountType: "SCA",
+        ...(idempotencyKey ? { idempotencyKey } : {}),
+      }),
     true
   );
   const wallet = created.data?.wallets?.[0];
@@ -129,9 +158,11 @@ function withoutSimulated(name: string): string {
  * soon as it exists, so a failure part-way keeps the wallets already made,
  * and the next run creates only the rest.
  *
- * Safe to run twice at once (a double click, two owners). The write only
- * lands on an account that still has no wallet, so each account keeps
- * exactly one; see the comment at the write.
+ * Safe to run twice at once (a double click, two owners). Each account's
+ * wallet is requested under the same idempotency key every time
+ * (`walletIdempotencyKey`), so Circle hands both runs the same wallet; and
+ * the write only lands on an account that still has no wallet, so each
+ * account keeps exactly one either way. See the comment at the write.
  */
 export async function createTreasuryWallets(options: { client?: CircleClientFactory } = {}): Promise<ProvisionResult> {
   const chain = currentOrgConfig().chain;
@@ -152,9 +183,10 @@ export async function createTreasuryWallets(options: { client?: CircleClientFact
     entitySecret: chain.circleEntitySecret,
   });
   const walletSetId = await treasuryWalletSetId(client);
+  const orgId = currentOrgId();
 
   for (const account of missing) {
-    const wallet = await createScaWallet(client, walletSetId, account.chain);
+    const wallet = await createScaWallet(client, walletSetId, account.chain, walletIdempotencyKey(orgId, account.id));
     const written = unwrap(
       await orgDb
         .from("accounts")
@@ -166,9 +198,12 @@ export async function createTreasuryWallets(options: { client?: CircleClientFact
 
     if (written.length === 0) {
       // Another run gave this account a wallet between our read and this
-      // write, and the condition kept its wallet. The one just created is
-      // left unused in the wallet set; it was never funded, so nothing is lost.
-      console.warn("circle: account already provisioned by another run; new wallet left unused", account.id, wallet.id);
+      // write, and the condition kept its wallet. Under the shared
+      // idempotency key that is normally this same wallet. If it is not (the
+      // two runs found different wallet sets, or Circle's key had expired),
+      // the one just created is left unused in its set; it was never funded,
+      // so nothing is lost.
+      console.warn("circle: account already provisioned by another run", account.id, wallet.id);
       result.skipped += 1;
       continue;
     }

@@ -59,10 +59,15 @@ export const GO_LIVE_CONSEQUENCES = (
   </>
 );
 
-/** The secret inputs are masked, and marked for password managers to leave alone: nothing here is a login. */
+/**
+ * The secret inputs are masked, and marked for password managers to leave
+ * alone: nothing here is a login. Browsers ignore autocomplete="off" on a
+ * password field, so each is marked a one-time code, which they neither save
+ * nor fill (as TryIt does), plus the password managers' own opt-outs.
+ */
 const SECRET_INPUT = {
   type: "password",
-  autoComplete: "off",
+  autoComplete: "one-time-code",
   "data-1p-ignore": true,
   "data-lpignore": "true",
   "data-bwignore": "true",
@@ -82,10 +87,24 @@ function ExternalLink({ href, children }: { href: string; children: ReactNode })
   );
 }
 
-function StatusLine({ live }: { live: boolean }) {
+/**
+ * Once Circle is connected, a sandbox's own cycles already pay through it
+ * (`getChainProvider` goes live on stored credentials); only the schedule
+ * waits for Go live. The line says so rather than "simulated".
+ */
+const STATUS_LINE: Record<GoLiveStatus["step"], { tone: "proof" | "held" | "simulated"; label: string }> = {
+  connect: { tone: "simulated", label: "Sandbox · simulated payments" },
+  wallets: { tone: "held", label: "Sandbox · connected to Circle — cycles you run by hand pay for real" },
+  go_live: { tone: "held", label: "Sandbox · connected to Circle — cycles you run by hand pay for real" },
+  live: { tone: "proof", label: "Live · paying on Arc testnet" },
+};
+
+function StatusLine({ step }: { step: GoLiveStatus["step"] }) {
+  const { tone, label } = STATUS_LINE[step];
   return (
-    <Badge tone={live ? "proof" : "simulated"} size="sm" dot>
-      {live ? "Live · paying on Arc testnet" : "Sandbox · simulated payments"}
+    // The connected line is long: at 360 px it wraps inside the badge instead of overflowing the header.
+    <Badge tone={tone} size="sm" dot className={cn(step !== "connect" && step !== "live" && "whitespace-normal rounded-lg text-left")}>
+      {label}
     </Badge>
   );
 }
@@ -154,7 +173,11 @@ function ReplaceCredentials({ orgSlug, status }: { orgSlug: string; status: GoLi
         <p className="text-sm leading-relaxed text-ink-2">
           New values are checked with Circle before they replace the stored ones, and are never shown again.
           {status.wallets.length > 0 && " Use the same Circle account: this workspace's wallets belong to it."}
-          {status.step === "live" && " Credentials for another account are refused."}
+          {status.wallets.some((wallet) => wallet.kind === "operating") && " Credentials for another account are refused."}
+        </p>
+        <p className="text-sm leading-relaxed text-ink-2">
+          Vestiarion can confirm the API key and the wallets, but not the entity secret once wallets exist; if payments start failing with the entity
+          secret rejected, pause the agent and reconnect with the right one.
         </p>
         <ConnectForm orgSlug={orgSlug} idPrefix="go-live-replace" replacing />
       </div>
@@ -323,7 +346,7 @@ export default function GoLivePanel({ orgSlug, status, canAdminister }: GoLivePa
 
   return (
     <section aria-labelledby="go-live-title">
-      <SectionHeader id="go-live-title" title="Go live" meta={<StatusLine live={live} />} />
+      <SectionHeader id="go-live-title" title="Go live" meta={<StatusLine step={status.step} />} />
       <div className="space-y-4">
         {body}
         {canReplace && <ReplaceCredentials orgSlug={orgSlug} status={status} />}

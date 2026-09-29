@@ -141,10 +141,12 @@ The **Go live** section at the top of Settings (`src/components/GoLivePanel.tsx`
 wallet addresses and when the workspace went live, never a credential or a wallet id — and drives
 the three actions in `src/app/actions/go-live.ts`, each gated on `org.administer`:
 `connectCircleAction` checks the pasted API key with Circle and stores both credentials as
-envelopes bound to the organization and column (`circle_connected`, or `circle_reconnected`; on a
-live workspace only if they reach its existing wallets); `createWalletsAction` provisions the
-treasury wallet set and one wallet per account in the owner's own entity, each write conditional on
-`circle_wallet_id is null` (`treasury_wallets_created`); and `goLiveAction` is one conditional
+envelopes bound to the organization and column (`circle_connected`, or `circle_reconnected`; once
+the operating account has a wallet, in any mode, only if they read that wallet back at its address
+in the treasury set); `createWalletsAction` fills in the treasury wallet set and a wallet for each
+account that has none, in the owner's own entity, under a per-account idempotency key and a write
+conditional on `circle_wallet_id is null` (`treasury_wallets_created`); and `goLiveAction` proves
+the stored credentials against the operating wallet again, then makes one conditional
 `mode = 'live' where mode = 'sandbox'` update (`workspace_went_live`). The ledger records ids only,
 every error an action returns is a fixed string, and a sandbox holding Circle credentials is never
 deleted by the cleanup (migration `0029`). The step between wallets and going live reads the
