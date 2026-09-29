@@ -34,7 +34,7 @@ describe("the workspace navigation", () => {
 
   it("lists Approvals in Controls, first, before Compliance", () => {
     const controls = NAV_GROUPS.find((group) => group.label === "Controls");
-    expect(controls?.items.map((item) => item.key)).toEqual(["approvals", "compliance", "audit", "members"]);
+    expect(controls?.items.map((item) => item.key)).toEqual(["approvals", "compliance", "audit", "members", "settings"]);
     expect(sectionTitle("approvals")).toBe("Approvals");
     expect(NAV_ITEMS.find((item) => item.key === "approvals")?.path).toBe("/approvals");
   });
@@ -62,8 +62,10 @@ describe("navItemForPathname — which section the current URL is in", () => {
     ["/o/acme/audit/anything-deeper", "audit"],
     ["/o/x/members", "members"],
     ["/o/acme/approvals", "approvals"],
+    ["/o/x/settings", "settings"],
   ])("%s → %s", (pathname, key) => {
     expect(navItemForPathname(pathname)?.key).toBe(key);
+    if (key === "settings") expect(sectionTitle("settings")).toBe("Settings");
   });
 
   it.each(["/o/acme", "/o/acme/", "/audit", "/o/acme/consoles", "/onboarding", "/"])("%s is no section", (pathname) => {
