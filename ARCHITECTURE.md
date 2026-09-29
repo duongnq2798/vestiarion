@@ -77,14 +77,14 @@ at the boundary through `authorize(slug, permission)` (`src/lib/auth/authorize.t
 re-derives the caller's membership and role from the session rather than trusting anything the form
 claims; a page can call the read-only `viewerCan` to decide whether to render a control at all.
 Actions call it for `records.write` (`src/app/actions/intake.ts`, `src/app/actions/milestones.ts`),
-`agent.run_cycle` (`src/app/actions/agent.ts`), and `members.manage` (`src/app/actions/members.ts`,
-for inviting, changing a role, revoking an invitation, and removing someone other than yourself —
-`owner` and `admin` hold it; leaving a workspace yourself needs only `workspace.read`, since it is
-open to every member). The remaining permissions — `workspace.read` (beyond the leaving case above),
-`agent.pause`, `agent.resume`, `approval.decide`, and `org.administer` — and `canAssignRole`'s rule
-that an admin may grant `approver` or `viewer` but nothing at its own rank or above while only an
-owner assigns `admin` or `owner`, are defined in `roles.ts` ahead of the features that will call
-them: pausing/resuming the agent and deciding approvals (Tier 1).
+`agent.run_cycle`, `agent.pause` and `agent.resume` (`src/app/actions/agent.ts`), `approval.decide`
+(`src/app/actions/approvals.ts`), and `members.manage` (`src/app/actions/members.ts`, for inviting,
+changing a role, revoking an invitation, and removing someone other than yourself — `owner` and
+`admin` hold it; leaving a workspace yourself needs only `workspace.read`, since it is open to every
+member). The remaining permissions — `workspace.read` (beyond the leaving case above) and
+`org.administer` — and `canAssignRole`'s rule that an admin may grant `approver` or `viewer` but
+nothing at its own rank or above while only an owner assigns `admin` or `owner`, are defined in
+`roles.ts` ahead of the feature that will call `org.administer`.
 
 **Members and invitations** (spec §7, §10 step 5b) go through service-role-only functions in
 migration `0021`, each told who is acting and re-deriving that person's role inside its own
@@ -129,6 +129,65 @@ member runs their own cycles from the console instead, capped at `SANDBOX_DAILY_
 organization per UTC day. The cap is enforced inside `begin_cycle_run` (migration 0022), which
 opens the `cycle_runs` row under a per-organization lock and counts the day's runs in the same
 transaction, so it holds across serverless instances rather than resetting per cold start.
+
+## Approvals and the pause switch
+
+**The approval inbox** (`/o/[slug]/approvals`, spec §5) lists every payable a
+cycle has held, flagged, or left awaiting more information, plus one that is
+`processing` — being decided right now, or claimed by a request that died
+more than 10 minutes ago. `src/lib/agent/approvals.ts` reads that list and
+carries out each of the three decisions:
+
+- **Approve and pay** calls `payInvoice` (`src/lib/agent/pay.ts`) — the same
+  function the agent's own AP stage calls, so a person and the agent cannot
+  record two different outcomes for one transfer. It refuses a high-risk
+  counterparty outright (only Compliance clears that, not a click) and checks
+  the operating balance first, reading it from the chain in live mode.
+- **Reject** sets the invoice `rejected`, with an optional reason kept in the
+  ledger, not on the invoice.
+- **Return to the agent** sets it back to `pending` for the next cycle to
+  decide again.
+
+Every decision first claims the row through `claim_invoice_decision`
+(migration `0025`), a compare-and-set that moves the invoice to `processing`
+only while it is still waiting. This covers two races: two people deciding
+the same invoice at once, and a person and the follow-up stage reopening it
+in the same moment. The claim also refuses an approval when the deciding
+person created the invoice (`invoices.created_by`), so no one approves their
+own payable. A `processing` invoice a crashed request never finished can be
+reclaimed ten minutes after `reviewed_at`; the payment's own idempotency key
+still keeps a retry from paying twice. All three server actions
+(`src/app/actions/approvals.ts`) require `approval.decide`.
+
+**The pause switch** stops one workspace's agent without touching
+credentials. `pause_agent` and `resume_agent` (migration `0025`) are
+service-role functions that re-check the acting person's role themselves:
+pausing takes `owner`, `admin` or `approver`; resuming takes only `owner` or
+`admin` — anyone who can approve money leaving can stop the agent, but
+starting it again is deliberate. The pause lives on `orgs`
+(`agent_paused_at`, `agent_paused_by`, `agent_pause_reason`) — platform data,
+read before any tenant scope opens — and `agent_paused(org_id)`
+(migration `0025`) exposes it to the tenant role as one boolean. While a
+workspace is paused:
+
+- the cron (`src/lib/agent/cron.ts`) skips it outright, reporting
+  `skipped: "paused"` and writing nothing to its ledger;
+- `begin_cycle_run` (migration `0025`) refuses to open a cycle, and the
+  console's Run cycle action surfaces that refusal;
+- a cycle already running stops moving money mid-cycle: the AP and
+  contractor stages (`src/lib/agent/orchestrator.ts`) re-read the flag
+  before each payment, and the treasury stage re-reads it before each
+  reserve deposit or withdrawal, holding instead of calling the payment
+  provider and marking the ledger entry's detail with
+  `heldBecause: "agent_paused"` (`src/lib/agent/pause.ts`).
+
+A person's own decisions in Approvals continue while the agent is paused —
+pausing is how the automation is stopped, and an approval is a deliberate
+human act, not the agent's own move.
+
+**Ledger actions** `approval_paid`, `approval_rejected`, `approval_returned`,
+`agent_paused`, and `agent_resumed` record every decision, pause, and resume,
+each carrying the acting person's user id, never an address.
 
 ## Read API
 
