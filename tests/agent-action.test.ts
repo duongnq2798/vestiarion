@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
-import { runAgentCycleAction } from "@/app/actions/agent";
+import { pauseAgentAction, resumeAgentAction, runAgentCycleAction } from "@/app/actions/agent";
 import { fakeSupabase, type RecordedRequest } from "./support/fake-supabase";
 
 /**
@@ -11,6 +11,9 @@ import { fakeSupabase, type RecordedRequest } from "./support/fake-supabase";
  * request it hands `begin_cycle_run`, and `inOrg` — is real. The cap itself
  * is enforced inside `begin_cycle_run` (migration 0022); these tests only
  * cover the boundary between it and the action.
+ *
+ * `pauseAgentAction` and `resumeAgentAction` below follow the same shape,
+ * against the 0025 pause/resume RPCs.
  */
 
 const { ORG, USER } = vi.hoisted(() => ({
@@ -22,6 +25,13 @@ vi.mock("server-only", () => ({}));
 
 const { authorizeMock } = vi.hoisted(() => ({ authorizeMock: vi.fn() }));
 vi.mock("@/lib/auth/authorize", () => ({ authorize: authorizeMock }));
+
+const { revalidatePathMock } = vi.hoisted(() => ({ revalidatePathMock: vi.fn() }));
+// The same stand-in `tests/members-actions.test.ts` uses: `revalidatePath`
+// needs a request's static-generation store that does not exist here, so a
+// success path (which the pause/resume tests below reach, unlike the cap and
+// pause-refusal tests above) would otherwise throw rather than assert on.
+vi.mock("next/cache", () => ({ revalidatePath: revalidatePathMock }));
 
 function membership(mode: "sandbox" | "live") {
   return { orgId: ORG, slug: "northstar", name: "Northstar", mode, role: "owner" as const };
@@ -135,5 +145,136 @@ describe("runAgentCycleAction — a live workspace", () => {
     await runWith({ config, db: fake.client, fetch: fake.fetch }, () => runAgentCycleAction("northstar"));
 
     expect(beginCycleRunArgs(fake.requests).p_daily_cap).toBeNull();
+  });
+});
+
+function pauseForm(reason?: string): FormData {
+  const formData = new FormData();
+  formData.set("orgSlug", "northstar");
+  if (reason !== undefined) formData.set("reason", reason);
+  return formData;
+}
+
+const INITIAL = { ok: false, message: "" };
+
+describe("pauseAgentAction", () => {
+  const config = configFromEnv({
+    NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid",
+    SUPABASE_SERVICE_ROLE_KEY: "k",
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: "test-anon-key",
+    SUPABASE_JWT_SECRET: "test-request-token-secret-at-least-32-characters",
+  });
+
+  it("returns the refusal when authorize refuses, and never calls pause_agent", async () => {
+    authorizeMock.mockResolvedValueOnce({ ok: false, message: "Your role in this workspace (viewer) cannot do that." });
+
+    const result = await pauseAgentAction(INITIAL, pauseForm());
+
+    expect(result).toEqual({ ok: false, message: "Your role in this workspace (viewer) cannot do that." });
+  });
+
+  it("sends the org, the actor and the reason to pause_agent, and returns 'Agent paused.'", async () => {
+    authorizeMock.mockResolvedValueOnce({ ok: true, user: { id: USER, email: null }, membership: membership("live") });
+    const fake = fakeSupabase((request) => {
+      if (request.path === "/rest/v1/orgs") return { body: orgRow("live") };
+      if (request.path === "/rest/v1/rpc/pause_agent") {
+        const body = request.body as Record<string, unknown>;
+        return { body: { id: ORG, slug: "northstar", name: "Northstar", mode: "live", agent_paused_at: "2026-09-29T00:00:00Z", agent_paused_by: body.p_actor, agent_pause_reason: body.p_reason } };
+      }
+      if (request.path === "/rest/v1/rpc/append_ledger_entry") {
+        return { body: { seq: 1, id: "e1", ts: "2026-09-29T00:00:00Z", actor: "human", domain: "system", action: "agent_paused", summary: "", detail: {}, body_hash: "00", signature: "00", prev_hash: null, hash: "00", signing_key_id: null } };
+      }
+      return { body: [] };
+    });
+
+    const result = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => pauseAgentAction(INITIAL, pauseForm("investigating")));
+
+    const pauseCall = fake.requests.find((r) => r.path === "/rest/v1/rpc/pause_agent");
+    expect(pauseCall?.body).toEqual({ p_org_id: ORG, p_actor: USER, p_reason: "investigating" });
+    expect(result).toEqual({ ok: true, message: "Agent paused." });
+    expect(revalidatePathMock).toHaveBeenCalled();
+  });
+
+  it("maps a PauseError to its message, without revalidating", async () => {
+    authorizeMock.mockResolvedValueOnce({ ok: true, user: { id: USER, email: null }, membership: membership("live") });
+    const fake = fakeSupabase((request) => {
+      if (request.path === "/rest/v1/orgs") return { body: orgRow("live") };
+      if (request.path === "/rest/v1/rpc/pause_agent") {
+        return { status: 400, body: { code: "P0001", message: "already_paused: the agent has been paused since 2026-09-29T00:00:00Z" } };
+      }
+      return { body: [] };
+    });
+
+    const result = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => pauseAgentAction(INITIAL, pauseForm()));
+
+    expect(result).toEqual({ ok: false, message: "The agent is already paused." });
+    expect(revalidatePathMock).not.toHaveBeenCalled();
+  });
+
+  it("logs and returns the generic message for anything else", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    authorizeMock.mockResolvedValueOnce({ ok: true, user: { id: USER, email: null }, membership: membership("live") });
+    const fake = fakeSupabase((request) => {
+      if (request.path === "/rest/v1/orgs") return { body: orgRow("live") };
+      if (request.path === "/rest/v1/rpc/pause_agent") return { status: 500, body: { message: "connection refused" } };
+      return { body: [] };
+    });
+
+    const result = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => pauseAgentAction(INITIAL, pauseForm()));
+
+    expect(result).toEqual({ ok: false, message: "That did not work. Try again in a moment." });
+    expect(error).toHaveBeenCalled();
+    error.mockRestore();
+  });
+});
+
+describe("resumeAgentAction", () => {
+  const config = configFromEnv({
+    NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid",
+    SUPABASE_SERVICE_ROLE_KEY: "k",
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: "test-anon-key",
+    SUPABASE_JWT_SECRET: "test-request-token-secret-at-least-32-characters",
+  });
+
+  it("returns the refusal when authorize refuses, and never calls resume_agent", async () => {
+    authorizeMock.mockResolvedValueOnce({ ok: false, message: "You are not a member of this workspace." });
+
+    const result = await resumeAgentAction(INITIAL, pauseForm());
+
+    expect(result).toEqual({ ok: false, message: "You are not a member of this workspace." });
+  });
+
+  it("sends the org and the actor to resume_agent, and returns 'Agent resumed.'", async () => {
+    authorizeMock.mockResolvedValueOnce({ ok: true, user: { id: USER, email: null }, membership: membership("live") });
+    const fake = fakeSupabase((request) => {
+      if (request.path === "/rest/v1/orgs") return { body: orgRow("live") };
+      if (request.path === "/rest/v1/rpc/resume_agent") return { body: "2026-09-29T00:00:00Z" };
+      if (request.path === "/rest/v1/rpc/append_ledger_entry") {
+        return { body: { seq: 1, id: "e1", ts: "2026-09-29T00:00:00Z", actor: "human", domain: "system", action: "agent_resumed", summary: "", detail: {}, body_hash: "00", signature: "00", prev_hash: null, hash: "00", signing_key_id: null } };
+      }
+      return { body: [] };
+    });
+
+    const result = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => resumeAgentAction(INITIAL, pauseForm()));
+
+    const resumeCall = fake.requests.find((r) => r.path === "/rest/v1/rpc/resume_agent");
+    expect(resumeCall?.body).toEqual({ p_org_id: ORG, p_actor: USER });
+    expect(result).toEqual({ ok: true, message: "Agent resumed." });
+    expect(revalidatePathMock).toHaveBeenCalled();
+  });
+
+  it("maps a PauseError to its message ('Only an owner or admin can resume the agent.')", async () => {
+    authorizeMock.mockResolvedValueOnce({ ok: true, user: { id: USER, email: null }, membership: membership("live") });
+    const fake = fakeSupabase((request) => {
+      if (request.path === "/rest/v1/orgs") return { body: orgRow("live") };
+      if (request.path === "/rest/v1/rpc/resume_agent") {
+        return { status: 400, body: { code: "P0001", message: "resume_not_permitted: a approver cannot resume the agent" } };
+      }
+      return { body: [] };
+    });
+
+    const result = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => resumeAgentAction(INITIAL, pauseForm()));
+
+    expect(result).toEqual({ ok: false, message: "Only an owner or admin can resume the agent." });
   });
 });

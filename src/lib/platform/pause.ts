@@ -1,0 +1,126 @@
+import { platformDb } from "../dal";
+import { withOrg } from "../dal/scope";
+import { appendLedgerEntry } from "../ledger";
+
+/**
+ * The pause switch (spec §D7): lets a member stop the workspace's agent, and
+ * an owner or admin start it again. Every change goes through a service-role
+ * function (migration 0025) that is told who is acting and checks that
+ * person's role itself; this module adds the signed ledger entry, the same
+ * `recordLedgerEntry` pattern as `src/lib/platform/members.ts`.
+ *
+ * Unlike the members functions, `pauseAgent` and `resumeAgent` are not called
+ * from inside the organization's own scope: the RPCs run against
+ * `platformDb()`, which needs none, and only the ledger entry does — so each
+ * opens its own scope with `withOrg` around just that append, the same shape
+ * `finishAcceptance` in `members.ts` uses for `member_joined`.
+ */
+
+export type PauseErrorCode = "not_a_member" | "pause_not_permitted" | "resume_not_permitted" | "already_paused" | "not_paused";
+
+const MESSAGES: Record<PauseErrorCode, string> = {
+  not_a_member: "You are not a member of this workspace.",
+  pause_not_permitted: "Your role cannot pause the agent.",
+  resume_not_permitted: "Only an owner or admin can resume the agent.",
+  already_paused: "The agent is already paused.",
+  not_paused: "The agent is already running.",
+};
+
+export class PauseError extends Error {
+  constructor(readonly code: PauseErrorCode) {
+    super(MESSAGES[code]);
+    this.name = "PauseError";
+  }
+}
+
+function raise(error: { message: string }): never {
+  const code = /^([a-z_]+):/.exec(error.message)?.[1];
+  if (code && code in MESSAGES) throw new PauseError(code as PauseErrorCode);
+  throw new Error(error.message);
+}
+
+/**
+ * Appends the ledger entry for a change that has already committed. A
+ * failure here must not turn a done pause or resume into a reported failure
+ * — the same `recordLedgerEntry` as `members.ts`, kept local here rather
+ * than shared since the two modules have no other coupling.
+ */
+async function recordLedgerEntry(action: string, orgId: string, append: () => Promise<unknown>): Promise<void> {
+  try {
+    await append();
+  } catch {
+    console.error("ledger entry not recorded", action, orgId);
+  }
+}
+
+/** Trimmed, capped at 280 characters, and `null` once empty — never an empty string, in the RPC argument or the ledger. */
+function trimReason(reason: string | undefined): string | null {
+  const trimmed = (reason ?? "").trim().slice(0, 280);
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+export async function pauseAgent(input: { orgId: string; actorId: string; reason?: string }): Promise<void> {
+  const reason = trimReason(input.reason);
+  const result = await platformDb()
+    .rpc("pause_agent", { p_org_id: input.orgId, p_actor: input.actorId, p_reason: reason })
+    .single();
+  if (result.error) raise(result.error);
+
+  await recordLedgerEntry("agent_paused", input.orgId, () =>
+    withOrg(
+      input.orgId,
+      () =>
+        appendLedgerEntry({
+          actor: "human",
+          domain: "system",
+          action: "agent_paused",
+          summary: "The agent was paused",
+          detail: { by: input.actorId, reason },
+        }),
+      { userId: input.actorId }
+    )
+  );
+}
+
+export async function resumeAgent(input: { orgId: string; actorId: string }): Promise<void> {
+  const result = await platformDb()
+    .rpc("resume_agent", { p_org_id: input.orgId, p_actor: input.actorId })
+    .single<string>();
+  if (result.error) raise(result.error);
+  const pausedSince = new Date(result.data as string).getTime();
+  const pausedFor = Math.max(0, Math.round((Date.now() - pausedSince) / 1000));
+
+  await recordLedgerEntry("agent_resumed", input.orgId, () =>
+    withOrg(
+      input.orgId,
+      () =>
+        appendLedgerEntry({
+          actor: "human",
+          domain: "system",
+          action: "agent_resumed",
+          summary: "The agent was resumed",
+          detail: { by: input.actorId, pausedFor },
+        }),
+      { userId: input.actorId }
+    )
+  );
+}
+
+export interface PauseState {
+  pausedAt: string;
+  pausedBy: string | null;
+  reason: string | null;
+}
+
+/** `null` when the workspace's agent is not paused. */
+export async function pauseStateOf(orgId: string): Promise<PauseState | null> {
+  const result = await platformDb()
+    .from("orgs")
+    .select("agent_paused_at, agent_paused_by, agent_pause_reason")
+    .eq("id", orgId)
+    .maybeSingle();
+  if (result.error) throw new Error(result.error.message);
+  const row = result.data as { agent_paused_at: string | null; agent_paused_by: string | null; agent_pause_reason: string | null } | null;
+  if (!row || row.agent_paused_at === null) return null;
+  return { pausedAt: row.agent_paused_at, pausedBy: row.agent_paused_by, reason: row.agent_pause_reason };
+}

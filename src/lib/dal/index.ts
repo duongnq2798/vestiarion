@@ -44,7 +44,7 @@ export type PlatformTable = (typeof PLATFORM_TABLES)[number];
 export const PLATFORM_RPCS = [
   "create_org", "invite_member", "accept_invitation", "change_member_role", "remove_member",
   "revoke_invitation", "org_members", "touch_org_activity", "delete_sandbox_org",
-  "pending_invitations_for", "accept_invitation_by_id",
+  "pending_invitations_for", "accept_invitation_by_id", "pause_agent", "resume_agent",
 ] as const;
 export type PlatformRpc = (typeof PLATFORM_RPCS)[number];
 
