@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import TryIt, { AUTHENTICATION_HINT, missingPathParams, runTryIt, TryItResultView, type TryItOperation } from "@/components/docs/TryIt";
+import TryIt, { AUTHENTICATION_HINT, isSendKey, missingPathParams, runTryIt, tryItHandlers, TryItResultView, type SendKeyEvent, type TryItOperation } from "@/components/docs/TryIt";
 import { operationById } from "@/lib/api/openapi";
 
 /**
@@ -158,12 +158,86 @@ describe("TryIt", () => {
     expect(markup).toContain(">Workspace API key<");
     expect(markup).toContain('type="password"');
     expect(markup).toContain(">Send<");
-    expect(markup).not.toMatch(/<button[^>]*type="submit"[^>]* disabled=""/);
+    expect(markup).not.toMatch(/<button[^>]* disabled=""/);
   });
 
   it("disables Send, and says why, until every required path parameter has a value", () => {
     const markup = html(<TryIt op={op("get-counterparty")} />);
-    expect(markup).toMatch(/<button[^>]*type="submit"[^>]* disabled=""/);
+    expect(markup).toMatch(/<button[^>]*type="button"[^>]* disabled=""[^>]*>(?:(?!<\/button>).)*Send/);
     expect(markup).toContain("Enter id to send the request.");
+  });
+
+  it("is no form, so there is nothing for a browser to submit or a password manager to capture", () => {
+    for (const id of ["get-status", "list-invoices", "get-counterparty"]) {
+      const markup = html(<TryIt op={op(id)} />);
+      expect(markup, id).not.toContain("<form");
+      expect(markup, id).not.toContain('type="submit"');
+    }
+  });
+
+  it("marks the key field as a one-time code that password managers ignore, still masked", () => {
+    const markup = html(<TryIt op={op("get-status")} />);
+    const input = markup.match(/<input[^>]*placeholder="vxk_\.\.\."[^>]*>/)?.[0];
+    expect(input).toBeDefined();
+    expect(input).toContain('type="password"');
+    expect(input).toContain('autoComplete="one-time-code"');
+    expect(input).toContain("data-1p-ignore=");
+    expect(input).toContain('data-lpignore="true"');
+    expect(input).toContain('data-bwignore="true"');
+    expect(input).toContain('spellCheck="false"');
+    expect(input).not.toContain('autoComplete="off"');
+  });
+});
+
+describe("sending from Try it", () => {
+  /** A keydown as React hands it over, from an element shaped like the one it stands for. */
+  function keydown(overrides: Partial<SendKeyEvent> & { tagName?: string; isComposing?: boolean } = {}) {
+    const { tagName = "INPUT", isComposing = false, ...rest } = overrides;
+    return {
+      key: "Enter",
+      shiftKey: false,
+      ctrlKey: false,
+      altKey: false,
+      metaKey: false,
+      defaultPrevented: false,
+      keyCode: 13,
+      target: { tagName },
+      nativeEvent: { isComposing },
+      preventDefault: vi.fn(),
+      ...rest,
+    };
+  }
+
+  it("runs the same send from the Send button and from Enter in a field", () => {
+    const send = vi.fn();
+    const handlers = tryItHandlers(send);
+    handlers.onClick();
+    const enter = keydown();
+    handlers.onKeyDown(enter);
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(enter.preventDefault).toHaveBeenCalledOnce();
+  });
+
+  it("sends on a plain Enter in an input, and on nothing else", () => {
+    expect(isSendKey(keydown())).toBe(true);
+    expect(isSendKey(keydown({ key: "a" }))).toBe(false);
+    for (const modifier of ["shiftKey", "ctrlKey", "altKey", "metaKey"] as const) expect(isSendKey(keydown({ [modifier]: true })), modifier).toBe(false);
+  });
+
+  it("leaves Enter alone while an input method is composing", () => {
+    expect(isSendKey(keydown({ isComposing: true }))).toBe(false);
+    expect(isSendKey(keydown({ keyCode: 229 }))).toBe(false);
+  });
+
+  it("leaves Enter on a button to the button, and Enter another control already handled", () => {
+    // The show/hide toggle and the enum Select's trigger are buttons; the Select handles its own Enter.
+    expect(isSendKey(keydown({ tagName: "BUTTON" }))).toBe(false);
+    expect(isSendKey(keydown({ defaultPrevented: true }))).toBe(false);
+
+    const send = vi.fn();
+    const onButton = keydown({ tagName: "BUTTON" });
+    tryItHandlers(send).onKeyDown(onButton);
+    expect(send).not.toHaveBeenCalled();
+    expect(onButton.preventDefault).not.toHaveBeenCalled();
   });
 });

@@ -2,7 +2,7 @@
 
 import { Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
@@ -89,6 +89,49 @@ export async function runTryIt(
   }
 }
 
+/** The parts of a keydown that decide whether it sends: React's event, or a plain object shaped like one in a test. */
+export type SendKeyEvent = {
+  key: string;
+  shiftKey: boolean;
+  ctrlKey: boolean;
+  altKey: boolean;
+  metaKey: boolean;
+  defaultPrevented: boolean;
+  /** 229 while an input method is composing, in browsers that do not set `isComposing`. */
+  keyCode: number;
+  target: EventTarget | { tagName?: string } | null;
+  nativeEvent: { isComposing?: boolean };
+};
+
+/**
+ * Whether a keydown inside "Try it" sends the request: Enter with no
+ * modifier, typed in a text input, not while an input method is composing
+ * (Enter then confirms the composition), and not already handled by another
+ * control. Enter on a button — the show/hide toggle, the enum Select's
+ * trigger — is left to that button.
+ */
+export function isSendKey(event: SendKeyEvent): boolean {
+  if (event.key !== "Enter" || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return false;
+  if (event.defaultPrevented || event.nativeEvent.isComposing || event.keyCode === 229) return false;
+  return (event.target as { tagName?: string } | null)?.tagName === "INPUT";
+}
+
+/**
+ * The two ways to send: the Send button, and Enter in any field. Both call
+ * the same `send`. "Try it" is deliberately not a `<form>`: with no form to
+ * submit, a browser has no login to offer to save the key from.
+ */
+export function tryItHandlers(send: () => void) {
+  return {
+    onClick: () => send(),
+    onKeyDown: (event: SendKeyEvent & { preventDefault: () => void }) => {
+      if (!isSendKey(event)) return;
+      event.preventDefault();
+      send();
+    },
+  };
+}
+
 const RESPONSE_PRE_CLASS = cn(
   "overflow-x-auto rounded-xl border border-ink/10 bg-ink px-4 py-3.5 font-mono text-[0.8125rem] leading-relaxed text-ground shadow-control"
 );
@@ -160,8 +203,7 @@ export default function TryIt({ op }: { op: TryItOperation }) {
 
   const missing = missingPathParams(op, values);
 
-  async function send(event: FormEvent) {
-    event.preventDefault();
+  async function send() {
     if (sending) return;
     setSending(true);
     setResult(null);
@@ -172,13 +214,23 @@ export default function TryIt({ op }: { op: TryItOperation }) {
     setSending(false);
   }
 
+  const handlers = tryItHandlers(() => void send());
+
   return (
-    <form onSubmit={send} className="my-6 space-y-4 rounded-xl border border-line bg-surface p-4 sm:p-6">
+    <div role="group" aria-label="Try it" onKeyDown={handlers.onKeyDown} className="my-6 space-y-4 rounded-xl border border-line bg-surface p-4 sm:p-6">
       <Field id="try-it-key" label="Workspace API key" description="The key is kept in memory only, for this page.">
         <div className="flex gap-2">
+          {/*
+            Masked, but not a login password: browsers ignore autocomplete="off"
+            on a password field, so it is marked a one-time code, which they
+            neither save nor fill, and the password managers' own opt-outs.
+          */}
           <Input
             type={showKey ? "text" : "password"}
-            autoComplete="off"
+            autoComplete="one-time-code"
+            data-1p-ignore
+            data-lpignore="true"
+            data-bwignore="true"
             spellCheck={false}
             value={key}
             onChange={(event) => setKey(event.target.value)}
@@ -217,13 +269,13 @@ export default function TryIt({ op }: { op: TryItOperation }) {
       ))}
 
       <div className="flex flex-wrap items-center gap-3">
-        <Button type="submit" loading={sending} disabled={missing.length > 0}>
+        <Button type="button" onClick={handlers.onClick} loading={sending} disabled={missing.length > 0}>
           Send
         </Button>
         {missing.length > 0 && <p className="text-xs text-ink-3">Enter {missing.join(", ")} to send the request.</p>}
       </div>
 
       <TryItResultView result={result} />
-    </form>
+    </div>
   );
 }
