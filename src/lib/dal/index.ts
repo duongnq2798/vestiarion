@@ -18,10 +18,12 @@ import { currentContext, currentOrgId } from "../context";
  * called: a handle kept past a nested scope for another organization refuses
  * to act rather than keep serving the one it was created in.
  *
- * `platformDb()` reaches the three tables that exist before any organization
- * is known — organizations, memberships, invitations — and the functions that
- * write them, and nothing else. It keeps the service role, because none of
- * those rows belong to one tenant.
+ * `platformDb()` reaches the tables that exist before any organization is
+ * known — organizations, memberships, invitations — plus the workspace API
+ * keys, which must be read before any organization is known (a request names
+ * its organization only through its key), and the functions that write them,
+ * and nothing else. It keeps the service role, because none of those rows
+ * belong to one tenant.
  *
  * ESLint forbids the raw client outside this directory. See eslint.config.mjs.
  */
@@ -38,13 +40,13 @@ export const TENANT_RPCS = [
 ] as const;
 export type TenantRpc = (typeof TENANT_RPCS)[number];
 
-export const PLATFORM_TABLES = ["orgs", "memberships", "invitations"] as const;
+export const PLATFORM_TABLES = ["orgs", "memberships", "invitations", "api_keys"] as const;
 export type PlatformTable = (typeof PLATFORM_TABLES)[number];
 
 export const PLATFORM_RPCS = [
   "create_org", "invite_member", "accept_invitation", "change_member_role", "remove_member",
   "revoke_invitation", "org_members", "touch_org_activity", "delete_sandbox_org",
-  "pending_invitations_for", "accept_invitation_by_id", "pause_agent", "resume_agent",
+  "pending_invitations_for", "accept_invitation_by_id", "pause_agent", "resume_agent", "create_api_key",
 ] as const;
 export type PlatformRpc = (typeof PLATFORM_RPCS)[number];
 

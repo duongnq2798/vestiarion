@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { can, canAssignRole, isOrgRole, type Permission } from "@/lib/auth/roles";
+import { can, canAssignRole, isOrgRole, PERMISSIONS, type Permission } from "@/lib/auth/roles";
 
 // Spec §7, row by row. ✓ = allowed.
 const TABLE: Array<[Permission, { owner: boolean; admin: boolean; approver: boolean; viewer: boolean }]> = [
@@ -10,6 +10,7 @@ const TABLE: Array<[Permission, { owner: boolean; admin: boolean; approver: bool
   ["agent.run_cycle",  { owner: true,  admin: true,  approver: false, viewer: false }],
   ["agent.resume",     { owner: true,  admin: true,  approver: false, viewer: false }],
   ["members.manage",   { owner: true,  admin: true,  approver: false, viewer: false }],
+  ["api_keys.manage",  { owner: true,  admin: true,  approver: false, viewer: false }],
   ["org.administer",   { owner: true,  admin: false, approver: false, viewer: false }],
 ];
 
@@ -18,6 +19,10 @@ describe("can — the §7 permission map", () => {
     for (const role of ["owner", "admin", "approver", "viewer"] as const) {
       expect(can(role, permission), `${role} → ${permission}`).toBe(expected[role]);
     }
+  });
+
+  it("covers every permission in the map", () => {
+    expect(TABLE.map(([permission]) => permission).sort()).toEqual(Object.keys(PERMISSIONS).sort());
   });
 
   it("gives no permission to someone without a role", () => {
