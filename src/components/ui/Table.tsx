@@ -11,7 +11,7 @@ import { cn } from "./cn";
 export function Table({ className, containerClassName, label, ...props }: ComponentProps<"table"> & { containerClassName?: string; label?: string }) {
   return (
     <div
-      className={cn("relative w-full overflow-x-auto", label && "rounded-lg outline-hidden focus-visible:ring-4 focus-visible:ring-agent-soft", containerClassName)}
+      className={cn("relative w-full overflow-x-auto", label && "rounded-lg", containerClassName)}
       {...(label ? { role: "region", "aria-label": label, tabIndex: 0 } : {})}
     >
       <table className={cn("w-full border-collapse text-left text-sm", className)} {...props} />

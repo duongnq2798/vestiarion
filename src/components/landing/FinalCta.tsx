@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/Button";
 
 export function FinalCta() {
   return (
-    <section aria-labelledby="final-cta-title" className="border-t border-agent bg-agent text-on-agent">
+    <section aria-labelledby="final-cta-title" className="focus-inverse border-t border-agent bg-agent text-on-agent">
       <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
         <p className="font-mono text-xs font-semibold uppercase tracking-[0.12em] text-on-agent/75">A workspace, not a promise</p>
         <div className="mt-4 grid gap-8 lg:grid-cols-[1fr_auto] lg:items-end lg:gap-16">
