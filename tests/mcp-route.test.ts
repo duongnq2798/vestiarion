@@ -323,8 +323,56 @@ describe("the MCP protocol, with a valid key", () => {
     expect(response.status).toBe(200);
     const result = (await reply(response)).result as { supportedVersions: string[]; capabilities: Record<string, unknown>; _meta: Record<string, unknown> };
     expect(result.supportedVersions).toContain(MODERN);
-    expect(result.capabilities).toHaveProperty("tools");
+    // The tool list is fixed, so there is never a change to announce.
+    expect(result.capabilities.tools).toEqual({ listChanged: false });
     expect(result._meta["io.modelcontextprotocol/serverInfo"]).toEqual({ name: "vestiarion", version: "1.0.0" });
+  });
+
+  it(`closes a ${MODERN} subscriptions/listen stream at once, rather than holding the function open`, async () => {
+    const fake = fakeSupabase(database());
+    const response = await post(fake, modernRequest({ id: 11, method: "subscriptions/listen", params: { notifications: { toolsListChanged: true } } }));
+    expect(response.status).toBe(200);
+
+    // Read the whole body, giving up after a second: a stream that stays open
+    // would only ever send keep-alives until `maxDuration`.
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    let text = "";
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timedOut = new Promise<"timeout">((resolve) => (timer = setTimeout(() => resolve("timeout"), 1000)));
+    let ended = false;
+    try {
+      while (true) {
+        const chunk = await Promise.race([reader.read(), timedOut]);
+        if (chunk === "timeout") break;
+        if (chunk.done) {
+          ended = true;
+          break;
+        }
+        text += decoder.decode(chunk.value, { stream: true });
+      }
+    } finally {
+      clearTimeout(timer);
+      if (!ended) await reader.cancel();
+    }
+    expect(ended).toBe(true);
+
+    const messages = text.split("\n").filter((line) => line.startsWith("data: ")).map((line) => JSON.parse(line.slice("data: ".length)) as Record<string, unknown>);
+    // The acknowledgement honors nothing, and the listen request completes.
+    expect(messages[0]).toMatchObject({ method: "notifications/subscriptions/acknowledged", params: { notifications: {} } });
+    expect(messages.at(-1)).toMatchObject({ id: 11, result: { resultType: "complete" } });
+    expect(fake.requests).toEqual([]);
+  });
+
+  it.each([
+    ["GET", GET],
+    ["DELETE", DELETE],
+  ] as const)("answers %s with 405 past the key check, and reads nothing", async (method, handler) => {
+    const fake = fakeSupabase(database());
+    const response = await send(handler, fake, { method, authorization: AUTHORIZATION, headers: { "mcp-protocol-version": "2025-06-18" } });
+    expect(response.status).toBe(405);
+    expect(reached.count).toBe(1);
+    expect(tenantRequests(fake)).toEqual([]);
   });
 
   describe.each(ERAS)("a %s client", (_version, request) => {

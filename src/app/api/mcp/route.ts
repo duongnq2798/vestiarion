@@ -57,7 +57,15 @@ const serve = createMcpHandler(
       );
     }
   },
-  { serverInfo: { name: "vestiarion", version: "1.0.0" } }
+  {
+    serverInfo: { name: "vestiarion", version: "1.0.0" },
+    // `registerTool` advertises `listChanged: true` unless told otherwise, and
+    // a 2026-era `subscriptions/listen` for it would then hold an SSE stream
+    // open on keep-alives until `maxDuration`. The tool list is fixed at
+    // build time, so there is never a change to announce, and a listen
+    // request is acknowledged and completed at once.
+    capabilities: { tools: { listChanged: false } },
+  }
 );
 
 async function handler(request: Request): Promise<Response> {

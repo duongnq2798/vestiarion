@@ -31,7 +31,7 @@ Every tool call reads the key's own workspace and no other. Asking `get_counterp
 
 ## Tools
 
-One tool per [API operation](/docs/api). Its name is the operation's id in snake case, its arguments are the operation's parameters, with their types, allowed values and bounds, and its description is the one below, which is what the agent reads. Every tool is marked read-only and idempotent.
+One tool per [API operation](/docs/api). Its name is the operation's id in snake case, its arguments are the operation's parameters, with their types, allowed values and bounds, and its description, which is what the agent reads, is the operation's summary and description from its reference page. Every tool is marked read-only and idempotent.
 
 <McpToolTable />
 

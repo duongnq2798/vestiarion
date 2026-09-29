@@ -116,17 +116,20 @@ describe("EndpointTable", () => {
 });
 
 describe("McpToolTable", () => {
-  it("lists every MCP tool by name, with its arguments and the description the agent receives, linked to its reference page", () => {
+  it("lists every MCP tool by name, with its arguments and what it answers, linked to its reference page", () => {
     const markup = html(<McpToolTable />);
     expect(MCP_TOOLS.length).toBe(OPERATIONS.length);
     for (const tool of MCP_TOOLS) {
+      const op = operationById(tool.operationId)!;
       expect(markup).toContain(`>${tool.name}</code>`);
+      expect(markup).toContain(`>${tool.title}<`);
       expect(markup).toContain(`href="/docs/api/${tool.operationId}"`);
+      expect(markup).toContain(`>GET ${op.path}</code>`);
       for (const argument of Object.keys(tool.inputSchema.shape)) expect(markup, `${tool.name} ${argument}`).toContain(`>${argument}</code>`);
     }
     expect(markup.match(/<tr>/g)).toHaveLength(MCP_TOOLS.length + 1);
-    // The description as written, its code spans as code.
-    expect(markup).toContain("Replays signatures, body hashes and hash-chain continuity");
-    expect(markup).toContain(">page.nextCursor</code>");
+    // The summary, not the full description: that stays on the reference pages and in tools/list.
+    expect(markup).not.toContain("Replays signatures, body hashes and hash-chain continuity");
+    expect(markup).not.toContain("page.nextCursor");
   });
 });

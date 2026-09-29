@@ -156,16 +156,22 @@ function endpointTables(origin: string): string {
     .join("\n\n");
 }
 
-/** The MCP page's tool table: each tool with its arguments, its description as the agent receives it, and its operation's reference page. */
+/**
+ * The MCP page's tool table, as `McpToolTable` renders it: each tool with its
+ * arguments, its operation's summary, and the endpoint's reference page. The
+ * full description is on that page and in `tools/list`.
+ */
 function mcpToolTable(origin: string): string {
   return table(
     ["Tool", "What it answers", "Reference"],
     MCP_TOOLS.map((tool) => {
       const args = Object.keys(tool.inputSchema.shape);
+      const op = operationById(tool.operationId);
+      const endpoint = op ? code(`${op.method.toUpperCase()} ${op.path}`) : tool.title;
       return [
         `${code(tool.name)}${args.length > 0 ? ` (arguments: ${args.map(code).join(", ")})` : ""}`,
-        tool.description,
-        `[${tool.title}](${origin}${docsHref(`api/${tool.operationId}`)})`,
+        tool.title,
+        `[${endpoint}](${origin}${docsHref(`api/${tool.operationId}`)})`,
       ];
     })
   );

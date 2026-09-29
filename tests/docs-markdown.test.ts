@@ -88,9 +88,10 @@ describe("the MCP page's Markdown", () => {
     for (const tool of MCP_TOOLS) {
       const op = OPERATIONS.find((candidate) => candidate.id === tool.operationId)!;
       expect(md).toContain(`| \`${tool.name}\``);
-      expect(md).toContain(`| [${op.summary}](${ORIGIN}/docs/api/${op.id}) |`);
+      // What it answers is the summary; the full description stays on the reference page.
+      expect(md).toContain(` | ${op.summary} | [\`GET ${op.path}\`](${ORIGIN}/docs/api/${op.id}) |`);
     }
-    expect(md).toContain("Replays signatures, body hashes and hash-chain continuity");
+    expect(md).not.toContain("Replays signatures, body hashes and hash-chain continuity");
     expect(md).toContain("https://www.vestiarion.xyz/api/mcp");
   });
 });
