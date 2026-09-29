@@ -5,7 +5,8 @@ import { balanceTileCopy, balanceTileMode } from "@/components/vx/Treasury";
  * The balance tile's label and sub-line, pinned as a pure function so the
  * sandbox-vs-live wording is testable without rendering the component. A
  * workspace whose funds are not on-chain (no live payments, or no real wallet
- * yet) gets the simulated wording, never "on-chain" — the * label must say so regardless of the simulated reserve amount, which is
+ * yet) gets the simulated wording, never "on-chain" — the
+ * label must say so regardless of the simulated reserve amount, which is
  * what previously read "Balance on-chain" even in a sandbox.
  */
 describe("balanceTileMode", () => {
