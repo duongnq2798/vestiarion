@@ -1,10 +1,11 @@
-import { describe, expect, it, vi } from "vitest";
-import { assertPublicDestination, isPublicAddress, validateWebhookUrl } from "@/lib/webhooks/safe-url";
+import { describe, expect, it } from "vitest";
+import { isPublicAddress, validateWebhookUrl } from "@/lib/webhooks/safe-url";
 
 /**
  * Safe webhook destinations (webhooks design W6): the URL is https, on port
- * 443 or none, with no credentials; at send time every address the host
- * resolves to must be public, IPv6 and IPv4-mapped forms included.
+ * 443 or none, with no credentials, and a literal IP host must be public,
+ * IPv6 and IPv4-mapped forms included. The resolved addresses of a host name
+ * are checked by the sender's own lookup (tests/webhook-http.test.ts).
  */
 
 describe("validateWebhookUrl", () => {
@@ -48,6 +49,38 @@ describe("validateWebhookUrl", () => {
     if (!check.ok) expect(check.reason).toMatch(reason);
   });
 
+  // The URL parser normalises a host before it is checked, so every other
+  // spelling of a refused address is refused too.
+  it.each([
+    ["an octal IPv4 host", "https://0177.0.0.1/", "127.0.0.1"],
+    ["a decimal IPv4 host", "https://2130706433/", "127.0.0.1"],
+    ["a hex IPv4 host", "https://0x7f000001/", "127.0.0.1"],
+    ["a short IPv4 host", "https://127.1/", "127.0.0.1"],
+    ["a trailing dot", "https://127.0.0.1./", "127.0.0.1"],
+    ["the host 0", "https://0/", "0.0.0.0"],
+    ["an uppercase bracketed IPv6 host", "https://[::FFFF:7F00:1]/", "[::ffff:7f00:1]"],
+    ["an uppercase link-local IPv6 host", "https://[FE80::1]/", "[fe80::1]"],
+    ["the metadata address, IPv4-mapped in hex", "https://[::ffff:a9fe:a9fe]/", "[::ffff:a9fe:a9fe]"],
+  ])("refuses %s, which the URL parser normalises to a refused address", (_label, raw, normalised) => {
+    expect(new URL(raw).hostname).toBe(normalised);
+    const check = validateWebhookUrl(raw);
+    expect(check).toEqual({ ok: false, reason: "the URL's address is not public" });
+  });
+
+  it.each([
+    ["an encoded zone id", "https://[fe80::1%25eth0]/"],
+    ["a raw zone id", "https://[fe80::1%eth0]/"],
+    ["a zone id on a public address", "https://[2606:4700::1111%25eth0]/"],
+  ])("refuses %s, which is not a valid URL", (_label, raw) => {
+    expect(validateWebhookUrl(raw)).toEqual({ ok: false, reason: "not a valid URL" });
+  });
+
+  it.each([
+    ["192.0.2.1"], ["198.51.100.7"], ["203.0.113.254"],
+  ])("refuses the documentation address %s as a literal host", (ip) => {
+    expect(validateWebhookUrl(`https://${ip}/in`)).toEqual({ ok: false, reason: "the URL's address is not public" });
+  });
+
   it("accepts exactly 500 characters", () => {
     const raw = "https://hooks.example.com/" + "a".repeat(474);
     expect(raw).toHaveLength(500);
@@ -71,6 +104,7 @@ describe("isPublicAddress", () => {
     ["191.255.255.255"], ["192.0.1.0"],
     ["192.167.255.255"], ["192.169.0.0"],
     ["198.17.255.255"], ["198.20.0.0"],
+    ["192.0.1.255"], ["192.0.3.0"], ["198.51.99.255"], ["198.51.101.0"], ["203.0.112.255"], ["203.0.114.0"],
     ["223.255.255.255"],
     // IPv6 global unicast.
     ["2606:4700::1111"], ["2606:4700:4700::1001"], ["2a00:1450:4001:82a::200e"],
@@ -99,6 +133,10 @@ describe("isPublicAddress", () => {
     ["192.168.0.0"], ["192.168.255.255"],
     // 198.18/15
     ["198.18.0.0"], ["198.19.255.255"],
+    // Documentation: 192.0.2/24, 198.51.100/24, 203.0.113/24
+    ["192.0.2.0"], ["192.0.2.1"], ["192.0.2.255"],
+    ["198.51.100.0"], ["198.51.100.7"], ["198.51.100.255"],
+    ["203.0.113.0"], ["203.0.113.9"], ["203.0.113.255"],
     // 224/4 and above
     ["224.0.0.0"], ["239.255.255.255"], ["240.0.0.0"], ["255.255.255.255"],
   ])("refuses the IPv4 address %s", (ip) => {
@@ -158,54 +196,5 @@ describe("isPublicAddress", () => {
     ["not a string", undefined as unknown as string],
   ])("refuses %s, which is not an address", (_label, ip) => {
     expect(isPublicAddress(ip)).toBe(false);
-  });
-});
-
-describe("assertPublicDestination", () => {
-  const url = new URL("https://hooks.example.com/in");
-
-  it("accepts a host whose every address is public, and looks up that host", async () => {
-    const lookup = vi.fn(async () => [{ address: "1.1.1.1", family: 4 }, { address: "2606:4700::1111", family: 6 }]);
-    const check = await assertPublicDestination(url, lookup);
-    expect(check).toEqual({ ok: true, url });
-    expect(lookup).toHaveBeenCalledWith("hooks.example.com");
-  });
-
-  it.each([
-    ["a private IPv4 address among public ones", [{ address: "1.1.1.1", family: 4 }, { address: "10.0.0.1", family: 4 }]],
-    ["an IPv6 loopback among public ones", [{ address: "2606:4700::1111", family: 6 }, { address: "::1", family: 6 }]],
-    ["an IPv4-mapped loopback", [{ address: "::ffff:7f00:1", family: 6 }]],
-    ["the metadata address", [{ address: "169.254.169.254", family: 4 }]],
-  ])("refuses a mixed or private answer: %s", async (_label, answer) => {
-    const check = await assertPublicDestination(url, async () => answer);
-    expect(check).toEqual({ ok: false, reason: "destination is not public" });
-  });
-
-  it("refuses when resolution fails", async () => {
-    const check = await assertPublicDestination(url, async () => {
-      throw Object.assign(new Error("getaddrinfo ENOTFOUND hooks.example.com"), { code: "ENOTFOUND" });
-    });
-    expect(check).toEqual({ ok: false, reason: "destination could not be resolved" });
-  });
-
-  it("refuses an empty answer", async () => {
-    const check = await assertPublicDestination(url, async () => []);
-    expect(check).toEqual({ ok: false, reason: "destination could not be resolved" });
-  });
-
-  it("checks an IP literal host without a lookup", async () => {
-    const lookup = vi.fn(async () => [{ address: "1.1.1.1", family: 4 }]);
-    expect((await assertPublicDestination(new URL("https://[2606:4700::1111]/in"), lookup)).ok).toBe(true);
-    expect(await assertPublicDestination(new URL("https://[::ffff:127.0.0.1]/in"), lookup)).toMatchObject({ ok: false });
-    expect(await assertPublicDestination(new URL("https://169.254.169.254/latest"), lookup)).toMatchObject({ ok: false });
-    expect(lookup).not.toHaveBeenCalled();
-  });
-
-  it("re-checks the URL's own rules, never looking up an http or credentialed URL", async () => {
-    const lookup = vi.fn(async () => [{ address: "1.1.1.1", family: 4 }]);
-    expect(await assertPublicDestination(new URL("http://hooks.example.com/in"), lookup)).toMatchObject({ ok: false });
-    expect(await assertPublicDestination(new URL("https://u:p@hooks.example.com/in"), lookup)).toMatchObject({ ok: false });
-    expect(await assertPublicDestination(new URL("https://hooks.example.com:8443/in"), lookup)).toMatchObject({ ok: false });
-    expect(lookup).not.toHaveBeenCalled();
   });
 });

@@ -1,4 +1,3 @@
-import dns from "node:dns";
 import net from "node:net";
 
 /**
@@ -6,10 +5,9 @@ import net from "node:net";
  *
  * - `validateWebhookUrl` checks the URL itself, for the form and again at send
  *   time: https, port 443 or none, no credentials, at most 500 characters, and
- *   a literal IP host must be public. No DNS.
- * - `assertPublicDestination` resolves the host at send time and refuses it
- *   unless every address is public, so a name that also points inside the
- *   network is never reached.
+ *   a literal IP host must be public. No DNS: a host name is resolved once, by
+ *   the sender's pinned lookup at connect time (`./http.ts`), which refuses it
+ *   unless every address is public.
  * - `isPublicAddress` is the address rule. IPv4 refuses this-network,
  *   private, CGNAT, loopback, link-local, IETF protocol assignments,
  *   benchmarking, documentation, multicast and reserved space. IPv6 allows
@@ -24,6 +22,9 @@ export type UrlCheck = { ok: true; url: URL } | { ok: false; reason: string };
 export type LookupFn = (host: string) => Promise<{ address: string; family: number }[]>;
 
 const URL_MAX = 500;
+
+/** `validateWebhookUrl`'s reason for a literal IP host that is not public. */
+export const URL_NOT_PUBLIC = "the URL's address is not public";
 
 /** [first address, prefix length] of each refused IPv4 range. */
 const REFUSED_V4: [string, number][] = [
@@ -137,33 +138,7 @@ export function validateWebhookUrl(raw: string): UrlCheck {
   if (url.href.length > URL_MAX) return { ok: false, reason: `the URL must be at most ${URL_MAX} characters` };
   const host = url.hostname;
   if ((net.isIP(host) !== 0 || host.startsWith("[")) && !isPublicAddress(host)) {
-    return { ok: false, reason: "the URL's address is not public" };
+    return { ok: false, reason: URL_NOT_PUBLIC };
   }
-  return { ok: true, url };
-}
-
-const systemLookup: LookupFn = (host) => dns.promises.lookup(host, { all: true });
-
-/**
- * At send time: the URL's own rules again, then every address its host
- * resolves to must be public. A failed or empty resolution is refused too.
- */
-export async function assertPublicDestination(url: URL, lookup: LookupFn = systemLookup): Promise<UrlCheck> {
-  const own = validateWebhookUrl(url.href);
-  if (!own.ok) return own;
-
-  const host = url.hostname.startsWith("[") ? url.hostname.slice(1, -1) : url.hostname;
-  if (net.isIP(host) !== 0) {
-    return isPublicAddress(host) ? { ok: true, url } : { ok: false, reason: "destination is not public" };
-  }
-
-  let addresses: { address: string; family: number }[];
-  try {
-    addresses = await lookup(host);
-  } catch {
-    return { ok: false, reason: "destination could not be resolved" };
-  }
-  if (!Array.isArray(addresses) || addresses.length === 0) return { ok: false, reason: "destination could not be resolved" };
-  if (!addresses.every((entry) => isPublicAddress(entry?.address))) return { ok: false, reason: "destination is not public" };
   return { ok: true, url };
 }

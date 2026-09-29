@@ -7,13 +7,14 @@ import { isPublicAddress, type LookupFn } from "./safe-url";
  * The one way a webhook leaves the platform
  * (docs/superpowers/specs/2026-09-29-webhooks-design.md, W6).
  *
- * Global `fetch` resolves the host again after `assertPublicDestination` has
- * checked it, so a name that answers with a public address for the check and a
- * private one for the connection (DNS rebinding) would reach inside the
- * network. This sender gives `node:https` a lookup of its own instead: it
- * resolves the name, refuses unless every address is public, and hands the
- * socket only those checked addresses. The address checked is the address
- * connected to.
+ * A name resolved once for a check and again for the connection could answer
+ * with a public address the first time and a private one the second (DNS
+ * rebinding). So the host is resolved exactly once, at connect time: this
+ * sender gives `node:https` a lookup of its own, which resolves the name,
+ * refuses unless every address is public, and hands the socket only those
+ * checked addresses. The address checked is the address connected to, and the
+ * lookup runs inside the request's timer. A literal IP host is never looked
+ * up, so the sender checks it directly before connecting.
  *
  * - TLS is verified as usual, against the host name (`servername`).
  * - Redirects are never followed: `node:https` does not follow them, and the
@@ -109,11 +110,20 @@ export interface SenderOptions {
 }
 
 export function createWebhookSender(options: SenderOptions = {}): WebhookSender {
-  const lookup = pinnedLookup(options.resolve ?? systemResolve, options.isAllowed ?? isPublicAddress);
+  const isAllowed = options.isAllowed ?? isPublicAddress;
+  const lookup = pinnedLookup(options.resolve ?? systemResolve, isAllowed);
   const transport = options.transport ?? https.request;
 
   return (input) =>
     new Promise<WebhookResponse>((resolve, reject) => {
+      const hostname = input.url.hostname.replace(/^\[(.*)\]$/, "$1");
+      // A literal address is connected to as it is, with no lookup, so the
+      // pinned lookup never sees it: the sender checks it here, itself.
+      if (net.isIP(hostname) !== 0 && !isAllowed(hostname)) {
+        reject(new WebhookSendError("destination is not public"));
+        return;
+      }
+
       let settled = false;
       let request: ReturnType<typeof https.request> | undefined;
       // One timer for the whole request: connection, answer and body.
@@ -125,7 +135,6 @@ export function createWebhookSender(options: SenderOptions = {}): WebhookSender 
         fn();
       };
 
-      const hostname = input.url.hostname.replace(/^\[(.*)\]$/, "$1");
       try {
         request = transport(
           {

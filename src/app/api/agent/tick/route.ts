@@ -6,6 +6,11 @@ import { deliverPendingWebhooks } from "@/lib/webhooks/deliver";
 
 export const maxDuration = 300;
 
+/** The webhook dispatch after a tick gets at most this long (webhooks design W3). */
+const WEBHOOK_DISPATCH_MS = 30_000;
+/** Kept free at the end of `maxDuration` for the dispatch to hand back and the response to go out. */
+const WEBHOOK_DISPATCH_MARGIN_MS = 15_000;
+
 function clientIp(request: Request): string {
   return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
     || request.headers.get("x-real-ip")
@@ -13,6 +18,7 @@ function clientIp(request: Request): string {
 }
 
 export async function POST(request: Request) {
+  const startedAt = Date.now();
   if (!hasValidAgentBearer(request.headers.get("authorization"), process.env.AGENT_API_TOKEN)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -42,12 +48,20 @@ export async function POST(request: Request) {
     const results = await runLiveOrganizations(runScheduledCycle);
 
     // The cycles' ledger entries go out to webhook endpoints right away
-    // (webhooks design W3), within 30 seconds; the 10-minute schedule picks up
-    // the rest. Best-effort: it never changes the tick's status or body.
-    try {
-      await deliverPendingWebhooks({ deadlineMs: 30_000 });
-    } catch {
-      console.error("webhook dispatch after the tick failed");
+    // (webhooks design W3), within what is left of this invocation: at most
+    // 30 seconds, and never so long that the tick would outrun `maxDuration`.
+    // When nothing is left it is skipped; the 10-minute schedule picks up the
+    // rest. Best-effort: it never changes the tick's status or body.
+    const dispatchMs = Math.min(
+      WEBHOOK_DISPATCH_MS,
+      maxDuration * 1000 - (Date.now() - startedAt) - WEBHOOK_DISPATCH_MARGIN_MS
+    );
+    if (dispatchMs > 0) {
+      try {
+        await deliverPendingWebhooks({ deadlineMs: dispatchMs });
+      } catch {
+        console.error("webhook dispatch after the tick failed");
+      }
     }
 
     const organizations = results.map((result) => {

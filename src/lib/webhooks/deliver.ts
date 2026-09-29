@@ -1,15 +1,15 @@
 import { platformDb } from "../dal";
 import { decryptSecret, masterKeysFromEnv, type SecretEnvelope } from "../secrets";
 import { createWebhookSender, WebhookSendError, type WebhookSender } from "./http";
-import { assertPublicDestination, type LookupFn } from "./safe-url";
+import { URL_NOT_PUBLIC, validateWebhookUrl, type LookupFn } from "./safe-url";
 import { signWebhook } from "./sign";
 
 /**
  * The webhook dispatcher (docs/superpowers/specs/2026-09-29-webhooks-design.md,
  * W3–W7, §5, §6).
  *
- * A run claims due deliveries through `claim_webhook_deliveries`, a few at a
- * time, and for each one:
+ * A run claims due deliveries through `claim_webhook_deliveries`, in batches
+ * of `CLAIM_BATCH`, and for each one:
  *
  * 1. reads the delivery again with its endpoint, its workspace's slug and its
  *    ledger entry, through `platformDb()`: the dispatcher runs outside any
@@ -17,10 +17,11 @@ import { signWebhook } from "./sign";
  *    delivery was queued fails the delivery without sending (ruling R5);
  * 2. builds the §5 payload with `JSON.stringify` and signs exactly that string;
  * 3. decrypts the endpoint's secret under `webhook_secret:<endpoint id>`;
- * 4. checks the URL and every address its host resolves to
- *    (`assertPublicDestination`), then sends through the pinned `node:https`
- *    sender, which checks the addresses again and connects only to one it
- *    checked (ruling R4);
+ * 4. checks the stored URL's own rules (`validateWebhookUrl`, which also
+ *    judges a literal IP host), with no DNS, then sends through the pinned
+ *    `node:https` sender. The sender resolves the host once, at connect time
+ *    and inside its timer, and connects only to addresses it checked (ruling
+ *    R4); that is the only DNS check;
  * 5. records the result.
  *
  * Every result write is fenced on the claim it received — `id`,
@@ -29,6 +30,11 @@ import { signWebhook } from "./sign";
  * plain updates: a success resets `consecutive_failures`, a failure goes
  * through `record_webhook_failure`, which disables the endpoint at
  * `WEBHOOK_DISABLE_AFTER` and fails its pending deliveries.
+ *
+ * A failure on the platform's side — a secret that cannot be decrypted, a
+ * stored URL that is no longer valid — uses one of the delivery's attempts,
+ * with the usual backoff, but never counts against the endpoint: a customer's
+ * endpoint is not disabled for our fault.
  *
  * Nothing here throws, and logs carry delivery and endpoint ids and fixed
  * reasons only: never the secret, the URL or anything the receiver answered.
@@ -40,10 +46,15 @@ export const WEBHOOK_MAX_ATTEMPTS = 7;
 export const WEBHOOK_DISABLE_AFTER = 20;
 export const WEBHOOK_TIMEOUT_MS = 10_000;
 /** W7: a run sends at most this many deliveries, and stops after `WEBHOOK_RUN_DEADLINE_MS`. */
-export const WEBHOOK_RUN_LIMIT = 50;
+export const WEBHOOK_RUN_LIMIT = 500;
 export const WEBHOOK_RUN_DEADLINE_MS = 60_000;
 /** How many deliveries one claim takes, so a run holds few claims it has not reached yet. */
-const CLAIM_BATCH = 10;
+const CLAIM_BATCH = 25;
+/**
+ * No batch is claimed with less than this left before the deadline: one
+ * request's timeout plus a margin for the reads and writes around it.
+ */
+const CLAIM_MARGIN_MS = WEBHOOK_TIMEOUT_MS + 2_000;
 /** A delivery that could not be prepared (our side, not the receiver's) waits this long, uncounted. */
 const RELEASE_DELAY_MS = 60_000;
 
@@ -54,7 +65,7 @@ export interface DeliverOptions {
   deadlineMs?: number;
   /** The sender; the pinned `node:https` one by default. */
   send?: WebhookSender;
-  /** DNS resolution, for the destination check and the default sender. */
+  /** DNS resolution for the default sender's pinned lookup; the system resolver by default. */
   lookup?: LookupFn;
   now?: () => Date;
 }
@@ -127,7 +138,6 @@ type Outcome =
 
 interface Run {
   send: WebhookSender;
-  lookup?: LookupFn;
   now: () => Date;
 }
 
@@ -209,7 +219,15 @@ async function succeeded(delivery: ClaimedDelivery, run: Run, status: number): P
   return { kind: "delivered", status };
 }
 
-async function attemptFailed(delivery: ClaimedDelivery, run: Run, status: number | null, reason: string): Promise<Outcome> {
+/**
+ * Records a failed attempt. `blame` says whose failure it was: the receiver's
+ * (the default) counts against the endpoint through `record_webhook_failure`;
+ * the platform's uses the attempt and its backoff but leaves the endpoint's
+ * counters alone.
+ */
+async function attemptFailed(
+  delivery: ClaimedDelivery, run: Run, status: number | null, reason: string, blame: "receiver" | "platform" = "receiver"
+): Promise<Outcome> {
   const attempts = delivery.attempts + 1;
   // R7: a webhook.test delivery gets a single attempt. Its failure is final at
   // once, never retried later — a test is a check the person is watching, and
@@ -225,6 +243,7 @@ async function attemptFailed(delivery: ClaimedDelivery, run: Run, status: number
       };
   if (!(await writeClaimed(delivery, values))) return { kind: "lost", status, reason };
   console.warn("webhook delivery attempt failed", delivery.id, delivery.endpoint_id, attempts, reason);
+  if (blame === "platform") return { kind: final ? "failed" : "retried", status, reason };
 
   const { data, error } = await platformDb().rpc("record_webhook_failure", {
     p_endpoint_id: delivery.endpoint_id,
@@ -275,17 +294,20 @@ async function deliverClaimed(delivery: ClaimedDelivery, run: Run): Promise<Outc
     secret = decryptSecret(endpoint.secret_enc, { orgId: endpoint.org_id, column: `webhook_secret:${endpoint.id}` }, masterKeysFromEnv());
   } catch {
     console.error("webhook secret unavailable", endpoint.id, delivery.id);
-    return attemptFailed(delivery, run, null, "secret unavailable");
+    return attemptFailed(delivery, run, null, "secret unavailable", "platform");
   }
 
-  let url: URL;
-  try {
-    url = new URL(endpoint.url);
-  } catch {
-    return attemptFailed(delivery, run, null, "not a valid URL");
+  // The URL's own rules only, with no DNS: the sender resolves the host, once.
+  const destination = validateWebhookUrl(endpoint.url);
+  if (!destination.ok) {
+    // A literal IP host that is not public is the customer's destination, like
+    // a name that resolves inside the network, and counts toward disabling
+    // (§6). Any other refusal means the stored URL itself no longer passes:
+    // ours to fix, not theirs.
+    if (destination.reason === URL_NOT_PUBLIC) return attemptFailed(delivery, run, null, "destination is not public");
+    console.error("webhook endpoint URL is not valid", endpoint.id, delivery.id);
+    return attemptFailed(delivery, run, null, "not a valid URL", "platform");
   }
-  const destination = await assertPublicDestination(url, run.lookup);
-  if (!destination.ok) return attemptFailed(delivery, run, null, destination.reason);
 
   const t = Math.floor(run.now().getTime() / 1000);
   const headers = {
@@ -324,7 +346,6 @@ async function deliverSafely(delivery: ClaimedDelivery, run: Run): Promise<Outco
 function runOf(options: DeliverOptions): Run {
   return {
     send: options.send ?? createWebhookSender({ resolve: options.lookup }),
-    lookup: options.lookup,
     now: options.now ?? (() => new Date()),
   };
 }
@@ -336,9 +357,13 @@ function tally(result: DeliverResult, outcome: Outcome): void {
 }
 
 /**
- * Sends due deliveries until `limit` are taken, the queue is empty or the
- * deadline passes. Claimed deliveries not reached by the deadline go back to
- * pending with their attempt count. Never throws.
+ * Claims due deliveries in batches of `CLAIM_BATCH` and sends them, until
+ * `limit` (`WEBHOOK_RUN_LIMIT` by default) have been taken, a batch comes back
+ * empty, or the deadline is near: no batch is claimed with less than
+ * `CLAIM_MARGIN_MS` left, and no send is started with less than one request's
+ * timeout left, so a claimed row is never left `sending` past the deadline.
+ * A claimed delivery not started in time goes back to pending with its
+ * attempt count. Never throws.
  */
 export async function deliverPendingWebhooks(options: DeliverOptions = {}): Promise<DeliverResult> {
   const result: DeliverResult = { delivered: 0, failed: 0, retried: 0 };
@@ -346,10 +371,10 @@ export async function deliverPendingWebhooks(options: DeliverOptions = {}): Prom
     const run = runOf(options);
     const limit = Math.max(0, Math.floor(options.limit ?? WEBHOOK_RUN_LIMIT));
     const deadline = run.now().getTime() + (options.deadlineMs ?? WEBHOOK_RUN_DEADLINE_MS);
-    const passed = () => run.now().getTime() >= deadline;
+    const left = () => deadline - run.now().getTime();
 
     let taken = 0;
-    while (taken < limit && !passed()) {
+    while (taken < limit && left() >= CLAIM_MARGIN_MS) {
       const { data, error } = await platformDb().rpc("claim_webhook_deliveries", {
         p_limit: Math.min(CLAIM_BATCH, limit - taken),
       });
@@ -362,7 +387,7 @@ export async function deliverPendingWebhooks(options: DeliverOptions = {}): Prom
       taken += claimed.length;
 
       for (const delivery of claimed) {
-        if (passed()) {
+        if (left() < WEBHOOK_TIMEOUT_MS) {
           try {
             await release(delivery, run, 0, "deadline");
           } catch {
@@ -418,8 +443,9 @@ export async function sendTestEvent(
     const claim = await platformDb().rpc("claim_webhook_deliveries", { p_limit: 1, p_only: inserted.data.id });
     if (claim.error) throw new Error("test event could not be claimed");
     const [delivery] = (claim.data ?? []) as ClaimedDelivery[];
-    // Another run claimed it first; it will be delivered by that run.
-    if (!delivery) return { ok: false, status: null, error: "queued for the next dispatch" };
+    // Another run claimed it first, between the insert and this claim, and is
+    // sending it now.
+    if (!delivery) return { ok: false, status: null, error: "it is being sent now by another dispatch" };
 
     const outcome = await deliverSafely(delivery, runOf(options));
     if (outcome.kind === "delivered") return { ok: true, status: outcome.status, error: null };

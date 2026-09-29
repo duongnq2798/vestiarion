@@ -113,6 +113,27 @@ describe("createWebhookSender", () => {
     expect(received).toEqual([]);
   });
 
+  it.each([
+    ["an IPv4 literal", (p: number) => `https://127.0.0.1:${p}/in`],
+    ["a bracketed IPv6 literal", (p: number) => `https://[::1]:${p}/in`],
+    ["an IPv4-mapped literal", (p: number) => `https://[::ffff:127.0.0.1]:${p}/in`],
+  ])("checks %s host itself, without a lookup, and never connects when it is not public", async (_label, url) => {
+    const resolve = vi.fn(loopback);
+    const send = createWebhookSender({ resolve, transport: httpTransport });
+
+    expect(await refusal(send(request({ url: new URL(url(port)) })))).toBe("destination is not public");
+    expect(resolve).not.toHaveBeenCalled();
+    expect(received).toEqual([]);
+  });
+
+  it("connects to an IP literal host that its address rule allows", async () => {
+    const resolve = vi.fn(loopback);
+
+    expect(await localSender(resolve)(request({ url: new URL(`https://127.0.0.1:${port}/in`) }))).toEqual({ status: 200 });
+    expect(resolve).not.toHaveBeenCalled();
+    expect(received).toHaveLength(1);
+  });
+
   it("refuses a mixed answer, even when the address it would connect to first is allowed", async () => {
     const send = localSender(async () => [{ address: "127.0.0.1", family: 4 }, { address: "10.0.0.7", family: 4 }]);
 

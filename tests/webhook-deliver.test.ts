@@ -4,7 +4,8 @@ import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { encryptSecret, type MasterKey, type SecretEnvelope } from "@/lib/secrets";
 import {
-  deliverPendingWebhooks, sendTestEvent, WEBHOOK_BACKOFF_MS, WEBHOOK_DISABLE_AFTER, WEBHOOK_MAX_ATTEMPTS, WEBHOOK_TIMEOUT_MS,
+  deliverPendingWebhooks, sendTestEvent, WEBHOOK_BACKOFF_MS, WEBHOOK_DISABLE_AFTER, WEBHOOK_MAX_ATTEMPTS, WEBHOOK_RUN_LIMIT,
+  WEBHOOK_TIMEOUT_MS,
 } from "@/lib/webhooks/deliver";
 import { WebhookSendError, type WebhookRequest, type WebhookSender } from "@/lib/webhooks/http";
 import type { LookupFn } from "@/lib/webhooks/safe-url";
@@ -342,32 +343,66 @@ describe("outcomes", () => {
 });
 
 describe("refusals before sending", () => {
-  it("never sends to a destination that resolves to a private address, and counts the attempt", async () => {
+  const rpcCalls = (name: string) => fake.requests.filter((r) => r.path === `/rest/v1/rpc/${name}`);
+
+  it("never connects to a host that resolves to a private address, and counts the attempt against the endpoint (§6)", async () => {
     endpoint();
     const d = delivery();
-    const send = vi.fn(answering(200));
+    const lookup = vi.fn<LookupFn>(async () => [{ address: "10.0.0.8", family: 4 }]);
 
-    expect(await dispatch(send, { lookup: async () => [{ address: "10.0.0.8", family: 4 }] }))
+    // The real sender, built with this lookup: the pinned lookup is the only DNS check.
+    expect(await run(() => deliverPendingWebhooks({ lookup, now: () => new Date(clock.t) })))
       .toEqual({ delivered: 0, failed: 0, retried: 1 });
 
-    expect(send).not.toHaveBeenCalled();
+    expect(lookup).toHaveBeenCalledTimes(1);
+    expect(lookup).toHaveBeenCalledWith("hooks.receiver.example");
     expect(deliveries.get(d.id)).toMatchObject({ status: "pending", attempts: 1, last_status: null, last_error: "destination is not public" });
-    expect(endpoints.get(ENDPOINT)?.consecutive_failures).toBe(1);
+    expect(endpoints.get(ENDPOINT)).toMatchObject({ consecutive_failures: 1, last_failure_at: iso(START) });
   });
 
-  it("fails the attempt with \"secret unavailable\" when the secret cannot be decrypted, logging the endpoint id", async () => {
-    endpoint({ secret_enc: encryptSecret(SECRET, { orgId: ORG, column: "webhook_secret:someone-else" }, [MASTER]) });
+  it("does no DNS lookup of its own before sending", async () => {
+    endpoint();
+    delivery();
+    const lookup = vi.fn<LookupFn>(async () => [{ address: "10.0.0.8", family: 4 }]);
+
+    expect(await dispatch(answering(200), { lookup })).toEqual({ delivered: 1, failed: 0, retried: 0 });
+    expect(lookup).not.toHaveBeenCalled();
+  });
+
+  it("refuses a stored URL whose host is a non-public IP literal without connecting, and counts it like a private answer (§6)", async () => {
+    endpoint({ url: "https://10.0.0.5/in", consecutive_failures: 2 });
     const d = delivery();
     const send = vi.fn(answering(200));
 
     expect(await dispatch(send)).toEqual({ delivered: 0, failed: 0, retried: 1 });
 
     expect(send).not.toHaveBeenCalled();
-    expect(deliveries.get(d.id)).toMatchObject({ status: "pending", attempts: 1, last_error: "secret unavailable" });
+    expect(deliveries.get(d.id)).toMatchObject({ status: "pending", attempts: 1, last_status: null, last_error: "destination is not public" });
+    expect(endpoints.get(ENDPOINT)).toMatchObject({ consecutive_failures: 3, last_failure_at: iso(START) });
+  });
+
+  // Our side, not the receiver's: the attempt is used and backs off like any
+  // other, but the endpoint's counters are never touched, so it is never disabled for it.
+  it("fails the attempt with \"secret unavailable\" when the secret cannot be decrypted, without counting it against the endpoint", async () => {
+    endpoint({
+      secret_enc: encryptSecret(SECRET, { orgId: ORG, column: "webhook_secret:someone-else" }, [MASTER]),
+      consecutive_failures: WEBHOOK_DISABLE_AFTER - 1,
+    });
+    const d = delivery({ attempts: 2 });
+    const send = vi.fn(answering(200));
+
+    expect(await dispatch(send)).toEqual({ delivered: 0, failed: 0, retried: 1 });
+
+    expect(send).not.toHaveBeenCalled();
+    expect(deliveries.get(d.id)).toMatchObject({
+      status: "pending", attempts: 3, next_attempt_at: iso(START + WEBHOOK_BACKOFF_MS[2]), last_error: "secret unavailable",
+    });
+    expect(endpoints.get(ENDPOINT)).toMatchObject({ consecutive_failures: WEBHOOK_DISABLE_AFTER - 1, last_failure_at: null, disabled_at: null });
+    expect(rpcCalls("record_webhook_failure")).toHaveLength(0);
     expect(console.error).toHaveBeenCalledWith("webhook secret unavailable", ENDPOINT, d.id);
   });
 
-  it("fails the attempt when no master key is configured", async () => {
+  it("fails the attempt when no master key is configured, without counting it against the endpoint", async () => {
     delete process.env.VESTIARION_MASTER_KEYS;
     endpoint();
     const d = delivery();
@@ -376,6 +411,50 @@ describe("refusals before sending", () => {
 
     expect(sent).toEqual([]);
     expect(deliveries.get(d.id)).toMatchObject({ status: "pending", last_error: "secret unavailable" });
+    expect(endpoints.get(ENDPOINT)).toMatchObject({ consecutive_failures: 0, last_failure_at: null });
+  });
+
+  it("refuses a stored URL that does not parse without connecting, and without counting it against the endpoint", async () => {
+    endpoint({ url: "https://exa mple.com/in", consecutive_failures: 4 });
+    const d = delivery();
+    const send = vi.fn(answering(200));
+
+    expect(await dispatch(send)).toEqual({ delivered: 0, failed: 0, retried: 1 });
+
+    expect(send).not.toHaveBeenCalled();
+    expect(deliveries.get(d.id)).toMatchObject({
+      status: "pending", attempts: 1, next_attempt_at: iso(START + WEBHOOK_BACKOFF_MS[0]), last_status: null, last_error: "not a valid URL",
+    });
+    expect(endpoints.get(ENDPOINT)).toMatchObject({ consecutive_failures: 4, last_failure_at: null, disabled_at: null });
+    expect(rpcCalls("record_webhook_failure")).toHaveLength(0);
+    expect(console.error).toHaveBeenCalledWith("webhook endpoint URL is not valid", ENDPOINT, d.id);
+    expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toContain("exa mple");
+  });
+
+  it.each([
+    ["secret unavailable", { secret_enc: { k: "k1", iv: "AAAA", tag: "AAAA", ct: "AAAA" } as unknown as SecretEnvelope }],
+    ["not a valid URL", { url: "https://hooks.receiver.example:8443/in" }],
+  ])(`still ends a delivery failed on its ${WEBHOOK_MAX_ATTEMPTS}th attempt for %s, leaving the endpoint alone`, async (reason, state) => {
+    endpoint({ ...state, consecutive_failures: 3 });
+    const d = delivery({ attempts: WEBHOOK_MAX_ATTEMPTS - 1 });
+
+    expect(await dispatch(answering(200))).toEqual({ delivered: 0, failed: 1, retried: 0 });
+
+    expect(sent).toEqual([]);
+    expect(deliveries.get(d.id)).toMatchObject({ status: "failed", attempts: WEBHOOK_MAX_ATTEMPTS, last_error: reason });
+    expect(endpoints.get(ENDPOINT)).toMatchObject({ consecutive_failures: 3, last_failure_at: null, disabled_at: null });
+  });
+
+  it("fails a delivery whose endpoint belongs to another workspace, without sending or counting", async () => {
+    endpoint({ org_id: "0b8f6c1e-2d3a-4e5f-8a9b-00000000a999", consecutive_failures: 5 });
+    const d = delivery({ attempts: 1 });
+
+    expect(await dispatch(answering(200))).toEqual({ delivered: 0, failed: 1, retried: 0 });
+
+    expect(sent).toEqual([]);
+    expect(deliveries.get(d.id)).toMatchObject({ status: "failed", attempts: 1, last_error: "endpoint belongs to another workspace" });
+    expect(endpoints.get(ENDPOINT)).toMatchObject({ consecutive_failures: 5, last_failure_at: null });
+    expect(rpcCalls("record_webhook_failure")).toHaveLength(0);
   });
 
   it.each([
@@ -425,22 +504,38 @@ describe("claims and fences (R6)", () => {
     expect(writes[0].params.get("claimed_at")).toMatch(/^eq\.2026-09-29T10:00:00\.000\d{3}\+00:00$/);
   });
 
-  it("claims in small batches and never more than the limit", async () => {
+  const claimLimits = () =>
+    fake.requests.filter((r) => r.path === "/rest/v1/rpc/claim_webhook_deliveries").map((r) => (r.body as { p_limit: number }).p_limit);
+
+  it("claims in batches of 25 until a batch comes back empty", async () => {
     endpoint();
-    for (let i = 0; i < 25; i++) delivery();
+    for (let i = 0; i < 60; i++) delivery();
 
-    expect(await dispatch(answering(200), { limit: 23 })).toEqual({ delivered: 23, failed: 0, retried: 0 });
+    expect(await dispatch(answering(200))).toEqual({ delivered: 60, failed: 0, retried: 0 });
 
-    const claims = fake.requests.filter((r) => r.path === "/rest/v1/rpc/claim_webhook_deliveries");
-    expect(claims.map((r) => (r.body as { p_limit: number }).p_limit)).toEqual([10, 10, 3]);
-    expect([...deliveries.values()].filter((d) => d.status === "pending")).toHaveLength(2);
+    expect(claimLimits()).toEqual([25, 25, 25, 25]);
+    expect([...deliveries.values()].every((d) => d.status === "delivered")).toBe(true);
   });
 
-  it("sends at most 50 by default", async () => {
+  it("never takes more than the limit it is given", async () => {
     endpoint();
-    for (let i = 0; i < 55; i++) delivery();
+    for (let i = 0; i < 60; i++) delivery();
 
-    expect((await dispatch(answering(200))).delivered).toBe(50);
+    expect(await dispatch(answering(200), { limit: 30 })).toEqual({ delivered: 30, failed: 0, retried: 0 });
+
+    expect(claimLimits()).toEqual([25, 5]);
+    expect([...deliveries.values()].filter((d) => d.status === "pending")).toHaveLength(30);
+  });
+
+  it(`sends at most ${WEBHOOK_RUN_LIMIT} by default`, async () => {
+    expect(WEBHOOK_RUN_LIMIT).toBe(500);
+    endpoint();
+    for (let i = 0; i < WEBHOOK_RUN_LIMIT + 5; i++) delivery();
+
+    expect((await dispatch(answering(200))).delivered).toBe(WEBHOOK_RUN_LIMIT);
+
+    expect(claimLimits()).toEqual(Array(WEBHOOK_RUN_LIMIT / 25).fill(25));
+    expect([...deliveries.values()].filter((d) => d.status === "pending")).toHaveLength(5);
   });
 });
 
@@ -461,6 +556,49 @@ describe("the deadline", () => {
     expect(sent.map((r) => r.headers["Vestiarion-Event-Id"])).toEqual([first.id, second.id]);
     expect(deliveries.get(third.id)).toMatchObject({ status: "pending", attempts: 3, claimed_at: null, last_error: null });
     expect(fake.requests.filter((r) => r.path === "/rest/v1/rpc/claim_webhook_deliveries")).toHaveLength(1);
+  });
+
+  it("stops claiming once less than one request's timeout plus a margin is left", async () => {
+    endpoint();
+    for (let i = 0; i < 60; i++) delivery();
+    const oneSecondEach: WebhookSender = async (request) => {
+      sent.push(request);
+      clock.t += 1_000;
+      return { status: 200 };
+    };
+
+    // Two batches fill 50 seconds; with 10 seconds left no third batch is claimed.
+    expect(await dispatch(oneSecondEach, { deadlineMs: 60_000 })).toEqual({ delivered: 50, failed: 0, retried: 0 });
+
+    expect(fake.requests.filter((r) => r.path === "/rest/v1/rpc/claim_webhook_deliveries")).toHaveLength(2);
+    const left = [...deliveries.values()].filter((d) => d.status !== "delivered");
+    expect(left).toHaveLength(10);
+    expect(left.every((d) => d.status === "pending" && d.claimed_at === null)).toBe(true);
+  });
+
+  it("starts no send that its timeout could carry past the deadline, handing the claim back first", async () => {
+    endpoint();
+    const first = delivery();
+    const second = delivery();
+    const third = delivery({ attempts: 2 });
+    let releasedAt: number | null = null;
+    const slow: WebhookSender = async (request) => {
+      sent.push(request);
+      clock.t += 26_000;
+      return { status: 200 };
+    };
+    const original = database;
+    fake = fakeSupabase((request) => {
+      if (request.method === "PATCH" && (request.body as { status?: string } | undefined)?.status === "pending") releasedAt = clock.t;
+      return original(request);
+    });
+
+    expect(await dispatch(slow, { deadlineMs: 60_000 })).toEqual({ delivered: 2, failed: 0, retried: 0 });
+
+    expect(sent.map((r) => r.headers["Vestiarion-Event-Id"])).toEqual([first.id, second.id]);
+    // At 52 s only 8 s were left, less than one request's timeout.
+    expect(deliveries.get(third.id)).toMatchObject({ status: "pending", attempts: 2, claimed_at: null });
+    expect(releasedAt).toBe(START + 52_000);
   });
 
   it("claims nothing when the deadline has already passed", async () => {
@@ -587,9 +725,10 @@ describe("sendTestEvent", () => {
   it("reports a refused destination without a status", async () => {
     endpoint();
 
+    // The real sender, whose pinned lookup refuses the loopback answer.
     expect(await run(() => sendTestEvent(
       { orgId: ORG, endpointId: ENDPOINT },
-      { send: answering(200), lookup: async () => [{ address: "127.0.0.1", family: 4 }], now: () => new Date(clock.t) }
+      { lookup: async () => [{ address: "127.0.0.1", family: 4 }], now: () => new Date(clock.t) }
     ))).toEqual({ ok: false, status: null, error: "destination is not public" });
   });
 
@@ -605,7 +744,7 @@ describe("sendTestEvent", () => {
     expect(deliveries.size).toBe(0);
   });
 
-  it("says so when another run claimed the test first", async () => {
+  it("says it is being sent now when another run claimed the test first", async () => {
     endpoint();
     breakNext = null;
     const original = database;
@@ -614,7 +753,7 @@ describe("sendTestEvent", () => {
       return original(request);
     });
 
-    expect(await test()).toEqual({ ok: false, status: null, error: "queued for the next dispatch" });
+    expect(await test()).toEqual({ ok: false, status: null, error: "it is being sent now by another dispatch" });
   });
 
   it("never throws", async () => {

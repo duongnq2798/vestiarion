@@ -6,8 +6,8 @@ export const maxDuration = 300;
 
 /**
  * Bearer-protected, run every 10 minutes by `.github/workflows/webhooks.yml`
- * (webhooks design W3): one dispatch run, at most 50 deliveries and 60
- * seconds (W7).
+ * (webhooks design W3): one dispatch run, at most 500 deliveries claimed in
+ * batches of 25, within 60 seconds (W7).
  */
 export async function POST(request: Request) {
   if (!hasValidAgentBearer(request.headers.get("authorization"), process.env.AGENT_API_TOKEN)) {
