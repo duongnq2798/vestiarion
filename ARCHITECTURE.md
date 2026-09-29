@@ -328,14 +328,15 @@ Where the read API is pulled, webhooks push: a workspace registers its own
 HTTPS endpoints (`webhooks.manage`, above) and each new `ledger_entries` row
 reaches them without polling. An `after insert` trigger on `ledger_entries`
 (migration `0028`) enqueues one `webhook_deliveries` row per active endpoint,
-in the same transaction as the append, so enqueueing can never be skipped or
-duplicated relative to the entry it is for. A dispatcher
+in the same transaction as the append. Enqueueing never fails the append: an
+enqueue error raises a warning and the entry is still appended. A dispatcher
 (`deliverPendingWebhooks`, `src/lib/webhooks/deliver.ts`) claims due rows and
 sends each one HMAC-signed, running right after every scheduled tick and
-again on a 10-minute schedule (`POST /api/platform/webhooks`). Every address a
-destination resolves to is checked against the same public-only rule at send
-time as when the endpoint was added, which closes the DNS-rebinding gap a
-one-time check would leave. Full detail — the payload, retries, the endpoint
+again on a 10-minute schedule (`POST /api/platform/webhooks`). A
+destination's host is resolved once, at connect time, and every address must
+pass the same public-only rule as when the endpoint was added; the connection
+is pinned to the addresses checked, which closes the DNS-rebinding gap a
+separate check would leave. Full detail — the payload, retries, the endpoint
 limit, and how to verify both the delivery's signature and the ledger entry's
 own — is in [docs/webhooks.md](docs/webhooks.md).
 

@@ -18,7 +18,8 @@ Decided on 2026-09-29 by the implementer under the partner's standing instructio
 
 - **W1. The event is the ledger entry.**
   - The ledger already records every decision and action, signed, with ids only (no email addresses).
-  - Delivering entries rather than inventing a second event model means a receiver sees exactly what the audit log shows, in the same order (`seq`), and can verify it.
+  - Delivering entries rather than inventing a second event model means a receiver sees exactly what the audit log shows, and can verify it.
+  - Each entry carries its `seq`, but delivery order is not guaranteed: a retry can land after a newer entry. Delivery is at least once, with the same `Vestiarion-Event-Id` on every retry. Receivers de-duplicate on the event id and order by `entry.seq` (amended 2026-09-29).
   - There is one event type, `ledger.appended`, plus `webhook.test`. Receivers filter on `entry.action`. There is no per-endpoint filter in this version.
 - **W2. The database enqueues, in the same transaction.**
   - An `after insert` trigger on `ledger_entries` inserts one `webhook_deliveries` row per active endpoint of the entry's workspace.
@@ -46,8 +47,8 @@ Decided on 2026-09-29 by the implementer under the partner's standing instructio
   - The timeout is 10 seconds, and at most 1 KB of the response body is read.
 - **W7. Limits.**
   - At most 5 active endpoints per workspace, checked in the database.
-  - A dispatch run sends at most 50 deliveries and stops after 60 seconds.
-  - Delivered rows older than 30 days are deleted by the daily cleanup.
+  - A dispatch run sends at most 500 deliveries, claimed in batches of 25, within 60 seconds. It claims no batch with less than one request's timeout plus a margin left (amended 2026-09-29; first drafted as 50 per run).
+  - Delivered rows older than 30 days are deleted by the daily cleanup, and so are failed rows created more than 30 days ago (retention of failed rows added 2026-09-29).
 - **W8. Permissions and ledger.**
   - `webhooks.manage` covers owner and admin.
   - Adding and removing an endpoint are ledger entries: `webhook_endpoint_created` with `{ by, endpointId }`, and `webhook_endpoint_removed` with `{ by, endpointId }`. The URL is left out, because it may carry a customer's hostname.
@@ -108,8 +109,8 @@ webhook_deliveries (
   - `signWebhook(secret, body, t)` returns the header value;
   - `verifyWebhookSignature(secret, body, header, now, tolerance)`, which the docs example and the tests use.
 - **`src/lib/webhooks/safe-url.ts`:**
-  - `validateWebhookUrl(url)` checks the syntax, for the form;
-  - `assertPublicDestination(url)` resolves the host and checks every address, at send time.
+  - `validateWebhookUrl(url)` checks the syntax and any literal IP host, for the form and again at send time;
+  - the host name is resolved once, by the sender's pinned lookup at connect time (`src/lib/webhooks/http.ts`), which checks every address. A separate pre-send lookup was dropped on 2026-09-29: it had no timeout and duplicated the pinned one.
 - **`src/lib/webhooks/deliver.ts`:**
   - `deliverPendingWebhooks({ limit, deadlineMs })` claims, builds each payload, signs, posts, and records the result, the backoff and the endpoint's counters. It never throws.
   - `sendTestEvent(endpointId)` enqueues a `webhook.test` delivery and dispatches it immediately.
@@ -147,7 +148,8 @@ A test event has `"type": "webhook.test"` and no `entry`.
 | The URL is not HTTPS, has credentials, or is too long | Refused in the form |
 | The URL resolves to a private address at send time | The attempt fails with "destination is not public"; it counts toward disabling |
 | The receiver answers 3xx, 4xx or 5xx, or times out | The attempt fails and is retried per W5 |
-| The master key cannot decrypt the secret | The attempt fails with "secret unavailable" and is logged with the endpoint id |
+| The master key cannot decrypt the secret | The attempt fails with "secret unavailable", is retried per W5 and is logged with the endpoint id; it does not count toward disabling (our failure, not the endpoint's) |
+| The stored URL no longer passes `validateWebhookUrl` | The attempt fails with "not a valid URL", as above; it does not count toward disabling. A literal IP host that is not public counts, like a private address |
 | A 6th endpoint | "This workspace already has 5 webhook endpoints. Remove one first." |
 | Enqueueing fails inside the trigger | A warning is raised; the ledger entry is appended normally |
 

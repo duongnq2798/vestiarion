@@ -26,15 +26,21 @@ is removed and added again, which also issues it a new secret.
 
 Deliveries go out from two places, never inside an unrelated request:
 
-- **Right after each scheduled agent tick**, within a 30-second window, for
-  the entries that tick just appended (`src/app/api/agent/tick/route.ts`).
+- **Right after each scheduled agent tick**, for the entries that tick just
+  appended (`src/app/api/agent/tick/route.ts`). The dispatch gets what is
+  left of the tick's own time budget: at most 30 seconds, less when the
+  tick's cycles used most of it, and none at all (the dispatch is skipped)
+  when nothing is left.
 - **Every 10 minutes**, from a bearer-token-protected dispatcher
   (`POST /api/platform/webhooks`, `src/app/api/platform/webhooks/route.ts`)
-  that a GitHub Actions schedule calls (`.github/workflows/webhooks.yml`). One
-  run sends at most 50 deliveries and stops after 60 seconds
-  (`WEBHOOK_RUN_LIMIT`, `WEBHOOK_RUN_DEADLINE_MS` in
-  `src/lib/webhooks/deliver.ts`); a queue larger than that is finished by the
-  next run.
+  that a GitHub Actions schedule calls (`.github/workflows/webhooks.yml`).
+
+A run is bounded by 60 seconds and 500 deliveries (`WEBHOOK_RUN_DEADLINE_MS`,
+`WEBHOOK_RUN_LIMIT` in `src/lib/webhooks/deliver.ts`), claimed in batches of
+25. No batch is claimed with less than about 12 seconds left, and no request
+is started that its 10-second timeout could carry past the deadline, so
+nothing is left half-sent when a run ends; a queue larger than one run is
+finished by the next.
 
 **A test event is the one exception.** Sending it from the Settings page
 (`sendTestEvent`, `src/lib/webhooks/deliver.ts`) delivers it synchronously,
@@ -80,8 +86,9 @@ The body is one JSON object:
 }
 ```
 
-`entry` mirrors exactly what [`GET /api/v1/ledger`](api.md) reports for that
-row, so a receiver already reading that API recognizes the shape. A
+`entry` carries the same fields as [`GET /api/v1/ledger`](api.md) reports
+for that row, without the row `id`, so a receiver already reading that API
+recognizes the shape. A
 `webhook.test` delivery has no `entry` at all — only `id`, `type`,
 `createdAt` (the queued time) and `workspace`.
 
@@ -184,6 +191,26 @@ endpoint is disabled and its still-pending deliveries are failed outright.
 There is no re-enabling in place — remove the endpoint and add it back, which
 also issues a fresh secret.
 
+A failure on Vestiarion's side — the endpoint's secret cannot be read, or its
+stored URL no longer passes the rules below — is retried on the same
+schedule and still ends the delivery `failed` after the 7th attempt, but it
+**never counts against your endpoint and never disables it**. A host that
+resolves to a non-public address is not such a failure: it counts, like any
+other failed attempt.
+
+## Delivery guarantees
+
+- **At least once.** The same event can arrive more than once — for example
+  when your endpoint answered but the answer was lost, or a dispatch run
+  stopped mid-request. Every retry of an event carries the same
+  `Vestiarion-Event-Id` (and the same `id` in the body), so de-duplicate on
+  it.
+- **Not in order.** Deliveries can arrive out of order: a retry of an older
+  entry can land after a newer one, and several dispatch runs may be at work.
+  Each `ledger.appended` event carries the entry's `seq`; order by
+  `entry.seq`, which ascends within a workspace (with gaps — the hash chain,
+  not `seq`, proves continuity).
+
 ## SSRF rules
 
 The URL is checked when an endpoint is added, and again at send time
@@ -191,25 +218,27 @@ The URL is checked when an endpoint is added, and again at send time
 
 - `https:` only, port 443 or unspecified, no username/password in the URL,
   at most 500 characters.
-- At send time, every address the host resolves to must be public. Refused:
-  this-network, private (RFC 1918), CGNAT, loopback, link-local (including
-  cloud metadata addresses), IETF protocol assignments, benchmarking,
-  documentation, multicast/reserved ranges, and their IPv6 equivalents
-  (unique local, link-local, documentation, Teredo); an address that carries
-  an IPv4 one — IPv4-mapped, NAT64, or 6to4 — is judged by that IPv4 address.
-  Only global IPv6 unicast is otherwise accepted.
-- The host is resolved again at connect time and the request is pinned to
-  only the addresses just checked, so a name that resolves to a public
-  address for the check and a private one for the connection (DNS rebinding)
-  cannot be reached.
+- Every address the destination has must be public. Refused: this-network,
+  private (RFC 1918), CGNAT, loopback, link-local (including cloud metadata
+  addresses), IETF protocol assignments, benchmarking, documentation,
+  multicast/reserved ranges, and their IPv6 equivalents (unique local,
+  link-local, documentation, Teredo); an address that carries an IPv4 one —
+  IPv4-mapped, NAT64, or 6to4 — is judged by that IPv4 address. Only global
+  IPv6 unicast is otherwise accepted.
+- A host name is resolved once, at connect time, inside the request's
+  10-second timeout: every answer must be public, and the connection is
+  pinned to only the addresses just checked, so a name cannot answer with a
+  public address for a check and a private one for the connection (DNS
+  rebinding). An IP-literal host is never resolved; it is checked directly,
+  when the endpoint is added and again before connecting.
 - Redirects are never followed.
 
 ## Retention
 
-Delivery records with `status = delivered` are deleted 30 days after
-delivery, by the daily cleanup job (`WEBHOOK_DELIVERY_RETENTION_DAYS`,
-`src/lib/platform/cleanup.ts`). Records that ended `failed` are not deleted by
-this job and remain visible to the same read paths.
+Delivery records are deleted by the daily cleanup job
+(`WEBHOOK_DELIVERY_RETENTION_DAYS`, `src/lib/platform/cleanup.ts`) after 30
+days: a `delivered` record 30 days after its delivery, a `failed` one 30 days
+after it was created. Records still pending or being sent are never deleted.
 
 ## Who sees what
 
