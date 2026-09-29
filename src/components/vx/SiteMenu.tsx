@@ -47,12 +47,16 @@ export function SiteMenu({ links }: { links: ReadonlyArray<{ href: string; label
             ))}
           </ul>
           <div className="mt-3 grid grid-cols-2 gap-2 border-t border-line pt-4">
-            <Button asChild variant="secondary">
-              <Link href="/login">Sign in</Link>
-            </Button>
-            <Button asChild>
-              <Link href="/onboarding">Open console</Link>
-            </Button>
+            <SheetClose asChild>
+              <Button asChild variant="secondary">
+                <Link href="/login">Sign in</Link>
+              </Button>
+            </SheetClose>
+            <SheetClose asChild>
+              <Button asChild>
+                <Link href="/onboarding">Open console</Link>
+              </Button>
+            </SheetClose>
           </div>
         </nav>
       </SheetContent>
