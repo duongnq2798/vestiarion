@@ -135,6 +135,24 @@ organization per UTC day. The cap is enforced inside `begin_cycle_run` (migratio
 opens the `cycle_runs` row under a per-organization lock and counts the day's runs in the same
 transaction, so it holds across serverless instances rather than resetting per cold start.
 
+**Going live** is self-serve, owner only (`docs/superpowers/specs/2026-09-29-go-live-design.md`).
+The **Go live** section at the top of Settings (`src/components/GoLivePanel.tsx`) renders
+`goLiveStatus` (`src/lib/platform/go-live.ts`) — the step, whether credentials are stored, the
+wallet addresses and when the workspace went live, never a credential or a wallet id — and drives
+the three actions in `src/app/actions/go-live.ts`, each gated on `org.administer`:
+`connectCircleAction` checks the pasted API key with Circle and stores both credentials as
+envelopes bound to the organization and column (`circle_connected`, or `circle_reconnected`; once any account has a wallet, in any mode, only if they read every such
+wallet back at its stored address in the treasury set); `createWalletsAction` fills in the treasury
+wallet set and a wallet for each account that has none, in the owner's own entity, under a
+per-account idempotency key and a write conditional on `circle_wallet_id is null` that also zeroes
+the simulated balance (`treasury_wallets_created`); and `goLiveAction` proves the stored
+credentials against every wallet again, then makes one conditional
+`mode = 'live' where mode = 'sandbox'` update, bound to the API key envelope it proved
+(`workspace_went_live`). The ledger records ids only,
+every error an action returns is a fixed string, and a sandbox holding Circle credentials is never
+deleted by the cleanup (migration `0029`). The step between wallets and going live reads the
+operating wallet's on-chain balance through `refreshBalanceAction`, which returns the number alone.
+
 ## Approvals and the pause switch
 
 **The approval inbox** (`/o/[slug]/approvals`, spec §5) lists every payable a

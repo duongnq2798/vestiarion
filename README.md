@@ -199,7 +199,8 @@ least one owner: the database itself refuses to remove or demote the last one. O
 admin can resume an agent someone paused. A sandbox workspace is capped at 20 agent cycles per UTC
 day, counted in the database so the cap holds however many server instances are running, which
 bounds how much a trial workspace can spend on LLM calls, and a sandbox that sits inactive for 60
-days is deleted by a daily cleanup job.
+days is deleted by a daily cleanup job, unless an owner has connected Circle to it. An owner takes a
+workspace live from **Settings** — see [Going live on Arc testnet](#going-live-on-arc-testnet).
 
 An **owner** or **admin** invites someone from the workspace's **Members** page
 (`/o/<slug>/members`), by email and role; an owner may grant any role, an admin only **approver** or
@@ -269,7 +270,7 @@ Two independent upgrades from there, in either order:
 | Want | Set | Check with |
 | --- | --- | --- |
 | Real LLM reasoning | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `DEEPSEEK_API_KEY` | `npm run agent:doctor` |
-| Real USDC on Arc | `CIRCLE_API_KEY` + `CIRCLE_ENTITY_SECRET` (via `npm run org:adopt-env`) | `npm run circle:doctor -- <org-slug>` |
+| Real USDC on Arc | An owner connects Circle under **Settings → Go live** | `npm run circle:doctor -- <org-slug>` |
 
 ### Scripts
 
@@ -344,11 +345,38 @@ assert about your own system drift, and figures you read do not.
 ## Going live on Arc testnet
 
 The simulator and the real integration share one interface (`ChainProvider` in
-`src/lib/circle/types.ts`), so switching is additive:
+`src/lib/circle/types.ts`), so switching is additive. A workspace's **owner** does it from the
+**Go live** section at the top of **Settings** (`/o/<slug>/settings`), in three steps, each unlocked
+by the one before:
 
-1. Get an **API key** and **Entity Secret** from the [Circle Console](https://console.circle.com)
-   and put them in `.env.local`, alongside a PKCS8 Ed25519 `LEDGER_SIGNING_KEY` if the
-   organization does not already have one stored.
+1. **Connect Circle.** Paste an **API key** and the **entity secret** from the
+   [Circle Console](https://console.circle.com). The server checks the key with Circle, then
+   encrypts both onto the workspace's row in `orgs`; they are never shown again, logged, or sent
+   back to the browser.
+2. **Create treasury wallets.** One click creates, in your own Circle account, a wallet set and an
+   Arc-testnet wallet for each account that has none, drops "(simulated)" from their names, and
+   starts each new wallet's balance at zero: nothing simulated carries into live mode.
+   Counterparties are paid only at a real address: set each one's address on the Counterparties
+   page, or its payments are held.
+3. **Go live.** Copy the operating wallet's address, fund it at
+   [faucet.circle.com](https://faucet.circle.com) (select **Arc Testnet**; 20 USDC every 2 hours),
+   and watch the on-chain balance in the same step. **Go live** asks for confirmation — real testnet
+   USDC moves when the agent pays, the agent runs every 6 hours, and the workspace is no longer
+   deleted when inactive — and then switches the workspace to `live`.
+
+Every member sees the workspace's status there; only an owner sees the steps. Credentials can be
+replaced later from the same section. Once the operating wallet exists, in any mode (sandbox or
+live), new credentials are accepted only if they reach every one of the workspace's wallets, in
+the Circle account that holds them; **Go live** checks the stored credentials the same way just
+before switching. To stop a live workspace paying, pause the agent from the console.
+
+### The founding workspace and the demo seed
+
+The founding organization predates this flow, and the demo seed creates counterparty wallets too,
+so both still go live with scripts:
+
+1. Put the Circle **API key** and **Entity Secret** in `.env.local`, alongside a PKCS8 Ed25519
+   `LEDGER_SIGNING_KEY` if the organization does not already have one stored.
 2. `npm run org:adopt-env -- <org-slug> --expect-key-id <key id>` — encrypts the ledger signing
    key and Circle credentials onto that organization's row. From here the app reads them from
    `orgs`, never from `.env.local`.
@@ -405,9 +433,9 @@ Everything the agent reasons about lives in five tables (`accounts`, `counterpar
   rounded. Every accepted record is written to the signed ledger as a human action.
 - Insert milestones with a real `verification_source` (a Git PR merge, a Kimai/Frappe timesheet
   entry, a client sign-off) and flip `verified` when that source confirms the work.
-- Run `npm run bootstrap:circle -- <org-slug>` once real accounts exist, fund the operating
-  wallet, and call `POST /api/agent/tick` on a schedule (cron, GitHub Action, whatever you have)
-  instead of a button click.
+- Take the workspace live from **Settings → Go live** once real accounts exist, and fund the
+  operating wallet. `POST /api/agent/tick`, called on a schedule (cron, GitHub Action, whatever you
+  have), then runs its cycles instead of a button click.
 
 ### Running on a real clock
 
