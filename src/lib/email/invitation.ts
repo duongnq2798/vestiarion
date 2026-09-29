@@ -1,19 +1,11 @@
 import type { OrgRole } from "../auth/roles";
+import { escapeHtml } from "./html";
 
 /**
  * The invitation email a person receives when someone adds them to a
  * workspace (spec §7, §10 step 5b). Follows the look of
  * `supabase/templates/magic-link.html`.
  */
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
 
 export function invitationEmail(input: {
   orgName: string;
