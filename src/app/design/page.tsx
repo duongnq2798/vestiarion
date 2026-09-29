@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
-import { ArrowRight, ExternalLink, Inbox, Play, Plus, Trash2 } from "lucide-react";
+import { ArrowRight, ExternalLink, FileSpreadsheet, Inbox, PenLine, Play, Plus, Trash2 } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -21,7 +21,15 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Spinner } from "@/components/ui/Spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/Table";
 import { Tooltip } from "@/components/ui/Tooltip";
+import CounterpartyIntake from "@/components/intake/CounterpartyIntake";
+import InvoiceCsvImport from "@/components/intake/InvoiceCsvImport";
+import InvoiceIntake from "@/components/intake/InvoiceIntake";
+import MembersPanel from "@/components/MembersPanel";
+import MilestoneVerification from "@/components/MilestoneVerification";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
+import { COUNTERPARTIES, DESIGN_SLUG, INVITATIONS, MEMBERS } from "./fixtures";
 import { FeedbackDemo, FormLab, OverlayDemo, TabsDemo } from "./Demos";
+import { FrameDemo } from "./Screens";
 
 export const metadata: Metadata = {
   title: "Design system",
@@ -38,6 +46,7 @@ const SECTIONS = [
   ["forms", "Forms"],
   ["overlays", "Overlays"],
   ["feedback", "Feedback and motion"],
+  ["screens", "Screens"],
 ] as const;
 
 // Full class names, so Tailwind sees each one in the source.
@@ -384,6 +393,39 @@ export default function DesignPage() {
                 </Reveal>
               ))}
             </div>
+          </Section>
+
+          <Section id="screens" title="Screens" description="the real components with made-up data — nothing here is saved">
+            <Callout tone="held" title="These forms reach the real server actions">
+              Without a signed-in member of a real workspace every submission is refused — which is how the refusal path is checked here: the message appears beside the form and what you typed stays.
+            </Callout>
+            <FrameDemo />
+            <CounterpartyIntake orgSlug={DESIGN_SLUG} />
+            <Card className="p-4 sm:p-6">
+              <Tabs defaultValue="manual">
+                <TabsList aria-label="Invoice intake">
+                  <TabsTrigger value="manual">
+                    <PenLine aria-hidden />
+                    Enter one invoice
+                  </TabsTrigger>
+                  <TabsTrigger value="csv">
+                    <FileSpreadsheet aria-hidden />
+                    Import CSV
+                  </TabsTrigger>
+                </TabsList>
+                <TabsContent value="manual" forceMount className="data-[state=inactive]:hidden">
+                  <InvoiceIntake orgSlug={DESIGN_SLUG} counterparties={COUNTERPARTIES} />
+                </TabsContent>
+                <TabsContent value="csv" forceMount className="data-[state=inactive]:hidden">
+                  <InvoiceCsvImport orgSlug={DESIGN_SLUG} />
+                </TabsContent>
+              </Tabs>
+            </Card>
+            <Card className="p-4 sm:p-5">
+              <Eyebrow>Milestone verification</Eyebrow>
+              <MilestoneVerification orgSlug={DESIGN_SLUG} milestoneId="00000000-0000-4000-8000-00000000000a" verified={false} />
+            </Card>
+            <MembersPanel orgSlug={DESIGN_SLUG} members={MEMBERS} invitations={INVITATIONS} viewerId="design-ada" viewerRole="owner" assignable={["owner", "admin", "approver", "viewer"]} />
           </Section>
         </main>
       </div>
