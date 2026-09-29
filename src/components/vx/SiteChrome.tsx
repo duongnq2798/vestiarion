@@ -1,7 +1,8 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { Button } from "@/components/ui/Button";
+import { Eyebrow } from "@/components/ui/Eyebrow";
 import { BrandMark } from "./Brand";
-import { Label } from "./Primitives";
 import { SiteMenu } from "./SiteMenu";
 
 /**
@@ -20,7 +21,7 @@ export const LANDING_SECTIONS = [
 function Wordmark() {
   return (
     <Link href="/" className="group inline-flex shrink-0 items-center gap-2.5 font-mono text-[0.8125rem] font-semibold uppercase tracking-[0.2em] text-ink">
-      <BrandMark className="logo-shadow size-9 shrink-0 text-agent transition-transform duration-300 group-hover:-rotate-6 group-hover:scale-105" />
+      <BrandMark className="size-9 shrink-0 text-agent drop-shadow-logo transition-transform duration-150 ease-standard group-hover:-rotate-6 group-hover:scale-105" />
       <span>Vestiarion</span>
     </Link>
   );
@@ -37,7 +38,7 @@ export function SiteHeader({ landing = false, children }: { landing?: boolean; c
             <ul className="flex items-center gap-1">
               {LANDING_SECTIONS.map((section) => (
                 <li key={section.href}>
-                  <a href={section.href} className="rounded-lg px-3 py-2 text-sm text-ink-2 transition-colors hover:bg-raised/70 hover:text-ink">
+                  <a href={section.href} className="rounded-lg px-3 py-2 text-sm text-ink-2 transition-colors duration-150 ease-standard hover:bg-raised/70 hover:text-ink">
                     {section.label}
                   </a>
                 </li>
@@ -45,15 +46,15 @@ export function SiteHeader({ landing = false, children }: { landing?: boolean; c
             </ul>
           </nav>
         )}
-        <div className={`flex items-center gap-2 ${landing ? "ml-auto md:ml-0" : "ml-auto"}`}>
+        <div className={landing ? "ml-auto flex items-center gap-2 md:ml-0" : "ml-auto flex items-center gap-2"}>
           {landing ? (
             <>
-              <Link href="/login" className="hidden rounded-lg px-3 py-2 text-sm font-medium text-ink-2 transition-colors hover:bg-raised/70 hover:text-ink md:inline-flex">
-                Sign in
-              </Link>
-              <Link href="/onboarding" className="brand-shadow hidden h-10 items-center rounded-xl bg-agent px-4 text-sm font-semibold text-on-agent transition-transform hover:-translate-y-0.5 min-[375px]:inline-flex">
-                Open console
-              </Link>
+              <Button asChild variant="ghost" className="hidden md:inline-flex">
+                <Link href="/login">Sign in</Link>
+              </Button>
+              <Button asChild className="hidden min-[375px]:inline-flex">
+                <Link href="/onboarding">Open console</Link>
+              </Button>
               <SiteMenu links={LANDING_SECTIONS} />
             </>
           ) : (
@@ -94,20 +95,23 @@ export function SiteFooter({ compact = false }: { compact?: boolean }) {
           <div className="col-span-2 lg:col-span-1">
             <Wordmark />
             <p className="mt-4 max-w-sm text-sm leading-relaxed text-ink-2">
-              An autonomous treasury agent. A model proposes, code enforces the boundary, and every decision is signed
-              into a chain anyone can verify.
+              An autonomous treasury agent. A model proposes, code enforces the boundary, and every decision is signed into a chain anyone can verify.
             </p>
           </div>
           {columns.map((column) => (
             <nav key={column.title} aria-label={column.title}>
-              <Label>{column.title}</Label>
+              <Eyebrow>{column.title}</Eyebrow>
               <ul className="mt-3 space-y-1">
                 {column.links.map((link) => (
                   <li key={link.href}>
                     {link.href.startsWith("#") ? (
-                      <a href={link.href} className="inline-flex py-1.5 text-sm text-ink-2 hover:text-agent">{link.label}</a>
+                      <a href={link.href} className="inline-flex py-1.5 text-sm text-ink-2 transition-colors duration-150 ease-standard hover:text-agent">
+                        {link.label}
+                      </a>
                     ) : (
-                      <Link href={link.href} className="inline-flex py-1.5 text-sm text-ink-2 hover:text-agent">{link.label}</Link>
+                      <Link href={link.href} className="inline-flex py-1.5 text-sm text-ink-2 transition-colors duration-150 ease-standard hover:text-agent">
+                        {link.label}
+                      </Link>
                     )}
                   </li>
                 ))}
