@@ -6,8 +6,7 @@ import { Eyebrow } from "@/components/ui/Eyebrow";
 import { Reveal } from "@/components/ui/Reveal";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { fmt } from "@/components/vx/Primitives";
-import { withFoundingOrg } from "@/lib/dal/scope";
-import { getLandingMetrics, type LandingMetrics } from "@/lib/landing";
+import type { LandingMetrics } from "@/lib/landing";
 
 function MetricCard({ label, value, note, href, measured }: {
   label: string;
@@ -30,12 +29,8 @@ function MetricCard({ label, value, note, href, measured }: {
   );
 }
 
-/**
- * The public showcase reads the founding organization, named explicitly: a
- * sandbox organization's demo data must never inflate its "live" figures.
- */
-async function LiveMetrics() {
-  const metrics = await withFoundingOrg(() => getLandingMetrics());
+async function LiveMetrics({ source }: { source: Promise<LandingMetrics> }) {
+  const metrics = await source;
   const hasCycles = metrics.instrumentedCycles > 0;
   const hasTransfers = metrics.settledLiveTransfers > 0;
   return (
@@ -68,7 +63,8 @@ function MetricsFallback() {
   );
 }
 
-export function LiveProof() {
+/** `metrics` is started by the page and streams in behind a skeleton. */
+export function LiveProof({ metrics }: { metrics: Promise<LandingMetrics> }) {
   return (
     <section id="measurements" aria-labelledby="measurements-title" className="mx-auto max-w-6xl scroll-mt-16 px-4 pb-10 pt-14 sm:px-6 sm:pb-14 sm:pt-20">
       <Reveal>
@@ -78,7 +74,7 @@ export function LiveProof() {
           <p className="mt-3 text-sm leading-relaxed text-ink-2">The current ledger can contain real earlier evidence while post-instrumentation cycle and transfer series remain empty. The page keeps that distinction visible.</p>
         </div>
         <Suspense fallback={<MetricsFallback />}>
-          <LiveMetrics />
+          <LiveMetrics source={metrics} />
         </Suspense>
       </Reveal>
     </section>
