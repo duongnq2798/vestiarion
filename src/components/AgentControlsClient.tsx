@@ -1,18 +1,43 @@
 "use client";
 
+import { Play } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 import { runAgentCycleAction } from "@/app/actions/agent";
-import type { CycleClockMode } from "@/lib/clock";
+import { Button } from "@/components/ui/Button";
+import { cn } from "@/components/ui/cn";
+import { ProgressBar } from "@/components/ui/ProgressBar";
+import { toast } from "@/components/ui/Toaster";
 import { orgHref } from "@/lib/auth/org-paths";
+import type { CycleClockMode } from "@/lib/clock";
 
 const STEPS = ["reading invoices", "screening counterparties", "checking milestones", "testing treasury economics"];
 
-export default function AgentControlsClient({ orgSlug, nextDay, headSeq, clockMode, paused = false }: { orgSlug: string; nextDay: number; headSeq?: number; clockMode: CycleClockMode; paused?: boolean }) {
+/**
+ * The page head's agent actions: whatever the page puts first (`leading` — the
+ * treasury page's pause switch), then Run, in one row. Progress and the result
+ * sit beneath that row, so a long status line never pushes the buttons apart.
+ * A finished cycle is announced by a toast; a failed one stays here, in words.
+ */
+export default function AgentControlsClient({
+  orgSlug,
+  nextDay,
+  headSeq,
+  clockMode,
+  paused = false,
+  leading,
+}: {
+  orgSlug: string;
+  nextDay: number;
+  headSeq?: number;
+  clockMode: CycleClockMode;
+  paused?: boolean;
+  leading?: ReactNode;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   function refreshDashboard() {
     startTransition(() => {
@@ -23,13 +48,17 @@ export default function AgentControlsClient({ orgSlug, nextDay, headSeq, clockMo
 
   async function runCycle() {
     setBusy(true);
-    setMessage(null);
+    setError(null);
     try {
       const result = await runAgentCycleAction(orgSlug);
-      setMessage(result.ok ? result.message : `Cycle failed: ${result.message}`);
-      if (result.ok) refreshDashboard();
-    } catch (error) {
-      setMessage(`Cycle failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+      if (result.ok) {
+        toast.success(result.message);
+        refreshDashboard();
+      } else {
+        setError(`Cycle failed: ${result.message}`);
+      }
+    } catch (caught) {
+      setError(`Cycle failed: ${caught instanceof Error ? caught.message : "Unknown error"}`);
     } finally {
       setBusy(false);
     }
@@ -37,24 +66,19 @@ export default function AgentControlsClient({ orgSlug, nextDay, headSeq, clockMo
 
   const running = busy || pending;
   const runLabel = clockMode === "simulate" ? `day ${nextDay}` : "cycle";
-  const failed = message?.toLowerCase().includes("fail") || message?.includes("expired") || message?.includes("disabled");
+  const status = running ? `Agent is ${STEPS.join(" · ")}.` : (error ?? (paused ? "The agent is paused. Resume it to run a cycle." : null));
 
   return (
-    <div className="flex max-w-xl flex-col items-stretch gap-2 sm:items-end">
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          disabled={busy || paused}
-          onClick={runCycle}
-          className="brand-shadow relative inline-flex h-10 items-center justify-center gap-2 overflow-hidden whitespace-nowrap rounded-xl bg-agent px-4 text-sm font-semibold text-on-agent transition-transform hover:-translate-y-0.5 disabled:cursor-progress disabled:opacity-70"
-        >
-          <span aria-hidden>▶</span>
+    <div className="flex flex-col items-stretch gap-2 sm:items-end">
+      <div className="flex flex-wrap items-start gap-2 sm:justify-end">
+        {leading}
+        <Button icon={<Play />} loading={running} disabled={paused} onClick={runCycle}>
           {running ? `Running ${runLabel}…` : clockMode === "simulate" ? `Run day ${nextDay}` : "Run cycle now"}
-          {running && <span aria-hidden className="absolute inset-x-0 bottom-0 h-0.5 overflow-hidden bg-on-agent/20"><span className="block h-full w-2/5 bg-on-agent motion-safe:animate-sweep" /></span>}
-        </button>
+        </Button>
       </div>
-      <p aria-live="polite" className={`min-h-4 text-xs ${failed ? "text-refused" : "text-ink-2"}`}>
-        {running ? `Agent is ${STEPS.join(" · ")}.` : (message ?? (paused ? "The agent is paused. Resume it to run a cycle." : null))}
+      {running && <ProgressBar label={`Running ${runLabel}`} className="sm:w-56" />}
+      <p aria-live="polite" className={cn("min-h-4 max-w-sm text-xs leading-relaxed sm:text-right", error ? "text-refused" : "text-ink-2")}>
+        {status}
       </p>
     </div>
   );

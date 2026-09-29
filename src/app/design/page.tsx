@@ -24,9 +24,12 @@ import { Tooltip } from "@/components/ui/Tooltip";
 import CounterpartyIntake from "@/components/intake/CounterpartyIntake";
 import InvoiceCsvImport from "@/components/intake/InvoiceCsvImport";
 import InvoiceIntake from "@/components/intake/InvoiceIntake";
+import AgentControlsClient from "@/components/AgentControlsClient";
+import AgentPauseControl from "@/components/AgentPauseControl";
 import MembersPanel from "@/components/MembersPanel";
 import MilestoneVerification from "@/components/MilestoneVerification";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
+import { PageHead } from "@/components/vx/Shell";
 import { COUNTERPARTIES, DESIGN_SLUG, INVITATIONS, MEMBERS } from "./fixtures";
 import { FeedbackDemo, FormLab, OverlayDemo, TabsDemo } from "./Demos";
 import { FrameDemo } from "./Screens";
@@ -400,6 +403,18 @@ export default function DesignPage() {
               Without a signed-in member of a real workspace every submission is refused — which is how the refusal path is checked here: the message appears beside the form and what you typed stays.
             </Callout>
             <FrameDemo />
+            <Card className="p-4 sm:p-6">
+              <PageHead
+                title="Treasury"
+                sub="What the agent holds, what it decided, and why."
+                right={<AgentControlsClient orgSlug={DESIGN_SLUG} nextDay={27} clockMode="simulate" leading={<AgentPauseControl orgSlug={DESIGN_SLUG} paused={false} canPause canResume />} />}
+              />
+              <PageHead
+                title="Treasury, paused"
+                sub="The same head while the agent is paused: Resume beside a disabled Run."
+                right={<AgentControlsClient orgSlug={DESIGN_SLUG} nextDay={27} clockMode="simulate" paused leading={<AgentPauseControl orgSlug={DESIGN_SLUG} paused canPause canResume />} />}
+              />
+            </Card>
             <CounterpartyIntake orgSlug={DESIGN_SLUG} />
             <Card className="p-4 sm:p-6">
               <Tabs defaultValue="manual">

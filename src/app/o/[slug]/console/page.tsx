@@ -93,10 +93,14 @@ export default async function DashboardPage({
           title={sectionTitle("treasury")}
           sub="What the agent holds, what it decided, and why."
           right={
-            <div className="flex flex-wrap items-start gap-2 md:justify-end">
-              <AgentPauseControl orgSlug={slug} paused={paused} canPause={can(role, "agent.pause")} canResume={can(role, "agent.resume")} />
-              <AgentControls orgSlug={slug} nextDay={dashboardStats.day + 1} headSeq={headSeq} clockMode={dashboardStats.clockMode} paused={paused} />
-            </div>
+            <AgentControls
+              orgSlug={slug}
+              nextDay={dashboardStats.day + 1}
+              headSeq={headSeq}
+              clockMode={dashboardStats.clockMode}
+              paused={paused}
+              leading={<AgentPauseControl orgSlug={slug} paused={paused} canPause={can(role, "agent.pause")} canResume={can(role, "agent.resume")} />}
+            />
           }
         />
 
