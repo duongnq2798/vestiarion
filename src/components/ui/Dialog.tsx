@@ -17,6 +17,8 @@ export type DialogContentProps = Omit<ComponentProps<typeof DialogPrimitive.Cont
   /** Keeps the title and description for screen readers only. */
   hideHeader?: boolean;
   showClose?: boolean;
+  /** Classes for the scrolling body that holds `children`. */
+  bodyClassName?: string;
 };
 
 /**
@@ -33,6 +35,7 @@ export function DialogContent({
   hideHeader = false,
   showClose = true,
   className,
+  bodyClassName,
   children,
   onOpenAutoFocus,
   onCloseAutoFocus,
@@ -43,7 +46,7 @@ export function DialogContent({
     <DialogPrimitive.Portal>
       <DialogPrimitive.Overlay data-overlay-backdrop="" className={overlayBackdrop} />
       <DialogPrimitive.Content
-        className={cn(dialogPanel, dialogMotion, "grid max-w-lg gap-5", className)}
+        className={cn(dialogPanel, dialogMotion, "flex max-w-lg flex-col gap-5 overflow-hidden", className)}
         {...(description ? {} : { "aria-describedby": undefined })}
         onOpenAutoFocus={(event) => {
           const active = document.activeElement;
@@ -60,19 +63,14 @@ export function DialogContent({
         }}
         {...props}
       >
-        <div className={cn("space-y-1.5", "col-start-1 row-start-1", showClose && "pr-10", hideHeader && "sr-only")}>
+        <div className={cn("shrink-0 space-y-1.5", showClose && "pr-10", hideHeader && "sr-only")}>
           <DialogPrimitive.Title className="text-lg font-semibold tracking-tight text-ink">{title}</DialogPrimitive.Title>
           {description && <DialogPrimitive.Description className="text-sm leading-relaxed text-ink-2">{description}</DialogPrimitive.Description>}
         </div>
-        {children}
+        <div className={cn("-m-1 min-h-0 flex-1 overflow-y-auto p-1", bodyClassName)}>{children}</div>
         {showClose && (
           <DialogPrimitive.Close asChild>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Close"
-              className="sticky top-0 z-10 col-start-1 row-start-1 -mr-2 -mt-2 justify-self-end sm:-mr-3 sm:-mt-3"
-            >
+            <Button variant="ghost" size="icon-sm" aria-label="Close" className="absolute right-3 top-3">
               <X />
             </Button>
           </DialogPrimitive.Close>

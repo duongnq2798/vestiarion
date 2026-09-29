@@ -242,7 +242,7 @@ export function OverlayDemo() {
                 Add a counterparty
               </Button>
             </DialogTrigger>
-            <DialogContent title="Add a counterparty" description="Screening runs as soon as it is saved.">
+            <DialogContent title="Add a counterparty" description="Screening runs as soon as it is saved." bodyClassName="space-y-5">
               <Field id="dialog-name" label="Legal or trading name">
                 <Input name="name" autoComplete="organization" />
               </Field>
@@ -260,7 +260,7 @@ export function OverlayDemo() {
             <DialogTrigger asChild>
               <Button variant="secondary">A long dialog</Button>
             </DialogTrigger>
-            <DialogContent title="A long dialog">
+            <DialogContent title="A long dialog" bodyClassName="space-y-3">
               {Array.from({ length: 12 }, (_, index) => (
                 <p key={index} className="text-sm leading-relaxed text-ink-2">
                   A modal panel with a required title. Escape, the close button or a click outside closes it.
