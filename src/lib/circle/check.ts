@@ -4,8 +4,14 @@ import {
 } from "@circle-fin/developer-controlled-wallets";
 import { withDeadline } from "./settlement";
 
-/** The Circle calls that checking a key and provisioning wallets make. */
-export type CircleClient = Pick<CircleDeveloperControlledWalletsClient, "listWalletSets" | "createWalletSet" | "createWallets">;
+/**
+ * The Circle calls that checking a key, provisioning wallets and proving a
+ * replacement key belongs to the same entity (`getWallet`) make.
+ */
+export type CircleClient = Pick<
+  CircleDeveloperControlledWalletsClient,
+  "listWalletSets" | "createWalletSet" | "createWallets" | "getWallet"
+>;
 
 /** Builds a Circle client from one organization's credentials. Tests pass a fake; production uses the SDK's. */
 export type CircleClientFactory = (credentials: { apiKey: string; entitySecret: string }) => CircleClient;

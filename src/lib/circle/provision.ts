@@ -65,8 +65,12 @@ function isEntitySecretRejection(error: unknown): boolean {
   return error instanceof Error && !circleHttpStatus(error) && error.message.startsWith("hexToBytes:");
 }
 
-/** Runs one Circle call under its deadline, and turns every failure into an error that carries no secret. */
-async function circleCall<T>(call: string, work: () => Promise<T>, write: boolean): Promise<T> {
+/**
+ * Runs one Circle call under its 15 s deadline, and turns every failure into
+ * an error that carries no secret: `EntitySecretRejected` for a write the
+ * secret was refused on, otherwise `CircleCallFailed` with the status only.
+ */
+export async function circleCall<T>(call: string, work: () => Promise<T>, write: boolean): Promise<T> {
   try {
     return await withDeadline(work(), WALLET_CALL_DEADLINE_MS, `no answer from Circle ${call} within ${WALLET_CALL_DEADLINE_MS} ms`);
   } catch (error) {
