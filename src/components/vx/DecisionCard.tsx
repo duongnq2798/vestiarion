@@ -125,10 +125,15 @@ function EvidenceRow({ items }: { items: Evidence[] }) {
           >
             <span className={item.state === "missing" ? undefined : "text-ink-3"}>{item.label}</span>
             {item.href ? (
-              <a href={item.href} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 font-mono text-agent transition-colors duration-150 ease-standard hover:underline">
+              <a
+                href={item.href}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={`${item.label} ${item.value} (opens in a new tab)`}
+                className="inline-flex items-center gap-0.5 font-mono text-agent transition-colors duration-150 ease-standard hover:underline"
+              >
                 {item.value}
                 <ArrowUpRight aria-hidden />
-                <span className="sr-only">(opens in a new tab)</span>
               </a>
             ) : (
               <span className="font-mono text-ink">{item.value}</span>

@@ -11,6 +11,8 @@ interface VerificationResponse {
   checkedEntries?: number;
   brokenAt?: number;
   reason?: string;
+  /** What the API route sends for a refused request (401/404/500), instead of `reason`. */
+  error?: string;
   /** Configuration problems met on the way to the verdict; not about the chain. */
   warnings?: string[];
 }
@@ -39,7 +41,8 @@ export function verificationVerdict(result: VerificationResponse | null): Verdic
       body: result.reason ?? "verification failed",
     };
   }
-  return { tone: "neutral", title: "Not checked", body: `${result.reason ?? "no verdict was produced"}. This is not a finding about the chain.` };
+  const cause = (result.reason ?? result.error ?? "no verdict was produced").replace(/\.$/, "");
+  return { tone: "neutral", title: "Not checked", body: `${cause}. This is not a finding about the chain.` };
 }
 
 export default function VerifyLedgerBadge({ orgSlug }: { orgSlug: string }) {

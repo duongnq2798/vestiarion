@@ -127,7 +127,7 @@ function InvoiceSection({ title, meta, decisions, orgSlug }: { title: string; me
     <section>
       <SectionHeader title={title} meta={meta} />
       {decisions.length === 0 ? (
-        <EmptyState titleAs="h2" compact title={`No ${title.toLowerCase()} here`} body="There are no records in this view." />
+        <EmptyState compact title={`No ${title.toLowerCase()} here`} body="There are no records in this view." />
       ) : (
         <div className="space-y-4">{decisions.map((decision) => <DecisionCard key={decision.id} decision={decision} orgSlug={orgSlug} />)}</div>
       )}

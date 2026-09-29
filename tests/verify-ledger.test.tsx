@@ -29,6 +29,13 @@ describe("verificationVerdict", () => {
     expect(verdict?.title).toBe("Not checked");
     expect(verdict?.body).toBe("Failed to fetch. This is not a finding about the chain.");
   });
+
+  it("reads the API route's `error` field when there is no `reason`, without doubling the full stop", () => {
+    const verdict = verificationVerdict({ error: "Sign in to verify this ledger." });
+    expect(verdict?.tone).toBe("neutral");
+    expect(verdict?.title).toBe("Not checked");
+    expect(verdict?.body).toBe("Sign in to verify this ledger. This is not a finding about the chain.");
+  });
 });
 
 describe("VerifyLedgerBadge", () => {
