@@ -92,6 +92,27 @@
   animation-play-state: paused !important;
 }
 
+/* The ledger grid, drawn for the dark "How it works" section. */
+@utility ledger-grid-dark {
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--color-ground) 5%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--color-ground) 5%, transparent) 1px, transparent 1px);
+  background-size: 32px 32px;
+  mask-image: radial-gradient(ellipse 80% 70% at 50% 30%, #000, transparent);
+}
+
+/* A dashed connector whose dashes travel downward, the way a step hands its
+   result to the next. Still under reduced motion. */
+@utility chain-flow {
+  background-image: linear-gradient(to bottom, currentColor 50%, transparent 0);
+  background-size: 1px 8px;
+  animation: chain-flow 900ms linear infinite;
+}
+
+@keyframes chain-flow {
+  to { background-position: 0 8px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .replay,
   .replay * {
