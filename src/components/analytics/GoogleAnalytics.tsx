@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import Script from "next/script";
-import { redactPath } from "@/lib/analytics/redact";
+import { redactPath, redactReferrer, redactTitle } from "@/lib/analytics/redact";
 
 type GoogleAnalyticsProps = {
   measurementId: string;
@@ -12,11 +12,12 @@ type GoogleAnalyticsProps = {
 type PageParameters = {
   page_location: string;
   page_path: string;
+  page_referrer: string;
   page_title: string;
 };
 
 type Gtag = {
-  (command: "set", parameters: PageParameters): void;
+  (command: "set", parameters: Partial<PageParameters>): void;
   (command: "event", eventName: "page_view", parameters: PageParameters): void;
 };
 
@@ -31,10 +32,12 @@ export function GoogleAnalytics({ measurementId }: GoogleAnalyticsProps) {
 
     const pagePath = redactPath(pathname);
     const analyticsWindow = window as Window & { gtag?: Gtag };
+    const origin = window.location.origin;
     const parameters = {
-      page_location: `${window.location.origin}${pagePath}`,
+      page_location: `${origin}${pagePath}`,
       page_path: pagePath,
-      page_title: document.title,
+      page_referrer: redactReferrer(document.referrer, origin),
+      page_title: redactTitle(pathname, document.title),
     };
     analyticsWindow.gtag?.("set", parameters);
     analyticsWindow.gtag?.("event", "page_view", parameters);
@@ -53,8 +56,7 @@ export function GoogleAnalytics({ measurementId }: GoogleAnalyticsProps) {
           window.gtag('js', new Date());
           window.gtag('set', {
             page_location: window.location.origin + ${serializedPagePath},
-            page_path: ${serializedPagePath},
-            page_title: document.title
+            page_path: ${serializedPagePath}
           });
           window.gtag('config', ${serializedMeasurementId}, {
             send_page_view: false,
