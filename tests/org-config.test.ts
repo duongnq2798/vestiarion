@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { configFromEnv } from "@/lib/config";
+import { configFromEnv, type VestiarionConfig } from "@/lib/config";
 import { FOUNDING_ORG_ID, orgConfig, type OrgRow } from "@/lib/dal/org-config";
 import { encryptSecret, parseMasterKeys } from "@/lib/secrets";
 
@@ -156,10 +156,22 @@ describe("orgConfig — hosted wallets (H1, H7; Review Focus 1 and 5)", () => {
   const noHostedPair = { ...hostedBase, chain: { ...hostedBase.chain, hostedCircleApiKey: undefined, hostedCircleEntitySecret: undefined } };
   const NOT_CONFIGURED = "the hosted Circle account is not configured on this deployment";
 
-  const expectNoHostedPair = (config: { chain: { circleApiKey?: string; circleEntitySecret?: string } }) => {
+  /** Ruling R4: an organization that is not hosted carries the platform pair under no key at all. */
+  const expectNoHostedPair = (config: VestiarionConfig) => {
     expect(config.chain.circleApiKey).not.toBe(HOSTED_KEY);
     expect(config.chain.circleEntitySecret).not.toBe(HOSTED_SECRET);
+    const text = JSON.stringify(config);
+    expect(text).not.toContain(HOSTED_KEY);
+    expect(text).not.toContain(HOSTED_SECRET);
   };
+
+  /** Ruling R4: every organization's chain config drops the platform pair's own keys. */
+  const expectPairKeysStripped = (config: VestiarionConfig) => {
+    expect(Object.keys(config.chain)).not.toContain("hostedCircleApiKey");
+    expect(Object.keys(config.chain)).not.toContain("hostedCircleEntitySecret");
+  };
+
+  const occurrences = (text: string, value: string) => text.split(value).length - 1;
 
   it("own: an own-account workspace uses its own credentials, not the hosted pair", () => {
     const { config, warnings } = orgConfig(hostedBase, row(OTHER_ORG, { apiKey: "org-key", entity: "org-secret" }, keys, OTHER_ORG, "own"), keys);
@@ -270,5 +282,73 @@ describe("orgConfig — hosted wallets (H1, H7; Review Focus 1 and 5)", () => {
     const { config } = orgConfig(hostedBase, legacy, keys);
     expectNoHostedPair(config);
     expect(config.chain.circleApiKey).toBeUndefined();
+    expect(config.chain.walletHost).toBeNull();
+  });
+
+  describe("ruling R4: the platform pair is stripped, and only a boolean says it exists", () => {
+    const cases = [
+      ["own, with credentials", row(OTHER_ORG, { apiKey: "org-key", entity: "org-secret" }, keys, OTHER_ORG, "own")],
+      ["own, without credentials", row(OTHER_ORG, {}, keys, OTHER_ORG, "own")],
+      ["own, credentials unreadable", row(OTHER_ORG, { apiKey: "org-key", entity: "org-secret" }, strangerKeys, OTHER_ORG, "own")],
+      ["not chosen", row(OTHER_ORG, {}, keys, OTHER_ORG, null)],
+      ["the founding workspace", row(FOUNDING_ORG_ID, { apiKey: "org-key", entity: "org-secret" }, keys, FOUNDING_ORG_ID, null)],
+    ] as const;
+
+    it.each(cases)("%s: the config contains the pair under no key, and says hostedAvailable", (_label, org) => {
+      const { config, warnings } = orgConfig(hostedBase, org, keys);
+      expectNoHostedPair(config);
+      expectPairKeysStripped(config);
+      expect(JSON.stringify(warnings)).not.toContain(HOSTED_KEY);
+      expect(config.chain.hostedAvailable).toBe(true);
+    });
+
+    it.each(cases)("%s: hostedAvailable is false on a deployment without the pair", (_label, org) => {
+      const { config } = orgConfig(noHostedPair, org, keys);
+      expectPairKeysStripped(config);
+      expect(config.chain.hostedAvailable).toBe(false);
+    });
+
+    it("hosted: the pair appears once each, as circleApiKey and circleEntitySecret only", () => {
+      const { config } = orgConfig(hostedBase, row(OTHER_ORG, {}, keys, OTHER_ORG, "hosted"), keys);
+      expectPairKeysStripped(config);
+      const text = JSON.stringify(config);
+      expect(occurrences(text, HOSTED_KEY)).toBe(1);
+      expect(occurrences(text, HOSTED_SECRET)).toBe(1);
+      expect(config.chain.circleApiKey).toBe(HOSTED_KEY);
+      expect(config.chain.circleEntitySecret).toBe(HOSTED_SECRET);
+      expect(config.chain.hostedAvailable).toBe(true);
+    });
+
+    it("half a pair is not available", () => {
+      for (const half of [
+        { ...hostedBase, chain: { ...hostedBase.chain, hostedCircleApiKey: undefined } },
+        { ...hostedBase, chain: { ...hostedBase.chain, hostedCircleEntitySecret: undefined } },
+      ]) {
+        const { config } = orgConfig(half, row(OTHER_ORG, {}, keys, OTHER_ORG, null), keys);
+        expect(config.chain.hostedAvailable).toBe(false);
+        expectPairKeysStripped(config);
+        expectNoHostedPair(config);
+      }
+    });
+
+    it("hostedAvailable is a boolean and nothing more", () => {
+      const { config } = orgConfig(hostedBase, row(OTHER_ORG), keys);
+      expect(typeof config.chain.hostedAvailable).toBe("boolean");
+    });
+
+    it.each([
+      ["own", "own"],
+      ["hosted", "hosted"],
+      ["not chosen", null],
+    ] as const)("%s: walletHost carries the row's wallet_host, for provisioning to name the wallet set", (_label, host) => {
+      const { config } = orgConfig(hostedBase, row(OTHER_ORG, {}, keys, OTHER_ORG, host), keys);
+      expect(config.chain.walletHost).toBe(host);
+    });
+
+    it("the platform config the scope was built from is not changed", () => {
+      const before = structuredClone(hostedBase);
+      orgConfig(hostedBase, row(OTHER_ORG, {}, keys, OTHER_ORG, "own"), keys);
+      expect(hostedBase).toEqual(before);
+    });
   });
 });

@@ -2,7 +2,15 @@ import { inspect } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
-import { connectCircleAction, createWalletsAction, goLiveAction, refreshBalanceAction, type BalanceActionResult, type GoLiveActionResult } from "@/app/actions/go-live";
+import {
+  chooseHostedWalletAction,
+  connectCircleAction,
+  createWalletsAction,
+  goLiveAction,
+  refreshBalanceAction,
+  type BalanceActionResult,
+  type GoLiveActionResult,
+} from "@/app/actions/go-live";
 import { GoLiveError } from "@/lib/platform/go-live";
 import { fakeSupabase } from "./support/fake-supabase";
 
@@ -30,7 +38,8 @@ vi.mock("next/cache", () => ({ revalidatePath: revalidatePathMock }));
 const { authorizeMock } = vi.hoisted(() => ({ authorizeMock: vi.fn() }));
 vi.mock("@/lib/auth/authorize", () => ({ authorize: authorizeMock }));
 
-const { connectCircleMock, createWalletsMock, goLiveMock, operatingBalanceMock } = vi.hoisted(() => ({
+const { chooseHostedWalletMock, connectCircleMock, createWalletsMock, goLiveMock, operatingBalanceMock } = vi.hoisted(() => ({
+  chooseHostedWalletMock: vi.fn(),
   connectCircleMock: vi.fn(),
   createWalletsMock: vi.fn(),
   goLiveMock: vi.fn(),
@@ -38,7 +47,14 @@ const { connectCircleMock, createWalletsMock, goLiveMock, operatingBalanceMock }
 }));
 vi.mock("@/lib/platform/go-live", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/platform/go-live")>();
-  return { ...actual, connectCircle: connectCircleMock, createWallets: createWalletsMock, goLive: goLiveMock, operatingBalance: operatingBalanceMock };
+  return {
+    ...actual,
+    chooseHostedWallet: chooseHostedWalletMock,
+    connectCircle: connectCircleMock,
+    createWallets: createWalletsMock,
+    goLive: goLiveMock,
+    operatingBalance: operatingBalanceMock,
+  };
 });
 
 const config = configFromEnv({
@@ -78,6 +94,7 @@ const ACTIONS = [
   ["connectCircleAction", connectCircleAction, connectForm, connectCircleMock],
   ["createWalletsAction", createWalletsAction, () => form(), createWalletsMock],
   ["goLiveAction", goLiveAction, () => form(), goLiveMock],
+  ["chooseHostedWalletAction", chooseHostedWalletAction, () => form(), chooseHostedWalletMock],
 ] as const;
 
 const logged: string[] = [];
@@ -239,6 +256,53 @@ describe("goLiveAction", () => {
     authorizeMock.mockResolvedValueOnce(owner());
     goLiveMock.mockRejectedValueOnce(new GoLiveError(code));
     await expect(run(() => goLiveAction(INITIAL, form()))).resolves.toEqual({ ok: false, message });
+  });
+});
+
+describe("chooseHostedWalletAction", () => {
+  it("passes the org and actor through, and says what comes next", async () => {
+    authorizeMock.mockResolvedValueOnce(owner());
+    chooseHostedWalletMock.mockResolvedValueOnce(undefined);
+    const result = await run(() => chooseHostedWalletAction(INITIAL, form()));
+    expect(chooseHostedWalletMock).toHaveBeenCalledWith({ orgId: ORG, actorId: USER });
+    expect(result).toEqual({ ok: true, message: "This workspace will use a Vestiarion testnet wallet; create its treasury wallets next." });
+    expectSafe(result);
+    expect(revalidatePathMock).toHaveBeenCalledWith("/o/[slug]", "layout");
+  });
+
+  it("ignores any credentials a form carries: the choice takes none", async () => {
+    authorizeMock.mockResolvedValueOnce(owner());
+    chooseHostedWalletMock.mockResolvedValueOnce(undefined);
+    const result = await run(() => chooseHostedWalletAction(INITIAL, connectForm()));
+    expect(chooseHostedWalletMock).toHaveBeenCalledWith({ orgId: ORG, actorId: USER });
+    expectSafe(result);
+  });
+
+  it.each([
+    ["hosted_unavailable", "Hosted testnet wallets are not available on this deployment."],
+    ["hosted_not_allowed", "A workspace with its own Circle account or wallets cannot switch to a hosted wallet."],
+    ["hosted_limit_reached", "All hosted testnet wallets are taken; connect your own Circle account instead."],
+  ] as const)("returns %s's message, and revalidates nothing", async (code, message) => {
+    authorizeMock.mockResolvedValueOnce(owner());
+    chooseHostedWalletMock.mockRejectedValueOnce(new GoLiveError(code));
+    const result = await run(() => chooseHostedWalletAction(INITIAL, form()));
+    expect(result).toEqual({ ok: false, message });
+    expectSafe(result);
+    expect(revalidatePathMock).not.toHaveBeenCalled();
+    expect(logged).toEqual([]);
+  });
+});
+
+describe("connectCircleAction on a hosted workspace", () => {
+  it("returns hosted_has_wallets's message", async () => {
+    authorizeMock.mockResolvedValueOnce(owner());
+    connectCircleMock.mockRejectedValueOnce(new GoLiveError("hosted_has_wallets"));
+    const result = await run(() => connectCircleAction(INITIAL, connectForm()));
+    expect(result).toEqual({
+      ok: false,
+      message: "This workspace's wallets are hosted by Vestiarion; start a new workspace to use your own Circle account.",
+    });
+    expectSafe(result);
   });
 });
 

@@ -10,8 +10,19 @@ import {
   type CircleClientFactory,
 } from "./check";
 
-/** The wallet set every organization's treasury wallets are created in, inside its own Circle entity. */
+/** The wallet set an own-account organization's treasury wallets are created in, inside its own Circle entity. */
 export const TREASURY_WALLET_SET = "vestiarion-treasury";
+
+/**
+ * The wallet set an organization's treasury wallets belong in (hosted wallets
+ * H3). An organization with its own Circle entity has it to itself, so every
+ * such organization uses `vestiarion-treasury`. Hosted organizations share the
+ * platform's hosted entity, so each has a set of its own, named for its id:
+ * the name says which workspace a wallet in that entity belongs to.
+ */
+export function walletSetName(orgId: string, host: "own" | "hosted" | null | undefined): string {
+  return host === "hosted" ? `vestiarion-${orgId}` : TREASURY_WALLET_SET;
+}
 
 const WALLET_CALL_DEADLINE_MS = 15_000;
 const SIMULATED_SUFFIX = " (simulated)";
@@ -82,20 +93,24 @@ export async function circleCall<T>(call: string, work: () => Promise<T>, write:
 }
 
 /**
- * The id of the treasury wallet set, creating it the first time.
+ * The id of the treasury wallet set of the organization in scope, creating it
+ * the first time. Its name (`walletSetName`) comes from the same scope
+ * configuration as the client's credentials, so a hosted organization's
+ * wallets always land in its own set inside the hosted entity.
  *
  * Two first runs at once can each create a set of that name. That is
  * harmless: a wallet works from either, and later runs take the first found.
  */
 export async function treasuryWalletSetId(client: CircleClient): Promise<string> {
+  const name = walletSetName(currentOrgId(), currentOrgConfig().chain.walletHost);
   const listed = await circleCall("listWalletSets", () => client.listWalletSets({ pageSize: 50 }), false);
   // The SDK types wallet sets as a union whose end-user variant has no
   // `name`; developer-controlled sets always have one.
   const sets = (listed.data?.walletSets ?? []) as Array<{ id: string; name?: string }>;
-  const existing = sets.find((set) => set.name === TREASURY_WALLET_SET)?.id;
+  const existing = sets.find((set) => set.name === name)?.id;
   if (existing) return existing;
 
-  const created = await circleCall("createWalletSet", () => client.createWalletSet({ name: TREASURY_WALLET_SET }), true);
+  const created = await circleCall("createWalletSet", () => client.createWalletSet({ name }), true);
   const id = created.data?.walletSet?.id;
   if (!id) throw new CircleCallFailed("createWalletSet");
   return id;
@@ -151,8 +166,9 @@ function withoutSimulated(name: string): string {
 
 /**
  * Gives every treasury account of the organization in scope a Circle
- * developer-controlled wallet on its chain, minted with the organization's
- * own credentials, drops " (simulated)" from the account's name, and zeroes
+ * developer-controlled wallet on its chain, minted with the credentials its
+ * scope holds (its own, or for a hosted organization the platform's hosted
+ * pair, in a set of its own: `walletSetName`), drops " (simulated)" from the account's name, and zeroes
  * its balance: the stored balance was the simulation's, and the new wallet
  * holds nothing until it is funded, so a simulated balance (or a simulated
  * reserve) never carries into live mode. Reconcile reads the real one.

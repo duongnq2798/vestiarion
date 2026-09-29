@@ -83,13 +83,19 @@ export function orgConfig(
     if (org[column] && value === undefined) credentialsUnreadable ??= warnings[before];
     return value;
   };
+  // Ruling R4: the platform pair leaves under no key of its own. A hosted
+  // organization receives it as its Circle credentials, below; every other
+  // organization never holds it at all, only whether it exists.
+  const { hostedCircleApiKey, hostedCircleEntitySecret, ...platformChain } = base.chain;
+  const hostedAvailable = Boolean(hostedCircleApiKey && hostedCircleEntitySecret);
+  const walletHost = org.wallet_host === "hosted" || org.wallet_host === "own" ? org.wallet_host : null;
+
   let circleApiKey: string | undefined;
   let circleEntitySecret: string | undefined;
-  if (org.wallet_host === "hosted") {
+  if (walletHost === "hosted") {
     // The hosted pair, whole or not at all. A hosted organization's own
     // credential columns are not opened: it pays from the platform's hosted
     // entity only, and switching to its own account clears the choice (H4).
-    const { hostedCircleApiKey, hostedCircleEntitySecret } = base.chain;
     if (hostedCircleApiKey && hostedCircleEntitySecret) {
       circleApiKey = hostedCircleApiKey;
       circleEntitySecret = hostedCircleEntitySecret;
@@ -107,10 +113,12 @@ export function orgConfig(
       ...base,
       businessName: org.name,
       chain: {
-        ...base.chain,
+        ...platformChain,
         circleApiKey,
         circleEntitySecret,
         credentialsUnreadable,
+        hostedAvailable,
+        walletHost,
       },
       ledgerSigningKey: open("ledger_signing_key_enc"),
       ledgerPublicKey: undefined,

@@ -31,7 +31,10 @@ const WALLETS: GoLiveStatus["wallets"] = [
 ];
 
 function status(overrides: Partial<GoLiveStatus> = {}): GoLiveStatus {
-  return { step: "connect", connected: false, wallets: [], liveSince: null, credentialsUnreadable: false, ...overrides };
+  return {
+    step: "connect", connected: false, host: null, hostedAvailable: false, wallets: [], liveSince: null, credentialsUnreadable: false,
+    ...overrides,
+  };
 }
 
 const STEPS: Record<GoLiveStatus["step"], GoLiveStatus> = {

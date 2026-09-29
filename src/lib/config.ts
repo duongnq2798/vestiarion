@@ -63,6 +63,18 @@ export interface ChainConfig {
    */
   hostedCircleApiKey?: string;
   hostedCircleEntitySecret?: string;
+  /**
+   * Whether this deployment has the hosted pair, so the hosted choice can be
+   * offered. Set only by `orgConfig`: an organization's configuration never
+   * carries the platform pair under its own keys, only this boolean (R4).
+   */
+  hostedAvailable?: boolean;
+  /**
+   * The organization's `wallet_host` (0030), set only by `orgConfig`, from the
+   * same row the credentials above were chosen by: provisioning names the
+   * wallet set by it (H3), so the set and the entity always agree.
+   */
+  walletHost?: "own" | "hosted" | null;
 }
 
 export interface LlmConfig {

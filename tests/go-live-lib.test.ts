@@ -7,12 +7,20 @@ import {
   RatelimitError,
   UnauthorizedError,
 } from "@circle-fin/developer-controlled-wallets";
-import { configFromEnv } from "@/lib/config";
+import { configFromEnv, type VestiarionConfig } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { withOrg } from "@/lib/dal/scope";
 import type { CircleClient, CircleClientFactory } from "@/lib/circle/check";
 import { TREASURY_WALLET_SET } from "@/lib/circle/provision";
-import { connectCircle, createWallets, goLive, GoLiveError, goLiveStatus, operatingBalance } from "@/lib/platform/go-live";
+import {
+  chooseHostedWallet,
+  connectCircle,
+  createWallets,
+  goLive,
+  GoLiveError,
+  goLiveStatus,
+  operatingBalance,
+} from "@/lib/platform/go-live";
 import { decryptSecret, encryptSecret, parseMasterKeys, type SecretEnvelope } from "@/lib/secrets";
 import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 
@@ -32,12 +40,25 @@ const OLD_API_KEY = "TEST_API_KEY:old-key-id:old-key-secret-value";
 const OLD_ENTITY_SECRET = "0ld5".repeat(16);
 const REQUEST = { url: "/v1/w3s/wallets/x", method: "GET" };
 const LEAKY = `Bearer ${API_KEY} ${ENTITY_SECRET}`;
+const HOSTED_API_KEY = "TEST_API_KEY:hosted-key-id:hosted-key-secret-value";
+const HOSTED_ENTITY_SECRET = "4057ed".repeat(10) + "beef";
+const SECRETS = [API_KEY, ENTITY_SECRET, OLD_API_KEY, OLD_ENTITY_SECRET, HOSTED_API_KEY, HOSTED_ENTITY_SECRET];
 
 const config = configFromEnv({
   NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid",
   SUPABASE_SERVICE_ROLE_KEY: "k",
   NEXT_PUBLIC_SUPABASE_ANON_KEY: "test-anon-key",
   SUPABASE_JWT_SECRET: "test-request-token-secret-at-least-32-characters",
+});
+
+/** A deployment with the platform's hosted Circle pair (hosted wallets H2). */
+const hostedConfig = configFromEnv({
+  NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid",
+  SUPABASE_SERVICE_ROLE_KEY: "k",
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: "test-anon-key",
+  SUPABASE_JWT_SECRET: "test-request-token-secret-at-least-32-characters",
+  HOSTED_CIRCLE_API_KEY: HOSTED_API_KEY,
+  HOSTED_CIRCLE_ENTITY_SECRET: HOSTED_ENTITY_SECRET,
 });
 
 const MASTER_KEYS = `t1:${crypto.randomBytes(32).toString("base64")}`;
@@ -62,6 +83,7 @@ interface State {
     ledger_signing_key_enc: SecretEnvelope;
     circle_api_key_enc: SecretEnvelope | null;
     circle_entity_secret_enc: SecretEnvelope | null;
+    wallet_host: "own" | "hosted" | null;
   };
   accounts: AccountRow[];
   wentLive: Array<{ ts: string }>;
@@ -76,6 +98,7 @@ function sandbox(overrides: Partial<State["org"]> = {}): State {
       ledger_signing_key_enc: seal(LEDGER_PEM, "ledger_signing_key_enc"),
       circle_api_key_enc: null,
       circle_entity_secret_enc: null,
+      wallet_host: null,
       ...overrides,
     },
     accounts: [
@@ -107,6 +130,11 @@ function founding(): State {
   return withWallets(connected({ mode: "live" }));
 }
 
+/** A sandbox that chose the hosted testnet wallet: no credentials of its own. */
+function hosted(overrides: Partial<State["org"]> = {}): State {
+  return sandbox({ wallet_host: "hosted", ...overrides });
+}
+
 const eqValue = (request: RecordedRequest, column: string) => request.params.get(column)?.replace(/^eq\./, "");
 
 /** A PostgREST projection of the org row: plain columns, and `alias:column->>k` for an envelope's key id. */
@@ -130,14 +158,48 @@ function one(request: RecordedRequest, rows: unknown[]): FakeReply {
   return { body: asObject ? rows[0] : rows };
 }
 
-function database(state: State, options: { orgUpdateMatchesNothing?: boolean } = {}) {
+interface DatabaseOptions {
+  orgUpdateMatchesNothing?: boolean;
+  /** The platform configuration the scope is built from: `config` (no hosted pair) unless given. */
+  platform?: VestiarionConfig;
+  /** How many other workspaces are hosted already, for `choose_hosted_wallet`'s limit. */
+  otherHosted?: number;
+  /** Runs just before an update to the org row is applied: another owner's change, landing in between. */
+  beforeOrgPatch?: () => void;
+  /** `choose_hosted_wallet` fails with this message instead of running. */
+  chooseError?: string;
+}
+
+/** PostgREST's answer to a `raise exception` in a function. */
+const raised = (message: string): FakeReply => ({ status: 400, body: { code: "P0001", message, details: null, hint: null } });
+
+/** `choose_hosted_wallet` (0030), as the fake runs it: the same refusals, in the same order. */
+function chooseHosted(state: State, body: { p_org_id: string; p_limit: number }, options: DatabaseOptions): FakeReply {
+  if (options.chooseError) return raised(options.chooseError);
+  if (body.p_org_id !== ORG) return raised(`org_not_found: no organization with id ${body.p_org_id}`);
+  if (state.org.circle_api_key_enc || state.org.circle_entity_secret_enc || state.accounts.some((account) => account.circle_wallet_id)) {
+    return raised("hosted_not_allowed: a workspace with Circle credentials or wallets cannot switch to a hosted wallet");
+  }
+  if (state.org.wallet_host === "hosted") return { body: null };
+  if (body.p_limit === null || body.p_limit < 0 || (options.otherHosted ?? 0) >= body.p_limit) {
+    return raised("hosted_limit_reached: every hosted testnet wallet is taken");
+  }
+  state.org.wallet_host = "hosted";
+  return { body: null };
+}
+
+function database(state: State, options: DatabaseOptions = {}) {
+  const platform = options.platform ?? config;
   const fake = fakeSupabase((request): FakeReply => {
     if (request.path === "/rest/v1/orgs" && request.method === "GET") {
       return one(request, [projectOrg(state, request.params.get("select") ?? "*")]);
     }
     if (request.path === "/rest/v1/orgs" && request.method === "PATCH") {
+      options.beforeOrgPatch?.();
       const mode = eqValue(request, "mode");
+      const host = request.params.get("wallet_host");
       if (options.orgUpdateMatchesNothing || eqValue(request, "id") !== ORG || (mode && mode !== state.org.mode)) return { body: [] };
+      if (host && host !== `eq.${state.org.wallet_host}`) return { body: [] };
       for (const [filter, value] of request.params) {
         const json = /^(\w+)->>(\w+)$/.exec(filter);
         if (!json) continue;
@@ -160,6 +222,9 @@ function database(state: State, options: { orgUpdateMatchesNothing?: boolean } =
     if (request.path === "/rest/v1/ledger_entries") {
       return { body: eqValue(request, "action") === "workspace_went_live" ? [...state.wentLive].reverse().slice(0, 1) : [] };
     }
+    if (request.path === "/rest/v1/rpc/choose_hosted_wallet") {
+      return chooseHosted(state, request.body as { p_org_id: string; p_limit: number }, options);
+    }
     if (request.path === "/rest/v1/rpc/append_ledger_entry") {
       return {
         body: {
@@ -173,9 +238,10 @@ function database(state: State, options: { orgUpdateMatchesNothing?: boolean } =
   return {
     fake,
     /** Inside the organization's scope, as a server action runs after `inOrg`. */
-    inScope: <T>(fn: () => Promise<T>) => runWith({ config, db: fake.client, fetch: fake.fetch }, () => withOrg(ORG, fn, { userId: ACTOR })),
+    inScope: <T>(fn: () => Promise<T>) =>
+      runWith({ config: platform, db: fake.client, fetch: fake.fetch }, () => withOrg(ORG, fn, { userId: ACTOR })),
     /** Outside any organization's scope, as a script would call it. */
-    unscoped: <T>(fn: () => Promise<T>) => runWith({ config, db: fake.client, fetch: fake.fetch }, fn),
+    unscoped: <T>(fn: () => Promise<T>) => runWith({ config: platform, db: fake.client, fetch: fake.fetch }, fn),
   };
 }
 
@@ -258,7 +324,7 @@ beforeEach(() => {
 
 afterEach(() => {
   for (const line of logged) {
-    for (const secret of [API_KEY, ENTITY_SECRET, OLD_API_KEY, OLD_ENTITY_SECRET]) expect(line).not.toContain(secret);
+    for (const secret of SECRETS) expect(line).not.toContain(secret);
   }
   if (savedMasterKeys === undefined) delete process.env.VESTIARION_MASTER_KEYS;
   else process.env.VESTIARION_MASTER_KEYS = savedMasterKeys;
@@ -273,7 +339,7 @@ async function refusal(work: Promise<unknown>): Promise<GoLiveError> {
   );
   expect(outcome).toBeInstanceOf(GoLiveError);
   const text = inspect(outcome, { depth: 6 });
-  for (const secret of [API_KEY, ENTITY_SECRET]) expect(text).not.toContain(secret);
+  for (const secret of SECRETS) expect(text).not.toContain(secret);
   return outcome as GoLiveError;
 }
 
@@ -290,6 +356,13 @@ describe("GoLiveError", () => {
     ["credentials_unreadable", "The stored Circle credentials cannot be read; reconnect."],
     ["credentials_changed", "The Circle credentials changed while going live; try again."],
     ["no_operating_wallet", "This workspace has no operating wallet; it cannot take new credentials."],
+    ["hosted_unavailable", "Hosted testnet wallets are not available on this deployment."],
+    ["hosted_not_allowed", "A workspace with its own Circle account or wallets cannot switch to a hosted wallet."],
+    ["hosted_limit_reached", "All hosted testnet wallets are taken; connect your own Circle account instead."],
+    [
+      "hosted_has_wallets",
+      "This workspace's wallets are hosted by Vestiarion; start a new workspace to use your own Circle account.",
+    ],
   ] as const)("%s says %j", (code, message) => {
     const error = new GoLiveError(code);
     expect(error.code).toBe(code);
@@ -315,8 +388,11 @@ describe("connectCircle", () => {
     expect(others).toEqual([]);
     expect(update.params.get("id")).toBe(`eq.${ORG}`);
     expect(update.params.get("mode")).toBe("eq.sandbox");
-    const body = update.body as { circle_api_key_enc: SecretEnvelope; circle_entity_secret_enc: SecretEnvelope };
-    expect(Object.keys(body).sort()).toEqual(["circle_api_key_enc", "circle_entity_secret_enc"]);
+    const body = update.body as { circle_api_key_enc: SecretEnvelope; circle_entity_secret_enc: SecretEnvelope; wallet_host: string };
+    // An own-account connect marks the workspace as its own, in the same update (H4).
+    expect(Object.keys(body).sort()).toEqual(["circle_api_key_enc", "circle_entity_secret_enc", "wallet_host"]);
+    expect(body.wallet_host).toBe("own");
+    expect(state.org.wallet_host).toBe("own");
 
     const keys = parseMasterKeys(MASTER_KEYS);
     expect(decryptSecret(body.circle_api_key_enc, { orgId: ORG, column: "circle_api_key_enc" }, keys)).toBe(API_KEY);
@@ -828,7 +904,7 @@ describe("goLiveStatus", () => {
   it("starts a new sandbox at connect", async () => {
     const { fake, inScope } = database(sandbox());
     await expect(inScope(() => goLiveStatus(ORG))).resolves.toEqual({
-      step: "connect", connected: false, wallets: [], liveSince: null, credentialsUnreadable: false,
+      step: "connect", connected: false, host: null, hostedAvailable: false, wallets: [], liveSince: null, credentialsUnreadable: false,
     });
     // Only whether credentials are stored is read, never the envelopes themselves.
     const statusRead = fake.requests.filter((request) => request.path === "/rest/v1/orgs" && request.params.get("select")?.includes("->>"));
@@ -845,6 +921,8 @@ describe("goLiveStatus", () => {
     expect(status).toEqual({
       step: "go_live",
       connected: true,
+      host: null,
+      hostedAvailable: false,
       wallets: [
         { accountName: "Operating", kind: "operating", address: OPERATING_ADDRESS },
         { accountName: "Reserve", kind: "reserve", address: "0x" + "cd".repeat(20) },
@@ -879,6 +957,8 @@ describe("goLiveStatus", () => {
     await expect(database(founding()).inScope(() => goLiveStatus(ORG))).resolves.toEqual({
       step: "live",
       connected: true,
+      host: null,
+      hostedAvailable: false,
       wallets: [
         { accountName: "Operating", kind: "operating", address: OPERATING_ADDRESS },
         { accountName: "Reserve", kind: "reserve", address: "0x" + "cd".repeat(20) },
@@ -922,5 +1002,399 @@ describe("operatingBalance", () => {
     const error = await refusal(database(withWallets(connected())).inScope(() => operatingBalance(provider)));
     expect(error.code).toBe("not_connected");
     expect(provider.getBalance).not.toHaveBeenCalled();
+  });
+});
+
+describe("hosted testnet wallets (hosted wallets H1, H3, H4)", () => {
+  const HOSTED_SET = `vestiarion-${ORG}`;
+  const rpcCalls = (fake: ReturnType<typeof fakeSupabase>) =>
+    fake.requests.filter((request) => request.path === "/rest/v1/rpc/choose_hosted_wallet");
+
+  describe("chooseHostedWallet", () => {
+    it("marks a fresh sandbox hosted through choose_hosted_wallet with the platform limit, and records ids only", async () => {
+      const state = sandbox();
+      const { fake, inScope } = database(state, { platform: hostedConfig });
+
+      await inScope(() => chooseHostedWallet({ orgId: ORG, actorId: ACTOR }));
+
+      const [call, ...others] = rpcCalls(fake);
+      expect(others).toEqual([]);
+      expect(call.body).toEqual({ p_org_id: ORG, p_limit: 100 });
+      expect(state.org.wallet_host).toBe("hosted");
+      // The RPC is the only write: nothing else touches the org row.
+      expect(orgPatches(fake)).toEqual([]);
+      const entries = appends(fake);
+      expect(entries).toHaveLength(1);
+      expect(entries[0]).toMatchObject({ p_org_id: ORG, p_action: "hosted_wallet_chosen", p_domain: "system", p_actor: "human" });
+      expect(entries[0].p_detail).toEqual({ by: ACTOR });
+      const sent = JSON.stringify(fake.requests.map((request) => ({ params: request.params.toString(), body: request.body })));
+      expect(sent).not.toContain(HOSTED_API_KEY);
+      expect(sent).not.toContain(HOSTED_ENTITY_SECRET);
+    });
+
+    it("passes HOSTED_WORKSPACE_LIMIT through", async () => {
+      const { fake, inScope } = database(sandbox(), { platform: { ...hostedConfig, hostedWorkspaceLimit: 3 } });
+      await inScope(() => chooseHostedWallet({ orgId: ORG, actorId: ACTOR }));
+      expect(rpcCalls(fake)[0].body).toEqual({ p_org_id: ORG, p_limit: 3 });
+    });
+
+    it("enters the organization's scope itself when called from outside one", async () => {
+      const state = sandbox();
+      const { fake, unscoped } = database(state, { platform: hostedConfig });
+      await unscoped(() => chooseHostedWallet({ orgId: ORG, actorId: ACTOR }));
+      expect(state.org.wallet_host).toBe("hosted");
+      expect(appends(fake).map((entry) => entry.p_action)).toEqual(["hosted_wallet_chosen"]);
+    });
+
+    it.each([
+      ["no pair at all", config],
+      ["only the API key", { ...hostedConfig, chain: { ...hostedConfig.chain, hostedCircleEntitySecret: undefined } }],
+      ["only the entity secret", { ...hostedConfig, chain: { ...hostedConfig.chain, hostedCircleApiKey: undefined } }],
+    ])("refuses as hosted_unavailable on a deployment with %s, before the RPC", async (_label, platform) => {
+      const state = sandbox();
+      const { fake, inScope } = database(state, { platform });
+      const error = await refusal(inScope(() => chooseHostedWallet({ orgId: ORG, actorId: ACTOR })));
+      expect(error.code).toBe("hosted_unavailable");
+      expect(error.message).toBe("Hosted testnet wallets are not available on this deployment.");
+      expect(rpcCalls(fake)).toEqual([]);
+      expect(state.org.wallet_host).toBeNull();
+      expect(appends(fake)).toEqual([]);
+    });
+
+    // Review Focus 3: own to hosted once credentials or any wallet exist is refused.
+    it.each([
+      ["a workspace with its own credentials", () => connected()],
+      ["an own-account workspace with credentials", () => connected({ wallet_host: "own" })],
+      ["a workspace with wallets", () => withWallets(sandbox())],
+      ["an own-account workspace with credentials and wallets", () => withWallets(connected({ wallet_host: "own" }))],
+      ["a workspace with only a reserve wallet", () => {
+        const state = withWallets(sandbox());
+        state.accounts[0] = { ...state.accounts[0], circle_wallet_id: null, address: null };
+        return state;
+      }],
+      ["a hosted workspace that already has wallets", () => withWallets(hosted())],
+      ["the founding workspace", founding],
+    ])("maps hosted_not_allowed for %s, and records nothing", async (_label, make) => {
+      const state = make();
+      const before = structuredClone(state.org);
+      const { fake, inScope } = database(state, { platform: hostedConfig });
+      const error = await refusal(inScope(() => chooseHostedWallet({ orgId: ORG, actorId: ACTOR })));
+      expect(error.code).toBe("hosted_not_allowed");
+      expect(error.message).toBe("A workspace with its own Circle account or wallets cannot switch to a hosted wallet.");
+      expect(rpcCalls(fake)).toHaveLength(1);
+      expect(state.org).toEqual(before);
+      expect(appends(fake)).toEqual([]);
+    });
+
+    it("maps hosted_limit_reached, and records nothing", async () => {
+      const state = sandbox();
+      const { fake, inScope } = database(state, { platform: { ...hostedConfig, hostedWorkspaceLimit: 2 }, otherHosted: 2 });
+      const error = await refusal(inScope(() => chooseHostedWallet({ orgId: ORG, actorId: ACTOR })));
+      expect(error.code).toBe("hosted_limit_reached");
+      expect(error.message).toBe("All hosted testnet wallets are taken; connect your own Circle account instead.");
+      expect(state.org.wallet_host).toBeNull();
+      expect(appends(fake)).toEqual([]);
+    });
+
+    it("admits the last place under the limit", async () => {
+      const state = sandbox();
+      const { inScope } = database(state, { platform: { ...hostedConfig, hostedWorkspaceLimit: 2 }, otherHosted: 1 });
+      await inScope(() => chooseHostedWallet({ orgId: ORG, actorId: ACTOR }));
+      expect(state.org.wallet_host).toBe("hosted");
+    });
+
+    it("is a no-op on a workspace already hosted with no wallets, and records nothing a second time", async () => {
+      const state = hosted();
+      const { fake, inScope } = database(state, { platform: hostedConfig });
+      await inScope(() => chooseHostedWallet({ orgId: ORG, actorId: ACTOR }));
+      expect(rpcCalls(fake)).toHaveLength(1);
+      expect(state.org.wallet_host).toBe("hosted");
+      expect(appends(fake)).toEqual([]);
+    });
+
+    it("passes any other database failure on as a plain error, not a GoLiveError", async () => {
+      const { fake, inScope } = database(sandbox(), { platform: hostedConfig, chooseError: "org_not_found: no organization" });
+      const outcome = await inScope(() => chooseHostedWallet({ orgId: ORG, actorId: ACTOR })).catch((error: unknown) => error);
+      expect(outcome).toBeInstanceOf(Error);
+      expect(outcome).not.toBeInstanceOf(GoLiveError);
+      expect(appends(fake)).toEqual([]);
+    });
+  });
+
+  describe("connectCircle on a hosted workspace (H4, Review Focus 3)", () => {
+    it("switches a hosted workspace with no wallets to its own account, in the same update as the credentials", async () => {
+      const state = hosted();
+      const { fake, inScope } = database(state, { platform: hostedConfig });
+      const fakeCircle = circle();
+
+      await inScope(() => connectCircle({ orgId: ORG, actorId: ACTOR, apiKey: API_KEY, entitySecret: ENTITY_SECRET, client: fakeCircle.factory }));
+
+      const [update, ...others] = orgPatches(fake);
+      expect(others).toEqual([]);
+      const body = update.body as Record<string, unknown>;
+      expect(Object.keys(body).sort()).toEqual(["circle_api_key_enc", "circle_entity_secret_enc", "wallet_host"]);
+      expect(body.wallet_host).toBe("own");
+      expect(state.org.wallet_host).toBe("own");
+      // No wallets, so nothing to prove.
+      expect(fakeCircle.getWallet).not.toHaveBeenCalled();
+      expect(appends(fake).map((entry) => [entry.p_action, entry.p_detail])).toEqual([["circle_connected", { by: ACTOR }]]);
+
+      // From here on the workspace pays with its own credentials, never the hosted pair.
+      const status = await inScope(() => goLiveStatus(ORG));
+      expect(status).toMatchObject({ step: "wallets", connected: true, host: "own" });
+    });
+
+    it.each([
+      ["both wallets", () => withWallets(hosted())],
+      ["only the reserve's", () => {
+        const state = withWallets(hosted());
+        state.accounts[0] = { ...state.accounts[0], circle_wallet_id: null, address: null };
+        return state;
+      }],
+      ["a live hosted workspace's", () => withWallets(hosted({ mode: "live" }))],
+    ])("refuses own credentials once the hosted workspace has %s, before any Circle call", async (_label, make) => {
+      const state = make();
+      const before = structuredClone(state.org);
+      const { fake, inScope } = database(state, { platform: hostedConfig });
+      const check = vi.fn(async () => "ok" as const);
+      const fakeCircle = circle(SAME_ENTITY);
+
+      const error = await refusal(
+        inScope(() => connectCircle({ orgId: ORG, actorId: ACTOR, apiKey: API_KEY, entitySecret: ENTITY_SECRET, check, client: fakeCircle.factory }))
+      );
+
+      expect(error.code).toBe("hosted_has_wallets");
+      expect(error.message).toBe("This workspace's wallets are hosted by Vestiarion; start a new workspace to use your own Circle account.");
+      expect(check).not.toHaveBeenCalled();
+      expect(fakeCircle.factory).not.toHaveBeenCalled();
+      expect(orgPatches(fake)).toEqual([]);
+      expect(state.org).toEqual(before);
+      expect(appends(fake)).toEqual([]);
+    });
+
+    it("refuses when a wallet appears while the key is being checked, rather than proving own credentials against hosted wallets", async () => {
+      const state = hosted();
+      const { fake, inScope } = database(state, { platform: hostedConfig });
+      const fakeCircle = circle(SAME_ENTITY);
+      const check = vi.fn(async () => {
+        withWallets(state);
+        return "ok" as const;
+      });
+
+      const error = await refusal(
+        inScope(() => connectCircle({ orgId: ORG, actorId: ACTOR, apiKey: API_KEY, entitySecret: ENTITY_SECRET, check, client: fakeCircle.factory }))
+      );
+
+      expect(error.code).toBe("hosted_has_wallets");
+      expect(fakeCircle.getWallet).not.toHaveBeenCalled();
+      expect(orgPatches(fake)).toEqual([]);
+      expect(state.org.wallet_host).toBe("hosted");
+    });
+
+    it("marks a workspace that had not chosen as its own", async () => {
+      const state = sandbox();
+      const { inScope } = database(state, { platform: hostedConfig });
+      await inScope(() => connectCircle({ orgId: ORG, actorId: ACTOR, apiKey: API_KEY, entitySecret: ENTITY_SECRET, client: circle().factory }));
+      expect(state.org.wallet_host).toBe("own");
+    });
+
+    it("still proves an own-account workspace's new credentials against its wallets, with the hosted pair configured", async () => {
+      const state = withWallets(connected({ wallet_host: "own" }));
+      const { inScope } = database(state, { platform: hostedConfig });
+      const fakeCircle = circle(SAME_ENTITY);
+      await inScope(() => connectCircle({ orgId: ORG, actorId: ACTOR, apiKey: API_KEY, entitySecret: ENTITY_SECRET, client: fakeCircle.factory }));
+      expect(fakeCircle.getWallet).toHaveBeenCalledTimes(2);
+      expect(fakeCircle.getWalletSet).toHaveBeenCalledWith({ id: "set-treasury" });
+      expect(state.org.wallet_host).toBe("own");
+    });
+  });
+
+  describe("createWallets", () => {
+    it("creates a hosted workspace's wallets with the hosted pair, in a set named for the workspace (Review Focus 4)", async () => {
+      const state = hosted();
+      const { fake, inScope } = database(state, { platform: hostedConfig });
+      const fakeCircle = circle({ sets: [{ id: "set-treasury", name: TREASURY_WALLET_SET }] });
+
+      const result = await inScope(() => createWallets({ orgId: ORG, actorId: ACTOR, client: fakeCircle.factory }));
+
+      expect(result).toEqual({ created: 2, skipped: 0 });
+      expect(fakeCircle.credentials).toEqual([{ apiKey: HOSTED_API_KEY, entitySecret: HOSTED_ENTITY_SECRET }]);
+      expect(fakeCircle.createWalletSet).toHaveBeenCalledExactlyOnceWith({ name: HOSTED_SET });
+      expect(fakeCircle.createWallets).toHaveBeenCalledTimes(2);
+      for (const call of [1, 2]) expect(fakeCircle.createWallets).toHaveBeenNthCalledWith(call, expect.objectContaining({ walletSetId: "set-new" }));
+      expect(state.accounts.map((account) => account.circle_wallet_id)).toEqual(["wallet-1", "wallet-2"]);
+      expect(orgPatches(fake)).toEqual([]);
+      expect(appends(fake).map((entry) => [entry.p_action, entry.p_detail])).toEqual([["treasury_wallets_created", { by: ACTOR, accounts: 2 }]]);
+    });
+
+    it("refuses a hosted workspace on a deployment without the pair, before any Circle call (H1)", async () => {
+      const state = hosted();
+      const { fake, inScope } = database(state);
+      const fakeCircle = circle();
+      const error = await refusal(inScope(() => createWallets({ orgId: ORG, actorId: ACTOR, client: fakeCircle.factory })));
+      expect(error.code).toBe("hosted_unavailable");
+      expect(fakeCircle.factory).not.toHaveBeenCalled();
+      expect(fake.requests.filter((request) => request.method === "PATCH")).toEqual([]);
+    });
+
+    it.each([
+      ["not chosen", null],
+      ["own", "own"],
+    ] as const)("never creates wallets with the hosted pair for a workspace that is %s and has no credentials (Review Focus 1)", async (_label, host) => {
+      const { inScope } = database(sandbox({ wallet_host: host }), { platform: hostedConfig });
+      const fakeCircle = circle();
+      const error = await refusal(inScope(() => createWallets({ orgId: ORG, actorId: ACTOR, client: fakeCircle.factory })));
+      expect(error.code).toBe("not_connected");
+      expect(fakeCircle.factory).not.toHaveBeenCalled();
+    });
+
+    it("never creates wallets with the hosted pair for an own-account workspace whose credentials cannot be read (Review Focus 1)", async () => {
+      const state = connected({ wallet_host: "own", circle_api_key_enc: seal(OLD_API_KEY, "circle_api_key_enc", OTHER_MASTER_KEYS) });
+      const { inScope } = database(state, { platform: hostedConfig });
+      const fakeCircle = circle();
+      const error = await refusal(inScope(() => createWallets({ orgId: ORG, actorId: ACTOR, client: fakeCircle.factory })));
+      expect(error.code).toBe("credentials_unreadable");
+      expect(fakeCircle.factory).not.toHaveBeenCalled();
+    });
+
+    it("uses an own-account workspace's own credentials and the treasury set, with the hosted pair configured", async () => {
+      const { inScope } = database(connected({ wallet_host: "own" }), { platform: hostedConfig });
+      const fakeCircle = circle({ sets: [{ id: "set-treasury", name: TREASURY_WALLET_SET }] });
+      await inScope(() => createWallets({ orgId: ORG, actorId: ACTOR, client: fakeCircle.factory }));
+      expect(fakeCircle.credentials).toEqual([{ apiKey: OLD_API_KEY, entitySecret: OLD_ENTITY_SECRET }]);
+      expect(fakeCircle.createWalletSet).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("goLive", () => {
+    it("takes a hosted workspace live without the same-entity proof, bound to wallet_host = 'hosted'", async () => {
+      const state = withWallets(hosted());
+      const { fake, inScope } = database(state, { platform: hostedConfig });
+      const fakeCircle = circle(SAME_ENTITY);
+
+      await inScope(() => goLive({ orgId: ORG, actorId: ACTOR, client: fakeCircle.factory }));
+
+      // The entity is the platform's by construction: no Circle call at all.
+      expect(fakeCircle.factory).not.toHaveBeenCalled();
+      const [update, ...others] = orgPatches(fake);
+      expect(others).toEqual([]);
+      expect(update.body).toEqual({ mode: "live" });
+      expect(update.params.get("id")).toBe(`eq.${ORG}`);
+      expect(update.params.get("mode")).toBe("eq.sandbox");
+      expect(update.params.get("wallet_host")).toBe("eq.hosted");
+      expect(update.params.get("circle_api_key_enc->>iv")).toBeNull();
+      expect(state.org.mode).toBe("live");
+      expect(appends(fake).map((entry) => [entry.p_action, entry.p_detail])).toEqual([["workspace_went_live", { by: ACTOR }]]);
+    });
+
+    it("refuses a hosted workspace whose operating account has no wallet", async () => {
+      const state = hosted();
+      state.accounts[1] = { ...state.accounts[1], circle_wallet_id: "wallet-reserve", address: RESERVE_ADDRESS };
+      const { fake, inScope } = database(state, { platform: hostedConfig });
+      expect((await refusal(inScope(() => goLive({ orgId: ORG, actorId: ACTOR })))).code).toBe("no_wallets");
+      expect(orgPatches(fake)).toEqual([]);
+    });
+
+    it("refuses a hosted workspace on a deployment without the pair (H1, Review Focus 5)", async () => {
+      const state = withWallets(hosted());
+      const { fake, inScope } = database(state);
+      const error = await refusal(inScope(() => goLive({ orgId: ORG, actorId: ACTOR })));
+      expect(error.code).toBe("hosted_unavailable");
+      expect(orgPatches(fake)).toEqual([]);
+      expect(state.org.mode).toBe("sandbox");
+    });
+
+    it("answers credentials_changed when the workspace stops being hosted before the update", async () => {
+      const state = withWallets(hosted());
+      const { fake, inScope } = database(state, { platform: hostedConfig, beforeOrgPatch: () => { state.org.wallet_host = "own"; } });
+      const error = await refusal(inScope(() => goLive({ orgId: ORG, actorId: ACTOR })));
+      expect(error.code).toBe("credentials_changed");
+      expect(orgPatches(fake)).toHaveLength(1);
+      expect(state.org.mode).toBe("sandbox");
+      expect(appends(fake)).toEqual([]);
+    });
+
+    it("answers already_live when another owner took the hosted workspace live first", async () => {
+      const state = withWallets(hosted());
+      const { fake, inScope } = database(state, { platform: hostedConfig, beforeOrgPatch: () => { state.org.mode = "live"; } });
+      expect((await refusal(inScope(() => goLive({ orgId: ORG, actorId: ACTOR })))).code).toBe("already_live");
+      expect(appends(fake)).toEqual([]);
+    });
+
+    it("refuses a live hosted workspace", async () => {
+      const { fake, inScope } = database(withWallets(hosted({ mode: "live" })), { platform: hostedConfig });
+      expect((await refusal(inScope(() => goLive({ orgId: ORG, actorId: ACTOR })))).code).toBe("already_live");
+      expect(orgPatches(fake)).toEqual([]);
+    });
+
+    it("still proves an own-account workspace, with the hosted pair configured: the proof is skipped for hosted only", async () => {
+      const state = withWallets(connected({ wallet_host: "own" }));
+      const { fake, inScope } = database(state, { platform: hostedConfig });
+      const fakeCircle = circle({ ...SAME_ENTITY, wallets: {} });
+      expect((await refusal(inScope(() => goLive({ orgId: ORG, actorId: ACTOR, client: fakeCircle.factory })))).code).toBe("different_entity");
+      expect(fakeCircle.credentials).toEqual([{ apiKey: OLD_API_KEY, entitySecret: OLD_ENTITY_SECRET }]);
+      expect(orgPatches(fake)).toEqual([]);
+    });
+
+    it("binds an own-account workspace's update to the envelope, not to wallet_host", async () => {
+      const state = withWallets(connected({ wallet_host: "own" }));
+      const { fake, inScope } = database(state, { platform: hostedConfig });
+      await inScope(() => goLive({ orgId: ORG, actorId: ACTOR, client: circle(SAME_ENTITY).factory }));
+      const [update] = orgPatches(fake);
+      expect(update.params.get("circle_api_key_enc->>iv")).toBe(`eq.${state.org.circle_api_key_enc!.iv}`);
+      expect(update.params.get("wallet_host")).toBeNull();
+      expect(state.org.mode).toBe("live");
+    });
+
+    it("refuses an own-account workspace with no credentials, never going live on the hosted pair (Review Focus 1)", async () => {
+      const state = withWallets(sandbox({ wallet_host: "own" }));
+      const { fake, inScope } = database(state, { platform: hostedConfig });
+      expect((await refusal(inScope(() => goLive({ orgId: ORG, actorId: ACTOR })))).code).toBe("not_connected");
+      expect(orgPatches(fake)).toEqual([]);
+    });
+  });
+
+  describe("goLiveStatus", () => {
+    it("offers the choice to a fresh sandbox on a deployment with the pair", async () => {
+      await expect(database(sandbox(), { platform: hostedConfig }).inScope(() => goLiveStatus(ORG))).resolves.toEqual({
+        step: "connect", connected: false, host: null, hostedAvailable: true, wallets: [], liveSince: null, credentialsUnreadable: false,
+      });
+    });
+
+    it("puts a hosted workspace with no wallets at wallets: the choice was its connect step", async () => {
+      await expect(database(hosted(), { platform: hostedConfig }).inScope(() => goLiveStatus(ORG))).resolves.toEqual({
+        step: "wallets", connected: false, host: "hosted", hostedAvailable: true, wallets: [], liveSince: null, credentialsUnreadable: false,
+      });
+    });
+
+    it("moves a hosted workspace to go_live once every account has a wallet, and to live", async () => {
+      await expect(database(withWallets(hosted()), { platform: hostedConfig }).inScope(() => goLiveStatus(ORG))).resolves.toMatchObject({
+        step: "go_live", host: "hosted",
+      });
+      await expect(
+        database(withWallets(hosted({ mode: "live" })), { platform: hostedConfig }).inScope(() => goLiveStatus(ORG))
+      ).resolves.toMatchObject({ step: "live", host: "hosted" });
+    });
+
+    it("says an own-account workspace is own", async () => {
+      await expect(database(connected({ wallet_host: "own" }), { platform: hostedConfig }).inScope(() => goLiveStatus(ORG))).resolves.toMatchObject({
+        step: "wallets", connected: true, host: "own", hostedAvailable: true,
+      });
+    });
+
+    it("reports a hosted workspace on a deployment without the pair as unreadable, and the choice as unavailable (Review Focus 5)", async () => {
+      await expect(database(withWallets(hosted())).inScope(() => goLiveStatus(ORG))).resolves.toMatchObject({
+        host: "hosted", hostedAvailable: false, credentialsUnreadable: true,
+      });
+    });
+
+    it("carries nothing of the hosted pair", async () => {
+      for (const state of [sandbox(), hosted(), withWallets(hosted())]) {
+        const status = await database(state, { platform: hostedConfig }).inScope(() => goLiveStatus(ORG));
+        expect(JSON.stringify(status)).not.toContain(HOSTED_API_KEY);
+        expect(JSON.stringify(status)).not.toContain(HOSTED_ENTITY_SECRET);
+        expect(typeof status.hostedAvailable).toBe("boolean");
+      }
+    });
   });
 });

@@ -9,7 +9,14 @@ import {
 import { configFromEnv, type VestiarionConfig } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import type { CircleClient, CircleClientFactory } from "@/lib/circle/check";
-import { createTreasuryWallets, EntitySecretRejected, TREASURY_WALLET_SET, walletIdempotencyKey } from "@/lib/circle/provision";
+import {
+  createTreasuryWallets,
+  EntitySecretRejected,
+  TREASURY_WALLET_SET,
+  treasuryWalletSetId,
+  walletIdempotencyKey,
+  walletSetName,
+} from "@/lib/circle/provision";
 import { fakeSupabase, orgTestContext, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 
 /**
@@ -254,6 +261,74 @@ describe("createTreasuryWallets", () => {
       expect(fakeCircle.factory).not.toHaveBeenCalled();
       expect(fake.requests).toEqual([]);
     }
+  });
+});
+
+describe("the wallet set per host (hosted wallets H3, Review Focus 4)", () => {
+  const OTHER_ORG = "0b6c1c9e-4a4f-4a7e-9b1e-000000000c1d";
+  const HOSTED_SET = `vestiarion-${ORG}`;
+  const hostedConfig: VestiarionConfig = { ...config, chain: { ...config.chain, walletHost: "hosted" } };
+
+  it("names the set vestiarion-<orgId> for a hosted workspace, and vestiarion-treasury otherwise", () => {
+    expect(walletSetName(ORG, "hosted")).toBe(HOSTED_SET);
+    expect(walletSetName(ORG, "own")).toBe(TREASURY_WALLET_SET);
+    expect(walletSetName(ORG, null)).toBe(TREASURY_WALLET_SET);
+    expect(walletSetName(ORG, undefined)).toBe(TREASURY_WALLET_SET);
+    expect(walletSetName(OTHER_ORG, "hosted")).not.toBe(HOSTED_SET);
+  });
+
+  it("hosted: creates the workspace's own set in the shared entity, never the shared treasury set or another workspace's", async () => {
+    const fake = database([OPERATING, RESERVE]);
+    const fakeCircle = circle({
+      sets: [
+        { id: "set-treasury", name: TREASURY_WALLET_SET },
+        { id: "set-neighbour", name: `vestiarion-${OTHER_ORG}` },
+      ],
+    });
+
+    const result = await inOrg(fake, () => createTreasuryWallets({ client: fakeCircle.factory }), hostedConfig);
+
+    expect(result).toEqual({ created: 2, skipped: 0 });
+    expect(fakeCircle.createWalletSet).toHaveBeenCalledExactlyOnceWith({ name: HOSTED_SET });
+    for (const [index, [input]] of fakeCircle.createWallets.mock.calls.entries()) {
+      expect(input).toMatchObject({ walletSetId: "set-new", accountType: "SCA" });
+      // The idempotency key does not change with the host.
+      expect(input).toMatchObject({ idempotencyKey: walletIdempotencyKey(ORG, [OPERATING, RESERVE][index].id) });
+    }
+  });
+
+  it("hosted: reuses the workspace's own set once it exists", async () => {
+    const fake = database([OPERATING]);
+    const fakeCircle = circle({
+      sets: [
+        { id: "set-treasury", name: TREASURY_WALLET_SET },
+        { id: "set-mine", name: HOSTED_SET },
+      ],
+    });
+    await inOrg(fake, () => createTreasuryWallets({ client: fakeCircle.factory }), hostedConfig);
+    expect(fakeCircle.createWalletSet).not.toHaveBeenCalled();
+    expect(fakeCircle.createWallets.mock.calls[0][0]).toMatchObject({ walletSetId: "set-mine" });
+  });
+
+  it.each([
+    ["own", "own"],
+    ["not chosen", null],
+    ["not said at all", undefined],
+  ] as const)("%s: uses the treasury set, as before", async (_label, walletHost) => {
+    const fake = database([OPERATING]);
+    const fakeCircle = circle({ sets: [{ id: "set-mine", name: HOSTED_SET }, { id: "set-treasury", name: TREASURY_WALLET_SET }] });
+    await inOrg(fake, () => createTreasuryWallets({ client: fakeCircle.factory }), { ...config, chain: { ...config.chain, walletHost } });
+    expect(fakeCircle.createWalletSet).not.toHaveBeenCalled();
+    expect(fakeCircle.createWallets.mock.calls[0][0]).toMatchObject({ walletSetId: "set-treasury" });
+  });
+
+  it("treasuryWalletSetId, which the bootstrap script also uses, names the set from the scope", async () => {
+    const fakeCircle = circle({ sets: [{ id: "set-treasury", name: TREASURY_WALLET_SET }] });
+    const client = fakeCircle.factory({ apiKey: API_KEY, entitySecret: ENTITY_SECRET });
+    const fake = database([]);
+    await expect(inOrg(fake, () => treasuryWalletSetId(client))).resolves.toBe("set-treasury");
+    await expect(inOrg(fake, () => treasuryWalletSetId(client), hostedConfig)).resolves.toBe("set-new");
+    expect(fakeCircle.createWalletSet).toHaveBeenCalledExactlyOnceWith({ name: HOSTED_SET });
   });
 });
 
