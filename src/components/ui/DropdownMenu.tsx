@@ -35,7 +35,7 @@ export function DropdownMenuContent({ className, sideOffset = 6, align = "start"
 export function DropdownMenuItem({ className, tone = "default", ...props }: ComponentProps<typeof DropdownMenuPrimitive.Item> & { tone?: "default" | "danger" }) {
   return (
     <DropdownMenuPrimitive.Item
-      className={cn(menuItem, tone === "danger" && "text-refused data-[highlighted]:bg-refused-soft data-[highlighted]:text-refused [&>svg]:text-refused", className)}
+      className={cn(menuItem, tone === "danger" && "text-refused before:bg-refused data-[highlighted]:bg-refused-soft data-[highlighted]:text-refused [&>svg]:text-refused", className)}
       {...props}
     />
   );
