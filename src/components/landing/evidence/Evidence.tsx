@@ -68,7 +68,7 @@ export function Seal({ tone = "proof", words = "Signed · Ed25519 · Hash-linked
  */
 export function Receipt({ children, className, slipClassName }: { children: ReactNode; className?: string; slipClassName?: string }) {
   return (
-    <div className={cn("drop-shadow-[0_14px_30px_rgb(43_54_47/0.14)]", className)}>
+    <div className={cn("receipt-shadow", className)}>
       <div className={cn("receipt-perforated bg-surface px-5 py-6", slipClassName)}>{children}</div>
     </div>
   );

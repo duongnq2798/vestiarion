@@ -13,6 +13,11 @@
     radial-gradient(circle var(--notch) at 50% 100%, #0000 97%, #000) bottom / calc(var(--notch) * 3) 51% repeat-x;
 }
 
+/* A slip's shadow: a drop-shadow, since the perforation mask clips box-shadow. */
+@utility receipt-shadow {
+  filter: drop-shadow(0 14px 30px color-mix(in srgb, var(--color-ink) 14%, transparent));
+}
+
 /* The dashed rule that joins one receipt to the one before it. */
 @utility chain-link-line {
   background-image: linear-gradient(to bottom, currentColor 55%, transparent 0);

@@ -2,6 +2,7 @@
 
 import { Check, Pause, Play, X } from "lucide-react";
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { Button } from "@/components/ui/Button";
 import { cn } from "@/components/ui/cn";
 import { HashText, Receipt, Seal, Verdict } from "../evidence/Evidence";
 import { HOLD_MS, PRINT_AT, REPLAY_MS, SCENARIOS, type ReplayScenario } from "./scenarios";
@@ -226,42 +227,43 @@ export function EvidenceReplay({ head }: { head: ChainHeadEntry[] }) {
 
   return (
     <figure ref={figure} aria-labelledby="replay-title" className="relative">
-      <div aria-hidden className="absolute -inset-x-6 -inset-y-8 -z-10 rounded-[3rem] bg-[radial-gradient(60%_50%_at_70%_20%,var(--color-agent-soft),transparent),radial-gradient(50%_45%_at_20%_85%,var(--color-proof-soft),transparent)] blur-2xl" />
-      <div className="rounded-[1.75rem] border border-line bg-surface/75 p-2 shadow-raised backdrop-blur-sm sm:p-2.5">
+      <div aria-hidden className="absolute -inset-x-6 -inset-y-8 -z-10 rounded-full bg-[radial-gradient(60%_50%_at_70%_20%,var(--color-agent-soft),transparent),radial-gradient(50%_45%_at_20%_85%,var(--color-proof-soft),transparent)] blur-2xl" />
+      <div className="rounded-2xl border border-line bg-surface/75 p-2 shadow-raised backdrop-blur-sm sm:p-2.5">
         <div className="flex items-center gap-2 px-1.5 pb-2 pt-0.5">
           <div role="group" aria-label="Choose a replay" className="flex rounded-full border border-line bg-ground/80 p-0.5">
             {SCENARIOS.map((item, itemIndex) => (
-              <button
+              <Button
                 key={item.id}
-                type="button"
+                variant="ghost"
+                size="sm"
                 aria-pressed={itemIndex === index}
                 onClick={() => choose(itemIndex)}
                 className={cn(
-                  "rounded-full px-3 py-1 text-xs font-semibold transition-colors duration-150 ease-standard",
-                  itemIndex === index
-                    ? item.id === "refused"
-                      ? "bg-refused text-on-agent shadow-control"
-                      : "bg-proof text-on-agent shadow-control"
-                    : "text-ink-2 hover:bg-raised hover:text-ink"
+                  "h-7 rounded-full",
+                  itemIndex === index &&
+                    (item.id === "refused"
+                      ? "bg-refused text-on-agent shadow-control hover:bg-refused hover:text-on-agent"
+                      : "bg-proof text-on-agent shadow-control hover:bg-proof hover:text-on-agent")
                 )}
               >
                 {item.tab}
-              </button>
+              </Button>
             ))}
           </div>
           {!stillMotion && (
-            <button
-              type="button"
+            <Button
+              variant="secondary"
+              size="icon-sm"
               onClick={togglePlay}
               aria-label={autoplay ? "Pause the replay" : "Play the replays"}
-              className="ml-auto grid size-8 place-items-center rounded-full border border-line bg-surface text-ink-2 transition-colors duration-150 ease-standard hover:bg-raised hover:text-ink"
+              className="ml-auto rounded-full"
             >
-              {autoplay ? <Pause aria-hidden className="size-3.5" /> : <Play aria-hidden className="size-3.5" />}
-            </button>
+              {autoplay ? <Pause aria-hidden /> : <Play aria-hidden />}
+            </Button>
           )}
         </div>
 
-        <div className="ledger-grid rounded-[1.35rem] border border-line/70 bg-ground/70 px-2.5 pb-4 pt-3 sm:px-4">
+        <div className="ledger-grid rounded-xl border border-line/70 bg-ground/70 px-2.5 pb-4 pt-3 sm:px-4">
           {/* Both receipts share one cell, so the slip is always as tall as the
               taller one and switching replays never moves the page. */}
           <div className="grid">
