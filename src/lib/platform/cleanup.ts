@@ -31,7 +31,12 @@ export async function deleteAbandonedSandboxes(now: Date = new Date()): Promise<
   const cutoffIso = cutoff.toISOString();
 
   const sandboxes = unwrap(
-    await platformDb().from("orgs").select("id").eq("mode", "sandbox").lt("last_active_at", cutoffIso)
+    await platformDb()
+      .from("orgs")
+      .select("id")
+      .eq("mode", "sandbox")
+      .lt("last_active_at", cutoffIso)
+      .is("circle_api_key_enc", null)
   ) as unknown as SandboxRow[];
 
   let deleted = 0;

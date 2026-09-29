@@ -64,6 +64,8 @@ describe("deleteAbandonedSandboxes", () => {
     const listing = fake.requests.find((request) => request.path === "/rest/v1/orgs");
     expect(listing?.params.get("mode")).toBe("eq.sandbox");
     expect(listing?.params.get("last_active_at")).toBe(`lt.${CUTOFF_ISO}`);
+    // Migration 0029: a sandbox holding Circle credentials is never listed for deletion.
+    expect(listing?.params.get("circle_api_key_enc")).toBe("is.null");
 
     const rpcCalls = fake.requests.filter((request) => request.path === "/rest/v1/rpc/delete_sandbox_org");
     expect(rpcCalls).toHaveLength(3);
