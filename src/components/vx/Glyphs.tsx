@@ -80,11 +80,3 @@ export function OutcomeGlyph({ outcome, className = "size-3.5" }: GlyphProps & {
   );
 }
 
-export function ChevronGlyph({ className = "size-3" }: GlyphProps) {
-  return (
-    <svg viewBox="0 0 12 12" className={`shrink-0 ${className}`} aria-hidden>
-      <path d="m4.5 2.5 3.5 3.5-3.5 3.5" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
