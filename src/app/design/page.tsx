@@ -307,7 +307,7 @@ export default function DesignPage() {
             </div>
             <div className="grid gap-3">
               {CALLOUT_TONES.map((tone) => (
-                <Callout key={tone} tone={tone} title={`A ${tone} callout`}>
+                <Callout key={tone} tone={tone} title={`${tone === "agent" ? "An" : "A"} ${tone} callout`}>
                   Blocks that stand apart from the page: a refusal, a warning, a recommendation.
                 </Callout>
               ))}

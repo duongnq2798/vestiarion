@@ -93,7 +93,7 @@ export function waitingDigestEmail(input: {
     })
     .join("\n");
   const moreHtml = more > 0
-    ? `<tr><td style="padding:10px 0;border-top:1px solid #ddd8ca;font-size:13px;line-height:20px;color:#79837d;">and ${more} more</td></tr>`
+    ? `<tr><td style="padding:10px 0;border-top:1px solid #ddd8ca;font-size:13px;line-height:20px;color:#646c67;">and ${more} more</td></tr>`
     : "";
 
   const html = `<!doctype html>
@@ -126,7 +126,7 @@ export function waitingDigestEmail(input: {
 
         <tr>
           <td style="background-color:#fffefa;border:1px solid #ddd8ca;border-radius:16px;padding:40px 40px 32px 40px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
-            <p style="margin:0 0 12px 0;font-family:'SFMono-Regular',Menlo,Consolas,monospace;font-size:11px;line-height:16px;letter-spacing:2px;text-transform:uppercase;color:#79837d;">Waiting for a decision</p>
+            <p style="margin:0 0 12px 0;font-family:'SFMono-Regular',Menlo,Consolas,monospace;font-size:11px;line-height:16px;letter-spacing:2px;text-transform:uppercase;color:#646c67;">Waiting for a decision</p>
             <h1 style="margin:0 0 16px 0;font-size:26px;line-height:32px;font-weight:700;color:#18211c;">${n} payment${n === 1 ? "" : "s"} need${n === 1 ? "s" : ""} a decision</h1>
             <p style="margin:0 0 20px 0;font-size:15px;line-height:24px;color:#4d5a53;">These are waiting for a decision in <strong style="color:#18211c;">${orgNameSafe}</strong>.</p>
 
@@ -151,7 +151,7 @@ ${moreHtml}
         </tr>
 
         <tr>
-          <td style="padding:28px 4px 0 4px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:12px;line-height:18px;color:#79837d;">
+          <td style="padding:28px 4px 0 4px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:12px;line-height:18px;color:#646c67;">
             <p style="margin:0 0 6px 0;">${footerSafe}</p>
           </td>
         </tr>

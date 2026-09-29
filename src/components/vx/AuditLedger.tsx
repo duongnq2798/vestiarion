@@ -61,7 +61,7 @@ export function AuditLedger({ entries, since }: { entries: LedgerEntry[]; since?
         <section key={`${group.day}-${groupIndex}`} aria-label={group.day}>
           <div className="sticky top-14 z-10 flex items-baseline justify-between border-b border-line bg-raised/95 px-4 py-1.5 backdrop-blur sm:pl-9 lg:top-0">
             <span className="text-[0.8125rem] font-semibold text-ink">{group.day}</span>
-            <span className="font-mono text-[0.6875rem] text-ink-3">
+            <span className="font-mono text-[0.6875rem] text-ink-2">
               #{pad(group.rows.at(-1)!.seq)}–#{pad(group.rows[0].seq)} · {group.rows.length} entries
             </span>
           </div>

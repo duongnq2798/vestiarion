@@ -21,7 +21,7 @@
 
   --color-ink: #18211c;
   --color-ink-2: #4d5a53;
-  --color-ink-3: #79837d;
+  --color-ink-3: #646c67;
 
   --color-agent: #3048c9;
   --color-agent-soft: #e9edff;
@@ -32,11 +32,11 @@
   --color-proof-soft: #e2f4ec;
   --color-proof-line: #9bcfbd;
 
-  --color-held: #a65f08;
+  --color-held: #9f5b08;
   --color-held-soft: #fff1cf;
   --color-held-line: #e2bd70;
 
-  --color-refused: #cf4434;
+  --color-refused: #bc3e2f;
   --color-refused-soft: #ffe8e2;
   --color-refused-line: #efa69a;
 
