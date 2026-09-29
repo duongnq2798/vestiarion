@@ -43,8 +43,11 @@ is hard-coded into the interface:
    cannot disagree about what happened; **reject** it, closing the obligation; or **return** it for
    the agent's next cycle to decide again. No one approves an invoice they created, and no one —
    however they click — can approve paying a counterparty screened high risk; only Compliance
-   clears that. An invoice is paid at most once, however many people click, since approving and the
-   agent's own cycle share one claim on the row. Anyone who can approve a payment can also pause the
+   clears that. A claim on the row makes one person's decision exclusive, however many people
+   click; the payment intent's idempotency key, keyed on the invoice, is what keeps an invoice from
+   being paid twice, whether by two people or by a person and the agent's own cycle. A payment
+   still pending is reconciled by the next cycle, never decided again, so the agent cannot undo a
+   person's approval. Anyone who can approve a payment can also pause the
    agent for the whole workspace, with a reason shown on every page until someone resumes it, and
    only an owner or admin may resume it. Pausing stops the agent's own cycles and the money it would
    move mid-cycle, including reserve sweeps and redemptions; it never stops a person's own decision

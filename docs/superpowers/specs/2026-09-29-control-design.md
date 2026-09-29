@@ -147,6 +147,7 @@ Migration `0025_control.sql`. It is idempotent, and runs as `db:migrate` replays
 | `approval_returned` | `ap` | `{ by, invoiceId }` |
 | `agent_paused` | `system` | `{ by, reason }` |
 | `agent_resumed` | `system` | `{ by, pausedFor: <seconds> }` |
+| `ap_reconcile` | `ap` | `{ invoiceId, counterpartyId, reconciled: true, previousStatus: "matched", execution }`: a `matched` payable with a payment intent, reconciled through `payInvoice` instead of decided again (added in the final fix pass) |
 
 - **`OPEN_PAYABLE_STATUSES`** stays `pending`, `matched`, `held` and `awaiting_info`:
   - `processing` is transient and is not an obligation;

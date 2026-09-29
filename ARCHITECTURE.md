@@ -135,8 +135,10 @@ transaction, so it holds across serverless instances rather than resetting per c
 **The approval inbox** (`/o/[slug]/approvals`, spec §5) lists every payable a
 cycle has held, flagged, or left awaiting more information, plus one that is
 `processing` — being decided right now, or claimed by a request that died
-more than 10 minutes ago. `src/lib/agent/approvals.ts` reads that list and
-carries out each of the three decisions:
+more than 10 minutes ago. `listWaitingPayables` marks the second kind
+`reclaimable`, and the card offers the three decisions again for it.
+`src/lib/agent/approvals.ts` reads that list and carries out each of the
+three decisions:
 
 - **Approve and pay** calls `payInvoice` (`src/lib/agent/pay.ts`) — the same
   function the agent's own AP stage calls, so a person and the agent cannot
@@ -152,12 +154,25 @@ Every decision first claims the row through `claim_invoice_decision`
 (migration `0025`), a compare-and-set that moves the invoice to `processing`
 only while it is still waiting. This covers two races: two people deciding
 the same invoice at once, and a person and the follow-up stage reopening it
-in the same moment. The claim also refuses an approval when the deciding
-person created the invoice (`invoices.created_by`), so no one approves their
-own payable. A `processing` invoice a crashed request never finished can be
-reclaimed ten minutes after `reviewed_at`; the payment's own idempotency key
-still keeps a retry from paying twice. All three server actions
-(`src/app/actions/approvals.ts`) require `approval.decide`.
+in the same moment — the follow-up stage's own write is conditional on the
+status it read (`applyFollowUp` in `src/lib/agent/orchestrator.ts`), so it
+never overwrites a claimed row. The claim also refuses an approval when the
+deciding person created the invoice (`invoices.created_by`), so no one
+approves their own payable. The claim makes a decision exclusive; it is the
+payment intent's idempotency key (`paymentIdempotencyKey("invoice", id)` in
+`src/lib/payments.ts`) that keeps an invoice from being paid twice. A
+`processing` invoice a crashed request never finished can be reclaimed ten
+minutes after `reviewed_at`, and a failed update after a claim is logged by
+invoice id. All three server actions (`src/app/actions/approvals.ts`)
+require `approval.decide`.
+
+**A payment still in flight is reconciled, not decided again.** An approval
+whose transfer is still pending leaves the invoice `matched`, which the AP
+stage selects. For a `matched` invoice that already has a payment intent, the
+stage skips the model and the guardrails and calls `payInvoice`, which
+reconciles the existing intent through its idempotency key and records
+`ap_reconcile` with `detail.reconciled: true`; otherwise a guardrail the
+person deliberately overrode could hold the invoice over a real transfer.
 
 **The pause switch** stops one workspace's agent without touching
 credentials. `pause_agent` and `resume_agent` (migration `0025`) are
@@ -173,7 +188,9 @@ workspace is paused:
 - the cron (`src/lib/agent/cron.ts`) skips it outright, reporting
   `skipped: "paused"` and writing nothing to its ledger;
 - `begin_cycle_run` (migration `0025`) refuses to open a cycle, and the
-  console's Run cycle action surfaces that refusal;
+  console's Run cycle action surfaces that refusal; a pause that lands
+  between the cron's listing and that refusal is reported as
+  `skipped: "paused"` too, not as a failure;
 - a cycle already running stops moving money mid-cycle: the AP and
   contractor stages (`src/lib/agent/orchestrator.ts`) re-read the flag
   before each payment, and the treasury stage re-reads it before each
