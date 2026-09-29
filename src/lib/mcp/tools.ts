@@ -35,8 +35,12 @@ function paramSchema(param: DocParam): z.ZodType {
     if (param.minimum !== undefined) integer = integer.min(param.minimum);
     if (param.maximum !== undefined) integer = integer.max(param.maximum);
     schema = integer;
-  } else {
+  } else if (param.type === "string") {
     schema = param.enum ? z.enum(param.enum as [string, ...string[]]) : z.string();
+  } else {
+    // A new DocParam type must get its own schema here, never fall through to a string.
+    const unhandled: never = param.type;
+    throw new Error(`No tool schema for parameter type ${String(unhandled)}`);
   }
   return (param.required ? schema : schema.optional()).describe(param.description);
 }

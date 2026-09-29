@@ -1,6 +1,6 @@
 # MCP server: the read API, as tools an AI agent can call
 
-This spec follows the developer docs design (`2026-09-29-developer-docs-design.md`), whose §8 names this as the next step. It was decided on 2026-09-30 by the implementer under the partner's standing instruction. Each decision states its reason.
+This spec follows the developer docs design (`2026-09-29-developer-docs-design.md`), whose §8 names this as the next step. It was decided on 2026-09-29 by the implementer under the partner's standing instruction. Each decision states its reason.
 
 ## 1. What this builds
 

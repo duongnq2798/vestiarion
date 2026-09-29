@@ -313,7 +313,9 @@ describe("the MCP protocol, with a valid key", () => {
     expect(response.status).toBe(200);
     const message = await reply(response);
     expect(message.id).toBe(1);
-    expect(message.result).toMatchObject({ protocolVersion: version, serverInfo: { name: "vestiarion", version: "1.0.0" }, capabilities: { tools: {} } });
+    expect(message.result).toMatchObject({ protocolVersion: version, serverInfo: { name: "vestiarion", version: "1.0.0" } });
+    // Tools only, and a static list (spec M5): no resources, no prompts, nothing to listen for.
+    expect((message.result as { capabilities: unknown }).capabilities).toEqual({ tools: { listChanged: false } });
     expect(reached.count).toBe(1);
   });
 

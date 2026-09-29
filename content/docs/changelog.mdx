@@ -1,6 +1,6 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
-## 2026-09-30: MCP server
+## 2026-09-29: MCP server
 
 - A remote MCP server at `https://www.vestiarion.xyz/api/mcp`, over Streamable HTTP. An AI agent connects with a workspace API key, sent as `Authorization: Bearer <key>`, and reads that workspace's records through one tool per `/api/v1` read operation. A tool returns the operation's JSON exactly. See [MCP server](/docs/ai-integration/mcp).
 - A missing, malformed, unknown or revoked key answers `401` with a `WWW-Authenticate` header; a key without the `read` scope answers `403`.
