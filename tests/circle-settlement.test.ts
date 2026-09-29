@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { awaitSettlement, type SettlementClient } from "@/lib/circle/settlement";
 
 /**
@@ -6,12 +6,23 @@ import { awaitSettlement, type SettlementClient } from "@/lib/circle/settlement"
  * is not a failed transfer: Circle already holds a transaction id, the money
  * may have moved, and recording it as failed lets it be rejected or paid
  * again by hand. Only Circle saying so makes it failed.
+ *
+ * The rejections below have the shapes @circle-fin/developer-controlled-wallets
+ * 10.8.1 actually produces: its wait throws a plain Error naming a terminal
+ * state, and an AbortError (whose cause is the TimeoutError) when its signal
+ * fires — never an error named TimeoutError itself.
  */
 
-function timeoutError(): Error {
-  const error = new Error("The operation was aborted due to timeout");
-  error.name = "TimeoutError";
+function sdkTimeout(): Error {
+  const cause = new Error("The operation was aborted due to timeout");
+  cause.name = "TimeoutError";
+  const error = new DOMException("The operation was aborted", "AbortError") as unknown as Error;
+  Object.defineProperty(error, "cause", { value: cause });
   return error;
+}
+
+function sdkTerminal(state: string): Error {
+  return new Error(`Transaction tx-1 ${state} (INSUFFICIENT_NATIVE_TOKEN): details`);
 }
 
 function transaction(state: string, extra: Record<string, unknown> = {}) {
@@ -31,6 +42,12 @@ function client(wait: () => Promise<unknown>, reread?: () => Promise<unknown>): 
   };
 }
 
+const never = () => new Promise<never>(() => {});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe("awaitSettlement", () => {
   it("is confirmed when Circle reports the transfer confirmed", async () => {
     const c = client(async () => transaction("CONFIRMED", { txHash: "0xabc" }));
@@ -45,25 +62,23 @@ describe("awaitSettlement", () => {
     expect((await awaitSettlement(c, "tx-1")).status).toBe("pending");
   });
 
-  it("is pending after a timeout, without reading again", async () => {
-    const c = client(async () => { throw timeoutError(); });
+  it("reads again when the wait runs out, and stays pending while Circle has not settled it", async () => {
+    const c = client(async () => { throw sdkTimeout(); }, async () => transaction("SENT"));
     const result = await awaitSettlement(c, "tx-1");
     expect(result.status).toBe("pending");
-    expect(c.calls).toHaveLength(1);
-  });
-
-  it("reads the transfer again after any other error, and takes Circle's answer: failed", async () => {
-    const c = client(async () => { throw new Error("transaction reached a terminal state"); }, async () => transaction("FAILED"));
-    const result = await awaitSettlement(c, "tx-1");
-    expect(result.status).toBe("failed");
     expect(c.calls).toEqual([
       expect.objectContaining({ id: "tx-1", waitForState: "CONFIRMED" }),
       { id: "tx-1" },
     ]);
   });
 
-  it.each(["CANCELLED", "DENIED", "STUCK"])("treats %s as failed", async (state) => {
-    const c = client(async () => { throw new Error("terminal"); }, async () => transaction(state));
+  it("is confirmed when the wait ran out just before Circle confirmed", async () => {
+    const c = client(async () => { throw sdkTimeout(); }, async () => transaction("COMPLETE", { txHash: "0x1" }));
+    expect((await awaitSettlement(c, "tx-1")).status).toBe("confirmed");
+  });
+
+  it.each(["FAILED", "CANCELLED", "DENIED", "STUCK"])("is failed when Circle reports %s", async (state) => {
+    const c = client(async () => { throw sdkTerminal(state); }, async () => transaction(state));
     expect((await awaitSettlement(c, "tx-1")).status).toBe("failed");
   });
 
@@ -82,5 +97,15 @@ describe("awaitSettlement", () => {
   it("is pending when the second read returns no transaction", async () => {
     const c = client(async () => { throw new Error("boom"); }, async () => ({ data: {} }));
     expect((await awaitSettlement(c, "tx-1")).status).toBe("pending");
+  });
+
+  it("does not hang on a request that never answers: the wait and the second read each give up", async () => {
+    vi.useFakeTimers();
+    const c = client(never, never);
+    const settled = awaitSettlement(c, "tx-1", { waitMs: 1_000, rereadMs: 2_000 });
+    await vi.advanceTimersByTimeAsync(1_000 + 5_000);
+    expect(c.calls).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(2_000);
+    await expect(settled).resolves.toEqual({ status: "pending" });
   });
 });

@@ -147,8 +147,9 @@ export class LiveProvider implements ChainProvider {
 
     // Arc settles in well under a second, but Circle's pipeline
     // (INITIATED -> CLEARED -> QUEUED -> SENT -> CONFIRMED -> COMPLETE) is
-    // asynchronous. awaitSettlement waits (capped, so a cycle cannot block on
-    // one payment) and reports failed only when Circle itself says so.
+    // asynchronous. awaitSettlement waits, with a deadline on every request so
+    // a cycle cannot block on one payment, and reports failed only when Circle
+    // itself reports a terminal state.
     const { status, transaction } = await awaitSettlement(this.client, txId);
     const txHash = transaction?.txHash;
     let feeUsd = ARC_FEE_USD;
