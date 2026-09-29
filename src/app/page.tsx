@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Claims } from "@/components/landing/Claims";
+import { Credentials } from "@/components/landing/Credentials";
 import { FinalCta } from "@/components/landing/FinalCta";
 import { Hero } from "@/components/landing/Hero";
 import { HowItWorks } from "@/components/landing/HowItWorks";
@@ -31,6 +32,7 @@ export default function LandingPage() {
 
       <main id="main">
         <Hero />
+        <Credentials />
         <LiveProof />
         <HowItWorks />
         <Claims />
