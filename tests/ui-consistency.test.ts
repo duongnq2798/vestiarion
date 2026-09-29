@@ -4,8 +4,9 @@ import { describe, expect, it } from "vitest";
 
 /**
  * Keeps every screen on the design system (spec §8): a new file that renders a
- * raw control, hard-codes a colour, invents a radius or brings back a removed
- * utility fails here, with the file and line of each offence.
+ * raw control, hard-codes a colour, invents a radius, brings back a removed
+ * utility or hides keyboard focus fails here, with the file and line of each
+ * offence.
  */
 
 const ROOT = process.cwd();
@@ -23,14 +24,15 @@ const TSX = walk(SRC, /\.tsx$/);
 const OUTSIDE_UI = TSX.filter((file) => !file.startsWith(UI));
 const STYLES = walk(SRC, /\.(tsx|ts|css)$/);
 
-function offences(files: string[], pattern: RegExp, keep: (match: string, lineBefore: string) => boolean = () => true): string[] {
+function offences(files: string[], pattern: RegExp, keep: (match: string, lineBefore: string, line: string) => boolean = () => true): string[] {
   return files.flatMap((file) => {
     const source = readFileSync(file, "utf8");
     return [...source.matchAll(pattern)]
       .filter((match) => {
         const index = match.index ?? 0;
         const lineStart = source.lastIndexOf("\n", index - 1) + 1;
-        return keep(match[0], source.slice(lineStart, index));
+        const lineEnd = source.indexOf("\n", index);
+        return keep(match[0], source.slice(lineStart, index), source.slice(lineStart, lineEnd === -1 ? undefined : lineEnd));
       })
       .map((match) => {
         const line = source.slice(0, match.index).split("\n").length;
@@ -93,6 +95,26 @@ function radiusOffence(line: string): boolean {
 /** One of the three shadow utilities Task 10 removed from globals.css. */
 const REMOVED_UTILITY = /(?<![\w-])(?:surface-shadow|brand-shadow|logo-shadow)(?![\w-])/g;
 
+/**
+ * A soft halo drawn on focus (`focus-visible:ring-agent-soft`, `has-[input:focus-visible]:ring-agent-soft`). It
+ * reads about 1.1:1 against the page — WCAG 1.4.11 asks 3:1 of a focus indicator — so it may only decorate a solid
+ * change: see `solidFocusBeside`.
+ */
+const SOFT_FOCUS = /(?<![\w-])(?:[\w-]+:)*(?:focus-visible|has-\[[^\]]*:focus-visible\]):ring-(?:agent|refused|proof|held)-soft(?![\w-])/g;
+
+/** The soft halo's own variant (`focus-visible:`, `has-[input:focus-visible]:`) turns the border agent or refused on the same line. */
+function solidFocusBeside(halo: string, line: string): boolean {
+  const variant = halo.slice(0, halo.lastIndexOf("ring-")).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?<![\\w:-])${variant}border-(?:agent|refused)(?![\\w-])`).test(line);
+}
+
+/**
+ * The opening tag of a region painted solid agent-blue. The page's focus ring is agent-blue too and would vanish on
+ * it, so the region carries `focus-inverse`, which turns the rings inside it white.
+ */
+const AGENT_BAND = /<(?:section|div|header|footer|aside|article|nav|main)\b[^>]*?(?<![\w-])bg-agent(?![\w/-])[^>]*>/g;
+const FOCUS_INVERSE = /(?<![\w-])focus-inverse(?![\w-])/;
+
 describe("the design system holds", () => {
   it("renders no raw button, select or textarea outside src/components/ui", () => {
     expect(offences(OUTSIDE_UI, RAW_CONTROL)).toEqual([]);
@@ -116,6 +138,14 @@ describe("the design system holds", () => {
 
   it("brings back none of the removed shadow utilities", () => {
     expect(offences(STYLES, REMOVED_UTILITY)).toEqual([]);
+  });
+
+  it("never shows keyboard focus as a soft halo alone", () => {
+    expect(offences(STYLES, SOFT_FOCUS, (halo, _before, line) => !solidFocusBeside(halo, line))).toEqual([]);
+  });
+
+  it("marks every agent-blue region focus-inverse", () => {
+    expect(offences(TSX, AGENT_BAND, (tag) => !FOCUS_INVERSE.test(tag))).toEqual([]);
   });
 });
 
@@ -213,5 +243,27 @@ describe("the patterns themselves", () => {
 
     expect("drop-shadow-logo".match(REMOVED_UTILITY)).toBeNull();
     expect("shadow-brand".match(REMOVED_UTILITY)).toBeNull();
+  });
+
+  it("SOFT_FOCUS flags a halo on its own, and spares one that comes with a border change under the same variant", () => {
+    const flagged = (line: string) => [...line.matchAll(SOFT_FOCUS)].some((match) => !solidFocusBeside(match[0], line));
+    expect(flagged('"outline-hidden focus-visible:ring-4 focus-visible:ring-agent-soft"')).toBe(true);
+    expect(flagged('"aria-invalid:border-refused aria-invalid:focus-visible:ring-refused-soft"')).toBe(true);
+    expect(flagged('"aria-invalid:focus-visible:border-agent focus-visible:ring-agent-soft"')).toBe(true);
+
+    expect(flagged('"focus-visible:border-agent focus-visible:ring-4 focus-visible:ring-agent-soft"')).toBe(false);
+    expect(flagged('"has-[input:focus-visible]:border-agent has-[input:focus-visible]:ring-agent-soft"')).toBe(false);
+    expect(flagged('"hover:ring-agent-soft ring-agent-soft"')).toBe(false);
+  });
+
+  it("AGENT_BAND finds a region painted solid agent-blue in its opening tag, and leaves tints, spans and children alone", () => {
+    expect('<section className="border-t bg-agent text-on-agent">'.match(AGENT_BAND)).not.toBeNull();
+    expect('<div\n  className="rounded-2xl bg-agent p-5">'.match(AGENT_BAND)).not.toBeNull();
+    expect(FOCUS_INVERSE.test('<section className="focus-inverse bg-agent">')).toBe(true);
+
+    expect('<div aria-hidden className="bg-agent/25 blur-3xl" />'.match(AGENT_BAND)).toBeNull();
+    expect('<div className="bg-agent-soft p-3">'.match(AGENT_BAND)).toBeNull();
+    expect('<span className="size-2 bg-agent" />'.match(AGENT_BAND)).toBeNull();
+    expect('<div className="flex gap-4"><span className="bg-agent" /></div>'.match(AGENT_BAND)).toBeNull();
   });
 });

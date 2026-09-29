@@ -60,7 +60,7 @@ export function TabsTrigger({ value, className, children, ...props }: ComponentP
     <TabsPrimitive.Trigger
       value={value}
       className={cn(
-        "relative inline-flex flex-1 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-lg px-3 text-sm font-medium text-ink-2 outline-hidden transition-colors duration-150 ease-standard hover:text-ink focus-visible:ring-4 focus-visible:ring-agent-soft data-[state=active]:text-ink sm:flex-none [&_svg]:size-4",
+        "relative inline-flex flex-1 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-lg px-3 text-sm font-medium text-ink-2 transition-colors duration-150 ease-standard hover:text-ink focus-visible:outline-offset-1 data-[state=active]:text-ink sm:flex-none [&_svg]:size-4",
         className
       )}
       {...props}
@@ -74,5 +74,5 @@ export function TabsTrigger({ value, className, children, ...props }: ComponentP
 }
 
 export function TabsContent({ className, ...props }: ComponentProps<typeof TabsPrimitive.Content>) {
-  return <TabsPrimitive.Content className={cn("outline-hidden duration-200 ease-standard data-[state=active]:animate-in data-[state=active]:fade-in-0", className)} {...props} />;
+  return <TabsPrimitive.Content className={cn("duration-200 ease-standard data-[state=active]:animate-in data-[state=active]:fade-in-0", className)} {...props} />;
 }

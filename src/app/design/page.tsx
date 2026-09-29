@@ -236,7 +236,7 @@ export default function DesignPage() {
                 Full audit log <ExternalLink />
               </Button>
             </Specimen>
-            <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-agent p-5">
+            <div className="focus-inverse flex flex-wrap items-center gap-3 rounded-2xl bg-agent p-5">
               <Button variant="inverse">Open console</Button>
               <span className="text-sm text-on-agent/80">The inverse button sits on an agent-blue band.</span>
             </div>

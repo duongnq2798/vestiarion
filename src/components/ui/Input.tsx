@@ -10,7 +10,8 @@ export const controlBase = [
   "w-full min-w-0 border border-line-strong bg-surface text-base text-ink shadow-control outline-hidden sm:text-sm",
   "transition-[border-color,box-shadow] duration-150 ease-standard placeholder:text-ink-3",
   "focus-visible:border-agent focus-visible:ring-4 focus-visible:ring-agent-soft",
-  "aria-invalid:border-refused aria-invalid:focus-visible:ring-refused-soft",
+  // An invalid field is refused-bordered already, so focus thickens that border instead of recolouring it.
+  "aria-invalid:border-refused aria-invalid:focus-visible:ring-2 aria-invalid:focus-visible:ring-refused",
   "disabled:cursor-not-allowed disabled:opacity-60",
 ].join(" ");
 
