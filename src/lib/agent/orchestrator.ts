@@ -7,6 +7,7 @@ import { runComplianceSweep, screeningMode as complianceScreeningMode } from "..
 import { refreshGitHubMilestones } from "../milestone-verification";
 import { seedScale } from "../seed";
 import { executePayment, type PaymentExecution } from "../payments";
+import { payInvoice, syncOperatingBalance, payoutAddress } from "./pay";
 import { CycleMetricsCollector } from "./cycle-metrics";
 import {
   emptyCounterpartyHistory,
@@ -111,40 +112,6 @@ function performanceEvidence(
     inputs: inputs ?? emptyCounterpartyHistory(),
     note: "Historical evidence for closer review, not a verdict or payment guardrail.",
   };
-}
-
-/**
- * Writes the operating account's balance back from whatever the provider
- * considers the chain. In simulate mode the provider already decremented it;
- * in live mode this is the only thing that keeps the stored balance in step
- * with Arc after a transfer. Without it, the treasury step later in the same
- * cycle reasons about money that has already left the wallet.
- *
- * The notional USYC carve-out is applied here for the same reason it is
- * applied during reconciliation — see the comment there.
- */
-async function syncOperatingBalance(accountId: string): Promise<number> {
-  const client = db();
-  const provider = getChainProvider();
-  const snapshot = await provider.getBalance(accountId);
-
-  let carveOut = 0;
-  if (provider.mode === "live" && provider.earnMode === "simulate") {
-    const reserve = (
-      await client.from("accounts").select("balance").eq("kind", "reserve").maybeSingle()
-    ).data as { balance: string } | null;
-    carveOut = num(reserve?.balance);
-  }
-
-  const spendable = Math.max(0, Number((snapshot.balance - carveOut).toFixed(6)));
-  const res = await client.from("accounts").update({ balance: spendable }).eq("id", accountId);
-  if (res.error) throw new Error(res.error.message);
-  return spendable;
-}
-
-/** Where a payment should actually land, or null when the counterparty has no wallet yet. */
-function payoutAddress(address: string | null, counterpartyId: string): string {
-  return address ?? `sim:${counterpartyId}`;
 }
 
 /**
@@ -738,29 +705,21 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
       // code, not in the prompt.
       if (guardrail.blocked) {
         // Refused by enforceApGuardrails before the provider can be called.
-      } else if (!operating) {
-        status = "held";
-        reasoning += " [no operating account configured]";
       } else {
-        try {
-          const result = await executePayment({
-            sourceType: "invoice",
-            sourceId: invoice.id,
-            fromAccountId: operating.id,
-            destination: payoutAddress(counterparty.address, counterparty.id),
+        const result = await payInvoice(
+          {
+            invoiceId: invoice.id,
+            counterpartyId: counterparty.id,
+            address: counterparty.address,
             amount,
-            memo: `Invoice ${invoice.id}`,
-          }, { provider });
-          paymentExecution = result;
-          txRef = result.txRef;
-          status = result.status === "confirmed" ? "paid" : result.status === "pending" ? "matched" : "held";
-          if (result.status === "failed") reasoning += ` [transfer failed: ${result.error ?? "provider reported failure"}]`;
-          else if (result.status === "pending") reasoning += " [transfer submitted; awaiting provider confirmation]";
-          else operatingBalance = await syncOperatingBalance(operating.id);
-        } catch (err) {
-          status = "held";
-          reasoning += ` [execution failed: ${(err as Error).message}]`;
-        }
+          },
+          { provider, operating: operating ? { id: operating.id } : null }
+        );
+        status = result.status;
+        txRef = result.txRef;
+        paymentExecution = result.execution;
+        reasoning += result.note;
+        if (result.operatingBalance !== null) operatingBalance = result.operatingBalance;
       }
     }
 
