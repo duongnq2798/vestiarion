@@ -121,7 +121,8 @@ export class LiveProvider implements ChainProvider {
     if (this.usdcTokenId) return this.usdcTokenId;
     const balances = await withDeadline(
       this.client.getWalletTokenBalance({ id: walletId }),
-      BALANCE_READ_DEADLINE_MS
+      BALANCE_READ_DEADLINE_MS,
+      `no answer from Circle getWalletTokenBalance within ${BALANCE_READ_DEADLINE_MS} ms`
     );
     const usdc = balances.data?.tokenBalances?.find((b) => b.token?.symbol === "USDC");
     if (!usdc?.token?.id) {
@@ -196,7 +197,8 @@ export class LiveProvider implements ChainProvider {
     const started = Date.now();
     const response = await withDeadline(
       this.client.getTransaction({ id: providerTxId }),
-      RECONCILE_TRANSFER_DEADLINE_MS
+      RECONCILE_TRANSFER_DEADLINE_MS,
+      `no answer from Circle getTransaction during reconciliation within ${RECONCILE_TRANSFER_DEADLINE_MS} ms`
     );
     const transaction = response.data?.transaction;
     if (!transaction) throw new Error(`Circle returned no transaction for ${providerTxId}`);
@@ -236,7 +238,8 @@ export class LiveProvider implements ChainProvider {
     const account = await this.account(accountId);
     const balances = await withDeadline(
       this.client.getWalletTokenBalance({ id: account.walletId }),
-      BALANCE_READ_DEADLINE_MS
+      BALANCE_READ_DEADLINE_MS,
+      `no answer from Circle getWalletTokenBalance within ${BALANCE_READ_DEADLINE_MS} ms`
     );
     const usdc = balances.data?.tokenBalances?.find((b) => b.token?.symbol === "USDC");
     return {

@@ -33,7 +33,7 @@ function statusOf(transaction: Transaction): TransferResult["status"] {
 export function withDeadline<T>(
   work: Promise<T>,
   ms: number,
-  message = `no answer from Circle within ${ms} ms`
+  message: string
 ): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<never>((_, reject) => {
@@ -66,10 +66,12 @@ export async function awaitSettlement(
   options: { waitMs?: number; rereadMs?: number } = {}
 ): Promise<Settlement> {
   const waitMs = options.waitMs ?? WAIT_MS;
+  const waitDeadlineMs = waitMs + 5_000;
   try {
     const settled = await withDeadline(
       client.getTransaction({ id: txId, waitForState: "CONFIRMED", signal: AbortSignal.timeout(waitMs) }),
-      waitMs + 5_000
+      waitDeadlineMs,
+      `no answer from Circle getTransaction while waiting for confirmation within ${waitDeadlineMs} ms`
     );
     const transaction = settled.data?.transaction;
     return transaction ? { status: statusOf(transaction), transaction } : { status: "pending" };
@@ -79,7 +81,12 @@ export async function awaitSettlement(
   }
 
   try {
-    const reread = await withDeadline(client.getTransaction({ id: txId }), options.rereadMs ?? REREAD_MS);
+    const rereadMs = options.rereadMs ?? REREAD_MS;
+    const reread = await withDeadline(
+      client.getTransaction({ id: txId }),
+      rereadMs,
+      `no answer from Circle getTransaction reread within ${rereadMs} ms`
+    );
     const transaction = reread.data?.transaction;
     return transaction ? { status: statusOf(transaction), transaction } : { status: "pending" };
   } catch (error) {

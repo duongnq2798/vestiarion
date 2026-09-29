@@ -45,10 +45,6 @@ function fakeClient(overrides: Partial<LiveProviderClient>): LiveProviderClient 
   } as unknown as LiveProviderClient;
 }
 
-async function flushProviderSetup(): Promise<void> {
-  for (let step = 0; step < 5; step += 1) await Promise.resolve();
-}
-
 async function expectDeadline(
   promise: Promise<unknown>,
   ms: number,
@@ -66,7 +62,7 @@ async function expectDeadline(
     }
   );
 
-  await flushProviderSetup();
+  await vi.advanceTimersByTimeAsync(0);
   expect(vi.getTimerCount()).toBe(1);
   await vi.advanceTimersByTimeAsync(ms - 1);
   expect(settled).toBe(false);
@@ -111,6 +107,22 @@ describe("LiveProvider Circle request deadlines", () => {
       "Circle did not answer createTransaction within 20000 ms; the transfer may or may not have been accepted"
     );
     expect(createTransaction).toHaveBeenCalledOnce();
+    expect(createTransaction).toHaveBeenCalledWith(
+      expect.objectContaining({ idempotencyKey: TRANSFER.idempotencyKey })
+    );
+  });
+
+  it("clears the createTransaction deadline when Circle rejects before it", async () => {
+    const createTransaction = vi.fn(async () => {
+      throw new Error("Circle rejected createTransaction");
+    });
+    const client = fakeClient({
+      createTransaction: createTransaction as unknown as LiveProviderClient["createTransaction"],
+    });
+    const provider = new LiveProvider(CHAIN, { client });
+
+    await expect(provider.transfer(TRANSFER)).rejects.toThrow("Circle rejected createTransaction");
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it("rejects a hung balance read while resolving the USDC token after 15 seconds", async () => {
@@ -123,10 +135,25 @@ describe("LiveProvider Circle request deadlines", () => {
     await expectDeadline(
       provider.transfer(TRANSFER),
       15_000,
-      "no answer from Circle within 15000 ms"
+      "no answer from Circle getWalletTokenBalance within 15000 ms"
     );
     expect(getWalletTokenBalance).toHaveBeenCalledOnce();
     expect(client.createTransaction).not.toHaveBeenCalled();
+  });
+
+  it("clears the getWalletTokenBalance deadline when Circle resolves before it", async () => {
+    const getWalletTokenBalance = vi.fn(async () => ({
+      data: {
+        tokenBalances: [{ amount: "12.5", token: { symbol: "USDC" } }],
+      },
+    }));
+    const client = fakeClient({
+      getWalletTokenBalance: getWalletTokenBalance as unknown as LiveProviderClient["getWalletTokenBalance"],
+    });
+    const provider = new LiveProvider(CHAIN, { client });
+
+    await expect(provider.getBalance("account-1")).resolves.toMatchObject({ balance: 12.5 });
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it("rejects a hung getBalance read after 15 seconds", async () => {
@@ -139,7 +166,7 @@ describe("LiveProvider Circle request deadlines", () => {
     await expectDeadline(
       provider.getBalance("account-1"),
       15_000,
-      "no answer from Circle within 15000 ms"
+      "no answer from Circle getWalletTokenBalance within 15000 ms"
     );
     expect(getWalletTokenBalance).toHaveBeenCalledOnce();
   });
@@ -154,7 +181,7 @@ describe("LiveProvider Circle request deadlines", () => {
     await expectDeadline(
       provider.reconcileTransfer("tx-1"),
       15_000,
-      "no answer from Circle within 15000 ms"
+      "no answer from Circle getTransaction during reconciliation within 15000 ms"
     );
     expect(getTransaction).toHaveBeenCalledOnce();
   });
