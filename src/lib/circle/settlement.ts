@@ -30,10 +30,14 @@ function statusOf(transaction: Transaction): TransferResult["status"] {
  * timeout of its own — its abort signal only cuts the pause between polls —
  * so a hung request would otherwise hold the cycle indefinitely.
  */
-function withDeadline<T>(work: Promise<T>, ms: number): Promise<T> {
+export function withDeadline<T>(
+  work: Promise<T>,
+  ms: number,
+  message = `no answer from Circle within ${ms} ms`
+): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`no answer from Circle within ${ms} ms`)), ms);
+    timer = setTimeout(() => reject(new Error(message)), ms);
   });
   return Promise.race([work, deadline]).finally(() => clearTimeout(timer));
 }

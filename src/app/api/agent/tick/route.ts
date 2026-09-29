@@ -3,6 +3,8 @@ import { runLiveOrganizations, runScheduledCycle } from "@/lib/agent/cron";
 import { hasValidAgentBearer } from "@/lib/agent-security";
 import { takeAgentCycleToken } from "@/lib/rate-limit";
 
+export const maxDuration = 300;
+
 function clientIp(request: Request): string {
   return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
     || request.headers.get("x-real-ip")
