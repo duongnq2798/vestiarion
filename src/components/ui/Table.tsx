@@ -4,11 +4,13 @@ import { cn } from "./cn";
 /**
  * A data table that scrolls sideways inside its own frame on a narrow screen.
  * `containerClassName` styles that frame — give it a max height and
- * `overflow-auto` for a sticky header over a long list.
+ * `overflow-auto` for a sticky header over a long list. The frame is
+ * `relative` so screen-reader-only text and hidden form controls in the
+ * cells scroll with the table instead of widening the page.
  */
 export function Table({ className, containerClassName, ...props }: ComponentProps<"table"> & { containerClassName?: string }) {
   return (
-    <div className={cn("w-full overflow-x-auto", containerClassName)}>
+    <div className={cn("relative w-full overflow-x-auto", containerClassName)}>
       <table className={cn("w-full border-collapse text-left text-sm", className)} {...props} />
     </div>
   );

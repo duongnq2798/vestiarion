@@ -140,6 +140,20 @@
     color-scheme: light;
     background: var(--color-ground);
     scroll-behavior: smooth;
+    /* The scrollbar's column stays reserved while an open menu, select or
+       dialog locks scrolling, so the page never reflows and jumps. */
+    scrollbar-gutter: stable;
+  }
+
+  /* Radix's scroll lock pads the body by the scrollbar's width; the stable
+     gutter above already holds that space. */
+  html body[data-scroll-locked] {
+    margin-right: 0 !important;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-line-strong) transparent;
   }
 
   body {
