@@ -1,7 +1,7 @@
 import { Callout } from "@/components/ui/Callout";
 import { utcMinute } from "@/lib/copy";
-import type { Member } from "@/lib/platform/members";
-import type { PauseState } from "@/lib/platform/pause";
+import { listMembers, type Member } from "@/lib/platform/members";
+import { pauseStateOf, type PauseState } from "@/lib/platform/pause";
 
 /**
  * What every workspace page says while the agent is paused: since when, by
@@ -20,4 +20,25 @@ export function AgentPausedBanner({ pause, members }: { pause: PauseState; membe
       </Callout>
     </div>
   );
+}
+
+/**
+ * What the layout needs to draw the banner: the pause, and the members to
+ * name its author from — best effort. A failed pause read shows no banner
+ * rather than taking every workspace page down with it; a failed member read
+ * names the pauser "a member".
+ */
+export async function pausedBanner(orgId: string): Promise<{ pause: PauseState; members: Member[] } | null> {
+  try {
+    const pause = await pauseStateOf(orgId);
+    if (!pause) return null;
+    const members = await listMembers(orgId).catch((error: unknown) => {
+      console.error("paused banner: members not loaded", orgId, error);
+      return [];
+    });
+    return { pause, members };
+  } catch (error) {
+    console.error("paused banner: pause state not loaded", orgId, error);
+    return null;
+  }
 }

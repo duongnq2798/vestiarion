@@ -1,12 +1,10 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import { AgentPausedBanner } from "@/components/AgentPausedBanner";
+import { AgentPausedBanner, pausedBanner } from "@/components/AgentPausedBanner";
 import { AppFrame } from "@/components/vx/AppFrame";
 import type { WorkspaceSummary } from "@/components/vx/AppNav";
 import { membershipFor, membershipsOf, requireMembership, type OrgMembership } from "@/lib/auth/membership";
 import { getSessionUser } from "@/lib/auth/session";
-import { listMembers, type Member } from "@/lib/platform/members";
-import { pauseStateOf, type PauseState } from "@/lib/platform/pause";
 
 type OrgLayoutProps = {
   children: ReactNode;
@@ -67,24 +65,4 @@ export default async function OrgLayout({ children, params }: OrgLayoutProps) {
       {children}
     </AppFrame>
   );
-}
-
-/**
- * The pause, and the members to name its author from — best effort: a failed
- * read shows no banner rather than taking every workspace page down with it.
- * The console reads the pause again for its own controls.
- */
-async function pausedBanner(orgId: string): Promise<{ pause: PauseState; members: Member[] } | null> {
-  try {
-    const pause = await pauseStateOf(orgId);
-    if (!pause) return null;
-    const members = await listMembers(orgId).catch((error: unknown) => {
-      console.error("paused banner: members not loaded", orgId, error);
-      return [];
-    });
-    return { pause, members };
-  } catch (error) {
-    console.error("paused banner: pause state not loaded", orgId, error);
-    return null;
-  }
 }

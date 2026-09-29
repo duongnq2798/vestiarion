@@ -43,7 +43,12 @@ export default async function DashboardPage({
       listCounterparties(),
       listLedgerEntries(1),
       listWaitingPayables(),
-      pauseStateOf(access.membership.orgId),
+      // Best effort, as in the layout: an unreadable pause shows the agent as running. A cycle is still
+      // refused server-side while paused, so this only affects which buttons show.
+      pauseStateOf(access.membership.orgId).catch((error: unknown) => {
+        console.error("console: pause state not loaded", access.membership.orgId, error);
+        return null;
+      }),
     ]);
     // Modes, not the provider: the page must still render when the
     // organization's Circle credentials cannot be read (R12).
@@ -76,8 +81,9 @@ export default async function DashboardPage({
     const treasuryDecisions = treasuryEntries.map(treasuryLedgerDecision);
     const executedReserveMoves = actionRows.slice(0, 2).map(treasuryActionDecision);
     const headSeq = headEntries[0]?.seq ?? 0;
-    // What the approvals inbox holds, so the tile and the page it links to agree.
-    const needsReview = waiting.length;
+    // What the approvals inbox holds for a person, so the tile and the page it links to agree. A row
+    // someone else is deciding right now does not need you.
+    const needsReview = waiting.filter((payable) => payable.status !== "processing").length;
     const paused = pause !== null;
     const role = access.membership.role;
 
@@ -104,7 +110,7 @@ export default async function DashboardPage({
           <StatTile label="Decisions logged" href={orgHref(slug, "/audit")} sub="Every entry is hash-linked and signed">
             <span className="tabular-nums">{dashboardStats.decisionsLogged}</span>
           </StatTile>
-          <StatTile label="Needs you" tone={needsReview > 0 ? "held" : "default"} href={orgHref(slug, "/approvals")} sub={needsReview > 0 ? "Held or flagged — the agent will not act alone" : "Nothing waiting"}>
+          <StatTile label="Needs you" tone={needsReview > 0 ? "held" : "default"} href={orgHref(slug, "/approvals")} sub={needsReview > 0 ? "Waiting for a person's decision" : "Nothing waiting"}>
             <span className="tabular-nums">{needsReview}</span>
           </StatTile>
         </div>

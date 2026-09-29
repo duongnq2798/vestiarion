@@ -3,9 +3,9 @@ import path from "node:path";
 import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import ApprovalCard from "@/components/ApprovalCard";
-import AgentPauseControl from "@/components/AgentPauseControl";
-import { AgentPausedBanner } from "@/components/AgentPausedBanner";
+import ApprovalCard, { payConfirmTitle } from "@/components/ApprovalCard";
+import AgentPauseControl, { PAUSE_DIALOG_DESCRIPTION } from "@/components/AgentPauseControl";
+import { AgentPausedBanner, pausedBanner } from "@/components/AgentPausedBanner";
 import type { WaitingPayable } from "@/lib/agent/approvals";
 import { utcMinute } from "@/lib/copy";
 
@@ -24,6 +24,10 @@ vi.mock("@/app/actions/agent", () => ({
   pauseAgentAction: vi.fn(),
   resumeAgentAction: vi.fn(),
 }));
+
+const { pauseStateOfMock, listMembersMock } = vi.hoisted(() => ({ pauseStateOfMock: vi.fn(), listMembersMock: vi.fn() }));
+vi.mock("@/lib/platform/pause", () => ({ pauseStateOf: pauseStateOfMock }));
+vi.mock("@/lib/platform/members", () => ({ listMembers: listMembersMock }));
 
 const html = (node: ReactElement) => renderToStaticMarkup(node);
 
@@ -115,9 +119,20 @@ describe("ApprovalCard", () => {
   it("has a live region for the result of a decision", () => {
     expect(card()).toContain('role="status"');
   });
+
+  it("asks before paying, and says when the payment is simulated", () => {
+    expect(payConfirmTitle(payable(), false)).toBe("Pay 1,250.00 USDC to Northwind Supply now?");
+    expect(payConfirmTitle(payable(), true)).toBe("Pay 1,250.00 USDC to Northwind Supply now? (simulated)");
+  });
 });
 
 describe("AgentPauseControl", () => {
+  it("says a pause stops the agent, not the people (spec D6)", () => {
+    expect(PAUSE_DIALOG_DESCRIPTION).toContain("The agent runs no cycle and moves no money until someone resumes it.");
+    expect(PAUSE_DIALOG_DESCRIPTION).toContain("People can still pay or reject from Approvals.");
+    expect(PAUSE_DIALOG_DESCRIPTION).not.toMatch(/^No cycle runs and no money moves/);
+  });
+
   it("offers Pause agent while running, to someone who may pause", () => {
     const markup = html(<AgentPauseControl orgSlug="acme" paused={false} canPause canResume={false} />);
     expect(markup).toContain("Pause agent");
@@ -147,6 +162,33 @@ describe("AgentPausedBanner", () => {
   it("says since when, by whom and why", () => {
     const markup = html(<AgentPausedBanner pause={{ pausedAt: "2026-09-29T14:05:12Z", pausedBy: CREATOR, reason: "Suspicious vendor" }} members={members} />);
     expect(markup).toContain("The agent is paused since 2026-09-29 14:05 UTC by ada@example.com: Suspicious vendor");
+  });
+
+  it("loads nothing more when the agent is running", async () => {
+    listMembersMock.mockClear();
+    pauseStateOfMock.mockResolvedValueOnce(null);
+    await expect(pausedBanner("org-1")).resolves.toBeNull();
+    expect(listMembersMock).not.toHaveBeenCalled();
+  });
+
+  it("shows no banner, rather than failing the page, when the pause cannot be read", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    pauseStateOfMock.mockRejectedValueOnce(new Error("connection refused"));
+    await expect(pausedBanner("org-1")).resolves.toBeNull();
+    expect(error).toHaveBeenCalled();
+    error.mockRestore();
+  });
+
+  it("names the pauser as a member when the member list cannot be read", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const pause = { pausedAt: "2026-09-29T14:05:12Z", pausedBy: CREATOR, reason: "Incident" };
+    pauseStateOfMock.mockResolvedValueOnce(pause);
+    listMembersMock.mockRejectedValueOnce(new Error("connection refused"));
+    const loaded = await pausedBanner("org-1");
+    expect(loaded).toEqual({ pause, members: [] });
+    expect(html(<AgentPausedBanner pause={loaded!.pause} members={loaded!.members} />)).toContain("by a member: Incident");
+    expect(error).toHaveBeenCalled();
+    error.mockRestore();
   });
 
   it("names a pauser who has left as a member, and leaves out a missing reason", () => {
@@ -181,10 +223,20 @@ describe("the new control screens, as source", () => {
     expect(read("src/app/o/[slug]/console/page.tsx")).toMatch(/label="Needs you"[^\n]*href=\{orgHref\(slug, "\/approvals"\)\}/);
   });
 
+  it("the console's Needs you tile counts what needs a person, not rows someone is already deciding", () => {
+    const console_ = read("src/app/o/[slug]/console/page.tsx");
+    expect(console_).toContain('waiting.filter((payable) => payable.status !== "processing").length');
+    expect(console_).toContain("Waiting for a person's decision");
+  });
+
+  it("the console treats an unreadable pause as not paused", () => {
+    expect(read("src/app/o/[slug]/console/page.tsx")).toMatch(/pauseStateOf\(access\.membership\.orgId\)\.catch\(/);
+  });
+
   it("the workspace layout draws the paused banner from platform data", () => {
     const layout = read("src/app/o/[slug]/layout.tsx");
-    expect(layout).toContain("pauseStateOf(orgId)");
     expect(layout).toContain("pausedBanner(membership.orgId)");
+    expect(layout).toContain("<AgentPausedBanner");
     expect(layout).toContain("<AgentPausedBanner");
   });
 });

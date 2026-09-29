@@ -23,6 +23,11 @@ const approve = withSuccessToast(approveInvoiceAction);
 const reject = withSuccessToast(rejectInvoiceAction);
 const giveBack = withSuccessToast(returnInvoiceAction);
 
+/** What Approve and pay asks before it pays; a sandbox's payment is simulated, and says so. */
+export function payConfirmTitle(payable: Pick<WaitingPayable, "amount" | "counterpartyName">, sandbox: boolean): string {
+  return `Pay ${fmt(payable.amount)} USDC to ${payable.counterpartyName} now?${sandbox ? " (simulated)" : ""}`;
+}
+
 const STATUS: Record<WaitingPayable["status"], { label: string; tone: BadgeProps["tone"] }> = {
   held: { label: "Held", tone: "held" },
   flagged: { label: "Flagged", tone: "refused" },
@@ -129,7 +134,7 @@ function Decisions({ orgSlug, payable, viewerId, sandbox }: { orgSlug: string; p
               Approve and pay
             </Button>
           }
-          title={`Pay ${fmt(payable.amount)} USDC to ${payable.counterpartyName} now?${sandbox ? " (simulated)" : ""}`}
+          title={payConfirmTitle(payable, sandbox)}
           description="The transfer starts as soon as you confirm, and the ledger records who approved it."
           confirmLabel="Pay now"
         />

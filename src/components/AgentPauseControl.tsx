@@ -13,6 +13,10 @@ import { useActionForm, type ActionResult } from "@/components/ui/useActionForm"
 import { withSuccessToast } from "@/components/withSuccessToast";
 
 const INITIAL: ActionResult = { ok: false, message: "" };
+
+/** Spec D6: a pause stops the agent, not the people. */
+export const PAUSE_DIALOG_DESCRIPTION =
+  "The agent runs no cycle and moves no money until someone resumes it. People can still pay or reject from Approvals. Every page says it is paused, and why.";
 const pause = withSuccessToast(pauseAgentAction);
 const resume = withSuccessToast(resumeAgentAction);
 
@@ -50,7 +54,7 @@ function PauseDialog({ orgSlug }: { orgSlug: string }) {
           Pause agent
         </Button>
       </DialogTrigger>
-      <DialogContent title="Pause the agent" description="No cycle runs and no money moves until someone resumes it. Every page says it is paused, and why.">
+      <DialogContent title="Pause the agent" description={PAUSE_DIALOG_DESCRIPTION}>
         <form {...formProps} className="grid gap-5">
           <input type="hidden" name="orgSlug" value={orgSlug} />
           <Field id="pause-reason" label="Reason" optional description="At most 280 characters. Shown on every page and kept in the ledger.">
