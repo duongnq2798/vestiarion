@@ -43,6 +43,12 @@ describe("Tabs", () => {
   it("marks exactly one tab as selected", () => {
     expect(html(tabs).match(/data-tab-indicator/g)).toHaveLength(1);
   });
+
+  it("scrolls a list that does not fit inside itself, not the page", () => {
+    const list = html(tabs).match(/<div[^>]*role="tablist"[^>]*>/)?.[0] ?? "";
+    expect(list).toContain("overflow-x-auto");
+    expect(list).toContain("max-w-full");
+  });
 });
 
 describe("CopyButton", () => {

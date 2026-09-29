@@ -41,7 +41,7 @@ export function DialogContent({
   const returnFocus = useRef<HTMLElement | null>(null);
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay className={overlayBackdrop} />
+      <DialogPrimitive.Overlay data-overlay-backdrop="" className={overlayBackdrop} />
       <DialogPrimitive.Content
         className={cn(dialogPanel, dialogMotion, "grid max-w-lg gap-5", className)}
         {...(description ? {} : { "aria-describedby": undefined })}

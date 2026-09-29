@@ -48,6 +48,7 @@ export function CommandPaletteProvider({
     function onKeyDown(event: KeyboardEvent) {
       if (event.key.toLowerCase() !== "k" || !(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return;
       event.preventDefault();
+      if (event.repeat) return;
       setOpen((current) => !current);
     }
     window.addEventListener("keydown", onKeyDown);

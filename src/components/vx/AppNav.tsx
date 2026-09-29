@@ -200,6 +200,12 @@ export function AccountMenu({ email }: { email: string | null }) {
             All workspaces
           </Link>
         </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href="/onboarding?new#create-workspace">
+            <Plus aria-hidden />
+            Create workspace
+          </Link>
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
           tone="danger"
@@ -224,7 +230,7 @@ function SearchButton() {
     <Button variant="secondary" onClick={palette.open} className="w-full justify-start gap-2.5 px-3 font-normal text-ink-3 shadow-none hover:text-ink">
       <Search aria-hidden />
       <span className="flex-1 text-left">Search or jump to…</span>
-      <Kbd>{shortcut}</Kbd>
+      <Kbd className="hidden lg:inline-flex">{shortcut}</Kbd>
     </Button>
   );
 }

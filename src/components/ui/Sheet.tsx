@@ -47,7 +47,7 @@ export type SheetContentProps = Omit<ComponentProps<typeof DialogPrimitive.Conte
 export function SheetContent({ side, title, description, hideHeader = false, showClose = true, className, children, ...props }: SheetContentProps) {
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay className={overlayBackdrop} />
+      <DialogPrimitive.Overlay data-overlay-backdrop="" className={overlayBackdrop} />
       <DialogPrimitive.Content className={cn(sheetVariants({ side }), className)} {...(description ? {} : { "aria-describedby": undefined })} {...props}>
         <div className={cn("shrink-0 space-y-1 border-b border-line px-5 py-4", showClose && "pr-14", hideHeader && "sr-only")}>
           <DialogPrimitive.Title className="text-base font-semibold tracking-tight text-ink">{title}</DialogPrimitive.Title>

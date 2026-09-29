@@ -26,6 +26,7 @@ import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/Table";
+import { toast } from "@/components/ui/Toaster";
 import { MOTION } from "@/components/ui/tokens";
 import { useActionForm } from "@/components/ui/useActionForm";
 import { canAssignRole, type OrgRole } from "@/lib/auth/roles";
@@ -145,7 +146,11 @@ function LeaveWorkspace({ orgSlug, userId, form }: { orgSlug: string; userId: st
 }
 
 function InviteForm({ orgSlug, assignable }: { orgSlug: string; assignable: readonly OrgRole[] }) {
-  const { state, formProps } = useActionForm(inviteMemberAction, INITIAL, { resetOnSuccess: true, toastOnSuccess: true });
+  const { state, formProps } = useActionForm(inviteMemberAction, INITIAL, {
+    resetOnSuccess: true,
+    // With a link to hand over, the full message sits beside the link; the toast only confirms.
+    onSuccess: (result) => toast.success(result.link ? "Invitation created" : result.message),
+  });
 
   return (
     <Card asChild className="space-y-3 p-4 sm:p-5">

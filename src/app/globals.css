@@ -154,7 +154,7 @@
   /* The reserved column shows the root's background, which no backdrop can
      cover: while a dialog or sheet is open it takes the backdrop's tint
      (`overlayBackdrop` in components/ui/overlay.ts, bg-ink/40). */
-  html:has(body [role="dialog"][data-state="open"], body [role="alertdialog"][data-state="open"]) {
+  html:has(body [data-overlay-backdrop][data-state="open"]) {
     background-color: color-mix(in srgb, var(--color-ink) 40%, var(--color-ground));
   }
 
@@ -164,9 +164,10 @@
     }
   }
 
+  /* Thin where scrollbars take space. No `scrollbar-color`: in Chromium a
+     non-auto colour can swap macOS's overlay scrollbars for classic ones. */
   * {
     scrollbar-width: thin;
-    scrollbar-color: var(--color-line-strong) transparent;
   }
 
   body {

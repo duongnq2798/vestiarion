@@ -40,12 +40,17 @@ export function Tabs({ defaultValue, onValueChange, className, children, ...prop
 }
 
 /** Tabs that do not fit scroll sideways inside the list, never the page. */
-export function TabsList({ className, ...props }: ComponentProps<typeof TabsPrimitive.List>) {
+export function TabsList({ className, children, ...props }: ComponentProps<typeof TabsPrimitive.List>) {
   return (
-    <TabsPrimitive.List
-      className={cn("inline-flex h-11 w-full max-w-full items-stretch gap-1 overflow-x-auto rounded-xl border border-line bg-raised/60 p-1 [scrollbar-width:none] sm:h-10 sm:w-fit", className)}
-      {...props}
-    />
+    <TabsPrimitive.List asChild {...props}>
+      {/* `layoutScroll` lets the gliding marker account for the list's own scroll offset. */}
+      <m.div
+        layoutScroll
+        className={cn("inline-flex h-11 w-full max-w-full items-stretch gap-1 overflow-x-auto rounded-xl border border-line bg-raised/60 p-1 [scrollbar-width:none] sm:h-10 sm:w-fit", className)}
+      >
+        {children}
+      </m.div>
+    </TabsPrimitive.List>
   );
 }
 

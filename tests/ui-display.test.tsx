@@ -143,6 +143,8 @@ describe("Table", () => {
     );
     expect(markup).toMatch(/^<div class="[^"]*overflow-x-auto/);
     expect(markup).toContain('scope="col"');
+    // Screen-reader-only text and hidden form controls in cells must scroll with the table, not widen the page.
+    expect(markup).toMatch(/^<div class="[^"]*\brelative\b/);
   });
 
   it("lets its frame scroll both ways when asked, for a sticky header", () => {
