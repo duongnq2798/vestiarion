@@ -253,7 +253,7 @@ logged rather than emailed. Each recipient gets a message of their own —
 addresses are never shared between them — built by `waitingDigestEmail`
 (`src/lib/email/waiting-digest.ts`): the workspace name, up to 10 invoices
 (then "and N more"), each with the counterparty's name, amount, status, and
-the first 140 characters of the agent's reasoning, all HTML-escaped, with no
+the first sentence of the agent's reasoning (at most 140 characters), all HTML-escaped, with no
 counterparty address, wallet, or email. It is sent through the same
 `sendEmail` (Resend, `no-reply@vestiarion.xyz`) invitations use. Needs
 `RESEND_API_KEY`; without it, nothing is sent and nothing is marked, and the
