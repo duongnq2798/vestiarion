@@ -38,6 +38,7 @@ import { PerformanceHistory } from "@/components/vx/PerformanceHistory";
 import { ProvenanceBar } from "@/components/vx/Provenance";
 import { RiskDial } from "@/components/vx/RiskDial";
 import { AccountsList, BalanceTile, ForecastPanel, StatTile } from "@/components/vx/Treasury";
+import { derivePerformanceScore } from "@/lib/agent/counterparty-history";
 import { PageHead } from "@/components/vx/Shell";
 import { ACCOUNTS, COUNTERPARTIES, DECISIONS, DESIGN_SLUG, FORECAST, HISTORY, INSIGHTS, INVITATIONS, LEDGER, MEMBERS, PROVENANCE } from "./fixtures";
 import { FeedbackDemo, FormLab, OverlayDemo, TabsDemo } from "./Demos";
@@ -442,7 +443,7 @@ export default function DesignPage() {
               <RiskDial risk="clear" baseline={5000} effective={5000} />
               <RiskDial risk="medium" baseline={5000} effective={2500} />
               <RiskDial risk="high" baseline={5000} effective={0} />
-              <PerformanceHistory score={0.82} inputs={HISTORY} />
+              <PerformanceHistory score={derivePerformanceScore(HISTORY).score} inputs={HISTORY} />
             </Card>
             <InsightsCharts data={INSIGHTS} />
             <InsightsCharts data={{ transfers: [], runs: [], snapshots: [], treasuryMoves: [], screenings: [] }} />
