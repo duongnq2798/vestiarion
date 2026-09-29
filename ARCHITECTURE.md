@@ -186,9 +186,12 @@ read again first, and a counterparty now screened high risk is not paid.
 The contractor stage does the same for a `verified` milestone whose release is
 already in flight. It records `milestone_reconcile` rather than asking the
 model again, so a change of mind cannot record a released payment as held.
-Only a payment actually in flight is reconciled: a submission that failed
-before the provider returned an id moved no money, so its invoice or milestone
-is decided again, through the model and the guardrails.
+Only a payment with something to reconcile is reconciled. An intent with no
+provider id that was never claimed, or whose submission failed before the
+provider returned an id, has no transfer to look up. So its invoice or
+milestone is decided again, through the model and the guardrails. If a lost
+submission did reach the provider, a resubmission reuses the same idempotency
+key.
 
 **Waiting for Circle never guesses.** After Circle accepts a transfer, it holds
 a transaction id, and the money may have moved. The live provider waits for

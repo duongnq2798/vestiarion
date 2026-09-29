@@ -182,6 +182,7 @@ describe("existingPaymentIntents — which payables the AP stage reconciles inst
               { source_id: "failed-no-id", provider_tx_id: null, status: "failed" },
               { source_id: "failed-by-provider", provider_tx_id: "circle-tx-2", status: "failed" },
               { source_id: "submitting", provider_tx_id: null, status: "submitting" },
+              { source_id: "created-no-id", provider_tx_id: null, status: "created" },
             ],
           }
         : undefined
@@ -192,11 +193,13 @@ describe("existingPaymentIntents — which payables the AP stage reconciles inst
         { id: "failed-no-id", status: "matched" },
         { id: "failed-by-provider", status: "matched" },
         { id: "submitting", status: "matched" },
+        { id: "created-no-id", status: "matched" },
       ])
     );
 
-    // Nothing moved for failed-no-id: it goes back through the model and the guardrails.
+    // No transfer to reconcile by: both go back through the model and the guardrails.
     expect(intents.has("failed-no-id")).toBe(false);
+    expect(intents.has("created-no-id")).toBe(false);
     // A transfer Circle reported failed is a real transfer, still reconciled by its id.
     expect(intents.get("failed-by-provider")).toEqual({ providerTxId: "circle-tx-2", status: "failed" });
     expect(intents.get("submitting")).toEqual({ providerTxId: null, status: "submitting" });

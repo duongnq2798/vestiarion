@@ -164,6 +164,7 @@ describe("existingMilestoneIntents — which milestones the contractor stage rec
               { source_id: "failed-no-id", provider_tx_id: null, status: "failed" },
               { source_id: "failed-by-circle", provider_tx_id: "circle-tx-2", status: "failed" },
               { source_id: "submitting", provider_tx_id: null, status: "submitting" },
+              { source_id: "created-no-id", provider_tx_id: null, status: "created" },
             ],
           }
         : undefined
@@ -174,8 +175,11 @@ describe("existingMilestoneIntents — which milestones the contractor stage rec
         { id: "failed-no-id", status: "verified" },
         { id: "failed-by-circle", status: "verified" },
         { id: "submitting", status: "verified" },
+        { id: "created-no-id", status: "verified" },
       ])
     );
+    // Never claimed, so never submitted: decided again like the failed one.
+    expect(intents.has("created-no-id")).toBe(false);
 
     // Nothing moved: it goes back through the model and the limit and risk guardrails.
     expect(intents.has("failed-no-id")).toBe(false);

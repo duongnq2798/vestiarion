@@ -295,13 +295,17 @@ async function paymentIntentsFor(
       .eq("source_type", sourceType)
       .in("source_id", ids)
   ) as Array<{ source_id: string; provider_tx_id: string | null; status: string }>;
-  // A submission that failed before the provider returned an id moved no
-  // money and is not in flight: `executePayment` would claim it again and
-  // transfer. Left out, its source is decided again — model and guardrails —
-  // so a payment limit cut or a risk change since is respected. A `failed`
-  // intent with a provider id is a real transfer the provider reported on,
-  // and is still reconciled by that id.
-  const inFlight = rows.filter((row) => !(row.status === "failed" && row.provider_tx_id === null));
+  // An intent with no provider id that is `created` (never claimed) or
+  // `failed` (the submission failed before the provider returned an id) has
+  // no transfer to reconcile by: `executePayment` would claim it and submit.
+  // Left out, its source is decided again — model and guardrails — so a
+  // payment limit cut or a risk change since is respected. Should the lost
+  // submission have reached the provider after all, a resubmission reuses the
+  // same idempotency key. A `failed` intent with a provider id is a real
+  // transfer the provider reported on, and is still reconciled by that id.
+  const inFlight = rows.filter(
+    (row) => !(row.provider_tx_id === null && (row.status === "failed" || row.status === "created"))
+  );
   return new Map(inFlight.map((row) => [row.source_id, { providerTxId: row.provider_tx_id, status: row.status }]));
 }
 
