@@ -105,3 +105,11 @@ describe("the Members page", () => {
     expect(page).toContain("<AutoRefresh intervalMs={invitations.length > 0 ? 15_000 : 60_000} />");
   });
 });
+
+describe("the Approvals page", () => {
+  const page = readFileSync(path.join(process.cwd(), "src", "app", "o", "[slug]", "approvals", "page.tsx"), "utf8");
+
+  it("re-reads itself every 15 s while something waits, and every 30 s while nothing does", () => {
+    expect(page).toContain("<AutoRefresh intervalMs={waiting.length > 0 ? 15_000 : 30_000} />");
+  });
+});

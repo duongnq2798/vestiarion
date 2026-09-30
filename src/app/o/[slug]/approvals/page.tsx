@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inbox } from "lucide-react";
 import ApprovalCard from "@/components/ApprovalCard";
+import { AutoRefresh } from "@/components/AutoRefresh";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { sectionTitle } from "@/components/vx/nav";
@@ -33,6 +34,10 @@ export default async function ApprovalsPage({ params }: { params: Promise<{ slug
               : "Payables the agent would not pay on its own, oldest due date first. An owner, admin or approver decides them."
           }
         />
+        {/* A payable the agent just held, or one another approver just decided, shows up without a reload:
+            every 15 s while something waits (someone else may be deciding it), every 30 s otherwise, and at once
+            on return to the tab. Open dialogs and a typed rejection reason survive a refresh. */}
+        <AutoRefresh intervalMs={waiting.length > 0 ? 15_000 : 30_000} />
         {waiting.length === 0 ? (
           <EmptyState icon={<Inbox />} title="Nothing is waiting for a decision." body="When the agent holds or flags a payable, it appears here." />
         ) : (
