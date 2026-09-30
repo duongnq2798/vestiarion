@@ -1,6 +1,6 @@
 # Payee links: a payee enters their own Arc address
 
-Date: 2026-09-30. Status: approved for implementation (decided under the standing autonomy grant;
+Date: 2026-09-30. Status: shipped (#75) (decided under the standing autonomy grant;
 rulings carry their cost if wrong).
 
 ## 1. Why
@@ -133,4 +133,22 @@ The token looks like `vxp_<43 base64url characters>` (32 random bytes). Only its
 
 ## 8. Rollout record
 
-(pending)
+- **Migration and merge.**
+  - The partner applied 0039 on 2026-09-30.
+  - A read-only probe showed:
+    - all five functions run as `security definer` with `search_path=""`;
+    - anon, authenticated and `vestiarion_tenant` cannot execute any of them;
+    - the service role can execute them;
+    - `payee_links` has RLS on, no role but the service role can read it, and its constraints are in place.
+  - Merged as `7b97259` (#75) at 16:55 UTC. After the deploy, `/payee/<unknown token>` answered 200 with the neutral sentence and `noindex`.
+- **Proven in testnet-2**, after a full reload of the member's tab:
+  - **#440 `payee_link_created`** at 17:03:45 for Centronex. The link expires 2026-10-07.
+  - The payee opened the link in a private window and submitted an address.
+    - The link's `used_at` is 17:04:27.
+    - **#441 `counterparty_address_changed`** has `via: "payee_link"` and `linkId`, and the address changed to `0x67C88453…`.
+    - The card showed it as not yet confirmed.
+  - **#442 `counterparty_address_confirmed`** (`via: "confirm"`) at 17:06:08.
+  - An event cycle started at 17:06:16, 8 s later. Its `cycle_complete` (#446) records `trigger: "event"` and `events: ["address_confirmed"]`.
+- **The same cycle was the first with `screening_mode: "live"`.** OpenSanctions was configured, and the partner had redeployed. Its sweep (#444) re-screened 0 of 3 counterparties, because all three had been screened by the bundled list at 16:04 and live mode re-screens after 24 hours. The key is exercised by the next new counterparty or the next re-screen.
+- **Found in the partner's check:** the member's tab showed "not yet confirmed" only after a reload, because the Counterparties page did not re-read its data.
+  - Fixed in the follow-up: `AutoRefresh` on Counterparties, every 15 s while a link is out or an address waits, and every 60 s otherwise.
