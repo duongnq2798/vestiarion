@@ -68,6 +68,21 @@ src/components/landing/*                      the copy line (H8)
 3. A new account signs in, creates a workspace, chooses the hosted wallet, creates wallets, funds 20 USDC from the faucet, adds a counterparty with the partner's own test address and an invoice, then goes live or runs a cycle by hand. Check the transaction on the Arc explorer.
 4. Record the outcome here.
 
+### Rollout record (2026-09-30)
+
+- **Steps 1 and 2.** The partner added `HOSTED_CIRCLE_API_KEY` and `HOSTED_CIRCLE_ENTITY_SECRET` in Vercel. `0030` was applied before #48 merged. The first hosted workspace, `testnet-demo`, went live, then was deleted on purpose (its tombstone is in `deleted_orgs`).
+- **Step 3**, in `testnet-2`, a live workspace on a hosted wallet:
+  - It has 2 wallets. The faucet top-ups took the operating balance 20 → 40 USDC, and the console's live balance read it back at 04:11 UTC.
+  - Counterparty "Trading Handrock": a vendor, screened clear, with a 2 USDC limit and the partner's own MetaMask address `0x1948…345a`.
+  - Invoice: 2 USDC, PO-1, goods received. Added at 04:59:06 UTC. The partner ran a cycle by hand at 04:59:21.
+  - The agent decided `pay`. It is ledger #329 (`ap_pay`, no guardrail), and its reasoning names the clear screening, the amount at the limit, and the complete three-way match. The cycle completed with 2 decisions (#331).
+  - The payment intent went from `created` at 04:59:31.8 to `confirmed` at 04:59:36.0, about 4.2 s from submission to confirmation. The invoice is `paid`, and the stored operating balance is 38 USDC.
+- **On chain.** Tx [`0xc7e7c760…41abf90`](https://testnet.arcscan.app/tx/0xc7e7c76074580eea203b06d4f12a4ad23579f0362674443e9e8f5dfc541abf90), block 64724686 at 04:59:34 UTC, status success.
+  - The USDC `Transfer` of exactly 2 USDC (18 decimals on Arc) goes from `0x97f8…b6b6`, testnet-2's operating wallet (it matches `accounts.address`), to `0x1948…345a`.
+  - The same transaction carries a second USDC transfer, 0.0185 USDC, from the ERC-4337 EntryPoint (`0x0000…a032`) to `0x5782…d841`. This is the smart-contract account's gas settlement. The receipt's own gas cost is $0.0079.
+- **Totals.** Production now has 9 confirmed on-chain payments: 8 from founding (its own Circle account) and 1 from testnet-2 (hosted). This is the first payment by a self-serve workspace, through the hosted flow end to end.
+- **Not yet exercised in production:** approve-and-pay by a person (the agent paid this invoice itself). The next held payment in a live workspace will be the first.
+
 ## 6. Out of scope
 
 - Mainnet.
