@@ -80,6 +80,28 @@ export function utcDate(value: Date | string): string {
   return `${year}-${month}-${day}`;
 }
 
+/** An invoice's early-payment discount: the percent off, and the timestamp of the day it lasts through (UTC). */
+export interface InvoiceDiscount {
+  pct: number;
+  deadline: string;
+}
+
+/**
+ * The early-payment discount an invoice row carries (migration 0038), or
+ * null when it has none. A percent the database would refuse anyway — not
+ * above 0 and below 100 — is no discount at all, so the full amount is paid:
+ * a row that cannot be read never pays less than it says.
+ */
+export function invoiceDiscount(row: {
+  early_pay_discount_pct?: string | number | null;
+  discount_due_date?: string | null;
+}): InvoiceDiscount | null {
+  if (row.early_pay_discount_pct == null || row.discount_due_date == null) return null;
+  const pct = typeof row.early_pay_discount_pct === "number" ? row.early_pay_discount_pct : Number(row.early_pay_discount_pct);
+  if (!Number.isFinite(pct) || pct <= 0 || pct >= 100) return null;
+  return { pct, deadline: row.discount_due_date };
+}
+
 /** True through the end of the deadline's UTC day when a discount is set; false when there is none, or once that day has passed. */
 export function discountApplies(discount: { pct: number; deadline: string } | null, now: Date): boolean {
   if (!discount) return false;

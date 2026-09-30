@@ -168,13 +168,16 @@ describe("the privacy page", () => {
     const models = body.split("A model provider")[1]?.split("OpenSanctions")[0] ?? "";
 
     // Structure and the task's own words, not data about the workspace.
-    const FRAME = ["task", "invoice", "counterparty", "treasury", "milestone", "contractor", "economics", "note", "duplicateNote", "duplicateMatchesTotal"];
+    const FRAME = ["task", "invoice", "terms", "counterparty", "treasury", "milestone", "contractor", "economics", "note", "duplicateNote", "duplicateMatchesTotal"];
     const PHRASES: Record<string, string> = {
       amount: "amount",
       memo: "memo",
       poReference: "purchase order reference",
       goodsReceived: "whether the goods were received",
       dueDate: "due date",
+      earlyPayDiscount: "early-payment discount",
+      timing: "the payment timing worked out from those",
+      scheduledEarlier: "when the agent scheduled the invoice earlier, the date it chose and its reasoning",
       name: "name",
       riskLevel: "risk level",
       paymentLimit: "payment limit",

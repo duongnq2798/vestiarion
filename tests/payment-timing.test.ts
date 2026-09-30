@@ -3,6 +3,7 @@ import {
   amountToPay,
   boundPayOn,
   discountApplies,
+  invoiceDiscount,
   planPaymentTiming,
   utcDate,
   type PaymentTimingInput,
@@ -65,6 +66,29 @@ describe("amountToPay", () => {
     // 6 decimals would give 99.666666 / 0.333333, rounding gives .666667 / .333333.
     const result = amountToPay(100, { pct: 1 / 3, deadline: "2026-10-10T12:00:00.000Z" }, new Date("2026-10-05T00:00:00.000Z"));
     expect(result).toEqual({ amountPaid: 99.666667, discountTaken: 0.333333 });
+  });
+});
+
+describe("invoiceDiscount", () => {
+  it("reads the pair of columns an invoice row carries", () => {
+    expect(invoiceDiscount({ early_pay_discount_pct: "2.00", discount_due_date: "2026-10-11T12:00:00+00:00" })).toEqual({
+      pct: 2,
+      deadline: "2026-10-11T12:00:00+00:00",
+    });
+    expect(invoiceDiscount({ early_pay_discount_pct: 1.5, discount_due_date: "2026-10-11T12:00:00Z" })).toEqual({ pct: 1.5, deadline: "2026-10-11T12:00:00Z" });
+  });
+
+  it("is none without both columns", () => {
+    expect(invoiceDiscount({ early_pay_discount_pct: null, discount_due_date: null })).toBeNull();
+    expect(invoiceDiscount({ early_pay_discount_pct: "2.00", discount_due_date: null })).toBeNull();
+    expect(invoiceDiscount({ early_pay_discount_pct: null, discount_due_date: "2026-10-11T12:00:00Z" })).toBeNull();
+    expect(invoiceDiscount({})).toBeNull();
+  });
+
+  it("is none, so the full amount is paid, for a percent outside (0, 100)", () => {
+    for (const pct of ["0", "100", "-2", "abc", 150]) {
+      expect(invoiceDiscount({ early_pay_discount_pct: pct, discount_due_date: "2026-10-11T12:00:00Z" }), String(pct)).toBeNull();
+    }
   });
 });
 
