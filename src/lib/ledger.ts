@@ -8,6 +8,7 @@ import {
   ledgerKeyId,
   ledgerReadKeys,
   ledgerSigningKey,
+  type KeyRotation,
   type LedgerKeyring,
   type LedgerReadKeys,
   type LocalLedgerKeyStore,
@@ -207,11 +208,11 @@ async function appendSigned(input: LedgerEntryInput, privateKey: crypto.KeyObjec
 }
 
 /**
- * If the key that signed the newest entry is not the one about to sign, the
- * ledger records that itself — an entry signed by the new key, naming both —
- * before anything else is written under the new authority.
+ * The rotation the next entry would record, if any: the key that signed the
+ * newest entry, against the one this scope's keyring holds as active. Shared
+ * by the automatic check and by a rotation an owner makes.
  */
-async function recordKeyRotationIfAny(privateKey: crypto.KeyObject): Promise<void> {
+async function pendingKeyRotation(): Promise<KeyRotation | null> {
   const head = unwrap(
     await db()
       .from("ledger_entries")
@@ -220,19 +221,42 @@ async function recordKeyRotationIfAny(privateKey: crypto.KeyObject): Promise<voi
       .limit(1)
   ) as Array<{ signing_key_id: string | null; body_hash: string; signature: string }>;
 
-  const rotation = detectKeyRotation(head[0] ?? null, ledgerVerificationKeyring());
-  if (!rotation) return;
+  return detectKeyRotation(head[0] ?? null, ledgerVerificationKeyring());
+}
 
-  await appendSigned(
-    {
-      actor: "system",
-      domain: "system",
-      action: "ledger_key_rotated",
-      summary: `Ledger signing key rotated: ${rotation.from} retired, ${rotation.to} now signs`,
-      detail: { from: rotation.from, to: rotation.to },
-    },
-    privateKey
-  );
+function rotationEntry(rotation: KeyRotation, by?: string): LedgerEntryInput {
+  return {
+    actor: by ? "human" : "system",
+    domain: "system",
+    action: "ledger_key_rotated",
+    summary: `Ledger signing key rotated: ${rotation.from} retired, ${rotation.to} now signs`,
+    detail: by ? { from: rotation.from, to: rotation.to, by } : { from: rotation.from, to: rotation.to },
+  };
+}
+
+/**
+ * If the key that signed the newest entry is not the one about to sign, the
+ * ledger records that itself — an entry signed by the new key, naming both —
+ * before anything else is written under the new authority.
+ */
+async function recordKeyRotationIfAny(privateKey: crypto.KeyObject): Promise<void> {
+  const rotation = await pendingKeyRotation();
+  if (!rotation) return;
+  await appendSigned(rotationEntry(rotation), privateKey);
+}
+
+/**
+ * The entry for a rotation an owner made (`rotateLedgerKey`), naming who.
+ * Called in a scope entered *after* the swap, so the key it signs with is the
+ * new one and the old one is in the keyring as retired. `null` when there is
+ * nothing to record: the head is signed by the current key already, or by a
+ * key this keyring cannot vouch for.
+ */
+export async function recordLedgerKeyRotation(by: string): Promise<LedgerEntry | null> {
+  const privateKey = ledgerSigningKey(currentOrgConfig(), NO_LOCAL_KEYS);
+  const rotation = await pendingKeyRotation();
+  if (!rotation) return null;
+  return appendSigned(rotationEntry(rotation, by), privateKey);
 }
 
 /**
