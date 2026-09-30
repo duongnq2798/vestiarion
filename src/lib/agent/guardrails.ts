@@ -50,7 +50,7 @@ export function enforceApGuardrails(input: ApGuardrailInput): ApGuardrailResult 
       blocked: true,
       status: "flagged",
       rule: "invoice.duplicate_of_settled",
-      reasoning: `${input.reasoning} [guardrail override: this invoice repeats one already settled (${duplicate.explanation}) — ${verb} refused before execution]`,
+      reasoning: `${input.reasoning} [guardrail override: this invoice repeats one already paid, being paid or scheduled (${duplicate.explanation}) — ${verb} refused before execution]`,
     };
   }
 

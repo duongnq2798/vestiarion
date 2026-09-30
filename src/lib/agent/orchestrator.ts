@@ -632,23 +632,25 @@ export interface PayableBookRow {
 }
 
 /**
- * What falls due before an invoice's payment date: every other open payable
- * (the treasury buffer's statuses, ./obligations.ts) dated before `before` —
- * by the day it is scheduled for when it is, else its due date — plus the
- * verified milestones, which are released the same day (RFB3). Full amounts,
- * as the buffer counts them. An obligation whose date cannot be read may well
- * come first, so it is counted.
+ * What falls due by an invoice's payment date: every other open payable (the
+ * treasury buffer's statuses, ./obligations.ts) dated on or before `by` — a
+ * payment in flight (`matched`) today, a scheduled one on the day it is
+ * scheduled for, any other on its due date — plus the verified milestones,
+ * which are released the same day (RFB3). An obligation due on the same day
+ * competes for the same cash, so it counts. Full amounts, as the buffer counts
+ * them. An obligation whose date cannot be read may well come first, so it is
+ * counted too.
  */
-export function obligationsDueBefore(
+export function obligationsDueBy(
   book: ReadonlyArray<PayableBookRow>,
-  input: { excludeId: string; before: string; milestoneTotal: number }
+  input: { excludeId: string; by: string; today: string; milestoneTotal: number }
 ): number {
   let total = input.milestoneTotal;
   for (const row of book) {
     if (row.id === input.excludeId) continue;
     if (!(OPEN_PAYABLE_STATUSES as readonly string[]).includes(row.status)) continue;
-    const day = utcDayOf(row.scheduled_for ?? row.due_date);
-    if (day === null || day < input.before) total += row.amount;
+    const day = row.status === "matched" ? input.today : utcDayOf(row.scheduled_for ?? row.due_date);
+    if (day === null || day <= input.by) total += row.amount;
   }
   return Number(total.toFixed(6));
 }
@@ -657,18 +659,28 @@ export function obligationsDueBefore(
 export type ApTiming = PaymentTiming & { earlierObligations: number };
 
 /**
- * `planPaymentTiming` with the obligations that fall due before this
- * invoice's own target date. The target does not depend on them — only
- * `shortfall` does — so a first pass finds the date and the second measures
- * what comes before it.
+ * `planPaymentTiming` with the obligations that fall due by this invoice's
+ * own target date. The target does not depend on them — only `shortfall`
+ * does — so a first pass finds the date and the second measures what comes
+ * by then.
  */
 function planApTiming(
   input: Omit<PaymentTimingInput, "earlierObligations">,
-  obligationsBefore: (targetOn: string) => number
+  obligationsBy: (targetOn: string, today: string) => number
 ): ApTiming {
-  const { targetOn } = planPaymentTiming({ ...input, earlierObligations: 0 });
-  const earlierObligations = obligationsBefore(targetOn);
+  const { targetOn, today } = planPaymentTiming({ ...input, earlierObligations: 0 });
+  const earlierObligations = obligationsBy(targetOn, today);
   return { ...planPaymentTiming({ ...input, earlierObligations }), earlierObligations };
+}
+
+/**
+ * Whether the decision code let stand gives the same answer as the written
+ * policy: the same action and, for two schedules, the same day. `decide`
+ * compares actions only, and before code has bounded the model's date.
+ */
+function sameApDecision(decision: ApDecision, reference: ApDecision): boolean {
+  if (decision.action !== reference.action) return false;
+  return decision.action !== "schedule" || decision.payOn === reference.payOn;
 }
 
 type TimingRule = ReturnType<typeof boundPayOn>["timingRule"];
@@ -747,7 +759,7 @@ async function decideApPayable(
     operatingBalance: number;
     history: InvoiceLike[];
     reserveApy: number;
-    obligationsBefore: (targetOn: string) => number;
+    obligationsBy: (targetOn: string, today: string) => number;
     metrics: CycleMetricsCollector;
   }
 ): Promise<{ status: string; scheduledFor: string | null; operatingBalance: number | null; line: CycleLogLine }> {
@@ -789,14 +801,14 @@ async function decideApPayable(
   const terms = { earlyPayDiscount: discount ? { percent: discount.pct, deadline: discount.deadline } : null };
   const timing = planApTiming(
     { now, amount, dueDate: invoice.due_date, discount, operatingBalance, reserveApy: ctx.reserveApy },
-    ctx.obligationsBefore
+    ctx.obligationsBy
   );
   const previouslyScheduledFor = invoice.status === "scheduled" ? (invoice.scheduled_for ?? null) : null;
   const scheduledEarlier = previouslyScheduledFor
     ? { payOn: utcDate(previouslyScheduledFor), reasoning: invoice.agent_reasoning }
     : null;
 
-  const { value: modelDecision, mode, reference, agreedWithReference } = await decide<ApDecision>({
+  const { value: modelDecision, mode, reference, agreedWithReference: sameActionAsReference } = await decide<ApDecision>({
     systemPrompt: SYSTEM_PROMPT,
     userPrompt: JSON.stringify({
       task: "Decide whether to pay this accounts-payable invoice, and when: now, or on a later day no later than its due date.",
@@ -834,7 +846,7 @@ async function decideApPayable(
       duplicateNote:
         duplicates.length === 0
           ? "No earlier payable from this counterparty resembles this invoice."
-          : `${duplicateContext.total} earlier payable(s) from this counterparty resemble this one; the ${duplicateContext.matches.length} strongest are shown. A repeat of an invoice that was already paid is duplicate billing — flag it rather than paying it a second time.`,
+          : `${duplicateContext.total} earlier payable(s) from this counterparty resemble this one; the ${duplicateContext.matches.length} strongest are shown. A repeat of an invoice that is already paid, being paid or scheduled is duplicate billing — flag it rather than paying or scheduling it a second time.`,
       responseShape: {
         action: "pay | schedule | hold | flag_fraud | request_info",
         payOn: "YYYY-MM-DD (UTC), with schedule only: after today, and no later than the due date",
@@ -887,6 +899,9 @@ async function decideApPayable(
     now,
     dueDate: invoice.due_date,
   });
+  // Scored on what code let stand, and on the day as well as the action; null
+  // still means the policy itself decided, so there was nothing to compare.
+  const agreedWithReference = sameActionAsReference === null ? null : sameApDecision(decision, reference);
 
   // A payment the agent commits to must be one it would be allowed to make:
   // `schedule` is refused exactly as `pay` is, against the full amount.
@@ -1119,7 +1134,7 @@ export async function runApStage(input: ApStageInput): Promise<number> {
   });
   const history = payableHistory.map(asInvoiceLike);
 
-  // What falls due before each invoice's payment date: the same book, kept
+  // What falls due by each invoice's payment date: the same book, kept
   // current as this stage decides (a payment made leaves it, a schedule moves
   // its day), plus the verified milestones the contractor stage releases today.
   const book: PayableBookRow[] = payableHistory.map((row) => ({
@@ -1135,12 +1150,19 @@ export async function runApStage(input: ApStageInput): Promise<number> {
       : (unwrap(await db.from("milestones").select("amount").eq("verified", true).eq("status", "verified")) as Array<{
           amount: string;
         }>).reduce((sum, row) => sum + num(row.amount), 0);
+  // Each outcome is written back into both the book and the duplicate
+  // history before the next invoice is decided. A twin decided later in the
+  // same cycle must see this one paid, in flight or scheduled — or, as
+  // importantly, no longer scheduled once it has been flagged or held, so a
+  // stale "scheduled" does not refuse the one twin still to be paid.
   const record = (id: string, status: string, scheduledFor: string | null) => {
     const row = book.find((entry) => entry.id === id);
     if (row) {
       row.status = status;
       row.scheduled_for = scheduledFor;
     }
+    const earlier = history.find((entry) => entry.id === id);
+    if (earlier) earlier.status = status;
   };
 
   // A `matched` payable with a payment intent already has a payment in
@@ -1182,7 +1204,7 @@ export async function runApStage(input: ApStageInput): Promise<number> {
       history,
       reserveApy,
       metrics,
-      obligationsBefore: (targetOn) => obligationsDueBefore(book, { excludeId: invoice.id, before: targetOn, milestoneTotal }),
+      obligationsBy: (targetOn, today) => obligationsDueBy(book, { excludeId: invoice.id, by: targetOn, today, milestoneTotal }),
     });
     if (decided.operatingBalance !== null) operatingBalance = decided.operatingBalance;
     record(invoice.id, decided.status, decided.scheduledFor);

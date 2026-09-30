@@ -6,7 +6,7 @@ import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { db } from "@/lib/dal";
 import { withOrg } from "@/lib/dal/scope";
-import { dueForDecision, obligationsDueBefore, runApStage, type CycleLogLine } from "@/lib/agent/orchestrator";
+import { dueForDecision, obligationsDueBy, runApStage, type CycleLogLine } from "@/lib/agent/orchestrator";
 import { CycleMetricsCollector } from "@/lib/agent/cycle-metrics";
 import type { DecideParams } from "@/lib/agent/decide";
 import type { BalanceSnapshot, ChainProvider, EarnResult, TransferParams, TransferResult } from "@/lib/circle";
@@ -482,6 +482,140 @@ describe("the AP stage and a scheduled invoice", () => {
   });
 });
 
+/**
+ * A duplicate must never be paid twice because the agent took its time. Two
+ * identical invoices are one obligation: whichever is paid, scheduled or in
+ * flight first, the other is refused in code (`invoice.duplicate_of_settled`),
+ * within one cycle as across cycles.
+ */
+describe("the AP stage and duplicates of money already committed", () => {
+  const twin = (overrides: Record<string, unknown> = {}) => ({ id: OTHER_INVOICE_ID, ...overrides });
+
+  it("pays only one of two identical invoices scheduled for the same day, and the guardrail flags the other", async () => {
+    today("2026-10-11T06:00:00.000Z");
+    // The worst case: a model that ignores the duplicate evidence and pays.
+    model(() => ({ action: "pay", reasoning: "Scheduled for today; paying at the discount.", confidence: 0.9 }));
+    const { fake, chain, stage } = apFake({ book: [scheduledPayable(), scheduledPayable(twin())] });
+
+    await stage();
+
+    expect(chain.transfers).toHaveLength(1);
+    const statuses = invoicePatches(fake.requests).map((p) => (p.body as Record<string, unknown>).status);
+    expect(statuses.sort()).toEqual(["flagged", "paid"]);
+    const flagged = ledger(fake.requests).find((e) => (e.p_detail as Record<string, unknown>).guardrailBlocked === true);
+    expect(flagged?.p_detail).toMatchObject({ guardrailRule: "invoice.duplicate_of_settled", execution: { resultingStatus: "flagged" } });
+    const flaggedPatch = invoicePatches(fake.requests).find((p) => (p.body as Record<string, unknown>).status === "flagged");
+    expect((flaggedPatch?.body as Record<string, string>).agent_reasoning).toMatch(/already (scheduled|paid)/);
+    // The one paid is the one the flagged twin was refused against.
+    const paidPatch = invoicePatches(fake.requests).find((p) => (p.body as Record<string, unknown>).status === "paid");
+    const [match] = (flagged?.p_detail as { observed: { duplicateCheck: { matches: Array<{ otherInvoiceId: string }> } } }).observed.duplicateCheck.matches;
+    expect(paidPatch?.params.get("id")).toBe(`eq.${match.otherInvoiceId}`);
+  });
+
+  it("flags the second of two identical fresh invoices in one cycle, rather than scheduling both", async () => {
+    today("2026-10-01T09:00:00.000Z");
+    model(() => ({ action: "schedule", payOn: "2026-10-11", reasoning: "Take the 2% discount on its deadline.", confidence: 0.9 }));
+    const { fake, chain, stage } = apFake({ book: [payable(), payable(twin())] });
+
+    await stage();
+
+    expect(chain.transfers).toEqual([]);
+    const [first, second] = invoicePatches(fake.requests);
+    expect(first.params.get("id")).toBe(`eq.${INVOICE_ID}`);
+    expect(first.body).toMatchObject({ status: "scheduled", scheduled_for: "2026-10-11T00:00:00.000Z" });
+    expect(second.params.get("id")).toBe(`eq.${OTHER_INVOICE_ID}`);
+    expect(second.body).toMatchObject({ status: "flagged", scheduled_for: null });
+    expect((second.body as Record<string, string>).agent_reasoning).toContain("already scheduled");
+    expect(ledger(fake.requests)[1].p_detail).toMatchObject({
+      guardrailBlocked: true,
+      guardrailRule: "invoice.duplicate_of_settled",
+      observed: { duplicateCheck: { matches: [{ otherInvoiceId: INVOICE_ID, otherInvoiceStatus: "scheduled" }] } },
+    });
+  });
+
+  it("with no model, flags the second of two identical fresh invoices too", async () => {
+    today("2026-10-01T09:00:00.000Z");
+    const { fake, stage } = apFake({ book: [payable(), payable(twin())] });
+
+    await stage();
+
+    const statuses = invoicePatches(fake.requests).map((p) => (p.body as Record<string, unknown>).status);
+    expect(statuses).toEqual(["scheduled", "flagged"]);
+    expect(ledger(fake.requests).map((e) => e.p_action)).toEqual(["ap_schedule", "ap_flag_fraud"]);
+  });
+
+  it("flags a duplicate of a scheduled invoice decided on a later day", async () => {
+    today("2026-10-03T09:00:00.000Z");
+    const { fake, chain, stage } = apFake({ book: [scheduledPayable(), payable(twin())] });
+
+    await stage();
+
+    expect(chain.transfers).toEqual([]);
+    const patches = invoicePatches(fake.requests);
+    expect(patches.map((p) => p.params.get("id"))).toEqual([`eq.${OTHER_INVOICE_ID}`]);
+    expect(patches[0].body).toMatchObject({ status: "flagged", scheduled_for: null });
+    const [entry] = ledger(fake.requests);
+    expect(entry.p_action).toBe("ap_flag_fraud");
+    expect((entry.p_detail as { decision: { reasoning: string } }).decision.reasoning).toContain("already scheduled");
+  });
+});
+
+describe("the AP stage compares the model with the reference on the decision code let stand", () => {
+  it("counts a schedule for another day as a disagreement", async () => {
+    today("2026-10-01T09:00:00.000Z");
+    model(() => ({ action: "schedule", payOn: "2026-10-31", reasoning: "Keep the cash until the due date.", confidence: 0.7 }));
+    const { fake, metrics, stage } = apFake({ book: [payable()] });
+
+    await stage();
+
+    expect(ledger(fake.requests)[0].p_detail).toMatchObject({
+      decision: { action: "schedule", payOn: "2026-10-31" },
+      referenceDecision: { action: "schedule", payOn: "2026-10-11" },
+      agreedWithReference: false,
+    });
+    expect(metrics.snapshot().referenceDisagreementCount).toBe(1);
+  });
+
+  it("judges a date code moved back to the due date as the date it now is", async () => {
+    today("2026-10-01T09:00:00.000Z");
+    model(() => ({ action: "schedule", payOn: "2026-12-01", reasoning: "Keep the cash for as long as possible.", confidence: 0.7 }));
+    const { fake, metrics, stage } = apFake({ book: [payable({ early_pay_discount_pct: null, discount_due_date: null })] });
+
+    await stage();
+
+    expect(ledger(fake.requests)[0].p_detail).toMatchObject({
+      decision: { action: "schedule", payOn: "2026-10-31" },
+      referenceDecision: { action: "schedule", payOn: "2026-10-31" },
+      timingRule: "payon.after_due",
+      agreedWithReference: true,
+    });
+    expect(metrics.snapshot().referenceDisagreementCount).toBe(0);
+  });
+
+  it("counts a schedule code turned into pay now as a disagreement with a reference schedule", async () => {
+    today("2026-10-01T09:00:00.000Z");
+    model(() => ({ action: "schedule", payOn: "2026-09-30", reasoning: "Pay it on the date it arrived.", confidence: 0.7 }));
+    const { fake, stage } = apFake({ book: [payable()] });
+
+    await stage();
+
+    expect(ledger(fake.requests)[0].p_detail).toMatchObject({
+      decision: { action: "pay" },
+      referenceDecision: { action: "schedule", payOn: "2026-10-11" },
+      agreedWithReference: false,
+    });
+  });
+
+  it("records no comparison when the policy itself decided", async () => {
+    today("2026-10-01T09:00:00.000Z");
+    const { fake, stage } = apFake({ book: [payable()] });
+
+    await stage();
+
+    expect(ledger(fake.requests)[0].p_detail).toMatchObject({ decisionMode: "heuristic", agreedWithReference: null });
+  });
+});
+
 describe("the AP stage with no model follows the timing policy", () => {
   it("schedules a correct invoice without terms for its due date, and says why", async () => {
     today("2026-10-01T09:00:00.000Z");
@@ -550,7 +684,7 @@ describe("dueForDecision — which loaded payables the AP stage decides", () => 
   });
 });
 
-describe("obligationsDueBefore — what falls due before an invoice's payment date", () => {
+describe("obligationsDueBy — what falls due by an invoice's payment date", () => {
   const book = [
     { id: "a", amount: 100, due_date: "2026-10-05T12:00:00Z", status: "pending", scheduled_for: null },
     { id: "b", amount: 200, due_date: "2026-10-30T12:00:00Z", status: "scheduled", scheduled_for: "2026-10-08T00:00:00Z" },
@@ -558,17 +692,29 @@ describe("obligationsDueBefore — what falls due before an invoice's payment da
     { id: "d", amount: 70, due_date: "2026-10-10T12:00:00Z", status: "pending", scheduled_for: null },
     { id: "e", amount: 999, due_date: "2026-10-01T12:00:00Z", status: "paid", scheduled_for: null },
     { id: "f", amount: 999, due_date: "2026-10-01T12:00:00Z", status: "flagged", scheduled_for: null },
+    { id: "g", amount: 30, due_date: "2026-11-30T12:00:00Z", status: "matched", scheduled_for: null },
     { id: "self", amount: 500, due_date: "2026-10-02T12:00:00Z", status: "pending", scheduled_for: null },
   ];
+  const TODAY = "2026-10-01";
 
-  it("sums the open payables dated before the target, by scheduled day where there is one, not this invoice, plus the milestones", () => {
-    expect(obligationsDueBefore(book, { excludeId: "self", before: "2026-10-10", milestoneTotal: 0 })).toBe(350);
-    expect(obligationsDueBefore(book, { excludeId: "self", before: "2026-10-10", milestoneTotal: 25.5 })).toBe(375.5);
-    expect(obligationsDueBefore(book, { excludeId: "self", before: "2026-10-08", milestoneTotal: 0 })).toBe(100);
+  it("sums the open payables dated on or before the target, by scheduled day where there is one, not this invoice, plus the milestones", () => {
+    expect(obligationsDueBy(book, { excludeId: "self", by: "2026-10-10", today: TODAY, milestoneTotal: 0 })).toBe(450);
+    expect(obligationsDueBy(book, { excludeId: "self", by: "2026-10-10", today: TODAY, milestoneTotal: 25.5 })).toBe(475.5);
+    expect(obligationsDueBy(book, { excludeId: "self", by: "2026-10-08", today: TODAY, milestoneTotal: 0 })).toBe(330);
+    expect(obligationsDueBy(book, { excludeId: "self", by: "2026-10-07", today: TODAY, milestoneTotal: 0 })).toBe(130);
+  });
+
+  it("counts one due on the target day itself", () => {
+    expect(obligationsDueBy(book, { excludeId: "self", by: "2026-10-05", today: TODAY, milestoneTotal: 0 })).toBe(130);
+    expect(obligationsDueBy(book, { excludeId: "self", by: "2026-10-04", today: TODAY, milestoneTotal: 0 })).toBe(30);
+  });
+
+  it("dates money already in flight today, whatever its due date says", () => {
+    expect(obligationsDueBy([book[6]], { excludeId: "self", by: TODAY, today: TODAY, milestoneTotal: 0 })).toBe(30);
   });
 
   it("counts an obligation it cannot date, since it may well come first", () => {
-    expect(obligationsDueBefore([{ id: "x", amount: 10, due_date: "garbage", status: "pending", scheduled_for: null }], { excludeId: "self", before: "2026-10-10", milestoneTotal: 0 })).toBe(10);
+    expect(obligationsDueBy([{ id: "x", amount: 10, due_date: "garbage", status: "pending", scheduled_for: null }], { excludeId: "self", by: "2026-10-10", today: TODAY, milestoneTotal: 0 })).toBe(10);
   });
 });
 

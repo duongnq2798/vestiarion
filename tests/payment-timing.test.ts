@@ -85,6 +85,12 @@ describe("invoiceDiscount", () => {
     expect(invoiceDiscount({})).toBeNull();
   });
 
+  it("is none, so the full amount is paid, for a deadline that is not a date", () => {
+    for (const deadline of ["", "soon", "2026-13-45", "not a date"]) {
+      expect(invoiceDiscount({ early_pay_discount_pct: "2.00", discount_due_date: deadline }), deadline).toBeNull();
+    }
+  });
+
   it("is none, so the full amount is paid, for a percent outside (0, 100)", () => {
     for (const pct of ["0", "100", "-2", "abc", 150]) {
       expect(invoiceDiscount({ early_pay_discount_pct: pct, discount_due_date: "2026-10-11T12:00:00Z" }), String(pct)).toBeNull();

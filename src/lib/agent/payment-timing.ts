@@ -26,7 +26,7 @@ export interface PaymentTimingInput {
   operatingBalance: number;
   /** Annualised, as a fraction: 0.045 for 4.5%. */
   reserveApy: number;
-  /** Open payables (and verified milestones) due before this invoice's target date, excluding this invoice. */
+  /** Open payables (and verified milestones) due on or before this invoice's target date, excluding this invoice. */
   earlierObligations: number;
 }
 
@@ -89,8 +89,9 @@ export interface InvoiceDiscount {
 /**
  * The early-payment discount an invoice row carries (migration 0038), or
  * null when it has none. A percent the database would refuse anyway — not
- * above 0 and below 100 — is no discount at all, so the full amount is paid:
- * a row that cannot be read never pays less than it says.
+ * above 0 and below 100 — or a deadline that is not a date is no discount at
+ * all, so the full amount is paid: a row that cannot be read never pays less
+ * than it says.
  */
 export function invoiceDiscount(row: {
   early_pay_discount_pct?: string | number | null;
@@ -99,6 +100,7 @@ export function invoiceDiscount(row: {
   if (row.early_pay_discount_pct == null || row.discount_due_date == null) return null;
   const pct = typeof row.early_pay_discount_pct === "number" ? row.early_pay_discount_pct : Number(row.early_pay_discount_pct);
   if (!Number.isFinite(pct) || pct <= 0 || pct >= 100) return null;
+  if (Number.isNaN(Date.parse(row.discount_due_date))) return null;
   return { pct, deadline: row.discount_due_date };
 }
 
