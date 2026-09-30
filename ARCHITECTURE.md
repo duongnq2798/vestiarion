@@ -223,9 +223,12 @@ its intent confirmed, pending or submitting, or holding a provider id whose
 transfer Circle has not reported in a terminal failure state (`CANCELLED`,
 `DENIED`, `FAILED`; `STUCK` is still in flight) — can only be approved: Reject
 and Return are refused with `payment_in_flight` before the claim, the card
-offers only Approve and pay, and Approve skips its funds check when such a
-transfer exists, since it reconciles rather than pays again. A payment already
-recorded as ended by Circle in a terminal failure moved nothing, so Reject and
+offers only Approve and pay, and Approve skips its funds check only when a
+transfer exists with a provider id that is not terminally failed, or the
+payment is confirmed — a `submitting` row with no provider id yet still runs
+it — since skipping the check means Approve only reconciles rather than pays
+again. A payment already recorded as ended by Circle in a terminal failure
+moved nothing, so Reject and
 Return are allowed, and Approve and pay, after its funds check, reads Circle
 once more and only on a terminal state sends it again under the next
 attempt's key (`retryTerminalFailure` in `executePayment`, `begin_payment_retry`
