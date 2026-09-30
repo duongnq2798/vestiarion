@@ -28,7 +28,7 @@ export function Hero({ provenance, head, hostedAvailable }: { provenance: Proven
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Button asChild size="lg">
-              <Link href={"/onboarding"}>{hostedAvailable ? "Try it on Arc testnet" : "Try it with simulated money"}</Link>
+              <Link href={"/onboarding"}>{hostedAvailable ? "Start on Arc testnet" : "Open a workspace"}</Link>
             </Button>
             <Button asChild size="lg" variant="secondary" className="bg-surface/80">
               <a href="#how-it-works">How a decision is made</a>
@@ -36,8 +36,8 @@ export function Hero({ provenance, head, hostedAvailable }: { provenance: Proven
           </div>
           <p className="mt-3 text-[0.8125rem] text-ink-3">
             {hostedAvailable
-              ? "Email sign-in, a workspace of your own, and a real Arc testnet wallet in one click. Fund it with testnet USDC from Circle's faucet; no real money moves."
-              : "Email sign-in, then a sandbox workspace of your own. No wallet, no real funds."}
+              ? "Email sign-in, a workspace of your own, and an Arc testnet wallet in one click. Fund it with USDC from Circle's faucet, and the agent pays from it."
+              : "Email sign-in, then a workspace of your own. Connect your Circle account from Settings to pay on Arc testnet."}
           </p>
           <div className="mt-8 border-t border-line/80 pt-5">
             <p className="mb-2.5 font-mono text-xs uppercase tracking-[0.14em] text-ink-3">What runs live right now</p>

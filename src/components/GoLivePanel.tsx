@@ -236,7 +236,7 @@ function HostedChoice({ orgSlug }: { orgSlug: string }) {
             Use a Vestiarion testnet wallet
           </SubmitButton>
         </div>
-        <p className="text-xs text-ink-3">Hosted by Vestiarion · Arc testnet · no real money</p>
+        <p className="text-xs text-ink-3">Hosted by Vestiarion · Arc testnet</p>
         <FormMessage tone={state.message && !state.ok ? "error" : "neutral"}>{state.ok ? null : state.message}</FormMessage>
       </form>
     </div>
