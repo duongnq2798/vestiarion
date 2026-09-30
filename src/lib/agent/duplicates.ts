@@ -53,7 +53,8 @@ export interface DuplicateMatch {
   explanation: string;
   /**
    * True when the match is against an invoice whose money has already gone
-   * or is committed to go: paid, a payment in flight, or scheduled.
+   * or is committed to go: paid, a payment in flight, scheduled, or being
+   * approved and paid by a person right now.
    */
   againstSettled: boolean;
 }
@@ -61,17 +62,24 @@ export interface DuplicateMatch {
 /**
  * A repeat of an invoice whose money has left, or is committed to leave, is
  * the one that costs money: paid (`paid`, or `received` on the other side of
- * the book), a payment in flight (`matched`), or one the agent has scheduled
- * to pay (`scheduled`). A repeat of a scheduled invoice scheduled too would be
- * paid twice on the day; so would one paid while the first is in flight.
+ * the book), a payment in flight (`matched`), one the agent has scheduled to
+ * pay (`scheduled`), or one a person has claimed on Approvals and is paying
+ * right now (`processing`, `claim_invoice_decision` in migration 0025). A
+ * repeat of a scheduled invoice scheduled too would be paid twice on the day;
+ * so would one paid while the first is in flight, or while a person pays it.
  */
-const COMMITTED_STATUSES = new Set(["paid", "received", "matched", "scheduled"]);
+const COMMITTED_STATUSES = new Set(["paid", "received", "matched", "scheduled", "processing"]);
 
-/** How a committed invoice is described in a match's explanation. */
-function committedState(status: string): string | null {
+/**
+ * How a committed invoice is described in a match's explanation, and on the
+ * decision card's duplicate evidence (src/components/vx/map.ts); null for a
+ * status whose money is not committed.
+ */
+export function committedState(status: string): string | null {
   if (status === "paid" || status === "received") return "already paid";
   if (status === "matched") return "already being paid";
   if (status === "scheduled") return "already scheduled";
+  if (status === "processing") return "already being decided by a person";
   return null;
 }
 
@@ -266,7 +274,7 @@ export function duplicateMatchContext(
 /**
  * The match that justifies refusing payment outright, if there is one: a
  * high-confidence repeat of money that has already left the account, or is
- * committed to — in flight, or scheduled.
+ * committed to — in flight, scheduled, or being paid by a person.
  */
 export function blockingDuplicate(matches: DuplicateMatch[]): DuplicateMatch | null {
   return (

@@ -9,7 +9,7 @@ Changes to the API and webhooks that affect an integration, newest first. Change
 - Every `ap_*` decision entry (`ap_pay`, `ap_hold`, `ap_flag_fraud`, `ap_request_info`, `ap_schedule`) now carries `timing`, `timingRule` and `terms` in its `detail`; an entry for a previously scheduled invoice also carries `scheduledFor`.
 - `ap_pay` and `approval_paid` gain `amountPaid` and `discountTaken` in `detail`: both `null` when nothing went out, or the discounted amount and the percent taken when an invoice was paid by its discount deadline.
 - `cycle_complete`'s `detail.outcomes` gains `scheduledCount`.
-- A duplicate is now also refused against a payable already `scheduled` or already being paid (`matched`), not only one already `paid` or `received`. The refusing entry's reasoning names which of the three it repeats.
+- A duplicate is now also refused against a payable already `scheduled`, already being paid (`matched`), or being decided by a person on Approvals (`processing`), not only one already `paid` or `received`. The refusing entry's reasoning names which of these it repeats.
 
 ## 2026-09-30: Payee links
 

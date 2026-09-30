@@ -144,9 +144,30 @@ class Chain implements ChainProvider {
 }
 
 /**
+ * Rows sorted as PostgREST sorts them for `order=col.asc,col2.desc,…`; rows
+ * left in the book's order when the request names none, as a table without
+ * an ORDER BY promises nothing.
+ */
+function orderedAs(rows: Array<Record<string, unknown>>, order: string | null): Array<Record<string, unknown>> {
+  if (!order) return rows;
+  const keys = order.split(",").map((term) => {
+    const [column, direction] = term.split(".");
+    return { column, sign: direction === "desc" ? -1 : 1 };
+  });
+  return [...rows].sort((a, b) => {
+    for (const { column, sign } of keys) {
+      const left = String(a[column] ?? "");
+      const right = String(b[column] ?? "");
+      if (left !== right) return left < right ? -sign : sign;
+    }
+    return 0;
+  });
+}
+
+/**
  * PostgREST as the AP stage meets it. `book` is the whole payable ledger:
- * the stage's load gets the rows whose status its `in` filter names, the
- * duplicate-detection history gets all of them.
+ * the stage's load gets the rows whose status its `in` filter names, in the
+ * order it asks for, the duplicate-detection history gets all of them.
  */
 function apFake(options: { book: Array<Record<string, unknown>>; paused?: boolean; milestones?: Array<{ amount: string }> }) {
   const intents = paymentIntentsBackend(ORG);
@@ -156,7 +177,8 @@ function apFake(options: { book: Array<Record<string, unknown>>; paused?: boolea
     if (request.path === "/rest/v1/rpc/agent_paused") return { body: options.paused ?? false };
     if (request.path === "/rest/v1/invoices" && request.method === "GET") {
       const statuses = request.params.get("status")?.match(/^in\.\((.*)\)$/)?.[1].split(",");
-      return { body: statuses ? options.book.filter((row) => statuses.includes(row.status as string)) : options.book };
+      const rows = statuses ? options.book.filter((row) => statuses.includes(row.status as string)) : options.book;
+      return { body: orderedAs(rows, request.params.get("order")) };
     }
     if (request.path === "/rest/v1/invoices" && request.method === "PATCH") return { body: [] };
     if (request.path === "/rest/v1/milestones") return { body: options.milestones ?? [] };
@@ -353,6 +375,16 @@ describe("the AP stage and a scheduled invoice", () => {
     expect(load.params.get("direction")).toBe("eq.payable");
   });
 
+  it("loads them in the order they were submitted, then by id, so each cycle decides them in the same order", async () => {
+    today("2026-10-01T09:00:00.000Z");
+    const { fake, stage } = apFake({ book: [] });
+
+    await stage();
+
+    const [load] = fake.requests.filter((r) => r.path === "/rest/v1/invoices" && r.params.get("status"));
+    expect(load.params.get("order")).toBe("created_at.asc,id.asc");
+  });
+
   it("leaves it alone before its day, and still counts it as falling due before a later invoice", async () => {
     today("2026-10-01T09:00:00.000Z");
     const later = {
@@ -466,6 +498,34 @@ describe("the AP stage and a scheduled invoice", () => {
     expect(lines).toEqual([{ domain: "ap", message: "Northwind: not paid, the agent was paused (400 USDC)" }]);
   });
 
+  it("holds it on its day when the counterparty's address changed since and no one has confirmed it, and moves nothing", async () => {
+    today("2026-10-11T06:00:00.000Z");
+    model(() => ({ action: "pay", reasoning: "Scheduled for today; paying at the discount.", confidence: 0.9 }));
+    const changed = counterparty({ address: "0xredirected", address_changed_at: "2026-10-05T14:00:00+00:00", address_confirmed_at: null });
+    const { fake, chain, stage } = apFake({ book: [scheduledPayable({ counterparties: changed })] });
+
+    await stage();
+
+    expect(chain.transfers).toEqual([]);
+    expect(fake.requests.some((r) => r.path.includes("payment_intents"))).toBe(false);
+    const [patch] = invoicePatches(fake.requests);
+    expect(patch.body).toMatchObject({ status: "held", scheduled_for: null, paid_amount: null, tx_ref: null });
+    expect((patch.body as Record<string, string>).agent_reasoning).toContain(
+      "the counterparty's address changed on 2026-10-05 and no one has confirmed it — held for a person to approve"
+    );
+    const [entry] = ledger(fake.requests);
+    expect(entry.p_action).toBe("ap_pay");
+    expect(entry.p_detail).toMatchObject({
+      guardrailBlocked: true,
+      guardrailRule: "counterparty.address_unconfirmed",
+      amountPaid: null,
+      discountTaken: null,
+      scheduledFor: "2026-10-11T00:00:00+00:00",
+      observed: { addressUnconfirmed: true },
+      execution: { txRef: null, resultingStatus: "held" },
+    });
+  });
+
   it("flags it on its day when the counterparty turned high risk since, and moves nothing", async () => {
     today("2026-10-11T06:00:00.000Z");
     model(() => ({ action: "pay", reasoning: "Scheduled for today; paying at the discount.", confidence: 0.9 }));
@@ -533,6 +593,37 @@ describe("the AP stage and duplicates of money already committed", () => {
     });
   });
 
+  it("flags the twin submitted later, whichever order the book holds them in", async () => {
+    today("2026-10-01T09:00:00.000Z");
+    model(() => ({ action: "schedule", payOn: "2026-10-11", reasoning: "Take the 2% discount on its deadline.", confidence: 0.9 }));
+    // The later submission comes first in the table and has the lower id: only created_at says which came first.
+    const later = payable({ id: "018f8ce0-1557-7b54-a931-4d777f6ba000", created_at: "2026-10-01T08:00:00+00:00" });
+    const earlier = payable({ created_at: "2026-09-30T08:00:00+00:00" });
+    const { fake, stage } = apFake({ book: [later, earlier] });
+
+    await stage();
+
+    const patches = invoicePatches(fake.requests);
+    expect(patches.map((p) => [p.params.get("id"), (p.body as Record<string, unknown>).status])).toEqual([
+      [`eq.${INVOICE_ID}`, "scheduled"],
+      ["eq.018f8ce0-1557-7b54-a931-4d777f6ba000", "flagged"],
+    ]);
+  });
+
+  it("breaks a tie in submission time by id", async () => {
+    today("2026-10-01T09:00:00.000Z");
+    const at = "2026-09-30T08:00:00+00:00";
+    const { fake, stage } = apFake({ book: [payable(twin({ created_at: at })), payable({ created_at: at })] });
+
+    await stage();
+
+    const patches = invoicePatches(fake.requests);
+    expect(patches.map((p) => [p.params.get("id"), (p.body as Record<string, unknown>).status])).toEqual([
+      [`eq.${INVOICE_ID}`, "scheduled"],
+      [`eq.${OTHER_INVOICE_ID}`, "flagged"],
+    ]);
+  });
+
   it("with no model, flags the second of two identical fresh invoices too", async () => {
     today("2026-10-01T09:00:00.000Z");
     const { fake, stage } = apFake({ book: [payable(), payable(twin())] });
@@ -542,6 +633,31 @@ describe("the AP stage and duplicates of money already committed", () => {
     const statuses = invoicePatches(fake.requests).map((p) => (p.body as Record<string, unknown>).status);
     expect(statuses).toEqual(["scheduled", "flagged"]);
     expect(ledger(fake.requests).map((e) => e.p_action)).toEqual(["ap_schedule", "ap_flag_fraud"]);
+  });
+
+  it("flags a duplicate of an invoice a person is approving and paying right now, whatever the model says", async () => {
+    today("2026-10-01T09:00:00.000Z");
+    model(() => ({ action: "pay", reasoning: "PO-1044 matches and the goods were received; paying now.", confidence: 0.9 }));
+    const { fake, chain, stage } = apFake({ book: [payable({ status: "processing" }), payable(twin())] });
+
+    await stage();
+
+    expect(chain.transfers).toEqual([]);
+    const patches = invoicePatches(fake.requests);
+    expect(patches.map((p) => p.params.get("id"))).toEqual([`eq.${OTHER_INVOICE_ID}`]);
+    expect(patches[0].body).toMatchObject({ status: "flagged", scheduled_for: null, paid_amount: null });
+    expect((patches[0].body as Record<string, string>).agent_reasoning).toContain("already being decided by a person");
+    expect((patches[0].body as Record<string, string>).agent_reasoning).toContain(
+      "[guardrail override: this invoice repeats one already paid, being paid, scheduled or being decided by a person ("
+    );
+    expect(promptOf().duplicateNote).toContain(
+      "A repeat of an invoice that is already paid, being paid, scheduled or being decided by a person is duplicate billing"
+    );
+    expect(ledger(fake.requests)[0].p_detail).toMatchObject({
+      guardrailBlocked: true,
+      guardrailRule: "invoice.duplicate_of_settled",
+      observed: { duplicateCheck: { matches: [{ otherInvoiceId: INVOICE_ID, otherInvoiceStatus: "processing" }] } },
+    });
   });
 
   it("flags a duplicate of a scheduled invoice decided on a later day", async () => {

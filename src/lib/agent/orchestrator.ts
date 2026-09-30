@@ -847,7 +847,7 @@ async function decideApPayable(
       duplicateNote:
         duplicates.length === 0
           ? "No earlier payable from this counterparty resembles this invoice."
-          : `${duplicateContext.total} earlier payable(s) from this counterparty resemble this one; the ${duplicateContext.matches.length} strongest are shown. A repeat of an invoice that is already paid, being paid or scheduled is duplicate billing — flag it rather than paying or scheduling it a second time.`,
+          : `${duplicateContext.total} earlier payable(s) from this counterparty resemble this one; the ${duplicateContext.matches.length} strongest are shown. A repeat of an invoice that is already paid, being paid, scheduled or being decided by a person is duplicate billing — flag it rather than paying or scheduling it a second time.`,
       responseShape: {
         action: "pay | schedule | hold | flag_fraud | request_info",
         payOn: "YYYY-MM-DD (UTC), with schedule only: after today, and no later than the due date",
@@ -1093,12 +1093,17 @@ export async function runApStage(input: ApStageInput): Promise<number> {
   let operatingBalance = input.operatingBalance;
   const now = new Date();
 
+  // In the order they were submitted (id breaks a tie), so each cycle decides
+  // them in the same order: of two identical invoices, the one submitted
+  // first is paid or scheduled, and the later one is the repeat refused.
   const loaded = unwrap(
     await db
       .from("invoices")
       .select("*, counterparties(id, name, risk_level, payment_limit, performance_score, performance_inputs, address, address_changed_at, address_confirmed_at)")
       .eq("direction", "payable")
       .in("status", ["pending", "matched", "scheduled"])
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
   ) as ApPayableRow[];
   // A scheduled payable waits for its day: it is counted below among what
   // falls due first, and in the cycle's treasury buffer, but not decided
