@@ -205,6 +205,13 @@ export default function ApiKeysPanel({ orgSlug, apiKeys, canManage }: { orgSlug:
             </Table>
           </Card>
         )}
+        {apiKeys.length > 0 && (
+          <p className="mt-2 text-xs text-ink-3">
+            {canManage
+              ? "A key's full value is shown only once, when it is created. Lost one? Create a new key, then revoke the old one."
+              : "A key's full value is shown only once, when it is created. Lost one? Ask an owner or admin for a new key."}
+          </p>
+        )}
       </section>
     </div>
   );
