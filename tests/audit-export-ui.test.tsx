@@ -41,4 +41,10 @@ describe("the Audit page", () => {
   it("says what the key id and head hash are for", () => {
     expect(page).toContain("Compare this key id and the head hash with the ones a verified export prints.");
   });
+
+  it("lists retired keys with exportKeys, only when there are some", () => {
+    expect(page).toMatch(/import\s*\{[^}]*\bexportKeys\b[^}]*\}\s*from\s*"@\/lib\/ledger-export"/);
+    expect(page).toContain("retiredKeys.length > 0");
+    expect(page).toMatch(/retiredKeys\.length > 0 &&[\s\S]*?Retired keys/);
+  });
 });

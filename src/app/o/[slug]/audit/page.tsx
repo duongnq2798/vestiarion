@@ -21,7 +21,16 @@ import { requireMembership } from "@/lib/auth/membership";
 import { orgHref } from "@/lib/auth/org-paths";
 import { chainModes } from "@/lib/circle";
 import { inOrg } from "@/lib/dal/scope";
-import { ledgerEntryCount, ledgerPublicKeyId, ledgerPublicKeyPem, ledgerReadWarnings, listLedgerEntries, listLedgerEntryPage } from "@/lib/ledger";
+import {
+  ledgerEntryCount,
+  ledgerPublicKeyId,
+  ledgerPublicKeyPem,
+  ledgerReadWarnings,
+  ledgerVerificationKeyring,
+  listLedgerEntries,
+  listLedgerEntryPage,
+} from "@/lib/ledger";
+import { exportKeys } from "@/lib/ledger-export";
 import { stats } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
@@ -62,6 +71,7 @@ export default async function AuditPage({ params, searchParams }: AuditPageProps
     const publicKey = ledgerPublicKeyPem();
     const keyId = ledgerPublicKeyId();
     const keyWarnings = ledgerReadWarnings();
+    const retiredKeys = exportKeys(ledgerVerificationKeyring()).filter((key) => key.status === "retired");
 
     return (
       <ProductShell day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()}>
@@ -128,6 +138,7 @@ export default async function AuditPage({ params, searchParams }: AuditPageProps
                   · <span className="font-mono text-ink-2">{keyId}</span>
                 </>
               ) : null}
+              {retiredKeys.length > 0 ? ` · ${retiredKeys.length} retired` : null}
             </span>
           }
           contentClassName="text-xs text-ink-3"
@@ -136,6 +147,19 @@ export default async function AuditPage({ params, searchParams }: AuditPageProps
             <>
               <pre className="overflow-x-auto whitespace-pre-wrap rounded-xl bg-ground p-3 font-mono text-ink-2">{publicKey}</pre>
               <p className="mt-2">Compare this key id and the head hash with the ones a verified export prints.</p>
+              {retiredKeys.length > 0 && (
+                <div className="mt-4">
+                  <p className="mb-2 font-medium text-ink-2">Retired keys</p>
+                  <div className="space-y-3">
+                    {retiredKeys.map((key) => (
+                      <div key={key.id}>
+                        <p className="mb-1 font-mono text-ink-3">{key.id}</p>
+                        <pre className="overflow-x-auto whitespace-pre-wrap rounded-xl bg-ground p-3 font-mono text-ink-2">{key.publicKeyPem}</pre>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </>
           ) : (
             <p className="rounded-xl bg-ground p-3">

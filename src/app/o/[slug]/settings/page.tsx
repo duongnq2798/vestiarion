@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import ApiKeysPanel from "@/components/ApiKeysPanel";
 import DeleteWorkspacePanel from "@/components/DeleteWorkspacePanel";
 import GoLivePanel from "@/components/GoLivePanel";
+import LedgerKeyPanel from "@/components/LedgerKeyPanel";
 import WebhooksPanel from "@/components/WebhooksPanel";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { sectionTitle } from "@/components/vx/nav";
@@ -12,6 +13,7 @@ import { inOrg } from "@/lib/dal/scope";
 import { listApiKeys } from "@/lib/platform/api-keys";
 import { deletionContext } from "@/lib/platform/delete-workspace";
 import { goLiveStatus } from "@/lib/platform/go-live";
+import { ledgerKeyStatus } from "@/lib/platform/ledger-key";
 import { listWebhookEndpoints, toWebhookEndpointViews } from "@/lib/platform/webhooks";
 import { stats } from "@/lib/queries";
 
@@ -27,10 +29,11 @@ export default async function SettingsPage({ params }: { params: Promise<{ slug:
     const canManageKeys = can(membership.role, "api_keys.manage");
     const canManageWebhooks = can(membership.role, "webhooks.manage");
     const canAdminister = can(membership.role, "org.administer");
-    const [goLive, apiKeys, webhookEndpoints, dashboardStats, deletion] = await Promise.all([
+    const [goLive, apiKeys, webhookEndpoints, ledgerKey, dashboardStats, deletion] = await Promise.all([
       goLiveStatus(membership.orgId),
       listApiKeys(membership.orgId),
       listWebhookEndpoints(membership.orgId),
+      ledgerKeyStatus(membership.orgId),
       stats(),
       // Only an owner sees the danger zone, so only an owner's page reads what it says.
       canAdminister ? deletionContext(membership.orgId) : null,
@@ -48,6 +51,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ slug:
           <ApiKeysPanel orgSlug={slug} apiKeys={apiKeys} canManage={canManageKeys} />
           {/* The full URL never crosses into the client component for a non-manager — built server-side, not just hidden at render time. */}
           <WebhooksPanel orgSlug={slug} endpoints={toWebhookEndpointViews(webhookEndpoints, canManageWebhooks)} canManage={canManageWebhooks} />
+          <LedgerKeyPanel orgSlug={slug} status={ledgerKey} canAdminister={canAdminister} />
           {/* deletionContext carries counts and booleans only; the panel renders nothing for the founding workspace. */}
           {deletion && <DeleteWorkspacePanel orgSlug={slug} context={deletion} canAdminister={canAdminister} />}
         </div>
