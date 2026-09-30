@@ -6,8 +6,9 @@ import { TooltipProvider } from "@/components/ui/Tooltip";
 
 /**
  * The landing page's promise, as the server renders it (hosted wallets H8).
- * It offers a real Arc testnet wallet only where the deployment has the
- * hosted pair; without it, the copy is the sandbox-only one it replaced.
+ * It offers an Arc testnet wallet in one click only where the deployment has
+ * the hosted pair. Either way it states what the product does, plainly: Arc
+ * testnet is named as the network it runs on, and nothing apologises for it.
  */
 const text = (markup: string) => markup.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").replace(/&#x27;/g, "'");
 
@@ -15,42 +16,49 @@ const hero = (hostedAvailable: boolean) =>
   text(renderToStaticMarkup(<TooltipProvider><Hero provenance={[]} head={[]} hostedAvailable={hostedAvailable} /></TooltipProvider>));
 const finalCta = (hostedAvailable: boolean) => text(renderToStaticMarkup(<FinalCta hostedAvailable={hostedAvailable} />));
 
+/** Disclaimers that talk the product down instead of saying what it does. */
+const DISCLAIMERS = [/no real money/i, /no real funds/i, /not real money/i, /fictional/i, /simulated money/i];
+
 describe("the landing hero", () => {
-  it("with the hosted pair: a real Arc testnet wallet in one click, funded from Circle's faucet", () => {
+  it("with the hosted pair: an Arc testnet wallet in one click, funded from Circle's faucet", () => {
     const words = hero(true);
     expect(words).toContain(
-      "Email sign-in, a workspace of your own, and a real Arc testnet wallet in one click. Fund it with testnet USDC from Circle's faucet; no real money moves."
+      "Email sign-in, a workspace of your own, and an Arc testnet wallet in one click. Fund it with USDC from Circle's faucet, and the agent pays from it."
     );
-    expect(words).toContain("Try it on Arc testnet");
-    expect(words).not.toContain("No wallet, no real funds");
-    expect(words).not.toContain("Try it with simulated money");
+    expect(words).toContain("Start on Arc testnet");
   });
 
-  it("without it: a sandbox of your own, no wallet and no real funds", () => {
+  it("without it: a workspace of your own, with Circle connected from Settings", () => {
     const words = hero(false);
-    expect(words).toContain("Email sign-in, then a sandbox workspace of your own. No wallet, no real funds.");
-    expect(words).toContain("Try it with simulated money");
-    expect(words).not.toContain("real Arc testnet wallet");
-    expect(words).not.toContain("Try it on Arc testnet");
+    expect(words).toContain("Email sign-in, then a workspace of your own. Connect your Circle account from Settings to pay on Arc testnet.");
+    expect(words).toContain("Open a workspace");
+    expect(words).not.toContain("one click");
+  });
+
+  it.each([true, false])("never talks the product down (hosted: %s)", (hostedAvailable) => {
+    const words = hero(hostedAvailable);
+    for (const phrase of DISCLAIMERS) expect(words).not.toMatch(phrase);
   });
 });
 
 describe("the landing page's final call to action", () => {
-  it("with the hosted pair: a sandbox to start, and a real Arc testnet wallet one click away in Settings", () => {
+  it("with the hosted pair: a wallet one click away in Settings, and the agent at work", () => {
     const words = finalCta(true);
-    expect(words).toContain("A real Arc testnet wallet is one click away in Settings");
-    expect(words).toContain("testnet USDC from Circle's faucet");
-    expect(words).toContain("no real money");
-    expect(words).toContain("Start a sandbox workspace");
-    expect(words).not.toContain("Keep the money fictional");
-    expect(words).not.toContain("requires separate wallet setup");
+    expect(words).toContain("Open a workspace. Put the agent to work on Arc.");
+    expect(words).toContain("Add an Arc testnet wallet in one click from Settings");
+    expect(words).toContain("USDC from Circle's faucet");
+    expect(words).toContain("Open a workspace");
   });
 
-  it("without it: today's copy, fictional money and a separate wallet setup", () => {
+  it("without it: a workspace, and Circle connected when you are ready", () => {
     const words = finalCta(false);
-    expect(words).toContain("Give the agent a sandbox. Keep the money fictional.");
-    expect(words).toContain("requires separate wallet setup");
-    expect(words).toContain("Start a sandbox workspace");
-    expect(words).not.toContain("one click away");
+    expect(words).toContain("Open a workspace. See the agent decide.");
+    expect(words).toContain("Connect your Circle account from Settings");
+    expect(words).not.toContain("one click");
+  });
+
+  it.each([true, false])("never talks the product down (hosted: %s)", (hostedAvailable) => {
+    const words = finalCta(hostedAvailable);
+    for (const phrase of DISCLAIMERS) expect(words).not.toMatch(phrase);
   });
 });

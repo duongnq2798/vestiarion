@@ -226,7 +226,7 @@ describe("GoLivePanel, with credentials this deployment cannot read", () => {
   });
 });
 
-const HOSTED_LABEL = "Hosted by Vestiarion · Arc testnet · no real money";
+const HOSTED_LABEL = "Hosted by Vestiarion · Arc testnet";
 
 const HOSTED: Record<Exclude<GoLiveStatus["step"], "connect">, GoLiveStatus> = {
   wallets: status({ step: "wallets", host: "hosted", hostedAvailable: true }),
