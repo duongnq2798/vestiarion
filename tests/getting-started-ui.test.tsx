@@ -47,8 +47,8 @@ describe("GettingStarted", () => {
     expect(render()).toMatch(/<svg[^>]*lucide-book-open[^>]*>.*<\/svg>Read the guide/);
   });
 
-  it("links the next step's own page, and the first-payment guide, once the workspace is live", () => {
-    const markup = render({ mode: "live" });
+  it("links the next step's own page, and the first-payment guide, once the workspace is live and funded", () => {
+    const markup = render({ mode: "live", accounts: [{ kind: "operating", circle_wallet_id: "w-1", balance: 40 }] });
     expect(markup).toContain('href="/o/acme/counterparties"');
     expect(markup).not.toContain('href="/o/acme/settings#go-live-title"');
     expect(markup).toContain('href="/docs/guides/first-payment"');

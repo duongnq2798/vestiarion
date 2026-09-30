@@ -5,11 +5,13 @@
  * rows the console already reads — the accounts, the counterparties, the
  * payables, the on-chain payments `stats()` counts, what waits for a person,
  * and the workspace's mode — so there is nothing to store and nothing to
- * dismiss: the checklist disappears at the first payment (G1).
+ * dismiss: the checklist disappears once the workspace is live and has made
+ * its first payment (G1).
  *
  * Funding reads the stored balance, never Circle (G2): the console makes no
- * Circle call for it. The step sends the person to Settings, where the Go live
- * panel reads the balance from the chain, and reads it again while it is 0.
+ * Circle call for it. Its balance tile reads the chain and stores the result,
+ * so the step ticks itself. It stays undone while the operating wallet holds
+ * no USDC, live or not: going live does not fund the wallet.
  *
  * Sample rows (sample-data design §1) never tick a step: they show the agent
  * working, not the workspace set up.
@@ -30,7 +32,7 @@ export interface GettingStartedInput {
     address_confirmed_at?: string | null;
     sample?: boolean;
   }>;
-  /** Payable invoices of counterparties a person added (`ownPayableCount`). */
+  /** Open payable invoices of counterparties a person added (`ownPayableCount`). */
   payableCount: number;
   /** Paid invoices and milestones with an on-chain transaction (`stats().onchainTransfers`). */
   onchainPayments: number;
@@ -50,7 +52,7 @@ export interface GettingStartedStep {
 }
 
 export interface GettingStarted {
-  /** False once the workspace has made its first payment on Arc testnet: the checklist is done and hides. */
+  /** False once the workspace is live and has made its first payment on Arc testnet: the checklist is done and hides. */
   show: boolean;
   steps: GettingStartedStep[];
   /** The first step not done, or null when every one is. */
@@ -66,7 +68,7 @@ export function gettingStarted(input: GettingStartedInput): GettingStarted {
   const live = input.mode === "live";
   const operating = input.accounts.find((account) => account.kind === "operating");
   const hasWallet = Boolean(operating?.circle_wallet_id);
-  const funded = live || (hasWallet && (operating?.balance ?? 0) > 0);
+  const funded = (live || hasWallet) && (operating?.balance ?? 0) > 0;
   const payees = input.counterparties.filter(
     (counterparty) => !counterparty.sample && counterparty.role !== "client" && Boolean(counterparty.address)
   );
@@ -87,7 +89,9 @@ export function gettingStarted(input: GettingStartedInput): GettingStarted {
     {
       id: "fund",
       title: "Fund it with USDC",
-      body: "Send testnet USDC to the operating wallet from Circle's faucet. Settings shows the wallet's address, and reads the balance from the chain again when you come back.",
+      body: live
+        ? "The operating wallet holds no USDC, so the agent cannot pay. Send testnet USDC to it from Circle's faucet: Settings lists its address."
+        : "Send testnet USDC to the operating wallet from Circle's faucet. Settings shows the wallet's address, and reads the balance from the chain again when you come back.",
       path: GO_LIVE,
       done: funded,
       ownerOnly: false,
@@ -95,7 +99,7 @@ export function gettingStarted(input: GettingStartedInput): GettingStarted {
     {
       id: "live",
       title: "Go live",
-      body: "Let the agent pay from the wallet, when a payable comes in and on its schedule.",
+      body: "Let the agent run every 6 hours on its own, and keep the workspace: a live workspace is not deleted when inactive.",
       path: GO_LIVE,
       done: live,
       ownerOnly: true,
@@ -132,22 +136,27 @@ export function gettingStarted(input: GettingStartedInput): GettingStarted {
 
   const next = steps.find((step) => !step.done)?.id ?? null;
   return {
-    show: !paid,
+    show: !(paid && live),
     steps,
     next,
     guide: steps.some((step) => SETTINGS_STEPS.has(step.id) && !step.done) ? "go-live" : "first-payment",
   };
 }
 
+/** A payable in one of these can no longer become a payment: paid already (in a sandbox, if the checklist still shows), or rejected. */
+const CLOSED = new Set(["paid", "rejected"]);
+
 /**
- * The payables of counterparties a person added: receivables, and the
- * invoices of sample counterparties, do not count towards "Add a payable".
- * Computed from the rows the console already reads.
+ * The open payables of counterparties a person added: receivables, closed
+ * payables, and the invoices of sample counterparties do not count towards
+ * "Add a payable". Computed from the rows the console already reads.
  */
 export function ownPayableCount(
-  invoices: Array<{ counterparty_id: string; direction: string }>,
+  invoices: Array<{ counterparty_id: string; direction: string; status?: string }>,
   counterparties: Array<{ id: string; sample?: boolean }>
 ): number {
   const sample = new Set(counterparties.filter((counterparty) => counterparty.sample).map((counterparty) => counterparty.id));
-  return invoices.filter((invoice) => invoice.direction === "payable" && !sample.has(invoice.counterparty_id)).length;
+  return invoices.filter(
+    (invoice) => invoice.direction === "payable" && !CLOSED.has(invoice.status ?? "") && !sample.has(invoice.counterparty_id)
+  ).length;
 }

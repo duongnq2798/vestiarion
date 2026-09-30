@@ -27,14 +27,14 @@ no stored state, no extra query, no Circle call on the console).
 | # | Step | Done when | Next-step guidance |
 |---|---|---|---|
 | 1 | Add a wallet | the operating account has a Circle wallet (or the workspace is live) | owner; Settings |
-| 2 | Fund it with USDC | the stored operating balance is above 0 (or live) | Settings shows the address and the faucet, and now reads the balance again by itself (R1) |
+| 2 | Fund it with USDC | the stored operating balance is above 0, live or not (R6) | Settings shows the address and the faucet, and now reads the balance again by itself (R1) |
 | 3 | Go live | the workspace is live | owner; Settings |
 | 4 | Add a payee with an Arc address | a vendor or contractor a person added, with an address that is not waiting for confirmation | points at **Ask for address**; when the only payee's address is unconfirmed, says to confirm it |
-| 5 | Add a payable | a payable invoice of a counterparty a person added | within the payee's limit, with a PO reference and goods received, or the agent asks for information |
+| 5 | Add a payable | an open payable (not paid, not rejected) of a counterparty a person added | within the payee's limit, with a PO reference and goods received, or the agent asks for information |
 | 6 | First payment on Arc testnet | the workspace has a paid invoice or milestone with an on-chain transaction (`stats().onchainTransfers`) | links to **Approvals** while the agent holds something for a person, otherwise to AP / AR |
 
-The checklist shows until step 6 is done, not merely until the workspace is live. A live workspace
-that has never paid anyone still needs the guide. **Read the guide** opens the Go live guide while a
+The checklist shows until the workspace is live and step 6 is done (R7), not merely until it is
+live. A live workspace that has never paid anyone still needs the guide. **Read the guide** opens the Go live guide while a
 Settings step is left, and the first-payment guide after that.
 
 ## 3. On `/open`
@@ -70,6 +70,17 @@ other's definition.
   explored a sandbox.
 - **R4: the payee step needs a confirmed address.** An address that is waiting for confirmation
   cannot be paid, so ticking the step for it would send the user to a payable the agent must hold.
+- **R6 (review I2): funding stays undone while the operating wallet holds no USDC, even when live.**
+  Going live does not check the balance, and the checklist now outlives going live, so ticking
+  funding for any live workspace would lead to payables the agent cannot pay. The stored balance is
+  current on the console (its balance tile reads the chain and stores it). Cost if wrong: a live
+  workspace briefly sees "Fund it" undone before the tile's first read lands.
+- **R7 (review minor 1, re-graded): the checklist hides only when the workspace is live and has
+  paid.** A sandbox with Circle connected can already pay on chain; hiding then would drop the guide
+  to going live, and a sandbox is deleted when inactive. Cost if wrong: none found.
+- **R8 (review I3): the first-payment figures fail on their own.** When `open_first_payments` cannot
+  be read, the two rows show a dash and every other figure still shows, so a deploy that lands
+  before migration 0042 cannot blank `/open`. Cost if wrong: two dashes until the migration runs.
 - **R5: "first payment" is an on-chain transfer the console already counts.** `stats()` counts paid
   invoices and milestones whose transaction is not a simulated one. Reusing it keeps G1's "no extra
   query". Cost if wrong: none found; a simulated payment never has an on-chain transaction.

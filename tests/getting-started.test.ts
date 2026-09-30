@@ -76,8 +76,8 @@ describe("gettingStarted", () => {
     expect(done(result).fund).toBe(false);
   });
 
-  it("asks for the payee once the workspace is live", () => {
-    const result = gettingStarted(input({ mode: "live" }));
+  it("asks for the payee once the workspace is live and funded", () => {
+    const result = gettingStarted(input({ mode: "live", accounts: FUNDED }));
     expect(done(result)).toMatchObject({ wallet: true, fund: true, live: true, payee: false });
     expect(result.next).toBe("payee");
     expect(step(result, "payee").body).toContain("Ask for address");
@@ -94,7 +94,7 @@ describe("gettingStarted", () => {
 
   it("does not tick the payee step for an address still waiting for confirmation, and says whose to confirm", () => {
     const waiting = { ...PAYEE, address_changed_at: "2026-10-01T09:00:00Z", address_confirmed_at: null };
-    const result = gettingStarted(input({ mode: "live", counterparties: [waiting] }));
+    const result = gettingStarted(input({ mode: "live", accounts: FUNDED, counterparties: [waiting] }));
     expect(done(result).payee).toBe(false);
     expect(step(result, "payee").body).toContain("Confirm the new address of Northstar Studio");
 
@@ -103,14 +103,14 @@ describe("gettingStarted", () => {
   });
 
   it("ticks the payable step once a payable exists, and says what the agent needs to pay it", () => {
-    const result = gettingStarted(input({ mode: "live", counterparties: [PAYEE] }));
+    const result = gettingStarted(input({ mode: "live", accounts: FUNDED, counterparties: [PAYEE] }));
     expect(result.next).toBe("payable");
     expect(step(result, "payable").body).toContain("PO reference");
     expect(done(gettingStarted(input({ payableCount: 1 }))).payable).toBe(true);
   });
 
   it("waits for the first payment on AP / AR, or on Approvals while the agent holds something for a person", () => {
-    const ready = input({ mode: "live", counterparties: [PAYEE], payableCount: 1 });
+    const ready = input({ mode: "live", accounts: FUNDED, counterparties: [PAYEE], payableCount: 1 });
     const deciding = gettingStarted(ready);
     expect(deciding.next).toBe("payment");
     expect(step(deciding, "payment").path).toBe("/invoices");
@@ -149,7 +149,23 @@ describe("gettingStarted", () => {
 
   it("opens the Go live guide while a Settings step is left, and the first-payment guide after", () => {
     expect(gettingStarted(input({ accounts: FUNDED })).guide).toBe("go-live");
-    expect(gettingStarted(input({ mode: "live" })).guide).toBe("first-payment");
+    expect(gettingStarted(input({ mode: "live", accounts: FUNDED })).guide).toBe("first-payment");
+  });
+
+  it("asks for USDC again when a live workspace's operating wallet holds none, and opens the Go live guide", () => {
+    const result = gettingStarted(input({ mode: "live", accounts: [{ kind: "operating", circle_wallet_id: "w-1", balance: 0 }] }));
+    expect(done(result)).toMatchObject({ wallet: true, fund: false, live: true });
+    expect(result.next).toBe("fund");
+    expect(step(result, "fund").body).toContain("holds no USDC");
+    expect(result.guide).toBe("go-live");
+  });
+
+  it("stays in a sandbox that has paid on Arc testnet, until it goes live", () => {
+    const result = gettingStarted(input({ accounts: FUNDED, counterparties: [PAYEE], payableCount: 1, onchainPayments: 1 }));
+    expect(result.show).toBe(true);
+    expect(done(result).payment).toBe(true);
+    expect(result.next).toBe("live");
+    expect(step(result, "live").body).toContain("every 6 hours");
   });
 });
 
@@ -185,5 +201,17 @@ describe("sample rows (sample-data design §1)", () => {
     ).toBe(1);
     // A counterparty the page does not know (deleted meanwhile) is not a sample one.
     expect(ownPayableCount([{ counterparty_id: "gone", direction: "payable" }], counterparties)).toBe(1);
+  });
+
+  it("counts only payables that can still be paid: one paid in a sandbox, or rejected, cannot be the first payment", () => {
+    const counterparties = [{ id: "own", sample: false }];
+    const invoices = [
+      { counterparty_id: "own", direction: "payable", status: "paid" },
+      { counterparty_id: "own", direction: "payable", status: "rejected" },
+    ];
+    expect(ownPayableCount(invoices, counterparties)).toBe(0);
+    for (const status of ["pending", "held", "flagged", "awaiting_info", "processing"]) {
+      expect(ownPayableCount([...invoices, { counterparty_id: "own", direction: "payable", status }], counterparties)).toBe(1);
+    }
   });
 });

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import {
@@ -140,19 +140,22 @@ describe("readOpenNumbers", () => {
     expect(numbers.sides.total.firstPayments).toBe(2);
   });
 
-  it("fails the read when either function fails, and forgets it", async () => {
-    const period = since("2026-09-24");
-    const failing = platform(
-      () => readOpenNumbers(period, 1_000),
+  it("still reads every other figure when open_first_payments cannot be read, with no first-payment figures", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { result } = platform(
+      () => readOpenNumbers(since("2026-09-24"), 1_000),
       (request) =>
         request.path === "/rest/v1/rpc/open_first_payments"
           ? { status: 404, body: { message: "function open_first_payments does not exist" } }
           : { body: DOCUMENT }
     );
-    await expect(failing.result).rejects.toThrow(/open_first_payments/);
-    const retry = platform(() => readOpenNumbers(period, 2_000), reply);
-    await retry.result;
-    expect(retry.fake.requests).toHaveLength(2);
+    const numbers = await result;
+    expect(numbers.sides.ours.usdcPaid).toBe(3);
+    for (const side of [numbers.sides.customers, numbers.sides.ours, numbers.sides.total]) {
+      expect(side).toMatchObject({ firstPayments: null, medianMinutesToFirstPayment: null });
+    }
+    expect(logged).toHaveBeenCalledWith(expect.stringContaining("open_first_payments"), expect.anything());
+    logged.mockRestore();
   });
 
   it("sends a null start for all time", async () => {

@@ -33,11 +33,17 @@ const sideSchema = z.object({
   usdcInWallets: figure,
 });
 
-/** From open_first_payments (0042): the median is null when no workspace made a first payment in the period. */
+/**
+ * From open_first_payments (0042): the median is null when no workspace made a
+ * first payment in the period, and both are null when the function could not
+ * be read, so /open still shows every other figure.
+ */
 const firstSideSchema = z.object({
-  firstPayments: figure,
+  firstPayments: figure.nullable(),
   medianMinutesToFirstPayment: figure.nullable(),
 });
+
+const NO_FIRSTS = { firstPayments: null, medianMinutesToFirstPayment: null };
 
 const firstPaymentsSchema = z.object({
   sides: z.object({ customers: firstSideSchema, ours: firstSideSchema, total: firstSideSchema }),
@@ -140,9 +146,17 @@ function memoKey(period: Period): string {
 
 async function fetchOpenNumbers(period: Period): Promise<OpenNumbers> {
   const since = { p_since: period.since ? period.since.toISOString() : null };
-  const [numbers, firsts] = await Promise.all([platformDb().rpc("open_numbers", since), platformDb().rpc("open_first_payments", since)]);
+  const [numbers, first] = await Promise.all([
+    platformDb().rpc("open_numbers", since),
+    // Figures of their own: when they cannot be read (before migration 0042, say), the rest of /open still shows.
+    Promise.resolve(platformDb().rpc("open_first_payments", since))
+      .then((result) => firstPaymentsSchema.parse(unwrap(result)).sides)
+      .catch((error: unknown) => {
+        console.error("open numbers: open_first_payments not read", error instanceof Error ? error.message : error);
+        return { customers: NO_FIRSTS, ours: NO_FIRSTS, total: NO_FIRSTS };
+      }),
+  ]);
   const document = openNumbersSchema.parse(unwrap(numbers));
-  const first = firstPaymentsSchema.parse(unwrap(firsts)).sides;
   return {
     ...document,
     sides: {
