@@ -40,6 +40,13 @@ const PLATFORM_TABLES = ["memberships", "invitations", "api_keys", "webhook_endp
 const deleteOrg = (orgId: string, by: string | null = owner) =>
   asServiceRole(db, (tx) => tx.query("select public.delete_org($1, $2)", [orgId, by]));
 
+/** A workspace whose owner is `owner`, the person every delete below is made by. */
+async function ownedOrg(slug: string): Promise<string> {
+  const orgId = await createOrg(db, slug);
+  await db.query("insert into public.memberships (org_id, user_id, role) values ($1, $2, 'owner')", [orgId, owner]);
+  return orgId;
+}
+
 const exists = async (orgId: string) =>
   (await db.query("select 1 from public.orgs where id = $1", [orgId])).rows.length === 1;
 
@@ -57,10 +64,26 @@ interface Tombstone {
 const tombstoneOf = async (orgId: string) =>
   (await db.query<Tombstone>("select * from public.deleted_orgs where org_id = $1", [orgId])).rows[0];
 
+/**
+ * Every base table in `public` with an `org_id` column, but the tombstones:
+ * read from the schema, so a table added later is covered without anyone
+ * remembering to list it here.
+ */
+async function orgScopedTables(): Promise<string[]> {
+  const { rows } = await db.query<{ table_name: string }>(
+    `select c.table_name from information_schema.columns c
+       join information_schema.tables t on t.table_schema = c.table_schema and t.table_name = c.table_name
+      where c.table_schema = 'public' and c.column_name = 'org_id' and t.table_type = 'BASE TABLE'
+        and c.table_name <> 'deleted_orgs'
+      order by c.table_name`
+  );
+  return rows.map((row) => row.table_name);
+}
+
 /** Every row of `orgId`, table by table, where any remains. */
 async function remaining(orgId: string): Promise<Record<string, number>> {
   const counts: Record<string, number> = {};
-  for (const table of [...TENANT_TABLES, ...PLATFORM_TABLES]) {
+  for (const table of await orgScopedTables()) {
     const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from public.${table} where org_id = $1`, [orgId]);
     if (rows[0].n > 0) counts[table] = rows[0].n;
   }
@@ -86,9 +109,8 @@ function nextPrefix(): string {
 
 /** A workspace with a row in every table the org owns, platform tables included. */
 async function populated(slug: string): Promise<string> {
-  const orgId = await createOrg(db, slug);
+  const orgId = await ownedOrg(slug);
   const member = await createUser(db, `${slug}-member@example.com`);
-  await db.query("insert into public.memberships (org_id, user_id, role) values ($1, $2, 'owner')", [orgId, owner]);
   await db.query("insert into public.memberships (org_id, user_id, role, invited_by) values ($1, $2, 'viewer', $3)", [orgId, member, owner]);
   await db.query(
     `insert into public.invitations (org_id, email, role, token_hash, invited_by, expires_at)
@@ -127,7 +149,7 @@ describe("delete_org refusals (0031, W3)", () => {
   });
 
   it("refuses a live workspace whose agent is running (pause first)", async () => {
-    const orgId = await createOrg(db, "live-running-co");
+    const orgId = await ownedOrg("live-running-co");
     await db.query("update public.orgs set mode = 'live' where id = $1", [orgId]);
 
     await expect(deleteOrg(orgId)).rejects.toThrow(/pause_first/);
@@ -136,7 +158,7 @@ describe("delete_org refusals (0031, W3)", () => {
   });
 
   it("deletes a live workspace once its agent is paused", async () => {
-    const orgId = await createOrg(db, "live-paused-co");
+    const orgId = await ownedOrg("live-paused-co");
     await db.query("update public.orgs set mode = 'live', agent_paused_at = now(), agent_paused_by = $2 where id = $1", [orgId, owner]);
 
     await deleteOrg(orgId);
@@ -145,7 +167,7 @@ describe("delete_org refusals (0031, W3)", () => {
   });
 
   it("deletes a sandbox without a pause: only a live workspace runs on the schedule", async () => {
-    const orgId = await createOrg(db, "sandbox-unpaused-co");
+    const orgId = await ownedOrg("sandbox-unpaused-co");
 
     await deleteOrg(orgId);
 
@@ -153,7 +175,7 @@ describe("delete_org refusals (0031, W3)", () => {
   });
 
   it("refuses while a cycle run is in progress, even for a paused workspace", async () => {
-    const orgId = await createOrg(db, "cycling-co");
+    const orgId = await ownedOrg("cycling-co");
     await db.query("update public.orgs set mode = 'live', agent_paused_at = now() where id = $1", [orgId]);
     await db.query(
       "insert into public.cycle_runs (org_id, started_at, status, clock_mode, chain_mode, screening_mode) values ($1, now(), 'running', 'real', 'simulate', 'simulate')",
@@ -166,7 +188,7 @@ describe("delete_org refusals (0031, W3)", () => {
   });
 
   it("does not wait forever on a crashed cycle: a run left running past the longest a cycle can take no longer counts", async () => {
-    const orgId = await createOrg(db, "crashed-cycle-co");
+    const orgId = await ownedOrg("crashed-cycle-co");
     await db.query(
       "insert into public.cycle_runs (org_id, started_at, status, clock_mode, chain_mode, screening_mode) values ($1, now() - interval '1 hour', 'running', 'real', 'simulate', 'simulate')",
       [orgId]
@@ -178,13 +200,75 @@ describe("delete_org refusals (0031, W3)", () => {
   });
 
   it("ignores finished runs", async () => {
-    const orgId = await createOrg(db, "finished-cycle-co");
+    const orgId = await ownedOrg("finished-cycle-co");
     for (const status of ["completed", "partial", "failed"]) {
       await db.query(
         "insert into public.cycle_runs (org_id, started_at, finished_at, duration_ms, status, clock_mode, chain_mode, screening_mode) values ($1, now(), now(), 0, $2, 'real', 'simulate', 'simulate')",
         [orgId, status]
       );
     }
+
+    await deleteOrg(orgId);
+
+    expect(await exists(orgId)).toBe(false);
+  });
+
+  it("refuses anyone but an owner of the workspace: no actor, an admin, or an owner since removed", async () => {
+    const orgId = await ownedOrg("owners-only-co");
+    const admin = await createUser(db, "owners-only-admin@example.com");
+    await db.query("insert into public.memberships (org_id, user_id, role) values ($1, $2, 'admin')", [orgId, admin]);
+    const former = await createUser(db, "owners-only-former@example.com");
+    await db.query("insert into public.memberships (org_id, user_id, role) values ($1, $2, 'owner')", [orgId, former]);
+    // Another owner remains, so the last-owner trigger lets this one go.
+    await db.query("delete from public.memberships where org_id = $1 and user_id = $2", [orgId, former]);
+    const stranger = await createUser(db, "owners-only-stranger@example.com");
+
+    for (const by of [null, admin, former, stranger]) {
+      await expect(deleteOrg(orgId, by)).rejects.toThrow(/not_owner/);
+    }
+    expect(await exists(orgId)).toBe(true);
+    expect(await tombstoneOf(orgId)).toBeUndefined();
+  });
+
+  it("refuses an owner of another workspace", async () => {
+    const orgId = await createOrg(db, "someone-elses-co");
+    await expect(deleteOrg(orgId)).rejects.toThrow(/not_owner/);
+    expect(await exists(orgId)).toBe(true);
+  });
+
+  it("refuses while a person's approval holds an invoice (processing, inside the 10-minute claim window)", async () => {
+    const orgId = await ownedOrg("approving-co");
+    const rows = await seedOrgRows(db, orgId, "approving-co");
+    await closeCycles(orgId);
+    await db.query("update public.invoices set status = 'processing', reviewed_by = $2, reviewed_at = now() - interval '9 minutes' where id = $1", [rows.invoiceId, owner]);
+
+    await expect(deleteOrg(orgId)).rejects.toThrow(/payment_in_progress/);
+    expect(await exists(orgId)).toBe(true);
+    expect(await tombstoneOf(orgId)).toBeUndefined();
+  });
+
+  it("refuses while a payment is being submitted (submitting, inside the 2-minute claim window)", async () => {
+    const orgId = await ownedOrg("submitting-co");
+    const rows = await seedOrgRows(db, orgId, "submitting-co");
+    await closeCycles(orgId);
+    await db.query("update public.payment_intents set status = 'submitting', updated_at = now() - interval '90 seconds' where org_id = $1 and idempotency_key = $2", [orgId, rows.idempotencyKey]);
+
+    await expect(deleteOrg(orgId)).rejects.toThrow(/payment_in_progress/);
+    expect(await exists(orgId)).toBe(true);
+  });
+
+  it("is not blocked by a stale claim: one the claim functions would take over", async () => {
+    const orgId = await ownedOrg("stale-claims-co");
+    const rows = await seedOrgRows(db, orgId, "stale-claims-co");
+    await closeCycles(orgId);
+    await db.query("update public.invoices set status = 'processing', reviewed_at = now() - interval '11 minutes' where id = $1", [rows.invoiceId]);
+    await db.query("update public.payment_intents set status = 'submitting', updated_at = now() - interval '3 minutes' where org_id = $1", [orgId]);
+    // A processing invoice with no review time at all is stale too (claim_invoice_decision's coalesce).
+    const second = (await db.query<{ id: string }>(
+      "insert into public.invoices (org_id, direction, counterparty_id, amount, due_date, status) values ($1, 'payable', $2, 1, now(), 'processing') returning id",
+      [orgId, rows.counterpartyId]
+    )).rows[0].id;
+    expect(second).toBeTruthy();
 
     await deleteOrg(orgId);
 
@@ -199,14 +283,14 @@ describe("delete_org refusals (0031, W3)", () => {
 
 describe("the tombstone (0031, W4)", () => {
   it("keeps the slug, name, who deleted it, the ledger's length, and its head's hash and signing key id", async () => {
-    const orgId = await createOrg(db, "tombstone-co");
+    const orgId = await ownedOrg("tombstone-co");
     await db.query("update public.orgs set name = 'Tombstone Co' where id = $1", [orgId]);
     const key = crypto.generateKeyPairSync("ed25519");
     await appendSignedForOrg(db, orgId, { actor: "system", domain: "system", action: "note", summary: "one", detail: {} }, key.privateKey);
     await appendSignedForOrg(db, orgId, { actor: "system", domain: "system", action: "note", summary: "two", detail: {} }, key.privateKey);
     const head = await appendSignedForOrg(db, orgId, { actor: "human", domain: "system", action: "note", summary: "three", detail: {} }, key.privateKey);
     // Another org's later entry is not this org's head.
-    const other = await createOrg(db, "tombstone-neighbour-co");
+    const other = await ownedOrg("tombstone-neighbour-co");
     await appendSignedForOrg(db, other, { actor: "system", domain: "system", action: "note", summary: "x", detail: {} }, crypto.generateKeyPairSync("ed25519").privateKey);
 
     const before = Date.now();
@@ -227,7 +311,7 @@ describe("the tombstone (0031, W4)", () => {
   });
 
   it("records an empty ledger as zero entries and no head", async () => {
-    const orgId = await createOrg(db, "empty-ledger-co");
+    const orgId = await ownedOrg("empty-ledger-co");
 
     await deleteOrg(orgId);
 
@@ -236,14 +320,9 @@ describe("the tombstone (0031, W4)", () => {
     });
   });
 
-  it("keeps a null deleted_by when none is given", async () => {
-    const orgId = await createOrg(db, "nobody-deleted-co");
-    await deleteOrg(orgId, null);
-    expect((await tombstoneOf(orgId)).deleted_by).toBeNull();
-  });
 
   it("writes no tombstone when the delete is refused", async () => {
-    const orgId = await createOrg(db, "refused-tombstone-co");
+    const orgId = await ownedOrg("refused-tombstone-co");
     await db.query("update public.orgs set mode = 'live' where id = $1", [orgId]);
     await expect(deleteOrg(orgId)).rejects.toThrow(/pause_first/);
     expect(await tombstoneOf(orgId)).toBeUndefined();
@@ -266,6 +345,10 @@ describe("the cascade (0031, W5)", () => {
     expect((await tombstoneOf(orgId)).ledger_entries).toBe(1);
   });
 
+  it("covers every org-scoped table in the schema: a new one fails here until it is seeded and deleted", async () => {
+    expect(await orgScopedTables()).toEqual([...TENANT_TABLES, ...PLATFORM_TABLES].sort());
+  });
+
   it("leaves another org's rows untouched", async () => {
     const kept = await populated("kept-co");
     const doomed = await populated("doomed-co");
@@ -281,7 +364,7 @@ describe("the cascade (0031, W5)", () => {
 
   it("clears the purge flag, so cycle snapshots are append-only again in the same transaction", async () => {
     const survivor = await populated("purge-flag-survivor-co");
-    const doomed = await createOrg(db, "purge-flag-doomed-co");
+    const doomed = await ownedOrg("purge-flag-doomed-co");
 
     await expect(
       asServiceRole(db, async (tx) => {
@@ -297,7 +380,7 @@ describe("the cascade (0031, W5)", () => {
 
 describe("grants (0031)", () => {
   it("delete_org can be executed by the service role only", async () => {
-    const orgId = await createOrg(db, "guarded-co");
+    const orgId = await ownedOrg("guarded-co");
     await expect(
       asTenant(db, orgId, (tx) => tx.query("select public.delete_org($1, $2)", [orgId, owner]))
     ).rejects.toThrow(/permission denied/);
@@ -311,7 +394,7 @@ describe("grants (0031)", () => {
   });
 
   it("deleted_orgs is closed to the tenant and browser roles", async () => {
-    const orgId = await createOrg(db, "closed-table-co");
+    const orgId = await ownedOrg("closed-table-co");
     await expect(asTenant(db, orgId, (tx) => tx.query("select * from public.deleted_orgs"))).rejects.toThrow(/permission denied/);
     await expect(asRole(db, "authenticated", (tx) => tx.query("select * from public.deleted_orgs"))).rejects.toThrow(/permission denied/);
     await expect(asRole(db, "anon", (tx) => tx.query("select * from public.deleted_orgs"))).rejects.toThrow(/permission denied/);
@@ -346,7 +429,7 @@ describe("grants (0031)", () => {
 
 describe("replay (0031)", () => {
   it("is idempotent: tombstones survive, the grants stay closed, and deleting still works", async () => {
-    const orgId = await createOrg(db, "replay-doomed-co");
+    const orgId = await ownedOrg("replay-doomed-co");
     await deleteOrg(orgId);
     const tombstone = await tombstoneOf(orgId);
 
@@ -354,7 +437,7 @@ describe("replay (0031)", () => {
     await applyMigrations(db);
 
     expect(await tombstoneOf(orgId)).toEqual(tombstone);
-    const next = await createOrg(db, "replay-next-co");
+    const next = await ownedOrg("replay-next-co");
     await expect(
       asRole(db, "authenticated", (tx) => tx.query("select public.delete_org($1, $2)", [next, owner]))
     ).rejects.toThrow(/permission denied/);

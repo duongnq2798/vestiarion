@@ -88,7 +88,7 @@ describe("deleteWorkspace", () => {
     const attempt = run(() => deleteWorkspace({ orgId: ORG, actorId: ACTOR, confirmSlug }));
 
     await expect(attempt).rejects.toThrow(DeleteWorkspaceError);
-    await expect(attempt).rejects.toThrow("Type the workspace's name exactly to confirm.");
+    await expect(attempt).rejects.toThrow("Type the workspace's slug exactly to confirm.");
     expect(rpcCalls()).toHaveLength(0);
   });
 
@@ -104,8 +104,10 @@ describe("deleteWorkspace", () => {
   it.each([
     ["founding_org: the founding workspace cannot be deleted", "founding_org", "The founding workspace cannot be deleted."],
     ["pause_first: northstar is live and its agent is running; pause it first", "pause_first", "Pause the agent first, so no cycle runs while the workspace is deleted."],
-    ["cycle_running: a cycle of northstar is in progress", "cycle_running", "A cycle is running; try again in a minute."],
+    ["cycle_running: a cycle of northstar is in progress", "cycle_running", "A cycle started in the last 15 minutes has not finished; try again shortly."],
     ["org_not_found: no organization with id x", "org_not_found", "This workspace no longer exists."],
+    ["not_owner: only an owner of northstar can delete it", "not_owner", "Only an owner can delete this workspace."],
+    ["payment_in_progress: a payment of northstar is being made", "payment_in_progress", "A payment is being made; try again in a few minutes."],
   ])("maps %s to its fixed message", async (raised, code, message) => {
     const { run } = database({ raise: raised });
 
@@ -114,6 +116,16 @@ describe("deleteWorkspace", () => {
     expect(error).toBeInstanceOf(DeleteWorkspaceError);
     expect((error as DeleteWorkspaceError).code).toBe(code);
     expect((error as DeleteWorkspaceError).message).toBe(message);
+  });
+
+  it.each([
+    ["an inherited property name", "constructor: x"],
+    ["the library's own slug check, which the database never raises", "slug_mismatch: x"],
+  ])("does not map %s", async (_label, raised) => {
+    const { run } = database({ raise: raised });
+    const error = await run(() => deleteWorkspace({ orgId: ORG, actorId: ACTOR, confirmSlug: "northstar" })).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(Error);
+    expect(error).not.toBeInstanceOf(DeleteWorkspaceError);
   });
 
   it("passes any other database error through as a plain Error, for the action to log by name", async () => {

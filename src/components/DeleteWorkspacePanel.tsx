@@ -2,7 +2,7 @@
 
 import { Trash2 } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, type ComponentProps } from "react";
 import { deleteWorkspaceAction, type DeleteWorkspaceActionResult } from "@/app/actions/workspace";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
@@ -50,7 +50,7 @@ export function DeleteWorkspaceConsequences({ slug, walletCount, hosted }: { slu
   return (
     <>
       <span className="block">
-        Deleting <span className="font-mono text-ink">{slug}</span> removes its invoices, counterparties, milestones, treasury records, the ledger, API
+        Deleting <span className="break-all font-mono text-ink">{slug}</span> removes its invoices, counterparties, milestones, treasury records, the ledger, API
         keys, webhooks, members and invitations, for everyone in it. This cannot be undone.
       </span>
       {walletCount > 0 && (
@@ -65,16 +65,44 @@ export function DeleteWorkspaceConsequences({ slug, walletCount, hosted }: { slu
   );
 }
 
+/**
+ * How the dialog may be dismissed: never by a click outside (as ConfirmDialog),
+ * and not by Escape while the delete is on its way.
+ */
+export function dismissGuards(pending: boolean) {
+  return {
+    onInteractOutside: (event: { preventDefault(): void }) => event.preventDefault(),
+    onEscapeKeyDown: (event: { preventDefault(): void }) => {
+      if (pending) event.preventDefault();
+    },
+  };
+}
+
+export interface DeleteWorkspaceFormProps {
+  orgSlug: string;
+  context: DeletionContext;
+  /** The action's state lives in the dialog, which also needs `pending` to stay open. */
+  pending: boolean;
+  message: string;
+  formProps: ComponentProps<"form">;
+}
+
 /** The confirmation inside the dialog: type the slug, then delete. */
-export function DeleteWorkspaceForm({ orgSlug, context }: { orgSlug: string; context: DeletionContext }) {
-  const { state, pending, formProps } = useActionForm(deleteWorkspaceAction, INITIAL);
+export function DeleteWorkspaceForm({ orgSlug, context, pending, message, formProps }: DeleteWorkspaceFormProps) {
   const [typed, setTyped] = useState("");
   const blocked = mustPause(context);
   return (
     <form {...formProps} className="grid gap-4">
       <input type="hidden" name="orgSlug" value={orgSlug} />
       {blocked && <PauseFirstNote orgSlug={orgSlug} />}
-      <Field id="delete-workspace-confirm" label="Type the workspace's name (slug) to confirm" description={<span className="font-mono">{context.slug}</span>}>
+      <Field
+        id="delete-workspace-confirm"
+        label={
+          <>
+            Type <span className="break-all font-mono">{context.slug}</span> to confirm
+          </>
+        }
+      >
         <Input
           name="confirmSlug"
           value={typed}
@@ -85,16 +113,51 @@ export function DeleteWorkspaceForm({ orgSlug, context }: { orgSlug: string; con
           className="font-mono"
         />
       </Field>
-      <FormMessage tone={state.message && !state.ok ? "error" : "neutral"}>{state.ok ? null : state.message}</FormMessage>
+      <FormMessage tone={message ? "error" : "neutral"}>{message || null}</FormMessage>
       <DialogFooter>
         <DialogClose asChild>
-          <Button variant="secondary">Cancel</Button>
+          <Button variant="secondary" disabled={pending}>
+            Cancel
+          </Button>
         </DialogClose>
         <Button type="submit" variant="danger-solid" icon={<Trash2 />} disabled={typed !== context.slug || blocked} loading={pending}>
           Delete this workspace
         </Button>
       </DialogFooter>
     </form>
+  );
+}
+
+/**
+ * The dialog holds the action's state, so it can refuse to close while the
+ * delete is pending. `alertdialog`, as ConfirmDialog is: it interrupts to ask
+ * before something that cannot be taken back.
+ */
+function DeleteWorkspaceDialog({ orgSlug, context }: { orgSlug: string; context: DeletionContext }) {
+  const { state, pending, formProps } = useActionForm(deleteWorkspaceAction, INITIAL);
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button variant="danger" icon={<Trash2 />}>
+          Delete workspace
+        </Button>
+      </DialogTrigger>
+      <DialogContent
+        role="alertdialog"
+        title="Delete this workspace?"
+        description={<DeleteWorkspaceConsequences slug={context.slug} walletCount={context.walletCount} hosted={context.hosted} />}
+        showClose={!pending}
+        {...dismissGuards(pending)}
+      >
+        <DeleteWorkspaceForm
+          orgSlug={orgSlug}
+          context={context}
+          pending={pending}
+          message={state.ok ? "" : state.message}
+          formProps={formProps}
+        />
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -108,19 +171,7 @@ export default function DeleteWorkspacePanel({ orgSlug, context, canAdminister }
           Deletes this workspace and everything in it, for every member. Only an owner can do this, and it cannot be undone.
         </p>
         {mustPause(context) && <PauseFirstNote orgSlug={orgSlug} />}
-        <Dialog>
-          <DialogTrigger asChild>
-            <Button variant="danger" icon={<Trash2 />}>
-              Delete workspace
-            </Button>
-          </DialogTrigger>
-          <DialogContent
-            title="Delete this workspace?"
-            description={<DeleteWorkspaceConsequences slug={context.slug} walletCount={context.walletCount} hosted={context.hosted} />}
-          >
-            <DeleteWorkspaceForm orgSlug={orgSlug} context={context} />
-          </DialogContent>
-        </Dialog>
+        <DeleteWorkspaceDialog orgSlug={orgSlug} context={context} />
       </div>
     </section>
   );

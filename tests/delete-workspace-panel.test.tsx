@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import DeleteWorkspacePanel, { DeleteWorkspaceConsequences, DeleteWorkspaceForm } from "@/components/DeleteWorkspacePanel";
+import DeleteWorkspacePanel, { DeleteWorkspaceConsequences, DeleteWorkspaceForm, dismissGuards } from "@/components/DeleteWorkspacePanel";
 import { Dialog } from "@/components/ui/Dialog";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import type { DeletionContext } from "@/lib/platform/delete-workspace";
@@ -88,8 +88,13 @@ describe("DeleteWorkspaceConsequences", () => {
 
 describe("DeleteWorkspaceForm", () => {
   // The form sits inside the dialog, whose Cancel needs the dialog around it.
-  const form = (overrides: Partial<DeletionContext> = {}) =>
-    html(<Dialog><DeleteWorkspaceForm orgSlug="northstar" context={context(overrides)} /></Dialog>);
+  // The action's state is the dialog's, so the form is given it: here, as the dialog would pass it.
+  const form = (overrides: Partial<DeletionContext> = {}, pending = false, message = "") =>
+    html(
+      <Dialog>
+        <DeleteWorkspaceForm orgSlug="northstar" context={context(overrides)} pending={pending} message={message} formProps={{}} />
+      </Dialog>
+    );
 
   it("labels the confirmation input, and names it confirmSlug", () => {
     const markup = form();
@@ -97,7 +102,9 @@ describe("DeleteWorkspaceForm", () => {
     expect(id).not.toBeNull();
     const inputId = id?.[1] ?? id?.[2];
     expect(markup).toContain(`for="${inputId}"`);
-    expect(text(markup)).toContain("Type the workspace's name (slug) to confirm");
+    // The label shows the slug to type.
+    const label = (markup.split(`<label for="${inputId}"`)[1] ?? "").split("</label>")[0].replace(/^[^>]*>/, "");
+    expect(text(label)).toBe("Type northstar to confirm");
     expect(markup).toMatch(/<input[^>]*autoComplete="off"/);
   });
 
@@ -110,8 +117,54 @@ describe("DeleteWorkspaceForm", () => {
     expect(markup).toMatch(/<button[^>]*type="submit"[^>]*disabled=""[^>]*>[\s\S]*?Delete this workspace/);
   });
 
+  it("shows the slug with break-all in the label and in the dialog's text, so a long one wraps at 360 px", () => {
+    const long = "a-very-long-workspace-slug-that-wraps-x";
+    const spans = (markup: string) => [...markup.matchAll(/<(?:span|code)[^>]*class="([^"]*font-mono[^"]*)"[^>]*>a-very-long/g)].map((match) => match[1]);
+    const inForm = spans(form({ slug: long }));
+    const inText = spans(html(<DeleteWorkspaceConsequences slug={long} walletCount={0} hosted={false} />));
+    expect(inForm).toHaveLength(1);
+    expect(inText).toHaveLength(1);
+    for (const classes of [...inForm, ...inText]) expect(classes.split(/\s+/)).toContain("break-all");
+  });
+
+  it("while pending, disables Cancel and marks the delete button busy", () => {
+    const markup = form({}, true);
+    expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>Cancel<\/button>/);
+    expect(markup).toMatch(/<button[^>]*type="submit"[^>]*disabled=""[^>]*aria-busy="true"/);
+  });
+
+  it("keeps Cancel enabled when not pending", () => {
+    expect(form()).toMatch(/<button type="button"(?![^>]*disabled="")[^>]*>Cancel<\/button>/);
+  });
+
+  it("shows the action's refusal", () => {
+    expect(text(form({}, false, "A payment is being made; try again in a few minutes."))).toContain("A payment is being made; try again in a few minutes.");
+  });
+
   it("shows the pause note inside the dialog too, when the workspace is live and running", () => {
     expect(text(form({ live: true }))).toContain(PAUSE);
     expect(text(form({ live: true, paused: true }))).not.toContain(PAUSE);
+  });
+});
+
+describe("dismissGuards", () => {
+  const event = () => ({ preventDefault: vi.fn() });
+
+  it("never lets a click outside close the dialog, pending or not", () => {
+    for (const pending of [false, true]) {
+      const outside = event();
+      dismissGuards(pending).onInteractOutside(outside);
+      expect(outside.preventDefault).toHaveBeenCalled();
+    }
+  });
+
+  it("lets Escape close the dialog only while nothing is pending", () => {
+    const idle = event();
+    dismissGuards(false).onEscapeKeyDown(idle);
+    expect(idle.preventDefault).not.toHaveBeenCalled();
+
+    const busy = event();
+    dismissGuards(true).onEscapeKeyDown(busy);
+    expect(busy.preventDefault).toHaveBeenCalled();
   });
 });

@@ -123,16 +123,18 @@ describe("deleteWorkspaceAction", () => {
     const result = await run(() => deleteWorkspaceAction(INITIAL, form({})));
 
     expect(deleteWorkspaceMock).toHaveBeenCalledWith({ orgId: ORG, actorId: USER, confirmSlug: "" });
-    expect(result).toEqual({ ok: false, message: "Type the workspace's name exactly to confirm." });
+    expect(result).toEqual({ ok: false, message: "Type the workspace's slug exactly to confirm." });
     expect(redirectMock).not.toHaveBeenCalled();
   });
 
   it.each([
     ["founding_org", "The founding workspace cannot be deleted."],
     ["pause_first", "Pause the agent first, so no cycle runs while the workspace is deleted."],
-    ["cycle_running", "A cycle is running; try again in a minute."],
-    ["slug_mismatch", "Type the workspace's name exactly to confirm."],
+    ["cycle_running", "A cycle started in the last 15 minutes has not finished; try again shortly."],
+    ["slug_mismatch", "Type the workspace's slug exactly to confirm."],
     ["org_not_found", "This workspace no longer exists."],
+    ["not_owner", "Only an owner can delete this workspace."],
+    ["payment_in_progress", "A payment is being made; try again in a few minutes."],
   ] as const)("returns %s's fixed message and does not redirect", async (code, message) => {
     authorizeMock.mockResolvedValueOnce(owner());
     deleteWorkspaceMock.mockRejectedValueOnce(new DeleteWorkspaceError(code));

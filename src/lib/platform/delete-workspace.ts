@@ -8,19 +8,28 @@ import { withOrg } from "../dal/scope";
  * (docs/superpowers/specs/2026-09-30-workspace-delete-footer-screenshots-design.md §1).
  *
  * The owner confirms by typing the workspace's slug; `delete_org` (migration
- * 0031) does the rest in one transaction: it refuses the founding workspace, a
- * live workspace whose agent is not paused, and one with a cycle in progress,
- * writes the tombstone, and deletes every row of the organization. No ledger
- * entry is written: the ledger is deleted, and the tombstone is the record.
+ * 0031) does the rest in one transaction: it refuses the founding workspace,
+ * anyone but an owner (re-checked there), a live workspace whose agent is not
+ * paused, and one with a cycle or a payment in progress, writes the tombstone,
+ * and deletes every row of the organization. No ledger entry is written: the ledger is deleted, and the tombstone is the record.
  */
 
-export type DeleteWorkspaceErrorCode = "slug_mismatch" | "founding_org" | "pause_first" | "cycle_running" | "org_not_found";
+export type DeleteWorkspaceErrorCode =
+  | "slug_mismatch"
+  | "founding_org"
+  | "not_owner"
+  | "pause_first"
+  | "cycle_running"
+  | "payment_in_progress"
+  | "org_not_found";
 
 const MESSAGES: Record<DeleteWorkspaceErrorCode, string> = {
-  slug_mismatch: "Type the workspace's name exactly to confirm.",
+  slug_mismatch: "Type the workspace's slug exactly to confirm.",
   founding_org: "The founding workspace cannot be deleted.",
+  not_owner: "Only an owner can delete this workspace.",
   pause_first: "Pause the agent first, so no cycle runs while the workspace is deleted.",
-  cycle_running: "A cycle is running; try again in a minute.",
+  cycle_running: "A cycle started in the last 15 minutes has not finished; try again shortly.",
+  payment_in_progress: "A payment is being made; try again in a few minutes.",
   org_not_found: "This workspace no longer exists.",
 };
 
@@ -35,7 +44,8 @@ export class DeleteWorkspaceError extends Error {
 /** A raised `code: …` from `delete_org` becomes its fixed message; anything else stays a plain Error. */
 function raise(error: { message: string }): never {
   const code = /^([a-z_]+):/.exec(error.message)?.[1];
-  if (code && code in MESSAGES && code !== "slug_mismatch") throw new DeleteWorkspaceError(code as DeleteWorkspaceErrorCode);
+  // slug_mismatch is this module's own check; the database never raises it.
+  if (code && Object.hasOwn(MESSAGES, code) && code !== "slug_mismatch") throw new DeleteWorkspaceError(code as DeleteWorkspaceErrorCode);
   throw new Error(error.message);
 }
 
