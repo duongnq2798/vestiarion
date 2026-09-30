@@ -1,6 +1,6 @@
 # Event-driven agent cycles
 
-Date: 2026-09-30. Status: approved for implementation (decided under the standing autonomy grant;
+Date: 2026-09-30. Status: shipped (#73) (decided under the standing autonomy grant;
 rulings carry their cost if wrong).
 
 ## 1. Why
@@ -117,4 +117,14 @@ No migration and no new setting. After deploy:
 
 ## 8. Rollout record
 
-(pending)
+- **Merged** as `d9a4bc1` (#73) at 15:47 UTC on 2026-09-30, with no migration.
+- **The first try proved nothing.** An invoice added at 15:55 UTC started no cycle. Vercel's logs showed why: every request from that tab, including the server-action POST, went to the previous production deployment (created 14:48 UTC). The tab had been opened before the deploy, and Vercel Skew Protection pins a page's requests to the deployment that served it. After a full reload, the tab reached the new deployment.
+- **Proven in testnet-2** (live, hosted wallet), with no one pressing Run cycle:
+  - **A 2 USDC payable added at 16:02:58.** An event cycle started at 16:03:14, the debounce after the action's response. The cycle also decided the payables still pending from before:
+    - 3 USDC paid on Arc testnet, tx `0x1510645b2d8c4ab9744cf51df33450e4655c654db60c1365a98c7410d39432e4`;
+    - two payables flagged, including the new one, 54.7 s after it was added.
+  - Its `cycle_complete` (#431) records `trigger: "event"` and `events: ["invoice_added"]`.
+  - **A 1 USDC payable added at 16:03:37, while that cycle was running.** A second event cycle waited for it: the first run closed at 16:04:00.9, and the second started at 16:04:04.6, so the two did not overlap.
+    - It paid the invoice, 52.5 s after it was added: tx `0x81381c50f5d0cadb49d1af77f1abb06c1727c8377aa88cbe1cfbf327f09c4e68`.
+    - Its `cycle_complete` (#439) records the same trigger.
+- **Later observation.** The first run's row closed about 2.5 s before its closing snapshot and `cycle_complete` were written, so a waiting cycle can start in that gap. Here it started after both. Overlap there touches only closing writes and the ledger, which is serialized. No decision is involved.
