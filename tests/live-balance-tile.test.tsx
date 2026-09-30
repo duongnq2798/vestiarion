@@ -166,7 +166,7 @@ describe("checkedLabel", () => {
   });
 
   it("falls back to the time of the read when there is no clock yet (the server render)", () => {
-    expect(checkedLabel(at, null)).toBe("Checked 2026-09-30 12:00 UTC");
+    expect(checkedLabel(at, null)).toBe("Checked Sep 30, 2026, 12:00 UTC");
   });
 });
 

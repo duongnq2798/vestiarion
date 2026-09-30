@@ -7,7 +7,7 @@ import ApprovalCard, { payConfirmTitle } from "@/components/ApprovalCard";
 import AgentPauseControl, { PAUSE_DIALOG_DESCRIPTION } from "@/components/AgentPauseControl";
 import { AgentPausedBanner, pausedBanner } from "@/components/AgentPausedBanner";
 import type { WaitingPayable } from "@/lib/agent/approvals";
-import { utcMinute } from "@/lib/copy";
+import { utcDay, utcMinute } from "@/lib/copy";
 
 /**
  * The approvals inbox, the pause control and the paused banner, as the markup
@@ -63,12 +63,27 @@ function card(overrides: Partial<WaitingPayable> = {}, props: Partial<{ canDecid
 
 describe("utcMinute", () => {
   it("reads an instant to the minute, in UTC, the same on server and browser", () => {
-    expect(utcMinute("2026-09-29T14:05:12.345+00:00")).toBe("2026-09-29 14:05 UTC");
-    expect(utcMinute("2026-09-29T23:30:00+02:00")).toBe("2026-09-29 21:30 UTC");
+    expect(utcMinute("2026-09-29T14:05:12.345+00:00")).toBe("Sep 29, 2026, 14:05 UTC");
+    expect(utcMinute("2026-09-29T23:30:00+02:00")).toBe("Sep 29, 2026, 21:30 UTC");
+    expect(utcMinute("2027-01-01T00:59:00+01:00")).toBe("Dec 31, 2026, 23:59 UTC");
+  });
+});
+
+describe("utcDay", () => {
+  it("reads an instant as its UTC day, with the month named", () => {
+    expect(utcDay("2026-09-30T12:00:00+00:00")).toBe("Sep 30, 2026");
+    expect(utcDay("2026-10-05")).toBe("Oct 5, 2026");
+    expect(utcDay("2026-12-31T23:30:00-02:00")).toBe("Jan 1, 2027");
   });
 });
 
 describe("ApprovalCard", () => {
+  it("shows the due date as a date, not the stored timestamp", () => {
+    const markup = card({ dueDate: "2026-09-30T12:00:00+00:00" });
+    expect(markup).toContain("Due Sep 30, 2026");
+    expect(markup).not.toContain("T12:00:00");
+  });
+
   it("shows where the payment goes, and posts that address with Approve and pay", () => {
     const markup = card();
     expect(markup).toContain("Pays to");
@@ -86,10 +101,10 @@ describe("ApprovalCard", () => {
     const markup = card();
     expect(markup).toContain("Northwind Supply");
     expect(markup).toContain("1,250.00");
-    expect(markup).toContain("2026-10-03");
+    expect(markup).toContain("Due Oct 3, 2026");
     expect(markup).toContain("Held");
     expect(markup).toContain("Above the auto-pay limit for a new vendor.");
-    expect(markup).toContain("stopped 2026-09-29 14:05 UTC");
+    expect(markup).toContain("stopped Sep 29, 2026, 14:05 UTC");
   });
 
   it("offers the three decisions to someone who may decide", () => {
@@ -212,7 +227,7 @@ describe("AgentPausedBanner", () => {
 
   it("says since when, by whom and why", () => {
     const markup = html(<AgentPausedBanner pause={{ pausedAt: "2026-09-29T14:05:12Z", pausedBy: CREATOR, reason: "Suspicious vendor" }} members={members} />);
-    expect(markup).toContain("The agent is paused since 2026-09-29 14:05 UTC by ada@example.com: Suspicious vendor");
+    expect(markup).toContain("The agent is paused since Sep 29, 2026, 14:05 UTC by ada@example.com: Suspicious vendor");
   });
 
   it("loads nothing more when the agent is running", async () => {
@@ -244,7 +259,7 @@ describe("AgentPausedBanner", () => {
 
   it("names a pauser who has left as a member, and leaves out a missing reason", () => {
     const markup = html(<AgentPausedBanner pause={{ pausedAt: "2026-09-29T14:05:12Z", pausedBy: VIEWER, reason: null }} members={members} />);
-    expect(markup).toContain("The agent is paused since 2026-09-29 14:05 UTC by a member.");
+    expect(markup).toContain("The agent is paused since Sep 29, 2026, 14:05 UTC by a member.");
   });
 });
 

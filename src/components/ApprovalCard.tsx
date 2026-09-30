@@ -16,7 +16,7 @@ import { useActionForm, type ActionResult } from "@/components/ui/useActionForm"
 import { Money, fmt } from "@/components/vx/Primitives";
 import { withSuccessToast } from "@/components/withSuccessToast";
 import type { WaitingPayable } from "@/lib/agent/approvals";
-import { utcMinute } from "@/lib/copy";
+import { utcDay, utcMinute } from "@/lib/copy";
 
 const INITIAL: ActionResult = { ok: false, message: "" };
 const approve = withSuccessToast(approveInvoiceAction);
@@ -76,7 +76,7 @@ export default function ApprovalCard({
           <div className="min-w-0 space-y-1">
             <CardTitle className="truncate">{payable.counterpartyName}</CardTitle>
             <p className="text-sm text-ink-2">
-              Due {payable.dueDate}
+              Due {utcDay(payable.dueDate)}
               {payable.decidedAt && <span className="text-ink-3"> · stopped {utcMinute(payable.decidedAt)}</span>}
             </p>
           </div>

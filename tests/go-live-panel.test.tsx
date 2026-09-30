@@ -152,7 +152,7 @@ describe("GoLivePanel, for an owner", () => {
     const words = text(markup);
     expect(words).toContain(OPERATING);
     expect(words).toContain(RESERVE);
-    expect(words).toContain("Live since 2026-09-30 09:00 UTC");
+    expect(words).toContain("Live since Sep 30, 2026, 09:00 UTC");
     expect(words).toContain("Runs every 6 hours; pause the agent from the console to stop it.");
     expect(markup).toContain('href="/o/acme/console"');
     expect(words).not.toContain("Create treasury wallets");
@@ -208,7 +208,7 @@ describe("GoLivePanel, for anyone who is not an owner", () => {
     const words = text(panel("live", false));
     expect(words).toContain(OPERATING);
     expect(words).toContain(RESERVE);
-    expect(words).toContain("Live since 2026-09-30 09:00 UTC");
+    expect(words).toContain("Live since Sep 30, 2026, 09:00 UTC");
   });
 });
 
