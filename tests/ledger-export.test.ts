@@ -84,8 +84,15 @@ describe("ledgerExportJsonChunks", () => {
 });
 
 describe("csvCell", () => {
-  it.each(["=1+1", "+1", "-1", "@SUM(A1)", "\tx", "\rx"])("neutralises a formula start: %j", (value) => {
-    expect(csvCell(value).replace(/^"|"$/g, "").startsWith("'")).toBe(true);
+  it.each(["=1+1", "+1", "-1", "@SUM(A1)", "\tx", "\rx", " =1+1", "  +1", "﻿=1+1", " \t@SUM(A1)"])(
+    "neutralises a formula start: %j",
+    (value) => {
+      expect(csvCell(value).replace(/^"|"$/g, "").startsWith("'")).toBe(true);
+    }
+  );
+
+  it.each(["a=b", "total -5"])("does not neutralise a formula character that isn't at the start: %j", (value) => {
+    expect(csvCell(value).startsWith("'")).toBe(false);
   });
 
   it("quotes commas, quotes and newlines, doubling quotes", () => {

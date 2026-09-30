@@ -112,13 +112,28 @@ export function* ledgerExportJsonChunks(doc: LedgerExport, entriesPerChunk = CHU
   yield "]}";
 }
 
-/** A spreadsheet runs a cell that starts like a formula; these first characters are neutralised with `'`. */
-const FORMULA_START = /^[=+\-@\t\r]/;
+/**
+ * A spreadsheet runs a cell that starts like a formula. A leading tab or
+ * carriage return neutralises the cell outright, whatever follows it; a cell
+ * that instead opens with `= + - @`, or opens with only whitespace and BOM
+ * characters (some spreadsheet imports trim those before judging a cell a
+ * formula) ahead of one of those four, is just as dangerous and is
+ * neutralised too. Either way the `'` prefix goes at the very start of the
+ * original text — the whitespace is never stripped, only looked past.
+ */
+const LEADING_WHITESPACE_OR_BOM = /^[\s﻿]*/;
+const FORMULA_TRIGGER = /^[=+\-@]/;
+
+function startsLikeFormula(text: string): boolean {
+  if (text.startsWith("\t") || text.startsWith("\r")) return true;
+  const afterLeading = text.slice(text.match(LEADING_WHITESPACE_OR_BOM)![0].length);
+  return FORMULA_TRIGGER.test(afterLeading);
+}
 
 export function csvCell(value: unknown): string {
   if (value === null || value === undefined) return "";
   let text = typeof value === "string" ? value : typeof value === "object" ? canonicalJson(value) : String(value);
-  if (FORMULA_START.test(text)) text = `'${text}`;
+  if (startsLikeFormula(text)) text = `'${text}`;
   return /[",\r\n]/.test(text) || text.startsWith("'") ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
