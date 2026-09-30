@@ -43,6 +43,7 @@ describe("requiresSession", () => {
     ["/docs/guides/go-live", false],
     ["/auth/callback", false],
     ["/api/ledger/verify", false],
+    ["/api/ledger/export", false],
   ])("%s → %s", (pathname, expected) => {
     expect(requiresSession(pathname)).toBe(expected);
   });

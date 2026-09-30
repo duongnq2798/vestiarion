@@ -12,8 +12,22 @@ const nextConfig: NextConfig = {
   // slug has a dot, and a `.md` that is not a page answers 404 from the route.
   // The route sends `X-Robots-Tag: noindex` itself; this covers the 404 Next
   // answers for a `/docs-md/…` path that is not a page, before the route runs.
+  //
+  // `/tools/:path*` is the standalone ledger verifier (audit-export fix
+  // round 2): served as a download rather than run inline in the browser
+  // tab someone reached it from, and not sniffed into running as anything
+  // other than the plain script it is.
   async headers() {
-    return [{ source: "/docs-md/:path*", headers: [{ key: "X-Robots-Tag", value: "noindex" }] }];
+    return [
+      { source: "/docs-md/:path*", headers: [{ key: "X-Robots-Tag", value: "noindex" }] },
+      {
+        source: "/tools/:path*",
+        headers: [
+          { key: "Content-Disposition", value: "attachment" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+        ],
+      },
+    ];
   },
   async rewrites() {
     return [

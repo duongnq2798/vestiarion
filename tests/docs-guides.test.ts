@@ -12,7 +12,7 @@ import { GoLiveError, type GoLiveErrorCode } from "@/lib/platform/go-live";
  * button in the app fails this test until the guide says the new name.
  */
 
-type GuideSlug = "guides/go-live" | "guides/first-payment";
+type GuideSlug = "guides/go-live" | "guides/first-payment" | "guides/audit-export";
 
 const PANEL = "src/components/GoLivePanel.tsx";
 const GO_LIVE_ACTIONS = "src/app/actions/go-live.ts";
@@ -37,6 +37,8 @@ const AUDIT_PAGE = "src/app/o/[slug]/audit/page.tsx";
 const CHECKLIST = "src/components/vx/GettingStarted.tsx";
 const ADDRESS_CONTROLS = "src/components/intake/CounterpartyAddressEdit.tsx";
 const ADDRESS_LIBRARY = "src/lib/counterparty-address.ts";
+const EXPORT_MENU = "src/components/AuditExportMenu.tsx";
+const VERIFIER = "public/tools/verify-ledger-export.mjs";
 
 /** Each guide's quoted UI strings, as `[text, the file it must appear in]`. */
 const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
@@ -155,6 +157,17 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["Remove sample data", SAMPLE_PANEL],
     ["Remove the sample data first. It exists only to try the agent with simulated payments.", GO_LIVE_LIBRARY],
   ],
+  "guides/audit-export": [
+    ["Audit log", APP_NAV],
+    ["Download", EXPORT_MENU],
+    ["Signed JSON", EXPORT_MENU],
+    ["CSV", EXPORT_MENU],
+    ["Compare this key id and the head hash with the ones a verified export prints.", AUDIT_PAGE],
+    ["VALID", VERIFIER],
+    ["BROKEN", VERIFIER],
+    ["NOT CHECKED", VERIFIER],
+    ["vestiarion-ledger-export/1", VERIFIER],
+  ],
 };
 
 /**
@@ -186,11 +199,23 @@ const DISCLAIMERS = [/no real money/i, /fictional/i, /simulated money/i, /no rea
 
 const sourceFile = (file: string) => readFileSync(path.join(process.cwd(), file), "utf8");
 
+/**
+ * How many of the app's own strings a guide must quote. The two user-journey
+ * guides walk a whole workflow across many screens; the export guide is
+ * narrower — mostly the export format and the verifier's own output — so its
+ * bar is lower, but still enough to show it is grounded in the real UI.
+ */
+const MIN_QUOTED: Record<GuideSlug, number> = {
+  "guides/go-live": 20,
+  "guides/first-payment": 20,
+  "guides/audit-export": 5,
+};
+
 describe.each(Object.entries(QUOTED) as Array<[GuideSlug, Array<readonly [string, string]>]>)("the %s guide", (slug, quoted) => {
   const guide = readSource(slug);
 
   it("quotes some of the app's text", () => {
-    expect(quoted.length).toBeGreaterThan(20);
+    expect(quoted.length).toBeGreaterThan(MIN_QUOTED[slug]);
   });
 
   it.each(quoted)("quotes %j, which %s says", (text, file) => {

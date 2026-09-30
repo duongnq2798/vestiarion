@@ -264,6 +264,16 @@ describe("the Markdown route and its rewrites", () => {
     expect(await nextConfig.headers!()).toContainEqual({ source: "/docs-md/:path*", headers: [{ key: "X-Robots-Tag", value: "noindex" }] });
   });
 
+  it("serves the tools directory (the standalone verifier) as a download, not sniffed by the browser", async () => {
+    expect(await nextConfig.headers!()).toContainEqual({
+      source: "/tools/:path*",
+      headers: [
+        { key: "Content-Disposition", value: "attachment" },
+        { key: "X-Content-Type-Options", value: "nosniff" },
+      ],
+    });
+  });
+
   it("names each page's .md path", () => {
     expect(docsMarkdownPath("")).toBe("/docs.md");
     expect(docsMarkdownPath("api/list-invoices")).toBe("/docs/api/list-invoices.md");

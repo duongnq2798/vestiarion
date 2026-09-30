@@ -38,7 +38,7 @@ const NAV_SLUGS = new Set(flatPages().map((page) => page.slug));
 /** Generated from the OpenAPI operations; they need no MDX file, and may have a notes file. */
 const GENERATED_SLUGS = new Set(OPERATIONS.map((op) => `api/${op.id}`));
 /** Internal addresses outside /docs that a page may link to. */
-const OTHER_TARGETS = new Set(["/api/v1/openapi.json", "/llms.txt", "/llms-full.txt"]);
+const OTHER_TARGETS = new Set(["/api/v1/openapi.json", "/llms.txt", "/llms-full.txt", "/tools/verify-ledger-export.mjs"]);
 
 /** Real app pages outside /docs that a docs page may link to. */
 const APP_ROUTES = new Set(["/", "/login", "/signup", "/onboarding", "/terms", "/privacy"]);
@@ -98,7 +98,7 @@ function linkProblems(slug: string, source: string, sourceOf: (slug: string) => 
     } else if (trimmed.startsWith("/docs/")) {
       targetSlug = trimmed.slice("/docs/".length).replace(/\.md$/, "");
     } else {
-      if (trimmed.startsWith("/api/") || trimmed.startsWith("/llms")) {
+      if (trimmed.startsWith("/api/") || trimmed.startsWith("/llms") || trimmed.startsWith("/tools/")) {
         if (!OTHER_TARGETS.has(trimmed)) problems.push(`${link}: no such public document`);
       } else if (!APP_ROUTES.has(trimmed)) {
         problems.push(`${link}: not a docs page, a public document or a known app page`);
@@ -148,11 +148,12 @@ describe("the docs navigation", () => {
     );
   });
 
-  it("lists the user guides right after Overview: going live, then the first payment", () => {
+  it("lists the user guides right after Overview: going live, the first payment, then verifying an export", () => {
     const section = DOCS_NAV.find((candidate) => candidate.title === "Guides")!;
     expect(section.pages.map((page) => [page.slug, page.title])).toEqual([
       ["guides/go-live", "Go live on Arc testnet"],
       ["guides/first-payment", "Your first payment"],
+      ["guides/audit-export", "Verify an audit export"],
     ]);
   });
 
@@ -176,7 +177,8 @@ describe("the docs navigation", () => {
     expect(neighbours("").prev).toBeUndefined();
     expect(neighbours("").next?.slug).toBe(pages[1].slug);
     expect(neighbours("data-delivery").next?.slug).toBe("guides/go-live");
-    expect(neighbours("guides/first-payment").next?.slug).toBe("get-started/quickstart");
+    expect(neighbours("guides/first-payment").next?.slug).toBe("guides/audit-export");
+    expect(neighbours("guides/audit-export").next?.slug).toBe("get-started/quickstart");
     expect(neighbours(pages[pages.length - 1].slug).next).toBeUndefined();
     expect(neighbours("no-such-page")).toEqual({});
   });
