@@ -931,6 +931,7 @@ export async function runAgentCycle(
 
   // One cycle at a time in a workspace (E3): refused here, before the run
   // opens, so a refused cycle leaves no row and uses none of a sandbox's cap.
+  // begin_cycle_run checks again under its lock (0043); this is the fast path.
   if (await hasRunningCycle()) throw new CycleRunningError();
 
   // Opens the run — and, for a sandbox organization, enforces its daily cap —
@@ -956,6 +957,8 @@ export async function runAgentCycle(
     const message = messageOf(err);
     if (message.startsWith("sandbox_cap_reached")) throw new SandboxCapReachedError();
     if (message.startsWith("agent_paused")) throw new AgentPausedError();
+    // Another instance opened a run between the check above and here (0043).
+    if (message.startsWith("cycle_running")) throw new CycleRunningError();
     throw err;
   }
 
