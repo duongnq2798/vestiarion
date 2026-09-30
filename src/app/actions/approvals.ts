@@ -4,6 +4,7 @@ import "server-only";
 
 import { z } from "zod";
 import { approveAndPay, ApprovalError, rejectInvoice, returnInvoice } from "@/lib/agent/approvals";
+import { raiseCycleEvent } from "@/lib/agent/cycle-soon";
 import { authorize } from "@/lib/auth/authorize";
 import { revalidateOrgPages } from "@/lib/auth/revalidate";
 import { inOrg } from "@/lib/dal/scope";
@@ -84,7 +85,8 @@ export async function returnInvoiceAction(_previous: ApprovalActionResult, formD
     try {
       await returnInvoice({ actorId: auth.user.id, invoiceId: parsed.data });
       revalidateOrgPages();
-      return { ok: true, message: "Returned to the agent. The next cycle decides it again." };
+      raiseCycleEvent(auth, "payable_returned");
+      return { ok: true, message: "Returned to the agent. It decides it again within a minute." };
     } catch (error) {
       return fail(error);
     }

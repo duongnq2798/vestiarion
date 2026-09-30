@@ -107,7 +107,7 @@ describe("loadSampleDataAction", () => {
     expect(loadMock).toHaveBeenCalledWith({ actorId: USER });
     expect(result).toEqual({
       ok: true,
-      message: "Sample data loaded: 6 counterparties, 6 invoices and 2 milestones. Run a cycle to see what the agent decides.",
+      message: "Sample data loaded: 6 counterparties, 6 invoices and 2 milestones. The agent will decide on them within a minute.",
     });
     expect(revalidatePathMock).toHaveBeenCalledWith("/o/[slug]", "layout");
   });

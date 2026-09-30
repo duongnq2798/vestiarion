@@ -5,6 +5,7 @@ import "server-only";
 import { agentCycleSuccessMessage, runAgentCycle } from "@/lib/agent/orchestrator";
 import { AgentPausedError } from "@/lib/agent/pause";
 import { SANDBOX_DAILY_CYCLES, SandboxCapReachedError } from "@/lib/agent/sandbox-cap";
+import { raiseCycleEvent } from "@/lib/agent/cycle-soon";
 import { authorize } from "@/lib/auth/authorize";
 import { revalidateOrgPages } from "@/lib/auth/revalidate";
 import { inOrg } from "@/lib/dal/scope";
@@ -74,6 +75,7 @@ export async function resumeAgentAction(_previous: AgentActionResult, formData: 
     try {
       await resumeAgent({ orgId: auth.membership.orgId, actorId: auth.user.id });
       revalidateOrgPages();
+      raiseCycleEvent(auth, "agent_resumed");
       return { ok: true, message: "Agent resumed." };
     } catch (error) {
       if (error instanceof PauseError) return { ok: false, message: error.message };

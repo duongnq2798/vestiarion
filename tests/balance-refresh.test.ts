@@ -119,6 +119,7 @@ describe("refreshOnChainBalances", () => {
     expect(chain.getBalance).toHaveBeenCalledTimes(1);
     expect(answer.refreshed).toBe(true);
     expect(answer.balance).toBe(120);
+    expect(answer.rose).toBe(true);
     expect(answer.syncedAt).not.toBeNull();
     expect(rows[0].balance).toBe("120.000000");
     expect(rows[0].balance_synced_at).toBe(answer.syncedAt);
@@ -227,6 +228,7 @@ describe("refreshOnChainBalances", () => {
 
     expect(rows[0].balance).toBe("60.000000");
     expect(answer.balance).toBe(60);
+    expect(answer.rose).toBe(false);
     const [write] = balanceWrites(fake.requests);
     expect(write.params.get("balance")).toBe("eq.100.000000");
   });
