@@ -103,6 +103,21 @@ content/docs/guides/first-payment.mdx, changelog.mdx
    - A read-only probe must find every existing intent at attempt 1 with `previous_attempts = []`.
 4. Record the result in this spec.
 
+### Rollout record (2026-09-30)
+
+- **Migration 0036** was applied by the partner before the merge of #70. A read-only probe found:
+  - the four columns with their defaults, and the `transfer_attempt_positive` and `previous_attempts_is_array` checks;
+  - `begin_payment_retry(uuid,text,uuid,text,text)` executable by `vestiarion_tenant` only, not `anon` or `authenticated`;
+  - all 12 existing intents at attempt 1, with `previous_attempts = []` and `provider_state` null;
+  - the new columns readable through PostgREST (200), so the schema cache had reloaded.
+- **After the deploy**, `listWaitingPayables` read the new fields through the app's code: `founding` had four waiting payables, none with a prior attempt; `testnet-2` had none.
+- **Regression payment in `testnet-2`**, a live workspace on a hosted wallet:
+  - ledger #407 `ap_pay`, Centronex 0.5 USDC, paid by the agent in a cycle at 14:56 UTC and signed by the workspace's rotated key `5e69c0196d40a5ec`;
+  - its intent: `confirmed`, `provider_state = 'COMPLETE'`, `transfer_attempt = 1`, `previous_attempts = []`, and an idempotency key equal to the attempt-1 derivation;
+  - the transaction: `0x0faa216f…4f772e1`, fee 0.003186 USDC (chain reported), settled in 2 s, receipt status `0x1` in block 64794074;
+  - `verifyLedger()` afterwards: `{ valid: true, checkedEntries: 67 }`.
+- **The retry path itself** is proven by the tests in §4, since no failed payment can be produced on demand.
+
 ## 6. Out of scope
 
 - Accelerating or cancelling a `STUCK` transfer through Circle's API.
