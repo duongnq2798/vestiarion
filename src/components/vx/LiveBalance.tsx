@@ -63,7 +63,7 @@ export function LiveBalanceView({
   failure: string | null;
   onRefresh: () => void;
 }) {
-  const status = failure ?? (syncedAt ? checkedLabel(syncedAt, now) : pending ? "Checking Circle…" : "Not checked yet");
+  const age = syncedAt ? checkedLabel(syncedAt, now) : pending ? "Checking Circle…" : "Not checked yet";
   return (
     <StatTile
       label={label}
@@ -71,8 +71,10 @@ export function LiveBalanceView({
         <>
           {sub && <span className="block">{sub}</span>}
           <span className="mt-1.5 flex min-w-0 items-center gap-1">
-            <span aria-live="polite" className="min-w-0 flex-1 text-xs text-ink-3">
-              {status}
+            <span className="min-w-0 flex-1 text-xs text-ink-3">
+              {/* The age ticks, so it stays out of the live region: only a refresh's result is announced. */}
+              <span>{age}</span>
+              <span aria-live="polite">{failure ? ` · ${failure}` : ""}</span>
             </span>
             <Button
               variant="ghost"
@@ -92,7 +94,7 @@ export function LiveBalanceView({
   );
 }
 
-interface TileState {
+export interface TileState {
   /** The non-reserve accounts' total, as last known. */
   balance: number;
   syncedAt: string | null;
@@ -100,10 +102,23 @@ interface TileState {
 }
 
 /**
+ * The tile's state after an answer. A failed read that still brought figures
+ * back (some accounts read, or the stored ones) shows them, with the failure
+ * beside their age; one that brought none keeps what the tile had.
+ */
+export function nextTileState(previous: TileState, result: RefreshBalanceResult): TileState {
+  if (result.ok && result.balance !== null) return { balance: result.balance, syncedAt: result.syncedAt, failure: null };
+  const failure = result.message ?? CIRCLE_UNREACHABLE;
+  if (result.balance !== null && result.syncedAt !== null) return { balance: result.balance, syncedAt: result.syncedAt, failure };
+  return { ...previous, failure };
+}
+
+/**
  * The balance tile in live mode: the stored balance at once, then one read of
  * the chain in the background when the tile mounts, and again on Refresh. A
- * failed read keeps the number it had and says so; it never shows an error of
- * Circle's, which the action does not return.
+ * failed read keeps the last known number and says so beside its age; it never
+ * shows an error of Circle's, which the action does not return. `BalanceTile`
+ * keys it on the server's figures, so new ones remount it.
  */
 export function LiveBalanceTile({
   orgSlug,
@@ -115,7 +130,7 @@ export function LiveBalanceTile({
   initialSyncedAt,
 }: {
   orgSlug: string;
-  /** `refreshBalanceAction`, handed down by the page so this module never imports the server's. */
+  /** `refreshOnChainBalanceAction`, handed down by the page so this module never imports the server's. */
   refreshAction: (orgSlug: string) => Promise<RefreshBalanceResult>;
   label: string;
   sub?: ReactNode;
@@ -128,9 +143,7 @@ export function LiveBalanceTile({
   const [state, refresh, pending] = useActionState(
     async (previous: TileState): Promise<TileState> => {
       try {
-        const result = await refreshAction(orgSlug);
-        if (result.ok && result.balance !== null) return { balance: result.balance, syncedAt: result.syncedAt, failure: null };
-        return { ...previous, failure: result.message ?? CIRCLE_UNREACHABLE };
+        return nextTileState(previous, await refreshAction(orgSlug));
       } catch {
         return { ...previous, failure: CIRCLE_UNREACHABLE };
       }

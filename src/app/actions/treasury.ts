@@ -17,15 +17,20 @@ export interface RefreshBalanceResult {
 }
 
 /**
- * The console's balance tile: reads the balance from the chain, at most every
- * 30 seconds, and answers with the number and when it was read. Any member may
- * ask (`workspace.read`): it moves nothing, and the stored balance it may
- * update is what every member already sees. The tile updates itself from the
- * answer, so nothing is revalidated; the console renders per request, so a
- * reload shows the new number anyway. No error of Circle's is logged or
- * returned — only this action's name, and a fixed sentence.
+ * The console's balance tile: reads the balance from the chain — at most once
+ * per 30 seconds per workspace, and never while a cycle is running — and
+ * answers with the number and when it was read. Any member may ask
+ * (`workspace.read`): it moves nothing, and the stored balance it may update
+ * is what every member already sees.
+ *
+ * It revalidates nothing: the tile takes the answer itself. When the console
+ * is rendered again for another reason (a cycle, an approval, a reload), the
+ * page reads the stored figures afresh and the tile remounts on them — it is
+ * keyed on them, see `BalanceTile` — so a new figure is never hidden behind
+ * the tile's own state. No error of Circle's is logged or returned: only this
+ * action's name, and a fixed sentence.
  */
-export async function refreshBalanceAction(orgSlug: string): Promise<RefreshBalanceResult> {
+export async function refreshOnChainBalanceAction(orgSlug: string): Promise<RefreshBalanceResult> {
   const auth = await authorize(orgSlug, "workspace.read");
   if (!auth.ok) return { ok: false, balance: null, syncedAt: null, message: auth.message };
   return inOrg(auth, async () => {
@@ -36,7 +41,7 @@ export async function refreshBalanceAction(orgSlug: string): Promise<RefreshBala
       }
       return { ok: true, balance: result.balance, syncedAt: result.syncedAt };
     } catch {
-      console.error("refreshBalanceAction failed");
+      console.error("refreshOnChainBalanceAction failed");
       return { ok: false, balance: null, syncedAt: null, message: CIRCLE_UNREACHABLE };
     }
   });

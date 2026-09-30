@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { refreshBalanceAction } from "@/app/actions/treasury";
+import { refreshOnChainBalanceAction } from "@/app/actions/treasury";
 import AgentControls from "@/components/AgentControls";
 import AgentPauseControl from "@/components/AgentPauseControl";
 import { CycleReport } from "@/components/vx/CycleReport";
@@ -114,7 +114,7 @@ export default async function DashboardPage({
             accounts={accounts}
             mode={balanceTileMode(modes.mode, accountsRows)}
             orgSlug={slug}
-            refreshAction={refreshBalanceAction}
+            refreshAction={refreshOnChainBalanceAction}
             syncedAt={accountsRows.find((account) => account.kind === "operating" && account.circle_wallet_id)?.balance_synced_at ?? null}
           />
           <StatTile label="Paid out to date" sub={`${dashboardStats.onchainTransfers} settled on-chain`}>

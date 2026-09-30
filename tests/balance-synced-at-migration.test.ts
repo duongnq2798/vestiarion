@@ -4,7 +4,8 @@ import { applyMigrations, asRole, asTenant, createDatabase, createOrg } from "./
 
 /**
  * Migration 0032: `accounts.balance_synced_at`, when the balance was last read
- * from the chain. The tenant role writes it beside `balance` — the reconcile
+ * from the chain, and `accounts.balance_refresh_claimed_at`, the console
+ * refresh's claim, so only one request at a time asks Circle. The tenant role writes it beside `balance` — the reconcile
  * stage and the console's balance refresh both run as that role — so it has to
  * be able to update it, for its own organization's rows only.
  */
@@ -27,6 +28,44 @@ async function account(orgId: string): Promise<string> {
   );
   return result.rows[0].id;
 }
+
+/** The console refresh's claim, as PostgREST runs it for the tenant: at most one winner per 30 seconds. */
+const claim = (orgId: string, id: string, at: string) =>
+  asTenant(db, orgId, (tx) =>
+    tx.query<{ id: string }>(
+      `update public.accounts set balance_refresh_claimed_at = $2::timestamptz
+        where id = $1 and (balance_refresh_claimed_at is null or balance_refresh_claimed_at < $2::timestamptz - interval '30 seconds')
+        returning id`,
+      [id, at]
+    )
+  );
+
+describe("accounts.balance_refresh_claimed_at (0032)", () => {
+  it("is a nullable timestamptz", async () => {
+    const column = await db.query<{ data_type: string; is_nullable: string }>(
+      "select data_type, is_nullable from information_schema.columns where table_schema = 'public' and table_name = 'accounts' and column_name = 'balance_refresh_claimed_at'"
+    );
+    expect(column.rows).toEqual([{ data_type: "timestamp with time zone", is_nullable: "YES" }]);
+  });
+
+  it("lets exactly one tenant request claim the account within 30 seconds, then the next after", async () => {
+    const orgId = await createOrg(db, "claim-co");
+    const id = await account(orgId);
+
+    expect((await claim(orgId, id, "2026-09-30T12:00:00Z")).rows).toEqual([{ id }]);
+    expect((await claim(orgId, id, "2026-09-30T12:00:01Z")).rows).toEqual([]);
+    expect((await claim(orgId, id, "2026-09-30T12:00:29Z")).rows).toEqual([]);
+    expect((await claim(orgId, id, "2026-09-30T12:00:31Z")).rows).toEqual([{ id }]);
+  });
+
+  it("never lets one organization claim another's account", async () => {
+    const mine = await createOrg(db, "claim-mine-co");
+    const theirs = await createOrg(db, "claim-theirs-co");
+    const id = await account(theirs);
+
+    expect((await claim(mine, id, "2026-09-30T12:00:00Z")).rows).toEqual([]);
+  });
+});
 
 describe("accounts.balance_synced_at (0032)", () => {
   it("is a nullable timestamptz, empty for existing rows", async () => {

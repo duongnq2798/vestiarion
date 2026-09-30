@@ -45,6 +45,11 @@ export function balanceTileCopy(mode: "sandbox" | "live", simulatedReserve: numb
   return { label: "Balance on-chain", sub: simulatedReserve > 0 ? null : "All funds shown are on-chain" };
 }
 
+/** What remounts the live balance tile: the stored figures the page rendered it with. */
+export function liveBalanceTileKey(syncedAt: string | null, initialBalance: number): string {
+  return `${syncedAt ?? ""}|${initialBalance}`;
+}
+
 /**
  * The balance tile. Live, inside a workspace (`orgSlug` and `refreshAction`),
  * it shows the stored balance at once and reads the chain in the background
@@ -61,7 +66,7 @@ export function BalanceTile({
   accounts: Account[];
   mode: "sandbox" | "live";
   orgSlug?: string;
-  /** `refreshBalanceAction`, passed by the page: the action module is the server's, never imported here. */
+  /** `refreshOnChainBalanceAction`, passed by the page: the action module is the server's, never imported here. */
   refreshAction?: (orgSlug: string) => Promise<RefreshBalanceResult>;
   /** When the operating account's balance was last read from the chain. */
   syncedAt?: string | null;
@@ -81,13 +86,19 @@ export function BalanceTile({
     const reserveOnChain = accounts
       .filter((account) => !account.simulated && account.kind === "reserve")
       .reduce((sum, account) => sum + account.balance, 0);
+    const initialBalance = live - reserveOnChain;
     return (
+      // Keyed on the server's figures: the tile keeps its own state, so when
+      // the page is rendered again with new ones (after a cycle, an approval,
+      // router.refresh()), a new key remounts it on them. Its mount refresh
+      // then lands in the 30-second cooldown the cycle's read just started.
       <LiveBalanceTile
+        key={liveBalanceTileKey(syncedAt, initialBalance)}
         orgSlug={orgSlug}
         refreshAction={refreshAction}
         label={copy.label}
         sub={sub}
-        initialBalance={live - reserveOnChain}
+        initialBalance={initialBalance}
         offset={reserveOnChain}
         initialSyncedAt={syncedAt}
       />

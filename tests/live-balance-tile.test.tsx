@@ -3,8 +3,8 @@ import path from "node:path";
 import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { BalanceTile } from "@/components/vx/Treasury";
-import { checkedLabel, LiveBalanceView } from "@/components/vx/LiveBalance";
+import { BalanceTile, liveBalanceTileKey } from "@/components/vx/Treasury";
+import { checkedLabel, LiveBalanceView, nextTileState } from "@/components/vx/LiveBalance";
 import type { Account } from "@/components/vx/types";
 
 /**
@@ -84,15 +84,65 @@ describe("LiveBalanceView", () => {
     expect(markup).toContain("animate-spin");
   });
 
-  it("keeps the stored number and says so quietly when Circle could not be reached", () => {
+  it("says quietly when Circle could not be reached, next to how old the figure is — not instead of it", () => {
     const markup = html(<LiveBalanceView {...base} pending={false} failure="Could not reach Circle; showing the last known balance" />);
     expect(markup).toContain("120.00");
+    expect(markup).toContain("Checked 3 min ago");
     expect(markup).toContain("Could not reach Circle; showing the last known balance");
     expect(markup).not.toContain("text-refused");
   });
 
+  it("announces only the refresh's result: the ticking age stays outside the live region", () => {
+    const liveRegions = (markup: string) => [...markup.matchAll(/<span[^>]*aria-live="polite"[^>]*>(.*?)<\/span>/g)].map((match) => match[1]);
+
+    const quiet = html(<LiveBalanceView {...base} pending={false} failure={null} />);
+    expect(liveRegions(quiet)).toEqual([""]);
+
+    const failed = html(<LiveBalanceView {...base} pending={false} failure="Could not reach Circle; showing the last known balance" />);
+    expect(liveRegions(failed)).toHaveLength(1);
+    expect(liveRegions(failed)[0]).toContain("Could not reach Circle; showing the last known balance");
+    expect(liveRegions(failed)[0]).not.toContain("Checked");
+  });
+
   it("says it is checking when no read has finished yet", () => {
     expect(html(<LiveBalanceView {...base} syncedAt={null} pending failure={null} />)).toContain("Checking Circle");
+  });
+});
+
+describe("nextTileState", () => {
+  const previous = { balance: 100, syncedAt: "2026-09-30T11:00:00.000Z", failure: null };
+  const FAILED = "Could not reach Circle; showing the last known balance";
+
+  it("takes the new figures from a successful read and clears a failure", () => {
+    expect(nextTileState({ ...previous, failure: FAILED }, { ok: true, balance: 120, syncedAt: "2026-09-30T12:00:00.000Z" })).toEqual({
+      balance: 120, syncedAt: "2026-09-30T12:00:00.000Z", failure: null,
+    });
+  });
+
+  it("uses the partial figures a failed read still brought back, with the failure beside them", () => {
+    expect(nextTileState(previous, { ok: false, balance: 110, syncedAt: "2026-09-30T12:00:00.000Z", message: FAILED })).toEqual({
+      balance: 110, syncedAt: "2026-09-30T12:00:00.000Z", failure: FAILED,
+    });
+  });
+
+  it("keeps the figures it had when a failed read brought none back", () => {
+    expect(nextTileState(previous, { ok: false, balance: null, syncedAt: null, message: FAILED })).toEqual({ ...previous, failure: FAILED });
+    expect(nextTileState(previous, { ok: false, balance: 100, syncedAt: null })).toEqual({ ...previous, failure: FAILED });
+  });
+});
+
+describe("liveBalanceTileKey — new server figures remount the live tile", () => {
+  it("changes when the page renders a new balance or a newer read", () => {
+    const key = liveBalanceTileKey("2026-09-30T12:00:00.000Z", 120);
+    expect(key).toBe("2026-09-30T12:00:00.000Z|120");
+    expect(liveBalanceTileKey("2026-09-30T12:00:00.000Z", 80)).not.toBe(key);
+    expect(liveBalanceTileKey("2026-09-30T12:05:00.000Z", 120)).not.toBe(key);
+    expect(liveBalanceTileKey(null, 120)).toBe("|120");
+  });
+
+  it("is the key BalanceTile gives LiveBalanceTile, so a revalidated page does not keep the old state", () => {
+    const source = readFileSync(path.join(process.cwd(), "src", "components", "vx", "Treasury.tsx"), "utf8");
+    expect(source).toMatch(/<LiveBalanceTile\s+key=\{liveBalanceTileKey\(syncedAt, initialBalance\)\}/);
   });
 });
 
@@ -125,7 +175,7 @@ describe("the console page", () => {
 
   it("hands the tile the action, the workspace, and the operating account's last read", () => {
     const page = source("src", "app", "o", "[slug]", "console", "page.tsx");
-    expect(page).toContain("refreshAction={refreshBalanceAction}");
+    expect(page).toContain("refreshAction={refreshOnChainBalanceAction}");
     expect(page).toContain("orgSlug={slug}");
     expect(page).toMatch(/syncedAt=\{accountsRows\.find\(\(account\) => account\.kind === "operating" && account\.circle_wallet_id\)\?\.balance_synced_at \?\? null\}/);
   });

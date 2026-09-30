@@ -6,7 +6,7 @@ import { currentOrgId, runWith } from "@/lib/context";
 import { fakeSupabase } from "./support/fake-supabase";
 
 /**
- * `refreshBalanceAction`, the console balance tile's read. `authorize` and
+ * `refreshOnChainBalanceAction`, the console balance tile's read. `authorize` and
  * the library are stand-ins; `inOrg` and the org lookup it makes are real, as
  * in `tests/notifications-actions.test.ts`.
  */
@@ -24,7 +24,7 @@ vi.mock("@/lib/agent/balances", async (importOriginal) => ({
   refreshOnChainBalances: refreshMock,
 }));
 
-import { refreshBalanceAction } from "@/app/actions/treasury";
+import { refreshOnChainBalanceAction } from "@/app/actions/treasury";
 
 const config = configFromEnv({
   NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid",
@@ -45,10 +45,10 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-describe("refreshBalanceAction", () => {
+describe("refreshOnChainBalanceAction", () => {
   it("gates on workspace.read: any member may see the balance", async () => {
     authorizeMock.mockResolvedValueOnce({ ok: false, message: "refused" });
-    await refreshBalanceAction("northstar");
+    await refreshOnChainBalanceAction("northstar");
     expect(authorizeMock).toHaveBeenCalledWith("northstar", "workspace.read");
   });
 
@@ -59,7 +59,7 @@ describe("refreshBalanceAction", () => {
 
   it("returns the refusal, and reads nothing, when authorize refuses", async () => {
     authorizeMock.mockResolvedValueOnce({ ok: false, message: "You are not a member of this workspace." });
-    const result = await refreshBalanceAction("northstar");
+    const result = await refreshOnChainBalanceAction("northstar");
     expect(result).toEqual({ ok: false, balance: null, syncedAt: null, message: "You are not a member of this workspace." });
     expect(refreshMock).not.toHaveBeenCalled();
   });
@@ -72,7 +72,7 @@ describe("refreshBalanceAction", () => {
       return { refreshed: true, balance: 120, syncedAt: "2026-09-30T12:00:00.000Z" };
     });
 
-    const result = await run(() => refreshBalanceAction("northstar"));
+    const result = await run(() => refreshOnChainBalanceAction("northstar"));
 
     expect(scoped).toBe(ORG);
     expect(result).toEqual({ ok: true, balance: 120, syncedAt: "2026-09-30T12:00:00.000Z" });
@@ -80,11 +80,16 @@ describe("refreshBalanceAction", () => {
     expect(revalidatePathMock).not.toHaveBeenCalled();
   });
 
-  it("treats a skipped read (cooldown, sandbox, no wallet) as a success carrying the stored figures", async () => {
+  it.each(["cooldown", "cycle_running", "not_live", "no_wallet"])("treats a skipped read (%s) as a success carrying the stored figures", async (reason) => {
     authorizeMock.mockResolvedValueOnce({ ok: true, user: { id: "u1" }, membership: MEMBERSHIP });
-    refreshMock.mockResolvedValueOnce({ refreshed: false, reason: "cooldown", balance: 100, syncedAt: "2026-09-30T11:59:50.000Z" });
+    refreshMock.mockResolvedValueOnce({ refreshed: false, reason, balance: 100, syncedAt: "2026-09-30T11:59:50.000Z" });
 
-    expect(await run(() => refreshBalanceAction("northstar"))).toEqual({ ok: true, balance: 100, syncedAt: "2026-09-30T11:59:50.000Z" });
+    expect(await run(() => refreshOnChainBalanceAction("northstar"))).toEqual({ ok: true, balance: 100, syncedAt: "2026-09-30T11:59:50.000Z" });
+  });
+
+  it("does not share its name with the Go live step's refreshBalanceAction", async () => {
+    const actions = await import("@/app/actions/treasury");
+    expect(Object.keys(actions)).toEqual(["refreshOnChainBalanceAction"]);
   });
 
   it("answers a Circle failure with the fixed sentence", async () => {
@@ -93,7 +98,7 @@ describe("refreshBalanceAction", () => {
       refreshed: false, reason: "unavailable", message: "Could not reach Circle; showing the last known balance", balance: 100, syncedAt: null,
     });
 
-    expect(await run(() => refreshBalanceAction("northstar"))).toEqual({
+    expect(await run(() => refreshOnChainBalanceAction("northstar"))).toEqual({
       ok: false, balance: 100, syncedAt: null, message: "Could not reach Circle; showing the last known balance",
     });
   });
@@ -103,10 +108,10 @@ describe("refreshBalanceAction", () => {
     refreshMock.mockRejectedValueOnce(new Error("relation accounts: column balance_synced_at does not exist"));
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    const result = await run(() => refreshBalanceAction("northstar"));
+    const result = await run(() => refreshOnChainBalanceAction("northstar"));
 
     expect(result).toEqual({ ok: false, balance: null, syncedAt: null, message: "Could not reach Circle; showing the last known balance" });
-    expect(logged.mock.calls).toEqual([["refreshBalanceAction failed"]]);
+    expect(logged.mock.calls).toEqual([["refreshOnChainBalanceAction failed"]]);
     logged.mockRestore();
   });
 });
