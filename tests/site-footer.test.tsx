@@ -57,8 +57,9 @@ describe("the full footer's columns", () => {
     ]);
   });
 
-  it("put the two guides and Support (GitHub Issues) under Resources", () => {
+  it("put the open numbers, the two guides and Support (GitHub Issues) under Resources", () => {
     expect(FOOTER_COLUMNS[2].links).toEqual([
+      { href: "/open", label: "Open numbers" },
       { href: "/docs/guides/go-live", label: "Go live guide" },
       { href: "/docs/guides/first-payment", label: "First payment guide" },
       { href: ISSUES_URL, label: "Support" },

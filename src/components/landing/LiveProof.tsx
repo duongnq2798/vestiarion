@@ -161,6 +161,12 @@ export function LiveProof({ metrics }: { metrics: Promise<LandingMetrics> }) {
           <p className="mt-4 max-w-2xl text-[0.9375rem] leading-relaxed text-ink-2">
             Empty evidence stays empty. Live transfers, estimates, simulations, run records and signed ledger entries remain visibly distinct.
           </p>
+          <p className="mt-3 max-w-2xl text-[0.9375rem] leading-relaxed text-ink-2">
+            These figures are the founding workspace&apos;s own. Every workspace&apos;s, customers&apos; apart from ours, are on{" "}
+            <Link href="/open" className="font-semibold text-agent underline-offset-4 hover:underline">
+              Open numbers →
+            </Link>
+          </p>
         </div>
         <Suspense fallback={<MetricsFallback />}>
           <LiveMetrics source={metrics} />

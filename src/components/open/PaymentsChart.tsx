@@ -55,7 +55,7 @@ export function PaymentsChart({ series }: { series: DailyPayments[] }) {
           <ul className="flex flex-wrap gap-4 text-xs text-ink-2" aria-label="Legend">
             {SERIES.map((entry) => (
               <li key={entry.key} className="inline-flex items-center gap-2">
-                <span aria-hidden className="size-2.5 rounded-sm" style={{ background: entry.color }} />
+                <span aria-hidden className="size-2.5 rounded-full" style={{ background: entry.color }} />
                 {entry.label}
               </li>
             ))}
