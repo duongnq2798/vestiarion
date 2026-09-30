@@ -18,8 +18,8 @@ import { appendLedgerEntryBestEffort } from "./ledger-best-effort";
  *
  * In the guardrail an empty limit means no limit, so a vendor's or a
  * contractor's can be changed but never cleared; a client's may be, as when
- * it was added. The write is a compare-and-set on the configured limit it
- * read, like the address edit.
+ * it was added. The write is a compare-and-set on the configured limit and
+ * the risk level it read, like the address edit.
  *
  * It is refused while a cycle is running: the cycle's compliance sweep
  * rewrites both limits from the row it read when it started, so an edit that
@@ -31,7 +31,7 @@ export type CounterpartyLimitErrorCode = "invalid" | "required" | "unchanged" | 
 const MESSAGES: Record<Exclude<CounterpartyLimitErrorCode, "invalid">, string> = {
   required: "A vendor or contractor needs a payment limit: without one, the agent could pay any amount.",
   unchanged: "That is already this counterparty's limit.",
-  conflict: "Someone else changed this limit a moment ago.",
+  conflict: "This counterparty changed a moment ago. Check its limit and try again.",
   not_found: "Counterparty not found.",
   cycle_running: "A cycle is running. Try again in a minute, once it has finished.",
 };
@@ -92,7 +92,10 @@ export async function changeCounterpartyLimit(input: {
   const update = db()
     .from("counterparties")
     .update({ baseline_payment_limit: parsed.limit, payment_limit: current })
-    .eq("id", row.id);
+    .eq("id", row.id)
+    // The current limit follows from this risk level: a screening that changed it since the read makes this miss,
+    // rather than this write restoring authority the screening just took away.
+    .eq("risk_level", row.risk_level);
   const guarded = row.baseline_payment_limit == null ? update.is("baseline_payment_limit", null) : update.eq("baseline_payment_limit", row.baseline_payment_limit);
   const rows = unwrap(await guarded.select("id")) as Array<{ id: string }>;
   if (rows.length === 0) throw new CounterpartyLimitError("conflict");

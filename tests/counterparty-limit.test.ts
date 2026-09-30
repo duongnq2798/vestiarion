@@ -111,6 +111,8 @@ describe("changeCounterpartyLimit", () => {
     const [patch] = patches(fake.requests);
     expect(patch.params.get("id")).toBe(`eq.${COUNTERPARTY_ID}`);
     expect(patch.params.get("baseline_payment_limit")).toBe("eq.2");
+    // The current limit is derived from this risk level, so a screening that changed it meanwhile must make the write miss.
+    expect(patch.params.get("risk_level")).toBe("eq.clear");
     expect(patch.body).toEqual({ baseline_payment_limit: "10", payment_limit: 10 });
     const [entry] = ledgerBodies(fake.requests);
     expect(entry.p_action).toBe("counterparty_limit_changed");
@@ -183,7 +185,7 @@ describe("changeCounterpartyLimit", () => {
     const { fake, run } = limitFake({ patch: () => ({ body: [] }) });
 
     await expect(run(() => changeCounterpartyLimit({ actorId: ACTOR, counterpartyId: COUNTERPARTY_ID, raw: "10" }))).rejects.toThrow(
-      "Someone else changed this limit a moment ago."
+      "This counterparty changed a moment ago. Check its limit and try again."
     );
     expect(ledgerBodies(fake.requests)).toHaveLength(0);
   });
