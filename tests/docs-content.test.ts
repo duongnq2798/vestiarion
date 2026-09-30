@@ -133,7 +133,7 @@ describe("the docs navigation", () => {
   it("lists every page once", () => {
     const slugs = flatPages().map((page) => page.slug);
     expect(new Set(slugs).size).toBe(slugs.length);
-    expect(DOCS_NAV.map((section) => section.title)).toEqual(["Overview", "Get started", "API reference", "Webhooks", "AI integration", "Changelog"]);
+    expect(DOCS_NAV.map((section) => section.title)).toEqual(["Overview", "Guides", "Get started", "API reference", "Webhooks", "AI integration", "Changelog"]);
   });
 
   it("lists the endpoint overview, then one generated page per operation in table order, titled with its summary", () => {
@@ -145,6 +145,14 @@ describe("the docs navigation", () => {
     expect(api.pages.find((page) => page.slug === "api/get-counterparty")?.description).toBe(
       "One counterparty, with up to 20 recent compliance screenings, newest first."
     );
+  });
+
+  it("lists the user guides right after Overview: going live, then the first payment", () => {
+    const section = DOCS_NAV.find((candidate) => candidate.title === "Guides")!;
+    expect(section.pages.map((page) => [page.slug, page.title])).toEqual([
+      ["guides/go-live", "Go live on Arc testnet"],
+      ["guides/first-payment", "Your first payment"],
+    ]);
   });
 
   it("lists the MCP server right after the AI integration page", () => {
@@ -166,7 +174,8 @@ describe("the docs navigation", () => {
     const pages = flatPages();
     expect(neighbours("").prev).toBeUndefined();
     expect(neighbours("").next?.slug).toBe(pages[1].slug);
-    expect(neighbours("data-delivery").next?.slug).toBe("get-started/quickstart");
+    expect(neighbours("data-delivery").next?.slug).toBe("guides/go-live");
+    expect(neighbours("guides/first-payment").next?.slug).toBe("get-started/quickstart");
     expect(neighbours(pages[pages.length - 1].slug).next).toBeUndefined();
     expect(neighbours("no-such-page")).toEqual({});
   });

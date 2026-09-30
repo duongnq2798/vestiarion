@@ -42,6 +42,13 @@ export const DOCS_NAV: NavSection[] = [
     ],
   },
   {
+    title: "Guides",
+    pages: [
+      { slug: "guides/go-live", title: "Go live on Arc testnet", description: "Create the workspace's wallets, fund them with testnet USDC and take the agent live." },
+      { slug: "guides/first-payment", title: "Your first payment", description: "Add a counterparty and an invoice, run a cycle, and follow the payment to the explorer and the ledger." },
+    ],
+  },
+  {
     title: "Get started",
     pages: [
       { slug: "get-started/quickstart", title: "Quickstart", description: "Create a workspace API key and make your first requests." },

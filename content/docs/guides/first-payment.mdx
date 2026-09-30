@@ -1,0 +1,76 @@
+This page takes a workspace from an empty book to its first payment on Arc testnet: add a counterparty and an invoice, let the agent decide, and follow the payment to the explorer and the signed ledger. Start with a workspace that is live and has testnet USDC in its operating wallet. [Go live on Arc testnet](/docs/guides/go-live) sets that up.
+
+Who does what:
+
+- **Owners and admins** add counterparties and invoices, and run cycles.
+- **Owners, admins and approvers** decide the payments the agent holds.
+- **Viewers** see everything, but have no controls.
+
+## 1. Add a counterparty with an Arc address
+
+A counterparty is a business or person the workspace pays or invoices. Open **Counterparties**, and fill in the form under **Add counterparty**:
+
+- **Legal or trading name**.
+- **Role**: **Vendor** or **Contractor** for someone you pay.
+- **Payment limit (USDC)**: the most the agent may pay this counterparty in one payment. Screening can lower it: the card shows the limit you set and the current one.
+- **Chain**: leave it as `ARC-TESTNET`.
+- **Payment address**: the counterparty's address on Arc testnet, `0x` followed by 40 hexadecimal characters.
+- **Jurisdiction**: an ISO code or a country name.
+
+Then choose **Add and screen**. The counterparty is screened as soon as it is saved, and a message gives the result: "*Name* added and screened: *level* risk." The agent never pays a counterparty screened high risk.
+
+<Callout title="Without an address, a payment is held">
+The form marks **Payment address** "Optional until payment setup", but the agent can pay only a counterparty that has one. As the Go live page puts it, "A payment to a counterparty without one is held for review." Enter the address when you add the counterparty: the page cannot add one to an existing counterparty.
+</Callout>
+
+Anyone who may not add records sees "Only an owner or admin of this workspace can add counterparties." instead of the form.
+
+## 2. Add an invoice
+
+Open **AP / AR**. Under **Invoice intake**, choose **Enter one invoice**, or **Import CSV** to add several from a file.
+
+- **Direction**: **Payable**, for an invoice you pay.
+- **Counterparty**: the one you just added.
+- **Amount (USDC)**: within the counterparty's payment limit. The agent does not pay an invoice over the limit; it holds it for you.
+- **Due date**.
+- **Memo**, if you like.
+- **PO reference**, and tick **Goods or services received**. Without a purchase order or confirmed receipt, the three-way match is incomplete, and the agent asks for more information instead of paying.
+
+Choose **Add invoice**. The page confirms with "Invoice added for *Name*." As the form says, "The agent will evaluate this invoice on the next cycle."
+
+## 3. Run a cycle
+
+A cycle is one run of the agent: it screens counterparties, reads open invoices, and pays, holds or flags each one. On a live workspace a cycle runs every 6 hours on its own, so the invoice is decided at the next run without anyone pressing a button.
+
+To decide it now, open **Treasury**, the console, and choose **Run cycle now**. Only owners and admins have this button. When the cycle ends, a message says "Cycle complete at *time* · *n* decisions logged." and the console shows a report of what the cycle did.
+
+## 4. Read the decision and its reasoning
+
+Each invoice's decision is a card on **AP / AR**, under **Payables**. The console's **Stopped** section also shows the latest decisions the agent stopped. A card shows:
+
+- the outcome: "Settled on Arc", "Held for you" or "Refused by guardrail";
+- the amount and the counterparty;
+- **Agent’s reasoning**: why it decided as it did, citing the facts it used, such as the amount, the PO reference, the risk level and the balance;
+- the evidence it checked, the ledger entry (`audit #` and its number), and, for a payment, the transaction hash.
+
+When the model decided to pay but a guardrail stopped it, the card also has a "Blocked by code, not by the model" band. The band names the rule, the amount attempted and the amount allowed.
+
+## 5. Approve a held payment
+
+**Approvals** lists every payable the agent would not pay on its own, oldest due date first, each marked held, flagged or awaiting information and shown with the agent's reasoning. When the list is empty, it says "Nothing is waiting for a decision."
+
+Owners, admins and approvers decide each one:
+
+- **Approve and pay** starts the transfer. A dialog asks you to confirm, and **Pay now** sends it at once. The ledger records who approved it.
+- **Reject** marks it not paid. You can give a reason, which is kept in the ledger.
+- **Return to agent** sends it back to pending, so the next cycle decides it again.
+
+**Approve and pay** is disabled in two cases, and the card says why. "You created this invoice" means that the person who added an invoice cannot also approve it. "Screened high risk" means that a high-risk counterparty is never paid.
+
+## 6. See it on Arc and in the audit log
+
+**On the Arc explorer.** On a settled decision card, the transaction hash is a link. It opens the transaction on the Arc testnet explorer, at `https://testnet.arcscan.app/tx/` followed by the hash, in a new tab.
+
+**In the audit log.** The card's `audit #` link opens the entry in **Audit log**. As that page says, "Every decision is appended here, hash-linked to the one before it and signed with Ed25519." Expand an entry to see its hash, the previous entry's hash, its body hash, its signature and the full detail. **Verify hash chain** checks every signature and every link, and answers "Chain intact" when all of them hold.
+
+To check a signature yourself, see [Verifying signatures](/docs/webhooks/verify). To read the ledger from your own code, see [List ledger entries](/docs/api/list-ledger-entries) and [Verify the ledger](/docs/api/verify-ledger).
