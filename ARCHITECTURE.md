@@ -123,6 +123,15 @@ deleted automatically. `POST /api/platform/cleanup`, bearer-guarded the same way
 and deletes candidates; `.github/workflows/sandbox-cleanup.yml` calls it once a day and on manual
 dispatch.
 
+**Deleting a workspace** is an owner's call from the danger zone at the bottom of Settings
+(`deleteWorkspaceAction`, `org.administer`, after typing the slug): `delete_org(p_org_id, p_by)`
+(migration `0031`, service role only) refuses the founding workspace, a live workspace whose agent
+is not paused, and one with a cycle run started in the last 15 minutes still `running`; otherwise,
+in one transaction, it writes a tombstone to the service-role-only `deleted_orgs` (slug, name, who,
+when, the ledger's entry count and its head's `hash` and `signing_key_id`), deletes every tenant
+table in `delete_sandbox_org`'s order, and deletes the org row, which cascades to memberships,
+invitations, API keys and webhooks.
+
 **The cron** (`POST /api/agent/tick`) no longer runs one configured business.
 `runLiveOrganizations` (`src/lib/agent/cron.ts`) lists every organization in `mode = 'live'` and,
 for each, enters its scope with `withOrg` and runs a cycle; one organization's failure is caught,
