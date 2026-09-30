@@ -32,6 +32,7 @@ const APPROVAL_CARD = "src/components/ApprovalCard.tsx";
 const APPROVALS_PAGE = "src/app/o/[slug]/approvals/page.tsx";
 const VERIFY_BADGE = "src/components/VerifyLedgerBadge.tsx";
 const AUDIT_PAGE = "src/app/o/[slug]/audit/page.tsx";
+const CHECKLIST = "src/components/vx/GettingStarted.tsx";
 const ADDRESS_CONTROLS = "src/components/intake/CounterpartyAddressEdit.tsx";
 const ADDRESS_LIBRARY = "src/lib/counterparty-address.ts";
 
@@ -39,6 +40,8 @@ const ADDRESS_LIBRARY = "src/lib/counterparty-address.ts";
 const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
   "guides/go-live": [
     ["Settings", APP_NAV],
+    ["Get started", CHECKLIST],
+    ["Read the guide", CHECKLIST],
     ["An owner can connect Circle and take this workspace live from here.", PANEL],
     ["Choose where the wallets live", PANEL],
     ["A testnet wallet, no Circle account needed", PANEL],

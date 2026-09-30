@@ -14,12 +14,14 @@ import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { AuditLedger, pad } from "@/components/vx/AuditLedger";
 import { DecisionCard } from "@/components/vx/DecisionCard";
+import { GettingStarted } from "@/components/vx/GettingStarted";
 import { invoiceDecision } from "@/components/vx/map";
 import type { NavKey } from "@/components/vx/nav";
 import { Hash } from "@/components/vx/Primitives";
 import type { WaitingPayable } from "@/lib/agent/approvals";
 import type { LedgerEntry } from "@/lib/ledger";
 import type { GoLiveStatus } from "@/lib/platform/go-live";
+import { gettingStarted } from "@/lib/getting-started";
 import type { CounterpartyRow, InvoiceRow } from "@/lib/queries";
 import { DESIGN_SLUG, LEDGER } from "../design/fixtures";
 
@@ -201,6 +203,19 @@ function HashChain({ entries }: { entries: LedgerEntry[] }) {
 }
 
 export const DOCS_SHOTS = {
+  "go-live-checklist": {
+    guide: "go-live",
+    page: "treasury",
+    render: function ChecklistShot() {
+      const checklist = gettingStarted({
+        mode: "sandbox",
+        accounts: [{ kind: "operating", circle_wallet_id: "docs-sample-wallet", balance: 0 }],
+        counterparties: [],
+        invoiceCount: 0,
+      });
+      return <GettingStarted slug={SLUG} checklist={checklist} isOwner />;
+    },
+  },
   "go-live-choose": { guide: "go-live", page: "settings", render: goLive(CHOOSING) },
   "go-live-own-account": { guide: "go-live", page: "settings", render: goLive(CHOOSING) },
   "go-live-create-wallets": { guide: "go-live", page: "settings", render: goLive({ ...CHOOSING, step: "wallets", host: "hosted" }) },
