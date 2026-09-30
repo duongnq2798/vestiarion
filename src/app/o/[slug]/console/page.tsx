@@ -4,6 +4,7 @@ import AgentControls from "@/components/AgentControls";
 import AgentPauseControl from "@/components/AgentPauseControl";
 import { CycleReport } from "@/components/vx/CycleReport";
 import { DecisionCard } from "@/components/vx/DecisionCard";
+import { GettingStarted } from "@/components/vx/GettingStarted";
 import { invoiceDecision, treasuryActionDecision, treasuryLedgerDecision } from "@/components/vx/map";
 import { Money } from "@/components/vx/Primitives";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -18,6 +19,7 @@ import { orgHref } from "@/lib/auth/org-paths";
 import { can } from "@/lib/auth/roles";
 import { chainModes } from "@/lib/circle";
 import { inOrg } from "@/lib/dal/scope";
+import { gettingStarted } from "@/lib/getting-started";
 import { listLedgerEntries, listLedgerEntriesAfter, listLedgerEntriesByDomain, listLedgerEntriesForTargets } from "@/lib/ledger";
 import { pauseStateOf } from "@/lib/platform/pause";
 import { latestForecast, listAccounts, listCounterparties, listInvoices, listTreasuryActions, stats } from "@/lib/queries";
@@ -89,6 +91,11 @@ export default async function DashboardPage({
     const needsReview = waiting.filter((payable) => payable.status !== "processing" || payable.reclaimable).length;
     const paused = pause !== null;
     const role = access.membership.role;
+    // Computed from the rows above, with no extra read (getting-started design G1, G2). Only people who
+    // can act on it see it: owners and admins add records, and an owner takes the workspace live.
+    const checklist = can(role, "records.write")
+      ? gettingStarted({ mode: access.membership.mode, accounts: accountsRows, counterparties, invoiceCount: invoices.length })
+      : null;
 
     return (
       <ProductShell day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={modes}>
@@ -106,6 +113,8 @@ export default async function DashboardPage({
             />
           }
         />
+
+        {checklist && <GettingStarted slug={slug} checklist={checklist} isOwner={can(role, "org.administer")} />}
 
         {since != null && <CycleReport entries={cycleEntries} day={dashboardStats.day} since={since} clockMode={dashboardStats.clockMode} completedAt={dashboardStats.lastCycleAt} orgSlug={slug} />}
 

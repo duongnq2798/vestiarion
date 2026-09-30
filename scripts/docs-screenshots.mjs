@@ -54,6 +54,7 @@ const MARGIN = 40;
  * picture. `tests/docs-screenshots.test.ts` holds this list to that one.
  */
 const SHOTS = {
+  "go-live-checklist": async () => {},
   "go-live-choose": async () => {},
   "go-live-own-account": async (page) => {
     await page.click(`[...document.querySelectorAll("summary")].find((s) => s.textContent.trim() === "Connect your own Circle account")`);
