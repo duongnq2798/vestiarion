@@ -147,19 +147,6 @@ export default async function AuditPage({ params, searchParams }: AuditPageProps
             <>
               <pre className="overflow-x-auto whitespace-pre-wrap rounded-xl bg-ground p-3 font-mono text-ink-2">{publicKey}</pre>
               <p className="mt-2">Compare this key id and the head hash with the ones a verified export prints.</p>
-              {retiredKeys.length > 0 && (
-                <div className="mt-4">
-                  <p className="mb-2 font-medium text-ink-2">Retired keys</p>
-                  <div className="space-y-3">
-                    {retiredKeys.map((key) => (
-                      <div key={key.id}>
-                        <p className="mb-1 font-mono text-ink-3">{key.id}</p>
-                        <pre className="overflow-x-auto whitespace-pre-wrap rounded-xl bg-ground p-3 font-mono text-ink-2">{key.publicKeyPem}</pre>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
             </>
           ) : (
             <p className="rounded-xl bg-ground p-3">
@@ -169,6 +156,20 @@ export default async function AuditPage({ params, searchParams }: AuditPageProps
               Nothing about the chain is known to be wrong — it is unverified, which is a different
               statement.
             </p>
+          )}
+          {/* Retired keys still verify the entries they signed, readable active key or not. */}
+          {retiredKeys.length > 0 && (
+            <div className="mt-4">
+              <p className="mb-2 font-medium text-ink-2">Retired keys</p>
+              <div className="space-y-3">
+                {retiredKeys.map((key) => (
+                  <div key={key.id}>
+                    <p className="mb-1 font-mono text-ink-3">{key.id}</p>
+                    <pre className="overflow-x-auto whitespace-pre-wrap rounded-xl bg-ground p-3 font-mono text-ink-2">{key.publicKeyPem}</pre>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
         </Disclosure>
 
