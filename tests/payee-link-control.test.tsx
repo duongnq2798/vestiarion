@@ -2,7 +2,8 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import PayeeLinkControl, { counterpartiesRefreshMs, CreatedPayeeLink } from "@/components/intake/PayeeLinkControl";
+import PayeeLinkControl, { CreatedPayeeLink } from "@/components/intake/PayeeLinkControl";
+import { counterpartiesRefreshMs } from "@/lib/counterparties-refresh";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 
 vi.mock("@/app/actions/payee-links", () => ({ createPayeeLinkAction: vi.fn(), revokePayeeLinkAction: vi.fn() }));

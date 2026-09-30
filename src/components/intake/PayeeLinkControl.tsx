@@ -17,16 +17,6 @@ import { utcDay } from "@/lib/copy";
 const INITIAL: PayeeLinkActionResult = { ok: false, message: "" };
 const revoke = withSuccessToast(revokePayeeLinkAction);
 
-/**
- * How often the Counterparties page re-reads its data. A payee answers a link from
- * another browser, so while a link is out or an address waits for confirmation the
- * page checks every 15 s, and "not yet confirmed" appears without a reload; the
- * rest of the time, every minute (the Members page's rhythm for its invitations).
- */
-export function counterpartiesRefreshMs(state: { linksOut: number; unconfirmed: number }): number {
-  return state.linksOut > 0 || state.unconfirmed > 0 ? 15_000 : 60_000;
-}
-
 export interface PayeeLinkControlProps {
   orgSlug: string;
   counterparty: { id: string; name: string };
