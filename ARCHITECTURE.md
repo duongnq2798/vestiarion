@@ -134,6 +134,14 @@ windows); otherwise, in one transaction, it writes a tombstone to the service-ro
 `signing_key_id`), deletes every tenant table in `delete_sandbox_org`'s order, and deletes the org
 row, which cascades to memberships, invitations, API keys and webhooks.
 
+**Deleting your account** (spec §6) is in the account menu and on `/onboarding`, gated by the
+session alone (`src/app/account/actions.ts`, never a user id from the form). `accountDeletionPlan`
+(`src/lib/platform/delete-account.ts`) blocks it while the person is the last owner of a workspace
+with other members or of the founding workspace; `deleteAccount` then runs `delete_org` on each
+workspace they are the only member of, stopping at the first refusal, and only then deletes the auth
+user through `platformAuth().deleteUser` (the service role's admin API), after which `0023`'s
+foreign keys remove memberships and sent invitations and null `created_by`.
+
 **The cron** (`POST /api/agent/tick`) no longer runs one configured business.
 `runLiveOrganizations` (`src/lib/agent/cron.ts`) lists every organization in `mode = 'live'` and,
 for each, enters its scope with `withOrg` and runs a cycle; one organization's failure is caught,

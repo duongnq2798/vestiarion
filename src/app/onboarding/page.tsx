@@ -4,6 +4,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { signOut } from "@/app/login/actions";
 import AcceptInvitationByIdForm from "@/components/AcceptInvitationByIdForm";
+import { DeleteAccountButton } from "@/components/DeleteAccountDialog";
 import CreateWorkspaceForm from "@/components/CreateWorkspaceForm";
 import { Avatar } from "@/components/ui/Avatar";
 import { Card } from "@/components/ui/Card";
@@ -57,6 +58,7 @@ export default async function OnboardingPage({ searchParams }: OnboardingPagePro
     <div className="flex min-h-dvh flex-col">
       <SiteHeader>
         {user.email && <span className="hidden max-w-[16rem] truncate text-sm text-ink-3 sm:block">{user.email}</span>}
+        <DeleteAccountButton />
         <form action={signOut}>
           <SubmitButton variant="ghost" icon={<LogOut />} pendingLabel="Signing out…">
             Sign out

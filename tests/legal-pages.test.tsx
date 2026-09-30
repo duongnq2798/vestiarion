@@ -134,6 +134,31 @@ describe("the privacy page", () => {
     expect(body).toContain("AES-256-GCM");
   });
 
+  it("describes the Delete account button and its rules (spec §6, A2, A3), and no longer asks for an issue to delete an account", () => {
+    const section = text(renderToStaticMarkup(<PrivacyPage />).split('id="delete-account"')[1]?.split('id="contact"')[0] ?? "");
+    for (const phrase of [
+      "Delete account",
+      "delete my account",
+      "only member",
+      "last owner",
+      "other members",
+      "founding workspace",
+      "paused",
+      "without your name",
+      "signed out",
+    ]) {
+      expect(section, phrase).toContain(phrase);
+    }
+    expect(section).not.toMatch(/open an issue|no button/i);
+    // The phrase the page quotes is the one the code checks.
+    expect(source("src/lib/platform/delete-account-phrase.ts")).toContain('"delete my account"');
+  });
+
+  it("still points questions at GitHub Issues in Contact", () => {
+    const contact = renderToStaticMarkup(<PrivacyPage />).split('id="contact"')[1] ?? "";
+    expect(contact).toContain(`href="${ISSUES_URL}"`);
+  });
+
   it("lists what a deleted workspace's tombstone keeps, as migration 0031 writes it", () => {
     const migration = source("supabase/migrations/0031_delete_org.sql");
     for (const column of ["slug", "name", "deleted_by", "deleted_at", "ledger_entries", "ledger_head_hash", "ledger_signing_key_id"]) {

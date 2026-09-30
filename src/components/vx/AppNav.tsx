@@ -1,11 +1,12 @@
 "use client";
 
-import { BookOpen, Check, ChevronsUpDown, LayoutGrid, LogOut, Menu, Plus, Search } from "lucide-react";
+import { BookOpen, Check, ChevronsUpDown, LayoutGrid, LogOut, Menu, Plus, Search, Trash2 } from "lucide-react";
 import { LayoutGroup, m } from "motion/react";
 import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import { startTransition, useEffect, useId, useState } from "react";
 import { signOut } from "@/app/login/actions";
+import { DeleteAccountDialog } from "@/components/DeleteAccountDialog";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/components/ui/cn";
@@ -175,51 +176,63 @@ export function WorkspaceSwitcher({ current, workspaces }: { current: WorkspaceS
   );
 }
 
-/** Who is signed in, and the way out. */
+/**
+ * Who is signed in, and the way out: signing out, or deleting the account
+ * (spec §6, A1), which needs no workspace role and so is always offered.
+ */
 export function AccountMenu({ email }: { email: string | null }) {
   const label = email ?? "this account";
+  const [deleting, setDeleting] = useState(false);
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="h-auto w-full justify-start gap-3 px-2 py-1.5 text-left font-normal sm:h-auto">
-          <Avatar name={email ?? "?"} />
-          <span className="min-w-0 flex-1">
-            <span className="block text-xs text-ink-3">Signed in as</span>
-            <span className="block truncate text-sm font-medium text-ink" title={email ?? undefined}>
-              {label}
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" className="h-auto w-full justify-start gap-3 px-2 py-1.5 text-left font-normal sm:h-auto">
+            <Avatar name={email ?? "?"} />
+            <span className="min-w-0 flex-1">
+              <span className="block text-xs text-ink-3">Signed in as</span>
+              <span className="block truncate text-sm font-medium text-ink" title={email ?? undefined}>
+                {label}
+              </span>
             </span>
-          </span>
-          <ChevronsUpDown aria-hidden className="text-ink-3" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent side="top" align="start" className="w-(--radix-dropdown-menu-trigger-width) min-w-56">
-        <DropdownMenuLabel className="truncate font-sans text-xs font-normal normal-case tracking-normal">{label}</DropdownMenuLabel>
-        <DropdownMenuItem asChild>
-          <Link href="/onboarding?new">
-            <LayoutGrid aria-hidden />
-            All workspaces
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link href="/onboarding?new#create-workspace">
-            <Plus aria-hidden />
-            Create workspace
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          tone="danger"
-          onSelect={() =>
-            startTransition(async () => {
-              await signOut();
-            })
-          }
-        >
-          <LogOut aria-hidden />
-          Sign out
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+            <ChevronsUpDown aria-hidden className="text-ink-3" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent side="top" align="start" className="w-(--radix-dropdown-menu-trigger-width) min-w-56">
+          <DropdownMenuLabel className="truncate font-sans text-xs font-normal normal-case tracking-normal">{label}</DropdownMenuLabel>
+          <DropdownMenuItem asChild>
+            <Link href="/onboarding?new">
+              <LayoutGrid aria-hidden />
+              All workspaces
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link href="/onboarding?new#create-workspace">
+              <Plus aria-hidden />
+              Create workspace
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            tone="danger"
+            onSelect={() =>
+              startTransition(async () => {
+                await signOut();
+              })
+            }
+          >
+            <LogOut aria-hidden />
+            Sign out
+          </DropdownMenuItem>
+          <DropdownMenuItem tone="danger" onSelect={() => setDeleting(true)}>
+            <Trash2 aria-hidden />
+            Delete account
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {/* Outside the menu, so closing the menu does not unmount it; controlled, since a menu item is not a dialog trigger. */}
+      <DeleteAccountDialog open={deleting} onOpenChange={setDeleting} />
+    </>
   );
 }
 

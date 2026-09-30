@@ -33,7 +33,7 @@ const INITIAL: DeleteWorkspaceActionResult = { ok: false, message: "" };
 
 const mustPause = (context: DeletionContext) => context.live && !context.paused;
 
-function PauseFirstNote({ orgSlug }: { orgSlug: string }) {
+export function PauseFirstNote({ orgSlug }: { orgSlug: string }) {
   return (
     <Callout tone="held" title="Pause the agent first, so no cycle runs while the workspace is deleted.">
       Pause it from the{" "}
@@ -43,6 +43,13 @@ function PauseFirstNote({ orgSlug }: { orgSlug: string }) {
       ; the workspace can be deleted once it is paused.
     </Callout>
   );
+}
+
+/** Where a deleted workspace's wallets stay (W2). Shown only when it has any. */
+export function WalletSentence({ hosted }: { hosted: boolean }) {
+  return hosted
+    ? "Its wallets stay in the Circle account that holds them, Vestiarion's testnet account, with any USDC in them; this workspace can no longer reach them."
+    : "Its wallets stay in the Circle account that holds them, with any USDC in them; Vestiarion can no longer reach them.";
 }
 
 /** What deleting the workspace takes with it, and what stays (W2). */
@@ -55,9 +62,7 @@ export function DeleteWorkspaceConsequences({ slug, walletCount, hosted }: { slu
       </span>
       {walletCount > 0 && (
         <span className="mt-2 block">
-          {hosted
-            ? "Its wallets stay in the Circle account that holds them, Vestiarion's testnet account, with any USDC in them; this workspace can no longer reach them."
-            : "Its wallets stay in the Circle account that holds them, with any USDC in them; Vestiarion can no longer reach them."}
+          <WalletSentence hosted={hosted} />
         </span>
       )}
       <span className="mt-2 block">Vestiarion keeps only a record that the workspace existed: its name, and its ledger&apos;s length and last hash.</span>

@@ -41,12 +41,19 @@ export class DeleteWorkspaceError extends Error {
   }
 }
 
-/** A raised `code: …` from `delete_org` becomes its fixed message; anything else stays a plain Error. */
-function raise(error: { message: string }): never {
+/**
+ * A `delete_org` refusal (`code: …`) as its fixed-message error, or null for
+ * anything else. Shared with account deletion, which runs `delete_org` too.
+ */
+export function deleteOrgRefusal(error: { message: string }): DeleteWorkspaceError | null {
   const code = /^([a-z_]+):/.exec(error.message)?.[1];
   // slug_mismatch is this module's own check; the database never raises it.
-  if (code && Object.hasOwn(MESSAGES, code) && code !== "slug_mismatch") throw new DeleteWorkspaceError(code as DeleteWorkspaceErrorCode);
-  throw new Error(error.message);
+  if (code && Object.hasOwn(MESSAGES, code) && code !== "slug_mismatch") return new DeleteWorkspaceError(code as DeleteWorkspaceErrorCode);
+  return null;
+}
+
+function raise(error: { message: string }): never {
+  throw deleteOrgRefusal(error) ?? new Error(error.message);
 }
 
 interface OrgFacts {

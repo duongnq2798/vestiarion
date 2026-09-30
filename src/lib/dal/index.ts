@@ -173,6 +173,18 @@ export function platformDb() {
   };
 }
 
+/**
+ * The service role's auth admin API, narrowed to the one call the platform
+ * makes: deleting the signed-in person's own account (account deletion,
+ * spec §6 A3). Nothing else of the admin API is reachable from here.
+ */
+export function platformAuth() {
+  const client = currentContext().db;
+  return {
+    deleteUser: (userId: string) => client.auth.admin.deleteUser(userId, false),
+  };
+}
+
 /** Throws with the Postgres error message attached, rather than a bare `null`. */
 export function unwrap<T>(result: { data: T | null; error: { message: string } | null }): T {
   if (result.error) throw new Error(result.error.message);

@@ -149,7 +149,7 @@ export default function PrivacyPage() {
       <LegalSection id="delete-workspace" title="Deleting a workspace">
         <p>
           An owner can delete a workspace from its Settings, typing its slug to confirm. A live workspace&apos;s agent has to be paused first, and deletion
-          waits while a cycle is running.
+          waits while a cycle is running or a payment is being made.
         </p>
         <p>
           Deletion removes the workspace&apos;s invoices, counterparties, milestones, treasury records, ledger, API keys, webhooks, members and invitations, in
@@ -164,12 +164,24 @@ export default function PrivacyPage() {
 
       <LegalSection id="delete-account" title="Deleting your account">
         <p>
-          The app has no button to delete an account yet. To ask for it, open an issue on <LegalLink href={ISSUES_URL}>GitHub Issues</LegalLink>. Issues are
-          public, so leave your email address out; we reply there with how to confirm the account is yours.
+          <strong>Delete account</strong> is in the menu under your email address, beside Sign out, and on the workspaces page. It needs no workspace role. Its
+          dialog lists what will happen before anything does, and you type <code>delete my account</code> to confirm.
         </p>
+        <ul>
+          <li>
+            A workspace where you are the only member is deleted with your account, as an owner deletes one from Settings, so the same rules apply: a live
+            workspace&apos;s agent has to be paused first, and deletion waits while a cycle is running or a payment is being made. Each leaves its tombstone.
+          </li>
+          <li>
+            If you are the last owner of a workspace that has other members, your account cannot be deleted until you make someone else an owner, or delete the
+            workspace. Your teammates never lose a workspace because you left.
+          </li>
+          <li>If you are the last owner of the founding workspace, your account cannot be deleted.</li>
+          <li>In a workspace with another owner, or where you are not an owner, only your membership goes.</li>
+        </ul>
         <p>
-          When an account is deleted, its memberships and the invitations it sent go with it. The workspaces it created stay, with their other members, and the
-          records it added stay without its name on them. The last owner of a workspace cannot be removed: add another owner, or delete the workspace, first.
+          If a workspace cannot be deleted, your account is not deleted. Otherwise your sign-in account is deleted, you are signed out, and your memberships and
+          the invitations you sent go with it. Records you added in workspaces you share stay, without your name on them.
         </p>
       </LegalSection>
 
