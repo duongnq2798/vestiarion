@@ -240,10 +240,9 @@ describe("the AP stage schedules a correct invoice with terms", () => {
       discountAvailableUntil: "2026-10-11",
       floatValueToDue: 0.986301,
       targetOn: "2026-10-11",
-      recommendation: { action: "schedule", payOn: "2026-10-11" },
       shortfall: false,
       amountDueAtTarget: 392,
-      earlierObligations: 0,
+      earlierObligations: { total: 0, count: 0 },
     });
     expect(prompt.scheduledEarlier).toBeNull();
     const shape = prompt.responseShape as Record<string, string>;
@@ -282,7 +281,13 @@ describe("the AP stage schedules a correct invoice with terms", () => {
       agreedWithReference: true,
       guardrailBlocked: false,
       guardrailRule: null,
-      timing: { targetOn: "2026-10-11", discountValue: 8, amountDueAtTarget: 392, earlierObligations: 0 },
+      timing: {
+        targetOn: "2026-10-11",
+        discountValue: 8,
+        amountDueAtTarget: 392,
+        earlierObligations: { total: 0, count: 0 },
+        recommendation: { action: "schedule", payOn: "2026-10-11" },
+      },
       timingRule: null,
       terms: { earlyPayDiscount: { percent: 2, deadline: "2026-10-11T12:00:00+00:00" } },
       observed: { amount: 400, paymentLimit: 1000, riskLevel: "low", poReference: "PO-1044", goodsReceived: true, operatingBalance: 1000 },
@@ -403,11 +408,12 @@ describe("the AP stage and a scheduled invoice", () => {
     expect(invoicePatches(fake.requests).map((p) => p.params.get("id"))).toEqual([`eq.${OTHER_INVOICE_ID}`]);
     expect(ledger(fake.requests).map((e) => (e.p_detail as Record<string, unknown>).invoiceId)).toEqual([OTHER_INVOICE_ID]);
     expect(chain.transfers).toEqual([]);
-    expect(lines).toEqual([{ domain: "ap", message: "Contoso: scheduled for 2026-10-20 (100 USDC)" }]);
+    // 450 less the 400 leaving on Oct 11 cannot cover 100 on Oct 20, so the written policy holds it.
+    expect(lines).toEqual([{ domain: "ap", message: "Contoso: hold (100 USDC)" }]);
 
     // The 400 USDC leaving on Oct 11 comes before Oct 20: 450 less 400 cannot cover 100.
-    expect(promptOf().timing).toMatchObject({ targetOn: "2026-10-20", earlierObligations: 400, shortfall: true });
-    expect(ledger(fake.requests)[0].p_detail).toMatchObject({ timing: { earlierObligations: 400, shortfall: true } });
+    expect(promptOf().timing).toMatchObject({ targetOn: "2026-10-20", earlierObligations: { total: 400, count: 1 }, shortfall: true });
+    expect(ledger(fake.requests)[0].p_detail).toMatchObject({ timing: { earlierObligations: { total: 400, count: 1 }, shortfall: true } });
   });
 
   it("counts verified milestones as falling due first", async () => {
@@ -419,7 +425,7 @@ describe("the AP stage and a scheduled invoice", () => {
     const milestones = fake.requests.find((r) => r.path === "/rest/v1/milestones");
     expect(milestones?.params.get("status")).toBe("eq.verified");
     // 500 less the 250 milestone released today cannot cover the 392 due on Oct 11.
-    expect(promptOf().timing).toMatchObject({ earlierObligations: 250, shortfall: true });
+    expect(promptOf().timing).toMatchObject({ earlierObligations: { total: 250, count: 1 }, shortfall: true });
   });
 
   it("decides it again on its day, tells the model why it waited, and pays the discounted amount", async () => {
@@ -676,6 +682,146 @@ describe("the AP stage and duplicates of money already committed", () => {
   });
 });
 
+/**
+ * The model decides when to pay from the facts (spec 2026-09-30-payment-timing
+ * P1). The written policy's own answer — its `recommendation` and `reason` —
+ * is withheld from the prompt, and recorded in the ledger as the reference, so
+ * agreeing with it is something the model does, not something it is told.
+ */
+describe("the AP stage gives the model the timing facts, not the policy's answer", () => {
+  const FACTS = [
+    "today", "dueOn", "discountValue", "discountAvailableUntil", "floatValueToDue", "targetOn", "amountDueAtTarget", "earlierObligations", "shortfall",
+  ];
+
+  it("sends every timing fact, and neither the recommendation nor its reason", async () => {
+    today("2026-10-01T09:00:00.000Z");
+    model(() => ({ action: "schedule", payOn: "2026-10-11", reasoning: "Take the 2% discount (8 USDC) on its deadline.", confidence: 0.9 }));
+    const { fake, stage } = apFake({ book: [payable()] });
+
+    await stage();
+
+    const timing = promptOf().timing as Record<string, unknown>;
+    expect(Object.keys(timing).sort()).toEqual([...FACTS].sort());
+    expect(timing).not.toHaveProperty("recommendation");
+    expect(timing).not.toHaveProperty("reason");
+    const sent = (decideMock.mock.calls[0][0] as DecideParams<unknown>).userPrompt;
+    expect(sent).not.toContain('"recommendation"');
+    expect(sent).not.toContain('"reason"');
+    expect(sent).not.toContain("paying on the discount deadline, Oct 11, 2026");
+
+    // The reference is still worked out, and kept where an auditor reads it.
+    expect(ledger(fake.requests)[0].p_detail).toMatchObject({
+      referenceDecision: { action: "schedule", payOn: "2026-10-11" },
+      agreedWithReference: true,
+      timing: {
+        recommendation: { action: "schedule", payOn: "2026-10-11" },
+        reason: expect.stringContaining("paying on the discount deadline, Oct 11, 2026"),
+      },
+    });
+  });
+
+  it("tells the model how many payments fall due first, and their total", async () => {
+    today("2026-10-01T09:00:00.000Z");
+    const chairs = payable({
+      id: OTHER_INVOICE_ID, amount: "100", memo: "Office chairs", po_reference: "PO-2210", due_date: "2026-10-05T12:00:00+00:00",
+      counterparty_id: CONTOSO, early_pay_discount_pct: null, discount_due_date: null, status: "held",
+      counterparties: counterparty({ id: CONTOSO, name: "Contoso" }),
+    });
+    const { stage } = apFake({ book: [payable(), chairs], milestones: [{ amount: "20" }, { amount: "30" }] });
+
+    await stage();
+
+    expect(promptOf().timing).toMatchObject({ targetOn: "2026-10-11", earlierObligations: { total: 150, count: 3 }, shortfall: false });
+  });
+
+  it("tells the model to hold a payment the balance cannot cover after what falls due on or before its date", async () => {
+    today("2026-10-01T09:00:00.000Z");
+    const { stage } = apFake({ book: [payable()] });
+
+    await stage();
+
+    const system = (decideMock.mock.calls[0][0] as DecideParams<unknown>).systemPrompt;
+    expect(system).toContain(
+      "When `timing.shortfall` is true, the operating balance cannot cover this payment after the payables that fall due on or before its date. Hold it and cite the figures, rather than scheduling or paying into a failure."
+    );
+    expect(system).toContain("what falls due on or before its date");
+    expect(system).not.toMatch(/falls due before/);
+  });
+});
+
+describe("the AP stage with no model holds a payable the balance cannot cover", () => {
+  const chairs = (overrides: Record<string, unknown> = {}) =>
+    payable({
+      id: OTHER_INVOICE_ID, amount: "100", memo: "Office chairs", po_reference: "PO-2210", due_date: "2026-10-20T12:00:00+00:00",
+      counterparty_id: CONTOSO, early_pay_discount_pct: null, discount_due_date: null,
+      counterparties: counterparty({ id: CONTOSO, name: "Contoso" }),
+      ...overrides,
+    });
+
+  it("holds it rather than scheduling it, and cites the balance, what falls due first and the amount", async () => {
+    today("2026-10-01T09:00:00.000Z");
+    const { fake, chain, stage } = apFake({ book: [scheduledPayable(), chairs()] });
+
+    await stage(450);
+
+    expect(chain.transfers).toEqual([]);
+    const [patch] = invoicePatches(fake.requests);
+    expect(patch.body).toMatchObject({ status: "held", scheduled_for: null, paid_amount: null });
+    const reasoning = (patch.body as Record<string, string>).agent_reasoning;
+    expect(reasoning).toBe(
+      "Operating balance 450 USDC, less 400 USDC for 1 obligation falling due on or before Oct 20, 2026, cannot cover the 100 USDC this invoice needs then; holding it rather than scheduling it into a shortfall."
+    );
+    const [entry] = ledger(fake.requests);
+    expect(entry.p_action).toBe("ap_hold");
+    expect(entry.p_detail).toMatchObject({
+      decisionMode: "heuristic",
+      decision: { action: "hold" },
+      referenceDecision: { action: "hold" },
+      guardrailBlocked: false,
+      timing: { shortfall: true, earlierObligations: { total: 400, count: 1 }, amountDueAtTarget: 100 },
+    });
+  });
+
+  it("holds one due today rather than paying into a failure", async () => {
+    today("2026-10-01T09:00:00.000Z");
+    const { fake, chain, stage } = apFake({ book: [chairs({ due_date: "2026-10-01T12:00:00+00:00" })] });
+
+    await stage(60);
+
+    expect(chain.transfers).toEqual([]);
+    expect(fake.requests.some((r) => r.path.includes("payment_intents"))).toBe(false);
+    const [patch] = invoicePatches(fake.requests);
+    expect(patch.body).toMatchObject({ status: "held", paid_amount: null });
+    expect((patch.body as Record<string, string>).agent_reasoning).toBe(
+      "Operating balance 60 USDC cannot cover the 100 USDC this invoice needs on Oct 1, 2026; holding it rather than paying it into a shortfall."
+    );
+  });
+
+  it("records the hold as the reference a model's schedule into a shortfall disagrees with", async () => {
+    today("2026-10-01T09:00:00.000Z");
+    model(() => ({ action: "schedule", payOn: "2026-10-20", reasoning: "Keep the cash until the due date.", confidence: 0.7 }));
+    const { fake, metrics, stage } = apFake({ book: [scheduledPayable(), chairs()] });
+
+    await stage(450);
+
+    expect(ledger(fake.requests)[0].p_detail).toMatchObject({
+      decision: { action: "schedule", payOn: "2026-10-20" },
+      referenceDecision: { action: "hold" },
+      agreedWithReference: false,
+    });
+    expect(metrics.snapshot().referenceDisagreementCount).toBe(1);
+  });
+
+  it("still asks for information first when the three-way match is incomplete", async () => {
+    today("2026-10-01T09:00:00.000Z");
+    const { fake, stage } = apFake({ book: [chairs({ due_date: "2026-10-01T12:00:00+00:00", goods_received: false })] });
+
+    await stage(60);
+
+    expect(ledger(fake.requests)[0].p_action).toBe("ap_request_info");
+  });
+});
+
 describe("the AP stage compares the model with the reference on the decision code let stand", () => {
   it("counts a schedule for another day as a disagreement", async () => {
     today("2026-10-01T09:00:00.000Z");
@@ -813,24 +959,30 @@ describe("obligationsDueBy — what falls due by an invoice's payment date", () 
   ];
   const TODAY = "2026-10-01";
 
-  it("sums the open payables dated on or before the target, by scheduled day where there is one, not this invoice, plus the milestones", () => {
-    expect(obligationsDueBy(book, { excludeId: "self", by: "2026-10-10", today: TODAY, milestoneTotal: 0 })).toBe(450);
-    expect(obligationsDueBy(book, { excludeId: "self", by: "2026-10-10", today: TODAY, milestoneTotal: 25.5 })).toBe(475.5);
-    expect(obligationsDueBy(book, { excludeId: "self", by: "2026-10-08", today: TODAY, milestoneTotal: 0 })).toBe(330);
-    expect(obligationsDueBy(book, { excludeId: "self", by: "2026-10-07", today: TODAY, milestoneTotal: 0 })).toBe(130);
+  const NONE = { total: 0, count: 0 };
+
+  it("sums the open payables dated on or before the target, by scheduled day where there is one, not this invoice, plus the milestones, and counts them", () => {
+    expect(obligationsDueBy(book, { excludeId: "self", by: "2026-10-10", today: TODAY, milestones: NONE })).toEqual({ total: 450, count: 5 });
+    expect(obligationsDueBy(book, { excludeId: "self", by: "2026-10-10", today: TODAY, milestones: { total: 25.5, count: 1 } })).toEqual({ total: 475.5, count: 6 });
+    expect(obligationsDueBy(book, { excludeId: "self", by: "2026-10-08", today: TODAY, milestones: NONE })).toEqual({ total: 330, count: 3 });
+    expect(obligationsDueBy(book, { excludeId: "self", by: "2026-10-07", today: TODAY, milestones: NONE })).toEqual({ total: 130, count: 2 });
   });
 
   it("counts one due on the target day itself", () => {
-    expect(obligationsDueBy(book, { excludeId: "self", by: "2026-10-05", today: TODAY, milestoneTotal: 0 })).toBe(130);
-    expect(obligationsDueBy(book, { excludeId: "self", by: "2026-10-04", today: TODAY, milestoneTotal: 0 })).toBe(30);
+    expect(obligationsDueBy(book, { excludeId: "self", by: "2026-10-05", today: TODAY, milestones: NONE })).toEqual({ total: 130, count: 2 });
+    expect(obligationsDueBy(book, { excludeId: "self", by: "2026-10-04", today: TODAY, milestones: NONE })).toEqual({ total: 30, count: 1 });
   });
 
   it("dates money already in flight today, whatever its due date says", () => {
-    expect(obligationsDueBy([book[6]], { excludeId: "self", by: TODAY, today: TODAY, milestoneTotal: 0 })).toBe(30);
+    expect(obligationsDueBy([book[6]], { excludeId: "self", by: TODAY, today: TODAY, milestones: NONE })).toEqual({ total: 30, count: 1 });
   });
 
   it("counts an obligation it cannot date, since it may well come first", () => {
-    expect(obligationsDueBy([{ id: "x", amount: 10, due_date: "garbage", status: "pending", scheduled_for: null }], { excludeId: "self", by: "2026-10-10", today: TODAY, milestoneTotal: 0 })).toBe(10);
+    expect(obligationsDueBy([{ id: "x", amount: 10, due_date: "garbage", status: "pending", scheduled_for: null }], { excludeId: "self", by: "2026-10-10", today: TODAY, milestones: NONE })).toEqual({ total: 10, count: 1 });
+  });
+
+  it("counts nothing when nothing falls due by then", () => {
+    expect(obligationsDueBy([], { excludeId: "self", by: "2026-10-10", today: TODAY, milestones: NONE })).toEqual(NONE);
   });
 });
 

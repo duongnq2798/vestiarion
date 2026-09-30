@@ -17,10 +17,10 @@ It was decided on 2026-09-30 by the implementer under the partner's standing ins
   - The invoice form and the CSV import gain two optional fields: "Early-payment discount (%)" and "Discount deadline".
   - Migration 0038 adds `invoices.early_pay_discount_pct`, `discount_due_date`, `scheduled_for` and `paid_amount`, plus the status `scheduled`.
 - **A new decision: schedule.** The AP decision becomes `pay | schedule | hold | flag_fraud | request_info`. `schedule` carries `payOn`, a calendar date (UTC). A scheduled invoice has status `scheduled` and `scheduled_for` set to that day, with the agent's reasoning, and the ledger records `ap_schedule` with the decision, the timing figures and the reference decision.
-- **Timing policy (`planPaymentTiming`).** This pure function computes the facts and a reference answer, which is handed to the model as context. It is also the fallback when the model is unavailable, and it serves as the reference the decision is compared against, as `planTreasury` does for treasury. Its inputs:
+- **Timing policy (`planPaymentTiming`).** This pure function computes the facts and a reference answer. The model receives the facts; the reference answer (`recommendation` and `reason`) is withheld from it and recorded in the ledger for comparison (`referenceDecision`, `timing`), so agreeing with it is a measurement, not an instruction. It is also the fallback when the model is unavailable, as `planTreasury` is for treasury. Its inputs:
   - today, the due date, the discount (percent and deadline);
   - the operating balance;
-  - the payables that fall due before this one;
+  - the payables that fall due on or before this one's target date: their total and how many there are;
   - the reserve's yield.
 
   Its rules, in order:
@@ -31,7 +31,7 @@ It was decided on 2026-09-30 by the implementer under the partner's standing ins
      - Otherwise, the target date is the due date.
   3. **No discount:** the target date is the due date. Paying earlier gives the money away sooner for nothing: the cash stays available for obligations that fall due first, and in the reserve when there is yield.
   4. **Target date after today:** schedule for it. Otherwise, pay now.
-  5. **Shortfall:** when the operating balance, less every payable due before this invoice's target date, cannot cover this invoice, the figures say so (`shortfall`). The model sees which obligations come first.
+  5. **Shortfall:** when the operating balance, less every payable due on or before this invoice's target date, cannot cover this invoice, the figures say so (`shortfall`, next to `earlierObligations: { total, count }`). The reference and the fallback then hold the invoice for a person, citing the figures, rather than schedule or pay it into a failure; the system prompt tells the model the same.
 - **Code bounds the model.**
   - `payOn` must be a real date after today and no later than the due date.
   - A `payOn` after the due date is moved back to the due date, and one on or before today becomes pay now.
@@ -61,7 +61,7 @@ It was decided on 2026-09-30 by the implementer under the partner's standing ins
 
 ## 2. Decisions
 
-- **P1. Timing is the model's decision inside bounds, not a formula in the model's place.** The policy computes the facts (what the discount is worth, how long the cash stays, what falls due first) and a reference answer, as for treasury. The model decides with those facts, which the rubric's "an agent that chooses when to pay, and can explain why" asks for. Code bounds the date and every check still applies. The ledger records the policy's answer next to the model's, so disagreements are measurable.
+- **P1. Timing is the model's decision inside bounds, not a formula in the model's place.** The policy computes the facts (what the discount is worth, how long the cash stays, what falls due first) and a reference answer, as for treasury. The model receives the facts and decides with them, which the rubric's "an agent that chooses when to pay, and can explain why" asks for; the reference answer is withheld from it. Code bounds the date and every check still applies. The ledger records the policy's answer next to the model's, for comparison, so disagreements are measurable and agreement is the model's own.
 - **P2. The latest date is the due date, always.** No invoice waits past it, whatever the model says, so scheduling can never make a business pay late.
 - **P3. Checks run twice.** Scheduling commits to nothing irreversible. On the day, the invoice is decided again with current facts, because a counterparty can turn high risk or change its address in between, or the agent can be paused.
 - **P4. Wall-clock dates.** Due dates, discount deadlines and `payOn` are calendar dates in UTC, compared with the wall clock, the same as obligations. The simulated day counter (`CYCLE_CLOCK_MODE=simulate`) does not move them. A scheduled payment is made by the first cycle on its day: the 6-hourly schedule for a live workspace, or a person's run in a sandbox.

@@ -220,6 +220,26 @@ describe("the privacy page", () => {
       }
     });
 
+    it("names each payment timing fact the invoice prompt sends, as timingFacts lists them, and not the policy's answer", () => {
+      const facts = orchestrator.split("function timingFacts(")[1]?.split("\n}\n")[0] ?? "";
+      const keys = [...facts.matchAll(/^\s+(\w+): timing\.\w+,$/gm)].map((m) => m[1]);
+      const TIMING: Record<string, string> = {
+        today: "today's date",
+        dueOn: "the due date",
+        discountValue: "what the discount is worth",
+        discountAvailableUntil: "the last day it applies",
+        floatValueToDue: "the yield from keeping the cash to the due date",
+        targetOn: "the day the written policy would pay on",
+        amountDueAtTarget: "the amount due that day",
+        earlierObligations: "the total and number of payments that fall due on or before that day",
+        shortfall: "whether the operating balance falls short of covering this invoice after them",
+      };
+      expect(keys.sort()).toEqual(Object.keys(TIMING).sort());
+      for (const key of keys) expect(models, key).toContain(TIMING[key]);
+      expect(models).not.toMatch(/falls? due before/);
+      expect(models).not.toContain("would pay on and why");
+    });
+
     it("says the performance history is a score and the counts it is computed from, as counterparty-history.ts has them", () => {
       const history = source("src/lib/agent/counterparty-history.ts");
       const inputs = [...(history.split("export interface CounterpartyHistoryInputs {")[1]?.split("}")[0] ?? "").matchAll(/^\s*(\w+): number;/gm)].map((m) => m[1]);

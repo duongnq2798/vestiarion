@@ -57,7 +57,9 @@ const STATUSES = new Set<string>(INVOICE_STATUSES);
  * `early_pay_discount_pct` and `discount_due_date` (migration 0038), read the
  * way `invoiceDiscount` in `src/lib/agent/payment-timing.ts` reads them for
  * the AP stage: a percent outside (0, 100), or a deadline that is not a real
- * date, is reported as no discount at all, never a malformed one.
+ * date, is reported as no discount at all, never a malformed one. A change to
+ * one belongs in the other, so the API never reports terms the agent would
+ * not pay by, or the reverse.
  */
 function invoiceDiscountOf(rawPct: unknown, rawDeadline: unknown): { percent: number; deadline: string } | null {
   if (rawPct == null || rawDeadline == null) return null;

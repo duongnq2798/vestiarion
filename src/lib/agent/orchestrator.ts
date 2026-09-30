@@ -39,7 +39,7 @@ import {
   type PaymentTimingInput,
 } from "./payment-timing";
 import { planTreasury, type TreasuryDecision } from "./treasury";
-import { plural } from "../copy";
+import { plural, utcDay } from "../copy";
 
 // Moved to ./balances.ts with the read it belongs to; still exported from here for existing callers.
 export { liveOperatingBalance } from "./balances";
@@ -86,7 +86,8 @@ When to pay an accounts-payable invoice:
 - Otherwise, paying on the due date keeps the cash available for what falls due first.
 - Pay now when the invoice is due today or overdue.
 - Never schedule a payment past the due date.
-- Cite the figures you were given: what the discount is worth, the yield from keeping the cash to the due date, the dates, and what falls due before it.
+- When \`timing.shortfall\` is true, the operating balance cannot cover this payment after the payables that fall due on or before its date. Hold it and cite the figures, rather than scheduling or paying into a failure.
+- Cite the figures you were given: what the discount is worth, the yield from keeping the cash to the due date, the dates, and what falls due on or before its date (\`timing.earlierObligations\`: their total and how many there are).
 
 Respond with ONLY a single JSON object in the requested shape. No prose outside the JSON.`;
 
@@ -632,6 +633,12 @@ export interface PayableBookRow {
   scheduled_for?: string | null;
 }
 
+/** Payments that fall due by a date: their total (USDC, full amounts) and how many there are. */
+export interface ObligationsDue {
+  total: number;
+  count: number;
+}
+
 /**
  * What falls due by an invoice's payment date: every other open payable (the
  * treasury buffer's statuses, ./obligations.ts) dated on or before `by` — a
@@ -644,20 +651,29 @@ export interface PayableBookRow {
  */
 export function obligationsDueBy(
   book: ReadonlyArray<PayableBookRow>,
-  input: { excludeId: string; by: string; today: string; milestoneTotal: number }
-): number {
-  let total = input.milestoneTotal;
+  input: { excludeId: string; by: string; today: string; milestones: ObligationsDue }
+): ObligationsDue {
+  let total = input.milestones.total;
+  let count = input.milestones.count;
   for (const row of book) {
     if (row.id === input.excludeId) continue;
     if (!(OPEN_PAYABLE_STATUSES as readonly string[]).includes(row.status)) continue;
     const day = row.status === "matched" ? input.today : utcDayOf(row.scheduled_for ?? row.due_date);
-    if (day === null || day <= input.by) total += row.amount;
+    if (day === null || day <= input.by) {
+      total += row.amount;
+      count += 1;
+    }
   }
-  return Number(total.toFixed(6));
+  return { total: Number(total.toFixed(6)), count };
 }
 
-/** The timing figures one AP decision is made with: the policy's, and what falls due before its date. */
-export type ApTiming = PaymentTiming & { earlierObligations: number };
+/**
+ * The timing figures one AP decision is made with: the policy's, and what
+ * falls due on or before its date. The ledger records all of it, the
+ * policy's `recommendation` and `reason` included; the model is sent only
+ * the facts (`timingFacts`).
+ */
+export type ApTiming = PaymentTiming & { earlierObligations: ObligationsDue };
 
 /**
  * `planPaymentTiming` with the obligations that fall due by this invoice's
@@ -667,11 +683,51 @@ export type ApTiming = PaymentTiming & { earlierObligations: number };
  */
 function planApTiming(
   input: Omit<PaymentTimingInput, "earlierObligations">,
-  obligationsBy: (targetOn: string, today: string) => number
+  obligationsBy: (targetOn: string, today: string) => ObligationsDue
 ): ApTiming {
   const { targetOn, today } = planPaymentTiming({ ...input, earlierObligations: 0 });
   const earlierObligations = obligationsBy(targetOn, today);
-  return { ...planPaymentTiming({ ...input, earlierObligations }), earlierObligations };
+  return { ...planPaymentTiming({ ...input, earlierObligations: earlierObligations.total }), earlierObligations };
+}
+
+/**
+ * The timing facts the model decides with (spec 2026-09-30-payment-timing
+ * P1): every figure the policy works out, and not its answer. The policy's
+ * `recommendation` and `reason` are withheld: the fallback still uses them,
+ * and the ledger records them next to the model's decision, so
+ * `agreedWithReference` measures the model's own judgement rather than
+ * whether it copied what it was handed. Each key is named here, so a field
+ * added to `PaymentTiming` reaches the model only once it is listed (and the
+ * privacy page says so).
+ */
+function timingFacts(timing: ApTiming) {
+  return {
+    today: timing.today,
+    dueOn: timing.dueOn,
+    discountValue: timing.discountValue,
+    discountAvailableUntil: timing.discountAvailableUntil,
+    floatValueToDue: timing.floatValueToDue,
+    targetOn: timing.targetOn,
+    amountDueAtTarget: timing.amountDueAtTarget,
+    earlierObligations: timing.earlierObligations,
+    shortfall: timing.shortfall,
+  };
+}
+
+/**
+ * Why the written policy holds a payable it cannot cover (`timing.shortfall`):
+ * the balance, what falls due on or before the day it would be paid, and what
+ * this invoice needs then. Holding it for a person, rather than scheduling or
+ * paying it into a transfer the balance cannot make.
+ */
+function shortfallReasoning(timing: ApTiming, operatingBalance: number): string {
+  const { total, count } = timing.earlierObligations;
+  const alternative = timing.targetOn > timing.today ? "scheduling" : "paying";
+  if (count === 0) {
+    return `Operating balance ${operatingBalance} USDC cannot cover the ${timing.amountDueAtTarget} USDC this invoice needs on ${utcDay(timing.targetOn)}; holding it rather than ${alternative} it into a shortfall.`;
+  }
+  const obligations = plural(count, "1 obligation", `${count} obligations`);
+  return `Operating balance ${operatingBalance} USDC, less ${total} USDC for ${obligations} falling due on or before ${utcDay(timing.targetOn)}, cannot cover the ${timing.amountDueAtTarget} USDC this invoice needs then; holding it rather than ${alternative} it into a shortfall.`;
 }
 
 /**
@@ -760,7 +816,7 @@ async function decideApPayable(
     operatingBalance: number;
     history: InvoiceLike[];
     reserveApy: number;
-    obligationsBy: (targetOn: string, today: string) => number;
+    obligationsBy: (targetOn: string, today: string) => ObligationsDue;
     metrics: CycleMetricsCollector;
   }
 ): Promise<{ status: string; scheduledFor: string | null; operatingBalance: number | null; line: CycleLogLine }> {
@@ -796,8 +852,9 @@ async function decideApPayable(
   const duplicateContext = duplicateMatchContext(duplicates);
 
   // When to pay (spec 2026-09-30-payment-timing §1): the invoice's terms, the
-  // policy's figures and reference answer, and — for an invoice scheduled
-  // earlier, now on its day — the date it was scheduled for and why.
+  // policy's figures — its reference answer is kept for the fallback and the
+  // ledger, not sent — and, for an invoice scheduled earlier, now on its day,
+  // the date it was scheduled for and why.
   const discount = invoiceDiscount(invoice);
   const terms = { earlyPayDiscount: discount ? { percent: discount.pct, deadline: discount.deadline } : null };
   const timing = planApTiming(
@@ -833,7 +890,7 @@ async function decideApPayable(
         ),
       },
       treasury: { operatingBalance },
-      timing,
+      timing: timingFacts(timing),
       scheduledEarlier,
       duplicateMatches: duplicateContext.matches.map((match) => ({
         otherInvoiceStatus: match.otherStatus,
@@ -885,6 +942,12 @@ async function decideApPayable(
           reasoning: `Cannot complete a three-way match: purchase order ${invoice.po_reference ?? "missing"}, goods received ${invoice.goods_received}.`,
           confidence: 0.7,
         };
+      }
+      // A correct invoice the balance cannot cover, after what falls due on
+      // or before its day, waits for a person rather than for a transfer
+      // that would fail.
+      if (timing.shortfall) {
+        return { action: "hold", reasoning: shortfallReasoning(timing, operatingBalance), confidence: 0.8 };
       }
       // A correct invoice is paid on the policy's day: now, or scheduled.
       const reasoning = `PO ${invoice.po_reference} matches, goods confirmed received, ${counterparty.name} screened clear, and ${amount} USDC is within the ${limit} USDC limit. ${timing.reason}`;
@@ -1150,12 +1213,16 @@ export async function runApStage(input: ApStageInput): Promise<number> {
     status: row.status,
     scheduled_for: row.scheduled_for ?? null,
   }));
-  const milestoneTotal =
+  const verifiedMilestones =
     payables.length === 0
-      ? 0
+      ? []
       : (unwrap(await db.from("milestones").select("amount").eq("verified", true).eq("status", "verified")) as Array<{
           amount: string;
-        }>).reduce((sum, row) => sum + num(row.amount), 0);
+        }>);
+  const milestones: ObligationsDue = {
+    total: verifiedMilestones.reduce((sum, row) => sum + num(row.amount), 0),
+    count: verifiedMilestones.length,
+  };
   // Each outcome is written back into both the book and the duplicate
   // history before the next invoice is decided. A twin decided later in the
   // same cycle must see this one paid, in flight or scheduled — or, as
@@ -1210,7 +1277,7 @@ export async function runApStage(input: ApStageInput): Promise<number> {
       history,
       reserveApy,
       metrics,
-      obligationsBy: (targetOn, today) => obligationsDueBy(book, { excludeId: invoice.id, by: targetOn, today, milestoneTotal }),
+      obligationsBy: (targetOn, today) => obligationsDueBy(book, { excludeId: invoice.id, by: targetOn, today, milestones }),
     });
     if (decided.operatingBalance !== null) operatingBalance = decided.operatingBalance;
     record(invoice.id, decided.status, decided.scheduledFor);

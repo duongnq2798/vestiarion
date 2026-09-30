@@ -1,10 +1,12 @@
 /**
  * When to pay an invoice, computed as a pure function.
  *
- * This is handed to the model as context and used as the fallback when the
- * model is unavailable, the same role `planTreasury` (./treasury.ts) plays
- * for the treasury step. It also serves as the reference a model's decision
- * is compared against, so the ledger can record when the two disagree.
+ * Its figures are handed to the model as context; its own answer
+ * (`recommendation` and `reason`) is not. That answer is the fallback when
+ * the model is unavailable, the same role `planTreasury` (./treasury.ts)
+ * plays for the treasury step, and the reference a model's decision is
+ * compared against, so the ledger can record when the two disagree (the AP
+ * stage's `timingFacts` in ./orchestrator.ts picks what the model is sent).
  *
  * Every date here is a UTC calendar date. Due dates are stored at noon UTC
  * (`dueDateIso` in `../intake-validation.ts`) specifically so extracting the
@@ -92,6 +94,10 @@ export interface InvoiceDiscount {
  * above 0 and below 100 — or a deadline that is not a date is no discount at
  * all, so the full amount is paid: a row that cannot be read never pays less
  * than it says.
+ *
+ * `/api/v1/invoices` reads the same two columns the same way, for
+ * `earlyPayDiscount` (`invoiceDiscountOf` in
+ * src/app/api/v1/invoices/route.ts); a change to one belongs in the other.
  */
 export function invoiceDiscount(row: {
   early_pay_discount_pct?: string | number | null;
