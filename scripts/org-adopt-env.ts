@@ -5,6 +5,10 @@
  *
  *   npm run org:adopt-env -- founding --expect-key-id 9b03458d9a617871
  *
+ * Refuses a key the organization has retired, and a key other than the one it
+ * already signs with: after a rotation from Settings the environment's copy is
+ * a retired key, and adopting it would undo the rotation.
+ *
  * The app reads each organization's secrets from its own row, never from env
  * — this command is the only thing that still reads the env copies, so they
  * can be removed from hosting once production is verified.
@@ -18,7 +22,7 @@ async function main() {
   const { configFromEnv } = await import("../src/lib/config");
   const { createContext } = await import("../src/lib/context");
   const { isValidSlug } = await import("../src/lib/auth/org-paths");
-  const { adoptEnvSecrets } = await import("../src/lib/platform/adopt");
+  const { adoptEnvSecrets, ledgerKeyAdoptionRefusal } = await import("../src/lib/platform/adopt");
   const { decryptSecret, masterKeysFromEnv } = await import("../src/lib/secrets");
   const { ledgerKeyId } = await import("../src/lib/ledger-keys");
 
@@ -31,7 +35,11 @@ async function main() {
   }
 
   const db = createContext(configFromEnv(process.env)).db;
-  const org = await db.from("orgs").select("id, wallet_host").eq("slug", slug).maybeSingle();
+  const org = await db
+    .from("orgs")
+    .select("id, wallet_host, ledger_signing_key_enc, ledger_retired_keys")
+    .eq("slug", slug)
+    .maybeSingle();
   if (org.error) throw new Error(org.error.message);
   if (!org.data) throw new Error(`no organization with slug ${slug}`);
 
@@ -43,6 +51,11 @@ async function main() {
     expectLedgerKeyId: expected,
     walletHost: org.data.wallet_host,
   });
+
+  // Never undo a rotation: a retired key, or a replacement for the key the
+  // workspace signs with now, is refused before anything is written.
+  const refusal = ledgerKeyAdoptionRefusal({ orgId: org.data.id, row: org.data, envKeyId: adopted.ledgerKeyId, keys });
+  if (refusal) throw new Error(refusal);
 
   const update = await db
     .from("orgs")
