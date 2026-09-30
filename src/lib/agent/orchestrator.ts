@@ -87,7 +87,7 @@ When to pay an accounts-payable invoice:
 - Pay now when the invoice is due today or overdue.
 - Never schedule a payment past the due date.
 - For a payment scheduled for a later day, cash held in the reserve counts toward what is available: the treasury stage redeems it back into operating before that date comes due. For a payment made now, only the operating balance counts — the treasury stage that would redeem the reserve runs after this one, in the same cycle, so that cash is not available for a transfer this minute.
-- When \`timing.shortfall\` is true, the operating balance cannot cover this payment after the payables that fall due on or before its date. Hold it and cite the figures, rather than scheduling or paying into a failure.
+- When \`timing.shortfall\` is true, the cash available by its date (the operating balance, plus the reserve for a later day) cannot cover this payment after the payables that fall due on or before that date. Hold it and cite the figures, rather than scheduling or paying into a failure.
 - Cite the figures you were given: what the discount is worth, the yield from keeping the cash to the due date, the dates, and what falls due on or before its date (\`timing.earlierObligations\`: their total and how many there are).
 
 Respond with ONLY a single JSON object in the requested shape. No prose outside the JSON.`;
@@ -717,18 +717,24 @@ function timingFacts(timing: ApTiming) {
 
 /**
  * Why the written policy holds a payable it cannot cover (`timing.shortfall`):
- * the balance, what falls due on or before the day it would be paid, and what
- * this invoice needs then. Holding it for a person, rather than scheduling or
- * paying it into a transfer the balance cannot make.
+ * the cash it counted (the reserve too, for a later day), what falls due on or
+ * before the day it would be paid, and what this invoice needs then. Holding
+ * it for a person, rather than scheduling or paying it into a transfer the
+ * balance cannot make.
  */
-function shortfallReasoning(timing: ApTiming, operatingBalance: number): string {
+function shortfallReasoning(timing: ApTiming, operatingBalance: number, reserveBalance: number): string {
   const { total, count } = timing.earlierObligations;
-  const alternative = timing.targetOn > timing.today ? "scheduling" : "paying";
+  const later = timing.targetOn > timing.today;
+  const alternative = later ? "scheduling" : "paying";
+  const cash =
+    later && reserveBalance > 0
+      ? `Operating balance ${operatingBalance} USDC plus ${reserveBalance} USDC in the reserve`
+      : `Operating balance ${operatingBalance} USDC`;
   if (count === 0) {
-    return `Operating balance ${operatingBalance} USDC cannot cover the ${timing.amountDueAtTarget} USDC this invoice needs on ${utcDay(timing.targetOn)}; holding it rather than ${alternative} it into a shortfall.`;
+    return `${cash} cannot cover the ${timing.amountDueAtTarget} USDC this invoice needs on ${utcDay(timing.targetOn)}; holding it rather than ${alternative} it into a shortfall.`;
   }
   const obligations = plural(count, "1 obligation", `${count} obligations`);
-  return `Operating balance ${operatingBalance} USDC, less ${total} USDC for ${obligations} falling due on or before ${utcDay(timing.targetOn)}, cannot cover the ${timing.amountDueAtTarget} USDC this invoice needs then; holding it rather than ${alternative} it into a shortfall.`;
+  return `${cash}, less ${total} USDC for ${obligations} falling due on or before ${utcDay(timing.targetOn)}, cannot cover the ${timing.amountDueAtTarget} USDC this invoice needs then; holding it rather than ${alternative} it into a shortfall.`;
 }
 
 /**
@@ -950,7 +956,7 @@ async function decideApPayable(
       // or before its day, waits for a person rather than for a transfer
       // that would fail.
       if (timing.shortfall) {
-        return { action: "hold", reasoning: shortfallReasoning(timing, operatingBalance), confidence: 0.8 };
+        return { action: "hold", reasoning: shortfallReasoning(timing, operatingBalance, ctx.reserveBalance), confidence: 0.8 };
       }
       // A correct invoice is paid on the policy's day: now, or scheduled.
       const reasoning = `PO ${invoice.po_reference} matches, goods confirmed received, ${counterparty.name} screened clear, and ${amount} USDC is within the ${limit} USDC limit. ${timing.reason}`;

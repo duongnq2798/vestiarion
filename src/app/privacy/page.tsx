@@ -117,7 +117,7 @@ export default function PrivacyPage() {
                 counterparty&apos;s name, risk level, payment limit and performance score; the operating balance and the reserve balance; the payment timing worked out from those:
                 today&apos;s date and the due date, what the discount is worth and the last day it applies, the yield from keeping the cash to the due date,
                 the day the written policy would pay on and the amount due that day, the total and number of payments that fall due on or before that day,
-                and whether the operating balance falls short of covering this invoice after them; when the agent scheduled the invoice earlier, the date it
+                and whether the cash available by that day falls short of covering this invoice after them; when the agent scheduled the invoice earlier, the date it
                 chose and its reasoning; and any earlier invoices from the same
                 counterparty that look like duplicates of it, each with its amount, due date and status, the signals that matched, how strong the match is
                 and what the match found;

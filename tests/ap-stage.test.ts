@@ -744,7 +744,7 @@ describe("the AP stage gives the model the timing facts, not the policy's answer
 
     const system = (decideMock.mock.calls[0][0] as DecideParams<unknown>).systemPrompt;
     expect(system).toContain(
-      "When `timing.shortfall` is true, the operating balance cannot cover this payment after the payables that fall due on or before its date. Hold it and cite the figures, rather than scheduling or paying into a failure."
+      "When `timing.shortfall` is true, the cash available by its date (the operating balance, plus the reserve for a later day) cannot cover this payment after the payables that fall due on or before that date. Hold it and cite the figures, rather than scheduling or paying into a failure."
     );
     expect(system).toContain("what falls due on or before its date");
     expect(system).not.toMatch(/falls due before/);
@@ -830,6 +830,30 @@ describe("the AP stage with no model holds a payable the balance cannot cover", 
       guardrailBlocked: false,
       timing: { shortfall: true, earlierObligations: { total: 400, count: 1 }, amountDueAtTarget: 100 },
     });
+  });
+
+  it("cites the reserve with the operating balance when it holds one targeted at a later day", async () => {
+    today("2026-10-01T09:00:00.000Z");
+    const { fake, stage } = apFake({ book: [scheduledPayable(), chairs()] });
+
+    await stage(300, 150);
+
+    const [patch] = invoicePatches(fake.requests);
+    expect(patch.body).toMatchObject({ status: "held", scheduled_for: null });
+    expect((patch.body as Record<string, string>).agent_reasoning).toBe(
+      "Operating balance 300 USDC plus 150 USDC in the reserve, less 400 USDC for 1 obligation falling due on or before Oct 20, 2026, cannot cover the 100 USDC this invoice needs then; holding it rather than scheduling it into a shortfall."
+    );
+  });
+
+  it("does not cite the reserve when it holds one due today, since the reserve cannot pay this minute", async () => {
+    today("2026-10-01T09:00:00.000Z");
+    const { fake, stage } = apFake({ book: [chairs({ due_date: "2026-10-01T12:00:00+00:00" })] });
+
+    await stage(60, 500);
+
+    expect((invoicePatches(fake.requests)[0].body as Record<string, string>).agent_reasoning).toBe(
+      "Operating balance 60 USDC cannot cover the 100 USDC this invoice needs on Oct 1, 2026; holding it rather than paying it into a shortfall."
+    );
   });
 
   it("holds one due today rather than paying into a failure", async () => {

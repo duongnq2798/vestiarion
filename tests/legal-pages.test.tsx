@@ -237,7 +237,7 @@ describe("the privacy page", () => {
         targetOn: "the day the written policy would pay on",
         amountDueAtTarget: "the amount due that day",
         earlierObligations: "the total and number of payments that fall due on or before that day",
-        shortfall: "whether the operating balance falls short of covering this invoice after them",
+        shortfall: "whether the cash available by that day falls short of covering this invoice after them",
       };
       expect(keys.sort()).toEqual(Object.keys(TIMING).sort());
       for (const key of keys) expect(models, key).toContain(TIMING[key]);
