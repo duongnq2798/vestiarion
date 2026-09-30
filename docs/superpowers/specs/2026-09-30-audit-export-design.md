@@ -79,6 +79,25 @@ No migration. Merge on green, then in production:
 
 Then record the result in this spec.
 
+### Rollout record (2026-09-30)
+
+- **Before the merge of #65**, exports of three production workspaces were built read-only with `buildLedgerExport`. The server's `verifyChain` and the standalone verifier both answered valid on each:
+  - `founding`: 194 entries, key `9b03458d9a617871`;
+  - `test-sample-data`: 22 entries;
+  - `note-one`: 30 entries.
+
+  Changing one digit in founding's entry #179 gave `BROKEN at entry #179`, exit 1.
+- **After the deploy**, requests without the partner's session:
+  - a signed-out request answered 401;
+  - a request with `sec-fetch-site: cross-site` answered 403;
+  - `/tools/verify-ledger-export.mjs` was served with `Content-Disposition: attachment` and `nosniff`, byte-identical to the repository's file, and it verified the founding export;
+  - `/docs/guides/audit-export` answered 200, and `llms.txt` lists the guide.
+- **The partner downloaded both formats from `testnet-2`:**
+  - #393 is `ledger_exported` `{format: "json", entries: 53, headSeq: 370}`;
+  - #394 is `{format: "csv", entries: 54, headSeq: 393}`, so the CSV includes the JSON's record.
+
+  Both entries hold ids and counts only. The chain rebuilt afterwards (55 entries, head #394, key `8d09d7efdfa51cda`) verifies with the standalone script.
+
 ## 6. Out of scope
 
 - Exporting one domain or a date range: the chain is only verifiable whole, from genesis.
