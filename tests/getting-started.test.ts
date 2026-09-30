@@ -1,13 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { gettingStarted, ownInvoiceCount, type GettingStartedInput } from "@/lib/getting-started";
+import { gettingStarted, ownPayableCount, type GettingStartedInput } from "@/lib/getting-started";
 
 /**
  * The console's Get started checklist, computed from rows the console
- * already reads (getting-started design §1, G1, G2): no stored state, so it
- * ticks itself off and disappears once the workspace is live.
+ * already reads (getting-started design §1, G1, G2; first-payment design §2):
+ * no stored state, so it ticks itself off, and it disappears once the
+ * workspace has made its first payment on Arc testnet.
  */
 
 const ADDRESS = "0x1948aB0000000000000000000000000000c345a0";
+const FUNDED = [{ kind: "operating", circle_wallet_id: "w-1", balance: 40 }];
+const PAYEE = { name: "Northstar Studio", role: "vendor", address: ADDRESS };
 
 function input(overrides: Partial<GettingStartedInput> = {}): GettingStartedInput {
   return {
@@ -17,25 +20,29 @@ function input(overrides: Partial<GettingStartedInput> = {}): GettingStartedInpu
       { kind: "reserve", circle_wallet_id: null, balance: 0 },
     ],
     counterparties: [],
-    invoiceCount: 0,
+    payableCount: 0,
+    onchainPayments: 0,
+    waitingCount: 0,
     ...overrides,
   };
 }
 
 const done = (result: ReturnType<typeof gettingStarted>) => Object.fromEntries(result.steps.map((step) => [step.id, step.done]));
+const step = (result: ReturnType<typeof gettingStarted>, id: string) => result.steps.find((candidate) => candidate.id === id)!;
 
 describe("gettingStarted", () => {
-  it("lists the five steps in order, none done, the wallet next, for a new workspace", () => {
+  it("lists the six steps to a first payment in order, none done, the wallet next, for a new workspace", () => {
     const result = gettingStarted(input());
     expect(result.show).toBe(true);
-    expect(result.steps.map((step) => step.title)).toEqual([
+    expect(result.steps.map((each) => each.title)).toEqual([
       "Add a wallet",
       "Fund it with USDC",
-      "Add a counterparty with an Arc address",
-      "Add an invoice",
       "Go live",
+      "Add a payee with an Arc address",
+      "Add a payable",
+      "First payment on Arc testnet",
     ]);
-    expect(Object.values(done(result))).toEqual([false, false, false, false, false]);
+    expect(Object.values(done(result))).toEqual([false, false, false, false, false, false]);
     expect(result.next).toBe("wallet");
   });
 
@@ -51,14 +58,17 @@ describe("gettingStarted", () => {
     expect(done(result).wallet).toBe(false);
   });
 
-  it("asks to check the balance in Settings while the stored balance of a new wallet is 0", () => {
-    const fund = gettingStarted(input({ accounts: [{ kind: "operating", circle_wallet_id: "w-1", balance: 0 }] })).steps[1];
-    expect(fund.body).toContain("Check the balance in Settings");
+  it("sends the person to Settings to fund a new wallet, where the balance is read from the chain", () => {
+    const fund = step(gettingStarted(input({ accounts: [{ kind: "operating", circle_wallet_id: "w-1", balance: 0 }] })), "fund");
+    expect(fund.body).toContain("faucet");
+    expect(fund.body).toContain("Settings");
+    expect(fund.path).toBe("/settings#go-live-title");
   });
 
-  it("ticks funding when the operating wallet holds USDC", () => {
-    const result = gettingStarted(input({ accounts: [{ kind: "operating", circle_wallet_id: "w-1", balance: 40 }] }));
+  it("ticks funding when the operating wallet holds USDC, and moves on to going live", () => {
+    const result = gettingStarted(input({ accounts: FUNDED }));
     expect(done(result).fund).toBe(true);
+    expect(result.next).toBe("live");
   });
 
   it("does not tick funding for a balance with no wallet: a sandbox's sample balance is not USDC on Arc", () => {
@@ -66,65 +76,114 @@ describe("gettingStarted", () => {
     expect(done(result).fund).toBe(false);
   });
 
-  it("ticks the counterparty step only for one with an address", () => {
-    expect(done(gettingStarted(input({ counterparties: [{ address: null }] }))).counterparty).toBe(false);
-    expect(done(gettingStarted(input({ counterparties: [{ address: "" }] }))).counterparty).toBe(false);
-    expect(done(gettingStarted(input({ counterparties: [{ address: null }, { address: ADDRESS }] }))).counterparty).toBe(true);
+  it("asks for the payee once the workspace is live", () => {
+    const result = gettingStarted(input({ mode: "live" }));
+    expect(done(result)).toMatchObject({ wallet: true, fund: true, live: true, payee: false });
+    expect(result.next).toBe("payee");
+    expect(step(result, "payee").body).toContain("Ask for address");
   });
 
-  it("ticks the invoice step once any invoice exists", () => {
-    expect(done(gettingStarted(input({ invoiceCount: 1 }))).invoice).toBe(true);
+  it("ticks the payee step only for a vendor or contractor with an address", () => {
+    const payee = (counterparties: GettingStartedInput["counterparties"]) => done(gettingStarted(input({ counterparties }))).payee;
+    expect(payee([{ ...PAYEE, address: null }])).toBe(false);
+    expect(payee([{ ...PAYEE, address: "" }])).toBe(false);
+    expect(payee([{ ...PAYEE, role: "client" }])).toBe(false);
+    expect(payee([PAYEE])).toBe(true);
+    expect(payee([{ ...PAYEE, role: "contractor" }])).toBe(true);
+  });
+
+  it("does not tick the payee step for an address still waiting for confirmation, and says whose to confirm", () => {
+    const waiting = { ...PAYEE, address_changed_at: "2026-10-01T09:00:00Z", address_confirmed_at: null };
+    const result = gettingStarted(input({ mode: "live", counterparties: [waiting] }));
+    expect(done(result).payee).toBe(false);
+    expect(step(result, "payee").body).toContain("Confirm the new address of Northstar Studio");
+
+    const confirmed = { ...waiting, address_confirmed_at: "2026-10-01T09:05:00Z" };
+    expect(done(gettingStarted(input({ counterparties: [confirmed] }))).payee).toBe(true);
+  });
+
+  it("ticks the payable step once a payable exists, and says what the agent needs to pay it", () => {
+    const result = gettingStarted(input({ mode: "live", counterparties: [PAYEE] }));
+    expect(result.next).toBe("payable");
+    expect(step(result, "payable").body).toContain("PO reference");
+    expect(done(gettingStarted(input({ payableCount: 1 }))).payable).toBe(true);
+  });
+
+  it("waits for the first payment on AP / AR, or on Approvals while the agent holds something for a person", () => {
+    const ready = input({ mode: "live", counterparties: [PAYEE], payableCount: 1 });
+    const deciding = gettingStarted(ready);
+    expect(deciding.next).toBe("payment");
+    expect(step(deciding, "payment").path).toBe("/invoices");
+
+    const held = gettingStarted({ ...ready, waitingCount: 1 });
+    expect(step(held, "payment").path).toBe("/approvals");
+    expect(step(held, "payment").body).toContain("Approvals");
+  });
+
+  it("stays for a live workspace until its first payment on Arc testnet, then hides", () => {
+    expect(gettingStarted(input({ mode: "live" })).show).toBe(true);
+    const paid = gettingStarted(input({ mode: "live", onchainPayments: 1 }));
+    expect(paid.show).toBe(false);
+    expect(done(paid).payment).toBe(true);
   });
 
   it("points at the first step not done, even when a later one is", () => {
-    const result = gettingStarted(input({ counterparties: [{ address: ADDRESS }], invoiceCount: 2 }));
+    const result = gettingStarted(input({ counterparties: [PAYEE], payableCount: 2 }));
     expect(result.next).toBe("wallet");
   });
 
-  it("points at Go live when everything before it is done", () => {
-    const result = gettingStarted(
-      input({ accounts: [{ kind: "operating", circle_wallet_id: "w-1", balance: 40 }], counterparties: [{ address: ADDRESS }], invoiceCount: 1 })
-    );
-    expect(result.next).toBe("live");
-    expect(result.show).toBe(true);
-  });
-
-  it("hides once the workspace is live", () => {
-    const result = gettingStarted(input({ mode: "live" }));
-    expect(result.show).toBe(false);
-    expect(done(result).live).toBe(true);
-    expect(done(result).fund).toBe(true);
-  });
-
   it("links each step to the page where it is done", () => {
-    expect(Object.fromEntries(gettingStarted(input()).steps.map((step) => [step.id, step.path]))).toEqual({
+    expect(Object.fromEntries(gettingStarted(input()).steps.map((each) => [each.id, each.path]))).toEqual({
       wallet: "/settings#go-live-title",
       fund: "/settings#go-live-title",
-      counterparty: "/counterparties",
-      invoice: "/invoices",
       live: "/settings#go-live-title",
+      payee: "/counterparties",
+      payable: "/invoices",
+      payment: "/invoices",
     });
   });
 
   it("marks the steps only an owner can take", () => {
-    expect(gettingStarted(input()).steps.filter((step) => step.ownerOnly).map((step) => step.id)).toEqual(["wallet", "live"]);
+    expect(gettingStarted(input()).steps.filter((each) => each.ownerOnly).map((each) => each.id)).toEqual(["wallet", "live"]);
+  });
+
+  it("opens the Go live guide while a Settings step is left, and the first-payment guide after", () => {
+    expect(gettingStarted(input({ accounts: FUNDED })).guide).toBe("go-live");
+    expect(gettingStarted(input({ mode: "live" })).guide).toBe("first-payment");
   });
 });
 
 describe("sample rows (sample-data design §1)", () => {
-  it("does not tick the counterparty step for a sample counterparty, even one given an address", () => {
-    expect(done(gettingStarted(input({ counterparties: [{ address: ADDRESS, sample: true }] }))).counterparty).toBe(false);
-    expect(done(gettingStarted(input({ counterparties: [{ address: ADDRESS, sample: true }, { address: ADDRESS, sample: false }] }))).counterparty).toBe(true);
+  it("does not tick the payee step for a sample counterparty, even one given an address", () => {
+    expect(done(gettingStarted(input({ counterparties: [{ ...PAYEE, sample: true }] }))).payee).toBe(false);
+    expect(done(gettingStarted(input({ counterparties: [{ ...PAYEE, sample: true }, { ...PAYEE, sample: false }] }))).payee).toBe(true);
   });
 
-  it("counts only the invoices of counterparties a person added", () => {
+  it("counts only the payables of counterparties a person added", () => {
     const counterparties = [
       { id: "own", sample: false },
       { id: "sample-1", sample: true },
     ];
-    expect(ownInvoiceCount([{ counterparty_id: "sample-1" }, { counterparty_id: "sample-1" }], counterparties)).toBe(0);
-    expect(ownInvoiceCount([{ counterparty_id: "sample-1" }, { counterparty_id: "own" }], counterparties)).toBe(1);
+    expect(
+      ownPayableCount(
+        [
+          { counterparty_id: "sample-1", direction: "payable" },
+          { counterparty_id: "sample-1", direction: "payable" },
+        ],
+        counterparties
+      )
+    ).toBe(0);
+    expect(
+      ownPayableCount(
+        [
+          { counterparty_id: "sample-1", direction: "payable" },
+          { counterparty_id: "own", direction: "payable" },
+          { counterparty_id: "own", direction: "receivable" },
+        ],
+        counterparties
+      )
+    ).toBe(1);
     // A counterparty the page does not know (deleted meanwhile) is not a sample one.
-    expect(ownInvoiceCount([{ counterparty_id: "gone" }], counterparties)).toBe(1);
+    expect(ownPayableCount([{ counterparty_id: "gone", direction: "payable" }], counterparties)).toBe(1);
   });
 });

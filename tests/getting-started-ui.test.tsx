@@ -12,7 +12,9 @@ function checklist(overrides: Partial<GettingStartedInput> = {}) {
     mode: "sandbox",
     accounts: [{ kind: "operating", circle_wallet_id: null, balance: 0 }],
     counterparties: [],
-    invoiceCount: 0,
+    payableCount: 0,
+    onchainPayments: 0,
+    waitingCount: 0,
     ...overrides,
   });
 }
@@ -23,11 +25,11 @@ const render = (props: { isOwner?: boolean } & Partial<GettingStartedInput> = {}
 };
 
 describe("GettingStarted", () => {
-  it("lists the five steps, counts the done ones, and links the guide", () => {
-    const markup = render({ counterparties: [{ address: "0x1948aB0000000000000000000000000000c345a0" }] });
+  it("lists the six steps, counts the done ones, and links the guide", () => {
+    const markup = render({ counterparties: [{ role: "vendor", address: "0x1948aB0000000000000000000000000000c345a0" }] });
     expect(markup).toContain("Get started");
-    expect(markup).toContain("1 of 5 done");
-    for (const title of ["Add a wallet", "Fund it with USDC", "Add a counterparty with an Arc address", "Add an invoice", "Go live"]) {
+    expect(markup).toContain("1 of 6 done");
+    for (const title of ["Add a wallet", "Fund it with USDC", "Go live", "Add a payee with an Arc address", "Add a payable", "First payment on Arc testnet"]) {
       expect(markup).toContain(title);
     }
     expect(markup).toContain('href="/docs/guides/go-live"');
@@ -45,10 +47,11 @@ describe("GettingStarted", () => {
     expect(render()).toMatch(/<svg[^>]*lucide-book-open[^>]*>.*<\/svg>Read the guide/);
   });
 
-  it("links the next step's own page once the wallet is funded", () => {
-    const markup = render({ accounts: [{ kind: "operating", circle_wallet_id: "w-1", balance: 40 }] });
+  it("links the next step's own page, and the first-payment guide, once the workspace is live", () => {
+    const markup = render({ mode: "live" });
     expect(markup).toContain('href="/o/acme/counterparties"');
     expect(markup).not.toContain('href="/o/acme/settings#go-live-title"');
+    expect(markup).toContain('href="/docs/guides/first-payment"');
   });
 
   it("tells an admin that an owner takes the owner-only steps", () => {
@@ -57,8 +60,8 @@ describe("GettingStarted", () => {
     expect(markup).toMatch(/>View<svg/);
   });
 
-  it("renders nothing once the workspace is live", () => {
-    expect(render({ mode: "live" })).toBe("");
+  it("renders nothing once the workspace has made its first payment on Arc testnet", () => {
+    expect(render({ mode: "live", onchainPayments: 1 })).toBe("");
   });
 });
 
@@ -70,8 +73,8 @@ describe("the console's checklist", () => {
   });
 
   it("uses the rows the console already reads, with no extra query", () => {
-    expect(page).toContain(
-      "gettingStarted({ mode: access.membership.mode, accounts: accountsRows, counterparties, invoiceCount: ownInvoiceCount(invoices, counterparties) })"
+    expect(page.replace(/\s+/g, " ")).toContain(
+      "gettingStarted({ mode: access.membership.mode, accounts: accountsRows, counterparties, payableCount: ownPayableCount(invoices, counterparties), onchainPayments: dashboardStats.onchainTransfers, waitingCount: needsReview, })"
     );
   });
 });
