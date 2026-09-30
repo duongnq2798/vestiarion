@@ -75,7 +75,10 @@ export default async function CounterpartiesPage({ params }: { params: Promise<{
                   <article>
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <h3 className="truncate text-sm font-semibold text-ink">{counterparty.name}</h3>
+                        <h3 className="flex min-w-0 items-center gap-2 text-sm font-semibold text-ink">
+                          <span className="truncate">{counterparty.name}</span>
+                          {counterparty.sample && <Badge size="sm" tone="simulated" shape="tag">Sample</Badge>}
+                        </h3>
                         <p className="mt-0.5 text-xs capitalize text-ink-3">{counterparty.role} · {counterparty.chain || "chain not set"}</p>
                       </div>
                       <Badge size="sm" dot tone={RISK_TONE[counterparty.risk_level] ?? "neutral"} className="shrink-0 capitalize">

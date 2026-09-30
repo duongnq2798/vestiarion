@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { refreshOnChainBalanceAction } from "@/app/actions/treasury";
 import AgentControls from "@/components/AgentControls";
 import AgentPauseControl from "@/components/AgentPauseControl";
+import { SampleDataLoaded, SampleDataOffer } from "@/components/SampleDataPanel";
 import { CycleReport } from "@/components/vx/CycleReport";
 import { DecisionCard } from "@/components/vx/DecisionCard";
 import { GettingStarted } from "@/components/vx/GettingStarted";
@@ -23,6 +24,7 @@ import { gettingStarted, ownInvoiceCount } from "@/lib/getting-started";
 import { listLedgerEntries, listLedgerEntriesAfter, listLedgerEntriesByDomain, listLedgerEntriesForTargets } from "@/lib/ledger";
 import { pauseStateOf } from "@/lib/platform/pause";
 import { latestForecast, listAccounts, listCounterparties, listInvoices, listTreasuryActions, stats } from "@/lib/queries";
+import { offerSampleData } from "@/lib/sample-data-offer";
 
 export const dynamic = "force-dynamic";
 
@@ -96,6 +98,9 @@ export default async function DashboardPage({
     const checklist = can(role, "records.write")
       ? gettingStarted({ mode: access.membership.mode, accounts: accountsRows, counterparties, invoiceCount: ownInvoiceCount(invoices, counterparties) })
       : null;
+    // Sample data (sample-data design §1): offered in an empty simulated sandbox, and called out while it is loaded.
+    const sampleOffered = offerSampleData({ canWrite: can(role, "records.write"), mode: access.membership.mode, chainMode: modes.mode, counterpartyCount: counterparties.length });
+    const sampleLoaded = counterparties.some((counterparty) => counterparty.sample);
 
     return (
       <ProductShell day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={modes}>
@@ -115,6 +120,9 @@ export default async function DashboardPage({
         />
 
         {checklist && <GettingStarted slug={slug} checklist={checklist} isOwner={can(role, "org.administer")} />}
+
+        {sampleOffered && <SampleDataOffer orgSlug={slug} />}
+        {sampleLoaded && <SampleDataLoaded orgSlug={slug} canRemove={can(role, "records.write")} />}
 
         {since != null && <CycleReport entries={cycleEntries} day={dashboardStats.day} since={since} clockMode={dashboardStats.clockMode} completedAt={dashboardStats.lastCycleAt} orgSlug={slug} />}
 
