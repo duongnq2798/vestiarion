@@ -171,6 +171,7 @@ const GO_LIVE_ERRORS: Record<GoLiveErrorCode, true> = {
   hosted_not_allowed: true,
   hosted_limit_reached: true,
   hosted_has_wallets: true,
+  sample_data_loaded: true,
 };
 
 /** Copy for real users on Arc testnet names the network plainly; it never hedges it away. */

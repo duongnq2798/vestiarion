@@ -5,6 +5,7 @@ import type { LedgerEntryInput } from "../ledger";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { encryptSecret, masterKeysFromEnv } from "../secrets";
 import { getChainProvider, type ChainProvider } from "../circle";
+import { hasSampleData } from "../sample-data";
 import { checkCircleApiKey, defaultCircleClient, type CircleClient, type CircleClientFactory } from "../circle/check";
 import {
   circleCall,
@@ -69,7 +70,8 @@ export type GoLiveErrorCode =
   | "hosted_unavailable"
   | "hosted_not_allowed"
   | "hosted_limit_reached"
-  | "hosted_has_wallets";
+  | "hosted_has_wallets"
+  | "sample_data_loaded";
 
 const MESSAGES: Record<GoLiveErrorCode, string> = {
   invalid: "Paste both the API key and the entity secret.",
@@ -87,6 +89,7 @@ const MESSAGES: Record<GoLiveErrorCode, string> = {
   hosted_not_allowed: "A workspace with its own Circle account or wallets cannot switch to a hosted wallet.",
   hosted_limit_reached: "All hosted testnet wallets are taken; connect your own Circle account instead.",
   hosted_has_wallets: "This workspace's wallets are hosted by Vestiarion; start a new workspace to use your own Circle account.",
+  sample_data_loaded: "Remove the sample data first. It exists only to try the agent with simulated payments.",
 };
 
 export class GoLiveError extends Error {
@@ -267,6 +270,8 @@ export async function connectCircle(input: {
   const apiKey = input.apiKey.trim();
   const entitySecret = input.entitySecret.trim();
   if (!validSecret(apiKey) || !validSecret(entitySecret)) throw new GoLiveError("invalid");
+  // A sample counterparty has no address: with credentials stored, the agent would try to pay it for real (sample-data S1).
+  if (await inScopeOf(input.orgId, input.actorId, hasSampleData)) throw new GoLiveError("sample_data_loaded");
 
   const keys = masterKeysFromEnv();
   const state = await orgState(input.orgId);
@@ -519,6 +524,7 @@ export async function chooseHostedWallet(input: { orgId: string; actorId: string
     return { available: Boolean(config.chain.hostedAvailable), limit: config.hostedWorkspaceLimit };
   });
   if (!platform.available) throw new GoLiveError("hosted_unavailable");
+  if (await inScopeOf(input.orgId, input.actorId, hasSampleData)) throw new GoLiveError("sample_data_loaded");
 
   const { data: changed, error } = await platformDb().rpc("choose_hosted_wallet", {
     p_org_id: input.orgId,
