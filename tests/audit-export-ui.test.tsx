@@ -20,6 +20,14 @@ describe("AuditExportMenu", () => {
   it("points at the guide for checking the file", () => {
     expect(markup).toContain('href="/docs/guides/audit-export"');
   });
+
+  it("labels the download links for assistive tech with a programmatic group label", () => {
+    expect(markup).toContain('role="group"');
+    expect(markup).toContain('aria-labelledby="audit-export-label"');
+    const labelMatch = markup.match(/<span id="audit-export-label"[^>]*>(.*?)<\/span>/);
+    expect(labelMatch).not.toBeNull();
+    expect(labelMatch![1]).toContain("Download");
+  });
 });
 
 describe("the Audit page", () => {

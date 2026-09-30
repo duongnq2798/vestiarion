@@ -10,8 +10,8 @@ import { Button } from "@/components/ui/Button";
 export function AuditExportMenu({ orgSlug }: { orgSlug: string }) {
   const href = (format: "json" | "csv") => `/api/ledger/export?org=${encodeURIComponent(orgSlug)}&format=${format}`;
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-ink-3">
+    <div role="group" aria-labelledby="audit-export-label" className="flex flex-wrap items-center gap-2">
+      <span id="audit-export-label" className="inline-flex items-center gap-1.5 text-xs font-semibold text-ink-3">
         <Download aria-hidden className="size-3.5" />
         Download
       </span>
@@ -27,9 +27,9 @@ export function AuditExportMenu({ orgSlug }: { orgSlug: string }) {
           CSV
         </a>
       </Button>
-      <Link href="/docs/guides/audit-export" className="text-xs text-ink-3 underline-offset-2 hover:underline">
-        How to check a file
-      </Link>
+      <Button asChild variant="link" size="sm">
+        <Link href="/docs/guides/audit-export">How to check a file</Link>
+      </Button>
     </div>
   );
 }
