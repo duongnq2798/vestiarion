@@ -55,6 +55,8 @@ export interface CounterpartyRow {
   address_changed_at: string | null;
   /** When a person last confirmed the address. */
   address_confirmed_at: string | null;
+  /** Loaded as sample data (0034): an example, removed with the rest of the sample. */
+  sample: boolean;
 }
 
 export async function listCounterparties(): Promise<CounterpartyRow[]> {
@@ -69,6 +71,7 @@ export async function listCounterparties(): Promise<CounterpartyRow[]> {
     performance_score: r.performance_score == null ? null : num(r.performance_score),
     performance_inputs:
       (r.performance_inputs as CounterpartyHistoryInputs | null | undefined) ?? null,
+    sample: r.sample === true,
   }));
 }
 

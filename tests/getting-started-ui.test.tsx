@@ -70,6 +70,8 @@ describe("the console's checklist", () => {
   });
 
   it("uses the rows the console already reads, with no extra query", () => {
-    expect(page).toContain("gettingStarted({ mode: access.membership.mode, accounts: accountsRows, counterparties, invoiceCount: invoices.length })");
+    expect(page).toContain(
+      "gettingStarted({ mode: access.membership.mode, accounts: accountsRows, counterparties, invoiceCount: ownInvoiceCount(invoices, counterparties) })"
+    );
   });
 });

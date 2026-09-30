@@ -103,6 +103,7 @@ const COUNTERPARTY: CounterpartyRow = {
   performance_inputs: null,
   address_changed_at: null,
   address_confirmed_at: null,
+  sample: false,
 };
 
 const INVOICE: InvoiceRow = {

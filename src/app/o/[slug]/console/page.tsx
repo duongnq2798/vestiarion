@@ -19,7 +19,7 @@ import { orgHref } from "@/lib/auth/org-paths";
 import { can } from "@/lib/auth/roles";
 import { chainModes } from "@/lib/circle";
 import { inOrg } from "@/lib/dal/scope";
-import { gettingStarted } from "@/lib/getting-started";
+import { gettingStarted, ownInvoiceCount } from "@/lib/getting-started";
 import { listLedgerEntries, listLedgerEntriesAfter, listLedgerEntriesByDomain, listLedgerEntriesForTargets } from "@/lib/ledger";
 import { pauseStateOf } from "@/lib/platform/pause";
 import { latestForecast, listAccounts, listCounterparties, listInvoices, listTreasuryActions, stats } from "@/lib/queries";
@@ -94,7 +94,7 @@ export default async function DashboardPage({
     // Computed from the rows above, with no extra read (getting-started design G1, G2). Only people who
     // can act on it see it: owners and admins add records, and an owner takes the workspace live.
     const checklist = can(role, "records.write")
-      ? gettingStarted({ mode: access.membership.mode, accounts: accountsRows, counterparties, invoiceCount: invoices.length })
+      ? gettingStarted({ mode: access.membership.mode, accounts: accountsRows, counterparties, invoiceCount: ownInvoiceCount(invoices, counterparties) })
       : null;
 
     return (
