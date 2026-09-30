@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import AgentControls from "@/components/AgentControls";
+import { AuditExportMenu } from "@/components/AuditExportMenu";
 import VerifyLedgerBadge from "@/components/VerifyLedgerBadge";
 import { AuditLedger, DomainFilter, pad } from "@/components/vx/AuditLedger";
 import { DOMAINS } from "@/components/vx/Glyphs";
@@ -95,8 +96,9 @@ export default async function AuditPage({ params, searchParams }: AuditPageProps
                 </dd>
               </div>
             </dl>
-            <div className="mt-4 border-t border-line pt-4">
+            <div className="mt-4 flex flex-col gap-3 border-t border-line pt-4 sm:flex-row sm:items-center sm:justify-between">
               <VerifyLedgerBadge orgSlug={slug} />
+              <AuditExportMenu orgSlug={slug} />
             </div>
           </section>
         </Card>
@@ -131,7 +133,10 @@ export default async function AuditPage({ params, searchParams }: AuditPageProps
           contentClassName="text-xs text-ink-3"
         >
           {publicKey ? (
-            <pre className="overflow-x-auto whitespace-pre-wrap rounded-xl bg-ground p-3 font-mono text-ink-2">{publicKey}</pre>
+            <>
+              <pre className="overflow-x-auto whitespace-pre-wrap rounded-xl bg-ground p-3 font-mono text-ink-2">{publicKey}</pre>
+              <p className="mt-2">Compare this key id and the head hash with the ones a verified export prints.</p>
+            </>
           ) : (
             <p className="rounded-xl bg-ground p-3">
               This organization has no readable ledger key, so signatures on the entries below cannot
