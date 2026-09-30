@@ -1,6 +1,9 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import type { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { FOUNDING_ORG_ID as A, applyMigrations, asRole, asTenant, createDatabase, createOrg } from "./support/pglite";
+import { FAILED_STATES } from "@/lib/circle/settlement";
+import { FOUNDING_ORG_ID as A, applyMigrations, asRole, asTenant, createDatabase, createOrg, MIGRATIONS_DIR } from "./support/pglite";
 
 /**
  * Migration 0036 (docs/superpowers/specs/2026-09-30-failed-transfer-retry-design.md,
@@ -116,6 +119,24 @@ const retry = (orgId: string, sourceId: string, expectedKey: string, newKey: str
       [orgId, "invoice", sourceId, expectedKey, newKey]
     )).rows[0]);
 
+const migration0036Source = () => readFileSync(path.join(MIGRATIONS_DIR, "0036_payment_attempts.sql"), "utf8");
+
+describe("0036's source", () => {
+  it("ends with a schema-reload notify, the way 0032 and 0033 do, so PostgREST sees the new columns and function before the first write that names one", () => {
+    const sql = migration0036Source();
+    const withoutRollback = sql.replace(/\n-- Rollback:[\s\S]*$/, "").trimEnd();
+    expect(withoutRollback.endsWith("notify pgrst, 'reload schema';")).toBe(true);
+  });
+
+  it("lists the same terminal failure states as FAILED_STATES (src/lib/circle/settlement.ts), order-insensitive", () => {
+    const sql = migration0036Source();
+    const match = sql.match(/provider_state in \(([^)]+)\)/);
+    expect(match).not.toBeNull();
+    const states = match![1].split(",").map((s) => s.trim().replace(/^'|'$/g, ""));
+    expect([...states].sort()).toEqual([...FAILED_STATES].sort());
+  });
+});
+
 describe("payment_intents columns (0036)", () => {
   it("provider_state and failure_reason are nullable text", async () => {
     const columns = await db.query<{ column_name: string; data_type: string; is_nullable: string }>(
@@ -207,11 +228,47 @@ describe("begin_payment_retry", () => {
       providerTxId: "circle-tx-1",
       providerState: "FAILED",
       failureReason: "insufficient_funds",
+      txHash: "0xabc",
+      feeUsd: 1.5,
+      feeSource: "provider_estimate",
     });
     expect(history[0].failedAt).toBeTruthy();
 
     // Persisted, not only returned.
     expect(await rowById(id)).toMatchObject({ idempotency_key: "retry-ok-1-attempt-2", transfer_attempt: 2, status: "created" });
+  });
+
+  it("drives a second retry (attempt 2 -> 3): the history has two items, attempts 1 and 2, and the key is attempt 3's", async () => {
+    const sourceId = await freshInvoice(A, counterpartyIdA);
+    const id = await retryableIntent(A, sourceId, "chain-1");
+
+    const afterFirst = await retry(A, sourceId, "chain-1", "chain-2");
+    expect(afterFirst).toMatchObject({ id, idempotency_key: "chain-2", transfer_attempt: 2, status: "created" });
+
+    // Attempt 2 is sent and Circle ends it in a terminal failure too, before the next retry.
+    await db.query(
+      `update public.payment_intents set status = 'failed', provider_tx_id = $2, tx_hash = $3,
+         provider_state = $4, failure_reason = $5, fee_usd = $6, fee_source = $7, updated_at = now()
+       where id = $1`,
+      [id, "circle-tx-2", "0xdef", "CANCELLED", "gas price rejected", 2.5, "chain_reported"]
+    );
+
+    const afterSecond = await retry(A, sourceId, "chain-2", "chain-3");
+    expect(afterSecond).toMatchObject({ id, idempotency_key: "chain-3", transfer_attempt: 3, status: "created" });
+
+    const history = afterSecond.previous_attempts as Array<Record<string, unknown>>;
+    expect(history).toHaveLength(2);
+    expect(history[0]).toMatchObject({ attempt: 1, idempotencyKey: "chain-1", providerTxId: "circle-tx-1", providerState: "FAILED" });
+    expect(history[1]).toMatchObject({
+      attempt: 2,
+      idempotencyKey: "chain-2",
+      providerTxId: "circle-tx-2",
+      providerState: "CANCELLED",
+      failureReason: "gas price rejected",
+      txHash: "0xdef",
+      feeUsd: 2.5,
+      feeSource: "chain_reported",
+    });
   });
 
   it("accepts CANCELLED and DENIED as terminal, same as FAILED", async () => {

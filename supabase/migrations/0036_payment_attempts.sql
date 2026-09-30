@@ -33,6 +33,11 @@ end $$;
 -- is failed, has a provider id, and its provider state is terminal. Returns
 -- the row, or a row of nulls when nothing matched (as claim_payment_intent).
 --
+-- provider_tx_id, provider_state, failure_reason, tx_hash, fee_usd and
+-- fee_source are copied into the new previous_attempts entry before they are
+-- cleared, so the failed attempt's evidence is kept even though the row's
+-- live columns move on.
+--
 -- Every field that describes the attempt that just failed is cleared, not
 -- only the ones the RPC's own precondition reads: provider_tx_id and tx_hash
 -- name a transfer that no longer applies to this row once a new key is in
@@ -65,6 +70,9 @@ begin
            'providerTxId', provider_tx_id,
            'providerState', provider_state,
            'failureReason', failure_reason,
+           'txHash', tx_hash,
+           'feeUsd', fee_usd,
+           'feeSource', fee_source,
            'failedAt', updated_at
          )),
          idempotency_key = p_new_key,
@@ -96,6 +104,11 @@ $$;
 revoke execute on function public.begin_payment_retry(uuid, text, uuid, text, text) from public, anon, authenticated;
 grant execute on function public.begin_payment_retry(uuid, text, uuid, text, text) to service_role;
 grant execute on function public.begin_payment_retry(uuid, text, uuid, text, text) to vestiarion_tenant;
+
+-- PostgREST must see the columns and the function before the first call that
+-- names one — without this, a stale cache makes recordResult fail after a
+-- real transfer, and the intent is recorded as failed with no provider id.
+notify pgrst, 'reload schema';
 
 -- Rollback:
 -- drop function if exists public.begin_payment_retry(uuid, text, uuid, text, text);
