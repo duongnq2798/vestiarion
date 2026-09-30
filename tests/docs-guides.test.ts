@@ -251,6 +251,27 @@ describe.each(Object.entries(QUOTED) as Array<[GuideSlug, Array<readonly [string
   });
 });
 
+describe("the first-payment guide's steps", () => {
+  const guide = readSource("guides/first-payment");
+  const sections = [...guide.matchAll(/^## (.+)$/gm)].map((match) => match[1]);
+
+  it("numbers every section after the sample-data tour, in order", () => {
+    const steps = sections.slice(sections.findIndex((title) => /^1\. /.test(title)));
+    expect(steps.length).toBeGreaterThan(1);
+    steps.forEach((title, index) => expect(title, title).toMatch(new RegExp(`^${index + 1}\\. `)));
+  });
+
+  it("counts scheduling among what a cycle does, and among a card's outcomes", () => {
+    expect(guide).toContain("pays, schedules, holds or flags each one");
+    expect(guide).toContain('the outcome: "Settled on Arc", "Scheduled for *date*", "Held for you" or "Refused by guardrail";');
+  });
+
+  it("says the sample data's annual support plan is scheduled for its discount deadline", () => {
+    const tour = guide.split("## Try it with sample data first")[1]?.split("\n## ")[0] ?? "";
+    expect(tour).toMatch(/^- an annual support plan .*scheduled for its discount deadline/m);
+  });
+});
+
 describe("the Go live guide's failure table", () => {
   const guide = readSource("guides/go-live");
 

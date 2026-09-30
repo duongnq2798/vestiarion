@@ -11,6 +11,7 @@ Who does what:
 To see the agent at work before you set anything up, open the console of a new workspace. While the workspace has no counterparties and has not connected Circle, the console shows **Try it with sample data**. Choose **Load sample data**: it adds six example counterparties, marked **Sample** on the Counterparties page, with invoices and milestones chosen so that one cycle shows every outcome. The agent usually runs that cycle within a minute on its own; then read the decisions on the console and on **Approvals**:
 
 - a hosting invoice with a purchase order and goods received is paid;
+- an annual support plan with a 2% early-payment discount is scheduled for its discount deadline;
 - an overage with no purchase order waits for information;
 - an invoice over the counterparty's payment limit is held for a person;
 - a print run billed again under a purchase order that was already paid is flagged;
@@ -94,7 +95,8 @@ Choose **Add invoice**. The page confirms with "Invoice added for *Name*. The ag
 
 ## 3. Run a cycle
 
-A cycle is one run of the agent: it screens counterparties, reads open invoices, and pays, holds or flags each one. Adding a payable starts a cycle, usually within a minute, so the invoice is decided without anyone pressing a button, and the pages show the decision on their own. The agent also starts one when a person returns a payable to it, confirms a changed address, verifies a milestone, or resumes it. One cycle runs at a time: if one is already running, the next waits for it, and **Run cycle now** says so instead of starting a second. A live workspace also runs a cycle every 6 hours on its own, for what time alone changes, such as due dates and screening.
+A cycle is one run of the agent: it screens counterparties, reads open invoices, and pays, schedules, holds or flags each one.
+Adding a payable starts a cycle, usually within a minute, so the invoice is decided without anyone pressing a button, and the pages show the decision on their own. The agent also starts one when a person returns a payable to it, confirms a changed address, verifies a milestone, or resumes it. One cycle runs at a time: if one is already running, the next waits for it, and **Run cycle now** says so instead of starting a second. A live workspace also runs a cycle every 6 hours on its own, for what time alone changes, such as due dates and screening.
 
 To run one yourself, open **Treasury**, the console, and choose **Run cycle now**. Only owners and admins have this button. When the cycle ends, a message says "Cycle complete at *time* · *n* decisions logged." and the console shows a report of what the cycle did.
 
@@ -102,7 +104,7 @@ To run one yourself, open **Treasury**, the console, and choose **Run cycle now*
 
 Each invoice's decision is a card on **AP / AR**, under **Payables**. The console's **Stopped** section also shows the latest decisions the agent stopped. A card shows:
 
-- the outcome: "Settled on Arc", "Held for you" or "Refused by guardrail";
+- the outcome: "Settled on Arc", "Scheduled for *date*", "Held for you" or "Refused by guardrail";
 - the amount and the counterparty;
 - **Agent’s reasoning**: why it decided as it did, citing the facts it used, such as the amount, the PO reference, the risk level and the balance;
 - the evidence it checked, the ledger entry (`audit #` and its number), and, for a payment, the transaction hash.
@@ -115,19 +117,20 @@ Each invoice's decision is a card on **AP / AR**, under **Payables**. The consol
 
 When the model decided to pay but a guardrail stopped it, the card also has a "Blocked by code, not by the model" band. The band names the rule, the amount attempted and the amount allowed.
 
-## When the agent pays
+## 5. When the agent pays
 
 An invoice does not have to be paid the moment it is decided. At intake, a payable can carry an early-payment discount: **Early-payment discount (%)** and **Discount deadline**, alongside its other fields. On a cycle, the agent chooses not only whether to pay an invoice but when, within a bound code enforces: never later than the invoice's due date.
 
 - With an early-payment discount still available, it schedules the payment for the discount's last day, and pays the discounted amount then.
 - Otherwise, it schedules the payment for the due date, holding the cash until it is owed.
 - A payable due today, or overdue, is paid at once rather than scheduled.
+- If the operating balance cannot cover a payable after the payables that fall due on or before its day, the agent holds it for a person rather than scheduling or paying it.
 
 A scheduled invoice's decision card reads "Scheduled for *date*", with the agent's reasoning for choosing that day. On the day itself, the next cycle checks everything again before anything moves: the counterparty's risk level, its payment limit, whether its address is confirmed, and whether the agent is paused. Pausing the agent stops a scheduled payment exactly as it stops any other.
 
 An invoice with an early-payment discount shows its terms on its card as "*pct*% off if paid by *date*". Until the agent has decided a payable, its card reads "Not yet decided", and while its transfer is in flight, "Payment in flight". The console's **Scheduled payments** section lists what the agent will pay next, soonest first: the date, the counterparty, the amount it will actually transfer — discounted, when the discount will still apply that day — and why.
 
-## 5. Approve a held payment
+## 6. Approve a held payment
 
 **Approvals** lists every payable the agent would not pay on its own, oldest due date first, each marked held, flagged or awaiting information and shown with the agent's reasoning. When the list is empty, it says "Nothing is waiting for a decision."
 
@@ -147,7 +150,7 @@ Owners, admins and approvers decide each one:
 
 If a payment attempt fails, the card says "The last payment attempt failed: " and Circle's reason, then "Approving sends a new transfer." Fix the cause first if you need to — for example, fund the operating wallet — then choose **Approve and pay** again to send it. Vestiarion never sends a second transfer while the first could still settle: a payment still in flight on Arc testnet instead says "The payment is still in flight on Arc testnet. It cannot be rejected or returned until Circle settles it; approving checks it again." Only **Reject** and **Return to agent** go away then — **Approve and pay** stays: for an invoice waiting here, approving is how its in-flight transfer is checked again, and it never sends a second one.
 
-## 6. See it on Arc and in the audit log
+## 7. See it on Arc and in the audit log
 
 **On the Arc explorer.** On a settled decision card, the transaction hash is a link. It opens the transaction on the Arc testnet explorer, at `https://testnet.arcscan.app/tx/` followed by the hash, in a new tab.
 
