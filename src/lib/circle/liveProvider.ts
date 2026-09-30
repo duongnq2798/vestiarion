@@ -7,6 +7,7 @@ import type {
   BalanceSnapshot,
   ChainProvider,
   EarnResult,
+  Stablecoin,
   TransferParams,
   TransferResult,
 } from "./types";
@@ -82,6 +83,8 @@ export class LiveProvider implements ChainProvider {
   readonly estimatedFeeUsd = ARC_FEE_USD;
   private readonly client: LiveProviderClient;
   private usdcTokenId?: string;
+  /** EURC's token id in each wallet, as Circle's token list names it; read once per wallet. */
+  private readonly eurcTokenIds = new Map<string, string>();
 
   private readonly arcRpcUrl?: string;
 
@@ -135,6 +138,24 @@ export class LiveProvider implements ChainProvider {
     return this.usdcTokenId;
   }
 
+  /** The token id for a transfer: USDC's as before; EURC's from the wallet's own token list. */
+  private async resolveTokenId(walletId: string, token: Stablecoin): Promise<string> {
+    if (token === "USDC") return this.resolveUsdcTokenId(walletId);
+    const known = this.eurcTokenIds.get(walletId);
+    if (known) return known;
+    const balances = await withDeadline(
+      this.client.getWalletTokenBalance({ id: walletId }),
+      BALANCE_READ_DEADLINE_MS,
+      `no answer from Circle getWalletTokenBalance within ${BALANCE_READ_DEADLINE_MS} ms`
+    );
+    const eurc = balances.data?.tokenBalances?.find((b) => b.token?.symbol === "EURC");
+    if (!eurc?.token?.id) {
+      throw new Error(`Wallet ${walletId} has never held EURC. Fund it with EURC from Circle's faucet first.`);
+    }
+    this.eurcTokenIds.set(walletId, eurc.token.id);
+    return eurc.token.id;
+  }
+
   async transfer(params: TransferParams): Promise<TransferResult> {
     if (params.toAddress.startsWith("sim:")) {
       throw new Error(
@@ -143,7 +164,7 @@ export class LiveProvider implements ChainProvider {
     }
 
     const account = await this.account(params.fromAccountId);
-    const tokenId = await this.resolveUsdcTokenId(account.walletId);
+    const tokenId = await this.resolveTokenId(account.walletId, params.token ?? "USDC");
     const started = Date.now();
 
     const created = await withDeadline(
@@ -239,19 +260,23 @@ export class LiveProvider implements ChainProvider {
     );
   }
 
-  async getBalance(accountId: string): Promise<BalanceSnapshot> {
+  getBalance(accountId: string): Promise<BalanceSnapshot> {
+    return this.getTokenBalance(accountId, "USDC");
+  }
+
+  async getTokenBalance(accountId: string, token: Stablecoin): Promise<BalanceSnapshot> {
     const account = await this.account(accountId);
     const balances = await withDeadline(
       this.client.getWalletTokenBalance({ id: account.walletId }),
       BALANCE_READ_DEADLINE_MS,
       `no answer from Circle getWalletTokenBalance within ${BALANCE_READ_DEADLINE_MS} ms`
     );
-    const usdc = balances.data?.tokenBalances?.find((b) => b.token?.symbol === "USDC");
+    const held = balances.data?.tokenBalances?.find((b) => b.token?.symbol === token);
     return {
       accountId,
       chain: account.chain,
-      token: "USDC",
-      balance: usdc ? Number(usdc.amount) : 0,
+      token,
+      balance: held ? Number(held.amount) : 0,
     };
   }
 }

@@ -32,12 +32,17 @@ export const ARC_FEE_USD = 0.00319;
 export const ARC_SETTLEMENT_MS_MIN = 2_000;
 export const ARC_SETTLEMENT_MS_MAX = 5_000;
 
+/** The stablecoins a payment can be in (EURC invoices spec E5). */
+export type Stablecoin = "USDC" | "EURC";
+
 export interface TransferParams {
   fromAccountId: string;
   toAddress: string;
   amount: number;
   idempotencyKey: string;
   memo?: string;
+  /** What is sent; USDC when absent. */
+  token?: Stablecoin;
 }
 
 export interface TransferResult {
@@ -98,4 +103,10 @@ export interface ChainProvider {
   depositToEarn(params: EarnDepositParams): Promise<EarnResult>;
   withdrawFromEarn(params: EarnDepositParams): Promise<EarnResult>;
   getBalance(accountId: string): Promise<BalanceSnapshot>;
+  /**
+   * One token's balance in an account's wallet (EURC invoices spec E5).
+   * Optional: providers that only ever hold USDC may leave it out, and a caller
+   * then has no EURC balance to rely on.
+   */
+  getTokenBalance?(accountId: string, token: Stablecoin): Promise<BalanceSnapshot>;
 }
