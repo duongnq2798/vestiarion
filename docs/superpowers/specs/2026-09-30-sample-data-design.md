@@ -45,8 +45,10 @@ Amounts are sized for the simulated operating balance of 10,000 USDC that every 
 | Kestrel Print Co | vendor | 1,500 | 180 "Brochure print run", PO-3307, **paid** 20 days ago | history |
 | Kestrel Print Co | | | 180 "Brochure print run", PO-3307, received, due in 2 days | flagged: repeats a paid invoice |
 | Lumen Retail Co | client | — | receivable 3,000 "Q4 platform retainer", SO-771, due in 10 days | forecast inflow |
-| Priya Shah — Backend Contractor | contractor | 4,000 | milestone 1,200 "API rate-limiting module", verified | released |
-| Diego Ramirez — Design Contractor | contractor | 2,500 | milestone 900 "Landing page redesign", not verified | waits |
+| Pinecrest Engineering — Backend Contractor | contractor | 5,000 | milestone 1,200 "API rate-limiting module", verified | released |
+| Marlow Design Studio — Design Contractor | contractor | 2,500 | milestone 900 "Landing page redesign", not verified | waits |
+
+Every limit leaves room for a `medium` screening tier (a quarter of the configured limit), so a fuzzy sanctions match on any sample name does not change an outcome.
 
 The exact outcomes are asserted by an end-to-end check in the sandbox (§5), not assumed from this table: if the agent decides differently, the fixture changes, not the claim.
 

@@ -1,4 +1,5 @@
 import { CYCLE_IN_PROGRESS_MS } from "./agent/balances";
+import { RECLAIM_AFTER_MS } from "./agent/approvals";
 import { currentOrgId } from "./context";
 import { db, platformDb, unwrap } from "./dal";
 import { appendLedgerEntryBestEffort } from "./ledger-best-effort";
@@ -40,7 +41,7 @@ export class SampleDataError extends Error {
   }
 }
 
-export type SampleKey = "northwind" | "harbor" | "kestrel" | "lumen" | "priya" | "diego";
+export type SampleKey = "northwind" | "harbor" | "kestrel" | "lumen" | "pinecrest" | "marlow";
 
 export interface SampleFixture {
   counterparties: Array<{ key: SampleKey; name: string; role: "vendor" | "client" | "contractor"; limit: number | null }>;
@@ -93,8 +94,8 @@ export function sampleFixture(now: Date): SampleFixture {
       { key: "harbor", name: "Harbor Office Supply", role: "vendor", limit: 500 },
       { key: "kestrel", name: "Kestrel Print Co", role: "vendor", limit: 1500 },
       { key: "lumen", name: "Lumen Retail Co", role: "client", limit: null },
-      { key: "priya", name: "Priya Shah — Backend Contractor", role: "contractor", limit: 4000 },
-      { key: "diego", name: "Diego Ramirez — Design Contractor", role: "contractor", limit: 2500 },
+      { key: "pinecrest", name: "Pinecrest Engineering — Backend Contractor", role: "contractor", limit: 5000 },
+      { key: "marlow", name: "Marlow Design Studio — Design Contractor", role: "contractor", limit: 2500 },
     ],
     invoices: [
       // Paid: a full three-way match, well under the limit.
@@ -124,7 +125,7 @@ export function sampleFixture(now: Date): SampleFixture {
     ],
     milestones: [
       {
-        contractor: "priya",
+        contractor: "pinecrest",
         title: "API rate-limiting module shipped",
         amount: 1200,
         verification_source: "timesheet:kimai",
@@ -136,7 +137,7 @@ export function sampleFixture(now: Date): SampleFixture {
         verification_detail: { sample: true },
       },
       {
-        contractor: "diego",
+        contractor: "marlow",
         title: "Landing page redesign — milestone 2",
         amount: 900,
         verification_source: "timesheet:kimai",
@@ -241,7 +242,21 @@ export async function removeSampleData(input: { actorId: string }): Promise<Samp
   if (counterparties.length === 0) throw new SampleDataError("not_loaded");
   const counterpartyIds = counterparties.map((row) => row.id);
 
-  const invoices = unwrap(await db().from("invoices").select("id").in("counterparty_id", counterpartyIds)) as Array<{ id: string }>;
+  const invoices = unwrap(
+    await db().from("invoices").select("id, status, reviewed_at").in("counterparty_id", counterpartyIds)
+  ) as Array<{ id: string; status: string; reviewed_at: string | null }>;
+  // Approve-and-pay (src/lib/agent/approvals.ts) claims an invoice — status "processing", reviewed_at set —
+  // before it inserts the payment intent; a removal in that window must not delete the invoice out from
+  // under it. A stale claim (RECLAIM_AFTER_MS old, or missing reviewed_at) is not a claim, so it never blocks.
+  const now = Date.now();
+  const claimedInvoice = invoices.find((invoice) => {
+    if (invoice.status !== "processing") return false;
+    if (invoice.reviewed_at === null) return false;
+    const claimedAt = Date.parse(invoice.reviewed_at);
+    return !Number.isNaN(claimedAt) && claimedAt >= now - RECLAIM_AFTER_MS;
+  });
+  if (claimedInvoice) throw new SampleDataError("payment_in_flight");
+
   const milestones = unwrap(await db().from("milestones").select("id").in("contractor_id", counterpartyIds)) as Array<{ id: string }>;
   const sources = [...invoices, ...milestones].map((row) => row.id);
 

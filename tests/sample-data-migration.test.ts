@@ -67,7 +67,7 @@ describe("counterparties.sample (0034)", () => {
     const contractor = (
       await asTenant(db, orgId, (tx) =>
         tx.query<{ id: string }>(
-          "insert into public.counterparties (org_id, name, role, sample) values ($1, 'Priya Shah — Backend Contractor', 'contractor', true) returning id",
+          "insert into public.counterparties (org_id, name, role, sample) values ($1, 'Pinecrest Engineering — Backend Contractor', 'contractor', true) returning id",
           [orgId]
         )
       )

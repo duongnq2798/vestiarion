@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { withOrg } from "@/lib/dal/scope";
-import { hasSampleData, loadSampleData, removeSampleData, SampleDataError, sampleFixture } from "@/lib/sample-data";
+import { hasSampleData, loadSampleData, removeSampleData, SampleDataError, sampleFixture, type SampleKey } from "@/lib/sample-data";
 import { encryptSecret, parseMasterKeys } from "@/lib/secrets";
 import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 
@@ -68,7 +68,7 @@ function sampleFake(options: {
   counterpartyInsert?: (request: RecordedRequest) => FakeReply | undefined;
   invoiceInsert?: (request: RecordedRequest) => FakeReply | undefined;
   sampleCounterparties?: Array<{ id: string }>;
-  invoices?: Array<{ id: string }>;
+  invoices?: Array<{ id: string; status?: string; reviewed_at?: string | null }>;
   milestones?: Array<{ id: string }>;
   intents?: Array<{ id: string; status: string }>;
   runningCycles?: Array<{ id: string }>;
@@ -119,8 +119,8 @@ describe("sampleFixture", () => {
       "Harbor Office Supply",
       "Kestrel Print Co",
       "Lumen Retail Co",
-      "Priya Shah — Backend Contractor",
-      "Diego Ramirez — Design Contractor",
+      "Pinecrest Engineering — Backend Contractor",
+      "Marlow Design Studio — Design Contractor",
     ]);
     for (const row of fixture.counterparties) {
       expect(row).not.toHaveProperty("address");
@@ -158,7 +158,27 @@ describe("sampleFixture", () => {
     expect(repeat).toMatchObject({ po_reference: "PO-3307", amount: 180 });
     expect(repeat.status).toBeUndefined();
     // Milestones: one verified to release, one waiting.
-    expect(fixture.milestones.map((row) => [row.contractor, row.verified])).toEqual([["priya", true], ["diego", false]]);
+    expect(fixture.milestones.map((row) => [row.contractor, row.verified])).toEqual([["pinecrest", true], ["marlow", false]]);
+  });
+
+  it("keeps every outcome when screening finds a medium risk", () => {
+    // 0.25 mirrors paymentLimitForRisk("medium", limit) in src/lib/compliance.ts.
+    const MEDIUM_FACTOR = 0.25;
+    const limitOf = (key: SampleKey) => fixture.counterparties.find((row) => row.key === key)?.limit as number;
+
+    // The only payable expected to pay: a full three-way match under the limit.
+    // (The repeat Kestrel invoice only matters as flagged, so it is skipped here.)
+    const paying = fixture.invoices.find((row) => row.memo === "Hosting — September" && row.status !== "paid");
+    expect(paying?.amount).toBeLessThanOrEqual(limitOf("northwind") * MEDIUM_FACTOR);
+
+    // Every verified milestone must still clear a quarter of its contractor's limit.
+    for (const milestone of fixture.milestones.filter((row) => row.verified)) {
+      expect(milestone.amount).toBeLessThanOrEqual(limitOf(milestone.contractor) * MEDIUM_FACTOR);
+    }
+
+    // Harbor's held invoice is over the limit outright, so medium risk changes nothing.
+    const held = fixture.invoices.find((row) => row.memo === "Standing desks");
+    expect(held?.amount).toBeGreaterThan(limitOf("harbor"));
   });
 });
 
@@ -296,6 +316,43 @@ describe("removeSampleData", () => {
 
     expect((await refusal(run(() => removeSampleData({ actorId: ACTOR })))).code).toBe("payment_in_flight");
     expect(fake.requests.filter((request) => request.method === "DELETE")).toEqual([]);
+  });
+
+  it("refuses while approve-and-pay holds a fresh claim on a sample invoice, and deletes nothing", async () => {
+    const { fake, run } = sampleFake({
+      sampleCounterparties: [{ id: "cp-0" }],
+      invoices: [{ id: "inv-0", status: "processing", reviewed_at: new Date().toISOString() }],
+    });
+
+    expect((await refusal(run(() => removeSampleData({ actorId: ACTOR })))).code).toBe("payment_in_flight");
+    expect(fake.requests.filter((request) => request.method === "DELETE")).toEqual([]);
+  });
+
+  it("proceeds when a processing claim on a sample invoice is stale (reviewed_at 11 minutes old)", async () => {
+    const staleReviewedAt = new Date(Date.now() - 11 * 60 * 1000).toISOString();
+    const { fake, run } = sampleFake({
+      sampleCounterparties: [{ id: "cp-0" }],
+      invoices: [{ id: "inv-0", status: "processing", reviewed_at: staleReviewedAt }],
+    });
+
+    const result = await run(() => removeSampleData({ actorId: ACTOR }));
+
+    expect(result.counterparties).toBe(1);
+    const deletes = fake.requests.filter((request) => request.method === "DELETE").map((request) => request.path);
+    expect(deletes).toContain("/rest/v1/counterparties");
+  });
+
+  it("proceeds when a processing claim on a sample invoice is missing reviewed_at", async () => {
+    const { fake, run } = sampleFake({
+      sampleCounterparties: [{ id: "cp-0" }],
+      invoices: [{ id: "inv-0", status: "processing", reviewed_at: null }],
+    });
+
+    const result = await run(() => removeSampleData({ actorId: ACTOR }));
+
+    expect(result.counterparties).toBe(1);
+    const deletes = fake.requests.filter((request) => request.method === "DELETE").map((request) => request.path);
+    expect(deletes).toContain("/rest/v1/counterparties");
   });
 });
 
