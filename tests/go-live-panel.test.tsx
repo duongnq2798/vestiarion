@@ -134,6 +134,12 @@ describe("GoLivePanel, for an owner", () => {
     expect(words).not.toContain("Create treasury wallets");
   });
 
+  it("go_live: the balance is read from the chain unless a sample is given, which only the docs screenshots do", () => {
+    expect(text(panel("go_live"))).toContain("USDC on chain: not read yet");
+    const sample = html(<GoLivePanel orgSlug="acme" status={STEPS.go_live} canAdminister sampleBalance={20} />);
+    expect(text(sample)).toContain("USDC on chain: 20.00 USDC");
+  });
+
   it("go_live: the confirmation states the three consequences of spec §2", () => {
     const words = text(html(<>{GO_LIVE_CONSEQUENCES}</>));
     expect(words).toContain("Real testnet USDC moves when the agent pays");
@@ -380,7 +386,7 @@ describe("GoLivePanel's props", () => {
     expectTypeOf<SecretLike<DeepKeys<GoLivePanelProps>>>().toEqualTypeOf<never>();
     // The names the check walks, so an empty walk cannot pass it vacuously.
     expectTypeOf<DeepKeys<GoLivePanelProps>>().toEqualTypeOf<
-      "orgSlug" | "status" | "canAdminister" | keyof GoLiveStatus | keyof GoLiveStatus["wallets"][number]
+      "orgSlug" | "status" | "canAdminister" | "sampleBalance" | keyof GoLiveStatus | keyof GoLiveStatus["wallets"][number]
     >();
   });
 });

@@ -47,6 +47,12 @@ export interface GoLivePanelProps {
   orgSlug: string;
   status: GoLiveStatus;
   canAdminister: boolean;
+  /**
+   * A balance for step 3 to show instead of reading the chain. Only the docs
+   * screenshots (src/app/docs-shots) set it, so their sample step makes no
+   * call; Settings leaves it unset, and the step reads the chain as it appears.
+   */
+  sampleBalance?: number;
 }
 
 const INITIAL: GoLiveActionResult = { ok: false, message: "" };
@@ -323,12 +329,15 @@ function WalletsStep({ orgSlug, status }: { orgSlug: string; status: GoLiveStatu
  * and again on Refresh. The read goes through `refreshBalanceAction`, which
  * returns the number only.
  */
-function BalanceLine({ orgSlug }: { orgSlug: string }) {
-  const [state, dispatch, pending] = useActionState(refreshBalanceAction, BALANCE_INITIAL);
-  const requested = useRef(false);
+function BalanceLine({ orgSlug, sampleBalance }: { orgSlug: string; sampleBalance?: number }) {
+  const [state, dispatch, pending] = useActionState(
+    refreshBalanceAction,
+    sampleBalance === undefined ? BALANCE_INITIAL : { ok: true, message: "", balance: sampleBalance }
+  );
+  const requested = useRef(sampleBalance !== undefined);
 
   useEffect(() => {
-    // Once per mount, however often a development build runs this effect.
+    // Once per mount, however often a development build runs this effect; never for a sample balance.
     if (requested.current) return;
     requested.current = true;
     const data = new FormData();
@@ -353,7 +362,7 @@ function BalanceLine({ orgSlug }: { orgSlug: string }) {
   );
 }
 
-function GoLiveStep({ orgSlug, status }: { orgSlug: string; status: GoLiveStatus }) {
+function GoLiveStep({ orgSlug, status, sampleBalance }: { orgSlug: string; status: GoLiveStatus; sampleBalance?: number }) {
   const { state, pending, formProps } = useActionForm(goLiveAction, INITIAL, { toastOnSuccess: true });
   const operating = status.wallets.find((wallet) => wallet.kind === "operating");
   return (
@@ -366,7 +375,7 @@ function GoLiveStep({ orgSlug, status }: { orgSlug: string; status: GoLiveStatus
           <p className="text-sm leading-relaxed text-ink-2">
             Get testnet USDC at <ExternalLink href={FAUCET}>faucet.circle.com</ExternalLink>: select Arc Testnet, and paste this address.
           </p>
-          <BalanceLine orgSlug={orgSlug} />
+          <BalanceLine orgSlug={orgSlug} sampleBalance={sampleBalance} />
         </div>
       )}
       <form id="go-live-form" {...formProps} className="grid gap-3 border-t border-line pt-4">
@@ -410,7 +419,7 @@ function LiveDetails({ orgSlug, status }: { orgSlug: string; status: GoLiveStatu
   );
 }
 
-export default function GoLivePanel({ orgSlug, status, canAdminister }: GoLivePanelProps) {
+export default function GoLivePanel({ orgSlug, status, canAdminister, sampleBalance }: GoLivePanelProps) {
   const live = status.step === "live";
 
   const hosted = status.host === "hosted";
@@ -443,7 +452,7 @@ export default function GoLivePanel({ orgSlug, status, canAdminister }: GoLivePa
   } else if (status.step === "wallets") {
     body = <WalletsStep orgSlug={orgSlug} status={status} />;
   } else {
-    body = <GoLiveStep orgSlug={orgSlug} status={status} />;
+    body = <GoLiveStep orgSlug={orgSlug} status={status} sampleBalance={sampleBalance} />;
   }
 
   // With unreadable credentials the warning asks an owner to reconnect, so the

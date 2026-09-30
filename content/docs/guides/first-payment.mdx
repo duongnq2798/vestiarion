@@ -17,6 +17,12 @@ A counterparty is a business or person the workspace pays or invoices. Open **Co
 - **Payment address**: the counterparty's address on Arc testnet, `0x` followed by 40 hexadecimal characters.
 - **Jurisdiction**: an ISO code or a country name.
 
+<Screenshot
+  src="/docs/guides/first-payment-counterparty.png"
+  alt="The Add counterparty form on the Counterparties page, filled in: Legal or trading name Northstar Studio, Role Vendor, Payment limit (USDC) 50.00, Chain ARC-TESTNET, a Payment address starting 0x, and Jurisdiction US. The Add and screen button is at the bottom right."
+  caption="A vendor with a payment limit and an Arc testnet address, ready to add and screen."
+/>
+
 Then choose **Add and screen**. The counterparty is screened as soon as it is saved, and a message gives the result: "*Name* added and screened: *level* risk." The agent never pays a counterparty screened high risk.
 
 <Callout title="Without an address, a payment is held">
@@ -36,6 +42,12 @@ Open **AP / AR**. Under **Invoice intake**, choose **Enter one invoice**, or **I
 - **Memo**, if you like.
 - **PO reference**, and tick **Goods or services received**. Without a purchase order or confirmed receipt, the three-way match is incomplete, and the agent asks for more information instead of paying.
 
+<Screenshot
+  src="/docs/guides/first-payment-invoice.png"
+  alt="The Invoice intake form on the AP / AR page, on the Enter one invoice tab, filled in: Direction Payable, Counterparty Northstar Studio · vendor, Amount (USDC) 12.50, Due date 10/15/2026, Memo October design retainer, PO reference PO-2207, and Goods or services received ticked. The Add invoice button is below."
+  caption="A payable within the counterparty's limit, with its PO reference and the goods received."
+/>
+
 Choose **Add invoice**. The page confirms with "Invoice added for *Name*." As the form says, "The agent will evaluate this invoice on the next cycle."
 
 ## 3. Run a cycle
@@ -53,6 +65,12 @@ Each invoice's decision is a card on **AP / AR**, under **Payables**. The consol
 - **Agent’s reasoning**: why it decided as it did, citing the facts it used, such as the amount, the PO reference, the risk level and the balance;
 - the evidence it checked, the ledger entry (`audit #` and its number), and, for a payment, the transaction hash.
 
+<Screenshot
+  src="/docs/guides/first-payment-decision.png"
+  alt="A decision card under Payables: Pay Northstar Studio, October design retainer, 12.50 USDC, marked Settled on Arc and decided by the LLM. The agent's reasoning reads: Paid 12.50 USDC to Northstar Studio: PO-2207 matches and the work was received, Northstar Studio screened clear with a 50.00 USDC limit, and the operating wallet holds 20.00 USDC. Below are the evidence chips PO, Goods received, Risk, Limit and Due, then the link to ledger entry 5 and the transaction hash."
+  caption="A settled payment: the agent's reasoning, the evidence it checked, the ledger entry and the transaction."
+/>
+
 When the model decided to pay but a guardrail stopped it, the card also has a "Blocked by code, not by the model" band. The band names the rule, the amount attempted and the amount allowed.
 
 ## 5. Approve a held payment
@@ -65,6 +83,12 @@ Owners, admins and approvers decide each one:
 - **Reject** marks it not paid. You can give a reason, which is kept in the ledger.
 - **Return to agent** sends it back to pending, so the next cycle decides it again.
 
+<Screenshot
+  src="/docs/guides/first-payment-approval.png"
+  alt="An approval card on the Approvals page: Bluebird Logistics, due 2026-10-09, 8.00 USDC, marked Held, with the reasoning: Held 8.00 USDC for Bluebird Logistics: no receipt is recorded for PO-2213, so the three-way match is incomplete. The buttons are Approve and pay, Reject and Return to agent."
+  caption="A held payable, with the three decisions a person can make."
+/>
+
 **Approve and pay** is disabled in two cases, and the card says why. "You created this invoice" means that the person who added an invoice cannot also approve it. "Screened high risk" means that a high-risk counterparty is never paid.
 
 ## 6. See it on Arc and in the audit log
@@ -72,5 +96,11 @@ Owners, admins and approvers decide each one:
 **On the Arc explorer.** On a settled decision card, the transaction hash is a link. It opens the transaction on the Arc testnet explorer, at `https://testnet.arcscan.app/tx/` followed by the hash, in a new tab.
 
 **In the audit log.** The card's `audit #` link opens the entry in **Audit log**. As that page says, "Every decision is appended here, hash-linked to the one before it and signed with Ed25519." Expand an entry to see its hash, the previous entry's hash, its body hash, its signature and the full detail. **Verify hash chain** checks every signature and every link, and answers "Chain intact" when all of them hold.
+
+<Screenshot
+  src="/docs/guides/first-payment-audit.png"
+  alt="The Audit log page after verifying: 5 entries, the head entry and its hash, and a green Chain intact box reading 5 signatures and 4 links verified. Below, the ledger lists entries newest first, grouped by date, starting with entry 5, Paid 12.50 USDC to Northstar Studio."
+  caption="The ledger verified: every signature and every link holds."
+/>
 
 To check a signature yourself, see [Verifying signatures](/docs/webhooks/verify). To read the ledger from your own code, see [List ledger entries](/docs/api/list-ledger-entries) and [Verify the ledger](/docs/api/verify-ledger).

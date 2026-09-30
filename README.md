@@ -286,6 +286,7 @@ Two independent upgrades from there, in either order:
 | `npm run status -- <org-slug>` | Balances, wallets, open invoices, ledger height |
 | `npm run circle:doctor -- <org-slug>` / `agent:doctor` | Reports exactly which parts are live |
 | `npm run arc:proof` | Standalone: two wallets, a faucet check, one real transfer |
+| `npm run docs:screenshots` | Rebuilds the user guides’ step screenshots in `public/docs/guides/` with local headless Edge. Run it after changing a screen a guide shows (Go live, the counterparty or invoice form, a decision or approval card, the audit log), then look at each PNG before committing |
 
 Seeded amounts scale down automatically when Circle credentials are present (`SEED_SCALE`),
 because the public faucet grants 20 testnet USDC every two hours and a demo denominated in

@@ -49,6 +49,13 @@ export const MDX_TO_MARKDOWN: Record<string, (attributes: JsxAttributes, childre
     const description = convert(children).replace(/\s+/g, " ").trim();
     return `- [${title}](${href})${description ? `: ${description}` : ""}`;
   },
+  // A step's screenshot: a Markdown image, its root path made absolute with the links, then its caption in italics.
+  Screenshot: (attributes) => {
+    const { src, alt, caption } = attributes;
+    if (typeof src !== "string" || typeof alt !== "string" || !alt.trim()) throw new Error("<Screenshot> needs a src and alt text");
+    const image = `![${alt.replace(/[[\]\\]/g, "\\$&")}](${src})`;
+    return typeof caption === "string" && caption.trim() ? `${image}\n\n*${caption.trim()}*` : image;
+  },
 };
 
 /**
@@ -65,7 +72,7 @@ export const MDX_TO_MARKDOWN: Record<string, (attributes: JsxAttributes, childre
  *   table row it would be a cell; after a quote, a list item or text, and
  *   before text, it would continue a paragraph.
  */
-const BLOCK_COMPONENTS = new Set(["Callout", "Cards", "Card", "EndpointTable", "McpToolTable"]);
+const BLOCK_COMPONENTS = new Set(["Callout", "Cards", "Card", "EndpointTable", "McpToolTable", "Screenshot"]);
 
 /** Components that belong only inside another: a `Card` is one cell of a `Cards` grid. */
 const PARENT_OF: Record<string, string> = { Card: "Cards" };
