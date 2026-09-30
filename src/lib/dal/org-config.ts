@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import type { VestiarionConfig } from "../config";
 import { decryptSecret, type MasterKey, type SecretEnvelope } from "../secrets";
 
@@ -13,15 +14,69 @@ export interface OrgRow {
   circle_entity_secret_enc: SecretEnvelope | null;
   /** Whose Circle account holds the wallets: the workspace's own, the platform's hosted one, or not chosen (0030). */
   wallet_host: "own" | "hosted" | null;
+  /** Public halves of this workspace's own retired ledger keys: `{ id, publicKeyPem, retiredAt }[]` (0035). */
+  ledger_retired_keys?: unknown;
 }
 
 export const ORG_SECRET_COLUMNS =
-  "id, slug, name, mode, ledger_signing_key_enc, circle_api_key_enc, circle_entity_secret_enc, wallet_host";
+  "id, slug, name, mode, ledger_signing_key_enc, circle_api_key_enc, circle_entity_secret_enc, wallet_host, ledger_retired_keys";
 
 /** Why a hosted organization has no Circle credentials: this deployment lacks the hosted pair (H1, Review Focus 5). */
 export const HOSTED_NOT_CONFIGURED = "the hosted Circle account is not configured on this deployment";
 
 type SecretColumn = "ledger_signing_key_enc" | "circle_api_key_enc" | "circle_entity_secret_enc";
+
+/** Exactly one full public PEM block, and nothing after it but whitespace. */
+const ONE_PUBLIC_PEM = /^-----BEGIN PUBLIC KEY-----[\s\S]+?-----END PUBLIC KEY-----\s*$/;
+
+/**
+ * An item of `ledger_retired_keys` the keyring can use, with its key parsed,
+ * or `null`. It must be a plain object with a string `id` and a
+ * `publicKeyPem` that is exactly one PUBLIC KEY block, holds no private key,
+ * and parses as a public key. `retiredAt` is passed through unchecked: a bad
+ * time does not stop a key verifying what it signed.
+ */
+export function readableRetiredKey(
+  item: unknown
+): { id: string; publicKeyPem: string; key: crypto.KeyObject; retiredAt: unknown } | null {
+  if (typeof item !== "object" || item === null) return null;
+  const { id, publicKeyPem, retiredAt } = item as { id?: unknown; publicKeyPem?: unknown; retiredAt?: unknown };
+  if (typeof id !== "string" || typeof publicKeyPem !== "string") return null;
+  if (!ONE_PUBLIC_PEM.test(publicKeyPem)) return null;
+  if (publicKeyPem.includes("PRIVATE KEY")) return null;
+  if ((publicKeyPem.match(/-----BEGIN /g) ?? []).length !== 1) return null;
+  try {
+    return { id, publicKeyPem, key: crypto.createPublicKey(publicKeyPem), retiredAt };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The public halves of `ledger_retired_keys`, joined into the same
+ * concatenated-PEM-bundle shape `LEDGER_RETIRED_PUBLIC_KEYS` and
+ * `ledgerKeyring`/`ledgerReadKeys` (ledger-keys.ts) already expect.
+ *
+ * Only an item `readableRetiredKey` accepts is trusted. `ledgerKeyring` throws
+ * on a private or unreadable block, and `ledgerReadKeys` then drops every
+ * retired key with it, so one bad item — truncated, carrying a private block,
+ * or garbage between PUBLIC KEY markers — is skipped here instead of ever
+ * reaching them; each skip is named in `warnings` rather than losing the row
+ * that follows it.
+ */
+export function retiredKeyBundle(value: unknown, warnings: string[]): string | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const pems: string[] = [];
+  value.forEach((item, i) => {
+    const readable = readableRetiredKey(item);
+    if (readable) {
+      pems.push(readable.publicKeyPem);
+    } else {
+      warnings.push(`ledger_retired_keys entry ${i + 1} is not a public key; skipped`);
+    }
+  });
+  return pems.length > 0 ? pems.join("\n") : undefined;
+}
 
 /**
  * One organization's configuration: the platform's settings, with the
@@ -83,6 +138,7 @@ export function orgConfig(
     if (org[column] && value === undefined) credentialsUnreadable ??= warnings[before];
     return value;
   };
+  const columnRetiredBundle = retiredKeyBundle(org.ledger_retired_keys, warnings);
   // Ruling R4: the platform pair leaves under no key of its own. A hosted
   // organization receives it as its Circle credentials, below; every other
   // organization never holds it at all, only whether it exists.
@@ -122,8 +178,13 @@ export function orgConfig(
       },
       ledgerSigningKey: open("ledger_signing_key_enc"),
       ledgerPublicKey: undefined,
-      // Public material, and only the founding chain has ever rotated.
-      ledgerRetiredPublicKeys: org.id === FOUNDING_ORG_ID ? base.ledgerRetiredPublicKeys : undefined,
+      // Public material. Every workspace's own rotations live on its row; the
+      // founding organization additionally carries whatever the environment
+      // still declares, from before a workspace kept its own retired keys.
+      ledgerRetiredPublicKeys:
+        org.id === FOUNDING_ORG_ID
+          ? [base.ledgerRetiredPublicKeys, columnRetiredBundle].filter(Boolean).join("\n") || undefined
+          : columnRetiredBundle,
       allowGeneratedLedgerKey: false,
     },
     warnings,

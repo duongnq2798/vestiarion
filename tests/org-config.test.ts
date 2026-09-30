@@ -1,7 +1,8 @@
 import crypto from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { configFromEnv, type VestiarionConfig } from "@/lib/config";
-import { FOUNDING_ORG_ID, orgConfig, type OrgRow } from "@/lib/dal/org-config";
+import { FOUNDING_ORG_ID, ORG_SECRET_COLUMNS, orgConfig, retiredKeyBundle, type OrgRow } from "@/lib/dal/org-config";
+import { ledgerKeyId, ledgerKeyring, ledgerReadKeys } from "@/lib/ledger-keys";
 import { encryptSecret, parseMasterKeys } from "@/lib/secrets";
 
 const OTHER_ORG = "5d0f3a2e-8c1b-4f7a-9e6d-00000000beef";
@@ -25,7 +26,8 @@ function row(
   sealed: Partial<Record<"ledger" | "apiKey" | "entity", string>> = {},
   sealWith = keys,
   sealFor = orgId,
-  walletHost: OrgRow["wallet_host"] = null
+  walletHost: OrgRow["wallet_host"] = null,
+  ledgerRetiredKeys: unknown = []
 ): OrgRow {
   const seal = (value: string | undefined, column: string) =>
     value ? encryptSecret(value, { orgId: sealFor, column }, sealWith) : null;
@@ -38,7 +40,14 @@ function row(
     circle_api_key_enc: seal(sealed.apiKey, "circle_api_key_enc"),
     circle_entity_secret_enc: seal(sealed.entity, "circle_entity_secret_enc"),
     wallet_host: walletHost,
+    ledger_retired_keys: ledgerRetiredKeys,
   };
+}
+
+/** A fresh Ed25519 public key, PEM-encoded, with the id its retired-key entry would carry. */
+function retiredKeyItem(retiredAt = "2026-01-01T00:00:00Z") {
+  const publicKeyPem = crypto.generateKeyPairSync("ed25519").publicKey.export({ type: "spki", format: "pem" }).toString();
+  return { id: ledgerKeyId(crypto.createPublicKey(publicKeyPem)), publicKeyPem, retiredAt };
 }
 
 describe("orgConfig", () => {
@@ -350,5 +359,90 @@ describe("orgConfig — hosted wallets (H1, H7; Review Focus 1 and 5)", () => {
       orgConfig(hostedBase, row(OTHER_ORG, {}, keys, OTHER_ORG, "own"), keys);
       expect(hostedBase).toEqual(before);
     });
+  });
+});
+
+describe("orgConfig — a workspace's own retired ledger keys", () => {
+  it("gives a non-founding organization the PEMs from its own retired-keys column", () => {
+    const item1 = retiredKeyItem("2026-01-01T00:00:00Z");
+    const item2 = retiredKeyItem("2026-02-01T00:00:00Z");
+    const { config, warnings } = orgConfig(base, row(OTHER_ORG, {}, keys, OTHER_ORG, null, [item1, item2]), keys);
+    expect(warnings).toEqual([]);
+    expect(config.ledgerRetiredPublicKeys).toBe(`${item1.publicKeyPem}\n${item2.publicKeyPem}`);
+    const keyring = ledgerKeyring(config);
+    expect(keyring.retired.map((k) => ledgerKeyId(k)).sort()).toEqual([item1.id, item2.id].sort());
+  });
+
+  it("gives a non-founding organization with no retired keys undefined", () => {
+    const { config, warnings } = orgConfig(base, row(OTHER_ORG, {}, keys, OTHER_ORG, null, []), keys);
+    expect(warnings).toEqual([]);
+    expect(config.ledgerRetiredPublicKeys).toBeUndefined();
+  });
+
+  it("gives the founding organization both the environment bundle and its column bundle", () => {
+    const item = retiredKeyItem();
+    const { config, warnings } = orgConfig(base, row(FOUNDING_ORG_ID, {}, keys, FOUNDING_ORG_ID, null, [item]), keys);
+    expect(warnings).toEqual([]);
+    expect(config.ledgerRetiredPublicKeys).toBe(`${base.ledgerRetiredPublicKeys}\n${item.publicKeyPem}`);
+  });
+
+  it("skips a malformed retired-key entry, names it in warnings, and still loads the good ones", () => {
+    const good = retiredKeyItem();
+    const privatePem = crypto.generateKeyPairSync("ed25519").privateKey.export({ type: "pkcs8", format: "pem" }).toString();
+    const malformed = [{ id: 1 }, { id: "priv", publicKeyPem: privatePem, retiredAt: "2026-01-01T00:00:00Z" }, "not-an-object", good];
+    const { config, warnings } = orgConfig(base, row(OTHER_ORG, {}, keys, OTHER_ORG, null, malformed), keys);
+    expect(config.ledgerRetiredPublicKeys).toBe(good.publicKeyPem);
+    expect(warnings).toEqual([
+      "ledger_retired_keys entry 1 is not a public key; skipped",
+      "ledger_retired_keys entry 2 is not a public key; skipped",
+      "ledger_retired_keys entry 3 is not a public key; skipped",
+    ]);
+  });
+
+  it("ORG_SECRET_COLUMNS selects ledger_retired_keys", () => {
+    expect(ORG_SECRET_COLUMNS).toContain("ledger_retired_keys");
+  });
+});
+
+describe("retiredKeyBundle", () => {
+  it("joins well-formed items' PEMs with a newline", () => {
+    const item1 = retiredKeyItem();
+    const item2 = retiredKeyItem();
+    const warnings: string[] = [];
+    expect(retiredKeyBundle([item1, item2], warnings)).toBe(`${item1.publicKeyPem}\n${item2.publicKeyPem}`);
+    expect(warnings).toEqual([]);
+  });
+
+  it("returns undefined for an empty array", () => {
+    const warnings: string[] = [];
+    expect(retiredKeyBundle([], warnings)).toBeUndefined();
+    expect(warnings).toEqual([]);
+  });
+});
+
+describe("retiredKeyBundle — only a readable public key reaches the keyring (final review, minor 3)", () => {
+  const good = retiredKeyItem();
+  const privatePem = crypto.generateKeyPairSync("ed25519").privateKey.export({ type: "pkcs8", format: "pem" }).toString();
+  const truncated = good.publicKeyPem.slice(0, good.publicKeyPem.indexOf("-----END"));
+  const publicThenPrivate = `${retiredKeyItem().publicKeyPem}\n${privatePem}`;
+  const garbage = "-----BEGIN PUBLIC KEY-----\nbm90IGEga2V5IGF0IGFsbCwganVzdCBiYXNlNjQ=\n-----END PUBLIC KEY-----\n";
+
+  it.each([
+    ["a truncated PEM", truncated],
+    ["a PUBLIC block followed by a PRIVATE block", publicThenPrivate],
+    ["a PUBLIC header around garbage base64", garbage],
+  ])("skips %s with the usual warning, and still loads the good item beside it", (_label, publicKeyPem) => {
+    const bad = { id: "badbadbadbadbadb", publicKeyPem, retiredAt: "2026-01-01T00:00:00Z" };
+    const warnings: string[] = [];
+    const bundle = retiredKeyBundle([bad, good], warnings);
+    // Compared as booleans, so a failure never prints the private block into test output.
+    expect(bundle?.includes("PRIVATE KEY"), "the bundle holds a private block").toBe(false);
+    expect(bundle === good.publicKeyPem, "the bundle is exactly the good item's PEM").toBe(true);
+    expect(warnings).toEqual(["ledger_retired_keys entry 1 is not a public key; skipped"]);
+
+    const { config } = orgConfig(base, row(OTHER_ORG, {}, keys, OTHER_ORG, null, [bad, good]), keys);
+    const readKeys = ledgerReadKeys(config);
+    expect(readKeys.warnings).toEqual([]);
+    expect(readKeys.retired.map((key) => ledgerKeyId(key))).toEqual([good.id]);
   });
 });

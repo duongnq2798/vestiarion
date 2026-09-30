@@ -41,4 +41,20 @@ describe("the Audit page", () => {
   it("says what the key id and head hash are for", () => {
     expect(page).toContain("Compare this key id and the head hash with the ones a verified export prints.");
   });
+
+  it("lists retired keys with exportKeys, only when there are some", () => {
+    expect(page).toMatch(/import\s*\{[^}]*\bexportKeys\b[^}]*\}\s*from\s*"@\/lib\/ledger-export"/);
+    expect(page).toContain("retiredKeys.length > 0");
+    expect(page).toMatch(/retiredKeys\.length > 0 &&[\s\S]*?Retired keys/);
+  });
+
+  it("lists retired keys whether or not the active key is readable, so the summary's count always matches what expands", () => {
+    // After the readable-key / no-readable-key branches, not inside either.
+    const noKey = page.indexOf("it is unverified, which is a different");
+    const list = page.indexOf("retiredKeys.length > 0 &&");
+    expect(noKey).toBeGreaterThan(-1);
+    expect(list).toBeGreaterThan(noKey);
+    // The no-readable-key branch has closed before the list opens.
+    expect(page.slice(noKey, list)).toMatch(/<\/p>\s*\)\}/);
+  });
 });

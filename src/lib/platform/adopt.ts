@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { ledgerKeyId } from "../ledger-keys";
-import { encryptSecret, type MasterKey, type SecretEnvelope } from "../secrets";
+import { decryptSecret, encryptSecret, type MasterKey, type SecretEnvelope } from "../secrets";
 
 export interface AdoptedSecrets {
   ledger_signing_key_enc: SecretEnvelope;
@@ -53,4 +53,53 @@ export function adoptEnvSecrets(input: {
     circle_entity_secret_enc: seal(input.env.CIRCLE_ENTITY_SECRET, "circle_entity_secret_enc"),
     ledgerKeyId: id,
   };
+}
+
+/**
+ * Whether adopting the environment's ledger key `envKeyId` would undo a
+ * rotation, as a message to print, or `null` when it may go ahead. Decided
+ * from the organization's row alone, before anything is written.
+ *
+ * - A key the workspace has retired can never sign for it again: its private
+ *   half was discarded on purpose, and adopting a copy of it back would put
+ *   the old authority back in charge.
+ * - A workspace that already signs with a readable key of its own keeps it:
+ *   replacing it would discard the private half of whatever signed the recent
+ *   entries. Rotation, from Settings, is the one way to change the key.
+ *
+ * Re-adopting the key already stored is allowed, so the command stays
+ * idempotent. A stored key that cannot be opened is not "a key this workspace
+ * signs with", so it does not refuse; `--expect-key-id` still guards the
+ * adoption. No refusal names anything but key ids and a time.
+ */
+export function ledgerKeyAdoptionRefusal(input: {
+  orgId: string;
+  row: { ledger_signing_key_enc: SecretEnvelope | null; ledger_retired_keys: unknown };
+  envKeyId: string;
+  keys: MasterKey[];
+}): string | null {
+  const retired = (Array.isArray(input.row.ledger_retired_keys) ? input.row.ledger_retired_keys : []).find(
+    (item): item is { id: string; retiredAt?: unknown } =>
+      typeof item === "object" && item !== null && (item as { id?: unknown }).id === input.envKeyId
+  );
+  if (retired) {
+    const when = typeof retired.retiredAt === "string" ? retired.retiredAt : "an earlier date";
+    return `That key was retired on ${when}; it can no longer sign for this workspace. Rotate from Settings → Ledger signing key instead.`;
+  }
+
+  const stored = storedLedgerKeyId(input.orgId, input.row.ledger_signing_key_enc, input.keys);
+  if (stored && stored !== input.envKeyId) {
+    return `This workspace already signs with key ${stored}; adopting ${input.envKeyId} would replace it. Rotate from Settings → Ledger signing key instead.`;
+  }
+  return null;
+}
+
+/** The id of the key stored on the row, or `null` when there is none or it cannot be opened. The reason is not kept. */
+function storedLedgerKeyId(orgId: string, envelope: SecretEnvelope | null, keys: MasterKey[]): string | null {
+  if (!envelope) return null;
+  try {
+    return ledgerKeyId(crypto.createPrivateKey(decryptSecret(envelope, { orgId, column: "ledger_signing_key_enc" }, keys)));
+  } catch {
+    return null;
+  }
 }

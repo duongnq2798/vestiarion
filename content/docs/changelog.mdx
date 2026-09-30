@@ -1,5 +1,13 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-09-30: Ledger signing key rotation
+
+- An owner can rotate a workspace's ledger signing key from Settings. The rotation is a ledger entry, delivered as a `ledger.appended` event like every other: `ledger_key_rotated`, in the `system` domain, with `actor: "human"`. Its `detail` is `{ from, to, by }`: the retired key's id, the new key's id, and the owner who rotated. See [Key identity and rotation](/docs/api/verify-ledger#key-identity-and-rotation).
+- From that entry on, `signingKeyId` is the new key's id. Earlier entries keep the old id and keep verifying against the retired key.
+- `ledgerRetiredKeyCount` in `GET /api/v1/status` now counts the workspace's own retired keys.
+
+No `/api/v1` endpoint, parameter or response schema changed.
+
 ## 2026-09-30: Counterparty limit changes
 
 - A new ledger action, delivered as a `ledger.appended` event: `counterparty_limit_changed`, in the `compliance` domain. Its `detail` is `{ by, counterpartyId, from, to, currentLimit }`, where `from` and `to` are the configured limits in USDC and `currentLimit` is the limit the counterparty's risk now allows. A client's limit may be `null`.

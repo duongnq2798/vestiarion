@@ -26,7 +26,9 @@ Every entry written since signing key ids were introduced carries `signingKeyId`
 
 That message names the missing key and the ones the deployment has: the difference between a suspected forgery and a retired key that was never added to the keyring.
 
-A rotation is recorded in the ledger itself. The first append under a new key first writes a `system` entry with `action: "ledger_key_rotated"`, signed by the new key, whose `detail` is `{"from": "<old id>", "to": "<new id>"}`. A consumer following the ledger sees the change of authority as an entry.
+A rotation is recorded in the ledger itself, as a `system` entry with `action: "ledger_key_rotated"`, signed by the new key. When an owner rotates the key from Settings, the entry has `actor: "human"` and its `detail` is `{"from": "<old id>", "to": "<new id>", "by": "<user id>"}`, where `by` is the owner who rotated. When the key changed any other way, the first append under the new key writes the entry automatically, with `actor: "system"` and `detail` `{"from": "<old id>", "to": "<new id>"}`. Either way, a consumer following the ledger sees the change of authority as an entry.
+
+From that entry on, `signingKeyId` is the new key's id. Earlier entries keep the old id, and keep verifying against the retired key, which stays in the workspace's keyring.
 
 ### The public key
 

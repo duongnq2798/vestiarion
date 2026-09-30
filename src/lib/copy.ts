@@ -32,3 +32,15 @@ export function utcMinute(iso: string): string {
  * so it is never shown or returned, only this.
  */
 export const CIRCLE_UNREACHABLE = "Could not reach Circle; showing the last known balance";
+
+/**
+ * Why a ledger key rotation was refused (`LedgerKeyError` in
+ * src/lib/platform/ledger-key.ts). Here rather than there so the Settings
+ * panel, a client component, can say the same sentence without importing the
+ * server module.
+ */
+export const LEDGER_KEY_MESSAGES = {
+  cycle_running: "A cycle is running. Try again in a minute, once it has finished.",
+  key_unreadable: "The current signing key cannot be read, so it cannot be retired safely. Nothing was changed.",
+  conflict: "The signing key changed a moment ago. Reload and check it before rotating again.",
+} as const;
