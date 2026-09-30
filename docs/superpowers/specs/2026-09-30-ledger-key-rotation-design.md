@@ -93,6 +93,25 @@ content/docs/guides/audit-export.mdx               rotation section
    - the Audit log page lists the retired key.
 4. Record the result in this spec.
 
+### Rollout record (2026-09-30)
+
+- **Migration 0035** was applied by the partner before the merge of #67. A read-only probe found:
+  - `ledger_retired_keys` as `jsonb` not null default `[]`;
+  - the `orgs_ledger_retired_keys_is_array` check;
+  - all 7 workspaces at `[]`.
+
+  After the deploy, the app's own org loading worked for `founding` and `test-sample-data` (both verify valid, no retired keys).
+- **The first rotation on a real ledger** was done by the partner in `testnet-2`, a live workspace on a hosted Arc testnet wallet, from Settings at 12:22 UTC:
+  - #395 is `ledger_key_rotated`, actor `human`, detail `{ from: 8d09d7efdfa51cda, to: 5e69c0196d40a5ec, by: <owner id> }`, signed by the new key;
+  - the workspace row now holds `8d09d7efdfa51cda` in `ledger_retired_keys` (retired 12:22:51 UTC), and the panel reports `5e69c0196d40a5ec` as current;
+  - the cycle that followed (#396–#398) was signed by the new key, and automatic detection wrote no second rotation entry.
+- **Verification after the rotation:**
+  - `verifyLedger()`: `{ valid: true, checkedEntries: 59 }` (55 entries by the old key, 4 by the new);
+  - the audit export listed both keys, and the standalone verifier answered VALID (exit 0) both from the file's own keys and with both keys pinned;
+  - with only the new key pinned it answered NOT CHECKED at #314, the first entry the old key signed (exit 2), and with only the old key NOT CHECKED at #395 (exit 2).
+
+  So the old public key is what keeps the earlier history verifiable, and the rotation entry is the boundary.
+
 ## 6. Out of scope
 
 - Rotating on a schedule.
