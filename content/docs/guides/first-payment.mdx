@@ -106,6 +106,18 @@ Each invoice's decision is a card on **AP / AR**, under **Payables**. The consol
 
 When the model decided to pay but a guardrail stopped it, the card also has a "Blocked by code, not by the model" band. The band names the rule, the amount attempted and the amount allowed.
 
+## When the agent pays
+
+An invoice does not have to be paid the moment it is decided. At intake, a payable can carry an early-payment discount: **Early-payment discount (%)** and **Discount deadline**, alongside its other fields. On a cycle, the agent chooses not only whether to pay an invoice but when, within a bound code enforces: never later than the invoice's due date.
+
+- With an early-payment discount still available, it schedules the payment for the discount's last day, and pays the discounted amount then.
+- Otherwise, it schedules the payment for the due date, holding the cash until it is owed.
+- A payable due today, or overdue, is paid at once rather than scheduled.
+
+A scheduled invoice's decision card reads "Scheduled for *date*", with the agent's reasoning for choosing that day. On the day itself, the next cycle checks everything again before anything moves: the counterparty's risk level, its payment limit, whether its address is confirmed, and whether the agent is paused. Pausing the agent stops a scheduled payment exactly as it stops any other.
+
+A scheduled invoice's status on **AP / AR** reads "Scheduled · *date*", and an invoice with an early-payment discount shows its terms as "*pct*% off if paid by *date*". The console's **Scheduled payments** section lists what the agent will pay next, soonest first: the date, the counterparty, the amount it will actually transfer — discounted, when the discount will still apply that day — and why.
+
 ## 5. Approve a held payment
 
 **Approvals** lists every payable the agent would not pay on its own, oldest due date first, each marked held, flagged or awaiting information and shown with the agent's reasoning. When the list is empty, it says "Nothing is waiting for a decision."

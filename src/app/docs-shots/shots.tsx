@@ -120,6 +120,10 @@ const INVOICE: InvoiceRow = {
   agent_reasoning:
     "Paid 12.50 USDC to Northstar Studio: PO-2207 matches and the work was received, Northstar Studio screened clear with a 50.00 USDC limit, and the operating wallet holds 20.00 USDC.",
   tx_ref: `0x${"7a".repeat(32)}`,
+  scheduled_for: null,
+  early_pay_discount_pct: null,
+  discount_due_date: null,
+  paid_amount: 12.5,
 };
 
 /**

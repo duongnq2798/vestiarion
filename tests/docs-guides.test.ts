@@ -40,6 +40,8 @@ const ADDRESS_LIBRARY = "src/lib/counterparty-address.ts";
 const EXPORT_MENU = "src/components/AuditExportMenu.tsx";
 const VERIFIER = "public/tools/verify-ledger-export.mjs";
 const LEDGER_KEY_PANEL = "src/components/LedgerKeyPanel.tsx";
+const MAP = "src/components/vx/map.ts";
+const SCHEDULED_PAYMENTS = "src/components/vx/ScheduledPayments.tsx";
 
 /** Each guide's quoted UI strings, as `[text, the file it must appear in]`. */
 const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
@@ -163,6 +165,12 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["Sample data is loaded", SAMPLE_PANEL],
     ["Remove sample data", SAMPLE_PANEL],
     ["Remove the sample data first. It exists only to try the agent with simulated payments.", GO_LIVE_LIBRARY],
+    ["Early-payment discount (%)", INVOICE_FORM],
+    ["Discount deadline", INVOICE_FORM],
+    ["Scheduled for", MAP],
+    ["Scheduled ·", MAP],
+    ["% off if paid by", MAP],
+    ["Scheduled payments", SCHEDULED_PAYMENTS],
   ],
   "guides/audit-export": [
     ["Audit log", APP_NAV],

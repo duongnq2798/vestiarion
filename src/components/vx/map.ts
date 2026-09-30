@@ -1,3 +1,5 @@
+import { invoiceDiscount } from "@/lib/agent/payment-timing";
+import { utcDay } from "@/lib/copy";
 import type { LedgerEntry } from "@/lib/ledger";
 import type { CounterpartyRow, InvoiceRow, MilestoneRow, TreasuryActionRow } from "@/lib/queries";
 import type { Decision, Evidence, Outcome } from "./types";
@@ -56,6 +58,35 @@ function matchingEntry(entries: LedgerEntry[], key: "invoiceId" | "milestoneId",
   return entries.find((entry) => entry.detail[key] === id);
 }
 
+/**
+ * The invoice's payment terms, as a fact a person reads next to the decision
+ * — not only in the agent's reasoning — when it carries an early-payment
+ * discount (payment timing design §1, "What a person sees").
+ */
+function termsEvidence(invoice: InvoiceRow): Evidence | null {
+  const discount = invoiceDiscount(invoice);
+  if (!discount) return null;
+  return { label: "Terms", value: `${discount.pct}% off if paid by ${utcDay(discount.deadline)}`, state: "neutral" };
+}
+
+/** The day the agent committed to pay, for an invoice still waiting for it. */
+function scheduledStatusEvidence(invoice: InvoiceRow): Evidence | null {
+  if (invoice.status !== "scheduled" || !invoice.scheduled_for) return null;
+  return { label: "Status", value: `Scheduled · ${utcDay(invoice.scheduled_for)}`, state: "neutral" };
+}
+
+/**
+ * What actually left, when it paid less than the invoice's full amount — an
+ * early-payment discount taken. `invoice.amount` is never reduced, so this is
+ * the only place the discounted transfer is shown next to the decision.
+ */
+function paidEvidence(invoice: InvoiceRow): Evidence | null {
+  if (invoice.status !== "paid" || invoice.paid_amount == null || invoice.paid_amount >= invoice.amount) return null;
+  const pct = invoice.early_pay_discount_pct == null ? null : Number(invoice.early_pay_discount_pct);
+  const note = pct != null && Number.isFinite(pct) ? ` (${pct}% discount)` : "";
+  return { label: "Paid", value: `${fmt(invoice.paid_amount)} USDC${note}`, state: "ok" };
+}
+
 function statusOutcome(status: string, txRef: string | null, guardrailBlocked: boolean): Outcome {
   if (guardrailBlocked) return "refused";
   if (status === "paid" && txRef?.startsWith("0x")) return "settled";
@@ -83,7 +114,14 @@ export function invoiceDecision(invoice: InvoiceRow, counterparty: CounterpartyR
     amount: invoice.amount,
     token: "USDC",
     outcome,
-    outcomeLabel: invoice.status === "awaiting_info" ? "Awaiting info" : invoice.status === "flagged" && !guardrailBlocked ? "Flagged for review" : undefined,
+    outcomeLabel:
+      invoice.status === "awaiting_info"
+        ? "Awaiting info"
+        : invoice.status === "flagged" && !guardrailBlocked
+          ? "Flagged for review"
+          : invoice.status === "scheduled" && invoice.scheduled_for
+            ? `Scheduled for ${utcDay(invoice.scheduled_for)}`
+            : undefined,
     reasoning: invoice.agent_reasoning ?? "The agent has not evaluated this invoice yet.",
     evidence: [
       { label: "PO", value: invoice.po_reference ?? "none", state: invoice.po_reference ? "ok" : "missing" },
@@ -91,6 +129,9 @@ export function invoiceDecision(invoice: InvoiceRow, counterparty: CounterpartyR
       { label: "Risk", value: risk, state: risk === "high" ? "missing" : "neutral" },
       { label: "Limit", value: counterparty?.payment_limit == null ? "none" : `${fmt(counterparty.payment_limit)} USDC`, state: counterparty?.payment_limit != null && invoice.amount > counterparty.payment_limit ? "missing" : "neutral" },
       { label: "Due", value: new Date(invoice.due_date).toLocaleDateString("en-US"), state: "neutral" },
+      termsEvidence(invoice),
+      scheduledStatusEvidence(invoice),
+      paidEvidence(invoice),
       duplicateEvidence(observed),
     ].filter((item): item is Evidence => item !== null),
     guardrail: guardrailBlocked ? { rule, attempted: invoice.amount, limit, note: risk === "high" ? "risk tier high" : "amount above screened limit" } : null,
