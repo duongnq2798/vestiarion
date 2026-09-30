@@ -207,6 +207,14 @@ describe("loadSampleData", () => {
     const [milestones] = requestsTo(fake.requests, "/rest/v1/milestones", "POST");
     expect((milestones.body as Array<Record<string, unknown>>).map((row) => row.contractor_id)).toEqual(["cp-4", "cp-5"]);
 
+    // A bulk insert names the union of the rows' keys in `columns`, so without
+    // `missing=default` a row that leaves a key out writes NULL instead of the
+    // column's default — the history row alone sets `status`, and the rest would
+    // violate invoices.status NOT NULL.
+    for (const request of [counterparties, invoices, milestones]) {
+      expect(request.headers.get("prefer")).toContain("missing=default");
+    }
+
     const [entry] = ledgerBodies(fake.requests);
     expect(entry.p_action).toBe("sample_data_loaded");
     expect(entry.p_domain).toBe("system");
