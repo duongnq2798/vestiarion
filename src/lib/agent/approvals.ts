@@ -326,7 +326,8 @@ export async function approveAndPay(
   // A transfer that already exists is reconciled, never sent again, so the
   // balance — already lower by this very payment — is not the question.
   const provider = getChainProvider();
-  if (!transferExists(await paymentIntentOf(invoice.id))) {
+  const alreadySent = transferExists(await paymentIntentOf(invoice.id));
+  if (!alreadySent) {
     const balance = provider.mode === "live" ? await syncOperatingBalance(operating.id) : operating.balance;
     if (balance < invoice.amount) {
       throw new ApprovalError("insufficient_funds", `The operating account holds ${balance} USDC, less than this invoice.`);
@@ -338,13 +339,15 @@ export async function approveAndPay(
     .single();
   if (claim.error) raiseFromClaim(claim.error);
 
-  if (shownAddress !== undefined) {
+  // A transfer already sent went wherever it went; recording it confirms nothing
+  // about the address the counterparty has now.
+  if (shownAddress !== undefined && !alreadySent) {
     // Best effort: the decision is claimed, and a confirmation that did not
     // land only means the agent holds the next payment to this address too.
     try {
       await confirmCounterpartyAddress({ actorId: input.actorId, counterpartyId: invoice.counterpartyId, shownAddress, via: "approval" });
     } catch (error) {
-      console.error("approval: counterparty address not confirmed", invoice.id, (error as Error).name);
+      console.error("approval: counterparty address not confirmed", invoice.id, (error as Error).message);
     }
   }
 

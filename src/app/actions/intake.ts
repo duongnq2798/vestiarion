@@ -116,7 +116,7 @@ const counterpartyIdSchema = z.string().uuid();
 /** A `CounterpartyAddressError` carries a message safe to show; anything else stays in the server log. */
 function addressFailure(error: unknown, what: string): IntakeActionResult {
   if (error instanceof CounterpartyAddressError) return { ok: false, message: error.message };
-  console.error(what, error instanceof Error ? error.name : "unknown error");
+  console.error(what, error instanceof Error ? error.message : "unknown error");
   return { ok: false, message: "That did not work. Try again in a moment." };
 }
 

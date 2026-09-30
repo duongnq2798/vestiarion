@@ -235,6 +235,16 @@ describe("confirmCounterpartyAddress", () => {
     expect(entry.p_detail).toEqual({ by: ACTOR, counterpartyId: COUNTERPARTY_ID, address: NEW, via: "confirm" });
   });
 
+  it("stamps the confirmation after the change even when this clock runs behind the one that stamped it", async () => {
+    const future = new Date(Date.now() + 60_000).toISOString();
+    const { fake, run } = addressFake({ row: counterpartyRow({ address: NEW, address_changed_at: future }) });
+
+    await run(() => confirmCounterpartyAddress({ actorId: ACTOR, counterpartyId: COUNTERPARTY_ID, shownAddress: NEW, via: "confirm" }));
+
+    const body = patches(fake.requests)[0].body as { address_confirmed_at: string };
+    expect(addressUnconfirmed(future, body.address_confirmed_at)).toBe(false);
+  });
+
   it("refuses an address that is no longer the counterparty's, before writing", async () => {
     const { fake, run } = addressFake({ row: unconfirmed() });
 

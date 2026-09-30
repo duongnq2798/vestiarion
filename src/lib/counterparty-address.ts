@@ -131,7 +131,9 @@ export async function confirmCounterpartyAddress(input: {
 
   const update = db()
     .from("counterparties")
-    .update({ address_confirmed_at: new Date().toISOString() })
+    // Never earlier than the change it confirms, even if this server's clock
+    // runs behind the one that stamped the change.
+    .update({ address_confirmed_at: new Date(Math.max(Date.now(), Date.parse(current.address_changed_at as string) + 1)).toISOString() })
     .eq("id", current.id)
     .eq("address_changed_at", current.address_changed_at as string);
   const guarded = current.address === null ? update.is("address", null) : update.eq("address", current.address);

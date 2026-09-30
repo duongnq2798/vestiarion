@@ -712,6 +712,18 @@ describe("approveAndPay and the address the person was shown", () => {
     expect(confirmed?.p_detail).toEqual({ by: ACTOR, counterpartyId: COUNTERPARTY_ID, address: "0xdead", via: "approval" });
   });
 
+  it("does not confirm the address when the approval only records a transfer that was already sent", async () => {
+    paid();
+    const { fake, run } = approvalsFake({
+      counterparty: unconfirmed,
+      intents: [{ source_id: INVOICE_ID, status: "confirmed", provider_tx_id: "circle-tx-1", last_error: null }],
+    });
+
+    await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID, shownAddress: "0xdead" }));
+
+    expect(counterpartyPatches(fake.requests)).toHaveLength(0);
+  });
+
   it("pays even when the confirmation cannot be written", async () => {
     paid();
     const { run } = approvalsFake();
