@@ -81,13 +81,13 @@ Open **AP / AR**. Under **Invoice intake**, choose **Enter one invoice**, or **I
   caption="A payable within the counterparty's limit, with its PO reference and the goods received."
 />
 
-Choose **Add invoice**. The page confirms with "Invoice added for *Name*." As the form says, "The agent will evaluate this invoice on the next cycle."
+Choose **Add invoice**. The page confirms with "Invoice added for *Name*. The agent will decide on it within a minute." As the form says, "The agent decides on a payable within a minute of adding it."
 
 ## 3. Run a cycle
 
-A cycle is one run of the agent: it screens counterparties, reads open invoices, and pays, holds or flags each one. On a live workspace a cycle runs every 6 hours on its own, so the invoice is decided at the next run without anyone pressing a button.
+A cycle is one run of the agent: it screens counterparties, reads open invoices, and pays, holds or flags each one. Adding a payable starts a cycle within a minute, so the invoice is decided without anyone pressing a button, and the pages show the decision on their own. The agent also starts one when a person returns a payable to it, confirms a changed address, verifies a milestone, resumes it, or when funds arrive in the wallet. A live workspace also runs a cycle every 6 hours on its own, for what time alone changes, such as due dates and screening.
 
-To decide it now, open **Treasury**, the console, and choose **Run cycle now**. Only owners and admins have this button. When the cycle ends, a message says "Cycle complete at *time* · *n* decisions logged." and the console shows a report of what the cycle did.
+To run one yourself, open **Treasury**, the console, and choose **Run cycle now**. Only owners and admins have this button. When the cycle ends, a message says "Cycle complete at *time* · *n* decisions logged." and the console shows a report of what the cycle did.
 
 ## 4. Read the decision and its reasoning
 
@@ -114,7 +114,7 @@ Owners, admins and approvers decide each one:
 
 - **Approve and pay** starts the transfer. A dialog asks you to confirm, and **Pay now** sends it at once. The ledger records who approved it.
 - **Reject** marks it not paid. You can give a reason, which is kept in the ledger.
-- **Return to agent** sends it back to pending, so the next cycle decides it again.
+- **Return to agent** sends it back to pending, and the agent decides it again within a minute.
 
 <Screenshot
   src="/docs/guides/first-payment-approval.png"

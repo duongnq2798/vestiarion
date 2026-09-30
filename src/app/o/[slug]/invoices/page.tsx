@@ -1,6 +1,7 @@
 import { FileSpreadsheet, ListFilter, PenLine } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { AutoRefresh } from "@/components/AutoRefresh";
 import AgentControls from "@/components/AgentControls";
 import InvoiceCsvImport from "@/components/intake/InvoiceCsvImport";
 import InvoiceIntake from "@/components/intake/InvoiceIntake";
@@ -64,6 +65,9 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
           sub="Three-way match, counterparty risk, and payment authority — with the agent’s complete reasoning on every line."
           right={<AgentControls orgSlug={slug} nextDay={dashboardStats.day + 1} headSeq={headEntries[0]?.seq ?? 0} clockMode={dashboardStats.clockMode} />}
         />
+        {/* The agent decides within a minute of an event (an invoice added, a payable returned): the page
+            re-reads its data every 20 s, and at once on return to the tab, so the decision appears without a reload. */}
+        <AutoRefresh intervalMs={20_000} />
 
         {filter && (
           <Callout tone="held" icon={<ListFilter />} className="mb-6">

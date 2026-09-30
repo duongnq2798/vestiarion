@@ -116,7 +116,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["Goods or services received", INVOICE_FORM],
     ["Add invoice", INVOICE_FORM],
     ["Invoice added for", INTAKE_ACTIONS],
-    ["The agent will evaluate this invoice on the next cycle.", INVOICE_FORM],
+    ["The agent decides on a payable within a minute of adding it.", INVOICE_FORM],
     ["Treasury", APP_NAV],
     ["Run cycle now", RUN],
     ["Cycle complete at", ORCHESTRATOR],
