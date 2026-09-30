@@ -1,9 +1,11 @@
-export const OPEN_PAYABLE_STATUSES = ["pending", "matched", "held", "awaiting_info"] as const;
+export const OPEN_PAYABLE_STATUSES = ["pending", "matched", "held", "awaiting_info", "scheduled"] as const;
 
 export interface PayableObligation {
   amount: string | number;
   due_date: string;
   status: string;
+  /** Set once a `scheduled` invoice has a target day; that day, not `due_date`, is when the cash leaves. */
+  scheduled_for?: string | null;
 }
 
 export interface PayableObligationSummary {
@@ -20,12 +22,16 @@ export interface PayableObligationSummary {
 export function summarizePayableObligations(rows: PayableObligation[], now = Date.now()): PayableObligationSummary {
   const open = rows.filter((row) => OPEN_PAYABLE_STATUSES.includes(row.status as (typeof OPEN_PAYABLE_STATUSES)[number]));
   const amount = (row: PayableObligation) => typeof row.amount === "number" ? row.amount : Number(row.amount);
+  // A scheduled row leaves the account on scheduled_for, not on due_date —
+  // that is the date the buffer has to hold cash for. Every other row (and a
+  // scheduled one with no target day yet) falls back to due_date as before.
+  const effectiveDate = (row: PayableObligation) => row.scheduled_for ?? row.due_date;
   const dueWithin = (days: number) => {
     const cutoff = now + days * 86_400_000;
-    return open.filter((row) => Date.parse(row.due_date) <= cutoff).reduce((sum, row) => sum + amount(row), 0);
+    return open.filter((row) => Date.parse(effectiveDate(row)) <= cutoff).reduce((sum, row) => sum + amount(row), 0);
   };
   const daysUntilNext = open.reduce((soonest, row) => {
-    const days = (Date.parse(row.due_date) - now) / 86_400_000;
+    const days = (Date.parse(effectiveDate(row)) - now) / 86_400_000;
     return Number.isFinite(days) ? Math.min(soonest, Math.max(0, days)) : soonest;
   }, Number.POSITIVE_INFINITY);
 

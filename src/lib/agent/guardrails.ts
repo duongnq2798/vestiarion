@@ -3,7 +3,7 @@ import { blockingDuplicate } from "./duplicates";
 import { addressUnconfirmed } from "../counterparty-address";
 
 export interface ApGuardrailInput {
-  action: "pay" | "hold" | "flag_fraud" | "request_info";
+  action: "pay" | "schedule" | "hold" | "flag_fraud" | "request_info";
   reasoning: string;
   amount: number;
   riskLevel: string;
@@ -31,7 +31,14 @@ export interface ApGuardrailResult {
 
 /** The final code boundary between a model's recommendation and execution. */
 export function enforceApGuardrails(input: ApGuardrailInput): ApGuardrailResult {
-  if (input.action !== "pay") return { blocked: false, status: null, rule: null, reasoning: input.reasoning };
+  if (input.action !== "pay" && input.action !== "schedule") {
+    return { blocked: false, status: null, rule: null, reasoning: input.reasoning };
+  }
+  // A payment the agent commits to must be one it would be allowed to make:
+  // every check below applies to `schedule` exactly as it does to `pay`. Only
+  // the wording of a refusal changes, so a person reading the ledger sees
+  // what was actually refused.
+  const verb = input.action === "schedule" ? "scheduling" : "payment";
 
   // Checked before risk and limit because a duplicate is the one failure where
   // every other check legitimately passes: the counterparty is clear, the
@@ -43,7 +50,7 @@ export function enforceApGuardrails(input: ApGuardrailInput): ApGuardrailResult 
       blocked: true,
       status: "flagged",
       rule: "invoice.duplicate_of_settled",
-      reasoning: `${input.reasoning} [guardrail override: this invoice repeats one already settled (${duplicate.explanation}) — payment refused before execution]`,
+      reasoning: `${input.reasoning} [guardrail override: this invoice repeats one already settled (${duplicate.explanation}) — ${verb} refused before execution]`,
     };
   }
 
@@ -52,7 +59,7 @@ export function enforceApGuardrails(input: ApGuardrailInput): ApGuardrailResult 
       blocked: true,
       status: "flagged",
       rule: "counterparty.high_risk",
-      reasoning: `${input.reasoning} [guardrail override: counterparty is high risk — payment refused before execution]`,
+      reasoning: `${input.reasoning} [guardrail override: counterparty is high risk — ${verb} refused before execution]`,
     };
   }
   // Ahead of the limit so the reason names the change: an edited address is
@@ -72,7 +79,7 @@ export function enforceApGuardrails(input: ApGuardrailInput): ApGuardrailResult 
       blocked: true,
       status: "held",
       rule: "counterparty.payment_limit",
-      reasoning: `${input.reasoning} [guardrail override: amount exceeds the ${input.paymentLimit} USDC payment limit — payment refused before execution]`,
+      reasoning: `${input.reasoning} [guardrail override: amount exceeds the ${input.paymentLimit} USDC payment limit — ${verb} refused before execution]`,
     };
   }
   return { blocked: false, status: null, rule: null, reasoning: input.reasoning };
