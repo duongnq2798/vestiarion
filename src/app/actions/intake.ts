@@ -214,6 +214,8 @@ export async function createInvoiceAction(
       poReference: formString(formData, "poReference"),
       goodsReceived: formData.get("goodsReceived") === "on",
       dueDate: formString(formData, "dueDate"),
+      earlyPayDiscountPct: formString(formData, "earlyPayDiscountPct"),
+      discountDeadline: formString(formData, "discountDeadline"),
     });
     if (!parsed.success) return { ok: false, message: firstZodMessage(parsed.error) };
 
@@ -241,6 +243,8 @@ export async function createInvoiceAction(
             po_reference: input.poReference,
             goods_received: input.goodsReceived,
             due_date: dueDateIso(input.dueDate),
+            early_pay_discount_pct: input.earlyPayDiscountPct,
+            discount_due_date: input.discountDeadline ? dueDateIso(input.discountDeadline) : null,
             created_by: auth.user.id,
           })
           .select("id")
@@ -321,6 +325,8 @@ export async function importInvoicesAction(
             po_reference: row.po_reference,
             goods_received: row.goods_received,
             due_date: dueDateIso(row.due_date),
+            early_pay_discount_pct: row.early_pay_discount_pct,
+            discount_due_date: row.discount_deadline ? dueDateIso(row.discount_deadline) : null,
             created_by: auth.user.id,
           })))
           .select("id")

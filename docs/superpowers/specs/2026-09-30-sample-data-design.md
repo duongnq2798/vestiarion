@@ -39,8 +39,9 @@ Amounts are sized for the simulated operating balance of 10,000 USDC that every 
 
 | Counterparty | Role | Limit | What is recorded | The first cycle's outcome |
 |---|---|---|---|---|
-| Northwind Hosting | vendor | 2,000 | 240 "Hosting — September", PO-1042, received, due in 3 days | paid |
+| Northwind Hosting | vendor | 2,000 | 240 "Hosting — September", PO-1042, received, due today | paid |
 | Northwind Hosting | | | 95 "Bandwidth overage", no PO, not received, due in 4 days | awaiting information |
+| Northwind Hosting | | | 400 "Annual support plan", PO-1044, received, 2% off within 10 days, due in 30 days | scheduled for its discount deadline, paid at 392 USDC on that day |
 | Harbor Office Supply | vendor | 500 | 1,200 "Standing desks", PO-2210, received, due in 6 days | held: over the limit |
 | Kestrel Print Co | vendor | 1,500 | 180 "Brochure print run", PO-3307, **paid** 20 days ago | history |
 | Kestrel Print Co | | | 180 "Brochure print run", PO-3307, received, due in 2 days | flagged: repeats a paid invoice |

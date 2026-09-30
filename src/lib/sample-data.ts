@@ -53,6 +53,8 @@ export interface SampleFixture {
     po_reference: string | null;
     goods_received: boolean;
     due_date: string;
+    early_pay_discount_pct?: number;
+    discount_due_date?: string;
     status?: "paid";
     decided_at?: string;
     settled_at?: string;
@@ -98,10 +100,23 @@ export function sampleFixture(now: Date): SampleFixture {
       { key: "marlow", name: "Marlow Design Studio — Design Contractor", role: "contractor", limit: 2500 },
     ],
     invoices: [
-      // Paid: a full three-way match, well under the limit.
-      { counterparty: "northwind", direction: "payable", amount: 240, memo: "Hosting — September", po_reference: "PO-1042", goods_received: true, due_date: at(3) },
+      // Paid: a full three-way match, well under the limit, due today.
+      { counterparty: "northwind", direction: "payable", amount: 240, memo: "Hosting — September", po_reference: "PO-1042", goods_received: true, due_date: at(0) },
       // Awaiting information: no purchase order and nothing received.
       { counterparty: "northwind", direction: "payable", amount: 95, memo: "Bandwidth overage", po_reference: null, goods_received: false, due_date: at(4) },
+      // Scheduled: 2/10 net 30. The discount is worth more than the yield on
+      // the cash kept until the due date, so the agent pays on the deadline.
+      {
+        counterparty: "northwind",
+        direction: "payable",
+        amount: 400,
+        memo: "Annual support plan",
+        po_reference: "PO-1044",
+        goods_received: true,
+        due_date: at(30),
+        early_pay_discount_pct: 2,
+        discount_due_date: at(10),
+      },
       // Held: a clean invoice over Harbor's 500 USDC limit.
       { counterparty: "harbor", direction: "payable", amount: 1200, memo: "Standing desks", po_reference: "PO-2210", goods_received: true, due_date: at(6) },
       // History for the next row: already paid, last month.

@@ -91,4 +91,23 @@ describe("createInvoiceAction's counterparty lookup", () => {
     const insert = fake.requests.find((sent) => sent.path === "/rest/v1/invoices" && sent.method === "POST");
     expect(insert?.body).toMatchObject({ counterparty_id: COUNTERPARTY, org_id: ORG, created_by: USER });
   });
+
+  it("inserts no discount terms when the form leaves them blank", async () => {
+    const fake = fakeSupabase(organizationDatabase([{ id: COUNTERPARTY, name: "Acme Supplies" }]));
+    await runWith({ config, db: fake.client, fetch: fake.fetch }, () => createInvoiceAction({ ok: false, message: "" }, invoiceForm()));
+
+    const insert = fake.requests.find((sent) => sent.path === "/rest/v1/invoices" && sent.method === "POST");
+    expect(insert?.body).toMatchObject({ early_pay_discount_pct: null, discount_due_date: null });
+  });
+
+  it("inserts the discount percent and the deadline at noon UTC when the form carries terms", async () => {
+    const fake = fakeSupabase(organizationDatabase([{ id: COUNTERPARTY, name: "Acme Supplies" }]));
+    const form = invoiceForm();
+    form.set("earlyPayDiscountPct", "2");
+    form.set("discountDeadline", "2026-10-20");
+    await runWith({ config, db: fake.client, fetch: fake.fetch }, () => createInvoiceAction({ ok: false, message: "" }, form));
+
+    const insert = fake.requests.find((sent) => sent.path === "/rest/v1/invoices" && sent.method === "POST");
+    expect(insert?.body).toMatchObject({ early_pay_discount_pct: "2", discount_due_date: "2026-10-20T12:00:00.000Z" });
+  });
 });
