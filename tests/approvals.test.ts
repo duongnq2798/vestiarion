@@ -1035,14 +1035,18 @@ describe("listWaitingPayables", () => {
     expect(lookup.params.get("source_id")).toBe("in.(sent,pending,unreadable,provider-failed,stuck,legacy-failed,none)");
   });
 
-  it("says what the last payment attempt did: failed with Circle's reason, or still in flight", async () => {
+  it("says what the last payment attempt did: failed with Circle's reason in plain words, or still in flight", async () => {
     const ids = [
-      "failed-reason", "failed-no-reason", "stuck", "sent", "confirmed", "unreadable", "unreadable-sent", "legacy-failed", "failed-before-id", "none",
+      "failed-reason", "failed-insufficient-token", "failed-on-chain", "failed-unmapped-code",
+      "failed-no-reason", "stuck", "sent", "confirmed", "unreadable", "unreadable-sent", "legacy-failed", "failed-before-id", "none",
     ];
     const { fake, run } = approvalsFake({
       invoice: (r) => (r.params.get("id") ? undefined : { body: ids.map((id) => invoiceRow({ id })) }),
       intents: [
         terminallyFailed({ source_id: "failed-reason", failure_reason: "INSUFFICIENT_NATIVE_TOKEN" }),
+        terminallyFailed({ source_id: "failed-insufficient-token", failure_reason: "INSUFFICIENT_TOKEN" }),
+        terminallyFailed({ source_id: "failed-on-chain", failure_reason: "FAILED_ON_CHAIN" }),
+        terminallyFailed({ source_id: "failed-unmapped-code", failure_reason: "SOME_OTHER_CIRCLE_CODE" }),
         terminallyFailed({ source_id: "failed-no-reason", provider_state: "CANCELLED", failure_reason: null }),
         { source_id: "stuck", status: "pending", provider_tx_id: "tx-3", last_error: null, provider_state: "STUCK", failure_reason: null },
         { source_id: "sent", status: "pending", provider_tx_id: "tx-4", last_error: null, provider_state: "SENT", failure_reason: null },
@@ -1058,7 +1062,16 @@ describe("listWaitingPayables", () => {
     const listed = await run(() => listWaitingPayables());
 
     expect(Object.fromEntries(listed.map((row) => [row.id, row.lastAttempt]))).toEqual({
-      "failed-reason": { state: "failed", reason: "INSUFFICIENT_NATIVE_TOKEN" },
+      "failed-reason": {
+        state: "failed",
+        reason: "the operating wallet does not hold enough USDC for the network fee (Circle: INSUFFICIENT_NATIVE_TOKEN)",
+      },
+      "failed-insufficient-token": {
+        state: "failed",
+        reason: "the operating wallet does not hold enough USDC (Circle: INSUFFICIENT_TOKEN)",
+      },
+      "failed-on-chain": { state: "failed", reason: "the transfer failed on chain (Circle: FAILED_ON_CHAIN)" },
+      "failed-unmapped-code": { state: "failed", reason: "SOME_OTHER_CIRCLE_CODE" },
       "failed-no-reason": { state: "failed", reason: "Circle reported CANCELLED" },
       stuck: { state: "in_flight" },
       sent: { state: "in_flight" },

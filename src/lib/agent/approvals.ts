@@ -182,18 +182,35 @@ function transferExists(intent: IntentState | null): boolean {
 export type LastPaymentAttempt = { state: "failed"; reason: string } | { state: "in_flight" } | null;
 
 /**
+ * Circle's own failure codes, in plain words, for the reasons a person is
+ * most likely to hit and be able to act on. Any other code stays exactly as
+ * Circle sent it — better an unfamiliar code than a made-up explanation.
+ */
+const REASON_IN_PLAIN_WORDS: Record<string, string> = {
+  INSUFFICIENT_NATIVE_TOKEN: "the operating wallet does not hold enough USDC for the network fee (Circle: INSUFFICIENT_NATIVE_TOKEN)",
+  INSUFFICIENT_TOKEN: "the operating wallet does not hold enough USDC (Circle: INSUFFICIENT_TOKEN)",
+  FAILED_ON_CHAIN: "the transfer failed on chain (Circle: FAILED_ON_CHAIN)",
+};
+
+/**
  * The last attempt as the card reports it: failed terminally, with Circle's
- * reason (or its state when it gave none); or in flight, when the transfer is
- * `pending` or Circle's last recorded state for it is one that can still move
- * money (`STUCK`, `SENT` and the rest) — a read of ours that failed since
- * does not change what Circle last said. Anything else is null: no transfer,
- * a confirmed one (Approve and pay records it), or a `failed` intent from
- * before Circle's state was kept, which Approve and pay reads from Circle.
+ * reason in plain words when it is one of the common ones, Circle's own code
+ * otherwise, or its state when it gave no reason at all; or in flight, when
+ * the transfer is `pending` or Circle's last recorded state for it is one
+ * that can still move money (`STUCK`, `SENT` and the rest) — a read of ours
+ * that failed since does not change what Circle last said. Anything else is
+ * null: no transfer, a confirmed one (Approve and pay records it), or a
+ * `failed` intent from before Circle's state was kept, which Approve and pay
+ * reads from Circle.
  */
 function lastAttemptOf(intent: IntentState | null): LastPaymentAttempt {
   if (!intent || intent.provider_tx_id === null || intent.status === "confirmed") return null;
   if (failedTerminally(intent)) {
-    return { state: "failed", reason: intent.failure_reason ?? `Circle reported ${intent.provider_state}` };
+    const reason = intent.failure_reason;
+    return {
+      state: "failed",
+      reason: reason ? (REASON_IN_PLAIN_WORDS[reason] ?? reason) : `Circle reported ${intent.provider_state}`,
+    };
   }
   return intent.status === "pending" || intent.provider_state !== null ? { state: "in_flight" } : null;
 }
