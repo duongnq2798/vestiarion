@@ -25,8 +25,11 @@ export function GettingStarted({ slug, checklist, isOwner }: { slug: string; che
         title="Get started"
         meta={`${doneCount} of ${checklist.steps.length} done`}
         action={
-          <Button asChild size="sm" variant="ghost" icon={<BookOpen />}>
-            <Link href="/docs/guides/go-live">Read the guide</Link>
+          <Button asChild size="sm" variant="ghost">
+            <Link href="/docs/guides/go-live">
+              <BookOpen aria-hidden />
+              Read the guide
+            </Link>
           </Button>
         }
       />
@@ -63,8 +66,11 @@ export function GettingStarted({ slug, checklist, isOwner }: { slug: string; che
                   )}
                 </div>
                 {next && (
-                  <Button asChild size="sm" variant="secondary" icon={<ArrowRight />} className="shrink-0">
-                    <Link href={orgHref(slug, step.path)}>{ownerStepForAdmin ? "View" : "Start"}</Link>
+                  <Button asChild size="sm" variant="secondary" className="shrink-0">
+                    <Link href={orgHref(slug, step.path)}>
+                      {ownerStepForAdmin ? "View" : "Start"}
+                      <ArrowRight aria-hidden />
+                    </Link>
                   </Button>
                 )}
               </li>

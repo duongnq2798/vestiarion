@@ -43,6 +43,6 @@ It was decided on 2026-09-30 by the implementer under the partner's standing ins
 
 ## 4. Out of scope
 
-- Screenshots in the guides.
+- Screenshots in the guides. (Superseded: the guides gained screenshots in #51, and this checklist has its own in the Go live guide.)
 - A dismissable or stored onboarding state.
 - Email onboarding.

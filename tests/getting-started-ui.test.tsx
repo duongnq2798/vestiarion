@@ -38,7 +38,11 @@ describe("GettingStarted", () => {
     const markup = render();
     expect(markup.match(/aria-current="step"/g)).toHaveLength(1);
     expect(markup).toContain('href="/o/acme/settings#go-live-title"');
-    expect(markup).toContain(">Start<");
+    expect(markup).toMatch(/>Start<svg[^>]*lucide-arrow-right/);
+  });
+
+  it("draws the guide link's icon", () => {
+    expect(render()).toMatch(/<svg[^>]*lucide-book-open[^>]*>.*<\/svg>Read the guide/);
   });
 
   it("links the next step's own page once the wallet is funded", () => {
@@ -50,7 +54,7 @@ describe("GettingStarted", () => {
   it("tells an admin that an owner takes the owner-only steps", () => {
     const markup = render({ isOwner: false });
     expect(markup).toContain("An owner of this workspace does this step.");
-    expect(markup).toContain(">View<");
+    expect(markup).toMatch(/>View<svg/);
   });
 
   it("renders nothing once the workspace is live", () => {
