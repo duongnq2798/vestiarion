@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import AgentControls from "@/components/AgentControls";
+import CounterpartyAddress from "@/components/intake/CounterpartyAddressEdit";
 import CounterpartyIntake from "@/components/intake/CounterpartyIntake";
 import { Badge, type BadgeProps } from "@/components/ui/Badge";
 import { Callout } from "@/components/ui/Callout";
@@ -13,6 +14,7 @@ import { sectionTitle } from "@/components/vx/nav";
 import { viewerCan } from "@/lib/auth/authorize";
 import { requireMembership } from "@/lib/auth/membership";
 import { chainModes } from "@/lib/circle";
+import { addressUnconfirmed } from "@/lib/counterparty-address";
 import { inOrg } from "@/lib/dal/scope";
 import { listLedgerEntries } from "@/lib/ledger";
 import { listCounterparties, stats } from "@/lib/queries";
@@ -32,11 +34,12 @@ export default async function CounterpartiesPage({ params }: { params: Promise<{
   const { slug } = await params;
   const access = await requireMembership(slug);
   return inOrg(access, async () => {
-    const [counterparties, dashboardStats, entries, canWrite] = await Promise.all([
+    const [counterparties, dashboardStats, entries, canWrite, canConfirm] = await Promise.all([
       listCounterparties(),
       stats(),
       listLedgerEntries(1),
       viewerCan(slug, "records.write"),
+      viewerCan(slug, "approval.decide"),
     ]);
 
     return (
@@ -89,7 +92,15 @@ export default async function CounterpartiesPage({ params }: { params: Promise<{
                       <div className="min-w-0"><dt className="text-ink-3">Jurisdiction</dt><dd className="mt-0.5 break-words text-ink">{counterparty.jurisdiction || "Not set"}</dd></div>
                       <div className="min-w-0"><dt className="text-ink-3">Last screened</dt><dd className="mt-0.5 break-words text-ink">{counterparty.last_screened_at ? new Date(counterparty.last_screened_at).toLocaleString() : "Not yet"}</dd></div>
                     </dl>
-                    {counterparty.address && <p className="mt-3 truncate border-t border-line pt-3 font-mono text-[0.7rem] text-ink-3" title={counterparty.address}>{counterparty.address}</p>}
+                    <CounterpartyAddress
+                      orgSlug={slug}
+                      counterparty={{ id: counterparty.id, name: counterparty.name, address: counterparty.address }}
+                      unconfirmedSince={
+                        addressUnconfirmed(counterparty.address_changed_at, counterparty.address_confirmed_at) ? counterparty.address_changed_at : null
+                      }
+                      canWrite={canWrite}
+                      canConfirm={canConfirm}
+                    />
                   </article>
                 </Card>
               ))}

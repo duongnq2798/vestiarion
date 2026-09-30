@@ -51,6 +51,10 @@ export interface CounterpartyRow {
   last_screened_at: string | null;
   performance_score: number | null;
   performance_inputs: CounterpartyHistoryInputs | null;
+  /** When a person last changed the address; null when it was set as the counterparty was added. */
+  address_changed_at: string | null;
+  /** When a person last confirmed the address. */
+  address_confirmed_at: string | null;
 }
 
 export async function listCounterparties(): Promise<CounterpartyRow[]> {
