@@ -34,8 +34,13 @@ begin
     select 1 from pg_constraint
      where conrelid = 'public.invoices'::regclass and conname = 'invoices_discount_before_due'
   ) then
+    -- Compared as UTC calendar dates, not instants: due_date and
+    -- discount_due_date are wall-clock dates (P4 of the design), and
+    -- dueDateIso (src/lib/intake-validation.ts) anchors due_date at 12:00
+    -- UTC, so a same-day deadline at a later time of day must still pass.
     alter table public.invoices add constraint invoices_discount_before_due
-      check (discount_due_date is null or discount_due_date <= due_date);
+      check (discount_due_date is null
+             or (discount_due_date at time zone 'UTC')::date <= (due_date at time zone 'UTC')::date);
   end if;
   if not exists (
     select 1 from pg_constraint

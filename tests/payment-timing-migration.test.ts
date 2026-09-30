@@ -145,6 +145,22 @@ describe("invoices_discount_before_due", () => {
       invoice(A, { dueDate: daysFromNow(30), earlyPayDiscountPct: 2, discountDueDate: daysFromNow(10) })
     ).resolves.toBeTruthy();
   });
+
+  it("allows a deadline on the due date's UTC day even at a later time of day (due_date is anchored at noon UTC, per dueDateIso)", async () => {
+    await expect(
+      invoice(A, {
+        dueDate: "2026-10-15T12:00:00.000Z", earlyPayDiscountPct: 2, discountDueDate: "2026-10-15T23:00:00.000Z",
+      })
+    ).resolves.toBeTruthy();
+  });
+
+  it("refuses a deadline on the next UTC day, even a minute past midnight", async () => {
+    await expect(
+      invoice(A, {
+        dueDate: "2026-10-15T12:00:00.000Z", earlyPayDiscountPct: 2, discountDueDate: "2026-10-16T00:30:00.000Z",
+      })
+    ).rejects.toThrow(/invoices_discount_before_due/);
+  });
 });
 
 describe("invoices_scheduled_has_date", () => {
