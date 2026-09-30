@@ -80,7 +80,7 @@ export function utcDate(value: Date | string): string {
   return `${year}-${month}-${day}`;
 }
 
-/** True through the end of the deadline's UTC day; false before the discount exists or after it lapses. */
+/** True through the end of the deadline's UTC day when a discount is set; false when there is none, or once that day has passed. */
 export function discountApplies(discount: { pct: number; deadline: string } | null, now: Date): boolean {
   if (!discount) return false;
   return utcDate(now) <= utcDate(discount.deadline);
@@ -115,16 +115,24 @@ export function boundPayOn(
   const today = utcDate(input.now);
   const dueOn = utcDate(input.dueDate);
 
+  if (!isCalendarDateString(dueOn)) {
+    return { action: "pay", timingRule: "payon.invalid" };
+  }
   if (payOn == null || payOn === "" || !isCalendarDateString(payOn)) {
     return { action: "pay", timingRule: "payon.invalid" };
   }
-  if (payOn <= today) {
+
+  // Clamp to the due date *before* checking against today. Checking
+  // "not after today" first would let an overdue or due-today invoice come
+  // out as "schedule" for a past (or today's) date, just because the
+  // unclamped payOn happened to be later than today.
+  const clamped = payOn > dueOn;
+  const effective = clamped ? dueOn : payOn;
+
+  if (effective <= today) {
     return { action: "pay", timingRule: "payon.not_after_today" };
   }
-  if (payOn > dueOn) {
-    return { action: "schedule", payOn: dueOn, timingRule: "payon.after_due" };
-  }
-  return { action: "schedule", payOn, timingRule: null };
+  return { action: "schedule", payOn: effective, timingRule: clamped ? "payon.after_due" : null };
 }
 
 function buildReason(args: {
@@ -145,15 +153,22 @@ function buildReason(args: {
 
   if (discountValue !== null && deadlineOn) {
     if (discountWins) {
+      // "at least as much" on a tie keeps the sentence honest — >= is the
+      // brief's rule ("worth at least as much"), and "worth more" would
+      // overstate an exact tie.
+      const comparison = discountValue === floatValueToDue ? "is worth at least as much as" : "is worth more than";
       return targetOn === today
-        ? `A ${input.discount!.pct}% early-payment discount (${discountValue} USDC) is worth more than holding the cash to the due date (${floatValueToDue} USDC of yield); the discount deadline is today, so paying now.`
-        : `A ${input.discount!.pct}% early-payment discount (${discountValue} USDC) is worth more than holding the cash to the due date (${floatValueToDue} USDC of yield); paying on the discount deadline, ${utcDay(deadlineOn)}.`;
+        ? `A ${input.discount!.pct}% early-payment discount (${discountValue} USDC) ${comparison} holding the cash to the due date (${floatValueToDue} USDC of yield); the discount deadline is today, so paying now.`
+        : `A ${input.discount!.pct}% early-payment discount (${discountValue} USDC) ${comparison} holding the cash to the due date (${floatValueToDue} USDC of yield); paying on the discount deadline, ${utcDay(deadlineOn)}.`;
     }
     return `Yield to the due date (${floatValueToDue} USDC) is worth more than the ${input.discount!.pct}% early-payment discount (${discountValue} USDC); paying on the due date, ${utcDay(dueOn)}.`;
   }
 
   if (input.discount && deadlineOn) {
-    return `The ${input.discount.pct}% early-payment discount lapsed on ${utcDay(deadlineOn)}; paying on the due date, ${utcDay(dueOn)}, keeps ${input.amount} USDC available until then.`;
+    // "ended with", not "lapsed on" — the discount was valid through the
+    // whole of that UTC day (discountApplies is inclusive), so it did not
+    // stop being valid on that date; it stopped the day after.
+    return `The ${input.discount.pct}% early-payment discount ended with ${utcDay(deadlineOn)}; paying on the due date, ${utcDay(dueOn)}, keeps ${input.amount} USDC available until then.`;
   }
 
   return `No early-payment discount; paying on the due date, ${utcDay(dueOn)}, keeps ${input.amount} USDC available until then.`;
@@ -166,6 +181,26 @@ function buildReason(args: {
 export function planPaymentTiming(input: PaymentTimingInput): PaymentTiming {
   const today = utcDate(input.now);
   const dueOn = utcDate(input.dueDate);
+
+  // Defense in depth: a due date that cannot be read is not a licence to
+  // schedule against an unknown day. Pay now, same as the "overdue" rule
+  // would if the date were known to be in the past.
+  if (!isCalendarDateString(dueOn)) {
+    const amountDueAtTarget = amountToPay(input.amount, input.discount, input.now).amountPaid;
+    return {
+      today,
+      dueOn: today,
+      discountValue: null,
+      discountAvailableUntil: null,
+      floatValueToDue: 0,
+      targetOn: today,
+      recommendation: { action: "pay" },
+      reason: "The due date could not be read; paying now rather than scheduling against an unknown date.",
+      shortfall: input.operatingBalance - input.earlierObligations < amountDueAtTarget,
+      amountDueAtTarget,
+    };
+  }
+
   const available = discountApplies(input.discount, input.now);
   const deadlineOn = input.discount ? utcDate(input.discount.deadline) : null;
 
@@ -176,7 +211,19 @@ export function planPaymentTiming(input: PaymentTimingInput): PaymentTiming {
     : 0;
   const discountWins = available && discountValue !== null && discountValue >= floatValueToDue;
 
-  const targetOn = dueOn <= today ? today : discountWins ? (deadlineOn as string) : dueOn;
+  let targetOn: string;
+  if (dueOn <= today) {
+    // Due today or overdue: pay now. `today` can be later than `dueOn` here
+    // by design (that is what "overdue" means) — the defensive due-date clamp
+    // below must not apply to this branch.
+    targetOn = today;
+  } else {
+    const rawTarget = discountWins ? (deadlineOn as string) : dueOn;
+    // Defense in depth: P2 says the due date is the latest any invoice waits,
+    // always. A discount deadline stored later than the due date (which
+    // intake validation should already forbid) must not schedule past it.
+    targetOn = rawTarget > dueOn ? dueOn : rawTarget;
+  }
 
   const recommendation: PaymentTiming["recommendation"] =
     targetOn > today ? { action: "schedule", payOn: targetOn } : { action: "pay" };

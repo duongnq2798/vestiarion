@@ -60,11 +60,11 @@ describe("amountToPay", () => {
     });
   });
 
-  it("rounds a non-terminating discount to 6 decimals and keeps paid + taken summing to the amount", () => {
-    // 100 * 1/3% = 0.333333... — must round, not truncate to a repeating decimal.
+  it("rounds a non-terminating discount to 6 decimals — pinned to distinguish rounding from truncation", () => {
+    // 100 * 1/3% = 0.3333333...% off => amountPaid 99.6666666...; truncating at
+    // 6 decimals would give 99.666666 / 0.333333, rounding gives .666667 / .333333.
     const result = amountToPay(100, { pct: 1 / 3, deadline: "2026-10-10T12:00:00.000Z" }, new Date("2026-10-05T00:00:00.000Z"));
-    expect(result.discountTaken).toBeCloseTo(0.333333, 6);
-    expect(Number((result.amountPaid + result.discountTaken).toFixed(6))).toBe(100);
+    expect(result).toEqual({ amountPaid: 99.666667, discountTaken: 0.333333 });
   });
 });
 
@@ -79,7 +79,7 @@ describe("boundPayOn", () => {
     expect(boundPayOn("2026-11-15", input)).toEqual({ action: "schedule", payOn: "2026-10-30", timingRule: "payon.after_due" });
   });
 
-  it("clamps a payOn on the due date itself (boundary, not after it)", () => {
+  it("schedules for the due date itself without flagging a correction (boundary, not after it)", () => {
     expect(boundPayOn("2026-10-30", input)).toEqual({ action: "schedule", payOn: "2026-10-30", timingRule: null });
   });
 
@@ -105,6 +105,36 @@ describe("boundPayOn", () => {
 
   it("treats an empty string as pay now", () => {
     expect(boundPayOn("", input)).toEqual({ action: "pay", timingRule: "payon.invalid" });
+  });
+
+  it("treats an unparseable due date as pay now", () => {
+    expect(boundPayOn("2026-10-10", { now: new Date("2026-09-30T00:00:00.000Z"), dueDate: "not-a-date" })).toEqual({
+      action: "pay",
+      timingRule: "payon.invalid",
+    });
+  });
+
+  describe("clamp before checking today — an overdue or due-today invoice never reads as schedule", () => {
+    it("pays now for an overdue invoice even when the chosen payOn is in the future", () => {
+      // due 10 days ago; payOn 15 days from now. Naively payOn > today, but
+      // clamped to the (overdue) due date first, it is not after today.
+      const overdue = { now: new Date("2026-09-30T00:00:00.000Z"), dueDate: "2026-09-20T12:00:00.000Z" };
+      expect(boundPayOn("2026-10-15", overdue)).toEqual({ action: "pay", timingRule: "payon.not_after_today" });
+    });
+
+    it("pays now when due today and the chosen payOn is tomorrow", () => {
+      const dueToday = { now: new Date("2026-09-30T00:00:00.000Z"), dueDate: "2026-09-30T12:00:00.000Z" };
+      expect(boundPayOn("2026-10-01", dueToday)).toEqual({ action: "pay", timingRule: "payon.not_after_today" });
+    });
+
+    it("schedules for tomorrow (the due date) when due tomorrow and payOn is far after it", () => {
+      const dueTomorrow = { now: new Date("2026-09-30T00:00:00.000Z"), dueDate: "2026-10-01T12:00:00.000Z" };
+      expect(boundPayOn("2026-12-01", dueTomorrow)).toEqual({
+        action: "schedule",
+        payOn: "2026-10-01",
+        timingRule: "payon.after_due",
+      });
+    });
   });
 });
 
@@ -160,6 +190,26 @@ describe("planPaymentTiming", () => {
     expect(result.floatValueToDue).toBe(0);
     expect(result.targetOn).toBe("2026-10-30");
     expect(result.recommendation).toEqual({ action: "schedule", payOn: "2026-10-30" });
+    expect(result.reason).toBe(
+      "The 2% early-payment discount ended with Oct 10, 2026; paying on the due date, Oct 30, 2026, keeps 400 USDC available until then."
+    );
+  });
+
+  it("treats an exact tie between the discount and the float value as the discount winning, worded 'at least as much'", () => {
+    // discountValue = 1000 * 1% = 10; floatValueToDue = 1000 * 36.5% * 10/365 = 10 — an exact tie.
+    const result = planPaymentTiming({
+      ...baseInput,
+      amount: 1000,
+      discount: { pct: 1, deadline: "2026-10-20T12:00:00.000Z" },
+      reserveApy: 0.365,
+    });
+    expect(result.discountValue).toBe(10);
+    expect(result.floatValueToDue).toBe(10);
+    expect(result.targetOn).toBe("2026-10-20");
+    expect(result.recommendation).toEqual({ action: "schedule", payOn: "2026-10-20" });
+    expect(result.reason).toBe(
+      "A 1% early-payment discount (10 USDC) is worth at least as much as holding the cash to the due date (10 USDC of yield); paying on the discount deadline, Oct 20, 2026."
+    );
   });
 
   it("targets the due date when yield on the reserve beats a tiny discount", () => {
@@ -212,5 +262,49 @@ describe("planPaymentTiming", () => {
   it("does not flag a shortfall when the balance covers the target amount", () => {
     const result = planPaymentTiming(baseInput); // amountDueAtTarget 392, balance 1000, earlierObligations 0
     expect(result.shortfall).toBe(false);
+  });
+
+  it("checks the shortfall against the discounted amount, not the full invoice, while the discount is live", () => {
+    // amount 400 at 2% => amountDueAtTarget 392 (target is the deadline).
+    // Balance 395 covers 392 but would not cover the undiscounted 400.
+    const result = planPaymentTiming({ ...baseInput, operatingBalance: 395, earlierObligations: 0 });
+    expect(result.targetOn).toBe("2026-10-10");
+    expect(result.amountDueAtTarget).toBe(392);
+    expect(result.shortfall).toBe(false);
+  });
+
+  it("flags a shortfall against the same balance once the discount has lapsed and the full amount is due", () => {
+    // Same 395 balance, but now past the deadline: amountDueAtTarget is the full 400, which 395 does not cover.
+    const result = planPaymentTiming({ ...baseInput, now: new Date("2026-10-11T00:00:00.000Z"), operatingBalance: 395, earlierObligations: 0 });
+    expect(result.amountDueAtTarget).toBe(400);
+    expect(result.shortfall).toBe(true);
+  });
+
+  it("flags a shortfall driven by earlier obligations even when the balance alone would cover it", () => {
+    // Balance 1000 easily covers 392, but 700 of it is already owed to invoices due first.
+    const result = planPaymentTiming({ ...baseInput, operatingBalance: 1000, earlierObligations: 700 });
+    expect(result.amountDueAtTarget).toBe(392);
+    expect(result.shortfall).toBe(true); // 1000 - 700 = 300 < 392
+  });
+
+  it("clamps the target to the due date, defensively, when a discount deadline stored past the due date would otherwise target later", () => {
+    const result = planPaymentTiming({
+      ...baseInput,
+      amount: 100,
+      dueDate: "2026-10-10T12:00:00.000Z",
+      discount: { pct: 50, deadline: "2026-10-20T12:00:00.000Z" }, // deadline after due — should never happen, but defend anyway
+      reserveApy: 0,
+    });
+    expect(result.dueOn).toBe("2026-10-10");
+    expect(result.discountAvailableUntil).toBe("2026-10-20"); // the raw fact about the discount is untouched
+    expect(result.targetOn).toBe("2026-10-10"); // but the target never goes past the due date
+    expect(result.recommendation).toEqual({ action: "schedule", payOn: "2026-10-10" });
+  });
+
+  it("pays now, defensively, when the due date cannot be read at all", () => {
+    const result = planPaymentTiming({ ...baseInput, dueDate: "not-a-real-date" });
+    expect(result.recommendation).toEqual({ action: "pay" });
+    expect(result.targetOn).toBe(result.today);
+    expect(result.reason).toContain("due date could not be read");
   });
 });
