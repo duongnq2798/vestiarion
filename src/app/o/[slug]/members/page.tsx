@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { AutoRefresh } from "@/components/AutoRefresh";
 import MembersPanel from "@/components/MembersPanel";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { sectionTitle } from "@/components/vx/nav";
@@ -40,6 +41,9 @@ export default async function MembersPage({ params }: { params: Promise<{ slug: 
           title={sectionTitle("members")}
           sub="Everyone in this workspace, and the invitations still open. Anyone may leave on their own; an owner or admin invites, changes roles and removes."
         />
+        {/* Someone accepting an invitation, or another admin's change, shows up without a reload:
+            every 15 s while an invitation is open, every minute otherwise, and at once on return to the tab. */}
+        <AutoRefresh intervalMs={invitations.length > 0 ? 15_000 : 60_000} />
         <MembersPanel
           orgSlug={slug}
           members={members}
