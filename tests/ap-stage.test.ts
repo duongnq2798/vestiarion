@@ -191,9 +191,11 @@ function apFake(options: { book: Array<Record<string, unknown>>; paused?: boolea
   const chain = new Chain();
   const metrics = new CycleMetricsCollector();
   const lines: CycleLogLine[] = [];
-  const stage = (operatingBalance = 1000) =>
+  const stage = (operatingBalance = 1000, reserveBalance = 0) =>
     runWith({ config, db: fake.client, fetch: fake.fetch }, () =>
-      withOrg(ORG, () => runApStage({ db: db(), provider: chain, operating: { id: ACCOUNT_ID }, operatingBalance, reserveApy: 0.045, metrics, lines }))
+      withOrg(ORG, () =>
+        runApStage({ db: db(), provider: chain, operating: { id: ACCOUNT_ID }, operatingBalance, reserveApy: 0.045, reserveBalance, metrics, lines })
+      )
     );
   return { fake, chain, metrics, lines, stage };
 }
@@ -746,6 +748,54 @@ describe("the AP stage gives the model the timing facts, not the policy's answer
     );
     expect(system).toContain("what falls due on or before its date");
     expect(system).not.toMatch(/falls due before/);
+  });
+});
+
+/**
+ * The shortfall check counts the reserve for a payment targeted at a later
+ * day, since the treasury stage redeems it back into operating before that
+ * day comes due — but not for a payment due (and so targeted) today, since
+ * the treasury stage that would redeem it runs after AP in the same cycle.
+ */
+describe("the AP stage counts the reserve balance for a payment scheduled later", () => {
+  it("schedules it for the discount deadline rather than holding it, when the reserve alone covers it", async () => {
+    today("2026-10-01T09:00:00.000Z");
+    // payable(): 400 USDC, 2% off by 2026-10-11 (10 days out), due 2026-10-31.
+    const { fake, stage } = apFake({ book: [payable()] });
+
+    await stage(0, 10_000); // no operating cash at all; the reserve covers the 392 USDC due on the deadline
+
+    expect(promptOf().timing).toMatchObject({ targetOn: "2026-10-11", shortfall: false, amountDueAtTarget: 392 });
+    const [patch] = invoicePatches(fake.requests);
+    expect(patch.body).toMatchObject({ status: "scheduled", scheduled_for: "2026-10-11T00:00:00.000Z" });
+  });
+
+  it("holds it rather than paying, when it is due today and the reserve cannot be drawn on this minute", async () => {
+    today("2026-10-01T09:00:00.000Z");
+    const dueToday = payable({
+      amount: "400", due_date: "2026-10-01T12:00:00+00:00", early_pay_discount_pct: null, discount_due_date: null,
+    });
+    const { fake, stage } = apFake({ book: [dueToday] });
+
+    await stage(0, 10_000); // no operating cash; the reserve is not liquid for a payment this minute
+
+    expect(promptOf().timing).toMatchObject({ targetOn: "2026-10-01", shortfall: true, amountDueAtTarget: 400 });
+    const [patch] = invoicePatches(fake.requests);
+    expect(patch.body).toMatchObject({ status: "held", scheduled_for: null, paid_amount: null });
+  });
+
+  it("holds it when the operating balance and the (empty) reserve together still fall short of a later target", async () => {
+    today("2026-10-01T09:00:00.000Z");
+    const dueIn20Days = payable({
+      amount: "400", due_date: "2026-10-21T12:00:00+00:00", early_pay_discount_pct: null, discount_due_date: null,
+    });
+    const { fake, stage } = apFake({ book: [dueIn20Days] });
+
+    await stage(100, 0);
+
+    expect(promptOf().timing).toMatchObject({ targetOn: "2026-10-21", shortfall: true, amountDueAtTarget: 400 });
+    const [patch] = invoicePatches(fake.requests);
+    expect(patch.body).toMatchObject({ status: "held", scheduled_for: null, paid_amount: null });
   });
 });
 

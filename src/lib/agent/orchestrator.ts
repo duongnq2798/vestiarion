@@ -86,6 +86,7 @@ When to pay an accounts-payable invoice:
 - Otherwise, paying on the due date keeps the cash available for what falls due first.
 - Pay now when the invoice is due today or overdue.
 - Never schedule a payment past the due date.
+- For a payment scheduled for a later day, cash held in the reserve counts toward what is available: the treasury stage redeems it back into operating before that date comes due. For a payment made now, only the operating balance counts — the treasury stage that would redeem the reserve runs after this one, in the same cycle, so that cash is not available for a transfer this minute.
 - When \`timing.shortfall\` is true, the operating balance cannot cover this payment after the payables that fall due on or before its date. Hold it and cite the figures, rather than scheduling or paying into a failure.
 - Cite the figures you were given: what the discount is worth, the yield from keeping the cash to the due date, the dates, and what falls due on or before its date (\`timing.earlierObligations\`: their total and how many there are).
 
@@ -816,6 +817,8 @@ async function decideApPayable(
     operatingBalance: number;
     history: InvoiceLike[];
     reserveApy: number;
+    /** What sits in the reserve today — counts in the shortfall check for an invoice targeted at a later day (see `PaymentTimingInput.reserveBalance`). */
+    reserveBalance: number;
     obligationsBy: (targetOn: string, today: string) => ObligationsDue;
     metrics: CycleMetricsCollector;
   }
@@ -858,7 +861,7 @@ async function decideApPayable(
   const discount = invoiceDiscount(invoice);
   const terms = { earlyPayDiscount: discount ? { percent: discount.pct, deadline: discount.deadline } : null };
   const timing = planApTiming(
-    { now, amount, dueDate: invoice.due_date, discount, operatingBalance, reserveApy: ctx.reserveApy },
+    { now, amount, dueDate: invoice.due_date, discount, operatingBalance, reserveApy: ctx.reserveApy, reserveBalance: ctx.reserveBalance },
     ctx.obligationsBy
   );
   const previouslyScheduledFor = invoice.status === "scheduled" ? (invoice.scheduled_for ?? null) : null;
@@ -889,7 +892,7 @@ async function decideApPayable(
           counterparty.performance_inputs
         ),
       },
-      treasury: { operatingBalance },
+      treasury: { operatingBalance, reserveBalance: ctx.reserveBalance },
       timing: timingFacts(timing),
       scheduledEarlier,
       duplicateMatches: duplicateContext.matches.map((match) => ({
@@ -1137,6 +1140,8 @@ export interface ApStageInput {
   operatingBalance: number;
   /** The reserve's yield, annualised, as a fraction (0.045 for 4.5%): what keeping cash to a due date earns. */
   reserveApy: number;
+  /** The reserve's balance as the cycle has it when the stage starts — counts toward a later-dated payment's shortfall check (`PaymentTimingInput.reserveBalance`). */
+  reserveBalance: number;
   metrics: CycleMetricsCollector;
   lines: CycleLogLine[];
 }
@@ -1152,7 +1157,7 @@ export interface ApStageInput {
  * for why a full `runAgentCycle()` is out of proportion).
  */
 export async function runApStage(input: ApStageInput): Promise<number> {
-  const { db, provider, operating, reserveApy, metrics, lines } = input;
+  const { db, provider, operating, reserveApy, reserveBalance, metrics, lines } = input;
   let operatingBalance = input.operatingBalance;
   const now = new Date();
 
@@ -1276,6 +1281,7 @@ export async function runApStage(input: ApStageInput): Promise<number> {
       operatingBalance,
       history,
       reserveApy,
+      reserveBalance,
       metrics,
       obligationsBy: (targetOn, today) => obligationsDueBy(book, { excludeId: invoice.id, by: targetOn, today, milestones }),
     });
@@ -1994,6 +2000,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     operating: operating ? { id: operating.id } : null,
     operatingBalance,
     reserveApy: num(accounts.find((a) => a.kind === "reserve")?.apy),
+    reserveBalance: num(accounts.find((a) => a.kind === "reserve")?.balance),
     metrics,
     lines,
   });

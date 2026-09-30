@@ -176,6 +176,7 @@ describe("planPaymentTiming", () => {
     discount: { pct: 2, deadline: "2026-10-10T12:00:00.000Z" },
     operatingBalance: 1000,
     reserveApy: 0,
+    reserveBalance: 0,
     earlierObligations: 0,
   };
 
@@ -315,6 +316,39 @@ describe("planPaymentTiming", () => {
     const result = planPaymentTiming({ ...baseInput, operatingBalance: 1000, earlierObligations: 700 });
     expect(result.amountDueAtTarget).toBe(392);
     expect(result.shortfall).toBe(true); // 1000 - 700 = 300 < 392
+  });
+
+  it("counts the reserve balance toward a payment scheduled for a later day, since the treasury can redeem it before then", () => {
+    // Deadline (targetOn) is 2026-10-10, after today: the reserve counts.
+    const result = planPaymentTiming({ ...baseInput, operatingBalance: 0, reserveBalance: 10_000, earlierObligations: 0 });
+    expect(result.targetOn).toBe("2026-10-10");
+    expect(result.amountDueAtTarget).toBe(392);
+    expect(result.shortfall).toBe(false);
+  });
+
+  it("ignores the reserve balance for a payment due today, since the treasury stage that would redeem it runs after AP", () => {
+    const result = planPaymentTiming({
+      ...baseInput,
+      dueDate: "2026-09-30T12:00:00.000Z", // due today; targetOn === today
+      operatingBalance: 0,
+      reserveBalance: 10_000,
+      earlierObligations: 0,
+    });
+    expect(result.targetOn).toBe("2026-09-30");
+    expect(result.shortfall).toBe(true);
+  });
+
+  it("still flags a shortfall for a later target when the operating balance and the reserve together fall short", () => {
+    const result = planPaymentTiming({
+      ...baseInput,
+      operatingBalance: 100,
+      reserveBalance: 0,
+      discount: null, // no discount: targetOn is the due date, 2026-10-30, amountDueAtTarget 400
+      earlierObligations: 0,
+    });
+    expect(result.targetOn).toBe("2026-10-30");
+    expect(result.amountDueAtTarget).toBe(400);
+    expect(result.shortfall).toBe(true);
   });
 
   it("clamps the target to the due date, defensively, when a discount deadline stored past the due date would otherwise target later", () => {

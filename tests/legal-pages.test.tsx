@@ -220,6 +220,11 @@ describe("the privacy page", () => {
       }
     });
 
+    it("says an invoice decision also receives the reserve balance, now that a later target date can draw on it", () => {
+      const invoiceBullet = models.split("for a contractor milestone:")[0];
+      expect(invoiceBullet).toContain("the operating balance and the reserve balance");
+    });
+
     it("names each payment timing fact the invoice prompt sends, as timingFacts lists them, and not the policy's answer", () => {
       const facts = orchestrator.split("function timingFacts(")[1]?.split("\n}\n")[0] ?? "";
       const keys = [...facts.matchAll(/^\s+(\w+): timing\.\w+,$/gm)].map((m) => m[1]);
