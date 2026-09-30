@@ -118,7 +118,8 @@ export default function ApprovalCard({
           </p>
           {unfinished && (
             <p className="mt-2 text-sm text-ink-2">
-              An earlier decision did not finish. If it was a payment, Approve and pay records it without paying twice.
+              An earlier decision did not finish.
+              {payable.lastAttempt?.state !== "failed" && " If it was a payment, Approve and pay records it without paying twice."}
             </p>
           )}
           {payable.paymentSent && payable.lastAttempt?.state !== "in_flight" && (

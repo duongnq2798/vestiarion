@@ -143,6 +143,18 @@ describe("ApprovalCard", () => {
     expect(markup).not.toMatch(APPROVE_DISABLED);
   });
 
+  it("omits the double-pay reassurance on an unfinished claim whose last attempt failed, since approving sends a new transfer instead", () => {
+    const markup = card({
+      status: "processing",
+      reviewedAt: "2026-09-29T13:00:00Z",
+      reclaimable: true,
+      lastAttempt: { state: "failed", reason: "Insufficient funds" },
+    });
+    expect(markup).toContain("An earlier decision did not finish.");
+    expect(markup).not.toContain("Approve and pay records it without paying twice.");
+    expect(markup).toContain("The last payment attempt failed: Insufficient funds. Approving sends a new transfer.");
+  });
+
   it("offers only Approve and pay when a payment was already sent, and says so", () => {
     const markup = card({ status: "processing", reclaimable: true, paymentSent: true });
     expect(markup).toContain("A payment was already sent; Approve and pay records it.");
