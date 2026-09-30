@@ -224,12 +224,14 @@ transfer Circle has not reported in a terminal failure state (`CANCELLED`,
 `DENIED`, `FAILED`; `STUCK` is still in flight) — can only be approved: Reject
 and Return are refused with `payment_in_flight` before the claim, the card
 offers only Approve and pay, and Approve skips its funds check when such a
-transfer exists, since it reconciles rather than pays again. A payment Circle
-ended in a terminal failure moved nothing, so Reject and Return are allowed,
-and Approve and pay, after its funds check, reads Circle once more and only on
-a terminal state sends it again under the next attempt's key
-(`retryTerminalFailure` in `executePayment`, `begin_payment_retry` in
-migration `0036`). The agent's cycle never sends a failed transfer again.
+transfer exists, since it reconciles rather than pays again. A payment already
+recorded as ended by Circle in a terminal failure moved nothing, so Reject and
+Return are allowed, and Approve and pay, after its funds check, reads Circle
+once more and only on a terminal state sends it again under the next
+attempt's key (`retryTerminalFailure` in `executePayment`, `begin_payment_retry`
+in migration `0036`). An approval that finds a sent transfer has since failed
+only records it: the invoice is held again, and the next approval, with its
+funds check, sends it. The agent's cycle never sends a failed transfer again.
 
 **A payment still in flight is reconciled, not decided again.** An approval
 whose transfer is still pending leaves the invoice `matched`, which the AP

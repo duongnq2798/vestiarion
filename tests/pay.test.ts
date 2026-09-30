@@ -399,6 +399,39 @@ describe("payInvoice after a terminal failure", () => {
     ]);
   });
 
+  it("sends nothing, and writes nothing under the stale key, when another request opened attempt 2 between the read and the retry", async () => {
+    const provider = new FakeProvider();
+    provider.reconcileResults.push(transferResult("failed", "circle-tx-1", { state: "FAILED", reason: "INSUFFICIENT_NATIVE_TOKEN" }));
+    provider.transferResults.push(transferResult("confirmed", "circle-tx-2"));
+    const backend = paymentIntentsBackend();
+    backend.seed(failedAttempt);
+    const key1 = paymentIdempotencyKey("invoice", INVOICE_ID);
+    const key2 = paymentIdempotencyKey("invoice", INVOICE_ID, 2);
+
+    const sent: RecordedRequest[] = [];
+    let raced = false;
+    const result = await inOrg((request) => {
+      sent.push(request);
+      if (request.path === "/rest/v1/rpc/begin_payment_retry" && !raced) {
+        // Another request's identical retry lands first and moves the row from key 1 to key 2.
+        raced = true;
+        backend.respond(request);
+      }
+      return withAccounts(backend)(request);
+    }, () => payInvoice(input, { provider, operating: { id: OPERATING_ACCOUNT_ID }, retryTerminalFailure: true }));
+
+    expect(result.status).toBe("held");
+    expect(result.execution).toMatchObject({ status: "failed", attempt: 1, idempotencyKey: key1, retriedAfter: null });
+    expect(provider.transfers).toHaveLength(0);
+    // Nothing follows this call's refused retry: no claim, no write under either key.
+    const retryAt = sent.findIndex((request) => request.path === "/rest/v1/rpc/begin_payment_retry");
+    expect(sent.slice(retryAt + 1).filter((request) => request.path.includes("payment_intents"))).toEqual([]);
+    expect(sent.some((request) => request.path === "/rest/v1/rpc/claim_payment_intent")).toBe(false);
+    // The row is exactly as the other request left it.
+    expect(backend.rows).toHaveLength(1);
+    expect(backend.rows[0]).toMatchObject({ idempotency_key: key2, transfer_attempt: 2, status: "created", provider_tx_id: null, provider_state: null });
+  });
+
   it("does not send again, even when asked, while Circle reports the transfer STUCK", async () => {
     const provider = new FakeProvider();
     provider.reconcileResults.push(transferResult("pending", "circle-tx-1", { state: "STUCK" }));

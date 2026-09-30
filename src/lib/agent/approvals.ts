@@ -38,7 +38,9 @@ import { payInvoice, syncOperatingBalance } from "./pay";
  * `FAILED`) moved nothing: Reject and Return are allowed, and Approve and pay
  * sends it again — `retryTerminalFailure`, which reads Circle first and opens
  * a new attempt only on a terminal state — after every check a first payment
- * gets, the balance included.
+ * gets, the balance included. It does so only for a failure already recorded
+ * when the approval began; an approval that finds a sent transfer has failed
+ * records that, and leaves the new transfer to the next approval.
  *
  * The ledger entry written after a decision commits is best effort, through
  * `appendLedgerEntryBestEffort` as `src/lib/platform/members.ts` uses it: the
@@ -181,19 +183,19 @@ export type LastPaymentAttempt = { state: "failed"; reason: string } | { state: 
 
 /**
  * The last attempt as the card reports it: failed terminally, with Circle's
- * reason (or its state when it gave none); or in flight, when Circle's last
- * answer for the transfer was a state that can still move money — `pending`,
- * `STUCK` among them. Anything else is null: no transfer, a confirmed one
- * (Approve and pay records it), or one whose state is unknown — a read of
- * ours that failed, or a `failed` intent from before Circle's state was kept
- * — which Approve and pay reads from Circle.
+ * reason (or its state when it gave none); or in flight, when the transfer is
+ * `pending` or Circle's last recorded state for it is one that can still move
+ * money (`STUCK`, `SENT` and the rest) — a read of ours that failed since
+ * does not change what Circle last said. Anything else is null: no transfer,
+ * a confirmed one (Approve and pay records it), or a `failed` intent from
+ * before Circle's state was kept, which Approve and pay reads from Circle.
  */
 function lastAttemptOf(intent: IntentState | null): LastPaymentAttempt {
-  if (!intent || intent.provider_tx_id === null) return null;
+  if (!intent || intent.provider_tx_id === null || intent.status === "confirmed") return null;
   if (failedTerminally(intent)) {
     return { state: "failed", reason: intent.failure_reason ?? `Circle reported ${intent.provider_state}` };
   }
-  return intent.status === "pending" ? { state: "in_flight" } : null;
+  return intent.status === "pending" || intent.provider_state !== null ? { state: "in_flight" } : null;
 }
 
 /** The invoice's payment intent, keyed as `executePayment` keys it (source type and id), or null. */
@@ -422,8 +424,15 @@ export async function approveAndPay(
     result = await payInvoice(
       { invoiceId: invoice.id, counterpartyId: invoice.counterpartyId, address: invoice.address, amount: invoice.amount },
       // A person's approval is the one caller that may send a payment Circle
-      // ended in a terminal failure again (executePayment reads Circle first).
-      { provider, operating: { id: operating.id }, retryTerminalFailure: true }
+      // ended in a terminal failure again, and only when the failure was
+      // already recorded (`!alreadySent`): that is the approval that ran the
+      // balance check and the address confirmation above, with the card
+      // showing Circle's reason. An approval of a transfer that was still
+      // sent or in flight skipped both, so it only reconciles — should Circle
+      // now report a terminal failure, that is recorded, the invoice is held
+      // again, and the next approval sends it. executePayment still reads
+      // Circle before any retry.
+      { provider, operating: { id: operating.id }, retryTerminalFailure: !alreadySent }
     );
   } catch (err) {
     // The claim went through, but nothing about the payment itself is known.
