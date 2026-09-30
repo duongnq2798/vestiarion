@@ -4,11 +4,11 @@ Only an **owner** of the workspace can take it live. Everyone else sees the work
 
 ## Before you start
 
-Until the workspace is live, the console shows owners and admins a **Get started** checklist: add a wallet, fund it with USDC, add a counterparty with an Arc address, add an invoice, and go live. Each step ticks itself off from the workspace's own records, and the next one links to the page where it is done. **Read the guide** opens this page. The checklist disappears once the workspace is live.
+Until the workspace has made its first payment on Arc testnet, the console shows owners and admins a **Get started** checklist: add a wallet, fund it with USDC, go live, add a payee with an Arc address, add a payable, and the first payment. Each step ticks itself off from the workspace's own records, and the next one links to the page where it is done. **Read the guide** opens this page until the workspace is live, and [Your first payment](/docs/guides/first-payment) after that. The checklist disappears once the first payment settles.
 
 <Screenshot
   src="/docs/guides/go-live-checklist.png"
-  alt="The Get started checklist on the Treasury console, 1 of 5 done: Add a wallet is ticked, and Fund it with USDC is highlighted as the next step, with a Start button. Below it are Add a counterparty with an Arc address, Add an invoice and Go live, with Read the guide at the top right."
+  alt="The Get started checklist on the Treasury console, 1 of 6 done: Add a wallet is ticked, and Fund it with USDC is highlighted as the next step, with a Start button. Below it are Go live, Add a payee with an Arc address, Add a payable and First payment on Arc testnet, with Read the guide at the top right."
   caption="The next step is highlighted, and each step ticks itself off."
 />
 
@@ -82,7 +82,7 @@ The step is headed "Fund the operating wallet, then go live". The agent pays fro
 
 1. Under **Operating wallet**, copy the address with the copy button beside it.
 2. Open [faucet.circle.com](https://faucet.circle.com). As the page says, "select Arc Testnet, and paste this address", then request testnet USDC.
-3. Back in **Go live**, choose **Refresh** beside "USDC on chain:". The balance is read from the chain when the step opens, and again on each refresh. Refresh until the USDC shows.
+3. Come back to **Go live**. The balance beside "USDC on chain:" is read from the chain when the step opens, and again on each **Refresh**. While it is 0, the page also reads it again when you return to its tab, and every 30 seconds while the tab is open, for 15 minutes, so the USDC shows without a refresh.
 
 <Screenshot
   src="/docs/guides/go-live-fund.png"
