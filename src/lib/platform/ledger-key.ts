@@ -1,9 +1,11 @@
 import crypto from "node:crypto";
 import { CYCLE_IN_PROGRESS_MS } from "../agent/balances";
 import { currentOrgId, NoOrgScopeError } from "../context";
+import { LEDGER_KEY_MESSAGES } from "../copy";
 import { db, platformDb, unwrap } from "../dal";
+import { readableRetiredKey } from "../dal/org-config";
 import { withOrg } from "../dal/scope";
-import { ledgerPublicKeyId, recordLedgerKeyRotation } from "../ledger";
+import { ledgerPublicKeyId, ledgerVerificationKeyring, recordLedgerKeyRotation } from "../ledger";
 import { ledgerKeyId } from "../ledger-keys";
 import { decryptSecret, encryptSecret, masterKeysFromEnv, type MasterKey, type SecretEnvelope } from "../secrets";
 
@@ -22,17 +24,11 @@ import { decryptSecret, encryptSecret, masterKeysFromEnv, type MasterKey, type S
  * verifying.
  */
 
-export type LedgerKeyErrorCode = "cycle_running" | "key_unreadable" | "conflict";
-
-const MESSAGES: Record<LedgerKeyErrorCode, string> = {
-  cycle_running: "A cycle is running. Try again in a minute, once it has finished.",
-  key_unreadable: "The current signing key cannot be read, so it cannot be retired safely. Nothing was changed.",
-  conflict: "The signing key changed a moment ago. Reload and check it before rotating again.",
-};
+export type LedgerKeyErrorCode = keyof typeof LEDGER_KEY_MESSAGES;
 
 export class LedgerKeyError extends Error {
   constructor(readonly code: LedgerKeyErrorCode) {
-    super(MESSAGES[code]);
+    super(LEDGER_KEY_MESSAGES[code]);
     this.name = "LedgerKeyError";
   }
 }
@@ -167,37 +163,56 @@ export async function rotateLedgerKey(input: {
   return { from, to };
 }
 
-/**
- * An item the keyring uses (the same test as `retiredKeyBundle` in
- * org-config.ts) with a readable time: the panel never lists a key that
- * verification skips.
- */
-function wellFormed(item: unknown): item is RetiredKey {
-  if (typeof item !== "object" || item === null) return false;
-  const { id, publicKeyPem, retiredAt } = item as { id?: unknown; publicKeyPem?: unknown; retiredAt?: unknown };
-  return (
-    typeof id === "string" &&
-    typeof publicKeyPem === "string" &&
-    publicKeyPem.includes("-----BEGIN PUBLIC KEY-----") &&
-    typeof retiredAt === "string" &&
-    !Number.isNaN(Date.parse(retiredAt))
-  );
+/** A retired key as the Settings panel lists it. `retiredAt` is null when no readable time is recorded for it. */
+export interface RetiredKeyStatus {
+  id: string;
+  retiredAt: string | null;
 }
 
 /**
- * What the Settings panel shows: the id of the key that signs, and the
- * retired keys with when each was retired. Ids and times only.
+ * What the Settings panel shows: the id of the key that signs, and every key
+ * the workspace's keyring retires, with when each was retired. Ids and times
+ * only.
+ *
+ * The list is the keyring's own, so the panel never hides a key that
+ * verification uses: the workspace's retired-keys column, newest first, and
+ * for the founding workspace the keys its environment still retires. A key
+ * without a readable time on the column (an environment key has none) is
+ * listed with `retiredAt: null`, after the dated ones.
  */
 export async function ledgerKeyStatus(
   orgId: string
-): Promise<{ current: string | null; retired: Array<{ id: string; retiredAt: string }> }> {
-  const current = await inScopeOf(orgId, undefined, async () => ledgerPublicKeyId());
+): Promise<{ current: string | null; retired: RetiredKeyStatus[] }> {
+  const { current, keyring } = await inScopeOf(orgId, undefined, async () => ({
+    current: ledgerPublicKeyId(),
+    keyring: ledgerVerificationKeyring(),
+  }));
   const row = unwrap(
     await platformDb().from("orgs").select("ledger_retired_keys").eq("id", orgId).single()
   ) as { ledger_retired_keys: unknown };
-  const retired = (Array.isArray(row.ledger_retired_keys) ? row.ledger_retired_keys : [])
-    .filter(wellFormed)
-    .map(({ id, retiredAt }) => ({ id, retiredAt }))
-    .sort((a, b) => Date.parse(b.retiredAt) - Date.parse(a.retiredAt));
+
+  // When the column says each key was retired, by the id derived from the key
+  // itself: that is the id the keyring and the ledger's labels use.
+  const retiredAt = new Map<string, string>();
+  for (const item of Array.isArray(row.ledger_retired_keys) ? row.ledger_retired_keys : []) {
+    const readable = readableRetiredKey(item);
+    if (!readable || typeof readable.retiredAt !== "string" || Number.isNaN(Date.parse(readable.retiredAt))) continue;
+    const id = ledgerKeyId(readable.key);
+    if (!retiredAt.has(id)) retiredAt.set(id, readable.retiredAt);
+  }
+
+  const seen = new Set<string>();
+  const retired: RetiredKeyStatus[] = [];
+  for (const key of keyring.retired) {
+    const id = ledgerKeyId(key);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    retired.push({ id, retiredAt: retiredAt.get(id) ?? null });
+  }
+  // Newest first; undated keys keep the keyring's order, after the dated ones.
+  retired.sort((a, b) => {
+    if (a.retiredAt === null || b.retiredAt === null) return (a.retiredAt === null ? 1 : 0) - (b.retiredAt === null ? 1 : 0);
+    return Date.parse(b.retiredAt) - Date.parse(a.retiredAt);
+  });
   return { current, retired };
 }

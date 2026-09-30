@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import LedgerKeyPanel, { type LedgerKeyPanelProps } from "@/components/LedgerKeyPanel";
 import { TooltipProvider } from "@/components/ui/Tooltip";
+import { LedgerKeyError } from "@/lib/platform/ledger-key";
 
 /**
  * The "Ledger signing key" section of Settings, as server-rendered markup
@@ -61,6 +62,30 @@ describe("LedgerKeyPanel", () => {
     expect(words).toContain("vxlk_old2 · retired Aug 1, 2026, 12:30 UTC");
     expect(words).not.toContain("No key has been retired yet.");
   });
+
+  it("says a key with no retirement time was retired before this workspace kept its own keys", () => {
+    const words = text(
+      panel({
+        retired: [
+          { id: "vxlk_new", retiredAt: "2026-09-30T05:07:00.000Z" },
+          { id: "vxlk_env", retiredAt: null },
+        ],
+      })
+    );
+    expect(words).toContain("vxlk_new · retired Sep 30, 2026, 05:07 UTC");
+    expect(words).toContain("vxlk_env · retired before this workspace kept its own keys");
+  });
+
+  it.each([true, false])(
+    "when the current key cannot be read, says why it cannot be rotated in place of the form (owner: %s)",
+    (canAdminister) => {
+      const markup = panel({ current: null }, canAdminister);
+      expect(text(markup)).toContain(new LedgerKeyError("key_unreadable").message);
+      expect(markup).not.toContain("<form");
+      expect(markup).not.toContain("Rotate signing key");
+      expect(text(markup)).not.toContain("An owner of this workspace can rotate the key.");
+    }
+  );
 
   it("for an owner, offers a Rotate signing key button and no note", () => {
     const markup = panel();

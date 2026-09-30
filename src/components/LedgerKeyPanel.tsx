@@ -8,7 +8,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { FormMessage } from "@/components/ui/FormMessage";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { useActionForm } from "@/components/ui/useActionForm";
-import { utcMinute } from "@/lib/copy";
+import { LEDGER_KEY_MESSAGES, utcMinute } from "@/lib/copy";
 import type { ledgerKeyStatus } from "@/lib/platform/ledger-key";
 
 /**
@@ -17,7 +17,8 @@ import type { ledgerKeyStatus } from "@/lib/platform/ledger-key";
  *
  * Everyone sees the current key and what has been retired; an owner
  * (`canAdminister`) can rotate it, behind a confirmation that says what
- * changes. `status` carries ids and timestamps only — never key material.
+ * changes, unless the current key cannot be read. `status` carries ids and
+ * timestamps only — never key material.
  */
 export interface LedgerKeyPanelProps {
   orgSlug: string;
@@ -39,7 +40,7 @@ function RetiredKeys({ retired }: { retired: LedgerKeyPanelProps["status"]["reti
     <ul className="space-y-1">
       {retired.map((key) => (
         <li key={key.id} className="font-mono text-xs text-ink-2">
-          {key.id} · retired {utcMinute(key.retiredAt)}
+          {key.id} · retired {key.retiredAt ? utcMinute(key.retiredAt) : "before this workspace kept its own keys"}
         </li>
       ))}
     </ul>
@@ -82,7 +83,14 @@ export default function LedgerKeyPanel({ orgSlug, status, canAdminister }: Ledge
           <RetiredKeys retired={status.retired} />
         </div>
         <div className="border-t border-line pt-4">
-          {canAdminister ? <RotateForm orgSlug={orgSlug} /> : <p className="text-sm text-ink-2">An owner of this workspace can rotate the key.</p>}
+          {status.current === null ? (
+            // A key that cannot be opened cannot be retired, for anyone: say so, rather than offer a form that refuses.
+            <p className="text-sm text-ink-2">{LEDGER_KEY_MESSAGES.key_unreadable}</p>
+          ) : canAdminister ? (
+            <RotateForm orgSlug={orgSlug} />
+          ) : (
+            <p className="text-sm text-ink-2">An owner of this workspace can rotate the key.</p>
+          )}
         </div>
       </Card>
     </section>

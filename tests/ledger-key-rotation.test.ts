@@ -7,6 +7,7 @@ import { inspect } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
+import { FOUNDING_ORG_ID } from "@/lib/dal/org-config";
 import { withOrg } from "@/lib/dal/scope";
 import {
   appendLedgerEntry,
@@ -59,8 +60,8 @@ const EARLIER_RETIRED = {
   retiredAt: "2026-01-01T00:00:00.000Z",
 };
 
-const seal = (value: string, keys = MASTER_KEYS): SecretEnvelope =>
-  encryptSecret(value, { orgId: ORG, column: "ledger_signing_key_enc" }, parseMasterKeys(keys));
+const seal = (value: string, keys = MASTER_KEYS, orgId = ORG): SecretEnvelope =>
+  encryptSecret(value, { orgId, column: "ledger_signing_key_enc" }, parseMasterKeys(keys));
 const open = (envelope: SecretEnvelope): string =>
   decryptSecret(envelope, { orgId: ORG, column: "ledger_signing_key_enc" }, parseMasterKeys(MASTER_KEYS));
 
@@ -70,6 +71,8 @@ const INPUTS: LedgerEntryInput[] = [
 ];
 
 interface State {
+  /** The organization's id; `ORG` unless a test needs the founding one. */
+  orgId?: string;
   org: {
     ledger_signing_key_enc: SecretEnvelope | null;
     ledger_retired_keys: unknown;
@@ -89,13 +92,17 @@ function workspace(overrides: Partial<State["org"]> = {}): State {
 interface DatabaseOptions {
   orgUpdateMatchesNothing?: boolean;
   appendFails?: boolean;
+  /** The platform configuration scopes are built from; `config` unless a test needs another. */
+  config?: typeof config;
+  /** Runs after an org read has been answered, with that read's `select`: another writer acting mid-flight. */
+  afterOrgRead?: (state: State, select: string) => void;
 }
 
 const eqValue = (request: RecordedRequest, column: string) => request.params.get(column)?.replace(/^eq\./, "");
 
 function projectOrg(state: State, select: string): Record<string, unknown> {
   const row: Record<string, unknown> = {
-    id: ORG, slug: "northstar", name: "Northstar", mode: "sandbox",
+    id: state.orgId ?? ORG, slug: "northstar", name: "Northstar", mode: "sandbox",
     circle_api_key_enc: null, circle_entity_secret_enc: null, wallet_host: null, ...state.org,
   };
   const out: Record<string, unknown> = {};
@@ -134,11 +141,14 @@ function append(state: State, body: Record<string, unknown>): LedgerRow {
 function database(state: State, options: DatabaseOptions = {}) {
   const fake = fakeSupabase((request): FakeReply => {
     if (request.path === "/rest/v1/orgs" && request.method === "GET") {
-      if (eqValue(request, "id") !== ORG) return { status: 406, body: { code: "PGRST116", message: "no rows" } };
-      return one(request, [projectOrg(state, request.params.get("select") ?? "*")]);
+      if (eqValue(request, "id") !== (state.orgId ?? ORG)) return { status: 406, body: { code: "PGRST116", message: "no rows" } };
+      const select = request.params.get("select") ?? "*";
+      const reply = one(request, [projectOrg(state, select)]);
+      options.afterOrgRead?.(state, select);
+      return reply;
     }
     if (request.path === "/rest/v1/orgs" && request.method === "PATCH") {
-      if (options.orgUpdateMatchesNothing || eqValue(request, "id") !== ORG) return { body: [] };
+      if (options.orgUpdateMatchesNothing || eqValue(request, "id") !== (state.orgId ?? ORG)) return { body: [] };
       for (const [filter, value] of request.params) {
         const json = /^(\w+)->>(\w+)$/.exec(filter);
         if (!json) continue;
@@ -146,7 +156,7 @@ function database(state: State, options: DatabaseOptions = {}) {
         if (`eq.${envelope?.[json[2]] ?? ""}` !== value) return { body: [] };
       }
       Object.assign(state.org, request.body);
-      return { body: [{ id: ORG }] };
+      return { body: [{ id: state.orgId ?? ORG }] };
     }
     if (request.path === "/rest/v1/cycle_runs" && request.method === "GET") {
       return { body: state.cycleRunning ? [{ id: "run-1" }] : [] };
@@ -163,11 +173,11 @@ function database(state: State, options: DatabaseOptions = {}) {
     }
     throw new Error(`unexpected request ${request.method} ${request.path}`);
   });
-  const base = { config, db: fake.client, fetch: fake.fetch };
+  const base = { config: options.config ?? config, db: fake.client, fetch: fake.fetch };
   return {
     fake,
     /** Inside the organization's scope, as a server action runs after `inOrg`. */
-    inScope: <T>(fn: () => Promise<T>) => runWith(base, () => withOrg(ORG, fn, { userId: ACTOR })),
+    inScope: <T>(fn: () => Promise<T>) => runWith(base, () => withOrg(state.orgId ?? ORG, fn, { userId: ACTOR })),
     /** Outside any organization's scope, as a script would call it. */
     unscoped: <T>(fn: () => Promise<T>) => runWith(base, fn),
   };
@@ -294,6 +304,30 @@ describe("rotateLedgerKey", () => {
     expect(state.org).toEqual(before);
   });
 
+  it("reports a conflict when another writer re-seals the key between the read and the swap, and keeps theirs", async () => {
+    const state = workspace();
+    const theirs = seal(crypto.generateKeyPairSync("ed25519").privateKey.export({ type: "pkcs8", format: "pem" }).toString());
+    let replaced = false;
+    const { fake, unscoped } = database(state, {
+      // The rotation's own read of the envelope; another writer lands right after it.
+      afterOrgRead: (current, select) => {
+        if (replaced || select !== "ledger_signing_key_enc,ledger_retired_keys") return;
+        current.org.ledger_signing_key_enc = theirs;
+        replaced = true;
+      },
+    });
+
+    const error = await unscoped(() => rotateLedgerKey({ orgId: ORG, actorId: ACTOR, now: NOW })).catch((e) => e);
+
+    expect(replaced).toBe(true);
+    expect(error).toBeInstanceOf(LedgerKeyError);
+    expect(error.code).toBe("conflict");
+    expect(orgPatches(fake.requests)).toHaveLength(1);
+    expect(appends(fake.requests)).toHaveLength(0);
+    expect(state.org.ledger_signing_key_enc).toEqual(theirs);
+    expect(state.org.ledger_retired_keys).toEqual([EARLIER_RETIRED]);
+  });
+
   it("refuses while a cycle is running, before touching the key", async () => {
     const state = { ...workspace(), cycleRunning: true };
     const { fake, inScope } = database(state);
@@ -373,6 +407,42 @@ describe("rotateLedgerKey", () => {
   });
 });
 
+describe("a scope entered before a rotation (K3)", () => {
+  it("appends under the old key, then the next fresh scope records the rotation once, and the whole chain verifies", async () => {
+    const state = workspace();
+    const { inScope, unscoped } = database(state);
+
+    const { from, to } = await inScope(async () => {
+      // A cycle's scope, entered before the rotation: its configuration holds key A.
+      const rotated = await unscoped(() => rotateLedgerKey({ orgId: ORG, actorId: ACTOR, now: NOW }));
+      await appendLedgerEntry({ actor: "agent", domain: "ap", action: "ap_pay", summary: "PAY 90", detail: { amount: 90 } });
+      return rotated;
+    });
+    const rotationsBefore = state.entries.filter((row) => row.action === "ledger_key_rotated").length;
+
+    const keyring = await inScope(async () => {
+      await appendLedgerEntry({ actor: "agent", domain: "ap", action: "ap_hold", summary: "HOLD 60", detail: { amount: 60 } });
+      return ledgerVerificationKeyring();
+    });
+
+    const rotations = state.entries.filter((row) => row.action === "ledger_key_rotated");
+    expect(rotations).toHaveLength(rotationsBefore + 1);
+    const systemRotations = rotations.filter((row) => row.actor === "system");
+    expect(systemRotations).toHaveLength(1);
+    expect(systemRotations[0]).toMatchObject({ domain: "system", detail: { from, to }, signing_key_id: to });
+    expect(state.entries.map((row) => [row.action, row.actor, row.signing_key_id])).toEqual([
+      ["workspace_created", "system", from],
+      ["ap_pay", "agent", from],
+      ["ledger_key_rotated", "human", to],
+      ["ap_pay", "agent", from],
+      ["ledger_key_rotated", "system", to],
+      ["ap_hold", "agent", to],
+    ]);
+    expect(keyring.active && ledgerKeyId(keyring.active)).toBe(to);
+    expect(verifyChain(state.entries, keyring).valid).toBe(true);
+  });
+});
+
 describe("recordLedgerKeyRotation", () => {
   it("returns null and appends nothing when the head is already signed by the current key", async () => {
     const state = workspace();
@@ -414,6 +484,55 @@ describe("ledgerKeyStatus", () => {
         { id: EARLIER_RETIRED.id, retiredAt: EARLIER_RETIRED.retiredAt },
       ],
     });
+  });
+
+  it("lists a retired key whose time is bad or missing, with retiredAt null, after the dated ones", async () => {
+    const keyX = crypto.generateKeyPairSync("ed25519");
+    const keyW = crypto.generateKeyPairSync("ed25519");
+    const state = workspace({
+      ledger_retired_keys: [
+        { id: ledgerKeyId(keyX.publicKey), publicKeyPem: keyX.publicKey.export({ type: "spki", format: "pem" }).toString(), retiredAt: "whenever" },
+        EARLIER_RETIRED,
+        { id: ledgerKeyId(keyW.publicKey), publicKeyPem: keyW.publicKey.export({ type: "spki", format: "pem" }).toString() },
+      ],
+    });
+    const { inScope, unscoped } = database(state);
+
+    const status = await unscoped(() => ledgerKeyStatus(ORG));
+    const keyring = await inScope(async () => ledgerVerificationKeyring());
+
+    expect(status).toEqual({
+      current: ID_A,
+      retired: [
+        { id: EARLIER_RETIRED.id, retiredAt: EARLIER_RETIRED.retiredAt },
+        { id: ledgerKeyId(keyX.publicKey), retiredAt: null },
+        { id: ledgerKeyId(keyW.publicKey), retiredAt: null },
+      ],
+    });
+    // The panel and the keyring agree.
+    expect(status.retired.map((key) => key.id).sort()).toEqual(keyring.retired.map((key) => ledgerKeyId(key)).sort());
+  });
+
+  it("for the founding workspace, also lists the keys the environment retires, with retiredAt null", async () => {
+    const envRetired = crypto.generateKeyPairSync("ed25519");
+    const foundingConfig = { ...config, ledgerRetiredPublicKeys: envRetired.publicKey.export({ type: "spki", format: "pem" }).toString() };
+    const state: State = {
+      ...workspace({ ledger_signing_key_enc: seal(PEM_A, MASTER_KEYS, FOUNDING_ORG_ID) }),
+      orgId: FOUNDING_ORG_ID,
+    };
+    const { inScope, unscoped } = database(state, { config: foundingConfig });
+
+    const status = await unscoped(() => ledgerKeyStatus(FOUNDING_ORG_ID));
+    const keyring = await inScope(async () => ledgerVerificationKeyring());
+
+    expect(status).toEqual({
+      current: ID_A,
+      retired: [
+        { id: EARLIER_RETIRED.id, retiredAt: EARLIER_RETIRED.retiredAt },
+        { id: ledgerKeyId(envRetired.publicKey), retiredAt: null },
+      ],
+    });
+    expect(status.retired.map((key) => key.id).sort()).toEqual(keyring.retired.map((key) => ledgerKeyId(key)).sort());
   });
 
   it("lists the key a rotation just retired", async () => {
