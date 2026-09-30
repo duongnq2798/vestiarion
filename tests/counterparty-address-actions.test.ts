@@ -4,8 +4,10 @@ import { runWith } from "@/lib/context";
 import {
   confirmCounterpartyAddressAction,
   updateCounterpartyAddressAction,
+  updateCounterpartyLimitAction,
   type IntakeActionResult,
 } from "@/app/actions/intake";
+import { CounterpartyLimitError } from "@/lib/counterparty-limit";
 import { CounterpartyAddressError } from "@/lib/counterparty-address";
 import { fakeSupabase } from "./support/fake-supabase";
 
@@ -38,6 +40,12 @@ vi.mock("@/lib/counterparty-address", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/counterparty-address")>()),
   changeCounterpartyAddress: changeMock,
   confirmCounterpartyAddress: confirmMock,
+}));
+
+const { changeLimitMock } = vi.hoisted(() => ({ changeLimitMock: vi.fn() }));
+vi.mock("@/lib/counterparty-limit", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/counterparty-limit")>()),
+  changeCounterpartyLimit: changeLimitMock,
 }));
 
 beforeEach(() => {
@@ -179,5 +187,46 @@ describe("confirmCounterpartyAddressAction", () => {
       ok: false,
       message: "This counterparty's address changed after this page loaded. Check the new address and try again.",
     });
+  });
+});
+
+describe("updateCounterpartyLimitAction", () => {
+  it("asks for records.write, and changes nothing when refused", async () => {
+    authorizeMock.mockResolvedValueOnce({ ok: false, message: "Only an owner or admin can do that." });
+
+    const result = await run(() => updateCounterpartyLimitAction(INITIAL, form({ counterpartyId: COUNTERPARTY_ID, paymentLimit: "10" })));
+
+    expect(authorizeMock).toHaveBeenCalledWith("northstar", "records.write");
+    expect(result.ok).toBe(false);
+    expect(changeLimitMock).not.toHaveBeenCalled();
+  });
+
+  it("changes the limit as the signed-in person, and refreshes the pages", async () => {
+    allow("admin");
+    changeLimitMock.mockResolvedValueOnce({ name: "Centronex", from: 2, to: 10, current: 10 });
+
+    const result = await run(() => updateCounterpartyLimitAction(INITIAL, form({ counterpartyId: COUNTERPARTY_ID, paymentLimit: "10" })));
+
+    expect(changeLimitMock).toHaveBeenCalledWith({ actorId: USER, counterpartyId: COUNTERPARTY_ID, raw: "10" });
+    expect(result).toEqual({ ok: true, message: "Centronex's payment limit is now 10 USDC." });
+    expect(revalidatePathMock).toHaveBeenCalled();
+  });
+
+  it("says what screening allows when it is less than the limit set", async () => {
+    allow("owner");
+    changeLimitMock.mockResolvedValueOnce({ name: "Centronex", from: 2, to: 100, current: 25 });
+
+    const result = await run(() => updateCounterpartyLimitAction(INITIAL, form({ counterpartyId: COUNTERPARTY_ID, paymentLimit: "100" })));
+
+    expect(result.message).toBe("Centronex's payment limit is now 100 USDC; screening allows 25 USDC for its risk.");
+  });
+
+  it("shows the library's own refusal", async () => {
+    allow("owner");
+    changeLimitMock.mockRejectedValueOnce(new CounterpartyLimitError("required"));
+
+    const result = await run(() => updateCounterpartyLimitAction(INITIAL, form({ counterpartyId: COUNTERPARTY_ID, paymentLimit: "" })));
+
+    expect(result).toEqual({ ok: false, message: "A vendor or contractor needs a payment limit: without one, the agent could pay any amount." });
   });
 });

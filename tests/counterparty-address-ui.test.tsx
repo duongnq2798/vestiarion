@@ -1,7 +1,10 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import CounterpartyAddress, { type CounterpartyAddressProps } from "@/components/intake/CounterpartyAddressEdit";
+import CounterpartyLimitEdit from "@/components/intake/CounterpartyLimitEdit";
 
 /**
  * The address controls on a counterparty card, rendered to static markup:
@@ -12,6 +15,7 @@ import CounterpartyAddress, { type CounterpartyAddressProps } from "@/components
 vi.mock("@/app/actions/intake", () => ({
   updateCounterpartyAddressAction: vi.fn(),
   confirmCounterpartyAddressAction: vi.fn(),
+  updateCounterpartyLimitAction: vi.fn(),
 }));
 
 const html = (node: ReactElement) => renderToStaticMarkup(node);
@@ -59,5 +63,23 @@ describe("CounterpartyAddress", () => {
   it("shows nothing about confirming for an address that was never changed", () => {
     const markup = render({ canWrite: true, canConfirm: true });
     expect(markup).not.toContain("not yet confirmed");
+  });
+});
+
+describe("CounterpartyLimitEdit", () => {
+  it("offers Edit limit, named for the counterparty for a screen reader", () => {
+    const markup = html(
+      <CounterpartyLimitEdit orgSlug="acme" counterparty={{ id: "c1", name: "Centronex", role: "vendor", baselineLimit: 2 }} />
+    );
+    expect(markup).toContain("Edit limit");
+    expect(markup).toContain('aria-label="Edit Centronex&#x27;s payment limit"');
+  });
+});
+
+describe("the Counterparties page", () => {
+  const page = readFileSync(path.join(process.cwd(), "src", "app", "o", "[slug]", "counterparties", "page.tsx"), "utf8");
+
+  it("offers Edit limit only to people who may add records", () => {
+    expect(page).toMatch(/\{canWrite && \(\s*<CounterpartyLimitEdit/);
   });
 });
