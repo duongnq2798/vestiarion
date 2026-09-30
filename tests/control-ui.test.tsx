@@ -69,6 +69,12 @@ describe("utcMinute", () => {
 });
 
 describe("ApprovalCard", () => {
+  it("shows the due date as a date, not the stored timestamp", () => {
+    const markup = card({ dueDate: "2026-09-30T12:00:00+00:00" });
+    expect(markup).toContain("Due 2026-09-30");
+    expect(markup).not.toContain("T12:00:00");
+  });
+
   it("shows where the payment goes, and posts that address with Approve and pay", () => {
     const markup = card();
     expect(markup).toContain("Pays to");

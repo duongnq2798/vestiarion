@@ -76,7 +76,7 @@ export default function ApprovalCard({
           <div className="min-w-0 space-y-1">
             <CardTitle className="truncate">{payable.counterpartyName}</CardTitle>
             <p className="text-sm text-ink-2">
-              Due {payable.dueDate}
+              Due {payable.dueDate.slice(0, 10)}
               {payable.decidedAt && <span className="text-ink-3"> · stopped {utcMinute(payable.decidedAt)}</span>}
             </p>
           </div>
