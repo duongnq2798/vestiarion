@@ -60,3 +60,5 @@ An owner can replace a workspace's signing key: open **Settings** → **Ledger s
 The old public key does not disappear. It stays listed under **Retired keys**, both on the **Ledger signing key** panel in Settings and on the **Audit log** page, next to the current key. The rotation itself is recorded in the ledger like any other decision, as `ledger_key_rotated`, naming both the retired and the new key id and who rotated.
 
 For verifying an export from a workspace that has rotated its key, see [§4](#4-compare-the-key-id-and-the-head) above: pass every key the export's entries were signed with, the retired one and the current one, by repeating `--public-key` or listing them in one file.
+
+If you operate a deployment that still sets `LEDGER_SIGNING_KEY` for the founding workspace, that environment copy becomes a retired private key once the workspace rotates: remove it from hosting. The app reads the signing key from the workspace itself, and `npm run org:adopt-env` refuses a retired key.
