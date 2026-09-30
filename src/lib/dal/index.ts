@@ -54,7 +54,7 @@ export const PLATFORM_RPCS = [
   "create_org", "invite_member", "accept_invitation", "change_member_role", "remove_member",
   "revoke_invitation", "org_members", "touch_org_activity", "delete_sandbox_org",
   "pending_invitations_for", "accept_invitation_by_id", "pause_agent", "resume_agent", "create_api_key",
-  "claim_webhook_deliveries", "record_webhook_failure", "create_webhook_endpoint", "choose_hosted_wallet",
+  "claim_webhook_deliveries", "record_webhook_failure", "create_webhook_endpoint", "choose_hosted_wallet", "delete_org",
 ] as const;
 export type PlatformRpc = (typeof PLATFORM_RPCS)[number];
 
@@ -170,6 +170,18 @@ export function platformDb() {
       if (!(PLATFORM_RPCS as readonly string[]).includes(name)) throw new Error(`${name} is not a platform function`);
       return client.rpc(name, args);
     },
+  };
+}
+
+/**
+ * The service role's auth admin API, narrowed to the one call the platform
+ * makes: deleting the signed-in person's own account (account deletion,
+ * spec §6 A3). Nothing else of the admin API is reachable from here.
+ */
+export function platformAuth() {
+  const client = currentContext().db;
+  return {
+    deleteUser: (userId: string) => client.auth.admin.deleteUser(userId, false),
   };
 }
 

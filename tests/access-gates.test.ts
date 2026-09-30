@@ -74,12 +74,14 @@ describe("every /o/[slug] page", () => {
 });
 
 describe("every server action", () => {
-  it("lives in src/app/actions, except sign-in and creating a first workspace", () => {
+  it("lives in src/app/actions, except sign-in, accepting an invitation, creating a first workspace, and your own account", () => {
     const withDirective = walk(path.join(ROOT, "src")).filter(
       (file) => /\.(ts|tsx)$/.test(file) && /^\s*["']use server["']/.test(read(file))
     );
     const outside = withDirective.map(rel).filter((file) => !file.startsWith("src/app/actions/"));
-    expect(outside.sort()).toEqual(["src/app/invite/actions.ts", "src/app/login/actions.ts", "src/app/onboarding/actions.ts"]);
+    expect(outside.sort()).toEqual([
+      "src/app/account/actions.ts", "src/app/invite/actions.ts", "src/app/login/actions.ts", "src/app/onboarding/actions.ts",
+    ]);
   });
 
   const actions = ACTION_FILES.flatMap((file) =>
@@ -133,6 +135,26 @@ describe("every invite action", () => {
 
   it.each(actions.map((action) => [action.name, action.body]))("%s awaits getSessionUser first", (_name, body) => {
     expect(awaitedNames(body)[0]).toBe("getSessionUser");
+  });
+});
+
+describe("every account action", () => {
+  // Deleting your own account needs no workspace role (spec §6, A1): the gate
+  // is the session, and the person acted on is always the session's user.
+  const ACCOUNT_ACTIONS = path.join(ROOT, "src", "app", "account", "actions.ts");
+  const actions = existsSync(ACCOUNT_ACTIONS) ? exportedAsyncFunctions(read(ACCOUNT_ACTIONS)) : [];
+
+  it("exists — the list is not empty", () => {
+    expect(actions.map((action) => action.name).sort()).toEqual(["accountDeletionPlanAction", "deleteAccountAction"]);
+  });
+
+  it.each(actions.map((action) => [action.name, action.body]))("%s awaits getSessionUser first", (_name, body) => {
+    expect(awaitedNames(body)[0]).toBe("getSessionUser");
+  });
+
+  it.each(actions.map((action) => [action.name, action.body]))("%s reads no user id from the form", (_name, body) => {
+    expect(body).not.toMatch(/formData\.get\(["'](?:userId|user_id|id)["']\)/);
+    expect(body).toMatch(/userId: user\.id|\(user\.id\)/);
   });
 });
 

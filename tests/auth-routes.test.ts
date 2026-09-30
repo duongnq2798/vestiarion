@@ -38,6 +38,9 @@ describe("requiresSession", () => {
     ["/invite/x", true],
     ["/", false],
     ["/login", false],
+    ["/terms", false],
+    ["/privacy", false],
+    ["/docs/guides/go-live", false],
     ["/auth/callback", false],
     ["/api/ledger/verify", false],
   ])("%s → %s", (pathname, expected) => {
@@ -63,5 +66,7 @@ describe("loginRedirectFor", () => {
   it("never redirects a public page", () => {
     expect(loginRedirectFor("/", "", false)).toBeNull();
     expect(loginRedirectFor("/login", "?next=%2Fo", false)).toBeNull();
+    expect(loginRedirectFor("/terms", "", false)).toBeNull();
+    expect(loginRedirectFor("/privacy", "", false)).toBeNull();
   });
 });

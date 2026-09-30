@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { STATUS_FOR, type ApiErrorCode } from "@/lib/api/contract";
 import { DOCS_TARGET } from "@/components/vx/command-items";
 import { DOCS_LINK } from "@/components/vx/nav";
+import { COMPACT_FOOTER_LINKS, FOOTER_COLUMNS } from "@/components/vx/SiteChrome";
 import { OPERATIONS } from "@/lib/api/openapi";
 import sitemap from "@/app/sitemap";
 import { CONTENT_DIR, hasSource, NOTES_LOADERS, PAGE_LOADERS, publishedPages, readSource } from "@/lib/docs/content";
@@ -40,7 +41,7 @@ const GENERATED_SLUGS = new Set(OPERATIONS.map((op) => `api/${op.id}`));
 const OTHER_TARGETS = new Set(["/api/v1/openapi.json", "/llms.txt", "/llms-full.txt"]);
 
 /** Real app pages outside /docs that a docs page may link to. */
-const APP_ROUTES = new Set(["/", "/login", "/signup", "/onboarding"]);
+const APP_ROUTES = new Set(["/", "/login", "/signup", "/onboarding", "/terms", "/privacy"]);
 
 /** The source without code: fenced blocks and inline code spans, where a link is an example, not a link. */
 function withoutCode(source: string): string {
@@ -223,10 +224,15 @@ describe("the Errors page", () => {
 });
 
 describe("the sitemap", () => {
-  it("lists the landing page and every published docs page, each as an absolute URL, in nav order", () => {
+  it("lists the landing page, every published docs page in nav order, then the terms and the privacy page, each as an absolute URL", () => {
     const origin = publicOrigin();
     const urls = sitemap().map((entry) => entry.url);
-    expect(urls).toEqual([`${origin}/`, ...publishedPages().map((page) => `${origin}${page.slug ? `/docs/${page.slug}` : "/docs"}`)]);
+    expect(urls).toEqual([
+      `${origin}/`,
+      ...publishedPages().map((page) => `${origin}${page.slug ? `/docs/${page.slug}` : "/docs"}`),
+      `${origin}/terms`,
+      `${origin}/privacy`,
+    ]);
     for (const url of urls) expect(url).toMatch(/^https?:\/\/[^/]+\//);
     expect(new Set(urls).size).toBe(urls.length);
   });
@@ -286,6 +292,14 @@ describe("docs links written in components", () => {
 
   it("include the console's Docs link and the palette's Developer docs", () => {
     expect(linkProblems("", [DOCS_LINK.href, DOCS_TARGET.href].map((link) => `<a href="${link}">`).join("\n"), sourceOnDisk)).toEqual([]);
+  });
+
+  it("include the site footer's, full and compact", () => {
+    const hrefs = [...FOOTER_COLUMNS.flatMap((column) => column.links), ...COMPACT_FOOTER_LINKS]
+      .map((link) => link.href)
+      .filter((href) => href.startsWith("/"));
+    expect(hrefs.filter((href) => href.startsWith("/docs")).length).toBeGreaterThanOrEqual(6);
+    expect(linkProblems("", hrefs.map((link) => `<a href="${link}">`).join("\n"), sourceOnDisk)).toEqual([]);
   });
 
   it("are read from both forms of literal, and not from a built one", () => {

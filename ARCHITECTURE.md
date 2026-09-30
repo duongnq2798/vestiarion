@@ -123,6 +123,25 @@ deleted automatically. `POST /api/platform/cleanup`, bearer-guarded the same way
 and deletes candidates; `.github/workflows/sandbox-cleanup.yml` calls it once a day and on manual
 dispatch.
 
+**Deleting a workspace** is an owner's call from the danger zone at the bottom of Settings
+(`deleteWorkspaceAction`, `org.administer`, after typing the slug): `delete_org(p_org_id, p_by)`
+(migration `0031`, service role only) refuses the founding workspace, anyone `member_role` does not
+name an owner, a live workspace whose agent is not paused, a cycle run started in the last 15
+minutes still `running`, and a payment in progress (an invoice `processing` under a review from the
+last 10 minutes, or a payment intent `submitting` since the last 2 minutes: the claim functions' own
+windows); otherwise, in one transaction, it writes a tombstone to the service-role-only
+`deleted_orgs` (slug, name, who, when, the ledger's entry count and its head's `hash` and
+`signing_key_id`), deletes every tenant table in `delete_sandbox_org`'s order, and deletes the org
+row, which cascades to memberships, invitations, API keys and webhooks.
+
+**Deleting your account** (spec §6) is in the account menu and on `/onboarding`, gated by the
+session alone (`src/app/account/actions.ts`, never a user id from the form). `accountDeletionPlan`
+(`src/lib/platform/delete-account.ts`) blocks it while the person is the last owner of a workspace
+with other members or of the founding workspace; `deleteAccount` then runs `delete_org` on each
+workspace they are the only member of, stopping at the first refusal, and only then deletes the auth
+user through `platformAuth().deleteUser` (the service role's admin API), after which `0023`'s
+foreign keys remove memberships and sent invitations and null `created_by`.
+
 **The cron** (`POST /api/agent/tick`) no longer runs one configured business.
 `runLiveOrganizations` (`src/lib/agent/cron.ts`) lists every organization in `mode = 'live'` and,
 for each, enters its scope with `withOrg` and runs a cycle; one organization's failure is caught,
@@ -385,7 +404,7 @@ the webhook verification snippets run against the signing code. The Guides
 pages (`content/docs/guides/`) are for people using the app rather than the
 API; they quote its buttons, fields and messages exactly, and
 `tests/docs-guides.test.ts` checks each quoted string against the source file
-it comes from, so renaming one in the app means updating the guide. **A PR that
+it comes from, so renaming one in the app means updating the guide. Their step screenshots are the app’s own components rendered with sample data by `/docs-shots/<name>` (`src/app/docs-shots/`), which answers only where `DOCS_SCREENSHOTS=1` is set; `npm run docs:screenshots` photographs them into `public/docs/guides/`, and `tests/docs-screenshots.test.tsx` holds every `<Screenshot>` to an existing PNG with alt text, and every PNG to a guide. **A PR that
 changes `/api/v1` or webhooks adds a changelog entry** to
 `content/docs/changelog.mdx`: dated, newest first, saying what changed for an
 integrator.

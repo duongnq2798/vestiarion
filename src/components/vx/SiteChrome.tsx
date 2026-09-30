@@ -3,13 +3,14 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/components/ui/cn";
 import { Eyebrow } from "@/components/ui/Eyebrow";
+import { GITHUB_URL, ISSUES_URL, LICENSE_URL } from "@/lib/site-links";
 import { BrandMark } from "./Brand";
 import { SiteMenu } from "./SiteMenu";
 
 /**
  * The header and footer of the pages outside a workspace: the landing page,
- * sign-in, the workspace chooser and the not-found pages. Inside a workspace
- * the navigation is `AppFrame`'s.
+ * sign-in, the workspace chooser, the docs, the terms and privacy pages and
+ * the not-found pages. Inside a workspace the navigation is `AppFrame`'s.
  */
 
 /** The landing page's own sections, which its header and footer link to. */
@@ -99,62 +100,170 @@ export function SiteHeader({
   );
 }
 
-/** `compact` is a single line, for pages that are one form or one list. */
+export interface FooterLink {
+  href: string;
+  label: string;
+}
+
+/**
+ * The full footer's columns (spec §2, F1). An address starting `#` is a
+ * section of the landing page, the one page this footer is on; `http…` is
+ * another site and opens in a new tab; anything else is a page of this app.
+ */
+export const FOOTER_COLUMNS: ReadonlyArray<{ title: string; links: readonly FooterLink[] }> = [
+  {
+    title: "Product",
+    links: [...LANDING_SECTIONS, { href: "/login", label: "Sign in" }, { href: "/onboarding", label: "Open console" }],
+  },
+  {
+    title: "Developers",
+    links: [
+      { href: "/docs", label: "Documentation" },
+      { href: "/docs/api", label: "API reference" },
+      { href: "/docs/ai-integration/mcp", label: "MCP server" },
+      { href: "/docs/changelog", label: "Changelog" },
+      { href: GITHUB_URL, label: "GitHub" },
+    ],
+  },
+  {
+    title: "Resources",
+    links: [
+      { href: "/docs/guides/go-live", label: "Go live guide" },
+      { href: "/docs/guides/first-payment", label: "First payment guide" },
+      { href: ISSUES_URL, label: "Support" },
+    ],
+  },
+  {
+    title: "Legal",
+    links: [
+      { href: "/terms", label: "Terms" },
+      { href: "/privacy", label: "Privacy" },
+      { href: ISSUES_URL, label: "Contact" },
+    ],
+  },
+];
+
+/** The compact footer's links, beside its one line. */
+export const COMPACT_FOOTER_LINKS: readonly FooterLink[] = [
+  { href: "/docs", label: "Docs" },
+  { href: "/terms", label: "Terms" },
+  { href: "/privacy", label: "Privacy" },
+  { href: GITHUB_URL, label: "GitHub" },
+];
+
+const isExternal = (href: string) => /^https?:\/\//.test(href);
+
+/** A footer link: another site in a new tab, a landing section as a plain anchor, a page through the router. */
+function FooterAnchor({ href, className, label, children }: { href: string; className: string; label?: string; children: ReactNode }) {
+  if (isExternal(href)) {
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer" aria-label={label} className={className}>
+        {children}
+      </a>
+    );
+  }
+  if (href.startsWith("#")) {
+    return (
+      <a href={href} aria-label={label} className={className}>
+        {children}
+      </a>
+    );
+  }
+  return (
+    <Link href={href} aria-label={label} className={className}>
+      {children}
+    </Link>
+  );
+}
+
+/**
+ * GitHub's mark, drawn in the current text colour. lucide-react dropped its
+ * brand icons, so the installed version has no GitHub icon to use.
+ */
+function GitHubMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false" fill="currentColor" className={className}>
+      <path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z" />
+    </svg>
+  );
+}
+
+const COLUMN_LINK = "inline-flex py-1.5 text-sm text-ink-2 transition-colors duration-150 ease-standard hover:text-agent";
+const COMPACT_LINK = "inline-flex py-1 text-ink-2 transition-colors duration-150 ease-standard hover:text-agent";
+const COPYRIGHT = "© 2026 Vestiarion contributors";
+
+/**
+ * The full footer is the landing page's: the wordmark, then four columns of
+ * links, two across on a phone, four from `sm` and beside the wordmark from
+ * `lg`. `compact` is one line and four links, for every other public page.
+ */
 export function SiteFooter({ compact = false }: { compact?: boolean }) {
-  const legal = "© 2026 Vestiarion contributors · MIT License";
   if (compact) {
     return (
-      <footer className="border-t border-line/80 px-4 py-6 text-center font-mono text-xs text-ink-3">
-        {legal} · Signed decisions on Arc testnet
+      <footer className="border-t border-line/80 px-4 py-6 font-mono text-xs text-ink-3">
+        <div className="mx-auto flex max-w-6xl flex-col items-center gap-2 text-center sm:flex-row sm:flex-wrap sm:justify-center sm:gap-x-6">
+          {/* Each part keeps to one line, so a narrow screen wraps between them, after a separator. */}
+          <p className="[&>span]:whitespace-nowrap">
+            <span>{COPYRIGHT} ·</span> <span>MIT License ·</span> <span>Signed decisions on Arc testnet</span>
+          </p>
+          <nav aria-label="Footer">
+            <ul className="flex flex-wrap justify-center gap-x-4">
+              {COMPACT_FOOTER_LINKS.map((link) => (
+                <li key={link.href}>
+                  <FooterAnchor href={link.href} className={COMPACT_LINK}>
+                    {link.label}
+                  </FooterAnchor>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        </div>
       </footer>
     );
   }
 
-  const columns = [
-    { title: "Product", links: LANDING_SECTIONS },
-    {
-      title: "Account",
-      links: [
-        { href: "/login", label: "Sign in" },
-        { href: "/onboarding", label: "Open console" },
-      ],
-    },
-  ];
-
   return (
     <footer className="border-t border-line bg-surface">
       <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-14">
-        <div className="grid grid-cols-2 gap-x-6 gap-y-10 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
-          <div className="col-span-2 lg:col-span-1">
+        <div className="grid grid-cols-2 gap-x-6 gap-y-10 sm:grid-cols-4 lg:grid-cols-6">
+          <div className="col-span-2 sm:col-span-4 lg:col-span-2">
             <Wordmark />
             <p className="mt-4 max-w-sm text-sm leading-relaxed text-ink-2">
               An autonomous treasury agent. A model proposes, code enforces the boundary, and every decision is signed into a chain anyone can verify.
             </p>
           </div>
-          {columns.map((column) => (
-            <nav key={column.title} aria-label={column.title}>
+          {FOOTER_COLUMNS.map((column) => (
+            <nav key={column.title} aria-label={column.title} className="min-w-0">
               <Eyebrow>{column.title}</Eyebrow>
               <ul className="mt-3 space-y-1">
                 {column.links.map((link) => (
-                  <li key={link.href}>
-                    {link.href.startsWith("#") ? (
-                      <a href={link.href} className="inline-flex py-1.5 text-sm text-ink-2 transition-colors duration-150 ease-standard hover:text-agent">
-                        {link.label}
-                      </a>
-                    ) : (
-                      <Link href={link.href} className="inline-flex py-1.5 text-sm text-ink-2 transition-colors duration-150 ease-standard hover:text-agent">
-                        {link.label}
-                      </Link>
-                    )}
+                  <li key={link.label}>
+                    <FooterAnchor href={link.href} className={COLUMN_LINK}>
+                      {link.label}
+                    </FooterAnchor>
                   </li>
                 ))}
               </ul>
             </nav>
           ))}
         </div>
-        <div className="mt-10 flex flex-col gap-2 border-t border-line pt-6 font-mono text-xs text-ink-3 sm:flex-row sm:items-center sm:justify-between">
-          <p>{legal}</p>
-          <p>Hash-chained decisions · Ed25519 signed · Arc testnet</p>
+        <div className="mt-10 flex flex-col gap-3 border-t border-line pt-6 font-mono text-xs text-ink-3 sm:flex-row sm:items-center sm:justify-between">
+          <p>
+            {COPYRIGHT} ·{" "}
+            <FooterAnchor href={LICENSE_URL} className="underline decoration-line-strong underline-offset-4 transition-colors duration-150 ease-standard hover:text-agent">
+              MIT License
+            </FooterAnchor>
+          </p>
+          <div className="flex items-center justify-between gap-4 sm:justify-end">
+            <p className="min-w-0">Hash-chained decisions · Ed25519 signed · Arc testnet</p>
+            <FooterAnchor
+              href={GITHUB_URL}
+              label="Vestiarion on GitHub"
+              className="-my-2 inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-ink-2 transition-colors duration-150 ease-standard hover:bg-raised/70 hover:text-ink"
+            >
+              <GitHubMark className="size-5" />
+            </FooterAnchor>
+          </div>
         </div>
       </div>
     </footer>

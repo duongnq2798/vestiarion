@@ -17,6 +17,12 @@ Step 1 depends on the deployment:
 - **When the deployment has hosted wallets**, step 1 is "Choose where the wallets live". It offers a hosted testnet wallet first (path A), and your own Circle account under "Connect your own Circle account" (path B).
 - **Otherwise**, step 1 is "Connect your Circle account" and shows only the form for your own account. Follow path B.
 
+<Screenshot
+  src="/docs/guides/go-live-choose.png"
+  alt="The Go live section of Settings at step 1 of 3, Choose where the wallets live. A box marked Recommended offers a testnet wallet with no Circle account needed, with the button Use a Vestiarion testnet wallet. Below it, a closed row reads Connect your own Circle account. The badge beside Go live reads Sandbox · simulated payments."
+  caption="Step 1 with hosted wallets: the testnet wallet first, your own Circle account below it."
+/>
+
 ### Path A: a Vestiarion testnet wallet
 
 You don't need a Circle account for this path. The workspace's wallets are created in Vestiarion's own Circle testnet account, in a wallet set of their own.
@@ -39,11 +45,23 @@ Then, in **Go live**:
 2. Paste the key into **API key** and the secret into **Entity secret**.
 3. Choose **Connect Circle**. Circle checks the API key before anything is stored. When it accepts the key, the page says "Circle is connected." Both values are then encrypted, and they are never shown again.
 
+<Screenshot
+  src="/docs/guides/go-live-own-account.png"
+  alt="Step 1 with Connect your own Circle account opened: a line pointing to console.circle.com, two empty masked fields labelled API key and Entity secret, the note The one registered for developer-controlled wallets under the second, and a Connect Circle button."
+  caption="Path B: paste the API key and the entity secret, then choose Connect Circle."
+/>
+
 The entity secret itself is checked in step 2, when the wallets are created. To change either value later, open **Replace Circle credentials**. The new values must belong to the same Circle account, because the workspace's wallets are in it.
 
 ## 2. Create the treasury wallets
 
 The step is headed "Create treasury wallets". It creates one wallet on Arc testnet for each of the workspace's accounts. With your own Circle account, it also proves the entity secret.
+
+<Screenshot
+  src="/docs/guides/go-live-create-wallets.png"
+  alt="Step 2 of 3, Create treasury wallets, for a workspace using a Vestiarion testnet wallet. It explains that one wallet is created on Arc testnet for each account, and shows the Create treasury wallets button and a note that counterparties are paid only at a real address. The badge reads Sandbox · hosted testnet wallet."
+  caption="Step 2, before the wallets exist."
+/>
 
 1. Choose **Create treasury wallets**.
 2. The page confirms with "Treasury wallets created: *n*." and lists each account's wallet address, with a button to copy it. If every account already has one, it says "Every account already has a wallet."
@@ -58,6 +76,12 @@ The step is headed "Fund the operating wallet, then go live". The agent pays fro
 2. Open [faucet.circle.com](https://faucet.circle.com). As the page says, "select Arc Testnet, and paste this address", then request testnet USDC.
 3. Back in **Go live**, choose **Refresh** beside "USDC on chain:". The balance is read from the chain when the step opens, and again on each refresh. Refresh until the USDC shows.
 
+<Screenshot
+  src="/docs/guides/go-live-fund.png"
+  alt="Step 3 of 3, Fund the operating wallet, then go live. It shows the operating wallet's address with a copy button, the line Get testnet USDC at faucet.circle.com: select Arc Testnet, and paste this address, the line USDC on chain: 20.00 USDC with a Refresh button, and the Go live button below a warning that going live cannot be undone from here."
+  caption="Step 3 after one faucet request: the operating wallet holds 20.00 USDC."
+/>
+
 ## 4. Go live
 
 1. Choose **Go live**. The step warns you first: "Going live cannot be undone from here; pausing the agent stops it paying."
@@ -68,6 +92,12 @@ The step is headed "Fund the operating wallet, then go live". The agent pays fro
    - "To stop it later, pause the agent from the console."
 3. Confirm with **Go live**. The page says "This workspace is live." and the badge changes to "Live · paying on Arc testnet", or to "Live · hosted testnet wallet on Arc" on path A.
 
+<Screenshot
+  src="/docs/guides/go-live-confirm.png"
+  alt="The dialog Take this workspace live? over the Go live step. It lists: Real testnet USDC moves when the agent pays. The agent runs every 6 hours on its own. The workspace is no longer deleted when inactive. To stop it later, pause the agent from the console. The buttons are Cancel and Go live."
+  caption="The confirmation lists what changes before anything does."
+/>
+
 Next, [make your first payment](/docs/guides/first-payment).
 
 ## What changes when you go live
@@ -76,6 +106,12 @@ Next, [make your first payment](/docs/guides/first-payment).
 - **Payments move testnet USDC on Arc** from the operating wallet, within the guardrails. Anything the agent will not pay waits in **Approvals**.
 - **The workspace is kept**, however long it is inactive.
 - **Going live is one-way.** Nothing in the app switches a live workspace back to sandbox.
+
+<Screenshot
+  src="/docs/guides/go-live-live.png"
+  alt="The Go live section of a live workspace. The badge reads Live · hosted testnet wallet on Arc. Below it are the Operating and Reserve wallet addresses with copy buttons, the line Live since 2026-09-30 09:12 UTC, and Runs every 6 hours; pause the agent from the console to stop it."
+  caption="A live workspace: its wallets, when it went live, and how to stop it."
+/>
 
 **To stop the agent**, go to the console and choose **Pause agent**. You can give a reason, which is shown on every page and kept in the ledger. A paused agent runs no cycle and moves no money, and its scheduled runs are skipped. People can still pay or reject from **Approvals**. Owners, admins and approvers can pause the agent. Only owners and admins can start it again, with **Resume agent**.
 

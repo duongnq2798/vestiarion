@@ -9,6 +9,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "check:lock": "node scripts/check-lockfile.mjs",
+    "docs:screenshots": "node scripts/docs-screenshots.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
