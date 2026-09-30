@@ -213,16 +213,23 @@ never overwrites a claimed row. The claim also refuses an approval when the
 deciding person created the invoice (`invoices.created_by`), so no one
 approves their own payable. The claim makes a decision exclusive; it is the
 payment intent's idempotency key (`paymentIdempotencyKey("invoice", id)` in
-`src/lib/payments.ts`) that keeps an invoice from being paid twice. A
+`src/lib/payments.ts` for the first transfer attempt, one more key per later
+attempt) that keeps an invoice from being paid twice. A
 `processing` invoice a crashed request never finished can be reclaimed ten
 minutes after `reviewed_at`, and a failed update after a claim is logged by
 invoice id. All three server actions (`src/app/actions/approvals.ts`)
-require `approval.decide`. An invoice whose payment was already sent — its
-intent confirmed, pending or submitting, or holding a provider id with an
-unread reconcile error — can only be approved: Reject and Return are refused
-with `payment_in_flight` before the claim, the card offers only Approve and
-pay, and Approve skips its funds check when a transfer already exists, since
-it reconciles rather than pays again.
+require `approval.decide`. An invoice whose payment may already have moved —
+its intent confirmed, pending or submitting, or holding a provider id whose
+transfer Circle has not reported in a terminal failure state (`CANCELLED`,
+`DENIED`, `FAILED`; `STUCK` is still in flight) — can only be approved: Reject
+and Return are refused with `payment_in_flight` before the claim, the card
+offers only Approve and pay, and Approve skips its funds check when such a
+transfer exists, since it reconciles rather than pays again. A payment Circle
+ended in a terminal failure moved nothing, so Reject and Return are allowed,
+and Approve and pay, after its funds check, reads Circle once more and only on
+a terminal state sends it again under the next attempt's key
+(`retryTerminalFailure` in `executePayment`, `begin_payment_retry` in
+migration `0036`). The agent's cycle never sends a failed transfer again.
 
 **A payment still in flight is reconciled, not decided again.** An approval
 whose transfer is still pending leaves the invoice `matched`, which the AP

@@ -62,12 +62,17 @@ export interface PayInvoiceResult {
  * account holds the invoice without ever calling the provider; otherwise the
  * transfer's outcome (confirmed, pending, failed, or thrown) maps to the same
  * status and the same note text as before.
+ *
+ * `retryTerminalFailure` is `executePayment`'s: only a person's Approve and
+ * pay sets it, so that a payment Circle ended in a terminal failure is sent
+ * again under a new attempt's key. The agent's cycle leaves it unset and a
+ * failed transfer stays held for a person.
  */
 export async function payInvoice(
   input: PayInvoiceInput,
-  deps: { provider: ChainProvider; operating: { id: string } | null }
+  deps: { provider: ChainProvider; operating: { id: string } | null; retryTerminalFailure?: boolean }
 ): Promise<PayInvoiceResult> {
-  const { provider, operating } = deps;
+  const { provider, operating, retryTerminalFailure = false } = deps;
 
   if (!operating) {
     return {
@@ -90,7 +95,7 @@ export async function payInvoice(
         amount: input.amount,
         memo: `Invoice ${input.invoiceId}`,
       },
-      { provider }
+      { provider, retryTerminalFailure }
     );
   } catch (err) {
     // Nothing is known to have moved: no transfer result exists at all.

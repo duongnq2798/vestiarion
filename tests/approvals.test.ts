@@ -10,6 +10,7 @@ import {
   rejectInvoice,
   returnInvoice,
 } from "@/lib/agent/approvals";
+import type { PaymentExecution } from "@/lib/payments";
 import { encryptSecret, parseMasterKeys } from "@/lib/secrets";
 import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 
@@ -155,6 +156,42 @@ function approvalsFake(options: {
     return { body: [] };
   });
   return { fake, run: <T>(fn: () => Promise<T>) => runWith({ config, db: fake.client, fetch: fake.fetch }, () => withOrg(ORG, fn)) };
+}
+
+/** What `executePayment` reported, as `payInvoice` hands it back. */
+function execution(overrides: Partial<PaymentExecution> = {}): PaymentExecution {
+  return {
+    idempotencyKey: "key-1",
+    providerTxId: "circle-tx-1",
+    txHash: "0xhash",
+    txRef: "0xhash",
+    status: "confirmed",
+    attemptCount: 1,
+    error: null,
+    reconciled: false,
+    chain: "ARC-TESTNET",
+    providerMode: "live",
+    feeUsd: 0.003,
+    feeSource: "chain_reported",
+    settledInMs: 4000,
+    executedAt: "2026-09-30T00:00:00Z",
+    attempt: 1,
+    retriedAfter: null,
+    ...overrides,
+  };
+}
+
+/** An invoice's intent whose current attempt Circle ended in a terminal failure. */
+function terminallyFailed(overrides: Record<string, unknown> = {}) {
+  return {
+    source_id: INVOICE_ID,
+    status: "failed",
+    provider_tx_id: "circle-tx-1",
+    last_error: null,
+    provider_state: "FAILED",
+    failure_reason: "INSUFFICIENT_NATIVE_TOKEN",
+    ...overrides,
+  };
 }
 
 function rpcBodies(requests: RecordedRequest[], name: string) {
@@ -303,9 +340,10 @@ describe("approveAndPay", () => {
     const [claim] = rpcBodies(fake.requests, "claim_invoice_decision");
     expect(claim).toEqual({ p_org_id: ORG, p_invoice_id: INVOICE_ID, p_by: ACTOR, p_decision: "approve" });
     expect(payInvoiceMock).toHaveBeenCalledTimes(1);
+    // A person's approval is the one caller that may send a terminally failed payment again.
     expect(payInvoiceMock).toHaveBeenCalledWith(
       { invoiceId: INVOICE_ID, counterpartyId: COUNTERPARTY_ID, address: "0xdead", amount: 150 },
-      { provider: { mode: "simulate", earnMode: "simulate", estimatedFeeUsd: 0.01 }, operating: { id: ACCOUNT_ID } }
+      { provider: { mode: "simulate", earnMode: "simulate", estimatedFeeUsd: 0.01 }, operating: { id: ACCOUNT_ID }, retryTerminalFailure: true }
     );
 
     const [update] = patchBodies(fake.requests, "/rest/v1/invoices");
@@ -429,6 +467,116 @@ describe("approveAndPay", () => {
     expect(error).toHaveBeenCalledWith("ledger entry not recorded", "approval_paid", ORG);
     error.mockRestore();
   });
+
+  it("records attempt 1, and no retriedAfter, in the approval_paid entry of a first payment", async () => {
+    payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: execution(), note: "", operatingBalance: 350 });
+    const { fake, run } = approvalsFake();
+
+    await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+
+    const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+    const detail = append.p_detail as Record<string, unknown>;
+    expect(detail.attempt).toBe(1);
+    expect(detail).not.toHaveProperty("retriedAfter");
+  });
+});
+
+describe("approveAndPay after Circle ended the last attempt in a terminal failure", () => {
+  const retried = () =>
+    payInvoiceMock.mockResolvedValue({
+      status: "paid",
+      txRef: "0xhash2",
+      execution: execution({
+        idempotencyKey: "key-2",
+        providerTxId: "circle-tx-2",
+        txHash: "0xhash2",
+        txRef: "0xhash2",
+        attempt: 2,
+        retriedAfter: { providerTxId: "circle-tx-1", providerState: "FAILED", failureReason: "INSUFFICIENT_NATIVE_TOKEN" },
+      }),
+      note: "",
+      operatingBalance: 350,
+    });
+
+  it("pays the held invoice on attempt 2, and approval_paid records the attempt and the one it followed", async () => {
+    retried();
+    const { fake, run } = approvalsFake({ intents: [terminallyFailed()] });
+
+    const result = await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+
+    expect(result).toEqual({ status: "paid", txRef: "0xhash2", note: "" });
+    expect(payInvoiceMock).toHaveBeenCalledTimes(1);
+    expect(payInvoiceMock.mock.calls[0][1]).toMatchObject({ retryTerminalFailure: true });
+    const [lookup] = fake.requests.filter((r) => r.path === "/rest/v1/payment_intents");
+    expect(lookup.params.get("select")).toContain("provider_state");
+
+    const [update] = patchBodies(fake.requests, "/rest/v1/invoices");
+    expect(update).toMatchObject({ status: "paid", tx_ref: "0xhash2" });
+
+    const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(append.p_action).toBe("approval_paid");
+    expect(append.p_summary).toBe("Approved and paid 150 USDC to Acme Supplies");
+    expect(append.p_detail).toEqual({
+      by: ACTOR,
+      invoiceId: INVOICE_ID,
+      counterpartyId: COUNTERPARTY_ID,
+      amount: 150,
+      overrode: "held",
+      txRef: "0xhash2",
+      status: "paid",
+      attempt: 2,
+      retriedAfter: { providerTxId: "circle-tx-1", providerState: "FAILED", failureReason: "INSUFFICIENT_NATIVE_TOKEN" },
+    });
+  });
+
+  it.each(["CANCELLED", "DENIED", "FAILED"])("runs the balance check on a retry after %s, refusing before any claim", async (state) => {
+    const { fake, run } = approvalsFake({ account: () => ({ body: accountRow("40") }), intents: [terminallyFailed({ provider_state: state })] });
+
+    const attempt = run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+
+    await expect(attempt).rejects.toMatchObject({ code: "insufficient_funds" });
+    await expect(attempt).rejects.toThrow("The operating account holds 40 USDC, less than this invoice.");
+    expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+  });
+
+  it("reads the live balance for a retry in live mode", async () => {
+    getChainProviderMock.mockReturnValue({ mode: "live", earnMode: "simulate", estimatedFeeUsd: 0.003 });
+    syncOperatingBalanceMock.mockResolvedValue(30);
+    const { run } = approvalsFake({ account: () => ({ body: accountRow("999") }), intents: [terminallyFailed()] });
+
+    await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).rejects.toThrow(
+      "The operating account holds 30 USDC, less than this invoice."
+    );
+    expect(syncOperatingBalanceMock).toHaveBeenCalledWith(ACCOUNT_ID);
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+  });
+
+  it("confirms the shown address a retry now pays to", async () => {
+    retried();
+    const { fake, run } = approvalsFake({
+      intents: [terminallyFailed()],
+      counterparty: { id: COUNTERPARTY_ID, name: "Acme Supplies", address: "0xdead", address_changed_at: "2026-09-30T12:00:00+00:00", address_confirmed_at: null },
+    });
+
+    await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID, shownAddress: "0xdead" }));
+
+    expect(fake.requests.filter((r) => r.path === "/rest/v1/counterparties" && r.method === "PATCH")).toHaveLength(1);
+  });
+
+  it.each([
+    ["STUCK at Circle", { status: "pending", provider_tx_id: "circle-tx-1", last_error: null, provider_state: "STUCK", failure_reason: null }],
+    ["recorded failed before Circle's state was kept", { status: "failed", provider_tx_id: "circle-tx-1", last_error: null, provider_state: null, failure_reason: null }],
+  ] as const)("skips the balance check, as for any transfer that may still move, when the transfer is %s", async (_label, intent) => {
+    // Approve and pay reads Circle before anything else: a transfer still in
+    // flight is recorded, never sent again, so the balance — possibly already
+    // lower by this very payment — is not the question.
+    payInvoiceMock.mockResolvedValue({ status: "matched", txRef: "circle-tx-1", execution: execution({ status: "pending" }), note: "", operatingBalance: null });
+    const { run } = approvalsFake({ account: () => ({ body: accountRow("40") }), intents: [{ source_id: INVOICE_ID, ...intent }] });
+
+    await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).resolves.toMatchObject({ status: "matched" });
+    expect(payInvoiceMock).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("rejectInvoice", () => {
@@ -476,6 +624,9 @@ describe("rejectInvoice", () => {
     ["pending", { status: "pending", provider_tx_id: "circle-tx-1", last_error: null }],
     ["submitting", { status: "submitting", provider_tx_id: null, last_error: null }],
     ["unreadable at the provider", { status: "failed", provider_tx_id: "circle-tx-1", last_error: "provider unreachable" }],
+    ["STUCK at Circle", { status: "pending", provider_tx_id: "circle-tx-1", last_error: null, provider_state: "STUCK" }],
+    ["recorded failed while Circle's last word was STUCK", { status: "failed", provider_tx_id: "circle-tx-1", last_error: null, provider_state: "STUCK" }],
+    ["recorded failed before Circle's state was kept", { status: "failed", provider_tx_id: "circle-tx-1", last_error: null, provider_state: null }],
   ] as const)("refuses with payment_in_flight, before any claim, when the payment is %s", async (_label, intent) => {
     const { fake, run } = approvalsFake({ intents: [{ source_id: INVOICE_ID, ...intent }] });
 
@@ -487,8 +638,8 @@ describe("rejectInvoice", () => {
     expect(patchBodies(fake.requests, "/rest/v1/invoices")).toHaveLength(0);
   });
 
-  it("still rejects when the provider itself reported the transfer failed", async () => {
-    const { fake, run } = approvalsFake({ intents: [{ source_id: INVOICE_ID, status: "failed", provider_tx_id: "circle-tx-1", last_error: null }] });
+  it.each(["CANCELLED", "DENIED", "FAILED"])("still rejects when Circle ended the transfer %s", async (state) => {
+    const { fake, run } = approvalsFake({ intents: [terminallyFailed({ provider_state: state })] });
 
     await run(() => rejectInvoice({ actorId: ACTOR, invoiceId: INVOICE_ID }));
 
@@ -515,6 +666,26 @@ describe("returnInvoice", () => {
     await expect(run(() => returnInvoice({ actorId: ACTOR, invoiceId: INVOICE_ID }))).rejects.toMatchObject({ code: "payment_in_flight" });
     expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
     expect(patchBodies(fake.requests, "/rest/v1/invoices")).toHaveLength(0);
+  });
+
+  it.each([
+    ["STUCK at Circle", { status: "pending", provider_tx_id: "circle-tx-1", last_error: null, provider_state: "STUCK" }],
+    ["recorded failed while Circle's last word was STUCK", { status: "failed", provider_tx_id: "circle-tx-1", last_error: null, provider_state: "STUCK" }],
+    ["recorded failed before Circle's state was kept", { status: "failed", provider_tx_id: "circle-tx-1", last_error: null, provider_state: null }],
+  ] as const)("refuses with payment_in_flight, before any claim, when the transfer is %s", async (_label, intent) => {
+    const { fake, run } = approvalsFake({ intents: [{ source_id: INVOICE_ID, ...intent }] });
+
+    await expect(run(() => returnInvoice({ actorId: ACTOR, invoiceId: INVOICE_ID }))).rejects.toMatchObject({ code: "payment_in_flight" });
+    expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
+    expect(patchBodies(fake.requests, "/rest/v1/invoices")).toHaveLength(0);
+  });
+
+  it("still returns an invoice whose transfer Circle ended FAILED", async () => {
+    const { fake, run } = approvalsFake({ intents: [terminallyFailed()] });
+
+    await run(() => returnInvoice({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+
+    expect(patchBodies(fake.requests, "/rest/v1/invoices")[0].status).toBe("pending");
   });
 
   it("still returns an invoice with no payment intent", async () => {
@@ -593,6 +764,7 @@ describe("listWaitingPayables", () => {
         reclaimable: false,
         paymentSent: false,
         address: "0xdead",
+        lastAttempt: null,
       },
     ]);
     const listing = fake.requests.find((r) => r.path === "/rest/v1/invoices" && r.method === "GET" && !r.params.get("id"));
@@ -622,14 +794,16 @@ describe("listWaitingPayables", () => {
   });
 
   it("marks a row paymentSent under the same rule Reject and Return refuse by", async () => {
-    const rows = ["sent", "pending", "unreadable", "provider-failed", "none"].map((id) => invoiceRow({ id }));
+    const rows = ["sent", "pending", "unreadable", "provider-failed", "stuck", "legacy-failed", "none"].map((id) => invoiceRow({ id }));
     const { fake, run } = approvalsFake({
       invoice: (r) => (r.params.get("id") ? undefined : { body: rows }),
       intents: [
-        { source_id: "sent", status: "confirmed", provider_tx_id: "tx-1", last_error: null },
-        { source_id: "pending", status: "pending", provider_tx_id: "tx-2", last_error: null },
-        { source_id: "unreadable", status: "failed", provider_tx_id: "tx-3", last_error: "provider unreachable" },
-        { source_id: "provider-failed", status: "failed", provider_tx_id: "tx-4", last_error: null },
+        { source_id: "sent", status: "confirmed", provider_tx_id: "tx-1", last_error: null, provider_state: "COMPLETE" },
+        { source_id: "pending", status: "pending", provider_tx_id: "tx-2", last_error: null, provider_state: "SENT" },
+        { source_id: "unreadable", status: "failed", provider_tx_id: "tx-3", last_error: "provider unreachable", provider_state: "SENT" },
+        { source_id: "provider-failed", status: "failed", provider_tx_id: "tx-4", last_error: null, provider_state: "FAILED" },
+        { source_id: "stuck", status: "pending", provider_tx_id: "tx-5", last_error: null, provider_state: "STUCK" },
+        { source_id: "legacy-failed", status: "failed", provider_tx_id: "tx-6", last_error: null, provider_state: null },
       ],
     });
 
@@ -640,11 +814,48 @@ describe("listWaitingPayables", () => {
       pending: true,
       unreadable: true,
       "provider-failed": false,
+      stuck: true,
+      "legacy-failed": true,
       none: false,
     });
     const [lookup] = fake.requests.filter((r) => r.path === "/rest/v1/payment_intents");
     expect(lookup.params.get("source_type")).toBe("eq.invoice");
-    expect(lookup.params.get("source_id")).toBe("in.(sent,pending,unreadable,provider-failed,none)");
+    expect(lookup.params.get("source_id")).toBe("in.(sent,pending,unreadable,provider-failed,stuck,legacy-failed,none)");
+  });
+
+  it("says what the last payment attempt did: failed with Circle's reason, or still in flight", async () => {
+    const ids = ["failed-reason", "failed-no-reason", "stuck", "sent", "confirmed", "unreadable", "legacy-failed", "failed-before-id", "none"];
+    const { fake, run } = approvalsFake({
+      invoice: (r) => (r.params.get("id") ? undefined : { body: ids.map((id) => invoiceRow({ id })) }),
+      intents: [
+        terminallyFailed({ source_id: "failed-reason", failure_reason: "INSUFFICIENT_NATIVE_TOKEN" }),
+        terminallyFailed({ source_id: "failed-no-reason", provider_state: "CANCELLED", failure_reason: null }),
+        { source_id: "stuck", status: "pending", provider_tx_id: "tx-3", last_error: null, provider_state: "STUCK", failure_reason: null },
+        { source_id: "sent", status: "pending", provider_tx_id: "tx-4", last_error: null, provider_state: "SENT", failure_reason: null },
+        { source_id: "confirmed", status: "confirmed", provider_tx_id: "tx-5", last_error: null, provider_state: "COMPLETE", failure_reason: null },
+        // Our own read failed: what Circle holds now is unknown, and Approve and pay is what reads it.
+        { source_id: "unreadable", status: "failed", provider_tx_id: "tx-6", last_error: "provider unreachable", provider_state: "STUCK", failure_reason: null },
+        { source_id: "legacy-failed", status: "failed", provider_tx_id: "tx-7", last_error: null, provider_state: null, failure_reason: null },
+        { source_id: "failed-before-id", status: "failed", provider_tx_id: null, last_error: "connection reset", provider_state: null, failure_reason: null },
+      ],
+    });
+
+    const listed = await run(() => listWaitingPayables());
+
+    expect(Object.fromEntries(listed.map((row) => [row.id, row.lastAttempt]))).toEqual({
+      "failed-reason": { state: "failed", reason: "INSUFFICIENT_NATIVE_TOKEN" },
+      "failed-no-reason": { state: "failed", reason: "Circle reported CANCELLED" },
+      stuck: { state: "in_flight" },
+      sent: { state: "in_flight" },
+      confirmed: null,
+      unreadable: null,
+      "legacy-failed": null,
+      "failed-before-id": null,
+      none: null,
+    });
+    const [lookup] = fake.requests.filter((r) => r.path === "/rest/v1/payment_intents");
+    expect(lookup.params.get("select")).toContain("provider_state");
+    expect(lookup.params.get("select")).toContain("failure_reason");
   });
 
   it("asks for no payment intents when nothing is waiting", async () => {

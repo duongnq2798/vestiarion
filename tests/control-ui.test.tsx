@@ -53,6 +53,7 @@ function payable(overrides: Partial<WaitingPayable> = {}): WaitingPayable {
     reclaimable: false,
     paymentSent: false,
     address: "0x1948aB0000000000000000000000000000c345a0",
+    lastAttempt: null,
     ...overrides,
   };
 }

@@ -114,6 +114,8 @@ function execution(overrides: Partial<PaymentExecution>): PaymentExecution {
     feeSource: null,
     settledInMs: null,
     executedAt: null,
+    attempt: 1,
+    retriedAfter: null,
     ...overrides,
   };
 }

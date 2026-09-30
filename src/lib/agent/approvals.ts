@@ -3,6 +3,7 @@ import { db, unwrap } from "../dal";
 import { getChainProvider } from "../circle";
 import { confirmCounterpartyAddress, sameAddress } from "../counterparty-address";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
+import { isTerminalFailure } from "../payments";
 import { payInvoice, syncOperatingBalance } from "./pay";
 
 /**
@@ -32,6 +33,12 @@ import { payInvoice, syncOperatingBalance } from "./pay";
  * reconciles, it never pays twice), while Reject and Return are refused with
  * `payment_in_flight` before any claim, since either would record a real
  * transfer as something that did not happen.
+ *
+ * A payment Circle ended in a terminal failure (`CANCELLED`, `DENIED`,
+ * `FAILED`) moved nothing: Reject and Return are allowed, and Approve and pay
+ * sends it again — `retryTerminalFailure`, which reads Circle first and opens
+ * a new attempt only on a terminal state — after every check a first payment
+ * gets, the balance included.
  *
  * The ledger entry written after a decision commits is best effort, through
  * `appendLedgerEntryBestEffort` as `src/lib/platform/members.ts` uses it: the
@@ -120,32 +127,80 @@ interface IntentState {
   status: string;
   provider_tx_id: string | null;
   last_error: string | null;
+  /** Circle's `state` for the current attempt's transfer, as last read; null before migration 0036 or any read since. */
+  provider_state: string | null;
+  /** Circle's `errorReason`; read only by the listing. */
+  failure_reason?: string | null;
 }
 
 /**
- * Whether a payment for the invoice was already sent, so that rejecting or
- * returning it would misrecord a real transfer: the intent is confirmed,
- * pending or being submitted, or it has a provider id and a recorded error —
- * a reconcile that could not read the provider, not a failure the provider
- * reported. A provider-reported failure (`failed`, no error of our own) or no
- * intent at all means nothing moved.
+ * Whether Circle ended the intent's current attempt without moving money: it
+ * is `failed`, has a provider id, and Circle's recorded state is `CANCELLED`,
+ * `DENIED` or `FAILED` — `begin_payment_retry`'s own condition (0036).
+ */
+function failedTerminally(intent: IntentState): boolean {
+  return intent.status === "failed" && intent.provider_tx_id !== null && isTerminalFailure(intent.provider_state);
+}
+
+/**
+ * Whether a payment for the invoice may already have moved, so that
+ * rejecting or returning it would misrecord a real transfer. It has, unless:
+ * - there is no intent;
+ * - no transfer exists for its current attempt — no provider id, and the
+ *   intent is `created` or `failed` (a submission that failed before Circle
+ *   returned an id). One `submitting` may reach Circle any moment, and one
+ *   `pending` or `confirmed` did;
+ * - or Circle ended that transfer in a terminal failure state.
+ * Anything else with a provider id counts as sent: Circle's `STUCK` (sent,
+ * and it can still be mined), `SENT`, `QUEUED`, `INITIATED`, `CLEARED`,
+ * `CONFIRMED`; a read of ours that failed; and a `failed` intent with no
+ * recorded state, since before migration 0036 a `STUCK` transfer was
+ * recorded `failed` (R1).
  */
 function paymentWasSent(intent: IntentState | null): boolean {
   if (!intent) return false;
   if (intent.status === "confirmed" || intent.status === "pending" || intent.status === "submitting") return true;
-  return intent.provider_tx_id !== null && intent.last_error !== null;
+  if (intent.provider_tx_id === null) return false;
+  return !failedTerminally(intent);
 }
 
-/** Whether `executePayment` would reconcile rather than transfer: a confirmed intent, or one with a provider id. */
+/**
+ * Whether `executePayment` would reconcile a transfer that may already have
+ * moved rather than send one: a confirmed intent, or a provider id whose
+ * attempt Circle did not end in a terminal failure. A terminally failed one
+ * is sent again on approval, so it is a new payment and the balance is
+ * checked for it.
+ */
 function transferExists(intent: IntentState | null): boolean {
-  return intent !== null && (intent.status === "confirmed" || intent.provider_tx_id !== null);
+  if (intent === null) return false;
+  return intent.status === "confirmed" || (intent.provider_tx_id !== null && !failedTerminally(intent));
+}
+
+/** What the approval card says about the last payment attempt (see `WaitingPayable.lastAttempt`). */
+export type LastPaymentAttempt = { state: "failed"; reason: string } | { state: "in_flight" } | null;
+
+/**
+ * The last attempt as the card reports it: failed terminally, with Circle's
+ * reason (or its state when it gave none); or in flight, when Circle's last
+ * answer for the transfer was a state that can still move money — `pending`,
+ * `STUCK` among them. Anything else is null: no transfer, a confirmed one
+ * (Approve and pay records it), or one whose state is unknown — a read of
+ * ours that failed, or a `failed` intent from before Circle's state was kept
+ * — which Approve and pay reads from Circle.
+ */
+function lastAttemptOf(intent: IntentState | null): LastPaymentAttempt {
+  if (!intent || intent.provider_tx_id === null) return null;
+  if (failedTerminally(intent)) {
+    return { state: "failed", reason: intent.failure_reason ?? `Circle reported ${intent.provider_state}` };
+  }
+  return intent.status === "pending" ? { state: "in_flight" } : null;
 }
 
 /** The invoice's payment intent, keyed as `executePayment` keys it (source type and id), or null. */
 async function paymentIntentOf(invoiceId: string): Promise<IntentState | null> {
   const result = await db()
     .from("payment_intents")
-    .select("status, provider_tx_id, last_error")
+    .select("status, provider_tx_id, last_error, provider_state")
     .eq("source_type", "invoice")
     .eq("source_id", invoiceId)
     .maybeSingle();
@@ -181,6 +236,8 @@ export interface WaitingPayable {
   paymentSent: boolean;
   /** Where Approve and pay sends the money: the counterparty's address now, or null when it has none. */
   address: string | null;
+  /** The last payment attempt, when Circle ended it in a terminal failure (Approve and pay sends a new transfer) or it is still in flight; else null. */
+  lastAttempt: LastPaymentAttempt;
 }
 
 /** Every payable currently waiting for a person's decision — held, flagged, awaiting more information, or claimed by someone else right now. */
@@ -210,7 +267,7 @@ export async function listWaitingPayables(): Promise<WaitingPayable[]> {
     const found = unwrap(
       await db()
         .from("payment_intents")
-        .select("source_id, status, provider_tx_id, last_error")
+        .select("source_id, status, provider_tx_id, last_error, provider_state, failure_reason")
         .eq("source_type", "invoice")
         .in("source_id", rows.map((row) => row.id))
     ) as Array<IntentState & { source_id: string }>;
@@ -218,22 +275,26 @@ export async function listWaitingPayables(): Promise<WaitingPayable[]> {
   }
 
   const now = Date.now();
-  return rows.map((row) => ({
-    id: row.id,
-    counterpartyId: row.counterparty_id,
-    counterpartyName: row.counterparties?.name ?? "unknown",
-    riskLevel: row.counterparties?.risk_level ?? "unknown",
-    amount: num(row.amount),
-    dueDate: row.due_date,
-    status: row.status,
-    reasoning: row.agent_reasoning,
-    decidedAt: row.decided_at,
-    createdBy: row.created_by,
-    reviewedAt: row.reviewed_at,
-    reclaimable: isReclaimable(row.status, row.reviewed_at, now),
-    paymentSent: paymentWasSent(intents.get(row.id) ?? null),
-    address: row.counterparties?.address ?? null,
-  }));
+  return rows.map((row) => {
+    const intent = intents.get(row.id) ?? null;
+    return {
+      id: row.id,
+      counterpartyId: row.counterparty_id,
+      counterpartyName: row.counterparties?.name ?? "unknown",
+      riskLevel: row.counterparties?.risk_level ?? "unknown",
+      amount: num(row.amount),
+      dueDate: row.due_date,
+      status: row.status,
+      reasoning: row.agent_reasoning,
+      decidedAt: row.decided_at,
+      createdBy: row.created_by,
+      reviewedAt: row.reviewed_at,
+      reclaimable: isReclaimable(row.status, row.reviewed_at, now),
+      paymentSent: paymentWasSent(intent),
+      address: row.counterparties?.address ?? null,
+      lastAttempt: lastAttemptOf(intent),
+    };
+  });
 }
 
 interface LoadedInvoice {
@@ -324,7 +385,9 @@ export async function approveAndPay(
   if (!operating) raise("no_operating_account");
 
   // A transfer that already exists is reconciled, never sent again, so the
-  // balance — already lower by this very payment — is not the question.
+  // balance — already lower by this very payment — is not the question. One
+  // Circle ended in a terminal failure moved nothing and is sent again, so it
+  // is checked like any new payment.
   const provider = getChainProvider();
   const alreadySent = transferExists(await paymentIntentOf(invoice.id));
   if (!alreadySent) {
@@ -340,7 +403,8 @@ export async function approveAndPay(
   if (claim.error) raiseFromClaim(claim.error);
 
   // A transfer already sent went wherever it went; recording it confirms nothing
-  // about the address the counterparty has now.
+  // about the address the counterparty has now. A new payment, a retry
+  // included, is sent to that address.
   if (shownAddress !== undefined && !alreadySent) {
     // Best effort: the decision is claimed, and a confirmation that did not
     // land only means the agent holds the next payment to this address too.
@@ -357,7 +421,9 @@ export async function approveAndPay(
   try {
     result = await payInvoice(
       { invoiceId: invoice.id, counterpartyId: invoice.counterpartyId, address: invoice.address, amount: invoice.amount },
-      { provider, operating: { id: operating.id } }
+      // A person's approval is the one caller that may send a payment Circle
+      // ended in a terminal failure again (executePayment reads Circle first).
+      { provider, operating: { id: operating.id }, retryTerminalFailure: true }
     );
   } catch (err) {
     // The claim went through, but nothing about the payment itself is known.
@@ -409,6 +475,10 @@ export async function approveAndPay(
       overrode: previous,
       txRef: result.txRef,
       status: result.status,
+      // Which transfer attempt this approval ended on, and on a retry the
+      // attempt Circle failed before it: ids and states only.
+      ...(result.execution ? { attempt: result.execution.attempt } : {}),
+      ...(result.execution?.retriedAfter ? { retriedAfter: result.execution.retriedAfter } : {}),
     },
   });
 
