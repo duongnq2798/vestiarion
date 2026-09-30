@@ -12,6 +12,15 @@ export const usdcAmountSchema = z.string().trim()
 
 const optionalText = (max: number) => z.string().trim().max(max).transform((value) => value || null);
 
+/**
+ * Like `optionalText`, but also accepts the key being absent entirely — for
+ * CSV rows that were not built by `parseInvoiceCsv` (which always fills in
+ * every optional column as `""`), such as a row object a caller constructs
+ * by hand in the old, pre-discount column shape. Absent means the same as
+ * blank: no discount.
+ */
+const optionalCsvText = (max: number) => z.string().trim().max(max).nullish().transform((value) => value || null);
+
 export const counterpartyInputSchema = z.object({
   name: z.string().trim().min(2).max(160),
   role: z.enum(["vendor", "client", "contractor"]),
@@ -112,8 +121,8 @@ export const csvInvoiceInputSchema = z
     po_reference: optionalText(100),
     goods_received: csvBooleanSchema,
     due_date: dueDateSchema,
-    early_pay_discount_pct: optionalText(10),
-    discount_deadline: optionalText(10),
+    early_pay_discount_pct: optionalCsvText(10),
+    discount_deadline: optionalCsvText(10),
   })
   .superRefine((value, context) => {
     checkDiscountPair(context, "early_pay_discount_pct", "discount_deadline", value.early_pay_discount_pct, value.discount_deadline, value.due_date);

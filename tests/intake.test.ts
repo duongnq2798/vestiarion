@@ -142,6 +142,32 @@ describe("invoice intake", () => {
       expect(accepted.success).toBe(true);
       if (accepted.success) expect(accepted.data).toMatchObject({ early_pay_discount_pct: "2", discount_deadline: "2026-10-10" });
     });
+
+    it("treats a CSV row object with neither discount key at all as no discount", () => {
+      // Older callers, and rows built by hand rather than through
+      // parseInvoiceCsv, may not carry these keys at all — absent means the
+      // same thing as blank, not a validation failure.
+      const result = csvInvoiceInputSchema.safeParse({
+        direction: "payable",
+        counterparty: "Example Supplier",
+        amount: "1.00",
+        memo: "",
+        po_reference: "",
+        goods_received: "true",
+        due_date: "2026-10-31",
+      });
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.data).toMatchObject({ early_pay_discount_pct: null, discount_deadline: null });
+    });
+
+    it("imports a CSV file whose header lacks both discount columns", () => {
+      const rows = parseInvoiceCsv(
+        "direction,counterparty,amount,memo,po_reference,goods_received,due_date\npayable,Acme,100.00,memo,PO-1,true,2026-10-31"
+      );
+      const result = csvInvoiceInputSchema.safeParse(rows[0]);
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.data).toMatchObject({ early_pay_discount_pct: null, discount_deadline: null });
+    });
   });
 });
 
