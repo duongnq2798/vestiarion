@@ -78,6 +78,23 @@ content/docs/guides/first-payment.mdx      "Try it with sample data first"
   3. In a new sandbox: load, run one cycle, check each outcome in §3 against the Approvals page and the ledger, remove, and check that no sample row and no orphaned intent remains while the ledger still verifies.
   4. Record the measured outcome in this spec.
 
+### Rollout record (2026-09-30)
+
+- **0034** was applied to production before the merge of #62. A read-only probe found `sample` as `boolean not null default false`, the partial index `counterparties_one_sample_set`, and 0 sample rows.
+- **The first load failed**, and nothing was left behind. A bulk insert names the union of its rows' keys, so supabase-js wrote NULL for the `status` that only the paid history row sets, and `invoices.status` refused it. The rollback in S3 removed the six counterparties it had just inserted: the probe found 0 counterparties, invoices and milestones in the workspace. Fixed in #63: every sample insert sends `Prefer: missing=default`.
+- **Loaded again in the sandbox `test-sample-data`**, which had no Circle connection. Ledger entry #372 was `sample_data_loaded` with counts only. The partner also added two invoices of their own against sample counterparties.
+- **One cycle** (08:30 UTC, run by hand, simulate provider, `decisionMode` model) gave every outcome in §3:
+  - screening: all six counterparties clear;
+  - Northwind 240: pay (#382);
+  - Northwind 95: request info (#383);
+  - Harbor 1,200: hold (#384);
+  - the Kestrel repeat of PO-3307: flag fraud (#385);
+  - the Pinecrest milestone: released (#388);
+  - Marlow: still pending.
+
+  An approver then approved and paid the flagged Kestrel invoice (#391). Three simulated intents were confirmed.
+- **Removed:** entry #392 was `sample_data_removed` with `{counterparties: 6, invoices: 8, milestones: 2, paymentIntents: 3}`; the 8 invoices include the partner's two. Afterwards the workspace held 0 counterparties, invoices, milestones and payment intents. `verifyLedger()` for the workspace answered `{"valid": true, "checkedEntries": 22}`.
+
 ## 6. Out of scope
 
 - Resetting simulated balances on removal (S5).
