@@ -381,7 +381,11 @@ the operations in `src/lib/api/openapi.ts`, which also serve
 view, `/llms.txt` and `/llms-full.txt`; and `src/lib/docs/nav.ts` is the one
 list of pages. Tests hold the content to the code: every nav page has its MDX,
 every link and anchor resolves, the OpenAPI document covers every v1 route, and
-the webhook verification snippets run against the signing code. **A PR that
+the webhook verification snippets run against the signing code. The Guides
+pages (`content/docs/guides/`) are for people using the app rather than the
+API; they quote its buttons, fields and messages exactly, and
+`tests/docs-guides.test.ts` checks each quoted string against the source file
+it comes from, so renaming one in the app means updating the guide. **A PR that
 changes `/api/v1` or webhooks adds a changelog entry** to
 `content/docs/changelog.mdx`: dated, newest first, saying what changed for an
 integrator.

@@ -1,0 +1,104 @@
+A workspace starts in sandbox. Going live gives it treasury wallets on Arc testnet, funded with testnet USDC from Circle's faucet, and sets the agent to pay from them on its own schedule. This page takes you through it, from **Settings** to the confirmation.
+
+Only an **owner** of the workspace can take it live. Everyone else sees the workspace's status in the same place, with the line "An owner can connect Circle and take this workspace live from here."
+
+## Before you start
+
+Open your workspace and go to **Settings**, at `/o/<slug>/settings`. **Go live** is the first section, and its badge shows where the workspace is. The section shows one step of three at a time:
+
+1. Choose where the wallets live.
+2. Create the treasury wallets.
+3. Fund the operating wallet, then go live.
+
+## 1. Choose where the wallets live
+
+Step 1 depends on the deployment:
+
+- **When the deployment has hosted wallets**, step 1 is "Choose where the wallets live". It offers a hosted testnet wallet first (path A), and your own Circle account under "Connect your own Circle account" (path B).
+- **Otherwise**, step 1 is "Connect your Circle account" and shows only the form for your own account. Follow path B.
+
+### Path A: a Vestiarion testnet wallet
+
+You don't need a Circle account for this path. The workspace's wallets are created in Vestiarion's own Circle testnet account, in a wallet set of their own.
+
+1. Under "A testnet wallet, no Circle account needed", choose **Use a Vestiarion testnet wallet**. The line under the button reads "Hosted by Vestiarion · Arc testnet".
+2. The page confirms: "This workspace will use a Vestiarion testnet wallet; create its treasury wallets next."
+
+Until the wallets are created, you can still change your mind. Open **Connect your own Circle account instead** and follow path B. Once the wallets exist, the choice is fixed, and the page says "To use your own Circle account, start a new workspace."
+
+### Path B: your own Circle account
+
+For this path you need two values from your account in the [Circle developer console](https://console.circle.com):
+
+- **An API key.** Create a testnet API key in the console, because the workspace's wallets are on Arc testnet.
+- **An entity secret.** The entity secret is the key that secures developer-controlled wallets. Generate it and **register it in the Circle console first**, as [Circle's guide to registering an entity secret](https://developers.circle.com/wallets/dev-controlled/register-entity-secret) describes, and keep its recovery file safe. Vestiarion does not register it for you. The field asks for "The one registered for developer-controlled wallets."
+
+Then, in **Go live**:
+
+1. Open **Connect your own Circle account**, if the step shows the hosted choice first.
+2. Paste the key into **API key** and the secret into **Entity secret**.
+3. Choose **Connect Circle**. Circle checks the API key before anything is stored. When it accepts the key, the page says "Circle is connected." Both values are then encrypted, and they are never shown again.
+
+The entity secret itself is checked in step 2, when the wallets are created. To change either value later, open **Replace Circle credentials**. The new values must belong to the same Circle account, because the workspace's wallets are in it.
+
+## 2. Create the treasury wallets
+
+The step is headed "Create treasury wallets". It creates one wallet on Arc testnet for each of the workspace's accounts. With your own Circle account, it also proves the entity secret.
+
+1. Choose **Create treasury wallets**.
+2. The page confirms with "Treasury wallets created: *n*." and lists each account's wallet address, with a button to copy it. If every account already has one, it says "Every account already has a wallet."
+
+Under the button, a note reads "Counterparties are paid only at a real address." Each counterparty needs its Arc testnet address before the agent can pay it. [Your first payment](/docs/guides/first-payment#1-add-a-counterparty-with-an-arc-address) shows where to enter it.
+
+## 3. Fund the operating wallet
+
+The step is headed "Fund the operating wallet, then go live". The agent pays from the operating wallet, so this is the wallet to fund.
+
+1. Under **Operating wallet**, copy the address with the copy button beside it.
+2. Open [faucet.circle.com](https://faucet.circle.com). As the page says, "select Arc Testnet, and paste this address", then request testnet USDC.
+3. Back in **Go live**, choose **Refresh** beside "USDC on chain:". The balance is read from the chain when the step opens, and again on each refresh. Refresh until the USDC shows.
+
+## 4. Go live
+
+1. Choose **Go live**. The step warns you first: "Going live cannot be undone from here; pausing the agent stops it paying."
+2. A dialog asks "Take this workspace live?" and lists what changes:
+   - "Real testnet USDC moves when the agent pays."
+   - "The agent runs every 6 hours on its own."
+   - "The workspace is no longer deleted when inactive."
+   - "To stop it later, pause the agent from the console."
+3. Confirm with **Go live**. The page says "This workspace is live." and the badge changes to "Live · paying on Arc testnet", or to "Live · hosted testnet wallet on Arc" on path A.
+
+Next, [make your first payment](/docs/guides/first-payment).
+
+## What changes when you go live
+
+- **The agent runs on a schedule.** A live workspace's agent runs a cycle every 6 hours on its own, with no one pressing a button. An owner or admin can still run one at any time with **Run cycle now** on the console. The console is **Treasury** in the app's navigation.
+- **Payments move testnet USDC on Arc** from the operating wallet, within the guardrails. Anything the agent will not pay waits in **Approvals**.
+- **The workspace is kept**, however long it is inactive.
+- **Going live is one-way.** Nothing in the app switches a live workspace back to sandbox.
+
+**To stop the agent**, go to the console and choose **Pause agent**. You can give a reason, which is shown on every page and kept in the ledger. A paused agent runs no cycle and moves no money, and its scheduled runs are skipped. People can still pay or reject from **Approvals**. Owners, admins and approvers can pause the agent. Only owners and admins can start it again, with **Resume agent**.
+
+## When something fails
+
+A failed step shows one of these messages under its button. You can repeat any step. Wallets created before a failure are kept, and creating the wallets again adds only the missing ones.
+
+| Message | What to do |
+| --- | --- |
+| Paste both the API key and the entity secret. | Both fields are required. Paste each value in full. |
+| Circle did not accept this API key. | Check that you copied the whole key, that it is still active in the Circle console, and that it is a testnet key. |
+| Could not reach Circle; try again. | Circle did not answer in time. Try the step again in a moment. |
+| This workspace's wallets belong to the connected Circle account; use its credentials. | The credentials belong to a different Circle account from the one that holds the wallets. Use that account's API key and entity secret. |
+| Connect Circle first. | Step 1 is not done. Choose the hosted wallet, or connect your Circle account. |
+| Circle did not accept the entity secret; reconnect with the right one. | The entity secret is not the one registered to the API key's account. Open **Replace Circle credentials**, paste the registered secret, then choose **Create treasury wallets** again. |
+| Create the treasury wallets first. | Complete step 2, then go live. |
+| This workspace is already live. | It went live already, from another tab or by another owner. Reload the page. |
+| The stored Circle credentials cannot be read; reconnect. | Paste the API key and entity secret again under **Replace Circle credentials**. |
+| The Circle credentials changed while going live; try again. | Someone replaced the credentials while this step was running. Reload the page and repeat the step. |
+| This workspace has no operating wallet; it cannot take new credentials. | This appears when replacing the credentials of a live workspace. The new ones cannot be proven without an operating wallet, so the stored credentials stay. |
+| Hosted testnet wallets are not available on this deployment. | Connect your own Circle account (path B). A workspace that already uses a hosted wallet pays nothing until hosted wallets are available again. |
+| A workspace with its own Circle account or wallets cannot switch to a hosted wallet. | This workspace already has Circle credentials or wallets. Continue with your own account. |
+| All hosted testnet wallets are taken; connect your own Circle account instead. | Follow path B with your own Circle account. |
+| This workspace's wallets are hosted by Vestiarion; start a new workspace to use your own Circle account. | The hosted wallets exist, so the choice is fixed. Create a new workspace to use your own account. |
+| Could not read the balance from Circle; try again. | The balance could not be read. Choose **Refresh** again. |
+| Something went wrong; try again. | An unexpected error. Try the step again. |
