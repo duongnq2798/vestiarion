@@ -29,11 +29,12 @@ export interface AccountDeletionPlan {
   soleWorkspaces: Array<{ slug: string; name: string; live: boolean; paused: boolean; walletCount: number; hosted: boolean }>;
 }
 
-export type AccountDeletionErrorCode = "confirm_mismatch" | "blocked" | "workspace_refused";
+export type AccountDeletionErrorCode = "confirm_mismatch" | "blocked" | "workspace_refused" | "auth_failed";
 
 const MESSAGES: Record<Exclude<AccountDeletionErrorCode, "workspace_refused">, string> = {
   confirm_mismatch: `Type ${DELETE_ACCOUNT_CONFIRMATION} exactly to confirm.`,
   blocked: "Make someone else an owner of each workspace listed, or delete it, first.",
+  auth_failed: "Your workspaces were deleted, but your account was not; try again.",
 };
 
 /** A refusal with a fixed message, safe to show. */
@@ -47,9 +48,13 @@ export class AccountDeletionError extends Error {
   }
 }
 
-/** One workspace's refusal, named: its slug, then `delete_org`'s fixed message. */
-function workspaceRefused(slug: string, message: string): AccountDeletionError {
-  return new AccountDeletionError("workspace_refused", `${slug}: ${message} Your account was not deleted.`);
+/**
+ * One workspace's refusal, named: the workspaces already deleted before it, if
+ * any, so the person knows they are gone; its slug; `delete_org`'s fixed message.
+ */
+function workspaceRefused(slug: string, message: string, alreadyDeleted: string[] = []): AccountDeletionError {
+  const deleted = alreadyDeleted.length > 0 ? `Deleted: ${alreadyDeleted.join(", ")}. ` : "";
+  return new AccountDeletionError("workspace_refused", `${deleted}${slug}: ${message} Your account was not deleted.`);
 }
 
 interface MyMembership {
@@ -122,15 +127,22 @@ export async function deleteAccount(input: { userId: string; confirmText: string
 
   // One at a time, stopping at the first refusal: the account stays, and so
   // does every workspace not yet reached.
+  const deleted: string[] = [];
   for (const workspace of plan.soleWorkspaces) {
     const { error } = await platformDb().rpc("delete_org", { p_org_id: soleIds.get(workspace.slug), p_by: input.userId });
     if (error) {
       const refusal = deleteOrgRefusal(error);
-      if (refusal) throw workspaceRefused(workspace.slug, refusal.message);
+      if (refusal) throw workspaceRefused(workspace.slug, refusal.message, deleted);
       throw new Error(error.message);
     }
+    deleted.push(workspace.slug);
   }
 
   const { error } = await platformAuth().deleteUser(input.userId);
-  if (error) throw new Error(error.message);
+  if (error) {
+    // Once a workspace is gone, the person needs to know that a retry will not
+    // bring it back; before, the failure is the action's generic one.
+    if (deleted.length > 0) throw new AccountDeletionError("auth_failed");
+    throw new Error(error.message);
+  }
 }

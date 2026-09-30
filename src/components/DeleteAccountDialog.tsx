@@ -33,6 +33,11 @@ const REASONS: Record<BlockedReason, string> = {
   founding: "You are the last owner of the founding workspace, which cannot be deleted. Make someone else an owner first.",
 };
 
+const BLOCKED_LINK: Record<BlockedReason, { path: string; label: string }> = {
+  has_other_members: { path: "members", label: "Open its Members page" },
+  founding: { path: "settings", label: "Open its Settings" },
+};
+
 const linkClass = "font-medium text-agent underline-offset-4 hover:underline";
 
 function Blocked({ blocked }: { blocked: AccountDeletionPlan["blocked"] }) {
@@ -45,8 +50,9 @@ function Blocked({ blocked }: { blocked: AccountDeletionPlan["blocked"] }) {
               {workspace.name} <span className="break-all font-mono text-xs text-ink-3">{workspace.slug}</span>
             </p>
             <p>{REASONS[workspace.reason]}</p>
-            <Link href={`/o/${workspace.slug}/settings`} className={linkClass}>
-              Open its Settings
+            {/* Someone else is made an owner on the Members page; the founding workspace's Settings are where it lives. */}
+            <Link href={`/o/${workspace.slug}/${BLOCKED_LINK[workspace.reason].path}`} className={linkClass}>
+              {BLOCKED_LINK[workspace.reason].label}
             </Link>
           </li>
         ))}
@@ -100,7 +106,8 @@ export function DeleteAccountBody({ plan, pending, message, formProps }: DeleteA
   const mustPause = plan.soleWorkspaces.some((workspace) => workspace.live && !workspace.paused);
   const remains = (
     <p className="text-sm leading-relaxed text-ink-2">
-      Records you added in workspaces you share stay, without your name attached. Your memberships and the invitations you sent are removed.
+      Records you added in workspaces you share stay, without your name attached. Your memberships and the invitations you sent are removed. A
+      workspace&apos;s signed ledger is append-only, so entries you caused keep your account&apos;s id (never your email).
     </p>
   );
 

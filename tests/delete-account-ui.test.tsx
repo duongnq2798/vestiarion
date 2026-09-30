@@ -35,7 +35,7 @@ const body = (plan: AccountDeletionPlan, pending = false, message = "") =>
 const submit = (markup: string) => /<button[^>]*type="submit"[^>]*>/.exec(markup)?.[0] ?? "";
 
 describe("DeleteAccountBody", () => {
-  it("lists each blocked workspace with its reason and a link to its Settings, and cannot be confirmed", () => {
+  it("lists each blocked workspace with its reason and a link to where it is resolved, and cannot be confirmed", () => {
     const markup = body({
       blocked: [
         { slug: "team-co", name: "Team Co", reason: "has_other_members" },
@@ -48,8 +48,12 @@ describe("DeleteAccountBody", () => {
     expect(words).toContain("You are its last owner, and it has other members. Make someone else an owner, or delete the workspace, first.");
     expect(words).toContain("Vestiarion workspace");
     expect(words).toContain("You are the last owner of the founding workspace, which cannot be deleted. Make someone else an owner first.");
-    expect(markup).toContain('href="/o/team-co/settings"');
+    // Someone else is made an owner on the Members page; the founding workspace's Settings say why it stays.
+    expect(markup).toContain('href="/o/team-co/members"');
+    expect(markup).not.toContain('href="/o/team-co/settings"');
     expect(markup).toContain('href="/o/founding/settings"');
+    expect(words).toContain("Open its Members page");
+    expect(words).toContain("Open its Settings");
     // Nothing to type and nothing to press.
     expect(markup).not.toContain('name="confirmText"');
     expect(markup).not.toMatch(/type="submit"/);
@@ -80,6 +84,7 @@ describe("DeleteAccountBody", () => {
       const words = text(body(plan));
       expect(words).toContain("Records you added in workspaces you share stay, without your name attached.");
       expect(words).toContain("Your memberships and the invitations you sent are removed.");
+      expect(words).toContain("A workspace's signed ledger is append-only, so entries you caused keep your account's id (never your email).");
     }
   });
 

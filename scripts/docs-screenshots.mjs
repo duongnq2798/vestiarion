@@ -250,7 +250,33 @@ async function photograph(page, base, name, prepare) {
   return { file, bytes: Buffer.byteLength(data, "base64") };
 }
 
+/**
+ * What this run started, at module scope so a signal handler reaches it:
+ * main records each process as it spawns it, and the Edge profile it made.
+ */
+const started = { server: undefined, edge: undefined, profile: undefined };
+
+/**
+ * Ctrl+C or SIGTERM mid-run: the `finally` in main never runs when Node exits
+ * on a signal, so stop Edge and the server here, remove the throwaway profile,
+ * and exit 130, the shell's code for an interrupted command.
+ */
+function interrupted() {
+  stop(started.edge);
+  stop(started.server);
+  if (started.profile) {
+    try {
+      rmSync(started.profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    } catch {
+      // Edge may still hold it for a moment; the OS cleans the temp dir.
+    }
+  }
+  process.exit(130);
+}
+
 async function main() {
+  process.once("SIGINT", interrupted);
+  process.once("SIGTERM", interrupted);
   const args = process.argv.slice(2);
   const skipBuild = args.includes("--skip-build");
   const names = args.filter((arg) => !arg.startsWith("--"));
@@ -265,11 +291,10 @@ async function main() {
   const cdpPort = await freePort();
   const base = `http://127.0.0.1:${port}`;
   const profile = mkdtempSync(path.join(tmpdir(), "vestiarion-docs-shots-edge-"));
-  let server;
-  let edge;
+  started.profile = profile;
   let page;
   try {
-    server = spawn(process.execPath, [NEXT_BIN, "start", "-p", String(port), "-H", "127.0.0.1"], {
+    started.server = spawn(process.execPath, [NEXT_BIN, "start", "-p", String(port), "-H", "127.0.0.1"], {
       cwd: ROOT,
       env,
       stdio: ["ignore", "inherit", "inherit"],
@@ -277,7 +302,7 @@ async function main() {
     });
     await waitForHttp(`${base}/docs-shots/${wanted[0]}`, (r) => r.status === 200, "next start (with DOCS_SCREENSHOTS=1)", 60000);
 
-    edge = spawn(EDGE, ["--headless=new", `--remote-debugging-port=${cdpPort}`, `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--hide-scrollbars", "about:blank"], {
+    started.edge = spawn(EDGE, ["--headless=new", `--remote-debugging-port=${cdpPort}`, `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--hide-scrollbars", "about:blank"], {
       stdio: "ignore",
       detached: process.platform !== "win32",
     });
@@ -297,8 +322,8 @@ async function main() {
     await page?.send("Browser.close").catch(() => {});
     page?.close();
     await sleep(500);
-    stop(edge);
-    stop(server);
+    stop(started.edge);
+    stop(started.server);
     await sleep(500);
     rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
     rmSync(path.join(ROOT, ".next", "types"), { recursive: true, force: true });

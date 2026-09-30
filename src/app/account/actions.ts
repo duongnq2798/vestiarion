@@ -53,9 +53,11 @@ export async function deleteAccountAction(_previous: DeleteAccountActionResult, 
     console.error("account: deleteAccountAction failed");
     return { ok: false, message: GENERIC };
   }
-  // The account is gone. Signing out clears this browser's session cookies;
-  // the local scope needs no call to Supabase, whose sessions for the user
-  // went with it. A failure here changes nothing the person can act on.
+  // The account is gone. Signing out clears this browser's session cookies.
+  // Even the local scope calls Supabase's /logout with the session's token;
+  // for a deleted user that answers 401, 403 or 404, which auth-js ignores
+  // before removing the session here. Any other failure changes nothing the
+  // person can act on.
   try {
     const supabase = await createSupabaseServerClient();
     await supabase.auth.signOut({ scope: "local" });

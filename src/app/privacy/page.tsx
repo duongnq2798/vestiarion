@@ -106,8 +106,26 @@ export default function PrivacyPage() {
           </li>
           <li>
             <strong>A model provider</strong>, when this deployment has one configured (Anthropic, OpenAI or DeepSeek), receives the context of each decision
-            the agent asks it about. For a payment, that is its amount, memo, purchase order reference and due date, the counterparty&apos;s name, risk
-            level, payment limit and payment history, and the operating balance; for a treasury move, the balances and upcoming obligations. Without one, a written rule-based policy decides, and nothing is sent.
+            the agent asks it about, and nothing else:
+            <ul>
+              <li>
+                for an invoice: its amount, memo, purchase order reference, due date and whether the goods were received; the counterparty&apos;s name, risk
+                level, payment limit and performance score; the operating balance; and any earlier invoices from the same counterparty that look like
+                duplicates of it, each with its amount, due date and status, the signals that matched, how strong the match is and what the match found;
+              </li>
+              <li>
+                for a contractor milestone: its title, amount and verification source, and the contractor&apos;s name, risk level, payment limit and
+                performance score;
+              </li>
+              <li>
+                for a treasury move: the operating and reserve balances, the reserve&apos;s yield, the obligations due in the next 7 and 14 days, the total open
+                obligations and the days until the next one is due, and the sweep&apos;s economics worked out from those: the cash above the required buffer, how
+                long it could stay swept, the projected yield and the cost of the transfers.
+              </li>
+            </ul>
+            A performance score comes with the counts it is computed from: payments paid without intervention, information requests, holds and flags,
+            duplicate submissions, risk tier changes, and the holds the workspace&apos;s own limits caused. Without a model provider, a written rule-based policy
+            decides, and nothing is sent.
           </li>
           <li>
             <strong>OpenSanctions</strong>, when this deployment has it configured, receives counterparty names and jurisdictions to screen them. Without it,
@@ -126,7 +144,7 @@ export default function PrivacyPage() {
         <p>When this deployment sets a measurement ID, Vestiarion counts page views with Google Analytics 4. Before a page view leaves your browser:</p>
         <ul>
           <li>
-            an invitation address becomes <code>/invite/:token</code>, and a workspace address has the workspace&apos;s name replaced, as <code>/o/:org</code>;
+            an invitation address becomes <code>/invite/:token</code>, and a workspace address has the workspace&apos;s slug replaced, as <code>/o/:org</code>;
           </li>
           <li>only the path is sent, never the query string or anything after a #;</li>
           <li>the title of a workspace page, which names the workspace, is replaced with its redacted path;</li>
@@ -181,7 +199,9 @@ export default function PrivacyPage() {
         </ul>
         <p>
           If a workspace cannot be deleted, your account is not deleted. Otherwise your sign-in account is deleted, you are signed out, and your memberships and
-          the invitations you sent go with it. Records you added in workspaces you share stay, without your name on them.
+          the invitations you sent go with it. Records you added in workspaces you share stay, without your name on them. A workspace&apos;s signed ledger is
+          append-only, so entries you caused keep your account&apos;s id (never your email). A workspace deleted with your account leaves its tombstone, and a
+          tombstone keeps who deleted it, as your account&apos;s id.
         </p>
       </LegalSection>
 

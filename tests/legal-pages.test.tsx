@@ -159,6 +159,92 @@ describe("the privacy page", () => {
     expect(contact).toContain(`href="${ISSUES_URL}"`);
   });
 
+  describe("what a model provider receives, held to the prompts in src/lib/agent/orchestrator.ts", () => {
+    const orchestrator = source("src/lib/agent/orchestrator.ts");
+    /** Each `userPrompt: JSON.stringify({ … })`, up to its responseShape: the keys it sends, shorthand ones included. */
+    const prompts = [...orchestrator.matchAll(/userPrompt: JSON\.stringify\(\{([\s\S]*?)responseShape:/g)].map((match) =>
+      new Set([...match[1].matchAll(/^\s*(\w+)(?::|,\s*$)/gm)].map((key) => key[1]))
+    );
+    const models = body.split("A model provider")[1]?.split("OpenSanctions")[0] ?? "";
+
+    // Structure and the task's own words, not data about the workspace.
+    const FRAME = ["task", "invoice", "counterparty", "treasury", "milestone", "contractor", "economics", "note", "duplicateNote", "duplicateMatchesTotal"];
+    const PHRASES: Record<string, string> = {
+      amount: "amount",
+      memo: "memo",
+      poReference: "purchase order reference",
+      goodsReceived: "whether the goods were received",
+      dueDate: "due date",
+      name: "name",
+      riskLevel: "risk level",
+      paymentLimit: "payment limit",
+      performanceHistory: "performance score",
+      operatingBalance: "operating balance",
+      duplicateMatches: "look like duplicates of it",
+      otherInvoiceStatus: "status",
+      otherInvoiceDueDate: "due date",
+      otherInvoiceAmount: "amount",
+      signals: "the signals that matched",
+      confidence: "how strong the match is",
+      finding: "what the match found",
+      title: "title",
+      verificationSource: "verification source",
+      reserveBalance: "reserve balances",
+      reserveApy: "the reserve's yield",
+      upcomingObligationsNext7Days: "the next 7 and 14 days",
+      upcomingObligationsNext14Days: "the next 7 and 14 days",
+      totalOpenObligations: "the total open obligations",
+      daysUntilNextObligation: "the days until the next one is due",
+      idleAboveBuffer: "the cash above the required buffer",
+      requiredBuffer: "the required buffer",
+      expectedHoldDays: "how long it could stay swept",
+      projectedYieldUsd: "the projected yield",
+      roundTripCostUsd: "the cost of the transfers",
+    };
+
+    it("finds the three prompts: an invoice, a milestone and a treasury move", () => {
+      expect(prompts).toHaveLength(3);
+      expect([...prompts[0]]).toEqual(expect.arrayContaining(["invoice", "goodsReceived", "duplicateMatches"]));
+      expect([...prompts[1]]).toEqual(expect.arrayContaining(["milestone", "verificationSource"]));
+      expect([...prompts[2]]).toEqual(expect.arrayContaining(["reserveApy", "upcomingObligationsNext14Days"]));
+    });
+
+    it("names every field a prompt sends: a new one fails here until the page says it", () => {
+      for (const key of prompts.flatMap((keys) => [...keys])) {
+        if (FRAME.includes(key)) continue;
+        expect(PHRASES, `orchestrator.ts sends ${key}; add it to the privacy page and to PHRASES`).toHaveProperty(key);
+        expect(models, key).toContain(PHRASES[key]);
+      }
+    });
+
+    it("says the performance history is a score and the counts it is computed from, as counterparty-history.ts has them", () => {
+      const history = source("src/lib/agent/counterparty-history.ts");
+      const inputs = [...(history.split("export interface CounterpartyHistoryInputs {")[1]?.split("}")[0] ?? "").matchAll(/^\s*(\w+): number;/gm)].map((m) => m[1]);
+      const COUNTS: Record<string, string> = {
+        paidWithoutIntervention: "paid without intervention",
+        informationRequested: "information requests",
+        heldOrFlagged: "holds and flags",
+        duplicateSubmissions: "duplicate submissions",
+        riskTierChanges: "risk tier changes",
+        heldByOurPolicy: "holds the workspace's own limits caused",
+      };
+      expect(inputs.sort()).toEqual(Object.keys(COUNTS).sort());
+      for (const input of inputs) expect(models, input).toContain(COUNTS[input]);
+      expect(models).not.toContain("payment history");
+    });
+  });
+
+  it("says a workspace address has the workspace's slug replaced in analytics, as the redaction does", () => {
+    expect(body).toContain("a workspace address has the workspace's slug replaced, as /o/:org");
+    expect(body).not.toContain("workspace's name replaced");
+  });
+
+  it("says the signed ledger keeps an account's id after the account is deleted, and the tombstone who deleted a workspace", () => {
+    const section = text(renderToStaticMarkup(<PrivacyPage />).split('id="delete-account"')[1]?.split('id="contact"')[0] ?? "");
+    expect(section).toContain("A workspace's signed ledger is append-only, so entries you caused keep your account's id (never your email).");
+    expect(section).toContain("tombstone keeps who deleted it");
+  });
+
   it("lists what a deleted workspace's tombstone keeps, as migration 0031 writes it", () => {
     const migration = source("supabase/migrations/0031_delete_org.sql");
     for (const column of ["slug", "name", "deleted_by", "deleted_at", "ledger_entries", "ledger_head_hash", "ledger_signing_key_id"]) {

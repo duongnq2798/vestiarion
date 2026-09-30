@@ -105,6 +105,19 @@ describe("the screenshot script", () => {
     expect(script).toMatch(/taskkill", \["\/PID", String\(child\.pid\), "\/T", "\/F"\]/);
     expect(script).not.toMatch(/taskkill[^\n]*\/IM/);
   });
+
+  it("stops Edge and the server it started on Ctrl+C or SIGTERM, then exits 130", () => {
+    // The handles live at module scope, so the handler reaches what main started.
+    expect(script).toMatch(/^const started = \{/m);
+    for (const signal of ["SIGINT", "SIGTERM"]) expect(script).toContain(`process.once("${signal}", interrupted)`);
+    const handler = script.slice(script.indexOf("function interrupted"), script.indexOf("async function main"));
+    expect(handler).toContain("stop(started.edge)");
+    expect(handler).toContain("stop(started.server)");
+    expect(handler).toContain("process.exit(130)");
+    // main records each process as it starts it.
+    expect(script).toContain("started.server = spawn(");
+    expect(script).toContain("started.edge = spawn(");
+  });
 });
 
 describe("the frames' page lines", () => {

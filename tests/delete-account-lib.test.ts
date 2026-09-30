@@ -326,7 +326,8 @@ describe("deleteAccount (A3)", () => {
     const error = await run(() => deleteAccount({ userId: ME, confirmText: "delete my account" })).catch((caught: unknown) => caught);
 
     expect(error).toBeInstanceOf(AccountDeletionError);
-    expect((error as Error).message).toBe(`b-refused-co: ${message} Your account was not deleted.`);
+    // The workspace already deleted is named, so the person knows it is gone.
+    expect((error as Error).message).toBe(`Deleted: a-first-co. b-refused-co: ${message} Your account was not deleted.`);
     expect(deleteOrgCalls().map((call) => (call as { p_org_id: string }).p_org_id)).toEqual([first.id, refused.id]);
     expect(authDeletes()).toEqual([]);
   });
@@ -364,7 +365,36 @@ describe("deleteAccount (A3)", () => {
     expect(authDeletes()).toEqual([]);
   });
 
-  it("throws a plain Error when the auth admin API refuses", async () => {
+  it("names no deleted workspace when the first one refuses", async () => {
+    const refused = org("only-refused-co");
+    const { run } = world({
+      orgs: [refused],
+      memberships: [{ org_id: refused.id, user_id: ME, role: "owner" }],
+      refuse: { [refused.id]: "cycle_running: x" },
+    });
+
+    await expect(run(() => deleteAccount({ userId: ME, confirmText: "delete my account" }))).rejects.toThrow(
+      /^only-refused-co: A cycle started in the last 15 minutes has not finished; try again shortly\. Your account was not deleted\.$/
+    );
+  });
+
+  it("says the workspaces were deleted but the account was not, when the auth admin API refuses after deleting some", async () => {
+    const solo = org("gone-co");
+    const { run, deleted } = world({
+      orgs: [solo],
+      memberships: [{ org_id: solo.id, user_id: ME, role: "owner" }],
+      authError: { status: 500, message: "Database error deleting user" },
+    });
+
+    const error = await run(() => deleteAccount({ userId: ME, confirmText: "delete my account" })).catch((caught: unknown) => caught);
+
+    expect(deleted).toEqual([solo.id]);
+    expect(error).toBeInstanceOf(AccountDeletionError);
+    expect((error as AccountDeletionError).code).toBe("auth_failed");
+    expect((error as Error).message).toBe("Your workspaces were deleted, but your account was not; try again.");
+  });
+
+  it("throws a plain Error when the auth admin API refuses and no workspace was deleted", async () => {
     const { run } = world({ orgs: [], memberships: [], authError: { status: 500, message: "Database error deleting user" } });
 
     const error = await run(() => deleteAccount({ userId: ME, confirmText: "delete my account" })).catch((caught: unknown) => caught);
