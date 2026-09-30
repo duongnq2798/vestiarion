@@ -168,6 +168,10 @@ export async function loadSampleData(input: { actorId: string; now?: Date }): Pr
   await requireSimulatedSandbox(orgId);
   const fixture = sampleFixture(input.now ?? new Date());
 
+  // Every insert here passes `defaultToNull: false`: a bulk insert names the union
+  // of its rows' keys, and without it a key one row leaves out is written as NULL
+  // rather than the column's default (only the paid history row sets `status`).
+  //
   // One statement, so the counterparties arrive together or not at all (S3).
   const inserted = await db()
     .from("counterparties")
@@ -179,7 +183,8 @@ export async function loadSampleData(input: { actorId: string; now?: Date }): Pr
         payment_limit: row.limit,
         baseline_payment_limit: row.limit,
         sample: true,
-      }))
+      })),
+      { defaultToNull: false }
     )
     .select("id, name");
   if (inserted.error) {
@@ -197,11 +202,17 @@ export async function loadSampleData(input: { actorId: string; now?: Date }): Pr
   try {
     const invoices = await db()
       .from("invoices")
-      .insert(fixture.invoices.map(({ counterparty, ...invoice }) => ({ ...invoice, counterparty_id: idOf(counterparty) })));
+      .insert(
+        fixture.invoices.map(({ counterparty, ...invoice }) => ({ ...invoice, counterparty_id: idOf(counterparty) })),
+        { defaultToNull: false }
+      );
     if (invoices.error) throw new Error(invoices.error.message);
     const milestones = await db()
       .from("milestones")
-      .insert(fixture.milestones.map(({ contractor, ...milestone }) => ({ ...milestone, contractor_id: idOf(contractor) })));
+      .insert(
+        fixture.milestones.map(({ contractor, ...milestone }) => ({ ...milestone, contractor_id: idOf(contractor) })),
+        { defaultToNull: false }
+      );
     if (milestones.error) throw new Error(milestones.error.message);
   } catch (error) {
     // Half a sample would block the next load on the index while showing no outcomes;
