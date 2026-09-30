@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { gettingStarted, type GettingStartedInput } from "@/lib/getting-started";
+import { gettingStarted, ownInvoiceCount, type GettingStartedInput } from "@/lib/getting-started";
 
 /**
  * The console's Get started checklist, computed from rows the console
@@ -108,5 +108,23 @@ describe("gettingStarted", () => {
 
   it("marks the steps only an owner can take", () => {
     expect(gettingStarted(input()).steps.filter((step) => step.ownerOnly).map((step) => step.id)).toEqual(["wallet", "live"]);
+  });
+});
+
+describe("sample rows (sample-data design §1)", () => {
+  it("does not tick the counterparty step for a sample counterparty, even one given an address", () => {
+    expect(done(gettingStarted(input({ counterparties: [{ address: ADDRESS, sample: true }] }))).counterparty).toBe(false);
+    expect(done(gettingStarted(input({ counterparties: [{ address: ADDRESS, sample: true }, { address: ADDRESS, sample: false }] }))).counterparty).toBe(true);
+  });
+
+  it("counts only the invoices of counterparties a person added", () => {
+    const counterparties = [
+      { id: "own", sample: false },
+      { id: "sample-1", sample: true },
+    ];
+    expect(ownInvoiceCount([{ counterparty_id: "sample-1" }, { counterparty_id: "sample-1" }], counterparties)).toBe(0);
+    expect(ownInvoiceCount([{ counterparty_id: "sample-1" }, { counterparty_id: "own" }], counterparties)).toBe(1);
+    // A counterparty the page does not know (deleted meanwhile) is not a sample one.
+    expect(ownInvoiceCount([{ counterparty_id: "gone" }], counterparties)).toBe(1);
   });
 });

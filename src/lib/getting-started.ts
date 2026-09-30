@@ -9,6 +9,9 @@
  * Circle call for it. A new wallet's stored balance is 0 until a live read, so
  * while it is, the step sends the person to Settings, where the live balance
  * is read.
+ *
+ * Sample rows (sample-data design §1) never tick a step: they show the agent
+ * working, not the workspace set up.
  */
 
 export type GettingStartedStepId = "wallet" | "fund" | "counterparty" | "invoice" | "live";
@@ -16,7 +19,7 @@ export type GettingStartedStepId = "wallet" | "fund" | "counterparty" | "invoice
 export interface GettingStartedInput {
   mode: "sandbox" | "live";
   accounts: Array<{ kind: string; circle_wallet_id: string | null; balance: number }>;
-  counterparties: Array<{ address: string | null }>;
+  counterparties: Array<{ address: string | null; sample?: boolean }>;
   invoiceCount: number;
 }
 
@@ -72,7 +75,7 @@ export function gettingStarted(input: GettingStartedInput): GettingStarted {
       title: "Add a counterparty with an Arc address",
       body: "Someone the agent pays, with their address on Arc testnet.",
       path: "/counterparties",
-      done: input.counterparties.some((counterparty) => Boolean(counterparty.address)),
+      done: input.counterparties.some((counterparty) => !counterparty.sample && Boolean(counterparty.address)),
       ownerOnly: false,
     },
     {
@@ -94,4 +97,16 @@ export function gettingStarted(input: GettingStartedInput): GettingStarted {
   ];
 
   return { show: !live, steps, next: steps.find((step) => !step.done)?.id ?? null };
+}
+
+/**
+ * The invoices of counterparties a person added: sample invoices do not count
+ * towards "Add an invoice". Computed from the rows the console already reads.
+ */
+export function ownInvoiceCount(
+  invoices: Array<{ counterparty_id: string }>,
+  counterparties: Array<{ id: string; sample?: boolean }>
+): number {
+  const sample = new Set(counterparties.filter((counterparty) => counterparty.sample).map((counterparty) => counterparty.id));
+  return invoices.filter((invoice) => !sample.has(invoice.counterparty_id)).length;
 }

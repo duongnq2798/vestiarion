@@ -16,6 +16,8 @@ type GuideSlug = "guides/go-live" | "guides/first-payment";
 
 const PANEL = "src/components/GoLivePanel.tsx";
 const GO_LIVE_ACTIONS = "src/app/actions/go-live.ts";
+const SAMPLE_PANEL = "src/components/SampleDataPanel.tsx";
+const GO_LIVE_LIBRARY = "src/lib/platform/go-live.ts";
 const APP_NAV = "src/components/vx/nav.ts";
 const PAUSE = "src/components/AgentPauseControl.tsx";
 const RUN = "src/components/AgentControlsClient.tsx";
@@ -147,6 +149,11 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["Verify hash chain", VERIFY_BADGE],
     ["Chain intact", VERIFY_BADGE],
     ["Every decision is appended here, hash-linked to the one before it and signed with Ed25519.", AUDIT_PAGE],
+    ["Try it with sample data", SAMPLE_PANEL],
+    ["Load sample data", SAMPLE_PANEL],
+    ["Sample data is loaded", SAMPLE_PANEL],
+    ["Remove sample data", SAMPLE_PANEL],
+    ["Remove the sample data first. It exists only to try the agent with simulated payments.", GO_LIVE_LIBRARY],
   ],
 };
 
@@ -171,6 +178,7 @@ const GO_LIVE_ERRORS: Record<GoLiveErrorCode, true> = {
   hosted_not_allowed: true,
   hosted_limit_reached: true,
   hosted_has_wallets: true,
+  sample_data_loaded: true,
 };
 
 /** Copy for real users on Arc testnet names the network plainly; it never hedges it away. */

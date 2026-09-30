@@ -6,6 +6,18 @@ Who does what:
 - **Owners, admins and approvers** decide the payments the agent holds.
 - **Viewers** see everything, but have no controls.
 
+## Try it with sample data first
+
+To see the agent at work before you set anything up, open the console of a new workspace. While the workspace has no counterparties and has not connected Circle, the console shows **Try it with sample data**. Choose **Load sample data**: it adds six example counterparties, marked **Sample** on the Counterparties page, with invoices and milestones chosen so that one cycle shows every outcome. Run a cycle, then read the decisions on the console and on **Approvals**:
+
+- a hosting invoice with a purchase order and goods received is paid;
+- an overage with no purchase order waits for information;
+- an invoice over the counterparty's payment limit is held for a person;
+- a print run billed again under a purchase order that was already paid is flagged;
+- a verified contractor milestone is released, and an unverified one waits.
+
+Sample payments are simulated. While **Sample data is loaded**, the console offers **Remove sample data**: it removes the sample counterparties and everything recorded against them, and the ledger keeps its entries. Remove the sample before you connect Circle; until then, connecting answers "Remove the sample data first. It exists only to try the agent with simulated payments."
+
 ## 1. Add a counterparty with an Arc address
 
 A counterparty is a business or person the workspace pays or invoices. Open **Counterparties**, and fill in the form under **Add counterparty**:

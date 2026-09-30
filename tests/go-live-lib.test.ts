@@ -87,6 +87,7 @@ interface State {
   };
   accounts: AccountRow[];
   wentLive: Array<{ ts: string }>;
+  sampleLoaded?: boolean;
 }
 
 const OPERATING_ADDRESS = "0x" + "ab".repeat(20);
@@ -228,6 +229,9 @@ function database(state: State, options: DatabaseOptions = {}) {
     }
     if (request.path === "/rest/v1/ledger_entries") {
       return { body: eqValue(request, "action") === "workspace_went_live" ? [...state.wentLive].reverse().slice(0, 1) : [] };
+    }
+    if (request.path === "/rest/v1/counterparties" && request.method === "GET") {
+      return { body: state.sampleLoaded ? [{ id: "cp-sample" }] : [] };
     }
     if (request.path === "/rest/v1/rpc/choose_hosted_wallet") {
       return chooseHosted(state, request.body as { p_org_id: string; p_limit: number }, options);
@@ -378,6 +382,24 @@ describe("GoLiveError", () => {
 });
 
 describe("connectCircle", () => {
+  it("refuses while sample data is loaded, before asking Circle anything", async () => {
+    const state = sandbox();
+    state.sampleLoaded = true;
+    const { fake, inScope } = database(state);
+    const fakeCircle = circle();
+
+    const error = await refusal(
+      inScope(() => connectCircle({ orgId: ORG, actorId: ACTOR, apiKey: API_KEY, entitySecret: ENTITY_SECRET, client: fakeCircle.factory }))
+    );
+
+    expect(error.code).toBe("sample_data_loaded");
+    expect(error.message).toBe("Remove the sample data first. It exists only to try the agent with simulated payments.");
+    expect(fakeCircle.listWalletSets).not.toHaveBeenCalled();
+    expect(orgPatches(fake)).toEqual([]);
+    const [lookup] = fake.requests.filter((request) => request.path === "/rest/v1/counterparties");
+    expect(lookup.params.get("sample")).toBe("eq.true");
+  });
+
   it("checks the trimmed key, stores both envelopes in one update, and records circle_connected with ids only", async () => {
     const state = sandbox();
     const { fake, inScope } = database(state);
@@ -1026,6 +1048,18 @@ describe("hosted testnet wallets (hosted wallets H1, H3, H4)", () => {
     fake.requests.filter((request) => request.path === "/rest/v1/rpc/choose_hosted_wallet");
 
   describe("chooseHostedWallet", () => {
+    it("refuses while sample data is loaded, and never calls choose_hosted_wallet", async () => {
+      const state = sandbox();
+      state.sampleLoaded = true;
+      const { fake, inScope } = database(state, { platform: hostedConfig });
+
+      const error = await refusal(inScope(() => chooseHostedWallet({ orgId: ORG, actorId: ACTOR })));
+
+      expect(error.code).toBe("sample_data_loaded");
+      expect(rpcCalls(fake)).toEqual([]);
+      expect(state.org.wallet_host).toBeNull();
+    });
+
     it("marks a fresh sandbox hosted through choose_hosted_wallet with the platform limit, and records ids only", async () => {
       const state = sandbox();
       const { fake, inScope } = database(state, { platform: hostedConfig });
