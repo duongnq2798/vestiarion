@@ -52,3 +52,11 @@ node verify-ledger-export.mjs vestiarion-your-workspace-ledger-392.json --public
 ```
 
 or put all the public keys in one file, one after another, and pass that file once.
+
+## 5. After a key rotation
+
+An owner can replace a workspace's signing key: open **Settings** → **Ledger signing key** → **Rotate signing key**. They might do this because a key is suspected of leaking, or just as routine hygiene — either way, entries already written keep verifying, since each one carries the id of the key that signed it. Anyone else who opens that panel sees why they can't: "An owner of this workspace can rotate the key."
+
+The old public key does not disappear. It stays listed under **Retired keys**, both on the **Ledger signing key** panel in Settings and on the **Audit log** page, next to the current key. The rotation itself is recorded in the ledger like any other decision, as `ledger_key_rotated`, naming both the retired and the new key id and who rotated.
+
+For verifying an export from a workspace that has rotated its key, see [§4](#4-compare-the-key-id-and-the-head) above: pass every key the export's entries were signed with, the retired one and the current one, by repeating `--public-key` or listing them in one file.

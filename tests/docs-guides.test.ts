@@ -39,6 +39,7 @@ const ADDRESS_CONTROLS = "src/components/intake/CounterpartyAddressEdit.tsx";
 const ADDRESS_LIBRARY = "src/lib/counterparty-address.ts";
 const EXPORT_MENU = "src/components/AuditExportMenu.tsx";
 const VERIFIER = "public/tools/verify-ledger-export.mjs";
+const LEDGER_KEY_PANEL = "src/components/LedgerKeyPanel.tsx";
 
 /** Each guide's quoted UI strings, as `[text, the file it must appear in]`. */
 const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
@@ -167,6 +168,11 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["BROKEN", VERIFIER],
     ["NOT CHECKED", VERIFIER],
     ["vestiarion-ledger-export/1", VERIFIER],
+    ["Settings", APP_NAV],
+    ["Ledger signing key", LEDGER_KEY_PANEL],
+    ["Rotate signing key", LEDGER_KEY_PANEL],
+    ["Retired keys", LEDGER_KEY_PANEL],
+    ["An owner of this workspace can rotate the key.", LEDGER_KEY_PANEL],
   ],
 };
 
