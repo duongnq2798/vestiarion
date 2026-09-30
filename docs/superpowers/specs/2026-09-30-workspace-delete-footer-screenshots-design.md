@@ -74,3 +74,26 @@ Decided on 2026-09-30 by the implementer under the partner's standing instructio
 
 - Apply `0031` before the merge.
 - After the merge, the partner deletes a test workspace (`test-test` or `test-test2`) from Settings. I check that the tombstone row exists and the org is gone.
+
+## 6. Deleting an account (added 2026-09-30 at the partner's request)
+
+Until now the privacy page asked people to open a GitHub issue to have their account deleted. The partner asked for a button instead.
+
+- **A1. Where it lives.** "Delete account" sits in the signed-in user's own menu, beside Sign out. It opens a dialog. Deleting an account is the person's own decision, so it needs no workspace role.
+- **A2. Workspaces the person solely owns.**
+  - **Blocked:** the person is the last owner of a workspace that has other members. The dialog names each one and says to make someone else an owner, or to delete the workspace, first. Teammates must never lose a workspace because its owner left.
+  - **Deleted with the account:** workspaces where the person is the only member. Each goes through `delete_org` (same refusals: pause first when live, no payment or cycle in flight), so each leaves its tombstone.
+  - **The founding workspace:** if the person is its last owner, the account cannot be deleted.
+- **A3. Confirmation.** The person types `delete my account`. Then, in order:
+  1. every sole-member workspace is deleted, and the account is not deleted if any of these fails;
+  2. the Supabase auth user is deleted with the service role (`auth.admin.deleteUser`);
+  3. the person is signed out and sent to `/`.
+
+  Migration 0023's foreign keys take care of the rest: memberships and sent invitations go, and `created_by` becomes null on records in workspaces that survive.
+- **A4. No new table.** The auth user row is Supabase's. The tombstones of the deleted workspaces are the platform's only record. The privacy page describes the button, and no longer asks for an issue.
+- **Testing:**
+  - each A2 case;
+  - deleting several sole workspaces, and stopping on the first refusal;
+  - the auth deletion through a fake admin client;
+  - sign-out and redirect;
+  - the dialog is always available to the signed-in user, and lists what will happen.
