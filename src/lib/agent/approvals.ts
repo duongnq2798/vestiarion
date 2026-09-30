@@ -1,6 +1,7 @@
 import { currentOrgId } from "../context";
 import { db, unwrap } from "../dal";
 import { getChainProvider } from "../circle";
+import { confirmCounterpartyAddress, sameAddress } from "../counterparty-address";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { payInvoice, syncOperatingBalance } from "./pay";
 
@@ -45,7 +46,8 @@ export type ApprovalErrorCode =
   | "high_risk"
   | "insufficient_funds"
   | "no_operating_account"
-  | "payment_in_flight";
+  | "payment_in_flight"
+  | "address_changed";
 
 /** Every message except `insufficient_funds`, whose text names the actual balance. */
 const MESSAGES: Record<Exclude<ApprovalErrorCode, "insufficient_funds">, string> = {
@@ -55,6 +57,7 @@ const MESSAGES: Record<Exclude<ApprovalErrorCode, "insufficient_funds">, string>
   no_operating_account: "This workspace has no operating account.",
   invoice_not_found: "That invoice is not waiting for a decision.",
   payment_in_flight: "A payment for this invoice was already sent. Approve and pay records it.",
+  address_changed: "This counterparty's address changed after this page loaded. Check the new address and try again.",
 };
 
 export class ApprovalError extends Error {
@@ -176,6 +179,8 @@ export interface WaitingPayable {
   reclaimable: boolean;
   /** A payment was already sent: only Approve and pay may record it, Reject and Return are refused. */
   paymentSent: boolean;
+  /** Where Approve and pay sends the money: the counterparty's address now, or null when it has none. */
+  address: string | null;
 }
 
 /** Every payable currently waiting for a person's decision — held, flagged, awaiting more information, or claimed by someone else right now. */
@@ -183,7 +188,7 @@ export async function listWaitingPayables(): Promise<WaitingPayable[]> {
   const rows = unwrap(
     await db()
       .from("invoices")
-      .select("id, amount, due_date, status, agent_reasoning, decided_at, created_by, reviewed_at, counterparty_id, counterparties(name, risk_level)")
+      .select("id, amount, due_date, status, agent_reasoning, decided_at, created_by, reviewed_at, counterparty_id, counterparties(name, risk_level, address)")
       .eq("direction", "payable")
       .in("status", WAITING_STATUSES)
       .order("due_date", { ascending: true })
@@ -197,7 +202,7 @@ export async function listWaitingPayables(): Promise<WaitingPayable[]> {
     created_by: string | null;
     reviewed_at: string | null;
     counterparty_id: string;
-    counterparties: { name: string; risk_level: string } | null;
+    counterparties: { name: string; risk_level: string; address: string | null } | null;
   }>;
 
   const intents = new Map<string, IntentState>();
@@ -227,6 +232,7 @@ export async function listWaitingPayables(): Promise<WaitingPayable[]> {
     reviewedAt: row.reviewed_at,
     reclaimable: isReclaimable(row.status, row.reviewed_at, now),
     paymentSent: paymentWasSent(intents.get(row.id) ?? null),
+    address: row.counterparties?.address ?? null,
   }));
 }
 
@@ -293,8 +299,15 @@ function approvalPaidSummary(status: "paid" | "matched" | "held", amount: number
   return `Approved; payment of ${amount} USDC to ${name} failed`;
 }
 
+/**
+ * `shownAddress` is the counterparty address the approval card showed the
+ * person. When given, the approval is refused if it is no longer the
+ * counterparty's, and a changed address no one had confirmed is confirmed by
+ * this approval (spec 2026-09-30-counterparty-address-edit E4): the person
+ * approved a payment to it, having seen it.
+ */
 export async function approveAndPay(
-  input: { actorId: string; invoiceId: string }
+  input: { actorId: string; invoiceId: string; shownAddress?: string }
 ): Promise<{ status: "paid" | "matched" | "held"; txRef: string | null; note: string }> {
   const orgId = currentOrgId();
   const invoice = await loadWaitingPayable(input.invoiceId);
@@ -302,6 +315,10 @@ export async function approveAndPay(
   // Early refusals, before any claim — none of these contend for the row.
   if (invoice.createdBy === input.actorId) raise("self_approval");
   if (invoice.riskLevel === "high") raise("high_risk");
+  const shownAddress = input.shownAddress?.trim();
+  if (shownAddress !== undefined && !sameAddress(invoice.address, shownAddress === "" ? null : shownAddress)) {
+    raise("address_changed");
+  }
 
   const operating = await operatingAccount();
   if (!operating) raise("no_operating_account");
@@ -320,6 +337,16 @@ export async function approveAndPay(
     .rpc("claim_invoice_decision", { p_invoice_id: invoice.id, p_by: input.actorId, p_decision: "approve" })
     .single();
   if (claim.error) raiseFromClaim(claim.error);
+
+  if (shownAddress !== undefined) {
+    // Best effort: the decision is claimed, and a confirmation that did not
+    // land only means the agent holds the next payment to this address too.
+    try {
+      await confirmCounterpartyAddress({ actorId: input.actorId, counterpartyId: invoice.counterpartyId, shownAddress, via: "approval" });
+    } catch (error) {
+      console.error("approval: counterparty address not confirmed", invoice.id, (error as Error).name);
+    }
+  }
 
   const previous = invoice.status;
 

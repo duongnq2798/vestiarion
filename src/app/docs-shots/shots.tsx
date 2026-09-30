@@ -158,6 +158,7 @@ const HELD: WaitingPayable = {
   reviewedAt: null,
   reclaimable: false,
   paymentSent: false,
+  address: "0x7a3c9e2b41d05f8a6c1e3b9d2f4a8c6e0b5d1f93",
 };
 
 function HashChain({ entries }: { entries: LedgerEntry[] }) {

@@ -106,9 +106,10 @@ describe("approveInvoiceAction", () => {
     authorizeMock.mockResolvedValueOnce({ ok: true, user: { id: USER, email: null }, membership: membership("approver") });
     approveAndPayMock.mockResolvedValueOnce({ status: "paid", txRef: "0xabc", note: "" });
 
-    const result = await run(() => approveInvoiceAction(INITIAL, form(VALID_ID)));
+    const result = await run(() => approveInvoiceAction(INITIAL, form(VALID_ID, { address: "0xdead" })));
 
-    expect(approveAndPayMock).toHaveBeenCalledWith({ actorId: USER, invoiceId: VALID_ID });
+    // The address the card showed goes with the approval, so a changed one is refused rather than confirmed unseen.
+    expect(approveAndPayMock).toHaveBeenCalledWith({ actorId: USER, invoiceId: VALID_ID, shownAddress: "0xdead" });
     expect(result).toEqual({ ok: true, message: "Paid." });
     expect(revalidatePathMock).toHaveBeenCalled();
   });

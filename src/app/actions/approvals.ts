@@ -47,7 +47,7 @@ export async function approveInvoiceAction(_previous: ApprovalActionResult, form
     const parsed = invoiceIdSchema.safeParse(formString(formData, "invoiceId"));
     if (!parsed.success) return { ok: false, message: "That invoice is not waiting for a decision." };
     try {
-      const result = await approveAndPay({ actorId: auth.user.id, invoiceId: parsed.data });
+      const result = await approveAndPay({ actorId: auth.user.id, invoiceId: parsed.data, shownAddress: formString(formData, "address") });
       // The invoice changed either way, so the pages refresh; a transfer that ended held is still a failure
       // to the person who pressed Approve and pay.
       revalidateOrgPages();
