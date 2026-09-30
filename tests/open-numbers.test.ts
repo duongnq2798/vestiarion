@@ -33,6 +33,19 @@ const DOCUMENT = {
   ourPayments: [{ at: "2026-09-27T10:00:00+00:00", amount: "2.000000", txHash: "0xh1", chain: "ARC-TESTNET" }],
 };
 
+/** What PostgREST returns for open_first_payments (0042): the median is a float, or null with no first payment. */
+const FIRSTS = {
+  sides: {
+    customers: { firstPayments: 2, medianMinutesToFirstPayment: 780.5 },
+    ours: { firstPayments: 0, medianMinutesToFirstPayment: null },
+    total: { firstPayments: "2", medianMinutesToFirstPayment: 780.5 },
+  },
+};
+
+/** Each function's document, by the path it is called at. */
+const reply = (request: RecordedRequest): FakeReply =>
+  request.path === "/rest/v1/rpc/open_first_payments" ? { body: FIRSTS } : { body: DOCUMENT };
+
 describe("parsePeriod", () => {
   it("is all time with no parameters", () => {
     expect(parsePeriod({}, NOW)).toEqual({ key: "all", since: null, label: "All time", query: "", fallback: false });
@@ -107,10 +120,11 @@ describe("dailySeries", () => {
 describe("readOpenNumbers", () => {
   const since = (date: string) => parsePeriod({ since: date }, NOW);
 
-  it("asks open_numbers for the period's start and reads figures sent as strings", async () => {
-    const { fake, result } = platform(() => readOpenNumbers(since("2026-09-20"), NOW.getTime()), () => ({ body: DOCUMENT }));
+  it("asks open_numbers and open_first_payments for the period's start and reads figures sent as strings", async () => {
+    const { fake, result } = platform(() => readOpenNumbers(since("2026-09-20"), NOW.getTime()), reply);
     const numbers = await result;
-    expect(fake.requests.map((request) => [request.path, request.body])).toEqual([
+    expect(fake.requests.map((request) => [request.path, request.body]).sort()).toEqual([
+      ["/rest/v1/rpc/open_first_payments", { p_since: "2026-09-20T00:00:00.000Z" }],
       ["/rest/v1/rpc/open_numbers", { p_since: "2026-09-20T00:00:00.000Z" }],
     ]);
     expect(numbers.sides.ours.usdcPaid).toBe(3);
@@ -118,32 +132,55 @@ describe("readOpenNumbers", () => {
     expect(numbers.ourPayments[0]).toEqual({ at: "2026-09-27T10:00:00+00:00", amount: 2, txHash: "0xh1", chain: "ARC-TESTNET" });
   });
 
+  it("merges the first payments into each side, keeping a missing median missing", async () => {
+    const { result } = platform(() => readOpenNumbers(since("2026-09-19"), NOW.getTime()), reply);
+    const numbers = await result;
+    expect(numbers.sides.customers).toMatchObject({ payments: 2, firstPayments: 2, medianMinutesToFirstPayment: 780.5 });
+    expect(numbers.sides.ours).toMatchObject({ firstPayments: 0, medianMinutesToFirstPayment: null });
+    expect(numbers.sides.total.firstPayments).toBe(2);
+  });
+
+  it("fails the read when either function fails, and forgets it", async () => {
+    const period = since("2026-09-24");
+    const failing = platform(
+      () => readOpenNumbers(period, 1_000),
+      (request) =>
+        request.path === "/rest/v1/rpc/open_first_payments"
+          ? { status: 404, body: { message: "function open_first_payments does not exist" } }
+          : { body: DOCUMENT }
+    );
+    await expect(failing.result).rejects.toThrow(/open_first_payments/);
+    const retry = platform(() => readOpenNumbers(period, 2_000), reply);
+    await retry.result;
+    expect(retry.fake.requests).toHaveLength(2);
+  });
+
   it("sends a null start for all time", async () => {
     const all = parsePeriod({}, NOW);
-    const { fake, result } = platform(() => readOpenNumbers(all, NOW.getTime() + 10 * 60_000), () => ({ body: DOCUMENT }));
+    const { fake, result } = platform(() => readOpenNumbers(all, NOW.getTime() + 10 * 60_000), reply);
     await result;
-    expect(fake.requests[0].body).toEqual({ p_since: null });
+    expect(fake.requests.map((request) => request.body)).toEqual([{ p_since: null }, { p_since: null }]);
   });
 
   it("answers the same period from memory for 60 seconds, then reads again", async () => {
     const period = since("2026-09-21");
-    const first = platform(() => readOpenNumbers(period, 1_000), () => ({ body: DOCUMENT }));
+    const first = platform(() => readOpenNumbers(period, 1_000), reply);
     await first.result;
-    const second = platform(() => readOpenNumbers(period, 60_000), () => ({ body: DOCUMENT }));
+    const second = platform(() => readOpenNumbers(period, 60_000), reply);
     await second.result;
     expect(second.fake.requests).toEqual([]);
-    const third = platform(() => readOpenNumbers(period, 61_001), () => ({ body: DOCUMENT }));
+    const third = platform(() => readOpenNumbers(period, 61_001), reply);
     await third.result;
-    expect(third.fake.requests).toHaveLength(1);
+    expect(third.fake.requests).toHaveLength(2);
   });
 
   it("forgets a failed read, so the next request tries again", async () => {
     const period = since("2026-09-22");
     const failing = platform(() => readOpenNumbers(period, 1_000), () => ({ status: 404, body: { message: "function open_numbers does not exist" } }));
     await expect(failing.result).rejects.toThrow(/open_numbers/);
-    const retry = platform(() => readOpenNumbers(period, 2_000), () => ({ body: DOCUMENT }));
+    const retry = platform(() => readOpenNumbers(period, 2_000), reply);
     await retry.result;
-    expect(retry.fake.requests).toHaveLength(1);
+    expect(retry.fake.requests).toHaveLength(2);
   });
 
   it("refuses a document of the wrong shape", async () => {

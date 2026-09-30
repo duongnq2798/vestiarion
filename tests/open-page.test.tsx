@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import OpenPage, { metadata } from "@/app/open/page";
-import { OPEN_ROWS } from "@/components/open/OpenNumbersTable";
+import { formatFigure, OPEN_ROWS } from "@/components/open/OpenNumbersTable";
 import { requiresSession } from "@/lib/auth/routes";
 import { readOpenNumbers, type OpenNumbers } from "@/lib/platform/open-numbers";
 
@@ -30,6 +30,7 @@ const side = (scale: number) => ({
   workspacesOpened: 2 * scale, liveWorkspaces: 1 * scale, people: 3 * scale, payments: 4 * scale, usdcPaid: 1234.5 * scale,
   payees: 2 * scale, invoicesDecided: 5 * scale, milestonesReleased: 1 * scale, cycles: 7 * scale, modelDecisions: 9 * scale,
   policyDepartures: 1 * scale, refusedByCode: 1 * scale, usdcInWallets: 40 * scale,
+  firstPayments: 1 * scale, medianMinutesToFirstPayment: scale === 2 ? null : 95 * scale,
 });
 
 const NUMBERS: OpenNumbers = {
@@ -67,6 +68,25 @@ describe("the /open page", () => {
     // whichever path proposed the decision.
     expect(OPEN_ROWS.find((row) => row.key === "milestonesReleased")?.label).toBe("Contractor milestones paid on Arc testnet");
     expect(OPEN_ROWS.find((row) => row.key === "refusedByCode")?.label).toBe("Decisions refused by code");
+  });
+
+  it("shows the first payments and the median time to one, with a dash where there is none", async () => {
+    const markup = await render();
+    const row = markup.slice(markup.indexOf("Median time from workspace opened to first payment"));
+    const cells = [...row.slice(0, row.indexOf("</tr>")).matchAll(/<td[^>]*>(.*?)<\/td>/g)].map((match) => text(match[1]));
+    expect(cells).toEqual(["1 h 35 min", "—", "4 h 45 min"]);
+    expect(text(markup)).toContain("Workspaces that made a first payment on Arc testnet");
+  });
+
+  it("writes a duration in minutes, hours or days", () => {
+    expect(formatFigure(null, "duration")).toBe("—");
+    expect(formatFigure(0, "duration")).toBe("0 min");
+    expect(formatFigure(12.6, "duration")).toBe("13 min");
+    expect(formatFigure(60, "duration")).toBe("1 h 0 min");
+    expect(formatFigure(1439, "duration")).toBe("23 h 59 min");
+    expect(formatFigure(1440, "duration")).toBe("1 d 0 h");
+    expect(formatFigure(7290, "duration")).toBe("5 d 1 h");
+    expect(formatFigure(3, "count")).toBe("3");
   });
 
   it("writes USDC with two decimals and marks today's totals as now", async () => {

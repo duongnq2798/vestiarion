@@ -6,11 +6,13 @@ import { platformDb, unwrap } from "../dal";
  * The open numbers (docs/superpowers/specs/2026-09-30-open-numbers-design.md):
  * platform-wide usage for the public /open page and `npm run numbers`.
  *
- * Every figure comes from one database function, `open_numbers(p_since)`, the
- * only reader that crosses workspaces (R2). It returns aggregates only, split
- * into customers' workspaces, ours, and the total (R3); this module validates
- * the document and keeps it for 60 seconds per period, so a busy public page
- * cannot hammer the database (R9).
+ * Every figure comes from two database functions, the only readers that cross
+ * workspaces (R2): `open_numbers(p_since)`, and `open_first_payments(p_since)`
+ * for the first payments and the time to them (first-payment design §3). They
+ * return aggregates only, split into customers' workspaces, ours, and the
+ * total (R3); this module validates both documents, merges them into one set
+ * of figures per side, and keeps it for 60 seconds per period, so a busy
+ * public page cannot hammer the database (R9).
  */
 
 const figure = z.coerce.number();
@@ -31,6 +33,16 @@ const sideSchema = z.object({
   usdcInWallets: figure,
 });
 
+/** From open_first_payments (0042): the median is null when no workspace made a first payment in the period. */
+const firstSideSchema = z.object({
+  firstPayments: figure,
+  medianMinutesToFirstPayment: figure.nullable(),
+});
+
+const firstPaymentsSchema = z.object({
+  sides: z.object({ customers: firstSideSchema, ours: firstSideSchema, total: firstSideSchema }),
+});
+
 /** Payments settled on one UTC day. A customer's amounts never appear by day, only their count (spec R6). */
 const dailySchema = z.object({
   day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -47,9 +59,9 @@ const openNumbersSchema = z.object({
 });
 
 export type SideKey = "customers" | "ours" | "total";
-export type SideNumbers = z.infer<typeof sideSchema>;
+export type SideNumbers = z.infer<typeof sideSchema> & z.infer<typeof firstSideSchema>;
 export type DailyPayments = z.infer<typeof dailySchema>;
-export type OpenNumbers = z.infer<typeof openNumbersSchema>;
+export type OpenNumbers = Omit<z.infer<typeof openNumbersSchema>, "sides"> & { sides: Record<SideKey, SideNumbers> };
 export type OurPayment = OpenNumbers["ourPayments"][number];
 
 export interface Period {
@@ -127,8 +139,18 @@ function memoKey(period: Period): string {
 }
 
 async function fetchOpenNumbers(period: Period): Promise<OpenNumbers> {
-  const result = await platformDb().rpc("open_numbers", { p_since: period.since ? period.since.toISOString() : null });
-  return openNumbersSchema.parse(unwrap(result));
+  const since = { p_since: period.since ? period.since.toISOString() : null };
+  const [numbers, firsts] = await Promise.all([platformDb().rpc("open_numbers", since), platformDb().rpc("open_first_payments", since)]);
+  const document = openNumbersSchema.parse(unwrap(numbers));
+  const first = firstPaymentsSchema.parse(unwrap(firsts)).sides;
+  return {
+    ...document,
+    sides: {
+      customers: { ...document.sides.customers, ...first.customers },
+      ours: { ...document.sides.ours, ...first.ours },
+      total: { ...document.sides.total, ...first.total },
+    },
+  };
 }
 
 /** The open numbers for a period, read at most once a minute per period on this instance. */
