@@ -8,7 +8,7 @@ Who does what:
 
 ## Try it with sample data first
 
-To see the agent at work before you set anything up, open the console of a new workspace. While the workspace has no counterparties and has not connected Circle, the console shows **Try it with sample data**. Choose **Load sample data**: it adds six example counterparties, marked **Sample** on the Counterparties page, with invoices and milestones chosen so that one cycle shows every outcome. Run a cycle, then read the decisions on the console and on **Approvals**:
+To see the agent at work before you set anything up, open the console of a new workspace. While the workspace has no counterparties and has not connected Circle, the console shows **Try it with sample data**. Choose **Load sample data**: it adds six example counterparties, marked **Sample** on the Counterparties page, with invoices and milestones chosen so that one cycle shows every outcome. The agent usually runs that cycle within a minute on its own; then read the decisions on the console and on **Approvals**:
 
 - a hosting invoice with a purchase order and goods received is paid;
 - an overage with no purchase order waits for information;
@@ -81,11 +81,11 @@ Open **AP / AR**. Under **Invoice intake**, choose **Enter one invoice**, or **I
   caption="A payable within the counterparty's limit, with its PO reference and the goods received."
 />
 
-Choose **Add invoice**. The page confirms with "Invoice added for *Name*. The agent will decide on it within a minute." As the form says, "The agent decides on a payable within a minute of adding it."
+Choose **Add invoice**. The page confirms with "Invoice added for *Name*. The agent usually decides on it within a minute." As the form says, "The agent usually decides on a payable within a minute of adding it."
 
 ## 3. Run a cycle
 
-A cycle is one run of the agent: it screens counterparties, reads open invoices, and pays, holds or flags each one. Adding a payable starts a cycle within a minute, so the invoice is decided without anyone pressing a button, and the pages show the decision on their own. The agent also starts one when a person returns a payable to it, confirms a changed address, verifies a milestone, resumes it, or when funds arrive in the wallet. A live workspace also runs a cycle every 6 hours on its own, for what time alone changes, such as due dates and screening.
+A cycle is one run of the agent: it screens counterparties, reads open invoices, and pays, holds or flags each one. Adding a payable starts a cycle, usually within a minute, so the invoice is decided without anyone pressing a button, and the pages show the decision on their own. The agent also starts one when a person returns a payable to it, confirms a changed address, verifies a milestone, or resumes it. One cycle runs at a time: if one is already running, the next waits for it, and **Run cycle now** says so instead of starting a second. A live workspace also runs a cycle every 6 hours on its own, for what time alone changes, such as due dates and screening.
 
 To run one yourself, open **Treasury**, the console, and choose **Run cycle now**. Only owners and admins have this button. When the cycle ends, a message says "Cycle complete at *time* · *n* decisions logged." and the console shows a report of what the cycle did.
 
@@ -114,7 +114,7 @@ Owners, admins and approvers decide each one:
 
 - **Approve and pay** starts the transfer. A dialog asks you to confirm, and **Pay now** sends it at once. The ledger records who approved it.
 - **Reject** marks it not paid. You can give a reason, which is kept in the ledger.
-- **Return to agent** sends it back to pending, and the agent decides it again within a minute.
+- **Return to agent** sends it back to pending, and the agent usually decides it again within a minute.
 
 <Screenshot
   src="/docs/guides/first-payment-approval.png"

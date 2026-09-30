@@ -15,6 +15,7 @@ import {
 } from "./counterparty-history";
 import { CycleJournal, messageOf, type CycleStage } from "./journal";
 import { syncOnChainBalances, type BalanceSync } from "./balances";
+import { CycleRunningError, hasRunningCycle } from "./cycle-running";
 import { decide } from "./decide";
 import { enforceApGuardrails } from "./guardrails";
 import { addressUnconfirmed } from "../counterparty-address";
@@ -927,6 +928,10 @@ export async function runAgentCycle(
   const journal = new CycleJournal();
   const startedAt = new Date().toISOString();
   const clockMode = cycleClockMode();
+
+  // One cycle at a time in a workspace (E3): refused here, before the run
+  // opens, so a refused cycle leaves no row and uses none of a sandbox's cap.
+  if (await hasRunningCycle()) throw new CycleRunningError();
 
   // Opens the run — and, for a sandbox organization, enforces its daily cap —
   // inside begin_cycle_run (migration 0022) before anything else happens.

@@ -117,7 +117,7 @@ beforeEach(() => {
 describe("adding an invoice", () => {
   it("raises invoice_added for a payable, and says the agent decides within a minute", async () => {
     const result = await createInvoiceAction(empty, invoice("payable"));
-    expect(result).toMatchObject({ ok: true, message: "Invoice added for Acme. The agent will decide on it within a minute." });
+    expect(result).toMatchObject({ ok: true, message: "Invoice added for Acme. The agent usually decides on it within a minute." });
     expect(raiseMock).toHaveBeenCalledWith(ACCESS, "invoice_added");
   });
 
@@ -166,7 +166,7 @@ describe("returning a payable to the agent", () => {
   it("raises payable_returned, and says the agent decides it again within a minute", async () => {
     mocks.returnInvoice.mockResolvedValue(undefined);
     const result = await returnInvoiceAction(empty, form({ invoiceId: INVOICE }));
-    expect(result).toEqual({ ok: true, message: "Returned to the agent. It decides it again within a minute." });
+    expect(result).toEqual({ ok: true, message: "Returned to the agent. It usually decides it again within a minute." });
     expect(raiseMock).toHaveBeenCalledWith(ACCESS, "payable_returned");
   });
 
@@ -202,17 +202,10 @@ describe("resuming the agent", () => {
 });
 
 describe("refreshing the balance", () => {
-  it("raises funds_arrived when the chain shows more than was stored", async () => {
-    mocks.refreshOnChainBalances.mockResolvedValue({ refreshed: true, rose: true, balance: 40, syncedAt: "2026-09-30T12:00:00Z" });
-    await refreshOnChainBalanceAction("northstar");
-    expect(raiseMock).toHaveBeenCalledWith(ACCESS, "funds_arrived");
-  });
-
-  it("raises nothing when the balance did not rise, or was not read", async () => {
-    mocks.refreshOnChainBalances
-      .mockResolvedValueOnce({ refreshed: true, rose: false, balance: 20, syncedAt: "2026-09-30T12:00:00Z" })
-      .mockResolvedValueOnce({ refreshed: false, reason: "cooldown", balance: 20, syncedAt: "2026-09-30T12:00:00Z" });
-    await refreshOnChainBalanceAction("northstar");
+  // A payable held for want of funds is not decided again by a cycle (only pending and
+  // matched payables are), so funds arriving gives the agent nothing new to decide.
+  it("raises nothing, even when the balance rose", async () => {
+    mocks.refreshOnChainBalances.mockResolvedValue({ refreshed: true, balance: 40, syncedAt: "2026-09-30T12:00:00Z" });
     await refreshOnChainBalanceAction("northstar");
     expect(raiseMock).not.toHaveBeenCalled();
   });
@@ -224,7 +217,7 @@ describe("loading sample data", () => {
     const result = await loadSampleDataAction({ ok: false, message: "" }, form({}));
     expect(result).toEqual({
       ok: true,
-      message: "Sample data loaded: 6 counterparties, 6 invoices and 2 milestones. The agent will decide on them within a minute.",
+      message: "Sample data loaded: 6 counterparties, 6 invoices and 2 milestones. The agent usually decides on them within a minute.",
     });
     expect(raiseMock).toHaveBeenCalledWith(ACCESS, "sample_loaded");
   });

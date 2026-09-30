@@ -35,7 +35,7 @@ export async function loadSampleDataAction(_previous: SampleDataActionResult, fo
       raiseCycleEvent(auth, "sample_loaded");
       return {
         ok: true,
-        message: `Sample data loaded: ${counts.counterparties} counterparties, ${counts.invoices} invoices and ${counts.milestones} milestones. The agent will decide on them within a minute.`,
+        message: `Sample data loaded: ${counts.counterparties} counterparties, ${counts.invoices} invoices and ${counts.milestones} milestones. The agent usually decides on them within a minute.`,
       };
     } catch (error) {
       return failure(error, "sample data load failed");

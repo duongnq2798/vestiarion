@@ -3,6 +3,7 @@
 import "server-only";
 
 import { agentCycleSuccessMessage, runAgentCycle } from "@/lib/agent/orchestrator";
+import { CycleRunningError } from "@/lib/agent/cycle-running";
 import { AgentPausedError } from "@/lib/agent/pause";
 import { SANDBOX_DAILY_CYCLES, SandboxCapReachedError } from "@/lib/agent/sandbox-cap";
 import { raiseCycleEvent } from "@/lib/agent/cycle-soon";
@@ -43,7 +44,7 @@ export async function runAgentCycleAction(orgSlug: string): Promise<AgentActionR
         lines: result.lines.length,
       };
     } catch (error) {
-      if (error instanceof SandboxCapReachedError || error instanceof AgentPausedError) {
+      if (error instanceof SandboxCapReachedError || error instanceof AgentPausedError || error instanceof CycleRunningError) {
         return { ok: false, message: error.message };
       }
       console.error("agent cycle failed", error);

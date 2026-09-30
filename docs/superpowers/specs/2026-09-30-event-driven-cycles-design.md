@@ -22,11 +22,12 @@ everything time alone changes, such as due dates, re-screening and reserve moves
 | `payable_returned` | `returnInvoiceAction` | a person handed the payable back to the agent |
 | `address_confirmed` | `confirmCounterpartyAddressAction` | payments held on an unconfirmed address may proceed |
 | `agent_resumed` | `resumeAgentAction` | work that waited while the agent was paused |
-| `funds_arrived` | `refreshOnChainBalanceAction`, when the operating balance rose | payables held for funds may be paid |
 | `sample_loaded` | `loadSampleDataAction` | sample payables to decide |
 
 Some actions are not events. Approve-and-pay and reject finish the payable themselves. Adding a
-counterparty or changing a limit gives the agent nothing to decide.
+counterparty or changing a limit gives the agent nothing to decide. Neither does funds arriving: a
+cycle decides only pending and matched payables, so one held for want of funds is not decided again
+by a cycle.
 
 ## 3. Behaviour
 
@@ -42,6 +43,9 @@ counterparty or changing a limit gives the agent nothing to decide.
   - Cause: the cycle's AP stage does not claim invoices, so two overlapping cycles could each
     record a decision for the same payable.
   - What already guards money: the payment intent's idempotency key stops a double payment.
+  - Every cycle refuses to open its run beside a running one (`CycleRunningError`, checked in
+    `runAgentCycle`): **Run cycle now** says so, the schedule skips the workspace, and an event
+    cycle that loses the race drops quietly.
 - **E4: the same limits as the button.** A paused agent refuses the cycle in `begin_cycle_run`, and
   the event is dropped. A sandbox cycle counts against the daily cap (`SANDBOX_DAILY_CYCLES`)
   exactly as "Run cycle" does, and reaching the cap drops the event. Neither case is an error.

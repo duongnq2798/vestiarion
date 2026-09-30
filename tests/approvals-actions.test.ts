@@ -215,7 +215,7 @@ describe("returnInvoiceAction", () => {
     const result = await run(() => returnInvoiceAction(INITIAL, form(VALID_ID)));
 
     expect(returnInvoiceMock).toHaveBeenCalledWith({ actorId: USER, invoiceId: VALID_ID });
-    expect(result).toEqual({ ok: true, message: "Returned to the agent. It decides it again within a minute." });
+    expect(result).toEqual({ ok: true, message: "Returned to the agent. It usually decides it again within a minute." });
     expect(revalidatePathMock).toHaveBeenCalled();
   });
 

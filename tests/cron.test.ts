@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { currentOrgId, runWith } from "@/lib/context";
 import { runLiveOrganizations, runScheduledCycle } from "@/lib/agent/cron";
+import { CycleRunningError } from "@/lib/agent/cycle-running";
 import { AgentPausedError } from "@/lib/agent/pause";
 import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 
@@ -169,6 +170,19 @@ describe("runScheduledCycle", () => {
       { slug: "b-corp", ok: true, skipped: "paused" },
     ]);
     expect(notifyMock).not.toHaveBeenCalled();
+  });
+
+  it("skips a workspace whose cycle is already running, as a skip and not a failure", async () => {
+    const fake = fakeSupabase(liveOrgsDatabase);
+    runAgentCycleMock.mockImplementation(async () => {
+      if (currentOrgId() === A) throw new CycleRunningError();
+      return { lines: [] };
+    });
+
+    const results = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => runLiveOrganizations(runScheduledCycle));
+
+    expect(results[0]).toEqual({ slug: "a-corp", ok: true, skipped: "running" });
+    expect(results[1]).toMatchObject({ slug: "b-corp", ok: true });
   });
 
   it("does not notify an organization skipped as paused", async () => {

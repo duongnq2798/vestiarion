@@ -270,7 +270,7 @@ export async function createInvoiceAction(
       revalidateOrgPages();
       if (input.direction !== "payable") return { ok: true, created: 1, message: `Invoice added for ${counterparty.name}.` };
       raiseCycleEvent(auth, "invoice_added");
-      return { ok: true, created: 1, message: `Invoice added for ${counterparty.name}. The agent will decide on it within a minute.` };
+      return { ok: true, created: 1, message: `Invoice added for ${counterparty.name}. The agent usually decides on it within a minute.` };
     } catch (error) {
       console.error("invoice intake failed", error);
       return { ok: false, message: error instanceof Error ? error.message : "Invoice could not be added." };

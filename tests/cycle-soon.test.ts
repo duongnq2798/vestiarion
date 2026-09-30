@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { raiseCycleEvent, resetCycleSoonForTests, runCycleSoon } from "@/lib/agent/cycle-soon";
+import { CycleRunningError } from "@/lib/agent/cycle-running";
 import { AgentPausedError } from "@/lib/agent/pause";
 import { SANDBOX_DAILY_CYCLES, SandboxCapReachedError } from "@/lib/agent/sandbox-cap";
 import { fakeSupabase, orgTestContext } from "./support/fake-supabase";
@@ -75,7 +76,12 @@ describe("runCycleSoon", () => {
     await vi.advanceTimersByTimeAsync(1);
     await pending;
 
-    expect(withOrgMock).toHaveBeenCalledWith(A, expect.any(Function), { userId: USER });
+    // One scope to wait for a running cycle, a fresh one for the cycle: the cycle's
+    // signing key is read when it starts, never held through the wait.
+    expect(withOrgMock.mock.calls.map((call) => [call[0], call[2]])).toEqual([
+      [A, { userId: USER }],
+      [A, { userId: USER }],
+    ]);
     expect(runAgentCycleMock).toHaveBeenCalledTimes(1);
     expect(runAgentCycleMock).toHaveBeenCalledWith({
       triggeredBy: USER,
@@ -98,7 +104,7 @@ describe("runCycleSoon", () => {
     runCycleSoon({ ...live(A), kind: "invoice_added" });
     runCycleSoon({ ...live(B), kind: "payable_returned" });
     await drain();
-    expect(withOrgMock.mock.calls.map((call) => call[0])).toEqual([A, B]);
+    expect(new Set(withOrgMock.mock.calls.map((call) => call[0]))).toEqual(new Set([A, B]));
     expect(runAgentCycleMock).toHaveBeenCalledTimes(2);
   });
 
@@ -129,13 +135,57 @@ describe("runCycleSoon", () => {
     expect(runAgentCycleMock).toHaveBeenCalledTimes(1);
   });
 
-  it("gives up after 90 seconds if that cycle is still running, and says so", async () => {
+  it("gives up 90 seconds into the wait if that cycle is still running, and says so", async () => {
     running[A] = true;
     const info = vi.spyOn(console, "info").mockImplementation(() => {});
     runCycleSoon({ ...live(), kind: "invoice_added" });
-    await drain();
+    const pending = callbacks.splice(0)[0]();
+    await vi.advanceTimersByTimeAsync(2_000 + 85_000);
+    expect(info).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(5_000);
+    await pending;
     expect(runAgentCycleMock).not.toHaveBeenCalled();
     expect(info).toHaveBeenCalledWith("event cycle skipped: a cycle is still running", A);
+  });
+
+  it("decides an invoice added while the last event cycle is still running, in a second cycle after it", async () => {
+    let finish!: () => void;
+    runAgentCycleMock.mockImplementationOnce(() => {
+      running[A] = true;
+      return new Promise((resolve) => {
+        finish = () => {
+          running[A] = false;
+          resolve({ lines: [] });
+        };
+      });
+    });
+    runCycleSoon({ ...live(), kind: "invoice_added" });
+    const first = callbacks.splice(0)[0]();
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(runAgentCycleMock).toHaveBeenCalledTimes(1);
+
+    runCycleSoon({ ...live(), kind: "payable_returned" });
+    expect(afterMock).toHaveBeenCalledTimes(2);
+    const second = callbacks.splice(0)[0]();
+    await vi.advanceTimersByTimeAsync(2_000 + 10_000);
+    expect(runAgentCycleMock).toHaveBeenCalledTimes(1);
+
+    finish();
+    await first;
+    await vi.advanceTimersByTimeAsync(5_000);
+    await second;
+    expect(runAgentCycleMock).toHaveBeenCalledTimes(2);
+    expect(runAgentCycleMock.mock.calls[1][0].trigger).toEqual({ kind: "event", events: ["payable_returned"] });
+  });
+
+  it("drops the event quietly when another cycle starts between its wait and its own start", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    runAgentCycleMock.mockRejectedValueOnce(new CycleRunningError());
+    runCycleSoon({ ...live(), kind: "invoice_added" });
+    await drain();
+    expect(info).toHaveBeenCalledWith("event cycle skipped: a cycle is still running", A);
+    expect(error).not.toHaveBeenCalled();
   });
 
   it("drops the event quietly when the agent is paused or the sandbox has used its cycles", async () => {

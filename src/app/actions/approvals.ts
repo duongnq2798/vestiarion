@@ -86,7 +86,7 @@ export async function returnInvoiceAction(_previous: ApprovalActionResult, formD
       await returnInvoice({ actorId: auth.user.id, invoiceId: parsed.data });
       revalidateOrgPages();
       raiseCycleEvent(auth, "payable_returned");
-      return { ok: true, message: "Returned to the agent. It decides it again within a minute." };
+      return { ok: true, message: "Returned to the agent. It usually decides it again within a minute." };
     } catch (error) {
       return fail(error);
     }

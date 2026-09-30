@@ -72,7 +72,7 @@ export default function InvoiceIntake({ counterparties, orgSlug }: { counterpart
           Add invoice
         </SubmitButton>
       </div>
-      <p className="text-xs text-ink-3">The agent decides on a payable within a minute of adding it.</p>
+      <p className="text-xs text-ink-3">The agent usually decides on a payable within a minute of adding it.</p>
     </form>
   );
 }

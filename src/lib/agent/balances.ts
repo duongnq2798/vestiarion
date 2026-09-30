@@ -202,8 +202,6 @@ export interface BalanceRefresh {
   balance: number;
   /** When the operating account's balance was last read from the chain, if ever. */
   syncedAt: string | null;
-  /** With `refreshed`: whether the non-reserve total is higher than it was before the read (funds arrived). */
-  rose?: boolean;
 }
 
 type StoredAccount = { id: string; kind: string; balance: string; circle_wallet_id: string | null; balance_synced_at: string | null };
@@ -289,5 +287,5 @@ export async function refreshOnChainBalances(options: { now?: number } = {}): Pr
     console.error(`refreshOnChainBalances: ${sync.failures.length} of ${sync.outcomes.length} balance reads did not complete`);
     return { refreshed: false, reason: "unavailable", message: CIRCLE_UNREACHABLE, balance, syncedAt };
   }
-  return { refreshed: true, balance, syncedAt, rose: balance > nonReserveTotal(rows) };
+  return { refreshed: true, balance, syncedAt };
 }
