@@ -6,14 +6,17 @@
 // recomputes the body hash from canonical JSON, checks the Ed25519 signature
 // against the key the entry names, and follows the hash links from genesis.
 //
-//   node verify-ledger-export.mjs export.json [--public-key key.pem]
+//   node verify-ledger-export.mjs export.json [--public-key <key.pem>]...
 //
 // Exit 0: VALID. Exit 1: BROKEN (the entry and the reason are printed).
 // Exit 2: NOT CHECKED (an unknown key, or a file that is not an export).
 //
 // The file carries its own public keys, so it can only prove it is consistent
 // with itself. Compare the key id and head hash printed below with the ones on
-// the workspace's Audit page, or pass --public-key with the key you trust.
+// the workspace's Audit page, or pass --public-key with the key you trust. Pass
+// it more than once — once per key, or all of them in one file — to check a
+// chain that spans a key rotation: an entry signed before the rotation needs
+// the retired key, not just the current one.
 
 import crypto from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -50,11 +53,18 @@ function keyId(key) {
 }
 
 const args = process.argv.slice(2);
-const pinIndex = args.indexOf("--public-key");
-const pinPath = pinIndex >= 0 ? args[pinIndex + 1] : undefined;
-const file = args.find((arg, i) => !arg.startsWith("--") && (pinIndex < 0 || i !== pinIndex + 1));
-if (!file || (pinIndex >= 0 && !pinPath)) {
-  finish(2, "NOT CHECKED: usage: node verify-ledger-export.mjs <export.json> [--public-key <key.pem>]");
+const pinPaths = [];
+let file;
+for (let i = 0; i < args.length; i++) {
+  if (args[i] === "--public-key") {
+    pinPaths.push(args[i + 1]);
+    i++;
+  } else if (!args[i].startsWith("--") && file === undefined) {
+    file = args[i];
+  }
+}
+if (!file || pinPaths.some((p) => !p)) {
+  finish(2, "NOT CHECKED: usage: node verify-ledger-export.mjs <export.json> [--public-key <key.pem>]...");
 }
 
 let doc;
@@ -67,11 +77,31 @@ if (doc?.format !== "vestiarion-ledger-export/1" || !Array.isArray(doc.entries) 
   finish(2, `NOT CHECKED: ${file} is not a Vestiarion ledger export (format vestiarion-ledger-export/1)`);
 }
 
+// A pinned file may hold more than one PEM block — someone checking a chain
+// that spans a key rotation passes the retired key and the current one, either
+// as two files or as two blocks in one. Every block becomes a trusted key; a
+// block that is a private key is refused rather than silently accepted (Node
+// can derive a public key from one, which would make a private key pasted in
+// by mistake look like it "worked").
+const PEM_BLOCK = /-----BEGIN [A-Z0-9 ]+-----[\s\S]*?-----END [A-Z0-9 ]+-----/g;
+
 const known = new Map();
 try {
-  if (pinPath) {
-    const key = crypto.createPublicKey(readFileSync(pinPath, "utf8"));
-    known.set(keyId(key), key);
+  if (pinPaths.length > 0) {
+    for (const pinPath of pinPaths) {
+      const text = readFileSync(pinPath, "utf8");
+      const blocks = text.match(PEM_BLOCK);
+      if (!blocks || blocks.length === 0) {
+        finish(2, `NOT CHECKED: ${pinPath} holds no PEM key block`);
+      }
+      for (const block of blocks) {
+        if (block.includes("PRIVATE KEY")) {
+          finish(2, `NOT CHECKED: ${pinPath} holds a private key; pass the public key instead`);
+        }
+        const key = crypto.createPublicKey(block);
+        known.set(keyId(key), key);
+      }
+    }
   } else {
     for (const entry of doc.keys) {
       const key = crypto.createPublicKey(entry.publicKeyPem);
@@ -126,6 +156,10 @@ function validateEntryShape(entry, position) {
 // anticipate, and turns it into NOT CHECKED instead of a stack trace.
 let last;
 try {
+  if (doc.entries.length === 0 && doc.head != null) {
+    finish(1, "BROKEN: the file names a head but holds no entries");
+  }
+
   let expectedPrev = GENESIS;
 
   doc.entries.forEach((entry, index) => {
@@ -171,8 +205,8 @@ finish(
   0,
   `VALID: ${doc.entries.length} entries of ${doc.workspace?.slug ?? "this workspace"}, each signed and linked from genesis`,
   `Head: ${last ? `#${last.seq} ${last.hash}` : "none (empty chain)"}`,
-  `Trusted key id${known.size === 1 ? "" : "s"}: ${trusted}${pinPath ? " (from --public-key)" : " (from the file itself)"}`,
-  pinPath
-    ? "The signatures were checked against the key you supplied."
+  `Trusted key id${known.size === 1 ? "" : "s"}: ${trusted}${pinPaths.length > 0 ? " (from --public-key)" : " (from the file itself)"}`,
+  pinPaths.length > 0
+    ? "The signatures were checked against the key(s) you supplied."
     : "The file vouches for itself: compare this key id and head hash with the workspace's Audit page before relying on it."
 );

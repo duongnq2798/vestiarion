@@ -1,4 +1,5 @@
 import type { KeyObject } from "node:crypto";
+import { db, unwrap } from "./dal";
 import {
   canonicalJson,
   ledgerVerificationKeyring,
@@ -98,6 +99,35 @@ export async function buildLedgerExport(workspace: { slug: string; name: string 
   return exportFromRows({ rows: await readLedgerRows(), keyring: ledgerVerificationKeyring(), workspace, now });
 }
 
+/**
+ * A brake on exports (audit-export E8): every export appends its own ledger
+ * entry, and every append fans out a webhook delivery to every endpoint
+ * (migration 0028), so looping on the download grows the ledger without
+ * bound and floods integrators. `src/lib/rate-limit.ts` is in-memory per
+ * instance, no brake at all on serverless, so the count is read from the
+ * ledger itself — the one store every instance shares.
+ */
+export const EXPORT_LIMIT = { count: 5, windowMs: 10 * 60_000 };
+
+/**
+ * How many `ledger_exported` entries this person has caused in this
+ * workspace within the window, capped at `EXPORT_LIMIT.count` — the caller
+ * only needs to know whether the limit is reached, not the exact total.
+ */
+export async function recentExportsBy(userId: string, now = new Date()): Promise<number> {
+  const since = new Date(now.getTime() - EXPORT_LIMIT.windowMs).toISOString();
+  const rows = unwrap(
+    await db()
+      .from("ledger_entries")
+      .select("id")
+      .eq("action", "ledger_exported")
+      .gt("ts", since)
+      .eq("detail->>by", userId)
+      .limit(EXPORT_LIMIT.count)
+  ) as Array<{ id: string }>;
+  return rows.length;
+}
+
 const CHUNK = 500;
 
 /** The document as JSON text in chunks of entries, so a long chain is never one string (E4). */
@@ -138,7 +168,10 @@ export function csvCell(value: unknown): string {
 }
 
 export function* ledgerExportCsvChunks(doc: LedgerExport, entriesPerChunk = CHUNK): Generator<string> {
-  yield `${LEDGER_EXPORT_FIELDS.join(",")}\r\n`;
+  // A BOM first, so Excel on Windows — which guesses a CSV's encoding rather
+  // than assuming UTF-8 — reads the accented and non-Latin text summaries can
+  // carry correctly instead of as mojibake.
+  yield `﻿${LEDGER_EXPORT_FIELDS.join(",")}\r\n`;
   for (let i = 0; i < doc.entries.length; i += entriesPerChunk) {
     yield doc.entries
       .slice(i, i + entriesPerChunk)

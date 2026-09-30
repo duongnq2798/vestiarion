@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import { verifyChain, type LedgerEntryInput, type LedgerRow } from "@/lib/ledger";
 import { exportFromRows, ledgerExportJsonChunks } from "@/lib/ledger-export";
 import { ledgerKeyId, type LedgerKeyring } from "@/lib/ledger-keys";
-import { buildChain } from "./support/ledger-chain";
+import { buildChain, continueChain } from "./support/ledger-chain";
 
 /**
  * `public/tools/verify-ledger-export.mjs` is a second implementation of the
@@ -115,6 +115,75 @@ describe("verify-ledger-export.mjs", () => {
     expect(run(intact(), ["--public-key", pinned]).code).toBe(0);
   });
 
+  describe("--public-key after a key rotation", () => {
+    const keyA = crypto.generateKeyPairSync("ed25519");
+    const keyB = crypto.generateKeyPairSync("ed25519");
+    const idA = ledgerKeyId(keyA.publicKey);
+    const idB = ledgerKeyId(keyB.publicKey);
+    const rotatedRing: LedgerKeyring = { active: keyB.publicKey, retired: [keyA.publicKey] };
+
+    function rotatedChain(): LedgerRow[] {
+      const before = buildChain(INPUTS.slice(0, 2), keyA.privateKey, idA);
+      const after = continueChain(before, INPUTS.slice(2), keyB.privateKey, idB);
+      return [...before, ...after];
+    }
+
+    it("verifies across the rotation when each key is pinned with its own --public-key", () => {
+      const rows = rotatedChain();
+      const a = path.join(dir, "rotated-a.pem");
+      const b = path.join(dir, "rotated-b.pem");
+      writeFileSync(a, keyA.publicKey.export({ type: "spki", format: "pem" }).toString());
+      writeFileSync(b, keyB.publicKey.export({ type: "spki", format: "pem" }).toString());
+      const result = run(rows, ["--public-key", a, "--public-key", b], rotatedRing);
+      expect(result.code).toBe(0);
+      expect(result.code).toBe(expected(rows, rotatedRing));
+      expect(result.out).toContain(idA);
+      expect(result.out).toContain(idB);
+    });
+
+    it("verifies across the rotation when both keys are in one file", () => {
+      const rows = rotatedChain();
+      const both = path.join(dir, "rotated-both.pem");
+      writeFileSync(
+        both,
+        [keyA.publicKey, keyB.publicKey].map((k) => k.export({ type: "spki", format: "pem" }).toString()).join("\n")
+      );
+      const result = run(rows, ["--public-key", both], rotatedRing);
+      expect(result.code).toBe(0);
+      expect(result.out).toContain(idA);
+      expect(result.out).toContain(idB);
+    });
+
+    it("answers NOT CHECKED (exit 2) when only the newer key is pinned, as verifyChain does", () => {
+      const rows = rotatedChain();
+      const bOnly = path.join(dir, "rotated-b-only.pem");
+      writeFileSync(bOnly, keyB.publicKey.export({ type: "spki", format: "pem" }).toString());
+      const bOnlyRing: LedgerKeyring = { active: keyB.publicKey, retired: [] };
+      const result = run(rows, ["--public-key", bOnly], bOnlyRing);
+      expect(result.code).toBe(2);
+      expect(result.code).toBe(expected(rows, bOnlyRing));
+      expect(result.first).toMatch(/^NOT CHECKED/);
+    });
+
+    it("answers NOT CHECKED (exit 2) for a private-key PEM, naming it as the reason", () => {
+      const priv = path.join(dir, "rotated-private.pem");
+      writeFileSync(priv, keyA.privateKey.export({ type: "pkcs8", format: "pem" }).toString());
+      const result = run(intact(), ["--public-key", priv]);
+      expect(result.code).toBe(2);
+      expect(result.first).toMatch(/^NOT CHECKED/);
+      expect(result.out).toMatch(/private key/i);
+    });
+
+    it("answers NOT CHECKED (exit 2) for a file with no PEM block, naming it as the reason", () => {
+      const empty = path.join(dir, "rotated-empty.pem");
+      writeFileSync(empty, "not a key\n");
+      const result = run(intact(), ["--public-key", empty]);
+      expect(result.code).toBe(2);
+      expect(result.first).toMatch(/^NOT CHECKED/);
+      expect(result.out).toMatch(/no PEM|holds no|not a (public )?key/i);
+    });
+  });
+
   it("answers BROKEN when the file's head does not name its last entry", () => {
     const result = run(intact(), [], ring, (doc) => {
       (doc.head as { hash: string }).hash = "e".repeat(64);
@@ -131,6 +200,15 @@ describe("verify-ledger-export.mjs", () => {
 
   it("verifies an empty chain as VALID with nothing to compare but the key", () => {
     expect(run([]).code).toBe(0);
+  });
+
+  it("answers BROKEN (exit 1) when the head names an entry but the file holds none", () => {
+    const rows = intact();
+    const result = run(rows, [], ring, (doc) => {
+      (doc.entries as unknown[]).length = 0;
+    });
+    expect(result.code).toBe(1);
+    expect(result.first).toMatch(/^BROKEN/);
   });
 
   // A malformed entry is data from outside the app: the script must report it

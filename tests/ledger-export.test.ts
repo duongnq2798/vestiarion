@@ -1,8 +1,12 @@
 import crypto from "node:crypto";
 import { describe, expect, it } from "vitest";
+import { configFromEnv } from "@/lib/config";
+import { runWith } from "@/lib/context";
+import { withOrg } from "@/lib/dal/scope";
 import { canonicalJson, verifyChain, type LedgerEntryInput } from "@/lib/ledger";
 import {
   csvCell,
+  EXPORT_LIMIT,
   exportFileName,
   exportFromRows,
   exportKeys,
@@ -10,9 +14,11 @@ import {
   LEDGER_EXPORT_FORMAT,
   ledgerExportCsvChunks,
   ledgerExportJsonChunks,
+  recentExportsBy,
 } from "@/lib/ledger-export";
 import { ledgerKeyId, type LedgerKeyring } from "@/lib/ledger-keys";
 import { buildChain } from "./support/ledger-chain";
+import { fakeSupabase, type RecordedRequest } from "./support/fake-supabase";
 
 const NOW = new Date("2026-09-30T12:00:00.000Z");
 const WORKSPACE = { slug: "northstar", name: "Northstar Studio" };
@@ -110,9 +116,13 @@ describe("ledgerExportCsvChunks", () => {
   const doc = exportFromRows({ rows, keyring: ring(current.publicKey), workspace: WORKSPACE, now: NOW });
   const csv = [...ledgerExportCsvChunks(doc, 1)].join("");
 
+  it("starts with a BOM, so Excel on Windows reads it as UTF-8", () => {
+    expect(csv.charCodeAt(0)).toBe(0xfeff);
+  });
+
   it("has the chain fields as its header and one row per entry, oldest first", () => {
     const [header] = csv.split("\r\n");
-    expect(header).toBe(LEDGER_EXPORT_FIELDS.join(","));
+    expect(header).toBe(`﻿${LEDGER_EXPORT_FIELDS.join(",")}`);
     expect(csv.endsWith("\r\n")).toBe(true);
     expect(csv.indexOf("Northwind")).toBeLessThan(csv.indexOf("cycle complete"));
   });
@@ -131,5 +141,58 @@ describe("exportFileName", () => {
   it("names the workspace, the head and the format", () => {
     expect(exportFileName("northstar", 392, "json")).toBe("vestiarion-northstar-ledger-392.json");
     expect(exportFileName("northstar", 0, "csv")).toBe("vestiarion-northstar-ledger-0.csv");
+  });
+});
+
+describe("recentExportsBy", () => {
+  const ORG = "5d0f3a2e-8c1b-4f7a-9e6d-00000000e0e2";
+  const USER = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000e2";
+  const NOW = new Date("2026-09-30T12:00:00.000Z");
+  const config = configFromEnv({
+    NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid",
+    SUPABASE_SERVICE_ROLE_KEY: "k",
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: "test-anon-key",
+    SUPABASE_JWT_SECRET: "test-request-token-secret-at-least-32-characters",
+  });
+
+  function scoped(respondEntries: (request: RecordedRequest) => { body: unknown }) {
+    const fake = fakeSupabase((request) => {
+      if (request.path === "/rest/v1/orgs") {
+        return {
+          body: {
+            id: ORG, slug: "northstar", name: "Northstar", mode: "sandbox", wallet_host: null,
+            ledger_signing_key_enc: null, circle_api_key_enc: null, circle_entity_secret_enc: null,
+          },
+        };
+      }
+      if (request.path === "/rest/v1/ledger_entries") return respondEntries(request);
+      return { body: [] };
+    });
+    return { fake, run: <T,>(fn: () => Promise<T>) => runWith({ config, db: fake.client, fetch: fake.fetch }, () => withOrg(ORG, fn)) };
+  }
+
+  it("counts ledger_exported entries by this user in the window, with the query's own filters", async () => {
+    const { fake, run } = scoped(() => ({ body: [{ id: "e1" }, { id: "e2" }] }));
+    const count = await run(() => recentExportsBy(USER, NOW));
+    expect(count).toBe(2);
+
+    const request = fake.requests.find((r) => r.path === "/rest/v1/ledger_entries");
+    expect(request?.params.get("action")).toBe("eq.ledger_exported");
+    expect(request?.params.get("ts")).toBe(`gt.${new Date(NOW.getTime() - EXPORT_LIMIT.windowMs).toISOString()}`);
+    expect(request?.params.get("detail->>by")).toBe(`eq.${USER}`);
+    expect(request?.params.get("limit")).toBe(String(EXPORT_LIMIT.count));
+    expect(request?.params.get("org_id")).toBe(`eq.${ORG}`);
+  });
+
+  it("reports at most the limit, even if more rows exist", async () => {
+    const { run } = scoped(() => ({
+      body: Array.from({ length: EXPORT_LIMIT.count }, (_, i) => ({ id: `e${i}` })),
+    }));
+    expect(await run(() => recentExportsBy(USER, NOW))).toBe(EXPORT_LIMIT.count);
+  });
+
+  it("is zero when nothing was exported recently", async () => {
+    const { run } = scoped(() => ({ body: [] }));
+    expect(await run(() => recentExportsBy(USER, NOW))).toBe(0);
   });
 });

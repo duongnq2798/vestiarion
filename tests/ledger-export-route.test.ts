@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
+import { EXPORT_LIMIT } from "@/lib/ledger-export";
 import { fakeSupabase } from "./support/fake-supabase";
 
 const { ORG, USER } = vi.hoisted(() => ({
@@ -8,18 +9,25 @@ const { ORG, USER } = vi.hoisted(() => ({
   USER: "0b6c1c9e-4a4f-4a7e-9b1e-0000000000e1",
 }));
 
-const { sessionMock, membershipMock, buildMock, appendMock } = vi.hoisted(() => ({
+const { sessionMock, membershipMock, buildMock, recentMock, appendEntryMock } = vi.hoisted(() => ({
   sessionMock: vi.fn(),
   membershipMock: vi.fn(),
   buildMock: vi.fn(),
-  appendMock: vi.fn(),
+  recentMock: vi.fn(),
+  appendEntryMock: vi.fn(),
 }));
 vi.mock("@/lib/auth/session", () => ({ getSessionUser: sessionMock }));
 vi.mock("@/lib/auth/membership", () => ({ membershipFor: membershipMock }));
-vi.mock("@/lib/ledger-best-effort", () => ({ appendLedgerEntryBestEffort: appendMock }));
 vi.mock("@/lib/ledger-export", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/ledger-export")>();
-  return { ...actual, buildLedgerExport: buildMock };
+  return { ...actual, buildLedgerExport: buildMock, recentExportsBy: recentMock };
+});
+// appendLedgerEntryBestEffort is exercised for real (it never throws by design); what can fail is the
+// append underneath it, so that's what a "record failed" test mocks — @/lib/ledger's appendLedgerEntry,
+// keeping every other export of the module real via importOriginal.
+vi.mock("@/lib/ledger", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/ledger")>();
+  return { ...actual, appendLedgerEntry: appendEntryMock };
 });
 
 import { GET } from "@/app/api/ledger/export/route";
@@ -46,13 +54,15 @@ const DOC = {
   ],
 };
 
-function call(query: string) {
+function call(query: string, headers?: Record<string, string>) {
   const fake = fakeSupabase((request) =>
     request.path === "/rest/v1/orgs"
       ? { body: { id: ORG, slug: "northstar", name: "Northstar Studio", mode: "sandbox", ledger_signing_key_enc: null, circle_api_key_enc: null, circle_entity_secret_enc: null, wallet_host: null } }
       : { body: [] }
   );
-  return runWith({ config, db: fake.client, fetch: fake.fetch }, () => GET(new Request(`https://www.vestiarion.xyz/api/ledger/export${query}`)));
+  return runWith({ config, db: fake.client, fetch: fake.fetch }, () =>
+    GET(new Request(`https://www.vestiarion.xyz/api/ledger/export${query}`, headers ? { headers } : undefined))
+  );
 }
 
 beforeEach(() => {
@@ -60,7 +70,8 @@ beforeEach(() => {
   sessionMock.mockResolvedValue({ id: USER, email: null });
   membershipMock.mockResolvedValue(MEMBERSHIP);
   buildMock.mockResolvedValue(DOC);
-  appendMock.mockResolvedValue(undefined);
+  recentMock.mockResolvedValue(0);
+  appendEntryMock.mockResolvedValue(undefined);
 });
 
 describe("GET /api/ledger/export", () => {
@@ -109,9 +120,14 @@ describe("GET /api/ledger/export", () => {
     expect(response.headers.get("content-disposition")).toContain(".json");
   });
 
+  it("sends x-content-type-options: nosniff", async () => {
+    const response = await call("?org=northstar&format=json");
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+  });
+
   it("records who exported what, with ids and counts only", async () => {
     await call("?org=northstar&format=csv");
-    expect(appendMock).toHaveBeenCalledWith(ORG, {
+    expect(appendEntryMock).toHaveBeenCalledWith({
       actor: "human",
       domain: "system",
       action: "ledger_exported",
@@ -121,7 +137,7 @@ describe("GET /api/ledger/export", () => {
   });
 
   it("still sends the file when the record cannot be written", async () => {
-    appendMock.mockRejectedValueOnce(new Error("database hiccup"));
+    appendEntryMock.mockRejectedValueOnce(new Error("database hiccup"));
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
     const response = await call("?org=northstar&format=json");
     expect(response.status).toBe(200);
@@ -135,5 +151,35 @@ describe("GET /api/ledger/export", () => {
     expect(response.status).toBe(500);
     expect(await response.json()).toEqual({ error: "The ledger could not be exported." });
     logged.mockRestore();
+  });
+
+  it("answers 429 with retry-after when 5 exports happened in the last 10 minutes, building and recording nothing", async () => {
+    recentMock.mockResolvedValueOnce(EXPORT_LIMIT.count);
+    const response = await call("?org=northstar&format=json");
+    expect(response.status).toBe(429);
+    expect(await response.json()).toEqual({ error: "Too many exports in the last 10 minutes. Try again later." });
+    expect(response.headers.get("retry-after")).toBe("600");
+    expect(buildMock).not.toHaveBeenCalled();
+    expect(appendEntryMock).not.toHaveBeenCalled();
+  });
+
+  it("still exports when only 4 happened in the last 10 minutes", async () => {
+    recentMock.mockResolvedValueOnce(EXPORT_LIMIT.count - 1);
+    const response = await call("?org=northstar&format=json");
+    expect(response.status).toBe(200);
+    expect(buildMock).toHaveBeenCalled();
+  });
+
+  it("refuses a cross-site request before anything is read or recorded", async () => {
+    const response = await call("?org=northstar&format=json", { "sec-fetch-site": "cross-site" });
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: "Start the export from the Audit log page." });
+    expect(sessionMock).not.toHaveBeenCalled();
+    expect(buildMock).not.toHaveBeenCalled();
+  });
+
+  it.each(["same-origin", "same-site", "none", undefined])("allows sec-fetch-site %s", async (value) => {
+    const response = await call("?org=northstar&format=json", value ? { "sec-fetch-site": value } : undefined);
+    expect(response.status).toBe(200);
   });
 });
