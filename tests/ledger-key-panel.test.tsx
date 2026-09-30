@@ -114,3 +114,12 @@ describe("LedgerKeyPanel's confirmation (rendered in a portal, so checked in sou
     expect(source).toContain('confirmLabel="Rotate key"');
   });
 });
+
+describe("the Settings page", () => {
+  const page = readFileSync(path.join(process.cwd(), "src", "app", "o", "[slug]", "settings", "page.tsx"), "utf8");
+
+  it("names the ledger signing key in its subtitle", () => {
+    const sub = /<PageHead[\s\S]*?sub="([^"]*)"/.exec(page)?.[1] ?? "";
+    expect(sub).toContain("the ledger signing key");
+  });
+});
