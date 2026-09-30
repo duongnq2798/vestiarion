@@ -33,14 +33,22 @@ It answers with one of three results:
 
 - **VALID** (exit code 0): every entry's content matches its hash, every signature verifies, and every link holds, from the first entry to the head. It prints the head and the key ids it trusted.
 - **BROKEN** (exit code 1): it names the first entry that fails and why: its content was changed, its signature does not verify, an entry is missing or out of order, or an entry is malformed, such as a missing field or a hash that is not hex.
-- **NOT CHECKED** (exit code 2): it could not check the file at all. The file is not an export, or an entry names a key the file does not hold.
+- **NOT CHECKED** (exit code 2): it could not check the file at all. The file is not an export, an entry names a key the file does not hold, or an entry was signed by a key you did not pass with `--public-key`.
 
 ## 4. Compare the key id and the head
 
 A file can only show that it agrees with itself. Someone who rewrote the entries could re-sign them with a key of their own and put that key in the file. So, before relying on a **VALID** result, compare the key id and head hash the verifier prints with the workspace's **Audit log** page. The key id is shown beside **Ledger signing public key**, and the head hash has a copy button. The page says: "Compare this key id and the head hash with the ones a verified export prints."
 
-If you already hold the workspace's public key, pass it in, and only that key is trusted:
+If you already hold the workspace's public key, pass it in, and only the key(s) you pass are trusted:
 
 ```bash
 node verify-ledger-export.mjs vestiarion-your-workspace-ledger-392.json --public-key workspace-key.pem
 ```
+
+If the workspace has rotated its signing key, an entry from before the rotation needs the retired key, not just the current one — the Audit log page lists every key it accepts. Pass every one of them: repeat `--public-key`, once per key,
+
+```bash
+node verify-ledger-export.mjs vestiarion-your-workspace-ledger-392.json --public-key current-key.pem --public-key retired-key.pem
+```
+
+or put all the public keys in one file, one after another, and pass that file once.
