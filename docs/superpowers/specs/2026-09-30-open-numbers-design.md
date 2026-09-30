@@ -25,23 +25,24 @@ One table, three columns — **Customers**, **Our workspaces**, **Total** — wi
 |---|---|---|
 | Workspaces opened | period | `orgs.created_at` |
 | Live on Arc testnet | now | `orgs.mode = 'live'` |
-| People | now | distinct `memberships.user_id` |
+| People | now | customers: distinct members of customers' workspaces who are not on the team; ours: distinct members of our workspaces; total: distinct members |
 | Payments settled on Arc testnet | period | `payment_intents`: provider `circle`, mode `live`, status `confirmed`, at `coalesce(executed_at, confirmed_at)` |
 | USDC paid | period | sum of those payments' `amount` |
 | Distinct payee wallets | period | distinct `lower(destination)` of those payments |
 | Invoices decided | period | `invoices.decided_at`, excluding sample counterparties |
-| Milestones released | period | `milestones.status = 'paid'` by `settled_at`, excluding sample counterparties |
+| Contractor milestones paid on Arc testnet | period | `milestones.status = 'paid'` whose settled Arc payment intent (`source_type = 'milestone'`) falls in the period, excluding sample counterparties |
 | Agent cycles | period | `cycle_runs.started_at` |
 | Decisions made by a model | period | `sum(cycle_runs.model_decision_count)` |
 | Model departed from the written policy | period | `sum(reference_disagreement_count)` |
-| Refused by code | period | `sum(guardrail_override_count)` |
-| USDC in Arc testnet wallets | now | `accounts.balance` of live workspaces' accounts that hold a Circle wallet, token USDC, as last synced |
+| Decisions refused by code | period | `sum(guardrail_override_count)` (a model's or the rule-based path's decision) |
+| USDC in Arc testnet wallets | now | `accounts.balance` of live workspaces' accounts that hold a Circle wallet, token USDC, chain `ARC-TESTNET`, with `balance_synced_at` set (read from the chain at least once) |
 
 Below it: a daily bar chart of settled payments across the period (customers and ours stacked;
-all time starts at the first payment's day; at most the latest 90 days), then **payments from our
-own workspaces** — the latest 20 in the period, each with amount, time and an arcscan link. A
-closing note states the method: what counts, what never counts, and that customer payments are
-counted but never listed.
+all time starts at the first payment's day; at most the latest 90 days; a customer's amounts are
+never shown by day, only their count), then **payments from our own workspaces** — the latest 20
+in the period from the founding workspace and workspaces a team member opened, each with amount,
+time and an arcscan link. A closing note states the method: what counts, what never counts, and
+that customer payments are counted but never listed.
 
 ## 3. Rulings
 
@@ -61,9 +62,13 @@ counted but never listed.
   (`provider = 'simulate'`) and never appear; neither do pending or failed ones.
 - **R5 — sample data never counts.** Invoices and milestones whose counterparty has `sample = true`
   are excluded from every row.
-- **R6 — customers' payments are counted, never listed.** Only our own workspaces' payments are
-  listed with transaction links. A customer's payments are public on chain, but tying a hash to
-  "a Vestiarion customer" is ours to withhold.
+- **R6 — customers' payments are counted, never listed.** Only payments from the founding
+  workspace and workspaces a team member opened are listed with transaction links; a workspace
+  whose creator deleted their account is counted as ours but never listed, because it may be a
+  former customer's. A customer's amounts never appear by day either: with one or two customers,
+  a day's amount could point to a single transfer. A customer's payments are public on chain, but
+  tying a hash to "a Vestiarion customer" is ours to withhold. The privacy page says the page
+  publishes counts and totals only.
 - **R7 — deleted workspaces drop out.** `delete_org` removes a workspace's rows; the page counts
   what exists. It never adds tombstones back.
 - **R8 — period parsing.** `since` must be a calendar date from 2026-01-01 through today (UTC);
@@ -96,8 +101,17 @@ counted but never listed.
 1. Partner runs `npm run db:migrate` (0037; additive).
 2. Partner adds the team: `npm run numbers -- team add <email>` for each team account.
 3. Merge → deploy; compare `/open` and `npm run numbers` with a read-only SQL probe.
-4. Record the outcome here in §7.
+4. Record the outcome here in §8.
 
-## 7. Rollout record
+## 7. Review changes (2026-09-30)
+
+The whole-branch review found, and the branch fixed with a failing test first each time: a
+former customer's workspace listed as ours (now counted, never listed); People counting as a
+customer someone who belongs to no customer workspace; wallet USDC counting Base Sepolia and
+never-synced seed balances; the milestones row counting milestones marked paid in a sandbox (now
+only those a settled Arc payment paid, timed by that payment); the refusals row claiming a model
+was overruled when the rule-based path's decisions count too; and customers' per-day USDC.
+
+## 8. Rollout record
 
 (pending)

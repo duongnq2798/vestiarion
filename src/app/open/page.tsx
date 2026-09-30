@@ -85,8 +85,12 @@ export default async function OpenPage({ searchParams }: OpenPageProps) {
               <li>A payment counts once Circle confirms it on Arc testnet. Sandbox workspaces simulate their payments, and those never count.</li>
               <li>
                 A workspace is a customer&apos;s when someone outside the Vestiarion team opened it. The team&apos;s own workspaces, and any whose creator has
-                since deleted their account, are counted as ours.
+                since deleted their account, are counted as ours; only workspaces the team opened list their payments.
               </li>
+              <li>A person counts as a customer when they are not on the team and belong to a customer&apos;s workspace.</li>
+              <li>A contractor milestone counts once a settled Arc testnet payment has paid it.</li>
+              <li>USDC in wallets is Arc testnet USDC in live workspaces&apos; Circle wallets, as last read from the chain.</li>
+              <li>Customers&apos; payments appear only as counts and totals, never one by one or as a day&apos;s amount.</li>
               <li>Sample data that a workspace loads to try the product never counts.</li>
               <li>Rows marked now are totals at the moment of reading; the others cover the period chosen above.</li>
               <li>A deleted workspace takes its activity out of these figures with it.</li>

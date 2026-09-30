@@ -37,8 +37,9 @@ function topRounded(x: number, y: number, width: number, height: number): string
   return `M${x},${y + height}V${y + r}Q${x},${y} ${x + r},${y}H${x + width - r}Q${x + width},${y} ${x + width},${y + r}V${y + height}Z`;
 }
 
+/** A day's figures. A customer's amounts are never shown by day, only their count. */
 function dayTitle(row: DailyPayments): string {
-  return `${fullDay(row.day)}: ${row.customers} by customers (${formatFigure(row.customersUsdc, "usdc")} USDC), ${row.ours} by our workspaces (${formatFigure(row.oursUsdc, "usdc")} USDC)`;
+  return `${fullDay(row.day)}: ${row.customers} by customers, ${row.ours} by our workspaces (${formatFigure(row.oursUsdc, "usdc")} USDC)`;
 }
 
 export function PaymentsChart({ series }: { series: DailyPayments[] }) {
@@ -131,7 +132,6 @@ function Chart({ series, customers, ours }: { series: DailyPayments[]; customers
             <TableRow>
               <TableHead>Day</TableHead>
               <TableHead className="text-right">Customers</TableHead>
-              <TableHead className="text-right">USDC</TableHead>
               <TableHead className="text-right">Our workspaces</TableHead>
               <TableHead className="text-right">USDC</TableHead>
             </TableRow>
@@ -143,7 +143,6 @@ function Chart({ series, customers, ours }: { series: DailyPayments[]; customers
                 <TableRow key={row.day}>
                   <TableCell className="font-mono">{fullDay(row.day)}</TableCell>
                   <TableCell className="text-right font-mono tabular-nums">{row.customers}</TableCell>
-                  <TableCell className="text-right font-mono tabular-nums">{formatFigure(row.customersUsdc, "usdc")}</TableCell>
                   <TableCell className="text-right font-mono tabular-nums">{row.ours}</TableCell>
                   <TableCell className="text-right font-mono tabular-nums">{formatFigure(row.oursUsdc, "usdc")}</TableCell>
                 </TableRow>

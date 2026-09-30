@@ -57,7 +57,7 @@ async function numbers(argv: string[]) {
   const series = dailySeries(numbers.daily, period).filter((day) => day.customers + day.ours > 0);
   if (series.length > 0) {
     console.log("\nSettled Arc testnet payments by day (UTC)");
-    console.table(Object.fromEntries(series.map((day) => [day.day, { customers: day.customers, ours: day.ours, customersUsdc: day.customersUsdc, oursUsdc: day.oursUsdc }])));
+    console.table(Object.fromEntries(series.map((day) => [day.day, { customers: day.customers, ours: day.ours, oursUsdc: day.oursUsdc }])));
   }
   if (numbers.ourPayments.length > 0) {
     console.log("\nOur own workspaces' latest payments");

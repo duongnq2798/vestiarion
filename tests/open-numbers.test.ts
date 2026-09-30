@@ -29,7 +29,7 @@ const SIDE = {
 const DOCUMENT = {
   generatedAt: "2026-09-30T12:00:00+00:00",
   sides: { customers: SIDE, ours: { ...SIDE, usdcPaid: "3.000000" }, total: SIDE },
-  daily: [{ day: "2026-09-28", customers: 1, ours: 0, customersUsdc: "5.000000", oursUsdc: 0 }],
+  daily: [{ day: "2026-09-28", customers: 1, ours: 2, oursUsdc: "5.000000" }],
   ourPayments: [{ at: "2026-09-27T10:00:00+00:00", amount: "2.000000", txHash: "0xh1", chain: "ARC-TESTNET" }],
 };
 
@@ -73,7 +73,7 @@ describe("parsePeriod", () => {
 });
 
 describe("dailySeries", () => {
-  const day = (d: string, customers = 0, ours = 0): DailyPayments => ({ day: d, customers, ours, customersUsdc: customers, oursUsdc: ours });
+  const day = (d: string, customers = 0, ours = 0): DailyPayments => ({ day: d, customers, ours, oursUsdc: ours });
   const all: Period = { key: "all", since: null, label: "All time", query: "", fallback: false };
 
   it("fills every day from the first payment to today with zeros between", () => {
@@ -114,7 +114,7 @@ describe("readOpenNumbers", () => {
       ["/rest/v1/rpc/open_numbers", { p_since: "2026-09-20T00:00:00.000Z" }],
     ]);
     expect(numbers.sides.ours.usdcPaid).toBe(3);
-    expect(numbers.daily[0].customersUsdc).toBe(5);
+    expect(numbers.daily[0]).toEqual({ day: "2026-09-28", customers: 1, ours: 2, oursUsdc: 5 });
     expect(numbers.ourPayments[0]).toEqual({ at: "2026-09-27T10:00:00+00:00", amount: 2, txHash: "0xh1", chain: "ARC-TESTNET" });
   });
 

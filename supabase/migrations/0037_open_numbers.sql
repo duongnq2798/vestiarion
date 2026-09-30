@@ -8,10 +8,16 @@
 --
 -- open_numbers(p_since) is the one reader that crosses workspaces (R2). It is a
 -- security definer function returning a single jsonb document of aggregates:
--- no row of a customer's workspace leaves it, only counts and sums, and only
--- our own workspaces' payments are listed with their hashes (R6). Payments are
--- settled Arc payments only (R4); sample counterparties never count (R5); a
--- null p_since means all time.
+-- no row of a customer's workspace leaves it, only counts and sums (R6).
+-- Payments are listed with their hashes only from the founding workspace and
+-- workspaces a team member opened: a workspace whose creator deleted their
+-- account is counted as ours but never listed, since it may be a former
+-- customer's. A customer's amounts never appear by day, only in the totals.
+-- Payments are settled Arc payments only (R4); a milestone counts as paid when
+-- a settled Arc payment paid it; sample counterparties never count (R5); the
+-- wallet total is Arc testnet USDC as last read from the chain. A person is a
+-- customer when they are off the team and belong to a customer's workspace.
+-- A null p_since means all time.
 --
 -- set_platform_team_member() and platform_team_members() maintain the list
 -- for `npm run numbers -- team …`. All three run for the service role only.
@@ -76,12 +82,14 @@ as $$
     select o.id, o.mode, o.created_at,
            case when o.created_by is not null
                  and not exists (select 1 from public.platform_team t where t.user_id = o.created_by)
-                then 'customers' else 'ours' end as side
+                then 'customers' else 'ours' end as side,
+           o.id = '00000000-0000-4000-8000-000000000001'::uuid
+             or exists (select 1 from public.platform_team t where t.user_id = o.created_by) as listable
       from public.orgs o
   ),
   sides (side) as (values ('customers'), ('ours'), ('total')),
   pay as (
-    select s.side, p.amount, lower(p.destination) as payee, p.tx_hash, p.chain,
+    select s.side, s.listable, p.amount, lower(p.destination) as payee, p.tx_hash, p.chain,
            coalesce(p.executed_at, p.confirmed_at, p.updated_at) as at
       from public.payment_intents p
       join org_side s on s.id = p.org_id
@@ -89,10 +97,11 @@ as $$
        and coalesce(p.executed_at, p.confirmed_at, p.updated_at) >= coalesce(p_since, '-infinity'::timestamptz)
   ),
   person as (
-    select distinct m.user_id,
-           case when exists (select 1 from public.platform_team t where t.user_id = m.user_id)
-                then 'ours' else 'customers' end as side
+    select distinct m.user_id, s.side
       from public.memberships m
+      join org_side s on s.id = m.org_id
+     where s.side = 'ours'
+        or not exists (select 1 from public.platform_team t where t.user_id = m.user_id)
   ),
   inv as (
     select s.side
@@ -108,9 +117,11 @@ as $$
       from public.milestones m
       join org_side s on s.id = m.org_id
       join public.counterparties c on c.id = m.contractor_id
-     where m.status = 'paid'
-       and coalesce(m.settled_at, m.decided_at, m.created_at) >= coalesce(p_since, '-infinity'::timestamptz)
-       and not c.sample
+      join public.payment_intents p
+        on p.org_id = m.org_id and p.source_type = 'milestone' and p.source_id = m.id
+     where m.status = 'paid' and not c.sample
+       and p.provider = 'circle' and p.provider_mode = 'live' and p.status = 'confirmed'
+       and coalesce(p.executed_at, p.confirmed_at, p.updated_at) >= coalesce(p_since, '-infinity'::timestamptz)
   ),
   run as (
     select s.side, r.model_decision_count, r.reference_disagreement_count, r.guardrail_override_count
@@ -123,6 +134,7 @@ as $$
       from public.accounts a
       join org_side s on s.id = a.org_id
      where s.mode = 'live' and a.circle_wallet_id is not null and a.token = 'USDC'
+       and a.chain = 'ARC-TESTNET' and a.balance_synced_at is not null
   )
   select jsonb_build_object(
     'generatedAt', now(),
@@ -131,7 +143,9 @@ as $$
         'workspacesOpened',   (select count(*) from org_side o where sd.side in ('total', o.side)
                                   and o.created_at >= coalesce(p_since, '-infinity'::timestamptz)),
         'liveWorkspaces',     (select count(*) from org_side o where sd.side in ('total', o.side) and o.mode = 'live'),
-        'people',             (select count(distinct x.user_id) from person x where sd.side in ('total', x.side)),
+        'people',             case when sd.side = 'total'
+                                   then (select count(distinct m.user_id) from public.memberships m)
+                                   else (select count(distinct x.user_id) from person x where x.side = sd.side) end,
         'payments',           (select count(*) from pay x where sd.side in ('total', x.side)),
         'usdcPaid',           (select coalesce(sum(x.amount), 0) from pay x where sd.side in ('total', x.side)),
         'payees',             (select count(distinct x.payee) from pay x where sd.side in ('total', x.side)),
@@ -147,12 +161,10 @@ as $$
     ),
     'daily', (
       select coalesce(jsonb_agg(jsonb_build_object(
-               'day', d.day, 'customers', d.customers, 'ours', d.ours,
-               'customersUsdc', d.customers_usdc, 'oursUsdc', d.ours_usdc) order by d.day), '[]'::jsonb)
+               'day', d.day, 'customers', d.customers, 'ours', d.ours, 'oursUsdc', d.ours_usdc) order by d.day), '[]'::jsonb)
         from (select to_char(x.at at time zone 'UTC', 'YYYY-MM-DD') as day,
                      count(*) filter (where x.side = 'customers') as customers,
                      count(*) filter (where x.side = 'ours') as ours,
-                     coalesce(sum(x.amount) filter (where x.side = 'customers'), 0) as customers_usdc,
                      coalesce(sum(x.amount) filter (where x.side = 'ours'), 0) as ours_usdc
                 from pay x
                group by 1) d
@@ -162,7 +174,7 @@ as $$
                'at', y.at, 'amount', y.amount, 'txHash', y.tx_hash, 'chain', y.chain) order by y.at desc), '[]'::jsonb)
         from (select x.at, x.amount, x.tx_hash, x.chain
                 from pay x
-               where x.side = 'ours' and x.tx_hash is not null
+               where x.listable and x.tx_hash is not null
                order by x.at desc
                limit 20) y
     )

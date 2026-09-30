@@ -35,7 +35,7 @@ const side = (scale: number) => ({
 const NUMBERS: OpenNumbers = {
   generatedAt: "2026-09-30T12:00:00+00:00",
   sides: { customers: side(1), ours: side(2), total: side(3) },
-  daily: [{ day: "2026-09-28", customers: 1, ours: 2, customersUsdc: 5, oursUsdc: 3 }],
+  daily: [{ day: "2026-09-28", customers: 1, ours: 2, oursUsdc: 3 }],
   ourPayments: [{ at: "2026-09-27T10:00:00+00:00", amount: 2, txHash: "0xabc1234567890def", chain: "ARC-TESTNET" }],
 };
 
@@ -63,6 +63,10 @@ describe("the /open page", () => {
     expect(columns).toEqual(["Figure", "Customers", "Our workspaces", "Total"]);
     for (const row of OPEN_ROWS) expect(page).toContain(row.label);
     expect(table.match(/<th scope="row"/g)).toHaveLength(OPEN_ROWS.length);
+    // Each label says no more than its figure counts: milestones paid by a settled Arc payment; refusals by code,
+    // whichever path proposed the decision.
+    expect(OPEN_ROWS.find((row) => row.key === "milestonesReleased")?.label).toBe("Contractor milestones paid on Arc testnet");
+    expect(OPEN_ROWS.find((row) => row.key === "refusedByCode")?.label).toBe("Decisions refused by code");
   });
 
   it("writes USDC with two decimals and marks today's totals as now", async () => {
@@ -102,6 +106,11 @@ describe("the /open page", () => {
     expect(page).toContain("Settled payments by day");
     expect(page).toContain("Sep 28, 2026");
     expect(markup).toContain("<details");
+    // A customer's amounts never appear by day, in the tooltip or the table view.
+    const details = markup.slice(markup.indexOf("<details"));
+    const dayColumns = [...details.matchAll(/<th scope="col"[^>]*>(.*?)<\/th>/g)].map((match) => text(match[1]));
+    expect(dayColumns).toEqual(["Day", "Customers", "Our workspaces", "USDC"]);
+    expect(markup).toContain("<title>Sep 28, 2026: 1 by customers, 2 by our workspaces (3.00 USDC)</title>");
   });
 
   it("shows an empty chart state when nothing was paid", async () => {
@@ -119,5 +128,14 @@ describe("the /open page", () => {
     expect(text(markup)).toContain("The numbers could not be read right now.");
     expect(markup).not.toContain("<table");
     expect(markup).not.toContain("open_numbers does not exist");
+  });
+});
+
+describe("the privacy page", () => {
+  it("says the open numbers publish counts and totals only, and never a customer's payment", async () => {
+    const { default: PrivacyPage } = await import("@/app/privacy/page");
+    const page = text(renderToStaticMarkup(<PrivacyPage />));
+    expect(page).toContain("open numbers page shows counts and totals across all workspaces");
+    expect(page).toContain("never lists a customer's payment");
   });
 });

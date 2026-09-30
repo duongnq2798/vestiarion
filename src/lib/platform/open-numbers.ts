@@ -31,11 +31,11 @@ const sideSchema = z.object({
   usdcInWallets: figure,
 });
 
+/** Payments settled on one UTC day. A customer's amounts never appear by day, only their count (spec R6). */
 const dailySchema = z.object({
   day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   customers: figure,
   ours: figure,
-  customersUsdc: figure,
   oursUsdc: figure,
 });
 
@@ -114,7 +114,7 @@ export function dailySeries(daily: DailyPayments[], period: Period, now: Date = 
   const series: DailyPayments[] = [];
   for (let at = Math.max(start, end - (MAX_CHART_DAYS - 1) * DAY_MS); at <= end; at += DAY_MS) {
     const day = new Date(at).toISOString().slice(0, 10);
-    series.push(byDay.get(day) ?? { day, customers: 0, ours: 0, customersUsdc: 0, oursUsdc: 0 });
+    series.push(byDay.get(day) ?? { day, customers: 0, ours: 0, oursUsdc: 0 });
   }
   return series;
 }
