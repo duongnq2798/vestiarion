@@ -1,8 +1,8 @@
-Every decision a workspace's agent or its people make, including a payment on Arc testnet, is appended to the workspace's ledger, hash-linked to the entry before it and signed with Ed25519. The Audit page checks that chain for you. An export lets someone else check it, with their own copy and without Vestiarion: an auditor, your accountant, or a counterparty.
+Every decision a workspace's agent or its people make, including a payment on Arc testnet, is appended to the workspace's ledger, hash-linked to the entry before it and signed with Ed25519. The Audit log page checks that chain for you. An export lets someone else check it, with their own copy and without Vestiarion: an auditor, your accountant, or a counterparty.
 
 ## 1. Download the ledger
 
-Open **Audit**. Next to the verification result, under **Download**, choose:
+Open **Audit log**. Next to the verification result, under **Download**, choose:
 
 - **Signed JSON**: the whole chain, oldest entry first, with the public keys that vouch for it. This is the file that verifies.
 - **CSV**: the same entries as a spreadsheet, one row per entry. It is for reading, not for checking: a spreadsheet may change the text it opens, and cells that would run as formulas are prefixed with `'`.
@@ -37,7 +37,7 @@ It answers with one of three results:
 
 ## 4. Compare the key id and the head
 
-A file can only show that it agrees with itself. Someone who rewrote the entries could re-sign them with a key of their own and put that key in the file. So, before relying on a **VALID** result, compare the key id and head hash the verifier prints with the workspace's **Audit** page. The key id is shown beside **Ledger signing public key**, and the head hash has a copy button. The page says: "Compare this key id and the head hash with the ones a verified export prints."
+A file can only show that it agrees with itself. Someone who rewrote the entries could re-sign them with a key of their own and put that key in the file. So, before relying on a **VALID** result, compare the key id and head hash the verifier prints with the workspace's **Audit log** page. The key id is shown beside **Ledger signing public key**, and the head hash has a copy button. The page says: "Compare this key id and the head hash with the ones a verified export prints."
 
 If you already hold the workspace's public key, pass it in, and only that key is trusted:
 

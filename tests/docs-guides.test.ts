@@ -158,7 +158,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["Remove the sample data first. It exists only to try the agent with simulated payments.", GO_LIVE_LIBRARY],
   ],
   "guides/audit-export": [
-    ["Audit", APP_NAV],
+    ["Audit log", APP_NAV],
     ["Download", EXPORT_MENU],
     ["Signed JSON", EXPORT_MENU],
     ["CSV", EXPORT_MENU],
