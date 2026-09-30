@@ -70,7 +70,7 @@ export async function runLiveOrganizations<T>(run: () => Promise<T>): Promise<Cr
  * returned.
  */
 export async function runScheduledCycle(): Promise<CycleResult> {
-  const result = await runAgentCycle();
+  const result = await runAgentCycle({ trigger: { kind: "schedule" } });
   try {
     await notifyWaitingDecisions();
   } catch (error) {

@@ -150,8 +150,8 @@ describe("runScheduledCycle", () => {
       { slug: "b-corp", ok: true, result: { lines: [] } },
     ]);
     expect(order).toEqual([`cycle ${A}`, `notify ${A}`, `cycle ${B}`, `notify ${B}`]);
-    // Only the scheduled path starts a cycle this way, with no options (N1).
-    expect(runAgentCycleMock).toHaveBeenCalledWith();
+    // Only the scheduled path starts a cycle this way: no person, no cap (N1), and the schedule as its trigger.
+    expect(runAgentCycleMock).toHaveBeenCalledWith({ trigger: { kind: "schedule" } });
   });
 
   it("does not notify for a failed cycle or one refused by a pause", async () => {

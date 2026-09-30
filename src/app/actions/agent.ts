@@ -32,6 +32,7 @@ export async function runAgentCycleAction(orgSlug: string): Promise<AgentActionR
       const result = await runAgentCycle({
         triggeredBy: auth.user.id,
         dailyCap: auth.membership.mode === "sandbox" ? SANDBOX_DAILY_CYCLES : undefined,
+        trigger: { kind: "manual" },
       });
       revalidateOrgPages();
       return {

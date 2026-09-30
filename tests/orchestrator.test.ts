@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
-import { agentCycleSuccessMessage, cycleCompleteSummary, runAgentCycle } from "@/lib/agent/orchestrator";
+import { agentCycleSuccessMessage, cycleCompleteSummary, runAgentCycle, triggerDetail } from "@/lib/agent/orchestrator";
 import { fakeSupabase, orgTestContext, type RecordedRequest } from "./support/fake-supabase";
 
 /**
@@ -94,6 +94,24 @@ describe("runAgentCycle — opens the run through begin_cycle_run before anythin
     expect(advanceIndex).toBeGreaterThan(beginIndex);
     expect(patchIndex).toBeGreaterThan(advanceIndex);
     expect(fake.requests[patchIndex].body).toEqual({ sim_day: 3 });
+  });
+});
+
+describe("triggerDetail — what started a cycle, as cycle_complete records it", () => {
+  it("names an event cycle's events", () => {
+    expect(triggerDetail({ kind: "event", events: ["invoice_added", "sample_loaded"] })).toEqual({
+      trigger: "event",
+      events: ["invoice_added", "sample_loaded"],
+    });
+  });
+
+  it("names a person's run and the schedule's", () => {
+    expect(triggerDetail({ kind: "manual" })).toEqual({ trigger: "manual" });
+    expect(triggerDetail({ kind: "schedule" })).toEqual({ trigger: "schedule" });
+  });
+
+  it("adds nothing when nothing says what started it (a script)", () => {
+    expect(triggerDetail(undefined)).toEqual({});
   });
 });
 
