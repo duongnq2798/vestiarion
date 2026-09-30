@@ -50,7 +50,7 @@ It was decided on 2026-09-30 by the implementer under the partner's standing ins
 - **Obligations.** `scheduled` joins the open payable statuses. A scheduled invoice counts toward the treasury buffer at its `scheduled_for` date, the day it will leave, and otherwise at its due date.
 - **What a person sees:**
   - **Decision cards:** a scheduled invoice reads "Scheduled for <date>", with the reason.
-  - **Invoices page:** the status reads "Scheduled · <date>", and the terms show as "<pct>% off if paid by <date>".
+  - **Invoices page:** each invoice is its decision card, so the badge is its status: "Scheduled for <date>" for a scheduled one, and never "Scheduled" otherwise ("Not yet decided" while pending, "Payment in flight" while matched). The terms show as "<pct>% off if paid by <date>".
   - **Console:** a "Scheduled payments" section lists what the agent will pay next (date, counterparty, amount, and whether it takes a discount), each with its reason.
   - **Pausing the agent** stops scheduled payments like any other.
 - **API and docs.**

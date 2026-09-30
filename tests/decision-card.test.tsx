@@ -2,7 +2,9 @@ import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { DecisionCard } from "@/components/vx/DecisionCard";
+import { invoiceDecision } from "@/components/vx/map";
 import type { Decision } from "@/components/vx/types";
+import type { InvoiceRow } from "@/lib/queries";
 
 const html = (node: ReactElement) => renderToStaticMarkup(node);
 
@@ -66,5 +68,51 @@ describe("DecisionCard", () => {
     const markup = html(<DecisionCard decision={{ ...base, evidence: [{ label: "PR", value: "acme-pr#12", href: "https://github.com/acme/pull/12", state: "ok" }] }} orgSlug="acme" />);
     expect(markup).toContain('href="https://github.com/acme/pull/12"');
     expect(markup).toContain('target="_blank"');
+  });
+});
+
+/**
+ * An invoice's card, as the AP / AR page renders it: the badge says where the
+ * invoice is, and only a scheduled one says Scheduled, with its day.
+ */
+describe("DecisionCard for an invoice", () => {
+  const invoice = (overrides: Partial<InvoiceRow>): InvoiceRow => ({
+    id: "inv-1",
+    direction: "payable",
+    counterparty_id: "cp-1",
+    counterparty_name: "Northwind Supply",
+    amount: 400,
+    memo: "Annual support plan",
+    po_reference: "PO-9",
+    goods_received: true,
+    due_date: "2026-10-30T12:00:00.000Z",
+    status: "pending",
+    agent_reasoning: null,
+    tx_ref: null,
+    scheduled_for: null,
+    early_pay_discount_pct: null,
+    discount_due_date: null,
+    paid_amount: null,
+    ...overrides,
+  });
+  const cardFor = (row: InvoiceRow) => html(<DecisionCard decision={invoiceDecision(row, undefined, [])} orgSlug="acme" />);
+
+  it("reads Not yet decided for a pending invoice", () => {
+    const markup = cardFor(invoice({ status: "pending" }));
+    expect(markup).toContain("Not yet decided");
+    expect(markup).not.toContain("Scheduled");
+  });
+
+  it("reads Payment in flight for a matched invoice", () => {
+    const markup = cardFor(invoice({ status: "matched", tx_ref: "circle-tx-1" }));
+    expect(markup).toContain("Payment in flight");
+    expect(markup).not.toContain("Scheduled");
+  });
+
+  it("reads Scheduled for <date> for a scheduled invoice, once", () => {
+    const markup = cardFor(invoice({ status: "scheduled", scheduled_for: "2026-10-10T00:00:00.000Z" }));
+    expect(markup).toContain("Scheduled for Oct 10, 2026");
+    expect(markup.match(/Oct 10, 2026/g)).toHaveLength(1);
+    expect(markup).not.toContain("Scheduled ·");
   });
 });

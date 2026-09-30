@@ -125,7 +125,7 @@ An invoice does not have to be paid the moment it is decided. At intake, a payab
 
 A scheduled invoice's decision card reads "Scheduled for *date*", with the agent's reasoning for choosing that day. On the day itself, the next cycle checks everything again before anything moves: the counterparty's risk level, its payment limit, whether its address is confirmed, and whether the agent is paused. Pausing the agent stops a scheduled payment exactly as it stops any other.
 
-A scheduled invoice's status on **AP / AR** reads "Scheduled · *date*", and an invoice with an early-payment discount shows its terms as "*pct*% off if paid by *date*". The console's **Scheduled payments** section lists what the agent will pay next, soonest first: the date, the counterparty, the amount it will actually transfer — discounted, when the discount will still apply that day — and why.
+An invoice with an early-payment discount shows its terms on its card as "*pct*% off if paid by *date*". Until the agent has decided a payable, its card reads "Not yet decided", and while its transfer is in flight, "Payment in flight". The console's **Scheduled payments** section lists what the agent will pay next, soonest first: the date, the counterparty, the amount it will actually transfer — discounted, when the discount will still apply that day — and why.
 
 ## 5. Approve a held payment
 

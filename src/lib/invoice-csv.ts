@@ -77,4 +77,5 @@ export function parseInvoiceCsv(csv: string): InvoiceCsvRow[] {
   });
 }
 
-export const INVOICE_CSV_TEMPLATE = `${REQUIRED_HEADERS.join(",")}\npayable,Vendor name,100.00,Invoice memo,PO-100,true,2026-10-15`;
+/** Every column, the two optional discount ones included but blank in the sample row: an invoice without early-payment terms. */
+export const INVOICE_CSV_TEMPLATE = `${ALL_HEADERS.join(",")}\npayable,Vendor name,100.00,Invoice memo,PO-100,true,2026-10-15,,`;

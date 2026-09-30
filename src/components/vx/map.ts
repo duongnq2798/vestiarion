@@ -1,3 +1,4 @@
+import { committedState } from "@/lib/agent/duplicates";
 import { invoiceDiscount } from "@/lib/agent/payment-timing";
 import { utcDay } from "@/lib/copy";
 import type { LedgerEntry } from "@/lib/ledger";
@@ -30,12 +31,14 @@ function duplicateEvidence(observed: Record<string, unknown> | undefined): Evide
 
   const strongest = record(matches[0]);
   const confidence = numberValue(strongest?.confidence);
-  const settled = stringValue(strongest?.otherInvoiceStatus) === "paid";
+  // Worded as the match's own explanation words it (./duplicates.ts): already
+  // paid, being paid, scheduled or being decided by a person.
+  const committed = committedState(stringValue(strongest?.otherInvoiceStatus) ?? "");
   return {
     label: "Duplicate check",
     value: `${matches.length} match${matches.length === 1 ? "" : "es"}${
       confidence == null ? "" : ` at ${(confidence * 100).toFixed(0)}%`
-    }${settled ? " against an invoice already paid" : ""}`,
+    }${committed ? ` against an invoice ${committed}` : ""}`,
     state: "missing",
   };
 }
@@ -69,12 +72,6 @@ function termsEvidence(invoice: InvoiceRow): Evidence | null {
   return { label: "Terms", value: `${discount.pct}% off if paid by ${utcDay(discount.deadline)}`, state: "neutral" };
 }
 
-/** The day the agent committed to pay, for an invoice still waiting for it. */
-function scheduledStatusEvidence(invoice: InvoiceRow): Evidence | null {
-  if (invoice.status !== "scheduled" || !invoice.scheduled_for) return null;
-  return { label: "Status", value: `Scheduled · ${utcDay(invoice.scheduled_for)}`, state: "neutral" };
-}
-
 /**
  * What actually left, when it paid less than the invoice's full amount — an
  * early-payment discount taken. `invoice.amount` is never reduced, so this is
@@ -85,6 +82,32 @@ function paidEvidence(invoice: InvoiceRow): Evidence | null {
   const pct = invoice.early_pay_discount_pct == null ? null : Number(invoice.early_pay_discount_pct);
   const note = pct != null && Number.isFinite(pct) ? ` (${pct}% discount)` : "";
   return { label: "Paid", value: `${fmt(invoice.paid_amount)} USDC${note}`, state: "ok" };
+}
+
+/**
+ * What the outcome badge says for an invoice whose outcome word alone would
+ * mislead: only a scheduled invoice reads "Scheduled", with its day. A
+ * pending one has not been decided yet, a matched one has a transfer in
+ * flight, and a processing one is with a person on Approvals, though all
+ * three share the neutral outcome.
+ */
+function invoiceOutcomeLabel(invoice: InvoiceRow, guardrailBlocked: boolean): string | undefined {
+  switch (invoice.status) {
+    case "awaiting_info":
+      return "Awaiting info";
+    case "flagged":
+      return guardrailBlocked ? undefined : "Flagged for review";
+    case "scheduled":
+      return invoice.scheduled_for ? `Scheduled for ${utcDay(invoice.scheduled_for)}` : undefined;
+    case "pending":
+      return "Not yet decided";
+    case "matched":
+      return "Payment in flight";
+    case "processing":
+      return "Being decided by a person";
+    default:
+      return undefined;
+  }
 }
 
 function statusOutcome(status: string, txRef: string | null, guardrailBlocked: boolean): Outcome {
@@ -114,14 +137,7 @@ export function invoiceDecision(invoice: InvoiceRow, counterparty: CounterpartyR
     amount: invoice.amount,
     token: "USDC",
     outcome,
-    outcomeLabel:
-      invoice.status === "awaiting_info"
-        ? "Awaiting info"
-        : invoice.status === "flagged" && !guardrailBlocked
-          ? "Flagged for review"
-          : invoice.status === "scheduled" && invoice.scheduled_for
-            ? `Scheduled for ${utcDay(invoice.scheduled_for)}`
-            : undefined,
+    outcomeLabel: invoiceOutcomeLabel(invoice, guardrailBlocked),
     reasoning: invoice.agent_reasoning ?? "The agent has not evaluated this invoice yet.",
     evidence: [
       { label: "PO", value: invoice.po_reference ?? "none", state: invoice.po_reference ? "ok" : "missing" },
@@ -130,7 +146,6 @@ export function invoiceDecision(invoice: InvoiceRow, counterparty: CounterpartyR
       { label: "Limit", value: counterparty?.payment_limit == null ? "none" : `${fmt(counterparty.payment_limit)} USDC`, state: counterparty?.payment_limit != null && invoice.amount > counterparty.payment_limit ? "missing" : "neutral" },
       { label: "Due", value: new Date(invoice.due_date).toLocaleDateString("en-US"), state: "neutral" },
       termsEvidence(invoice),
-      scheduledStatusEvidence(invoice),
       paidEvidence(invoice),
       duplicateEvidence(observed),
     ].filter((item): item is Evidence => item !== null),

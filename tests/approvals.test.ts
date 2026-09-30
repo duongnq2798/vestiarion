@@ -1100,12 +1100,33 @@ describe("listWaitingPayables", () => {
         paymentSent: false,
         address: "0xdead",
         lastAttempt: null,
+        discount: null,
       },
     ]);
     const listing = fake.requests.find((r) => r.path === "/rest/v1/invoices" && r.method === "GET" && !r.params.get("id"));
     expect(listing?.params.get("direction")).toBe("eq.payable");
     expect(listing?.params.get("status")).toBe("in.(held,flagged,awaiting_info,processing)");
     expect(listing?.params.get("order")).toBe("due_date.asc");
+  });
+
+  it("reads each row's early-payment discount the way payInvoice applies it, so the approval dialog can say what will leave", async () => {
+    const rows = [
+      invoiceRow({ id: "terms", early_pay_discount_pct: "2.00", discount_due_date: "2026-10-11T12:00:00+00:00" }),
+      invoiceRow({ id: "no-terms", early_pay_discount_pct: null, discount_due_date: null }),
+      invoiceRow({ id: "unreadable", early_pay_discount_pct: "0", discount_due_date: "2026-10-11T12:00:00+00:00" }),
+    ];
+    const { fake, run } = approvalsFake({ invoice: (r) => (r.params.get("id") ? undefined : { body: rows }) });
+
+    const listed = await run(() => listWaitingPayables());
+
+    expect(Object.fromEntries(listed.map((row) => [row.id, row.discount]))).toEqual({
+      terms: { pct: 2, deadline: "2026-10-11T12:00:00+00:00" },
+      "no-terms": null,
+      unreadable: null,
+    });
+    const listing = fake.requests.find((r) => r.path === "/rest/v1/invoices" && r.method === "GET" && !r.params.get("id"));
+    expect(listing?.params.get("select")).toContain("early_pay_discount_pct");
+    expect(listing?.params.get("select")).toContain("discount_due_date");
   });
 
   it("marks a processing row reclaimable once its claim is over 10 minutes old or has no reviewed_at, as the claim does", async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseInvoiceCsv } from "@/lib/invoice-csv";
+import { INVOICE_CSV_TEMPLATE, parseInvoiceCsv } from "@/lib/invoice-csv";
 import { counterpartyInputSchema, csvInvoiceInputSchema, firstZodMessage, invoiceInputSchema, usdcAmountSchema } from "@/lib/intake-validation";
 
 describe("USDC intake precision", () => {
@@ -204,6 +204,20 @@ describe("invoice CSV parser", () => {
 
   it("requires at least one invoice row", () => {
     expect(() => parseInvoiceCsv(header)).toThrow("at least one invoice row");
+  });
+
+  it("offers a template with the optional discount columns in its header, blank in the sample row, that imports as it is", () => {
+    const [templateHeader, sample, ...rest] = INVOICE_CSV_TEMPLATE.split("\n");
+    expect(rest).toEqual([]);
+    expect(templateHeader).toBe(`${header},early_pay_discount_pct,discount_deadline`);
+    expect(sample).toBe("payable,Vendor name,100.00,Invoice memo,PO-100,true,2026-10-15,,");
+
+    const rows = parseInvoiceCsv(INVOICE_CSV_TEMPLATE);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ counterparty: "Vendor name", due_date: "2026-10-15", early_pay_discount_pct: "", discount_deadline: "" });
+    const result = csvInvoiceInputSchema.safeParse(rows[0]);
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data).toMatchObject({ early_pay_discount_pct: null, discount_deadline: null });
   });
 
   it("parses the optional discount columns when present, and leaves them blank when absent", () => {

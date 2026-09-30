@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
-import { createInvoiceAction } from "@/app/actions/intake";
+import { createInvoiceAction, importInvoicesAction } from "@/app/actions/intake";
 import { fakeSupabase, type RecordedRequest } from "./support/fake-supabase";
 
 /**
- * `createInvoiceAction` against a real supabase-js client whose network is a
- * recorder. Two stand-ins, both for things a node test cannot have: the
+ * `createInvoiceAction` and `importInvoicesAction` against a real supabase-js
+ * client whose network is a recorder. Two stand-ins, both for things a node test cannot have: the
  * `server-only` marker, which Next resolves itself and which is not installed
  * as a package, and the signed-in session behind `authorize`, which
  * reads request cookies. Everything after authorization is the real action,
@@ -55,7 +55,8 @@ function organizationDatabase(counterparties: Array<{ id: string; name: string }
     }
     const wantsObject = sent.headers.get("accept")?.includes("application/vnd.pgrst.object+json") ?? false;
     if (sent.path === "/rest/v1/counterparties") {
-      const found = counterparties.filter((row) => sent.params.get("id") === `eq.${row.id}`);
+      // The form looks one up by id; the CSV import reads them all, to match by name.
+      const found = sent.params.get("id") ? counterparties.filter((row) => sent.params.get("id") === `eq.${row.id}`) : counterparties;
       if (!wantsObject) return { body: found };
       if (found.length === 1) return { body: found[0] };
       return {
@@ -63,7 +64,10 @@ function organizationDatabase(counterparties: Array<{ id: string; name: string }
         body: { code: "PGRST116", details: "The result contains 0 rows", hint: null, message: "Cannot coerce the result to a single JSON object" },
       };
     }
-    if (sent.path === "/rest/v1/invoices" && sent.method === "POST") return { body: { id: "0b6c1c9e-4a4f-4a7e-9b1e-0000000001a1" } };
+    if (sent.path === "/rest/v1/invoices" && sent.method === "POST") {
+      const id = (index: number) => `0b6c1c9e-4a4f-4a7e-9b1e-0000000001a${index + 1}`;
+      return { body: Array.isArray(sent.body) ? sent.body.map((_, index) => ({ id: id(index) })) : { id: id(0) } };
+    }
     return { body: [] };
   };
 }
@@ -109,5 +113,46 @@ describe("createInvoiceAction's counterparty lookup", () => {
 
     const insert = fake.requests.find((sent) => sent.path === "/rest/v1/invoices" && sent.method === "POST");
     expect(insert?.body).toMatchObject({ early_pay_discount_pct: "2", discount_due_date: "2026-10-20T12:00:00.000Z" });
+  });
+});
+
+describe("importInvoicesAction's insert", () => {
+  const csvRow = (overrides: Record<string, string> = {}) => ({
+    direction: "payable",
+    counterparty: "Acme Supplies",
+    amount: "10.50",
+    memo: "Services",
+    po_reference: "PO-42",
+    goods_received: "true",
+    due_date: "2026-10-31",
+    early_pay_discount_pct: "",
+    discount_deadline: "",
+    ...overrides,
+  });
+  function importForm(rows: Array<Record<string, string>>): FormData {
+    const form = new FormData();
+    form.set("orgSlug", "northstar");
+    form.set("rowsJson", JSON.stringify(rows));
+    return form;
+  }
+
+  it("inserts a row's discount percent and its deadline at noon UTC, and no terms for a row that leaves them blank", async () => {
+    const fake = fakeSupabase(organizationDatabase([{ id: COUNTERPARTY, name: "Acme Supplies" }]));
+    const rows = [csvRow({ early_pay_discount_pct: "2", discount_deadline: "2026-10-20" }), csvRow({ po_reference: "PO-43" })];
+    await runWith({ config, db: fake.client, fetch: fake.fetch }, () => importInvoicesAction({ ok: false, message: "" }, importForm(rows)));
+
+    const inserts = fake.requests.filter((sent) => sent.path === "/rest/v1/invoices" && sent.method === "POST");
+    expect(inserts).toHaveLength(1);
+    const body = inserts[0].body as Array<Record<string, unknown>>;
+    expect(body).toHaveLength(2);
+    expect(body[0]).toMatchObject({
+      counterparty_id: COUNTERPARTY,
+      org_id: ORG,
+      created_by: USER,
+      due_date: "2026-10-31T12:00:00.000Z",
+      early_pay_discount_pct: "2",
+      discount_due_date: "2026-10-20T12:00:00.000Z",
+    });
+    expect(body[1]).toMatchObject({ counterparty_id: COUNTERPARTY, po_reference: "PO-43", early_pay_discount_pct: null, discount_due_date: null });
   });
 });

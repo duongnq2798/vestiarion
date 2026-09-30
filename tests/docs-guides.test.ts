@@ -169,8 +169,9 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["Early-payment discount (%)", INVOICE_FORM],
     ["Discount deadline", INVOICE_FORM],
     ["Scheduled for", MAP],
-    ["Scheduled ·", MAP],
     ["% off if paid by", MAP],
+    ["Not yet decided", MAP],
+    ["Payment in flight", MAP],
     ["Scheduled payments", SCHEDULED_PAYMENTS],
   ],
   "guides/audit-export": [

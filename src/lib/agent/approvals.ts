@@ -258,6 +258,8 @@ export interface WaitingPayable {
   address: string | null;
   /** The last payment attempt, when Circle ended it in a terminal failure (Approve and pay sends a new transfer) or it is still in flight; else null. */
   lastAttempt: LastPaymentAttempt;
+  /** The invoice's early-payment discount, read as `payInvoice` applies it, so the approval dialog can say what will leave; null without one. */
+  discount: InvoiceDiscount | null;
 }
 
 /** Every payable currently waiting for a person's decision — held, flagged, awaiting more information, or claimed by someone else right now. */
@@ -265,7 +267,9 @@ export async function listWaitingPayables(): Promise<WaitingPayable[]> {
   const rows = unwrap(
     await db()
       .from("invoices")
-      .select("id, amount, due_date, status, agent_reasoning, decided_at, created_by, reviewed_at, counterparty_id, counterparties(name, risk_level, address)")
+      .select(
+        "id, amount, due_date, status, agent_reasoning, decided_at, created_by, reviewed_at, counterparty_id, early_pay_discount_pct, discount_due_date, counterparties(name, risk_level, address)"
+      )
       .eq("direction", "payable")
       .in("status", WAITING_STATUSES)
       .order("due_date", { ascending: true })
@@ -279,6 +283,8 @@ export async function listWaitingPayables(): Promise<WaitingPayable[]> {
     created_by: string | null;
     reviewed_at: string | null;
     counterparty_id: string;
+    early_pay_discount_pct?: string | number | null;
+    discount_due_date?: string | null;
     counterparties: { name: string; risk_level: string; address: string | null } | null;
   }>;
 
@@ -313,6 +319,7 @@ export async function listWaitingPayables(): Promise<WaitingPayable[]> {
       paymentSent: paymentWasSent(intent),
       address: row.counterparties?.address ?? null,
       lastAttempt: lastAttemptOf(intent),
+      discount: invoiceDiscount(row),
     };
   });
 }
