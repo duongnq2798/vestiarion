@@ -84,41 +84,87 @@ try {
 if (known.size === 0) finish(2, "NOT CHECKED: no public key to check the signatures with");
 
 const trusted = [...known.keys()].join(", ");
-let expectedPrev = GENESIS;
 
-for (const entry of doc.entries) {
-  const at = `entry #${entry.seq}`;
-  const bodyHash = sha256(
-    canonicalJson({ actor: entry.actor, domain: entry.domain, action: entry.action, summary: entry.summary, detail: entry.detail })
-  );
-  if (bodyHash !== entry.body_hash) finish(1, `BROKEN at ${at}: its content does not match its recorded body hash`);
+// An export is data from outside the app, and an auditor runs this on a file
+// they do not necessarily trust. A malformed entry is reported as BROKEN, not
+// crashed on: every field the checks below rely on is validated as the right
+// shape *before* it is hashed, hex-decoded or compared.
+const REQUIRED_STRING_FIELDS = ["actor", "domain", "action", "summary", "body_hash", "signature", "prev_hash", "hash"];
+const HEX_PAIRS = /^([0-9a-f]{2})*$/i;
 
-  let candidates;
-  if (entry.signing_key_id) {
-    const key = known.get(entry.signing_key_id);
-    if (!key) {
-      finish(2, `NOT CHECKED: ${at} was signed by key ${entry.signing_key_id}, which is not among the trusted keys (${trusted})`);
-    }
-    candidates = [key];
-  } else {
-    // Entries written before key ids existed name no key; any trusted key may have signed them.
-    candidates = [...known.values()];
-  }
-  const signed = candidates.some((key) =>
-    crypto.verify(null, Buffer.from(entry.body_hash, "hex"), key, Buffer.from(entry.signature, "hex"))
-  );
-  if (!signed) finish(1, `BROKEN at ${at}: its signature does not verify against the trusted keys (${trusted})`);
-
-  if (entry.prev_hash !== expectedPrev) finish(1, `BROKEN at ${at}: prev_hash does not match the preceding entry's hash`);
-  if (sha256(entry.prev_hash + entry.body_hash + entry.signature) !== entry.hash) {
-    finish(1, `BROKEN at ${at}: its hash does not match prev_hash + body_hash + signature`);
-  }
-  expectedPrev = entry.hash;
+// `#<seq>` once seq is known to be a real integer; otherwise the entry cannot
+// even name itself, so it is named by its position in the file instead.
+function entryLabel(entry, position) {
+  return entry && typeof entry === "object" && Number.isSafeInteger(entry.seq) ? `#${entry.seq}` : `number ${position}`;
 }
 
-const last = doc.entries[doc.entries.length - 1];
-if (last && (doc.head?.seq !== last.seq || doc.head?.hash !== last.hash)) {
-  finish(1, `BROKEN: the file's head does not name its last entry (#${last.seq})`);
+function invalidField(entry, position, field) {
+  finish(1, `BROKEN at entry ${entryLabel(entry, position)}: it is missing or has an invalid ${field}`);
+}
+
+function validateEntryShape(entry, position) {
+  if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
+    invalidField(entry, position, "entry");
+  }
+  if (!Number.isSafeInteger(entry.seq)) invalidField(entry, position, "seq");
+  for (const field of REQUIRED_STRING_FIELDS) {
+    if (typeof entry[field] !== "string") invalidField(entry, position, field);
+  }
+  if (!Object.prototype.hasOwnProperty.call(entry, "detail")) invalidField(entry, position, "detail");
+  if (entry.signing_key_id !== undefined && entry.signing_key_id !== null && typeof entry.signing_key_id !== "string") {
+    invalidField(entry, position, "signing_key_id");
+  }
+  for (const field of ["body_hash", "signature"]) {
+    if (!HEX_PAIRS.test(entry[field])) {
+      finish(1, `BROKEN at entry ${entryLabel(entry, position)}: its ${field} is not hex`);
+    }
+  }
+}
+
+// A last resort, not the normal path: every field the code below reads has
+// already been checked above. This only catches what validation did not
+// anticipate, and turns it into NOT CHECKED instead of a stack trace.
+let last;
+try {
+  let expectedPrev = GENESIS;
+
+  doc.entries.forEach((entry, index) => {
+    validateEntryShape(entry, index + 1);
+    const at = `entry ${entryLabel(entry, index + 1)}`;
+    const bodyHash = sha256(
+      canonicalJson({ actor: entry.actor, domain: entry.domain, action: entry.action, summary: entry.summary, detail: entry.detail })
+    );
+    if (bodyHash !== entry.body_hash) finish(1, `BROKEN at ${at}: its content does not match its recorded body hash`);
+
+    let candidates;
+    if (entry.signing_key_id) {
+      const key = known.get(entry.signing_key_id);
+      if (!key) {
+        finish(2, `NOT CHECKED: ${at} was signed by key ${entry.signing_key_id}, which is not among the trusted keys (${trusted})`);
+      }
+      candidates = [key];
+    } else {
+      // Entries written before key ids existed name no key; any trusted key may have signed them.
+      candidates = [...known.values()];
+    }
+    const signed = candidates.some((key) =>
+      crypto.verify(null, Buffer.from(entry.body_hash, "hex"), key, Buffer.from(entry.signature, "hex"))
+    );
+    if (!signed) finish(1, `BROKEN at ${at}: its signature does not verify against the trusted keys (${trusted})`);
+
+    if (entry.prev_hash !== expectedPrev) finish(1, `BROKEN at ${at}: prev_hash does not match the preceding entry's hash`);
+    if (sha256(entry.prev_hash + entry.body_hash + entry.signature) !== entry.hash) {
+      finish(1, `BROKEN at ${at}: its hash does not match prev_hash + body_hash + signature`);
+    }
+    expectedPrev = entry.hash;
+  });
+
+  last = doc.entries[doc.entries.length - 1];
+  if (last && (doc.head?.seq !== last.seq || doc.head?.hash !== last.hash)) {
+    finish(1, `BROKEN: the file's head does not name its last entry (#${last.seq})`);
+  }
+} catch (error) {
+  finish(2, `NOT CHECKED: the file could not be checked (${error.message})`);
 }
 
 finish(

@@ -39,7 +39,12 @@ function run(rows: LedgerRow[], extra: string[] = [], keyring: LedgerKeyring = r
   const file = path.join(dir, `export-${++n}.json`);
   writeFileSync(file, JSON.stringify(parsed));
   const result = spawnSync(process.execPath, [SCRIPT, file, ...extra], { encoding: "utf8" });
-  return { code: result.status, out: `${result.stdout}${result.stderr}`, first: result.stdout.split("\n")[0] };
+  return {
+    code: result.status,
+    out: `${result.stdout}${result.stderr}`,
+    first: result.stdout.split("\n")[0],
+    stderr: result.stderr,
+  };
 }
 
 const expected = (rows: LedgerRow[], keyring: LedgerKeyring = ring) => {
@@ -126,5 +131,48 @@ describe("verify-ledger-export.mjs", () => {
 
   it("verifies an empty chain as VALID with nothing to compare but the key", () => {
     expect(run([]).code).toBe(0);
+  });
+
+  // A malformed entry is data from outside the app: the script must report it
+  // as BROKEN, never crash with a stack trace (fix round 1).
+  it("answers BROKEN (exit 1) for an entry that is null, without crashing", () => {
+    const result = run(intact(), [], ring, (doc) => {
+      (doc.entries as unknown[])[0] = null;
+    });
+    expect(result.code).toBe(1);
+    expect(result.first).toMatch(/^BROKEN/);
+    expect(result.stderr).not.toContain("    at ");
+  });
+
+  it("answers BROKEN (exit 1) naming signature and #2 when the second entry's signature is deleted", () => {
+    const result = run(intact(), [], ring, (doc) => {
+      const entries = doc.entries as Array<Record<string, unknown>>;
+      delete entries[1].signature;
+    });
+    expect(result.code).toBe(1);
+    expect(result.first).toMatch(/^BROKEN/);
+    expect(result.out).toContain("signature");
+    expect(result.out).toContain("#2");
+    expect(result.stderr).not.toContain("    at ");
+  });
+
+  it("answers BROKEN (exit 1) when a signature is not hex", () => {
+    const result = run(intact(), [], ring, (doc) => {
+      const entries = doc.entries as Array<Record<string, unknown>>;
+      entries[1].signature = "zz";
+    });
+    expect(result.code).toBe(1);
+    expect(result.first).toMatch(/^BROKEN/);
+    expect(result.stderr).not.toContain("    at ");
+  });
+
+  it("answers BROKEN (exit 1) when seq is a string", () => {
+    const result = run(intact(), [], ring, (doc) => {
+      const entries = doc.entries as Array<Record<string, unknown>>;
+      entries[0].seq = "1";
+    });
+    expect(result.code).toBe(1);
+    expect(result.first).toMatch(/^BROKEN/);
+    expect(result.stderr).not.toContain("    at ");
   });
 });
