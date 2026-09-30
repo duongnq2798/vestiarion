@@ -162,6 +162,38 @@ describe("ApprovalCard", () => {
     expect(card()).not.toContain("A payment was already sent");
   });
 
+  it("says why the last payment attempt failed, and still offers all three decisions", () => {
+    const markup = card({ lastAttempt: { state: "failed", reason: "Insufficient funds" } });
+    expect(markup).toContain("The last payment attempt failed: Insufficient funds. Approving sends a new transfer.");
+    expect(markup).toContain("Approve and pay");
+    expect(markup).toContain("Reject");
+    expect(markup).toContain("Return to agent");
+    expect(markup).not.toMatch(APPROVE_DISABLED);
+  });
+
+  it("says a payment still in flight can only be approved, which checks it again", () => {
+    const markup = card({ lastAttempt: { state: "in_flight" } });
+    expect(markup).toContain(
+      "The payment is still in flight on Arc testnet. It cannot be rejected or returned until Circle settles it; approving checks it again."
+    );
+    expect(markup).toContain("Approve and pay");
+    expect(markup).not.toMatch(APPROVE_DISABLED);
+    expect(markup).not.toContain("Reject");
+    expect(markup).not.toContain("Return to agent");
+  });
+
+  it("shows the in-flight line instead of the sent-payment line when a payment already sent is in flight", () => {
+    const markup = card({ paymentSent: true, lastAttempt: { state: "in_flight" } });
+    expect(markup).not.toContain("A payment was already sent; Approve and pay records it.");
+    expect(markup).toContain("still in flight on Arc testnet");
+  });
+
+  it("does not mention a last payment attempt otherwise", () => {
+    const markup = card();
+    expect(markup).not.toContain("The last payment attempt failed");
+    expect(markup).not.toContain("still in flight on Arc testnet");
+  });
+
   it("offers nothing on an unfinished claim to someone who may not decide", () => {
     const markup = card({ status: "processing", reclaimable: true }, { canDecide: false });
     expect(markup).not.toContain("<button");

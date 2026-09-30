@@ -124,6 +124,8 @@ Owners, admins and approvers decide each one:
 
 **Approve and pay** is disabled in two cases, and the card says why. "You created this invoice" means that the person who added an invoice cannot also approve it. "Screened high risk" means that a high-risk counterparty is never paid.
 
+If a payment attempt fails, the card says "The last payment attempt failed: " and Circle's reason, then "Approving sends a new transfer." Fix the cause first if you need to — for example, fund the operating wallet — then choose **Approve and pay** again to send it. Vestiarion never sends a second transfer while the first could still settle: a payment still in flight on Arc testnet instead says "The payment is still in flight on Arc testnet. It cannot be rejected or returned until Circle settles it; approving checks it again." Only **Reject** and **Return to agent** go away then — **Approve and pay** stays, because approving is the only way an in-flight transfer is ever reconciled, and it never sends a second one.
+
 ## 6. See it on Arc and in the audit log
 
 **On the Arc explorer.** On a settled decision card, the transaction hash is a link. It opens the transaction on the Arc testnet explorer, at `https://testnet.arcscan.app/tx/` followed by the hash, in a new tab.
