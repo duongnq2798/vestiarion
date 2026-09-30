@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import PayeeLinkControl, { CreatedPayeeLink } from "@/components/intake/PayeeLinkControl";
+import PayeeLinkControl, { counterpartiesRefreshMs, CreatedPayeeLink } from "@/components/intake/PayeeLinkControl";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 
 vi.mock("@/app/actions/payee-links", () => ({ createPayeeLinkAction: vi.fn(), revokePayeeLinkAction: vi.fn() }));
@@ -59,5 +59,16 @@ describe("CreatedPayeeLink", () => {
     expect(page).toContain("Copy link");
     expect(page).toContain("It works once and expires Oct 7, 2026.");
     expect(page).toContain("the agent holds payments to Northwind until someone here confirms it");
+  });
+});
+
+describe("counterpartiesRefreshMs", () => {
+  // A payee answers from another browser: the Counterparties page re-reads its data
+  // often while a link is out or an address waits for confirmation, so "not yet
+  // confirmed" appears without a reload, and rarely otherwise.
+  it("is 15 s while a link is out or an address waits, and 60 s otherwise", () => {
+    expect(counterpartiesRefreshMs({ linksOut: 1, unconfirmed: 0 })).toBe(15_000);
+    expect(counterpartiesRefreshMs({ linksOut: 0, unconfirmed: 2 })).toBe(15_000);
+    expect(counterpartiesRefreshMs({ linksOut: 0, unconfirmed: 0 })).toBe(60_000);
   });
 });

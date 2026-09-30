@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import AgentControls from "@/components/AgentControls";
+import { AutoRefresh } from "@/components/AutoRefresh";
 import CounterpartyAddress from "@/components/intake/CounterpartyAddressEdit";
 import CounterpartyIntake from "@/components/intake/CounterpartyIntake";
 import CounterpartyLimitEdit from "@/components/intake/CounterpartyLimitEdit";
-import PayeeLinkControl from "@/components/intake/PayeeLinkControl";
+import PayeeLinkControl, { counterpartiesRefreshMs } from "@/components/intake/PayeeLinkControl";
 import { Badge, type BadgeProps } from "@/components/ui/Badge";
 import { Callout } from "@/components/ui/Callout";
 import { Card } from "@/components/ui/Card";
@@ -46,6 +47,10 @@ export default async function CounterpartiesPage({ params }: { params: Promise<{
     ]);
     // Only those who may send a payee link see which ones are out.
     const payeeLinks = canWrite ? await listActivePayeeLinks(access.membership.orgId) : new Map<string, { id: string; expiresAt: string }>();
+    const refreshMs = counterpartiesRefreshMs({
+      linksOut: payeeLinks.size,
+      unconfirmed: counterparties.filter((counterparty) => addressUnconfirmed(counterparty.address_changed_at, counterparty.address_confirmed_at)).length,
+    });
 
     return (
       <ProductShell day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()}>
@@ -54,6 +59,8 @@ export default async function CounterpartiesPage({ params }: { params: Promise<{
           sub="Add the people and businesses Vestiarion may invoice or pay. Each new record is screened immediately."
           right={<AgentControls orgSlug={slug} nextDay={dashboardStats.day + 1} headSeq={entries[0]?.seq ?? 0} clockMode={dashboardStats.clockMode} />}
         />
+        {/* A payee answers a link from another browser: re-read often while one is out or an address waits. */}
+        <AutoRefresh intervalMs={refreshMs} />
 
         <section className="mb-8">
           <SectionHeader title="Add counterparty" meta="human-entered · screened on submission" />
