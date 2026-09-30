@@ -1,5 +1,17 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-09-30: What started a cycle
+
+- A `cycle_complete` ledger entry's `detail` can now carry `trigger`, which says what started the cycle:
+  - `"schedule"` for the six-hourly run;
+  - `"manual"` for **Run cycle now**;
+  - `"event"` when something in the workspace gave the agent a decision to make.
+- An event cycle's `detail` also carries `events`, the kinds that led to it: `invoice_added`, `milestone_verified`, `payable_returned`, `address_confirmed`, `agent_resumed` and `sample_loaded`. `by`, when present, is the person whose action started the cycle.
+- These fields are visible on `ledger.appended` events and in `GET /api/v1/ledger`.
+- A cycle no longer starts while another one in the same workspace is running, so one workspace's cycles do not overlap.
+
+No `/api/v1` endpoint, parameter or response schema changed.
+
 ## 2026-09-30: Failed-payment retry
 
 - An `approval_paid` ledger entry's `detail` can now carry `attempt`, the transfer attempt this approval ended on (starting at 1), and, only when that attempt is a retry, `retriedAfter`: `{ providerTxId, providerState, failureReason }` for the earlier attempt Circle ended in a terminal failure. Both are visible on `ledger.appended` events and in `GET /api/v1/ledger`.

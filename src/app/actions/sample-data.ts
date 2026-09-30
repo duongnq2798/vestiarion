@@ -2,6 +2,7 @@
 
 import "server-only";
 
+import { raiseCycleEvent } from "@/lib/agent/cycle-soon";
 import { authorize } from "@/lib/auth/authorize";
 import { revalidateOrgPages } from "@/lib/auth/revalidate";
 import { inOrg } from "@/lib/dal/scope";
@@ -31,9 +32,10 @@ export async function loadSampleDataAction(_previous: SampleDataActionResult, fo
     try {
       const counts = await loadSampleData({ actorId: auth.user.id });
       revalidateOrgPages();
+      raiseCycleEvent(auth, "sample_loaded");
       return {
         ok: true,
-        message: `Sample data loaded: ${counts.counterparties} counterparties, ${counts.invoices} invoices and ${counts.milestones} milestones. Run a cycle to see what the agent decides.`,
+        message: `Sample data loaded: ${counts.counterparties} counterparties, ${counts.invoices} invoices and ${counts.milestones} milestones. The agent usually decides on them within a minute.`,
       };
     } catch (error) {
       return failure(error, "sample data load failed");

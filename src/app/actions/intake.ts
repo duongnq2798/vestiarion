@@ -4,6 +4,7 @@ import "server-only";
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { raiseCycleEvent } from "@/lib/agent/cycle-soon";
 import { authorize } from "@/lib/auth/authorize";
 import { revalidateOrgPages } from "@/lib/auth/revalidate";
 import { screenCounterparty } from "@/lib/compliance";
@@ -192,6 +193,7 @@ export async function confirmCounterpartyAddressAction(
         via: "confirm",
       });
       revalidateOrgPages();
+      if (confirmed) raiseCycleEvent(auth, "address_confirmed");
       return { ok: true, message: confirmed ? "Address confirmed. Payments to it are decided as usual again." : "This address is already confirmed." };
     } catch (error) {
       return addressFailure(error, "counterparty address confirmation failed");
@@ -266,7 +268,9 @@ export async function createInvoiceAction(
 
       revalidatePath("/");
       revalidateOrgPages();
-      return { ok: true, created: 1, message: `Invoice added for ${counterparty.name}.` };
+      if (input.direction !== "payable") return { ok: true, created: 1, message: `Invoice added for ${counterparty.name}.` };
+      raiseCycleEvent(auth, "invoice_added");
+      return { ok: true, created: 1, message: `Invoice added for ${counterparty.name}. The agent usually decides on it within a minute.` };
     } catch (error) {
       console.error("invoice intake failed", error);
       return { ok: false, message: error instanceof Error ? error.message : "Invoice could not be added." };
@@ -349,6 +353,7 @@ export async function importInvoicesAction(
 
       revalidatePath("/");
       revalidateOrgPages();
+      if (resolved.some(({ row }) => row.direction === "payable")) raiseCycleEvent(auth, "invoice_added");
       return { ok: true, created: inserted.length, message: `Imported ${inserted.length} invoice${inserted.length === 1 ? "" : "s"}.` };
     } catch (error) {
       console.error("invoice CSV import failed", error);
