@@ -68,6 +68,8 @@ export class SimulateProvider implements ChainProvider {
       settledInMs:
         ARC_SETTLEMENT_MS_MIN +
         Math.floor(Math.random() * (ARC_SETTLEMENT_MS_MAX - ARC_SETTLEMENT_MS_MIN + 1)),
+      providerState: null,
+      failureReason: null,
     };
   }
 
@@ -82,6 +84,8 @@ export class SimulateProvider implements ChainProvider {
       feeSource: "simulated_profile",
       providerMode: "simulate",
       settledInMs: 0,
+      providerState: null,
+      failureReason: null,
     };
   }
 

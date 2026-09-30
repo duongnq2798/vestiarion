@@ -3,7 +3,7 @@ import path from "node:path";
 import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import ApprovalCard, { payConfirmTitle } from "@/components/ApprovalCard";
+import ApprovalCard, { payConfirmDescription, payConfirmTitle } from "@/components/ApprovalCard";
 import AgentPauseControl, { PAUSE_DIALOG_DESCRIPTION } from "@/components/AgentPauseControl";
 import { AgentPausedBanner, pausedBanner } from "@/components/AgentPausedBanner";
 import type { WaitingPayable } from "@/lib/agent/approvals";
@@ -53,6 +53,7 @@ function payable(overrides: Partial<WaitingPayable> = {}): WaitingPayable {
     reclaimable: false,
     paymentSent: false,
     address: "0x1948aB0000000000000000000000000000c345a0",
+    lastAttempt: null,
     ...overrides,
   };
 }
@@ -142,6 +143,18 @@ describe("ApprovalCard", () => {
     expect(markup).not.toMatch(APPROVE_DISABLED);
   });
 
+  it("omits the double-pay reassurance on an unfinished claim whose last attempt failed, since approving sends a new transfer instead", () => {
+    const markup = card({
+      status: "processing",
+      reviewedAt: "2026-09-29T13:00:00Z",
+      reclaimable: true,
+      lastAttempt: { state: "failed", reason: "Insufficient funds" },
+    });
+    expect(markup).toContain("An earlier decision did not finish.");
+    expect(markup).not.toContain("Approve and pay records it without paying twice.");
+    expect(markup).toContain("The last payment attempt failed: Insufficient funds. Approving sends a new transfer.");
+  });
+
   it("offers only Approve and pay when a payment was already sent, and says so", () => {
     const markup = card({ status: "processing", reclaimable: true, paymentSent: true });
     expect(markup).toContain("A payment was already sent; Approve and pay records it.");
@@ -159,6 +172,38 @@ describe("ApprovalCard", () => {
 
   it("does not mention a sent payment otherwise", () => {
     expect(card()).not.toContain("A payment was already sent");
+  });
+
+  it("says why the last payment attempt failed, and still offers all three decisions", () => {
+    const markup = card({ lastAttempt: { state: "failed", reason: "Insufficient funds" } });
+    expect(markup).toContain("The last payment attempt failed: Insufficient funds. Approving sends a new transfer.");
+    expect(markup).toContain("Approve and pay");
+    expect(markup).toContain("Reject");
+    expect(markup).toContain("Return to agent");
+    expect(markup).not.toMatch(APPROVE_DISABLED);
+  });
+
+  it("says a payment still in flight can only be approved, which checks it again", () => {
+    const markup = card({ lastAttempt: { state: "in_flight" } });
+    expect(markup).toContain(
+      "The payment is still in flight on Arc testnet. It cannot be rejected or returned until Circle settles it; approving checks it again."
+    );
+    expect(markup).toContain("Approve and pay");
+    expect(markup).not.toMatch(APPROVE_DISABLED);
+    expect(markup).not.toContain("Reject");
+    expect(markup).not.toContain("Return to agent");
+  });
+
+  it("shows the in-flight line instead of the sent-payment line when a payment already sent is in flight", () => {
+    const markup = card({ paymentSent: true, lastAttempt: { state: "in_flight" } });
+    expect(markup).not.toContain("A payment was already sent; Approve and pay records it.");
+    expect(markup).toContain("still in flight on Arc testnet");
+  });
+
+  it("does not mention a last payment attempt otherwise", () => {
+    const markup = card();
+    expect(markup).not.toContain("The last payment attempt failed");
+    expect(markup).not.toContain("still in flight on Arc testnet");
   });
 
   it("offers nothing on an unfinished claim to someone who may not decide", () => {
@@ -189,6 +234,28 @@ describe("ApprovalCard", () => {
   it("asks before paying, and says when the payment is simulated", () => {
     expect(payConfirmTitle(payable(), false)).toBe("Pay 1,250.00 USDC to Northwind Supply now?");
     expect(payConfirmTitle(payable(), true)).toBe("Pay 1,250.00 USDC to Northwind Supply now? (simulated)");
+  });
+
+  it("says the transfer starts as soon as you confirm, with no prior attempt to report", () => {
+    expect(payConfirmDescription(payable())).toBe("The transfer starts as soon as you confirm, and the ledger records who approved it.");
+  });
+
+  it("says a new transfer starts after a failed attempt", () => {
+    expect(payConfirmDescription(payable({ lastAttempt: { state: "failed", reason: "Insufficient funds" } }))).toBe(
+      "A new transfer starts as soon as you confirm, and the ledger records who approved it."
+    );
+  });
+
+  it("says nothing new is sent for a transfer still in flight", () => {
+    expect(payConfirmDescription(payable({ lastAttempt: { state: "in_flight" } }))).toBe(
+      "Nothing new is sent: Vestiarion checks the transfer already made with Circle, and the ledger records who approved it."
+    );
+  });
+
+  it("says nothing new is sent when a payment was already sent, even without a reported last attempt", () => {
+    expect(payConfirmDescription(payable({ paymentSent: true }))).toBe(
+      "Nothing new is sent: Vestiarion checks the transfer already made with Circle, and the ledger records who approved it."
+    );
   });
 });
 
@@ -304,5 +371,23 @@ describe("the new control screens, as source", () => {
     expect(layout).toContain("pausedBanner(membership.orgId)");
     expect(layout).toContain("<AgentPausedBanner");
     expect(layout).toContain("<AgentPausedBanner");
+  });
+
+  // The Approve and pay confirmation is a portalled AlertDialog (see
+  // ConfirmDialog), so renderToStaticMarkup never shows its description;
+  // these three strings are pinned in source instead, as payConfirmDescription
+  // picks one of them.
+  it("the pay confirmation says the transfer starts, with no prior attempt to report", () => {
+    expect(read("src/components/ApprovalCard.tsx")).toContain("The transfer starts as soon as you confirm, and the ledger records who approved it.");
+  });
+
+  it("the pay confirmation says a new transfer starts after a failed attempt", () => {
+    expect(read("src/components/ApprovalCard.tsx")).toContain("A new transfer starts as soon as you confirm, and the ledger records who approved it.");
+  });
+
+  it("the pay confirmation says nothing new is sent for a transfer already made", () => {
+    expect(read("src/components/ApprovalCard.tsx")).toContain(
+      "Nothing new is sent: Vestiarion checks the transfer already made with Circle, and the ledger records who approved it."
+    );
   });
 });
