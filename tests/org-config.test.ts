@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { configFromEnv, type VestiarionConfig } from "@/lib/config";
 import { FOUNDING_ORG_ID, ORG_SECRET_COLUMNS, orgConfig, retiredKeyBundle, type OrgRow } from "@/lib/dal/org-config";
-import { ledgerKeyId, ledgerKeyring } from "@/lib/ledger-keys";
+import { ledgerKeyId, ledgerKeyring, ledgerReadKeys } from "@/lib/ledger-keys";
 import { encryptSecret, parseMasterKeys } from "@/lib/secrets";
 
 const OTHER_ORG = "5d0f3a2e-8c1b-4f7a-9e6d-00000000beef";
@@ -417,5 +417,32 @@ describe("retiredKeyBundle", () => {
     const warnings: string[] = [];
     expect(retiredKeyBundle([], warnings)).toBeUndefined();
     expect(warnings).toEqual([]);
+  });
+});
+
+describe("retiredKeyBundle — only a readable public key reaches the keyring (final review, minor 3)", () => {
+  const good = retiredKeyItem();
+  const privatePem = crypto.generateKeyPairSync("ed25519").privateKey.export({ type: "pkcs8", format: "pem" }).toString();
+  const truncated = good.publicKeyPem.slice(0, good.publicKeyPem.indexOf("-----END"));
+  const publicThenPrivate = `${retiredKeyItem().publicKeyPem}\n${privatePem}`;
+  const garbage = "-----BEGIN PUBLIC KEY-----\nbm90IGEga2V5IGF0IGFsbCwganVzdCBiYXNlNjQ=\n-----END PUBLIC KEY-----\n";
+
+  it.each([
+    ["a truncated PEM", truncated],
+    ["a PUBLIC block followed by a PRIVATE block", publicThenPrivate],
+    ["a PUBLIC header around garbage base64", garbage],
+  ])("skips %s with the usual warning, and still loads the good item beside it", (_label, publicKeyPem) => {
+    const bad = { id: "badbadbadbadbadb", publicKeyPem, retiredAt: "2026-01-01T00:00:00Z" };
+    const warnings: string[] = [];
+    const bundle = retiredKeyBundle([bad, good], warnings);
+    // Compared as booleans, so a failure never prints the private block into test output.
+    expect(bundle?.includes("PRIVATE KEY"), "the bundle holds a private block").toBe(false);
+    expect(bundle === good.publicKeyPem, "the bundle is exactly the good item's PEM").toBe(true);
+    expect(warnings).toEqual(["ledger_retired_keys entry 1 is not a public key; skipped"]);
+
+    const { config } = orgConfig(base, row(OTHER_ORG, {}, keys, OTHER_ORG, null, [bad, good]), keys);
+    const readKeys = ledgerReadKeys(config);
+    expect(readKeys.warnings).toEqual([]);
+    expect(readKeys.retired.map((key) => ledgerKeyId(key))).toEqual([good.id]);
   });
 });

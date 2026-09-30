@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import type { VestiarionConfig } from "../config";
 import { decryptSecret, type MasterKey, type SecretEnvelope } from "../secrets";
 
@@ -25,30 +26,51 @@ export const HOSTED_NOT_CONFIGURED = "the hosted Circle account is not configure
 
 type SecretColumn = "ledger_signing_key_enc" | "circle_api_key_enc" | "circle_entity_secret_enc";
 
+/** Exactly one full public PEM block, and nothing after it but whitespace. */
+const ONE_PUBLIC_PEM = /^-----BEGIN PUBLIC KEY-----[\s\S]+?-----END PUBLIC KEY-----\s*$/;
+
+/**
+ * An item of `ledger_retired_keys` the keyring can use, with its key parsed,
+ * or `null`. It must be a plain object with a string `id` and a
+ * `publicKeyPem` that is exactly one PUBLIC KEY block, holds no private key,
+ * and parses as a public key. `retiredAt` is passed through unchecked: a bad
+ * time does not stop a key verifying what it signed.
+ */
+export function readableRetiredKey(
+  item: unknown
+): { id: string; publicKeyPem: string; key: crypto.KeyObject; retiredAt: unknown } | null {
+  if (typeof item !== "object" || item === null) return null;
+  const { id, publicKeyPem, retiredAt } = item as { id?: unknown; publicKeyPem?: unknown; retiredAt?: unknown };
+  if (typeof id !== "string" || typeof publicKeyPem !== "string") return null;
+  if (!ONE_PUBLIC_PEM.test(publicKeyPem)) return null;
+  if (publicKeyPem.includes("PRIVATE KEY")) return null;
+  if ((publicKeyPem.match(/-----BEGIN /g) ?? []).length !== 1) return null;
+  try {
+    return { id, publicKeyPem, key: crypto.createPublicKey(publicKeyPem), retiredAt };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * The public halves of `ledger_retired_keys`, joined into the same
  * concatenated-PEM-bundle shape `LEDGER_RETIRED_PUBLIC_KEYS` and
  * `ledgerKeyring`/`ledgerReadKeys` (ledger-keys.ts) already expect.
  *
- * An item must be well-formed — a plain object with a string `id` and a
- * string `publicKeyPem` that contains a `-----BEGIN PUBLIC KEY-----` block —
- * to be trusted. `ledgerKeyring`/`ledgerReadKeys` throw on a private PEM, so a
- * malformed or private-key item is skipped here instead of ever reaching
- * them; each skip is named in `warnings` rather than losing the row that
- * follows it.
+ * Only an item `readableRetiredKey` accepts is trusted. `ledgerKeyring` throws
+ * on a private or unreadable block, and `ledgerReadKeys` then drops every
+ * retired key with it, so one bad item — truncated, carrying a private block,
+ * or garbage between PUBLIC KEY markers — is skipped here instead of ever
+ * reaching them; each skip is named in `warnings` rather than losing the row
+ * that follows it.
  */
 export function retiredKeyBundle(value: unknown, warnings: string[]): string | undefined {
   if (!Array.isArray(value)) return undefined;
   const pems: string[] = [];
   value.forEach((item, i) => {
-    const wellFormed =
-      typeof item === "object" &&
-      item !== null &&
-      typeof (item as { id?: unknown }).id === "string" &&
-      typeof (item as { publicKeyPem?: unknown }).publicKeyPem === "string" &&
-      (item as { publicKeyPem: string }).publicKeyPem.includes("-----BEGIN PUBLIC KEY-----");
-    if (wellFormed) {
-      pems.push((item as { publicKeyPem: string }).publicKeyPem);
+    const readable = readableRetiredKey(item);
+    if (readable) {
+      pems.push(readable.publicKeyPem);
     } else {
       warnings.push(`ledger_retired_keys entry ${i + 1} is not a public key; skipped`);
     }
