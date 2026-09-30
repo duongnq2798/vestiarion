@@ -3,7 +3,7 @@ import path from "node:path";
 import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import ApprovalCard, { payConfirmTitle } from "@/components/ApprovalCard";
+import ApprovalCard, { payConfirmDescription, payConfirmTitle } from "@/components/ApprovalCard";
 import AgentPauseControl, { PAUSE_DIALOG_DESCRIPTION } from "@/components/AgentPauseControl";
 import { AgentPausedBanner, pausedBanner } from "@/components/AgentPausedBanner";
 import type { WaitingPayable } from "@/lib/agent/approvals";
@@ -223,6 +223,28 @@ describe("ApprovalCard", () => {
     expect(payConfirmTitle(payable(), false)).toBe("Pay 1,250.00 USDC to Northwind Supply now?");
     expect(payConfirmTitle(payable(), true)).toBe("Pay 1,250.00 USDC to Northwind Supply now? (simulated)");
   });
+
+  it("says the transfer starts as soon as you confirm, with no prior attempt to report", () => {
+    expect(payConfirmDescription(payable())).toBe("The transfer starts as soon as you confirm, and the ledger records who approved it.");
+  });
+
+  it("says a new transfer starts after a failed attempt", () => {
+    expect(payConfirmDescription(payable({ lastAttempt: { state: "failed", reason: "Insufficient funds" } }))).toBe(
+      "A new transfer starts as soon as you confirm, and the ledger records who approved it."
+    );
+  });
+
+  it("says nothing new is sent for a transfer still in flight", () => {
+    expect(payConfirmDescription(payable({ lastAttempt: { state: "in_flight" } }))).toBe(
+      "Nothing new is sent: Vestiarion checks the transfer already made with Circle, and the ledger records who approved it."
+    );
+  });
+
+  it("says nothing new is sent when a payment was already sent, even without a reported last attempt", () => {
+    expect(payConfirmDescription(payable({ paymentSent: true }))).toBe(
+      "Nothing new is sent: Vestiarion checks the transfer already made with Circle, and the ledger records who approved it."
+    );
+  });
 });
 
 describe("AgentPauseControl", () => {
@@ -337,5 +359,23 @@ describe("the new control screens, as source", () => {
     expect(layout).toContain("pausedBanner(membership.orgId)");
     expect(layout).toContain("<AgentPausedBanner");
     expect(layout).toContain("<AgentPausedBanner");
+  });
+
+  // The Approve and pay confirmation is a portalled AlertDialog (see
+  // ConfirmDialog), so renderToStaticMarkup never shows its description;
+  // these three strings are pinned in source instead, as payConfirmDescription
+  // picks one of them.
+  it("the pay confirmation says the transfer starts, with no prior attempt to report", () => {
+    expect(read("src/components/ApprovalCard.tsx")).toContain("The transfer starts as soon as you confirm, and the ledger records who approved it.");
+  });
+
+  it("the pay confirmation says a new transfer starts after a failed attempt", () => {
+    expect(read("src/components/ApprovalCard.tsx")).toContain("A new transfer starts as soon as you confirm, and the ledger records who approved it.");
+  });
+
+  it("the pay confirmation says nothing new is sent for a transfer already made", () => {
+    expect(read("src/components/ApprovalCard.tsx")).toContain(
+      "Nothing new is sent: Vestiarion checks the transfer already made with Circle, and the ledger records who approved it."
+    );
   });
 });

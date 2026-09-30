@@ -29,6 +29,22 @@ export function payConfirmTitle(payable: Pick<WaitingPayable, "amount" | "counte
   return `Pay ${fmt(payable.amount)} USDC to ${payable.counterpartyName} now?${sandbox ? " (simulated)" : ""}`;
 }
 
+/**
+ * What the confirm dialog says will happen when Approve and pay is chosen. A
+ * transfer already sent — including one still in flight — is only checked,
+ * never sent again; a terminal failure is sent again, as a new transfer;
+ * otherwise this is the first attempt.
+ */
+export function payConfirmDescription(payable: Pick<WaitingPayable, "paymentSent" | "lastAttempt">): string {
+  if (payable.paymentSent || payable.lastAttempt?.state === "in_flight") {
+    return "Nothing new is sent: Vestiarion checks the transfer already made with Circle, and the ledger records who approved it.";
+  }
+  if (payable.lastAttempt?.state === "failed") {
+    return "A new transfer starts as soon as you confirm, and the ledger records who approved it.";
+  }
+  return "The transfer starts as soon as you confirm, and the ledger records who approved it.";
+}
+
 const STATUS: Record<WaitingPayable["status"], { label: string; tone: BadgeProps["tone"] }> = {
   held: { label: "Held", tone: "held" },
   flagged: { label: "Flagged", tone: "refused" },
@@ -173,7 +189,7 @@ function Decisions({ orgSlug, payable, viewerId, sandbox }: { orgSlug: string; p
             </Button>
           }
           title={payConfirmTitle(payable, sandbox)}
-          description="The transfer starts as soon as you confirm, and the ledger records who approved it."
+          description={payConfirmDescription(payable)}
           confirmLabel="Pay now"
         />
         {!payable.paymentSent && payable.lastAttempt?.state !== "in_flight" && (
