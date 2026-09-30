@@ -55,6 +55,7 @@ export const PLATFORM_RPCS = [
   "revoke_invitation", "org_members", "touch_org_activity", "delete_sandbox_org",
   "pending_invitations_for", "accept_invitation_by_id", "pause_agent", "resume_agent", "create_api_key",
   "claim_webhook_deliveries", "record_webhook_failure", "create_webhook_endpoint", "choose_hosted_wallet", "delete_org",
+  "open_numbers", "set_platform_team_member", "platform_team_members",
 ] as const;
 export type PlatformRpc = (typeof PLATFORM_RPCS)[number];
 

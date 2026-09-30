@@ -41,7 +41,7 @@ const GENERATED_SLUGS = new Set(OPERATIONS.map((op) => `api/${op.id}`));
 const OTHER_TARGETS = new Set(["/api/v1/openapi.json", "/llms.txt", "/llms-full.txt", "/tools/verify-ledger-export.mjs"]);
 
 /** Real app pages outside /docs that a docs page may link to. */
-const APP_ROUTES = new Set(["/", "/login", "/signup", "/onboarding", "/terms", "/privacy"]);
+const APP_ROUTES = new Set(["/", "/login", "/signup", "/onboarding", "/terms", "/privacy", "/open"]);
 
 /** The source without code: fenced blocks and inline code spans, where a link is an example, not a link. */
 function withoutCode(source: string): string {
@@ -226,11 +226,12 @@ describe("the Errors page", () => {
 });
 
 describe("the sitemap", () => {
-  it("lists the landing page, every published docs page in nav order, then the terms and the privacy page, each as an absolute URL", () => {
+  it("lists the landing page, the open numbers, every published docs page in nav order, then the terms and the privacy page, each as an absolute URL", () => {
     const origin = publicOrigin();
     const urls = sitemap().map((entry) => entry.url);
     expect(urls).toEqual([
       `${origin}/`,
+      `${origin}/open`,
       ...publishedPages().map((page) => `${origin}${page.slug ? `/docs/${page.slug}` : "/docs"}`),
       `${origin}/terms`,
       `${origin}/privacy`,

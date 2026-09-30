@@ -40,6 +40,10 @@
   --color-refused-soft: #ffe8e2;
   --color-refused-line: #efa69a;
 
+  /* A second chart series beside agent cobalt (the open numbers page): it
+     passed the dataviz palette check against cobalt on the light surface. */
+  --color-series-ours: #b05a8a;
+
   --text-reasoning: 1.0625rem;
   --text-reasoning--line-height: 1.65;
 

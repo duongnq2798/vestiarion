@@ -70,6 +70,10 @@ export default function PrivacyPage() {
           </li>
         </ul>
         <p>Nobody can approve an invoice they created. The service&apos;s own scheduled jobs, such as the agent&apos;s cycles and the cleanup below, work across workspaces.</p>
+        <p>
+          The public <LegalLink href="/open">open numbers</LegalLink> page shows counts and totals across all workspaces, such as how many payments settled
+          and how much USDC they moved. It never names a workspace or a person, and never lists a customer&apos;s payment.
+        </p>
       </LegalSection>
 
       <LegalSection id="secrets" title="Secrets">
