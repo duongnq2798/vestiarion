@@ -45,6 +45,15 @@ The form marks **Payment address** "Optional until payment setup", but the agent
 
 Owners and admins change a counterparty's limit with **Edit limit**, under **Configured limit** on its card. Enter the new **Payment limit (USDC)** and choose **Save limit**. The card's **Current authority** follows at once: the whole limit for a counterparty screened clear, a quarter of it for medium risk, and 0 for high risk. A vendor or contractor always has a limit, because without one the agent could pay any amount. The ledger records who changed the limit, and from what to what.
 
+### Ask a payee for their address
+
+You don't have to collect a payee's address yourself. On the counterparty's card, owners and admins choose **Ask for address**, then **Create link**:
+
+- The link is shown once, with **Copy link**. Send it to the payee however you usually reach them.
+- The payee opens it without an account. They see which business wants to pay them and enter their own Arc address.
+- The link works once and expires after 7 days. A new link replaces the payee's unused one, and **Revoke** on the card stops it.
+- An address that comes in through a link counts as a change, like any other: the card says "not yet confirmed", and the agent holds payments to that payee until someone here confirms it, as below.
+
 ### Changing an address
 
 Owners and admins change a counterparty's address with **Edit address** on its card: enter the new **Arc address**, or leave it empty to clear it, and choose **Save address**.

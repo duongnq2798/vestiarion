@@ -1,5 +1,15 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-09-30: Payee links
+
+- Two new ledger actions, delivered as `ledger.appended` events, both in the `compliance` domain with `actor: "human"`:
+  - `payee_link_created`, whose `detail` is `{ by, counterpartyId, linkId, expiresAt }`;
+  - `payee_link_revoked`, whose `detail` is `{ by, counterpartyId, linkId }`.
+- A `counterparty_address_changed` entry made by a payee through a payee link has `by: null`, and carries `via: "payee_link"` and `linkId` next to `counterpartyId`, `from` and `to`.
+- Such a change waits for confirmation like any other; a later `counterparty_address_confirmed` records who confirmed it.
+
+No `/api/v1` endpoint, parameter or response schema changed.
+
 ## 2026-09-30: What started a cycle
 
 - A `cycle_complete` ledger entry's `detail` can now carry `trigger`, which says what started the cycle:
