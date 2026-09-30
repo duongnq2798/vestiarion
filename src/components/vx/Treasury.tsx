@@ -1,47 +1,18 @@
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import type { RefreshBalanceResult } from "@/app/actions/treasury";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { Card, CardContent } from "@/components/ui/Card";
 import { cn } from "@/components/ui/cn";
-import { Eyebrow } from "@/components/ui/Eyebrow";
 import { SectionHeader } from "@/components/ui/SectionHeader";
+import { LiveBalanceTile } from "./LiveBalance";
 import { Money, Reasoning } from "./Primitives";
+import { StatTile } from "./StatTile";
 import type { Account, Forecast } from "./types";
 
-/** One figure with its label: a card, and a lifting one when it links to the page behind the number. */
-export function StatTile({
-  label,
-  children,
-  sub,
-  tone = "default",
-  href,
-}: {
-  label: string;
-  children: ReactNode;
-  sub?: ReactNode;
-  tone?: "default" | "held";
-  href?: string;
-}) {
-  const content = (
-    <>
-      <Eyebrow className={tone === "held" ? "text-held" : undefined}>{label}</Eyebrow>
-      <div className="mt-2 min-w-0 text-[1.375rem] font-semibold leading-none tracking-tight text-ink sm:text-[1.625rem]">{children}</div>
-      {sub && <div className="mt-2 text-[0.8125rem] leading-snug text-ink-2">{sub}</div>}
-    </>
-  );
-  const className = cn("block min-w-0 px-4 py-4", tone === "held" && "bg-held-soft");
-  return href ? (
-    <Card asChild interactive tone={tone} className={className}>
-      <Link href={href}>{content}</Link>
-    </Card>
-  ) : (
-    <Card tone={tone} className={className}>
-      {content}
-    </Card>
-  );
-}
+export { StatTile };
 
 /**
  * Which wording the balance tile uses: on-chain only when payments are live
@@ -74,21 +45,56 @@ export function balanceTileCopy(mode: "sandbox" | "live", simulatedReserve: numb
   return { label: "Balance on-chain", sub: simulatedReserve > 0 ? null : "All funds shown are on-chain" };
 }
 
-export function BalanceTile({ accounts, mode }: { accounts: Account[]; mode: "sandbox" | "live" }) {
+/**
+ * The balance tile. Live, inside a workspace (`orgSlug` and `refreshAction`),
+ * it shows the stored balance at once and reads the chain in the background
+ * (`LiveBalanceTile`); a sandbox, or a page with no workspace (the design
+ * page), gets the plain figure and never asks the chain.
+ */
+export function BalanceTile({
+  accounts,
+  mode,
+  orgSlug,
+  refreshAction,
+  syncedAt = null,
+}: {
+  accounts: Account[];
+  mode: "sandbox" | "live";
+  orgSlug?: string;
+  /** `refreshBalanceAction`, passed by the page: the action module is the server's, never imported here. */
+  refreshAction?: (orgSlug: string) => Promise<RefreshBalanceResult>;
+  /** When the operating account's balance was last read from the chain. */
+  syncedAt?: string | null;
+}) {
   const live = accounts.filter((account) => !account.simulated).reduce((sum, account) => sum + account.balance, 0);
   const simulated = accounts.filter((account) => account.simulated).reduce((sum, account) => sum + account.balance, 0);
   const copy = balanceTileCopy(mode, simulated);
+  const sub =
+    copy.sub ?? (
+      <span>
+        + <Money value={simulated} token="USYC" simulated className="text-ink-2" /> in the simulated reserve, not counted above
+      </span>
+    );
+  if (mode === "live" && orgSlug && refreshAction) {
+    // The refresh answers with the non-reserve accounts only; a reserve held
+    // on chain (a live USYC leg) still counts, from its stored figure.
+    const reserveOnChain = accounts
+      .filter((account) => !account.simulated && account.kind === "reserve")
+      .reduce((sum, account) => sum + account.balance, 0);
+    return (
+      <LiveBalanceTile
+        orgSlug={orgSlug}
+        refreshAction={refreshAction}
+        label={copy.label}
+        sub={sub}
+        initialBalance={live - reserveOnChain}
+        offset={reserveOnChain}
+        initialSyncedAt={syncedAt}
+      />
+    );
+  }
   return (
-    <StatTile
-      label={copy.label}
-      sub={
-        copy.sub ?? (
-          <span>
-            + <Money value={simulated} token="USYC" simulated className="text-ink-2" /> in the simulated reserve, not counted above
-          </span>
-        )
-      }
-    >
+    <StatTile label={copy.label} sub={sub}>
       <Money value={live} />
     </StatTile>
   );
