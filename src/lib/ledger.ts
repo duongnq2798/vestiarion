@@ -485,10 +485,33 @@ export function ledgerVerificationKeyring(): LedgerKeyring {
   return ledgerReadKeyring();
 }
 
+/** PostgREST's `max_rows` on Supabase: the most rows one request answers with. */
+export const LEDGER_PAGE_SIZE = 1000;
+
+/**
+ * Every entry of the organization in scope, oldest first. Read by `seq` in
+ * pages, because one request stops at the project's row cap and a chain past
+ * it would otherwise verify, or export, only its first page (audit-export E3).
+ */
+export async function readLedgerRows(): Promise<LedgerRow[]> {
+  const rows: LedgerRow[] = [];
+  let after = 0;
+  for (;;) {
+    const page = unwrap(
+      await db()
+        .from("ledger_entries")
+        .select("*")
+        .gt("seq", after)
+        .order("seq", { ascending: true })
+        .limit(LEDGER_PAGE_SIZE)
+    ) as LedgerRow[];
+    rows.push(...page);
+    if (page.length < LEDGER_PAGE_SIZE) return rows;
+    after = page[page.length - 1].seq;
+  }
+}
+
 /** Verifies the ledger as stored in Postgres, oldest entry first. */
 export async function verifyLedger(): Promise<VerificationResult> {
-  const rows = unwrap(
-    await db().from("ledger_entries").select("*").order("seq", { ascending: true })
-  ) as LedgerRow[];
-  return verifyChain(rows, ledgerVerificationKeyring());
+  return verifyChain(await readLedgerRows(), ledgerVerificationKeyring());
 }
