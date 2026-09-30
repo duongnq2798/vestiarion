@@ -89,6 +89,10 @@ export default function ApprovalCard({
         </CardHeader>
         <CardContent>
           <p className="text-reasoning text-ink-2">{payable.reasoning?.trim() || "The agent recorded no reasoning."}</p>
+          <p className="mt-2 min-w-0 truncate text-xs text-ink-3" title={payable.address ?? undefined}>
+            Pays to{" "}
+            {payable.address ? <span className="font-mono text-ink-2">{payable.address}</span> : "no address set"}
+          </p>
           {unfinished && (
             <p className="mt-2 text-sm text-ink-2">
               An earlier decision did not finish. If it was a payment, Approve and pay records it without paying twice.
@@ -139,6 +143,7 @@ function Decisions({ orgSlug, payable, viewerId, sandbox }: { orgSlug: string; p
         <form id={approveId} className="contents" {...approveForm.formProps} onSubmit={submitting("approve", approveForm.formProps.onSubmit)}>
           <input type="hidden" name="orgSlug" value={orgSlug} />
           <input type="hidden" name="invoiceId" value={payable.id} />
+          <input type="hidden" name="address" value={payable.address ?? ""} />
         </form>
         <ConfirmDialog
           formId={approveId}

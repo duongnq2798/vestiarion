@@ -17,6 +17,7 @@ import { CycleJournal, messageOf, type CycleStage } from "./journal";
 import { syncOnChainBalances, type BalanceSync } from "./balances";
 import { decide } from "./decide";
 import { enforceApGuardrails } from "./guardrails";
+import { addressUnconfirmed } from "../counterparty-address";
 import { SandboxCapReachedError } from "./sandbox-cap";
 import { AgentPausedError, heldBecausePausedDetail, pausedPaymentNote, pausedTreasuryNote } from "./pause";
 import {
@@ -244,11 +245,30 @@ export async function payApInvoiceIfNotPaused(
 /** Appended to a held invoice's reasoning when a resubmission was refused because screening now says high risk. */
 const NOT_RESUBMITTED_HIGH_RISK_NOTE = " [not resubmitted: counterparty now screened high risk]";
 
-/** The counterparty's risk level as it stands now, read fresh; thrown on a failed read, so a resubmission fails closed. */
-async function currentRiskLevel(orgDb: OrgDb, counterpartyId: string): Promise<string | null> {
-  const result = await orgDb.from("counterparties").select("risk_level").eq("id", counterpartyId).maybeSingle();
+/** Appended to a held invoice's reasoning when a resubmission was refused because a changed address is unconfirmed. */
+const NOT_RESUBMITTED_ADDRESS_NOTE = " [not resubmitted: the counterparty's address changed and no one has confirmed it]";
+
+/**
+ * Why a resubmission must not go out, from the counterparty as it stands now,
+ * read fresh: it is screened high risk, or a person changed its address and no
+ * one has confirmed it (spec 2026-09-30-counterparty-address-edit E4), since a
+ * resubmission pays the current address. Thrown on a failed read, so a
+ * resubmission fails closed.
+ */
+async function resubmissionBlocker(
+  orgDb: OrgDb,
+  counterpartyId: string
+): Promise<"counterparty.high_risk" | "counterparty.address_unconfirmed" | null> {
+  const result = await orgDb
+    .from("counterparties")
+    .select("risk_level, address_changed_at, address_confirmed_at")
+    .eq("id", counterpartyId)
+    .maybeSingle();
   if (result.error) throw new Error(result.error.message);
-  return (result.data as { risk_level: string } | null)?.risk_level ?? null;
+  const row = result.data as { risk_level: string; address_changed_at?: string | null; address_confirmed_at?: string | null } | null;
+  if (row?.risk_level === "high") return "counterparty.high_risk";
+  if (addressUnconfirmed(row?.address_changed_at ?? null, row?.address_confirmed_at ?? null)) return "counterparty.address_unconfirmed";
+  return null;
 }
 
 /** The payment intent a payable already has: enough to tell whether a transfer exists. */
@@ -381,7 +401,8 @@ export async function reconcileApInvoice(
   }
 
   let outcome: PayStepOutcome;
-  let notResubmitted = false;
+  let notResubmitted: Exclude<Awaited<ReturnType<typeof resubmissionBlocker>>, null> | null = null;
+  const blocker = transferExists ? null : await resubmissionBlocker(deps.db, invoice.counterpartyId);
   if (transferExists) {
     const result = await payInvoice(input, { provider: deps.provider, operating: deps.operating });
     const execution = result.execution;
@@ -425,13 +446,13 @@ export async function reconcileApInvoice(
       heldBecausePaused: false,
       operatingBalance: result.operatingBalance,
     };
-  } else if ((await currentRiskLevel(deps.db, invoice.counterpartyId)) === "high") {
-    notResubmitted = true;
+  } else if (blocker) {
+    notResubmitted = blocker;
     outcome = {
       status: "held",
       txRef: null,
       paymentExecution: null,
-      reasoningSuffix: NOT_RESUBMITTED_HIGH_RISK_NOTE,
+      reasoningSuffix: blocker === "counterparty.high_risk" ? NOT_RESUBMITTED_HIGH_RISK_NOTE : NOT_RESUBMITTED_ADDRESS_NOTE,
       heldBecausePaused: false,
       operatingBalance: null,
     };
@@ -460,7 +481,7 @@ export async function reconcileApInvoice(
       counterpartyId: invoice.counterpartyId,
       reconciled: true,
       previousStatus: "matched",
-      ...(notResubmitted ? { notResubmittedBecause: "counterparty.high_risk" } : {}),
+      ...(notResubmitted ? { notResubmittedBecause: notResubmitted } : {}),
       execution: {
         txRef,
         chainMode: execution?.providerMode ?? deps.provider.mode,
@@ -478,8 +499,10 @@ export async function reconcileApInvoice(
 
   const message = outcome.heldBecausePaused
     ? `${invoice.counterpartyName}: not paid, the agent was paused (${invoice.amount} USDC)`
-    : notResubmitted
+    : notResubmitted === "counterparty.high_risk"
       ? `${name}: not resubmitted, the counterparty is now screened high risk (${invoice.amount} USDC)`
+      : notResubmitted === "counterparty.address_unconfirmed"
+      ? `${name}: not resubmitted, the counterparty's address changed and no one has confirmed it (${invoice.amount} USDC)`
       : status === "paid"
       ? `${invoice.counterpartyName}: reconciled an in-flight payment, now paid (${invoice.amount} USDC)`
       : status === "matched"
@@ -629,8 +652,21 @@ export async function reconcileMilestone(
     };
   }
 
+  // A release that never reached the provider would be resubmitted to the
+  // contractor's current address. While a changed address is unconfirmed the
+  // milestone waits exactly as the contractor stage's own check makes it wait:
+  // still verified, nothing written, decided again once someone confirms it.
+  const blocker = transferExists ? null : await resubmissionBlocker(deps.db, milestone.contractorId);
+  if (blocker === "counterparty.address_unconfirmed") {
+    return {
+      status: "verified",
+      operatingBalance: null,
+      line: { domain: "contractor", message: `${name}: "${milestone.title}" waiting for someone to confirm its new address` },
+    };
+  }
+
   let outcome: PayStepOutcome;
-  let notResubmitted = false;
+  let notResubmitted: "counterparty.high_risk" | null = null;
   if (transferExists && deps.operating) {
     const result = await releaseMilestone(release, { provider: deps.provider, operatingAccountId: deps.operating.id });
     const execution = result.paymentExecution;
@@ -667,8 +703,8 @@ export async function reconcileMilestone(
       };
     }
     outcome = result;
-  } else if ((await currentRiskLevel(deps.db, milestone.contractorId)) === "high") {
-    notResubmitted = true;
+  } else if (blocker === "counterparty.high_risk") {
+    notResubmitted = blocker;
     outcome = {
       status: "held",
       txRef: null,
@@ -711,7 +747,7 @@ export async function reconcileMilestone(
       counterpartyId: milestone.contractorId,
       reconciled: true,
       previousStatus: "verified",
-      ...(notResubmitted ? { notResubmittedBecause: "counterparty.high_risk" } : {}),
+      ...(notResubmitted ? { notResubmittedBecause: notResubmitted } : {}),
       execution: {
         txRef,
         chainMode: execution?.providerMode ?? deps.provider.mode,
@@ -1159,7 +1195,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
   const payables = unwrap(
     await db
       .from("invoices")
-      .select("*, counterparties(id, name, risk_level, payment_limit, performance_score, performance_inputs, address)")
+      .select("*, counterparties(id, name, risk_level, payment_limit, performance_score, performance_inputs, address, address_changed_at, address_confirmed_at)")
       .eq("direction", "payable")
       .in("status", ["pending", "matched"])
   ) as Array<{
@@ -1181,6 +1217,8 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
       performance_score: string | null;
       performance_inputs: CounterpartyHistoryInputs | null;
       address: string | null;
+      address_changed_at: string | null;
+      address_confirmed_at: string | null;
     };
   }>;
 
@@ -1359,6 +1397,8 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
       riskLevel: counterparty.risk_level,
       paymentLimit: limit,
       duplicates,
+      addressChangedAt: counterparty.address_changed_at,
+      addressConfirmedAt: counterparty.address_confirmed_at,
     });
     metrics.recordDecisionMode(mode, agreedWithReference);
     let status = guardrail.status ?? statusForAction[decision.action];
@@ -1432,6 +1472,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           poReference: invoice.po_reference,
           goodsReceived: invoice.goods_received,
           operatingBalance,
+          addressUnconfirmed: addressUnconfirmed(counterparty.address_changed_at, counterparty.address_confirmed_at),
           // Recorded whether or not anything matched. "We looked and found
           // nothing" is the half of a fraud control that a log which only
           // records hits can never prove.
@@ -1481,7 +1522,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
   const milestones = unwrap(
     await db
       .from("milestones")
-      .select("*, counterparties(id, name, risk_level, payment_limit, performance_score, performance_inputs, address)")
+      .select("*, counterparties(id, name, risk_level, payment_limit, performance_score, performance_inputs, address, address_changed_at, address_confirmed_at)")
       .eq("verified", true)
       .eq("status", "verified")
   ) as Array<{
@@ -1501,6 +1542,8 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
       performance_score: string | null;
       performance_inputs: CounterpartyHistoryInputs | null;
       address: string | null;
+      address_changed_at: string | null;
+      address_confirmed_at: string | null;
     };
   }>;
 
@@ -1531,6 +1574,18 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
       if (reconciled.operatingBalance !== null) operatingBalance = reconciled.operatingBalance;
       metrics.recordMilestone(reconciled.status, false);
       lines.push(reconciled.line);
+      continue;
+    }
+    // A contractor whose address a person changed, and no one has confirmed
+    // since, is not paid (spec 2026-09-30-counterparty-address-edit E4). A
+    // held milestone has no approval path, so the milestone stays `verified`
+    // and waits: no model call and no ledger entry each cycle, and the first
+    // cycle after someone confirms the address decides it as usual.
+    if (addressUnconfirmed(contractor.address_changed_at, contractor.address_confirmed_at)) {
+      lines.push({
+        domain: "contractor",
+        message: `${contractor.name}: "${milestone.title}" waiting for someone to confirm its new address`,
+      });
       continue;
     }
     const limit = contractor.payment_limit == null ? null : num(contractor.payment_limit);

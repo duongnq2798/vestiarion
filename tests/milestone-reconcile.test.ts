@@ -395,6 +395,45 @@ describe("reconcileMilestone — a verified milestone with a release in flight",
     expect(append.p_detail).toMatchObject({ notResubmittedBecause: "counterparty.high_risk", execution: { resultingStatus: "held" } });
   });
 
+  it("does not resubmit to a contractor whose changed address no one has confirmed, and writes nothing", async () => {
+    const { fake, run } = cycleFake((r) => {
+      if (r.path === "/rest/v1/counterparties" && r.method === "GET") {
+        return { body: { risk_level: "low", address_changed_at: "2026-09-30T12:00:00+00:00", address_confirmed_at: null } };
+      }
+      if (r.path === "/rest/v1/rpc/agent_paused") return { body: false };
+      return undefined;
+    });
+
+    const outcome = await run(() =>
+      reconcileMilestone({ ...milestone, txRef: null }, neverSubmitted, { db: db(), provider, operating: { id: ACCOUNT_ID } })
+    );
+
+    expect(executePaymentMock).not.toHaveBeenCalled();
+    expect(outcome.status).toBe("verified");
+    expect(outcome.line.message).toBe(`Lena Ortiz: "${milestone.title}" waiting for someone to confirm its new address`);
+    expect(milestonePatches(fake.requests)).toHaveLength(0);
+    expect(rpcBodies(fake.requests, "append_ledger_entry")).toHaveLength(0);
+  });
+
+  it("resubmits once the changed address was confirmed", async () => {
+    executePaymentMock.mockResolvedValue(execution({ status: "confirmed", txHash: "0xhash", txRef: "0xhash", reconciled: false }));
+    syncMock.mockResolvedValue(200);
+    const { run } = cycleFake((r) => {
+      if (r.path === "/rest/v1/counterparties" && r.method === "GET") {
+        return { body: { risk_level: "low", address_changed_at: "2026-09-30T12:00:00+00:00", address_confirmed_at: "2026-09-30T12:05:00+00:00" } };
+      }
+      if (r.path === "/rest/v1/rpc/agent_paused") return { body: false };
+      return undefined;
+    });
+
+    const outcome = await run(() =>
+      reconcileMilestone({ ...milestone, txRef: null }, neverSubmitted, { db: db(), provider, operating: { id: ACCOUNT_ID } })
+    );
+
+    expect(executePaymentMock).toHaveBeenCalledTimes(1);
+    expect(outcome.status).toBe("paid");
+  });
+
   it("holds without calling executePayment when no transfer exists yet and the agent is paused", async () => {
     const { fake, run } = cycleFake((r) => {
       if (r.path === "/rest/v1/counterparties" && r.method === "GET") return { body: { risk_level: "low" } };

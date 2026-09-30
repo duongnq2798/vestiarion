@@ -121,3 +121,50 @@ describe("AP guardrails — duplicate billing", () => {
     expect(result.reasoning).toBe(clean.reasoning);
   });
 });
+
+describe("AP guardrails — a changed address no one has confirmed", () => {
+  const base = { action: "pay" as const, reasoning: "Pay now.", amount: 2, riskLevel: "clear", paymentLimit: 5 };
+
+  it("holds a pay verdict while the address change is unconfirmed, naming the date", () => {
+    const result = enforceApGuardrails({ ...base, addressChangedAt: "2026-09-30T12:00:00Z", addressConfirmedAt: null });
+    expect(result).toMatchObject({ blocked: true, status: "held", rule: "counterparty.address_unconfirmed" });
+    expect(result.reasoning).toBe(
+      "Pay now. [guardrail override: the counterparty's address changed on 2026-09-30 and no one has confirmed it — held for a person to approve]"
+    );
+  });
+
+  it("holds when the last confirmation predates the change", () => {
+    expect(
+      enforceApGuardrails({ ...base, addressChangedAt: "2026-09-30T12:00:00Z", addressConfirmedAt: "2026-09-29T12:00:00Z" })
+    ).toMatchObject({ blocked: true, rule: "counterparty.address_unconfirmed" });
+  });
+
+  it("pays once a person confirmed the new address", () => {
+    expect(
+      enforceApGuardrails({ ...base, addressChangedAt: "2026-09-30T12:00:00Z", addressConfirmedAt: "2026-09-30T12:05:00Z" })
+    ).toEqual({ blocked: false, status: null, rule: null, reasoning: "Pay now." });
+  });
+
+  it("never holds an address set when the counterparty was added", () => {
+    expect(enforceApGuardrails({ ...base, addressChangedAt: null, addressConfirmedAt: null })).toMatchObject({ blocked: false });
+    expect(enforceApGuardrails(base)).toMatchObject({ blocked: false });
+  });
+
+  it("still flags high risk first", () => {
+    expect(
+      enforceApGuardrails({ ...base, riskLevel: "high", addressChangedAt: "2026-09-30T12:00:00Z", addressConfirmedAt: null })
+    ).toMatchObject({ status: "flagged", rule: "counterparty.high_risk" });
+  });
+
+  it("names the address change ahead of the limit when both would hold", () => {
+    expect(
+      enforceApGuardrails({ ...base, amount: 50, addressChangedAt: "2026-09-30T12:00:00Z", addressConfirmedAt: null })
+    ).toMatchObject({ status: "held", rule: "counterparty.address_unconfirmed" });
+  });
+
+  it("leaves a non-payment verdict alone", () => {
+    expect(
+      enforceApGuardrails({ ...base, action: "hold", addressChangedAt: "2026-09-30T12:00:00Z", addressConfirmedAt: null })
+    ).toEqual({ blocked: false, status: null, rule: null, reasoning: "Pay now." });
+  });
+});

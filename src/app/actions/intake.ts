@@ -16,6 +16,11 @@ import {
   firstZodMessage,
   invoiceInputSchema,
 } from "@/lib/intake-validation";
+import {
+  changeCounterpartyAddress,
+  confirmCounterpartyAddress,
+  CounterpartyAddressError,
+} from "@/lib/counterparty-address";
 import { appendLedgerEntry } from "@/lib/ledger";
 
 export interface IntakeActionResult {
@@ -102,6 +107,66 @@ export async function createCounterpartyAction(
     } catch (error) {
       console.error("counterparty intake failed", error);
       return { ok: false, message: error instanceof Error ? error.message : "Counterparty could not be added." };
+    }
+  });
+}
+
+const counterpartyIdSchema = z.string().uuid();
+
+/** A `CounterpartyAddressError` carries a message safe to show; anything else stays in the server log. */
+function addressFailure(error: unknown, what: string): IntakeActionResult {
+  if (error instanceof CounterpartyAddressError) return { ok: false, message: error.message };
+  console.error(what, error instanceof Error ? error.message : "unknown error");
+  return { ok: false, message: "That did not work. Try again in a moment." };
+}
+
+/** Sets, changes or clears a counterparty's Arc address. The next payment to a changed address waits for a person. */
+export async function updateCounterpartyAddressAction(
+  _previous: IntakeActionResult,
+  formData: FormData
+): Promise<IntakeActionResult> {
+  const auth = await authorize(formData.get("orgSlug"), "records.write");
+  if (!auth.ok) return { ok: false, message: auth.message };
+  return inOrg(auth, async () => {
+    const id = counterpartyIdSchema.safeParse(formString(formData, "counterpartyId"));
+    if (!id.success) return { ok: false, message: "Counterparty not found." };
+    try {
+      const result = await changeCounterpartyAddress({ actorId: auth.user.id, counterpartyId: id.data, raw: formString(formData, "address") });
+      revalidateOrgPages();
+      return {
+        ok: true,
+        message:
+          result.to === null
+            ? `${result.name}'s address cleared.`
+            : `${result.name}'s address changed. The next payment to it waits for a person to approve it.`,
+      };
+    } catch (error) {
+      return addressFailure(error, "counterparty address change failed");
+    }
+  });
+}
+
+/** Confirms a changed address, as the page showed it, so payments to it are decided as usual again. */
+export async function confirmCounterpartyAddressAction(
+  _previous: IntakeActionResult,
+  formData: FormData
+): Promise<IntakeActionResult> {
+  const auth = await authorize(formData.get("orgSlug"), "approval.decide");
+  if (!auth.ok) return { ok: false, message: auth.message };
+  return inOrg(auth, async () => {
+    const id = counterpartyIdSchema.safeParse(formString(formData, "counterpartyId"));
+    if (!id.success) return { ok: false, message: "Counterparty not found." };
+    try {
+      const confirmed = await confirmCounterpartyAddress({
+        actorId: auth.user.id,
+        counterpartyId: id.data,
+        shownAddress: formString(formData, "address"),
+        via: "confirm",
+      });
+      revalidateOrgPages();
+      return { ok: true, message: confirmed ? "Address confirmed. Payments to it are decided as usual again." : "This address is already confirmed." };
+    } catch (error) {
+      return addressFailure(error, "counterparty address confirmation failed");
     }
   });
 }

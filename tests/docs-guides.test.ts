@@ -32,6 +32,8 @@ const APPROVAL_CARD = "src/components/ApprovalCard.tsx";
 const APPROVALS_PAGE = "src/app/o/[slug]/approvals/page.tsx";
 const VERIFY_BADGE = "src/components/VerifyLedgerBadge.tsx";
 const AUDIT_PAGE = "src/app/o/[slug]/audit/page.tsx";
+const ADDRESS_CONTROLS = "src/components/intake/CounterpartyAddressEdit.tsx";
+const ADDRESS_LIBRARY = "src/lib/counterparty-address.ts";
 
 /** Each guide's quoted UI strings, as `[text, the file it must appear in]`. */
 const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
@@ -120,6 +122,13 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["audit #", DECISION_CARD],
     ["Approvals", APP_NAV],
     ["Nothing is waiting for a decision.", APPROVALS_PAGE],
+    ["Edit address", ADDRESS_CONTROLS],
+    ["Arc address", ADDRESS_CONTROLS],
+    ["Save address", ADDRESS_CONTROLS],
+    ["not yet confirmed", ADDRESS_CONTROLS],
+    ["Confirm address", ADDRESS_CONTROLS],
+    ["Pays to", APPROVAL_CARD],
+    ["This counterparty's address changed after this page loaded. Check the new address and try again.", ADDRESS_LIBRARY],
     ["Approve and pay", APPROVAL_CARD],
     ["Pay now", APPROVAL_CARD],
     ["Reject", APPROVAL_CARD],

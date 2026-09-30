@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import ApprovalCard from "@/components/ApprovalCard";
 import GoLivePanel from "@/components/GoLivePanel";
 import VerifyLedgerBadge from "@/components/VerifyLedgerBadge";
+import CounterpartyAddress from "@/components/intake/CounterpartyAddressEdit";
 import CounterpartyIntake from "@/components/intake/CounterpartyIntake";
 import InvoiceCsvImport from "@/components/intake/InvoiceCsvImport";
 import InvoiceIntake from "@/components/intake/InvoiceIntake";
@@ -98,6 +99,8 @@ const COUNTERPARTY: CounterpartyRow = {
   last_screened_at: "2026-09-30T11:52:00Z",
   performance_score: null,
   performance_inputs: null,
+  address_changed_at: null,
+  address_confirmed_at: null,
 };
 
 const INVOICE: InvoiceRow = {
@@ -158,6 +161,7 @@ const HELD: WaitingPayable = {
   reviewedAt: null,
   reclaimable: false,
   paymentSent: false,
+  address: "0x7a3c9e2b41d05f8a6c1e3b9d2f4a8c6e0b5d1f93",
 };
 
 function HashChain({ entries }: { entries: LedgerEntry[] }) {
@@ -215,6 +219,29 @@ export const DOCS_SHOTS = {
         <section>
           <SectionHeader title="Add counterparty" meta="human-entered · screened on submission" />
           <CounterpartyIntake orgSlug={SLUG} />
+        </section>
+      );
+    },
+  },
+  "first-payment-address": {
+    guide: "first-payment",
+    page: "counterparties",
+    render: function AddressShot() {
+      return (
+        <section className="max-w-md">
+          <Card className="min-w-0 p-4">
+            <h3 className="truncate text-sm font-semibold text-ink">{COUNTERPARTY.name}</h3>
+            <p className="mt-0.5 text-xs capitalize text-ink-3">
+              {COUNTERPARTY.role} · {COUNTERPARTY.chain}
+            </p>
+            <CounterpartyAddress
+              orgSlug={SLUG}
+              counterparty={{ id: COUNTERPARTY.id, name: COUNTERPARTY.name, address: COUNTERPARTY.address }}
+              unconfirmedSince="2026-09-30T12:20:00Z"
+              canWrite
+              canConfirm
+            />
+          </Card>
         </section>
       );
     },

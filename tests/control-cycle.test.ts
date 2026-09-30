@@ -420,6 +420,28 @@ describe("reconcileApInvoice — a matched payable with a payment in flight", ()
     expect(append.p_detail).toMatchObject({ notResubmittedBecause: "counterparty.high_risk", execution: { resultingStatus: "held" } });
   });
 
+  it("does not resubmit to a counterparty whose changed address no one has confirmed, and holds it for a person", async () => {
+    const { fake, run } = cycleFake((r) => {
+      if (r.path === "/rest/v1/counterparties" && r.method === "GET") {
+        return { body: { risk_level: "low", address_changed_at: "2026-09-30T12:00:00+00:00", address_confirmed_at: null } };
+      }
+      if (r.path === "/rest/v1/rpc/agent_paused") return { body: false };
+      return undefined;
+    });
+
+    const outcome = await run(() =>
+      reconcileApInvoice({ ...invoice, txRef: null }, { providerTxId: null, status: "submitting" }, { db: db(), provider, operating: { id: ACCOUNT_ID } })
+    );
+
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+    expect(outcome.status).toBe("held");
+    expect(outcome.line.message).toBe("Acme Supplies: not resubmitted, the counterparty's address changed and no one has confirmed it (150 USDC)");
+    const body = invoicePatches(fake.requests)[0].body as Record<string, unknown>;
+    expect(body.agent_reasoning).toBe(`${invoice.reasoning} [not resubmitted: the counterparty's address changed and no one has confirmed it]`);
+    const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(append.p_detail).toMatchObject({ notResubmittedBecause: "counterparty.address_unconfirmed", execution: { resultingStatus: "held" } });
+  });
+
   it("resubmits through payInvoice when the counterparty is not high risk and the agent is not paused", async () => {
     payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", operatingBalance: 200 });
     const { run } = cycleFake((r) => {

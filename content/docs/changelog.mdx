@@ -1,5 +1,15 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-09-30: Counterparty address changes
+
+- Two new ledger actions, delivered as `ledger.appended` events like every other entry, both in the `compliance` domain:
+  - `counterparty_address_changed`, whose `detail` is `{ by, counterpartyId, from, to }`. `from` or `to` is `null` when there was no address before, or it was cleared.
+  - `counterparty_address_confirmed`, whose `detail` is `{ by, counterpartyId, address, via }`. `via` is `"approval"` when approving a payment confirmed it, and `"confirm"` when someone confirmed it on the counterparty.
+- An agent decision entry (`ap_pay` and the other `ap_*` actions) can now carry `guardrailRule: "counterparty.address_unconfirmed"`. It means the payment was held because the counterparty's address changed and no one has confirmed it. Its `observed` object gains `addressUnconfirmed`, a boolean.
+- An `ap_reconcile` entry can now carry `notResubmittedBecause: "counterparty.address_unconfirmed"`, beside the existing `"counterparty.high_risk"`. A payment that never reached the network is not sent again to a changed address that no one has confirmed; it is held for a person.
+
+No `/api/v1` endpoint, parameter or response changed.
+
 ## 2026-09-29: MCP server
 
 - A remote MCP server at `https://www.vestiarion.xyz/api/mcp`, over Streamable HTTP. An AI agent connects with a workspace API key, sent as `Authorization: Bearer <key>`, and reads that workspace's records through one tool per `/api/v1` read operation. A tool returns the operation's JSON exactly. See [MCP server](/docs/ai-integration/mcp).

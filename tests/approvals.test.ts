@@ -107,9 +107,13 @@ function approvalsFake(options: {
   /** The invoice's payment intent, or none; for the listing, every row's intent. */
   intents?: Array<Record<string, unknown>>;
   ledgerFails?: boolean;
+  /** The counterparty row the address confirmation reads; none by default. */
+  counterparty?: Record<string, unknown>;
 } = {}) {
   const fake = fakeSupabase((request) => {
     if (request.path === "/rest/v1/orgs") return { body: orgRow() };
+    if (request.path === "/rest/v1/counterparties" && request.method === "GET") return { body: options.counterparty ?? null };
+    if (request.path === "/rest/v1/counterparties" && request.method === "PATCH") return { body: [{ id: COUNTERPARTY_ID }] };
 
     if (request.path === "/rest/v1/invoices" && request.method === "GET") {
       const failure = options.invoice?.(request);
@@ -588,6 +592,7 @@ describe("listWaitingPayables", () => {
         reviewedAt: null,
         reclaimable: false,
         paymentSent: false,
+        address: "0xdead",
       },
     ]);
     const listing = fake.requests.find((r) => r.path === "/rest/v1/invoices" && r.method === "GET" && !r.params.get("id"));
@@ -667,5 +672,72 @@ describe("no ledger body ever contains an email address", () => {
       ...rpcBodies(fake3.requests, "append_ledger_entry"),
     ];
     expect(JSON.stringify(appends)).not.toMatch(/[^\s"]+@[^\s"]+\.[^\s"]+/);
+  });
+});
+
+describe("approveAndPay and the address the person was shown", () => {
+  const CHANGED_AT = "2026-09-30T12:00:00+00:00";
+  const unconfirmed = { id: COUNTERPARTY_ID, name: "Acme Supplies", address: "0xdead", address_changed_at: CHANGED_AT, address_confirmed_at: null };
+  const paid = () => payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", operatingBalance: 350 });
+  const counterpartyPatches = (requests: RecordedRequest[]) =>
+    requests.filter((r) => r.path === "/rest/v1/counterparties" && r.method === "PATCH");
+
+  it("refuses before any claim when the counterparty's address is no longer the one shown", async () => {
+    const { fake, run } = approvalsFake({ counterparty: unconfirmed });
+
+    const attempt = run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID, shownAddress: "0xbeef" }));
+
+    await expect(attempt).rejects.toBeInstanceOf(ApprovalError);
+    await expect(attempt).rejects.toThrow("This counterparty's address changed after this page loaded. Check the new address and try again.");
+    expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+  });
+
+  it("compares addresses without regard to letter case", async () => {
+    paid();
+    const { run } = approvalsFake({ counterparty: unconfirmed });
+
+    await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID, shownAddress: "0xDEAD" }))).resolves.toMatchObject({ status: "paid" });
+  });
+
+  it("confirms an unconfirmed address it paid to, and records who confirmed it", async () => {
+    paid();
+    const { fake, run } = approvalsFake({ counterparty: unconfirmed });
+
+    await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID, shownAddress: "0xdead" }));
+
+    const [patch] = counterpartyPatches(fake.requests);
+    expect(Object.keys(patch.body as object)).toEqual(["address_confirmed_at"]);
+    const confirmed = rpcBodies(fake.requests, "append_ledger_entry").find((body) => body.p_action === "counterparty_address_confirmed");
+    expect(confirmed?.p_detail).toEqual({ by: ACTOR, counterpartyId: COUNTERPARTY_ID, address: "0xdead", via: "approval" });
+  });
+
+  it("does not confirm the address when the approval only records a transfer that was already sent", async () => {
+    paid();
+    const { fake, run } = approvalsFake({
+      counterparty: unconfirmed,
+      intents: [{ source_id: INVOICE_ID, status: "confirmed", provider_tx_id: "circle-tx-1", last_error: null }],
+    });
+
+    await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID, shownAddress: "0xdead" }));
+
+    expect(counterpartyPatches(fake.requests)).toHaveLength(0);
+  });
+
+  it("pays even when the confirmation cannot be written", async () => {
+    paid();
+    const { run } = approvalsFake();
+
+    await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID, shownAddress: "0xdead" }))).resolves.toMatchObject({ status: "paid" });
+    expect(payInvoiceMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("accepts nothing shown for a counterparty with no address", async () => {
+    paid();
+    const { run } = approvalsFake({
+      invoice: (r) => (r.params.get("id") ? { body: invoiceRow({ counterparties: { name: "Acme", risk_level: "medium", address: null } }) } : undefined),
+    });
+
+    await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID, shownAddress: "" }))).resolves.toMatchObject({ status: "paid" });
   });
 });

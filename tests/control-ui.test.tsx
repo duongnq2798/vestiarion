@@ -52,6 +52,7 @@ function payable(overrides: Partial<WaitingPayable> = {}): WaitingPayable {
     reviewedAt: null,
     reclaimable: false,
     paymentSent: false,
+    address: "0x1948aB0000000000000000000000000000c345a0",
     ...overrides,
   };
 }
@@ -68,6 +69,19 @@ describe("utcMinute", () => {
 });
 
 describe("ApprovalCard", () => {
+  it("shows where the payment goes, and posts that address with Approve and pay", () => {
+    const markup = card();
+    expect(markup).toContain("Pays to");
+    expect(markup).toContain("0x1948aB0000000000000000000000000000c345a0");
+    expect(markup).toMatch(/<input type="hidden" name="address" value="0x1948aB0000000000000000000000000000c345a0"\/>/);
+  });
+
+  it("says when the counterparty has no address, and posts an empty one", () => {
+    const markup = card({ address: null });
+    expect(markup).toContain("no address set");
+    expect(markup).toMatch(/<input type="hidden" name="address" value=""\/>/);
+  });
+
   it("shows the counterparty, amount, due date, status, reasoning and when the agent stopped", () => {
     const markup = card();
     expect(markup).toContain("Northwind Supply");

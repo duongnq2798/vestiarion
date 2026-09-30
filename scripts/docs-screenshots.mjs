@@ -68,6 +68,7 @@ const SHOTS = {
   "first-payment-counterparty": async (page) => {
     await page.fill({ "cp-name": "Northstar Studio", "cp-limit": "50.00", "cp-address": `0x${"c0ffee00".repeat(5)}`, "cp-jurisdiction": "US" });
   },
+  "first-payment-address": async () => {},
   "first-payment-invoice": async (page) => {
     await page.click(`document.getElementById("invoice-counterparty")`);
     await page.waitFor(`[...document.querySelectorAll("[role=option]")].some((o) => o.textContent.includes("Northstar Studio"))`);
