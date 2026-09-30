@@ -85,43 +85,45 @@ function Chart({ series, customers, ours }: { series: DailyPayments[]; customers
 
   return (
     <figure className="mt-4 rounded-2xl border border-line bg-surface p-4 shadow-surface">
-      <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} role="img" aria-label={summary} className="h-auto w-full">
-        {ticks.map((tick) => (
-          <g key={tick}>
-            <line x1={MARGIN.left} x2={WIDTH - MARGIN.right} y1={y(tick)} y2={y(tick)} stroke="var(--color-line)" strokeWidth="1" />
-            <text x={MARGIN.left - 8} y={y(tick)} dy="0.32em" textAnchor="end" className="fill-ink-3 font-mono text-[10px]">
-              {tick}
-            </text>
-          </g>
-        ))}
-        {series.map((row) => {
-          const left = (x(row.day) ?? 0) + (x.bandwidth() - barWidth) / 2;
-          const customerTop = y(row.customers);
-          const oursTop = y(row.customers + row.ours);
-          const customerHeight = baseline - customerTop;
-          const oursHeight = customerTop - oursTop - (row.customers > 0 ? GAP : 0);
-          return (
-            <g key={row.day}>
-              {row.customers > 0 &&
-                (row.ours > 0 ? (
-                  <rect x={left} y={customerTop} width={barWidth} height={customerHeight} fill={SERIES[0].color} />
-                ) : (
-                  <path d={topRounded(left, customerTop, barWidth, customerHeight)} fill={SERIES[0].color} />
-                ))}
-              {row.ours > 0 && oursHeight > 0 && <path d={topRounded(left, oursTop, barWidth, oursHeight)} fill={SERIES[1].color} />}
-              <rect x={x(row.day)} y={MARGIN.top} width={x.bandwidth()} height={baseline - MARGIN.top} fill="transparent" className="hover:fill-ink/5">
-                <title>{dayTitle(row)}</title>
-              </rect>
-              {labelled.has(row.day) && (
-                <text x={(x(row.day) ?? 0) + x.bandwidth() / 2} y={HEIGHT - 8} textAnchor="middle" className="fill-ink-3 font-mono text-[10px]">
-                  {shortDay(row.day)}
-                </text>
-              )}
+      <div role="region" aria-label="Settled payments by day, chart" tabIndex={0} className="overflow-x-auto rounded-lg">
+        <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} role="img" aria-label={summary} className="h-auto w-full min-w-[40rem]">
+          {ticks.map((tick) => (
+            <g key={tick}>
+              <line x1={MARGIN.left} x2={WIDTH - MARGIN.right} y1={y(tick)} y2={y(tick)} stroke="var(--color-line)" strokeWidth="1" />
+              <text x={MARGIN.left - 8} y={y(tick)} dy="0.32em" textAnchor="end" className="fill-ink-3 font-mono text-[11px]">
+                {tick}
+              </text>
             </g>
-          );
-        })}
-        <line x1={MARGIN.left} x2={WIDTH - MARGIN.right} y1={baseline} y2={baseline} stroke="var(--color-line-strong)" strokeWidth="1" />
-      </svg>
+          ))}
+          {series.map((row) => {
+            const left = (x(row.day) ?? 0) + (x.bandwidth() - barWidth) / 2;
+            const customerTop = y(row.customers);
+            const oursTop = y(row.customers + row.ours);
+            const customerHeight = baseline - customerTop;
+            const oursHeight = customerTop - oursTop - (row.customers > 0 ? GAP : 0);
+            return (
+              <g key={row.day}>
+                {row.customers > 0 &&
+                  (row.ours > 0 ? (
+                    <rect x={left} y={customerTop} width={barWidth} height={customerHeight} fill={SERIES[0].color} />
+                  ) : (
+                    <path d={topRounded(left, customerTop, barWidth, customerHeight)} fill={SERIES[0].color} />
+                  ))}
+                {row.ours > 0 && oursHeight > 0 && <path d={topRounded(left, oursTop, barWidth, oursHeight)} fill={SERIES[1].color} />}
+                <rect x={x(row.day)} y={MARGIN.top} width={x.bandwidth()} height={baseline - MARGIN.top} fill="transparent" className="hover:fill-ink/5">
+                  <title>{dayTitle(row)}</title>
+                </rect>
+                {labelled.has(row.day) && (
+                  <text x={(x(row.day) ?? 0) + x.bandwidth() / 2} y={HEIGHT - 8} textAnchor="middle" className="fill-ink-3 font-mono text-[11px]">
+                    {shortDay(row.day)}
+                  </text>
+                )}
+              </g>
+            );
+          })}
+          <line x1={MARGIN.left} x2={WIDTH - MARGIN.right} y1={baseline} y2={baseline} stroke="var(--color-line-strong)" strokeWidth="1" />
+        </svg>
+      </div>
       <figcaption className="mt-2 text-xs text-ink-3">Days are UTC. Hover a day for its figures.</figcaption>
       <Disclosure variant="default" className="mt-4" summary="Show the days as a table">
         <Table label="Settled payments by day, as a table" className="text-xs">

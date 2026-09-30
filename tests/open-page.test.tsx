@@ -96,6 +96,8 @@ describe("the /open page", () => {
   it("draws the settled payments by day, with a legend and a table view", async () => {
     const markup = await render();
     expect(markup).toContain('role="img"');
+    // On a phone the chart keeps a legible width and scrolls inside a focusable region, never the page.
+    expect(markup).toMatch(/<div role="region" aria-label="Settled payments by day, chart" tabindex="0" class="[^"]*overflow-x-auto[^"]*"><svg[^>]*class="[^"]*min-w-\[40rem\]/);
     const page = text(markup);
     expect(page).toContain("Settled payments by day");
     expect(page).toContain("Sep 28, 2026");
