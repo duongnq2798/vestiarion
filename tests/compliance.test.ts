@@ -308,6 +308,18 @@ describe("isScreeningDue", () => {
     expect(isScreeningDue(stale, now, 24 * 3_600_000)).toBe(true);
   });
 
+  it("re-screens a counterparty whose last verdict came from the other source, however fresh", () => {
+    const bundled = { risk_level: "clear", last_screened_at: hoursAgo(1), last_screening_mode: "simulate" };
+    const live = { risk_level: "clear", last_screened_at: hoursAgo(1), last_screening_mode: "live" };
+    const unknown = { risk_level: "clear", last_screened_at: hoursAgo(1), last_screening_mode: null };
+    expect(isScreeningDue(bundled, now, 24 * 3_600_000, "live")).toBe(true);
+    expect(isScreeningDue(live, now, 24 * 3_600_000, "live")).toBe(false);
+    // A verdict whose source is not known is re-checked once, by the source in use now.
+    expect(isScreeningDue(unknown, now, 24 * 3_600_000, "live")).toBe(true);
+    // Without a mode to compare, only the interval decides, as before.
+    expect(isScreeningDue(bundled, now, 24 * 3_600_000)).toBe(false);
+  });
+
   it("is due exactly on the interval boundary", () => {
     const row = { risk_level: "clear", last_screened_at: hoursAgo(24) };
     expect(isScreeningDue(row, now, 24 * 3_600_000)).toBe(true);
