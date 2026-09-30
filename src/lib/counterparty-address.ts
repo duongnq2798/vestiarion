@@ -79,11 +79,19 @@ async function loadCounterparty(counterpartyId: string): Promise<AddressRow> {
   return result.data as AddressRow;
 }
 
-export async function changeCounterpartyAddress(input: {
-  actorId: string;
+/**
+ * Who changed the address: a member (`actorId`), or the payee themselves through
+ * a one-time payee link (`payeeLinkId`, spec 2026-09-30-payee-links-design.md).
+ * Either way the change is stamped, so payments wait for a member to confirm it.
+ */
+export type AddressChangeInput = ({ actorId: string } | { payeeLinkId: string }) & {
   counterpartyId: string;
   raw: string;
-}): Promise<{ name: string; from: string | null; to: string | null }> {
+};
+
+export async function changeCounterpartyAddress(
+  input: AddressChangeInput
+): Promise<{ name: string; from: string | null; to: string | null }> {
   const parsed = parseAddressInput(input.raw);
   if (!parsed.ok) throw new CounterpartyAddressError("invalid");
 
@@ -98,15 +106,22 @@ export async function changeCounterpartyAddress(input: {
   const rows = unwrap(await guarded.select("id")) as Array<{ id: string }>;
   if (rows.length === 0) throw new CounterpartyAddressError("conflict");
 
+  const byPayee = "payeeLinkId" in input;
   await appendLedgerEntryBestEffort(currentOrgId(), {
     actor: "human",
     domain: "compliance",
     action: "counterparty_address_changed",
-    summary:
-      parsed.address === null
+    summary: byPayee
+      ? `${current.name} entered their own payment address through a payee link; the next payment waits for a person to confirm it`
+      : parsed.address === null
         ? `Cleared ${current.name}'s payment address`
         : `Changed ${current.name}'s payment address; the next payment waits for a person to confirm it`,
-    detail: { by: input.actorId, counterpartyId: current.id, from: current.address, to: parsed.address },
+    detail: {
+      ...(byPayee ? { by: null, via: "payee_link", linkId: input.payeeLinkId } : { by: input.actorId }),
+      counterpartyId: current.id,
+      from: current.address,
+      to: parsed.address,
+    },
   });
 
   return { name: current.name, from: current.address, to: parsed.address };

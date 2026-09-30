@@ -46,7 +46,7 @@ export const TENANT_RPCS = [
 export type TenantRpc = (typeof TENANT_RPCS)[number];
 
 export const PLATFORM_TABLES = [
-  "orgs", "memberships", "invitations", "api_keys", "webhook_endpoints", "webhook_deliveries",
+  "orgs", "memberships", "invitations", "api_keys", "webhook_endpoints", "webhook_deliveries", "payee_links",
 ] as const;
 export type PlatformTable = (typeof PLATFORM_TABLES)[number];
 
@@ -56,6 +56,7 @@ export const PLATFORM_RPCS = [
   "pending_invitations_for", "accept_invitation_by_id", "pause_agent", "resume_agent", "create_api_key",
   "claim_webhook_deliveries", "record_webhook_failure", "create_webhook_endpoint", "choose_hosted_wallet", "delete_org",
   "open_numbers", "set_platform_team_member", "platform_team_members",
+  "create_payee_link", "payee_link_preview", "claim_payee_link", "release_payee_link", "revoke_payee_link",
 ] as const;
 export type PlatformRpc = (typeof PLATFORM_RPCS)[number];
 
