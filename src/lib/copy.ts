@@ -17,3 +17,10 @@ export function utcMinute(iso: string): string {
   const at = new Date(iso).toISOString();
   return `${at.slice(0, 10)} ${at.slice(11, 16)} UTC`;
 }
+
+/**
+ * What the console's balance tile says when the chain could not be read. A
+ * fixed sentence on purpose: Circle's own error can carry request details,
+ * so it is never shown or returned, only this.
+ */
+export const CIRCLE_UNREACHABLE = "Could not reach Circle; showing the last known balance";

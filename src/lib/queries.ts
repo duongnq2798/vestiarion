@@ -22,6 +22,8 @@ export interface AccountRow {
   circle_wallet_id: string | null;
   balance: number;
   apy: number;
+  /** When `balance` was last read from the chain (migration 0032); null when it never has been. */
+  balance_synced_at: string | null;
 }
 
 export async function listAccounts(): Promise<AccountRow[]> {

@@ -38,6 +38,8 @@ export interface Decision {
 export interface Account {
   id: string;
   name: string;
+  /** Which account this is; the balance tile needs it to tell a reserve held on chain from the rest. */
+  kind?: "operating" | "reserve" | "chain";
   chain: string;
   token: string;
   balance: number;

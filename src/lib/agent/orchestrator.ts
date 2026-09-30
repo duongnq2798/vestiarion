@@ -14,6 +14,7 @@ import {
   type CounterpartyHistoryInputs,
 } from "./counterparty-history";
 import { CycleJournal, messageOf, type CycleStage } from "./journal";
+import { syncOnChainBalances, type BalanceSync } from "./balances";
 import { decide } from "./decide";
 import { enforceApGuardrails } from "./guardrails";
 import { SandboxCapReachedError } from "./sandbox-cap";
@@ -28,6 +29,9 @@ import { followUpConfig, planFollowUp, type DecisionFacts, type FollowUpConfig, 
 import { OPEN_PAYABLE_STATUSES, summarizePayableObligations } from "./obligations";
 import { planTreasury, type TreasuryDecision } from "./treasury";
 import { plural } from "../copy";
+
+// Moved to ./balances.ts with the read it belongs to; still exported from here for existing callers.
+export { liveOperatingBalance } from "./balances";
 
 /** The closing `cycle_complete` ledger entry's summary line, pulled out as a
  * pure function so the singular/plural wording can be tested without
@@ -831,17 +835,22 @@ interface CycleContext {
 }
 
 /**
- * The operating account in live mode while the USYC leg is simulated: the
- * reserve is a notional carve-out of the USDC in the operating wallet, so
- * `spendable + reserve` is what is on chain. The carve-out is clamped to that
- * amount: a reserve larger than the money that exists (a simulated one
- * carried over, or funds moved out of the wallet) never claims more than is
- * there.
+ * The reconcile stage's ledger lines for one balance read, in the order the
+ * accounts were read: a line for each balance that changed, and one for each
+ * account that could not be read or written. An account that was read and
+ * found unchanged writes no line.
  */
-export function liveOperatingBalance(onChain: number, notionalReserve: number): { spendable: number; reserve: number } {
-  const available = Math.max(0, onChain);
-  const reserve = Math.min(Math.max(0, notionalReserve), available);
-  return { spendable: Number((available - reserve).toFixed(6)), reserve };
+export function reconcileLines(sync: Pick<BalanceSync, "outcomes">): CycleLogLine[] {
+  return sync.outcomes.flatMap((outcome): CycleLogLine[] => {
+    if (outcome.kind === "changed") {
+      const note = outcome.note ? ` (${outcome.note})` : "";
+      return [{ domain: "treasury", message: `Reconciled ${outcome.name}: ${outcome.from} → ${outcome.to} USDC${note}` }];
+    }
+    if (outcome.kind === "failed") {
+      return [{ domain: "treasury", message: `Could not reconcile ${outcome.name}: ${outcome.message}` }];
+    }
+    return [];
+  });
 }
 
 /**
@@ -986,53 +995,12 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
   await stage("reconcile", async () => {
 
   // ------------------------------------------------------------ 0. reconcile
-  // In live mode the chain is the source of truth for cash. Reading the
-  // stored balance instead would let the agent authorise payments against
-  // money that is no longer there — the exact failure a treasury agent must
-  // not have.
-  //
-  // While the USYC leg is simulated, the reserve is a *notional* carve-out:
-  // those USDC physically remain in the operating wallet. Subtracting it
-  // keeps the identity `operating + reserve == on-chain total`, so the
-  // reserve cannot conjure a balance that does not exist on Arc.
+  // In live mode the chain is the source of truth for cash, so each
+  // non-reserve account's stored balance is written back from it, less the
+  // notional USYC reserve while that leg is simulated. The read and its
+  // reasoning live in ./balances.ts, shared with the console's balance refresh.
   if (provider.mode === "live") {
-    const rows = unwrap(
-      await db.from("accounts").select("id, name, kind, balance")
-    ) as Array<{ id: string; name: string; kind: string; balance: string }>;
-
-    const notionalReserve =
-      provider.earnMode === "simulate"
-        ? num(rows.find((a) => a.kind === "reserve")?.balance)
-        : 0;
-
-    for (const account of rows.filter((a) => a.kind !== "reserve")) {
-      try {
-        const snapshot = await provider.getBalance(account.id);
-        const { spendable, reserve: carveOut } = liveOperatingBalance(
-          snapshot.balance,
-          account.kind === "operating" ? notionalReserve : 0
-        );
-        const stored = num(account.balance);
-        if (Math.abs(spendable - stored) < 0.000001) continue;
-
-        const res = await db
-          .from("accounts")
-          .update({ balance: spendable })
-          .eq("id", account.id);
-        if (res.error) throw new Error(res.error.message);
-
-        const note = carveOut > 0 ? ` (on-chain ${snapshot.balance} less ${carveOut} notional reserve)` : "";
-        lines.push({
-          domain: "treasury",
-          message: `Reconciled ${account.name}: ${stored} → ${spendable} USDC${note}`,
-        });
-      } catch (err) {
-        lines.push({
-          domain: "treasury",
-          message: `Could not reconcile ${account.name}: ${(err as Error).message}`,
-        });
-      }
-    }
+    lines.push(...reconcileLines(await syncOnChainBalances(provider, db)));
   }
 
   });
