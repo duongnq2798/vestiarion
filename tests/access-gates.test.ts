@@ -74,13 +74,14 @@ describe("every /o/[slug] page", () => {
 });
 
 describe("every server action", () => {
-  it("lives in src/app/actions, except sign-in, accepting an invitation, creating a first workspace, and your own account", () => {
+  it("lives in src/app/actions, except sign-in, accepting an invitation, creating a first workspace, your own account, and a payee's own address", () => {
     const withDirective = walk(path.join(ROOT, "src")).filter(
       (file) => /\.(ts|tsx)$/.test(file) && /^\s*["']use server["']/.test(read(file))
     );
     const outside = withDirective.map(rel).filter((file) => !file.startsWith("src/app/actions/"));
     expect(outside.sort()).toEqual([
       "src/app/account/actions.ts", "src/app/invite/actions.ts", "src/app/login/actions.ts", "src/app/onboarding/actions.ts",
+      "src/app/payee/[token]/actions.ts",
     ]);
   });
 
@@ -104,6 +105,24 @@ describe("every server action", () => {
     const bodies = actions.map((action) => action.body).join("\n");
     const matches = bodies.match(/authorize\([^,]+,\s*"[a-z_.]+"\)/g) ?? [];
     expect(matches.length).toBeGreaterThanOrEqual(5);
+  });
+});
+
+describe("the payee's address action", () => {
+  // A payee has no account: the one-time link is the credential, and whatever they
+  // enter waits for a member's confirmation (payee links spec R1). So its gate is the
+  // link itself — checked, claimed once, before anything else — never a session.
+  const PAYEE_ACTIONS = path.join(ROOT, "src", "app", "payee", "[token]", "actions.ts");
+  const actions = exportedAsyncFunctions(read(PAYEE_ACTIONS));
+
+  it("is the one submit action", () => {
+    expect(actions.map((action) => action.name)).toEqual(["submitPayeeAddressAction"]);
+  });
+
+  it("awaits the link check first, and enters no workspace itself", () => {
+    const [action] = actions;
+    expect(awaitedNames(action.body)[0]).toBe("submitPayeeAddress");
+    expect(action.body).not.toMatch(/inOrg|withOrg|authorize/);
   });
 });
 

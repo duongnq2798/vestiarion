@@ -4,6 +4,7 @@
  */
 export function redactPath(pathname: string): string {
   if (/^\/invite\/[^/]+/.test(pathname)) return "/invite/:token";
+  if (/^\/payee\/[^/]+/.test(pathname)) return "/payee/:token";
   return pathname.replace(/^\/o\/[^/]+/, "/o/:org");
 }
 

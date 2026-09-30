@@ -3,6 +3,7 @@ import AgentControls from "@/components/AgentControls";
 import CounterpartyAddress from "@/components/intake/CounterpartyAddressEdit";
 import CounterpartyIntake from "@/components/intake/CounterpartyIntake";
 import CounterpartyLimitEdit from "@/components/intake/CounterpartyLimitEdit";
+import PayeeLinkControl from "@/components/intake/PayeeLinkControl";
 import { Badge, type BadgeProps } from "@/components/ui/Badge";
 import { Callout } from "@/components/ui/Callout";
 import { Card } from "@/components/ui/Card";
@@ -18,6 +19,7 @@ import { chainModes } from "@/lib/circle";
 import { addressUnconfirmed } from "@/lib/counterparty-address";
 import { inOrg } from "@/lib/dal/scope";
 import { listLedgerEntries } from "@/lib/ledger";
+import { listActivePayeeLinks } from "@/lib/platform/payee-links";
 import { listCounterparties, stats } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
@@ -42,6 +44,8 @@ export default async function CounterpartiesPage({ params }: { params: Promise<{
       viewerCan(slug, "records.write"),
       viewerCan(slug, "approval.decide"),
     ]);
+    // Only those who may send a payee link see which ones are out.
+    const payeeLinks = canWrite ? await listActivePayeeLinks(access.membership.orgId) : new Map<string, { id: string; expiresAt: string }>();
 
     return (
       <ProductShell day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()}>
@@ -116,6 +120,15 @@ export default async function CounterpartiesPage({ params }: { params: Promise<{
                       canWrite={canWrite}
                       canConfirm={canConfirm}
                     />
+                    {canWrite && counterparty.role !== "client" && (
+                      <div className="mt-2">
+                        <PayeeLinkControl
+                          orgSlug={slug}
+                          counterparty={{ id: counterparty.id, name: counterparty.name }}
+                          activeLink={payeeLinks.get(counterparty.id) ?? null}
+                        />
+                      </div>
+                    )}
                   </article>
                 </Card>
               ))}

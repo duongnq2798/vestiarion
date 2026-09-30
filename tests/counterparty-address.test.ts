@@ -157,6 +157,43 @@ describe("changeCounterpartyAddress", () => {
     expect(entry.p_detail).toEqual({ by: ACTOR, counterpartyId: COUNTERPARTY_ID, from: OLD, to: NEW });
   });
 
+  it("records a payee's own change through a payee link as the link, with no person", async () => {
+    const { fake, run } = addressFake({ row: counterpartyRow({ address: null }) });
+    const LINK = "0b6c1c9e-4a4f-4a7e-9b1e-0000000001e1";
+
+    const result = await run(() => changeCounterpartyAddress({ payeeLinkId: LINK, counterpartyId: COUNTERPARTY_ID, raw: NEW }));
+
+    expect(result).toEqual({ name: "Acme Supplies", from: null, to: NEW });
+    // The change is stamped like any other, so payments wait for a member to confirm it.
+    const body = patches(fake.requests)[0].body as Record<string, unknown>;
+    expect(Number.isNaN(Date.parse(String(body.address_changed_at)))).toBe(false);
+    const [entry] = ledgerBodies(fake.requests);
+    expect(entry.p_actor).toBe("human");
+    expect(entry.p_detail).toEqual({ by: null, via: "payee_link", linkId: LINK, counterpartyId: COUNTERPARTY_ID, from: null, to: NEW });
+    expect(entry.p_summary).toBe("An address was entered through Acme Supplies's payee link; the next payment waits for a person to confirm it");
+  });
+
+  it("guards on the change and the confirmation it read, so a confirmation that lands first makes this a conflict", async () => {
+    const CONFIRMED_AT = "2026-09-30T12:05:00.654321+00:00";
+    const { fake, run } = addressFake({ row: counterpartyRow({ address_changed_at: CHANGED_AT, address_confirmed_at: CONFIRMED_AT }) });
+
+    await run(() => changeCounterpartyAddress({ actorId: ACTOR, counterpartyId: COUNTERPARTY_ID, raw: NEW }));
+
+    const [patch] = patches(fake.requests);
+    expect(patch.params.get("address_changed_at")).toBe(`eq.${CHANGED_AT}`);
+    expect(patch.params.get("address_confirmed_at")).toBe(`eq.${CONFIRMED_AT}`);
+  });
+
+  it("guards on never-changed and never-confirmed with is.null", async () => {
+    const { fake, run } = addressFake();
+
+    await run(() => changeCounterpartyAddress({ payeeLinkId: "0b6c1c9e-4a4f-4a7e-9b1e-0000000001e1", counterpartyId: COUNTERPARTY_ID, raw: NEW }));
+
+    const [patch] = patches(fake.requests);
+    expect(patch.params.get("address_changed_at")).toBe("is.null");
+    expect(patch.params.get("address_confirmed_at")).toBe("is.null");
+  });
+
   it("guards on a missing address with is.null, when the counterparty has none yet", async () => {
     const { fake, run } = addressFake({ row: counterpartyRow({ address: null }) });
 

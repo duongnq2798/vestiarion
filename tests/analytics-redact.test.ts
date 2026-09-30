@@ -8,6 +8,8 @@ describe("redactPath", () => {
     ["/invite/abc", "/invite/:token"],
     ["/invite/abc/", "/invite/:token"],
     ["/invite/abc/extra", "/invite/:token"],
+    ["/payee/vxp_secret", "/payee/:token"],
+    ["/payee/vxp_secret/", "/payee/:token"],
     ["/o/acme", "/o/:org"],
     ["/o/acme/", "/o/:org/"],
     ["/o/acme/audit", "/o/:org/audit"],
