@@ -21,19 +21,21 @@ This change points the checklist at them. It also measures how long the path tak
 
 ## 2. The checklist
 
-The steps, in order. Each is computed from rows (G1 still holds).
+The steps, in order. Each is computed from rows the console already reads (G1 and G2 still hold:
+no stored state, no extra query, no Circle call on the console).
 
-| # | Step | Done when | Notes |
+| # | Step | Done when | Next-step guidance |
 |---|---|---|---|
-| 1 | Add a wallet | the operating account has a Circle wallet (or the workspace is live) | owner; a hosted wallet in one click |
-| 2 | Fund it with USDC | the stored operating balance is above 0 (or live) | shows the operating wallet's address with **Copy** and a link to Circle's faucet; while this is the next step, the console reads the balance from the chain every 30 s, for up to 15 minutes, and ticks the step on its own |
-| 3 | Go live | the workspace is live | owner |
-| 4 | Add a payee with a confirmed Arc address | a non-sample vendor or contractor with an address that is not waiting for confirmation | mentions **Ask for address** (payee links) and confirming an address that arrived through one |
-| 5 | Add a payable | the workspace has a non-sample payable invoice | "the agent decides on it within a minute" |
-| 6 | First payment on Arc testnet | a confirmed live payment exists | done: links to it on arcscan |
+| 1 | Add a wallet | the operating account has a Circle wallet (or the workspace is live) | owner; Settings |
+| 2 | Fund it with USDC | the stored operating balance is above 0 (or live) | Settings shows the address and the faucet, and now reads the balance again by itself (R1) |
+| 3 | Go live | the workspace is live | owner; Settings |
+| 4 | Add a payee with an Arc address | a vendor or contractor a person added, with an address that is not waiting for confirmation | points at **Ask for address**; when the only payee's address is unconfirmed, says to confirm it |
+| 5 | Add a payable | a payable invoice of a counterparty a person added | within the payee's limit, with a PO reference and goods received, or the agent asks for information |
+| 6 | First payment on Arc testnet | the workspace has a paid invoice or milestone with an on-chain transaction (`stats().onchainTransfers`) | links to **Approvals** while the agent holds something for a person, otherwise to AP / AR |
 
 The checklist shows until step 6 is done, not merely until the workspace is live. A live workspace
-that has never paid anyone still needs the guide.
+that has never paid anyone still needs the guide. **Read the guide** opens the Go live guide while a
+Settings step is left, and the first-payment guide after that.
 
 ## 3. On `/open`
 
@@ -52,12 +54,13 @@ other's definition.
 
 ## 4. Rulings
 
-- **R1: G2 changes for the funding step only.** While "Fund it" is the next step and the operating
-  account has a wallet, the console calls the existing balance refresh (`refreshOnChainBalanceAction`)
-  every 30 s, for at most 15 minutes. The refresh already holds a 30 s cooldown and a claim, and
-  refuses while a cycle runs, so this adds at most two Circle reads a minute for one waiting
-  workspace. Every other console view still makes no Circle call. Cost if wrong: a few extra balance
-  reads while someone funds a wallet.
+- **R1: the balance is read again where the funding happens, not on the console.** In Settings, the
+  Go live panel's balance line already reads the operating balance from Circle once when it opens.
+  While that balance is 0 or unread, it now reads it again when the tab becomes visible (coming back
+  from the faucet), and every 30 s while the tab is visible, for up to 15 minutes after the panel
+  opened. It stops once the balance is above 0, and never runs for a sample balance. G2 is
+  unchanged: the console makes no Circle call. Cost if wrong: at most 30 balance reads for one owner
+  who leaves Settings open on an unfunded wallet.
 - **R2: "Go live" comes before the payee and the payable.** On the old order, a new user's first
   payable was paid in a sandbox with simulated money, and did not count as a first payment. Cost if
   wrong: a user who wants to try things out first still has sample data and the sandbox; the order
@@ -67,42 +70,36 @@ other's definition.
   explored a sandbox.
 - **R4: the payee step needs a confirmed address.** An address that is waiting for confirmation
   cannot be paid, so ticking the step for it would send the user to a payable the agent must hold.
+- **R5: "first payment" is an on-chain transfer the console already counts.** `stats()` counts paid
+  invoices and milestones whose transaction is not a simulated one. Reusing it keeps G1's "no extra
+  query". Cost if wrong: none found; a simulated payment never has an on-chain transaction.
 
 ## 5. Pieces
 
-- `src/lib/getting-started.ts`:
-  - the new steps;
-  - the input gains `operatingAddress`, the counterparties' role and address timestamps,
-    `payableCount` and `firstPayment`;
-  - `show` is "first payment not yet".
-- `src/components/vx/GettingStarted.tsx`: the address row with `CopyButton`, the faucet link, and
-  the first payment's arcscan link.
-- `src/components/FundingWatcher.tsx`: a client component that calls the refresh every 30 s for at
-  most 15 minutes, and calls `router.refresh()` once the balance is above 0.
-- The console page:
-  - reads the first confirmed live payment (one `payment_intents` query);
-  - passes the operating address;
-  - renders the watcher while step 2 is next.
+- `src/lib/getting-started.ts`: the six steps; the input gains the counterparties' name, role and
+  address timestamps, `payableCount` (was `invoiceCount`), `onchainPayments` and `waitingCount`;
+  `show` is "no on-chain payment yet"; `ownPayableCount` replaces `ownInvoiceCount`.
+- `src/components/vx/GettingStarted.tsx`: the guide link by stage.
+- The console page passes `dashboardStats.onchainTransfers` and `needsReview`.
+- `src/lib/funding-watch.ts`: when the balance line should read again (pure, tested); the Go live
+  panel's `BalanceLine` wires it to an interval and `visibilitychange`.
 - `supabase/migrations/0042_first_payments.sql`: the `open_first_payments` function.
-- `src/lib/platform/open-numbers.ts`, which reads and merges `open_first_payments`; `OPEN_ROWS`,
-  which gains two rows and a `duration` format; and the page.
-- `npm run numbers`, which prints them.
-- Docs: the first-payment guide lists the path in the new order.
+- `src/lib/platform/open-numbers.ts` reads both functions and merges the figures into each side;
+  `OPEN_ROWS` gains two rows and a `duration` format; `npm run numbers` prints them.
+- Docs: the go-live guide's checklist paragraph and its screenshot (`go-live-checklist`), the
+  balance line's new behaviour, and the first-payment guide's opening.
 
 ## 6. Tests
 
 - **Checklist:** every step's done rule, including an unconfirmed address, a client, sample rows and
-  receivables; the order; `show` until the first payment; the address on the fund step; the arcscan
-  link.
-- **Watcher:** it refreshes on the interval, stops at the cap, stops once funded, and never runs
-  without a wallet. Both the timer and the action are faked.
-- **PGlite:**
-  - the first payment per workspace, and a later payment that does not count;
-  - the median;
-  - the period, by the first payment's time;
-  - the customer/ours split;
-  - the grants.
-- **Open numbers:** the merge, the duration format, and the rows rendered.
+  receivables; the order; `show` until an on-chain payment; step 6's link while something waits;
+  the guide link by stage; the console wiring pin.
+- **Funding watch:** reads again when visible, unfunded, within 15 minutes and not already reading;
+  never for a sample balance, a funded wallet, a hidden tab, or after the cap.
+- **PGlite:** the first payment per workspace, and a later payment that does not count; a simulated
+  or failed payment that does not count; the median; the period, by the first payment's time; the
+  customer/ours split; the grants.
+- **Open numbers:** the merge, a missing median, the duration format, and the rows rendered.
 
 ## 7. Rollout
 
