@@ -5,7 +5,10 @@ import { submitPayeeAddressAction } from "@/app/payee/[token]/actions";
 import PayeePage, { metadata } from "@/app/payee/[token]/page";
 import { requiresSession } from "@/lib/auth/routes";
 import { CounterpartyAddressError } from "@/lib/counterparty-address";
+import { configFromEnv } from "@/lib/config";
+import { runWith } from "@/lib/context";
 import { publicOrigin } from "@/lib/public-origin";
+import { fakeSupabase, orgTestContext } from "./support/fake-supabase";
 
 /**
  * Payee links, where people meet them (spec 2026-09-30-payee-links-design.md
@@ -22,7 +25,9 @@ vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/auth/revalidate", () => ({ revalidateOrgPages: vi.fn() }));
 vi.mock("@/lib/auth/authorize", () => ({ authorize: authorizeMock }));
-vi.mock("@/lib/dal/scope", () => ({ inOrg: (_access: unknown, fn: () => Promise<unknown>) => fn() }));
+vi.mock("@/lib/dal/scope", () => ({
+  inOrg: (_access: unknown, fn: () => Promise<unknown>) => runWith(orgTestContext({ config, client: fake.client, orgId: ORG, userId: USER }), fn),
+}));
 vi.mock("@/lib/platform/payee-links", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/platform/payee-links")>()),
   ...lib,
@@ -35,6 +40,11 @@ const LINK = "0b6c1c9e-4a4f-4a7e-9b1e-0000000001e1";
 const TOKEN = `vxp_${"A".repeat(43)}`;
 const ACCESS = { ok: true, user: { id: USER, email: null }, membership: { orgId: ORG, slug: "acme", name: "Acme", mode: "live", role: "owner" } };
 
+const config = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k" });
+/** The workspace's counterparty, as the create action looks it up in the workspace's scope. */
+let role: string | null = "vendor";
+let fake = fakeSupabase(() => ({ body: role ? [{ id: PAYEE, role }] : [] }));
+
 const text = (markup: string) => markup.replace(/<[^>]+>/g, " ").replace(/&#x27;/g, "'").replace(/\s+/g, " ").trim();
 
 function form(fields: Record<string, string>): FormData {
@@ -46,6 +56,8 @@ function form(fields: Record<string, string>): FormData {
 const empty = { ok: false, message: "" };
 
 beforeEach(() => {
+  role = "vendor";
+  fake = fakeSupabase(() => ({ body: role ? [{ id: PAYEE, role }] : [] }));
   authorizeMock.mockReset().mockResolvedValue(ACCESS);
   for (const mock of Object.values(lib)) mock.mockReset();
 });
@@ -62,6 +74,17 @@ describe("createPayeeLinkAction", () => {
       url: `${publicOrigin()}/payee/${TOKEN}`,
       expiresAt: "2026-10-07T12:00:00+00:00",
     });
+  });
+
+  it("makes no link for a client, whom the agent never pays, or for a counterparty the workspace does not hold", async () => {
+    role = "client";
+    expect(await createPayeeLinkAction(empty, form({ orgSlug: "acme", counterpartyId: PAYEE }))).toEqual({
+      ok: false,
+      message: "A payee link is for a vendor or a contractor the agent pays.",
+    });
+    role = null;
+    expect(await createPayeeLinkAction(empty, form({ orgSlug: "acme", counterpartyId: PAYEE }))).toEqual({ ok: false, message: "Counterparty not found." });
+    expect(lib.createPayeeLink).not.toHaveBeenCalled();
   });
 
   it("makes nothing when refused, or for a malformed counterparty id", async () => {

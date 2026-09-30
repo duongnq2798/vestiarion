@@ -102,7 +102,14 @@ export async function changeCounterpartyAddress(
     .from("counterparties")
     .update({ address: parsed.address, address_changed_at: new Date().toISOString() })
     .eq("id", current.id);
-  const guarded = current.address === null ? update.is("address", null) : update.eq("address", current.address);
+  // Guarded on everything read, the change and the confirmation included: a
+  // confirmation that lands between this read and this write would otherwise be
+  // inherited by the new address (its timestamp later than this change's), and
+  // the agent would pay an address no one confirmed. Then this is a conflict.
+  const onAddress = current.address === null ? update.is("address", null) : update.eq("address", current.address);
+  const onChange = current.address_changed_at === null ? onAddress.is("address_changed_at", null) : onAddress.eq("address_changed_at", current.address_changed_at);
+  const guarded =
+    current.address_confirmed_at === null ? onChange.is("address_confirmed_at", null) : onChange.eq("address_confirmed_at", current.address_confirmed_at);
   const rows = unwrap(await guarded.select("id")) as Array<{ id: string }>;
   if (rows.length === 0) throw new CounterpartyAddressError("conflict");
 
@@ -112,7 +119,7 @@ export async function changeCounterpartyAddress(
     domain: "compliance",
     action: "counterparty_address_changed",
     summary: byPayee
-      ? `${current.name} entered their own payment address through a payee link; the next payment waits for a person to confirm it`
+      ? `An address was entered through ${current.name}'s payee link; the next payment waits for a person to confirm it`
       : parsed.address === null
         ? `Cleared ${current.name}'s payment address`
         : `Changed ${current.name}'s payment address; the next payment waits for a person to confirm it`,

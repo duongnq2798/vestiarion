@@ -5,6 +5,7 @@ import "server-only";
 import { z } from "zod";
 import { authorize } from "@/lib/auth/authorize";
 import { revalidateOrgPages } from "@/lib/auth/revalidate";
+import { db, unwrap } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
 import { createPayeeLink, PayeeLinkError, revokePayeeLink } from "@/lib/platform/payee-links";
 import { publicOrigin } from "@/lib/public-origin";
@@ -37,6 +38,14 @@ export async function createPayeeLinkAction(_previous: PayeeLinkActionResult, fo
   if (!counterpartyId.success) return { ok: false, message: "Counterparty not found." };
   return inOrg(auth, async () => {
     try {
+      // A payee link asks someone the agent pays for their address; a client is
+      // never paid, and the public page would tell them otherwise.
+      const found = unwrap(
+        await db().from("counterparties").select("id, role").eq("id", counterpartyId.data).limit(1)
+      ) as Array<{ id: string; role: string }>;
+      if (found.length === 0) return { ok: false, message: "Counterparty not found." };
+      if (found[0].role === "client") return { ok: false, message: "A payee link is for a vendor or a contractor the agent pays." };
+
       const { link, token } = await createPayeeLink({ orgId: auth.membership.orgId, actorId: auth.user.id, counterpartyId: counterpartyId.data });
       revalidateOrgPages();
       return {

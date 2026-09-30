@@ -49,7 +49,6 @@ export default function PayeeLinkControl({ orgSlug, counterparty, activeLink }: 
 
 function AskForAddress({ orgSlug, counterparty }: Pick<PayeeLinkControlProps, "orgSlug" | "counterparty">) {
   const [open, setOpen] = useState(false);
-  const { state, formProps } = useActionForm(createPayeeLinkAction, INITIAL);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -62,26 +61,38 @@ function AskForAddress({ orgSlug, counterparty }: Pick<PayeeLinkControlProps, "o
         title={`Ask ${counterparty.name} for their address`}
         description="Send them a one-time link. They enter their own Arc address, with no account, and you confirm it before the agent pays there."
       >
-        {state.ok && state.url && state.expiresAt ? (
-          <CreatedPayeeLink url={state.url} expiresAt={state.expiresAt} payeeName={counterparty.name} />
-        ) : (
-          <form {...formProps} className="grid gap-5">
-            <input type="hidden" name="orgSlug" value={orgSlug} />
-            <input type="hidden" name="counterpartyId" value={counterparty.id} />
-            <p className="text-sm leading-6 text-ink-2">A new link replaces any unused one you sent {counterparty.name} before.</p>
-            <FormMessage tone={state.message && !state.ok ? "error" : "neutral"}>{state.ok ? null : state.message}</FormMessage>
-            <DialogFooter>
-              <DialogClose asChild>
-                <Button variant="secondary">Cancel</Button>
-              </DialogClose>
-              <SubmitButton pendingLabel="Creating…" icon={<Link2 />}>
-                Create link
-              </SubmitButton>
-            </DialogFooter>
-          </form>
-        )}
+        <CreateLinkForm orgSlug={orgSlug} counterparty={counterparty} />
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * The create form, and the link it just made. Its state lives here, inside the
+ * dialog's content, which unmounts when the dialog closes: reopening always
+ * starts at the form, never at a link that has since been used or revoked.
+ */
+function CreateLinkForm({ orgSlug, counterparty }: Pick<PayeeLinkControlProps, "orgSlug" | "counterparty">) {
+  const { state, formProps } = useActionForm(createPayeeLinkAction, INITIAL);
+
+  if (state.ok && state.url && state.expiresAt) {
+    return <CreatedPayeeLink url={state.url} expiresAt={state.expiresAt} payeeName={counterparty.name} />;
+  }
+  return (
+    <form {...formProps} className="grid gap-5">
+      <input type="hidden" name="orgSlug" value={orgSlug} />
+      <input type="hidden" name="counterpartyId" value={counterparty.id} />
+      <p className="text-sm leading-6 text-ink-2">A new link replaces any unused one you sent {counterparty.name} before.</p>
+      <FormMessage tone={state.message && !state.ok ? "error" : "neutral"}>{state.ok ? null : state.message}</FormMessage>
+      <DialogFooter>
+        <DialogClose asChild>
+          <Button variant="secondary">Cancel</Button>
+        </DialogClose>
+        <SubmitButton pendingLabel="Creating…" icon={<Link2 />}>
+          Create link
+        </SubmitButton>
+      </DialogFooter>
+    </form>
   );
 }
 

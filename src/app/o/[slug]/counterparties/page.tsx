@@ -120,7 +120,7 @@ export default async function CounterpartiesPage({ params }: { params: Promise<{
                       canWrite={canWrite}
                       canConfirm={canConfirm}
                     />
-                    {canWrite && (
+                    {canWrite && counterparty.role !== "client" && (
                       <div className="mt-2">
                         <PayeeLinkControl
                           orgSlug={slug}

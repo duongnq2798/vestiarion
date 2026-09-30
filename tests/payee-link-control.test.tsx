@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import PayeeLinkControl, { CreatedPayeeLink } from "@/components/intake/PayeeLinkControl";
@@ -30,6 +32,21 @@ describe("PayeeLinkControl", () => {
     expect(page).toContain("Address link sent · expires Oct 7, 2026");
     expect(page).toContain("Revoke");
     expect(markup).toContain('value="0b6c1c9e-4a4f-4a7e-9b1e-0000000001e1"');
+  });
+});
+
+describe("the create form's state", () => {
+  // No DOM here (see tests/docs-try-it.test.tsx), so the structure is pinned instead:
+  // the state that holds a just-made link lives in a component rendered inside the
+  // dialog's content, which unmounts when the dialog closes. Reopening shows the
+  // form again, never a link that has since been used or revoked.
+  const source = readFileSync(path.join(process.cwd(), "src/components/intake/PayeeLinkControl.tsx"), "utf8");
+  const body = (name: string) => source.slice(source.indexOf(`function ${name}(`), source.indexOf("\n}\n", source.indexOf(`function ${name}(`)));
+
+  it("lives inside the dialog's content, not in the component that owns the dialog", () => {
+    expect(body("AskForAddress")).not.toContain("useActionForm(");
+    expect(body("CreateLinkForm")).toContain("useActionForm(createPayeeLinkAction");
+    expect(body("AskForAddress")).toMatch(/<DialogContent[\s\S]*<CreateLinkForm/);
   });
 });
 
