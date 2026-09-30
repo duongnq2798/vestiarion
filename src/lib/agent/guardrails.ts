@@ -1,5 +1,6 @@
 import type { DuplicateMatch } from "./duplicates";
 import { blockingDuplicate } from "./duplicates";
+import { addressUnconfirmed } from "../counterparty-address";
 
 export interface ApGuardrailInput {
   action: "pay" | "hold" | "flag_fraud" | "request_info";
@@ -9,11 +10,16 @@ export interface ApGuardrailInput {
   paymentLimit: number | null;
   /** Reportable repeats of this invoice, strongest first. */
   duplicates?: DuplicateMatch[];
+  /** When a person last changed the counterparty's address; null when it was set as the counterparty was added. */
+  addressChangedAt?: string | null;
+  /** When a person last confirmed the counterparty's address. */
+  addressConfirmedAt?: string | null;
 }
 
 export type ApGuardrailRule =
   | "counterparty.high_risk"
   | "counterparty.payment_limit"
+  | "counterparty.address_unconfirmed"
   | "invoice.duplicate_of_settled";
 
 export interface ApGuardrailResult {
@@ -47,6 +53,18 @@ export function enforceApGuardrails(input: ApGuardrailInput): ApGuardrailResult 
       status: "flagged",
       rule: "counterparty.high_risk",
       reasoning: `${input.reasoning} [guardrail override: counterparty is high risk — payment refused before execution]`,
+    };
+  }
+  // Ahead of the limit so the reason names the change: an edited address is
+  // the classic payment-redirection fraud, and whatever the amount, the first
+  // payment to it waits for a person.
+  const changedAt = input.addressChangedAt ?? null;
+  if (addressUnconfirmed(changedAt, input.addressConfirmedAt ?? null)) {
+    return {
+      blocked: true,
+      status: "held",
+      rule: "counterparty.address_unconfirmed",
+      reasoning: `${input.reasoning} [guardrail override: the counterparty's address changed on ${(changedAt as string).slice(0, 10)} and no one has confirmed it — held for a person to approve]`,
     };
   }
   if (input.paymentLimit != null && input.amount > input.paymentLimit) {

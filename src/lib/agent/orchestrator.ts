@@ -17,6 +17,7 @@ import { CycleJournal, messageOf, type CycleStage } from "./journal";
 import { syncOnChainBalances, type BalanceSync } from "./balances";
 import { decide } from "./decide";
 import { enforceApGuardrails } from "./guardrails";
+import { addressUnconfirmed } from "../counterparty-address";
 import { SandboxCapReachedError } from "./sandbox-cap";
 import { AgentPausedError, heldBecausePausedDetail, pausedPaymentNote, pausedTreasuryNote } from "./pause";
 import {
@@ -1159,7 +1160,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
   const payables = unwrap(
     await db
       .from("invoices")
-      .select("*, counterparties(id, name, risk_level, payment_limit, performance_score, performance_inputs, address)")
+      .select("*, counterparties(id, name, risk_level, payment_limit, performance_score, performance_inputs, address, address_changed_at, address_confirmed_at)")
       .eq("direction", "payable")
       .in("status", ["pending", "matched"])
   ) as Array<{
@@ -1181,6 +1182,8 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
       performance_score: string | null;
       performance_inputs: CounterpartyHistoryInputs | null;
       address: string | null;
+      address_changed_at: string | null;
+      address_confirmed_at: string | null;
     };
   }>;
 
@@ -1359,6 +1362,8 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
       riskLevel: counterparty.risk_level,
       paymentLimit: limit,
       duplicates,
+      addressChangedAt: counterparty.address_changed_at,
+      addressConfirmedAt: counterparty.address_confirmed_at,
     });
     metrics.recordDecisionMode(mode, agreedWithReference);
     let status = guardrail.status ?? statusForAction[decision.action];
@@ -1432,6 +1437,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           poReference: invoice.po_reference,
           goodsReceived: invoice.goods_received,
           operatingBalance,
+          addressUnconfirmed: addressUnconfirmed(counterparty.address_changed_at, counterparty.address_confirmed_at),
           // Recorded whether or not anything matched. "We looked and found
           // nothing" is the half of a fraud control that a log which only
           // records hits can never prove.
@@ -1481,7 +1487,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
   const milestones = unwrap(
     await db
       .from("milestones")
-      .select("*, counterparties(id, name, risk_level, payment_limit, performance_score, performance_inputs, address)")
+      .select("*, counterparties(id, name, risk_level, payment_limit, performance_score, performance_inputs, address, address_changed_at, address_confirmed_at)")
       .eq("verified", true)
       .eq("status", "verified")
   ) as Array<{
@@ -1501,6 +1507,8 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
       performance_score: string | null;
       performance_inputs: CounterpartyHistoryInputs | null;
       address: string | null;
+      address_changed_at: string | null;
+      address_confirmed_at: string | null;
     };
   }>;
 
@@ -1531,6 +1539,18 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
       if (reconciled.operatingBalance !== null) operatingBalance = reconciled.operatingBalance;
       metrics.recordMilestone(reconciled.status, false);
       lines.push(reconciled.line);
+      continue;
+    }
+    // A contractor whose address a person changed, and no one has confirmed
+    // since, is not paid (spec 2026-09-30-counterparty-address-edit E4). A
+    // held milestone has no approval path, so the milestone stays `verified`
+    // and waits: no model call and no ledger entry each cycle, and the first
+    // cycle after someone confirms the address decides it as usual.
+    if (addressUnconfirmed(contractor.address_changed_at, contractor.address_confirmed_at)) {
+      lines.push({
+        domain: "contractor",
+        message: `${contractor.name}: "${milestone.title}" waiting for someone to confirm its new address`,
+      });
       continue;
     }
     const limit = contractor.payment_limit == null ? null : num(contractor.payment_limit);
