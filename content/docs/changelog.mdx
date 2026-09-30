@@ -11,6 +11,28 @@ Changes to the API and webhooks that affect an integration, newest first. Change
 - `cycle_complete`'s `detail.outcomes` gains `scheduledCount`.
 - A duplicate is now also refused against a payable already `scheduled` or already being paid (`matched`), not only one already `paid` or `received`. The refusing entry's reasoning names which of the three it repeats.
 
+## 2026-09-30: Payee links
+
+- Two new ledger actions, delivered as `ledger.appended` events, both in the `compliance` domain with `actor: "human"`:
+  - `payee_link_created`, whose `detail` is `{ by, counterpartyId, linkId, expiresAt }`;
+  - `payee_link_revoked`, whose `detail` is `{ by, counterpartyId, linkId }`.
+- A `counterparty_address_changed` entry made by a payee through a payee link has `by: null`, and carries `via: "payee_link"` and `linkId` next to `counterpartyId`, `from` and `to`.
+- Such a change waits for confirmation like any other; a later `counterparty_address_confirmed` records who confirmed it.
+
+No `/api/v1` endpoint, parameter or response schema changed.
+
+## 2026-09-30: What started a cycle
+
+- A `cycle_complete` ledger entry's `detail` can now carry `trigger`, which says what started the cycle:
+  - `"schedule"` for the six-hourly run;
+  - `"manual"` for **Run cycle now**;
+  - `"event"` when something in the workspace gave the agent a decision to make.
+- An event cycle's `detail` also carries `events`, the kinds that led to it: `invoice_added`, `milestone_verified`, `payable_returned`, `address_confirmed`, `agent_resumed` and `sample_loaded`. `by`, when present, is the person whose action started the cycle.
+- These fields are visible on `ledger.appended` events and in `GET /api/v1/ledger`.
+- A cycle no longer starts while another one in the same workspace is running, so one workspace's cycles do not overlap.
+
+No `/api/v1` endpoint, parameter or response schema changed.
+
 ## 2026-09-30: Failed-payment retry
 
 - An `approval_paid` ledger entry's `detail` can now carry `attempt`, the transfer attempt this approval ended on (starting at 1), and, only when that attempt is a retry, `retriedAfter`: `{ providerTxId, providerState, failureReason }` for the earlier attempt Circle ended in a terminal failure. Both are visible on `ledger.appended` events and in `GET /api/v1/ledger`.

@@ -1,6 +1,6 @@
 # Open numbers: a public page of platform-wide usage
 
-Date: 2026-09-30. Status: approved for implementation (design decided under the standing autonomy
+Date: 2026-09-30. Status: shipped (PR #69) (design decided under the standing autonomy
 grant; rulings below carry their cost if wrong).
 
 ## 1. Why
@@ -114,4 +114,24 @@ was overruled when the rule-based path's decisions count too; and customers' per
 
 ## 8. Rollout record
 
-(pending)
+- **2026-09-30, about 14:50 UTC.** The partner applied 0037 with `npm run db:migrate` and put two accounts on the team with `npm run numbers -- team add`. The three other sign-in accounts were left off by choice, so their two sandbox workspaces count as customers'.
+- **Read-only probe in production.**
+  - `open_numbers`, `set_platform_team_member` and `platform_team_members` are all `security definer` with `search_path=""`.
+  - None of the three is executable by anon or authenticated; the service role can execute all three.
+  - `platform_team` has RLS on, and anon and authenticated cannot select from it.
+- **`npm run numbers` against an independent SQL probe.** Every row matched. All time:
+  - 7 workspaces opened: 2 customers', 5 ours.
+  - 2 live, both ours.
+  - 3 people: 1 customer, 2 ours.
+  - 12 payments settled on Arc testnet, 16.815 USDC, to 6 payee wallets, all ours.
+  - 14 invoices decided and 2 contractor milestones paid on Arc testnet.
+  - 68 cycles and 90 decisions made by a model, with 3 departures from the written policy and 0 refused by code.
+  - 50.765 USDC in Arc testnet wallets.
+- **Before merging.** Main (#70, 0036) was merged into the branch, and `npm run verify` passed on the merged tree: 195 files, 3973 tests.
+- **Merged** as `d693010` at 15:00 UTC.
+  - CI's typecheck, lint and test steps passed on the head commit, and the Vercel preview built it. The build step was also checked locally with `next build`.
+- **After the deploy, `www.vestiarion.xyz/open` answered 200 at 15:01 UTC.** It showed real activity since the probe: a 0.50 USDC payment at 14:56 UTC, which took the payments to 13 and 17.32 USDC and the wallet total to 50.27.
+- **`?since=2026-09-27` on the page** showed:
+  - 5 payments settled on Arc testnet, 12.50 USDC, to 2 payee wallets;
+  - 5 invoices decided;
+  - 44 cycles, with 56 decisions made by a model.

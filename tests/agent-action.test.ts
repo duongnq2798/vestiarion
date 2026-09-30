@@ -94,6 +94,29 @@ describe("runAgentCycleAction — the sandbox cap", () => {
   });
 });
 
+describe("runAgentCycleAction — a cycle already running", () => {
+  const config = configFromEnv({
+    NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid",
+    SUPABASE_SERVICE_ROLE_KEY: "k",
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: "test-anon-key",
+    SUPABASE_JWT_SECRET: "test-request-token-secret-at-least-32-characters",
+  });
+
+  it("says one is running instead of starting a second beside it", async () => {
+    authorizeMock.mockResolvedValueOnce({ ok: true, user: { id: USER, email: null }, membership: membership("live") });
+    const fake = fakeSupabase((request) => {
+      if (request.path === "/rest/v1/orgs") return { body: orgRow("live") };
+      if (request.path === "/rest/v1/cycle_runs" && request.method === "GET") return { body: [{ id: "run-0" }] };
+      return { body: [] };
+    });
+
+    const result = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => runAgentCycleAction("northstar"));
+
+    expect(result).toEqual({ ok: false, message: "A cycle is already running. Its decisions appear here in a moment." });
+    expect(fake.requests.some((request) => request.path === "/rest/v1/rpc/begin_cycle_run")).toBe(false);
+  });
+});
+
 describe("runAgentCycleAction — a paused workspace", () => {
   const config = configFromEnv({
     NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid",

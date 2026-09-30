@@ -15,6 +15,7 @@ import {
 } from "./counterparty-history";
 import { CycleJournal, messageOf, type CycleStage } from "./journal";
 import { syncOnChainBalances, type BalanceSync } from "./balances";
+import { CycleRunningError, hasRunningCycle } from "./cycle-running";
 import { decide } from "./decide";
 import { enforceApGuardrails } from "./guardrails";
 import { addressUnconfirmed } from "../counterparty-address";
@@ -1560,6 +1561,19 @@ async function realClockDay(orgDb: OrgDb): Promise<number> {
   return clock.data?.current_day ?? 0;
 }
 
+/**
+ * What started a cycle (event-driven cycles, E5): the six-hourly schedule, a
+ * person's "Run cycle", or workspace events such as an invoice added. A script
+ * passes none.
+ */
+export type CycleTrigger = { kind: "schedule" } | { kind: "manual" } | { kind: "event"; events: string[] };
+
+/** The trigger as `cycle_complete` records it: `trigger`, plus `events` for an event cycle; nothing for none. */
+export function triggerDetail(trigger: CycleTrigger | undefined): Record<string, unknown> {
+  if (!trigger) return {};
+  return trigger.kind === "event" ? { trigger: "event", events: trigger.events } : { trigger: trigger.kind };
+}
+
 interface CycleContext {
   db: OrgDb;
   provider: ReturnType<typeof getChainProvider>;
@@ -1571,6 +1585,7 @@ interface CycleContext {
   day: number;
   cycleRunId: string;
   triggeredBy?: string;
+  trigger?: CycleTrigger;
 }
 
 /**
@@ -1607,7 +1622,7 @@ export function reconcileLines(sync: Pick<BalanceSync, "outcomes">): CycleLogLin
  * while everything it had already written stayed committed.
  */
 export async function runAgentCycle(
-  options: { triggeredBy?: string; dailyCap?: number } = {}
+  options: { triggeredBy?: string; dailyCap?: number; trigger?: CycleTrigger } = {}
 ): Promise<CycleResult> {
   const orgDb = db();
   const provider = getChainProvider();
@@ -1616,6 +1631,10 @@ export async function runAgentCycle(
   const journal = new CycleJournal();
   const startedAt = new Date().toISOString();
   const clockMode = cycleClockMode();
+
+  // One cycle at a time in a workspace (E3): refused here, before the run
+  // opens, so a refused cycle leaves no row and uses none of a sandbox's cap.
+  if (await hasRunningCycle()) throw new CycleRunningError();
 
   // Opens the run — and, for a sandbox organization, enforces its daily cap —
   // inside begin_cycle_run (migration 0022) before anything else happens.
@@ -1659,6 +1678,7 @@ export async function runAgentCycle(
     const ctx: CycleContext = {
       db: orgDb, provider, lines, metrics, journal, startedAt, clockMode, day, cycleRunId: runId,
       triggeredBy: options.triggeredBy,
+      trigger: options.trigger,
     };
 
     return await executeCycle(ctx);
@@ -1704,7 +1724,7 @@ export async function runAgentCycle(
 }
 
 async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
-  const { db, provider, lines, metrics, journal, startedAt, clockMode, day, cycleRunId, triggeredBy } = ctx;
+  const { db, provider, lines, metrics, journal, startedAt, clockMode, day, cycleRunId, triggeredBy, trigger } = ctx;
 
   /**
    * Runs one stage, or records why it could not. A stage that throws no longer
@@ -2387,6 +2407,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     summary: cycleCompleteSummary(clockMode, day, finishedAt, cycleMetrics.decisionCount),
     detail: {
       ...(triggeredBy ? { by: triggeredBy } : {}),
+      ...triggerDetail(trigger),
       day,
       clockMode,
       startedAt,

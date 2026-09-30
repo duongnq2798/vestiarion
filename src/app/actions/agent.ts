@@ -3,8 +3,10 @@
 import "server-only";
 
 import { agentCycleSuccessMessage, runAgentCycle } from "@/lib/agent/orchestrator";
+import { CycleRunningError } from "@/lib/agent/cycle-running";
 import { AgentPausedError } from "@/lib/agent/pause";
 import { SANDBOX_DAILY_CYCLES, SandboxCapReachedError } from "@/lib/agent/sandbox-cap";
+import { raiseCycleEvent } from "@/lib/agent/cycle-soon";
 import { authorize } from "@/lib/auth/authorize";
 import { revalidateOrgPages } from "@/lib/auth/revalidate";
 import { inOrg } from "@/lib/dal/scope";
@@ -32,6 +34,7 @@ export async function runAgentCycleAction(orgSlug: string): Promise<AgentActionR
       const result = await runAgentCycle({
         triggeredBy: auth.user.id,
         dailyCap: auth.membership.mode === "sandbox" ? SANDBOX_DAILY_CYCLES : undefined,
+        trigger: { kind: "manual" },
       });
       revalidateOrgPages();
       return {
@@ -41,7 +44,7 @@ export async function runAgentCycleAction(orgSlug: string): Promise<AgentActionR
         lines: result.lines.length,
       };
     } catch (error) {
-      if (error instanceof SandboxCapReachedError || error instanceof AgentPausedError) {
+      if (error instanceof SandboxCapReachedError || error instanceof AgentPausedError || error instanceof CycleRunningError) {
         return { ok: false, message: error.message };
       }
       console.error("agent cycle failed", error);
@@ -73,6 +76,7 @@ export async function resumeAgentAction(_previous: AgentActionResult, formData: 
     try {
       await resumeAgent({ orgId: auth.membership.orgId, actorId: auth.user.id });
       revalidateOrgPages();
+      raiseCycleEvent(auth, "agent_resumed");
       return { ok: true, message: "Agent resumed." };
     } catch (error) {
       if (error instanceof PauseError) return { ok: false, message: error.message };

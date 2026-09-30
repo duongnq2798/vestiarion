@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
-import { agentCycleSuccessMessage, cycleCompleteSummary, runAgentCycle } from "@/lib/agent/orchestrator";
+import { CycleRunningError } from "@/lib/agent/cycle-running";
+import { agentCycleSuccessMessage, cycleCompleteSummary, runAgentCycle, triggerDetail } from "@/lib/agent/orchestrator";
 import { fakeSupabase, orgTestContext, type RecordedRequest } from "./support/fake-supabase";
 
 /**
@@ -94,6 +95,42 @@ describe("runAgentCycle — opens the run through begin_cycle_run before anythin
     expect(advanceIndex).toBeGreaterThan(beginIndex);
     expect(patchIndex).toBeGreaterThan(advanceIndex);
     expect(fake.requests[patchIndex].body).toEqual({ sim_day: 3 });
+  });
+});
+
+describe("runAgentCycle — one cycle at a time in a workspace", () => {
+  it("refuses to open a second cycle while one started in the last 15 minutes is still running", async () => {
+    const fake = fakeSupabase((request) =>
+      request.path === "/rest/v1/cycle_runs" && request.method === "GET" ? { body: [{ id: "run-0" }] } : { body: [] }
+    );
+
+    await expect(runWith(orgTestContext({ config, client: fake.client, orgId: ORG }), () => runAgentCycle())).rejects.toBeInstanceOf(
+      CycleRunningError
+    );
+
+    expect(fake.requests.some((request) => request.path === "/rest/v1/rpc/begin_cycle_run")).toBe(false);
+    const check = fake.requests.find((request) => request.path === "/rest/v1/cycle_runs");
+    expect(check?.params.get("status")).toBe("eq.running");
+    expect(check?.params.get("org_id")).toBe(`eq.${ORG}`);
+    expect(check?.params.get("started_at")).toMatch(/^gt\./);
+  });
+});
+
+describe("triggerDetail — what started a cycle, as cycle_complete records it", () => {
+  it("names an event cycle's events", () => {
+    expect(triggerDetail({ kind: "event", events: ["invoice_added", "sample_loaded"] })).toEqual({
+      trigger: "event",
+      events: ["invoice_added", "sample_loaded"],
+    });
+  });
+
+  it("names a person's run and the schedule's", () => {
+    expect(triggerDetail({ kind: "manual" })).toEqual({ trigger: "manual" });
+    expect(triggerDetail({ kind: "schedule" })).toEqual({ trigger: "schedule" });
+  });
+
+  it("adds nothing when nothing says what started it (a script)", () => {
+    expect(triggerDetail(undefined)).toEqual({});
   });
 });
 

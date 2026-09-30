@@ -3,6 +3,7 @@
 import "server-only";
 
 import { z } from "zod";
+import { raiseCycleEvent } from "@/lib/agent/cycle-soon";
 import { authorize } from "@/lib/auth/authorize";
 import { revalidateOrgPages } from "@/lib/auth/revalidate";
 import { db } from "@/lib/dal";
@@ -79,6 +80,8 @@ export async function manualMilestoneVerificationAction(
     });
 
     revalidateOrgPages();
+    // A verified milestone that is not yet paid is one the agent can release.
+    if (verified && milestone.status !== "paid") raiseCycleEvent(auth, "milestone_verified");
     return { ok: true, message: verified ? "Manual verification recorded." : "Verification revoked and recorded." };
   });
 }

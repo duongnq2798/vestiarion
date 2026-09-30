@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { refreshOnChainBalanceAction } from "@/app/actions/treasury";
+import { AutoRefresh } from "@/components/AutoRefresh";
 import AgentControls from "@/components/AgentControls";
 import AgentPauseControl from "@/components/AgentPauseControl";
 import { SampleDataLoaded, SampleDataOffer } from "@/components/SampleDataPanel";
@@ -122,6 +123,9 @@ export default async function DashboardPage({
             />
           }
         />
+        {/* The agent decides within a minute of an event (an invoice added, a payable returned): the page
+            re-reads its data every 20 s, and at once on return to the tab, so the decision appears without a reload. */}
+        <AutoRefresh intervalMs={20_000} />
 
         {checklist && <GettingStarted slug={slug} checklist={checklist} isOwner={can(role, "org.administer")} />}
 

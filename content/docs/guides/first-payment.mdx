@@ -8,7 +8,7 @@ Who does what:
 
 ## Try it with sample data first
 
-To see the agent at work before you set anything up, open the console of a new workspace. While the workspace has no counterparties and has not connected Circle, the console shows **Try it with sample data**. Choose **Load sample data**: it adds six example counterparties, marked **Sample** on the Counterparties page, with invoices and milestones chosen so that one cycle shows every outcome. Run a cycle, then read the decisions on the console and on **Approvals**:
+To see the agent at work before you set anything up, open the console of a new workspace. While the workspace has no counterparties and has not connected Circle, the console shows **Try it with sample data**. Choose **Load sample data**: it adds six example counterparties, marked **Sample** on the Counterparties page, with invoices and milestones chosen so that one cycle shows every outcome. The agent usually runs that cycle within a minute on its own; then read the decisions on the console and on **Approvals**:
 
 - a hosting invoice with a purchase order and goods received is paid;
 - an overage with no purchase order waits for information;
@@ -44,6 +44,15 @@ The form marks **Payment address** "Optional until payment setup", but the agent
 ### Changing a payment limit
 
 Owners and admins change a counterparty's limit with **Edit limit**, under **Configured limit** on its card. Enter the new **Payment limit (USDC)** and choose **Save limit**. The card's **Current authority** follows at once: the whole limit for a counterparty screened clear, a quarter of it for medium risk, and 0 for high risk. A vendor or contractor always has a limit, because without one the agent could pay any amount. The ledger records who changed the limit, and from what to what.
+
+### Ask a payee for their address
+
+You don't have to collect a payee's address yourself. On the counterparty's card, owners and admins choose **Ask for address**, then **Create link**:
+
+- The link is shown once, with **Copy link**. Send it to the payee however you usually reach them.
+- The payee opens it without an account. They see which business wants to pay them and enter their own Arc address.
+- The link works once and expires after 7 days. A new link replaces the payee's unused one, and **Revoke** on the card stops it.
+- An address that comes in through a link counts as a change, like any other: the card says "not yet confirmed", and the agent holds payments to that payee until someone here confirms it, as below.
 
 ### Changing an address
 
@@ -81,13 +90,13 @@ Open **AP / AR**. Under **Invoice intake**, choose **Enter one invoice**, or **I
   caption="A payable within the counterparty's limit, with its PO reference and the goods received."
 />
 
-Choose **Add invoice**. The page confirms with "Invoice added for *Name*." As the form says, "The agent will evaluate this invoice on the next cycle."
+Choose **Add invoice**. The page confirms with "Invoice added for *Name*. The agent usually decides on it within a minute." As the form says, "The agent usually decides on a payable within a minute of adding it."
 
 ## 3. Run a cycle
 
-A cycle is one run of the agent: it screens counterparties, reads open invoices, and pays, holds or flags each one. On a live workspace a cycle runs every 6 hours on its own, so the invoice is decided at the next run without anyone pressing a button.
+A cycle is one run of the agent: it screens counterparties, reads open invoices, and pays, holds or flags each one. Adding a payable starts a cycle, usually within a minute, so the invoice is decided without anyone pressing a button, and the pages show the decision on their own. The agent also starts one when a person returns a payable to it, confirms a changed address, verifies a milestone, or resumes it. One cycle runs at a time: if one is already running, the next waits for it, and **Run cycle now** says so instead of starting a second. A live workspace also runs a cycle every 6 hours on its own, for what time alone changes, such as due dates and screening.
 
-To decide it now, open **Treasury**, the console, and choose **Run cycle now**. Only owners and admins have this button. When the cycle ends, a message says "Cycle complete at *time* · *n* decisions logged." and the console shows a report of what the cycle did.
+To run one yourself, open **Treasury**, the console, and choose **Run cycle now**. Only owners and admins have this button. When the cycle ends, a message says "Cycle complete at *time* · *n* decisions logged." and the console shows a report of what the cycle did.
 
 ## 4. Read the decision and its reasoning
 
@@ -126,7 +135,7 @@ Owners, admins and approvers decide each one:
 
 - **Approve and pay** starts the transfer. A dialog asks you to confirm, and **Pay now** sends it at once. The ledger records who approved it.
 - **Reject** marks it not paid. You can give a reason, which is kept in the ledger.
-- **Return to agent** sends it back to pending, so the next cycle decides it again.
+- **Return to agent** sends it back to pending, and the agent usually decides it again within a minute.
 
 <Screenshot
   src="/docs/guides/first-payment-approval.png"

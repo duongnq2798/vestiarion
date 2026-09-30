@@ -35,7 +35,7 @@ afterAll(async () => {
 });
 
 const ENVELOPE = { v: 1, iv: "x", tag: "y", data: "z" };
-const PLATFORM_TABLES = ["memberships", "invitations", "api_keys", "webhook_endpoints", "webhook_deliveries"] as const;
+const PLATFORM_TABLES = ["memberships", "invitations", "api_keys", "webhook_endpoints", "webhook_deliveries", "payee_links"] as const;
 
 const deleteOrg = (orgId: string, by: string | null = owner) =>
   asServiceRole(db, (tx) => tx.query("select public.delete_org($1, $2)", [orgId, by]));
@@ -126,7 +126,12 @@ async function populated(slug: string): Promise<string> {
     [orgId, JSON.stringify(ENVELOPE), owner]
   )).rows[0].id;
   // The endpoint exists first, so the seeded ledger entry enqueues a delivery (0028's trigger).
-  await seedOrgRows(db, orgId, slug);
+  const seeded = await seedOrgRows(db, orgId, slug);
+  // A payee link goes with its counterparty (0039), which delete_org deletes.
+  await db.query(
+    "insert into public.payee_links (org_id, counterparty_id, token_hash, created_by, expires_at) values ($1, $2, $3, $4, now() + interval '7 days')",
+    [orgId, seeded.counterpartyId, crypto.randomBytes(32).toString("hex"), owner]
+  );
   await db.query(
     "insert into public.webhook_deliveries (org_id, endpoint_id, event_type) values ($1, $2, 'webhook.test')",
     [orgId, endpoint]

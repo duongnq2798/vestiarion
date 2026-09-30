@@ -2,6 +2,7 @@ import { currentOrgId } from "../context";
 import { platformDb, unwrap } from "../dal";
 import { withOrg } from "../dal/scope";
 import { notifyWaitingDecisions } from "../notifications/waiting";
+import { CycleRunningError } from "./cycle-running";
 import { runAgentCycle, type CycleResult } from "./orchestrator";
 import { AgentPausedError } from "./pause";
 
@@ -15,7 +16,7 @@ interface LiveOrgRow {
 
 export type CronRunResult<T> =
   | { slug: string; ok: true; result: T }
-  | { slug: string; ok: true; skipped: "paused" }
+  | { slug: string; ok: true; skipped: "paused" | "running" }
   | { slug: string; ok: false; error: string };
 
 /**
@@ -29,7 +30,9 @@ export type CronRunResult<T> =
  * refuse it: the pause must stop the cron from doing anything, not merely
  * from opening a run. A pause that lands after this listing but before
  * `begin_cycle_run` is refused there instead; that `AgentPausedError` is the
- * same correct refusal, so it is reported as skipped, not as a failure.
+ * same correct refusal, so it is reported as skipped, not as a failure. So is
+ * a workspace whose cycle is already running — an event's cycle, or a
+ * person's — since one cycle at a time is the rule (event-driven cycles E3).
  */
 export async function runLiveOrganizations<T>(run: () => Promise<T>): Promise<CronRunResult<T>[]> {
   const orgs = unwrap(
@@ -48,6 +51,10 @@ export async function runLiveOrganizations<T>(run: () => Promise<T>): Promise<Cr
     } catch (error) {
       if (error instanceof AgentPausedError) {
         results.push({ slug: org.slug, ok: true, skipped: "paused" });
+        continue;
+      }
+      if (error instanceof CycleRunningError) {
+        results.push({ slug: org.slug, ok: true, skipped: "running" });
         continue;
       }
       console.error("cycle failed for", org.slug, error);
@@ -70,7 +77,7 @@ export async function runLiveOrganizations<T>(run: () => Promise<T>): Promise<Cr
  * returned.
  */
 export async function runScheduledCycle(): Promise<CycleResult> {
-  const result = await runAgentCycle();
+  const result = await runAgentCycle({ trigger: { kind: "schedule" } });
   try {
     await notifyWaitingDecisions();
   } catch (error) {
