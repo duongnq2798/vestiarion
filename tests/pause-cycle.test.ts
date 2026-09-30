@@ -253,6 +253,8 @@ function confirmedTransferResult(): TransferResult {
     feeSource: "chain_reported",
     providerMode: "live",
     settledInMs: 5,
+    providerState: "COMPLETE",
+    failureReason: null,
   };
 }
 
@@ -315,6 +317,10 @@ function paymentIntentsBackend() {
             fee_source: null,
             settled_in_ms: null,
             executed_at: null,
+            provider_state: null,
+            failure_reason: null,
+            transfer_attempt: 1,
+            previous_attempts: [],
             created_at: "2026-01-01T00:00:00.000Z",
             updated_at: "2026-01-01T00:00:00.000Z",
           });
@@ -322,8 +328,12 @@ function paymentIntentsBackend() {
         return { body: [] };
       }
       if (sent.method === "GET") {
+        // By key, or — as `ensure` reads it — by source, the row being one per source.
         const key = sent.params.get("idempotency_key")?.replace(/^eq\./, "");
-        return { body: (key ? rows.get(key) : undefined) ?? null };
+        if (key) return { body: rows.get(key) ?? null };
+        const type = sent.params.get("source_type")?.replace(/^eq\./, "");
+        const id = sent.params.get("source_id")?.replace(/^eq\./, "");
+        return { body: [...rows.values()].find((row) => row.source_type === type && row.source_id === id) ?? null };
       }
       if (sent.method === "PATCH") {
         const key = sent.params.get("idempotency_key")?.replace(/^eq\./, "");

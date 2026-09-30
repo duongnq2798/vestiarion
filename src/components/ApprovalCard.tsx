@@ -5,6 +5,7 @@ import { useCallback, useState, type FormEvent } from "react";
 import { approveInvoiceAction, rejectInvoiceAction, returnInvoiceAction } from "@/app/actions/approvals";
 import { Badge, type BadgeProps } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { Callout } from "@/components/ui/Callout";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/Card";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogTrigger } from "@/components/ui/Dialog";
@@ -28,6 +29,22 @@ export function payConfirmTitle(payable: Pick<WaitingPayable, "amount" | "counte
   return `Pay ${fmt(payable.amount)} USDC to ${payable.counterpartyName} now?${sandbox ? " (simulated)" : ""}`;
 }
 
+/**
+ * What the confirm dialog says will happen when Approve and pay is chosen. A
+ * transfer already sent — including one still in flight — is only checked,
+ * never sent again; a terminal failure is sent again, as a new transfer;
+ * otherwise this is the first attempt.
+ */
+export function payConfirmDescription(payable: Pick<WaitingPayable, "paymentSent" | "lastAttempt">): string {
+  if (payable.paymentSent || payable.lastAttempt?.state === "in_flight") {
+    return "Nothing new is sent: Vestiarion checks the transfer already made with Circle, and the ledger records who approved it.";
+  }
+  if (payable.lastAttempt?.state === "failed") {
+    return "A new transfer starts as soon as you confirm, and the ledger records who approved it.";
+  }
+  return "The transfer starts as soon as you confirm, and the ledger records who approved it.";
+}
+
 const STATUS: Record<WaitingPayable["status"], { label: string; tone: BadgeProps["tone"] }> = {
   held: { label: "Held", tone: "held" },
   flagged: { label: "Flagged", tone: "refused" },
@@ -47,6 +64,12 @@ const UNFINISHED: { label: string; tone: BadgeProps["tone"] } = { label: "Unfini
  * minutes old — offers the three decisions again, and says why. A row whose
  * payment was already sent offers only Approve and pay, which records it; the
  * server refuses Reject and Return for it too.
+ *
+ * The last payment attempt, when there is one worth reporting, says why: a
+ * terminal failure names Circle's reason, and Approve and pay sends a new
+ * transfer; a transfer still in flight says so instead of the sent-payment
+ * line, and only Reject and Return go away — Approve and pay stays, since
+ * approving it is the only way it is ever reconciled.
  *
  * Paying is refused here before the server refuses it — the person who
  * created the invoice cannot approve it, nor can anyone pay a counterparty
@@ -95,10 +118,23 @@ export default function ApprovalCard({
           </p>
           {unfinished && (
             <p className="mt-2 text-sm text-ink-2">
-              An earlier decision did not finish. If it was a payment, Approve and pay records it without paying twice.
+              An earlier decision did not finish.
+              {payable.lastAttempt?.state !== "failed" && " If it was a payment, Approve and pay records it without paying twice."}
             </p>
           )}
-          {payable.paymentSent && <p className="mt-2 text-sm text-ink-2">A payment was already sent; Approve and pay records it.</p>}
+          {payable.paymentSent && payable.lastAttempt?.state !== "in_flight" && (
+            <p className="mt-2 text-sm text-ink-2">A payment was already sent; Approve and pay records it.</p>
+          )}
+          {payable.lastAttempt?.state === "failed" && (
+            <Callout tone="refused" className="mt-2">
+              The last payment attempt failed: {payable.lastAttempt.reason}. Approving sends a new transfer.
+            </Callout>
+          )}
+          {payable.lastAttempt?.state === "in_flight" && (
+            <Callout tone="held" className="mt-2">
+              The payment is still in flight on Arc testnet. It cannot be rejected or returned until Circle settles it; approving checks it again.
+            </Callout>
+          )}
         </CardContent>
         {processing ? (
           <CardFooter>
@@ -154,10 +190,10 @@ function Decisions({ orgSlug, payable, viewerId, sandbox }: { orgSlug: string; p
             </Button>
           }
           title={payConfirmTitle(payable, sandbox)}
-          description="The transfer starts as soon as you confirm, and the ledger records who approved it."
+          description={payConfirmDescription(payable)}
           confirmLabel="Pay now"
         />
-        {!payable.paymentSent && (
+        {!payable.paymentSent && payable.lastAttempt?.state !== "in_flight" && (
           <>
             <RejectDialog orgSlug={orgSlug} payable={payable} />
             <form id={returnId} className="contents" {...returnForm.formProps} onSubmit={submitting("return", returnForm.formProps.onSubmit)}>

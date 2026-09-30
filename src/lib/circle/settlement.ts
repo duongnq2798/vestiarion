@@ -7,8 +7,13 @@ type Transaction = NonNullable<
   NonNullable<Awaited<ReturnType<SettlementClient["getTransaction"]>>["data"]>["transaction"]
 >;
 
-/** Circle states that end a transfer without moving money. */
-export const FAILED_STATES: readonly string[] = ["CANCELLED", "DENIED", "FAILED", "STUCK"] as const;
+/**
+ * Circle's terminal failure states: the transfer ended without moving money
+ * and, per Circle's docs, "must be re-initiated". `STUCK` is deliberately not
+ * here — Circle's docs say it "is not a terminal failure": the transaction
+ * was sent and can still be mined (or accelerated), so it stays `pending`.
+ */
+export const FAILED_STATES: readonly string[] = ["CANCELLED", "DENIED", "FAILED"] as const;
 
 const WAIT_MS = 45_000;
 const REREAD_MS = 15_000;

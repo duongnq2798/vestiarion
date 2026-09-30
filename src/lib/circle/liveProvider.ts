@@ -191,6 +191,8 @@ export class LiveProvider implements ChainProvider {
       feeSource,
       providerMode: "live",
       settledInMs,
+      providerState: transaction?.state ?? null,
+      failureReason: transaction?.errorReason ?? null,
     };
   }
 
@@ -220,6 +222,8 @@ export class LiveProvider implements ChainProvider {
       feeSource: fee.feeSource,
       providerMode: "live",
       settledInMs: measuredSettlementMs(transaction) ?? (confirmed ? Date.now() - started : null),
+      providerState: transaction.state,
+      failureReason: transaction.errorReason ?? null,
     };
   }
 

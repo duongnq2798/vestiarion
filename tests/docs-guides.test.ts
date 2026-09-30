@@ -147,6 +147,12 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["Return to agent", APPROVAL_CARD],
     ["You created this invoice", APPROVAL_CARD],
     ["Screened high risk", APPROVAL_CARD],
+    ["The last payment attempt failed:", APPROVAL_CARD],
+    ["Approving sends a new transfer.", APPROVAL_CARD],
+    [
+      "The payment is still in flight on Arc testnet. It cannot be rejected or returned until Circle settles it; approving checks it again.",
+      APPROVAL_CARD,
+    ],
     ["https://testnet.arcscan.app/tx/", PRIMITIVES],
     ["Audit log", APP_NAV],
     ["Verify hash chain", VERIFY_BADGE],

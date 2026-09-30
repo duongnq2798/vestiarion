@@ -82,9 +82,16 @@ describe("awaitSettlement", () => {
     expect((await awaitSettlement(c, "tx-1")).status).toBe("confirmed");
   });
 
-  it.each(["FAILED", "CANCELLED", "DENIED", "STUCK"])("is failed when Circle reports %s", async (state) => {
+  it.each(["FAILED", "CANCELLED", "DENIED"])("is failed when Circle reports %s", async (state) => {
     const c = client(async () => { throw sdkTerminal(state); }, async () => transaction(state));
     expect((await awaitSettlement(c, "tx-1")).status).toBe("failed");
+  });
+
+  it("is pending, not failed, when Circle reports STUCK — the transfer was sent and can still be mined", async () => {
+    const c = client(async () => { throw sdkTerminal("STUCK"); }, async () => transaction("STUCK"));
+    const result = await awaitSettlement(c, "tx-1");
+    expect(result.status).toBe("pending");
+    expect(result.transaction?.state).toBe("STUCK");
   });
 
   it("is confirmed when a network error hid a transfer that settled", async () => {

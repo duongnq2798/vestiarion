@@ -50,6 +50,10 @@ export interface TransferResult {
   feeSource: "chain_reported" | "provider_estimate" | "simulated_profile";
   providerMode: "live" | "simulate";
   settledInMs: number | null;
+  /** Circle's own transaction `state` (e.g. "STUCK", "COMPLETE"), or null for the simulator or when it could not be read. */
+  providerState: string | null;
+  /** Circle's `errorReason` for a FAILED transaction, or null. */
+  failureReason: string | null;
 }
 
 export interface EarnDepositParams {
