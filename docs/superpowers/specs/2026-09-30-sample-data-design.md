@@ -11,7 +11,7 @@ It was decided on 2026-09-30 by the implementer under the partner's standing ins
 - **A "Try it with sample data" card on the console.** It shows to owners and admins (`records.write`) of a sandbox that pays with the simulator and has no counterparties yet. The button is **Load sample data**.
 - **Loading** inserts, in the workspace's own scope:
   - six counterparties, each marked `sample = true`, all fictional, none with an address;
-  - seven invoices and two milestones against them (§3);
+  - six invoices and two milestones against them (§3);
   - one ledger entry, `system/sample_data_loaded`, with the counts and who loaded it.
 - **While sample data is loaded**, the console shows a callout: **Sample data is loaded**, with a **Remove sample data** button behind a confirmation. The Counterparties page shows a **Sample** badge next to each sample counterparty.
 - **Removing** deletes every sample counterparty, and with it (the existing `on delete cascade`) its invoices, milestones and compliance checks, and the payment intents recorded for those invoices and milestones. It appends `system/sample_data_removed` with the counts. The ledger keeps every entry the sample data caused, as it keeps everything.
@@ -45,8 +45,8 @@ Amounts are sized for the simulated operating balance of 10,000 USDC that every 
 | Kestrel Print Co | vendor | 1,500 | 180 "Brochure print run", PO-3307, **paid** 20 days ago | history |
 | Kestrel Print Co | | | 180 "Brochure print run", PO-3307, received, due in 2 days | flagged: repeats a paid invoice |
 | Lumen Retail Co | client | — | receivable 3,000 "Q4 platform retainer", SO-771, due in 10 days | forecast inflow |
-| Priya Shah (contractor) | contractor | 4,000 | milestone 1,200 "API rate-limiting module", verified | released |
-| Diego Ramirez (contractor) | contractor | 2,500 | milestone 900 "Landing page redesign", not verified | waits |
+| Priya Shah — Backend Contractor | contractor | 4,000 | milestone 1,200 "API rate-limiting module", verified | released |
+| Diego Ramirez — Design Contractor | contractor | 2,500 | milestone 900 "Landing page redesign", not verified | waits |
 
 The exact outcomes are asserted by an end-to-end check in the sandbox (§5), not assumed from this table: if the agent decides differently, the fixture changes, not the claim.
 
