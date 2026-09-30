@@ -21,6 +21,7 @@ import {
   confirmCounterpartyAddress,
   CounterpartyAddressError,
 } from "@/lib/counterparty-address";
+import { changeCounterpartyLimit, CounterpartyLimitError } from "@/lib/counterparty-limit";
 import { appendLedgerEntry } from "@/lib/ledger";
 
 export interface IntakeActionResult {
@@ -113,9 +114,9 @@ export async function createCounterpartyAction(
 
 const counterpartyIdSchema = z.string().uuid();
 
-/** A `CounterpartyAddressError` carries a message safe to show; anything else stays in the server log. */
+/** A `CounterpartyAddressError` or `CounterpartyLimitError` carries a message safe to show; anything else stays in the server log. */
 function addressFailure(error: unknown, what: string): IntakeActionResult {
-  if (error instanceof CounterpartyAddressError) return { ok: false, message: error.message };
+  if (error instanceof CounterpartyAddressError || error instanceof CounterpartyLimitError) return { ok: false, message: error.message };
   console.error(what, error instanceof Error ? error.message : "unknown error");
   return { ok: false, message: "That did not work. Try again in a moment." };
 }
@@ -142,6 +143,33 @@ export async function updateCounterpartyAddressAction(
       };
     } catch (error) {
       return addressFailure(error, "counterparty address change failed");
+    }
+  });
+}
+
+/** Changes a counterparty's configured payment limit, and with it the current one screening derives. */
+export async function updateCounterpartyLimitAction(
+  _previous: IntakeActionResult,
+  formData: FormData
+): Promise<IntakeActionResult> {
+  const auth = await authorize(formData.get("orgSlug"), "records.write");
+  if (!auth.ok) return { ok: false, message: auth.message };
+  return inOrg(auth, async () => {
+    const id = counterpartyIdSchema.safeParse(formString(formData, "counterpartyId"));
+    if (!id.success) return { ok: false, message: "Counterparty not found." };
+    try {
+      const result = await changeCounterpartyLimit({ actorId: auth.user.id, counterpartyId: id.data, raw: formString(formData, "paymentLimit") });
+      revalidateOrgPages();
+      if (result.to === null) return { ok: true, message: `${result.name}'s payment limit cleared.` };
+      return {
+        ok: true,
+        message:
+          result.current === result.to
+            ? `${result.name}'s payment limit is now ${result.to} USDC.`
+            : `${result.name}'s payment limit is now ${result.to} USDC; screening allows ${result.current} USDC for its risk.`,
+      };
+    } catch (error) {
+      return addressFailure(error, "counterparty limit change failed");
     }
   });
 }

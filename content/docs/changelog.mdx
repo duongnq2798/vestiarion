@@ -1,5 +1,11 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-09-30: Counterparty limit changes
+
+- A new ledger action, delivered as a `ledger.appended` event: `counterparty_limit_changed`, in the `compliance` domain. Its `detail` is `{ by, counterpartyId, from, to, currentLimit }`, where `from` and `to` are the configured limits in USDC and `currentLimit` is the limit the counterparty's risk now allows. A client's limit may be `null`.
+
+No `/api/v1` endpoint, parameter or response changed.
+
 ## 2026-09-30: Counterparty address changes
 
 - Two new ledger actions, delivered as `ledger.appended` events like every other entry, both in the `compliance` domain:

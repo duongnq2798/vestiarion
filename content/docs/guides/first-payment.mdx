@@ -29,6 +29,10 @@ Then choose **Add and screen**. The counterparty is screened as soon as it is sa
 The form marks **Payment address** "Optional until payment setup", but the agent can pay only a counterparty that has one. As the Go live page puts it, "A payment to a counterparty without one is held for review." You can add it later with **Edit address** on the counterparty's card.
 </Callout>
 
+### Changing a payment limit
+
+Owners and admins change a counterparty's limit with **Edit limit**, under **Configured limit** on its card. Enter the new **Payment limit (USDC)** and choose **Save limit**. The card's **Current authority** follows at once: the whole limit for a counterparty screened clear, a quarter of it for medium risk, and 0 for high risk. A vendor or contractor always has a limit, because without one the agent could pay any amount. The ledger records who changed the limit, and from what to what.
+
 ### Changing an address
 
 Owners and admins change a counterparty's address with **Edit address** on its card: enter the new **Arc address**, or leave it empty to clear it, and choose **Save address**.

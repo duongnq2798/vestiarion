@@ -189,7 +189,7 @@ async function recordSyncedAt(orgDb: OrgDb, accountIds: string[], syncedAt: stri
 export const BALANCE_REFRESH_COOLDOWN_MS = 30_000;
 
 /** A cycle row still `running` that started this recently is in progress: the window `delete_org` (0031) uses. */
-const CYCLE_IN_PROGRESS_MS = 15 * 60_000;
+export const CYCLE_IN_PROGRESS_MS = 15 * 60_000;
 
 export interface BalanceRefresh {
   /** Whether Circle was read, and every read succeeded. */

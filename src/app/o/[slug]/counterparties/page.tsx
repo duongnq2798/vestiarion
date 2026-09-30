@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import AgentControls from "@/components/AgentControls";
 import CounterpartyAddress from "@/components/intake/CounterpartyAddressEdit";
 import CounterpartyIntake from "@/components/intake/CounterpartyIntake";
+import CounterpartyLimitEdit from "@/components/intake/CounterpartyLimitEdit";
 import { Badge, type BadgeProps } from "@/components/ui/Badge";
 import { Callout } from "@/components/ui/Callout";
 import { Card } from "@/components/ui/Card";
@@ -87,7 +88,18 @@ export default async function CounterpartiesPage({ params }: { params: Promise<{
                       compact
                     />
                     <dl className="mt-4 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3 text-xs">
-                      <div className="min-w-0"><dt className="text-ink-3">Configured limit</dt><dd className="mt-0.5 text-ink">{counterparty.baseline_payment_limit == null ? "Not set" : <Money value={counterparty.baseline_payment_limit} />}</dd></div>
+                      <div className="min-w-0">
+                        <dt className="text-ink-3">Configured limit</dt>
+                        <dd className="mt-0.5 flex flex-wrap items-baseline gap-x-2 text-ink">
+                          {counterparty.baseline_payment_limit == null ? "Not set" : <Money value={counterparty.baseline_payment_limit} />}
+                          {canWrite && (
+                            <CounterpartyLimitEdit
+                              orgSlug={slug}
+                              counterparty={{ id: counterparty.id, name: counterparty.name, role: counterparty.role, baselineLimit: counterparty.baseline_payment_limit }}
+                            />
+                          )}
+                        </dd>
+                      </div>
                       <div className="min-w-0"><dt className="text-ink-3">Current authority</dt><dd className="mt-0.5 text-ink">{counterparty.payment_limit == null ? "Not set" : <Money value={counterparty.payment_limit} />}</dd></div>
                       <div className="min-w-0"><dt className="text-ink-3">Jurisdiction</dt><dd className="mt-0.5 break-words text-ink">{counterparty.jurisdiction || "Not set"}</dd></div>
                       <div className="min-w-0"><dt className="text-ink-3">Last screened</dt><dd className="mt-0.5 break-words text-ink">{counterparty.last_screened_at ? new Date(counterparty.last_screened_at).toLocaleString() : "Not yet"}</dd></div>
