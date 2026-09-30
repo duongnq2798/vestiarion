@@ -253,6 +253,8 @@ function confirmedTransferResult(): TransferResult {
     feeSource: "chain_reported",
     providerMode: "live",
     settledInMs: 5,
+    providerState: "COMPLETE",
+    failureReason: null,
   };
 }
 

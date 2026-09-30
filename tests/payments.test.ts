@@ -134,6 +134,8 @@ function transferResult(status: TransferResult["status"], providerTxId = "circle
     feeSource: "chain_reported",
     providerMode: "live",
     settledInMs: 5,
+    providerState: status === "confirmed" ? "COMPLETE" : null,
+    failureReason: null,
   };
 }
 

@@ -187,6 +187,95 @@ describe("LiveProvider Circle request deadlines", () => {
   });
 });
 
+describe("LiveProvider reports Circle's state and failure reason", () => {
+  function transactionResponse(overrides: Record<string, unknown>) {
+    return {
+      data: {
+        transaction: {
+          id: "tx-1",
+          blockchain: "ARC-TESTNET",
+          createDate: "2026-09-29T00:00:00Z",
+          ...overrides,
+        },
+      },
+    };
+  }
+
+  function provider(getTransaction: LiveProviderClient["getTransaction"], createTransaction?: LiveProviderClient["createTransaction"]): LiveProvider {
+    return new LiveProvider(CHAIN, {
+      client: fakeClient({
+        createTransaction: createTransaction ?? (vi.fn(async () => ({ data: { id: "tx-1" } })) as unknown as LiveProviderClient["createTransaction"]),
+        getTransaction,
+      }),
+    });
+  }
+
+  it("transfer() carries COMPLETE and no failure reason on a confirmed transfer", async () => {
+    const getTransaction = vi.fn(async () => transactionResponse({ state: "COMPLETE" })) as unknown as LiveProviderClient["getTransaction"];
+
+    const result = await provider(getTransaction).transfer(TRANSFER);
+
+    expect(result.status).toBe("confirmed");
+    expect(result.providerState).toBe("COMPLETE");
+    expect(result.failureReason).toBeNull();
+  });
+
+  it("transfer() carries FAILED and Circle's errorReason", async () => {
+    const getTransaction = vi.fn(async () =>
+      transactionResponse({ state: "FAILED", errorReason: "INSUFFICIENT_NATIVE_TOKEN" })
+    ) as unknown as LiveProviderClient["getTransaction"];
+
+    const result = await provider(getTransaction).transfer(TRANSFER);
+
+    expect(result.status).toBe("failed");
+    expect(result.providerState).toBe("FAILED");
+    expect(result.failureReason).toBe("INSUFFICIENT_NATIVE_TOKEN");
+  });
+
+  it("transfer() treats STUCK as pending, not failed, while still reporting the state", async () => {
+    const getTransaction = vi.fn(async () => transactionResponse({ state: "STUCK" })) as unknown as LiveProviderClient["getTransaction"];
+
+    const result = await provider(getTransaction).transfer(TRANSFER);
+
+    expect(result.status).toBe("pending");
+    expect(result.providerState).toBe("STUCK");
+    expect(result.failureReason).toBeNull();
+  });
+
+  it("transfer() carries both null when no transaction could be read at all", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const getTransaction = vi.fn(async () => {
+      throw new Error("fetch failed");
+    }) as unknown as LiveProviderClient["getTransaction"];
+
+    const result = await provider(getTransaction).transfer(TRANSFER);
+
+    expect(result.status).toBe("pending");
+    expect(result.providerState).toBeNull();
+    expect(result.failureReason).toBeNull();
+    warn.mockRestore();
+  });
+
+  it.each(["CANCELLED", "DENIED"])("reconcileTransfer() carries %s as failed, with its state", async (state) => {
+    const getTransaction = vi.fn(async () => transactionResponse({ state })) as unknown as LiveProviderClient["getTransaction"];
+
+    const result = await provider(getTransaction).reconcileTransfer("tx-1");
+
+    expect(result.status).toBe("failed");
+    expect(result.providerState).toBe(state);
+  });
+
+  it("reconcileTransfer() treats STUCK as pending, with its state and no failure reason", async () => {
+    const getTransaction = vi.fn(async () => transactionResponse({ state: "STUCK" })) as unknown as LiveProviderClient["getTransaction"];
+
+    const result = await provider(getTransaction).reconcileTransfer("tx-1");
+
+    expect(result.status).toBe("pending");
+    expect(result.providerState).toBe("STUCK");
+    expect(result.failureReason).toBeNull();
+  });
+});
+
 describe("LiveProvider refusals name the fix in the product, not a script", () => {
   it("a counterparty without an address points to the Counterparties page", async () => {
     const createTransaction = vi.fn();
