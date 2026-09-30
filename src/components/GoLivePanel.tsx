@@ -2,7 +2,7 @@
 
 import { ArrowUpRight, Rocket, Wallet } from "lucide-react";
 import Link from "next/link";
-import { startTransition, useActionState, useEffect, useRef, type ReactNode } from "react";
+import { startTransition, useActionState, useCallback, useEffect, useRef, type ReactNode } from "react";
 import {
   chooseHostedWalletAction,
   connectCircleAction,
@@ -28,6 +28,7 @@ import { cn } from "@/components/ui/cn";
 import { useActionForm } from "@/components/ui/useActionForm";
 import { fmt } from "@/components/vx/Primitives";
 import { utcMinute } from "@/lib/copy";
+import { FUNDING_WATCH_INTERVAL_MS, shouldReadBalanceAgain } from "@/lib/funding-watch";
 import type { GoLiveStatus } from "@/lib/platform/go-live";
 
 /**
@@ -326,8 +327,10 @@ function WalletsStep({ orgSlug, status }: { orgSlug: string; status: GoLiveStatu
 
 /**
  * The operating wallet's balance on chain, read once when the step appears
- * and again on Refresh. The read goes through `refreshBalanceAction`, which
- * returns the number only.
+ * and again on Refresh. While it is 0 or unread, it is also read again when
+ * the tab becomes visible (back from the faucet) and every 30 s while it is,
+ * for 15 minutes (first-payment design R1). The read goes through
+ * `refreshBalanceAction`, which returns the number only.
  */
 function BalanceLine({ orgSlug, sampleBalance }: { orgSlug: string; sampleBalance?: number }) {
   const [state, dispatch, pending] = useActionState(
@@ -335,15 +338,38 @@ function BalanceLine({ orgSlug, sampleBalance }: { orgSlug: string; sampleBalanc
     sampleBalance === undefined ? BALANCE_INITIAL : { ok: true, message: "", balance: sampleBalance }
   );
   const requested = useRef(sampleBalance !== undefined);
+  // The latest balance and whether a read is running, for the watch below, which is set up once.
+  const latest = useRef({ balance: state.balance, pending });
+  useEffect(() => {
+    latest.current = { balance: state.balance, pending };
+  });
+
+  const read = useCallback(() => {
+    const data = new FormData();
+    data.set("orgSlug", orgSlug);
+    startTransition(() => dispatch(data));
+  }, [dispatch, orgSlug]);
 
   useEffect(() => {
     // Once per mount, however often a development build runs this effect; never for a sample balance.
     if (requested.current) return;
     requested.current = true;
-    const data = new FormData();
-    data.set("orgSlug", orgSlug);
-    startTransition(() => dispatch(data));
-  }, [dispatch, orgSlug]);
+    read();
+  }, [read]);
+
+  useEffect(() => {
+    const openedAt = Date.now();
+    const readAgain = () => {
+      const visible = document.visibilityState === "visible";
+      if (shouldReadBalanceAgain({ ...latest.current, openedAt, now: Date.now(), visible, sample: sampleBalance !== undefined })) read();
+    };
+    const timer = setInterval(readAgain, FUNDING_WATCH_INTERVAL_MS);
+    document.addEventListener("visibilitychange", readAgain);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", readAgain);
+    };
+  }, [read, sampleBalance]);
 
   const value = state.balance !== null ? `${fmt(state.balance)} USDC` : pending ? "reading…" : "not read yet";
   return (
