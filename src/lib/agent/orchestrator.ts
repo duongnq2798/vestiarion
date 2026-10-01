@@ -31,7 +31,7 @@ import { followUpConfig, planFollowUp, type DecisionFacts, type FollowUpConfig, 
 import { OPEN_PAYABLE_STATUSES, summarizePayableObligations, sumUsdcAmounts } from "./obligations";
 import { ARC_TESTNET_EURC, quoteEurcInUsdc, type EurcQuote } from "../fx/quote";
 import { quoteUsdcForEurc, sizeSwap, SWAP_COST_CAP_PERCENT, type SwapOffer, type SwapQuote } from "../fx/swap-service";
-import { resumeOpenSwap, swapForPayment, type SwapOutcome } from "../fx/swap";
+import { resumeOpenSwaps, swapForPayment, type SwapOutcome, type SwapSweep } from "../fx/swap";
 import { currentOrgConfig } from "../context";
 import { bridgeFee as irisBridgeFee, EXPECTED_BRIDGE_SECONDS, type BridgeFee } from "../circle/cctp";
 import { EXPECTED_GATEWAY_SECONDS } from "../circle/gateway";
@@ -362,14 +362,23 @@ export async function payApInvoiceIfNotPaused(
     };
   }
   // A EURC payment funded by a swap (EURC swap spec S6): the swap first, and
-  // no transfer unless it went through.
-  const swap = deps.swap ? await deps.swap() : undefined;
+  // no transfer unless it went through. A swap still in flight, or whose
+  // outcome is not known, leaves the payable pending: the next cycle's sweep
+  // finishes the swap before deciding it again (review #1, #2).
+  let swap: SwapOutcome | undefined;
+  if (deps.swap) {
+    try {
+      swap = await deps.swap();
+    } catch (error) {
+      swap = { ok: false, pending: true, swapId: null, reason: `The swap's outcome is not known yet (${error instanceof Error ? error.message : String(error)}).` };
+    }
+  }
   if (swap && !swap.ok) {
     return {
-      status: "held",
+      status: swap.pending ? "pending" : "held",
       txRef: null,
       paymentExecution: null,
-      reasoningSuffix: swap.pending ? ` [not paid: ${swap.reason} The next cycle finishes it first.]` : ` [not paid: the swap for its EURC failed. ${swap.reason}]`,
+      reasoningSuffix: swap.pending ? ` [not paid yet: ${swap.reason} The next cycle finishes it first.]` : ` [not paid: the swap for its EURC failed. ${swap.reason}]`,
       heldBecausePaused: false,
       operatingBalance: null,
       swap,
@@ -927,6 +936,13 @@ function shortfallReasoning(timing: ApTiming, operatingBalance: number, reserveB
  * policy: the same action and, for two schedules, the same day. `decide`
  * compares actions only, and before code has bounded the model's date.
  */
+/** The decision without `fundWithSwap`. */
+function withoutSwapChoice(decision: ApDecision): ApDecision {
+  const { fundWithSwap: _ignored, ...rest } = decision;
+  void _ignored;
+  return rest;
+}
+
 function sameApDecision(decision: ApDecision, reference: ApDecision): boolean {
   if (decision.action !== reference.action) return false;
   // Two payments agree only if both swap, or neither does (EURC swap spec S4).
@@ -1132,12 +1148,36 @@ async function decideApPayable(
   let swapOffer: SwapOffer | null = null;
   let swapUnavailable: string | null = null;
   if (ctx.swap && isEurc && fx && eurcShortNow > 0 && !crossChain && !highRisk && !overLimit) {
-    const sized = await sizeSwap(eurcShortNow, fx.rate, ctx.swap.quote);
-    if (sized.offer) swapOffer = sized.offer;
-    else swapUnavailable = sized.reason;
+    // A payable whose payment has already started is paid by it: a swap now would buy its EURC twice
+    // (review #3). A read that fails is taken as started.
+    const started = await db.from("payment_intents").select("id").eq("source_type", "invoice").eq("source_id", invoice.id).maybeSingle();
+    if (started.error || started.data) {
+      swapUnavailable = started.error
+        ? "Whether a payment for this invoice has started could not be read, so no swap is made for it."
+        : "A payment for this invoice has already started, so no swap is made for it.";
+    } else {
+      try {
+        const sized = await sizeSwap(eurcShortNow, fx.rate, ctx.swap.quote);
+        if (sized.offer) swapOffer = sized.offer;
+        else swapUnavailable = sized.reason;
+      } catch (error) {
+        console.error("ap: no USDC→EURC quote", invoice.id, error instanceof Error ? error.message : error);
+        swapUnavailable = "The USDC→EURC swap could not be quoted.";
+      }
+    }
   }
   // What a swap's USDC must leave in place: the USDC falling due within 7 days.
   const usdcDueWithin7Days = isEurc ? ctx.obligationsBy(utcDate(new Date(now.getTime() + 7 * 86_400_000)), utcDate(now), "USDC").total : 0;
+  // Why code would refuse the offer (S5), when it would; the plan counts only a swap code would make (review #6).
+  const swapRefusal =
+    swapOffer === null
+      ? null
+      : swapOffer.costPercent > SWAP_COST_CAP_PERCENT
+        ? `The swap of ${swapOffer.usdcIn} USDC for the EURC it needs costs ${swapOffer.costPercent}% above the quoted rate, more than the ${SWAP_COST_CAP_PERCENT}% a swap may cost.`
+        : Number((operatingBalance - swapOffer.usdcIn).toFixed(6)) < usdcDueWithin7Days
+          ? `Swapping ${swapOffer.usdcIn} USDC for the EURC it needs would leave ${Number((operatingBalance - swapOffer.usdcIn).toFixed(6))} USDC, less than the ${usdcDueWithin7Days} USDC due within 7 days.`
+          : null;
+  const plannedSwapEurc = swapOffer !== null && swapRefusal === null ? swapOffer.eurcMinimum : 0;
   // EURC money only for a EURC payable (P1): the wallet's EURC — all of it
   // in a sandbox, which does not track one — no USDC reserve, and only the
   // other EURC payables falling due first.
@@ -1149,7 +1189,7 @@ async function decideApPayable(
       discount,
       // With a swap on offer, the EURC it would bring counts (S3): a later day is scheduled, and swapped for on that day.
       operatingBalance: isEurc
-        ? (eurcUnreadable ? 0 : (eurcBalance ?? Number.POSITIVE_INFINITY) + (swapOffer?.eurcMinimum ?? 0))
+        ? (eurcUnreadable ? 0 : (eurcBalance ?? Number.POSITIVE_INFINITY) + plannedSwapEurc)
         : viaGateway
           ? (gateway ? gateway.balanceUsdc - gateway.feeUsdc : 0)
           : operatingBalance - (fee?.feeUsdc ?? 0),
@@ -1280,7 +1320,9 @@ async function decideApPayable(
       if (timing.shortfall) {
         return {
           action: "hold",
-          reasoning: shortfallReasoning(timing, isEurc ? (eurcBalance ?? 0) : operatingBalance, isEurc ? 0 : ctx.reserveBalance, currency) + (swapUnavailable ? ` ${swapUnavailable}` : ""),
+          reasoning:
+            shortfallReasoning(timing, isEurc ? (eurcBalance ?? 0) : operatingBalance, isEurc ? 0 : ctx.reserveBalance, currency) +
+            (swapRefusal ?? swapUnavailable ? ` ${swapRefusal ?? swapUnavailable}` : ""),
           confidence: 0.8,
         };
       }
@@ -1318,10 +1360,12 @@ async function decideApPayable(
 
   // Code bounds the date before anything else sees the decision: no invoice
   // is scheduled past its due date, or for a day already here (P2).
-  const { decision, payOn, timingRule, requestedPayOn, note: timingNote } = boundApDecision(modelDecision, {
+  const { decision: boundDecision, payOn, timingRule, requestedPayOn, note: timingNote } = boundApDecision(modelDecision, {
     now,
     dueDate: invoice.due_date,
   });
+  // A swap is a choice only when the wallet is short: on any other payable the flag means nothing, and is not recorded (review #9).
+  const decision: ApDecision = boundDecision.fundWithSwap === true && !(eurcShortNow > 0) ? withoutSwapChoice(boundDecision) : boundDecision;
   // Scored on what code let stand, and on the day as well as the action; null
   // still means the policy itself decided, so there was nothing to compare.
   const agreedWithReference = sameActionAsReference === null ? null : sameApDecision(decision, reference);
@@ -1584,8 +1628,8 @@ export interface ApStageInput {
   gatewayQuote?: (chain: string, amount: number) => Promise<GatewayQuote | null>;
   /** What swapping some USDC for EURC would give now (EURC swap spec S1); Circle's Stablecoin Service unless a test passes its own. */
   quoteSwap?: (usdcIn: number) => Promise<SwapQuote>;
-  /** Making and resuming swaps (S6, S7); src/lib/fx/swap.ts unless a test passes its own. */
-  swaps?: { run: SwapRunner; resume: (input: { invoiceId: string; counterpartyName: string }) => Promise<SwapOutcome | null> };
+  /** Making swaps, and finishing those in flight (S6, S7); src/lib/fx/swap.ts unless a test passes its own. */
+  swaps?: { run: SwapRunner; resumeAll: () => Promise<SwapSweep> };
 }
 
 /** Makes a swap to fund one EURC payment (src/lib/fx/swap.ts `swapForPayment`, bound to the stage's wallet). */
@@ -1603,8 +1647,6 @@ interface EurcFunds {
   spent: (amountEurc: number) => void;
   /** EURC a swap brought in this stage (EURC swap spec S6). */
   received: (amountEurc: number) => void;
-  /** Read the balance again: a resumed swap may have changed it in a way this stage cannot count (S7). */
-  forget: () => void;
 }
 
 /**
@@ -1649,22 +1691,46 @@ export async function runApStage(input: ApStageInput): Promise<number> {
     received: (amountEurc) => {
       if (typeof eurcHeld === "number") eurcHeld = Number((eurcHeld + amountEurc).toFixed(6));
     },
-    forget: () => {
-      eurcHeld = undefined;
-    },
   };
 
   // Swaps for EURC payables the wallet is short of (EURC swap spec): only from a
   // live wallet whose provider can make one, and whose address the swap pays back to.
   const swapAddress = input.operatingAddress ?? null;
   const swapDeps = () => ({ provider, operating: operating as { id: string }, operatingAddress: swapAddress as string, apiKey: currentOrgConfig().chain.circleApiKey ?? null });
-  const swaps =
+  const swapper =
     provider.mode === "live" && operating && provider.swapForEurc && swapAddress
       ? (input.swaps ?? {
           run: (swap: Parameters<SwapRunner>[0]) => swapForPayment(swap, swapDeps()),
-          resume: (open: { invoiceId: string; counterpartyName: string }) => resumeOpenSwap(open, swapDeps()),
+          resumeAll: () => resumeOpenSwaps(swapDeps()),
         })
       : null;
+  // Every swap in flight is finished before anything is decided (S7), and before the EURC balance is
+  // read, so what it brought is counted once, from the chain, and it is never made twice. One still in
+  // flight keeps its payable undecided this cycle. A paused agent sends nothing, so resumes nothing.
+  // Before 0048, or when the sweep itself fails, no swap is offered this stage (review #2).
+  const swapsInFlight = new Set<string>();
+  let swapsAvailable = swapper !== null;
+  if (swapper && !(await pausedPaymentNote())) {
+    try {
+      const sweep = await swapper.resumeAll();
+      swapsAvailable = sweep.available;
+      for (const { invoiceId, outcome } of sweep.outcomes) {
+        if (!outcome.ok && outcome.pending) swapsInFlight.add(invoiceId);
+      }
+      // A swap that ended now may have taken its USDC after the cycle read the balance: read it again (review #7).
+      if (sweep.outcomes.some(({ outcome }) => outcome.ok) && operating) {
+        try {
+          operatingBalance = await syncOperatingBalance(operating.id);
+        } catch (error) {
+          console.error("ap: balance not read again after a resumed swap", error instanceof Error ? error.message : error);
+        }
+      }
+    } catch (error) {
+      console.error("ap: swaps in flight not checked; none is made this stage", error instanceof Error ? error.message : error);
+      swapsAvailable = false;
+    }
+  }
+  const swaps = swapper && swapsAvailable ? swapper : null;
   const quoteSwap =
     input.quoteSwap ?? ((usdcIn: number) => quoteUsdcForEurc(usdcIn, { fromAddress: swapAddress as string, apiKey: currentOrgConfig().chain.circleApiKey ?? null }));
 
@@ -1782,17 +1848,11 @@ export async function runApStage(input: ApStageInput): Promise<number> {
       continue;
     }
 
-    // A swap for this payable whose answer was lost is finished before it is
-    // decided, so the EURC it brought is read and it is never made twice (S7).
-    // A paused agent sends nothing, so resumes nothing.
-    if (swaps && invoiceCurrency(invoice.currency) === "EURC" && !(await pausedPaymentNote())) {
-      const resumed = await swaps.resume({ invoiceId: invoice.id, counterpartyName: counterparty.name });
-      if (resumed?.ok) eurc.forget();
-      if (resumed && !resumed.ok && resumed.pending) {
-        record(invoice.id, invoice.status, invoice.scheduled_for ?? null);
-        lines.push({ domain: "ap", message: `${counterparty.name}: a swap of USDC for its EURC is in flight at Circle; decided once it ends (${amount} EURC)` });
-        continue;
-      }
+    // Its swap is still in flight at Circle: decided once it ends (S7).
+    if (swapsInFlight.has(invoice.id)) {
+      record(invoice.id, invoice.status, invoice.scheduled_for ?? null);
+      lines.push({ domain: "ap", message: `${counterparty.name}: a swap of USDC for its EURC is in flight at Circle; decided once it ends (${amount} EURC)` });
+      continue;
     }
 
     const decided = await decideApPayable(invoice, {

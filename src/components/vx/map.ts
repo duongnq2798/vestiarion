@@ -366,6 +366,17 @@ export function milestoneDecision(milestone: MilestoneRow, entries: LedgerEntry[
   };
 }
 
+const TREASURY_DECISIONS = new Set(["hold", "sweep_to_usyc", "redeem_from_usyc"]);
+
+/**
+ * The treasury stage's own decisions among treasury-domain entries, newest first, at most `count`. A swap
+ * of USDC for EURC or a Gateway deposit is in the same domain but is no decision on the reserve, and is
+ * never shown as one (EURC swap review #8).
+ */
+export function treasuryDecisionEntries(entries: LedgerEntry[], count: number): LedgerEntry[] {
+  return entries.filter((entry) => TREASURY_DECISIONS.has(entry.action)).slice(0, count);
+}
+
 export function treasuryLedgerDecision(entry: LedgerEntry): Decision {
   const decision = record(entry.detail.decision);
   const economics = record(entry.detail.economics);

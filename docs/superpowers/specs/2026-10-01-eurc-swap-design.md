@@ -135,8 +135,11 @@ For `pay` on a EURC payable whose EURC is short:
 1. Paused → held, nothing swapped.
 2. `swapForPayment()`.
 3. On success, `payInvoice` as before.
-4. On failure, or while the swap is still in flight at Circle, the payable is held. The reason goes in
-   the reasoning, and the outcome in `detail.swap` (R6).
+4. On failure the payable is held. The reason goes in the reasoning, and the outcome in `detail.swap`
+   (R6).
+5. While the swap is still in flight at Circle, or its outcome is not known because a call threw, the
+   payable stays `pending`. The next cycle's sweep (S7) finishes the swap before deciding it again
+   (review #1, #2). A throw in the swap path never stops the stage.
 
 **`swapForPayment({ invoiceId, offer, short })`:**
 1. **Open swap.** An invoice with an open `submitted` row was resumed before its decision (S7), so it
@@ -179,12 +182,18 @@ call it never received is created now.
 
 - If the service's deadline has passed by then, the execute reverts on chain and the row fails. No
   USDC moves; the approval stays.
-- **Before** a EURC payable is decided, an open row for it is resumed. Its balance read then sees the
-  EURC that swap brought, so a swap whose answer was lost is never followed by a second one.
-- A paused agent resumes nothing; the row stays open until a cycle runs unpaused.
-- A confirmed resume adds `eurcReceived` to the stage's EURC and appends the `fx_swap` entry the lost
-  answer never wrote.
-- A row whose resumed swap is still pending at Circle holds the payable: "a swap for it is in flight".
+- **The sweep.** At the start of the AP stage, before any EURC balance is read, every open row is
+  resumed (`resumeOpenSwaps`). The balance read then sees the EURC those swaps brought, so a swap whose
+  answer was lost is never followed by a second one.
+- **A paused agent** resumes nothing; the rows stay open until a cycle runs unpaused.
+- **A confirmed resume:**
+  - appends the `fx_swap` entry the lost answer never wrote;
+  - makes the stage read the USDC balance again, because the swap may have taken its USDC after the
+    cycle read it (R8).
+- **A row still pending at Circle** keeps its payable undecided that cycle, with the line "a swap of
+  USDC for its EURC is in flight at Circle".
+- **A resume that throws** is reported in flight, not thrown.
+- **The sweep finds no table** (before 0048), or fails: no swap is offered that stage.
 
 ### S8. Data: migration `0048_fx_swaps.sql`
 
@@ -218,6 +227,24 @@ call it never received is created now.
 - **Privacy page.** Circle's Stablecoin Service also builds the swap, for the operating wallet's
   address.
 
+### S11. After the review (2026-10-01)
+
+- **Payments already started.** No swap is offered for a payable that already has a payment intent:
+  its payment is under way, and a second swap would buy its EURC twice (#3).
+- **Cost.** `costPercent` is rounded **up** to two places. The created transaction's cost is weighed
+  again against the cap before anything is sent (#4).
+- **The created transaction is checked**, not only its reported figures (#5):
+  - the amount is the one asked for;
+  - the instructions approve no more USDC than that amount;
+  - EURC is among the tokens returned to the wallet;
+  - the minimum relied on is the EURC the chain enforces (`minTokenOut`), when that is lower than
+    `stopLimit`.
+- **Planning.** It counts a swap only when the swap passes both bounds (#6). Otherwise a payable that
+  is not due yet is held now, with the bound's reason.
+- **`fundWithSwap`** is recorded only for a payable the wallet was short of (#9).
+- **The console's treasury tiles** show only the treasury stage's decisions (hold, sweep, redeem). A
+  swap and Gateway steps are left out (#8).
+
 ## 4. Rulings
 
 - **R1. The swap rails, not `kit.swap()`.** `kit.swap()` with `@circle-fin/adapter-circle-wallets`
@@ -249,6 +276,15 @@ call it never received is created now.
     is not decided that cycle, and its line says so.
   - **Cost if wrong:** a band does not show for a failed swap; the reasoning and the `fx_swap` entry
     still do.
+- **R7. A resume sends from the current operating account.**
+  - **What.** The row does not record the wallet the swap was made from.
+  - **Why it is safe.** A workspace's operating wallet is created once and never replaced.
+  - **Cost if wrong:** after a replaced wallet, a resume would ask Circle for the same keys from
+    another wallet. It would fail, and the row would close as failed.
+- **R8. A confirmed resume reads the USDC balance again**
+  (`syncOperatingBalance`).
+  - **Why not subtract instead.** Subtracting `usdcIn` would count it twice when the swap had already
+    gone through before the cycle read the balance, which is the usual case for a swap left pending.
 - **R5. viem as a direct dependency.** It is already installed through App Kit (2.56.8). It encodes
   the Adapter call. The tests decode it with the same ABI.
 

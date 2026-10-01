@@ -20,6 +20,7 @@ import { awaitSettlement, FAILED_STATES, withDeadline, type Settlement } from ".
 import { ARC_TESTNET_USDC, BridgeFeeError, bridgeFee, bridgeStepKey, burnCalls, forwardedMint, type ContractCall } from "./cctp";
 import { burnIntent, burnIntentTypedData, estimateGateway, gatewaySalt, gatewayTransferStatus, submitGatewayTransfer, type GatewayTransferStatus } from "./gateway";
 import { payeeChain, paidAcrossChains } from "../payee-chains";
+import { toBaseUnits } from "../fx/quote";
 import type { ChainConfig } from "../config";
 
 export type LiveProviderClient = Pick<
@@ -585,7 +586,8 @@ export class LiveProvider implements ChainProvider {
       const { status, transaction } = await awaitSettlement(this.client, txId);
       return { status, txId, txHash: transaction?.txHash ?? null, state: transaction?.state ?? null };
     };
-    const units = BigInt(Math.round(params.usdcIn * 1_000_000)).toString();
+    // In base units the way the swap's call was built (src/lib/fx/swap-service.ts), never by a float multiply (review #10).
+    const units = toBaseUnits(params.usdcIn);
     const approve = await send({ contractAddress: ARC_TESTNET_USDC, abiFunctionSignature: "approve(address,uint256)", abiParameters: [params.adapter, units] }, params.approveKey);
     if (approve.status !== "confirmed") return { approve, execute: null };
     const execute = await send({ contractAddress: params.adapter, callData: params.callData }, params.executeKey);

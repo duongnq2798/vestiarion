@@ -14,11 +14,14 @@ Changes to the API and webhooks that affect an integration, newest first. Change
   - `swapOffer`: `{ usdcIn, eurcEstimated, eurcMinimum, usdcPerEurc, costPercent, provider }` when a swap was offered, or `null`;
   - `swapUnavailable`: why there was none, or `null`;
   - `swap`: `{ swapId, state, usdcIn, eurcReceived, swapTxHash, reason }` for the swap made to fund the payment, or `null`. `state` is `confirmed`, `pending` or `failed`.
-  - `decision.fundWithSwap` is `true` when the model chose to pay with the swap.
+  - `decision.fundWithSwap` is `true` when the model chose to pay with the swap. It appears only on a payable the wallet's EURC was short of.
+  - `swapOffer.costPercent` is what each EURC costs through the swap above the rate the payable was weighed at, in percent, rounded up to two places.
 - **Two new values of `guardrailRule`:**
   - `fx.swap_cost_above_cap`, for a swap costing more than 3% above the quoted rate;
   - `fx.swap_usdc_short`, for a swap that would leave the USDC below what falls due in USDC within 7 days.
-- **A swap that does not go through** holds the payable with `guardrailRule: null`, as a failed transfer does. Its reason is in `swap.reason`.
+- **When a swap does not go through:**
+  - A failed swap holds the payable with `guardrailRule: null`, as a failed transfer does. Its reason is in `swap.reason`.
+  - A swap still in flight at Circle leaves the payable `pending`. The next cycle finishes the swap, then decides the payable again.
 
 ## 2026-10-01: Milestone escrow
 

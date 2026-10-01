@@ -8,7 +8,7 @@ import { SampleDataLoaded, SampleDataOffer } from "@/components/SampleDataPanel"
 import { CycleReport } from "@/components/vx/CycleReport";
 import { DecisionCard } from "@/components/vx/DecisionCard";
 import { GettingStarted } from "@/components/vx/GettingStarted";
-import { invoiceDecision, treasuryActionDecision, treasuryLedgerDecision } from "@/components/vx/map";
+import { invoiceDecision, treasuryActionDecision, treasuryDecisionEntries, treasuryLedgerDecision } from "@/components/vx/map";
 import { Money } from "@/components/vx/Primitives";
 import { ScheduledPayments, scheduledPaymentRows } from "@/components/vx/ScheduledPayments";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -82,7 +82,8 @@ export default async function DashboardPage({
     const since = Number.isFinite(sinceValue) ? sinceValue : undefined;
     const [invoiceEntries, treasuryEntries, cycleEntries, gateway] = await Promise.all([
       listLedgerEntriesForTargets({ invoiceIds: invoices.map((invoice) => invoice.id) }),
-      listLedgerEntriesByDomain("treasury", 2),
+      // The latest two decisions, read from enough entries that swaps and Gateway steps in between do not crowd them out.
+      listLedgerEntriesByDomain("treasury", 30),
       since == null ? Promise.resolve([]) : listLedgerEntriesAfter(since),
       // A live workspace's Gateway balance (Gateway payouts G5), read alongside the ledger rather than
       // after it (review M4). Best effort: a read that fails shows no panel.
@@ -100,7 +101,7 @@ export default async function DashboardPage({
     // What the agent will pay next, soonest first (payment timing design §1):
     // derived from the invoices already loaded above, no extra query.
     const scheduledPayments = scheduledPaymentRows(invoices);
-    const treasuryDecisions = treasuryEntries.map(treasuryLedgerDecision);
+    const treasuryDecisions = treasuryDecisionEntries(treasuryEntries, 2).map(treasuryLedgerDecision);
     const executedReserveMoves = actionRows.slice(0, 2).map(treasuryActionDecision);
     const headSeq = headEntries[0]?.seq ?? 0;
     // What the approvals inbox holds for a person, so the tile and the page it links to agree. A row

@@ -120,7 +120,14 @@ interface AskOptions {
 }
 
 const micro = (amount: number) => Math.ceil(Number((amount * 1_000_000).toFixed(3))) / 1_000_000;
-const round = (value: number, places: number) => Math.round(value * 10 ** places) / 10 ** places;
+
+/**
+ * What each EURC costs through a swap above the rate the payable was weighed at, in percent, rounded up
+ * to two places: a cost just above the cap is never shown at it (review #4).
+ */
+export function swapCostPercent(usdcIn: number, eurcEstimated: number, usdcPerEurc: number): number {
+  return Math.ceil(Number(((usdcIn / eurcEstimated / usdcPerEurc - 1) * 10_000).toFixed(6))) / 100;
+}
 
 /** One request, with the key when there is one, and without it once if the service refuses the key. */
 async function ask(url: string, init: RequestInit, options: AskOptions): Promise<unknown> {
@@ -177,7 +184,10 @@ export async function quoteUsdcForEurc(usdcIn: number, options: AskOptions): Pro
   }).toString();
   return once(async () => {
     const parsed = quoteSchema.safeParse(await ask(url.toString(), { method: "GET" }, options));
-    if (!parsed.success || BigInt(parsed.data.quote.estimatedAmount) === BigInt(0)) throw new FxQuoteError("malformed");
+    // A zero estimate or minimum is no quote: sizing divides by the minimum (review #2).
+    if (!parsed.success || BigInt(parsed.data.quote.estimatedAmount) === BigInt(0) || BigInt(parsed.data.quote.minAmount) === BigInt(0)) {
+      throw new FxQuoteError("malformed");
+    }
     return {
       eurcEstimated: fromBaseUnits(parsed.data.quote.estimatedAmount),
       eurcMinimum: fromBaseUnits(parsed.data.quote.minAmount),
@@ -197,13 +207,13 @@ export async function sizeSwap(short: number, usdcPerEurc: number, quote: (usdcI
     eurcEstimated: answer.eurcEstimated,
     eurcMinimum: answer.eurcMinimum,
     usdcPerEurc,
-    costPercent: round((usdcIn / answer.eurcEstimated / usdcPerEurc - 1) * 100, 2),
+    costPercent: swapCostPercent(usdcIn, answer.eurcEstimated, usdcPerEurc),
     provider: answer.provider,
   });
   try {
     let usdcIn = micro((short * usdcPerEurc) / (1 - SWAP_SLIPPAGE_BPS / 10_000));
     let answer = await quote(usdcIn);
-    if (answer.eurcMinimum < short) {
+    if (answer.eurcMinimum < short && answer.eurcMinimum > 0) {
       usdcIn = micro(((usdcIn * short) / answer.eurcMinimum) * 1.005);
       answer = await quote(usdcIn);
     }
@@ -229,6 +239,7 @@ const address = z.string().regex(/^0x[0-9a-fA-F]{40}$/);
 const hex = z.string().regex(/^0x[0-9a-fA-F]*$/);
 const integer = z.string().regex(/^(0x[0-9a-fA-F]+|\d+)$/);
 const swapSchema = z.object({
+  amount: baseUnits,
   estimatedAmount: baseUnits,
   stopLimit: baseUnits,
   route: z.object({ provider: z.string().optional() }).passthrough().optional(),
@@ -267,7 +278,20 @@ export async function createSwapTransaction(usdcIn: number, options: AskOptions)
     if (!parsed.success) throw new FxQuoteError("malformed");
     const { executionParams, signature } = parsed.data.transaction;
     const wallet = options.fromAddress.toLowerCase();
+    const eurc = ARC_TESTNET_EURC.toLowerCase();
+    // What is signed is checked, not only what is reported (review #5): the amount asked for; no
+    // instruction approving more USDC than it; every token returned to the wallet, EURC among them;
+    // and the EURC the chain enforces, which is the minimum relied on.
+    if (parsed.data.amount !== units) throw new FxQuoteError("malformed");
     if (executionParams.tokens.some((token) => token.beneficiary.toLowerCase() !== wallet)) throw new FxQuoteError("malformed");
+    if (!executionParams.tokens.some((token) => token.token.toLowerCase() === eurc)) throw new FxQuoteError("malformed");
+    const approved = executionParams.instructions.reduce((sum, instruction) => sum + BigInt(instruction.amountToApprove), BigInt(0));
+    if (approved > BigInt(units)) throw new FxQuoteError("malformed");
+    const enforced = executionParams.instructions
+      .filter((instruction) => instruction.tokenOut.toLowerCase() === eurc)
+      .reduce((sum, instruction) => sum + BigInt(instruction.minTokenOut), BigInt(0));
+    if (enforced === BigInt(0)) throw new FxQuoteError("malformed");
+    const stopLimit = BigInt(parsed.data.stopLimit);
     const callData = encodeFunctionData({
       abi: ADAPTER_EXECUTE_ABI,
       functionName: "execute",
@@ -293,7 +317,7 @@ export async function createSwapTransaction(usdcIn: number, options: AskOptions)
     });
     return {
       eurcEstimated: fromBaseUnits(parsed.data.estimatedAmount),
-      eurcMinimum: fromBaseUnits(parsed.data.stopLimit),
+      eurcMinimum: fromBaseUnits((enforced < stopLimit ? enforced : stopLimit).toString()),
       provider: parsed.data.route?.provider ?? null,
       adapter: ADAPTER,
       callData,

@@ -9,7 +9,8 @@ import { CycleMetricsCollector } from "@/lib/agent/cycle-metrics";
 import type { DecideParams } from "@/lib/agent/decide";
 import type { BalanceSnapshot, ChainProvider, EarnResult, Stablecoin, SwapCallResult, TransferParams, TransferResult } from "@/lib/circle";
 import { FxQuoteError, type EurcQuote } from "@/lib/fx/quote";
-import type { SwapOutcome } from "@/lib/fx/swap";
+import type { SwapOutcome, SwapSweep } from "@/lib/fx/swap";
+import answer from "./fixtures/stablecoin-swap-answer.json";
 import type { SwapOffer, SwapQuote } from "@/lib/fx/swap-service";
 import { encryptSecret, parseMasterKeys } from "@/lib/secrets";
 import { fakeSupabase, type RecordedRequest } from "./support/fake-supabase";
@@ -110,7 +111,16 @@ class Chain implements ChainProvider {
     this.balanceReads.push(token);
     return { accountId, chain: "ARC-TESTNET", token, balance: token === "EURC" ? this.eurc : 1000 };
   }
-  async swapForEurc(): Promise<SwapCallResult> { throw new Error("the stage swaps through the injected swaps"); }
+  swapCalls: Array<{ usdcIn: number; callData: string; approveKey: string; executeKey: string }> = [];
+  /** What a real swap does to the wallet: the EURC comes in. Only the default wiring calls it; other tests inject their swaps. */
+  async swapForEurc(params: { usdcIn: number; callData: string; approveKey: string; executeKey: string }): Promise<SwapCallResult> {
+    this.swapCalls.push(params);
+    this.eurc = Number((this.eurc + 2.063076).toFixed(6));
+    return {
+      approve: { status: "confirmed", txId: "tx-approve", txHash: "0xa11", state: "COMPLETE" },
+      execute: { status: "confirmed", txId: "tx-swap", txHash: `0x${"5a".repeat(32)}`, state: "COMPLETE" },
+    };
+  }
   async reconcileTransfer(): Promise<TransferResult> { throw new Error("not used"); }
   async getBalance(): Promise<BalanceSnapshot> { throw new Error("not used"); }
   async depositToEarn(): Promise<EarnResult> { throw new Error("not used"); }
@@ -126,9 +136,13 @@ function apFake(options: {
   mode?: "live" | "simulate";
   quoteSwap?: (usdcIn: number) => Promise<SwapQuote>;
   run?: (input: { offer: SwapOffer; short: number }) => Promise<SwapOutcome>;
-  resume?: (invoiceId: string) => Promise<SwapOutcome | null>;
+  sweep?: (chain: Chain) => Promise<SwapSweep>;
   operatingBalance?: number;
+  /** Leave the swaps to the stage's own wiring (src/lib/fx/swap.ts), over a fake fx_swaps table. */
+  defaultSwaps?: boolean;
+  operatingAddress?: string;
 }) {
+  const swapRows = new Map<string, Record<string, unknown>>();
   const intents = paymentIntentsBackend(ORG);
   const fake = fakeSupabase((request) => {
     if (request.path === "/rest/v1/orgs") {
@@ -152,6 +166,19 @@ function apFake(options: {
       return { body: { id: ACCOUNT_ID, chain: "ARC-TESTNET", token: "USDC", balance: "1000", apy: "0" } };
     }
     if (request.path === "/rest/v1/accounts" && request.method === "PATCH") return { body: [] };
+    if (request.path === "/rest/v1/fx_swaps") {
+      if (request.method === "GET") return { body: [...swapRows.values()].filter((row) => row.state === "submitted") };
+      if (request.method === "POST") {
+        const row = request.body as Record<string, unknown>;
+        swapRows.set(row.id as string, row);
+        return { body: { id: row.id } };
+      }
+      if (request.method === "PATCH") {
+        const id = request.params.get("id")?.replace("eq.", "") as string;
+        swapRows.set(id, { ...swapRows.get(id), ...(request.body as Record<string, unknown>) });
+        return { body: [] };
+      }
+    }
     return intents.respond(request);
   });
   const chain = new Chain(options.mode ?? "live", options.eurc ?? 0);
@@ -159,19 +186,19 @@ function apFake(options: {
   const run = vi.fn(async (input: { invoiceId: string; counterpartyName: string; offer: SwapOffer; short: number; reasoning: string }) =>
     options.run ? options.run(input) : swapped(input.offer)
   );
-  const resume = vi.fn(async (input: { invoiceId: string; counterpartyName: string }) => (options.resume ? options.resume(input.invoiceId) : null));
+  const resumeAll = vi.fn(async (): Promise<SwapSweep> => (options.sweep ? options.sweep(chain) : { available: true, outcomes: [] }));
   const lines: CycleLogLine[] = [];
   const stage = () =>
     runWith({ config, db: fake.client, fetch: fake.fetch }, () =>
       withOrg(ORG, () =>
         runApStage({
-          db: db(), provider: chain, operating: { id: ACCOUNT_ID }, operatingAddress: WALLET, operatingBalance: options.operatingBalance ?? 1000,
+          db: db(), provider: chain, operating: { id: ACCOUNT_ID }, operatingAddress: options.operatingAddress ?? WALLET, operatingBalance: options.operatingBalance ?? 1000,
           reserveApy: 0.045, reserveBalance: 0, metrics: new CycleMetricsCollector(), lines,
-          quoteEurc: async (amount) => QUOTE(amount), quoteSwap, swaps: { run, resume },
+          quoteEurc: async (amount) => QUOTE(amount), quoteSwap, ...(options.defaultSwaps ? {} : { swaps: { run, resumeAll } }),
         })
       )
     );
-  return { fake, chain, lines, stage, quoteSwap, run, resume };
+  return { fake, chain, lines, stage, quoteSwap, run, resumeAll, intents, swapRows };
 }
 
 /** The model answers `action`, choosing the swap or not; the reference is the written policy's own answer. */
@@ -209,8 +236,8 @@ describe("a EURC payable the wallet is short of, with a swap to fund it", () => 
     expect(quoteSwap).toHaveBeenCalledWith(2.507384);
     const prompt = promptAt(0);
     expect(prompt.treasury).toEqual({ eurcBalance: 0, usdcBalance: 1000, usdcDueWithin7Days: 0, reserveBalance: 0 });
-    // 2.507384 USDC for 2.063076 EURC is 1.215362 a EURC, 0.06% below the 1.216081 it was weighed at.
-    expect(prompt.swap).toEqual({ usdcIn: 2.507384, eurcEstimated: 2.063076, eurcMinimum: 2.001143, usdcPerEurc: RATE, costPercent: -0.06, provider: "lifi" });
+    // 2.507384 USDC for 2.063076 EURC is 1.215362 a EURC, 0.059% below the 1.216081 it was weighed at, rounded up to -0.05.
+    expect(prompt.swap).toEqual({ usdcIn: 2.507384, eurcEstimated: 2.063076, eurcMinimum: 2.001143, usdcPerEurc: RATE, costPercent: -0.05, provider: "lifi" });
     expect(prompt.swapUnavailable).toBeUndefined();
     expect((prompt as unknown as { responseShape: Record<string, string> }).responseShape.fundWithSwap).toContain("swap");
     expect(systemPromptOf()).toContain("fundWithSwap");
@@ -281,38 +308,91 @@ describe("a EURC payable the wallet is short of, with a swap to fund it", () => 
     expect(entries(fake.requests)[0].p_detail).toMatchObject({ swap: { swapId: "swap-1", state: "failed", reason: "Circle did not complete the swap (FAILED)." } });
   });
 
-  it("is held while its swap is in flight at Circle", async () => {
+  it("stays pending while its swap is in flight at Circle, so the next cycle's sweep finishes the swap first (review #1)", async () => {
     model("pay", { fundWithSwap: true });
     const { fake, chain, stage } = apFake({ book: [payable()], run: async () => ({ ok: false, pending: true, swapId: "swap-1", reason: "A swap for this invoice is in flight at Circle." }) });
     await stage();
     expect(chain.transfers).toEqual([]);
-    expect(patches(fake.requests)[0]).toMatchObject({ status: "held" });
+    const [patch] = patches(fake.requests);
+    expect(patch).toMatchObject({ status: "pending", scheduled_for: null });
+    expect(String(patch.agent_reasoning)).toContain("The next cycle finishes it first.");
     expect(entries(fake.requests)[0].p_detail).toMatchObject({ swap: { state: "pending" } });
+  });
+
+  it("stays pending, and the stage goes on, when making its swap throws (review #2)", async () => {
+    model("pay", { fundWithSwap: true });
+    const usdcBill = payable({ id: USDC_ID, currency: "USDC", amount: "3", po_reference: "PO-1", created_at: "2026-10-01T08:30:00Z" });
+    const { fake, chain, stage } = apFake({ book: [payable(), usdcBill], run: async () => { throw new Error("Circle answered 500"); } });
+    await stage();
+    const [first, second] = patches(fake.requests);
+    expect(first).toMatchObject({ status: "pending" });
+    expect(String(first.agent_reasoning)).toContain("Circle answered 500");
+    // The USDC payable after it is still decided and paid.
+    expect(second).toMatchObject({ status: "paid" });
+    expect(chain.transfers).toEqual([expect.objectContaining({ token: "USDC", amount: 3 })]);
+  });
+
+  it("is not decided while the sweep finds its swap still in flight", async () => {
+    model("pay", { fundWithSwap: true });
+    const { fake, stage, run } = apFake({
+      book: [payable()],
+      sweep: async () => ({ available: true, outcomes: [{ invoiceId: INVOICE_ID, outcome: { ok: false, pending: true, swapId: "swap-0", reason: "A swap for this invoice is in flight at Circle." } }] }),
+    });
+    await stage();
+    expect(decideMock).not.toHaveBeenCalled();
+    expect(run).not.toHaveBeenCalled();
+    expect(patches(fake.requests)).toEqual([]);
+  });
+
+  it("is offered no swap before the swaps table exists (0048 not applied, review #2)", async () => {
+    model("pay", { fundWithSwap: true });
+    const { fake, stage, quoteSwap, run } = apFake({ book: [payable()], sweep: async () => ({ available: false, outcomes: [] }) });
+    await stage();
+    expect(quoteSwap).not.toHaveBeenCalled();
+    expect(promptAt(0).swap).toBeUndefined();
+    expect(run).not.toHaveBeenCalled();
+    expect(entries(fake.requests)[0].p_detail).toMatchObject({ guardrailRule: "treasury.insufficient_eurc" });
+  });
+
+  it("is offered no swap, and the stage goes on, when the sweep itself fails", async () => {
+    model("pay", { fundWithSwap: true });
+    const { fake, stage, quoteSwap } = apFake({ book: [payable()], sweep: async () => { throw new Error("database unavailable"); } });
+    await stage();
+    expect(quoteSwap).not.toHaveBeenCalled();
+    expect(patches(fake.requests)[0]).toMatchObject({ status: "held" });
+  });
+
+  it("is offered no second swap when its payment has already started (review #3)", async () => {
+    model("pay", { fundWithSwap: true });
+    const { stage, quoteSwap, run, intents } = apFake({ book: [payable()] });
+    intents.insert({ source_type: "invoice", source_id: INVOICE_ID, idempotency_key: "invoice-key", provider: "circle", amount: 2, destination: "0xparis" });
+    await stage();
+    expect(quoteSwap).not.toHaveBeenCalled();
+    expect(run).not.toHaveBeenCalled();
+    expect(promptAt(0).swapUnavailable).toBe("A payment for this invoice has already started, so no swap is made for it.");
   });
 
   it("swaps nothing while the agent is paused", async () => {
     model("pay", { fundWithSwap: true });
-    const { chain, stage, run, resume } = apFake({ book: [payable()], paused: true });
+    const { chain, stage, run, resumeAll } = apFake({ book: [payable()], paused: true });
     await stage();
     expect(run).not.toHaveBeenCalled();
-    expect(resume).not.toHaveBeenCalled();
+    expect(resumeAll).not.toHaveBeenCalled();
     expect(chain.transfers).toEqual([]);
   });
 
   it("finishes a swap whose answer was lost before deciding, and so never swaps twice", async () => {
     model("pay", { fundWithSwap: true });
-    const box: { chain?: Chain } = {};
-    const { chain, stage, run, resume } = apFake({
+    const { chain, stage, run, resumeAll } = apFake({
       book: [payable()],
-      resume: async () => {
+      sweep: async (wallet) => {
         // The swap went through: the wallet now holds its EURC.
-        box.chain!.eurc = 2.06;
-        return { ok: true, swapId: "swap-0", usdcIn: 2.5, eurcMinimum: 2.0, eurcReceived: 2.06, swapTxHash: "0xswap0" };
+        wallet.eurc = 2.06;
+        return { available: true, outcomes: [{ invoiceId: INVOICE_ID, outcome: { ok: true, swapId: "swap-0", usdcIn: 2.5, eurcMinimum: 2.0, eurcReceived: 2.06, swapTxHash: "0xswap0" } }] };
       },
     });
-    box.chain = chain;
     await stage();
-    expect(resume).toHaveBeenCalledWith({ invoiceId: INVOICE_ID, counterpartyName: "Atelier Lumière" });
+    expect(resumeAll).toHaveBeenCalledTimes(1);
     expect(promptAt(0).treasury).toMatchObject({ eurcBalance: 2.06 });
     expect(promptAt(0).swap).toBeUndefined();
     expect(run).not.toHaveBeenCalled();
@@ -364,9 +444,66 @@ describe("a EURC payable the wallet is short of, with a swap to fund it", () => 
 
   it("is never offered a swap in a sandbox", async () => {
     model("pay", { fundWithSwap: true });
-    const { stage, quoteSwap, resume } = apFake({ book: [payable()], mode: "simulate" });
+    const { stage, quoteSwap, resumeAll } = apFake({ book: [payable()], mode: "simulate" });
     await stage();
     expect(quoteSwap).not.toHaveBeenCalled();
-    expect(resume).not.toHaveBeenCalled();
+    expect(resumeAll).not.toHaveBeenCalled();
+  });
+
+  it("does not plan with a swap over its bounds: a payable not due yet is held now, not scheduled into a refusal (review #6)", async () => {
+    policyOnly();
+    const dear = async (usdcIn: number): Promise<SwapQuote> => ({ eurcEstimated: Number((usdcIn * 0.79).toFixed(6)), eurcMinimum: Number((usdcIn * 0.8).toFixed(6)), provider: "lifi" });
+    const { fake, stage, run } = apFake({ book: [payable({ due_date: "2026-10-04T12:00:00+00:00" })], quoteSwap: dear });
+    await stage();
+    expect(run).not.toHaveBeenCalled();
+    const [patch] = patches(fake.requests);
+    expect(patch).toMatchObject({ status: "held" });
+    expect(String(patch.agent_reasoning)).toContain("costs");
+  });
+
+  it("records no fundWithSwap on a payable the wallet's EURC covered (review #9)", async () => {
+    model("pay", { fundWithSwap: true });
+    const { fake, stage } = apFake({ book: [payable()], eurc: 500 });
+    await stage();
+    expect(entries(fake.requests)[0].p_detail.decision).not.toHaveProperty("fundWithSwap");
+  });
+
+  it("swaps through the stage's own wiring: the service's transaction, the provider's calls, the row and the ledger", async () => {
+    model("pay", { fundWithSwap: true });
+    const BENEFICIARY = "0x1111111111111111111111111111111111111111";
+    // Circle's Stablecoin Service, answering the amount asked for with the captured swap scaled to it, and
+    // Arc testnet's RPC with the swap's receipt.
+    const service = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes("/stablecoinKits/swap")) {
+        const asked = (JSON.parse(String(init?.body)) as { amount: string }).amount;
+        const swap = structuredClone(answer);
+        swap.amount = asked;
+        swap.estimatedAmount = "2063076";
+        swap.stopLimit = "2001143";
+        swap.transaction.executionParams.instructions[0].amountToApprove = "200";
+        swap.transaction.executionParams.instructions[1].amountToApprove = String(BigInt(asked) - BigInt(200));
+        swap.transaction.executionParams.instructions[1].minTokenOut = "2001143";
+        return new Response(JSON.stringify(swap), { status: 200 });
+      }
+      const to = `0x${BENEFICIARY.slice(2).padStart(64, "0")}`;
+      return new Response(
+        JSON.stringify({ result: { logs: [{ address: "0x89b50855aa3be2f677cd6303cec089b5f319d72a", topics: ["0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef", to, to], data: `0x${(2_063_076).toString(16).padStart(64, "0")}` }] } }),
+        { status: 200 }
+      );
+    });
+    vi.stubGlobal("fetch", service);
+    try {
+      const { fake, chain, stage, swapRows } = apFake({ book: [payable()], defaultSwaps: true, operatingAddress: BENEFICIARY });
+      await stage();
+      expect(chain.swapCalls).toHaveLength(1);
+      expect(chain.swapCalls[0]).toMatchObject({ usdcIn: 2.507384 });
+      expect(chain.swapCalls[0].callData.slice(0, 10)).toBe("0xaa3e079c");
+      expect([...swapRows.values()]).toEqual([expect.objectContaining({ invoice_id: INVOICE_ID, state: "confirmed", eurc_received: 2.063076, swap_tx_hash: `0x${"5a".repeat(32)}` })]);
+      const summaries = entries(fake.requests).map((entry) => entry.p_summary);
+      expect(summaries).toEqual(["SWAP 2.507384 USDC for 2.063076 EURC to pay Atelier Lumière's invoice", "PAY invoice from Atelier Lumière for 2 EURC"]);
+      expect(chain.transfers).toEqual([expect.objectContaining({ token: "EURC", amount: 2 })]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

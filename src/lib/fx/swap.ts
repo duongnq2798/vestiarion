@@ -5,7 +5,8 @@ import { currentOrgId } from "../context";
 import { db } from "../dal";
 import { appendLedgerEntry } from "../ledger";
 import { ARC_TESTNET_EURC, FxQuoteError } from "./quote";
-import { createSwapTransaction, type SwapOffer } from "./swap-service";
+import { createSwapTransaction, swapCostPercent, type SwapOffer } from "./swap-service";
+import { SWAP_COST_CAP_PERCENT } from "./swap-limits";
 
 /**
  * A swap of USDC for EURC made to pay a EURC invoice (docs/superpowers/specs/2026-10-01-eurc-swap-design.md
@@ -31,6 +32,13 @@ export interface SwapDeps {
 export type SwapOutcome =
   | { ok: true; swapId: string; usdcIn: number; eurcMinimum: number; eurcReceived: number | null; swapTxHash: string | null }
   | { ok: false; pending: boolean; swapId: string | null; reason: string };
+
+/** The swaps in flight a stage finished before deciding anything (S7), and whether swaps exist at all yet. */
+export interface SwapSweep {
+  /** False before migration 0048: no swap can be recorded, so none is offered (S8). */
+  available: boolean;
+  outcomes: Array<{ invoiceId: string; outcome: SwapOutcome }>;
+}
 
 interface SwapRow {
   id: string;
@@ -58,6 +66,10 @@ export function swapStepKey(seed: string): string {
 }
 
 const num = (value: string | number) => Number(value);
+const missingTable = (code: string | undefined) => code === "42P01" || code === "PGRST205";
+const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
+/** A swap whose row exists but whose calls did not finish here: the next sweep resumes it (review #2). */
+const unknownYet = (swapId: string, error: unknown): SwapOutcome => ({ ok: false, pending: true, swapId, reason: `The swap's outcome is not known yet (${message(error)}).` });
 
 /** The EURC the swap's transaction sent to the wallet, from its receipt's Transfer logs; null when it cannot be read. */
 async function eurcReceivedIn(txHash: string | null, wallet: string, deps: SwapDeps): Promise<number | null> {
@@ -160,9 +172,26 @@ export async function swapForPayment(
   try {
     transaction = await createSwapTransaction(input.offer.usdcIn, { fromAddress: deps.operatingAddress, apiKey: deps.apiKey, fetch: deps.fetch, retryDelayMs: deps.retryDelayMs });
   } catch (error) {
-    if (!(error instanceof FxQuoteError)) throw error;
-    const why = error.code === "no_route" ? "No USDC→EURC route on Arc testnet right now" : error.code === "malformed" ? "its answer could not be read" : "it did not answer";
+    // Nothing is recorded or sent yet: no swap, and the payable is decided again next cycle.
+    const why =
+      error instanceof FxQuoteError
+        ? error.code === "no_route"
+          ? "No USDC→EURC route on Arc testnet right now"
+          : error.code === "malformed"
+            ? "its answer could not be read"
+            : "it did not answer"
+        : message(error);
     return { ok: false, pending: false, swapId: null, reason: `Circle's Stablecoin Service gave no swap: ${why}.` };
+  }
+  // The created transaction is weighed again: its estimate can be worse than the quote's (review #4).
+  const cost = swapCostPercent(input.offer.usdcIn, transaction.eurcEstimated, input.offer.usdcPerEurc);
+  if (cost > SWAP_COST_CAP_PERCENT) {
+    return {
+      ok: false,
+      pending: false,
+      swapId: null,
+      reason: `The rate moved: the swap would now cost ${cost}% above the quoted rate, more than the ${SWAP_COST_CAP_PERCENT}% a swap may cost.`,
+    };
   }
   if (transaction.eurcMinimum < input.short) {
     return {
@@ -192,21 +221,38 @@ export async function swapForPayment(
     .single();
   if (inserted.error) {
     if (inserted.error.code === "23505") return { ok: false, pending: true, swapId: null, reason: "Another swap for this invoice is in flight." };
-    throw new Error(inserted.error.message);
+    if (missingTable(inserted.error.code)) return { ok: false, pending: false, swapId: null, reason: "Swaps are not set up for this workspace yet." };
+    return { ok: false, pending: false, swapId: null, reason: `The swap could not be recorded (${inserted.error.message}).` };
   }
-  return send(row, { counterpartyName: input.counterpartyName, reasoning: input.reasoning, resumed: false }, deps);
+  try {
+    return await send(row, { counterpartyName: input.counterpartyName, reasoning: input.reasoning, resumed: false }, deps);
+  } catch (error) {
+    return unknownYet(row.id, error);
+  }
 }
 
 /**
- * Resumes the invoice's swap in flight, if it has one (S7): the same calls under the same keys. Null when
- * it has none, or before migration 0048 there is no table to have one in.
+ * Finishes every swap in flight (S7), before a stage decides anything: the same calls under the same
+ * keys. One whose calls fail again is reported still in flight, not thrown, so one stuck swap never
+ * stops a stage (review #2). Before migration 0048 there is no table: swaps are unavailable.
  */
-export async function resumeOpenSwap(input: { invoiceId: string; counterpartyName: string }, deps: SwapDeps): Promise<SwapOutcome | null> {
-  const open = await db().from("fx_swaps").select(COLUMNS).eq("invoice_id", input.invoiceId).eq("state", "submitted").maybeSingle<SwapRow>();
+export async function resumeOpenSwaps(deps: SwapDeps): Promise<SwapSweep> {
+  const open = await db().from("fx_swaps").select(`${COLUMNS}, invoices(counterparties(name))`).eq("state", "submitted");
   if (open.error) {
-    if (open.error.code === "42P01" || open.error.code === "PGRST205") return null;
+    if (missingTable(open.error.code)) return { available: false, outcomes: [] };
     throw new Error(open.error.message);
   }
-  if (!open.data) return null;
-  return send(open.data, { counterpartyName: input.counterpartyName, reasoning: null, resumed: true }, deps);
+  const rows = (open.data ?? []) as unknown as Array<SwapRow & { invoices?: { counterparties?: { name?: string | null } | null } | null }>;
+  const outcomes: SwapSweep["outcomes"] = [];
+  for (const row of rows) {
+    const counterpartyName = row.invoices?.counterparties?.name ?? "a counterparty";
+    let outcome: SwapOutcome;
+    try {
+      outcome = await send(row, { counterpartyName, reasoning: null, resumed: true }, deps);
+    } catch (error) {
+      outcome = unknownYet(row.id, error);
+    }
+    outcomes.push({ invoiceId: row.invoice_id, outcome });
+  }
+  return { available: true, outcomes };
 }

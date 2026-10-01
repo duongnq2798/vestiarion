@@ -128,7 +128,7 @@ A vendor that bills in euros can be paid in EURC, Circle's euro stablecoin, on A
   - **Who decides.** The model decides whether to pay with it, weighing what it costs.
   - **What code refuses.** A swap that costs more than 3% above the quoted rate (`fx.swap_cost_above_cap`), or that would leave the USDC below what falls due in USDC within 7 days (`fx.swap_usdc_short`).
   - **How it runs.** From the operating wallet, before the EURC transfer. It is recorded as its own `fx_swap` ledger entry, with its rate and its transaction on Arc testnet. The card shows **Funded by swap**, linked to that transaction.
-  - **When it runs.** A payable not due yet is scheduled, and the swap is made on its day. A sandbox never swaps.
+  - **When it runs.** A payable not due yet is scheduled, and the swap is made on its day. A swap still in flight at Circle is finished by the next cycle before the payable is decided again. A sandbox never swaps.
 - **Repeats.** A EURC bill sent again in EURC is refused like any repeat. A purchase order billed once in USDC and again in EURC is shown to the agent as a re-bill to confirm.
 - **Totals stay USDC.** Paid out to date, the treasury buffer and the forecast count USDC only.
 

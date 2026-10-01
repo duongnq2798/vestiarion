@@ -115,10 +115,10 @@ describe("sizeSwap", () => {
   });
 
   it("prices each EURC through the swap against the rate the payable was weighed at", async () => {
-    // 2.507384 USDC for 2.06 EURC is 1.217177 a EURC: 0.09% above 1.216081.
+    // 2.507384 USDC for 2.06 EURC is 1.217177 a EURC: 0.0901% above 1.216081, rounded up to 0.1.
     const quote = vi.fn(async (): Promise<SwapQuote> => ({ eurcEstimated: 2.06, eurcMinimum: 2.0, provider: "lifi" }));
     const sized = await sizeSwap(2, rate, quote);
-    expect(sized.offer!.costPercent).toBe(0.09);
+    expect(sized.offer!.costPercent).toBe(0.1);
     expect(SWAP_COST_CAP_PERCENT).toBe(3);
   });
 });
@@ -178,5 +178,50 @@ describe("createSwapTransaction", () => {
     const fetch = vi.fn().mockResolvedValueOnce(noRoute()).mockResolvedValueOnce(swapAnswer());
     await createSwapTransaction(1, { fromAddress: FROM, fetch, retryDelayMs: 0 });
     expect(fetch).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("review fixes (EURC swap review #2, #4, #5)", () => {
+  it("calls a quote whose minimum is zero unreadable, rather than dividing by it", async () => {
+    const fetch = vi.fn().mockResolvedValue(quoteAnswer("822815", "0"));
+    await expect(quoteUsdcForEurc(1, { fromAddress: FROM, fetch })).rejects.toMatchObject({ code: "malformed" });
+  });
+
+  it("rounds a swap's cost up, so one just above the cap is never shown at the cap (review #4)", async () => {
+    // 2.507384 USDC for 2.0 EURC at 1.216081: 3.0918…% above, shown as 3.1 and refused against 3.
+    const quote = vi.fn(async (): Promise<SwapQuote> => ({ eurcEstimated: 2.0, eurcMinimum: 2.0, provider: "lifi" }));
+    expect((await sizeSwap(2, 1.216081, quote)).offer!.costPercent).toBe(3.1);
+    const atCap = vi.fn(async (): Promise<SwapQuote> => ({ eurcEstimated: 2.0002, eurcMinimum: 2.0, provider: "lifi" }));
+    expect((await sizeSwap(2, 1.216081, atCap)).offer!.costPercent).toBeGreaterThan(3);
+  });
+
+  const variant = (change: (copy: typeof answer) => void) => {
+    const copy = structuredClone(answer);
+    change(copy);
+    return vi.fn().mockResolvedValue(json(copy));
+  };
+
+  it("refuses an answer for another amount than the one asked for (review #5)", async () => {
+    await expect(createSwapTransaction(1, { fromAddress: FROM, fetch: variant((c) => (c.amount = "2000000")) })).rejects.toMatchObject({ code: "malformed" });
+  });
+
+  it("refuses an answer whose instructions would approve more USDC than the swap's", async () => {
+    await expect(
+      createSwapTransaction(1, { fromAddress: FROM, fetch: variant((c) => (c.transaction.executionParams.instructions[1].amountToApprove = "1999800")) })
+    ).rejects.toMatchObject({ code: "malformed" });
+  });
+
+  it("refuses an answer with no instruction that yields EURC, or none returned to the wallet", async () => {
+    await expect(
+      createSwapTransaction(1, { fromAddress: FROM, fetch: variant((c) => (c.transaction.executionParams.instructions[1].tokenOut = ARC_TESTNET_USDC)) })
+    ).rejects.toMatchObject({ code: "malformed" });
+    await expect(
+      createSwapTransaction(1, { fromAddress: FROM, fetch: variant((c) => c.transaction.executionParams.tokens.splice(1, 1)) })
+    ).rejects.toMatchObject({ code: "malformed" });
+  });
+
+  it("takes as its minimum the EURC the chain enforces, when the instructions promise less than the answer reports", async () => {
+    const swap = await createSwapTransaction(1, { fromAddress: FROM, fetch: variant((c) => (c.transaction.executionParams.instructions[1].minTokenOut = "700000")) });
+    expect(swap.eurcMinimum).toBe(0.7);
   });
 });

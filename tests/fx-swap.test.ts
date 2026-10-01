@@ -3,7 +3,7 @@ import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import type { ChainProvider, SwapCallParams, SwapCallResult, SwapStep } from "@/lib/circle";
 import { ARC_TESTNET_EURC } from "@/lib/fx/quote";
-import { resumeOpenSwap, swapForPayment, swapStepKey } from "@/lib/fx/swap";
+import { resumeOpenSwaps, swapForPayment, swapStepKey } from "@/lib/fx/swap";
 import type { SwapOffer } from "@/lib/fx/swap-service";
 import answer from "./fixtures/stablecoin-swap-answer.json";
 import { fakeSupabase, orgTestContext, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
@@ -40,8 +40,7 @@ function database(options: { open?: Record<string, unknown> | null; insertError?
     if (request.path !== "/rest/v1/fx_swaps") throw new Error(`unexpected request ${request.method} ${request.path}`);
     if (request.method === "GET") {
       if (options.selectError) return { status: 404, body: options.selectError };
-      const open = [...rows.values()].find((row) => row.invoice_id === request.params.get("invoice_id")?.replace("eq.", "") && row.state === "submitted");
-      return { body: open ?? null };
+      return { body: [...rows.values()].filter((row) => row.state === "submitted") };
     }
     if (request.method === "POST") {
       if (options.insertError) return { status: 409, body: options.insertError };
@@ -70,13 +69,13 @@ function provider(result: (params: SwapCallParams) => SwapCallResult) {
 const confirmed = () => ({ approve: step("confirmed", "tx-approve", "0xa11"), execute: step("confirmed", "tx-swap", SWAP_HASH) });
 
 /** Circle's Stablecoin Service, answering with the captured swap, and Arc testnet's RPC, with the swap's receipt. */
-function network(options: { stopLimit?: string; noRoute?: boolean; received?: string } = {}) {
+function network(options: { stopLimit?: string; estimated?: string; noRoute?: boolean; received?: string } = {}) {
   const posted: unknown[] = [];
   const fetch = vi.fn(async (url: string, init?: RequestInit) => {
     if (url.includes("/stablecoinKits/swap")) {
       posted.push(JSON.parse(String(init?.body)));
       if (options.noRoute) return new Response(JSON.stringify({ code: 331001, message: "No route available" }), { status: 404 });
-      return new Response(JSON.stringify({ ...answer, stopLimit: options.stopLimit ?? answer.stopLimit }), { status: 200 });
+      return new Response(JSON.stringify({ ...answer, stopLimit: options.stopLimit ?? answer.stopLimit, estimatedAmount: options.estimated ?? answer.estimatedAmount }), { status: 200 });
     }
     const body = JSON.parse(String(init?.body)) as { method: string };
     if (body.method === "eth_getTransactionReceipt") {
@@ -237,16 +236,50 @@ describe("swapForPayment", () => {
   });
 });
 
-describe("resumeOpenSwap", () => {
+it("swapForPayment refuses a swap whose created transaction costs more than the cap, sending nothing (review #4)", async () => {
+  const d = database();
+  const p = provider(confirmed);
+  // 1 USDC for an estimated 0.78 EURC is 1.282051 a EURC: 5.43% above 1.216081.
+  const outcome = await d.run(() => swapForPayment(input, deps(p.provider, network({ estimated: "780000", stopLimit: "760000" }))));
+  expect(outcome).toEqual({ ok: false, pending: false, swapId: null, reason: "The rate moved: the swap would now cost 5.43% above the quoted rate, more than the 3% a swap may cost." });
+  expect(p.swapForEurc).not.toHaveBeenCalled();
+});
+
+it("swapForPayment leaves a swap in flight, to be resumed, when a call throws after its row exists (review #2)", async () => {
+  const d = database();
+  const swapForEurc = vi.fn(async () => {
+    throw new Error("Circle did not answer a swap call within 20000 ms; it may or may not have been accepted");
+  });
+  const outcome = await d.run(() => swapForPayment(input, deps({ mode: "live", swapForEurc } as unknown as ChainProvider, network())));
+  const swapId = (d.fake.requests.find((r) => r.method === "POST")!.body as { id: string }).id;
+  expect(d.rows.get(swapId)).toMatchObject({ state: "submitted" });
+  expect(outcome).toEqual({
+    ok: false,
+    pending: true,
+    swapId,
+    reason: "The swap's outcome is not known yet (Circle did not answer a swap call within 20000 ms; it may or may not have been accepted).",
+  });
+});
+
+it("swapForPayment makes no swap, and throws nothing, before the swaps table exists (review #2)", async () => {
+  const d = database({ insertError: { code: "PGRST205", message: "Could not find the table 'public.fx_swaps' in the schema cache" } });
+  const p = provider(confirmed);
+  const outcome = await d.run(() => swapForPayment(input, deps(p.provider, network())));
+  expect(outcome).toEqual({ ok: false, pending: false, swapId: null, reason: "Swaps are not set up for this workspace yet." });
+  expect(p.swapForEurc).not.toHaveBeenCalled();
+});
+
+describe("resumeOpenSwaps", () => {
   const OPEN = {
     id: "0b6c1c9e-4a4f-4a7e-9b1e-0000000055aa", invoice_id: INVOICE, state: "submitted", usdc_in: "1", eurc_minimum: "0.798131", eurc_estimated: "0.822815",
     usdc_per_eurc: "1.216081", cost_percent: "0.06", provider: "lifi", adapter: ADAPTER, call_data: "0xaa3e079c00", deadline: "2026-10-01T12:10:00Z",
+    invoices: { counterparties: { name: "Atelier Lumière" } },
   };
 
-  it("sends the open swap's calls again, under the same keys and with the same call, and closes it", async () => {
+  it("sends every open swap's calls again, under the same keys and with the same call, and closes it", async () => {
     const d = database({ open: OPEN });
     const p = provider(confirmed);
-    const outcome = await d.run(() => resumeOpenSwap({ invoiceId: INVOICE, counterpartyName: "Atelier Lumière" }, deps(p.provider, network())));
+    const sweep = await d.run(() => resumeOpenSwaps(deps(p.provider, network())));
 
     expect(p.swapForEurc).toHaveBeenCalledWith({
       fromAccountId: "acct-op",
@@ -257,20 +290,32 @@ describe("resumeOpenSwap", () => {
       executeKey: swapStepKey(`${ORG}/swap/${INVOICE}/${OPEN.id}/execute`),
     });
     expect(d.rows.get(OPEN.id)).toMatchObject({ state: "confirmed", eurc_received: 0.8229 });
-    expect(outcome).toMatchObject({ ok: true, swapId: OPEN.id, eurcReceived: 0.8229 });
-    expect(appendLedgerEntry).toHaveBeenCalledWith(expect.objectContaining({ action: "fx_swap", detail: expect.objectContaining({ resumed: true, reasoning: null }) }));
+    expect(sweep).toEqual({ available: true, outcomes: [{ invoiceId: INVOICE, outcome: expect.objectContaining({ ok: true, swapId: OPEN.id, eurcReceived: 0.8229 }) }] });
+    expect(appendLedgerEntry).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "fx_swap", summary: "SWAP 1 USDC for 0.8229 EURC to pay Atelier Lumière's invoice", detail: expect.objectContaining({ resumed: true, reasoning: null }) })
+    );
   });
 
-  it("is nothing when the invoice has no swap in flight", async () => {
+  it("is an empty sweep when no swap is in flight", async () => {
     const d = database();
     const p = provider(confirmed);
-    expect(await d.run(() => resumeOpenSwap({ invoiceId: INVOICE, counterpartyName: "x" }, deps(p.provider, network())))).toBeNull();
+    expect(await d.run(() => resumeOpenSwaps(deps(p.provider, network())))).toEqual({ available: true, outcomes: [] });
     expect(p.swapForEurc).not.toHaveBeenCalled();
   });
 
-  it("is nothing before the swaps table exists (0048 not applied)", async () => {
+  it("says swaps are unavailable before the swaps table exists (0048 not applied)", async () => {
     const d = database({ selectError: { code: "PGRST205", message: "Could not find the table 'public.fx_swaps' in the schema cache" } });
     const p = provider(confirmed);
-    expect(await d.run(() => resumeOpenSwap({ invoiceId: INVOICE, counterpartyName: "x" }, deps(p.provider, network())))).toBeNull();
+    expect(await d.run(() => resumeOpenSwaps(deps(p.provider, network())))).toEqual({ available: false, outcomes: [] });
+  });
+
+  it("reports a swap whose resume threw as still in flight, rather than throwing (review #2)", async () => {
+    const d = database({ open: OPEN });
+    const swapForEurc = vi.fn(async () => {
+      throw new Error("Circle answered 400");
+    });
+    const sweep = await d.run(() => resumeOpenSwaps(deps({ mode: "live", swapForEurc } as unknown as ChainProvider, network())));
+    expect(sweep.outcomes).toEqual([{ invoiceId: INVOICE, outcome: { ok: false, pending: true, swapId: OPEN.id, reason: "The swap's outcome is not known yet (Circle answered 400)." } }]);
+    expect(d.rows.get(OPEN.id)).toMatchObject({ state: "submitted" });
   });
 });
