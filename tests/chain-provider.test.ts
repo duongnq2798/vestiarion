@@ -1,7 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { chainModes, getChainProvider } from "@/lib/circle";
+import { LiveProvider } from "@/lib/circle/liveProvider";
+import type { SwapCallParams } from "@/lib/circle/types";
 import { fakeSupabase, orgTestContext } from "./support/fake-supabase";
 
 /**
@@ -54,5 +56,38 @@ describe("chainModes — must render a page even when getChainProvider() refuses
     runWith({ ...orgTestContext({ config, client: fakeSupabase().client, orgId: ORG }), config: readable }, () => {
       expect(chainModes()).toEqual({ mode: "live", earnMode: "simulate" });
     });
+  });
+});
+
+describe("getChainProvider — a live workspace's provider offers everything its live leg can do", () => {
+  // A workspace with Circle credentials gets the HybridProvider: live payments, simulated yield. Every
+  // optional capability the agent checks for (`provider.swapForEurc && …`) must reach the live leg, or
+  // the agent silently never uses it in production. Before this, the swap (EURC swap spec S6) was missing.
+  const readable = { ...config, chain: { ...config.chain, circleApiKey: "placeholder-api-key", circleEntitySecret: "placeholder-entity-secret" } };
+  const inLiveWorkspace = <T,>(fn: () => T) => runWith({ ...orgTestContext({ config, client: fakeSupabase().client, orgId: ORG }), config: readable }, fn);
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("swaps USDC for EURC through the live leg", async () => {
+    const answer = { approve: { txId: "a", txHash: "0xa", state: "COMPLETE" }, execute: { txId: "e", txHash: "0xe", state: "COMPLETE" } };
+    const swap = vi.spyOn(LiveProvider.prototype, "swapForEurc").mockResolvedValue(answer as never);
+    const params = { fromAccountId: "operating" } as unknown as SwapCallParams;
+    await inLiveWorkspace(async () => {
+      const provider = getChainProvider();
+      expect(provider.mode).toBe("live");
+      expect(typeof provider.swapForEurc).toBe("function");
+      expect(await provider.swapForEurc!(params)).toBe(answer);
+    });
+    expect(swap).toHaveBeenCalledWith(params);
+  });
+
+  it("reads a token balance through the live leg", async () => {
+    const balance = vi.spyOn(LiveProvider.prototype, "getTokenBalance").mockResolvedValue({ balance: 3 } as never);
+    await inLiveWorkspace(async () => {
+      expect(await getChainProvider().getTokenBalance!("operating", "EURC")).toEqual({ balance: 3 });
+    });
+    expect(balance).toHaveBeenCalledWith("operating", "EURC");
   });
 });
