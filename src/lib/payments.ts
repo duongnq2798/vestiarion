@@ -47,6 +47,9 @@ export interface PaymentIntent {
   previousAttempts: PreviousPaymentAttempt[];
   createdAt: string;
   updatedAt: string;
+  /** A bridged payment's chain and mint (CCTP payouts X8); null or absent for a payment on Arc. */
+  destinationChain?: string | null;
+  mintTxHash?: string | null;
 }
 
 interface PaymentIntentRow {
@@ -75,6 +78,8 @@ interface PaymentIntentRow {
   previous_attempts: PreviousPaymentAttempt[];
   created_at: string;
   updated_at: string;
+  destination_chain?: string | null;
+  mint_tx_hash?: string | null;
 }
 
 export interface PaymentIntentStore {
@@ -132,6 +137,9 @@ export interface PaymentExecution {
   attempt: number;
   /** Set only when this execution opened a new attempt after Circle ended the previous one in a terminal failure. */
   retriedAfter: RetriedAfter | null;
+  /** A bridged payment's chain and its mint, once the Forwarding Service submitted it. */
+  destinationChain?: string | null;
+  mintTxHash?: string | null;
 }
 
 /**
@@ -194,6 +202,8 @@ function fromRow(row: PaymentIntentRow): PaymentIntent {
     previousAttempts: row.previous_attempts,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    destinationChain: row.destination_chain ?? null,
+    mintTxHash: row.mint_tx_hash ?? null,
   };
 }
 
@@ -327,6 +337,8 @@ function execution(intent: PaymentIntent, reconciled: boolean, retriedAfter: Ret
     executedAt: intent.executedAt,
     attempt: intent.transferAttempt,
     retriedAfter,
+    destinationChain: intent.destinationChain ?? null,
+    mintTxHash: intent.mintTxHash ?? null,
   };
 }
 

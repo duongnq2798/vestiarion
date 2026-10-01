@@ -6,6 +6,7 @@ import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { isTerminalFailure } from "../payments";
 import { payInvoice, syncOperatingBalance } from "./pay";
 import { invoiceDiscount, type InvoiceDiscount } from "./payment-timing";
+import { paidAcrossChains } from "../payee-chains";
 
 /**
  * The approvals library (spec §6): lets a person pay, reject or return a
@@ -347,13 +348,15 @@ interface LoadedInvoice {
   /** The invoice's early-payment discount, applied by `payInvoice` exactly as for the agent. */
   discount: InvoiceDiscount | null;
   currency: Stablecoin;
+  /** The payee's chain: another than Arc testnet is paid through CCTP (CCTP payouts X2). */
+  destinationChain: string | null;
 }
 
 async function loadWaitingPayable(invoiceId: string): Promise<LoadedInvoice> {
   const result = await db()
     .from("invoices")
     .select(
-      "id, amount, currency, status, direction, agent_reasoning, created_by, counterparty_id, early_pay_discount_pct, discount_due_date, counterparties(name, risk_level, address)"
+      "id, amount, currency, status, direction, agent_reasoning, created_by, counterparty_id, early_pay_discount_pct, discount_due_date, counterparties(name, risk_level, address, chain)"
     )
     .eq("id", invoiceId)
     .maybeSingle();
@@ -370,7 +373,7 @@ async function loadWaitingPayable(invoiceId: string): Promise<LoadedInvoice> {
     counterparty_id: string;
     early_pay_discount_pct: string | number | null;
     discount_due_date: string | null;
-    counterparties: { name: string; risk_level: string; address: string | null } | null;
+    counterparties: { name: string; risk_level: string; address: string | null; chain?: string | null } | null;
   } | null;
 
   if (!row || row.direction !== "payable" || !(WAITING_STATUSES as readonly string[]).includes(row.status)) {
@@ -389,6 +392,7 @@ async function loadWaitingPayable(invoiceId: string): Promise<LoadedInvoice> {
     address: row.counterparties?.address ?? null,
     discount: invoiceDiscount(row),
     currency: currencyOf(row.currency),
+    destinationChain: row.counterparties?.chain ?? null,
   };
 }
 
@@ -497,6 +501,7 @@ export async function approveAndPay(
         // deadline's UTC day. The funds check above stays on the full amount.
         discount: invoice.discount,
         currency: invoice.currency,
+        ...(paidAcrossChains(invoice.destinationChain) ? { destinationChain: invoice.destinationChain as string } : {}),
       },
       // A person's approval is the one caller that may send a payment Circle
       // ended in a terminal failure again, and only when the failure was

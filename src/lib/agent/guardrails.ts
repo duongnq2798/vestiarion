@@ -21,6 +21,12 @@ export interface ApGuardrailInput {
    */
   currency?: "USDC" | "EURC";
   fxAvailable?: boolean;
+  /**
+   * A payee on another chain, paid through CCTP (CCTP payouts X4–X6): the fee
+   * as a percent of the amount (null when Iris gave none), and whether the
+   * invoice is in a token that does not cross. Null for a payee on Arc.
+   */
+  bridge?: { feePercent: number | null; unsupportedToken: boolean } | null;
   /** A live EURC payment the wallet's EURC cannot cover: what it holds (null when it could not be read) and what the payment sends. */
   eurcShort?: { balance: number | null; needed: number } | null;
 }
@@ -31,7 +37,13 @@ export type ApGuardrailRule =
   | "counterparty.address_unconfirmed"
   | "invoice.duplicate_of_settled"
   | "fx.rate_unavailable"
-  | "treasury.insufficient_eurc";
+  | "treasury.insufficient_eurc"
+  | "bridge.unsupported_token"
+  | "bridge.fee_unavailable"
+  | "bridge.fee_above_cap";
+
+/** The most a CCTP fee may be, as a percent of the invoice, before a payout waits for a person (CCTP payouts R4). */
+export const BRIDGE_FEE_CAP_PERCENT = 10;
 
 export interface ApGuardrailResult {
   blocked: boolean;
@@ -102,6 +114,32 @@ export function enforceApGuardrails(input: ApGuardrailInput): ApGuardrailResult 
       status: "held",
       rule: "counterparty.payment_limit",
       reasoning: `${input.reasoning} [guardrail override: ${amount} exceeds the ${input.paymentLimit} USDC payment limit — ${verb} refused before execution]`,
+    };
+  }
+  // A payee on another chain is paid through CCTP: USDC only, at a fee code
+  // has read and that is worth paying (CCTP payouts X4–X6).
+  if (input.bridge?.unsupportedToken) {
+    return {
+      blocked: true,
+      status: "held",
+      rule: "bridge.unsupported_token",
+      reasoning: `${input.reasoning} [guardrail override: only USDC crosses chains, and this invoice is in EURC — ${verb} to a payee on another chain refused; held for a person]`,
+    };
+  }
+  if (input.bridge && input.bridge.feePercent === null) {
+    return {
+      blocked: true,
+      status: "held",
+      rule: "bridge.fee_unavailable",
+      reasoning: `${input.reasoning} [guardrail override: Circle gave no CCTP fee for this payee's chain, so its cost is not known — held for a person]`,
+    };
+  }
+  if (input.bridge && input.bridge.feePercent !== null && input.bridge.feePercent > BRIDGE_FEE_CAP_PERCENT) {
+    return {
+      blocked: true,
+      status: "held",
+      rule: "bridge.fee_above_cap",
+      reasoning: `${input.reasoning} [guardrail override: the CCTP fee is ${input.bridge.feePercent}% of the amount, above the ${BRIDGE_FEE_CAP_PERCENT}% a payout may cost — ${verb} refused before execution]`,
     };
   }
   // A EURC invoice is paid from EURC, never from USDC (E5): a payment the
