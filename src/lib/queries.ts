@@ -46,6 +46,8 @@ export interface CounterpartyRow {
   jurisdiction: string | null;
   risk_level: string;
   risk_notes: string | null;
+  /** The screening entity the current verdict matched, when a live screen matched one (migration 0051). */
+  risk_entity_id?: string | null;
   payment_limit: number | null;
   baseline_payment_limit: number | null;
   last_screened_at: string | null;
