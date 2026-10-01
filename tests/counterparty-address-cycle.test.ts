@@ -27,7 +27,9 @@ describe("the cycle and an unconfirmed address", () => {
   });
 
   it("skips a milestone before its decision, without writing it, while the contractor's address is unconfirmed", () => {
-    const check = source.indexOf("if (addressUnconfirmed(contractor.address_changed_at, contractor.address_confirmed_at))");
+    // payeeNotReady answers "unconfirmed" for an unconfirmed address (tests/payee-not-ready.test.ts), and in a live
+    // workspace "no_address" for a contractor with none yet (pay a freelancer R5).
+    const check = source.indexOf("const waiting = payeeNotReady(contractor, provider.mode === \"live\");");
     const decision = source.indexOf("await decide<MilestoneDecision>(");
     expect(check).toBeGreaterThan(0);
     expect(decision).toBeGreaterThan(check);

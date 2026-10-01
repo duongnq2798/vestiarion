@@ -18,7 +18,7 @@ import { syncOnChainBalances, type BalanceSync } from "./balances";
 import { CycleRunningError, hasRunningCycle } from "./cycle-running";
 import { decide } from "./decide";
 import { enforceApGuardrails } from "./guardrails";
-import { addressUnconfirmed } from "../counterparty-address";
+import { addressUnconfirmed, payeeNotReady } from "../counterparty-address";
 import { SandboxCapReachedError } from "./sandbox-cap";
 import { AgentPausedError, HELD_BECAUSE_PAUSED, heldBecausePausedDetail, pausedPaymentNote, pausedTreasuryNote } from "./pause";
 import {
@@ -2836,14 +2836,20 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
       continue;
     }
     // A contractor whose address a person changed, and no one has confirmed
-    // since, is not paid (spec 2026-09-30-counterparty-address-edit E4). A
-    // held milestone has no approval path, so the milestone stays `verified`
-    // and waits: no model call and no ledger entry each cycle, and the first
-    // cycle after someone confirms the address decides it as usual.
-    if (addressUnconfirmed(contractor.address_changed_at, contractor.address_confirmed_at)) {
+    // since, is not paid (spec 2026-09-30-counterparty-address-edit E4); nor,
+    // in a live workspace, one with no address yet, whose payee has still to
+    // add it through their link (pay a freelancer R5). A held milestone has no
+    // approval path, so the milestone stays `verified` and waits: no model
+    // call and no ledger entry each cycle, and the first cycle after the
+    // address is in and confirmed decides it as usual.
+    const waiting = payeeNotReady(contractor, provider.mode === "live");
+    if (waiting) {
       lines.push({
         domain: "contractor",
-        message: `${contractor.name}: "${milestone.title}" waiting for someone to confirm its new address`,
+        message:
+          waiting === "no_address"
+            ? `${contractor.name}: "${milestone.title}" waiting for its payee to add an address`
+            : `${contractor.name}: "${milestone.title}" waiting for someone to confirm its new address`,
       });
       continue;
     }

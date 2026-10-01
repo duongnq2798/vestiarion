@@ -55,6 +55,23 @@ export function addressUnconfirmed(changedAt: string | null, confirmedAt: string
   return Date.parse(confirmedAt) < Date.parse(changedAt);
 }
 
+/**
+ * Why the agent cannot pay a counterparty yet, or null when it can
+ * (docs/superpowers/specs/2026-10-01-pay-a-freelancer-design.md R5):
+ * `unconfirmed` while a changed address waits for a person's confirmation;
+ * `no_address` in a live workspace while the payee has not added one, since a
+ * live transfer needs somewhere to go. A sandbox simulates a payment to a
+ * counterparty with no address, as it always has.
+ */
+export function payeeNotReady(
+  counterparty: { address: string | null; address_changed_at: string | null; address_confirmed_at: string | null },
+  live: boolean
+): "no_address" | "unconfirmed" | null {
+  if (addressUnconfirmed(counterparty.address_changed_at, counterparty.address_confirmed_at)) return "unconfirmed";
+  if (live && !counterparty.address) return "no_address";
+  return null;
+}
+
 /** EVM addresses are case-insensitive; the mixed case is only a checksum. */
 export function sameAddress(a: string | null, b: string | null): boolean {
   return (a ?? "").toLowerCase() === (b ?? "").toLowerCase();
