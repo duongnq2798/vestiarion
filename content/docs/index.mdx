@@ -1,6 +1,9 @@
 Vestiarion is an autonomous treasury agent for stablecoin businesses on Arc. It pays invoices in USDC or EURC, and contractor milestones in USDC, through Circle, within guardrails: it never pays a high-risk counterparty, never exceeds a payment limit, and keeps a liquidity buffer. Every decision it makes is recorded, with its reasoning, in an Ed25519-signed, hash-chained ledger. The API gives your integration read access to one workspace: its ledger, invoices, counterparties, milestones, treasury and insights. Webhooks push each new ledger entry to your endpoint as it is appended.
 
 <Cards>
+  <Card title="Try it in 5 minutes" href="/docs/guides/try-it">
+    Sample data, the agent deciding, a payment you approve, and the signed ledger, with no wallet or keys.
+  </Card>
   <Card title="Quickstart" href="/docs/get-started/quickstart">
     Create an API key and make your first two requests.
   </Card>

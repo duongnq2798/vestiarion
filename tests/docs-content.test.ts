@@ -148,9 +148,10 @@ describe("the docs navigation", () => {
     );
   });
 
-  it("lists the user guides right after Overview: going live, the first payment, paying a contractor, then verifying an export", () => {
+  it("lists the user guides right after Overview: trying it, going live, the first payment, paying a contractor, then verifying an export", () => {
     const section = DOCS_NAV.find((candidate) => candidate.title === "Guides")!;
     expect(section.pages.map((page) => [page.slug, page.title])).toEqual([
+      ["guides/try-it", "Try it in 5 minutes"],
       ["guides/go-live", "Go live on Arc testnet"],
       ["guides/first-payment", "Your first payment"],
       ["guides/pay-a-contractor", "Pay a contractor for delivered work"],
@@ -177,7 +178,8 @@ describe("the docs navigation", () => {
     const pages = flatPages();
     expect(neighbours("").prev).toBeUndefined();
     expect(neighbours("").next?.slug).toBe(pages[1].slug);
-    expect(neighbours("data-delivery").next?.slug).toBe("guides/go-live");
+    expect(neighbours("data-delivery").next?.slug).toBe("guides/try-it");
+    expect(neighbours("guides/try-it").next?.slug).toBe("guides/go-live");
     expect(neighbours("guides/first-payment").next?.slug).toBe("guides/pay-a-contractor");
     expect(neighbours("guides/pay-a-contractor").next?.slug).toBe("guides/audit-export");
     expect(neighbours("guides/audit-export").next?.slug).toBe("get-started/quickstart");

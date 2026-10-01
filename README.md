@@ -2,6 +2,27 @@
 
 An autonomous treasury agent for a small business, settled in USDC on Arc.
 
+## Try it
+
+- **The app:** [www.vestiarion.xyz](https://www.vestiarion.xyz). The five-minute path, with no wallet and no keys, is in [Try it in 5 minutes](https://www.vestiarion.xyz/docs/guides/try-it):
+  1. sign in;
+  2. load sample data;
+  3. watch the agent decide within a minute;
+  4. approve a payment yourself;
+  5. verify the signed ledger.
+- **Live numbers:** [www.vestiarion.xyz/open](https://www.vestiarion.xyz/open) shows the payments, payees and decisions, read from the production database, with our own workspaces counted apart from customers'.
+- **Real payments on Arc testnet**, made by the agent in production:
+  - a USDC payable paid 53 seconds after it was added, with no one pressing Run:
+    [`0x81381c50…4e68`](https://testnet.arcscan.app/tx/0x81381c50f5d0cadb49d1af77f1abb06c1727c8377aa88cbe1cfbf327f09c4e68);
+  - a EURC invoice, weighed against a USDC limit at a rate quoted by Circle's Stablecoin Service:
+    [`0x2e66257f…8f58`](https://testnet.arcscan.app/tx/0x2e66257f2cf478ecd2d0f7e263e1ad78bf9877b0afb93f3679c0601ef7328f58);
+  - a payout to a vendor on Base Sepolia through CCTP. The burn is on Arc,
+    [`0xbc1961bb…d49c`](https://testnet.arcscan.app/tx/0xbc1961bbe2896e7e91d452498b595f1a1de8d45f34b7db8b3fd9d873d908d49c),
+    and Circle forwarded the mint of exactly 1 USDC on Base Sepolia,
+    [`0x6c749323…ef9a`](https://sepolia.basescan.org/tx/0x6c749323f9e36efe21fcd5c33df2e55ba5db82040dbd06ff2a8872045c6fef9a).
+
+  Each feature's design under `docs/superpowers/specs/` ends with its rollout record: what was run in production, with its ledger entries and transactions.
+
 > *Tameion* is ancient Greek for a treasury — literally the room the money was kept in. In
 > Byzantium that room grew into the *vestiarion*, the department that minted the coin, held the
 > stores, and paid the army. Vestiarion is the same idea in software: **one agent that runs a
