@@ -166,12 +166,14 @@ function EvidenceRow({ items, className }: { items: Evidence[]; className?: stri
   return (
     <ul aria-label="Evidence cited by this decision" className={cn("flex flex-wrap gap-1.5", className)}>
       {items.map((item) => (
-        <li key={`${item.label}-${item.value}`}>
+        // A chip is as wide as its column at most, and wraps its words onto more lines there: a long one
+        // ("Duplicate check: clear against 1 earlier invoice") used to run past the card's edge.
+        <li key={`${item.label}-${item.value}`} className="min-w-0 max-w-full">
           <Badge
             shape="tag"
             tone={item.state === "missing" ? "held" : "neutral"}
             icon={item.state === "ok" ? <Check aria-hidden /> : item.state === "missing" ? <X aria-hidden /> : undefined}
-            className="font-normal"
+            className="flex-wrap gap-y-0.5 whitespace-normal font-normal [overflow-wrap:anywhere]"
           >
             <span className={item.state === "missing" ? undefined : "text-ink-3"}>{item.label}</span>
             {item.href ? (
