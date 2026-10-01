@@ -96,6 +96,8 @@ export interface InvoiceRow {
   discount_due_date: string | null;
   /** What actually left when this invoice was paid: the discounted amount when it was paid by the deadline, the full amount otherwise, null until it is paid. */
   paid_amount: number | null;
+  /** USDC or EURC (0040); `listInvoices` always sets it. */
+  currency?: "USDC" | "EURC";
 }
 
 export async function listInvoices(): Promise<InvoiceRow[]> {
@@ -111,6 +113,7 @@ export async function listInvoices(): Promise<InvoiceRow[]> {
     amount: num(r.amount),
     counterparty_name: r.counterparties?.name ?? "unknown",
     paid_amount: r.paid_amount == null ? null : num(r.paid_amount),
+    currency: r.currency === "EURC" ? "EURC" : "USDC",
   }));
 }
 

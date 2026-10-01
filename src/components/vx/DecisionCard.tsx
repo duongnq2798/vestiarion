@@ -99,11 +99,11 @@ function GuardrailBand({ guardrail, token = "USDC", action }: { guardrail: Guard
         <dd className="font-mono text-ink [overflow-wrap:anywhere]">{guardrail.rule}</dd>
         <dt className="text-ink-3">Attempted</dt>
         <dd className="font-mono tabular-nums text-ink">
-          {fmt(guardrail.attempted)} {token}
+          {fmt(guardrail.attempted)} {guardrail.attemptedToken ?? token}
         </dd>
         <dt className="text-ink-3">Allowed</dt>
         <dd className="font-mono tabular-nums text-ink">
-          {fmt(guardrail.limit)} {token}
+          {fmt(guardrail.limit)} {guardrail.limitToken ?? token}
           {guardrail.note && <span className="ml-2 font-sans text-ink-2">({guardrail.note})</span>}
         </dd>
       </dl>

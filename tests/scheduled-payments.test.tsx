@@ -77,7 +77,7 @@ describe("ScheduledPayments", () => {
   it("titles the section Scheduled payments, and shows the date, counterparty, amount and reasoning", () => {
     const markup = html(
       <ScheduledPayments
-        payments={[{ id: "inv-1", counterparty: "Northwind Supply", date: "2026-10-10T00:00:00.000Z", amount: 392, reasoning: "Paying on the discount deadline." }]}
+        payments={[{ id: "inv-1", counterparty: "Northwind Supply", date: "2026-10-10T00:00:00.000Z", amount: 392, currency: "USDC", reasoning: "Paying on the discount deadline." }]}
       />
     );
     expect(markup).toContain("Scheduled payments");
@@ -89,5 +89,13 @@ describe("ScheduledPayments", () => {
 
   it("renders nothing when there is nothing scheduled", () => {
     expect(html(<ScheduledPayments payments={[]} />)).toBe("");
+  });
+});
+
+describe("a scheduled EURC payable", () => {
+  it("keeps its currency, and is shown in it", () => {
+    const rows = scheduledPaymentRows([invoice({ currency: "EURC", early_pay_discount_pct: null, discount_due_date: null })]);
+    expect(rows[0]).toMatchObject({ amount: 400, currency: "EURC" });
+    expect(html(<ScheduledPayments payments={rows} />)).toMatch(/400\.00<\/span><span[^>]*>EURC<\/span>/);
   });
 });

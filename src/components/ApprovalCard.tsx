@@ -32,13 +32,13 @@ const giveBack = withSuccessToast(returnInvoiceAction);
  * sandbox's payment is simulated, and says so.
  */
 export function payConfirmTitle(
-  payable: Pick<WaitingPayable, "amount" | "counterpartyName" | "discount">,
+  payable: Pick<WaitingPayable, "amount" | "counterpartyName" | "discount"> & { currency?: WaitingPayable["currency"] },
   sandbox: boolean,
   now: Date = new Date()
 ): string {
   const { amountPaid, discountTaken } = amountToPay(payable.amount, payable.discount, now);
   const discount = discountTaken > 0 && payable.discount ? ` (${payable.discount.pct}% discount through ${utcDay(payable.discount.deadline)})` : "";
-  return `Pay ${fmt(amountPaid)} USDC to ${payable.counterpartyName} now?${discount}${sandbox ? " (simulated)" : ""}`;
+  return `Pay ${fmt(amountPaid)} ${payable.currency ?? "USDC"} to ${payable.counterpartyName} now?${discount}${sandbox ? " (simulated)" : ""}`;
 }
 
 /**
@@ -116,7 +116,7 @@ export default function ApprovalCard({
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-3 sm:flex-col sm:items-end sm:gap-1.5">
-            <Money value={payable.amount} className="text-lg font-semibold text-ink" />
+            <Money value={payable.amount} token={payable.currency ?? "USDC"} className="text-lg font-semibold text-ink" />
             <Badge tone={status.tone} dot size="sm">
               {status.label}
             </Badge>

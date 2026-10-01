@@ -3,7 +3,7 @@ import { invoiceDiscount } from "@/lib/agent/payment-timing";
 import { utcDay } from "@/lib/copy";
 import type { LedgerEntry } from "@/lib/ledger";
 import type { CounterpartyRow, InvoiceRow, MilestoneRow, TreasuryActionRow } from "@/lib/queries";
-import type { Decision, Evidence, Outcome } from "./types";
+import type { Decision, Evidence, Guardrail, Outcome } from "./types";
 import { fmt } from "./Primitives";
 
 /**
@@ -140,6 +140,12 @@ export function invoiceDecision(invoice: InvoiceRow, counterparty: CounterpartyR
   const risk = stringValue(observed?.riskLevel) ?? counterparty?.risk_level ?? "unscreened";
   const outcome = statusOutcome(invoice.status, invoice.tx_ref, guardrailBlocked);
   const rule = risk === "high" ? "counterparty.high_risk" : "counterparty.payment_limit";
+  // A EURC invoice is shown in EURC and weighed at the USDC value its decision
+  // recorded (EURC invoices design E2, E6); the limit is always USDC.
+  const currency = invoice.currency ?? "USDC";
+  const eurc = currency === "EURC";
+  const usdcValue = eurc ? (numberValue(entry?.detail.usdcValue) ?? null) : invoice.amount;
+  const rate = numberValue(record(entry?.detail.fx)?.rate);
 
   return {
     id: invoice.id,
@@ -148,7 +154,7 @@ export function invoiceDecision(invoice: InvoiceRow, counterparty: CounterpartyR
     subject: invoice.counterparty_name,
     memo: invoice.memo ?? undefined,
     amount: invoice.amount,
-    token: "USDC",
+    token: currency,
     outcome,
     outcomeLabel: invoiceOutcomeLabel(invoice, guardrailBlocked),
     reasoning: invoice.agent_reasoning ?? "The agent has not evaluated this invoice yet.",
@@ -156,17 +162,57 @@ export function invoiceDecision(invoice: InvoiceRow, counterparty: CounterpartyR
       { label: "PO", value: invoice.po_reference ?? "none", state: invoice.po_reference ? "ok" : "missing" },
       { label: "Goods received", value: invoice.goods_received ? "yes" : "no", state: invoice.goods_received ? "ok" : "missing" },
       { label: "Risk", value: risk, state: risk === "high" ? "missing" : "neutral" },
-      { label: "Limit", value: counterparty?.payment_limit == null ? "none" : `${fmt(counterparty.payment_limit)} USDC`, state: counterparty?.payment_limit != null && invoice.amount > counterparty.payment_limit ? "missing" : "neutral" },
+      { label: "Limit", value: counterparty?.payment_limit == null ? "none" : `${fmt(counterparty.payment_limit)} USDC`, state: counterparty?.payment_limit != null && usdcValue != null && usdcValue > counterparty.payment_limit ? "missing" : "neutral" },
+      eurc && entry
+        ? usdcValue != null
+          ? { label: "USDC value", value: `${fmt(usdcValue)} USDC${rate != null ? ` at ${rate}` : ""}`, state: "neutral" as const }
+          : { label: "USDC value", value: "no rate", state: "missing" as const }
+        : null,
       { label: "Due", value: new Date(invoice.due_date).toLocaleDateString("en-US"), state: "neutral" },
       termsEvidence(invoice),
       paidEvidence(invoice),
       duplicateEvidence(observed),
     ].filter((item): item is Evidence => item !== null),
-    guardrail: guardrailBlocked ? { rule, attempted: invoice.amount, limit, note: risk === "high" ? "risk tier high" : "amount above screened limit" } : null,
+    guardrail: guardrailBlocked ? invoiceGuardrail(invoice.amount, currency, usdcValue, limit, risk, rule, entry?.detail) : null,
     decisionMode: stringValue(entry?.detail.decisionMode),
     txHash: invoice.tx_ref?.startsWith("0x") ? invoice.tx_ref : null,
     auditSeq: entry?.seq,
     at: entry?.ts ?? invoice.due_date,
+  };
+}
+
+/**
+ * The band a refused invoice shows. A USDC invoice reads as it always has. A
+ * EURC one names its own rule: no rate (EURC against a USDC limit it could not
+ * be weighed on), not enough EURC (what it would send against the wallet's
+ * EURC), or the limit (its USDC value against the limit).
+ */
+function invoiceGuardrail(
+  amount: number,
+  currency: string,
+  usdcValue: number | null,
+  limit: number,
+  risk: string,
+  inferredRule: string,
+  detail: Record<string, unknown> | undefined
+): Guardrail {
+  const recorded = stringValue(detail?.guardrailRule);
+  if (currency !== "EURC") {
+    return { rule: inferredRule, attempted: amount, limit, note: risk === "high" ? "risk tier high" : "amount above screened limit" };
+  }
+  if (recorded === "fx.rate_unavailable") {
+    return { rule: recorded, attempted: amount, attemptedToken: "EURC", limit, limitToken: "USDC", note: "no EURC→USDC rate to weigh it at" };
+  }
+  if (recorded === "treasury.insufficient_eurc") {
+    return { rule: recorded, attempted: amount, attemptedToken: "EURC", limit: numberValue(detail?.eurcBalance) ?? 0, limitToken: "EURC", note: "EURC in the operating wallet" };
+  }
+  return {
+    rule: recorded ?? inferredRule,
+    attempted: usdcValue ?? amount,
+    attemptedToken: usdcValue != null ? "USDC" : "EURC",
+    limit,
+    limitToken: "USDC",
+    note: risk === "high" ? "risk tier high" : "USDC value above screened limit",
   };
 }
 

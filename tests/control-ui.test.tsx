@@ -235,6 +235,7 @@ describe("ApprovalCard", () => {
 
   it("asks before paying, and says when the payment is simulated", () => {
     expect(payConfirmTitle(payable(), false)).toBe("Pay 1,250.00 USDC to Northwind Supply now?");
+    expect(payConfirmTitle(payable({ currency: "EURC" }), false)).toBe("Pay 1,250.00 EURC to Northwind Supply now?");
     expect(payConfirmTitle(payable(), true)).toBe("Pay 1,250.00 USDC to Northwind Supply now? (simulated)");
   });
 
@@ -407,5 +408,14 @@ describe("the new control screens, as source", () => {
     expect(read("src/components/ApprovalCard.tsx")).toContain(
       "Nothing new is sent: Vestiarion checks the transfer already made with Circle, and the ledger records who approved it."
     );
+  });
+});
+
+describe("ApprovalCard for a EURC payable (EURC invoices design E4)", () => {
+  it("shows the amount in EURC", () => {
+    const markup = renderToStaticMarkup(
+      <ApprovalCard orgSlug="acme" payable={payable({ currency: "EURC" })} canDecide viewerId={VIEWER} sandbox={false} />
+    );
+    expect(markup).toMatch(/1,250\.00<\/span><span[^>]*>EURC<\/span>/);
   });
 });

@@ -14,6 +14,9 @@ export interface Guardrail {
   attempted: number;
   limit: number;
   note?: string;
+  /** What `attempted` and `limit` are in, when not the decision's own token: a EURC invoice is weighed against a USDC limit. */
+  attemptedToken?: string;
+  limitToken?: string;
 }
 
 export interface Decision {
