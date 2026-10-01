@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { extractText, getDocumentProxy } from "unpdf";
+import { emailParts } from "./email";
 
 /**
  * An invoice document to plain text, for the model to read (invoice from a
@@ -35,7 +36,7 @@ export class DocumentReadError extends Error {
 export type DocumentInput = { bytes: Uint8Array; name: string; type: string } | { text: string };
 
 export interface ReadDocument {
-  kind: "pdf" | "text";
+  kind: "pdf" | "email" | "text";
   text: string;
   /** The SHA-256 of the bytes read, or of the pasted text's UTF-8, in hex. */
   sha256: string;
@@ -72,8 +73,12 @@ function isPdf(bytes: Uint8Array): boolean {
   return head.includes("%PDF-");
 }
 
+function isEmail(name: string, type: string): boolean {
+  return /\.eml$/i.test(name) || type === "message/rfc822";
+}
+
 function isText(name: string, type: string): boolean {
-  return /\.(txt|eml)$/i.test(name) || type.startsWith("text/") || type === "message/rfc822";
+  return /\.txt$/i.test(name) || type.startsWith("text/");
 }
 
 async function pdfText(bytes: Uint8Array): Promise<string> {
@@ -84,6 +89,19 @@ async function pdfText(bytes: Uint8Array): Promise<string> {
   } catch {
     throw new DocumentReadError("unsupported", "This PDF could not be read. Paste the invoice's text instead.");
   }
+}
+
+/**
+ * An email's subject, its text and the text of each PDF attached, without
+ * the MIME around them (review I6). An attachment that cannot be read is
+ * left out; the message's own text still is.
+ */
+async function emailText(bytes: Uint8Array): Promise<string> {
+  const parts = emailParts(bytes);
+  const attachments = await Promise.all(parts.pdfs.map((pdf) => pdfText(pdf).catch(() => "")));
+  const read = [parts.subject ? `Subject: ${parts.subject}` : "", ...parts.text, ...attachments].filter((text) => text.trim()).join("\n\n");
+  // A file named .eml that holds no message structure at all is read as the text it is.
+  return read.trim() ? read : new TextDecoder("utf-8").decode(bytes);
 }
 
 export async function readDocument(input: DocumentInput): Promise<ReadDocument> {
@@ -97,6 +115,7 @@ export async function readDocument(input: DocumentInput): Promise<ReadDocument> 
   if (bytes.length > MAX_DOCUMENT_BYTES) throw new DocumentReadError("too_large");
   if (bytes.length === 0) throw new DocumentReadError("empty");
   if (isPdf(bytes)) return finish("pdf", await pdfText(bytes), sha256(bytes));
+  if (isEmail(name, type) && !bytes.includes(0)) return finish("email", await emailText(bytes), sha256(bytes));
   // A binary file named .txt is not text: a NUL byte gives it away.
   if (isText(name, type) && !bytes.includes(0)) return finish("text", new TextDecoder("utf-8").decode(bytes), sha256(bytes));
   throw new DocumentReadError("unsupported");

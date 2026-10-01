@@ -13,7 +13,7 @@ export const DOCUMENT_FIELDS = ["amount", "currency", "dueDate", "poReference", 
 export type DocumentField = (typeof DOCUMENT_FIELDS)[number];
 
 export interface DocumentProvenance {
-  kind: "pdf" | "text";
+  kind: "pdf" | "email" | "text";
   sha256: string;
   reader: DecisionMode;
   changed: DocumentField[];
@@ -41,7 +41,7 @@ export function documentProvenance(formData: FormData, submitted: Submitted): Do
   const reader = formData.get("documentReader");
   const readJson = formData.get("documentRead");
   if (typeof sha256 !== "string" || !/^[0-9a-f]{64}$/.test(sha256)) return null;
-  if (kind !== "pdf" && kind !== "text") return null;
+  if (kind !== "pdf" && kind !== "email" && kind !== "text") return null;
   if (typeof reader !== "string" || !READERS.includes(reader as DecisionMode)) return null;
   if (typeof readJson !== "string") return null;
 

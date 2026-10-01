@@ -111,7 +111,7 @@ What the model read is checked before you see it:
 - When the invoice asks to be paid to another address than the one on file, the form warns you. The agent pays the address on file; a document never changes it.
 - **Goods or services received** is never ticked for you: "A document cannot say this; tick it only if you received them."
 
-A PDF is read from its text. A scanned PDF has none: "This PDF has no text to read; it may be a scan. Paste the invoice's text instead." A file can be up to 4 MB, and a workspace can read five a minute. The document itself is not kept. The invoice's ledger entry records the document's SHA-256 hash, which model read it, and which fields you changed.
+A PDF is read from its text, and an email (an `.eml` file) from its own text and the PDFs attached to it. A scanned PDF has no text: "This PDF has no text to read; it may be a scan. Paste the invoice's text instead." A file can be up to 4 MB, and a workspace can read five a minute. The document itself is not kept. The invoice's ledger entry records the document's SHA-256 hash, which model read it, and which fields you changed.
 
 ### Invoices in EURC
 

@@ -27,7 +27,7 @@ export interface DocumentReadResult {
   /** The model's own note on what to check, or null. */
   modelNote?: string | null;
   reader?: DecisionMode;
-  document?: { kind: "pdf" | "text"; sha256: string; truncated: boolean };
+  document?: { kind: "pdf" | "email" | "text"; sha256: string; truncated: boolean };
   /** Changes on every read, so the form below remounts with the new values. */
   nonce?: number;
   /** On a refusal about the file chosen: let it go, so text pasted next is what is read (review I3). */

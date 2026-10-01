@@ -90,6 +90,10 @@ describe("an invoice added from a document", () => {
     expect((await entryDetail(documentForm({ amount: "10.5" })))?.document).toMatchObject({ changed: [] });
   });
 
+  it("records an invoice read from an email", async () => {
+    expect((await entryDetail(documentForm({ documentKind: "email" })))?.document).toMatchObject({ kind: "email" });
+  });
+
   it("counts a currency the member chose where none was read", async () => {
     const form = documentForm({ documentRead: JSON.stringify({ ...READ, currency: null }) });
     expect((await entryDetail(form))?.document).toMatchObject({ changed: ["currency"] });

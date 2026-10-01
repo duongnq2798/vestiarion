@@ -15,6 +15,7 @@ A small business receives invoices as PDFs and emails. Today a member types each
   **Read invoice** sends it.
 - **D2: text, not pages.**
   - The server reads a PDF's text layer (`unpdf`), and the first 20,000 characters go to the model.
+  - An email is read as a person would: its subject, its text (or its HTML as text) and the text of each PDF attached, never its headers or base64 (review I6).
   - A PDF with almost no text (under 40 letters or digits) is a scan. It answers "This PDF has no text to read; it may be a scan. Paste the invoice's text instead." No model reads images here.
 - **D3: the reader.** The extraction runs through the agent's own `decide()`, so it uses the workspace's model (DeepSeek in production).
   - It asks for one JSON object: vendor name, invoice number, total due, currency as written, issue date, due date, purchase order, early-payment discount percent and deadline, pay-to address, pay-to chain as written, a memo of at most 120 characters, and notes.

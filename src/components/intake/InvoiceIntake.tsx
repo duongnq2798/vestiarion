@@ -32,7 +32,7 @@ export interface InvoiceFormInitial {
 
 /** The document an invoice was read from, recorded on its ledger entry (D8). `read` is the JSON of the values read. */
 export interface InvoiceFormDocument {
-  kind: "pdf" | "text";
+  kind: "pdf" | "email" | "text";
   sha256: string;
   reader: string;
   read: string;

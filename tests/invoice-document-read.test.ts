@@ -36,7 +36,7 @@ describe("reading an invoice document", () => {
 
   it("reads a text file or an email as UTF-8", async () => {
     const text = await readDocument({ bytes: utf8("Invoice INV-9\nTotal due 12.50 USDC"), name: "invoice.eml", type: "message/rfc822" });
-    expect(text).toMatchObject({ kind: "text", text: "Invoice INV-9\nTotal due 12.50 USDC" });
+    expect(text).toMatchObject({ kind: "email", text: "Invoice INV-9\nTotal due 12.50 USDC" });
     const plain = await readDocument({ bytes: utf8("Invoice INV-9 total 12.50"), name: "invoice.txt", type: "" });
     expect(plain.kind).toBe("text");
   });

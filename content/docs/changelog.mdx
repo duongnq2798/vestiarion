@@ -3,7 +3,7 @@ Changes to the API and webhooks that affect an integration, newest first. Change
 ## 2026-10-01: Invoices read from a document
 
 - A `create_invoice` entry for an invoice read from a document carries `document` in its `detail`:
-  - `kind`: `pdf` or `text`;
+  - `kind`: `pdf`, `email` (an `.eml` file: its text and the text of its PDF attachments) or `text`;
   - `sha256`: the hash of the document's bytes, or of the pasted text;
   - `reader`: the model that read it (`anthropic`, `openai`, `deepseek`), or `heuristic` for the rule-based reader;
   - `changed`: the form fields the member changed from what was read, among `amount`, `currency`, `dueDate`, `poReference`, `earlyPayDiscountPct`, `discountDeadline`, `memo` and `counterpartyId`.
