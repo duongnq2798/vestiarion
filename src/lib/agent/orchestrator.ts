@@ -1260,6 +1260,8 @@ async function decideApPayable(
         settledInMs: paymentExecution?.settledInMs ?? null,
         executedAt: paymentExecution?.executedAt ?? null,
         reconciled: paymentExecution?.reconciled ?? false,
+        // A bridged payment: where it mints, and the mint when it came at once (CCTP payouts X8).
+        ...(paymentExecution?.destinationChain ? { destinationChain: paymentExecution.destinationChain, mintTxHash: paymentExecution.mintTxHash ?? null } : {}),
         // D6: the ledger says the pause is why this held, not just the
         // reasoning text — set only when it is, so it is unambiguous from
         // a hold for a missing operating account or a failed transfer.

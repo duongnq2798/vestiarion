@@ -236,3 +236,21 @@ describe("invoiceDecision: a EURC invoice (EURC invoices design E6)", () => {
     expect(decision.guardrail).toMatchObject({ rule: "counterparty.payment_limit", attempted: 117, attemptedToken: "USDC", limit: 110, limitToken: "USDC" });
   });
 });
+
+describe("invoiceDecision: a payee on another chain (CCTP payouts X11)", () => {
+  const reconciled = { seq: 12, id: "e12", ts: "2026-10-01T09:01:00.000Z", actor: "agent", domain: "ap", action: "ap_reconcile", summary: "",
+    detail: { invoiceId: "inv-1", reconciled: true, execution: { txRef: "0xburn", destinationChain: "BASE-SEPOLIA", mintTxHash: "0xmint" } } } as unknown as LedgerEntry;
+
+  it("links the mint on the payee's chain next to the burn on Arc, and says how it was paid", () => {
+    const decision = invoiceDecision(invoice({ status: "paid", tx_ref: "0xburn" }), { payment_limit: 10, chain: "BASE-SEPOLIA" } as never, [reconciled]);
+    expect(decision.txHash).toBe("0xburn");
+    expect(decision.mint).toEqual({ chainLabel: "Base Sepolia", txHash: "0xmint", href: "https://sepolia.basescan.org/tx/0xmint" });
+    expect(decision.evidence).toContainEqual({ label: "Paid on", value: "Base Sepolia, through CCTP", state: "neutral" });
+  });
+
+  it("has no mint for a payee on Arc", () => {
+    const decision = invoiceDecision(invoice({ status: "paid", tx_ref: "0xabc" }), { payment_limit: 10, chain: "ARC-TESTNET" } as never, []);
+    expect(decision.mint ?? null).toBeNull();
+    expect(decision.evidence.find((item) => item.label === "Paid on")).toBeUndefined();
+  });
+});

@@ -1,5 +1,18 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-01: Payees on other chains
+
+- A counterparty's `chain` is one of `ARC-TESTNET`, `BASE-SEPOLIA`, `ARB-SEPOLIA` or `ETH-SEPOLIA`. `GET /api/v1/counterparties` returns it as before.
+- A payee on a chain other than Arc testnet is paid from Arc through CCTP V2 with Circle's Forwarding Service.
+  - Its decision entry (`ap_pay`, `ap_hold`, `ap_flag_fraud`, `ap_request_info`, `ap_schedule`) carries `payout: { chain, route: "cctp", domain, feeUsdc }` in `detail`. `feeUsdc` is `null` when Circle gave no fee.
+  - Its `execution` carries `destinationChain` and `mintTxHash` once the payment was sent. `execution.txRef` is the burn on Arc testnet.
+  - `mintTxHash` is `null` until the Forwarding Service mints. A later `ap_reconcile` entry carries it.
+- Three new values of `guardrailRule`, each of which holds the payable for a person:
+  - `bridge.fee_above_cap`, when the fee is above 10% of the amount;
+  - `bridge.fee_unavailable`, when Circle gave no fee;
+  - `bridge.unsupported_token`, for an invoice in EURC to a payee on another chain.
+- A bridged invoice is `matched` from the burn until the mint, then `paid`. `GET /api/v1/invoices` shows it so.
+
 ## 2026-10-01: Invoices in EURC
 
 - An invoice can be in EURC as well as USDC. `GET /api/v1/invoices` returns its `currency`, which is now `USDC` or `EURC`; `amount` and `paidAmount` are in that currency.

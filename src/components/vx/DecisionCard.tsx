@@ -88,6 +88,12 @@ export function DecisionCard({ decision, compact = false, orgSlug }: { decision:
               ) : refused ? (
                 <span className="font-mono text-xs text-refused">no transaction sent</span>
               ) : null}
+              {decision.mint && (
+                <span className="inline-flex items-center gap-1.5 text-xs text-ink-3">
+                  minted on {decision.mint.chainLabel}
+                  <Hash value={decision.mint.txHash} href={decision.mint.href} />
+                </span>
+              )}
             </div>
           </footer>
         )}

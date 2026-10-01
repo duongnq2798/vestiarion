@@ -5,6 +5,7 @@ import type { LedgerEntry } from "@/lib/ledger";
 import type { CounterpartyRow, InvoiceRow, MilestoneRow, TreasuryActionRow } from "@/lib/queries";
 import type { Decision, Evidence, Guardrail, Outcome } from "./types";
 import { fmt } from "./Primitives";
+import { paidAcrossChains, payeeChain } from "@/lib/payee-chains";
 
 /**
  * Renders the duplicate-billing check as evidence in its own right — including
@@ -171,14 +172,29 @@ export function invoiceDecision(invoice: InvoiceRow, counterparty: CounterpartyR
       { label: "Due", value: new Date(invoice.due_date).toLocaleDateString("en-US"), state: "neutral" },
       termsEvidence(invoice),
       paidEvidence(invoice),
+      paidAcrossChains(counterparty?.chain) ? { label: "Paid on", value: `${payeeChain(counterparty?.chain).label}, through CCTP`, state: "neutral" as const } : null,
       duplicateEvidence(observed),
     ].filter((item): item is Evidence => item !== null),
     guardrail: guardrailBlocked ? invoiceGuardrail(invoice.amount, currency, usdcValue, limit, risk, rule, entry?.detail) : null,
     decisionMode: stringValue(entry?.detail.decisionMode),
     txHash: invoice.tx_ref?.startsWith("0x") ? invoice.tx_ref : null,
+    mint: mintOf(invoice.id, entries),
     auditSeq: entry?.seq,
     at: entry?.ts ?? invoice.due_date,
   };
+}
+
+/** A bridged payment's mint, from whichever of the invoice's entries recorded it: the decision, or a later reconcile. */
+function mintOf(invoiceId: string, entries: LedgerEntry[]): Decision["mint"] {
+  for (const entry of entries) {
+    if (entry.detail.invoiceId !== invoiceId) continue;
+    const execution = record(entry.detail.execution);
+    const txHash = stringValue(execution?.mintTxHash);
+    if (!txHash) continue;
+    const chain = payeeChain(stringValue(execution?.destinationChain));
+    return { chainLabel: chain.label, txHash, href: `${chain.explorerTx}${txHash}` };
+  }
+  return null;
 }
 
 /**

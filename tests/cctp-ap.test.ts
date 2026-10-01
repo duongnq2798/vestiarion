@@ -261,3 +261,13 @@ describe("a bridged payment in flight (X8)", () => {
     expect(entry.p_detail).toMatchObject({ execution: { mintTxHash: "0xmint", destinationChain: "BASE-SEPOLIA" } });
   });
 });
+
+describe("a bridge whose mint came at once", () => {
+  it("is paid, and the decision's entry names the mint", async () => {
+    model("pay");
+    const { fake, stage } = apFake({ book: [payable()], minted: "0xmint" });
+    await stage();
+    expect(patches(fake.requests)[0]).toMatchObject({ status: "paid" });
+    expect(entries(fake.requests)[0].p_detail).toMatchObject({ execution: { destinationChain: "BASE-SEPOLIA", mintTxHash: "0xmint" } });
+  });
+});

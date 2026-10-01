@@ -34,6 +34,8 @@ export interface Decision {
   guardrail?: Guardrail | null;
   decisionMode?: string;
   txHash?: string | null;
+  /** A payment to a payee on another chain: its mint there, which Circle's Forwarding Service submitted (CCTP payouts X11). */
+  mint?: { chainLabel: string; txHash: string; href: string } | null;
   auditSeq?: number;
   at: string;
 }
