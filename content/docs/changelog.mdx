@@ -1,5 +1,13 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-01: Milestone escrow
+
+- A live workspace can lock a milestone's USDC in its own escrow contract on Arc testnet. Three new ledger actions, in the `contractor` domain, are delivered as `ledger.appended` events:
+  - `escrow_deployed`, once per workspace. Its `detail` is `{ by, address, payer, deployer, circleContractId, txHash }`.
+  - `escrow_funded`, when a milestone is locked. Its `detail` is `{ by, milestoneId, contract, holdId, payee, amountUsdc, refundAfter, fundTxHash }`. `fundTxHash` is `null` when the hold was found already on chain and recorded.
+  - `escrow_refunded`, when a hold is taken back after its refund date. Its `detail` is `{ by, milestoneId, contract, holdId, amountUsdc, refundTxHash }`.
+- A milestone locked in escrow is paid by releasing its hold rather than by a transfer. Its release decision's `execution.txRef` is that release transaction on Arc testnet.
+
 ## 2026-10-01: Payment receipts
 
 - An owner or admin can share a paid payable's receipt as a public link. Three new ledger actions, in the `ap` domain, are delivered as `ledger.appended` events:
