@@ -18,16 +18,12 @@ export interface ReceiptActionResult {
 
 const idSchema = z.string().uuid();
 
-/** Who may share, in which workspace, and which invoice: the checks both actions make first. */
-async function receiptAccess(formData: FormData) {
-  const auth = await authorize(formData.get("orgSlug"), "records.write");
-  if (!auth.ok) return { ok: false as const, result: { ok: false, message: auth.message } };
-  if (auth.membership.mode !== "live") {
-    return { ok: false as const, result: { ok: false, message: "A receipt is for a payment on chain, which a live workspace makes." } };
-  }
+/** After authorization: a live workspace, and an invoice id. The refusal both actions give, or the id. */
+function receiptRequest(mode: string, formData: FormData): { ok: false; result: ReceiptActionResult } | { ok: true; invoiceId: string } {
+  if (mode !== "live") return { ok: false, result: { ok: false, message: "A receipt is for a payment on chain, which a live workspace makes." } };
   const invoiceId = idSchema.safeParse(formData.get("invoiceId"));
-  if (!invoiceId.success) return { ok: false as const, result: { ok: false, message: "That invoice is not in this workspace." } };
-  return { ok: true as const, auth, invoiceId: invoiceId.data };
+  if (!invoiceId.success) return { ok: false, result: { ok: false, message: "That invoice is not in this workspace." } };
+  return { ok: true, invoiceId: invoiceId.data };
 }
 
 /**
@@ -36,9 +32,11 @@ async function receiptAccess(formData: FormData) {
  * old one. The link is given once.
  */
 export async function shareReceiptAction(_previous: ReceiptActionResult, formData: FormData): Promise<ReceiptActionResult> {
-  const access = await receiptAccess(formData);
-  if (!access.ok) return access.result;
-  const { auth, invoiceId } = access;
+  const auth = await authorize(formData.get("orgSlug"), "records.write");
+  if (!auth.ok) return { ok: false, message: auth.message };
+  const request = receiptRequest(auth.membership.mode, formData);
+  if (!request.ok) return request.result;
+  const { invoiceId } = request;
   return inOrg(auth, async () => {
     try {
       const shared = await shareReceipt({ actorId: auth.user.id, invoiceId });
@@ -59,9 +57,11 @@ export async function shareReceiptAction(_previous: ReceiptActionResult, formDat
 }
 
 export async function stopSharingReceiptAction(_previous: ReceiptActionResult, formData: FormData): Promise<ReceiptActionResult> {
-  const access = await receiptAccess(formData);
-  if (!access.ok) return access.result;
-  const { auth, invoiceId } = access;
+  const auth = await authorize(formData.get("orgSlug"), "records.write");
+  if (!auth.ok) return { ok: false, message: auth.message };
+  const request = receiptRequest(auth.membership.mode, formData);
+  if (!request.ok) return request.result;
+  const { invoiceId } = request;
   return inOrg(auth, async () => {
     try {
       await stopSharingReceipt({ actorId: auth.user.id, invoiceId });

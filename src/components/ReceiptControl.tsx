@@ -5,6 +5,7 @@ import { useState } from "react";
 import { shareReceiptAction, stopSharingReceiptAction, type ReceiptActionResult } from "@/app/actions/receipts";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { FormMessage } from "@/components/ui/FormMessage";
+import { Input } from "@/components/ui/Input";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
 
@@ -50,7 +51,7 @@ export function ReceiptControl({ orgSlug, invoiceId, shared }: { orgSlug: string
       {url && (
         <div className="space-y-1.5 rounded-lg border border-line bg-surface p-2.5">
           <div className="flex min-w-0 items-center gap-2">
-            <input readOnly value={url} aria-label="Receipt link" className="min-w-0 flex-1 bg-transparent font-mono text-xs text-ink outline-none" onFocus={(event) => event.currentTarget.select()} />
+            <Input readOnly value={url} aria-label="Receipt link" className="min-w-0 flex-1 font-mono text-xs" onFocus={(event) => event.currentTarget.select()} />
             <CopyButton value={url} size="sm" variant="secondary" />
           </div>
           <p className="text-xs text-ink-3">
