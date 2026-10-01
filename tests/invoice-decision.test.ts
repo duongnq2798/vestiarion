@@ -308,6 +308,20 @@ describe("invoiceDecision: a payout code held (review I1, M3, M14)", () => {
     expect(mint.txHash).toBeNull();
   });
 
+  it("sets the route's fee against the other route's, when the decision recorded both (route evidence)", () => {
+    const quoted = { seq: 22, id: "e22", ts: "2026-10-01T09:00:00.000Z", actor: "agent", domain: "ap", action: "ap_pay", summary: "",
+      detail: { invoiceId: "inv-1", payout: { chain: "ARB-SEPOLIA", route: "gateway", domain: 3, feeUsdc: 0.107811, quotes: { cctpFeeUsdc: 0.135342, gatewayFeeUsdc: 0.107811 } } } } as unknown as LedgerEntry;
+    const decision = invoiceDecision(invoice({ status: "paid", tx_ref: "0xmint" }), { payment_limit: 50, chain: "ARB-SEPOLIA" } as never, [quoted]);
+    expect(decision.evidence).toContainEqual({ label: "Payee's chain", value: "Arbitrum Sepolia, through Gateway at 0.107811 USDC, against 0.135342 USDC through CCTP", state: "neutral" });
+    // A route with no quote to set it against reads as before.
+    const alone = { ...quoted, detail: { ...quoted.detail, payout: { chain: "ARB-SEPOLIA", route: "cctp", domain: 3, feeUsdc: 0.135342, quotes: { cctpFeeUsdc: 0.135342, gatewayFeeUsdc: null } } } } as unknown as LedgerEntry;
+    expect(invoiceDecision(invoice({ status: "paid", tx_ref: "0xburn" }), { payment_limit: 50, chain: "ARB-SEPOLIA" } as never, [alone]).evidence).toContainEqual({
+      label: "Payee's chain",
+      value: "Arbitrum Sepolia, through CCTP",
+      state: "neutral",
+    });
+  });
+
   it("links no simulated mint", () => {
     const simulated = { seq: 14, id: "e14", ts: "2026-10-01T09:00:00.000Z", actor: "agent", domain: "ap", action: "ap_pay", summary: "",
       detail: { invoiceId: "inv-1", execution: { destinationChain: "BASE-SEPOLIA", mintTxHash: "sim_mint_1" } } } as unknown as LedgerEntry;

@@ -148,6 +148,7 @@ export function invoiceDecision(invoice: InvoiceRow, counterparty: CounterpartyR
   const usdcValue = eurc ? (numberValue(entry?.detail.usdcValue) ?? null) : invoice.amount;
   const rate = numberValue(record(entry?.detail.fx)?.rate);
   const route = routeOf(invoice.id, entries);
+  const routeFees = routeFeesOf(invoice.id, entries);
   const mint = mintOf(invoice.id, entries);
 
   return {
@@ -174,7 +175,7 @@ export function invoiceDecision(invoice: InvoiceRow, counterparty: CounterpartyR
       { label: "Due", value: new Date(invoice.due_date).toLocaleDateString("en-US"), state: "neutral" },
       termsEvidence(invoice),
       paidEvidence(invoice),
-      paidAcrossChains(counterparty?.chain) ? { label: "Payee's chain", value: `${payeeChain(counterparty?.chain).label}, through ${route}`, state: "neutral" as const } : null,
+      paidAcrossChains(counterparty?.chain) ? { label: "Payee's chain", value: `${payeeChain(counterparty?.chain).label}, through ${route}${routeFees ?? ""}`, state: "neutral" as const } : null,
       duplicateEvidence(observed),
     ].filter((item): item is Evidence => item !== null),
     guardrail: guardrailBlocked ? invoiceGuardrail(invoice.amount, currency, usdcValue, limit, risk, rule, entry?.detail) : null,
@@ -200,6 +201,20 @@ function payoutRouteLabel(detail: Record<string, unknown> | undefined): "Gateway
 function routeOf(invoiceId: string, entries: LedgerEntry[]): "Gateway" | "CCTP" {
   const decided = entries.find((entry) => entry.detail.invoiceId === invoiceId && stringValue(record(entry.detail.payout)?.route) !== undefined);
   return payoutRouteLabel(decided?.detail);
+}
+
+/**
+ * The route's fee set against the other route's, as the decision that chose it recorded both
+ * (` at 0.107811 USDC, against 0.135342 USDC through CCTP`); null when it did not record both.
+ */
+function routeFeesOf(invoiceId: string, entries: LedgerEntry[]): string | null {
+  const decided = entries.find((entry) => entry.detail.invoiceId === invoiceId && record(record(entry.detail.payout)?.quotes) !== undefined);
+  const payout = record(decided?.detail.payout);
+  const quotes = record(payout?.quotes);
+  const cctp = numberValue(quotes?.cctpFeeUsdc);
+  const gateway = numberValue(quotes?.gatewayFeeUsdc);
+  if (cctp === undefined || gateway === undefined) return null;
+  return stringValue(payout?.route) === "gateway" ? ` at ${gateway} USDC, against ${cctp} USDC through CCTP` : ` at ${cctp} USDC, against ${gateway} USDC through Gateway`;
 }
 
 /** A bridged payment's mint, from whichever of the invoice's entries recorded it: the decision, or a later reconcile. */

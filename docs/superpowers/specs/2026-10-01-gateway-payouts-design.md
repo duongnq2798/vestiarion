@@ -93,6 +93,7 @@ The guardrails stand as they are:
   - `tx_hash` is the mint on the payee's chain. Gateway burns on Arc later, in a batch, so no Arc transaction belongs to one payout.
   - `chain` is the payee's chain, so /open links the mint to that chain's explorer.
 - The ledger's `payout` carries `route: "gateway"`, the fee, and the transfer id.
+  - It also carries both routes' fees as read for the decision, `quotes: { cctpFeeUsdc, gatewayFeeUsdc }`, and the card sets the route's fee against the other's (added after the rollout).
 - The decision card names the route and links the mint.
 - The Treasury page shows the Gateway balance, the signer's address, and the funding form.
 
@@ -148,3 +149,44 @@ A sandbox workspace has no Gateway account, so its payouts across chains stay on
 2. In testnet-2, the partner funds a Gateway balance of 3 USDC.
 3. The partner adds a 1 USDC payable to the Base Sepolia vendor.
 4. Record the transfer id, the mint on Base Sepolia, and the ledger entries here.
+
+### Done, 2026-10-01 (PR #98, merged as 4ddaf09)
+
+**Migration.** 0045 was applied by the partner before the merge. A read-only check confirmed:
+- `gateway_signers` exists, with RLS and the `tenant_isolation` and `tenant_isolation_guard` policies;
+- `payment_intents.payout_route` exists, with its check constraint;
+- 0038's `invoices_scheduled_has_date` is still in place.
+
+**Funding, testnet-2, 5 USDC.**
+- The signer is `0x325d…f6b6`.
+- Ledger entries:
+  - #565 `gateway_signer_created`;
+  - #566 `gateway_delegate_added`, delegate tx `0x8be09d5bd9db450604f1e8004d100ab284e227cf682d6a7f91cb14ea143b7748`;
+  - #567 `gateway_deposit`, approve `0xad99ff58910a9ab8c473012cc549d126ec33443a0407cb393764172b62740146`, deposit `0xe2a899cdd625f05dc694890bef1ed0da8a55e35498bd2b1ca2d48da42dd1f274`.
+- Gateway then reported 5.000000 USDC for the operating wallet.
+- The entry recorded `balanceUsdc: 0`: Gateway had not yet counted the deposit when it was read right after Circle completed it. Funding now waits for the balance that includes the deposit, or records `null`.
+
+**First attempt: 1 USDC to the Base Sepolia vendor (PO-108). No Gateway payout.** Two separate things happened:
+- **The route.** It was CCTP, as G2 says it should be. To Base Sepolia, CCTP costs 0.054597 USDC and Gateway 0.056623 USDC, read live.
+- **The decision.** DeepSeek flagged the invoice as a possible duplicate (confidence 0.60) of a 1 USDC invoice from the same vendor paid earlier that day. The rule-based reference said pay, and `agreedWithReference` is `false`. The invoice was flagged and nothing was sent.
+
+**The Gateway payout: 2 USDC to a vendor on Arbitrum Sepolia (STM, PO-109).**
+- Live fees to Arbitrum Sepolia:
+
+  | Route | Fee |
+  |---|---|
+  | Gateway | 0.105944 USDC |
+  | CCTP | 0.135342 USDC |
+
+- The invoice was added at 08:28:05Z (#577). The `ap_pay` decision came at 08:28:28Z (#580), 23 seconds later.
+  - Decision mode: `deepseek`, with `agreedWithReference: true`.
+  - `payout: { chain: "ARB-SEPOLIA", route: "gateway", domain: 3, feeUsdc: 0.107811, gatewayBalanceUsdc: 5 }`.
+- The Gateway transfer is `e8ac3d41-da1f-4f40-bc86-3d4b44e84278`, status `confirmed`. Its fee was 0.107811 USDC: a 0.0035 base fee plus a 0.104311 forwarding fee.
+- The forwarded mint on Arbitrum Sepolia is `0x207f716e0e3200304c0b86047d7e8a01384aa336733436e9b796e25d820997a9`, in block 314579095. It minted exactly 2.0 USDC to the vendor `0x221b…1bc3`.
+- `settled_in_ms` is 6260, from signing to the mint.
+- The intent:
+  - `provider_tx_id` is `gateway:e8ac3d41-…`;
+  - `tx_hash`, `mint_tx_hash`, `chain` and `destination_chain` are the mint on `ARB-SEPOLIA`;
+  - `bridge_fee` is 0.107811 and `fee_usd` is 0;
+  - `payout_route` is `gateway`.
+- The Gateway balance went from 5 to 2.892189 USDC. The operating wallet was not touched (29.195179 USDC before and after).
