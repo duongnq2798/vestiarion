@@ -1,5 +1,13 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-01: Held milestones decided again
+
+- **New ledger action `milestone_reopened`**, in the `contractor` domain, delivered as a `ledger.appended` event. The agent appends it when it returns a held milestone to `verified` because a fact its decision rested on changed: the contractor's risk level or payment limit, the milestone's verification source, or the agent was paused when it held it.
+  - Its `detail` is `{ milestoneId, previousStatus, followUp: { action, reason, changes } }`. `previousStatus` is `held`, `followUp.action` is `reopen`, and `changes` lists each fact that moved, in words.
+  - The milestone's next decision entry follows in the same cycle.
+- A milestone's `status` can now go from `held` back to `verified` without anyone verifying it again.
+- An event cycle's `detail.events` can include **`limit_raised`**: someone raised a counterparty's payment limit and screening allows more than zero.
+
 ## 2026-10-01: EURC payments funded by a swap
 
 - A live workspace can pay a EURC payable after swapping USDC for the EURC it needs, through Circle's Stablecoin Service on Arc testnet.
