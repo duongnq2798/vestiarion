@@ -165,3 +165,24 @@ Migration `0046_payment_receipts.sql` creates `payment_receipts`:
 1. The partner runs `npm run db:migrate` for 0046 before the merge.
 2. In testnet-2, the partner shares the receipt of the Gateway payout to STM (Arbitrum Sepolia, mint `0x207f716e…97a9`).
 3. The link opens in a private window, and all three checks pass. Record the link's entry seq here.
+
+### Done, 2026-10-01 (PR #102, merged as 68450bf)
+
+**Migration.** 0046 was applied by the partner before the merge. A read-only check confirmed:
+- `payment_receipts` exists, with RLS, both policies and every constraint;
+- `invoices_org_id_id_key` exists;
+- `payment_receipt_by_token` is a definer function that only `service_role` can execute;
+- 0038's and 0045's constraints are still in place.
+
+**The first receipt.**
+- **What was shared.** The partner shared the receipt of an approved 2 USDC payment on Arc testnet (PO-103), not the Gateway payout the plan named. Both are live payments.
+- **The entries.**
+  - `receipt_shared` is entry #589, signed with key `5e69c0196d40a5ec`. Its row also holds the workspace's retired key `8d09d7efdfa51cda`.
+  - It names #586 `approval_paid`.
+  - The receipt entry holds no names, no reasoning and no user ids.
+- **The three checks, run read-only on the production rows:**
+  - **Signed:** passes.
+  - **Recorded:** passes. #586 was written before #589, is a payment-recording entry, is signed, and contains the transaction.
+  - **On chain:** passes. Transaction `0x00017344c5d915926aa13cceca4435cf19c8c69c081152416af75da7491cdf95`, block 64920611 on Arc testnet, logs a native USDC transfer of exactly 2 USDC to the payee.
+- **A layout bug the rollout found.** A new link on the card sat in the footer's hash cluster, which may not shrink, so the long URL pushed the panel out of the card. The card now gives the action a full-width row of its own (follow-up PR).
+

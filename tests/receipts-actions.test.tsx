@@ -1,7 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { shareReceiptAction, stopSharingReceiptAction } from "@/app/actions/receipts";
-import { ReceiptControl } from "@/components/ReceiptControl";
+import { ReceiptControl, ReceiptLink } from "@/components/ReceiptControl";
+import { TooltipProvider } from "@/components/ui/Tooltip";
 import { DecisionCard } from "@/components/vx/DecisionCard";
 import type { Decision } from "@/components/vx/types";
 import { receiptShareable } from "@/lib/receipts/facts";
@@ -124,6 +125,32 @@ describe("which payables offer a receipt", () => {
     expect(receiptShareable({ status: "paid", direction: "payable" }, { txHash: null, mint: null })).toBe(false);
     expect(receiptShareable({ status: "matched", direction: "payable" }, { txHash: `0x${"1".repeat(64)}`, mint: null })).toBe(false);
     expect(receiptShareable({ status: "paid", direction: "receivable" }, { txHash: `0x${"1".repeat(64)}`, mint: null })).toBe(false);
+  });
+
+  it("gives the control a full-width row of its own, never the hashes' cluster, so a long link cannot push it out of the card", () => {
+    const decision = {
+      id: INVOICE, domain: "ap", action: "Pay", subject: "STM", amount: 2, token: "USDC", outcome: "recorded", outcomeLabel: "Paid",
+      reasoning: "Due today.", evidence: [], txHash: `0x${"1".repeat(64)}`, auditSeq: 586, at: "2026-10-01T08:28:28Z",
+    } as unknown as Decision;
+    const markup = renderToStaticMarkup(<DecisionCard decision={decision} orgSlug="testnet-2" footerAction={<span>RECEIPT-ACTION</span>} />);
+    const start = markup.indexOf("flex shrink-0 flex-wrap items-center gap-4");
+    const cluster = markup.slice(start, markup.indexOf("</div>", start));
+    expect(cluster).toContain("audit #0586");
+    expect(cluster).not.toContain("RECEIPT-ACTION");
+    expect(markup).toMatch(/data-slot="decision-action"[^>]*>(<[^>]+>)*RECEIPT-ACTION/);
+  });
+
+  it("shows a new link whole: it wraps inside the card, beside Copy, with what it shows", () => {
+    const url = `https://www.vestiarion.xyz/receipt/vxr_${"k".repeat(43)}`;
+    const markup = renderToStaticMarkup(
+      <TooltipProvider>
+        <ReceiptLink url={url} message="Receipt shared. Copy the link now: it is shown only once." />
+      </TooltipProvider>
+    );
+    expect(markup).toContain(`value="${url}"`);
+    expect(text(markup)).toContain("Copy");
+    expect(text(markup)).toContain("Receipt shared. Copy the link now: it is shown only once. Anyone with this link sees the amount, the payee's address and the transactions, and can check them. It shows no names.");
+    expect(markup).toMatch(/class="[^"]*w-full[^"]*"/);
   });
 
   it("shows the control in the card's footer", () => {
