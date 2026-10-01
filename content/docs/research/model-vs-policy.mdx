@@ -26,8 +26,9 @@ The figures are as of 1 October 2026, 05:30 UTC, and come from `npm run research
 - **Guardrails** run after the model, whatever it says. Code refuses, and holds for a person, any payment that:
   - is over the counterparty's limit;
   - goes to a counterparty screened as high risk;
-  - goes to an address not confirmed since it changed;
-  - is beyond the money available.
+  - goes to an address that changed and is not yet confirmed;
+  - repeats, at a confidence of 0.9 or more, an invoice already paid or committed;
+  - for EURC or a payee on another chain, has no rate, not enough EURC, or no acceptable fee.
 
 ## What happened
 
@@ -64,7 +65,7 @@ They fall into three kinds.
 
 Three times the policy would have paid, and the model flagged the invoice instead (#387, #426, #429). Each time, the duplicate check had found an earlier invoice from the same vendor, with the same amount and a close due date, at a confidence of 0.60. In #426 and #429 one of those earlier invoices was already paid.
 
-The policy stops a payment as a duplicate only on a match of 0.9 or more against an invoice already paid, being paid or scheduled. These matches were weaker, and the purchase orders differed, so the policy paid.
+The policy stops a payment as a duplicate only on a match of 0.9 or more against an invoice already paid, being paid, scheduled or with a person, and code enforces the same stop whatever the model says. These matches were weaker, and the purchase orders differed, so the policy paid.
 
 The model is shown the same matches, with a note that a repeat of an invoice already paid is duplicate billing, and it stopped. Both Centronex invoices were tests that one of us ran against the same small vendor. These were false alarms: they cost a person's attention, not money.
 
@@ -91,7 +92,7 @@ The reasoning was right and the action was wrong. This is why code checks the ac
 - **Its confidence carried information.** The answers that departed from the policy averaged 0.75, against 0.94 for those that matched it. The answer that code refused carried 0.5.
 - **The guardrails did real work.** In a week of production decisions they refused one, and it was the one that mattered.
 
-Next, we will tell the model the policy's threshold: a match on amount and date alone, under a different purchase order, is not by itself duplicate billing. The agreement rate on payables will then show whether the false alarms stop, and this note will be updated with that result.
+Next, we will tell the model the policy's threshold: a match on amount and date alone, under a different purchase order, is not by itself duplicate billing. Code would still stop a strong duplicate whatever the model says. The agreement rate on payables will then show whether the false alarms stop, and this note will be updated with that result.
 
 ## The limits of this note
 
