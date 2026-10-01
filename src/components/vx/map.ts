@@ -100,11 +100,19 @@ function invoiceOutcomeLabel(invoice: InvoiceRow, guardrailBlocked: boolean): st
     case "scheduled":
       return invoice.scheduled_for ? `Scheduled for ${utcDay(invoice.scheduled_for)}` : undefined;
     case "pending":
-      return "Not yet decided";
+      // The agent decides payables, never receivables — a receivable just
+      // waits on the counterparty to pay it.
+      return invoice.direction === "receivable" ? "Awaiting payment" : "Not yet decided";
     case "matched":
       return "Payment in flight";
     case "processing":
       return "Being decided by a person";
+    case "paid":
+      // A recognised tx_ref already reads as paid through its own outcome
+      // word ("Settled on Arc" / "Simulated"); an unrecognised or missing one
+      // — sample history, or a row from before tx_ref was recorded — must
+      // still read as paid, never fall through to the default "Scheduled".
+      return invoice.tx_ref?.startsWith("0x") || invoice.tx_ref?.startsWith("sim_") ? undefined : "Paid";
     default:
       return undefined;
   }
@@ -114,6 +122,11 @@ function statusOutcome(status: string, txRef: string | null, guardrailBlocked: b
   if (guardrailBlocked) return "refused";
   if (status === "paid" && txRef?.startsWith("0x")) return "settled";
   if (status === "paid" && txRef?.startsWith("sim_")) return "simulated";
+  // A paid invoice whose tx_ref is missing or unrecognised must never fall
+  // through to the default "scheduled" outcome below — that reads as
+  // "Scheduled", which a paid invoice never is (spec §1, "never Scheduled
+  // otherwise").
+  if (status === "paid") return "recorded";
   if (["held", "flagged", "awaiting_info"].includes(status)) return "held";
   if (["received", "rejected"].includes(status)) return "recorded";
   return "scheduled";

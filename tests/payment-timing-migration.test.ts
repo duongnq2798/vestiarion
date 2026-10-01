@@ -211,6 +211,25 @@ describe("invoices_status_check (0038 adds 'scheduled')", () => {
   });
 });
 
+describe("an older migration replayed without 0038", () => {
+  // A migrate run from a checkout that lacks 0038 replays 0025 and stops
+  // short of 0038, so nothing would put back a constraint 0025's status-check
+  // rebuild dropped. That rebuild must leave 0038's other checks alone, even
+  // the one that names `status`.
+  it("keeps every 0038 check when 0025 is replayed on its own", async () => {
+    const checks = async () =>
+      (await db.query<{ conname: string }>(
+        "select conname from pg_constraint where conrelid = 'public.invoices'::regclass and contype = 'c' order by 1"
+      )).rows.map((row) => row.conname);
+    const before = await checks();
+    expect(before).toContain("invoices_scheduled_has_date");
+
+    await db.exec(readFileSync(path.join(MIGRATIONS_DIR, "0025_control.sql"), "utf8"));
+
+    expect(await checks()).toEqual(before);
+  });
+});
+
 describe("0038 is idempotent", () => {
   it("replays twice without error, keeping an already-shaped row unchanged", async () => {
     const id = await invoice(A, {
