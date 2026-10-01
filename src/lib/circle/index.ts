@@ -116,4 +116,7 @@ export type {
   EarnResult,
   BalanceSnapshot,
   Stablecoin,
+  SwapCallParams,
+  SwapCallResult,
+  SwapStep,
 } from "./types";
