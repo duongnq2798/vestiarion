@@ -1,5 +1,18 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-01: Invoices in EURC
+
+- An invoice can be in EURC as well as USDC. `GET /api/v1/invoices` returns its `currency`, which is now `USDC` or `EURC`; `amount` and `paidAmount` are in that currency.
+- A EURC payable is paid in EURC from the operating wallet. Its decision entry (`ap_pay`, `ap_hold`, `ap_flag_fraud`, `ap_request_info`, `ap_schedule`) carries `currency` in `detail`, and, for EURC only:
+  - `usdcValue`, its value in USDC, which is what counts against the counterparty's limit;
+  - `fx: { rate, source: "circle-stablecoin-quote", quotedAt, usdcMinimum }`, or `null` when Circle gave no quote;
+  - `eurcBalance`, the operating wallet's EURC as read for the decision, or `null` in a sandbox.
+
+  Every `ap_*` entry for a USDC invoice carries `currency: "USDC"`.
+- Two new values of `guardrailRule` for a EURC payable: `fx.rate_unavailable`, when there was no quote to weigh it at, and `treasury.insufficient_eurc`, when the wallet's EURC cannot cover the payment. Both hold the payable for a person.
+- `approval_paid` and the `create_invoice` and `import_invoice` entries gain `currency` in `detail`, and their summaries name it.
+- The invoice CSV import takes an optional `currency` column. A blank or missing value means USDC.
+
 ## 2026-10-01: Payment timing
 
 - An invoice can carry early-payment terms: a percent off and the date it lapses, set on the invoice form or by CSV import. `GET /api/v1/invoices` now returns `earlyPayDiscount: { percent, deadline } | null` for any invoice that carries them.

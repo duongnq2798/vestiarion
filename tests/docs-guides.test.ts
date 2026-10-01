@@ -113,6 +113,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["Payable", INVOICE_FORM],
     ["Amount", INVOICE_FORM],
     ["Currency", INVOICE_FORM],
+    ["A EURC payable is paid in EURC, and checked against the payment limit at its USDC value.", INVOICE_FORM],
     ["Due date", INVOICE_FORM],
     ["Memo", INVOICE_FORM],
     ["PO reference", INVOICE_FORM],

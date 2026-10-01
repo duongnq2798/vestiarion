@@ -127,7 +127,7 @@ export const InvoiceSchema = z
     direction: z.enum(INVOICE_DIRECTIONS),
     status: z.string(),
     amount: z.number(),
-    currency: z.string(),
+    currency: z.string().describe("USDC or EURC: what `amount` is in, and what a payable is paid in. A EURC payable is checked against the counterparty's USDC limit at a quoted rate."),
     memo: z.string().nullable(),
     poReference: z.string().nullable(),
     goodsReceived: z.boolean(),
