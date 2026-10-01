@@ -5,6 +5,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { runComplianceSweep, screenCounterparty } from "@/lib/compliance";
+import { appendLedgerEntry } from "@/lib/ledger";
 import { fakeSupabase, orgTestContext, type RecordedRequest } from "./support/fake-supabase";
 import { applyMigrations, createDatabase, createOrg } from "./support/pglite";
 
@@ -86,6 +87,39 @@ describe("the sweep, once live screening is on", () => {
     const result = await runWith(orgTestContext({ config: live, client: fake.client, orgId: ORG }), () => runComplianceSweep());
     expect(result.screened).toHaveLength(0);
     expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("the sweep's ledger entry", () => {
+  const stale = new Date(Date.now() - 3 * 86_400_000).toISOString();
+  const unscreened = (id: string, name: string) =>
+    counterparty({ id, name, risk_level: "unscreened", baseline_payment_limit: null, last_screened_at: null, last_screening_mode: null });
+  const sweepEntry = () =>
+    vi.mocked(appendLedgerEntry).mock.calls.map(([entry]) => entry).find((entry) => entry.action === "compliance_sweep");
+
+  beforeEach(() => vi.mocked(appendLedgerEntry).mockClear());
+
+  it("counts a new workspace's first screens apart, rather than as changes", async () => {
+    const fake = workspace([unscreened("0b6c1c9e-4a4f-4a7e-9b1e-0000000000a1", "Acme Supplies"), unscreened("0b6c1c9e-4a4f-4a7e-9b1e-0000000000a2", "Birch Hosting")]);
+    await runWith(orgTestContext({ config: bundled, client: fake.client, orgId: ORG }), () => runComplianceSweep());
+
+    expect(sweepEntry()?.summary).toBe("Screened 2 of 2 counterparties: 2 for the first time, 0 changed");
+    expect(sweepEntry()?.detail).toMatchObject({ screened: [{ name: "Acme Supplies", firstScreen: true }, { name: "Birch Hosting", firstScreen: true }] });
+  });
+
+  it("names a first screen next to re-screens that found nothing new", async () => {
+    const fake = workspace([unscreened("0b6c1c9e-4a4f-4a7e-9b1e-0000000000a1", "Acme Supplies"), counterparty({ name: "Birch Hosting", last_screened_at: stale })]);
+    await runWith(orgTestContext({ config: bundled, client: fake.client, orgId: ORG }), () => runComplianceSweep());
+
+    expect(sweepEntry()?.summary).toBe("Screened 2 of 2 counterparties: 1 for the first time, 0 changed");
+  });
+
+  it("keeps its wording when every screen is a re-screen", async () => {
+    const fake = workspace([counterparty({ last_screened_at: stale })]);
+    await runWith(orgTestContext({ config: bundled, client: fake.client, orgId: ORG }), () => runComplianceSweep());
+
+    expect(sweepEntry()?.summary).toBe("Re-screened 1 of 1 counterparties; 0 changed");
+    expect(sweepEntry()?.detail).toMatchObject({ screened: [{ name: "Acme Supplies", changed: false, firstScreen: false }] });
   });
 });
 

@@ -1,5 +1,10 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-01: First screens in the compliance sweep
+
+- Each entry in a `compliance_sweep` entry's `detail.screened` now carries `firstScreen`: `true` when the counterparty had no verdict before. `changed` is still `true` for a first screen.
+- When a sweep includes first screens, its `summary` counts them apart: "Screened 6 of 6 counterparties: 6 for the first time, 0 changed". A sweep of re-screens only still reads "Re-screened 6 of 6 counterparties; 0 changed".
+
 ## 2026-10-01: Payees on other chains
 
 - A counterparty's `chain` is one of `ARC-TESTNET`, `BASE-SEPOLIA`, `ARB-SEPOLIA` or `ETH-SEPOLIA`. `GET /api/v1/counterparties` returns it as before.

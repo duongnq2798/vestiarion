@@ -565,15 +565,20 @@ export async function runComplianceSweep(): Promise<SweepResult> {
   }
 
   const changes = screened.filter((s) => s.changed);
+  // A first screen is a verdict where there was none, not a change: a new
+  // workspace's first sweep would otherwise read "6 changed" with nothing moved.
+  const firstScreens = screened.filter((s) => s.firstScreen).length;
   const performance = await refreshCounterpartyPerformance(rows);
   const complete = failures.length === 0;
   await appendLedgerEntry({
     actor: "agent",
     domain: "compliance",
     action: "compliance_sweep",
-    summary: complete
-      ? `Re-screened ${screened.length} of ${rows.length} counterparties; ${changes.length} changed`
-      : `Screening incomplete: ${failures.length} of ${due.length} due checks failed; previous verdicts retained`,
+    summary: !complete
+      ? `Screening incomplete: ${failures.length} of ${due.length} due checks failed; previous verdicts retained`
+      : firstScreens > 0
+        ? `Screened ${screened.length} of ${rows.length} counterparties: ${firstScreens} for the first time, ${changes.length - firstScreens} changed`
+        : `Re-screened ${screened.length} of ${rows.length} counterparties; ${changes.length} changed`,
     detail: {
       source: screeningMode() === "live" ? "opensanctions:yente" : "simulated-sanctions-list",
       screeningMode: screeningMode(),
@@ -583,6 +588,7 @@ export async function runComplianceSweep(): Promise<SweepResult> {
         name: s.name,
         riskLevel: s.riskLevel,
         changed: s.changed,
+        firstScreen: s.firstScreen,
         rawScore: s.rawScore,
         matchedEntityId: s.matchedEntityId,
       })),
