@@ -86,10 +86,10 @@ describe("the burn intent", () => {
 
 describe("the Gateway API", () => {
   it("estimates a forwarded transfer: the fee to put in the burn intent, and its block height", async () => {
-    const fetch = vi.fn(async (..._args: unknown[]) =>
+    const fetch = vi.fn<typeof globalThis.fetch>(async () =>
       respond(200, { body: [{ burnIntent: { maxBlockHeight: "66288611", maxFee: "56724" } }], fees: { token: "USDC", total: "0.056724", forwardingFee: "0.053224" } })
     );
-    const estimate = await estimateGateway({ depositor: DEPOSITOR, signer: SIGNER, recipient: PAYEE, chain: "BASE-SEPOLIA", amount: 1, salt: gatewaySalt("k") }, { fetch: fetch as unknown as typeof globalThis.fetch });
+    const estimate = await estimateGateway({ depositor: DEPOSITOR, signer: SIGNER, recipient: PAYEE, chain: "BASE-SEPOLIA", amount: 1, salt: gatewaySalt("k") }, { fetch });
     expect(estimate).toEqual({ maxFee: BigInt(56724), maxBlockHeight: "66288611", feeUsdc: 0.056724 });
     expect(String(fetch.mock.calls[0][0])).toBe("https://gateway-api-testnet.circle.com/v1/estimate?enableForwarder=true");
     const sent = JSON.parse(String((fetch.mock.calls[0][1] as RequestInit).body)) as Array<{ spec: { destinationDomain: number; value: string } }>;
@@ -98,13 +98,13 @@ describe("the Gateway API", () => {
 
   it("reads the depositor's Gateway balance, summed over the domains it answers for", async () => {
     const fetch = vi.fn(async () => respond(200, { token: "USDC", balances: [{ domain: 26, depositor: DEPOSITOR, balance: "2.5" }, { domain: 6, depositor: DEPOSITOR, balance: "0.25" }] }));
-    expect(await gatewayBalance(DEPOSITOR, { fetch: fetch as unknown as typeof globalThis.fetch })).toBe(2.75);
+    expect(await gatewayBalance(DEPOSITOR, { fetch })).toBe(2.75);
   });
 
   it("submits a signed burn intent with forwarding, and returns the transfer id", async () => {
-    const fetch = vi.fn(async (..._args: unknown[]) => respond(201, { transferId: "tr-1" }));
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => respond(201, { transferId: "tr-1" }));
     const intent = burnIntent({ depositor: DEPOSITOR, signer: SIGNER, recipient: PAYEE, chain: "BASE-SEPOLIA", amount: 1, salt: gatewaySalt("k"), maxFee: BigInt(56724), maxBlockHeight: "66288611" });
-    expect(await submitGatewayTransfer(intent, "0xsig", { fetch: fetch as unknown as typeof globalThis.fetch })).toBe("tr-1");
+    expect(await submitGatewayTransfer(intent, "0xsig", { fetch })).toBe("tr-1");
     expect(String(fetch.mock.calls[0][0])).toBe("https://gateway-api-testnet.circle.com/v1/transfer?enableForwarder=true");
     expect(JSON.parse(String((fetch.mock.calls[0][1] as RequestInit).body))).toEqual([{ burnIntent: intent, signature: "0xsig" }]);
   });
