@@ -2,6 +2,22 @@ A milestone pays a contractor for a piece of work once that work is verified, in
 
 Owners and admins add milestones and verify them. Other members see every milestone and its decision, but have no controls here.
 
+## Pay someone new in one step
+
+To pay someone who is not yet on file for work they have delivered, open **Contractors** and fill in **Pay a freelancer**: their **Name**, their **Email** if you have it, **What they delivered**, the **Amount (USDC)** and, if there is one, a **Link to the work**. Choose **Set up payment**. Vestiarion then:
+
+- adds them as a contractor, with that amount as their payment limit, and screens them;
+- adds the work as a milestone, verified by you, with the note "Delivered work confirmed when the payment was set up";
+- emails them a one-time link to add the address they want to be paid at, and shows you the same link to copy. **Copy link** is there if they have no email or it does not arrive.
+
+<Screenshot
+  src="/docs/guides/pay-freelancer.png"
+  alt="The Pay a freelancer form on the Contractors page, filled in: Name Linh Tran, Email linh@example.com, What they delivered 10 social posts for October, Amount (USDC) 25.00, and a Link to the work. Below it, the result after Set up payment: a message that the link was emailed, the payee link with a Copy link button, and when the link expires."
+  caption="One form sets up the payment; the link goes to the freelancer by email and is shown once to copy."
+/>
+
+When they add their address, the members who can confirm addresses get an email. Confirm it on **Counterparties** with **Confirm address**, and the agent pays the milestone within a minute. In a live workspace nothing is paid before that; a sandbox pays them simulated, at once. The steps below are the same path one at a time, for someone already on file.
+
 ## 1. Add the contractor
 
 Open **Counterparties** and add the person or studio you pay, with **Role** set to **Contractor** and a **Payment limit (USDC)** at least as large as the milestones you will add. A vendor can be paid for milestones too; a client cannot.
