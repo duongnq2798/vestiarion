@@ -17,6 +17,7 @@ import { useActionForm, type ActionResult } from "@/components/ui/useActionForm"
 import { Money, fmt } from "@/components/vx/Primitives";
 import { withSuccessToast } from "@/components/withSuccessToast";
 import type { WaitingPayable } from "@/lib/agent/approvals";
+import { amountToPay } from "@/lib/agent/payment-timing";
 import { utcDay, utcMinute } from "@/lib/copy";
 
 const INITIAL: ActionResult = { ok: false, message: "" };
@@ -24,9 +25,20 @@ const approve = withSuccessToast(approveInvoiceAction);
 const reject = withSuccessToast(rejectInvoiceAction);
 const giveBack = withSuccessToast(returnInvoiceAction);
 
-/** What Approve and pay asks before it pays; a sandbox's payment is simulated, and says so. */
-export function payConfirmTitle(payable: Pick<WaitingPayable, "amount" | "counterpartyName">, sandbox: boolean): string {
-  return `Pay ${fmt(payable.amount)} USDC to ${payable.counterpartyName} now?${sandbox ? " (simulated)" : ""}`;
+/**
+ * What Approve and pay asks before it pays: the amount that will leave, which
+ * is the discounted one while an early-payment discount still applies (the
+ * same `amountToPay` rule `payInvoice` pays by), naming the discount; a
+ * sandbox's payment is simulated, and says so.
+ */
+export function payConfirmTitle(
+  payable: Pick<WaitingPayable, "amount" | "counterpartyName" | "discount">,
+  sandbox: boolean,
+  now: Date = new Date()
+): string {
+  const { amountPaid, discountTaken } = amountToPay(payable.amount, payable.discount, now);
+  const discount = discountTaken > 0 && payable.discount ? ` (${payable.discount.pct}% discount through ${utcDay(payable.discount.deadline)})` : "";
+  return `Pay ${fmt(amountPaid)} USDC to ${payable.counterpartyName} now?${discount}${sandbox ? " (simulated)" : ""}`;
 }
 
 /**

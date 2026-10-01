@@ -29,8 +29,17 @@ import {
 } from "./duplicates";
 import { followUpConfig, planFollowUp, type DecisionFacts, type FollowUpConfig, type FollowUpPlan } from "./follow-up";
 import { OPEN_PAYABLE_STATUSES, summarizePayableObligations } from "./obligations";
+import {
+  boundPayOn,
+  invoiceDiscount,
+  planPaymentTiming,
+  utcDate,
+  type InvoiceDiscount,
+  type PaymentTiming,
+  type PaymentTimingInput,
+} from "./payment-timing";
 import { planTreasury, type TreasuryDecision } from "./treasury";
-import { plural } from "../copy";
+import { plural, utcDay } from "../copy";
 
 // Moved to ./balances.ts with the read it belongs to; still exported from here for existing callers.
 export { liveOperatingBalance } from "./balances";
@@ -71,13 +80,31 @@ Rules you must follow:
 - Keep enough liquid operating cash to cover every obligation due in the next 7 days before sweeping anything into yield.
 - Your reasoning must cite the specific facts you were given: amounts, PO numbers, risk levels, balances. A human auditor will read it next to the same data. Never write vague justifications like "looks fine" or "seems reasonable".
 
+When to pay an accounts-payable invoice:
+- Choose when to pay, not only whether. You may pay now, or schedule the payment for a later day up to the invoice's due date.
+- Take an early-payment discount when it is worth more than keeping the cash: schedule the payment for the discount's deadline, the last day that still earns it.
+- Otherwise, paying on the due date keeps the cash available for what falls due first.
+- Pay now when the invoice is due today or overdue.
+- Never schedule a payment past the due date.
+- When \`timing.shortfall\` is true, the operating balance cannot cover this payment after the payables that fall due on or before its date. Hold it and cite the figures, rather than scheduling or paying into a failure.
+- Cite the figures you were given: what the discount is worth, the yield from keeping the cash to the due date, the dates, and what falls due on or before its date (\`timing.earlierObligations\`: their total and how many there are).
+
 Respond with ONLY a single JSON object in the requested shape. No prose outside the JSON.`;
 
-const apDecisionSchema = z.object({
-  action: z.enum(["pay", "hold", "flag_fraud", "request_info"]),
-  reasoning: z.string().min(10),
-  confidence: z.number().min(0).max(1),
-});
+const apDecisionSchema = z
+  .object({
+    action: z.enum(["pay", "schedule", "hold", "flag_fraud", "request_info"]),
+    // A calendar date, UTC, `YYYY-MM-DD`; code bounds it (`boundPayOn`) after
+    // the model has spoken. Null is accepted as "none" for the other actions,
+    // which models often send for a field the shape lists.
+    payOn: z.string().nullish(),
+    reasoning: z.string().min(10),
+    confidence: z.number().min(0).max(1),
+  })
+  .refine((decision) => decision.action !== "schedule" || (typeof decision.payOn === "string" && decision.payOn.length > 0), {
+    message: "schedule requires payOn",
+    path: ["payOn"],
+  });
 type ApDecision = z.infer<typeof apDecisionSchema>;
 
 const milestoneDecisionSchema = z.object({
@@ -218,9 +245,9 @@ interface PayStepOutcome {
  * one branch does.
  */
 export async function payApInvoiceIfNotPaused(
-  input: { invoiceId: string; counterpartyId: string; address: string | null; amount: number },
+  input: { invoiceId: string; counterpartyId: string; address: string | null; amount: number; discount?: InvoiceDiscount | null },
   deps: { provider: ChainProvider; operating: { id: string } | null }
-): Promise<PayStepOutcome> {
+): Promise<PayStepOutcome & { payment?: { amountPaid: number; discountTaken: number } }> {
   const pauseNote = await pausedPaymentNote();
   if (pauseNote) {
     return {
@@ -240,6 +267,9 @@ export async function payApInvoiceIfNotPaused(
     reasoningSuffix: result.note,
     heldBecausePaused: false,
     operatingBalance: result.operatingBalance,
+    // What the transfer carries, the early-payment discount off it through
+    // its deadline's day; present only when `payInvoice` ran.
+    payment: { amountPaid: result.amountPaid, discountTaken: result.discountTaken },
   };
 }
 
@@ -372,6 +402,10 @@ function withNote(reasoning: string | null, note: string): string {
  * The invoice keeps its decision time and, when the reconciliation reports
  * none, its recorded txRef; the reasoning gains a note only when the status
  * moves on, so a payment still pending does not repeat its note every cycle.
+ * It keeps its `paid_amount` too: that was written with the transfer being
+ * reconciled, which carried it. A transfer that failed clears it, and a
+ * resubmission — a new transfer, with the invoice's early-payment discount
+ * applied as of now — records its own.
  * The ledger entry is `ap_reconcile` — `detail.reconciled: true`, or `false`
  * with `reconcileError` when it did not complete — and no `observed` facts,
  * so the follow-up stage keeps comparing against the decision itself.
@@ -385,11 +419,18 @@ export async function reconcileApInvoice(
     address: string | null;
     reasoning: string | null;
     txRef: string | null;
+    discount?: InvoiceDiscount | null;
   },
   intent: ExistingPaymentIntent,
   deps: { db: OrgDb; provider: ChainProvider; operating: { id: string } | null }
 ): Promise<{ status: string; operatingBalance: number | null; line: CycleLogLine }> {
-  const input = { invoiceId: invoice.id, counterpartyId: invoice.counterpartyId, address: invoice.address, amount: invoice.amount };
+  const input = {
+    invoiceId: invoice.id,
+    counterpartyId: invoice.counterpartyId,
+    address: invoice.address,
+    amount: invoice.amount,
+    discount: invoice.discount ?? null,
+  };
   const transferExists = intent.providerTxId !== null || intent.status === "confirmed";
   const name = invoice.counterpartyName;
 
@@ -403,6 +444,8 @@ export async function reconcileApInvoice(
 
   let outcome: PayStepOutcome;
   let notResubmitted: Exclude<Awaited<ReturnType<typeof resubmissionBlocker>>, null> | null = null;
+  // `undefined` leaves the invoice's recorded paid amount as it is.
+  let paidAmount: number | null | undefined;
   const blocker = transferExists ? null : await resubmissionBlocker(deps.db, invoice.counterpartyId);
   if (transferExists) {
     const result = await payInvoice(input, { provider: deps.provider, operating: deps.operating });
@@ -447,8 +490,10 @@ export async function reconcileApInvoice(
       heldBecausePaused: false,
       operatingBalance: result.operatingBalance,
     };
+    if (result.status === "held") paidAmount = null;
   } else if (blocker) {
     notResubmitted = blocker;
+    paidAmount = null;
     outcome = {
       status: "held",
       txRef: null,
@@ -458,7 +503,12 @@ export async function reconcileApInvoice(
       operatingBalance: null,
     };
   } else {
-    outcome = await payApInvoiceIfNotPaused(input, { provider: deps.provider, operating: deps.operating });
+    const resubmitted = await payApInvoiceIfNotPaused(input, { provider: deps.provider, operating: deps.operating });
+    outcome = resubmitted;
+    paidAmount =
+      resubmitted.payment && (resubmitted.status === "paid" || resubmitted.status === "matched")
+        ? resubmitted.payment.amountPaid
+        : null;
   }
 
   const status = outcome.status;
@@ -467,7 +517,13 @@ export async function reconcileApInvoice(
   const now = new Date().toISOString();
   const update = await deps.db
     .from("invoices")
-    .update({ status, agent_reasoning: reasoning, settled_at: status === "paid" ? now : null, tx_ref: txRef })
+    .update({
+      status,
+      agent_reasoning: reasoning,
+      settled_at: status === "paid" ? now : null,
+      tx_ref: txRef,
+      ...(paidAmount !== undefined ? { paid_amount: paidAmount } : {}),
+    })
     .eq("id", invoice.id);
   if (update.error) throw new Error(update.error.message);
 
@@ -510,6 +566,725 @@ export async function reconcileApInvoice(
         ? `${invoice.counterpartyName}: reconciled an in-flight payment, still pending (${invoice.amount} USDC)`
         : `${invoice.counterpartyName}: reconciled an in-flight payment, now held (${invoice.amount} USDC)`;
   return { status, operatingBalance: outcome.operatingBalance, line: { domain: "ap", message } };
+}
+
+/** A payable as the AP stage loads it: the invoice row, with the counterparty it pays. */
+interface ApPayableRow {
+  id: string;
+  status: string;
+  amount: string;
+  memo: string | null;
+  po_reference: string | null;
+  goods_received: boolean;
+  due_date: string;
+  counterparty_id: string;
+  agent_reasoning: string | null;
+  tx_ref: string | null;
+  early_pay_discount_pct?: string | number | null;
+  discount_due_date?: string | null;
+  scheduled_for?: string | null;
+  counterparties: {
+    id: string;
+    name: string;
+    risk_level: string;
+    payment_limit: string | null;
+    performance_score: string | null;
+    performance_inputs: CounterpartyHistoryInputs | null;
+    address: string | null;
+    address_changed_at: string | null;
+    address_confirmed_at: string | null;
+  };
+}
+
+/** The UTC calendar day of a timestamp, or null when it cannot be read. */
+function utcDayOf(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const time = Date.parse(value);
+  return Number.isNaN(time) ? null : utcDate(new Date(time));
+}
+
+/**
+ * Whether the AP stage decides a payable it loaded this cycle. Every one it
+ * loads, except a `scheduled` one before its day: that waits, counted among
+ * the obligations but not decided, until the first cycle on its
+ * `scheduled_for` day (UTC), which decides it again with every check (spec
+ * 2026-09-30-payment-timing P3). Its due date is the latest it waits, even
+ * if the scheduled day somehow lies after it (P2), and a day that cannot be
+ * read is no reason to wait at all.
+ */
+export function dueForDecision(
+  row: { status: string; scheduled_for?: string | null; due_date: string },
+  now: Date
+): boolean {
+  if (row.status !== "scheduled") return true;
+  const scheduledOn = utcDayOf(row.scheduled_for);
+  const dueOn = utcDayOf(row.due_date);
+  if (scheduledOn === null || dueOn === null) return true;
+  const today = utcDate(now);
+  return scheduledOn <= today || dueOn <= today;
+}
+
+/** One payable in the book the AP stage keeps while it decides. */
+export interface PayableBookRow {
+  id: string;
+  amount: number;
+  due_date: string;
+  status: string;
+  scheduled_for?: string | null;
+}
+
+/** Payments that fall due by a date: their total (USDC, full amounts) and how many there are. */
+export interface ObligationsDue {
+  total: number;
+  count: number;
+}
+
+/**
+ * What falls due by an invoice's payment date: every other open payable (the
+ * treasury buffer's statuses, ./obligations.ts) dated on or before `by` — a
+ * payment in flight (`matched`) today, a scheduled one on the day it is
+ * scheduled for, any other on its due date — plus the verified milestones,
+ * which are released the same day (RFB3). An obligation due on the same day
+ * competes for the same cash, so it counts. Full amounts, as the buffer counts
+ * them. An obligation whose date cannot be read may well come first, so it is
+ * counted too.
+ */
+export function obligationsDueBy(
+  book: ReadonlyArray<PayableBookRow>,
+  input: { excludeId: string; by: string; today: string; milestones: ObligationsDue }
+): ObligationsDue {
+  let total = input.milestones.total;
+  let count = input.milestones.count;
+  for (const row of book) {
+    if (row.id === input.excludeId) continue;
+    if (!(OPEN_PAYABLE_STATUSES as readonly string[]).includes(row.status)) continue;
+    const day = row.status === "matched" ? input.today : utcDayOf(row.scheduled_for ?? row.due_date);
+    if (day === null || day <= input.by) {
+      total += row.amount;
+      count += 1;
+    }
+  }
+  return { total: Number(total.toFixed(6)), count };
+}
+
+/**
+ * The timing figures one AP decision is made with: the policy's, and what
+ * falls due on or before its date. The ledger records all of it, the
+ * policy's `recommendation` and `reason` included; the model is sent only
+ * the facts (`timingFacts`).
+ */
+export type ApTiming = PaymentTiming & { earlierObligations: ObligationsDue };
+
+/**
+ * `planPaymentTiming` with the obligations that fall due by this invoice's
+ * own target date. The target does not depend on them — only `shortfall`
+ * does — so a first pass finds the date and the second measures what comes
+ * by then.
+ */
+function planApTiming(
+  input: Omit<PaymentTimingInput, "earlierObligations">,
+  obligationsBy: (targetOn: string, today: string) => ObligationsDue
+): ApTiming {
+  const { targetOn, today } = planPaymentTiming({ ...input, earlierObligations: 0 });
+  const earlierObligations = obligationsBy(targetOn, today);
+  return { ...planPaymentTiming({ ...input, earlierObligations: earlierObligations.total }), earlierObligations };
+}
+
+/**
+ * The timing facts the model decides with (spec 2026-09-30-payment-timing
+ * P1): every figure the policy works out, and not its answer. The policy's
+ * `recommendation` and `reason` are withheld: the fallback still uses them,
+ * and the ledger records them next to the model's decision, so
+ * `agreedWithReference` measures the model's own judgement rather than
+ * whether it copied what it was handed. Each key is named here, so a field
+ * added to `PaymentTiming` reaches the model only once it is listed (and the
+ * privacy page says so).
+ */
+function timingFacts(timing: ApTiming) {
+  return {
+    today: timing.today,
+    dueOn: timing.dueOn,
+    discountValue: timing.discountValue,
+    discountAvailableUntil: timing.discountAvailableUntil,
+    floatValueToDue: timing.floatValueToDue,
+    targetOn: timing.targetOn,
+    amountDueAtTarget: timing.amountDueAtTarget,
+    earlierObligations: timing.earlierObligations,
+    shortfall: timing.shortfall,
+  };
+}
+
+/**
+ * Why the written policy holds a payable it cannot cover (`timing.shortfall`):
+ * the balance, what falls due on or before the day it would be paid, and what
+ * this invoice needs then. Holding it for a person, rather than scheduling or
+ * paying it into a transfer the balance cannot make.
+ */
+function shortfallReasoning(timing: ApTiming, operatingBalance: number): string {
+  const { total, count } = timing.earlierObligations;
+  const alternative = timing.targetOn > timing.today ? "scheduling" : "paying";
+  if (count === 0) {
+    return `Operating balance ${operatingBalance} USDC cannot cover the ${timing.amountDueAtTarget} USDC this invoice needs on ${utcDay(timing.targetOn)}; holding it rather than ${alternative} it into a shortfall.`;
+  }
+  const obligations = plural(count, "1 obligation", `${count} obligations`);
+  return `Operating balance ${operatingBalance} USDC, less ${total} USDC for ${obligations} falling due on or before ${utcDay(timing.targetOn)}, cannot cover the ${timing.amountDueAtTarget} USDC this invoice needs then; holding it rather than ${alternative} it into a shortfall.`;
+}
+
+/**
+ * Whether the decision code let stand gives the same answer as the written
+ * policy: the same action and, for two schedules, the same day. `decide`
+ * compares actions only, and before code has bounded the model's date.
+ */
+function sameApDecision(decision: ApDecision, reference: ApDecision): boolean {
+  if (decision.action !== reference.action) return false;
+  return decision.action !== "schedule" || decision.payOn === reference.payOn;
+}
+
+type TimingRule = ReturnType<typeof boundPayOn>["timingRule"];
+
+/**
+ * The model's decision as code lets it stand: a `schedule` is bounded by
+ * `boundPayOn` — a date after the due date moves back to it, one today or
+ * earlier (or unreadable) becomes pay now — and every correction is named,
+ * for the ledger (`timingRule`) and for a person reading the reasoning.
+ * Every other action stands as it is, without any date sent along with it:
+ * only a schedule has a day.
+ */
+function boundApDecision(
+  decision: ApDecision,
+  input: { now: Date; dueDate: string }
+): { decision: ApDecision; payOn: string | null; timingRule: TimingRule; requestedPayOn: string | null; note: string } {
+  if (decision.action !== "schedule") {
+    return {
+      decision: { action: decision.action, reasoning: decision.reasoning, confidence: decision.confidence },
+      payOn: null,
+      timingRule: null,
+      requestedPayOn: null,
+      note: "",
+    };
+  }
+  const requested = decision.payOn ?? undefined;
+  const bounded = boundPayOn(requested, input);
+  if (bounded.action === "pay") {
+    const readable = bounded.timingRule !== "payon.invalid";
+    return {
+      decision: { action: "pay", reasoning: decision.reasoning, confidence: decision.confidence },
+      payOn: null,
+      timingRule: bounded.timingRule,
+      requestedPayOn: readable ? (requested ?? null) : null,
+      note:
+        bounded.timingRule === "payon.not_after_today"
+          ? ` [paying now: the date chosen, ${requested}, is not after today]`
+          : bounded.timingRule === "payon.invalid"
+            ? " [paying now: the date chosen could not be read as a calendar date]"
+            : "",
+    };
+  }
+  return {
+    decision: { ...decision, payOn: bounded.payOn },
+    payOn: bounded.payOn,
+    timingRule: bounded.timingRule,
+    requestedPayOn: bounded.timingRule ? (requested ?? null) : null,
+    note:
+      bounded.timingRule === "payon.after_due"
+        ? ` [scheduled for the due date, ${bounded.payOn}: the date chosen, ${requested}, is after it]`
+        : "",
+  };
+}
+
+const STATUS_FOR_AP_ACTION: Record<ApDecision["action"], string> = {
+  pay: "paid",
+  schedule: "scheduled",
+  hold: "held",
+  flag_fraud: "flagged",
+  request_info: "awaiting_info",
+};
+
+/**
+ * One payable's decision — whether to pay it and when — for one that has no
+ * payment in flight: the model (or the written policy) with the invoice's
+ * terms and timing figures, then code's bounds on the date, the guardrails,
+ * the pause, and the payment or the schedule, the invoice's write, its
+ * ledger entry and its cycle line.
+ */
+async function decideApPayable(
+  invoice: ApPayableRow,
+  ctx: {
+    db: OrgDb;
+    provider: ChainProvider;
+    operating: { id: string } | null;
+    operatingBalance: number;
+    history: InvoiceLike[];
+    reserveApy: number;
+    obligationsBy: (targetOn: string, today: string) => ObligationsDue;
+    metrics: CycleMetricsCollector;
+  }
+): Promise<{ status: string; scheduledFor: string | null; operatingBalance: number | null; line: CycleLogLine }> {
+  const { db, provider, operating, operatingBalance, history, metrics } = ctx;
+  const counterparty = invoice.counterparties;
+  const amount = num(invoice.amount);
+  // One moment for the whole decision: the timing figures and the bounds on
+  // the model's date are both measured against it.
+  const now = new Date();
+  const limit = counterparty.payment_limit == null ? null : num(counterparty.payment_limit);
+  const overLimit = limit != null && amount > limit;
+  const highRisk = counterparty.risk_level === "high";
+
+  // The system prompt has always told the model to flag a duplicate invoice.
+  // Until this was computed it had no way to see one: it is shown a single
+  // invoice and cannot know an identical bill was settled last week.
+  // Detection is uncapped by construction — `findDuplicates` has no limit to
+  // forget. Only the evidence presented to the model is truncated, by
+  // `duplicateMatchContext`; payment refusal must never depend on how many
+  // other invoices happened to resemble this one.
+  const duplicates = findDuplicates(
+    {
+      id: invoice.id,
+      counterpartyId: invoice.counterparty_id,
+      amount,
+      memo: invoice.memo,
+      poReference: invoice.po_reference,
+      dueDate: invoice.due_date,
+      status: "pending",
+    },
+    history
+  );
+  const duplicateContext = duplicateMatchContext(duplicates);
+
+  // When to pay (spec 2026-09-30-payment-timing §1): the invoice's terms, the
+  // policy's figures — its reference answer is kept for the fallback and the
+  // ledger, not sent — and, for an invoice scheduled earlier, now on its day,
+  // the date it was scheduled for and why.
+  const discount = invoiceDiscount(invoice);
+  const terms = { earlyPayDiscount: discount ? { percent: discount.pct, deadline: discount.deadline } : null };
+  const timing = planApTiming(
+    { now, amount, dueDate: invoice.due_date, discount, operatingBalance, reserveApy: ctx.reserveApy },
+    ctx.obligationsBy
+  );
+  const previouslyScheduledFor = invoice.status === "scheduled" ? (invoice.scheduled_for ?? null) : null;
+  const scheduledEarlier = previouslyScheduledFor
+    ? { payOn: utcDate(previouslyScheduledFor), reasoning: invoice.agent_reasoning }
+    : null;
+
+  const { value: modelDecision, mode, reference, agreedWithReference: sameActionAsReference } = await decide<ApDecision>({
+    systemPrompt: SYSTEM_PROMPT,
+    userPrompt: JSON.stringify({
+      task: "Decide whether to pay this accounts-payable invoice, and when: now, or on a later day no later than its due date.",
+      invoice: {
+        amount,
+        memo: invoice.memo,
+        poReference: invoice.po_reference,
+        goodsReceived: invoice.goods_received,
+        dueDate: invoice.due_date,
+      },
+      terms: {
+        earlyPayDiscount: terms.earlyPayDiscount,
+      },
+      counterparty: {
+        name: counterparty.name,
+        riskLevel: counterparty.risk_level,
+        paymentLimit: limit,
+        performanceHistory: performanceEvidence(
+          counterparty.performance_score,
+          counterparty.performance_inputs
+        ),
+      },
+      treasury: { operatingBalance },
+      timing: timingFacts(timing),
+      scheduledEarlier,
+      duplicateMatches: duplicateContext.matches.map((match) => ({
+        otherInvoiceStatus: match.otherStatus,
+        otherInvoiceDueDate: match.otherDueDate,
+        otherInvoiceAmount: match.otherAmount,
+        confidence: match.confidence,
+        signals: match.signals,
+        finding: match.explanation,
+      })),
+      duplicateMatchesTotal: duplicateContext.total,
+      duplicateNote:
+        duplicates.length === 0
+          ? "No earlier payable from this counterparty resembles this invoice."
+          : `${duplicateContext.total} earlier payable(s) from this counterparty resemble this one; the ${duplicateContext.matches.length} strongest are shown. A repeat of an invoice that is already paid, being paid, scheduled or being decided by a person is duplicate billing — flag it rather than paying or scheduling it a second time.`,
+      responseShape: {
+        action: "pay | schedule | hold | flag_fraud | request_info",
+        payOn: "YYYY-MM-DD (UTC), with schedule only: after today, and no later than the due date",
+        reasoning: "string",
+        confidence: "number between 0 and 1",
+      },
+    }),
+    schema: apDecisionSchema,
+    fallback: (): ApDecision => {
+      const repeat = blockingDuplicate(duplicates);
+      if (repeat) {
+        return {
+          action: "flag_fraud",
+          reasoning: `Duplicate billing: ${repeat.explanation}`,
+          confidence: repeat.confidence,
+        };
+      }
+      if (highRisk) {
+        return {
+          action: "flag_fraud",
+          reasoning: `${counterparty.name} is flagged high risk by compliance screening; payment blocked pending human review.`,
+          confidence: 0.95,
+        };
+      }
+      if (overLimit) {
+        return {
+          action: "hold",
+          reasoning: `Invoice amount ${amount} USDC exceeds ${counterparty.name}'s payment limit of ${limit} USDC.`,
+          confidence: 0.9,
+        };
+      }
+      if (!invoice.goods_received || !invoice.po_reference) {
+        return {
+          action: "request_info",
+          reasoning: `Cannot complete a three-way match: purchase order ${invoice.po_reference ?? "missing"}, goods received ${invoice.goods_received}.`,
+          confidence: 0.7,
+        };
+      }
+      // A correct invoice the balance cannot cover, after what falls due on
+      // or before its day, waits for a person rather than for a transfer
+      // that would fail.
+      if (timing.shortfall) {
+        return { action: "hold", reasoning: shortfallReasoning(timing, operatingBalance), confidence: 0.8 };
+      }
+      // A correct invoice is paid on the policy's day: now, or scheduled.
+      const reasoning = `PO ${invoice.po_reference} matches, goods confirmed received, ${counterparty.name} screened clear, and ${amount} USDC is within the ${limit} USDC limit. ${timing.reason}`;
+      return timing.recommendation.action === "schedule"
+        ? { action: "schedule", payOn: timing.recommendation.payOn, reasoning, confidence: 0.85 }
+        : { action: "pay", reasoning, confidence: 0.85 };
+    },
+  });
+
+  // Code bounds the date before anything else sees the decision: no invoice
+  // is scheduled past its due date, or for a day already here (P2).
+  const { decision, payOn, timingRule, requestedPayOn, note: timingNote } = boundApDecision(modelDecision, {
+    now,
+    dueDate: invoice.due_date,
+  });
+  // Scored on what code let stand, and on the day as well as the action; null
+  // still means the policy itself decided, so there was nothing to compare.
+  const agreedWithReference = sameActionAsReference === null ? null : sameApDecision(decision, reference);
+
+  // A payment the agent commits to must be one it would be allowed to make:
+  // `schedule` is refused exactly as `pay` is, against the full amount.
+  const guardrail = enforceApGuardrails({
+    action: decision.action,
+    reasoning: decision.reasoning + timingNote,
+    amount,
+    riskLevel: counterparty.risk_level,
+    paymentLimit: limit,
+    duplicates,
+    addressChangedAt: counterparty.address_changed_at,
+    addressConfirmedAt: counterparty.address_confirmed_at,
+  });
+  metrics.recordDecisionMode(mode, agreedWithReference);
+  let status = guardrail.status ?? STATUS_FOR_AP_ACTION[decision.action];
+  let txRef: string | null = null;
+  let paymentExecution: PaymentExecution | null = null;
+  let reasoning = guardrail.reasoning;
+  const guardrailBlocked = guardrail.blocked;
+  let heldBecausePaused = false;
+  let payment: { amountPaid: number; discountTaken: number } | null = null;
+  let operatingBalanceAfter: number | null = null;
+
+  if (decision.action === "pay") {
+    // The guardrails are enforced here, after the model has spoken. A
+    // hallucinated or jailbroken "pay" on a flagged counterparty dies in
+    // code, not in the prompt.
+    if (guardrail.blocked) {
+      // Refused by enforceApGuardrails before the provider can be called.
+    } else {
+      const outcome = await payApInvoiceIfNotPaused(
+        {
+          invoiceId: invoice.id,
+          counterpartyId: counterparty.id,
+          address: counterparty.address,
+          amount,
+          discount,
+        },
+        { provider, operating }
+      );
+      status = outcome.status;
+      txRef = outcome.txRef;
+      paymentExecution = outcome.paymentExecution;
+      reasoning += outcome.reasoningSuffix;
+      heldBecausePaused = outcome.heldBecausePaused;
+      operatingBalanceAfter = outcome.operatingBalance;
+      payment = outcome.payment ?? null;
+    }
+  }
+
+  // Only a schedule the guardrails let through leaves the invoice scheduled,
+  // and always with its day. Any other outcome clears the day.
+  const scheduledFor = status === "scheduled" && payOn ? `${payOn}T00:00:00.000Z` : null;
+  // A transfer that went out — confirmed, or submitted and awaiting the
+  // provider — carried `payment.amountPaid`; nothing else moved anything.
+  const sent = payment !== null && (status === "paid" || status === "matched") ? payment : null;
+
+  const at = new Date().toISOString();
+  const update = await db
+    .from("invoices")
+    .update({
+      status,
+      agent_reasoning: reasoning,
+      decided_at: at,
+      settled_at: status === "paid" ? at : null,
+      tx_ref: txRef,
+      scheduled_for: scheduledFor,
+      // Written with the transfer that carried it, so the cycle that later
+      // reconciles a submitted payment records it as is.
+      paid_amount: sent ? sent.amountPaid : null,
+    })
+    .eq("id", invoice.id);
+  if (update.error) throw new Error(update.error.message);
+  metrics.recordInvoice(status, guardrailBlocked);
+
+  await appendLedgerEntry({
+    actor: "agent",
+    domain: "ap",
+    action: `ap_${decision.action}`,
+    summary:
+      decision.action === "schedule"
+        ? `SCHEDULE invoice from ${counterparty.name} for ${amount} USDC on ${payOn}`
+        : sent && sent.discountTaken > 0
+          ? `PAY invoice from ${counterparty.name} for ${amount} USDC: ${sent.amountPaid} USDC with the early-payment discount`
+          : `${decision.action.toUpperCase()} invoice from ${counterparty.name} for ${amount} USDC`,
+    detail: {
+      invoiceId: invoice.id,
+      counterpartyId: counterparty.id,
+      decision,
+      decisionMode: mode,
+      referenceDecision: reference,
+      agreedWithReference,
+      guardrailBlocked,
+      guardrailRule: guardrail.rule,
+      // When to pay: the figures the decision was made with, any correction
+      // code made to the model's date, and the invoice's terms.
+      timing,
+      timingRule,
+      ...(requestedPayOn ? { requestedPayOn } : {}),
+      terms,
+      // The day an earlier cycle scheduled this invoice for, now decided again.
+      ...(previouslyScheduledFor ? { scheduledFor: previouslyScheduledFor } : {}),
+      // What the transfer carried and what the discount took off it; null
+      // when nothing went out.
+      ...(decision.action === "pay"
+        ? { amountPaid: sent ? sent.amountPaid : null, discountTaken: sent ? sent.discountTaken : null }
+        : {}),
+      observed: {
+        amount,
+        paymentLimit: limit,
+        riskLevel: counterparty.risk_level,
+        performanceHistory: performanceEvidence(
+          counterparty.performance_score,
+          counterparty.performance_inputs
+        ),
+        poReference: invoice.po_reference,
+        goodsReceived: invoice.goods_received,
+        operatingBalance: operatingBalanceAfter ?? operatingBalance,
+        addressUnconfirmed: addressUnconfirmed(counterparty.address_changed_at, counterparty.address_confirmed_at),
+        // Recorded whether or not anything matched. "We looked and found
+        // nothing" is the half of a fraud control that a log which only
+        // records hits can never prove.
+        duplicateCheck: {
+          candidatesConsidered: history.length,
+          matchesTotal: duplicateContext.total,
+          matchesShown: duplicateContext.matches.length,
+          matches: duplicateContext.matches.map((match) => ({
+            otherInvoiceId: match.otherId,
+            otherInvoiceStatus: match.otherStatus,
+            confidence: match.confidence,
+            signals: match.signals,
+            finding: match.explanation,
+          })),
+        },
+      },
+      execution: {
+        txRef,
+        chainMode: paymentExecution?.providerMode ?? provider.mode,
+        resultingStatus: status,
+        settlementRequired: true,
+        feeUsd: paymentExecution?.feeUsd ?? null,
+        feeSource: paymentExecution?.feeSource ?? null,
+        settledInMs: paymentExecution?.settledInMs ?? null,
+        executedAt: paymentExecution?.executedAt ?? null,
+        reconciled: paymentExecution?.reconciled ?? false,
+        // D6: the ledger says the pause is why this held, not just the
+        // reasoning text — set only when it is, so it is unambiguous from
+        // a hold for a missing operating account or a failed transfer.
+        ...heldBecausePausedDetail(heldBecausePaused),
+      },
+    },
+  });
+
+  const message = heldBecausePaused
+    ? `${counterparty.name}: not paid, the agent was paused (${amount} USDC)`
+    : scheduledFor
+      ? `${counterparty.name}: scheduled for ${payOn} (${amount} USDC)`
+      : sent && discount && sent.discountTaken > 0
+        ? `${counterparty.name}: pay (${sent.amountPaid} USDC after a ${discount.pct}% early-payment discount on ${amount} USDC)`
+        : `${counterparty.name}: ${decision.action} (${amount} USDC)`;
+  return { status, scheduledFor, operatingBalance: operatingBalanceAfter, line: { domain: "ap", message } };
+}
+
+export interface ApStageInput {
+  db: OrgDb;
+  provider: ChainProvider;
+  operating: { id: string } | null;
+  /** The operating balance as the cycle has it when the stage starts. */
+  operatingBalance: number;
+  /** The reserve's yield, annualised, as a fraction (0.045 for 4.5%): what keeping cash to a due date earns. */
+  reserveApy: number;
+  metrics: CycleMetricsCollector;
+  lines: CycleLogLine[];
+}
+
+/**
+ * The cycle's AP stage: every payable that is pending, matched, or scheduled
+ * and now on its day, decided — or, for a matched one with a payment in
+ * flight, reconciled — in turn. Returns the operating balance as the stage
+ * leaves it, so each decision sees the payments already made this cycle.
+ *
+ * Exported so the stage is testable over a recorded fake without faking every
+ * stage ahead of it (tests/ap-stage.test.ts; see tests/orchestrator.test.ts
+ * for why a full `runAgentCycle()` is out of proportion).
+ */
+export async function runApStage(input: ApStageInput): Promise<number> {
+  const { db, provider, operating, reserveApy, metrics, lines } = input;
+  let operatingBalance = input.operatingBalance;
+  const now = new Date();
+
+  // In the order they were submitted (id breaks a tie), so each cycle decides
+  // them in the same order: of two identical invoices, the one submitted
+  // first is paid or scheduled, and the later one is the repeat refused.
+  const loaded = unwrap(
+    await db
+      .from("invoices")
+      .select("*, counterparties(id, name, risk_level, payment_limit, performance_score, performance_inputs, address, address_changed_at, address_confirmed_at)")
+      .eq("direction", "payable")
+      .in("status", ["pending", "matched", "scheduled"])
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
+  ) as ApPayableRow[];
+  // A scheduled payable waits for its day: it is counted below among what
+  // falls due first, and in the cycle's treasury buffer, but not decided
+  // before then.
+  const payables = loaded.filter((row) => dueForDecision(row, now));
+
+  // The whole payable book, settled rows included, because a duplicate is only
+  // detectable against what came before it — and the invoice that matters most
+  // is the one already paid. Loaded once per cycle rather than per invoice.
+  const payableHistory = unwrap(
+    await db
+      .from("invoices")
+      .select("id, counterparty_id, amount, memo, po_reference, due_date, status, scheduled_for")
+      .eq("direction", "payable")
+  ) as Array<{
+    id: string;
+    counterparty_id: string;
+    amount: string;
+    memo: string | null;
+    po_reference: string | null;
+    due_date: string;
+    status: string;
+    scheduled_for?: string | null;
+  }>;
+
+  const asInvoiceLike = (row: (typeof payableHistory)[number]): InvoiceLike => ({
+    id: row.id,
+    counterpartyId: row.counterparty_id,
+    amount: num(row.amount),
+    memo: row.memo,
+    poReference: row.po_reference,
+    dueDate: row.due_date,
+    status: row.status,
+  });
+  const history = payableHistory.map(asInvoiceLike);
+
+  // What falls due by each invoice's payment date: the same book, kept
+  // current as this stage decides (a payment made leaves it, a schedule moves
+  // its day), plus the verified milestones the contractor stage releases today.
+  const book: PayableBookRow[] = payableHistory.map((row) => ({
+    id: row.id,
+    amount: num(row.amount),
+    due_date: row.due_date,
+    status: row.status,
+    scheduled_for: row.scheduled_for ?? null,
+  }));
+  const verifiedMilestones =
+    payables.length === 0
+      ? []
+      : (unwrap(await db.from("milestones").select("amount").eq("verified", true).eq("status", "verified")) as Array<{
+          amount: string;
+        }>);
+  const milestones: ObligationsDue = {
+    total: verifiedMilestones.reduce((sum, row) => sum + num(row.amount), 0),
+    count: verifiedMilestones.length,
+  };
+  // Each outcome is written back into both the book and the duplicate
+  // history before the next invoice is decided. A twin decided later in the
+  // same cycle must see this one paid, in flight or scheduled — or, as
+  // importantly, no longer scheduled once it has been flagged or held, so a
+  // stale "scheduled" does not refuse the one twin still to be paid.
+  const record = (id: string, status: string, scheduledFor: string | null) => {
+    const row = book.find((entry) => entry.id === id);
+    if (row) {
+      row.status = status;
+      row.scheduled_for = scheduledFor;
+    }
+    const earlier = history.find((entry) => entry.id === id);
+    if (earlier) earlier.status = status;
+  };
+
+  // A `matched` payable with a payment intent already has a payment in
+  // flight: it is reconciled, not decided again (see reconcileApInvoice).
+  const inFlight = await existingPaymentIntents(db, payables);
+
+  for (const invoice of payables) {
+    const counterparty = invoice.counterparties;
+    const amount = num(invoice.amount);
+
+    const intent = invoice.status === "matched" ? inFlight.get(invoice.id) : undefined;
+    if (intent) {
+      const reconciled = await reconcileApInvoice(
+        {
+          id: invoice.id,
+          amount,
+          counterpartyId: counterparty.id,
+          counterpartyName: counterparty.name,
+          address: counterparty.address,
+          reasoning: invoice.agent_reasoning,
+          txRef: invoice.tx_ref,
+          discount: invoiceDiscount(invoice),
+        },
+        intent,
+        { db, provider, operating }
+      );
+      if (reconciled.operatingBalance !== null) operatingBalance = reconciled.operatingBalance;
+      metrics.recordInvoice(reconciled.status, false);
+      record(invoice.id, reconciled.status, null);
+      lines.push(reconciled.line);
+      continue;
+    }
+
+    const decided = await decideApPayable(invoice, {
+      db,
+      provider,
+      operating,
+      operatingBalance,
+      history,
+      reserveApy,
+      metrics,
+      obligationsBy: (targetOn, today) => obligationsDueBy(book, { excludeId: invoice.id, by: targetOn, today, milestones }),
+    });
+    if (decided.operatingBalance !== null) operatingBalance = decided.operatingBalance;
+    record(invoice.id, decided.status, decided.scheduledFor);
+    lines.push(decided.line);
+  }
+
+  return operatingBalance;
 }
 
 /**
@@ -1212,328 +1987,16 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
 
   await stage("ap", async () => {
   // ----------------------------------------------------------------------- 2. AP
-  const payables = unwrap(
-    await db
-      .from("invoices")
-      .select("*, counterparties(id, name, risk_level, payment_limit, performance_score, performance_inputs, address, address_changed_at, address_confirmed_at)")
-      .eq("direction", "payable")
-      .in("status", ["pending", "matched"])
-  ) as Array<{
-    id: string;
-    status: string;
-    amount: string;
-    memo: string | null;
-    po_reference: string | null;
-    goods_received: boolean;
-    due_date: string;
-    counterparty_id: string;
-    agent_reasoning: string | null;
-    tx_ref: string | null;
-    counterparties: {
-      id: string;
-      name: string;
-      risk_level: string;
-      payment_limit: string | null;
-      performance_score: string | null;
-      performance_inputs: CounterpartyHistoryInputs | null;
-      address: string | null;
-      address_changed_at: string | null;
-      address_confirmed_at: string | null;
-    };
-  }>;
-
-  // The whole payable book, settled rows included, because a duplicate is only
-  // detectable against what came before it — and the invoice that matters most
-  // is the one already paid. Loaded once per cycle rather than per invoice.
-  const payableHistory = unwrap(
-    await db
-      .from("invoices")
-      .select("id, counterparty_id, amount, memo, po_reference, due_date, status")
-      .eq("direction", "payable")
-  ) as Array<{
-    id: string;
-    counterparty_id: string;
-    amount: string;
-    memo: string | null;
-    po_reference: string | null;
-    due_date: string;
-    status: string;
-  }>;
-
-  const asInvoiceLike = (row: (typeof payableHistory)[number]): InvoiceLike => ({
-    id: row.id,
-    counterpartyId: row.counterparty_id,
-    amount: num(row.amount),
-    memo: row.memo,
-    poReference: row.po_reference,
-    dueDate: row.due_date,
-    status: row.status,
+  // Whether, and when, to pay each payable: see runApStage.
+  operatingBalance = await runApStage({
+    db,
+    provider,
+    operating: operating ? { id: operating.id } : null,
+    operatingBalance,
+    reserveApy: num(accounts.find((a) => a.kind === "reserve")?.apy),
+    metrics,
+    lines,
   });
-  const history = payableHistory.map(asInvoiceLike);
-
-  // A `matched` payable with a payment intent already has a payment in
-  // flight: it is reconciled, not decided again (see reconcileApInvoice).
-  const inFlight = await existingPaymentIntents(db, payables);
-
-  for (const invoice of payables) {
-    const counterparty = invoice.counterparties;
-    const amount = num(invoice.amount);
-
-    const intent = invoice.status === "matched" ? inFlight.get(invoice.id) : undefined;
-    if (intent) {
-      const reconciled = await reconcileApInvoice(
-        {
-          id: invoice.id,
-          amount,
-          counterpartyId: counterparty.id,
-          counterpartyName: counterparty.name,
-          address: counterparty.address,
-          reasoning: invoice.agent_reasoning,
-          txRef: invoice.tx_ref,
-        },
-        intent,
-        { db, provider, operating: operating ? { id: operating.id } : null }
-      );
-      if (reconciled.operatingBalance !== null) operatingBalance = reconciled.operatingBalance;
-      metrics.recordInvoice(reconciled.status, false);
-      lines.push(reconciled.line);
-      continue;
-    }
-    const limit = counterparty.payment_limit == null ? null : num(counterparty.payment_limit);
-    const overLimit = limit != null && amount > limit;
-    const highRisk = counterparty.risk_level === "high";
-
-    // The system prompt has always told the model to flag a duplicate invoice.
-    // Until this was computed it had no way to see one: it is shown a single
-    // invoice and cannot know an identical bill was settled last week.
-    // Detection is uncapped by construction — `findDuplicates` has no limit to
-    // forget. Only the evidence presented to the model is truncated, by
-    // `duplicateMatchContext`; payment refusal must never depend on how many
-    // other invoices happened to resemble this one.
-    const duplicates = findDuplicates(
-      {
-        id: invoice.id,
-        counterpartyId: invoice.counterparty_id,
-        amount,
-        memo: invoice.memo,
-        poReference: invoice.po_reference,
-        dueDate: invoice.due_date,
-        status: "pending",
-      },
-      history
-    );
-    const duplicateContext = duplicateMatchContext(duplicates);
-
-    const { value: decision, mode, reference, agreedWithReference } = await decide<ApDecision>({
-      systemPrompt: SYSTEM_PROMPT,
-      userPrompt: JSON.stringify({
-        task: "Decide whether to pay this accounts-payable invoice.",
-        invoice: {
-          amount,
-          memo: invoice.memo,
-          poReference: invoice.po_reference,
-          goodsReceived: invoice.goods_received,
-          dueDate: invoice.due_date,
-        },
-        counterparty: {
-          name: counterparty.name,
-          riskLevel: counterparty.risk_level,
-          paymentLimit: limit,
-          performanceHistory: performanceEvidence(
-            counterparty.performance_score,
-            counterparty.performance_inputs
-          ),
-        },
-        treasury: { operatingBalance },
-        duplicateMatches: duplicateContext.matches.map((match) => ({
-          otherInvoiceStatus: match.otherStatus,
-          otherInvoiceDueDate: match.otherDueDate,
-          otherInvoiceAmount: match.otherAmount,
-          confidence: match.confidence,
-          signals: match.signals,
-          finding: match.explanation,
-        })),
-        duplicateMatchesTotal: duplicateContext.total,
-        duplicateNote:
-          duplicates.length === 0
-            ? "No earlier payable from this counterparty resembles this invoice."
-            : `${duplicateContext.total} earlier payable(s) from this counterparty resemble this one; the ${duplicateContext.matches.length} strongest are shown. A repeat of an invoice that was already paid is duplicate billing — flag it rather than paying it a second time.`,
-        responseShape: {
-          action: "pay | hold | flag_fraud | request_info",
-          reasoning: "string",
-          confidence: "number between 0 and 1",
-        },
-      }),
-      schema: apDecisionSchema,
-      fallback: (): ApDecision => {
-        const repeat = blockingDuplicate(duplicates);
-        if (repeat) {
-          return {
-            action: "flag_fraud",
-            reasoning: `Duplicate billing: ${repeat.explanation}`,
-            confidence: repeat.confidence,
-          };
-        }
-        if (highRisk) {
-          return {
-            action: "flag_fraud",
-            reasoning: `${counterparty.name} is flagged high risk by compliance screening; payment blocked pending human review.`,
-            confidence: 0.95,
-          };
-        }
-        if (overLimit) {
-          return {
-            action: "hold",
-            reasoning: `Invoice amount ${amount} USDC exceeds ${counterparty.name}'s payment limit of ${limit} USDC.`,
-            confidence: 0.9,
-          };
-        }
-        if (!invoice.goods_received || !invoice.po_reference) {
-          return {
-            action: "request_info",
-            reasoning: `Cannot complete a three-way match: purchase order ${invoice.po_reference ?? "missing"}, goods received ${invoice.goods_received}.`,
-            confidence: 0.7,
-          };
-        }
-        return {
-          action: "pay",
-          reasoning: `PO ${invoice.po_reference} matches, goods confirmed received, ${counterparty.name} screened clear, and ${amount} USDC is within the ${limit} USDC limit.`,
-          confidence: 0.85,
-        };
-      },
-    });
-
-    const statusForAction: Record<ApDecision["action"], string> = {
-      pay: "paid",
-      hold: "held",
-      flag_fraud: "flagged",
-      request_info: "awaiting_info",
-    };
-
-    const guardrail = enforceApGuardrails({
-      action: decision.action,
-      reasoning: decision.reasoning,
-      amount,
-      riskLevel: counterparty.risk_level,
-      paymentLimit: limit,
-      duplicates,
-      addressChangedAt: counterparty.address_changed_at,
-      addressConfirmedAt: counterparty.address_confirmed_at,
-    });
-    metrics.recordDecisionMode(mode, agreedWithReference);
-    let status = guardrail.status ?? statusForAction[decision.action];
-    let txRef: string | null = null;
-    let paymentExecution: PaymentExecution | null = null;
-    let reasoning = guardrail.reasoning;
-    const guardrailBlocked = guardrail.blocked;
-    let heldBecausePaused = false;
-
-    if (decision.action === "pay") {
-      // The guardrails are enforced here, after the model has spoken. A
-      // hallucinated or jailbroken "pay" on a flagged counterparty dies in
-      // code, not in the prompt.
-      if (guardrail.blocked) {
-        // Refused by enforceApGuardrails before the provider can be called.
-      } else {
-        const outcome = await payApInvoiceIfNotPaused(
-          {
-            invoiceId: invoice.id,
-            counterpartyId: counterparty.id,
-            address: counterparty.address,
-            amount,
-          },
-          { provider, operating: operating ? { id: operating.id } : null }
-        );
-        status = outcome.status;
-        txRef = outcome.txRef;
-        paymentExecution = outcome.paymentExecution;
-        reasoning += outcome.reasoningSuffix;
-        heldBecausePaused = outcome.heldBecausePaused;
-        if (outcome.operatingBalance !== null) operatingBalance = outcome.operatingBalance;
-      }
-    }
-
-    const now = new Date().toISOString();
-    const update = await db
-      .from("invoices")
-      .update({
-        status,
-        agent_reasoning: reasoning,
-        decided_at: now,
-        settled_at: status === "paid" ? now : null,
-        tx_ref: txRef,
-      })
-      .eq("id", invoice.id);
-    if (update.error) throw new Error(update.error.message);
-    metrics.recordInvoice(status, guardrailBlocked);
-
-    await appendLedgerEntry({
-      actor: "agent",
-      domain: "ap",
-      action: `ap_${decision.action}`,
-      summary: `${decision.action.toUpperCase()} invoice from ${counterparty.name} for ${amount} USDC`,
-      detail: {
-        invoiceId: invoice.id,
-        counterpartyId: counterparty.id,
-        decision,
-        decisionMode: mode,
-        referenceDecision: reference,
-        agreedWithReference,
-        guardrailBlocked,
-        guardrailRule: guardrail.rule,
-        observed: {
-          amount,
-          paymentLimit: limit,
-          riskLevel: counterparty.risk_level,
-          performanceHistory: performanceEvidence(
-            counterparty.performance_score,
-            counterparty.performance_inputs
-          ),
-          poReference: invoice.po_reference,
-          goodsReceived: invoice.goods_received,
-          operatingBalance,
-          addressUnconfirmed: addressUnconfirmed(counterparty.address_changed_at, counterparty.address_confirmed_at),
-          // Recorded whether or not anything matched. "We looked and found
-          // nothing" is the half of a fraud control that a log which only
-          // records hits can never prove.
-          duplicateCheck: {
-            candidatesConsidered: history.length,
-            matchesTotal: duplicateContext.total,
-            matchesShown: duplicateContext.matches.length,
-            matches: duplicateContext.matches.map((match) => ({
-              otherInvoiceId: match.otherId,
-              otherInvoiceStatus: match.otherStatus,
-              confidence: match.confidence,
-              signals: match.signals,
-              finding: match.explanation,
-            })),
-          },
-        },
-        execution: {
-          txRef,
-          chainMode: paymentExecution?.providerMode ?? provider.mode,
-          resultingStatus: status,
-          settlementRequired: true,
-          feeUsd: paymentExecution?.feeUsd ?? null,
-          feeSource: paymentExecution?.feeSource ?? null,
-          settledInMs: paymentExecution?.settledInMs ?? null,
-          executedAt: paymentExecution?.executedAt ?? null,
-          reconciled: paymentExecution?.reconciled ?? false,
-          // D6: the ledger says the pause is why this held, not just the
-          // reasoning text — set only when it is, so it is unambiguous from
-          // a hold for a missing operating account or a failed transfer.
-          ...heldBecausePausedDetail(heldBecausePaused),
-        },
-      },
-    });
-
-    lines.push({
-      domain: "ap",
-      message: heldBecausePaused
-        ? `${counterparty.name}: not paid, the agent was paused (${amount} USDC)`
-        : `${counterparty.name}: ${decision.action} (${amount} USDC)`,
-    });
-  }
 
   });
 
@@ -1757,13 +2220,15 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
   const operatingNow = freshAccounts.find((a) => a.kind === "operating");
   const reserveNow = freshAccounts.find((a) => a.kind === "reserve");
 
+  // scheduled_for with the rest: a scheduled invoice counts on the day it
+  // leaves, not on its (later) due date (./obligations.ts).
   const openInvoices = unwrap(
     await db
       .from("invoices")
-      .select("amount, due_date, status")
+      .select("amount, due_date, status, scheduled_for")
       .eq("direction", "payable")
       .in("status", [...OPEN_PAYABLE_STATUSES])
-  ) as Array<{ amount: string; due_date: string; status: string }>;
+  ) as Array<{ amount: string; due_date: string; status: string; scheduled_for: string | null }>;
   const openMilestones = unwrap(
     await db.from("milestones").select("amount").in("status", ["pending", "verified"])
   ) as Array<{ amount: string }>;

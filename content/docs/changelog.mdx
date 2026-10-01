@@ -1,5 +1,16 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-01: Payment timing
+
+- An invoice can carry early-payment terms: a percent off and the date it lapses, set on the invoice form or by CSV import. `GET /api/v1/invoices` now returns `earlyPayDiscount: { percent, deadline } | null` for any invoice that carries them.
+- A payable the agent has committed to pay later reaches status `scheduled`, decided again each cycle until the day it pays. `GET /api/v1/invoices`'s `status` filter now accepts `scheduled`.
+- `GET /api/v1/invoices` also returns `scheduledFor` (an ISO timestamp, or `null`) and `paidAmount`: what actually left, once an invoice's status is `paid`. `paidAmount` stays `null` before then, even while a submitted transfer already carries an amount.
+- A new ledger action, delivered as a `ledger.appended` event: `ap_schedule`, in the `ap` domain, recorded when the agent schedules a payable. Its `detail` carries `decision: { action: "schedule", payOn, reasoning, confidence }`, `timing` and `timingRule` (the policy's figures, and any correction made to the model's date), `requestedPayOn` when a date was corrected, `terms: { earlyPayDiscount }`, `observed`, and `execution.resultingStatus: "scheduled"`.
+- Every `ap_*` decision entry (`ap_pay`, `ap_hold`, `ap_flag_fraud`, `ap_request_info`, `ap_schedule`) now carries `timing`, `timingRule` and `terms` in its `detail`; an entry for a previously scheduled invoice also carries `scheduledFor`.
+- `ap_pay` and `approval_paid` gain `amountPaid` and `discountTaken` in `detail`: both `null` when nothing went out, or the discounted amount and the percent taken when an invoice was paid by its discount deadline.
+- `cycle_complete`'s `detail.outcomes` gains `scheduledCount`.
+- A duplicate is now also refused against a payable already `scheduled`, already being paid (`matched`), or being decided by a person on Approvals (`processing`), not only one already `paid` or `received`. The refusing entry's reasoning names which of these it repeats.
+
 ## 2026-09-30: Payee links
 
 - Two new ledger actions, delivered as `ledger.appended` events, both in the `compliance` domain with `actor: "human"`:

@@ -39,4 +39,31 @@ describe("payable obligation buffer", () => {
     expect(result.openTotal).toBe(5);
     expect(result.daysUntilNext).toBe(10);
   });
+
+  it("counts a scheduled payable as open, alongside pending/matched/held/awaiting_info", () => {
+    expect(OPEN_PAYABLE_STATUSES).toContain("scheduled");
+    const result = summarizePayableObligations([
+      { amount: "6", due_date: due(20), status: "scheduled", scheduled_for: due(3) },
+    ], now);
+    expect(result.due7d).toBe(6);
+    expect(result.openTotal).toBe(6);
+  });
+
+  it("dates a scheduled row by scheduled_for, not by the (later) due date", () => {
+    const result = summarizePayableObligations([
+      // Due in 20 days, but scheduled to leave in 3 — the buffer must see it at 3.
+      { amount: "6", due_date: due(20), status: "scheduled", scheduled_for: due(3) },
+    ], now);
+    expect(result.due7d).toBe(6);
+    expect(result.due14d).toBe(6);
+    expect(result.daysUntilNext).toBe(3);
+  });
+
+  it("falls back to due_date when a scheduled row has no scheduled_for", () => {
+    const result = summarizePayableObligations([
+      { amount: "6", due_date: due(3), status: "scheduled" },
+    ], now);
+    expect(result.due7d).toBe(6);
+    expect(result.daysUntilNext).toBe(3);
+  });
 });

@@ -1,10 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { payInvoice, syncOperatingBalance, payoutAddress, type PayInvoiceInput } from "@/lib/agent/pay";
 import { paymentIdempotencyKey } from "@/lib/payments";
 import type { BalanceSnapshot, ChainProvider, EarnResult, TransferParams, TransferResult } from "@/lib/circle";
 import { fakeSupabase, orgTestContext, type RecordedRequest, type FakeReply } from "./support/fake-supabase";
+import { paymentIntentsBackend as sharedPaymentIntentsBackend } from "./support/payment-intents";
 
 /**
  * `payInvoice` is the AP stage's pay branch, moved verbatim so a person
@@ -78,129 +79,14 @@ function transferResult(
 }
 
 /**
- * A minimal `payment_intents` table behind the fake REST wire — enough to
- * drive `executePayment`'s ensure → claim → transfer → recordResult path the
- * way the real table would, without a real database. Modelled on the
- * `SupabasePaymentIntentStore.claim` tests in `tests/payments.test.ts`, but
- * stateful across the whole flow rather than a single canned response.
- *
- * Rows are one per source (`unique (source_type, source_id)`), found by
- * source or by their current key, and `begin_payment_retry` moves a row to
- * its next attempt under the same condition migration 0036 applies.
+ * The shared `payment_intents` table (tests/support/payment-intents.ts), with
+ * `seed` for this file's invoice: the row an earlier attempt left.
  */
 function paymentIntentsBackend() {
-  const rows: Array<Record<string, unknown>> = [];
-  const retries: Array<Record<string, unknown>> = [];
-  const eq = (value: string | null) => value?.replace(/^eq\./, "");
-  const byKey = (key: unknown) => rows.find((row) => row.idempotency_key === key);
-  const bySource = (type: unknown, id: unknown) => rows.find((row) => row.source_type === type && row.source_id === id);
-
-  const COLUMNS = [
-    "id", "org_id", "source_type", "source_id", "idempotency_key", "provider", "provider_tx_id", "tx_hash",
-    "amount", "destination", "status", "attempt_count", "last_error", "confirmed_at", "chain",
-    "provider_mode", "fee_usd", "fee_source", "settled_in_ms", "executed_at", "provider_state", "failure_reason",
-    "transfer_attempt", "previous_attempts", "created_at", "updated_at",
-  ];
-  // No matching row: every field null, the same shape PostgREST sends when a
-  // `returns payment_intents` function's UPDATE matched nothing.
-  const nothing = (): FakeReply => ({ body: Object.fromEntries(COLUMNS.map((column) => [column, null])) });
-
-  const insert = (body: Record<string, unknown>) => {
-    const row: Record<string, unknown> = {
-      id: `intent-${rows.length + 1}`,
-      org_id: ORG,
-      source_type: body.source_type,
-      source_id: body.source_id,
-      idempotency_key: body.idempotency_key,
-      provider: body.provider,
-      provider_tx_id: null,
-      tx_hash: null,
-      amount: String(body.amount),
-      destination: body.destination,
-      status: "created",
-      attempt_count: 0,
-      last_error: null,
-      confirmed_at: null,
-      chain: null,
-      provider_mode: body.provider_mode,
-      fee_usd: null,
-      fee_source: null,
-      settled_in_ms: null,
-      executed_at: null,
-      provider_state: null,
-      failure_reason: null,
-      transfer_attempt: 1,
-      previous_attempts: [],
-      created_at: "2026-01-01T00:00:00.000Z",
-      updated_at: "2026-01-01T00:00:00.000Z",
-    };
-    rows.push(row);
-    return row;
-  };
-
-  const respond = (sent: RecordedRequest): FakeReply => {
-    if (sent.path === "/rest/v1/payment_intents") {
-      if (sent.method === "POST") {
-        const body = (Array.isArray(sent.body) ? sent.body[0] : sent.body) as Record<string, unknown>;
-        // on_conflict=source_type,source_id with ignore-duplicates: a source keeps its one row.
-        if (!bySource(body.source_type, body.source_id)) insert(body);
-        return { body: [] };
-      }
-      if (sent.method === "GET") {
-        const key = eq(sent.params.get("idempotency_key"));
-        const row = key ? byKey(key) : bySource(eq(sent.params.get("source_type")), eq(sent.params.get("source_id")));
-        return { body: row ?? null };
-      }
-      if (sent.method === "PATCH") {
-        const row = byKey(eq(sent.params.get("idempotency_key")));
-        if (row) Object.assign(row, sent.body as Record<string, unknown>);
-        return { body: [] };
-      }
-    }
-    if (sent.path === "/rest/v1/rpc/claim_payment_intent") {
-      const row = byKey((sent.body as Record<string, unknown> | undefined)?.p_idempotency_key);
-      if (row && ["created", "failed"].includes(row.status as string)) {
-        row.status = "submitting";
-        row.attempt_count = (row.attempt_count as number) + 1;
-        return { body: { ...row } };
-      }
-      return nothing();
-    }
-    if (sent.path === "/rest/v1/rpc/begin_payment_retry") {
-      const args = sent.body as Record<string, unknown>;
-      retries.push(args);
-      const row = bySource(args.p_source_type, args.p_source_id);
-      if (
-        !row ||
-        row.idempotency_key !== args.p_expected_key ||
-        row.status !== "failed" ||
-        row.provider_tx_id === null ||
-        !["CANCELLED", "DENIED", "FAILED"].includes(row.provider_state as string)
-      ) {
-        return nothing();
-      }
-      Object.assign(row, {
-        previous_attempts: [
-          ...(row.previous_attempts as unknown[]),
-          {
-            attempt: row.transfer_attempt, idempotencyKey: row.idempotency_key, providerTxId: row.provider_tx_id,
-            providerState: row.provider_state, failureReason: row.failure_reason, failedAt: row.updated_at,
-          },
-        ],
-        idempotency_key: args.p_new_key,
-        transfer_attempt: (row.transfer_attempt as number) + 1,
-        provider_tx_id: null, tx_hash: null, provider_state: null, failure_reason: null,
-        fee_usd: null, fee_source: null, settled_in_ms: null,
-        status: "created", last_error: null, confirmed_at: null, executed_at: null,
-      });
-      return { body: { ...row } };
-    }
-    return { body: [] };
-  };
-
+  const backend = sharedPaymentIntentsBackend(ORG);
   /** The invoice's row as an earlier attempt left it. */
   const seed = (overrides: Record<string, unknown>) => {
-    const row = insert({
+    const row = backend.insert({
       source_type: "invoice", source_id: INVOICE_ID, idempotency_key: paymentIdempotencyKey("invoice", INVOICE_ID),
       provider: "circle", provider_mode: "live", amount: input.amount, destination: "0xdead",
     });
@@ -208,7 +94,7 @@ function paymentIntentsBackend() {
     return row;
   };
 
-  return { rows, retries, respond, seed };
+  return { ...backend, seed };
 }
 
 function inOrg<T>(respond: (request: RecordedRequest) => FakeReply, fn: () => Promise<T>) {
@@ -228,6 +114,8 @@ describe("payInvoice", () => {
       execution: null,
       note: " [no operating account configured]",
       operatingBalance: null,
+      amountPaid: 12.5,
+      discountTaken: 0,
     });
     expect(provider.transfers).toHaveLength(0);
   });
@@ -330,9 +218,93 @@ describe("payInvoice", () => {
       execution: null,
       note: " [execution failed: payment_intents insert failed: connection reset]",
       operatingBalance: null,
+      amountPaid: 12.5,
+      discountTaken: 0,
     });
     // The failure happened before the provider was ever asked to move money.
     expect(provider.transfers).toHaveLength(0);
+  });
+});
+
+/**
+ * An early-payment discount lowers the transfer through the end of the
+ * deadline's UTC day, and never after it (spec 2026-09-30-payment-timing §1,
+ * P5). The limit a caller checks is the invoice's full amount; this is only
+ * what leaves.
+ */
+describe("payInvoice with an early-payment discount", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const discounted = { ...input, amount: 400, discount: { pct: 2, deadline: "2026-10-11T12:00:00+00:00" } };
+  const withAccounts = (backend: ReturnType<typeof paymentIntentsBackend>) => (sent: RecordedRequest): FakeReply => {
+    if (sent.path === "/rest/v1/accounts" && sent.method === "GET") {
+      return { body: { id: OPERATING_ACCOUNT_ID, chain: "ARC-TESTNET", token: "USDC", balance: "600", apy: "0" } };
+    }
+    if (sent.path === "/rest/v1/accounts" && sent.method === "PATCH") return { body: [] };
+    return backend.respond(sent);
+  };
+
+  it("transfers the discounted amount on the deadline's day, and says what it took", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-11T23:59:59.000Z"));
+    const provider = new FakeProvider();
+    provider.transferResults.push(transferResult("confirmed"));
+    const backend = paymentIntentsBackend();
+
+    const result = await inOrg(withAccounts(backend), () => payInvoice(discounted, { provider, operating: { id: OPERATING_ACCOUNT_ID } }));
+
+    expect(result.status).toBe("paid");
+    expect(provider.transfers).toHaveLength(1);
+    expect(provider.transfers[0].amount).toBe(392);
+    expect(result.amountPaid).toBe(392);
+    expect(result.discountTaken).toBe(8);
+    // The intent records the amount the transfer carried.
+    expect(backend.rows[0].amount).toBe("392");
+  });
+
+  it("transfers the full amount the day after the deadline", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-12T00:00:01.000Z"));
+    const provider = new FakeProvider();
+    provider.transferResults.push(transferResult("confirmed"));
+    const backend = paymentIntentsBackend();
+
+    const result = await inOrg(withAccounts(backend), () => payInvoice(discounted, { provider, operating: { id: OPERATING_ACCOUNT_ID } }));
+
+    expect(provider.transfers[0].amount).toBe(400);
+    expect(result.amountPaid).toBe(400);
+    expect(result.discountTaken).toBe(0);
+  });
+
+  it("rounds the discounted transfer to USDC's six decimals", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-01T09:00:00.000Z"));
+    const provider = new FakeProvider();
+    provider.transferResults.push(transferResult("pending"));
+    const backend = paymentIntentsBackend();
+
+    const result = await inOrg(backend.respond, () =>
+      payInvoice({ ...input, amount: 33.333333, discount: { pct: 1.5, deadline: "2026-10-05T12:00:00+00:00" } }, { provider, operating: { id: OPERATING_ACCOUNT_ID } })
+    );
+
+    expect(result.status).toBe("matched");
+    expect(provider.transfers[0].amount).toBe(32.833333);
+    expect(result.amountPaid).toBe(32.833333);
+    expect(result.discountTaken).toBe(0.5);
+  });
+
+  it("transfers the full amount, with nothing taken, when the invoice has no discount", async () => {
+    const provider = new FakeProvider();
+    provider.transferResults.push(transferResult("confirmed"));
+    const backend = paymentIntentsBackend();
+
+    const result = await inOrg(withAccounts(backend), () => payInvoice({ ...input, discount: null }, { provider, operating: { id: OPERATING_ACCOUNT_ID } }));
+
+    expect(provider.transfers[0].amount).toBe(12.5);
+    expect(result.amountPaid).toBe(12.5);
+    expect(result.discountTaken).toBe(0);
   });
 });
 
