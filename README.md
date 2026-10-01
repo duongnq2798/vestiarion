@@ -15,6 +15,7 @@ An autonomous treasury agent for a small business, settled in USDC on Arc.
   - 3 stopped it by a different action than the policy's;
   - 1 would have paid over a limit, and code refused it.
 - **Live numbers:** [www.vestiarion.xyz/open](https://www.vestiarion.xyz/open) shows the payments, payees and decisions, read from the production database, with our own workspaces counted apart from customers'.
+- **Updates:** [@vestiarionhq](https://x.com/vestiarionhq) on X, where what ships is posted with its receipts.
 - **Real payments on Arc testnet**, made by the agent in production:
   - a USDC payable paid 53 seconds after it was added, with no one pressing Run:
     [`0x81381c50…4e68`](https://testnet.arcscan.app/tx/0x81381c50f5d0cadb49d1af77f1abb06c1727c8377aa88cbe1cfbf327f09c4e68);

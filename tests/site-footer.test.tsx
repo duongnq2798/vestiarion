@@ -3,7 +3,7 @@ import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { COMPACT_FOOTER_LINKS, FOOTER_COLUMNS, LANDING_SECTIONS, SiteFooter } from "@/components/vx/SiteChrome";
-import { GITHUB_URL, ISSUES_URL, LICENSE_URL } from "@/lib/site-links";
+import { GITHUB_URL, ISSUES_URL, LICENSE_URL, X_HANDLE, X_URL } from "@/lib/site-links";
 
 /**
  * The site footer (spec §2, F1, F3): its columns, where each link goes, and
@@ -57,12 +57,13 @@ describe("the full footer's columns", () => {
     ]);
   });
 
-  it("put the open numbers, the two guides and Support (GitHub Issues) under Resources", () => {
+  it("put the open numbers, the two guides, Support (GitHub Issues) and X under Resources", () => {
     expect(FOOTER_COLUMNS[2].links).toEqual([
       { href: "/open", label: "Open numbers" },
       { href: "/docs/guides/go-live", label: "Go live guide" },
       { href: "/docs/guides/first-payment", label: "First payment guide" },
       { href: ISSUES_URL, label: "Support" },
+      { href: X_URL, label: "Updates on X" },
     ]);
   });
 
@@ -108,6 +109,12 @@ describe("the full footer, rendered", () => {
     }
   });
 
+  it("closes with a labelled X icon beside the GitHub one", () => {
+    const icon = links.find((anchor) => anchor.ariaLabel === "Vestiarion on X");
+    expect(icon).toMatchObject({ href: X_URL, text: "", target: "_blank", rel: "noopener noreferrer" });
+    expect(markup).toMatch(/<a [^>]*aria-label="Vestiarion on X"[^>]*><svg [^>]*aria-hidden="true"/);
+  });
+
   it("closes with the copyright, the MIT License and a labelled GitHub icon", () => {
     expect(text(markup)).toContain("© 2026 Vestiarion contributors");
     expect(links).toContainEqual({ href: LICENSE_URL, text: "MIT License", target: "_blank", rel: "noopener noreferrer", ariaLabel: null });
@@ -126,17 +133,18 @@ describe("the compact footer", () => {
   const markup = renderToStaticMarkup(<SiteFooter compact />);
   const links = anchors(markup);
 
-  it("links the docs, the terms, the privacy page and GitHub", () => {
+  it("links the docs, the terms, the privacy page, GitHub and X", () => {
     expect(COMPACT_FOOTER_LINKS).toEqual([
       { href: "/docs", label: "Docs" },
       { href: "/terms", label: "Terms" },
       { href: "/privacy", label: "Privacy" },
       { href: GITHUB_URL, label: "GitHub" },
+      { href: X_URL, label: "X" },
     ]);
     expect(links.map(({ href, text: label }) => ({ href, label }))).toEqual(COMPACT_FOOTER_LINKS);
   });
 
-  it("opens GitHub in a new tab, and the rest in this one", () => {
+  it("opens GitHub and X in a new tab, and the rest in this one", () => {
     for (const anchor of links) {
       if (isExternal(anchor.href)) {
         expect(anchor.target).toBe("_blank");
@@ -150,6 +158,19 @@ describe("the compact footer", () => {
   it("keeps the copyright and the Arc testnet line", () => {
     expect(text(markup)).toContain("© 2026 Vestiarion contributors · MIT License");
     expect(text(markup)).toContain("Arc testnet");
+  });
+});
+
+describe("the X account", () => {
+  it("is @vestiarionhq", () => {
+    expect(X_HANDLE).toBe("@vestiarionhq");
+    expect(X_URL).toBe("https://x.com/vestiarionhq");
+  });
+
+  it("is written only in src/lib/site-links.ts", () => {
+    for (const file of ["src/components/vx/SiteChrome.tsx", "src/app/layout.tsx", "src/app/page.tsx", "src/lib/docs/social.ts"]) {
+      expect(readFileSync(path.join(process.cwd(), file), "utf8"), file).not.toContain("vestiarionhq");
+    }
   });
 });
 

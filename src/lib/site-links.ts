@@ -11,3 +11,8 @@ export const ISSUES_URL = `${GITHUB_URL}/issues`;
 
 /** The MIT License the code is released under. */
 export const LICENSE_URL = `${GITHUB_URL}/blob/main/LICENSE`;
+
+/** The project's account on X: the footer links it, and pages name it as their `twitter:site`. */
+export const X_HANDLE = "@vestiarionhq";
+
+export const X_URL = `https://x.com/${X_HANDLE.slice(1)}`;

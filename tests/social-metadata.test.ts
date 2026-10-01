@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { unstable_doesMiddlewareMatch } from "next/experimental/testing/server";
 import { describe, expect, it } from "vitest";
 import { generateStaticParams as generateDocsImageParams } from "@/app/og/docs/[[...slug]]/route";
@@ -8,8 +10,14 @@ import { metadata as landingMetadata } from "@/app/page";
 import { PRODUCTION_ORIGIN, resolvePublicOrigin } from "@/lib/public-origin";
 
 describe("public social metadata", () => {
-  it("uses the large X card on the landing page", () => {
-    expect(landingMetadata.twitter).toMatchObject({ card: "summary_large_image" });
+  it("uses the large X card on the landing page, credited to the project's X account", () => {
+    expect(landingMetadata.twitter).toMatchObject({ card: "summary_large_image", site: "@vestiarionhq" });
+  });
+
+  it("credits every page to the project's X account by default", () => {
+    // The root layout loads next/font, which a node test cannot import; its metadata is read as source.
+    const layout = readFileSync(path.join(process.cwd(), "src/app/layout.tsx"), "utf8");
+    expect(layout).toContain('twitter: { card: "summary_large_image", site: X_HANDLE },');
   });
 
   it("falls back to the canonical production origin", () => {
@@ -50,7 +58,7 @@ describe("docs social images", () => {
       siteName: "Vestiarion",
       images: [{ url: "/og/docs/webhooks/verify", width: 1200, height: 630 }],
     });
-    expect(social.twitter).toMatchObject({ card: "summary_large_image", images: [{ url: "/og/docs/webhooks/verify" }] });
+    expect(social.twitter).toMatchObject({ card: "summary_large_image", site: "@vestiarionhq", images: [{ url: "/og/docs/webhooks/verify" }] });
     expect(docsImagePath("")).toBe("/og/docs");
   });
 });
