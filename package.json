@@ -25,7 +25,8 @@
     "fixture:guardrail": "tsx scripts/guardrail-fixture.ts",
     "org:grant": "tsx scripts/org-grant.ts",
     "org:adopt-env": "tsx scripts/org-adopt-env.ts",
-    "numbers": "tsx scripts/open-numbers.ts"
+    "numbers": "tsx scripts/open-numbers.ts",
+    "research:model-vs-policy": "tsx scripts/model-vs-policy.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",

@@ -13,4 +13,9 @@ describe("the landing's live figures", () => {
     expect(markup).toMatch(/<a[^>]*href="\/open"[^>]*>[^<]*Open numbers/);
     expect(markup.replace(/<[^>]+>/g, " ").replace(/&#x27;/g, "'").replace(/\s+/g, " ")).toContain("These figures are the founding workspace's own.");
   });
+
+  it("link to the research note on where the model departed from the written policy", () => {
+    const markup = renderToStaticMarkup(<LiveProof metrics={new Promise(() => {})} />);
+    expect(markup).toMatch(/<a[^>]*href="\/docs\/research\/model-vs-policy"[^>]*>[^<]*When the model and the policy disagree/);
+  });
 });

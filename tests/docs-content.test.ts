@@ -134,7 +134,7 @@ describe("the docs navigation", () => {
   it("lists every page once", () => {
     const slugs = flatPages().map((page) => page.slug);
     expect(new Set(slugs).size).toBe(slugs.length);
-    expect(DOCS_NAV.map((section) => section.title)).toEqual(["Overview", "Guides", "Get started", "API reference", "Webhooks", "AI integration", "Changelog"]);
+    expect(DOCS_NAV.map((section) => section.title)).toEqual(["Overview", "Guides", "Research", "Get started", "API reference", "Webhooks", "AI integration", "Changelog"]);
   });
 
   it("lists the endpoint overview, then one generated page per operation in table order, titled with its summary", () => {
@@ -182,7 +182,8 @@ describe("the docs navigation", () => {
     expect(neighbours("guides/try-it").next?.slug).toBe("guides/go-live");
     expect(neighbours("guides/first-payment").next?.slug).toBe("guides/pay-a-contractor");
     expect(neighbours("guides/pay-a-contractor").next?.slug).toBe("guides/audit-export");
-    expect(neighbours("guides/audit-export").next?.slug).toBe("get-started/quickstart");
+    expect(neighbours("guides/audit-export").next?.slug).toBe("research/model-vs-policy");
+    expect(neighbours("research/model-vs-policy").next?.slug).toBe("get-started/quickstart");
     expect(neighbours(pages[pages.length - 1].slug).next).toBeUndefined();
     expect(neighbours("no-such-page")).toEqual({});
   });
