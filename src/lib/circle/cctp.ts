@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { payeeChain, type PayeeChain } from "../payee-chains";
 
 /**
@@ -75,6 +76,20 @@ export async function bridgeFee(chain: PayeeChain | string, amount: number, opti
   const protocolUnits = (toUnits(amount) * BigInt(Math.round(bps * 100))) / BigInt(1_000_000);
   const maxFeeUnits = BigInt(Math.round(forward)) + protocolUnits;
   return { feeUsdc: fromUnits(maxFeeUnits), maxFeeUnits, domain: target.domain };
+}
+
+/**
+ * The Circle idempotency key for one step of a bridge, derived from the
+ * payment attempt's key: the same attempt always sends the same approve and
+ * the same burn, so a resubmission after an ambiguous outcome is answered
+ * with the transaction Circle already created (X9). A UUID, as Circle requires.
+ */
+export function bridgeStepKey(attemptKey: string, step: "approve" | "burn"): string {
+  const hash = createHash("sha256").update(`vestiarion/cctp/v1/${attemptKey}/${step}`, "utf8").digest();
+  hash[6] = (hash[6] & 0x0f) | 0x50;
+  hash[8] = (hash[8] & 0x3f) | 0x80;
+  const hex = hash.subarray(0, 16).toString("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
 }
 
 /** An EVM address as the 32 bytes CCTP takes for a recipient. */

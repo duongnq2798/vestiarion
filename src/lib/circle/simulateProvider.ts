@@ -9,6 +9,7 @@ import type {
   TransferResult,
 } from "./types";
 import { ARC_FEE_USD, ARC_SETTLEMENT_MS_MAX, ARC_SETTLEMENT_MS_MIN } from "./types";
+import { paidAcrossChains } from "../payee-chains";
 
 interface AccountRow {
   id: string;
@@ -61,7 +62,12 @@ export class SimulateProvider implements ChainProvider {
       await this.addBalance(account.id, -params.amount, balance);
     }
     const providerTxId = `sim_${params.idempotencyKey}`;
+    // A simulated bridge: the burn and the mint at once (CCTP payouts X10).
+    const bridged = paidAcrossChains(params.destinationChain)
+      ? { destinationChain: params.destinationChain as string, mintTxHash: `sim_mint_${params.idempotencyKey}` }
+      : {};
     return {
+      ...bridged,
       providerTxId,
       txHash: providerTxId,
       txRef: providerTxId,

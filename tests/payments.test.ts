@@ -262,6 +262,13 @@ describe("payment idempotency", () => {
     expect(paymentIdempotencyKey("milestone", request.sourceId, 2)).not.toBe(keys[1]);
   });
 
+  it("passes the payee's chain to the provider (CCTP payouts X2)", async () => {
+    const provider = new FakeProvider();
+    provider.transferResults.push(transferResult("confirmed"));
+    await executePayment({ ...request, destinationChain: "BASE-SEPOLIA" }, { provider, store: new MemoryStore() });
+    expect(provider.transfers[0].destinationChain).toBe("BASE-SEPOLIA");
+  });
+
   it("transfers the request's token, USDC unless it says EURC (EURC invoices design E5)", async () => {
     const usdc = new FakeProvider();
     usdc.transferResults.push(transferResult("confirmed"));
@@ -620,6 +627,27 @@ describe("SupabasePaymentIntentStore by source, and its attempts", () => {
     await result;
     const [insert] = fake.requests;
     expect(Array.isArray(insert.body) ? insert.body[0] : insert.body).toMatchObject({ token: "EURC" });
+  });
+
+  it("records where a bridged payment goes, and only for one (CCTP payouts X8)", async () => {
+    const respond = (sent: RecordedRequest) => ({ body: sent.path === "/rest/v1/payment_intents" && sent.method === "GET" ? intentRow({ status: "created" }) : [] });
+    const bridged = inOrganization(respond, () => new SupabasePaymentIntentStore().ensure({ ...input, destinationChain: "BASE-SEPOLIA" }));
+    await bridged.result;
+    expect(Array.isArray(bridged.fake.requests[0].body) ? bridged.fake.requests[0].body[0] : bridged.fake.requests[0].body).toMatchObject({ destination_chain: "BASE-SEPOLIA" });
+    const onArc = inOrganization(respond, () => new SupabasePaymentIntentStore().ensure({ ...input, destinationChain: "ARC-TESTNET" }));
+    await onArc.result;
+    expect(Array.isArray(onArc.fake.requests[0].body) ? onArc.fake.requests[0].body[0] : onArc.fake.requests[0].body).not.toHaveProperty("destination_chain");
+  });
+
+  it("records a bridged payment's mint and fee with its result, and nothing of the kind for a payment on Arc", async () => {
+    const respond = (sent: RecordedRequest) => ({ body: sent.path === "/rest/v1/payment_intents" && sent.method === "GET" ? intentRow({ status: "confirmed" }) : [] });
+    const result = { ...transferResult("confirmed"), mintTxHash: "0xmint", destinationChain: "BASE-SEPOLIA", bridgeFeeUsdc: 0.054613 };
+    const bridged = inOrganization(respond, () => new SupabasePaymentIntentStore().recordResult(KEY, result));
+    await bridged.result;
+    expect(bridged.fake.requests[0].body).toMatchObject({ mint_tx_hash: "0xmint", destination_chain: "BASE-SEPOLIA", bridge_fee: 0.054613 });
+    const onArc = inOrganization(respond, () => new SupabasePaymentIntentStore().recordResult(KEY, transferResult("confirmed")));
+    await onArc.result;
+    expect(onArc.fake.requests[0].body).not.toHaveProperty("mint_tx_hash");
   });
 
   it("returns a source's later attempt with that attempt's key, from the row rather than from the source", async () => {
