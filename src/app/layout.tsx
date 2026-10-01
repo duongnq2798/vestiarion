@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/Toaster";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { THEME_COLOR } from "@/components/ui/tokens";
 import { publicOrigin } from "@/lib/public-origin";
+import { X_HANDLE } from "@/lib/site-links";
 import "./globals.css";
 
 const sans = Geist({
@@ -43,7 +44,7 @@ export const metadata: Metadata = {
     type: "website",
     locale: "en_US",
   },
-  twitter: { card: "summary_large_image" },
+  twitter: { card: "summary_large_image", site: X_HANDLE },
   applicationName: "Vestiarion",
   appleWebApp: { title: "Vestiarion" },
   // Amounts, hashes and sequence numbers must never turn into phone or address links.
