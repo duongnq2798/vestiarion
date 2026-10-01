@@ -28,6 +28,8 @@ const INVOICES_PAGE = "src/app/o/[slug]/invoices/page.tsx";
 const DOCUMENT_TAB = "src/components/intake/InvoiceDocumentIntake.tsx";
 const DOCUMENT_READ = "src/lib/invoice-document/read.ts";
 const GATEWAY_PANEL = "src/components/GatewayPanel.tsx";
+const ESCROW_PANEL = "src/components/EscrowPanel.tsx";
+const MILESTONE_ESCROW = "src/components/MilestoneEscrow.tsx";
 const RECEIPT_CONTROL = "src/components/ReceiptControl.tsx";
 const RECEIPT_VIEW = "src/components/receipt/ReceiptView.tsx";
 const INTAKE_ACTIONS = "src/app/actions/intake.ts";
@@ -236,6 +238,12 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["Scheduled payments", SCHEDULED_PAYMENTS],
   ],
   "guides/pay-a-contractor": [
+    ["Set up escrow", ESCROW_PANEL],
+    ["Milestone escrow", ESCROW_PANEL],
+    ["Finish setting up", ESCROW_PANEL],
+    ["Refundable to this workspace from", MILESTONE_ESCROW],
+    ["Lock in escrow", MILESTONE_ESCROW],
+    ["Refund from escrow", MILESTONE_ESCROW],
     ["Counterparties", APP_NAV],
     ["Role", COUNTERPARTY_FORM],
     ["Contractor", COUNTERPARTY_FORM],

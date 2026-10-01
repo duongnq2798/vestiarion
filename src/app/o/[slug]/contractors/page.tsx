@@ -1,6 +1,8 @@
 import { Flag } from "lucide-react";
 import type { Metadata } from "next";
 import AgentControls from "@/components/AgentControls";
+import { EscrowPanel } from "@/components/EscrowPanel";
+import { MilestoneEscrow } from "@/components/MilestoneEscrow";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import MilestoneIntake from "@/components/intake/MilestoneIntake";
 import MilestoneVerification from "@/components/MilestoneVerification";
@@ -15,6 +17,8 @@ import { sectionTitle } from "@/components/vx/nav";
 import { viewerCan } from "@/lib/auth/authorize";
 import { requireMembership } from "@/lib/auth/membership";
 import { chainModes } from "@/lib/circle";
+import { readEscrowContract } from "@/lib/circle/escrow-setup";
+import { addressUnconfirmed } from "@/lib/counterparty-address";
 import { inOrg } from "@/lib/dal/scope";
 import { listLedgerEntries, listLedgerEntriesForTargets } from "@/lib/ledger";
 import { listCounterparties, listMilestones, stats } from "@/lib/queries";
@@ -27,15 +31,29 @@ export default async function ContractorsPage({ params }: { params: Promise<{ sl
   const { slug } = await params;
   const access = await requireMembership(slug);
   return inOrg(access, async () => {
-    const [milestones, counterparties, headEntries, dashboardStats, canWrite] = await Promise.all([
+    const live = access.membership.mode === "live";
+    const [milestones, counterparties, headEntries, dashboardStats, canWrite, canManageTreasury, escrow] = await Promise.all([
       listMilestones(),
       listCounterparties(),
       listLedgerEntries(1),
       stats(),
       viewerCan(slug, "records.write"),
+      viewerCan(slug, "treasury.manage"),
+      // A live workspace's escrow (milestone escrow E2). Best effort: a read that fails shows no panel.
+      live
+        ? readEscrowContract().catch((error: unknown) => {
+            console.error("contractors: escrow not loaded", error instanceof Error ? error.message : error);
+            return undefined;
+          })
+        : Promise.resolve(undefined),
     ]);
     const entries = await listLedgerEntriesForTargets({ milestoneIds: milestones.map((milestone) => milestone.id) });
     const decisions = milestones.map((milestone) => milestoneDecision(milestone, entries));
+    // Made here, not in the browser, so the server's markup and the browser's agree (as the Gateway form's id is).
+    const defaultRefundDate = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
+    const minRefundDate = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+    const maxRefundDate = new Date(Date.now() + 365 * 86_400_000).toISOString().slice(0, 10);
+    const contractorsById = new Map(counterparties.map((counterparty) => [counterparty.id, counterparty]));
     // Clients pay the business; contractors are listed first, then vendors.
     const payees = counterparties
       .filter((counterparty) => counterparty.role !== "client")
@@ -64,6 +82,12 @@ export default async function ContractorsPage({ params }: { params: Promise<{ sl
           )}
         </section>
 
+        {live && escrow !== undefined && (
+          <section className="mb-8">
+            <EscrowPanel orgSlug={slug} address={escrow?.address ?? null} deploying={Boolean(escrow && !escrow.address)} canSetUp={canManageTreasury} />
+          </section>
+        )}
+
         {decisions.length === 0 ? (
           <EmptyState
             titleAs="h2"
@@ -82,6 +106,44 @@ export default async function ContractorsPage({ params }: { params: Promise<{ sl
                     orgSlug={slug}
                     milestoneId={milestones[index].id}
                     verified={milestones[index].verified}
+                  />
+                )}
+                {live && (
+                  <MilestoneEscrow
+                    orgSlug={slug}
+                    milestoneId={milestones[index].id}
+                    requestId={crypto.randomUUID()}
+                    defaultRefundDate={defaultRefundDate}
+                    minRefundDate={minRefundDate}
+                    maxRefundDate={maxRefundDate}
+                    payee={contractorsById.get(milestones[index].contractor_id)?.address ?? null}
+                    amount={milestones[index].amount}
+                    lockable={(() => {
+                      const contractor = contractorsById.get(milestones[index].contractor_id);
+                      return (
+                        milestones[index].status === "pending" &&
+                        Boolean(contractor?.address) &&
+                        (contractor?.chain ?? "ARC-TESTNET") === "ARC-TESTNET" &&
+                        !addressUnconfirmed(contractor?.address_changed_at ?? null, contractor?.address_confirmed_at ?? null)
+                      );
+                    })()}
+                    escrowReady={Boolean(escrow?.address)}
+                    canManage={canManageTreasury}
+                    paid={milestones[index].status === "paid"}
+                    refundable={Boolean(milestones[index].escrow_refund_after) && Date.parse(milestones[index].escrow_refund_after ?? "") <= Date.now()}
+                    hold={
+                      milestones[index].escrow_state && milestones[index].escrow_state !== "funding"
+                        ? {
+                            state: milestones[index].escrow_state as "funded" | "released" | "refunded",
+                            payee: milestones[index].escrow_payee ?? null,
+                            refundAfter: milestones[index].escrow_refund_after ?? "",
+                            amount: Number(milestones[index].escrow_amount ?? milestones[index].amount),
+                            fundTxHash: milestones[index].escrow_fund_tx_hash ?? null,
+                            releaseTxHash: milestones[index].escrow_release_tx_hash ?? null,
+                            refundTxHash: milestones[index].escrow_refund_tx_hash ?? null,
+                          }
+                        : null
+                    }
                   />
                 )}
               </div>

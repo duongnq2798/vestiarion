@@ -56,10 +56,15 @@ export interface TransferParams {
    * from its first attempt.
    */
   route?: PayoutRoute;
+  /** The escrow route's hold (milestone escrow E4): the workspace's escrow contract and the milestone's hold id. */
+  escrow?: { contract: string; holdId: string };
 }
 
 /** The two ways a payee on another chain is paid from Arc testnet. */
-export type PayoutRoute = "cctp" | "gateway";
+/** How a payment goes: across chains through CCTP or a Gateway balance, or, for a milestone locked in escrow, by releasing its hold. */
+export type PayoutRoute = "cctp" | "gateway" | "escrow";
+/** The routes a payment across chains can take. */
+export type CrossChainRoute = Exclude<PayoutRoute, "escrow">;
 
 export interface TransferResult {
   providerTxId: string;

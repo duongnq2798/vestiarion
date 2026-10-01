@@ -197,6 +197,7 @@ export class LiveProvider implements ChainProvider {
     }
 
     const account = await this.account(params.fromAccountId);
+    if (params.route === "escrow") return this.escrowRelease(params, account);
     if (paidAcrossChains(params.destinationChain)) {
       return params.route === "gateway" ? this.gatewayPayout(params, account) : this.bridge(params, account);
     }
@@ -250,6 +251,49 @@ export class LiveProvider implements ChainProvider {
       settledInMs,
       providerState: transaction?.state ?? null,
       failureReason: transaction?.errorReason ?? null,
+    };
+  }
+
+  /**
+   * Pays a milestone locked in escrow by releasing its hold (milestone escrow E4): `release(bytes32)` on the
+   * workspace's escrow contract, from the operating wallet (the contract's payer), under the attempt's key. The
+   * contract sends the hold to its payee, once; a second release reverts. A plain Circle transaction, so
+   * reconciliation reads it as it reads a transfer.
+   */
+  private async escrowRelease(params: TransferParams, account: { walletId: string; chain: string }): Promise<TransferResult> {
+    if (!params.escrow) throw new Error("An escrow release names no hold; nothing was sent.");
+    const started = Date.now();
+    const created = await withDeadline(
+      this.client.createContractExecutionTransaction({
+        walletId: account.walletId,
+        contractAddress: params.escrow.contract,
+        abiFunctionSignature: "release(bytes32)",
+        abiParameters: [params.escrow.holdId],
+        idempotencyKey: params.idempotencyKey,
+        refId: params.memo,
+        fee: { type: "level", config: { feeLevel: "MEDIUM" } },
+      }),
+      CREATE_TRANSACTION_DEADLINE_MS,
+      `Circle did not answer the escrow release within ${CREATE_TRANSACTION_DEADLINE_MS} ms; it may or may not have been accepted`
+    );
+    const txId = created.data?.id;
+    if (!txId) throw new Error("Circle did not return a transaction id");
+    const { status, transaction } = await awaitSettlement(this.client, txId);
+    const txHash = transaction?.txHash ?? null;
+    const fee = transaction ? await resolveFee(this.arcRpcUrl, transaction.networkFeeInUSD, txHash ?? undefined) : { feeUsd: ARC_FEE_USD, feeSource: "provider_estimate" as const };
+    return {
+      providerTxId: txId,
+      txHash,
+      txRef: txHash ?? txId,
+      chain: account.chain,
+      status,
+      feeUsd: fee.feeUsd,
+      feeSource: fee.feeSource,
+      providerMode: "live",
+      settledInMs: status === "confirmed" ? (transaction ? (measuredSettlementMs(transaction) ?? Date.now() - started) : Date.now() - started) : null,
+      providerState: transaction?.state ?? null,
+      failureReason: transaction?.errorReason ?? null,
+      route: "escrow",
     };
   }
 

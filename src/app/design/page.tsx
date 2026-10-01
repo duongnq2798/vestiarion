@@ -29,6 +29,8 @@ import AgentControlsClient from "@/components/AgentControlsClient";
 import AgentPauseControl from "@/components/AgentPauseControl";
 import MembersPanel from "@/components/MembersPanel";
 import { ReceiptControl, ReceiptLink } from "@/components/ReceiptControl";
+import { EscrowPanel } from "@/components/EscrowPanel";
+import { MilestoneEscrow } from "@/components/MilestoneEscrow";
 import { ReceiptView } from "@/components/receipt/ReceiptView";
 import { designReceipt } from "./receipt-fixture";
 import MilestoneVerification from "@/components/MilestoneVerification";
@@ -497,6 +499,59 @@ export default function DesignPage() {
             <Card className="p-4 sm:p-5">
               <Eyebrow>Milestone verification</Eyebrow>
               <MilestoneVerification orgSlug={DESIGN_SLUG} milestoneId="00000000-0000-4000-8000-00000000000a" verified={false} />
+            </Card>
+            <EscrowPanel orgSlug={DESIGN_SLUG} address={null} deploying={false} canSetUp />
+            <EscrowPanel orgSlug={DESIGN_SLUG} address="0xE5c0000000000000000000000000000000000E5c" deploying={false} canSetUp />
+            <Card className="space-y-3 p-4 sm:p-5">
+              <Eyebrow>Milestone escrow, under a milestone&apos;s card</Eyebrow>
+              <MilestoneEscrow
+                orgSlug={DESIGN_SLUG}
+                milestoneId="00000000-0000-4000-8000-00000000000c"
+                requestId="00000000-0000-4000-8000-0000000000aa"
+                defaultRefundDate="2026-10-31"
+                minRefundDate="2026-10-02"
+                maxRefundDate="2027-10-01"
+                escrowReady
+                canManage
+                paid={false}
+                refundable={false}
+                payee="0x67C8000000000000000000000000000000000504"
+                amount={2}
+                lockable
+                hold={null}
+              />
+              <MilestoneEscrow
+                orgSlug={DESIGN_SLUG}
+                milestoneId="00000000-0000-4000-8000-00000000000d"
+                requestId="00000000-0000-4000-8000-0000000000ab"
+                defaultRefundDate="2026-10-31"
+                minRefundDate="2026-10-02"
+                maxRefundDate="2027-10-01"
+                payee="0x67C8000000000000000000000000000000000504"
+                amount={2}
+                lockable={false}
+                escrowReady
+                canManage
+                paid={false}
+                refundable
+                hold={{ state: "funded", refundAfter: "2026-10-31T00:00:00Z", amount: 2, fundTxHash: `0x${"2a".repeat(32)}`, releaseTxHash: null, refundTxHash: null }}
+              />
+              <MilestoneEscrow
+                orgSlug={DESIGN_SLUG}
+                milestoneId="00000000-0000-4000-8000-00000000000e"
+                requestId="00000000-0000-4000-8000-0000000000ac"
+                defaultRefundDate="2026-10-31"
+                minRefundDate="2026-10-02"
+                maxRefundDate="2027-10-01"
+                payee="0x67C8000000000000000000000000000000000504"
+                amount={2}
+                lockable={false}
+                escrowReady
+                canManage
+                paid
+                refundable={false}
+                hold={{ state: "released", refundAfter: "2026-10-31T00:00:00Z", amount: 2, fundTxHash: `0x${"2a".repeat(32)}`, releaseTxHash: `0x${"3b".repeat(32)}`, refundTxHash: null }}
+              />
             </Card>
             <Card className="space-y-3 p-4 sm:p-5">
               <Eyebrow>Payment receipt, on a paid payable&apos;s card</Eyebrow>

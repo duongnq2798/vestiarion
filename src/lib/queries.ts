@@ -133,6 +133,14 @@ export interface MilestoneRow {
   status: string;
   agent_reasoning: string | null;
   tx_ref: string | null;
+  /** The milestone's hold in the workspace's escrow (milestone escrow E3–E5); null when it has none. */
+  escrow_state?: "funding" | "funded" | "released" | "refunded" | null;
+  escrow_payee?: string | null;
+  escrow_amount?: number | string | null;
+  escrow_refund_after?: string | null;
+  escrow_fund_tx_hash?: string | null;
+  escrow_release_tx_hash?: string | null;
+  escrow_refund_tx_hash?: string | null;
 }
 
 export async function listMilestones(): Promise<MilestoneRow[]> {

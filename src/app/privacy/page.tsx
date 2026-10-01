@@ -107,7 +107,7 @@ export default function PrivacyPage() {
             <strong>Supabase</strong> holds the database and runs sign-in.
           </li>
           <li>
-            <strong>Circle</strong> creates the wallets and moves the payments, through Developer-Controlled Wallets, CCTP and Gateway, so it receives wallet addresses and payment amounts.
+            <strong>Circle</strong> creates the wallets and moves the payments, through Developer-Controlled Wallets, CCTP, Gateway and its Smart Contract Platform, so it receives wallet addresses and payment amounts.
           </li>
           <li>
             <strong>Resend</strong> sends transactional email: invitations to a workspace, and digests of the payments waiting for a decision. It receives each

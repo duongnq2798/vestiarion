@@ -32,6 +32,31 @@ Within a minute of a milestone being verified, the agent decides whether to rele
 
 Code checks every release the model asks for. It refuses one for a contractor screened high risk, or one above the contractor's payment limit, and the card says so. A released milestone's card links its transaction on Arc testnet.
 
+## Lock a milestone in escrow
+
+A live workspace can lock a milestone's USDC in a contract on Arc testnet before the work starts, so the contractor can see the money is set aside for them.
+
+- **Set it up once.** On **Contractors**, an owner or admin chooses **Set up escrow** under **Milestone escrow**. Setting it up:
+  - creates a deployer wallet;
+  - sends that wallet 0.1 USDC of gas from the operating wallet;
+  - deploys the contract through Circle's Smart Contract Platform.
+
+  If it is interrupted, choose **Finish setting up**: nothing is deployed twice.
+- **Lock a milestone.** Under a milestone that is not verified yet, set **Refundable to this workspace from** and choose **Lock in escrow**.
+  - The contractor needs a confirmed Arc testnet address. The form names the address the hold will pay; that address cannot change afterwards.
+  - The card then reads, for example, "2 USDC locked in escrow for 0x67C8…0504 until 31 Oct 2026", with the transaction that funded it.
+- **What the contract allows.** Only the workspace's operating wallet can call it, and only two things can happen to a hold, once:
+  - it is released to the contractor's address;
+  - from the refund date, it is refunded to the workspace.
+
+  Before that date, the money can go nowhere but to the contractor.
+- **Release.** Once the milestone is verified, the agent pays it by releasing the hold instead of sending a transfer. It holds the milestone for a person instead when:
+  - its amount changed after it was locked;
+  - the contractor's address is no longer the one the hold pays. Refund it from its date, then pay the new address.
+- **Refund.** From the refund date, a hold that is still on chain shows **Refund from escrow**.
+
+The contract was written for Vestiarion and is not audited.
+
 ## 5. Read it in the audit log
 
 Open **Audit log** to see the milestone's whole story in order, each entry signed: `create_milestone` when it was added, the verification, and the agent's release decision with its reasoning and its transaction. [Verify an audit export](/docs/guides/audit-export) shows how someone outside the workspace can check the same entries.
