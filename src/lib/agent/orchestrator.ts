@@ -20,14 +20,22 @@ import { decide } from "./decide";
 import { enforceApGuardrails } from "./guardrails";
 import { addressUnconfirmed } from "../counterparty-address";
 import { SandboxCapReachedError } from "./sandbox-cap";
-import { AgentPausedError, heldBecausePausedDetail, pausedPaymentNote, pausedTreasuryNote } from "./pause";
+import { AgentPausedError, HELD_BECAUSE_PAUSED, heldBecausePausedDetail, pausedPaymentNote, pausedTreasuryNote } from "./pause";
 import {
   blockingDuplicate,
   duplicateMatchContext,
   findDuplicates,
   type InvoiceLike,
 } from "./duplicates";
-import { followUpConfig, planFollowUp, type DecisionFacts, type FollowUpConfig, type FollowUpPlan } from "./follow-up";
+import {
+  followUpConfig,
+  planFollowUp,
+  planMilestoneFollowUp,
+  type DecisionFacts,
+  type FollowUpConfig,
+  type FollowUpPlan,
+  type MilestoneDecisionFacts,
+} from "./follow-up";
 import { OPEN_PAYABLE_STATUSES, summarizePayableObligations, sumUsdcAmounts } from "./obligations";
 import { ARC_TESTNET_EURC, quoteEurcInUsdc, type EurcQuote } from "../fx/quote";
 import { quoteUsdcForEurc, sizeSwap, SWAP_COST_CAP_PERCENT, type SwapOffer, type SwapQuote } from "../fx/swap-service";
@@ -304,6 +312,99 @@ export async function applyFollowUp(
         ? `Reopened ${row.amount} ${row.currency ?? "USDC"} invoice: ${plan.changes.join("; ") || "no recorded decision facts"}`
         : `Escalated ${row.amount} ${row.currency ?? "USDC"} invoice for human review`,
   };
+}
+
+/**
+ * The follow-up stage for contractor milestones: a held milestone whose facts
+ * changed since the agent held it goes back to `verified`, so the contractor
+ * stage decides it again in the same cycle (planMilestoneFollowUp). Until this,
+ * a held milestone stayed held unless a person revoked its verification and
+ * verified it again.
+ *
+ * The facts are the latest milestone decision's `observed` and
+ * `execution.heldBecause`, newest entry first; entries without a decision
+ * (verification, reopening) carry none. Each write is a compare-and-set on
+ * `held`, like the invoices': a person who revoked the verification meanwhile
+ * keeps their change, and nothing is recorded for that milestone. Exported to
+ * be tested without a full cycle.
+ */
+export async function followUpHeldMilestones(orgDb: OrgDb): Promise<CycleLogLine[]> {
+  const held = unwrap(
+    await orgDb
+      .from("milestones")
+      .select("id, title, amount, verification_source, counterparties(risk_level, payment_limit)")
+      .eq("status", "held")
+      .eq("verified", true)
+  ) as unknown as Array<{
+    id: string;
+    title: string;
+    amount: string;
+    verification_source: string | null;
+    counterparties: { risk_level: string; payment_limit: string | null };
+  }>;
+  if (held.length === 0) return [];
+
+  const entries = unwrap(
+    await orgDb
+      .from("ledger_entries")
+      .select("detail")
+      .eq("domain", "contractor")
+      .in("detail->>milestoneId", held.map((row) => row.id))
+      .order("seq", { ascending: false })
+  ) as Array<{ detail: Record<string, unknown> }>;
+
+  const factsByMilestone = new Map<string, MilestoneDecisionFacts>();
+  for (const { detail } of entries) {
+    const milestoneId = detail.milestoneId as string | undefined;
+    const observed = detail.observed as Record<string, unknown> | undefined;
+    if (!milestoneId || !detail.decision || !observed || factsByMilestone.has(milestoneId)) continue;
+    const execution = detail.execution as Record<string, unknown> | undefined;
+    factsByMilestone.set(milestoneId, {
+      riskLevel: String(observed.riskLevel ?? "unscreened"),
+      paymentLimit: observed.paymentLimit == null ? null : num(observed.paymentLimit),
+      verificationSource: (observed.verificationSource as string | null | undefined) ?? null,
+      heldBecausePaused: execution?.heldBecause === HELD_BECAUSE_PAUSED,
+    });
+  }
+
+  const lines: CycleLogLine[] = [];
+  for (const row of held) {
+    const amount = num(row.amount);
+    const plan = planMilestoneFollowUp(
+      {
+        id: row.id,
+        title: row.title,
+        amount,
+        riskLevel: row.counterparties.risk_level,
+        paymentLimit: row.counterparties.payment_limit == null ? null : num(row.counterparties.payment_limit),
+        verificationSource: row.verification_source,
+      },
+      factsByMilestone.get(row.id) ?? null
+    );
+    if (plan.action !== "reopen") continue;
+
+    const changed = unwrap(
+      await orgDb.from("milestones").update({ status: "verified" }).eq("id", row.id).eq("status", "held").select("id")
+    ) as Array<{ id: string }>;
+    if (changed.length === 0) continue;
+
+    await appendLedgerEntry({
+      actor: "agent",
+      domain: "contractor",
+      action: "milestone_reopened",
+      summary: `Reopened held milestone "${row.title}" (${amount} USDC): evidence changed`,
+      detail: {
+        milestoneId: row.id,
+        followUp: { action: plan.action, reason: plan.reason, changes: plan.changes },
+        previousStatus: "held",
+      },
+    });
+    lines.push({
+      domain: "contractor",
+      message: `Reopened ${amount} USDC milestone "${row.title}": ${plan.changes.join("; ") || "no recorded decision facts"}`,
+    });
+  }
+  return lines;
 }
 
 /** What a paused-or-not payment step in the AP or contractor stage decided,
@@ -2638,6 +2739,10 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
       if (line) lines.push(line);
     }
   }
+
+  // Held milestones whose facts changed go back to `verified`, which the
+  // contractor stage below decides in this same cycle.
+  lines.push(...(await followUpHeldMilestones(db)));
 
   });
 

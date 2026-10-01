@@ -4,7 +4,7 @@ import { configFromEnv, type FollowUpConfig } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { db } from "@/lib/dal";
 import { withOrg } from "@/lib/dal/scope";
-import { applyFollowUp, existingPaymentIntents, reconcileApInvoice } from "@/lib/agent/orchestrator";
+import { applyFollowUp, existingPaymentIntents, followUpHeldMilestones, reconcileApInvoice } from "@/lib/agent/orchestrator";
 import type { ChainProvider } from "@/lib/circle";
 import { encryptSecret, parseMasterKeys } from "@/lib/secrets";
 import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
@@ -168,6 +168,92 @@ describe("applyFollowUp — the follow-up stage's write is a compare-and-set", (
     await expect(
       run(() => applyFollowUp(db(), { id: INVOICE_ID, status: "held", amount: 150 }, reopen, FOLLOW_UP_CONFIG, Date.now()))
     ).rejects.toThrow("invoices update failed: connection reset");
+  });
+});
+
+describe("followUpHeldMilestones — a held milestone goes back to the agent when its facts change", () => {
+  const MILESTONE_A = "018f8ce0-1557-7b54-a931-4d777f6bc0a1";
+  const MILESTONE_B = "018f8ce0-1557-7b54-a931-4d777f6bc0b1";
+  const MILESTONE_C = "018f8ce0-1557-7b54-a931-4d777f6bc0c1";
+  const held = [
+    // A: held over a 1 USDC limit that is now 5.
+    { id: MILESTONE_A, title: "Thumbnails", amount: "2", verification_source: "PR #84", counterparties: { risk_level: "clear", payment_limit: "5" } },
+    // B: held by the model; nothing changed since.
+    { id: MILESTONE_B, title: "Posts", amount: "1", verification_source: "PR #85", counterparties: { risk_level: "clear", payment_limit: "5" } },
+    // C: held because the agent was paused.
+    { id: MILESTONE_C, title: "Logo", amount: "1", verification_source: "PR #86", counterparties: { risk_level: "clear", payment_limit: "5" } },
+  ];
+  const decision = (milestoneId: string, observed: object, execution: object = { resultingStatus: "held" }) => ({
+    detail: { milestoneId, decision: { action: "hold" }, observed, execution },
+  });
+  // Newest first, as the stage asks for them; a later non-decision entry (a verification) carries no facts.
+  const ledger = [
+    { detail: { milestoneId: MILESTONE_A, verified: true } },
+    decision(MILESTONE_A, { riskLevel: "clear", paymentLimit: 1, verificationSource: "PR #84" }),
+    decision(MILESTONE_A, { riskLevel: "clear", paymentLimit: 0.5, verificationSource: "PR #84" }),
+    decision(MILESTONE_B, { riskLevel: "clear", paymentLimit: 5, verificationSource: "PR #85" }),
+    decision(MILESTONE_C, { riskLevel: "clear", paymentLimit: 5, verificationSource: "PR #86" }, { resultingStatus: "held", heldBecause: "agent_paused" }),
+  ];
+  const milestonePatches = (requests: RecordedRequest[]) => requests.filter((r) => r.path === "/rest/v1/milestones" && r.method === "PATCH");
+
+  function heldFake(patchReply: (r: RecordedRequest) => FakeReply = (r) => ({ body: [{ id: r.params.get("id")?.slice(3) }] })) {
+    return cycleFake((r) => {
+      if (r.path === "/rest/v1/milestones" && r.method === "GET") return { body: held };
+      // Only the stage's read of decision facts; appending an entry reads the ledger's head too.
+      if (r.path === "/rest/v1/ledger_entries" && r.params.get("domain") === "eq.contractor") return { body: ledger };
+      if (r.path === "/rest/v1/milestones" && r.method === "PATCH") return patchReply(r);
+      return undefined;
+    });
+  }
+
+  it("reads held, verified milestones and the facts of each one's latest decision", async () => {
+    const { fake, run } = heldFake();
+    await run(() => followUpHeldMilestones(db()));
+    const read = fake.requests.find((r) => r.path === "/rest/v1/milestones" && r.method === "GET")!;
+    expect(read.params.get("status")).toBe("eq.held");
+    expect(read.params.get("verified")).toBe("eq.true");
+    const facts = fake.requests.find((r) => r.path === "/rest/v1/ledger_entries" && r.params.has("domain"))!;
+    expect(facts.params.get("domain")).toBe("eq.contractor");
+    expect(facts.params.get("order")).toBe("seq.desc");
+  });
+
+  it("reopens a milestone whose limit was raised and one held only by the pause, each as a compare-and-set on held", async () => {
+    const { fake, run } = heldFake();
+    const lines = await run(() => followUpHeldMilestones(db()));
+
+    const patches = milestonePatches(fake.requests);
+    expect(patches.map((p) => p.params.get("id"))).toEqual([`eq.${MILESTONE_A}`, `eq.${MILESTONE_C}`]);
+    for (const patch of patches) {
+      expect(patch.body).toEqual({ status: "verified" });
+      expect(patch.params.get("status")).toBe("eq.held");
+      expect(patch.params.get("select")).toBe("id");
+    }
+    const appends = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(appends.map((a) => a.p_action)).toEqual(["milestone_reopened", "milestone_reopened"]);
+    expect(appends[0].p_domain).toBe("contractor");
+    expect(appends[0].p_detail).toMatchObject({
+      milestoneId: MILESTONE_A,
+      previousStatus: "held",
+      followUp: { action: "reopen", changes: ["payment limit moved 1 USDC → 5 USDC"] },
+    });
+    expect(lines).toEqual([
+      { domain: "contractor", message: 'Reopened 2 USDC milestone "Thumbnails": payment limit moved 1 USDC → 5 USDC' },
+      { domain: "contractor", message: 'Reopened 1 USDC milestone "Logo": the agent was paused when it was held, and is running again' },
+    ]);
+  });
+
+  it("writes nothing for a milestone a person changed meanwhile", async () => {
+    const { fake, run } = heldFake(() => ({ body: [] }));
+    const lines = await run(() => followUpHeldMilestones(db()));
+    expect(milestonePatches(fake.requests)).toHaveLength(2);
+    expect(rpcBodies(fake.requests, "append_ledger_entry")).toHaveLength(0);
+    expect(lines).toEqual([]);
+  });
+
+  it("reads nothing more when no milestone is held", async () => {
+    const { fake, run } = cycleFake((r) => (r.path === "/rest/v1/milestones" ? { body: [] } : undefined));
+    expect(await run(() => followUpHeldMilestones(db()))).toEqual([]);
+    expect(fake.requests.some((r) => r.path === "/rest/v1/ledger_entries")).toBe(false);
   });
 });
 
