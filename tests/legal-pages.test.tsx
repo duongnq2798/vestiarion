@@ -203,6 +203,7 @@ describe("the privacy page", () => {
       finding: "what the match found",
       title: "title",
       verificationSource: "verification source",
+      verification: "how it was verified",
       reserveBalance: "reserve balances",
       reserveApy: "the reserve's yield",
       upcomingObligationsNext7Days: "the next 7 and 14 days",
