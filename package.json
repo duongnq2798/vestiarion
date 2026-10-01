@@ -58,6 +58,7 @@
     "shiki": "^4.4.3",
     "sonner": "^2.0.8",
     "tailwind-merge": "^3.7.0",
+    "unpdf": "1.8.1",
     "zod": "^4.6.5"
   },
   "devDependencies": {
