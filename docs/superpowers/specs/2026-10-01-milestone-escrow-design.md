@@ -123,3 +123,33 @@ Migration `0047_milestone_escrow.sql`:
 2. In testnet-2, the partner presses **Set up escrow**.
 3. The partner locks a 1 USDC milestone for a contractor with an Arc address, then verifies it. The agent releases it.
 4. Record the deployment, the funding and the release here.
+
+### Done, 2026-10-01 (PR #105, merged as c23ad10)
+
+**Migration.** 0047 was applied by the partner before the merge. A read-only check confirmed:
+- `escrow_contracts` exists, with RLS and both policies;
+- milestones have the seven escrow columns;
+- the state check includes `funding`;
+- `payout_route` accepts `escrow`.
+
+**Setup, testnet-2.**
+- Ledger entry #591, `escrow_deployed`.
+- The contract is `0x74af203fec3f121ff1cd3a763092d1211487702b`, deployed through Circle's Smart Contract Platform (contract `01a0f75c-dc8f-7d6d-acef-f6b5e22b1d98`). Deployer `0x2590…1a6c`, deploy tx `0x550727a6a205d4d17f6998c06d5ed5ae84a21296466b2e3c348945884b971860`.
+- On chain, the contract has 2,279 bytes of code; `payer()` is the operating wallet `0x97f8…b6b6`, and `token()` is USDC `0x3600…0000`.
+
+**The milestone.** "Escrow test – logo files", 1 USDC for the contractor Puka Hotel. Each step, with its ledger entry:
+
+| Time (UTC) | Entry | Step |
+|---|---|---|
+| 12:10:08 | #592 `create_milestone` | Added. |
+| 12:11:06 | #593 `escrow_funded` | Locked until 2026-10-31. Hold id `0x96a6e67c…` is the milestone's id. Fund tx `0x865c3ecc3b4d1f4da44cf4ada127420b3c82a8f83a8f155f0188dad1e5e213ae`, block 64944221. |
+| 12:12:14 | #594 `verify_milestone_manual` | Verified by hand. |
+| 12:12:39 | #598 `milestone_release` | DeepSeek decided to release, 25 seconds after the verification. Release tx `0x4e196f4c0e75fc0bb7fe7643c605fe3fb059e97f29eb8fe965dd632698b44f87`, block 64944402. |
+
+- **The fund transaction** logs 1 USDC moving from the operating wallet to the escrow, and the contract's `Funded` event.
+- **The release transaction** logs 1 USDC moving from the escrow to the contractor `0xba3f…4bfa`, and the contract's `Released` event.
+- **The payment intent** is on the `escrow` route, `confirmed` on its first attempt, and its `tx_hash` is the release.
+- **The milestone** is `paid`, with `escrow_state = released` and both transactions recorded.
+- **The contract's own record:** `holds(id)` answers state 2 (released), the same payee, refund date 2026-10-31 and amount 1.
+- **The operating wallet** went from 20.140575 to 19.040575 USDC: 0.1 USDC of gas for the deployer, and the 1 USDC locked.
+
