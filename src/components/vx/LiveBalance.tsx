@@ -52,10 +52,13 @@ export function LiveBalanceView({
   pending,
   failure,
   onRefresh,
+  eurc = null,
 }: {
   label?: string;
   sub?: ReactNode;
   balance: number;
+  /** The operating wallet's EURC, as last read; a line beside the USDC when it holds some. */
+  eurc?: number | null;
   syncedAt: string | null;
   now: number | null;
   pending: boolean;
@@ -69,6 +72,11 @@ export function LiveBalanceView({
       label={label}
       sub={
         <>
+          {eurc !== null && eurc > 0 && (
+            <span className="block">
+              <Money value={eurc} token="EURC" className="text-ink-2" /> in the operating wallet
+            </span>
+          )}
           {sub && <span className="block">{sub}</span>}
           <span className="mt-1.5 flex min-w-0 items-center gap-1">
             <span className="min-w-0 flex-1 text-xs text-ink-3">
@@ -99,6 +107,8 @@ export interface TileState {
   balance: number;
   syncedAt: string | null;
   failure: string | null;
+  /** The operating wallet's EURC, as last read; kept when a read brings none. */
+  eurc?: number | null;
 }
 
 /**
@@ -107,10 +117,11 @@ export interface TileState {
  * beside their age; one that brought none keeps what the tile had.
  */
 export function nextTileState(previous: TileState, result: RefreshBalanceResult): TileState {
-  if (result.ok && result.balance !== null) return { balance: result.balance, syncedAt: result.syncedAt, failure: null };
+  const eurc = result.eurc !== undefined ? { eurc: result.eurc } : previous.eurc !== undefined ? { eurc: previous.eurc } : {};
+  if (result.ok && result.balance !== null) return { balance: result.balance, syncedAt: result.syncedAt, failure: null, ...eurc };
   const failure = result.message ?? CIRCLE_UNREACHABLE;
-  if (result.balance !== null && result.syncedAt !== null) return { balance: result.balance, syncedAt: result.syncedAt, failure };
-  return { ...previous, failure };
+  if (result.balance !== null && result.syncedAt !== null) return { balance: result.balance, syncedAt: result.syncedAt, failure, ...eurc };
+  return { ...previous, failure, ...eurc };
 }
 
 /**
@@ -165,6 +176,7 @@ export function LiveBalanceTile({
       label={label}
       sub={sub}
       balance={state.balance + offset}
+      eurc={state.eurc ?? null}
       syncedAt={state.syncedAt}
       now={now}
       pending={pending}

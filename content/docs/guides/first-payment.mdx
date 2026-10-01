@@ -122,6 +122,7 @@ A vendor that bills in euros can be paid in EURC, Circle's euro stablecoin, on A
 - **Paid from EURC.** A EURC payable is paid in EURC from the operating wallet; USDC is never sent in its place.
   - **When the wallet's EURC is short:** the agent can buy the EURC with USDC first (next point). Otherwise the payable is held. If the model had decided to pay it anyway, the band names the rule, `treasury.insufficient_eurc`.
   - **Testnet EURC:** get it at [faucet.circle.com](https://faucet.circle.com) for the operating wallet's address, the same way as USDC.
+  - **How much EURC the wallet holds:** the **Balance on-chain** tile on **Console** shows it under the USDC, read from Arc testnet each time the tile refreshes.
 - **Paid from USDC by a swap.** In a live workspace, when a EURC payment is due now and the wallet's EURC is short of it, the agent is offered a swap of USDC for the EURC it needs.
   - **Where.** The swap goes through Circle's Stablecoin Service, the swap service behind App Kit, on Arc testnet.
   - **How much.** It is sized so that its minimum covers what is missing. EURC above that stays in the wallet.
