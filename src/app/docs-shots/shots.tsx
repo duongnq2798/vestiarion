@@ -1,4 +1,4 @@
-import { FileSpreadsheet, PenLine } from "lucide-react";
+import { FileSpreadsheet, FileText, PenLine } from "lucide-react";
 import type { ReactNode } from "react";
 import ApprovalCard from "@/components/ApprovalCard";
 import GoLivePanel from "@/components/GoLivePanel";
@@ -6,6 +6,7 @@ import VerifyLedgerBadge from "@/components/VerifyLedgerBadge";
 import CounterpartyAddress from "@/components/intake/CounterpartyAddressEdit";
 import CounterpartyIntake from "@/components/intake/CounterpartyIntake";
 import InvoiceCsvImport from "@/components/intake/InvoiceCsvImport";
+import InvoiceDocumentIntake, { DocumentDraft } from "@/components/intake/InvoiceDocumentIntake";
 import InvoiceIntake from "@/components/intake/InvoiceIntake";
 import { Card } from "@/components/ui/Card";
 import { CopyButton } from "@/components/ui/CopyButton";
@@ -279,13 +280,17 @@ export const DOCS_SHOTS = {
     render: function InvoiceShot() {
       return (
         <section>
-          <SectionHeader title="Invoice intake" meta="manual entry or CSV preview and confirm" />
+          <SectionHeader title="Invoice intake" meta="typed in, read from a document, or imported from a CSV, and confirmed" />
           <Card className="p-4 sm:p-6">
             <Tabs defaultValue="manual">
               <TabsList aria-label="Invoice intake">
                 <TabsTrigger value="manual">
                   <PenLine aria-hidden />
                   Enter one invoice
+                </TabsTrigger>
+                <TabsTrigger value="document">
+                  <FileText aria-hidden />
+                  From a document
                 </TabsTrigger>
                 <TabsTrigger value="csv">
                   <FileSpreadsheet aria-hidden />
@@ -295,10 +300,56 @@ export const DOCS_SHOTS = {
               <TabsContent value="manual" forceMount className="data-[state=inactive]:hidden">
                 <InvoiceIntake orgSlug={SLUG} counterparties={[{ id: COUNTERPARTY.id, name: COUNTERPARTY.name, role: COUNTERPARTY.role }]} />
               </TabsContent>
+              <TabsContent value="document" forceMount className="data-[state=inactive]:hidden">
+                <InvoiceDocumentIntake orgSlug={SLUG} counterparties={[{ id: COUNTERPARTY.id, name: COUNTERPARTY.name, role: COUNTERPARTY.role }]} />
+              </TabsContent>
               <TabsContent value="csv" forceMount className="data-[state=inactive]:hidden">
                 <InvoiceCsvImport orgSlug={SLUG} />
               </TabsContent>
             </Tabs>
+          </Card>
+        </section>
+      );
+    },
+  },
+  "first-payment-document": {
+    guide: "first-payment",
+    page: "invoices",
+    render: function DocumentShot() {
+      const asked = `0x${"5af3107a".repeat(5)}`;
+      return (
+        <section>
+          <SectionHeader title="Invoice intake" meta="typed in, read from a document, or imported from a CSV, and confirmed" />
+          <Card className="p-4 sm:p-6">
+            <DocumentDraft
+              orgSlug={SLUG}
+              counterparties={[{ id: COUNTERPARTY.id, name: COUNTERPARTY.name, role: COUNTERPARTY.role }]}
+              result={{
+                ok: true,
+                message: `Read the invoice from ${COUNTERPARTY.name}. Check every field before adding it.`,
+                draft: {
+                  vendorName: COUNTERPARTY.name,
+                  invoiceNumber: "NS-2207",
+                  amount: "12.50",
+                  currency: "USDC",
+                  dueDate: "2026-10-15",
+                  poReference: "PO-2207",
+                  earlyPayDiscountPct: null,
+                  discountDeadline: null,
+                  payToAddress: asked,
+                  memo: "October design retainer",
+                  counterpartyId: COUNTERPARTY.id,
+                },
+                warnings: [
+                  `This invoice asks to be paid to ${asked}. The address on file for ${COUNTERPARTY.name} is ${COUNTERPARTY.address}. The agent pays the address on file; confirm a change with the vendor before making it.`,
+                ],
+                notFound: [],
+                modelNote: null,
+                reader: "deepseek",
+                document: { kind: "pdf", sha256: "0".repeat(64), truncated: false },
+                nonce: 1,
+              }}
+            />
           </Card>
         </section>
       );

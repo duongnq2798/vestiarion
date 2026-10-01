@@ -78,6 +78,7 @@ const SHOTS = {
     await page.fill({ "invoice-amount": "12.50", "invoice-due": "2026-10-15", "invoice-memo": "October design retainer", "invoice-po": "PO-2207" });
     await page.click(`document.getElementById([...document.querySelectorAll("label")].find((l) => l.textContent.trim() === "Goods or services received").htmlFor)`);
   },
+  "first-payment-document": async () => {},
   "first-payment-decision": async () => {},
   "first-payment-approval": async () => {},
   "first-payment-audit": async (page) => {

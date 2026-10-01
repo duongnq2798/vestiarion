@@ -3,6 +3,14 @@ import type { NextConfig } from "next";
 import { legacyRedirects } from "./src/lib/auth/org-paths";
 
 const nextConfig: NextConfig = {
+  // An invoice document of up to 4 MB is read through a Server Action
+  // (src/app/actions/invoice-document.ts), with room for the multipart
+  // overhead. The action refuses a larger file itself.
+  experimental: {
+    serverActions: {
+      bodySizeLimit: "5mb",
+    },
+  },
   async redirects() {
     return legacyRedirects();
   },

@@ -76,7 +76,7 @@ Anyone who may not add records sees "Only an owner or admin of this workspace ca
 
 ## 2. Add an invoice
 
-Open **AP / AR**. Under **Invoice intake**, choose **Enter one invoice**, or **Import CSV** to add several from a file.
+Open **AP / AR**. Under **Invoice intake**, choose **Enter one invoice**, **From a document** to have the model read it from a PDF or an email (see [Read an invoice from a document](#read-an-invoice-from-a-document)), or **Import CSV** to add several from a file.
 
 - **Direction**: **Payable**, for an invoice you pay.
 - **Counterparty**: the one you just added.
@@ -93,6 +93,25 @@ Open **AP / AR**. Under **Invoice intake**, choose **Enter one invoice**, or **I
 />
 
 Choose **Add invoice**. The page confirms with "Invoice added for *Name*. The agent usually decides on it within a minute." As the form says, "The agent usually decides on a payable within a minute of adding it."
+
+### Read an invoice from a document
+
+Instead of typing an invoice in, choose **From a document**. Choose a PDF or an email, or paste the invoice's text under **Or paste the invoice's text**, then choose **Read invoice**. The workspace's model reads the vendor, the amount, the currency, the due date, the purchase order, any early-payment discount and the address the invoice asks to be paid to. It fills in the invoice form below with them. Nothing is added until you check the form and choose **Add invoice**.
+
+<Screenshot
+  src="/docs/guides/first-payment-document.png"
+  alt="An invoice from Northstar Studio read from a PDF by DeepSeek, on the AP / AR page. A callout asks for every field to be checked and warns that the invoice asks to be paid to a different address than the one on file. Below it, the invoice form is filled in: Counterparty Northstar Studio · vendor, Amount 12.50, Currency USDC, Due date 10/15/2026, Memo October design retainer, PO reference PO-2207, and Goods or services received left unticked."
+  caption="An invoice read from a PDF, with its address checked against the one on file. Nothing is added until you choose Add invoice."
+/>
+
+What the model read is checked before you see it:
+
+- An amount, purchase order or address that the document does not contain is left blank: "The amount the model gave is not in the document, so it was left blank."
+- The counterparty is matched by its address on file, or else by its name. When none matches, the form says so: add it on **Counterparties** first, or choose one.
+- When the invoice asks to be paid to another address than the one on file, the form warns you. The agent pays the address on file; a document never changes it.
+- **Goods or services received** is never ticked for you: "A document cannot say this; tick it only if you received them."
+
+A PDF is read from its text, and an email (an `.eml` file) from its own text and the PDFs attached to it. A scanned PDF has no text: "This PDF has no text to read; it may be a scan. Paste the invoice's text instead." A file can be up to 4 MB, and a workspace can read five a minute. The document itself is not kept. The invoice's ledger entry records the document's SHA-256 hash, which model read it, and which fields you changed.
 
 ### Invoices in EURC
 

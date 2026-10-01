@@ -15,6 +15,8 @@ export interface ActionFormOptions<State extends ActionResult = ActionResult> {
   toastOnSuccess?: boolean;
   /** Runs once after a successful result — for a form hosted in a dialog that should close itself. */
   onSuccess?: (state: State) => void;
+  /** Runs once after every result, refused or not — for a form that must let go of something a refusal was about. */
+  onResult?: (state: State) => void;
 }
 
 const FOCUSABLE =
@@ -54,7 +56,7 @@ function restoreFocus(form: HTMLFormElement | null, submitter: HTMLElement | nul
 export function useActionForm<State extends ActionResult>(
   action: (previous: State, formData: FormData) => Promise<State>,
   initial: State,
-  { resetOnSuccess = false, toastOnSuccess = false, onSuccess }: ActionFormOptions<State> = {}
+  { resetOnSuccess = false, toastOnSuccess = false, onSuccess, onResult }: ActionFormOptions<State> = {}
 ) {
   const formRef = useRef<HTMLFormElement>(null);
   const submitterRef = useRef<HTMLElement | null>(null);
@@ -80,8 +82,9 @@ export function useActionForm<State extends ActionResult>(
       if (toastOnSuccess && state.message) toast.success(state.message);
       onSuccess?.(state);
     }
+    onResult?.(state);
     restoreFocus(formRef.current, submitterRef.current, state.ok);
-  }, [state, resetOnSuccess, toastOnSuccess, onSuccess]);
+  }, [state, resetOnSuccess, toastOnSuccess, onSuccess, onResult]);
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
