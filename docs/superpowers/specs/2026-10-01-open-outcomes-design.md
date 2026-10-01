@@ -1,7 +1,7 @@
 # Open outcomes: what the agent decided, and how it went
 
-Date: 2026-10-01. Status: in progress (design decided under the standing autonomy grant; rulings
-below carry their cost if wrong).
+Date: 2026-10-01. Status: shipped (PR #109) (design decided under the standing autonomy grant;
+rulings below carry their cost if wrong).
 
 ## 1. Why
 
@@ -109,4 +109,24 @@ The method list under the page gains one line per row.
 
 ## 7. Rollout record
 
-(pending)
+- **2026-10-01, about 14:25 UTC.** `npm run db:migrate` from this branch (main at `6f7a1e6` plus
+  0049) applied 0049. No other branch held a migration that was applied but not merged.
+- **Read-only probe in production.**
+  - `open_outcomes` is `security definer` with `search_path=""`; anon and authenticated cannot
+    execute it, the service role can.
+  - The re-run left the later definitions in place: 0038's `invoices_scheduled_has_date`, 0040's
+    `open_numbers` (with `token`), 0043's `begin_cycle_run` (refuses `cycle_running`).
+- **Every all-time total equals an independent SQL count** written without the function's CTEs:
+  22 decisions carried out, 16 escalated, 7 escalations resolved by a person, 4 flags resolved
+  (all four paid, none upheld), 23 invoices paid on Arc testnet, 21 on time, 17 on time with no
+  person involved.
+  - The two late ones were due 30 Sep (12:00 UTC) and paid on 1 Oct at 08:50 UTC, by a person,
+    after the agent had flagged them as possible duplicates. They are the false alarms the research
+    note describes.
+  - 1 duplicate caught, before 27 Sep.
+- **Since 27 Sep:**
+  - ours: 14 decisions carried out and 10 escalated (58%); 0 of 4 flags upheld; 15 of 17 invoices
+    paid on time, 11 of 17 with no person involved;
+  - customers: 1 decision, escalated.
+- **Layout.** At 520 px the two tables fit, and a figure wraps only between its parts. At 375 px
+  each table scrolls inside its own region and the page does not scroll sideways.
