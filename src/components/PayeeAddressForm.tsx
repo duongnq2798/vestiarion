@@ -11,7 +11,7 @@ import { useActionForm } from "@/components/ui/useActionForm";
 const INITIAL: PayeeAddressResult = { ok: false, message: "" };
 
 /** The payee's one field. Once it is sent, the form gives way to what happens next. */
-export default function PayeeAddressForm({ token }: { token: string }) {
+export default function PayeeAddressForm({ token, chainLabel = "Arc testnet" }: { token: string; chainLabel?: string }) {
   const { state, formProps } = useActionForm(submitPayeeAddressAction, INITIAL);
 
   if (state.ok) {
@@ -26,7 +26,7 @@ export default function PayeeAddressForm({ token }: { token: string }) {
   return (
     <form {...formProps} className="grid gap-4">
       <input type="hidden" name="token" value={token} />
-      <Field id="payee-address" label="Your Arc address" description="0x followed by 40 hex characters, from any wallet that holds USDC on Arc testnet.">
+      <Field id="payee-address" label={`Your address on ${chainLabel}`} description={`0x followed by 40 hex characters, from any wallet that holds USDC on ${chainLabel}.`}>
         <Input name="address" required maxLength={200} autoComplete="off" spellCheck={false} className="font-mono" placeholder="0x…" />
       </Field>
       <FormMessage tone={state.message ? "error" : "neutral"}>{state.message || null}</FormMessage>

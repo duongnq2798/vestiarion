@@ -28,6 +28,27 @@ describe("counterparties.chain (0044)", () => {
       db.query("insert into public.counterparties (org_id, name, role, chain) values ($1, 'Elsewhere', 'vendor', 'POLYGON-AMOY')", [orgId])
     ).rejects.toThrow(/counterparties_chain_check/);
   });
+
+  it("pays only a vendor on another chain (review C1)", async () => {
+    const orgId = await createOrg(db, "roles-co");
+    await expect(
+      db.query("insert into public.counterparties (org_id, name, role, chain) values ($1, 'Priya', 'contractor', 'BASE-SEPOLIA')", [orgId])
+    ).rejects.toThrow(/counterparties_chain_check/);
+    await db.query("insert into public.counterparties (org_id, name, role, chain) values ($1, 'Priya', 'contractor', 'ARC-TESTNET')", [orgId]);
+  });
+
+  it("tells a payee link which chain the payee is paid on, through a function of its own (review I3)", async () => {
+    const orgId = await createOrg(db, "links-co");
+    const cp = (await db.query<{ id: string }>("insert into public.counterparties (org_id, name, role, chain) values ($1, 'Base Payee', 'vendor', 'BASE-SEPOLIA') returning id", [orgId])).rows[0].id;
+    await db.query(
+      "insert into public.payee_links (org_id, counterparty_id, token_hash, expires_at) values ($1, $2, repeat('a', 64), now() + interval '1 day'), ($1, $2, repeat('b', 64), now() - interval '1 day')",
+      [orgId, cp]
+    );
+    const chain = async (hash: string) => (await db.query<{ c: string | null }>("select public.payee_link_chain($1) as c", [hash])).rows[0].c;
+    expect(await chain("a".repeat(64))).toBe("BASE-SEPOLIA");
+    expect(await chain("b".repeat(64))).toBeNull();
+    expect(await chain("c".repeat(64))).toBeNull();
+  });
 });
 
 describe("payment_intents (0044)", () => {

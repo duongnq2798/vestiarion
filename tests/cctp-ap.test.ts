@@ -271,3 +271,44 @@ describe("a bridge whose mint came at once", () => {
     expect(entries(fake.requests)[0].p_detail).toMatchObject({ execution: { destinationChain: "BASE-SEPOLIA", mintTxHash: "0xmint" } });
   });
 });
+
+describe("the review's fixes (I4, I5, M6)", () => {
+  it("lets the burn's fee be at most 10% of the amount, read again at the burn (I4)", async () => {
+    model("pay");
+    const { chain, stage } = apFake({ book: [payable()] });
+    await stage();
+    expect(chain.transfers[0].maxBridgeFeeUsdc).toBe(0.15);
+  });
+
+  it("weighs the cap on the fee itself, not on a rounded percent (M6)", async () => {
+    model("pay");
+    // 0.15006 USDC on 1.5 USDC is 10.004%: rounded, it would read 10.0% and pass.
+    const { fake, chain, stage } = apFake({ book: [payable()], fee: async () => ({ feeUsdc: 0.15006, maxFeeUnits: BigInt(150060), domain: 6 }) });
+    await stage();
+    expect(chain.transfers).toEqual([]);
+    expect(entries(fake.requests)[0].p_detail).toMatchObject({ guardrailRule: "bridge.fee_above_cap" });
+  });
+
+  it("holds a bridge still not minted two hours after it was sent, for a person, and sends nothing (I5)", async () => {
+    const { fake, chain, stage } = apFake({
+      book: [payable({ status: "matched", tx_ref: "0xburn", decided_at: "2026-10-01T06:00:00Z" })],
+      minted: null,
+      intent: { provider_tx_id: "cctp:burn-1", tx_hash: "0xburn", status: "pending", destination_chain: "BASE-SEPOLIA" },
+    });
+    await stage();
+    expect(chain.transfers).toEqual([]);
+    const [patch] = patches(fake.requests);
+    expect(patch).toMatchObject({ status: "held" });
+    expect(String(patch.agent_reasoning)).toContain("not minted");
+  });
+
+  it("leaves a bridge sent minutes ago in flight", async () => {
+    const { fake, stage } = apFake({
+      book: [payable({ status: "matched", tx_ref: "0xburn", decided_at: "2026-10-01T08:55:00Z" })],
+      minted: null,
+      intent: { provider_tx_id: "cctp:burn-1", tx_hash: "0xburn", status: "pending", destination_chain: "BASE-SEPOLIA" },
+    });
+    await stage();
+    expect(patches(fake.requests)[0]).toMatchObject({ status: "matched" });
+  });
+});

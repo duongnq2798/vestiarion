@@ -4,14 +4,15 @@ Changes to the API and webhooks that affect an integration, newest first. Change
 
 - A counterparty's `chain` is one of `ARC-TESTNET`, `BASE-SEPOLIA`, `ARB-SEPOLIA` or `ETH-SEPOLIA`. `GET /api/v1/counterparties` returns it as before.
 - A payee on a chain other than Arc testnet is paid from Arc through CCTP V2 with Circle's Forwarding Service.
-  - Its decision entry (`ap_pay`, `ap_hold`, `ap_flag_fraud`, `ap_request_info`, `ap_schedule`) carries `payout: { chain, route: "cctp", domain, feeUsdc }` in `detail`. `feeUsdc` is `null` when Circle gave no fee.
-  - Its `execution` carries `destinationChain` and `mintTxHash` once the payment was sent. `execution.txRef` is the burn on Arc testnet.
+  - Its decision entry (`ap_pay`, `ap_hold`, `ap_flag_fraud`, `ap_request_info`, `ap_schedule`) carries `payout: { chain, route: "cctp", domain, feeUsdc }` in `detail`, where `chain` is the chain id (`BASE-SEPOLIA`) and `feeUsdc` is `null` when Circle gave no fee.
+  - Only a vendor can be paid on another chain; a contractor's milestones are released on Arc testnet.
+  - Its `execution` carries `destinationChain` and `mintTxHash` once the payment was sent. `execution.txRef` is the burn on Arc testnet, or `cctp:<Circle transaction id>` while the burn has no hash yet.
   - `mintTxHash` is `null` until the Forwarding Service mints. A later `ap_reconcile` entry carries it.
 - Three new values of `guardrailRule`, each of which holds the payable for a person:
   - `bridge.fee_above_cap`, when the fee is above 10% of the amount;
   - `bridge.fee_unavailable`, when Circle gave no fee;
   - `bridge.unsupported_token`, for an invoice in EURC to a payee on another chain.
-- A bridged invoice is `matched` from the burn until the mint, then `paid`. `GET /api/v1/invoices` shows it so.
+- A bridged invoice is `matched` from the burn until the mint, then `paid`. `GET /api/v1/invoices` shows it so. One still not minted two hours after it was sent is `held` for a person, by an `ap_reconcile` entry saying so.
 
 ## 2026-10-01: Invoices in EURC
 

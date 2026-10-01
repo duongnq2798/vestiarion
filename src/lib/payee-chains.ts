@@ -14,6 +14,9 @@ export type PayeeChain = (typeof PAYEE_CHAINS)[number]["id"];
 
 export const PAYEE_CHAIN_IDS = PAYEE_CHAINS.map((chain) => chain.id) as [PayeeChain, ...PayeeChain[]];
 
+/** The most a CCTP fee may be, as a percent of the invoice, before a payout waits for a person (CCTP payouts R4). */
+export const BRIDGE_FEE_CAP_PERCENT = 10;
+
 /** The chain's entry, or Arc testnet's for a value that is not one of them (a row from before 0044). */
 export function payeeChain(value: string | null | undefined) {
   return PAYEE_CHAINS.find((chain) => chain.id === value) ?? PAYEE_CHAINS[0];

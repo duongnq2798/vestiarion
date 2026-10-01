@@ -6,7 +6,8 @@ import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { isTerminalFailure } from "../payments";
 import { payInvoice, syncOperatingBalance } from "./pay";
 import { invoiceDiscount, type InvoiceDiscount } from "./payment-timing";
-import { paidAcrossChains } from "../payee-chains";
+import { paidAcrossChains, payeeChain } from "../payee-chains";
+import { bridgeFee, type BridgeFee } from "../circle/cctp";
 
 /**
  * The approvals library (spec §6): lets a person pay, reject or return a
@@ -58,7 +59,8 @@ export type ApprovalErrorCode =
   | "insufficient_funds"
   | "no_operating_account"
   | "payment_in_flight"
-  | "address_changed";
+  | "address_changed"
+  | "bridge_unsupported_token";
 
 /** Every message except `insufficient_funds`, whose text names the actual balance. */
 const MESSAGES: Record<Exclude<ApprovalErrorCode, "insufficient_funds">, string> = {
@@ -69,6 +71,7 @@ const MESSAGES: Record<Exclude<ApprovalErrorCode, "insufficient_funds">, string>
   invoice_not_found: "That invoice is not waiting for a decision.",
   payment_in_flight: "A payment for this invoice was already sent. Approve and pay records it.",
   address_changed: "This counterparty's address changed after this page loaded. Check the new address and try again.",
+  bridge_unsupported_token: "Only USDC crosses chains. This invoice is in EURC, and its payee is paid on another chain.",
 };
 
 export class ApprovalError extends Error {
@@ -264,15 +267,21 @@ export interface WaitingPayable {
   discount: InvoiceDiscount | null;
   /** What the invoice is in, and what Approve and pay sends: USDC or EURC (EURC invoices design E4). */
   currency: Stablecoin;
+  /** The chain the payee is paid on (CCTP payouts X1): ARC-TESTNET, or one paid through CCTP. */
+  payeeChain: string;
+  /** For a payee on another chain, the CCTP fee to it as read for this listing; null when not read or not needed (review I2). */
+  bridgeFeeUsdc: number | null;
 }
 
 /** Every payable currently waiting for a person's decision — held, flagged, awaiting more information, or claimed by someone else right now. */
-export async function listWaitingPayables(): Promise<WaitingPayable[]> {
+export async function listWaitingPayables(
+  options: { bridgeFee?: (chain: string, amount: number) => Promise<BridgeFee> } = {}
+): Promise<WaitingPayable[]> {
   const rows = unwrap(
     await db()
       .from("invoices")
       .select(
-        "id, amount, currency, due_date, status, agent_reasoning, decided_at, created_by, reviewed_at, counterparty_id, early_pay_discount_pct, discount_due_date, counterparties(name, risk_level, address)"
+        "id, amount, currency, due_date, status, agent_reasoning, decided_at, created_by, reviewed_at, counterparty_id, early_pay_discount_pct, discount_due_date, counterparties(name, risk_level, address, chain)"
       )
       .eq("direction", "payable")
       .in("status", WAITING_STATUSES)
@@ -290,8 +299,24 @@ export async function listWaitingPayables(): Promise<WaitingPayable[]> {
     counterparty_id: string;
     early_pay_discount_pct?: string | number | null;
     discount_due_date?: string | null;
-    counterparties: { name: string; risk_level: string; address: string | null } | null;
+    counterparties: { name: string; risk_level: string; address: string | null; chain?: string | null } | null;
   }>;
+
+  // The fee to a payee on another chain, read now, so the person approving
+  // sees what leaves (CCTP payouts, review I2). One that cannot be read is null.
+  const readFee = options.bridgeFee ?? ((chain: string, amount: number) => bridgeFee(chain, amount));
+  const fees = new Map<string, number | null>();
+  await Promise.all(
+    rows
+      .filter((row) => paidAcrossChains(row.counterparties?.chain) && currencyOf(row.currency) === "USDC")
+      .map(async (row) => {
+        try {
+          fees.set(row.id, (await readFee(payeeChain(row.counterparties?.chain).id, num(row.amount))).feeUsdc);
+        } catch {
+          fees.set(row.id, null);
+        }
+      })
+  );
 
   const intents = new Map<string, IntentState>();
   if (rows.length > 0) {
@@ -326,6 +351,8 @@ export async function listWaitingPayables(): Promise<WaitingPayable[]> {
       lastAttempt: lastAttemptOf(intent, currencyOf(row.currency)),
       discount: invoiceDiscount(row),
       currency: currencyOf(row.currency),
+      payeeChain: payeeChain(row.counterparties?.chain).id,
+      bridgeFeeUsdc: fees.get(row.id) ?? null,
     };
   });
 }
@@ -445,6 +472,9 @@ export async function approveAndPay(
     raise("address_changed");
   }
 
+  // Only USDC crosses chains (CCTP payouts X6): refused before any claim.
+  if (invoice.currency !== "USDC" && paidAcrossChains(invoice.destinationChain)) raise("bridge_unsupported_token");
+
   const operating = await operatingAccount();
   if (!operating) raise("no_operating_account");
 
@@ -501,7 +531,9 @@ export async function approveAndPay(
         // deadline's UTC day. The funds check above stays on the full amount.
         discount: invoice.discount,
         currency: invoice.currency,
-        ...(paidAcrossChains(invoice.destinationChain) ? { destinationChain: invoice.destinationChain as string } : {}),
+        // A person approving a payout to another chain lets its fee be at most the invoice itself (review I2, I4):
+        // a fee read higher at the burn sends nothing.
+        ...(paidAcrossChains(invoice.destinationChain) ? { destinationChain: invoice.destinationChain as string, maxBridgeFeeUsdc: invoice.amount } : {}),
       },
       // A person's approval is the one caller that may send a payment Circle
       // ended in a terminal failure again, and only when the failure was

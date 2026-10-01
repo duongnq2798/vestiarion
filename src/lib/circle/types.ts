@@ -47,6 +47,8 @@ export interface TransferParams {
    * other is paid from Arc through CCTP V2 with the Forwarding Service.
    */
   destinationChain?: string;
+  /** For a bridged payment, the most its CCTP fee may be, in USDC: a higher fee read at the burn sends nothing (review I4). */
+  maxBridgeFeeUsdc?: number;
   token?: Stablecoin;
 }
 

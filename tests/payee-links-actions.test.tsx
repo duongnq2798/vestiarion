@@ -165,13 +165,23 @@ describe("the payee's page", () => {
   });
 
   it("names the business and the payee, and asks for one address", async () => {
-    lib.previewPayeeLink.mockResolvedValue({ orgName: "Acme", counterpartyName: "Northwind", expiresAt: "2026-10-07T12:00:00+00:00" });
+    lib.previewPayeeLink.mockResolvedValue({ orgName: "Acme", counterpartyName: "Northwind", expiresAt: "2026-10-07T12:00:00+00:00", chain: "ARC-TESTNET" });
     const markup = await render();
     const page = text(markup);
     expect(page).toContain("Acme wants to pay Northwind on Arc testnet");
+    expect(page).toContain("Your address on Arc testnet");
     expect(page).toContain("Acme confirms it before paying you");
     expect(markup).toMatch(/<input[^>]*name="address"/);
     expect(markup).toContain(`value="${TOKEN}"`);
+  });
+
+  it("asks a payee paid on another chain for their address there (review I3)", async () => {
+    lib.previewPayeeLink.mockResolvedValue({ orgName: "Acme", counterpartyName: "Northwind", expiresAt: "2026-10-07T12:00:00+00:00", chain: "BASE-SEPOLIA" });
+    const page = text(await render());
+    expect(page).toContain("Acme wants to pay Northwind on Base Sepolia");
+    expect(page).toContain("Your address on Base Sepolia");
+    expect(page).not.toContain("Northwind on Arc testnet");
+    expect(page).not.toContain("address on Arc testnet");
   });
 
   it("says the same neutral thing for any unusable link, naming no one", async () => {

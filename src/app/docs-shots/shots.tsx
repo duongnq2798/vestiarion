@@ -172,6 +172,8 @@ const HELD: WaitingPayable = {
   lastAttempt: null,
   discount: null,
   currency: "USDC",
+  payeeChain: "ARC-TESTNET",
+  bridgeFeeUsdc: null,
 };
 
 function HashChain({ entries }: { entries: LedgerEntry[] }) {

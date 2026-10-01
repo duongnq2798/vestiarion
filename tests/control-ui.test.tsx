@@ -56,6 +56,8 @@ function payable(overrides: Partial<WaitingPayable> = {}): WaitingPayable {
     lastAttempt: null,
     discount: null,
     currency: "USDC",
+    payeeChain: "ARC-TESTNET",
+    bridgeFeeUsdc: null,
     ...overrides,
   };
 }
@@ -236,6 +238,13 @@ describe("ApprovalCard", () => {
   it("asks before paying, and says when the payment is simulated", () => {
     expect(payConfirmTitle(payable(), false)).toBe("Pay 1,250.00 USDC to Northwind Supply now?");
     expect(payConfirmTitle(payable({ currency: "EURC" }), false)).toBe("Pay 1,250.00 EURC to Northwind Supply now?");
+    // A payee on another chain: where it goes, and the fee on top (CCTP payouts, review I2).
+    expect(payConfirmTitle(payable({ payeeChain: "ETH-SEPOLIA", bridgeFeeUsdc: 1.854162 }), false)).toBe(
+      "Pay 1,250.00 USDC to Northwind Supply on Ethereum Sepolia now? The CCTP fee, about 1.854162 USDC, comes on top."
+    );
+    expect(payConfirmTitle(payable({ payeeChain: "BASE-SEPOLIA", bridgeFeeUsdc: null }), false)).toBe(
+      "Pay 1,250.00 USDC to Northwind Supply on Base Sepolia now? A CCTP fee comes on top."
+    );
     expect(payConfirmTitle(payable(), true)).toBe("Pay 1,250.00 USDC to Northwind Supply now? (simulated)");
   });
 

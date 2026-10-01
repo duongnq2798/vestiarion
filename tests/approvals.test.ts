@@ -416,6 +416,38 @@ describe("approveAndPay", () => {
     expect(patchBodies(fake.requests, "/rest/v1/invoices")).toHaveLength(0);
   });
 
+  describe("a payee on another chain (CCTP payouts, review I2)", () => {
+    const onBase = (r: RecordedRequest) =>
+      r.params.get("id") ? { body: invoiceRow({ counterparties: { name: "Acme Supplies", risk_level: "medium", address: "0xdead", chain: "BASE-SEPOLIA" } }) } : undefined;
+
+    it("sends the payment to the payee's chain, and lets its fee be at most the invoice", async () => {
+      payInvoiceMock.mockResolvedValue({ status: "matched", txRef: "0xburn", execution: null, note: "", operatingBalance: null, amountPaid: 150, discountTaken: 0 });
+      const { run } = approvalsFake({ invoice: onBase });
+      await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+      expect(payInvoiceMock.mock.calls[0][0]).toMatchObject({ destinationChain: "BASE-SEPOLIA", maxBridgeFeeUsdc: 150 });
+    });
+
+    it("refuses an EURC invoice to such a payee before any claim: only USDC crosses (review M11)", async () => {
+      const { fake, run } = approvalsFake({
+        invoice: (r) => (r.params.get("id") ? { body: invoiceRow({ currency: "EURC", counterparties: { name: "Acme Supplies", risk_level: "medium", address: "0xdead", chain: "BASE-SEPOLIA" } }) } : undefined),
+      });
+      const attempt = run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+      await expect(attempt).rejects.toThrow("Only USDC crosses chains");
+      expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
+    });
+
+    it("lists the payee's chain and the fee to it, read now, so the person sees what leaves", async () => {
+      const bridgeFee = vi.fn(async () => ({ feeUsdc: 1.854162, maxFeeUnits: BigInt(1854162), domain: 0 }));
+      const { run } = approvalsFake({
+        invoice: (r) =>
+          r.params.get("id") ? undefined : { body: [invoiceRow({ counterparties: { name: "Acme Supplies", risk_level: "medium", address: "0xdead", chain: "ETH-SEPOLIA" } })] },
+      });
+      const [listed] = await run(() => listWaitingPayables({ bridgeFee }));
+      expect(listed).toMatchObject({ payeeChain: "ETH-SEPOLIA", bridgeFeeUsdc: 1.854162 });
+      expect(bridgeFee).toHaveBeenCalledWith("ETH-SEPOLIA", 150);
+    });
+  });
+
   describe("a EURC payable (EURC invoices design E5)", () => {
     const eurcInvoice = (r: RecordedRequest) => (r.params.get("id") ? { body: invoiceRow({ currency: "EURC" }) } : undefined);
 
@@ -1138,6 +1170,8 @@ describe("listWaitingPayables", () => {
         lastAttempt: null,
         discount: null,
         currency: "USDC",
+        payeeChain: "ARC-TESTNET",
+        bridgeFeeUsdc: null,
       },
     ]);
     const listing = fake.requests.find((r) => r.path === "/rest/v1/invoices" && r.method === "GET" && !r.params.get("id"));

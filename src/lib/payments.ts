@@ -109,6 +109,8 @@ export interface PaymentRequest {
   token?: Stablecoin;
   /** The payee's chain: another than Arc testnet is paid through CCTP (CCTP payouts X2). */
   destinationChain?: string;
+  /** The most a bridged payment's CCTP fee may be, in USDC (review I4). */
+  maxBridgeFeeUsdc?: number;
 }
 
 /** The terminally failed attempt a retry followed: ids and Circle's states only. */
@@ -416,6 +418,7 @@ export async function executePayment(
       idempotencyKey,
       token: request.token ?? "USDC",
       ...(request.destinationChain ? { destinationChain: request.destinationChain } : {}),
+      ...(request.maxBridgeFeeUsdc != null ? { maxBridgeFeeUsdc: request.maxBridgeFeeUsdc } : {}),
     });
     intent = await store.recordResult(idempotencyKey, result);
     return execution(intent, false, retriedAfter);

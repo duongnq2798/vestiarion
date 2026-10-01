@@ -14,7 +14,7 @@ import type {
 import { ARC_FEE_USD } from "./types";
 import { fetchArcFeeUsd } from "./arcFees";
 import { awaitSettlement, FAILED_STATES, withDeadline, type Settlement } from "./settlement";
-import { bridgeFee, bridgeStepKey, burnCalls, forwardedMint, type ContractCall } from "./cctp";
+import { BridgeFeeError, bridgeFee, bridgeStepKey, burnCalls, forwardedMint, type ContractCall } from "./cctp";
 import { payeeChain, paidAcrossChains } from "../payee-chains";
 import type { ChainConfig } from "../config";
 
@@ -23,8 +23,12 @@ export type LiveProviderClient = Pick<
   "createTransaction" | "getWalletTokenBalance" | "getTransaction" | "createContractExecutionTransaction"
 >;
 
-/** How long a bridge waits for the Forwarding Service's mint before reporting the payment in flight. */
-const BRIDGE_MINT_WAIT_MS = 30_000;
+/**
+ * How long a bridge waits for the Forwarding Service's mint before reporting
+ * the payment in flight: Circle documents 8–20 s for a fast transfer. Kept to
+ * that so a cycle's bridges stay inside the tick's time budget (review I6).
+ */
+export const BRIDGE_MINT_WAIT_MS = 20_000;
 const BRIDGE_MINT_POLL_MS = 3_000;
 /** A bridge's provider id: its burn, or its approve when the burn was never sent (X9). */
 const BURN_ID = "cctp:";
@@ -246,6 +250,13 @@ export class LiveProvider implements ChainProvider {
     }
     const chain = payeeChain(params.destinationChain);
     const fee = await bridgeFee(chain.id, params.amount, { fetch: this.fetch });
+    // The fee is read again here, just before the burn; one above what this
+    // payment may pay sends nothing (review I4).
+    if (params.maxBridgeFeeUsdc != null && fee.feeUsdc > params.maxBridgeFeeUsdc) {
+      throw new BridgeFeeError(
+        `The CCTP fee to ${chain.label}, ${fee.feeUsdc} USDC, is above the ${params.maxBridgeFeeUsdc} USDC this payment may pay; nothing was sent.`
+      );
+    }
     const [approve, burn] = burnCalls({ amount: params.amount, maxFeeUnits: fee.maxFeeUnits, domain: fee.domain, recipient: params.toAddress });
     const started = Date.now();
     const base = { chain: account.chain, providerMode: "live" as const, destinationChain: chain.id, bridgeFeeUsdc: fee.feeUsdc };

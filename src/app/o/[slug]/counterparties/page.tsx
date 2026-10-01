@@ -92,7 +92,9 @@ export default async function CounterpartiesPage({ params }: { params: Promise<{
                           <span className="truncate">{counterparty.name}</span>
                           {counterparty.sample && <Badge size="sm" tone="simulated" shape="tag">Sample</Badge>}
                         </h3>
-                        <p className="mt-0.5 text-xs capitalize text-ink-3">{counterparty.role} · {payeeChain(counterparty.chain).label}</p>
+                        <p className="mt-0.5 text-xs text-ink-3">
+                          <span className="capitalize">{counterparty.role}</span> · {payeeChain(counterparty.chain).label}
+                        </p>
                       </div>
                       <Badge size="sm" dot tone={RISK_TONE[counterparty.risk_level] ?? "neutral"} className="shrink-0 capitalize">
                         {counterparty.risk_level}

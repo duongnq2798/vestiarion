@@ -245,12 +245,43 @@ describe("invoiceDecision: a payee on another chain (CCTP payouts X11)", () => {
     const decision = invoiceDecision(invoice({ status: "paid", tx_ref: "0xburn" }), { payment_limit: 10, chain: "BASE-SEPOLIA" } as never, [reconciled]);
     expect(decision.txHash).toBe("0xburn");
     expect(decision.mint).toEqual({ chainLabel: "Base Sepolia", txHash: "0xmint", href: "https://sepolia.basescan.org/tx/0xmint" });
-    expect(decision.evidence).toContainEqual({ label: "Paid on", value: "Base Sepolia, through CCTP", state: "neutral" });
+    expect(decision.evidence).toContainEqual({ label: "Payee's chain", value: "Base Sepolia, through CCTP", state: "neutral" });
   });
 
   it("has no mint for a payee on Arc", () => {
     const decision = invoiceDecision(invoice({ status: "paid", tx_ref: "0xabc" }), { payment_limit: 10, chain: "ARC-TESTNET" } as never, []);
     expect(decision.mint ?? null).toBeNull();
-    expect(decision.evidence.find((item) => item.label === "Paid on")).toBeUndefined();
+    expect(decision.evidence.find((item) => item.label === "Payee's chain")).toBeUndefined();
+  });
+});
+
+describe("invoiceDecision: a payout code held (review I1, M3, M14)", () => {
+  const held = (rule: string, payout: Record<string, unknown>) =>
+    ({ seq: 13, id: "e13", ts: "2026-10-01T09:00:00.000Z", actor: "agent", domain: "ap", action: "ap_pay", summary: "",
+      detail: { invoiceId: "inv-1", currency: "USDC", guardrailBlocked: true, guardrailRule: rule, payout, observed: { paymentLimit: 50, riskLevel: "clear" } } }) as unknown as LedgerEntry;
+
+  it("names the fee rule, and sets the fee against what 10% of the invoice allows", () => {
+    const decision = invoiceDecision(invoice({ amount: 2, status: "held" }), { payment_limit: 50, chain: "ETH-SEPOLIA" } as never, [
+      held("bridge.fee_above_cap", { chain: "ETH-SEPOLIA", route: "cctp", domain: 0, feeUsdc: 1.854162 }),
+    ]);
+    expect(decision.guardrail).toEqual({ rule: "bridge.fee_above_cap", attempted: 1.854162, limit: 0.2, note: "CCTP fee, against 10% of the invoice" });
+  });
+
+  it("names a payout held for want of a fee by its rule", () => {
+    const decision = invoiceDecision(invoice({ amount: 2, status: "held" }), { payment_limit: 50, chain: "BASE-SEPOLIA" } as never, [
+      held("bridge.fee_unavailable", { chain: "BASE-SEPOLIA", route: "cctp", domain: 6, feeUsdc: null }),
+    ]);
+    expect(decision.guardrail).toMatchObject({ rule: "bridge.fee_unavailable", note: "no CCTP fee from Circle" });
+  });
+
+  it("calls the payee's chain what it is, paid or not", () => {
+    const decision = invoiceDecision(invoice({ status: "held" }), { payment_limit: 50, chain: "BASE-SEPOLIA" } as never, []);
+    expect(decision.evidence).toContainEqual({ label: "Payee's chain", value: "Base Sepolia, through CCTP", state: "neutral" });
+  });
+
+  it("links no simulated mint", () => {
+    const simulated = { seq: 14, id: "e14", ts: "2026-10-01T09:00:00.000Z", actor: "agent", domain: "ap", action: "ap_pay", summary: "",
+      detail: { invoiceId: "inv-1", execution: { destinationChain: "BASE-SEPOLIA", mintTxHash: "sim_mint_1" } } } as unknown as LedgerEntry;
+    expect(invoiceDecision(invoice({ status: "paid", tx_ref: "sim_1" }), undefined, [simulated]).mint ?? null).toBeNull();
   });
 });

@@ -50,6 +50,9 @@ export class SimulateProvider implements ChainProvider {
 
   async transfer(params: TransferParams): Promise<TransferResult> {
     const account = await this.account(params.fromAccountId);
+    if (paidAcrossChains(params.destinationChain) && (params.token ?? "USDC") !== "USDC") {
+      throw new Error("Only USDC crosses chains through CCTP; a EURC payment is paid on Arc testnet only.");
+    }
     // A simulated account holds USDC only: an EURC payment is simulated like a
     // USDC one but never moves the USDC balance (EURC invoices spec E7).
     if ((params.token ?? "USDC") === "USDC") {

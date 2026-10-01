@@ -128,6 +128,57 @@ describe("LiveProvider: a payee on another chain", () => {
     expect(result).toMatchObject({ status: "failed", providerTxId: "cctp-approve:approve-tx" });
   });
 
+  it("sends nothing when the fee read now is above the most this payment may pay (review I4)", async () => {
+    const { client, executions } = circle();
+    const provider = new LiveProvider(CHAIN, { client, fetch: iris(null), bridgeMintWaitMs: 0 });
+    await expect(provider.transfer({ ...TRANSFER, maxBridgeFeeUsdc: 0.05 })).rejects.toThrow(/above the 0.05 USDC/);
+    expect(executions).toEqual([]);
+  });
+
+  it("throws, burning nothing, while Circle has not confirmed the approve, so the next attempt sends the same approve (review I7)", async () => {
+    const { client, executions, raw } = circle();
+    raw.getTransaction.mockImplementation((async ({ id }: { id: string }) => ({
+      data: { transaction: { id, state: "SENT", blockchain: "ARC-TESTNET", createDate: "2026-10-01T00:00:00Z" } },
+    })) as never);
+    const provider = new LiveProvider(CHAIN, { client, fetch: iris(null), bridgeMintWaitMs: 0 });
+    await expect(provider.transfer(TRANSFER)).rejects.toThrow(/nothing was burned/);
+    expect(executions.map((call) => call.abiFunctionSignature)).toEqual(["approve(address,uint256)"]);
+  });
+
+  it("reports a burn Circle failed after the approve confirmed as failed, under the burn's id (review I7)", async () => {
+    const { client, raw } = circle();
+    raw.getTransaction.mockImplementation((async ({ id }: { id: string }) => ({
+      data: {
+        transaction: id === "burn-tx"
+          ? { id, state: "FAILED", errorReason: "FAILED_ON_CHAIN", blockchain: "ARC-TESTNET", createDate: "2026-10-01T00:00:00Z" }
+          : { id, state: "COMPLETE", txHash: "0xapprove", blockchain: "ARC-TESTNET", createDate: "2026-10-01T00:00:00Z" },
+      },
+    })) as never);
+    const result = await new LiveProvider(CHAIN, { client, fetch: iris(null), bridgeMintWaitMs: 0 }).transfer(TRANSFER);
+    expect(result).toMatchObject({ status: "failed", providerTxId: "cctp:burn-tx", failureReason: "FAILED_ON_CHAIN" });
+  });
+
+  it("reconciles a failed approve as failed, and sends nothing (review I7)", async () => {
+    const { client, executions, raw } = circle();
+    raw.getTransaction.mockImplementation((async ({ id }: { id: string }) => ({
+      data: { transaction: { id, state: "FAILED", errorReason: "INSUFFICIENT_TOKEN", blockchain: "ARC-TESTNET", createDate: "2026-10-01T00:00:00Z" } },
+    })) as never);
+    const result = await new LiveProvider(CHAIN, { client, fetch: iris(null), bridgeMintWaitMs: 0 }).reconcileTransfer("cctp-approve:approve-tx");
+    expect(result).toMatchObject({ status: "failed", providerTxId: "cctp-approve:approve-tx" });
+    expect(executions).toEqual([]);
+  });
+
+  it("waits no more than 20 s for the mint, inside the tick's time budget (review I6)", async () => {
+    const { BRIDGE_MINT_WAIT_MS } = await import("@/lib/circle/liveProvider");
+    expect(BRIDGE_MINT_WAIT_MS).toBe(20_000);
+  });
+
+  it("refuses a simulated EURC bridge too: only USDC crosses (review M11)", async () => {
+    const provider = new SimulateProvider();
+    vi.spyOn(provider as unknown as { account: (id: string) => Promise<unknown> }, "account").mockResolvedValue({ id: "account-1", chain: "ARC-TESTNET", token: "USDC", balance: "100" });
+    await expect(provider.transfer({ ...TRANSFER, token: "EURC" })).rejects.toThrow(/Only USDC/);
+  });
+
   it("reconciles a bridge by its burn and the mint Iris reports, and sends nothing", async () => {
     const { client, executions } = circle();
     const pending = await new LiveProvider(CHAIN, { client, fetch: iris(null), bridgeMintWaitMs: 0 }).reconcileTransfer("cctp:burn-tx");

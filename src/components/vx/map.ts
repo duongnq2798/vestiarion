@@ -5,7 +5,7 @@ import type { LedgerEntry } from "@/lib/ledger";
 import type { CounterpartyRow, InvoiceRow, MilestoneRow, TreasuryActionRow } from "@/lib/queries";
 import type { Decision, Evidence, Guardrail, Outcome } from "./types";
 import { fmt } from "./Primitives";
-import { paidAcrossChains, payeeChain } from "@/lib/payee-chains";
+import { BRIDGE_FEE_CAP_PERCENT, paidAcrossChains, payeeChain } from "@/lib/payee-chains";
 
 /**
  * Renders the duplicate-billing check as evidence in its own right — including
@@ -172,7 +172,7 @@ export function invoiceDecision(invoice: InvoiceRow, counterparty: CounterpartyR
       { label: "Due", value: new Date(invoice.due_date).toLocaleDateString("en-US"), state: "neutral" },
       termsEvidence(invoice),
       paidEvidence(invoice),
-      paidAcrossChains(counterparty?.chain) ? { label: "Paid on", value: `${payeeChain(counterparty?.chain).label}, through CCTP`, state: "neutral" as const } : null,
+      paidAcrossChains(counterparty?.chain) ? { label: "Payee's chain", value: `${payeeChain(counterparty?.chain).label}, through CCTP`, state: "neutral" as const } : null,
       duplicateEvidence(observed),
     ].filter((item): item is Evidence => item !== null),
     guardrail: guardrailBlocked ? invoiceGuardrail(invoice.amount, currency, usdcValue, limit, risk, rule, entry?.detail) : null,
@@ -190,7 +190,8 @@ function mintOf(invoiceId: string, entries: LedgerEntry[]): Decision["mint"] {
     if (entry.detail.invoiceId !== invoiceId) continue;
     const execution = record(entry.detail.execution);
     const txHash = stringValue(execution?.mintTxHash);
-    if (!txHash) continue;
+    // A simulated mint has nothing on chain to link (review M3).
+    if (!txHash || !txHash.startsWith("0x")) continue;
     const chain = payeeChain(stringValue(execution?.destinationChain));
     return { chainLabel: chain.label, txHash, href: `${chain.explorerTx}${txHash}` };
   }
@@ -213,6 +214,14 @@ function invoiceGuardrail(
   detail: Record<string, unknown> | undefined
 ): Guardrail {
   const recorded = stringValue(detail?.guardrailRule);
+  // A payout to another chain code held (CCTP payouts X4–X6, review I1): its
+  // own rule, and for a costly one the fee against what 10% of the invoice allows.
+  if (recorded === "bridge.fee_above_cap") {
+    const fee = numberValue(record(detail?.payout)?.feeUsdc) ?? 0;
+    return { rule: recorded, attempted: fee, limit: Math.round(amount * BRIDGE_FEE_CAP_PERCENT * 10_000) / 1_000_000, note: `CCTP fee, against ${BRIDGE_FEE_CAP_PERCENT}% of the invoice` };
+  }
+  if (recorded === "bridge.fee_unavailable") return { rule: recorded, attempted: amount, limit, note: "no CCTP fee from Circle" };
+  if (recorded === "bridge.unsupported_token") return { rule: recorded, attempted: amount, attemptedToken: currency, limit, limitToken: "USDC", note: "only USDC crosses chains" };
   if (currency !== "EURC") {
     return { rule: inferredRule, attempted: amount, limit, note: risk === "high" ? "risk tier high" : "amount above screened limit" };
   }

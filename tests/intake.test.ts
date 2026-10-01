@@ -31,6 +31,13 @@ describe("counterparty intake", () => {
     if (!elsewhere.success) expect(firstZodMessage(elsewhere.error)).toContain("Choose a chain Vestiarion can pay on");
   });
 
+  it("pays only a vendor on another chain: a contractor's milestones are released on Arc testnet (review C1)", () => {
+    const contractor = counterpartyInputSchema.safeParse({ ...base, role: "contractor", chain: "BASE-SEPOLIA" });
+    expect(contractor.success).toBe(false);
+    if (!contractor.success) expect(firstZodMessage(contractor.error)).toContain("Only a vendor can be paid on another chain");
+    expect(counterpartyInputSchema.safeParse({ ...base, role: "contractor", chain: "ARC-TESTNET" }).success).toBe(true);
+  });
+
   it("allows a client with no outbound payment authority", () => {
     const result = counterpartyInputSchema.safeParse({ ...base, role: "client", paymentLimit: "" });
     expect(result.success).toBe(true);

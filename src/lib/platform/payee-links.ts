@@ -120,10 +120,12 @@ export interface PayeeLinkPreview {
   orgName: string;
   counterpartyName: string;
   expiresAt: string;
+  /** The chain the payee is paid on, so the page asks for an address there (CCTP payouts, review I3). */
+  chain: string;
 }
 
 /** What the payee's page shows for a usable link; null for any other (R4). */
-export async function previewPayeeLink(token: string): Promise<PayeeLinkPreview | null> {
+export async function previewPayeeLink(token: string, options: { withChain?: boolean } = {}): Promise<PayeeLinkPreview | null> {
   const hash = payeeLinkHash(token);
   if (!hash) return null;
   const rows = unwrap(await platformDb().rpc("payee_link_preview", { p_token_hash: hash })) as Array<{
@@ -132,7 +134,18 @@ export async function previewPayeeLink(token: string): Promise<PayeeLinkPreview 
     expires_at: string;
   }>;
   const row = rows[0];
-  return row ? { orgName: row.org_name, counterpartyName: row.counterparty_name, expiresAt: row.expires_at } : null;
+  if (!row) return null;
+  // Read on its own (0044): a chain that cannot be read is Arc testnet, where every payee was paid before.
+  let chain = "ARC-TESTNET";
+  if (options.withChain !== false) {
+    try {
+      const found = unwrap(await platformDb().rpc("payee_link_chain", { p_token_hash: hash }));
+      if (typeof found === "string" && found) chain = found;
+    } catch (error) {
+      console.error("payee link: chain not read", error instanceof Error ? error.message : error);
+    }
+  }
+  return { orgName: row.org_name, counterpartyName: row.counterparty_name, expiresAt: row.expires_at, chain };
 }
 
 export type PayeeSubmission =
@@ -151,7 +164,8 @@ export async function submitPayeeAddress(token: string, raw: string): Promise<Pa
   const parsed = parseAddressInput(raw);
   if (!parsed.ok || parsed.address === null) return { ok: false, reason: "invalid_address" };
 
-  const preview = await previewPayeeLink(token);
+  // The submission needs the business's name, not the chain.
+  const preview = await previewPayeeLink(token, { withChain: false });
   if (!preview) return { ok: false, reason: "invalid_link" };
   const claimed = unwrap(await platformDb().rpc("claim_payee_link", { p_token_hash: hash })) as Array<{
     link_id: string;

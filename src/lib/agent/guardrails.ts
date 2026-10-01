@@ -1,6 +1,7 @@
 import type { DuplicateMatch } from "./duplicates";
 import { blockingDuplicate } from "./duplicates";
 import { addressUnconfirmed } from "../counterparty-address";
+import { BRIDGE_FEE_CAP_PERCENT } from "../payee-chains";
 
 export interface ApGuardrailInput {
   action: "pay" | "schedule" | "hold" | "flag_fraud" | "request_info";
@@ -42,8 +43,7 @@ export type ApGuardrailRule =
   | "bridge.fee_unavailable"
   | "bridge.fee_above_cap";
 
-/** The most a CCTP fee may be, as a percent of the invoice, before a payout waits for a person (CCTP payouts R4). */
-export const BRIDGE_FEE_CAP_PERCENT = 10;
+export { BRIDGE_FEE_CAP_PERCENT };
 
 export interface ApGuardrailResult {
   blocked: boolean;
@@ -139,7 +139,7 @@ export function enforceApGuardrails(input: ApGuardrailInput): ApGuardrailResult 
       blocked: true,
       status: "held",
       rule: "bridge.fee_above_cap",
-      reasoning: `${input.reasoning} [guardrail override: the CCTP fee is ${input.bridge.feePercent}% of the amount, above the ${BRIDGE_FEE_CAP_PERCENT}% a payout may cost — ${verb} refused before execution]`,
+      reasoning: `${input.reasoning} [guardrail override: the CCTP fee is ${input.bridge.feePercent.toFixed(2)}% of the amount, above the ${BRIDGE_FEE_CAP_PERCENT}% a payout may cost — ${verb} refused before execution]`,
     };
   }
   // A EURC invoice is paid from EURC, never from USDC (E5): a payment the
