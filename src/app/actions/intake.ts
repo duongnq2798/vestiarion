@@ -162,6 +162,11 @@ export async function updateCounterpartyLimitAction(
     try {
       const result = await changeCounterpartyLimit({ actorId: auth.user.id, counterpartyId: id.data, raw: formString(formData, "paymentLimit") });
       revalidateOrgPages();
+      // A higher limit can unblock a payment held over the old one, so the agent looks again within a minute
+      // (follow-up reopens it). A lower one, or one screening allows none of, unblocks nothing.
+      if (result.from !== null && result.to !== null && result.to > result.from && (result.current ?? 0) > 0) {
+        raiseCycleEvent(auth, "limit_raised");
+      }
       if (result.to === null) return { ok: true, message: `${result.name}'s payment limit cleared.` };
       return {
         ok: true,

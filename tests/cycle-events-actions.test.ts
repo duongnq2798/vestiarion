@@ -3,7 +3,7 @@ import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { returnInvoiceAction } from "@/app/actions/approvals";
 import { resumeAgentAction } from "@/app/actions/agent";
-import { confirmCounterpartyAddressAction, createInvoiceAction, importInvoicesAction } from "@/app/actions/intake";
+import { confirmCounterpartyAddressAction, createInvoiceAction, importInvoicesAction, updateCounterpartyLimitAction } from "@/app/actions/intake";
 import { manualMilestoneVerificationAction } from "@/app/actions/milestones";
 import { loadSampleDataAction } from "@/app/actions/sample-data";
 import { refreshOnChainBalanceAction } from "@/app/actions/treasury";
@@ -26,6 +26,7 @@ const { ORG, USER, raiseMock, authorizeMock, mocks } = vi.hoisted(() => ({
     returnInvoice: vi.fn(),
     resumeAgent: vi.fn(),
     confirmCounterpartyAddress: vi.fn(),
+    changeCounterpartyLimit: vi.fn(),
     loadSampleData: vi.fn(),
     refreshOnChainBalances: vi.fn(),
     appendLedgerEntry: vi.fn(),
@@ -49,6 +50,10 @@ vi.mock("@/lib/platform/pause", async (importOriginal) => ({
 vi.mock("@/lib/counterparty-address", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/counterparty-address")>()),
   confirmCounterpartyAddress: mocks.confirmCounterpartyAddress,
+}));
+vi.mock("@/lib/counterparty-limit", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/counterparty-limit")>()),
+  changeCounterpartyLimit: mocks.changeCounterpartyLimit,
 }));
 vi.mock("@/lib/sample-data", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/sample-data")>()),
@@ -188,6 +193,34 @@ describe("confirming a changed address", () => {
   it("raises nothing when there was nothing to confirm", async () => {
     mocks.confirmCounterpartyAddress.mockResolvedValue(false);
     await confirmCounterpartyAddressAction(empty, form({ counterpartyId: COUNTERPARTY, address: "0xabc" }));
+    expect(raiseMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("changing a counterparty's limit", () => {
+  const change = (paymentLimit: string) => updateCounterpartyLimitAction(empty, form({ counterpartyId: COUNTERPARTY, paymentLimit }));
+
+  it("raises limit_raised when the limit went up and screening allows some of it, so a held payment is decided again", async () => {
+    mocks.changeCounterpartyLimit.mockResolvedValue({ name: "Acme", from: 1, to: 5, current: 5 });
+    await change("5");
+    expect(raiseMock).toHaveBeenCalledWith(ACCESS, "limit_raised");
+  });
+
+  it("raises nothing when the limit went down", async () => {
+    mocks.changeCounterpartyLimit.mockResolvedValue({ name: "Acme", from: 5, to: 1, current: 1 });
+    await change("1");
+    expect(raiseMock).not.toHaveBeenCalled();
+  });
+
+  it("raises nothing when screening allows nothing for the counterparty's risk", async () => {
+    mocks.changeCounterpartyLimit.mockResolvedValue({ name: "Acme", from: 1, to: 5, current: 0 });
+    await change("5");
+    expect(raiseMock).not.toHaveBeenCalled();
+  });
+
+  it("raises nothing when the change is refused", async () => {
+    mocks.changeCounterpartyLimit.mockRejectedValue(new Error("conflict"));
+    await change("5").catch(() => undefined);
     expect(raiseMock).not.toHaveBeenCalled();
   });
 });
