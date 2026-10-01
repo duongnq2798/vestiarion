@@ -33,6 +33,7 @@ export type CycleEventKind =
   | "payable_returned"
   | "address_confirmed"
   | "match_dismissed"
+  | "payment_received"
   | "limit_raised"
   | "agent_resumed"
   | "sample_loaded";
