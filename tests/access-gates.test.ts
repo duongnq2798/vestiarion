@@ -74,14 +74,14 @@ describe("every /o/[slug] page", () => {
 });
 
 describe("every server action", () => {
-  it("lives in src/app/actions, except sign-in, accepting an invitation, creating a first workspace, your own account, and a payee's own address", () => {
+  it("lives in src/app/actions, except sign-in, accepting an invitation, creating a first workspace, your own account, a payee's own address, and a client's payment check", () => {
     const withDirective = walk(path.join(ROOT, "src")).filter(
       (file) => /\.(ts|tsx)$/.test(file) && /^\s*["']use server["']/.test(read(file))
     );
     const outside = withDirective.map(rel).filter((file) => !file.startsWith("src/app/actions/"));
     expect(outside.sort()).toEqual([
       "src/app/account/actions.ts", "src/app/invite/actions.ts", "src/app/login/actions.ts", "src/app/onboarding/actions.ts",
-      "src/app/payee/[token]/actions.ts",
+      "src/app/pay/[token]/actions.ts", "src/app/payee/[token]/actions.ts",
     ]);
   });
 
