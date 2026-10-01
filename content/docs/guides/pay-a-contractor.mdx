@@ -32,6 +32,8 @@ Within a minute of a milestone being verified, the agent decides whether to rele
 
 Code checks every release the model asks for. It refuses one for a contractor screened high risk, or one above the contractor's payment limit, and the card says so. A released milestone's card links its transaction on Arc testnet.
 
+A held milestone is decided again once something it was held for changes: the contractor's payment limit, their screening, or the milestone's evidence. Raising the limit on the counterparty brings the agent back within a minute. The ledger records `milestone_reopened` with what changed, followed by the new decision.
+
 ## Lock a milestone in escrow
 
 A live workspace can lock a milestone's USDC in a contract on Arc testnet before the work starts, so the contractor can see the money is set aside for them.

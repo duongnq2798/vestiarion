@@ -32,6 +32,7 @@ export type CycleEventKind =
   | "milestone_added"
   | "payable_returned"
   | "address_confirmed"
+  | "limit_raised"
   | "agent_resumed"
   | "sample_loaded";
 
