@@ -23,6 +23,7 @@ import {
   CounterpartyAddressError,
 } from "@/lib/counterparty-address";
 import { changeCounterpartyLimit, CounterpartyLimitError } from "@/lib/counterparty-limit";
+import { documentProvenance } from "@/lib/invoice-document/provenance";
 import { appendLedgerEntry } from "@/lib/ledger";
 
 export interface IntakeActionResult {
@@ -255,6 +256,17 @@ export async function createInvoiceAction(
           .single<{ id: string }>()
       );
 
+      // An invoice read from a document records where it came from (invoice from a document D8).
+      const document = documentProvenance(formData, {
+        amount: input.amount,
+        currency: input.currency,
+        dueDate: input.dueDate,
+        poReference: input.poReference,
+        earlyPayDiscountPct: input.earlyPayDiscountPct,
+        discountDeadline: input.discountDeadline,
+        memo: input.memo,
+        counterpartyId: counterparty.id,
+      });
       await appendLedgerEntry({
         actor: "human",
         domain: input.direction === "payable" ? "ap" : "ar",
@@ -270,6 +282,7 @@ export async function createInvoiceAction(
           dueDate: input.dueDate,
           poReference: input.poReference,
           goodsReceived: input.goodsReceived,
+          ...(document ? { document } : {}),
         },
       });
 
