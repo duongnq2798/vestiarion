@@ -1,0 +1,216 @@
+import { createHash } from "node:crypto";
+import { payeeChain, type PayeeChain } from "../payee-chains";
+import { ARC_TESTNET_DOMAIN, ARC_TESTNET_USDC } from "./cctp";
+
+/**
+ * Circle Gateway from Arc testnet (docs/superpowers/specs/2026-10-01-gateway-payouts-design.md).
+ * A workspace's operating wallet deposits USDC into GatewayWallet on Arc; a
+ * payout is then a burn intent its Gateway signer signs, sent to Gateway's
+ * API with the Forwarding Service, and Circle mints on the payee's chain.
+ * The EIP-712 types and domain are Circle's, exactly as its reference for an
+ * SCA depositor with an EOA delegate builds them: a changed field name, type
+ * or order makes every signature invalid.
+ */
+
+/** GatewayWallet and GatewayMinter: the same addresses on every EVM testnet, Arc's included. */
+export const GATEWAY_WALLET = "0x0077777d7EBA4688BDeF3E311b846F25870A19B9";
+export const GATEWAY_MINTER = "0x0022222ABE238Cc2C7Bb1f21003F0a260052475B";
+export const GATEWAY_API = "https://gateway-api-testnet.circle.com/v1";
+/** What a forwarded Gateway payout takes: the attestation is instant, and the mint is the next block on the payee's chain. */
+export const EXPECTED_GATEWAY_SECONDS = 5;
+
+/** USDC on each chain a payee can be paid on, as Circle lists it for testnets. */
+export const USDC_BY_CHAIN: Record<PayeeChain, string> = {
+  "ARC-TESTNET": ARC_TESTNET_USDC,
+  "BASE-SEPOLIA": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+  "ARB-SEPOLIA": "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d",
+  "ETH-SEPOLIA": "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+};
+
+const GATEWAY_DEADLINE_MS = 10_000;
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
+/** A Gateway API refusal or silence, in words that are safe to record. */
+export class GatewayError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "GatewayError";
+  }
+}
+
+const toBytes32 = (address: string) => `0x${address.toLowerCase().replace(/^0x/, "").padStart(64, "0")}`;
+const toUnits = (amount: number) => BigInt(Math.round(amount * 1_000_000));
+
+/**
+ * The burn intent's salt for a payment attempt: sha256 of its key and the
+ * route. Every attempt under the same key asks for the same transfer, and
+ * GatewayWallet spends a salt only once, so a retried payout cannot pay twice.
+ */
+export function gatewaySalt(attemptKey: string): `0x${string}` {
+  return `0x${createHash("sha256").update(`${attemptKey}:gateway`, "utf8").digest("hex")}`;
+}
+
+export interface GatewayPayout {
+  /** The operating wallet: the Gateway balance's depositor. */
+  depositor: string;
+  /** The workspace's Gateway signer, the depositor's delegate. */
+  signer: string;
+  /** The payee, on `chain`. */
+  recipient: string;
+  chain: PayeeChain | string;
+  amount: number;
+  salt: `0x${string}`;
+}
+
+export interface BurnIntent {
+  maxBlockHeight: string;
+  maxFee: string;
+  spec: {
+    version: 1;
+    sourceDomain: number;
+    destinationDomain: number;
+    sourceContract: string;
+    destinationContract: string;
+    sourceToken: string;
+    destinationToken: string;
+    sourceDepositor: string;
+    destinationRecipient: string;
+    sourceSigner: string;
+    destinationCaller: string;
+    value: string;
+    salt: string;
+    hookData: "0x";
+  };
+}
+
+function transferSpec(payout: GatewayPayout): BurnIntent["spec"] {
+  const target = payeeChain(payout.chain);
+  if (target.id === "ARC-TESTNET") throw new GatewayError("A payee on Arc testnet is paid directly, not through Gateway");
+  return {
+    version: 1,
+    sourceDomain: ARC_TESTNET_DOMAIN,
+    destinationDomain: target.domain,
+    sourceContract: toBytes32(GATEWAY_WALLET),
+    destinationContract: toBytes32(GATEWAY_MINTER),
+    sourceToken: toBytes32(ARC_TESTNET_USDC),
+    destinationToken: toBytes32(USDC_BY_CHAIN[target.id]),
+    sourceDepositor: toBytes32(payout.depositor),
+    destinationRecipient: toBytes32(payout.recipient),
+    sourceSigner: toBytes32(payout.signer),
+    destinationCaller: toBytes32(ZERO_ADDRESS),
+    value: toUnits(payout.amount).toString(),
+    salt: payout.salt,
+    hookData: "0x",
+  };
+}
+
+export function burnIntent(input: GatewayPayout & { maxFee: bigint; maxBlockHeight: string }): BurnIntent {
+  return { maxBlockHeight: input.maxBlockHeight, maxFee: input.maxFee.toString(), spec: transferSpec(input) };
+}
+
+const EIP712_TYPES = {
+  EIP712Domain: [
+    { name: "name", type: "string" },
+    { name: "version", type: "string" },
+  ],
+  TransferSpec: [
+    { name: "version", type: "uint32" },
+    { name: "sourceDomain", type: "uint32" },
+    { name: "destinationDomain", type: "uint32" },
+    { name: "sourceContract", type: "bytes32" },
+    { name: "destinationContract", type: "bytes32" },
+    { name: "sourceToken", type: "bytes32" },
+    { name: "destinationToken", type: "bytes32" },
+    { name: "sourceDepositor", type: "bytes32" },
+    { name: "destinationRecipient", type: "bytes32" },
+    { name: "sourceSigner", type: "bytes32" },
+    { name: "destinationCaller", type: "bytes32" },
+    { name: "value", type: "uint256" },
+    { name: "salt", type: "bytes32" },
+    { name: "hookData", type: "bytes" },
+  ],
+  BurnIntent: [
+    { name: "maxBlockHeight", type: "uint256" },
+    { name: "maxFee", type: "uint256" },
+    { name: "spec", type: "TransferSpec" },
+  ],
+};
+
+/** The typed data the Gateway signer signs, through Circle's `signTypedData`. */
+export function burnIntentTypedData(intent: BurnIntent) {
+  return { types: EIP712_TYPES, domain: { name: "GatewayWallet", version: "1" }, primaryType: "BurnIntent" as const, message: intent };
+}
+
+async function call(what: string, url: string, init: RequestInit, fetcher: typeof fetch): Promise<unknown> {
+  let response: Response;
+  try {
+    response = await fetcher(url, { ...init, signal: AbortSignal.timeout(GATEWAY_DEADLINE_MS), cache: "no-store" });
+  } catch {
+    throw new GatewayError(`Gateway did not answer the ${what}`);
+  }
+  const body = (await response.json().catch(() => null)) as { message?: unknown } | null;
+  if (!response.ok) {
+    const said = typeof body?.message === "string" ? `: ${body.message.slice(0, 200)}` : "";
+    throw new GatewayError(`Gateway answered ${response.status} to the ${what}${said}`);
+  }
+  return body;
+}
+
+const post = (body: unknown): RequestInit => ({ method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+
+/**
+ * What a forwarded payout costs, and the `maxFee` and `maxBlockHeight` to
+ * sign it with: Gateway's estimate covers its base fee and the Forwarding
+ * Service's fee for minting on the payee's chain.
+ */
+export async function estimateGateway(payout: GatewayPayout, options: { fetch?: typeof fetch } = {}): Promise<{ maxFee: bigint; maxBlockHeight: string; feeUsdc: number }> {
+  const answer = (await call("fee estimate", `${GATEWAY_API}/estimate?enableForwarder=true`, post([{ spec: transferSpec(payout) }]), options.fetch ?? fetch)) as {
+    body?: Array<{ burnIntent?: { maxFee?: string; maxBlockHeight?: string } }>;
+    fees?: { total?: string };
+  } | null;
+  const estimated = answer?.body?.[0]?.burnIntent;
+  const total = Number(answer?.fees?.total);
+  if (!estimated?.maxFee || !estimated.maxBlockHeight || !Number.isFinite(total) || total < 0) {
+    throw new GatewayError("Gateway's fee estimate had no fee");
+  }
+  return { maxFee: BigInt(estimated.maxFee), maxBlockHeight: estimated.maxBlockHeight, feeUsdc: total };
+}
+
+/** The depositor's unified Gateway balance in USDC, over every domain Gateway answers for. */
+export async function gatewayBalance(depositor: string, options: { fetch?: typeof fetch } = {}): Promise<number> {
+  const answer = (await call("balance read", `${GATEWAY_API}/balances`, post({ token: "USDC", sources: [{ domain: ARC_TESTNET_DOMAIN, depositor }] }), options.fetch ?? fetch)) as {
+    balances?: Array<{ balance?: string }>;
+  } | null;
+  const total = (answer?.balances ?? []).reduce((sum, row) => sum + (Number(row.balance) || 0), 0);
+  return Math.round(total * 1_000_000) / 1_000_000;
+}
+
+/** Sends a signed burn intent, with forwarding: Circle mints on the payee's chain. Returns the transfer's id. */
+export async function submitGatewayTransfer(intent: BurnIntent, signature: string, options: { fetch?: typeof fetch } = {}): Promise<string> {
+  const answer = (await call("transfer", `${GATEWAY_API}/transfer?enableForwarder=true`, post([{ burnIntent: intent, signature }]), options.fetch ?? fetch)) as { transferId?: unknown } | null;
+  if (typeof answer?.transferId !== "string" || !answer.transferId) throw new GatewayError("Gateway accepted the transfer but returned no transfer id");
+  return answer.transferId;
+}
+
+export interface GatewayTransferStatus {
+  status: "pending" | "confirmed" | "failed";
+  /** The mint on the payee's chain, once confirmed. */
+  mintTxHash: string | null;
+  failureReason: string | null;
+}
+
+/** A transfer's state, read again: it sends nothing. */
+export async function gatewayTransferStatus(transferId: string, options: { fetch?: typeof fetch } = {}): Promise<GatewayTransferStatus> {
+  const answer = (await call("status read", `${GATEWAY_API}/transfer/${encodeURIComponent(transferId)}`, { method: "GET" }, options.fetch ?? fetch)) as {
+    status?: string;
+    transactionHash?: string;
+    forwardingDetails?: { failureReason?: string };
+  } | null;
+  const status = answer?.status;
+  if (status === "confirmed" || status === "finalized") {
+    return { status: "confirmed", mintTxHash: typeof answer?.transactionHash === "string" ? answer.transactionHash : null, failureReason: null };
+  }
+  if (status === "failed") return { status: "failed", mintTxHash: null, failureReason: answer?.forwardingDetails?.failureReason ?? "Gateway reported the transfer failed." };
+  if (status === "expired") return { status: "failed", mintTxHash: null, failureReason: "The attestation expired before the mint." };
+  return { status: "pending", mintTxHash: null, failureReason: null };
+}
