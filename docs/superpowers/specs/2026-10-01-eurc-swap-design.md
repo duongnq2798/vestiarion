@@ -135,7 +135,8 @@ For `pay` on a EURC payable whose EURC is short:
 1. Paused → held, nothing swapped.
 2. `swapForPayment()`.
 3. On success, `payInvoice` as before.
-4. On failure → held with `guardrailRule: "fx.swap_failed"`, and the reason in the reasoning.
+4. On failure, or while the swap is still in flight at Circle, the payable is held. The reason goes in
+   the reasoning, and the outcome in `detail.swap` (R6).
 
 **`swapForPayment({ invoiceId, offer, short })`:**
 1. **Open swap.** An invoice with an open `submitted` row was resumed before its decision (S7), so it
@@ -205,10 +206,9 @@ call it never received is created now.
 - **The decision card** for a EURC payable paid after a swap gets a row: "Funded by swap: 2.45 USDC →
   2.01 EURC" with the swap's tx link. It reads from `ap_pay` `detail.swap`, which is
   `{ swapId, usdcIn, eurcReceived, swapTxHash }` or `null`.
-- **The guardrail band** names the three new rules:
+- **The guardrail band** names the two new rules:
   - `fx.swap_cost_above_cap`: the cost against 3%;
-  - `fx.swap_usdc_short`: USDC after the swap against what falls due;
-  - `fx.swap_failed`: the swap's failure.
+  - `fx.swap_usdc_short`: USDC after the swap against what falls due.
 
 ### S10. Docs
 
@@ -239,6 +239,16 @@ call it never received is created now.
   and still refuses a broken quote.
 - **R4. The leftover EURC stays.** Sizing to the slippage floor buys up to about 3% more EURC than
   needed. It is not swapped back; it pays the next EURC invoice.
+- **R6. A failed swap is a failed execution, not a guardrail.**
+  - **What is recorded.** The payable is held. The reasoning says why. `detail.swap` records the swap
+    as `{ swapId, state: "confirmed" | "pending" | "failed", usdcIn, eurcReceived, swapTxHash, reason }`.
+    `guardrailRule` stays `null`, as for a transfer Circle failed.
+  - **Why.** A guardrail is code refusing what the model decided; a swap that did not go through is
+    not that.
+  - **A swap in flight.** When it is still in flight when the stage reaches the payable, the payable
+    is not decided that cycle, and its line says so.
+  - **Cost if wrong:** a band does not show for a failed swap; the reasoning and the `fx_swap` entry
+    still do.
 - **R5. viem as a direct dependency.** It is already installed through App Kit (2.56.8). It encodes
   the Adapter call. The tests decode it with the same ABI.
 

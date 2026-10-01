@@ -58,7 +58,6 @@ export type ApGuardrailRule =
   | "treasury.insufficient_eurc"
   | "fx.swap_cost_above_cap"
   | "fx.swap_usdc_short"
-  | "fx.swap_failed"
   | "bridge.unsupported_token"
   | "bridge.fee_unavailable"
   | "bridge.fee_above_cap"
