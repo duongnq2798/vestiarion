@@ -57,7 +57,7 @@ describe("the rule-based reader", () => {
 describe("reading an invoice with the workspace's model", () => {
   it("returns the model's reading, through decide(), with the model named", async () => {
     const reply = { vendorName: "Northwind Hosting", amount: "200.00", currency: "USDC", dueDate: "2026-10-31", poReference: "PO-1042" };
-    const fetch = vi.fn(async (..._args: unknown[]) =>
+    const fetch = vi.fn<typeof globalThis.fetch>(async () =>
       new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(reply) } }] }), { status: 200, headers: { "content-type": "application/json" } })
     );
     vi.stubGlobal("fetch", fetch);
