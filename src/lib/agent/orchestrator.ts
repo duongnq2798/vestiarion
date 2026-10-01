@@ -151,7 +151,8 @@ export function duplicateNote(total: number, shown: number): string {
  * agent asked (scripts/replay-ap-decisions.ts).
  */
 export function apDecisionPrompt(facts: ApPromptFacts, note: string = duplicateNote(facts.duplicateMatchesTotal, facts.duplicateMatches.length)): string {
-  return JSON.stringify({
+  // The facts sent are the ones the call site lists (the privacy page's test reads them there); this adds the frame.
+  const prompt = {
     task: "Decide whether to pay this accounts-payable invoice, and when: now, or on a later day no later than its due date.",
     ...facts,
     duplicateNote: note,
@@ -161,7 +162,8 @@ export function apDecisionPrompt(facts: ApPromptFacts, note: string = duplicateN
       reasoning: "string",
       confidence: "number between 0 and 1",
     },
-  });
+  };
+  return JSON.stringify(prompt);
 }
 
 const apDecisionSchema = z
