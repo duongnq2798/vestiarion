@@ -60,9 +60,10 @@ end $$;
 
 -- Status: add 'scheduled'. Rebuild the status check by shape, whatever it is
 -- named, only while it lacks 'scheduled' (the 0025 pattern), so a replay
--- changes nothing. `invoices_scheduled_has_date` above also mentions
--- 'scheduled' and the word "status", but it is excluded by the same filter,
--- so it is never mistaken for the status check.
+-- changes nothing. The shape is the allowed-values list (`status = ANY (...)`,
+-- as Postgres stores `status in (...)`), so a check that only mentions
+-- status, such as `invoices_scheduled_has_date` above, is never mistaken for
+-- it, whichever status a later migration adds.
 do $$
 declare
   c record;
@@ -70,7 +71,7 @@ begin
   for c in
     select conname from pg_constraint
      where conrelid = 'public.invoices'::regclass and contype = 'c'
-       and pg_get_constraintdef(oid) like '%status%'
+       and pg_get_constraintdef(oid) like '%status = ANY%'
        and pg_get_constraintdef(oid) not like '%scheduled%'
   loop
     execute format('alter table public.invoices drop constraint %I', c.conname);
