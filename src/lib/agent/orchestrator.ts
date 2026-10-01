@@ -1475,7 +1475,8 @@ async function decideApPayable(
             usdcValue,
             fx: fx ? { rate: fx.rate, source: fx.source, quotedAt: fx.quotedAt, usdcMinimum: fx.usdcMinimum } : null,
             eurcBalance,
-            // The swap it was offered (S2) or why there was none, and the one made to fund it (S9).
+            // The swap it was offered (S2) or why there was none, what its USDC had to leave for, and the one made to fund it (S9).
+            usdcDueWithin7Days,
             swapOffer,
             swapUnavailable,
             swap: swapOutcome

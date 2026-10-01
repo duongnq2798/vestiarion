@@ -123,8 +123,9 @@ async function send(row: SwapRow, context: { counterpartyName: string; reasoning
     summary: confirmed
       ? `SWAP ${usdcIn} USDC for ${eurcReceived ?? `at least ${eurcMinimum}`} EURC to pay ${context.counterpartyName}'s invoice`
       : `SWAP failed: ${usdcIn} USDC for EURC to pay ${context.counterpartyName}'s invoice`,
+    // Not `invoiceId`: that names an invoice's decision entries, and a swap is not one (as receipts, 0046).
     detail: {
-      invoiceId: row.invoice_id,
+      paysInvoiceId: row.invoice_id,
       swapId: row.id,
       state: confirmed ? "confirmed" : "failed",
       usdcIn,

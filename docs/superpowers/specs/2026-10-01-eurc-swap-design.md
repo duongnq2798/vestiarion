@@ -161,7 +161,7 @@ For `pay` on a EURC payable whose EURC is short:
    Circle's state.
 8. **Ledger.** One `fx_swap` entry, actor `agent`, domain `treasury`, for both outcomes:
    - `summary`: "SWAP 2.45 USDC for 2.01 EURC to pay {counterparty}'s invoice", or "SWAP failed: …";
-   - `detail`: `{ invoiceId, swapId, state, usdcIn, eurcMinimum, eurcEstimated, eurcReceived,
+   - `detail`: `{ paysInvoiceId, swapId, state, usdcIn, eurcMinimum, eurcEstimated, eurcReceived,
      usdcPerEurc, costPercent, provider, adapter, approveTxHash, swapTxHash, reasoning }`.
 
 **What the provider adds.** It does steps 4–5 only, as `swapForEurc({ fromAccountId, adapter, usdcIn,

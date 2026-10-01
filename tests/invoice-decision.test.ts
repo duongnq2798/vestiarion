@@ -337,3 +337,49 @@ describe("invoiceDecision: a payout code held (review I1, M3, M14)", () => {
     expect(invoiceDecision(invoice({ status: "paid", tx_ref: "sim_1" }), undefined, [simulated]).mint ?? null).toBeNull();
   });
 });
+
+describe("invoiceDecision: a EURC invoice paid from USDC by a swap (EURC swap spec S9)", () => {
+  const decided = (detail: Record<string, unknown>): LedgerEntry =>
+    ({ seq: 9, id: "e9", ts: "2026-10-01T09:00:00.000Z", actor: "agent", domain: "ap", action: "ap_pay", summary: "", detail: { invoiceId: "inv-1", currency: "EURC", usdcValue: 2.43, ...detail } }) as unknown as LedgerEntry;
+  const SWAP_TX = `0x${"5a".repeat(32)}`;
+
+  it("shows the swap that funded it, linked to its transaction on Arc testnet", () => {
+    const decision = invoiceDecision(
+      invoice({ currency: "EURC", amount: 2, status: "paid", tx_ref: "0xabc" }),
+      undefined,
+      [decided({ swap: { swapId: "s-1", state: "confirmed", usdcIn: 2.507384, eurcReceived: 2.063076, swapTxHash: SWAP_TX, reason: null } })]
+    );
+    expect(decision.evidence).toContainEqual({ label: "Funded by swap", value: "2.507384 USDC → 2.063076 EURC", href: `https://testnet.arcscan.app/tx/${SWAP_TX}`, state: "ok" });
+  });
+
+  it("says a swap failed, or is in flight", () => {
+    const failed = invoiceDecision(invoice({ currency: "EURC", amount: 2, status: "held" }), undefined, [
+      decided({ swap: { swapId: "s-1", state: "failed", usdcIn: 2.507384, eurcReceived: null, swapTxHash: null, reason: "Circle did not complete the swap (FAILED)." } }),
+    ]);
+    expect(failed.evidence).toContainEqual({ label: "Swap", value: "failed", state: "missing" });
+    const inFlight = invoiceDecision(invoice({ currency: "EURC", amount: 2, status: "held" }), undefined, [
+      decided({ swap: { swapId: "s-1", state: "pending", usdcIn: 2.507384, eurcReceived: null, swapTxHash: null, reason: "in flight" } }),
+    ]);
+    expect(inFlight.evidence).toContainEqual({ label: "Swap", value: "in flight", state: "neutral" });
+  });
+
+  it("shows no swap row for a EURC payment the wallet's EURC covered", () => {
+    const decision = invoiceDecision(invoice({ currency: "EURC", amount: 2, status: "paid", tx_ref: "0xabc" }), undefined, [decided({ swap: null })]);
+    expect(decision.evidence.map((item) => item.label)).not.toContain("Funded by swap");
+    expect(decision.evidence.map((item) => item.label)).not.toContain("Swap");
+  });
+
+  it("sets a swap held for its cost against the cap", () => {
+    const decision = invoiceDecision(invoice({ currency: "EURC", amount: 2, status: "held" }), undefined, [
+      decided({ guardrailBlocked: true, guardrailRule: "fx.swap_cost_above_cap", swapOffer: { usdcIn: 2.6, costPercent: 3.2 }, observed: { paymentLimit: 200 } }),
+    ]);
+    expect(decision.guardrail).toEqual({ rule: "fx.swap_cost_above_cap", attempted: 3.2, attemptedToken: "%", limit: 3, limitToken: "%", note: "the swap's cost above the quoted rate" });
+  });
+
+  it("sets a swap held for the USDC it would leave against what falls due", () => {
+    const decision = invoiceDecision(invoice({ currency: "EURC", amount: 2, status: "held" }), undefined, [
+      decided({ guardrailBlocked: true, guardrailRule: "fx.swap_usdc_short", swapOffer: { usdcIn: 2.507384 }, observed: { paymentLimit: 200, operatingBalance: 7 }, usdcDueWithin7Days: 5 }),
+    ]);
+    expect(decision.guardrail).toEqual({ rule: "fx.swap_usdc_short", attempted: 4.492616, attemptedToken: "USDC", limit: 5, limitToken: "USDC", note: "USDC left after the swap, against what falls due within 7 days" });
+  });
+});

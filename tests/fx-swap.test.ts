@@ -161,7 +161,7 @@ describe("swapForPayment", () => {
       action: "fx_swap",
       summary: "SWAP 1 USDC for 0.8229 EURC to pay Atelier Lumière's invoice",
       detail: {
-        invoiceId: INVOICE,
+        paysInvoiceId: INVOICE,
         swapId,
         state: "confirmed",
         usdcIn: 1,
