@@ -1,4 +1,4 @@
-import { FileSpreadsheet, PenLine } from "lucide-react";
+import { FileSpreadsheet, FileText, PenLine } from "lucide-react";
 import type { ReactNode } from "react";
 import ApprovalCard from "@/components/ApprovalCard";
 import GoLivePanel from "@/components/GoLivePanel";
@@ -6,6 +6,7 @@ import VerifyLedgerBadge from "@/components/VerifyLedgerBadge";
 import CounterpartyAddress from "@/components/intake/CounterpartyAddressEdit";
 import CounterpartyIntake from "@/components/intake/CounterpartyIntake";
 import InvoiceCsvImport from "@/components/intake/InvoiceCsvImport";
+import InvoiceDocumentIntake from "@/components/intake/InvoiceDocumentIntake";
 import InvoiceIntake from "@/components/intake/InvoiceIntake";
 import { Card } from "@/components/ui/Card";
 import { CopyButton } from "@/components/ui/CopyButton";
@@ -279,13 +280,17 @@ export const DOCS_SHOTS = {
     render: function InvoiceShot() {
       return (
         <section>
-          <SectionHeader title="Invoice intake" meta="manual entry or CSV preview and confirm" />
+          <SectionHeader title="Invoice intake" meta="typed in, read from a document, or imported from a CSV, and confirmed" />
           <Card className="p-4 sm:p-6">
             <Tabs defaultValue="manual">
               <TabsList aria-label="Invoice intake">
                 <TabsTrigger value="manual">
                   <PenLine aria-hidden />
                   Enter one invoice
+                </TabsTrigger>
+                <TabsTrigger value="document">
+                  <FileText aria-hidden />
+                  From a document
                 </TabsTrigger>
                 <TabsTrigger value="csv">
                   <FileSpreadsheet aria-hidden />
@@ -294,6 +299,9 @@ export const DOCS_SHOTS = {
               </TabsList>
               <TabsContent value="manual" forceMount className="data-[state=inactive]:hidden">
                 <InvoiceIntake orgSlug={SLUG} counterparties={[{ id: COUNTERPARTY.id, name: COUNTERPARTY.name, role: COUNTERPARTY.role }]} />
+              </TabsContent>
+              <TabsContent value="document" forceMount className="data-[state=inactive]:hidden">
+                <InvoiceDocumentIntake orgSlug={SLUG} counterparties={[{ id: COUNTERPARTY.id, name: COUNTERPARTY.name, role: COUNTERPARTY.role }]} />
               </TabsContent>
               <TabsContent value="csv" forceMount className="data-[state=inactive]:hidden">
                 <InvoiceCsvImport orgSlug={SLUG} />

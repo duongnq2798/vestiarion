@@ -1,9 +1,10 @@
-import { FileSpreadsheet, ListFilter, PenLine } from "lucide-react";
+import { FileSpreadsheet, FileText, ListFilter, PenLine } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import AgentControls from "@/components/AgentControls";
 import InvoiceCsvImport from "@/components/intake/InvoiceCsvImport";
+import InvoiceDocumentIntake from "@/components/intake/InvoiceDocumentIntake";
 import InvoiceIntake from "@/components/intake/InvoiceIntake";
 import { Callout } from "@/components/ui/Callout";
 import { Card } from "@/components/ui/Card";
@@ -83,7 +84,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
         )}
 
         <section className="mb-8">
-          <SectionHeader title="Invoice intake" meta="manual entry or CSV preview and confirm" />
+          <SectionHeader title="Invoice intake" meta="typed in, read from a document, or imported from a CSV, and confirmed" />
           {canWrite ? (
             <Card className="p-4 sm:p-6">
               <Tabs defaultValue="manual">
@@ -91,6 +92,10 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
                   <TabsTrigger value="manual">
                     <PenLine aria-hidden />
                     Enter one invoice
+                  </TabsTrigger>
+                  <TabsTrigger value="document">
+                    <FileText aria-hidden />
+                    From a document
                   </TabsTrigger>
                   <TabsTrigger value="csv">
                     <FileSpreadsheet aria-hidden />
@@ -100,6 +105,9 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
                 {/* Both stay mounted, so switching tabs never loses what was typed. */}
                 <TabsContent value="manual" forceMount className="data-[state=inactive]:hidden">
                   <InvoiceIntake orgSlug={slug} counterparties={counterparties.map(({ id, name, role }) => ({ id, name, role }))} />
+                </TabsContent>
+                <TabsContent value="document" forceMount className="data-[state=inactive]:hidden">
+                  <InvoiceDocumentIntake orgSlug={slug} counterparties={counterparties.map(({ id, name, role }) => ({ id, name, role }))} />
                 </TabsContent>
                 <TabsContent value="csv" forceMount className="data-[state=inactive]:hidden">
                   <InvoiceCsvImport orgSlug={slug} />
