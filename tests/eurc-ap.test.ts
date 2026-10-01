@@ -88,7 +88,7 @@ class Chain implements ChainProvider {
   transfers: TransferParams[] = [];
   balanceReads: Stablecoin[] = [];
 
-  constructor(readonly mode: "live" | "simulate", private readonly eurc: number) {}
+  constructor(readonly mode: "live" | "simulate", private readonly eurc: number | Error) {}
 
   async transfer(params: TransferParams): Promise<TransferResult> {
     this.transfers.push(params);
@@ -99,7 +99,8 @@ class Chain implements ChainProvider {
   }
   async getTokenBalance(accountId: string, token: Stablecoin): Promise<BalanceSnapshot> {
     this.balanceReads.push(token);
-    return { accountId, chain: "ARC-TESTNET", token, balance: token === "EURC" ? this.eurc : 1000 };
+    if (token === "EURC" && this.eurc instanceof Error) throw this.eurc;
+    return { accountId, chain: "ARC-TESTNET", token, balance: token === "EURC" ? (this.eurc as number) : 1000 };
   }
   async reconcileTransfer(): Promise<TransferResult> { throw new Error("not used"); }
   async getBalance(): Promise<BalanceSnapshot> { throw new Error("not used"); }
@@ -107,7 +108,7 @@ class Chain implements ChainProvider {
   async withdrawFromEarn(): Promise<EarnResult> { throw new Error("not used"); }
 }
 
-function apFake(options: { book: Array<Record<string, unknown>>; mode?: "live" | "simulate"; eurc?: number; quote?: () => Promise<EurcQuote> }) {
+function apFake(options: { book: Array<Record<string, unknown>>; mode?: "live" | "simulate"; eurc?: number | Error; quote?: () => Promise<EurcQuote> }) {
   const intents = paymentIntentsBackend(ORG);
   const fake = fakeSupabase((request) => {
     if (request.path === "/rest/v1/orgs") {
@@ -204,15 +205,29 @@ describe("a EURC payable inside its limit at the quoted rate", () => {
     expect(eurcCall.treasury).toMatchObject({ eurcBalance: 500, reserveBalance: 0 });
   });
 
-  it("is not a repeat of a USDC invoice with the same PO and amount (P2)", async () => {
+  it("is shown a USDC bill under the same PO as a re-bill to confirm, which does not block it (review I1)", async () => {
     model("pay");
     const usdcTwin = payable({ id: TWIN_ID, currency: "USDC", status: "paid", tx_ref: "0xold" });
     const { fake, chain, stage } = apFake({ book: [usdcTwin, payable()] });
 
     await stage();
 
+    const prompt = promptOf();
+    expect(prompt.duplicateMatches).toEqual([expect.objectContaining({ signals: ["purchase_order_rebilled"], otherInvoiceAmount: 100 })]);
     expect(chain.transfers).toHaveLength(1);
     expect(patches(fake.requests)[0]).toMatchObject({ status: "paid" });
+  });
+
+  it("is refused when it repeats a EURC bill already paid in EURC", async () => {
+    model("pay");
+    const eurcTwin = payable({ id: TWIN_ID, status: "paid", tx_ref: "0xold" });
+    const { fake, chain, stage } = apFake({ book: [eurcTwin, payable()] });
+
+    await stage();
+
+    expect(chain.transfers).toEqual([]);
+    expect(patches(fake.requests)[0]).toMatchObject({ status: "flagged" });
+    expect(entries(fake.requests)[0].p_detail).toMatchObject({ guardrailRule: "invoice.duplicate_of_settled" });
   });
 });
 
@@ -286,5 +301,48 @@ describe("a USDC payable", () => {
     expect(chain.balanceReads).toEqual([]);
     expect(promptOf().invoice).toMatchObject({ amount: 100, currency: "USDC", usdcValue: 100 });
     expect(chain.transfers[0]).toMatchObject({ token: "USDC" });
+  });
+});
+
+describe("the review's fixes (M1, M4, M5)", () => {
+  it("holds a EURC payable whose wallet balance could not be read, and still decides the USDC payable after it", async () => {
+    model("pay");
+    const usdc = payable({ id: USDC_ID, currency: "USDC", po_reference: "PO-1", created_at: "2026-10-01T08:30:00Z" });
+    const { fake, chain, stage } = apFake({ book: [payable(), usdc], eurc: new Error("Circle did not answer within 15 s") });
+
+    await stage();
+
+    const [eurcPatch, usdcPatch] = patches(fake.requests);
+    expect(eurcPatch).toMatchObject({ status: "held" });
+    expect(String(eurcPatch.agent_reasoning)).toContain("could not be read");
+    expect(entries(fake.requests)[0].p_detail).toMatchObject({ guardrailRule: "treasury.insufficient_eurc" });
+    expect(usdcPatch).toMatchObject({ status: "paid" });
+    expect(chain.transfers.map((transfer) => transfer.token)).toEqual(["USDC"]);
+  });
+
+  it("tells the model what a null EURC balance means", () => {
+    // Read from the prompt the stage sends; any decision will do.
+    return (async () => {
+      model("pay");
+      const { stage } = apFake({ book: [payable()], mode: "simulate" });
+      await stage();
+      expect(systemPromptOf()).toContain("eurcBalance is null");
+    })();
+  });
+
+  it("does not write a null limit into the policy's reasoning", async () => {
+    model("hold");
+    const { fake, stage } = apFake({
+      book: [payable({ counterparties: vendor({ payment_limit: null }) })],
+      quote: async () => {
+        throw new FxQuoteError("unavailable");
+      },
+    });
+
+    await stage();
+
+    const reference = entries(fake.requests)[0].p_detail.referenceDecision as { reasoning: string };
+    expect(reference.reasoning).not.toContain("null");
+    expect(reference.reasoning).toContain("No EURC→USDC rate");
   });
 });

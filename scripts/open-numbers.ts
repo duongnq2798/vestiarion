@@ -61,7 +61,7 @@ async function numbers(argv: string[]) {
   }
   if (numbers.ourPayments.length > 0) {
     console.log("\nOur own workspaces' latest payments");
-    for (const payment of numbers.ourPayments) console.log(`${payment.at}   ${payment.amount.toFixed(2)} USDC   ${payment.txHash}`);
+    for (const payment of numbers.ourPayments) console.log(`${payment.at}   ${payment.amount.toFixed(2)} ${payment.token ?? "USDC"}   ${payment.txHash}`);
   }
 }
 

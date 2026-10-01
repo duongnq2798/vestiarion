@@ -166,17 +166,17 @@ describe("waitingToNotify", () => {
 
     expect(waiting).toEqual([
       {
-        id: NEW_ID, counterpartyName: "Acme Supplies", amount: 150.5, status: "held",
+        id: NEW_ID, counterpartyName: "Acme Supplies", amount: 150.5, currency: "USDC", status: "held",
         reasoning: "Held for manual review: over the daily limit.", escalated: false,
       },
       {
-        id: ESCALATED_ID, counterpartyName: "Acme Supplies", amount: 150.5, status: "flagged",
+        id: ESCALATED_ID, counterpartyName: "Acme Supplies", amount: 150.5, currency: "USDC", status: "flagged",
         reasoning: "Held for manual review: over the daily limit.", escalated: true,
       },
     ]);
 
     const [read] = fake.requests.filter((r) => r.path === "/rest/v1/invoices");
-    expect(read.params.get("select")).toBe("id,amount,status,agent_reasoning,notified_at,escalated_at,counterparties(name)");
+    expect(read.params.get("select")).toBe("id,amount,currency,status,agent_reasoning,notified_at,escalated_at,counterparties(name)");
     expect(read.params.get("direction")).toBe("eq.payable");
     // Paid, rejected and every other status never reach the selection at all.
     expect(read.params.get("status")).toBe("in.(held,flagged,awaiting_info)");

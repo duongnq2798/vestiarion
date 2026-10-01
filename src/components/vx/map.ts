@@ -81,7 +81,7 @@ function paidEvidence(invoice: InvoiceRow): Evidence | null {
   if (invoice.status !== "paid" || invoice.paid_amount == null || invoice.paid_amount >= invoice.amount) return null;
   const pct = invoice.early_pay_discount_pct == null ? null : Number(invoice.early_pay_discount_pct);
   const note = pct != null && Number.isFinite(pct) ? ` (${pct}% discount)` : "";
-  return { label: "Paid", value: `${fmt(invoice.paid_amount)} USDC${note}`, state: "ok" };
+  return { label: "Paid", value: `${fmt(invoice.paid_amount)} ${invoice.currency ?? "USDC"}${note}`, state: "ok" };
 }
 
 /**

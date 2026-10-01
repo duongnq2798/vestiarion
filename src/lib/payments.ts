@@ -211,7 +211,9 @@ export class SupabasePaymentIntentStore implements PaymentIntentStore {
       provider_mode: input.provider === "circle" ? "live" : "simulate",
       amount: input.amount,
       destination: input.destination,
-      token: input.token ?? "USDC",
+      // USDC is the column's default (0040): only a EURC payment names its token,
+      // so USDC payments do not depend on the column existing yet.
+      ...(input.token && input.token !== "USDC" ? { token: input.token } : {}),
     }, { onConflict: "source_type,source_id", ignoreDuplicates: true });
     if (result.error) throw new Error(result.error.message);
     return this.getBySource(input.sourceType, input.sourceId);

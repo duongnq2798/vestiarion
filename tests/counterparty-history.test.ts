@@ -145,6 +145,33 @@ describe("deriveCounterpartyHistories", () => {
     );
   });
 
+  it("counts a EURC payable held at its USDC value, for want of a rate, or for want of our own EURC as ours, not theirs (review I4)", () => {
+    const hold = (invoiceId: string, detail: Record<string, unknown>) => ({
+      domain: "ap",
+      action: "ap_hold",
+      detail: { invoiceId, guardrailBlocked: false, guardrailRule: null, currency: "EURC", ...detail },
+    });
+    const histories = deriveCounterpartyHistories(
+      [
+        // 100 EURC is under the 110 USDC limit at face value, but 117 USDC at the rate is over it.
+        hold("over-at-rate", { usdcValue: 117, observed: { amount: 100, paymentLimit: 110, riskLevel: "clear" } }),
+        // Circle gave no quote.
+        hold("no-rate", { usdcValue: null, fx: null, observed: { amount: 100, paymentLimit: 200, riskLevel: "clear" } }),
+        // The wallet's EURC could not cover it.
+        hold("short", { usdcValue: 117, eurcBalance: 40, observed: { amount: 100, paymentLimit: 200, riskLevel: "clear" } }),
+      ],
+      {
+        invoiceCounterparty: new Map([
+          ["over-at-rate", "cp-1"],
+          ["no-rate", "cp-1"],
+          ["short", "cp-1"],
+        ]),
+        milestoneCounterparty: new Map(),
+      }
+    );
+    expect(histories.get("cp-1")).toEqual(inputs({ heldByOurPolicy: 3 }));
+  });
+
   it("counts a payment the reconcile later confirmed as paid, and one still pending as nothing yet", () => {
     const histories = deriveCounterpartyHistories(
       [

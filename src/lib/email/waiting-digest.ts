@@ -9,6 +9,8 @@ import { escapeHtml } from "./html";
 export interface DigestItem {
   counterpartyName: string;
   amount: number;
+  /** USDC unless the invoice is in EURC. */
+  currency?: string;
   status: "held" | "flagged" | "awaiting_info";
   reason: string | null;
   escalated: boolean;
@@ -58,7 +60,7 @@ interface RenderedLine {
 function renderLines(items: DigestItem[]): RenderedLine[] {
   return items.slice(0, DIGEST_MAX_ITEMS).map((item) => ({
     counterpartyName: item.counterpartyName,
-    amountText: formatAmount(item.amount),
+    amountText: `${formatAmount(item.amount)} ${item.currency ?? "USDC"}`,
     statusLabel: STATUS_LABEL[item.status],
     reminder: item.escalated,
     reason: firstSentence(item.reason),
@@ -88,7 +90,7 @@ export function waitingDigestEmail(input: {
       const reasonHtml = line.reason ? ` &mdash; ${escapeHtml(line.reason)}` : "";
       const reminderHtml = line.reminder ? ` <span style="color:#b3541e;">(reminder)</span>` : "";
       return `<tr><td style="padding:10px 0;border-top:1px solid #ddd8ca;font-size:14px;line-height:20px;color:#18211c;">` +
-        `<strong>${escapeHtml(line.counterpartyName)}</strong> &mdash; ${escapeHtml(line.amountText)} USDC &mdash; ` +
+        `<strong>${escapeHtml(line.counterpartyName)}</strong> &mdash; ${escapeHtml(line.amountText)} &mdash; ` +
         `<span style="color:#4d5a53;">${escapeHtml(line.statusLabel)}</span>${reminderHtml}${reasonHtml}</td></tr>`;
     })
     .join("\n");
@@ -166,7 +168,7 @@ ${moreHtml}
   const textLines = lines.map((line) => {
     const reminder = line.reminder ? " (reminder)" : "";
     const reason = line.reason ? ` — ${line.reason}` : "";
-    return `- ${line.counterpartyName} — ${line.amountText} USDC — ${line.statusLabel}${reminder}${reason}`;
+    return `- ${line.counterpartyName} — ${line.amountText} — ${line.statusLabel}${reminder}${reason}`;
   });
   if (more > 0) textLines.push(`and ${more} more`);
 

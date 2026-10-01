@@ -13,7 +13,7 @@ import { INVOICE_CSV_TEMPLATE, parseInvoiceCsv, type InvoiceCsvRow } from "@/lib
 import { csvInvoiceInputSchema, firstZodMessage } from "@/lib/intake-validation";
 
 const INITIAL: IntakeActionResult = { ok: false, message: "" };
-const HEADINGS = ["Direction", "Counterparty", "Amount", "Memo", "PO", "Received", "Due", "Discount %", "Discount deadline"];
+const HEADINGS = ["Direction", "Counterparty", "Amount", "Currency", "Memo", "PO", "Received", "Due", "Discount %", "Discount deadline"];
 
 /**
  * A CSV of invoices, previewed and checked row by row in the browser before
@@ -93,6 +93,7 @@ export default function InvoiceCsvImport({ orgSlug }: { orgSlug: string }) {
                   <TableCell className="px-3 py-2">{row.direction}</TableCell>
                   <TableCell className="px-3 py-2 font-medium">{row.counterparty}</TableCell>
                   <TableCell className="px-3 py-2 font-mono">{row.amount}</TableCell>
+                  <TableCell className="px-3 py-2 font-mono">{row.currency ? row.currency.toUpperCase() : "USDC"}</TableCell>
                   <TableCell className="max-w-48 truncate px-3 py-2">{row.memo || "—"}</TableCell>
                   <TableCell className="px-3 py-2 font-mono">{row.po_reference || "—"}</TableCell>
                   <TableCell className="px-3 py-2">{row.goods_received || "false"}</TableCell>

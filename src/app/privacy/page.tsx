@@ -87,7 +87,7 @@ export default function PrivacyPage() {
 
       <LegalSection id="wallets" title="Wallets and payments">
         <p>
-          Payments are USDC transfers on Arc testnet through Circle Developer-Controlled Wallets. A workspace that connects its own Circle account keeps its
+          Payments are USDC or EURC transfers on Arc testnet through Circle Developer-Controlled Wallets. A workspace that connects its own Circle account keeps its
           wallets in that account. A workspace that chooses hosted wallets has them created in Vestiarion&apos;s own Circle testnet account, so Vestiarion
           holds them; you fund them from Circle&apos;s faucet.
         </p>

@@ -43,7 +43,7 @@ describe("quoteEurcInUsdc", () => {
     expect(quote).toEqual({
       usdcEstimated: 12.161872,
       usdcMinimum: 11.797015,
-      rate: 1.2161872,
+      rate: 1.216187,
       source: "circle-stablecoin-quote",
       quotedAt: "2026-10-01T00:00:00.000Z",
     });
@@ -92,5 +92,15 @@ describe("quoteEurcInUsdc", () => {
       await expect(quoteEurcInUsdc(amount, { fromAddress: FROM, now: NOW, fetch })).rejects.toBeInstanceOf(RangeError);
     }
     expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("the rate's precision (review M3)", () => {
+  it("is kept to six decimals, as amounts are", async () => {
+    resetFxQuotesForTests();
+    const fetch = async () =>
+      new Response(JSON.stringify({ quote: { estimatedAmount: "3647451", minAmount: "3538027" } }), { status: 200, headers: { "content-type": "application/json" } });
+    const quote = await quoteEurcInUsdc(3, { fromAddress: "0x0000000000000000000000000000000000000001", fetch: fetch as unknown as typeof globalThis.fetch });
+    expect(quote.rate).toBe(1.215817);
   });
 });

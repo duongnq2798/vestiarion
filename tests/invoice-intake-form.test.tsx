@@ -19,3 +19,12 @@ describe("InvoiceIntake", () => {
     expect(markup).toMatch(/<select[^>]*name="currency"/);
   });
 });
+
+describe("the CSV import's preview (review M2)", () => {
+  it("shows each row's currency before anything is imported, USDC where the row leaves it blank", async () => {
+    const { readFileSync } = await import("node:fs");
+    const source = readFileSync("src/components/intake/InvoiceCsvImport.tsx", "utf8");
+    expect(source).toContain('"Amount", "Currency"');
+    expect(source).toContain('{row.currency ? row.currency.toUpperCase() : "USDC"}');
+  });
+});

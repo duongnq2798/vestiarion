@@ -21,8 +21,8 @@ export interface ApGuardrailInput {
    */
   currency?: "USDC" | "EURC";
   fxAvailable?: boolean;
-  /** A live EURC payment the wallet's EURC cannot cover: what it holds and what the payment sends. */
-  eurcShort?: { balance: number; needed: number } | null;
+  /** A live EURC payment the wallet's EURC cannot cover: what it holds (null when it could not be read) and what the payment sends. */
+  eurcShort?: { balance: number | null; needed: number } | null;
 }
 
 export type ApGuardrailRule =
@@ -111,7 +111,10 @@ export function enforceApGuardrails(input: ApGuardrailInput): ApGuardrailResult 
       blocked: true,
       status: "held",
       rule: "treasury.insufficient_eurc",
-      reasoning: `${input.reasoning} [guardrail override: the operating wallet holds ${input.eurcShort.balance} EURC, less than the ${input.eurcShort.needed} EURC this payment sends — held for a person; fund EURC from Circle's faucet first]`,
+      reasoning:
+        input.eurcShort.balance === null
+          ? `${input.reasoning} [guardrail override: the operating wallet's EURC could not be read, so the ${input.eurcShort.needed} EURC this payment sends cannot be checked — held for a person]`
+          : `${input.reasoning} [guardrail override: the operating wallet holds ${input.eurcShort.balance} EURC, less than the ${input.eurcShort.needed} EURC this payment sends — held for a person; fund EURC from Circle's faucet first]`,
     };
   }
   return { blocked: false, status: null, rule: null, reasoning: input.reasoning };

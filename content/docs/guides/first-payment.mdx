@@ -99,8 +99,9 @@ Choose **Add invoice**. The page confirms with "Invoice added for *Name*. The ag
 A vendor that bills in euros can be paid in EURC, Circle's euro stablecoin, on Arc testnet. Choose **EURC** under **Currency** on the invoice form, or put `EURC` in a CSV row's `currency` column. As the form says, "A EURC payable is paid in EURC, and checked against the payment limit at its USDC value."
 
 - **The rate.** Payment limits stay in USDC. Before it decides a EURC payable, the agent asks Circle's Stablecoin Service what the amount is worth in USDC on Arc testnet, and checks that value against the limit. The decision's ledger entry records the rate and when it was quoted. It is the testnet market's rate, not a reference exchange rate.
-- **No rate, no payment.** When the quote does not answer, the payable is held for a person, and its card names the rule `fx.rate_unavailable`. You can still approve it on **Approvals**.
-- **Paid from EURC.** A EURC payable is paid in EURC from the operating wallet, never with USDC. When the wallet's EURC cannot cover it, the payable is held, and its card names the rule `treasury.insufficient_eurc`. Get testnet EURC at [faucet.circle.com](https://faucet.circle.com) for the operating wallet's address, the same way as USDC.
+- **No rate, no payment.** When the quote does not answer, the payable is held for a person, and its card shows **USDC value** "no rate". If the model had decided to pay it anyway, the card's "Blocked by code, not by the model" band names the rule, `fx.rate_unavailable`. You can still approve it on **Approvals**.
+- **Paid from EURC.** A EURC payable is paid in EURC from the operating wallet, never with USDC. When the wallet's EURC cannot cover it, the payable is held. If the model had decided to pay it anyway, the band names the rule, `treasury.insufficient_eurc`. Get testnet EURC at [faucet.circle.com](https://faucet.circle.com) for the operating wallet's address, the same way as USDC.
+- **Repeats.** A EURC bill sent again in EURC is refused like any repeat. A purchase order billed once in USDC and again in EURC is shown to the agent as a re-bill to confirm.
 - **Totals stay USDC.** Paid out to date, the treasury buffer and the forecast count USDC only.
 
 ## 3. Run a cycle

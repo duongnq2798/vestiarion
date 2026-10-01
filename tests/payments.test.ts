@@ -601,8 +601,11 @@ describe("SupabasePaymentIntentStore by source, and its attempts", () => {
     expect(insert.params.get("on_conflict")).toBe("source_type,source_id");
     expect(insert.headers.get("prefer")).toContain("resolution=ignore-duplicates");
     expect(Array.isArray(insert.body) ? insert.body[0] : insert.body).toMatchObject({
-      source_type: "invoice", source_id: request.sourceId, idempotency_key: KEY, org_id: ORG, token: "USDC",
+      source_type: "invoice", source_id: request.sourceId, idempotency_key: KEY, org_id: ORG,
     });
+    // A USDC intent leaves `token` to the column's default, so a deploy that lands before migration 0040
+    // still pays USDC: only a EURC payment needs the column (review I5).
+    expect(Array.isArray(insert.body) ? insert.body[0] : insert.body).not.toHaveProperty("token");
     expect(read.method).toBe("GET");
     expect(read.params.get("source_type")).toBe("eq.invoice");
     expect(read.params.get("source_id")).toBe(`eq.${request.sourceId}`);

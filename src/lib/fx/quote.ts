@@ -105,7 +105,8 @@ export async function quoteEurcInUsdc(
   const value: EurcQuote = {
     usdcEstimated,
     usdcMinimum: fromBaseUnits(parsed.data.quote.minAmount),
-    rate: usdcEstimated / fromBaseUnits(amount),
+    // Six decimals, as amounts are: 3 EURC at 3.647451 USDC is 1.215817, not 1.2158170000000001.
+    rate: Number((usdcEstimated / fromBaseUnits(amount)).toFixed(6)),
     source: "circle-stablecoin-quote",
     quotedAt: new Date(now).toISOString(),
   };

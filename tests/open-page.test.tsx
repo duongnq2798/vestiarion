@@ -37,7 +37,10 @@ const NUMBERS: OpenNumbers = {
   generatedAt: "2026-09-30T12:00:00+00:00",
   sides: { customers: side(1), ours: side(2), total: side(3) },
   daily: [{ day: "2026-09-28", customers: 1, ours: 2, oursUsdc: 3 }],
-  ourPayments: [{ at: "2026-09-27T10:00:00+00:00", amount: 2, txHash: "0xabc1234567890def", chain: "ARC-TESTNET" }],
+  ourPayments: [
+    { at: "2026-09-27T10:00:00+00:00", amount: 2, txHash: "0xabc1234567890def", chain: "ARC-TESTNET" },
+    { at: "2026-09-27T09:00:00+00:00", amount: 5, token: "EURC", txHash: "0xeurc567890abcdef", chain: "ARC-TESTNET" },
+  ],
 };
 
 async function render(params: Record<string, string> = {}) {
@@ -157,5 +160,13 @@ describe("the privacy page", () => {
     const page = text(renderToStaticMarkup(<PrivacyPage />));
     expect(page).toContain("open numbers page shows counts and totals across all workspaces");
     expect(page).toContain("never lists a customer's payment");
+  });
+});
+
+describe("our payments in EURC (review I2)", () => {
+  it("lists a EURC payment in EURC, and one with no token as USDC", async () => {
+    const page = text(await render());
+    expect(page).toContain("5.00 EURC");
+    expect(page).toContain("2.00 USDC");
   });
 });

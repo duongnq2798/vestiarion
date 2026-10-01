@@ -1217,6 +1217,15 @@ describe("listWaitingPayables", () => {
     expect(lookup.params.get("source_id")).toBe("in.(sent,pending,unreadable,provider-failed,stuck,legacy-failed,none)");
   });
 
+  it("names the invoice's own token when Circle says the wallet does not hold enough of it (review I2)", async () => {
+    const { run } = approvalsFake({
+      invoice: (r) => (r.params.get("id") ? undefined : { body: [invoiceRow({ id: "eurc", currency: "EURC" })] }),
+      intents: [terminallyFailed({ source_id: "eurc", failure_reason: "INSUFFICIENT_TOKEN" })],
+    });
+    const [listed] = await run(() => listWaitingPayables());
+    expect(listed.lastAttempt).toEqual({ state: "failed", reason: "the operating wallet does not hold enough EURC (Circle: INSUFFICIENT_TOKEN)" });
+  });
+
   it("says what the last payment attempt did: failed with Circle's reason in plain words, or still in flight", async () => {
     const ids = [
       "failed-reason", "failed-insufficient-token", "failed-on-chain", "failed-unmapped-code",

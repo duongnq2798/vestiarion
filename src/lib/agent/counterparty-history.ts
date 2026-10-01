@@ -144,7 +144,20 @@ function record(value: unknown): Record<string, unknown> | null {
  */
 function heldByOurConfiguration(entry: CounterpartyHistoryLedgerEntry): boolean {
   const rule = entry.detail.guardrailRule;
-  if (rule === "counterparty.payment_limit" || rule === "counterparty.high_risk") return true;
+  if (
+    rule === "counterparty.payment_limit" ||
+    rule === "counterparty.high_risk" ||
+    rule === "fx.rate_unavailable" ||
+    rule === "treasury.insufficient_eurc"
+  ) {
+    return true;
+  }
+
+  // A EURC payable (EURC invoices design): a quote Circle did not give, or EURC
+  // our own wallet did not hold, is about us, not the counterparty, whoever
+  // held it, the model or code.
+  const eurc = entry.detail.currency === "EURC";
+  if (eurc && entry.detail.usdcValue === null) return true;
 
   const observed = record(entry.detail.observed);
   if (!observed) return false;
@@ -153,7 +166,11 @@ function heldByOurConfiguration(entry: CounterpartyHistoryLedgerEntry): boolean 
   if (risk === "high" || risk === "medium") return true;
 
   const limit = observed.paymentLimit;
-  const amount = observed.amount;
+  // A EURC amount is weighed against the USDC limit at its USDC value.
+  const amount = eurc && typeof entry.detail.usdcValue === "number" ? entry.detail.usdcValue : observed.amount;
+  if (eurc && typeof entry.detail.eurcBalance === "number" && typeof observed.amount === "number" && entry.detail.eurcBalance < observed.amount) {
+    return true;
+  }
   return (
     typeof limit === "number" &&
     typeof amount === "number" &&

@@ -221,6 +221,11 @@ describe("invoiceDecision: a EURC invoice (EURC invoices design E6)", () => {
     expect(decision.guardrail).toMatchObject({ rule: "treasury.insufficient_eurc", attempted: 100, attemptedToken: "EURC", limit: 40, limitToken: "EURC" });
   });
 
+  it("says what a discounted EURC payment paid in EURC", () => {
+    const decision = invoiceDecision(invoice({ currency: "EURC", amount: 100, status: "paid", paid_amount: 98, early_pay_discount_pct: "2.00" }), undefined, []);
+    expect(decision.evidence).toContainEqual({ label: "Paid", value: "98.00 EURC (2% discount)", state: "ok" });
+  });
+
   it("weighs the limit evidence on the USDC value, not on the face value", () => {
     const decision = invoiceDecision(
       invoice({ currency: "EURC", amount: 100, status: "held" }),

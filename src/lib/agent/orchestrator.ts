@@ -77,7 +77,7 @@ const SYSTEM_PROMPT = `You are Vestiarion, an autonomous treasury agent operatin
 Rules you must follow:
 - Never pay a counterparty whose risk level is "high".
 - Never authorise an amount above the counterparty's current payment limit.
-- An invoice is in USDC or EURC. Payment limits are in USDC: a EURC invoice is weighed at its USDC value (invoice.usdcValue, from Circle's quote), and it is paid in EURC from the wallet's EURC (treasury.eurcBalance), never with USDC. When usdcValue is null there is no rate, so hold it.
+- An invoice is in USDC or EURC. Payment limits are in USDC: a EURC invoice is weighed at its USDC value (invoice.usdcValue, from Circle's quote), and it is paid in EURC from the wallet's EURC (treasury.eurcBalance), never with USDC. When usdcValue is null there is no rate, so hold it. When treasury.eurcBalance is null, payments are simulated here or the balance could not be read; code checks it before any EURC leaves.
 - When a three-way match is incomplete (no purchase order on file, or goods not confirmed received), request information instead of paying.
 - When evidence suggests fraud — a duplicate invoice, a mismatched PO, a counterparty whose risk just changed — flag it rather than holding quietly.
 - Keep enough liquid operating cash to cover every obligation due in the next 7 days before sweeping anything into yield.
@@ -167,7 +167,7 @@ function performanceEvidence(
  */
 export async function applyFollowUp(
   orgDb: OrgDb,
-  row: { id: string; status: string; amount: number },
+  row: { id: string; status: string; amount: number; currency?: string },
   plan: FollowUpPlan,
   followUp: FollowUpConfig,
   now: number
@@ -193,8 +193,8 @@ export async function applyFollowUp(
     action: plan.action === "reopen" ? "invoice_reopened" : "invoice_escalated",
     summary:
       plan.action === "reopen"
-        ? `Reopened ${row.status.replace("_", " ")} invoice for ${row.amount} USDC: evidence changed`
-        : `Escalated ${row.status.replace("_", " ")} invoice for ${row.amount} USDC to a human`,
+        ? `Reopened ${row.status.replace("_", " ")} invoice for ${row.amount} ${row.currency ?? "USDC"}: evidence changed`
+        : `Escalated ${row.status.replace("_", " ")} invoice for ${row.amount} ${row.currency ?? "USDC"} to a human`,
     detail: {
       invoiceId: row.id,
       followUp: {
@@ -213,8 +213,8 @@ export async function applyFollowUp(
     domain: "ap",
     message:
       plan.action === "reopen"
-        ? `Reopened ${row.amount} USDC invoice: ${plan.changes.join("; ") || "no recorded decision facts"}`
-        : `Escalated ${row.amount} USDC invoice for human review`,
+        ? `Reopened ${row.amount} ${row.currency ?? "USDC"} invoice: ${plan.changes.join("; ") || "no recorded decision facts"}`
+        : `Escalated ${row.amount} ${row.currency ?? "USDC"} invoice for human review`,
   };
 }
 
@@ -874,7 +874,9 @@ async function decideApPayable(
     }
   }
   const usdcValue = isEurc ? (fx ? fx.usdcEstimated : null) : amount;
-  const eurcBalance = isEurc ? await ctx.eurc.balance() : null;
+  const eurcRead = isEurc ? await ctx.eurc.balance() : null;
+  const eurcUnreadable = eurcRead === "unreadable";
+  const eurcBalance = typeof eurcRead === "number" ? eurcRead : null;
   const overLimit = limit != null && usdcValue != null && usdcValue > limit;
   const priced = isEurc ? `${amount} EURC (${usdcValue} USDC at the quoted rate)` : `${amount} USDC`;
   const highRisk = counterparty.risk_level === "high";
@@ -891,6 +893,7 @@ async function decideApPayable(
       id: invoice.id,
       counterpartyId: invoice.counterparty_id,
       amount,
+      currency,
       memo: invoice.memo,
       poReference: invoice.po_reference,
       dueDate: invoice.due_date,
@@ -915,7 +918,7 @@ async function decideApPayable(
       amount,
       dueDate: invoice.due_date,
       discount,
-      operatingBalance: isEurc ? (eurcBalance ?? Number.POSITIVE_INFINITY) : operatingBalance,
+      operatingBalance: isEurc ? (eurcUnreadable ? 0 : (eurcBalance ?? Number.POSITIVE_INFINITY)) : operatingBalance,
       reserveApy: isEurc ? 0 : ctx.reserveApy,
       reserveBalance: isEurc ? 0 : ctx.reserveBalance,
       currency,
@@ -996,7 +999,10 @@ async function decideApPayable(
       if (isEurc && usdcValue === null) {
         return {
           action: "hold",
-          reasoning: `No EURC→USDC rate from Circle's Stablecoin Service, so ${amount} EURC cannot be checked against ${counterparty.name}'s ${limit} USDC payment limit.`,
+          reasoning:
+            limit == null
+              ? `No EURC→USDC rate from Circle's Stablecoin Service, so the USDC value of ${amount} EURC is not known.`
+              : `No EURC→USDC rate from Circle's Stablecoin Service, so ${amount} EURC cannot be checked against ${counterparty.name}'s ${limit} USDC payment limit.`,
           confidence: 0.9,
         };
       }
@@ -1058,7 +1064,11 @@ async function decideApPayable(
     addressConfirmedAt: counterparty.address_confirmed_at,
     currency,
     fxAvailable: !isEurc || fx !== null,
-    eurcShort: isEurc && eurcBalance !== null && eurcBalance < eurcNeeded ? { balance: eurcBalance, needed: eurcNeeded } : null,
+    eurcShort: eurcUnreadable
+      ? { balance: null, needed: eurcNeeded }
+      : isEurc && eurcBalance !== null && eurcBalance < eurcNeeded
+        ? { balance: eurcBalance, needed: eurcNeeded }
+        : null,
   });
   metrics.recordDecisionMode(mode, agreedWithReference);
   let status = guardrail.status ?? STATUS_FOR_AP_ACTION[decision.action];
@@ -1247,7 +1257,8 @@ export interface ApStageInput {
  */
 interface EurcFunds {
   quote: (amountEurc: number) => Promise<EurcQuote>;
-  balance: () => Promise<number | null>;
+  /** The wallet's EURC; null when payments are simulated; "unreadable" when the read failed. */
+  balance: () => Promise<number | null | "unreadable">;
   spent: (amountEurc: number) => void;
 }
 
@@ -1273,7 +1284,16 @@ export async function runApStage(input: ApStageInput): Promise<number> {
     quote: input.quoteEurc ?? ((amountEurc) => quoteEurcInUsdc(amountEurc, { fromAddress: input.operatingAddress ?? ARC_TESTNET_EURC })),
     balance: async () => {
       if (provider.mode !== "live" || !provider.getTokenBalance || !operating) return null;
-      if (eurcHeld === undefined) eurcHeld = (await provider.getTokenBalance(operating.id, "EURC")).balance;
+      if (eurcHeld === undefined) {
+        // A failed read holds the EURC payable it was for; it must not stop
+        // the stage, and the next EURC payable tries again.
+        try {
+          eurcHeld = (await provider.getTokenBalance(operating.id, "EURC")).balance;
+        } catch (error) {
+          console.error("ap: EURC balance not read", error instanceof Error ? error.message : error);
+          return "unreadable";
+        }
+      }
       return eurcHeld;
     },
     spent: (amountEurc) => {
@@ -1322,16 +1342,13 @@ export async function runApStage(input: ApStageInput): Promise<number> {
     id: row.id,
     counterpartyId: row.counterparty_id,
     amount: num(row.amount),
+    currency: invoiceCurrency(row.currency),
     memo: row.memo,
     poReference: row.po_reference,
     dueDate: row.due_date,
     status: row.status,
   });
   const history = payableHistory.map(asInvoiceLike);
-  // A repeat is the same bill in the same currency (P2): each invoice is
-  // checked against the history in its own currency only.
-  const currencyOfRow = new Map(payableHistory.map((row) => [row.id, invoiceCurrency(row.currency)]));
-  const historyIn = (currency: Stablecoin) => history.filter((row) => (currencyOfRow.get(row.id) ?? "USDC") === currency);
 
   // What falls due by each invoice's payment date: the same book, kept
   // current as this stage decides (a payment made leaves it, a schedule moves
@@ -1406,7 +1423,7 @@ export async function runApStage(input: ApStageInput): Promise<number> {
       provider,
       operating,
       operatingBalance,
-      history: historyIn(invoiceCurrency(invoice.currency)),
+      history,
       reserveApy,
       reserveBalance,
       metrics,
@@ -2037,7 +2054,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     await db
       .from("invoices")
       .select(
-        "id, status, amount, due_date, decided_at, escalated_at, po_reference, goods_received, counterparties(risk_level, payment_limit)"
+        "id, status, amount, currency, due_date, decided_at, escalated_at, po_reference, goods_received, counterparties(risk_level, payment_limit)"
       )
       .eq("direction", "payable")
       .in("status", ["held", "awaiting_info", "flagged"])
@@ -2046,6 +2063,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     id: string;
     status: string;
     amount: string;
+    currency?: string | null;
     due_date: string;
     decided_at: string | null;
     escalated_at: string | null;
@@ -2086,6 +2104,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           id: row.id,
           status: row.status,
           amount: num(row.amount),
+          currency: invoiceCurrency(row.currency),
           dueDate: row.due_date,
           decidedAt: row.decided_at,
           escalatedAt: row.escalated_at,
@@ -2102,7 +2121,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
 
       if (plan.action === "wait") continue;
 
-      const line = await applyFollowUp(db, { id: row.id, status: row.status, amount: num(row.amount) }, plan, followUp, now);
+      const line = await applyFollowUp(db, { id: row.id, status: row.status, amount: num(row.amount), currency: invoiceCurrency(row.currency) }, plan, followUp, now);
       if (line) lines.push(line);
     }
   }

@@ -176,3 +176,18 @@ describe("waitingDigestEmail", () => {
     expect(email.text).toContain("Flagged: <b>suspicious</b> counterparty.");
   });
 });
+
+describe("a EURC payable in the digest (EURC invoices design E6, review I2)", () => {
+  it("is written in EURC, in the HTML and in the text", () => {
+    const email = waitingDigestEmail({ orgName: "Acme", link, origin, items: [item({ amount: 100, currency: "EURC" })] });
+    expect(email.html).toContain("100.00 EURC");
+    expect(email.text).toContain("100.00 EURC");
+    expect(email.text).not.toContain("100.00 USDC");
+  });
+
+  it("reads each waiting payable's currency", async () => {
+    const { readFileSync } = await import("node:fs");
+    const source = readFileSync("src/lib/notifications/waiting.ts", "utf8");
+    expect(source).toContain('.select("id, amount, currency, status, agent_reasoning, notified_at, escalated_at, counterparties(name)")');
+  });
+});

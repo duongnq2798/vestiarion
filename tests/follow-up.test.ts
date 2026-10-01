@@ -235,3 +235,16 @@ describe("followUpConfig", () => {
     }
   });
 });
+
+describe("planFollowUp — a EURC invoice (review I2)", () => {
+  it("says its amount in EURC when it escalates it", () => {
+    const plan = planFollowUp(
+      frozen({ currency: "EURC", amount: 100, dueDate: daysAgo(2), decidedAt: daysAgo(9) }),
+      { poReference: null, goodsReceived: false, riskLevel: "clear", paymentLimit: 2 },
+      NOW,
+      config
+    );
+    expect(plan.action).toBe("escalate");
+    expect(plan.reason).toContain("100 EURC needs a human decision");
+  });
+});

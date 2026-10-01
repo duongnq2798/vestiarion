@@ -189,7 +189,8 @@ export type LastPaymentAttempt = { state: "failed"; reason: string } | { state: 
  */
 const REASON_IN_PLAIN_WORDS: Record<string, string> = {
   INSUFFICIENT_NATIVE_TOKEN: "the operating wallet does not hold enough USDC for the network fee (Circle: INSUFFICIENT_NATIVE_TOKEN)",
-  INSUFFICIENT_TOKEN: "the operating wallet does not hold enough USDC (Circle: INSUFFICIENT_TOKEN)",
+  // The invoice's own token: a EURC payment fails for want of EURC.
+  INSUFFICIENT_TOKEN: "the operating wallet does not hold enough {token} (Circle: INSUFFICIENT_TOKEN)",
   FAILED_ON_CHAIN: "the transfer failed on chain (Circle: FAILED_ON_CHAIN)",
 };
 
@@ -204,13 +205,13 @@ const REASON_IN_PLAIN_WORDS: Record<string, string> = {
  * `failed` intent from before Circle's state was kept, which Approve and pay
  * reads from Circle.
  */
-function lastAttemptOf(intent: IntentState | null): LastPaymentAttempt {
+function lastAttemptOf(intent: IntentState | null, token: Stablecoin = "USDC"): LastPaymentAttempt {
   if (!intent || intent.provider_tx_id === null || intent.status === "confirmed") return null;
   if (failedTerminally(intent)) {
     const reason = intent.failure_reason;
     return {
       state: "failed",
-      reason: reason ? (REASON_IN_PLAIN_WORDS[reason] ?? reason) : `Circle reported ${intent.provider_state}`,
+      reason: reason ? (REASON_IN_PLAIN_WORDS[reason]?.replace("{token}", token) ?? reason) : `Circle reported ${intent.provider_state}`,
     };
   }
   return intent.status === "pending" || intent.provider_state !== null ? { state: "in_flight" } : null;
@@ -321,7 +322,7 @@ export async function listWaitingPayables(): Promise<WaitingPayable[]> {
       reclaimable: isReclaimable(row.status, row.reviewed_at, now),
       paymentSent: paymentWasSent(intent),
       address: row.counterparties?.address ?? null,
-      lastAttempt: lastAttemptOf(intent),
+      lastAttempt: lastAttemptOf(intent, currencyOf(row.currency)),
       discount: invoiceDiscount(row),
       currency: currencyOf(row.currency),
     };

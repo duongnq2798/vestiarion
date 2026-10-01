@@ -120,6 +120,14 @@ describe("applyFollowUp — the follow-up stage's write is a compare-and-set", (
     expect(line).toEqual({ domain: "ap", message: "Reopened 150 USDC invoice: PO added" });
   });
 
+  it("writes a EURC invoice's amount in EURC (review I2)", async () => {
+    const { fake, run } = cycleFake((r) => (r.path === "/rest/v1/invoices" && r.method === "PATCH" ? { body: [{ id: INVOICE_ID }] } : undefined));
+    const line = await run(() => applyFollowUp(db(), { id: INVOICE_ID, status: "held", amount: 150, currency: "EURC" }, reopen, FOLLOW_UP_CONFIG, Date.now()));
+    expect(line).toEqual({ domain: "ap", message: "Reopened 150 EURC invoice: PO added" });
+    const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(append.p_summary).toBe("Reopened held invoice for 150 EURC: evidence changed");
+  });
+
   it("clears notified_at on reopen, so a re-held payable is news again", async () => {
     const { fake, run } = cycleFake((r) => (r.path === "/rest/v1/invoices" && r.method === "PATCH" ? { body: [{ id: INVOICE_ID }] } : undefined));
 
