@@ -1,6 +1,7 @@
 import { Flag } from "lucide-react";
 import type { Metadata } from "next";
 import AgentControls from "@/components/AgentControls";
+import { EscrowPanel } from "@/components/EscrowPanel";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import MilestoneIntake from "@/components/intake/MilestoneIntake";
 import MilestoneVerification from "@/components/MilestoneVerification";
@@ -15,6 +16,7 @@ import { sectionTitle } from "@/components/vx/nav";
 import { viewerCan } from "@/lib/auth/authorize";
 import { requireMembership } from "@/lib/auth/membership";
 import { chainModes } from "@/lib/circle";
+import { readEscrowContract } from "@/lib/circle/escrow-setup";
 import { inOrg } from "@/lib/dal/scope";
 import { listLedgerEntries, listLedgerEntriesForTargets } from "@/lib/ledger";
 import { listCounterparties, listMilestones, stats } from "@/lib/queries";
@@ -27,12 +29,21 @@ export default async function ContractorsPage({ params }: { params: Promise<{ sl
   const { slug } = await params;
   const access = await requireMembership(slug);
   return inOrg(access, async () => {
-    const [milestones, counterparties, headEntries, dashboardStats, canWrite] = await Promise.all([
+    const live = access.membership.mode === "live";
+    const [milestones, counterparties, headEntries, dashboardStats, canWrite, canManageTreasury, escrow] = await Promise.all([
       listMilestones(),
       listCounterparties(),
       listLedgerEntries(1),
       stats(),
       viewerCan(slug, "records.write"),
+      viewerCan(slug, "treasury.manage"),
+      // A live workspace's escrow (milestone escrow E2). Best effort: a read that fails shows no panel.
+      live
+        ? readEscrowContract().catch((error: unknown) => {
+            console.error("contractors: escrow not loaded", error instanceof Error ? error.message : error);
+            return undefined;
+          })
+        : Promise.resolve(undefined),
     ]);
     const entries = await listLedgerEntriesForTargets({ milestoneIds: milestones.map((milestone) => milestone.id) });
     const decisions = milestones.map((milestone) => milestoneDecision(milestone, entries));
@@ -63,6 +74,12 @@ export default async function ContractorsPage({ params }: { params: Promise<{ sl
             <Callout>Only an owner or admin of this workspace can add milestones.</Callout>
           )}
         </section>
+
+        {live && escrow !== undefined && (
+          <section className="mb-8">
+            <EscrowPanel orgSlug={slug} address={escrow?.address ?? null} deploying={Boolean(escrow && !escrow.address)} canSetUp={canManageTreasury} />
+          </section>
+        )}
 
         {decisions.length === 0 ? (
           <EmptyState
