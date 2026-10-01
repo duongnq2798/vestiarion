@@ -18,7 +18,7 @@ export interface IntakeCounterparty {
   role: string;
 }
 
-/** One invoice, typed in. The agent evaluates it on its next cycle. */
+/** One invoice, typed in, in USDC or EURC. The agent evaluates it on its next cycle. */
 export default function InvoiceIntake({ counterparties, orgSlug }: { counterparties: IntakeCounterparty[]; orgSlug: string }) {
   const { state, formProps } = useActionForm(createInvoiceAction, INITIAL, { resetOnSuccess: true, toastOnSuccess: true });
   const none = counterparties.length === 0;
@@ -52,8 +52,19 @@ export default function InvoiceIntake({ counterparties, orgSlug }: { counterpart
             </SelectContent>
           </Select>
         </Field>
-        <Field id="invoice-amount" label="Amount (USDC)">
+        <Field id="invoice-amount" label="Amount">
           <Input name="amount" required inputMode="decimal" placeholder="1250.00" />
+        </Field>
+        <Field id="invoice-currency" label="Currency" description="A EURC payable is paid in EURC, and checked against the payment limit at its USDC value.">
+          <Select name="currency" defaultValue="USDC">
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="USDC">USDC</SelectItem>
+              <SelectItem value="EURC">EURC</SelectItem>
+            </SelectContent>
+          </Select>
         </Field>
         <Field id="invoice-due" label="Due date">
           <Input name="dueDate" required type="date" />
