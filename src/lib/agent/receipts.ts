@@ -84,8 +84,8 @@ export async function recordIncomingTransfers(
 
   const transfers = await provider.listInboundTransfers(operatingAccountId, since);
   if (transfers.length > 0) {
-    unwrap(
-      await orgDb.from("incoming_transfers").upsert(
+    // A write that asks nothing back: PostgREST answers with no data, so only its error is read.
+    const recorded = await orgDb.from("incoming_transfers").upsert(
         transfers.map((transfer) => ({
           circle_tx_id: transfer.circleTxId,
           tx_hash: transfer.txHash,
@@ -96,8 +96,8 @@ export async function recordIncomingTransfers(
           received_at: transfer.receivedAt,
         })),
         { onConflict: "org_id,circle_tx_id", ignoreDuplicates: true }
-      )
-    );
+      );
+    if (recorded.error) throw new Error(recorded.error.message);
   }
 
   // Every unmatched transfer is tried, not only this read's: a receivable added after its money arrived still finds it.
@@ -177,7 +177,8 @@ export async function recordIncomingTransfers(
         .select("id")
     ) as Array<{ id: string }>;
     if (settled.length === 0) {
-      unwrap(await orgDb.from("incoming_transfers").update({ invoice_id: null, matched_by: null }).eq("id", row.id));
+      const released = await orgDb.from("incoming_transfers").update({ invoice_id: null, matched_by: null }).eq("id", row.id);
+      if (released.error) throw new Error(released.error.message);
       continue;
     }
 
