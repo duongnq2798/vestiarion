@@ -135,7 +135,12 @@ function matchEndpoint(baseUrl: string): string {
   return /\/match\/[^/]+$/.test(trimmed) ? trimmed : `${trimmed}/match/default`;
 }
 
-export async function screenName(name: string, jurisdiction?: string | null): Promise<ScreeningResult> {
+/**
+ * Screens a name. `dismissed` names entities a person reviewed and dismissed
+ * as not this counterparty (dismiss screening match R2): they are skipped, and
+ * the best match left, if any, is judged as usual.
+ */
+export async function screenName(name: string, jurisdiction?: string | null, dismissed: ReadonlySet<string> = new Set()): Promise<ScreeningResult> {
   const { openSanctionsUrl: baseUrl, openSanctionsApiKey } = currentConfig().compliance;
   if (!baseUrl) return screenBundledName(name);
 
@@ -165,7 +170,7 @@ export async function screenName(name: string, jurisdiction?: string | null): Pr
   if (!parsed.success) throw new Error("OpenSanctions returned an invalid match response");
   const query = parsed.data.responses.counterparty;
   if (!query || query.status >= 400) throw new Error(`OpenSanctions query failed with status ${query?.status ?? "missing"}`);
-  return classifyOpenSanctionsCandidate(query.results[0]);
+  return classifyOpenSanctionsCandidate(query.results.find((candidate) => !dismissed.has(candidate.id)));
 }
 
 /**
@@ -272,6 +277,33 @@ export function planScreening(cp: CounterpartyScreeningRow, result = screenBundl
   return { result, baseline, previousLimit, newLimit, changed, firstScreen };
 }
 
+/**
+ * The entities people dismissed as not each counterparty, keyed by
+ * counterparty, for the name it had when they did (R2): once the name
+ * changes, the new name is screened in full. Before migration 0051 there are
+ * none.
+ */
+export async function dismissedEntities(rows: Array<Pick<CounterpartyScreeningRow, "id" | "name">>): Promise<Map<string, Set<string>>> {
+  const byId = new Map<string, Set<string>>();
+  if (rows.length === 0) return byId;
+  const result = await db()
+    .from("screening_dismissals")
+    .select("counterparty_id, matched_entity_id, screened_name")
+    .in("counterparty_id", rows.map((row) => row.id));
+  if (result.error) {
+    if (result.error.code === "42P01") return byId;
+    throw new Error(result.error.message);
+  }
+  const names = new Map(rows.map((row) => [row.id, row.name.trim().toLowerCase()]));
+  for (const dismissal of result.data as Array<{ counterparty_id: string; matched_entity_id: string; screened_name: string }>) {
+    if (names.get(dismissal.counterparty_id) !== dismissal.screened_name.trim().toLowerCase()) continue;
+    const set = byId.get(dismissal.counterparty_id) ?? new Set<string>();
+    set.add(dismissal.matched_entity_id);
+    byId.set(dismissal.counterparty_id, set);
+  }
+  return byId;
+}
+
 export async function screenCounterparty(counterpartyId: string): Promise<ScreeningOutcome> {
   const client = db();
   const cp = unwrap(
@@ -282,7 +314,7 @@ export async function screenCounterparty(counterpartyId: string): Promise<Screen
       .single<CounterpartyScreeningRow>()
   );
   try {
-    return await applyScreening(cp);
+    return await applyScreening(cp, (await dismissedEntities([cp])).get(cp.id));
   } catch (error) {
     if (!(error instanceof ScreeningLookupError)) throw error;
     await recordScreeningFailure(cp, error.message, true);
@@ -294,11 +326,11 @@ export async function screenCounterparty(counterpartyId: string): Promise<Screen
  * Screens one already-loaded row. Split out so a sweep can screen the whole
  * book from a single select rather than one round trip per counterparty.
  */
-async function applyScreening(cp: CounterpartyScreeningRow): Promise<ScreeningOutcome> {
+async function applyScreening(cp: CounterpartyScreeningRow, dismissed?: ReadonlySet<string>): Promise<ScreeningOutcome> {
   const client = db();
   let result: ScreeningResult;
   try {
-    result = await screenName(cp.name, cp.jurisdiction);
+    result = await screenName(cp.name, cp.jurisdiction, dismissed);
   } catch (error) {
     throw new ScreeningLookupError(error instanceof Error ? error.message : "Unknown screening failure");
   }
@@ -314,6 +346,8 @@ async function applyScreening(cp: CounterpartyScreeningRow): Promise<ScreeningOu
       last_screening_mode: plan.result.screeningMode,
       baseline_payment_limit: plan.baseline,
       payment_limit: plan.newLimit,
+      // The entity the verdict matched, which the card offers to dismiss (dismiss screening match R4).
+      risk_entity_id: plan.result.matchedEntityId,
     })
     .eq("id", cp.id);
   if (update.error) throw new Error(update.error.message);
@@ -550,9 +584,10 @@ export async function runComplianceSweep(): Promise<SweepResult> {
 
   const screened: ScreeningOutcome[] = [];
   const failures: SweepResult["failures"] = [];
+  const dismissed = await dismissedEntities(due);
   for (const row of due) {
     try {
-      screened.push(await applyScreening(row));
+      screened.push(await applyScreening(row, dismissed.get(row.id)));
     } catch (error) {
       if (!(error instanceof ScreeningLookupError)) throw error;
       const message = error instanceof Error ? error.message : "Unknown screening failure";
