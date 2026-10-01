@@ -177,7 +177,7 @@ describe("the privacy page", () => {
       currency: "currency",
       usdcValue: "its value in USDC for an invoice in EURC",
       eurcBalance: "the wallet&apos;s EURC balance",
-      payout: "across chains through CCTP with its fee",
+      payout: "across chains through CCTP or a Gateway balance with its fee",
       memo: "memo",
       poReference: "purchase order reference",
       goodsReceived: "whether the goods were received",

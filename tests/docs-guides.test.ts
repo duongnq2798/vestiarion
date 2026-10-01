@@ -27,6 +27,7 @@ const INVOICE_FORM = "src/components/intake/InvoiceIntake.tsx";
 const INVOICES_PAGE = "src/app/o/[slug]/invoices/page.tsx";
 const DOCUMENT_TAB = "src/components/intake/InvoiceDocumentIntake.tsx";
 const DOCUMENT_READ = "src/lib/invoice-document/read.ts";
+const GATEWAY_PANEL = "src/components/GatewayPanel.tsx";
 const INTAKE_ACTIONS = "src/app/actions/intake.ts";
 const ORCHESTRATOR = "src/lib/agent/orchestrator.ts";
 const CONSOLE_PAGE = "src/app/o/[slug]/console/page.tsx";
@@ -153,6 +154,9 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["The amount the model gave is not in the document, so it was left blank.", DOCUMENT_TAB],
     ["A document cannot say this; tick it only if you received them.", INVOICE_FORM],
     ["This PDF has no text to read; it may be a scan. Paste the invoice's text instead.", DOCUMENT_READ],
+    ["Gateway balance", GATEWAY_PANEL],
+    ["Amount to move from the operating wallet (USDC)", GATEWAY_PANEL],
+    ["Fund Gateway", GATEWAY_PANEL],
     ["Direction", INVOICE_FORM],
     ["Payable", INVOICE_FORM],
     ["Amount", INVOICE_FORM],
