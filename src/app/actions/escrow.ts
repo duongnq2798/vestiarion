@@ -5,7 +5,7 @@ import "server-only";
 import { z } from "zod";
 import { authorize } from "@/lib/auth/authorize";
 import { revalidateOrgPages } from "@/lib/auth/revalidate";
-import { EscrowHoldError, lockMilestone } from "@/lib/circle/escrow-holds";
+import { EscrowHoldError, lockMilestone, refundMilestone } from "@/lib/circle/escrow-holds";
 import { EscrowSetupError, setUpEscrow } from "@/lib/circle/escrow-setup";
 import { inOrg } from "@/lib/dal/scope";
 
@@ -70,6 +70,31 @@ export async function lockMilestoneAction(_previous: EscrowActionResult, formDat
       if (error instanceof EscrowHoldError) return error.renew ? { ok: false, message: error.message, renew: true } : { ok: false, message: error.message };
       console.error("lockMilestoneAction failed", error instanceof Error ? error.name : "unknown");
       return { ok: false, message: "Locking did not finish. Try again: nothing is locked twice." };
+    }
+  });
+}
+
+/** Takes a milestone's hold back to the workspace from its refund date (milestone escrow E5): an owner's or admin's act. */
+export async function refundMilestoneAction(_previous: EscrowActionResult, formData: FormData): Promise<EscrowActionResult> {
+  const auth = await authorize(formData.get("orgSlug"), "treasury.manage");
+  if (!auth.ok) return { ok: false, message: auth.message };
+  if (auth.membership.mode !== "live") return { ok: false, message: LIVE_ONLY };
+  const milestoneId = idSchema.safeParse(formData.get("milestoneId"));
+  if (!milestoneId.success) return { ok: false, message: "That milestone is not in this workspace." };
+  const requestId = idSchema.safeParse(formData.get("requestId"));
+  if (!requestId.success) return { ok: false, message: "Reload the page and try again." };
+  return inOrg(auth, async () => {
+    try {
+      await refundMilestone({ actorId: auth.user.id, milestoneId: milestoneId.data, requestId: requestId.data });
+      revalidateOrgPages();
+      return { ok: true, message: "Refunded from escrow to this workspace." };
+    } catch (error) {
+      if (error instanceof EscrowHoldError) {
+        revalidateOrgPages();
+        return error.renew ? { ok: false, message: error.message, renew: true } : { ok: false, message: error.message };
+      }
+      console.error("refundMilestoneAction failed", error instanceof Error ? error.name : "unknown");
+      return { ok: false, message: "The refund did not finish. Try again: nothing is sent twice." };
     }
   });
 }

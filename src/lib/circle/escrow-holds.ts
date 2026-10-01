@@ -186,3 +186,76 @@ export async function lockMilestone(
   }
   return record(funded.txHash);
 }
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const day = (date: Date) => `${date.getUTCDate()} ${MONTHS[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
+
+/**
+ * Takes a hold back to the workspace from its refund date (milestone escrow E5): an owner's or admin's act,
+ * for a milestone not paid. The chain is read first: a hold it no longer has funded is recorded as it is
+ * there, and nothing is sent. The refund runs under the request's key.
+ */
+export async function refundMilestone(
+  input: { actorId: string; milestoneId: string; requestId: string; now?: Date },
+  options: { client?: (credentials: { apiKey: string; entitySecret: string }) => EscrowHoldClient; fetch?: typeof fetch; rpcUrl?: string } = {}
+): Promise<{ refundTxHash: string | null }> {
+  const escrow = await readEscrowContract();
+  if (!escrow?.address) throw new EscrowHoldError("Set up escrow for this workspace first.");
+  const milestone = unwrap(
+    await db().from("milestones").select("id, status, amount, escrow_state, escrow_amount, escrow_refund_after").eq("id", input.milestoneId).single()
+  ) as { id: string; status: string; amount: string | number; escrow_state: string | null; escrow_amount: string | number | null; escrow_refund_after: string | null };
+  if (milestone.escrow_state !== "funded") throw new EscrowHoldError("This milestone has no hold in escrow to refund.");
+  if (milestone.status === "paid") throw new EscrowHoldError("This milestone is paid; its hold went to the contractor.");
+  const refundAfter = new Date(milestone.escrow_refund_after ?? "");
+  const now = input.now ?? new Date();
+  if (Number.isNaN(refundAfter.getTime()) || now.getTime() < refundAfter.getTime()) throw new EscrowHoldError(`This hold can be refunded from ${day(refundAfter)}.`);
+
+  const amount = Number(milestone.escrow_amount ?? milestone.amount);
+  const id = holdId(milestone.id);
+  const chainOptions = { fetch: options.fetch, rpcUrl: options.rpcUrl };
+  const record = async (state: "refunded" | "released", refundTxHash: string | null) => {
+    const saved = await db()
+      .from("milestones")
+      .update(state === "refunded" ? { escrow_state: "refunded", escrow_refund_tx_hash: refundTxHash } : { escrow_state: "released" })
+      .eq("id", milestone.id);
+    if (saved.error) throw new Error(saved.error.message);
+  };
+
+  const onChain = (await readHold(escrow.address, id, chainOptions)).state;
+  if (onChain === "released") {
+    await record("released", null);
+    throw new EscrowHoldError("This hold was released to the contractor.");
+  }
+  if (onChain === "refunded") {
+    await record("refunded", null);
+    return { refundTxHash: null };
+  }
+
+  const chain = currentOrgConfig().chain;
+  if (chain.credentialsUnreadable || !chain.circleApiKey || !chain.circleEntitySecret) throw new EscrowHoldError("This workspace's Circle credentials could not be read.");
+  const client = (options.client ?? initiateDeveloperControlledWalletsClient)({ apiKey: chain.circleApiKey, entitySecret: chain.circleEntitySecret });
+  const operating = await operatingWallet();
+  const refunded = await execute(
+    client,
+    operating.walletId,
+    { contractAddress: escrow.address, abiFunctionSignature: "refund(bytes32)", abiParameters: [id] },
+    escrowStepKey(`${currentOrgId()}/refund/${milestone.id}/${input.requestId}`)
+  );
+  if (!refunded.ok) {
+    const after = (await readHold(escrow.address, id, chainOptions)).state;
+    if (after === "refunded") {
+      await record("refunded", null);
+      return { refundTxHash: null };
+    }
+    throw new EscrowHoldError(`Circle did not complete the refund (${refunded.state}). Nothing moved; try again.`, true);
+  }
+  await record("refunded", refunded.txHash);
+  await appendLedgerEntry({
+    actor: "human",
+    domain: "contractor",
+    action: "escrow_refunded",
+    summary: `Refunded ${amount} USDC from escrow to the workspace`,
+    detail: { by: input.actorId, milestoneId: milestone.id, contract: escrow.address, holdId: id, amountUsdc: amount, refundTxHash: refunded.txHash },
+  });
+  return { refundTxHash: refunded.txHash };
+}

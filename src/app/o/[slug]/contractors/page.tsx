@@ -113,6 +113,7 @@ export default async function ContractorsPage({ params }: { params: Promise<{ sl
                     escrowReady={Boolean(escrow?.address)}
                     canManage={canManageTreasury}
                     paid={milestones[index].status === "paid"}
+                    refundable={Boolean(milestones[index].escrow_refund_after) && Date.parse(milestones[index].escrow_refund_after ?? "") <= Date.now()}
                     hold={
                       milestones[index].escrow_state
                         ? {

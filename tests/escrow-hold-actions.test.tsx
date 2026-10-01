@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { lockMilestoneAction } from "@/app/actions/escrow";
+import { lockMilestoneAction, refundMilestoneAction } from "@/app/actions/escrow";
 import { MilestoneEscrow } from "@/components/MilestoneEscrow";
 
 /**
@@ -9,7 +9,7 @@ import { MilestoneEscrow } from "@/components/MilestoneEscrow";
  * tests/escrow-holds.test.ts covers it.
  */
 
-const { authorizeMock, lib } = vi.hoisted(() => ({ authorizeMock: vi.fn(), lib: { lockMilestone: vi.fn() } }));
+const { authorizeMock, lib } = vi.hoisted(() => ({ authorizeMock: vi.fn(), lib: { lockMilestone: vi.fn(), refundMilestone: vi.fn() } }));
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/auth/revalidate", () => ({ revalidateOrgPages: vi.fn() }));
@@ -34,6 +34,7 @@ const text = (markup: string) => markup.replace(/<[^>]+>/g, " ").replace(/&#x27;
 beforeEach(() => {
   authorizeMock.mockReset();
   lib.lockMilestone.mockReset();
+  lib.refundMilestone.mockReset();
 });
 
 describe("lockMilestoneAction", () => {
@@ -64,8 +65,25 @@ describe("lockMilestoneAction", () => {
   });
 });
 
+describe("refundMilestoneAction", () => {
+  it("refunds a hold under the form's request id", async () => {
+    authorizeMock.mockResolvedValue(access("live"));
+    lib.refundMilestone.mockResolvedValue({ refundTxHash: `0x${"4".repeat(64)}` });
+    expect(await refundMilestoneAction(empty, form())).toEqual({ ok: true, message: "Refunded from escrow to this workspace." });
+    expect(lib.refundMilestone).toHaveBeenCalledWith({ actorId: "user-1", milestoneId: MILESTONE, requestId: REQUEST });
+  });
+
+  it("says why it could not refund, and asks for a new request id after a step Circle failed", async () => {
+    authorizeMock.mockResolvedValue(access("live"));
+    lib.refundMilestone.mockRejectedValueOnce(new EscrowHoldError("This hold can be refunded from 31 Oct 2026."));
+    expect(await refundMilestoneAction(empty, form())).toEqual({ ok: false, message: "This hold can be refunded from 31 Oct 2026." });
+    lib.refundMilestone.mockRejectedValueOnce(new EscrowHoldError("Circle did not complete the refund (FAILED). Nothing moved; try again.", true));
+    expect(await refundMilestoneAction(empty, form())).toEqual({ ok: false, message: "Circle did not complete the refund (FAILED). Nothing moved; try again.", renew: true });
+  });
+});
+
 describe("the milestone's escrow on its card", () => {
-  const base = { orgSlug: "testnet-2", milestoneId: MILESTONE, requestId: REQUEST, defaultRefundDate: "2026-10-31", escrowReady: true, canManage: true, paid: false };
+  const base = { orgSlug: "testnet-2", milestoneId: MILESTONE, requestId: REQUEST, defaultRefundDate: "2026-10-31", escrowReady: true, canManage: true, paid: false, refundable: false };
 
   it("offers to lock an unlocked milestone, with a refund date, to an owner or admin", () => {
     const markup = renderToStaticMarkup(<MilestoneEscrow {...base} hold={null} />);
@@ -78,6 +96,13 @@ describe("the milestone's escrow on its card", () => {
     expect(renderToStaticMarkup(<MilestoneEscrow {...base} escrowReady={false} hold={null} />)).toBe("");
     expect(renderToStaticMarkup(<MilestoneEscrow {...base} canManage={false} hold={null} />)).toBe("");
     expect(renderToStaticMarkup(<MilestoneEscrow {...base} paid hold={null} />)).toBe("");
+  });
+
+  it("offers to refund a hold from its refund date, to an owner or admin, for a milestone not paid", () => {
+    const hold = { state: "funded" as const, refundAfter: "2026-10-31T00:00:00Z", amount: 2, fundTxHash: FUND, releaseTxHash: null, refundTxHash: null };
+    expect(text(renderToStaticMarkup(<MilestoneEscrow {...base} refundable hold={hold} />))).toContain("Refund from escrow");
+    expect(text(renderToStaticMarkup(<MilestoneEscrow {...base} refundable={false} hold={hold} />))).not.toContain("Refund from escrow");
+    expect(text(renderToStaticMarkup(<MilestoneEscrow {...base} refundable canManage={false} hold={hold} />))).not.toContain("Refund from escrow");
   });
 
   it("says a hold is locked until its date, released or refunded, with its transaction", () => {

@@ -3,7 +3,7 @@ import { keccak_256 } from "@noble/hashes/sha3.js";
 import { configFromEnv, type VestiarionConfig } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { escrowStepKey } from "@/lib/circle/escrow-setup";
-import { EscrowHoldError, HOLDS_SELECTOR, holdId, lockMilestone, readHold, type EscrowHoldClient } from "@/lib/circle/escrow-holds";
+import { EscrowHoldError, HOLDS_SELECTOR, holdId, lockMilestone, readHold, refundMilestone, type EscrowHoldClient } from "@/lib/circle/escrow-holds";
 import { fakeSupabase, orgTestContext, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 
 /**
@@ -158,6 +158,45 @@ describe("a milestone whose payment has started", () => {
     await expect(lock(database({}, {}, [{ id: "intent-1" }]), c, chain(0))).rejects.toEqual(
       new EscrowHoldError("This milestone's payment has already started, so it cannot be locked in escrow.")
     );
+    expect(c.calls).toEqual([]);
+  });
+});
+
+describe("refundMilestone", () => {
+  const funded = { escrow_state: "funded", escrow_amount: "2", escrow_refund_after: "2026-10-31T00:00:00Z" };
+  const refund = (db: ReturnType<typeof database>, c: ReturnType<typeof circle>, rpc: ReturnType<typeof chain>, now: Date) =>
+    db.run(() => refundMilestone({ actorId: USER, milestoneId: MILESTONE, requestId: REQUEST, now }, { client: () => c.client, fetch: rpc as unknown as typeof fetch, rpcUrl: "https://rpc.example" }));
+
+  it("refunds a hold to the workspace from its refund date, under the request's key, and records it", async () => {
+    const db = database(funded);
+    const c = circle();
+    await refund(db, c, chain(1), new Date("2026-10-31T00:00:00Z"));
+    expect(c.calls.map((call) => [call.walletId, call.contractAddress, call.abiFunctionSignature, call.abiParameters, call.idempotencyKey])).toEqual([
+      ["wallet-op", ESCROW, "refund(bytes32)", [holdId(MILESTONE)], escrowStepKey(`${ORG}/refund/${MILESTONE}/${REQUEST}`)],
+    ]);
+    expect(db.milestone()).toMatchObject({ escrow_state: "refunded" });
+    expect(String(db.milestone().escrow_refund_tx_hash)).toMatch(/^0x1a/);
+    expect(appendLedgerEntry).toHaveBeenCalledWith(expect.objectContaining({ domain: "contractor", action: "escrow_refunded", detail: expect.objectContaining({ by: USER, milestoneId: MILESTONE, contract: ESCROW, amountUsdc: 2 }) }));
+  });
+
+  it("refuses before the refund date, and for a milestone with no hold or a paid one, before calling Circle", async () => {
+    const c = circle();
+    await expect(refund(database(funded), c, chain(1), new Date("2026-10-30T23:59:59Z"))).rejects.toEqual(new EscrowHoldError("This hold can be refunded from 31 Oct 2026."));
+    await expect(refund(database(), c, chain(1), new Date("2026-11-01T00:00:00Z"))).rejects.toEqual(new EscrowHoldError("This milestone has no hold in escrow to refund."));
+    await expect(refund(database({ ...funded, status: "paid" }), c, chain(1), new Date("2026-11-01T00:00:00Z"))).rejects.toEqual(
+      new EscrowHoldError("This milestone is paid; its hold went to the contractor.")
+    );
+    expect(c.calls).toEqual([]);
+  });
+
+  it("records what the chain says when the hold is no longer funded there, and sends nothing", async () => {
+    const released = database(funded);
+    const c = circle();
+    await expect(refund(released, c, chain(2), new Date("2026-11-01T00:00:00Z"))).rejects.toEqual(new EscrowHoldError("This hold was released to the contractor."));
+    expect(released.milestone()).toMatchObject({ escrow_state: "released" });
+    const refunded = database(funded);
+    await refund(refunded, c, chain(3), new Date("2026-11-01T00:00:00Z"));
+    expect(refunded.milestone()).toMatchObject({ escrow_state: "refunded", escrow_refund_tx_hash: null });
     expect(c.calls).toEqual([]);
   });
 });

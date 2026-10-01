@@ -1,8 +1,8 @@
 "use client";
 
-import { LockKeyhole } from "lucide-react";
+import { LockKeyhole, Undo2 } from "lucide-react";
 import { useState } from "react";
-import { lockMilestoneAction, type EscrowActionResult } from "@/app/actions/escrow";
+import { lockMilestoneAction, refundMilestoneAction, type EscrowActionResult } from "@/app/actions/escrow";
 import { Field } from "@/components/ui/Field";
 import { FormMessage } from "@/components/ui/FormMessage";
 import { Input } from "@/components/ui/Input";
@@ -46,6 +46,7 @@ export function MilestoneEscrow({
   escrowReady,
   canManage,
   paid,
+  refundable,
   hold,
 }: {
   orgSlug: string;
@@ -55,35 +56,50 @@ export function MilestoneEscrow({
   escrowReady: boolean;
   canManage: boolean;
   paid: boolean;
+  /** The hold's refund date has come: decided on the server, so the server's markup and the browser's agree. */
+  refundable: boolean;
   hold: MilestoneHold | null;
 }) {
   const [requestId, setRequestId] = useState(initialRequestId);
-  const { state, formProps } = useActionForm(lockMilestoneAction, INITIAL, {
-    toastOnSuccess: true,
-    onResult: (result) => (result.ok || result.renew) && setRequestId(crypto.randomUUID()),
-  });
+  const renew = (result: EscrowActionResult) => (result.ok || result.renew) && setRequestId(crypto.randomUUID());
+  const { state, formProps } = useActionForm(lockMilestoneAction, INITIAL, { toastOnSuccess: true, onResult: renew });
+  const refund = useActionForm(refundMilestoneAction, INITIAL, { toastOnSuccess: true, onResult: renew });
 
   if (hold) {
+    const canRefund = hold.state === "funded" && refundable && canManage && !paid;
     return (
-      <p className="mt-2 flex flex-wrap items-center gap-2 px-1 text-sm text-ink-2">
-        <LockKeyhole className="size-4 text-ink-3" aria-hidden />
-        {hold.state === "funded" ? (
-          <>
-            {hold.amount} USDC locked in escrow until {day(hold.refundAfter)}
-            <TxLink hash={hold.fundTxHash} />
-          </>
-        ) : hold.state === "released" ? (
-          <>
-            Released from escrow to the contractor
-            <TxLink hash={hold.releaseTxHash} />
-          </>
-        ) : (
-          <>
-            Refunded from escrow to this workspace
-            <TxLink hash={hold.refundTxHash} />
-          </>
+      <div className="mt-2 flex flex-col gap-2 px-1 sm:flex-row sm:items-center sm:justify-between">
+        <p className="flex flex-wrap items-center gap-2 text-sm text-ink-2">
+          <LockKeyhole className="size-4 text-ink-3" aria-hidden />
+          {hold.state === "funded" ? (
+            <>
+              {hold.amount} USDC locked in escrow until {day(hold.refundAfter)}
+              <TxLink hash={hold.fundTxHash} />
+            </>
+          ) : hold.state === "released" ? (
+            <>
+              Released from escrow to the contractor
+              <TxLink hash={hold.releaseTxHash} />
+            </>
+          ) : (
+            <>
+              Refunded from escrow to this workspace
+              <TxLink hash={hold.refundTxHash} />
+            </>
+          )}
+        </p>
+        {canRefund && (
+          <form {...refund.formProps} className="flex flex-col gap-1 sm:items-end">
+            <input type="hidden" name="orgSlug" value={orgSlug} />
+            <input type="hidden" name="milestoneId" value={milestoneId} />
+            <input type="hidden" name="requestId" value={requestId} />
+            <SubmitButton variant="secondary" size="sm" icon={<Undo2 />} pendingLabel="Refunding…">
+              Refund from escrow
+            </SubmitButton>
+            <FormMessage tone="error">{refund.state.ok ? null : refund.state.message}</FormMessage>
+          </form>
         )}
-      </p>
+      </div>
     );
   }
   if (!escrowReady || !canManage || paid) return null;
