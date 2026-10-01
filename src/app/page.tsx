@@ -15,6 +15,7 @@ import { currentConfig } from "@/lib/context";
 import { withFoundingOrg } from "@/lib/dal/scope";
 import { getLandingMetrics } from "@/lib/landing";
 import { listLedgerEntries } from "@/lib/ledger";
+import { X_HANDLE } from "@/lib/site-links";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +33,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
+    site: X_HANDLE,
     title: "Vestiarion — Verifiable Treasury Agent on Arc",
     description: "An autonomous treasury agent whose decisions, refusals, and evidence are inspectable.",
   },

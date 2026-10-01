@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { X_HANDLE } from "../site-links";
 import { docsHref } from "./paths";
 
 /** Where the social image of the docs page at `slug` is served, by `app/og/docs/[[...slug]]/route.ts`. */
@@ -31,6 +32,6 @@ export function docsSocialMetadata(page: { slug: string; title: string; descript
       locale: "en_US",
       images: [image],
     },
-    twitter: { card: "summary_large_image", title, description: page.description, images: [image] },
+    twitter: { card: "summary_large_image", site: X_HANDLE, title, description: page.description, images: [image] },
   };
 }

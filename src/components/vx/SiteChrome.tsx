@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/components/ui/cn";
 import { Eyebrow } from "@/components/ui/Eyebrow";
-import { GITHUB_URL, ISSUES_URL, LICENSE_URL } from "@/lib/site-links";
+import { GITHUB_URL, ISSUES_URL, LICENSE_URL, X_URL } from "@/lib/site-links";
 import { BrandMark } from "./Brand";
 import { SiteMenu } from "./SiteMenu";
 
@@ -132,6 +132,7 @@ export const FOOTER_COLUMNS: ReadonlyArray<{ title: string; links: readonly Foot
       { href: "/docs/guides/go-live", label: "Go live guide" },
       { href: "/docs/guides/first-payment", label: "First payment guide" },
       { href: ISSUES_URL, label: "Support" },
+      { href: X_URL, label: "Updates on X" },
     ],
   },
   {
@@ -150,6 +151,7 @@ export const COMPACT_FOOTER_LINKS: readonly FooterLink[] = [
   { href: "/terms", label: "Terms" },
   { href: "/privacy", label: "Privacy" },
   { href: GITHUB_URL, label: "GitHub" },
+  { href: X_URL, label: "X" },
 ];
 
 const isExternal = (href: string) => /^https?:\/\//.test(href);
@@ -189,8 +191,17 @@ function GitHubMark({ className }: { className?: string }) {
   );
 }
 
+function XMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="currentColor" className={className}>
+      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+    </svg>
+  );
+}
+
 const COLUMN_LINK = "inline-flex py-1.5 text-sm text-ink-2 transition-colors duration-150 ease-standard hover:text-agent";
 const COMPACT_LINK = "inline-flex py-1 text-ink-2 transition-colors duration-150 ease-standard hover:text-agent";
+const ICON_LINK = "-my-2 inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-ink-2 transition-colors duration-150 ease-standard hover:bg-raised/70 hover:text-ink";
 const COPYRIGHT = "© 2026 Vestiarion contributors";
 
 /**
@@ -257,13 +268,14 @@ export function SiteFooter({ compact = false }: { compact?: boolean }) {
           </p>
           <div className="flex items-center justify-between gap-4 sm:justify-end">
             <p className="min-w-0">Hash-chained decisions · Ed25519 signed · Arc testnet</p>
-            <FooterAnchor
-              href={GITHUB_URL}
-              label="Vestiarion on GitHub"
-              className="-my-2 inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-ink-2 transition-colors duration-150 ease-standard hover:bg-raised/70 hover:text-ink"
-            >
-              <GitHubMark className="size-5" />
-            </FooterAnchor>
+            <div className="flex shrink-0 items-center gap-1">
+              <FooterAnchor href={GITHUB_URL} label="Vestiarion on GitHub" className={ICON_LINK}>
+                <GitHubMark className="size-5" />
+              </FooterAnchor>
+              <FooterAnchor href={X_URL} label="Vestiarion on X" className={ICON_LINK}>
+                <XMark className="size-4" />
+              </FooterAnchor>
+            </div>
           </div>
         </div>
       </div>
