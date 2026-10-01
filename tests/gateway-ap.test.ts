@@ -201,6 +201,17 @@ describe("a payee on Base Sepolia, with a Gateway balance", () => {
     expect(entries(fake.requests)[0].p_detail).toMatchObject({ payout: { chain: "BASE-SEPOLIA", route: "gateway", domain: 6, feeUsdc: 0.0505 } });
   });
 
+  it("records both routes' fees with the route it took, so the choice can be checked (route evidence)", async () => {
+    model("pay");
+    const funded = apFake({ book: [payable()], gateway: FUNDED });
+    await funded.stage();
+    expect(entries(funded.fake.requests)[0].p_detail).toMatchObject({ payout: { route: "gateway", feeUsdc: 0.0505, quotes: { cctpFeeUsdc: 0.054613, gatewayFeeUsdc: 0.0505 } } });
+
+    const none = apFake({ book: [payable()] });
+    await none.stage();
+    expect(entries(none.fake.requests)[0].p_detail).toMatchObject({ payout: { route: "cctp", quotes: { cctpFeeUsdc: 0.054613, gatewayFeeUsdc: null } } });
+  });
+
   it("goes through CCTP when the Gateway balance cannot cover the amount and its fee", async () => {
     model("pay");
     const { chain, stage } = apFake({ book: [payable()], gateway: async () => ({ feeUsdc: 0.0505, balanceUsdc: 1.55 }) });

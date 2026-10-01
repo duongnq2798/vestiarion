@@ -93,6 +93,16 @@ export interface SyncOptions {
  * names. The caller decides whether the provider is live; this reads whatever
  * it is given.
  */
+/**
+ * Reads the wallet accounts' balances from the chain now and stores them,
+ * compare-and-set: after money left a wallet outside a cycle (a Gateway
+ * deposit), so the stored figures every page shows follow at once rather
+ * than at the next refresh or cycle. It throws when the read cannot start.
+ */
+export async function syncWalletBalances(): Promise<BalanceSync> {
+  return syncOnChainBalances(getChainProvider(), db(), { walletsOnly: true, compareAndSet: true });
+}
+
 export async function syncOnChainBalances(provider: ChainProvider, orgDb: OrgDb, options: SyncOptions = {}): Promise<BalanceSync> {
   const rows = unwrap(
     await orgDb.from("accounts").select("id, name, kind, balance, circle_wallet_id")

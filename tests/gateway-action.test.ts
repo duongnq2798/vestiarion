@@ -7,11 +7,17 @@ import { can } from "@/lib/auth/roles";
  * stand-ins; the action's own checks and messages are real.
  */
 
-const { authorizeMock, fundGateway } = vi.hoisted(() => ({ authorizeMock: vi.fn(), fundGateway: vi.fn() }));
+const { authorizeMock, fundGateway, syncWalletBalances, revalidateOrgPages } = vi.hoisted(() => ({
+  authorizeMock: vi.fn(),
+  fundGateway: vi.fn(),
+  syncWalletBalances: vi.fn(),
+  revalidateOrgPages: vi.fn(),
+}));
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/auth/authorize", () => ({ authorize: authorizeMock }));
-vi.mock("@/lib/auth/revalidate", () => ({ revalidateOrgPages: vi.fn() }));
+vi.mock("@/lib/auth/revalidate", () => ({ revalidateOrgPages }));
+vi.mock("@/lib/agent/balances", () => ({ refreshOnChainBalances: vi.fn(), syncWalletBalances }));
 vi.mock("@/lib/dal/scope", () => ({ inOrg: (_access: unknown, fn: () => Promise<unknown>) => fn() }));
 vi.mock("@/lib/circle/gateway-funding", () => ({
   fundGateway,
@@ -39,6 +45,8 @@ function form(amount: string, requestId = REQUEST): FormData {
 beforeEach(() => {
   authorizeMock.mockReset();
   fundGateway.mockReset();
+  syncWalletBalances.mockReset();
+  revalidateOrgPages.mockReset();
 });
 
 describe("who may fund a Gateway balance", () => {
@@ -55,6 +63,39 @@ describe("fundGatewayAction", () => {
     expect(authorizeMock).toHaveBeenCalledWith("testnet-2", "treasury.manage");
     expect(fundGateway).toHaveBeenCalledWith({ actorId: "user-1", amount: 3, requestId: REQUEST });
     expect(result).toEqual({ ok: true, message: "Deposited 3 USDC into Gateway. The Gateway balance is 3 USDC." });
+  });
+
+  it("says Gateway counts the deposit shortly, when it had not yet (Gateway rollout)", async () => {
+    authorizeMock.mockResolvedValue(access("live"));
+    fundGateway.mockResolvedValue({ signerAddress: "0xsigner", depositTxHash: "0xdeposit", balanceUsdc: null });
+    expect((await fundGatewayAction({ ok: false, message: "" }, form("5"))).message).toBe(
+      "Deposited 5 USDC into Gateway. Gateway counts it once Arc testnet finalizes the deposit, usually within a minute."
+    );
+  });
+
+  it("reads the operating wallet's balance again after the deposit, before the page is drawn again, so it shows what left (Gateway rollout)", async () => {
+    authorizeMock.mockResolvedValue(access("live"));
+    fundGateway.mockResolvedValue({ signerAddress: "0xsigner", depositTxHash: "0xdeposit", balanceUsdc: 3 });
+    const order: string[] = [];
+    syncWalletBalances.mockImplementation(async () => order.push("sync"));
+    revalidateOrgPages.mockImplementation(() => order.push("revalidate"));
+    expect((await fundGatewayAction({ ok: false, message: "" }, form("1"))).ok).toBe(true);
+    expect(order).toEqual(["sync", "revalidate"]);
+  });
+
+  it("still reports a deposit that was made when the balance read after it fails (Gateway rollout)", async () => {
+    authorizeMock.mockResolvedValue(access("live"));
+    fundGateway.mockResolvedValue({ signerAddress: "0xsigner", depositTxHash: "0xdeposit", balanceUsdc: 3 });
+    syncWalletBalances.mockRejectedValue(new Error("Circle did not answer"));
+    expect(await fundGatewayAction({ ok: false, message: "" }, form("1"))).toEqual({ ok: true, message: "Deposited 1 USDC into Gateway. The Gateway balance is 3 USDC." });
+    expect(revalidateOrgPages).toHaveBeenCalled();
+  });
+
+  it("reads no balance when the funding failed", async () => {
+    authorizeMock.mockResolvedValue(access("live"));
+    fundGateway.mockRejectedValue(new Error("Enter an amount greater than zero."));
+    await fundGatewayAction({ ok: false, message: "" }, form("1"));
+    expect(syncWalletBalances).not.toHaveBeenCalled();
   });
 
   it("refuses a sandbox: its payments are simulated, and Gateway is on Arc testnet", async () => {

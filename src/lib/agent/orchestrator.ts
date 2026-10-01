@@ -1383,7 +1383,17 @@ async function decideApPayable(
       // A payee on another chain: the route and the fee read for this decision (CCTP payouts X11).
       // A Gateway payout also records the Gateway balance it was weighed against.
       ...(crossChain
-        ? { payout: { chain: destination.id, route, domain: destination.domain, feeUsdc: routeFeeUsdc, ...(viaGateway && gateway ? { gatewayBalanceUsdc: gateway.balanceUsdc } : {}) } }
+        ? {
+            payout: {
+              chain: destination.id,
+              route,
+              domain: destination.domain,
+              feeUsdc: routeFeeUsdc,
+              ...(viaGateway && gateway ? { gatewayBalanceUsdc: gateway.balanceUsdc } : {}),
+              // Both routes' fees as read for this decision, so the route it took can be checked against the other.
+              ...(isEurc ? {} : { quotes: { cctpFeeUsdc: fee?.feeUsdc ?? null, gatewayFeeUsdc: gateway?.feeUsdc ?? null } }),
+            },
+          }
         : {}),
       // A EURC payable's USDC value and the quote it came from (E2); null when there was none.
       ...(isEurc

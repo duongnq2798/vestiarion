@@ -98,9 +98,39 @@ async function execute(
   return { id, txHash: settled.transaction?.txHash ?? null };
 }
 
+/** Reads the Gateway balance, or null when Gateway does not answer. */
+async function readBalance(depositor: string, fetcher: typeof fetch | undefined): Promise<number | null> {
+  try {
+    return await gatewayBalance(depositor, { fetch: fetcher });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The Gateway balance once Gateway counts a deposit: it does so a few seconds after Circle completes the
+ * deposit on Arc testnet (Gateway rollout, where a read right after found none of it). Read until it
+ * reaches `target` or `waitMs` pass; null if it has not, rather than a balance without the deposit.
+ */
+async function countedBalance(depositor: string, target: number, options: { fetch?: typeof fetch; waitMs: number; pollMs: number }): Promise<number | null> {
+  const deadline = Date.now() + options.waitMs;
+  for (;;) {
+    const balance = await readBalance(depositor, options.fetch);
+    if (balance !== null && Math.round(balance * 1_000_000) >= Math.round(target * 1_000_000)) return balance;
+    if (Date.now() >= deadline) return null;
+    await new Promise((resolve) => setTimeout(resolve, options.pollMs));
+  }
+}
+
 export async function fundGateway(
   input: { actorId: string; amount: number; requestId: string },
-  options: { client?: (credentials: { apiKey: string; entitySecret: string }) => GatewayFundingClient; fetch?: typeof fetch } = {}
+  options: {
+    client?: (credentials: { apiKey: string; entitySecret: string }) => GatewayFundingClient;
+    fetch?: typeof fetch;
+    /** How long to wait for Gateway to count the deposit; 20 seconds unless given. */
+    balanceWaitMs?: number;
+    balancePollMs?: number;
+  } = {}
 ): Promise<FundGatewayResult> {
   if (!Number.isFinite(input.amount) || input.amount <= 0) throw new Error("Enter an amount greater than zero.");
   const chain = currentOrgConfig().chain;
@@ -180,6 +210,8 @@ export async function fundGateway(
   }
 
   // The deposit: approve GatewayWallet for the amount, then deposit it, each under this request's keys.
+  // The balance before it, so the one after is known to include it.
+  const before = await readBalance(operating.address, options.fetch);
   const units = toUnits(input.amount);
   const approved = await execute(
     client,
@@ -196,12 +228,14 @@ export async function fundGateway(
     "deposit into Gateway"
   );
 
-  let balanceUsdc: number | null = null;
-  try {
-    balanceUsdc = await gatewayBalance(operating.address, { fetch: options.fetch });
-  } catch {
-    balanceUsdc = null;
-  }
+  const balanceUsdc =
+    before === null
+      ? null
+      : await countedBalance(operating.address, before + input.amount, {
+          fetch: options.fetch,
+          waitMs: options.balanceWaitMs ?? 20_000,
+          pollMs: options.balancePollMs ?? 2_000,
+        });
   await appendLedgerEntry({
     actor: "human",
     domain: "treasury",
