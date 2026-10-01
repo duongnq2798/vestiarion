@@ -22,11 +22,13 @@ import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fa
  * workspace scope and the ledger are faked here.
  */
 
-const { changeMock, withOrgMock, ledgerMock } = vi.hoisted(() => ({
+const { changeMock, withOrgMock, ledgerMock, notifyMock } = vi.hoisted(() => ({
   changeMock: vi.fn(),
   withOrgMock: vi.fn(),
   ledgerMock: vi.fn(),
+  notifyMock: vi.fn(),
 }));
+vi.mock("@/lib/notifications/payee-address", () => ({ notifyPayeeAddress: notifyMock }));
 vi.mock("@/lib/counterparty-address", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/counterparty-address")>()),
   changeCounterpartyAddress: changeMock,
@@ -55,6 +57,7 @@ beforeEach(() => {
   changeMock.mockReset().mockResolvedValue({ name: "Northwind", from: null, to: ADDRESS });
   withOrgMock.mockReset().mockImplementation(async (_orgId: string, fn: () => Promise<unknown>) => fn());
   ledgerMock.mockReset().mockResolvedValue(undefined);
+  notifyMock.mockReset().mockResolvedValue(1);
 });
 
 describe("tokens", () => {
@@ -191,6 +194,12 @@ describe("submitPayeeAddress", () => {
     expect(changeMock).toHaveBeenCalledWith({ payeeLinkId: LINK, counterpartyId: PAYEE, raw: ADDRESS });
   });
 
+  it("tells the people who can confirm the address that it arrived (pay a freelancer R4)", async () => {
+    const { result } = platform(() => submitPayeeAddress(TOKEN, ADDRESS), usable());
+    await result;
+    expect(notifyMock).toHaveBeenCalledWith({ orgId: ORG, orgName: "Acme", payeeName: "Northwind", address: ADDRESS });
+  });
+
   it("refuses a malformed or empty address without using the link", async () => {
     for (const raw of ["0x123", "", "   ", `${ADDRESS}0`]) {
       const { fake, result } = platform(() => submitPayeeAddress(TOKEN, raw), usable());
@@ -217,6 +226,8 @@ describe("submitPayeeAddress", () => {
     const { fake, result } = platform(() => submitPayeeAddress(TOKEN, ADDRESS), usable());
     expect(await result).toEqual({ ok: true, orgName: "Acme", unchanged: true });
     expect(fake.requests.some((request) => rpc(request, "release_payee_link"))).toBe(false);
+    // Nothing new to confirm.
+    expect(notifyMock).not.toHaveBeenCalled();
   });
 
   it("puts the link back when the change fails, so the payee can try again", async () => {
@@ -225,5 +236,6 @@ describe("submitPayeeAddress", () => {
     await expect(result).rejects.toBeInstanceOf(CounterpartyAddressError);
     const release = fake.requests.find((request) => rpc(request, "release_payee_link"));
     expect(release?.body).toEqual({ p_link_id: LINK });
+    expect(notifyMock).not.toHaveBeenCalled();
   });
 });

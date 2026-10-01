@@ -3,6 +3,7 @@ import { changeCounterpartyAddress, CounterpartyAddressError, parseAddressInput 
 import { platformDb, unwrap } from "../dal";
 import { withOrg } from "../dal/scope";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
+import { notifyPayeeAddress } from "../notifications/payee-address";
 
 /**
  * Payee links (docs/superpowers/specs/2026-09-30-payee-links-design.md).
@@ -179,10 +180,14 @@ export async function submitPayeeAddress(token: string, raw: string): Promise<Pa
     await withOrg(link.org_id, () =>
       changeCounterpartyAddress({ payeeLinkId: link.link_id, counterpartyId: link.counterparty_id, raw: parsed.address as string })
     );
-    return { ok: true, orgName: preview.orgName, unchanged: false };
   } catch (error) {
     if (error instanceof CounterpartyAddressError && error.code === "unchanged") return { ok: true, orgName: preview.orgName, unchanged: true };
     await platformDb().rpc("release_payee_link", { p_link_id: link.link_id });
     throw error;
   }
+  // Nothing is paid to the new address until a member confirms it (R1), and
+  // until now nobody was told it had arrived (pay a freelancer R4). Best
+  // effort: it never throws.
+  await notifyPayeeAddress({ orgId: link.org_id, orgName: preview.orgName, payeeName: preview.counterpartyName, address: parsed.address });
+  return { ok: true, orgName: preview.orgName, unchanged: false };
 }
