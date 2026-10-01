@@ -36,7 +36,7 @@ import { currentContext, currentOrgId } from "../context";
 export const TENANT_TABLES = [
   "accounts", "counterparties", "invoices", "milestones", "treasury_actions", "compliance_checks",
   "forecasts", "ledger_entries", "payment_intents", "cycle_runs", "cycle_snapshots", "sim_clock", "gateway_signers", "payment_receipts", "escrow_contracts",
-  "fx_swaps", "screening_dismissals",
+  "fx_swaps", "screening_dismissals", "receivable_links", "incoming_transfers",
 ] as const;
 export type TenantTable = (typeof TENANT_TABLES)[number];
 
@@ -58,7 +58,7 @@ export const PLATFORM_RPCS = [
   "claim_webhook_deliveries", "record_webhook_failure", "create_webhook_endpoint", "choose_hosted_wallet", "delete_org",
   "open_numbers", "open_first_payments", "open_outcomes", "set_platform_team_member", "platform_team_members",
   "create_payee_link", "payee_link_preview", "payee_link_chain", "claim_payee_link", "release_payee_link", "revoke_payee_link",
-  "payment_receipt_by_token",
+  "payment_receipt_by_token", "pay_link_preview",
 ] as const;
 export type PlatformRpc = (typeof PLATFORM_RPCS)[number];
 

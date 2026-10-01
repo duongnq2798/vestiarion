@@ -1,5 +1,15 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-01: Receivables paid on Arc
+
+- **New ledger action `pay_link_created`**, in the `ar` domain: an owner or admin made a link for a client to pay a receivable. Its `detail` is `{ by, invoiceId, linkId }`.
+- **New ledger action `ar_received`**, in the `ar` domain, appended by the agent when a transfer that arrived in the operating wallet settles an open receivable.
+  - Its `detail` is `{ invoiceId, counterpartyId, amount, currency, txHash, from, circleTxId, matchedBy, receivedAt }`.
+  - `matchedBy` is `sender` when the client's address on file sent it, and `amount` when it was the only open receivable of that currency and amount.
+- A receivable's `status` becomes `received`, with `settledAt` and `txRef` set, when a transfer settles it.
+- A cycle's `detail.stages` includes `receipts`, which runs after `reconcile`.
+- An event cycle's `detail.events` can include **`payment_received`**: a client's "I have paid" check found the receivable paid.
+
 ## 2026-10-01: Dismissing a screening match
 
 - **New ledger action `screening_match_dismissed`**, in the `compliance` domain, delivered as a `ledger.appended` event. It is appended when a member who can decide approvals dismisses a counterparty's screening match as not the same person.

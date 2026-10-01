@@ -83,6 +83,16 @@ describe("getChainProvider — a live workspace's provider offers everything its
     expect(swap).toHaveBeenCalledWith(params);
   });
 
+  it("reads inbound transfers through the live leg (receivables on Arc)", async () => {
+    const inbound = vi.spyOn(LiveProvider.prototype, "listInboundTransfers").mockResolvedValue([]);
+    await inLiveWorkspace(async () => {
+      const provider = getChainProvider();
+      expect(typeof provider.listInboundTransfers).toBe("function");
+      expect(await provider.listInboundTransfers!("operating", "2026-10-01T00:00:00Z")).toEqual([]);
+    });
+    expect(inbound).toHaveBeenCalledWith("operating", "2026-10-01T00:00:00Z");
+  });
+
   it("reads a token balance through the live leg", async () => {
     const balance = vi.spyOn(LiveProvider.prototype, "getTokenBalance").mockResolvedValue({ balance: 3 } as never);
     await inLiveWorkspace(async () => {

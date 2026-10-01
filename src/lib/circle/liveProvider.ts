@@ -7,6 +7,7 @@ import type {
   BalanceSnapshot,
   ChainProvider,
   EarnResult,
+  InboundTransfer,
   Stablecoin,
   SwapCallParams,
   SwapCallResult,
@@ -25,7 +26,7 @@ import type { ChainConfig } from "../config";
 
 export type LiveProviderClient = Pick<
   CircleDeveloperControlledWalletsClient,
-  "createTransaction" | "getWalletTokenBalance" | "getTransaction" | "createContractExecutionTransaction" | "signTypedData"
+  "createTransaction" | "getWalletTokenBalance" | "getTransaction" | "createContractExecutionTransaction" | "signTypedData" | "listTransactions"
 >;
 
 /**
@@ -592,6 +593,52 @@ export class LiveProvider implements ChainProvider {
     if (approve.status !== "confirmed") return { approve, execute: null };
     const execute = await send({ contractAddress: params.adapter, callData: params.callData }, params.executeKey);
     return { approve, execute };
+  }
+
+  /**
+   * Completed inbound USDC and EURC transfers to the account's wallet (receivables on Arc §2). The
+   * wallet's token list names each token id; a transfer of anything else, not yet complete, or with
+   * no amount is left out. Circle answers 50 at most, oldest first from `since`.
+   */
+  async listInboundTransfers(accountId: string, since: string | null): Promise<InboundTransfer[]> {
+    const account = await this.account(accountId);
+    const balances = await withDeadline(
+      this.client.getWalletTokenBalance({ id: account.walletId }),
+      BALANCE_READ_DEADLINE_MS,
+      `no answer from Circle getWalletTokenBalance within ${BALANCE_READ_DEADLINE_MS} ms`
+    );
+    const tokens = new Map<string, Stablecoin>();
+    for (const balance of balances.data?.tokenBalances ?? []) {
+      const symbol = balance.token?.symbol;
+      if (balance.token?.id && (symbol === "USDC" || symbol === "EURC")) tokens.set(balance.token.id, symbol);
+    }
+    const listed = await withDeadline(
+      this.client.listTransactions({
+        walletIds: [account.walletId],
+        txType: "INBOUND",
+        state: "COMPLETE",
+        ...(since ? { from: since } : {}),
+        pageSize: 50,
+      } as Parameters<LiveProviderClient["listTransactions"]>[0]),
+      BALANCE_READ_DEADLINE_MS,
+      `no answer from Circle listTransactions within ${BALANCE_READ_DEADLINE_MS} ms`
+    );
+    return (listed.data?.transactions ?? []).flatMap((tx): InboundTransfer[] => {
+      const token = tx.tokenId ? tokens.get(tx.tokenId) : undefined;
+      const amount = Number(tx.amounts?.[0]);
+      if (!token || tx.state !== "COMPLETE" || tx.transactionType !== "INBOUND" || !(amount > 0)) return [];
+      return [
+        {
+          circleTxId: tx.id,
+          txHash: tx.txHash ?? null,
+          from: tx.sourceAddress ?? null,
+          amount,
+          token,
+          chain: tx.blockchain,
+          receivedAt: tx.firstConfirmDate ?? tx.updateDate ?? tx.createDate,
+        },
+      ];
+    });
   }
 
   async getTokenBalance(accountId: string, token: Stablecoin): Promise<BalanceSnapshot> {

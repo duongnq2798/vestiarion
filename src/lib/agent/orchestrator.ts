@@ -28,6 +28,7 @@ import {
   type InvoiceLike,
 } from "./duplicates";
 import { milestoneVerification } from "./milestone-evidence";
+import { recordIncomingTransfers } from "./receipts";
 import {
   followUpConfig,
   planFollowUp,
@@ -2603,6 +2604,17 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     lines.push(...reconcileLines(await syncOnChainBalances(provider, db)));
   }
 
+  });
+
+  await stage("receipts", async () => {
+  // ------------------------------------------------------------ 0b. receipts
+  // Money that arrived is recorded and matched to what clients owed before
+  // anything is decided, so the cycle sees a receivable paid and its cash in
+  // hand (receivables on Arc). Live only: a sandbox has no real wallet (R4).
+  if (provider.mode === "live") {
+    const operatingId = (unwrap(await db.from("accounts").select("id").eq("kind", "operating").limit(1)) as Array<{ id: string }>)[0]?.id;
+    if (operatingId) lines.push(...(await recordIncomingTransfers(db, provider, operatingId)).lines);
+  }
   });
 
   await stage("compliance", async () => {

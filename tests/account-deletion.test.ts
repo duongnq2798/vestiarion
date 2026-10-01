@@ -114,6 +114,7 @@ describe("0023 is idempotent", () => {
         { tbl: "payee_links", col: "created_by", action: "n" },
         { tbl: "payment_receipts", col: "created_by", action: "n" },
         { tbl: "platform_team", col: "user_id", action: "c" },
+        { tbl: "receivable_links", col: "created_by", action: "n" },
         { tbl: "screening_dismissals", col: "dismissed_by", action: "n" },
         { tbl: "webhook_endpoints", col: "created_by", action: "n" },
       ]);

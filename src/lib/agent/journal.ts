@@ -23,6 +23,7 @@
 
 export const CYCLE_STAGES = [
   "reconcile",
+  "receipts",
   "compliance",
   "follow_up",
   "ap",
@@ -38,6 +39,9 @@ export type CycleStage = (typeof CYCLE_STAGES)[number];
  *
  *   reconcile   Nothing. In live mode it is what makes stored balances match
  *               the chain; if it failed, the agent does not know what it holds.
+ *   receipts    Nothing. It records money that arrived and settles the
+ *               receivables it pays; it authorises nothing leaving, so it
+ *               stays open, and nothing waits on it (receivables on Arc).
  *   compliance  Nothing. It is the source of risk truth, not a consumer of it.
  *   follow_up   compliance — it reopens invoices by comparing today's risk tier
  *               and limit against the ones a past decision rested on.
@@ -54,6 +58,7 @@ export type CycleStage = (typeof CYCLE_STAGES)[number];
  */
 export const STAGE_REQUIRES: Record<CycleStage, readonly CycleStage[]> = {
   reconcile: [],
+  receipts: [],
   compliance: [],
   follow_up: ["compliance"],
   ap: ["reconcile", "compliance"],

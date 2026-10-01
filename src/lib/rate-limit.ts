@@ -38,3 +38,13 @@ const documentBuckets = new Map<string, Bucket>();
 export function takeDocumentReadToken(key: string, now = Date.now()): boolean {
   return take(documentBuckets, key, 5, 12_000, now);
 }
+
+const payCheckBuckets = new Map<string, Bucket>();
+
+/**
+ * "I have paid" on a pay link reads Circle (receivables on Arc R5): three checks, then one every 20 s,
+ * per receivable. Single-instance, like the others.
+ */
+export function takePayCheckToken(key: string, now = Date.now()): boolean {
+  return take(payCheckBuckets, key, 3, 20_000, now);
+}

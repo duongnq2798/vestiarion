@@ -6,6 +6,7 @@ import AgentControls from "@/components/AgentControls";
 import InvoiceCsvImport from "@/components/intake/InvoiceCsvImport";
 import InvoiceDocumentIntake from "@/components/intake/InvoiceDocumentIntake";
 import InvoiceIntake from "@/components/intake/InvoiceIntake";
+import { PayLinkControl } from "@/components/PayLinkControl";
 import { ReceiptControl } from "@/components/ReceiptControl";
 import { Callout } from "@/components/ui/Callout";
 import { Card } from "@/components/ui/Card";
@@ -72,6 +73,15 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
     const shared = await sharedReceipts([...shareable]);
     const receiptFor = (decision: ReturnType<typeof invoiceDecision>) =>
       shareable.has(decision.id) ? <ReceiptControl orgSlug={slug} invoiceId={decision.id} shared={shared.has(decision.id)} /> : undefined;
+    // An open receivable in a live workspace offers a pay link for its client (receivables on Arc §2);
+    // a sandbox has no real wallet to be paid into (R4).
+    const payLinkable = new Set(
+      canWrite && access.membership.mode === "live"
+        ? shown.filter((invoice) => invoice.direction === "receivable" && (invoice.status === "pending" || invoice.status === "matched")).map((invoice) => invoice.id)
+        : []
+    );
+    const payLinkFor = (decision: ReturnType<typeof invoiceDecision>) =>
+      payLinkable.has(decision.id) ? <PayLinkControl orgSlug={slug} invoiceId={decision.id} /> : undefined;
 
     return (
       <ProductShell day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()}>
@@ -141,7 +151,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
             </section>
           )}
           <InvoiceSection title="Payables" meta={`${payables.length} invoices`} decisions={ordinaryPayables} orgSlug={slug} footerFor={receiptFor} />
-          <InvoiceSection title="Receivables" meta={`${receivables.length} invoices`} decisions={receivables} orgSlug={slug} />
+          <InvoiceSection title="Receivables" meta={`${receivables.length} invoices`} decisions={receivables} orgSlug={slug} footerFor={payLinkFor} />
         </div>
       </ProductShell>
     );
