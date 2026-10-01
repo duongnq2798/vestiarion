@@ -127,10 +127,22 @@ export interface ApPromptFacts {
   duplicateMatchesTotal: number;
 }
 
-/** What the model is told about the payables that resemble this one. */
+/**
+ * What the model is told about the payables that resemble this one. The
+ * written policy, and the guardrail, stop a payment as a duplicate only when
+ * it bills the same purchase order for the same amount as one already paid or
+ * committed; a match on amount and dates alone is weighed. Told that every
+ * repeat of a paid invoice is duplicate billing, the model flagged invoices
+ * the policy would pay, under their own purchase orders (research note "When
+ * the model and the policy disagree": #387, #426, #429).
+ */
 export function duplicateNote(total: number, shown: number): string {
   if (total === 0) return "No earlier payable from this counterparty resembles this invoice.";
-  return `${total} earlier payable(s) from this counterparty resemble this one; the ${shown} strongest are shown. A repeat of an invoice that is already paid, being paid, scheduled or being decided by a person is duplicate billing — flag it rather than paying or scheduling it a second time.`;
+  return [
+    `${total} earlier payable(s) from this counterparty resemble this one; the ${shown} strongest are shown, each with its signals and a confidence.`,
+    "A match that bills the same purchase order for the same amount as an invoice already paid, being paid, scheduled or being decided by a person is duplicate billing: flag it. Code stops it either way.",
+    "A match on amount and due dates alone, under a different purchase order or none, is a signal to weigh, not proof: vendors often bill the same amount on the same cycle. Do not flag on it alone; flag it when other facts point the same way, and say in your reasoning how you weighed it.",
+  ].join(" ");
 }
 
 /**

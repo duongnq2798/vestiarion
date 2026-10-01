@@ -659,7 +659,7 @@ describe("the AP stage and duplicates of money already committed", () => {
       "[guardrail override: this invoice repeats one already paid, being paid, scheduled or being decided by a person ("
     );
     expect(promptOf().duplicateNote).toContain(
-      "A repeat of an invoice that is already paid, being paid, scheduled or being decided by a person is duplicate billing"
+      "A match that bills the same purchase order for the same amount as an invoice already paid, being paid, scheduled or being decided by a person is duplicate billing"
     );
     expect(ledger(fake.requests)[0].p_detail).toMatchObject({
       guardrailBlocked: true,
