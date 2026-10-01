@@ -5,7 +5,7 @@
  *
  *   npm run research:model-vs-policy
  *
- * Read-only: the session refuses writes. Needs SUPABASE_PROJECT_ID and
+ * Read-only: the query runs in a read-only transaction. Needs SUPABASE_PROJECT_ID and
  * SUPABASE_DATABASE_PASSWORD (or SUPABASE_DB_URL), as `npm run db:migrate`
  * does. A customer's workspace is never named and its entries' summaries are
  * never printed: it is counted, as /open counts it.
@@ -38,12 +38,15 @@ const DECISIONS = `
          e.detail->'referenceDecision'->>'action' as policy_action,
          e.detail->'agreedWithReference' as agreed,
          e.detail->>'guardrailRule' as guardrail_rule,
+         coalesce((e.detail->>'guardrailBlocked')::boolean, false) as guardrail_blocked,
          e.detail->'decision'->>'confidence' as confidence,
          i.status as outcome
     from public.ledger_entries e
     join public.orgs o on o.id = e.org_id
-    left join public.invoices i on i.id::text = e.detail->>'invoiceId'
+    left join public.invoices i on i.id = (e.detail->>'invoiceId')::uuid and i.org_id = e.org_id
    where e.actor = 'agent' and e.detail ? 'decisionMode'
+     -- The guardrail fixture's planted verdicts are not the model's (scripts/guardrail-fixture.ts).
+     and not (e.detail ? 'guardrailFixture')
    order by e.seq`;
 
 interface Row {
@@ -58,6 +61,7 @@ interface Row {
   policy_action: string | null;
   agreed: boolean | null;
   guardrail_rule: string | null;
+  guardrail_blocked: boolean;
   confidence: string | null;
   outcome: string | null;
 }
@@ -66,8 +70,10 @@ async function main() {
   const client = new Client({ connectionString: connectionString(), ssl: { rejectUnauthorized: false } });
   await client.connect();
   try {
-    await client.query("set session characteristics as transaction read only");
+    // A read-only transaction, which holds through a transaction-mode pooler as a session setting may not.
+    await client.query("begin transaction read only");
     const { rows } = await client.query<Row>(DECISIONS);
+    await client.query("commit");
     const decisions: RecordedDecision[] = rows.map((row) => ({
       seq: Number(row.seq),
       ts: row.ts.toISOString(),
@@ -78,6 +84,7 @@ async function main() {
       policyAction: row.policy_action,
       agreed: typeof row.agreed === "boolean" ? row.agreed : null,
       guardrailRule: row.guardrail_rule,
+      guardrailBlocked: row.guardrail_blocked,
       confidence: row.confidence === null ? null : Number(row.confidence),
       summary: row.side === "ours" ? row.summary : "—",
       outcome: row.outcome,

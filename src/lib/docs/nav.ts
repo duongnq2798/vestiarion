@@ -54,7 +54,7 @@ export const DOCS_NAV: NavSection[] = [
   {
     title: "Research",
     pages: [
-      { slug: "research/model-vs-policy", title: "When the model and the policy disagree", description: "Every production decision, the written policy's answer to the same facts, where they differed, and where code refused the model." },
+      { slug: "research/model-vs-policy", title: "When the model and the policy disagree", description: "Production decisions beside the written policy's answer to the same facts: where they differed, and where code refused the model." },
     ],
   },
   {

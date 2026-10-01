@@ -16,6 +16,7 @@ const row = (overrides: Partial<RecordedDecision>): RecordedDecision => ({
   policyAction: "pay",
   agreed: true,
   guardrailRule: null,
+  guardrailBlocked: false,
   confidence: 0.9,
   summary: "PAY invoice from Centronex for 2 USDC",
   outcome: "paid",
@@ -31,6 +32,23 @@ const ROWS: RecordedDecision[] = [
   row({ seq: 505, ts: "2026-10-01T02:32:05.000Z", modelAction: "pay", policyAction: "hold", agreed: false, guardrailRule: "counterparty.payment_limit", confidence: 0.5, outcome: "held" }),
   row({ seq: 510, mode: "heuristic", agreed: null }),
 ];
+
+describe("a refusal or a difference the first summary missed", () => {
+  // A milestone's refusal records guardrailBlocked and no rule; two answers that both move money can differ on the day.
+  const summary = summarizeDecisions([
+    row({ seq: 600, domain: "contractor", modelAction: "release", policyAction: "release", guardrailBlocked: true }),
+    row({ seq: 601, modelAction: "schedule", policyAction: "pay", agreed: false, outcome: "scheduled" }),
+  ]);
+
+  it("counts a milestone that code refused, though its entry names no rule", () => {
+    expect(summary.refusedByCode.map((decision) => decision.seq)).toEqual([600]);
+  });
+
+  it("keeps a difference where both answers move money, as a difference of when", () => {
+    expect(summary.bothMove.map((decision) => decision.seq)).toEqual([601]);
+    expect(summaryMarkdown(summary)).toContain("| #601 |");
+  });
+});
 
 describe("summarizing the agent's recorded decisions", () => {
   const summary = summarizeDecisions(ROWS);
@@ -95,6 +113,11 @@ describe("the summary as Markdown", () => {
     expect(markdown).toContain("| Refused by code | 1 |");
     expect(markdown).toContain("| ap | 3 | 0 (0%) |");
     expect(markdown).toContain("The model's mean confidence: 0.9 where it chose the policy's action, 0.65 where it did not.");
+  });
+
+  it("names the providers and the workspaces the figures come from", () => {
+    expect(markdown).toContain("By provider: deepseek 6, heuristic 1.");
+    expect(markdown).toContain("Workspaces: founding, testnet-2.");
   });
 
   it("lists every disagreement with its ledger entry", () => {

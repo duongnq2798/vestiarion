@@ -168,7 +168,7 @@ export function LiveProof({ metrics }: { metrics: Promise<LandingMetrics> }) {
             </Link>
           </p>
           <p className="mt-3 max-w-2xl text-[0.9375rem] leading-relaxed text-ink-2">
-            Every production decision sits in the ledger beside the written policy&apos;s answer to the same facts. Where they differed, and the one payment code refused:{" "}
+            Since 24 September, each production decision sits in the ledger beside the written policy&apos;s answer to the same facts. Where they differed in the first week, and the payment code refused:{" "}
             <Link href="/docs/research/model-vs-policy" className="font-semibold text-agent underline-offset-4 hover:underline">
               When the model and the policy disagree →
             </Link>

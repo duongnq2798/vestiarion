@@ -21,8 +21,10 @@ export interface RecordedDecision {
   policyAction: string | null;
   /** Null when the policy's answer was not recorded, or the fallback decided. */
   agreed: boolean | null;
-  /** The guardrail that refused the model's decision, or null. */
+  /** The guardrail that refused the model's decision, or null. A milestone's refusal names no rule. */
   guardrailRule: string | null;
+  /** Whether code refused the model's decision: a payable's entry also names the rule, a milestone's does not. */
+  guardrailBlocked: boolean;
   confidence: number | null;
   summary: string;
   /** The invoice's status now, when the decision was about one. */
@@ -36,6 +38,7 @@ export interface DecisionSummary {
   from: string | null;
   to: string | null;
   workspaces: number;
+  workspaceNames: string[];
   modelDecisions: number;
   fallbackDecisions: number;
   byMode: Record<string, number>;
@@ -56,6 +59,8 @@ export interface DecisionSummary {
   looser: RecordedDecision[];
   /** Both stopped it, by a different action: hold, request information or flag. */
   differentStop: RecordedDecision[];
+  /** Both moved money, differently: paying now against scheduling, or two schedules on different days. */
+  bothMove: RecordedDecision[];
   refusedByCode: RecordedDecision[];
   pairs: Array<{ model: string; policy: string; count: number }>;
 }
@@ -92,6 +97,7 @@ export function summarizeDecisions(rows: RecordedDecision[]): DecisionSummary {
     from: times[0] ?? null,
     to: times[times.length - 1] ?? null,
     workspaces: new Set(sorted.map((row) => row.workspace)).size,
+    workspaceNames: [...new Set(sorted.map((row) => row.workspace))],
     modelDecisions: model.length,
     fallbackDecisions: sorted.length - model.length,
     byMode: tally(sorted.map((row) => row.mode)),
@@ -112,7 +118,8 @@ export function summarizeDecisions(rows: RecordedDecision[]): DecisionSummary {
     stricter: disagreements.filter((row) => moves(row.policyAction) && !moves(row.modelAction)),
     looser: disagreements.filter((row) => moves(row.modelAction) && !moves(row.policyAction)),
     differentStop: disagreements.filter((row) => !moves(row.modelAction) && !moves(row.policyAction)),
-    refusedByCode: model.filter((row) => row.guardrailRule !== null),
+    bothMove: disagreements.filter((row) => moves(row.modelAction) && moves(row.policyAction)),
+    refusedByCode: model.filter((row) => row.guardrailBlocked || row.guardrailRule !== null),
     pairs: [...pairCounts.values()].sort((a, b) => b.count - a.count || a.model.localeCompare(b.model) || a.policy.localeCompare(b.policy)),
   };
 }
@@ -134,6 +141,8 @@ export function summaryMarkdown(summary: DecisionSummary): string {
     `| A different action | ${summary.disagreed} |`,
     `| Refused by code | ${summary.refusedByCode.length} |`,
     "",
+    `By provider: ${Object.entries(summary.byMode).map(([mode, count]) => `${mode} ${count}`).join(", ")}.`,
+    `Workspaces: ${summary.workspaceNames.join(", ")}.`,
     `By domain: ${Object.entries(summary.byDomain).map(([domain, count]) => `${domain} ${count}`).join(", ")}.`,
     "",
     "| Domain | Measured | Same action as the policy |",
@@ -143,11 +152,11 @@ export function summaryMarkdown(summary: DecisionSummary): string {
     ),
     "",
     `The model's mean confidence: ${summary.meanConfidence.agreed ?? "—"} where it chose the policy's action, ${summary.meanConfidence.differed ?? "—"} where it did not.`,
-    `Of the differences: ${summary.stricter.length} where the policy would have moved money and the model stopped it; ${summary.looser.length} where the model would have moved money and the policy would not; ${summary.differentStop.length} where both stopped it by a different action.`,
+    `Of the differences: ${summary.stricter.length} where the policy would have moved money and the model stopped it; ${summary.looser.length} where the model would have moved money and the policy would not; ${summary.differentStop.length} where both stopped it by a different action; ${summary.bothMove.length} where both moved money, differently.`,
     "",
     "| Entry | Workspace | Decision | Model | Policy | Confidence | Refused by | Invoice now |",
     "|---|---|---|---|---|---|---|---|",
-    ...[...summary.stricter, ...summary.differentStop, ...summary.looser]
+    ...[...summary.stricter, ...summary.differentStop, ...summary.looser, ...summary.bothMove]
       .sort((a, b) => a.seq - b.seq)
       .map((row) => `| #${row.seq} | ${cell(row.workspace)} | ${cell(row.summary)} | ${cell(row.modelAction)} | ${cell(row.policyAction)} | ${cell(row.confidence)} | ${cell(row.guardrailRule)} | ${cell(row.outcome)} |`),
   ];
