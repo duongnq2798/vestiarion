@@ -58,8 +58,9 @@ function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
+/** The newest entry about the record that decided or recorded it: a receipt's entries are about sharing, not deciding (receipts review #1). */
 function matchingEntry(entries: LedgerEntry[], key: "invoiceId" | "milestoneId", id: string) {
-  return entries.find((entry) => entry.detail[key] === id);
+  return entries.find((entry) => entry.detail[key] === id && !entry.action.startsWith("receipt_"));
 }
 
 /**

@@ -36,7 +36,7 @@ export function designReceipt(): ReceiptView {
     facts,
     entry,
     publicKeys: { [keyId]: publicKey.export({ type: "spki", format: "pem" }).toString() },
-    records: { seq: 580 },
+    records: { seq: 580, signingKeyId: keyId },
     checks: { signed: { ok: true }, recorded: { ok: true }, onChain: { state: "matches", block: 314579095 } },
   };
 }

@@ -29,7 +29,7 @@ function view(overrides: Partial<ReceiptViewData> = {}): ReceiptViewData {
       body_hash: "b".repeat(64), signature: "5".repeat(128), prev_hash: "p".repeat(64), hash: "c".repeat(64), signing_key_id: "0123456789abcdef",
     },
     publicKeys: { "0123456789abcdef": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA\n-----END PUBLIC KEY-----\n" },
-    records: { seq: 580 },
+    records: { seq: 580, signingKeyId: "fedcba9876543210" },
     checks: { signed: { ok: true }, recorded: { ok: true }, onChain: { state: "matches", block: 314579095 } },
     ...overrides,
   };
@@ -65,9 +65,10 @@ describe("a receipt", () => {
     const markup = text(renderToStaticMarkup(<ReceiptView view={view()} />));
     expect(markup).toContain("All three checks pass");
     expect(markup).toContain("Signed by the paying workspace");
-    expect(markup).toContain("Ledger entry #612 is signed with the workspace's key 0123456789abcdef, and its hash links it into the workspace's chain.");
+    expect(markup).toContain("Ledger entry #612 is signed with the workspace's key 0123456789abcdef. Its hash follows from its content, its signature and the hash of the entry before it.");
+    expect(markup).not.toContain("links it into");
     expect(markup).toContain("Recorded when it was paid");
-    expect(markup).toContain("Entry #580 in the same ledger, signed by the same workspace, records this transaction. Its content stays private.");
+    expect(markup).toContain("Entry #580, written earlier in the same workspace's ledger and signed with its key fedcba9876543210, records this transaction. Its content stays private.");
     expect(markup).toContain("On Arbitrum Sepolia");
     expect(markup).toContain("Block 314579095 holds a transfer of 2 USDC to the payee in this transaction.");
   });
@@ -86,9 +87,15 @@ describe("a receipt", () => {
         />
       )
     );
-    expect(markup).toContain("Not every check passes");
+    expect(markup).toContain("A check does not pass");
     expect(markup).toContain("The entry's content does not match its body hash.");
     expect(markup).toContain("Arbitrum Sepolia did not answer just now. The explorer shows the transaction.");
+  });
+
+  it("says the chain could not be read, not that a check failed, when that is all that is missing (receipts review #10)", () => {
+    const markup = text(renderToStaticMarkup(<ReceiptView view={view({ checks: { signed: { ok: true }, recorded: { ok: true }, onChain: { state: "unreadable" } } })} />));
+    expect(markup).toContain("One check could not be made just now");
+    expect(markup).not.toContain("does not pass");
   });
 
   it("lets anyone check it again: the signed entry, its hashes, the key, and the browser's own check", () => {

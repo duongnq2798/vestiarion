@@ -1,4 +1,4 @@
-import { arcRpcUrl } from "../circle/arcFees";
+import { ARC_TESTNET_RPC_URL } from "../circle/arcFees";
 import { USDC_BY_CHAIN } from "../circle/gateway";
 import { ARC_TESTNET_EURC } from "../fx/quote";
 import { payeeChain, type PayeeChain } from "../payee-chains";
@@ -27,16 +27,36 @@ const TRANSFER = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523
 const ARC_NATIVE_USDC = "0xfffffffffffffffffffffffffffffffffffffffe";
 const RPC_TIMEOUT_MS = 4_000;
 
-/** The public RPC of each payee chain; Arc testnet's is the one this deployment is configured with. */
-const PUBLIC_RPC: Record<Exclude<PayeeChain, "ARC-TESTNET">, string> = {
+/**
+ * The public RPC of each payee chain. Arc testnet's too: an anonymous page view never spends the
+ * deployment's own node, which the agent reads fees through (review #5).
+ */
+const PUBLIC_RPC: Record<PayeeChain, string> = {
+  "ARC-TESTNET": ARC_TESTNET_RPC_URL,
   "BASE-SEPOLIA": "https://sepolia.base.org",
   "ARB-SEPOLIA": "https://sepolia-rollup.arbitrum.io/rpc",
   "ETH-SEPOLIA": "https://ethereum-sepolia-rpc.publicnode.com",
 };
 
 export function receiptRpcUrl(chain: string): string {
-  const id = payeeChain(chain).id;
-  return id === "ARC-TESTNET" ? arcRpcUrl() : PUBLIC_RPC[id];
+  return PUBLIC_RPC[payeeChain(chain).id];
+}
+
+/**
+ * Mined transactions' receipts, by chain and hash: a mined receipt never changes, so each is read once per
+ * server instance however often its page is opened (review #5). Bounded; the oldest goes first.
+ */
+const MINED = new Map<string, TxReceipt>();
+const MINED_LIMIT = 500;
+
+/** Forgets every remembered receipt: for tests, which share this module. */
+export function forgetMinedReceipts(): void {
+  MINED.clear();
+}
+
+function remember(key: string, receipt: TxReceipt): void {
+  if (MINED.size >= MINED_LIMIT) MINED.delete(MINED.keys().next().value as string);
+  MINED.set(key, receipt);
 }
 
 /** The contracts that log a transfer of the token on the chain, with their decimals. */
@@ -68,9 +88,20 @@ export function matchTransfer(facts: ReceiptFacts, receipt: TxReceipt): OnChainC
   const payee = facts.payee.toLowerCase();
   const found = tokenContracts(facts).some(({ address, decimals }) => {
     const expected = units(facts.amount, decimals);
-    return receipt.logs.some(
-      (log) => log.address.toLowerCase() === address.toLowerCase() && log.topics[0] === TRANSFER && topicAddress(log.topics[2]) === payee && value(log.data) === expected
-    );
+    // A CCTP mint also carries the part of the most the fee could be that Circle did not charge (CCTP payouts
+    // R3): the payee receives the amount, and at most the fee on top (review #3). Every other route is exact.
+    const most = facts.route === "cctp" && facts.feeUsdc ? expected + units(facts.feeUsdc, decimals) : expected;
+    return receipt.logs.some((log) => {
+      const moved = value(log.data);
+      return (
+        log.address.toLowerCase() === address.toLowerCase() &&
+        log.topics[0] === TRANSFER &&
+        topicAddress(log.topics[2]) === payee &&
+        moved !== null &&
+        moved >= expected &&
+        moved <= most
+      );
+    });
   });
   if (!found) return { state: "mismatch", reason: `No transfer of ${facts.amount} ${facts.token} to ${facts.payee} is in this transaction.` };
   return { state: "matches", block: Number(BigInt(receipt.blockNumber)) };
@@ -81,6 +112,9 @@ export async function readOnChain(
   facts: ReceiptFacts,
   options: { fetch?: typeof fetch; rpcUrl?: (chain: string) => string; timeoutMs?: number } = {}
 ): Promise<OnChainCheck> {
+  const key = `${payeeChain(facts.chain).id}:${facts.txHash.toLowerCase()}`;
+  const known = MINED.get(key);
+  if (known) return matchTransfer(facts, known);
   let answer: { result?: TxReceipt | null; error?: unknown };
   try {
     const response = await (options.fetch ?? fetch)((options.rpcUrl ?? receiptRpcUrl)(facts.chain), {
@@ -94,10 +128,12 @@ export async function readOnChain(
   } catch {
     return { state: "unreadable" };
   }
-  if (answer.error || answer.result === undefined) return { state: "unreadable" };
-  if (answer.result === null) return { state: "mismatch", reason: `${payeeChain(facts.chain).label} has no transaction with this hash.` };
+  // No receipt is not proof of no transaction: a lagging or pruned node answers null too (review #4).
+  if (answer.error || answer.result === undefined || answer.result === null) return { state: "unreadable" };
   try {
-    return matchTransfer(facts, answer.result);
+    const checked = matchTransfer(facts, answer.result);
+    remember(key, answer.result);
+    return checked;
   } catch {
     return { state: "unreadable" };
   }

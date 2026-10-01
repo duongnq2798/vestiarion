@@ -1,5 +1,5 @@
 import { platformDb } from "../dal";
-import type { ReceiptFacts } from "../receipts/facts";
+import { RECORDING_ACTIONS, type ReceiptFacts } from "../receipts/facts";
 import { readOnChain, type OnChainCheck } from "../receipts/onchain";
 import { receiptTokenHash } from "../receipts/token";
 import { recordsTransaction, verifyEntry, type EntryCheck, type PublicLedgerRow } from "../receipts/verify";
@@ -23,7 +23,8 @@ export interface ReceiptView {
   facts: ReceiptFacts;
   entry: PublicLedgerRow;
   publicKeys: Record<string, string>;
-  records: { seq: number };
+  /** The entry that recorded the payment: its seq, and the key that signed it (P4). Never its content. */
+  records: { seq: number; signingKeyId: string | null };
   checks: ReceiptChecks;
 }
 
@@ -48,6 +49,9 @@ function statement(entry: PublicLedgerRow): { facts: ReceiptFacts; records: { se
 
 async function recordedCheck(found: Found, records: { seq: number; hash: string }, facts: ReceiptFacts): Promise<EntryCheck> {
   if (!found.records || found.records.seq !== records.seq) return { ok: false, reason: "The entry this receipt names is not in the workspace's ledger." };
+  // Recorded when it was paid: before the receipt, by an entry that records a payment (review #8).
+  if (found.records.seq >= found.entry.seq) return { ok: false, reason: "The entry this receipt names was not written before it." };
+  if (!RECORDING_ACTIONS.has(found.records.action)) return { ok: false, reason: "The entry this receipt names does not record a payment." };
   const signed = await verifyEntry(found.records, found.publicKeys);
   if (signed.ok !== true) return signed;
   const transactions = [facts.txHash, ...(facts.sourceTxHash ? [facts.sourceTxHash] : [])];
@@ -77,7 +81,7 @@ export async function readReceipt(
     facts: stated.facts,
     entry: found.entry,
     publicKeys: found.publicKeys ?? {},
-    records: { seq: stated.records.seq },
+    records: { seq: stated.records.seq, signingKeyId: found.records?.signing_key_id ?? null },
     checks: { signed, recorded, onChain },
   };
 }

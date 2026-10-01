@@ -89,8 +89,8 @@ export async function verifyEntry(row: PublicLedgerRow, keys: Record<string, str
       }
     }
   } catch {
-    // An older browser without Ed25519 in Web Crypto: no evidence either way.
-    return { ok: null, reason: "This browser cannot check Ed25519 signatures." };
+    // Web Crypto here cannot use the key as Ed25519 (an older browser, or a key that is not one): no evidence either way.
+    return { ok: null, reason: "The Ed25519 signature could not be checked here." };
   }
   if (!signed) return { ok: false, reason: "The signature does not verify with the workspace's key." };
 

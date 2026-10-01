@@ -1,10 +1,11 @@
 /**
- * The path Google Analytics may see: invite tokens and organization slugs are
+ * The path Google Analytics may see: invite, payee-link and receipt tokens and organization slugs are
  * replaced, and callers pass a pathname only, so no query string or hash.
  */
 export function redactPath(pathname: string): string {
   if (/^\/invite\/[^/]+/.test(pathname)) return "/invite/:token";
   if (/^\/payee\/[^/]+/.test(pathname)) return "/payee/:token";
+  if (/^\/receipt\/[^/]+/.test(pathname)) return "/receipt/:token";
   return pathname.replace(/^\/o\/[^/]+/, "/o/:org");
 }
 

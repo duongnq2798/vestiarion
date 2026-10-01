@@ -1,10 +1,11 @@
 import crypto from "node:crypto";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { bodyHashOf } from "@/lib/ledger";
 import { ledgerKeyId } from "@/lib/ledger-keys";
 import { readReceipt } from "@/lib/platform/receipts";
+import { forgetMinedReceipts } from "@/lib/receipts/onchain";
 import { receiptTokenHash } from "@/lib/receipts/token";
 import type { PublicLedgerRow } from "@/lib/receipts/verify";
 import { fakeSupabase, type RecordedRequest } from "./support/fake-supabase";
@@ -64,13 +65,17 @@ function read(found: unknown, chain: unknown = MINTED, token = TOKEN) {
 }
 
 describe("readReceipt", () => {
+  beforeEach(() => {
+    forgetMinedReceipts();
+  });
+
   it("reads a live link by its hash, and checks the receipt is signed, was recorded when paid, and is on chain", async () => {
     const { result, fake } = read({ publicKeys: KEYS, entry: RECEIPT, records: DECISION });
     expect(await result).toEqual({
       facts: FACTS,
       entry: RECEIPT,
       publicKeys: KEYS,
-      records: { seq: 580 },
+      records: { seq: 580, signingKeyId: KEY_ID },
       checks: { signed: { ok: true }, recorded: { ok: true }, onChain: { state: "matches", block: 314575767 } },
     });
     expect(fake.requests[0].body).toEqual({ p_token_hash: receiptTokenHash(TOKEN) });
@@ -99,6 +104,15 @@ describe("readReceipt", () => {
     expect((await read({ publicKeys: KEYS, entry: RECEIPT, records: null }).result)?.checks.recorded).toEqual({ ok: false, reason: "The entry this receipt names is not in the workspace's ledger." });
     const other = signed(580, "ap_pay", "PAY invoice", { invoiceId: "inv-1", execution: { mintTxHash: `0x${"9".repeat(64)}` } });
     expect((await read({ publicKeys: KEYS, entry: RECEIPT, records: other }).result)?.checks.recorded).toEqual({ ok: false, reason: "The entry this receipt names does not record its transaction." });
+  });
+
+  it("says the payment was not recorded by an entry written after the receipt, or one that records no payment (receipts review #8)", async () => {
+    const later = signed(700, "ap_pay", "PAY invoice", { invoiceId: "inv-1", execution: { mintTxHash: MINT } });
+    const afterIt = signed(612, "receipt_shared", "Receipt: 2 USDC paid on Arbitrum Sepolia", { receipt: FACTS, records: { seq: 700, hash: later.hash } }, DECISION.hash);
+    expect((await read({ publicKeys: KEYS, entry: afterIt, records: later }).result)?.checks.recorded).toEqual({ ok: false, reason: "The entry this receipt names was not written before it." });
+    const note = signed(580, "create_invoice", "Added payable invoice", { invoiceId: "inv-1", note: MINT });
+    const namingNote = signed(612, "receipt_shared", "Receipt: 2 USDC paid on Arbitrum Sepolia", { receipt: FACTS, records: { seq: 580, hash: note.hash } }, DECISION.hash);
+    expect((await read({ publicKeys: KEYS, entry: namingNote, records: note }).result)?.checks.recorded).toEqual({ ok: false, reason: "The entry this receipt names does not record a payment." });
   });
 
   it("says when the chain could not be read, and still shows the receipt", async () => {

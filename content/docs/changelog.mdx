@@ -9,8 +9,9 @@ Changes to the API and webhooks that affect an integration, newest first. Change
     - `route` is `direct`, `cctp` or `gateway`;
     - `sourceTxHash` is a CCTP payout's burn;
     - `records` is `{ seq, hash }` of the entry that recorded the payment.
-  - `receipt_link_renewed`, when a new link replaces an earlier one or a revoked receipt is shared again. Its `detail` is `{ by, invoiceId, receiptId }`.
-  - `receipt_revoked`, when a receipt's link is turned off. Its `detail` is `{ by, invoiceId, receiptId }`.
+  - `receipt_link_renewed`, when a new link replaces an earlier one or a revoked receipt is shared again. Its `detail` is `{ by, receiptId }`.
+  - `receipt_revoked`, when a receipt's link is turned off. Its `detail` is `{ by, receiptId }`.
+  - None of the three carries `invoiceId` in `detail`: a receipt's entries are about sharing a payment, not deciding an invoice.
 
 ## 2026-10-01: Payouts from a Gateway balance
 

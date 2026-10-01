@@ -57,7 +57,7 @@ function database(start: { receipt?: { id: string; revoked_at: string | null } |
     if (request.path === "/rest/v1/payment_intents") return { body: [INTENT] };
     if (request.path === "/rest/v1/payment_receipts") {
       if (request.method === "GET") {
-        if (request.params.get("invoice_id")?.startsWith("in.")) return { body: receipt && !receipt.revoked_at ? [{ invoice_id: INVOICE }] : [] };
+        if (request.params.get("revoked_at") === "is.null") return { body: receipt && !receipt.revoked_at ? [{ invoice_id: INVOICE }] : [] };
         return wantsObject ? (receipt ? { body: receipt } : none) : { body: receipt ? [receipt] : [] };
       }
       if (request.method === "POST") {
@@ -146,7 +146,7 @@ describe("sharing it again", () => {
     expect(appendLedgerEntry).not.toHaveBeenCalled();
     const [update] = writes(db.fake.requests, "PATCH");
     expect(update.body).toMatchObject({ token_hash: receiptTokenHash(shared.token), revoked_at: null });
-    expect(appendBestEffort).toHaveBeenCalledWith(ORG, expect.objectContaining({ action: "receipt_link_renewed", detail: { by: USER, invoiceId: INVOICE, receiptId: "rcpt-1" } }));
+    expect(appendBestEffort).toHaveBeenCalledWith(ORG, expect.objectContaining({ action: "receipt_link_renewed", detail: { by: USER, receiptId: "rcpt-1" } }));
   });
 });
 
@@ -156,7 +156,7 @@ describe("stopping sharing", () => {
     await db.run(() => stopSharingReceipt({ actorId: USER, invoiceId: INVOICE }));
     expect(writes(db.fake.requests, "PATCH")[0].body).toHaveProperty("revoked_at");
     expect(db.receipt()?.revoked_at).not.toBeNull();
-    expect(appendBestEffort).toHaveBeenCalledWith(ORG, expect.objectContaining({ action: "receipt_revoked", detail: { by: USER, invoiceId: INVOICE, receiptId: "rcpt-1" } }));
+    expect(appendBestEffort).toHaveBeenCalledWith(ORG, expect.objectContaining({ action: "receipt_revoked", detail: { by: USER, receiptId: "rcpt-1" } }));
   });
 
   it("says a receipt that is not shared is not shared", async () => {
@@ -171,5 +171,14 @@ describe("sharedReceipts", () => {
   it("names the invoices whose receipt link is live", async () => {
     expect(await database({ receipt: { id: "rcpt-1", revoked_at: null } }).run(() => sharedReceipts([INVOICE]))).toEqual(new Set([INVOICE]));
     expect(await database().run(() => sharedReceipts([]))).toEqual(new Set());
+  });
+
+  it("reads the workspace's live receipts without listing every invoice in the request (receipts review #7)", async () => {
+    const db = database({ receipt: { id: "rcpt-1", revoked_at: null } });
+    const many = Array.from({ length: 400 }, (_, i) => `0b6c1c9e-4a4f-4a7e-9b1e-${String(i).padStart(12, "0")}`);
+    expect(await db.run(() => sharedReceipts([...many, INVOICE]))).toEqual(new Set([INVOICE]));
+    const [read] = db.fake.requests.filter((r) => r.path === "/rest/v1/payment_receipts");
+    expect(read.params.get("invoice_id")).toBeNull();
+    expect(read.params.get("revoked_at")).toBe("is.null");
   });
 });

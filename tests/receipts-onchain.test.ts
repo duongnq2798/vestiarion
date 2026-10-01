@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
-import { matchTransfer, readOnChain, type TxReceipt } from "@/lib/receipts/onchain";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { forgetMinedReceipts, matchTransfer, readOnChain, receiptRpcUrl, type TxReceipt } from "@/lib/receipts/onchain";
 import type { ReceiptFacts } from "@/lib/receipts/facts";
 
 /**
@@ -59,6 +59,17 @@ describe("matchTransfer", () => {
     expect(matchTransfer(facts({ chain: "BASE-SEPOLIA" }), receipt([log("0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d", WALLET, PAYEE, BigInt(2_000_000))]))).toMatchObject({ state: "mismatch" });
   });
 
+  it("takes a CCTP mint that also carries the part of the fee Circle did not charge, never one above the fee (receipts review #3)", () => {
+    const cctp = facts({ chain: "BASE-SEPOLIA", route: "cctp", feeUsdc: 0.054604 });
+    const mint = (value: number) => receipt([log("0x036CbD53842c5426634e7929541eC2318f3dCF7e", "0x0000000000000000000000000000000000000000", PAYEE, BigInt(value))]);
+    expect(matchTransfer(cctp, mint(2_000_300))).toEqual({ state: "matches", block: 500 });
+    expect(matchTransfer(cctp, mint(2_054_604))).toEqual({ state: "matches", block: 500 });
+    expect(matchTransfer(cctp, mint(2_054_605))).toMatchObject({ state: "mismatch" });
+    expect(matchTransfer(cctp, mint(1_999_999))).toMatchObject({ state: "mismatch" });
+    // Gateway mints exactly the amount: its fee is taken from the balance, not the mint.
+    expect(matchTransfer(facts({ chain: "BASE-SEPOLIA", route: "gateway", feeUsdc: 0.05 }), mint(2_000_300))).toMatchObject({ state: "mismatch" });
+  });
+
   it("says a transaction that failed on chain is not the payment", () => {
     expect(matchTransfer(facts(), receipt([log("0x3600000000000000000000000000000000000000", WALLET, PAYEE, BigInt(2_000_000))], "0x0"))).toEqual({
       state: "mismatch",
@@ -68,6 +79,10 @@ describe("matchTransfer", () => {
 });
 
 describe("readOnChain", () => {
+  beforeEach(() => {
+    forgetMinedReceipts();
+  });
+
   const rpc = (answer: unknown, status = 200) => vi.fn(async () => new Response(JSON.stringify(answer), { status }));
 
   it("reads the transaction's receipt from the chain's RPC and matches it", async () => {
@@ -77,12 +92,37 @@ describe("readOnChain", () => {
     expect(body).toMatchObject({ method: "eth_getTransactionReceipt", params: [TX] });
   });
 
-  it("says a transaction the chain does not know is not there", async () => {
+  it("could not read a transaction the node does not know: a lagging or pruned node is not proof it is absent (receipts review #4)", async () => {
     const fetch = rpc({ jsonrpc: "2.0", id: 1, result: null });
-    expect(await readOnChain(facts({ chain: "ARB-SEPOLIA" }), { fetch: fetch as unknown as typeof globalThis.fetch, rpcUrl: () => "https://rpc.example" })).toEqual({
-      state: "mismatch",
-      reason: "Arbitrum Sepolia has no transaction with this hash.",
+    expect(await readOnChain(facts({ chain: "ARB-SEPOLIA", txHash: `0x${"4".repeat(64)}` }), { fetch: fetch as unknown as typeof globalThis.fetch, rpcUrl: () => "https://rpc.example" })).toEqual({
+      state: "unreadable",
     });
+  });
+
+  it("reads a mined transaction once: its receipt never changes (receipts review #5)", async () => {
+    const mined = { jsonrpc: "2.0", id: 1, result: receipt([log("0x3600000000000000000000000000000000000000", WALLET, PAYEE, BigInt(2_000_000))]) };
+    const fetch = rpc(mined);
+    const once = facts({ txHash: `0x${"5".repeat(64)}` });
+    const options = { fetch: fetch as unknown as typeof globalThis.fetch, rpcUrl: () => "https://rpc.example" };
+    expect(await readOnChain(once, options)).toEqual({ state: "matches", block: 500 });
+    expect(await readOnChain(once, options)).toEqual({ state: "matches", block: 500 });
+    // A different claim about the same transaction is matched afresh against the receipt read before.
+    expect(await readOnChain({ ...once, amount: 3 }, options)).toMatchObject({ state: "mismatch" });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks again after a read that gave no receipt", async () => {
+    const fetch = rpc({ jsonrpc: "2.0", id: 1, result: null });
+    const missing = facts({ txHash: `0x${"6".repeat(64)}` });
+    const options = { fetch: fetch as unknown as typeof globalThis.fetch, rpcUrl: () => "https://rpc.example" };
+    await readOnChain(missing, options);
+    await readOnChain(missing, options);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("reads Arc testnet through its public RPC, never the deployment's own (receipts review #5)", () => {
+    expect(receiptRpcUrl("ARC-TESTNET")).toBe("https://rpc.testnet.arc.network");
+    expect(receiptRpcUrl("BASE-SEPOLIA")).toBe("https://sepolia.base.org");
   });
 
   it("says it could not read the chain when the RPC errs, answers badly or does not answer", async () => {

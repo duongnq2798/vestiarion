@@ -49,7 +49,7 @@ export type BuiltReceipt = { ok: true; facts: ReceiptFacts; records: { seq: numb
 const TX_HASH = /^0x[0-9a-fA-F]{64}$/;
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 /** The entries that record a payment's transaction: the agent's decision, a person's approval, a later reconcile. */
-const RECORDING_ACTIONS = new Set(["ap_pay", "approval_paid", "ap_reconcile"]);
+export const RECORDING_ACTIONS: ReadonlySet<string> = new Set(["ap_pay", "approval_paid", "ap_reconcile"]);
 
 const refuse = (reason: string): BuiltReceipt => ({ ok: false, reason });
 

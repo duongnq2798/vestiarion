@@ -58,7 +58,14 @@ function sentence(check: EntryCheck, passed: string): string {
 export function ReceiptView({ view }: { view: ReceiptViewData }) {
   const { facts, entry, checks } = view;
   const chain = payeeChain(facts.chain);
-  const allPass = checks.signed.ok === true && checks.recorded.ok === true && checks.onChain.state === "matches";
+  // Three answers, not two: every check passes; one did not pass; or one could not be made just now (review #10).
+  const failed = checks.signed.ok === false || checks.recorded.ok === false || checks.onChain.state === "mismatch";
+  const unchecked = [checks.signed.ok === null, checks.recorded.ok === null, checks.onChain.state === "unreadable"].filter(Boolean).length;
+  const headline = failed
+    ? { tone: "refused" as const, text: "A check does not pass" }
+    : unchecked === 0
+      ? { tone: "proof" as const, text: "All three checks pass" }
+      : { tone: "neutral" as const, text: unchecked === 1 ? "One check could not be made just now" : "Some checks could not be made just now" };
   const keyId = entry.signing_key_id;
   const shownKeys = keyId && view.publicKeys[keyId] ? { [keyId]: view.publicKeys[keyId] } : view.publicKeys;
   const body = canonicalJson({ actor: entry.actor, domain: entry.domain, action: entry.action, summary: entry.summary, detail: entry.detail });
@@ -68,8 +75,8 @@ export function ReceiptView({ view }: { view: ReceiptViewData }) {
       <section className="rounded-2xl border border-line bg-surface p-6 shadow-surface">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Eyebrow className="text-agent">Payment receipt</Eyebrow>
-          <Badge tone={allPass ? "proof" : "held"} dot>
-            {allPass ? "All three checks pass" : "Not every check passes"}
+          <Badge tone={headline.tone} dot>
+            {headline.text}
           </Badge>
         </div>
         <h1 className="mt-3 text-2xl font-semibold tracking-[-0.02em] text-ink">
@@ -101,13 +108,19 @@ export function ReceiptView({ view }: { view: ReceiptViewData }) {
         <ol className="mt-4 space-y-5">
           <CheckItem title="Signed by the paying workspace" passed={checks.signed.ok}>
             <p className="text-sm text-ink-2">
-              {sentence(checks.signed, `Ledger entry #${entry.seq} is signed with the workspace's key ${keyId ?? ""}, and its hash links it into the workspace's chain.`)}
+              {sentence(
+                checks.signed,
+                `Ledger entry #${entry.seq} is signed with the workspace's key ${keyId ?? ""}. Its hash follows from its content, its signature and the hash of the entry before it.`
+              )}
             </p>
             <BrowserCheck entry={entry} publicKeys={view.publicKeys} />
           </CheckItem>
           <CheckItem title="Recorded when it was paid" passed={checks.recorded.ok}>
             <p className="text-sm text-ink-2">
-              {sentence(checks.recorded, `Entry #${view.records.seq} in the same ledger, signed by the same workspace, records this transaction. Its content stays private.`)}
+              {sentence(
+                checks.recorded,
+                `Entry #${view.records.seq}, written earlier in the same workspace's ledger and signed with its key ${view.records.signingKeyId ?? ""}, records this transaction. Its content stays private.`
+              )}
             </p>
           </CheckItem>
           <CheckItem title={`On ${chain.label}`} passed={checks.onChain.state === "matches" ? true : checks.onChain.state === "mismatch" ? false : null}>

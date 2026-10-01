@@ -56,7 +56,8 @@ export async function shareReceipt(input: { actorId: string; invoiceId: string }
       domain: "ap",
       action: "receipt_link_renewed",
       summary: "A new link was made for a shared receipt; any earlier link no longer opens it",
-      detail: { by: input.actorId, invoiceId: input.invoiceId, receiptId: existing.id },
+      // The receipt, not the invoice: an entry naming the invoice would stand in for its decision on the card (review #1).
+      detail: { by: input.actorId, receiptId: existing.id },
     });
     return { token, receiptId: existing.id, renewed: true };
   }
@@ -104,15 +105,17 @@ export async function stopSharingReceipt(input: { actorId: string; invoiceId: st
     domain: "ap",
     action: "receipt_revoked",
     summary: "A shared receipt's link was revoked",
-    detail: { by: input.actorId, invoiceId: input.invoiceId, receiptId: existing.id },
+    detail: { by: input.actorId, receiptId: existing.id },
   });
 }
 
-/** Which of these invoices have a receipt whose link is live. */
+/**
+ * Which of these invoices have a receipt whose link is live. The workspace's live receipts are read whole:
+ * they are few, and naming every invoice in the request could outgrow a URL (review #7).
+ */
 export async function sharedReceipts(invoiceIds: string[]): Promise<Set<string>> {
   if (invoiceIds.length === 0) return new Set();
-  const rows = unwrap(
-    await db().from("payment_receipts").select("invoice_id").in("invoice_id", invoiceIds).is("revoked_at", null)
-  ) as Array<{ invoice_id: string }>;
-  return new Set(rows.map((row) => row.invoice_id));
+  const rows = unwrap(await db().from("payment_receipts").select("invoice_id").is("revoked_at", null)) as Array<{ invoice_id: string }>;
+  const wanted = new Set(invoiceIds);
+  return new Set(rows.map((row) => row.invoice_id).filter((id) => wanted.has(id)));
 }

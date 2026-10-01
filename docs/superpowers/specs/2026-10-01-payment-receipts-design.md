@@ -57,8 +57,8 @@ detail   {
 
 - **Token.** A link is `/receipt/vxr_` followed by 43 base64url characters (32 random bytes). Only the SHA-256 of the secret is stored, as for payee links.
 - **Shown once.** The member sees the link once, when it is made. They can copy it then.
-- **One link per payment.** Making a new link replaces the old one, which stops working. This appends `receipt_link_renewed { receiptId }`.
-- **Stop sharing.** It revokes the link (`receipt_revoked { receiptId }`). Sharing again later makes a new link (`receipt_link_renewed`); the receipt entry is not appended twice.
+- **One link per payment.** Making a new link replaces the old one, which stops working. This appends `receipt_link_renewed { by, receiptId }`.
+- **Stop sharing.** It revokes the link (`receipt_revoked { by, receiptId }`). Sharing again later makes a new link (`receipt_link_renewed`); the receipt entry is not appended twice.
 - **What a dead link shows.** A revoked, replaced or unknown link shows one sentence and names nothing: "This receipt link is no longer valid."
 
 ### P4. Keys

@@ -164,7 +164,8 @@ export default function PrivacyPage() {
         <p>When this deployment sets a measurement ID, Vestiarion counts page views with Google Analytics 4. Before a page view leaves your browser:</p>
         <ul>
           <li>
-            an invitation address becomes <code>/invite/:token</code>, and a workspace address has the workspace&apos;s slug replaced, as <code>/o/:org</code>;
+            an invitation address becomes <code>/invite/:token</code>, a payee link <code>/payee/:token</code> and a receipt link{" "}
+            <code>/receipt/:token</code>, and a workspace address has the workspace&apos;s slug replaced, as <code>/o/:org</code>;
           </li>
           <li>only the path is sent, never the query string or anything after a #;</li>
           <li>the title of a workspace page, which names the workspace, is replaced with its redacted path;</li>

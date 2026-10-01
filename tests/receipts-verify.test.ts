@@ -65,6 +65,15 @@ describe("verifyEntry", () => {
   });
 });
 
+describe("a key Web Crypto cannot use as Ed25519", () => {
+  it("says the signature could not be checked here, wherever that is (receipts review #11)", async () => {
+    const rsa = crypto.generateKeyPairSync("rsa", { modulusLength: 1024 }).publicKey;
+    const rsaPem = rsa.export({ type: "spki", format: "pem" }).toString();
+    const rsaId = ledgerKeyId(rsa);
+    expect(await verifyEntry(signed(DETAIL, { keyId: rsaId }), { [rsaId]: rsaPem })).toEqual({ ok: null, reason: "The Ed25519 signature could not be checked here." });
+  });
+});
+
 describe("recordsTransaction", () => {
   const row = signed({ invoiceId: "inv-1", execution: { mintTxHash: `0x${"AB".repeat(32)}` } });
   it("is true for the entry the receipt names, when its detail contains one of the transactions", () => {
