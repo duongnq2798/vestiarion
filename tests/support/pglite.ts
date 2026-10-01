@@ -99,7 +99,7 @@ export async function createUser(db: PGlite, email: string): Promise<string> {
 export const TENANT_TABLES = [
   "accounts", "counterparties", "invoices", "milestones", "treasury_actions", "compliance_checks",
   "forecasts", "ledger_entries", "payment_intents", "cycle_runs", "cycle_snapshots", "sim_clock", "gateway_signers", "payment_receipts", "escrow_contracts",
-  "fx_swaps",
+  "fx_swaps", "screening_dismissals",
 ] as const;
 
 export interface SeededRows {
@@ -149,6 +149,10 @@ export async function seedOrgRows(db: PGlite, orgId: string, tag: string): Promi
     `insert into fx_swaps (org_id, invoice_id, state, usdc_in, eurc_minimum, eurc_estimated, usdc_per_eurc, cost_percent, adapter, call_data, deadline)
      values ($1, $2, 'confirmed', 1, 0.8, 0.82, 1.2, 0, '0x' || repeat('bb', 20), '0x', now())`,
     [orgId, invoiceId]
+  );
+  await db.query(
+    "insert into screening_dismissals (org_id, counterparty_id, matched_entity_id, screened_name, reason) values ($1, $2, $3, $4, 'seeded dismissal')",
+    [orgId, counterpartyId, `Q-${tag}`, `cp-${tag}`]
   );
   const key = crypto.generateKeyPairSync("ed25519");
   await appendSignedForOrg(db, orgId, { actor: "system", domain: "system", action: "note", summary: tag, detail: { tag } }, key.privateKey);
