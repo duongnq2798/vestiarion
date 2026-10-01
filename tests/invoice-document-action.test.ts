@@ -20,6 +20,8 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/auth/authorize", () => ({ authorize: authorizeMock }));
 
 const config = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k" });
+const withDeepSeek = { ...config, llm: { deepseek: { apiKey: "d" } } };
+let activeConfig: typeof config = config;
 const COUNTERPARTIES = [
   { id: "0b6c1c9e-4a4f-4a7e-9b1e-00000000c0de", name: "Northwind Hosting", role: "vendor", address: null },
   { id: "0b6c1c9e-4a4f-4a7e-9b1e-00000000c0df", name: "Harbor Office Supply", role: "vendor", address: null },
@@ -29,7 +31,7 @@ let fake: ReturnType<typeof fakeSupabase>;
 let orgId = "";
 
 vi.mock("@/lib/dal/scope", () => ({
-  inOrg: (_access: unknown, fn: () => Promise<unknown>) => runWith(orgTestContext({ config, client: fake.client, orgId }), fn),
+  inOrg: (_access: unknown, fn: () => Promise<unknown>) => runWith(orgTestContext({ config: activeConfig, client: fake.client, orgId }), fn),
 }));
 
 let orgCounter = 0;
@@ -38,6 +40,8 @@ beforeEach(() => {
   orgCounter += 1;
   orgId = `0b6c1c9e-4a4f-4a7e-9b1e-${String(orgCounter).padStart(12, "0")}`;
   authorizeMock.mockReset();
+  activeConfig = config;
+  vi.unstubAllGlobals();
   authorizeMock.mockResolvedValue({
     ok: true,
     user: { id: "0b6c1c9e-4a4f-4a7e-9b1e-0000000000e1", email: null },
@@ -103,6 +107,30 @@ describe("reading an invoice document", () => {
   it("allows five reads a minute per workspace", async () => {
     for (let count = 0; count < 5; count += 1) expect((await read({ text: "Harbor Office Supply\nTotal due 75.00" })).ok).toBe(true);
     expect(await read({ text: "Harbor Office Supply\nTotal due 75.00" })).toEqual({ ok: false, message: "That is five invoices read this minute. Try again in a few seconds." });
+  });
+});
+
+describe("a model's total that the total line does not bear out", () => {
+  function deepSeekReplies(reply: Record<string, unknown>) {
+    activeConfig = withDeepSeek;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(reply) } }] }), { status: 200, headers: { "content-type": "application/json" } }))
+    );
+  }
+
+  it("is prefilled, since the document has the figure, but the member is told what the total line says", async () => {
+    deepSeekReplies({ vendorName: "Northwind Hosting", amount: "180.00", currency: "USDC", dueDate: "2026-10-31" });
+    const result = await read({ file: fixture("northwind-inv-2207.pdf") });
+    expect(result.reader).toBe("deepseek");
+    expect(result.draft?.amount).toBe("180.00");
+    expect(result.warnings).toContain("The total line reads 200.00, but the model read 180.00. Check the amount against the invoice.");
+  });
+
+  it("raises nothing when the two agree", async () => {
+    deepSeekReplies({ vendorName: "Northwind Hosting", amount: "200.00", currency: "USDC", dueDate: "2026-10-31" });
+    const result = await read({ file: fixture("northwind-inv-2207.pdf") });
+    expect(result.warnings?.some((warning) => warning.startsWith("The total line reads"))).toBe(false);
   });
 });
 

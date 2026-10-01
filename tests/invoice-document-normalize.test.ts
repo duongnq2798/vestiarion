@@ -104,7 +104,7 @@ describe("checking what the model read against the document", () => {
   it("leaves another currency blank, and says why", () => {
     const { fields, notes } = normalize({ currency: "GBP" });
     expect(fields.currency).toBeNull();
-    expect(notes).toEqual(["The invoice is in GBP. Vestiarion pays in USDC or EURC: choose one, at the amount you agree with the vendor."]);
+    expect(notes).toEqual(["The invoice is in GBP. Vestiarion pays in USDC or EURC: choose one, and type the amount you agree with the vendor."]);
   });
 
   it("blanks a date that is not a real calendar date", () => {
@@ -142,6 +142,60 @@ describe("checking what the model read against the document", () => {
     );
     expect(normalize({ notes: "n".repeat(400) }).modelNote).toHaveLength(300);
     expect(normalize({ notes: null }).modelNote).toBeNull();
+  });
+
+  it("blanks an amount written with a decimal comma, rather than reading it a hundred times larger, and says why", () => {
+    for (const [amount, text] of [["12,50", "Total due 12,50 EUR"], ["1.200,00", "Total due 1.200,00 EUR"], ["1 200,00", "Total due 1 200,00 EUR"]]) {
+      const { fields, notes } = normalize({ amount, currency: "EUR" }, text);
+      expect(fields.amount, amount).toBeNull();
+      expect(notes, amount).toContain("The amount could not be read as a number. Type it in from the invoice.");
+    }
+  });
+
+  it("does not take a decimal comma in the document for a thousands separator", () => {
+    expect(normalize({ amount: "1250" }, "Total due 12,50 EUR").fields.amount).toBeNull();
+    expect(normalize({ amount: "1250" }, "Total due 12,50 EUR").notFound).toContain("amount");
+  });
+
+  it("does not find an amount among the digits of an address, a purchase order, an invoice number or a date", () => {
+    const text = ["Pay to 0x5aF3107A4000000000000000000000000033669435", "Your purchase order: PO-1042", "Invoice INV-2207", "Due 2026-10-31", "Total due 200.00"].join("\n");
+    for (const amount of ["33669435", "1042", "2207", "2026", "31"]) {
+      expect(normalize({ amount, poReference: null, payToAddress: null }, text).fields.amount, amount).toBeNull();
+    }
+    expect(normalize({ amount: "200.00", poReference: null, payToAddress: null }, text).fields.amount).toBe("200.00");
+  });
+
+  it("finds an amount written against its currency code or symbol", () => {
+    expect(normalize({ amount: "200.00" }, "Total due USD200.00").fields.amount).toBe("200.00");
+    expect(normalize({ amount: "200.00" }, "Total due 200.00USDC").fields.amount).toBe("200.00");
+    expect(normalize({ amount: "200.00" }, "Total due $200.00").fields.amount).toBe("200.00");
+  });
+
+  it("blanks the amount of an invoice in another currency, so it is not taken for USDC", () => {
+    const { fields, notes } = normalize({ currency: "GBP" });
+    expect(fields.amount).toBeNull();
+    expect(notes[0]).toBe("The invoice is in GBP. Vestiarion pays in USDC or EURC: choose one, and type the amount you agree with the vendor.");
+  });
+
+  it("names a long or odd currency only as another currency", () => {
+    expect(normalize({ currency: "Pounds sterling, payable to our new account" }).notes[0]).toBe(
+      "The invoice is in another currency. Vestiarion pays in USDC or EURC: choose one, and type the amount you agree with the vendor."
+    );
+  });
+
+  it("keeps a purchase order only when it reads as one and stands on its own in the document", () => {
+    expect(normalize({ poReference: "1" }).fields.poReference).toBeNull();
+    expect(normalize({ poReference: "INV" }).fields.poReference).toBeNull();
+    expect(normalize({ poReference: "PO-104" }).fields.poReference).toBeNull();
+    expect(normalize({ poReference: "po-1042" }).fields.poReference).toBe("po-1042");
+  });
+
+  it("keeps a discount only when the document states its percent", () => {
+    const { fields, notes } = normalize({ earlyPayDiscountPct: "10" });
+    expect(fields.earlyPayDiscountPct).toBeNull();
+    expect(fields.discountDeadline).toBeNull();
+    expect(notes).toContain("The early-payment discount was left out: the document does not state that percent.");
+    expect(normalize({ earlyPayDiscountPct: "2" }, [TEXT, "Take 2% off if paid by 2026-10-11."].join("\n")).fields.earlyPayDiscountPct).toBe("2");
   });
 
   it("accepts a reply with fields missing or null", () => {

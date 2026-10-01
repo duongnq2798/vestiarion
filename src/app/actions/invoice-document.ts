@@ -61,8 +61,15 @@ export async function readInvoiceDocumentAction(_previous: DocumentReadResult, f
       const document = await readDocument(await documentInput(source));
       const counterparties = unwrap(await db().from("counterparties").select("id, name, role, address").order("name")) as MatchableCounterparty[];
 
-      const { raw, reader } = await extractInvoice(document.text, new Date().toISOString().slice(0, 10));
+      const { raw, reader, reference } = await extractInvoice(document.text, new Date().toISOString().slice(0, 10));
       const { fields, notFound, notes, modelNote } = normalizeExtraction(raw, document.text);
+      // The total line, read by rule, against the model's total: both are in the document, so neither is blanked,
+      // but a member should know when they differ (review I1).
+      const ruled = reader === "heuristic" ? null : normalizeExtraction(reference, document.text).fields.amount;
+      const totals =
+        ruled !== null && fields.amount !== null && Number(ruled) !== Number(fields.amount)
+          ? [`The total line reads ${ruled}, but the model read ${fields.amount}. Check the amount against the invoice.`]
+          : [];
       const match = matchCounterparty(fields, counterparties);
       const matched = counterparties.find((counterparty) => counterparty.id === match.counterpartyId);
 
@@ -70,7 +77,7 @@ export async function readInvoiceDocumentAction(_previous: DocumentReadResult, f
         ok: true,
         message: `Read the invoice${matched ? ` from ${matched.name}` : ""}. Check every field before adding it.`,
         draft: { ...fields, counterpartyId: match.counterpartyId },
-        warnings: [...match.warnings, ...notes, ...(document.truncated ? ["Only the first 20,000 characters were read."] : [])],
+        warnings: [...totals, ...match.warnings, ...notes, ...(document.truncated ? ["Only the first 20,000 characters were read."] : [])],
         notFound,
         modelNote,
         reader,

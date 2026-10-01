@@ -103,12 +103,17 @@ export function ruleBasedExtraction(text: string): RawExtraction {
   });
 }
 
-export async function extractInvoice(text: string, today: string): Promise<{ raw: RawExtraction; reader: DecisionMode }> {
+/**
+ * The model's reading, which reader produced it, and the rule-based reading
+ * of the same text: `decide()` computes it either way, and the action
+ * compares the two totals (review I1).
+ */
+export async function extractInvoice(text: string, today: string): Promise<{ raw: RawExtraction; reader: DecisionMode; reference: RawExtraction }> {
   const result = await decide({
     systemPrompt: EXTRACTION_SYSTEM_PROMPT,
     userPrompt: extractionUserPrompt(text, today),
     schema: rawExtractionSchema,
     fallback: () => ruleBasedExtraction(text),
   });
-  return { raw: result.value, reader: result.mode };
+  return { raw: result.value, reader: result.mode, reference: result.reference };
 }

@@ -62,6 +62,9 @@ export interface NormalizedExtraction {
 const AMOUNT_PATTERN = /^(?:0|[1-9]\d{0,13})(?:\.\d{1,6})?$/;
 const DISCOUNT_PCT_PATTERN = /^(?:0|[1-9]\d?)(?:\.\d{1,2})?$/;
 const ADDRESS_PATTERN = /^0x[0-9a-fA-F]{40}$/;
+/** A purchase order as people write one: letters, digits and separators, with at least one digit. */
+const PO_PATTERN = /^[A-Za-z0-9][A-Za-z0-9#/.\- ]{2,}$/;
+const CURRENCY_CODES = "USDC|EURC|USD|EUR";
 
 /** A decimal string as millionths, or null when it has more than 6 places. */
 function micros(value: string): bigint | null {
@@ -70,22 +73,52 @@ function micros(value: string): bigint | null {
   return BigInt(match[1]) * BigInt(1_000_000) + BigInt((match[2] ?? "").padEnd(6, "0"));
 }
 
-/** Every figure written in the text, thousands separators removed: "1,200.00" is one figure, 1200. */
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Every amount written in the text. A comma counts as a thousands separator
+ * only between groups of three digits, so "1,200.00" is 1200 and "12,50" is
+ * no figure at all, rather than 1250. Digits inside an address, a purchase
+ * order, an invoice number or a date are not figures (review C1, I1).
+ */
 function figures(text: string): Set<bigint> {
+  const spaced = text
+    .replace(/0x[0-9a-fA-F]+/g, " ")
+    .replace(new RegExp(`\\b(${CURRENCY_CODES})(?=\\d)`, "gi"), "$1 ")
+    .replace(new RegExp(`(\\d)(${CURRENCY_CODES})\\b`, "gi"), "$1 $2");
   const found = new Set<bigint>();
-  for (const [token] of text.matchAll(/\d[\d,]*(?:\.\d+)?/g)) {
-    const value = micros(token.replace(/,/g, ""));
-    if (value !== null) found.add(value);
+  for (const token of spaced.split(/\s+/)) {
+    // A word that mixes letters and digits is an identifier: PO-1042, INV-2207, an IBAN.
+    if (/[A-Za-z]/.test(token) && /\d/.test(token)) continue;
+    for (const [figure] of token.matchAll(/(?<![\d.,\-/#])(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?![\d\-/]|[.,]\d)/g)) {
+      const value = micros(figure.replace(/,/g, ""));
+      if (value !== null) found.add(value);
+    }
   }
   return found;
 }
 
-function readAmount(value: string | null, text: string): { amount: string | null; notFound: boolean } {
-  if (value === null) return { amount: null, notFound: false };
-  const cleaned = value.replace(/[,\s]/g, "").replace(/^[$€]/, "");
-  const scaled = AMOUNT_PATTERN.test(cleaned) ? micros(cleaned) : null;
-  if (scaled === null || scaled <= BigInt(0)) return { amount: null, notFound: false };
-  return figures(text).has(scaled) ? { amount: cleaned, notFound: false } : { amount: null, notFound: true };
+/** The model's amount as a plain decimal, or null when it is not one: "1,200.00" is 1200.00; "12,50" and "1.200,00" are not read. */
+function plainAmount(value: string): string | null {
+  const bare = value
+    .replace(/^[$€]\s*/, "")
+    .replace(new RegExp(`\\s*(${CURRENCY_CODES})$`, "i"), "")
+    .trim();
+  if (/^\d{1,3}(?:,\d{3})+(?:\.\d{1,6})?$/.test(bare)) return bare.replace(/,/g, "");
+  if (/^\d+(?:\.\d{1,6})?$/.test(bare)) return bare;
+  return null;
+}
+
+type AmountReading = { amount: string } | { amount: null; why: "absent" | "unreadable" | "not_found" };
+
+function readAmount(value: string | null, text: string): AmountReading {
+  if (value === null) return { amount: null, why: "absent" };
+  const plain = plainAmount(value);
+  const scaled = plain !== null && AMOUNT_PATTERN.test(plain) ? micros(plain) : null;
+  if (plain === null || scaled === null || scaled <= BigInt(0)) return { amount: null, why: "unreadable" };
+  return figures(text).has(scaled) ? { amount: plain } : { amount: null, why: "not_found" };
 }
 
 const CURRENCIES: Record<string, InvoiceCurrency> = {
@@ -110,23 +143,39 @@ function cut(value: string | null, max: number): string | null {
   return value === null ? null : value.slice(0, max);
 }
 
+/** Whether the text writes this percent as a discount: "2%", "2 %", "2/10 net 30", "2 percent" (review M3). */
+function statesPercent(text: string, pct: string): boolean {
+  const canonical = escapeRegExp(String(Number(pct)));
+  return new RegExp(`(?<![\\d.])${canonical}(?:\\.0+)?\\s*(?:%|/|percent|pct)`, "i").test(text);
+}
+
 export function normalizeExtraction(raw: RawExtraction, text: string): NormalizedExtraction {
   const notFound: NotFoundField[] = [];
   const notes: string[] = [];
   const lowerText = text.toLowerCase();
 
-  const amount = readAmount(raw.amount, text);
-  if (amount.notFound) notFound.push("amount");
-
+  // A currency Vestiarion does not pay in leaves the amount blank too: the
+  // figure is not a USDC or EURC amount, and must not sit beside one (review I2).
   let currency: InvoiceCurrency | null = null;
+  let foreign = false;
   if (raw.currency !== null) {
     currency = CURRENCIES[raw.currency.toUpperCase()] ?? null;
-    if (currency === null) notes.push(`The invoice is in ${raw.currency}. Vestiarion pays in USDC or EURC: choose one, at the amount you agree with the vendor.`);
+    if (currency === null) {
+      foreign = true;
+      const named = /^[A-Za-z$€£¥]{1,5}$/.test(raw.currency) ? raw.currency : "another currency";
+      notes.push(`The invoice is in ${named}. Vestiarion pays in USDC or EURC: choose one, and type the amount you agree with the vendor.`);
+    }
   }
 
+  const reading = foreign ? ({ amount: null, why: "absent" } as const) : readAmount(raw.amount, text);
+  if (reading.amount === null && reading.why === "not_found") notFound.push("amount");
+  if (reading.amount === null && reading.why === "unreadable") notes.push("The amount could not be read as a number. Type it in from the invoice.");
+
+  // A purchase order must read as one, and stand on its own in the text: "PO-104" is not in "PO-1042" (review M2).
   let poReference: string | null = null;
   if (raw.poReference !== null) {
-    if (lowerText.includes(raw.poReference.toLowerCase())) poReference = cut(raw.poReference, 100);
+    const standsAlone = new RegExp(`(?<![A-Za-z0-9])${escapeRegExp(raw.poReference)}(?![A-Za-z0-9])`, "i");
+    if (PO_PATTERN.test(raw.poReference) && /\d/.test(raw.poReference) && standsAlone.test(text)) poReference = cut(raw.poReference, 100);
     else notFound.push("poReference");
   }
 
@@ -149,6 +198,8 @@ export function normalizeExtraction(raw: RawExtraction, text: string): Normalize
       notes.push("The early-payment discount was left out: its percent is not between 0 and 100.");
     } else if (pct === null || !isRealDate(deadline)) {
       notes.push("The early-payment discount was left out: the invoice gives its percent or its deadline, not both.");
+    } else if (!statesPercent(text, pct)) {
+      notes.push("The early-payment discount was left out: the document does not state that percent.");
     } else if (dueDate !== null && deadline > dueDate) {
       notes.push("The early-payment discount was left out: its deadline is after the due date.");
     } else {
@@ -161,7 +212,7 @@ export function normalizeExtraction(raw: RawExtraction, text: string): Normalize
     fields: {
       vendorName: cut(raw.vendorName, 160),
       invoiceNumber: cut(raw.invoiceNumber, 100),
-      amount: amount.amount,
+      amount: reading.amount,
       currency,
       dueDate,
       poReference,
