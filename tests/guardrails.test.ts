@@ -248,3 +248,52 @@ describe("AP guardrails — schedule is bound exactly like pay", () => {
     expect(result).toEqual({ blocked: false, status: null, rule: null, reasoning: "Schedule for the deadline." });
   });
 });
+
+describe("a EURC payment the wallet is short of, and the swap that could fund it (EURC swap spec S5)", () => {
+  const OFFER = { usdcIn: 2.507384, costPercent: 0.09 };
+  const base = {
+    action: "pay" as const,
+    reasoning: "Pay now, swapping USDC for the EURC it needs.",
+    amount: 2.43,
+    riskLevel: "clear",
+    paymentLimit: 10,
+    currency: "EURC" as const,
+    fxAvailable: true,
+  };
+  type SwapFacts = { requested: boolean; offer: { usdcIn: number; costPercent: number } | null; usdcBalance: number; usdcDueWithin7Days: number };
+  const short = (swap: SwapFacts) => ({ balance: 0, needed: 2, swap });
+  const swap = (overrides: Partial<SwapFacts> = {}): SwapFacts => ({ requested: true, offer: OFFER, usdcBalance: 20, usdcDueWithin7Days: 5, ...overrides });
+
+  it("lets a payment through that the model chose to fund with the offered swap", () => {
+    expect(enforceApGuardrails({ ...base, eurcShort: short(swap()) })).toEqual({ blocked: false, status: null, rule: null, reasoning: base.reasoning });
+  });
+
+  it("holds one the model did not choose to fund with a swap, as before", () => {
+    const result = enforceApGuardrails({ ...base, eurcShort: short(swap({ requested: false })) });
+    expect(result).toMatchObject({ blocked: true, status: "held", rule: "treasury.insufficient_eurc" });
+    expect(result.reasoning).toContain("holds 0 EURC, less than the 2 EURC");
+  });
+
+  it("holds one the model would fund with a swap when there was none to make", () => {
+    const result = enforceApGuardrails({ ...base, eurcShort: short(swap({ offer: null })) });
+    expect(result).toMatchObject({ blocked: true, status: "held", rule: "treasury.insufficient_eurc" });
+    expect(result.reasoning).toContain("no swap was available");
+  });
+
+  it("holds a swap that costs more than 3% above the rate the payable was weighed at", () => {
+    const result = enforceApGuardrails({ ...base, eurcShort: short(swap({ offer: { usdcIn: 2.6, costPercent: 3.2 } })) });
+    expect(result).toMatchObject({ blocked: true, status: "held", rule: "fx.swap_cost_above_cap" });
+    expect(result.reasoning).toContain("3.2%");
+  });
+
+  it("holds a swap that would leave the USDC short of what falls due in USDC within 7 days", () => {
+    const result = enforceApGuardrails({ ...base, eurcShort: short(swap({ usdcBalance: 7, usdcDueWithin7Days: 5 })) });
+    expect(result).toMatchObject({ blocked: true, status: "held", rule: "fx.swap_usdc_short" });
+    expect(result.reasoning).toContain("4.492616 USDC");
+  });
+
+  it("still holds a payment whose EURC could not be read, swap or not", () => {
+    const result = enforceApGuardrails({ ...base, eurcShort: { balance: null, needed: 2, swap: swap() } });
+    expect(result).toMatchObject({ blocked: true, rule: "treasury.insufficient_eurc" });
+  });
+});

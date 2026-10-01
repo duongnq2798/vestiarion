@@ -2,6 +2,7 @@ import type { DuplicateMatch } from "./duplicates";
 import { blockingDuplicate } from "./duplicates";
 import { addressUnconfirmed } from "../counterparty-address";
 import { BRIDGE_FEE_CAP_PERCENT } from "../payee-chains";
+import { SWAP_COST_CAP_PERCENT } from "../fx/swap-limits";
 
 export interface ApGuardrailInput {
   action: "pay" | "schedule" | "hold" | "flag_fraud" | "request_info";
@@ -36,7 +37,16 @@ export interface ApGuardrailInput {
     gatewayShort?: { balanceUsdc: number; neededUsdc: number } | null;
   } | null;
   /** A live EURC payment the wallet's EURC cannot cover: what it holds (null when it could not be read) and what the payment sends. */
-  eurcShort?: { balance: number | null; needed: number } | null;
+  eurcShort?: {
+    balance: number | null;
+    needed: number;
+    /**
+     * The swap of USDC for EURC that could fund it (EURC swap spec S5): whether the model chose it
+     * (`fundWithSwap`), the offer (null when there was none to make), and the USDC it would leave
+     * against what falls due in USDC within 7 days.
+     */
+    swap?: { requested: boolean; offer: { usdcIn: number; costPercent: number } | null; usdcBalance: number; usdcDueWithin7Days: number };
+  } | null;
 }
 
 export type ApGuardrailRule =
@@ -46,6 +56,9 @@ export type ApGuardrailRule =
   | "invoice.duplicate_of_settled"
   | "fx.rate_unavailable"
   | "treasury.insufficient_eurc"
+  | "fx.swap_cost_above_cap"
+  | "fx.swap_usdc_short"
+  | "fx.swap_failed"
   | "bridge.unsupported_token"
   | "bridge.fee_unavailable"
   | "bridge.fee_above_cap"
@@ -165,8 +178,32 @@ export function enforceApGuardrails(input: ApGuardrailInput): ApGuardrailResult 
       reasoning: `${input.reasoning} [guardrail override: an earlier attempt went through Gateway, and the Gateway balance, ${input.bridge.gatewayShort.balanceUsdc} USDC, does not cover the ${input.bridge.gatewayShort.neededUsdc} USDC this payout needs with its fee — ${verb} refused; held for a person to check the earlier transfer with Circle]`,
     };
   }
-  // A EURC invoice is paid from EURC, never from USDC (E5): a payment the
-  // wallet's EURC cannot cover now waits for a person.
+  // A EURC invoice is paid from EURC, never sent as USDC (E5). A payment the
+  // wallet's EURC cannot cover waits for a person, unless the model chose to
+  // fund it with the swap it was offered, within the swap's two bounds (EURC
+  // swap spec S5): its cost above the rate the payable was weighed at, and
+  // the USDC it leaves for what falls due in USDC within 7 days.
+  const swap = input.eurcShort?.swap;
+  if (input.action === "pay" && input.eurcShort && input.eurcShort.balance !== null && swap?.requested && swap.offer) {
+    if (swap.offer.costPercent > SWAP_COST_CAP_PERCENT) {
+      return {
+        blocked: true,
+        status: "held",
+        rule: "fx.swap_cost_above_cap",
+        reasoning: `${input.reasoning} [guardrail override: the swap of ${swap.offer.usdcIn} USDC for the EURC this payment needs costs ${swap.offer.costPercent}% above the rate it was weighed at, more than the ${SWAP_COST_CAP_PERCENT}% a swap may cost — payment refused before execution]`,
+      };
+    }
+    const left = Math.round((swap.usdcBalance - swap.offer.usdcIn) * 1_000_000) / 1_000_000;
+    if (left < swap.usdcDueWithin7Days) {
+      return {
+        blocked: true,
+        status: "held",
+        rule: "fx.swap_usdc_short",
+        reasoning: `${input.reasoning} [guardrail override: swapping ${swap.offer.usdcIn} USDC would leave ${left} USDC, less than the ${swap.usdcDueWithin7Days} USDC due within 7 days — payment refused before execution]`,
+      };
+    }
+    return { blocked: false, status: null, rule: null, reasoning: input.reasoning };
+  }
   if (input.action === "pay" && input.eurcShort) {
     return {
       blocked: true,
@@ -175,7 +212,9 @@ export function enforceApGuardrails(input: ApGuardrailInput): ApGuardrailResult 
       reasoning:
         input.eurcShort.balance === null
           ? `${input.reasoning} [guardrail override: the operating wallet's EURC could not be read, so the ${input.eurcShort.needed} EURC this payment sends cannot be checked — held for a person]`
-          : `${input.reasoning} [guardrail override: the operating wallet holds ${input.eurcShort.balance} EURC, less than the ${input.eurcShort.needed} EURC this payment sends — held for a person; fund EURC from Circle's faucet first]`,
+          : swap?.requested
+            ? `${input.reasoning} [guardrail override: the operating wallet holds ${input.eurcShort.balance} EURC, less than the ${input.eurcShort.needed} EURC this payment sends, and no swap was available to fund it — held for a person]`
+            : `${input.reasoning} [guardrail override: the operating wallet holds ${input.eurcShort.balance} EURC, less than the ${input.eurcShort.needed} EURC this payment sends — held for a person; fund EURC from Circle's faucet first]`,
     };
   }
   return { blocked: false, status: null, rule: null, reasoning: input.reasoning };

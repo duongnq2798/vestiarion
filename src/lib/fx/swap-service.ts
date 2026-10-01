@@ -2,6 +2,9 @@ import { ArcTestnet } from "@circle-fin/app-kit/chains";
 import { encodeFunctionData, type Hex } from "viem";
 import { z } from "zod";
 import { ARC_TESTNET_EURC, ARC_TESTNET_USDC, FxQuoteError, fromBaseUnits, toBaseUnits } from "./quote";
+import { SWAP_SLIPPAGE_BPS } from "./swap-limits";
+
+export { SWAP_COST_CAP_PERCENT, SWAP_SLIPPAGE_BPS } from "./swap-limits";
 
 /**
  * A swap of USDC for EURC on Arc testnet through Circle's Stablecoin Service, the service App Kit's
@@ -20,10 +23,6 @@ const DEADLINE_MS = 10_000;
 const RETRY_DELAY_MS = 750;
 const NO_ROUTE = 331001;
 
-/** The swap's slippage floor, as App Kit's swaps default to: its minimum output is 97% of the estimate. */
-export const SWAP_SLIPPAGE_BPS = 300;
-/** The most a swap may cost above the rate its payable was weighed at (R3). */
-export const SWAP_COST_CAP_PERCENT = 3;
 /** The Adapter contract on Arc testnet, from App Kit's own chain definition. */
 export const ADAPTER: string = ArcTestnet.kitContracts.adapter;
 
