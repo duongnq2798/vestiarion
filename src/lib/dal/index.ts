@@ -35,7 +35,7 @@ import { currentContext, currentOrgId } from "../context";
 
 export const TENANT_TABLES = [
   "accounts", "counterparties", "invoices", "milestones", "treasury_actions", "compliance_checks",
-  "forecasts", "ledger_entries", "payment_intents", "cycle_runs", "cycle_snapshots", "sim_clock", "gateway_signers",
+  "forecasts", "ledger_entries", "payment_intents", "cycle_runs", "cycle_snapshots", "sim_clock", "gateway_signers", "payment_receipts",
 ] as const;
 export type TenantTable = (typeof TENANT_TABLES)[number];
 
