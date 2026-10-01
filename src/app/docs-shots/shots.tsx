@@ -218,7 +218,9 @@ export const DOCS_SHOTS = {
         mode: "sandbox",
         accounts: [{ kind: "operating", circle_wallet_id: "docs-sample-wallet", balance: 0 }],
         counterparties: [],
-        invoiceCount: 0,
+        payableCount: 0,
+        onchainPayments: 0,
+        waitingCount: 0,
       });
       return <GettingStarted slug={SLUG} checklist={checklist} isOwner />;
     },

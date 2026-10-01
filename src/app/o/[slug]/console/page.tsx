@@ -22,7 +22,7 @@ import { orgHref } from "@/lib/auth/org-paths";
 import { can } from "@/lib/auth/roles";
 import { chainModes } from "@/lib/circle";
 import { inOrg } from "@/lib/dal/scope";
-import { gettingStarted, ownInvoiceCount } from "@/lib/getting-started";
+import { gettingStarted, ownPayableCount } from "@/lib/getting-started";
 import { listLedgerEntries, listLedgerEntriesAfter, listLedgerEntriesByDomain, listLedgerEntriesForTargets } from "@/lib/ledger";
 import { pauseStateOf } from "@/lib/platform/pause";
 import { latestForecast, listAccounts, listCounterparties, listInvoices, listTreasuryActions, stats } from "@/lib/queries";
@@ -98,10 +98,18 @@ export default async function DashboardPage({
     const needsReview = waiting.filter((payable) => payable.status !== "processing" || payable.reclaimable).length;
     const paused = pause !== null;
     const role = access.membership.role;
-    // Computed from the rows above, with no extra read (getting-started design G1, G2). Only people who
-    // can act on it see it: owners and admins add records, and an owner takes the workspace live.
+    // Computed from the rows above, with no extra read (getting-started design G1, G2), until the first
+    // payment on Arc testnet (first-payment design §2). Only people who can act on it see it: owners and
+    // admins add records, and an owner takes the workspace live.
     const checklist = can(role, "records.write")
-      ? gettingStarted({ mode: access.membership.mode, accounts: accountsRows, counterparties, invoiceCount: ownInvoiceCount(invoices, counterparties) })
+      ? gettingStarted({
+          mode: access.membership.mode,
+          accounts: accountsRows,
+          counterparties,
+          payableCount: ownPayableCount(invoices, counterparties),
+          onchainPayments: dashboardStats.onchainTransfers,
+          waitingCount: needsReview,
+        })
       : null;
     // Sample data (sample-data design §1): offered in an empty simulated sandbox, and called out while it is loaded.
     const sampleOffered = offerSampleData({ canWrite: can(role, "records.write"), mode: access.membership.mode, chainMode: modes.mode, counterpartyCount: counterparties.length });
