@@ -15,6 +15,25 @@ const ORG = "0b6c1c9e-4a4f-4a7e-9b1e-000000000a0b";
 const config = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k" });
 
 describe("stats — paid out to date", () => {
+  it("adds up USDC only, and still counts a EURC transfer as settled on chain (EURC design R3)", async () => {
+    const fake = fakeSupabase((request) => {
+      if (request.path === "/rest/v1/invoices" && request.params.get("status") === "eq.paid" && !request.headers.get("prefer")?.includes("count")) {
+        return {
+          body: [
+            { amount: "10", paid_amount: null, tx_ref: "0xusdc", currency: "USDC" },
+            { amount: "8", paid_amount: null, tx_ref: "0xeurc", currency: "EURC" },
+          ],
+        };
+      }
+      return { body: [] };
+    });
+    const result = await runWith(orgTestContext({ config, client: fake.client, orgId: ORG }), () => stats());
+    expect(result.totalPaidOut).toBe(10);
+    expect(result.onchainTransfers).toBe(2);
+    const [paid] = fake.requests.filter((r) => r.path === "/rest/v1/invoices" && r.params.get("status") === "eq.paid");
+    expect(paid.params.get("select")).toContain("currency");
+  });
+
   it("sums paid_amount where an invoice has one, and the invoice amount where it does not", async () => {
     const fake = fakeSupabase((request) => {
       if (request.path === "/rest/v1/invoices" && request.params.get("status") === "eq.paid" && !request.headers.get("prefer")?.includes("count")) {

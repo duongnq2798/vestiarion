@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { db, unwrap, type OrgDb } from "../dal";
 import { appendLedgerEntry } from "../ledger";
-import { getChainProvider, type ChainProvider } from "../circle";
+import { getChainProvider, type ChainProvider, type Stablecoin } from "../circle";
 import { cycleClockMode, type CycleClockMode } from "../clock";
 import { runComplianceSweep, screeningMode as complianceScreeningMode } from "../compliance";
 import { refreshGitHubMilestones } from "../milestone-verification";
@@ -28,7 +28,7 @@ import {
   type InvoiceLike,
 } from "./duplicates";
 import { followUpConfig, planFollowUp, type DecisionFacts, type FollowUpConfig, type FollowUpPlan } from "./follow-up";
-import { OPEN_PAYABLE_STATUSES, summarizePayableObligations } from "./obligations";
+import { OPEN_PAYABLE_STATUSES, summarizePayableObligations, sumUsdcAmounts } from "./obligations";
 import {
   boundPayOn,
   invoiceDiscount,
@@ -629,6 +629,8 @@ export function dueForDecision(
 export interface PayableBookRow {
   id: string;
   amount: number;
+  /** USDC when absent. */
+  currency?: Stablecoin;
   due_date: string;
   status: string;
   scheduled_for?: string | null;
@@ -652,12 +654,16 @@ export interface ObligationsDue {
  */
 export function obligationsDueBy(
   book: ReadonlyArray<PayableBookRow>,
-  input: { excludeId: string; by: string; today: string; milestones: ObligationsDue }
+  input: { excludeId: string; by: string; today: string; milestones: ObligationsDue; currency?: Stablecoin }
 ): ObligationsDue {
-  let total = input.milestones.total;
-  let count = input.milestones.count;
+  // Money competes only with money of its own kind: a EURC payable is paid
+  // from EURC, and milestones are always USDC (EURC invoices design P1).
+  const currency = input.currency ?? "USDC";
+  let total = currency === "USDC" ? input.milestones.total : 0;
+  let count = currency === "USDC" ? input.milestones.count : 0;
   for (const row of book) {
     if (row.id === input.excludeId) continue;
+    if ((row.currency ?? "USDC") !== currency) continue;
     if (!(OPEN_PAYABLE_STATUSES as readonly string[]).includes(row.status)) continue;
     const day = row.status === "matched" ? input.today : utcDayOf(row.scheduled_for ?? row.due_date);
     if (day === null || day <= input.by) {
@@ -2238,10 +2244,10 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
   const openInvoices = unwrap(
     await db
       .from("invoices")
-      .select("amount, due_date, status, scheduled_for")
+      .select("amount, due_date, status, scheduled_for, currency")
       .eq("direction", "payable")
       .in("status", [...OPEN_PAYABLE_STATUSES])
-  ) as Array<{ amount: string; due_date: string; status: string; scheduled_for: string | null }>;
+  ) as Array<{ amount: string; due_date: string; status: string; scheduled_for: string | null; currency: string | null }>;
   const openMilestones = unwrap(
     await db.from("milestones").select("amount").in("status", ["pending", "verified"])
   ) as Array<{ amount: string }>;
@@ -2408,9 +2414,10 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
   await stage("forecast", async () => {
   // ------------------------------------------------------------------ 5. forecast
   const receivables = unwrap(
-    await db.from("invoices").select("amount").eq("direction", "receivable").in("status", ["pending", "matched"])
-  ) as Array<{ amount: string }>;
-  projectedInflow = receivables.reduce((s, r) => s + num(r.amount), 0);
+    await db.from("invoices").select("amount, currency").eq("direction", "receivable").in("status", ["pending", "matched"])
+  ) as Array<{ amount: string; currency: string | null }>;
+  // USDC only: the forecast is set against USDC balances (EURC invoices design R3).
+  projectedInflow = sumUsdcAmounts(receivables);
 
   const forecast = await db.from("forecasts").insert({
     as_of: new Date().toISOString(),

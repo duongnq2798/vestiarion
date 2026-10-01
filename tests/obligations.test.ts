@@ -1,9 +1,36 @@
 import { describe, expect, it } from "vitest";
-import { OPEN_PAYABLE_STATUSES, summarizePayableObligations } from "@/lib/agent/obligations";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { OPEN_PAYABLE_STATUSES, summarizePayableObligations, sumUsdcAmounts } from "@/lib/agent/obligations";
+
+describe("sumUsdcAmounts", () => {
+  it("adds the USDC amounts, a row with no currency being USDC, and leaves EURC out", () => {
+    expect(sumUsdcAmounts([{ amount: "10" }, { amount: 2.5, currency: "USDC" }, { amount: "100", currency: "EURC" }])).toBe(12.5);
+  });
+});
+
+describe("the treasury stage's reads (EURC design R3)", () => {
+  const source = readFileSync(path.join(process.cwd(), "src", "lib", "agent", "orchestrator.ts"), "utf8");
+
+  it("reads each open payable's currency for the buffer, and adds up only USDC receivables for the forecast", () => {
+    expect(source).toContain('.select("amount, due_date, status, scheduled_for, currency")');
+    expect(source).toContain('.select("amount, currency").eq("direction", "receivable")');
+    expect(source).toContain("projectedInflow = sumUsdcAmounts(receivables)");
+  });
+});
 
 describe("payable obligation buffer", () => {
   const now = Date.parse("2026-09-24T00:00:00Z");
   const due = (days: number) => new Date(now + days * 86_400_000).toISOString();
+
+  it("counts USDC payables only: a EURC payable is paid from EURC, not from the USDC the buffer keeps (EURC design R3)", () => {
+    const result = summarizePayableObligations([
+      { amount: "5", due_date: due(1), status: "pending", currency: "USDC" },
+      { amount: "7", due_date: due(2), status: "pending" },
+      { amount: "500", due_date: due(1), status: "pending", currency: "EURC" },
+    ], now);
+    expect(result).toMatchObject({ due7d: 12, due14d: 12, openTotal: 12 });
+  });
 
   it("includes held and awaiting-info payables until they are resolved", () => {
     const result = summarizePayableObligations([

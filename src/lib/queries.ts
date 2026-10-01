@@ -210,7 +210,7 @@ export async function stats(): Promise<DashboardStats> {
   const client = db();
 
   const [paidInvoices, paidMilestones, clock, decisions, flagged, latestCycle] = await Promise.all([
-    client.from("invoices").select("amount, paid_amount, tx_ref").eq("status", "paid"),
+    client.from("invoices").select("amount, paid_amount, tx_ref, currency").eq("status", "paid"),
     client.from("milestones").select("amount, tx_ref").eq("status", "paid"),
     // No row yet is not an error: an organization that has never run a
     // simulated cycle has no sim_clock row until its first one.
@@ -223,19 +223,22 @@ export async function stats(): Promise<DashboardStats> {
   // What actually left: an invoice paid with an early-payment discount
   // records the transfer's amount in paid_amount (migration 0038); one paid
   // without, or before that column existed, left its full amount.
+  // A EURC payment is a payment settled on chain, but never part of a USDC
+  // total (EURC invoices design R3). Milestones are always USDC.
   const paid = [
-    ...((paidInvoices.data ?? []) as Array<{ amount: unknown; paid_amount: unknown; tx_ref: string | null }>).map((row) => ({
+    ...((paidInvoices.data ?? []) as Array<{ amount: unknown; paid_amount: unknown; tx_ref: string | null; currency?: string | null }>).map((row) => ({
       amount: row.paid_amount ?? row.amount,
       tx_ref: row.tx_ref,
+      usdc: (row.currency ?? "USDC") === "USDC",
     })),
-    ...((paidMilestones.data ?? []) as Array<{ amount: unknown; tx_ref: string | null }>),
+    ...((paidMilestones.data ?? []) as Array<{ amount: unknown; tx_ref: string | null }>).map((row) => ({ ...row, usdc: true })),
   ];
 
   return {
     day: (clock.data as { current_day: number } | null)?.current_day ?? 0,
     clockMode: cycleClockMode(),
     lastCycleAt: (latestCycle.data as { ts: string } | null)?.ts ?? null,
-    totalPaidOut: paid.reduce((sum, r) => sum + num(r.amount), 0),
+    totalPaidOut: paid.filter((r) => r.usdc).reduce((sum, r) => sum + num(r.amount), 0),
     decisionsLogged: decisions.count ?? 0,
     flagged: flagged.count ?? 0,
     onchainTransfers: paid.filter((r) => r.tx_ref && !r.tx_ref.startsWith("sim_")).length,
