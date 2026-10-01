@@ -85,13 +85,30 @@ function circle(options: { failDeposit?: boolean; failDelegate?: boolean } = {})
   return { client: client as unknown as GatewayFundingClient, calls };
 }
 
-const balance = (async () => new Response(JSON.stringify({ balances: [{ domain: 26, balance: "3" }] }), { status: 200 })) as unknown as typeof fetch;
+/** Gateway's answers to balance reads, in order; the last one repeats. Gateway counts a deposit a little after Circle completes it. */
+function balances(...values: string[]): typeof fetch {
+  let read = 0;
+  return (async () => {
+    const value = values[Math.min(read, values.length - 1)];
+    read += 1;
+    return new Response(JSON.stringify({ balances: [{ domain: 26, balance: value }] }), { status: 200 });
+  }) as unknown as typeof fetch;
+}
 
 beforeEach(() => appendLedgerEntry.mockClear());
 
-async function fund(db: ReturnType<typeof database>, c: ReturnType<typeof circle>, requestId = "req-1", amount = 3) {
+async function fund(
+  db: ReturnType<typeof database>,
+  c: ReturnType<typeof circle>,
+  requestId = "req-1",
+  amount = 3,
+  gateway: { fetch?: typeof fetch; balanceWaitMs?: number } = {}
+) {
   return runWith(orgTestContext({ config, client: db.fake.client, orgId: ORG, userId: USER }), () =>
-    fundGateway({ actorId: USER, amount, requestId }, { client: () => c.client, fetch: balance })
+    fundGateway(
+      { actorId: USER, amount, requestId },
+      { client: () => c.client, fetch: gateway.fetch ?? balances("0", String(amount)), balanceWaitMs: gateway.balanceWaitMs ?? 0, balancePollMs: 1 }
+    )
   );
 }
 
@@ -162,6 +179,20 @@ describe("funding a Gateway balance", () => {
     expect(c.calls).toEqual([]);
   });
 
+  it("waits for Gateway to count the deposit, and records the balance that includes it (Gateway rollout)", async () => {
+    const db = database({ signer: { org_id: ORG, circle_wallet_id: "wallet-signer", address: SIGNER_ADDRESS, delegate_tx_id: "tx-0", delegate_tx_hash: "0xdelegated" } });
+    const result = await fund(db, circle(), "req-8", 5, { fetch: balances("2", "2", "2", "7"), balanceWaitMs: 1_000 });
+    expect(result.balanceUsdc).toBe(7);
+    expect(appendLedgerEntry.mock.calls[0][0].detail).toMatchObject({ amountUsdc: 5, balanceUsdc: 7 });
+  });
+
+  it("records no balance, rather than one without the deposit, when Gateway has not counted it yet (Gateway rollout)", async () => {
+    const db = database({ signer: { org_id: ORG, circle_wallet_id: "wallet-signer", address: SIGNER_ADDRESS, delegate_tx_id: "tx-0", delegate_tx_hash: "0xdelegated" } });
+    const result = await fund(db, circle(), "req-9", 5, { fetch: balances("0"), balanceWaitMs: 0 });
+    expect(result.balanceUsdc).toBeNull();
+    expect(appendLedgerEntry.mock.calls[0][0].detail).toMatchObject({ amountUsdc: 5, balanceUsdc: null });
+  });
+
   it("refuses an amount that is not positive, before calling Circle", async () => {
     const c = circle();
     await expect(fund(database(), c, "req-4", 0)).rejects.toThrow("Enter an amount greater than zero.");
@@ -170,7 +201,7 @@ describe("funding a Gateway balance", () => {
 });
 
 describe("what the Treasury page shows of the Gateway balance", () => {
-  const read = (db: ReturnType<typeof database>, fetcher: typeof fetch = balance) =>
+  const read = (db: ReturnType<typeof database>, fetcher: typeof fetch = balances("3")) =>
     runWith(orgTestContext({ config, client: db.fake.client, orgId: ORG, userId: USER }), () => readGatewayState({ fetch: fetcher }));
 
   it("is nothing before the first funding", async () => {

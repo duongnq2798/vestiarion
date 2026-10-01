@@ -81,7 +81,10 @@ export async function fundGatewayAction(_previous: FundGatewayResult, formData: 
     try {
       const funded = await fundGateway({ actorId: auth.user.id, amount: Number(amount.data), requestId: requestId.data });
       revalidateOrgPages();
-      const held = funded.balanceUsdc === null ? "" : ` The Gateway balance is ${funded.balanceUsdc} USDC.`;
+      const held =
+        funded.balanceUsdc === null
+          ? " Gateway counts it once Arc testnet finalizes the deposit, usually within a minute."
+          : ` The Gateway balance is ${funded.balanceUsdc} USDC.`;
       return { ok: true, message: `Deposited ${Number(amount.data)} USDC into Gateway.${held}` };
     } catch (error) {
       // Every error the funding raises is written for the person who asked: its own checks,

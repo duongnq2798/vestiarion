@@ -57,6 +57,14 @@ describe("fundGatewayAction", () => {
     expect(result).toEqual({ ok: true, message: "Deposited 3 USDC into Gateway. The Gateway balance is 3 USDC." });
   });
 
+  it("says Gateway counts the deposit shortly, when it had not yet (Gateway rollout)", async () => {
+    authorizeMock.mockResolvedValue(access("live"));
+    fundGateway.mockResolvedValue({ signerAddress: "0xsigner", depositTxHash: "0xdeposit", balanceUsdc: null });
+    expect((await fundGatewayAction({ ok: false, message: "" }, form("5"))).message).toBe(
+      "Deposited 5 USDC into Gateway. Gateway counts it once Arc testnet finalizes the deposit, usually within a minute."
+    );
+  });
+
   it("refuses a sandbox: its payments are simulated, and Gateway is on Arc testnet", async () => {
     authorizeMock.mockResolvedValue(access("sandbox"));
     expect(await fundGatewayAction({ ok: false, message: "" }, form("3"))).toEqual({ ok: false, message: "Gateway is for a live workspace on Arc testnet. Take this workspace live first." });
