@@ -3,7 +3,7 @@
 import "server-only";
 
 import { z } from "zod";
-import { refreshOnChainBalances } from "@/lib/agent/balances";
+import { refreshOnChainBalances, syncWalletBalances } from "@/lib/agent/balances";
 import { authorize } from "@/lib/auth/authorize";
 import { revalidateOrgPages } from "@/lib/auth/revalidate";
 import { fundGateway, GatewayStepFailed } from "@/lib/circle/gateway-funding";
@@ -80,6 +80,13 @@ export async function fundGatewayAction(_previous: FundGatewayResult, formData: 
   return inOrg(auth, async () => {
     try {
       const funded = await fundGateway({ actorId: auth.user.id, amount: Number(amount.data), requestId: requestId.data });
+      // The deposit left the operating wallet: its stored balance follows before the page is drawn
+      // again, so the balance tile and the accounts show it. Best effort: the deposit was made.
+      try {
+        await syncWalletBalances();
+      } catch {
+        console.error("fundGatewayAction: the balance read after the deposit did not complete");
+      }
       revalidateOrgPages();
       const held =
         funded.balanceUsdc === null
