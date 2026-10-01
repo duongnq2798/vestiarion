@@ -1,5 +1,25 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-01: EURC payments funded by a swap
+
+- A live workspace can pay a EURC payable after swapping USDC for the EURC it needs, through Circle's Stablecoin Service on Arc testnet.
+- **New ledger action `fx_swap`**, in the `treasury` domain, delivered as a `ledger.appended` event when a swap ends.
+  - Its `detail` is `{ paysInvoiceId, swapId, state, usdcIn, eurcMinimum, eurcEstimated, eurcReceived, usdcPerEurc, costPercent, provider, adapter, approveTxHash, swapTxHash, failure, reasoning, resumed }`.
+  - `state` is `confirmed` or `failed`.
+  - `eurcReceived` is the EURC the swap's transaction sent to the operating wallet, read from its receipt, or `null` when it could not be read.
+  - `resumed` is `true` for a swap whose first answer was lost, finished by a later cycle. Its `reasoning` is then `null`.
+  - It carries `paysInvoiceId`, not `invoiceId`: it is not a decision on the invoice.
+- **New fields on a EURC payable's decision entry:**
+  - `usdcDueWithin7Days`;
+  - `swapOffer`: `{ usdcIn, eurcEstimated, eurcMinimum, usdcPerEurc, costPercent, provider }` when a swap was offered, or `null`;
+  - `swapUnavailable`: why there was none, or `null`;
+  - `swap`: `{ swapId, state, usdcIn, eurcReceived, swapTxHash, reason }` for the swap made to fund the payment, or `null`. `state` is `confirmed`, `pending` or `failed`.
+  - `decision.fundWithSwap` is `true` when the model chose to pay with the swap.
+- **Two new values of `guardrailRule`:**
+  - `fx.swap_cost_above_cap`, for a swap costing more than 3% above the quoted rate;
+  - `fx.swap_usdc_short`, for a swap that would leave the USDC below what falls due in USDC within 7 days.
+- **A swap that does not go through** holds the payable with `guardrailRule: null`, as a failed transfer does. Its reason is in `swap.reason`.
+
 ## 2026-10-01: Milestone escrow
 
 - A live workspace can lock a milestone's USDC in its own escrow contract on Arc testnet. Three new ledger actions, in the `contractor` domain, are delivered as `ledger.appended` events:
