@@ -30,7 +30,7 @@ export function SampleDataOffer({ orgSlug }: { orgSlug: string }) {
               Try it with sample data
             </h2>
             <p className="text-sm text-ink-2">
-              Six example counterparties with invoices and milestones, chosen so that one cycle shows every outcome: a payment, a hold, a flag, a question and a milestone release. Payments are simulated, and you can remove the sample at any time.
+              Six example counterparties with invoices and milestones, chosen so that one cycle shows every outcome: a payment, a scheduled payment, a hold, a flag, a question and a milestone release. Payments are simulated, and you can remove the sample at any time.
             </p>
           </div>
           <Button type="submit" variant="secondary" icon={<FlaskConical />} loading={pending} className="shrink-0">
