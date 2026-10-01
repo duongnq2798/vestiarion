@@ -72,6 +72,38 @@ describe("invoiceDecision: scheduled outcome", () => {
     expect(decision.outcomeLabel).toBeDefined();
     expect(decision.outcomeLabel).not.toMatch(/Scheduled/);
   });
+
+  it("reads Awaiting payment for a pending receivable, since the agent never decides receivables", () => {
+    const decision = invoiceDecision(invoice({ direction: "receivable", status: "pending" }), undefined, []);
+    expect(decision.outcomeLabel).toBe("Awaiting payment");
+  });
+
+  it("still reads Not yet decided for a pending payable", () => {
+    const decision = invoiceDecision(invoice({ direction: "payable", status: "pending" }), undefined, []);
+    expect(decision.outcomeLabel).toBe("Not yet decided");
+  });
+
+  it("reads as paid, never Scheduled, for a paid invoice whose tx_ref is missing (the sample data's paid history row)", () => {
+    const decision = invoiceDecision(invoice({ status: "paid", tx_ref: null }), undefined, []);
+    expect(decision.outcome).not.toBe("scheduled");
+    expect(decision.outcomeLabel).toBe("Paid");
+  });
+
+  it("reads as paid, never Scheduled, for a paid invoice whose tx_ref is in a form the badge doesn't recognise", () => {
+    const decision = invoiceDecision(invoice({ status: "paid", tx_ref: "circle-tx-1" }), undefined, []);
+    expect(decision.outcome).not.toBe("scheduled");
+    expect(decision.outcomeLabel).toBe("Paid");
+  });
+
+  it("still reads Settled on Arc / Simulated (its own outcome word, not Paid) for a paid invoice with a recognised tx_ref", () => {
+    const onChain = invoiceDecision(invoice({ status: "paid", tx_ref: "0xabc" }), undefined, []);
+    expect(onChain.outcome).toBe("settled");
+    expect(onChain.outcomeLabel).toBeUndefined();
+
+    const simulated = invoiceDecision(invoice({ status: "paid", tx_ref: "sim_1" }), undefined, []);
+    expect(simulated.outcome).toBe("simulated");
+    expect(simulated.outcomeLabel).toBeUndefined();
+  });
 });
 
 describe("invoiceDecision: terms evidence", () => {

@@ -28,6 +28,17 @@ export interface PaymentTimingInput {
   operatingBalance: number;
   /** Annualised, as a fraction: 0.045 for 4.5%. */
   reserveApy: number;
+  /**
+   * What sits in the yield-bearing reserve (USYC). Counted in the shortfall
+   * check only when `targetOn` is after today: `planTreasury` (./treasury.ts)
+   * redeems from the reserve whenever the operating balance would otherwise
+   * dip under its buffer over what falls due, so cash swept there today is
+   * back in the operating account before a payment scheduled for a later
+   * day comes due. It does not count toward paying now — the treasury stage
+   * that would redeem it runs after the AP stage in the same cycle, so it is
+   * not liquid this minute.
+   */
+  reserveBalance: number;
   /** Open payables (and verified milestones) due on or before this invoice's target date, excluding this invoice. */
   earlierObligations: number;
 }
@@ -48,7 +59,10 @@ export interface PaymentTiming {
   recommendation: { action: "pay" } | { action: "schedule"; payOn: string };
   /** One sentence, citing the numbers. */
   reason: string;
-  /** operatingBalance - earlierObligations < amountDueAt(targetOn) */
+  /**
+   * (operatingBalance, plus reserveBalance when targetOn is after today) -
+   * earlierObligations < amountDueAt(targetOn).
+   */
   shortfall: boolean;
   /** Discounted when targetOn <= discount deadline. */
   amountDueAtTarget: number;
@@ -205,6 +219,17 @@ function buildReason(args: {
 }
 
 /**
+ * What counts toward the shortfall check for a payment targeted at `targetOn`:
+ * the operating balance alone when that target is today (the treasury stage
+ * that would redeem the reserve runs after AP, in the same cycle, so that
+ * cash is not liquid yet), plus the reserve balance when the target is a
+ * later day — the treasury has time to redeem it back before then.
+ */
+function availableBy(input: PaymentTimingInput, targetOn: string, today: string): number {
+  return targetOn > today ? input.operatingBalance + input.reserveBalance : input.operatingBalance;
+}
+
+/**
  * The reference answer: capture the discount on its last valid day, otherwise
  * hold the cash until the due date, and never later than that.
  */
@@ -226,7 +251,7 @@ export function planPaymentTiming(input: PaymentTimingInput): PaymentTiming {
       targetOn: today,
       recommendation: { action: "pay" },
       reason: "The due date could not be read; paying now rather than scheduling against an unknown date.",
-      shortfall: input.operatingBalance - input.earlierObligations < amountDueAtTarget,
+      shortfall: availableBy(input, today, today) - input.earlierObligations < amountDueAtTarget,
       amountDueAtTarget,
     };
   }
@@ -261,7 +286,7 @@ export function planPaymentTiming(input: PaymentTimingInput): PaymentTiming {
   const reason = buildReason({ input, today, dueOn, deadlineOn, discountValue, floatValueToDue, discountWins, targetOn });
 
   const amountDueAtTarget = amountToPay(input.amount, input.discount, new Date(`${targetOn}T12:00:00.000Z`)).amountPaid;
-  const shortfall = input.operatingBalance - input.earlierObligations < amountDueAtTarget;
+  const shortfall = availableBy(input, targetOn, today) - input.earlierObligations < amountDueAtTarget;
 
   return {
     today,

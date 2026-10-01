@@ -86,7 +86,8 @@ When to pay an accounts-payable invoice:
 - Otherwise, paying on the due date keeps the cash available for what falls due first.
 - Pay now when the invoice is due today or overdue.
 - Never schedule a payment past the due date.
-- When \`timing.shortfall\` is true, the operating balance cannot cover this payment after the payables that fall due on or before its date. Hold it and cite the figures, rather than scheduling or paying into a failure.
+- For a payment scheduled for a later day, cash held in the reserve counts toward what is available: the treasury stage redeems it back into operating before that date comes due. For a payment made now, only the operating balance counts — the treasury stage that would redeem the reserve runs after this one, in the same cycle, so that cash is not available for a transfer this minute.
+- When \`timing.shortfall\` is true, the cash available by its date (the operating balance, plus the reserve for a later day) cannot cover this payment after the payables that fall due on or before that date. Hold it and cite the figures, rather than scheduling or paying into a failure.
 - Cite the figures you were given: what the discount is worth, the yield from keeping the cash to the due date, the dates, and what falls due on or before its date (\`timing.earlierObligations\`: their total and how many there are).
 
 Respond with ONLY a single JSON object in the requested shape. No prose outside the JSON.`;
@@ -716,18 +717,24 @@ function timingFacts(timing: ApTiming) {
 
 /**
  * Why the written policy holds a payable it cannot cover (`timing.shortfall`):
- * the balance, what falls due on or before the day it would be paid, and what
- * this invoice needs then. Holding it for a person, rather than scheduling or
- * paying it into a transfer the balance cannot make.
+ * the cash it counted (the reserve too, for a later day), what falls due on or
+ * before the day it would be paid, and what this invoice needs then. Holding
+ * it for a person, rather than scheduling or paying it into a transfer the
+ * balance cannot make.
  */
-function shortfallReasoning(timing: ApTiming, operatingBalance: number): string {
+function shortfallReasoning(timing: ApTiming, operatingBalance: number, reserveBalance: number): string {
   const { total, count } = timing.earlierObligations;
-  const alternative = timing.targetOn > timing.today ? "scheduling" : "paying";
+  const later = timing.targetOn > timing.today;
+  const alternative = later ? "scheduling" : "paying";
+  const cash =
+    later && reserveBalance > 0
+      ? `Operating balance ${operatingBalance} USDC plus ${reserveBalance} USDC in the reserve`
+      : `Operating balance ${operatingBalance} USDC`;
   if (count === 0) {
-    return `Operating balance ${operatingBalance} USDC cannot cover the ${timing.amountDueAtTarget} USDC this invoice needs on ${utcDay(timing.targetOn)}; holding it rather than ${alternative} it into a shortfall.`;
+    return `${cash} cannot cover the ${timing.amountDueAtTarget} USDC this invoice needs on ${utcDay(timing.targetOn)}; holding it rather than ${alternative} it into a shortfall.`;
   }
   const obligations = plural(count, "1 obligation", `${count} obligations`);
-  return `Operating balance ${operatingBalance} USDC, less ${total} USDC for ${obligations} falling due on or before ${utcDay(timing.targetOn)}, cannot cover the ${timing.amountDueAtTarget} USDC this invoice needs then; holding it rather than ${alternative} it into a shortfall.`;
+  return `${cash}, less ${total} USDC for ${obligations} falling due on or before ${utcDay(timing.targetOn)}, cannot cover the ${timing.amountDueAtTarget} USDC this invoice needs then; holding it rather than ${alternative} it into a shortfall.`;
 }
 
 /**
@@ -816,6 +823,8 @@ async function decideApPayable(
     operatingBalance: number;
     history: InvoiceLike[];
     reserveApy: number;
+    /** What sits in the reserve today — counts in the shortfall check for an invoice targeted at a later day (see `PaymentTimingInput.reserveBalance`). */
+    reserveBalance: number;
     obligationsBy: (targetOn: string, today: string) => ObligationsDue;
     metrics: CycleMetricsCollector;
   }
@@ -858,7 +867,7 @@ async function decideApPayable(
   const discount = invoiceDiscount(invoice);
   const terms = { earlyPayDiscount: discount ? { percent: discount.pct, deadline: discount.deadline } : null };
   const timing = planApTiming(
-    { now, amount, dueDate: invoice.due_date, discount, operatingBalance, reserveApy: ctx.reserveApy },
+    { now, amount, dueDate: invoice.due_date, discount, operatingBalance, reserveApy: ctx.reserveApy, reserveBalance: ctx.reserveBalance },
     ctx.obligationsBy
   );
   const previouslyScheduledFor = invoice.status === "scheduled" ? (invoice.scheduled_for ?? null) : null;
@@ -889,7 +898,7 @@ async function decideApPayable(
           counterparty.performance_inputs
         ),
       },
-      treasury: { operatingBalance },
+      treasury: { operatingBalance, reserveBalance: ctx.reserveBalance },
       timing: timingFacts(timing),
       scheduledEarlier,
       duplicateMatches: duplicateContext.matches.map((match) => ({
@@ -947,7 +956,7 @@ async function decideApPayable(
       // or before its day, waits for a person rather than for a transfer
       // that would fail.
       if (timing.shortfall) {
-        return { action: "hold", reasoning: shortfallReasoning(timing, operatingBalance), confidence: 0.8 };
+        return { action: "hold", reasoning: shortfallReasoning(timing, operatingBalance, ctx.reserveBalance), confidence: 0.8 };
       }
       // A correct invoice is paid on the policy's day: now, or scheduled.
       const reasoning = `PO ${invoice.po_reference} matches, goods confirmed received, ${counterparty.name} screened clear, and ${amount} USDC is within the ${limit} USDC limit. ${timing.reason}`;
@@ -1137,6 +1146,8 @@ export interface ApStageInput {
   operatingBalance: number;
   /** The reserve's yield, annualised, as a fraction (0.045 for 4.5%): what keeping cash to a due date earns. */
   reserveApy: number;
+  /** The reserve's balance as the cycle has it when the stage starts — counts toward a later-dated payment's shortfall check (`PaymentTimingInput.reserveBalance`). */
+  reserveBalance: number;
   metrics: CycleMetricsCollector;
   lines: CycleLogLine[];
 }
@@ -1152,7 +1163,7 @@ export interface ApStageInput {
  * for why a full `runAgentCycle()` is out of proportion).
  */
 export async function runApStage(input: ApStageInput): Promise<number> {
-  const { db, provider, operating, reserveApy, metrics, lines } = input;
+  const { db, provider, operating, reserveApy, reserveBalance, metrics, lines } = input;
   let operatingBalance = input.operatingBalance;
   const now = new Date();
 
@@ -1276,6 +1287,7 @@ export async function runApStage(input: ApStageInput): Promise<number> {
       operatingBalance,
       history,
       reserveApy,
+      reserveBalance,
       metrics,
       obligationsBy: (targetOn, today) => obligationsDueBy(book, { excludeId: invoice.id, by: targetOn, today, milestones }),
     });
@@ -1994,6 +2006,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     operating: operating ? { id: operating.id } : null,
     operatingBalance,
     reserveApy: num(accounts.find((a) => a.kind === "reserve")?.apy),
+    reserveBalance: num(accounts.find((a) => a.kind === "reserve")?.balance),
     metrics,
     lines,
   });

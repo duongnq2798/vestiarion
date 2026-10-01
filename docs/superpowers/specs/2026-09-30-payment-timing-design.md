@@ -19,7 +19,7 @@ It was decided on 2026-09-30 by the implementer under the partner's standing ins
 - **A new decision: schedule.** The AP decision becomes `pay | schedule | hold | flag_fraud | request_info`. `schedule` carries `payOn`, a calendar date (UTC). A scheduled invoice has status `scheduled` and `scheduled_for` set to that day, with the agent's reasoning, and the ledger records `ap_schedule` with the decision, the timing figures and the reference decision.
 - **Timing policy (`planPaymentTiming`).** This pure function computes the facts and a reference answer. The model receives the facts; the reference answer (`recommendation` and `reason`) is withheld from it and recorded in the ledger for comparison (`referenceDecision`, `timing`), so agreeing with it is a measurement, not an instruction. It is also the fallback when the model is unavailable, as `planTreasury` is for treasury. Its inputs:
   - today, the due date, the discount (percent and deadline);
-  - the operating balance;
+  - the operating balance, and the reserve's balance;
   - the payables that fall due on or before this one's target date: their total and how many there are;
   - the reserve's yield.
 
@@ -31,7 +31,7 @@ It was decided on 2026-09-30 by the implementer under the partner's standing ins
      - Otherwise, the target date is the due date.
   3. **No discount:** the target date is the due date. Paying earlier gives the money away sooner for nothing: the cash stays available for obligations that fall due first, and in the reserve when there is yield.
   4. **Target date after today:** schedule for it. Otherwise, pay now.
-  5. **Shortfall:** when the operating balance, less every payable due on or before this invoice's target date, cannot cover this invoice, the figures say so (`shortfall`, next to `earlierObligations: { total, count }`). The reference and the fallback then hold the invoice for a person, citing the figures, rather than schedule or pay it into a failure; the system prompt tells the model the same.
+  5. **Shortfall:** when the cash available by the target date, less every payable due on or before it, cannot cover this invoice, the figures say so. For a later target, the available cash is the operating balance plus the reserve, because the treasury stage redeems from the reserve once an obligation comes within its 7-day window, and a live workspace runs a cycle every 6 hours. For a payment now, only the operating balance counts: the treasury stage runs after AP in the same cycle. The figures appear (`shortfall`, next to `earlierObligations: { total, count }`). The reference and the fallback then hold the invoice for a person, citing the figures, rather than schedule or pay it into a failure; the system prompt tells the model the same.
 - **Code bounds the model.**
   - `payOn` must be a real date after today and no later than the due date.
   - A `payOn` after the due date is moved back to the due date, and one on or before today becomes pay now.

@@ -5,7 +5,11 @@
 
 -- 1. `processing`: an invoice a person is deciding right now (D5).
 --    Rebuild the status check by shape, whatever it is named, only while it
---    lacks 'processing', so a replay changes nothing.
+--    lacks 'processing', so a replay changes nothing. The shape is the
+--    allowed-values list (Postgres stores `status in (...)` as
+--    `status = ANY (...)`): a later check that only mentions status, such as
+--    0038's invoices_scheduled_has_date, is never taken for it, and a replay
+--    from a checkout without 0038 cannot drop that check.
 do $$
 declare
   c record;
@@ -13,7 +17,7 @@ begin
   for c in
     select conname from pg_constraint
      where conrelid = 'public.invoices'::regclass and contype = 'c'
-       and pg_get_constraintdef(oid) like '%status%'
+       and pg_get_constraintdef(oid) like '%status = ANY%'
        and pg_get_constraintdef(oid) not like '%processing%'
   loop
     execute format('alter table public.invoices drop constraint %I', c.conname);
