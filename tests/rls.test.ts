@@ -38,6 +38,7 @@ const CRUD_UPDATE: Record<string, { column: string; expr: string }> = {
   payment_intents: { column: "last_error", expr: "coalesce(last_error, '') || '-changed'" },
   cycle_runs: { column: "sim_day", expr: "coalesce(sim_day, 0) + 1" },
   sim_clock: { column: "current_day", expr: "current_day + 1" },
+  gateway_signers: { column: "delegate_tx_id", expr: "coalesce(delegate_tx_id, '') || '-changed'" },
 };
 
 beforeAll(async () => {

@@ -30,7 +30,7 @@ create table if not exists public.gateway_signers (
 
 alter table public.gateway_signers enable row level security;
 revoke all privileges on table public.gateway_signers from anon, authenticated, vestiarion_tenant;
-grant select, insert, update on table public.gateway_signers to vestiarion_tenant;
+grant select, insert, update, delete on table public.gateway_signers to vestiarion_tenant;
 grant all privileges on table public.gateway_signers to service_role;
 
 -- The tenant boundary, as 0018 writes it for every tenant table.
