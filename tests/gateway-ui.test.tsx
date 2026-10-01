@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
@@ -40,13 +39,7 @@ describe("the Gateway panel", () => {
   });
 });
 
-describe("the decision card for a Gateway payout", () => {
-  it("names the route a payout took, and does not link a mint on another chain to Arc's explorer", () => {
-    const map = readFileSync("src/components/vx/map.ts", "utf8");
-    expect(map).toContain("`${payeeChain(counterparty?.chain).label}, through ${payoutRouteLabel(entry?.detail)}`");
-    expect(map).toContain('txHash: invoice.tx_ref?.startsWith("0x") && payoutRouteLabel(entry?.detail) !== "Gateway" ? invoice.tx_ref : null');
-  });
-});
+// The decision card's route and links are tested on invoiceDecision itself, in tests/invoice-decision.test.ts (Gateway review I4).
 
 describe("/open's list of our payments", () => {
   it("links a payout minted on another chain to that chain's explorer, and one on Arc to arcscan", () => {

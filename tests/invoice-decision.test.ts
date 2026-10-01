@@ -286,6 +286,28 @@ describe("invoiceDecision: a payout code held (review I1, M3, M14)", () => {
     expect(decision.evidence).toContainEqual({ label: "Payee's chain", value: "Base Sepolia, through CCTP", state: "neutral" });
   });
 
+  // Entries come newest first: a reconcile that recorded the mint carries no payout of its own (Gateway review I4).
+  const decided = (route: string) =>
+    ({ seq: 20, id: "e20", ts: "2026-10-01T09:00:00.000Z", actor: "agent", domain: "ap", action: "ap_pay", summary: "",
+      detail: { invoiceId: "inv-1", payout: { chain: "BASE-SEPOLIA", route, domain: 6, feeUsdc: 0.05 } } }) as unknown as LedgerEntry;
+  const reconciled = { seq: 21, id: "e21", ts: "2026-10-01T09:05:00.000Z", actor: "agent", domain: "ap", action: "ap_reconcile", summary: "",
+    detail: { invoiceId: "inv-1", reconciled: true, execution: { destinationChain: "BASE-SEPOLIA", mintTxHash: "0xmint" } } } as unknown as LedgerEntry;
+
+  it("names the route a payout took from whichever entry recorded it, and never links its mint to Arc's explorer (Gateway review I4)", () => {
+    const decision = invoiceDecision(invoice({ status: "paid", tx_ref: "0xmint" }), { payment_limit: 50, chain: "BASE-SEPOLIA" } as never, [reconciled, decided("gateway")]);
+    expect(decision.evidence).toContainEqual({ label: "Payee's chain", value: "Base Sepolia, through Gateway", state: "neutral" });
+    expect(decision.txHash).toBeNull();
+    expect(decision.mint).toEqual({ chainLabel: "Base Sepolia", txHash: "0xmint", href: "https://sepolia.basescan.org/tx/0xmint" });
+  });
+
+  it("links a CCTP payout's burn on Arc, but never a transaction that is its mint (Gateway review I4)", () => {
+    const burn = invoiceDecision(invoice({ status: "paid", tx_ref: "0xburn" }), { payment_limit: 50, chain: "BASE-SEPOLIA" } as never, [reconciled, decided("cctp")]);
+    expect(burn.evidence).toContainEqual({ label: "Payee's chain", value: "Base Sepolia, through CCTP", state: "neutral" });
+    expect(burn.txHash).toBe("0xburn");
+    const mint = invoiceDecision(invoice({ status: "paid", tx_ref: "0xmint" }), { payment_limit: 50, chain: "BASE-SEPOLIA" } as never, [reconciled, decided("cctp")]);
+    expect(mint.txHash).toBeNull();
+  });
+
   it("links no simulated mint", () => {
     const simulated = { seq: 14, id: "e14", ts: "2026-10-01T09:00:00.000Z", actor: "agent", domain: "ap", action: "ap_pay", summary: "",
       detail: { invoiceId: "inv-1", execution: { destinationChain: "BASE-SEPOLIA", mintTxHash: "sim_mint_1" } } } as unknown as LedgerEntry;
