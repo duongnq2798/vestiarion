@@ -236,6 +236,22 @@ describe("reconcileApInvoice — a matched payable with a payment in flight", ()
     txRef: "circle-tx-1",
   };
 
+  it("reconciles a EURC payment as EURC, and says so (EURC invoices design E5)", async () => {
+    payInvoiceMock.mockResolvedValue({
+      status: "paid", txRef: "0xhash", note: "", operatingBalance: null,
+      execution: { providerMode: "live", feeUsd: 0.003, feeSource: "chain_reported", settledInMs: 4000, executedAt: "2026-09-29T00:00:00Z", reconciled: true },
+    });
+    const { run } = cycleFake();
+
+    const outcome = await run(() =>
+      reconcileApInvoice({ ...invoice, currency: "EURC" }, { providerTxId: "circle-tx-1", status: "pending" }, { db: db(), provider, operating: { id: ACCOUNT_ID } })
+    );
+
+    expect(payInvoiceMock.mock.calls[0][0]).toMatchObject({ amount: 150, currency: "EURC" });
+    expect(outcome.line.message).toContain("150 EURC");
+    expect(outcome.line.message).not.toContain("USDC");
+  });
+
   it("goes to payInvoice without the model or the guardrails, and records paid with the txRef", async () => {
     payInvoiceMock.mockResolvedValue({
       status: "paid", txRef: "0xhash", note: "", operatingBalance: 350,
@@ -251,7 +267,7 @@ describe("reconcileApInvoice — a matched payable with a payment in flight", ()
     expect(guardrailsMock).not.toHaveBeenCalled();
     expect(payInvoiceMock).toHaveBeenCalledTimes(1);
     expect(payInvoiceMock).toHaveBeenCalledWith(
-      { invoiceId: INVOICE_ID, counterpartyId: COUNTERPARTY_ID, address: "0xdead", amount: 150, discount: null },
+      { invoiceId: INVOICE_ID, counterpartyId: COUNTERPARTY_ID, address: "0xdead", amount: 150, discount: null, currency: "USDC" },
       { provider, operating: { id: ACCOUNT_ID } }
     );
     // A transfer already exists, so nothing new can move: the pause is not consulted.
@@ -475,7 +491,7 @@ describe("reconcileApInvoice — a matched payable with a payment in flight", ()
       reconcileApInvoice({ ...invoice, txRef: null, discount }, { providerTxId: null, status: "submitting" }, { db: db(), provider, operating: { id: ACCOUNT_ID } })
     );
 
-    expect(payInvoiceMock.mock.calls[0][0]).toEqual({ invoiceId: INVOICE_ID, counterpartyId: COUNTERPARTY_ID, address: "0xdead", amount: 150, discount });
+    expect(payInvoiceMock.mock.calls[0][0]).toEqual({ invoiceId: INVOICE_ID, counterpartyId: COUNTERPARTY_ID, address: "0xdead", amount: 150, discount, currency: "USDC" });
     const body = invoicePatches(fake.requests)[0].body as Record<string, unknown>;
     expect(body.status).toBe("paid");
     expect(body.paid_amount).toBe(147);

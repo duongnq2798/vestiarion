@@ -262,6 +262,18 @@ describe("payment idempotency", () => {
     expect(paymentIdempotencyKey("milestone", request.sourceId, 2)).not.toBe(keys[1]);
   });
 
+  it("transfers the request's token, USDC unless it says EURC (EURC invoices design E5)", async () => {
+    const usdc = new FakeProvider();
+    usdc.transferResults.push(transferResult("confirmed"));
+    await executePayment(request, { provider: usdc, store: new MemoryStore() });
+    expect(usdc.transfers[0].token).toBe("USDC");
+
+    const eurc = new FakeProvider();
+    eurc.transferResults.push(transferResult("confirmed"));
+    await executePayment({ ...request, token: "EURC" }, { provider: eurc, store: new MemoryStore() });
+    expect(eurc.transfers[0].token).toBe("EURC");
+  });
+
   it("retries a failed request with the same provider idempotency key", async () => {
     const store = new MemoryStore();
     const provider = new FakeProvider();
@@ -370,6 +382,7 @@ describe("executePayment after a terminal failure (retryTerminalFailure)", () =>
       amount: request.amount,
       memo: request.memo,
       idempotencyKey: KEY_2,
+      token: "USDC",
     });
     expect(execution).toMatchObject({
       status: "confirmed",
@@ -588,12 +601,22 @@ describe("SupabasePaymentIntentStore by source, and its attempts", () => {
     expect(insert.params.get("on_conflict")).toBe("source_type,source_id");
     expect(insert.headers.get("prefer")).toContain("resolution=ignore-duplicates");
     expect(Array.isArray(insert.body) ? insert.body[0] : insert.body).toMatchObject({
-      source_type: "invoice", source_id: request.sourceId, idempotency_key: KEY, org_id: ORG,
+      source_type: "invoice", source_id: request.sourceId, idempotency_key: KEY, org_id: ORG, token: "USDC",
     });
     expect(read.method).toBe("GET");
     expect(read.params.get("source_type")).toBe("eq.invoice");
     expect(read.params.get("source_id")).toBe(`eq.${request.sourceId}`);
     expect(read.params.get("idempotency_key")).toBeNull();
+  });
+
+  it("records a EURC payment's token on the intent it creates", async () => {
+    const { fake, result } = inOrganization(
+      (sent) => ({ body: sent.path === "/rest/v1/payment_intents" && sent.method === "GET" ? intentRow({ status: "created" }) : [] }),
+      () => new SupabasePaymentIntentStore().ensure({ ...input, token: "EURC" })
+    );
+    await result;
+    const [insert] = fake.requests;
+    expect(Array.isArray(insert.body) ? insert.body[0] : insert.body).toMatchObject({ token: "EURC" });
   });
 
   it("returns a source's later attempt with that attempt's key, from the row rather than from the source", async () => {

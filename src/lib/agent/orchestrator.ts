@@ -421,6 +421,8 @@ export async function reconcileApInvoice(
     reasoning: string | null;
     txRef: string | null;
     discount?: InvoiceDiscount | null;
+    /** USDC unless the invoice is in EURC; the in-flight transfer moves this token (EURC invoices design E5). */
+    currency?: Stablecoin;
   },
   intent: ExistingPaymentIntent,
   deps: { db: OrgDb; provider: ChainProvider; operating: { id: string } | null }
@@ -431,7 +433,9 @@ export async function reconcileApInvoice(
     address: invoice.address,
     amount: invoice.amount,
     discount: invoice.discount ?? null,
+    currency: invoice.currency ?? "USDC",
   };
+  const currency = input.currency;
   const transferExists = intent.providerTxId !== null || intent.status === "confirmed";
   const name = invoice.counterpartyName;
 
@@ -439,7 +443,7 @@ export async function reconcileApInvoice(
     return {
       status: "matched",
       operatingBalance: null,
-      line: { domain: "ap", message: `${name}: in-flight payment left pending, no operating account to reconcile it against (${invoice.amount} USDC)` },
+      line: { domain: "ap", message: `${name}: in-flight payment left pending, no operating account to reconcile it against (${invoice.amount} ${currency})` },
     };
   }
 
@@ -462,7 +466,7 @@ export async function reconcileApInvoice(
         actor: "agent",
         domain: "ap",
         action: "ap_reconcile",
-        summary: `RECONCILE invoice from ${name} for ${invoice.amount} USDC: not completed, left pending`,
+        summary: `RECONCILE invoice from ${name} for ${invoice.amount} ${currency}: not completed, left pending`,
         detail: {
           invoiceId: invoice.id,
           counterpartyId: invoice.counterpartyId,
@@ -480,7 +484,7 @@ export async function reconcileApInvoice(
       return {
         status: "matched",
         operatingBalance: null,
-        line: { domain: "ap", message: `${name}: could not reconcile the in-flight payment, left pending for the next cycle (${invoice.amount} USDC)` },
+        line: { domain: "ap", message: `${name}: could not reconcile the in-flight payment, left pending for the next cycle (${invoice.amount} ${currency})` },
       };
     }
     outcome = {
@@ -533,7 +537,7 @@ export async function reconcileApInvoice(
     actor: "agent",
     domain: "ap",
     action: "ap_reconcile",
-    summary: `RECONCILE invoice from ${invoice.counterpartyName} for ${invoice.amount} USDC: ${status}`,
+    summary: `RECONCILE invoice from ${invoice.counterpartyName} for ${invoice.amount} ${currency}: ${status}`,
     detail: {
       invoiceId: invoice.id,
       counterpartyId: invoice.counterpartyId,
@@ -556,16 +560,16 @@ export async function reconcileApInvoice(
   });
 
   const message = outcome.heldBecausePaused
-    ? `${invoice.counterpartyName}: not paid, the agent was paused (${invoice.amount} USDC)`
+    ? `${invoice.counterpartyName}: not paid, the agent was paused (${invoice.amount} ${currency})`
     : notResubmitted === "counterparty.high_risk"
-      ? `${name}: not resubmitted, the counterparty is now screened high risk (${invoice.amount} USDC)`
+      ? `${name}: not resubmitted, the counterparty is now screened high risk (${invoice.amount} ${currency})`
       : notResubmitted === "counterparty.address_unconfirmed"
-      ? `${name}: not resubmitted, the counterparty's address changed and no one has confirmed it (${invoice.amount} USDC)`
+      ? `${name}: not resubmitted, the counterparty's address changed and no one has confirmed it (${invoice.amount} ${currency})`
       : status === "paid"
-      ? `${invoice.counterpartyName}: reconciled an in-flight payment, now paid (${invoice.amount} USDC)`
+      ? `${invoice.counterpartyName}: reconciled an in-flight payment, now paid (${invoice.amount} ${currency})`
       : status === "matched"
-        ? `${invoice.counterpartyName}: reconciled an in-flight payment, still pending (${invoice.amount} USDC)`
-        : `${invoice.counterpartyName}: reconciled an in-flight payment, now held (${invoice.amount} USDC)`;
+        ? `${invoice.counterpartyName}: reconciled an in-flight payment, still pending (${invoice.amount} ${currency})`
+        : `${invoice.counterpartyName}: reconciled an in-flight payment, now held (${invoice.amount} ${currency})`;
   return { status, operatingBalance: outcome.operatingBalance, line: { domain: "ap", message } };
 }
 
@@ -584,6 +588,8 @@ interface ApPayableRow {
   early_pay_discount_pct?: string | number | null;
   discount_due_date?: string | null;
   scheduled_for?: string | null;
+  /** USDC or EURC (0040); absent on rows read before it. */
+  currency?: string | null;
   counterparties: {
     id: string;
     name: string;
@@ -623,6 +629,11 @@ export function dueForDecision(
   if (scheduledOn === null || dueOn === null) return true;
   const today = utcDate(now);
   return scheduledOn <= today || dueOn <= today;
+}
+
+/** An invoice's currency as read: EURC, or USDC for anything else, a row from before 0040 included. */
+export function invoiceCurrency(value: string | null | undefined): Stablecoin {
+  return value === "EURC" ? "EURC" : "USDC";
 }
 
 /** One payable in the book the AP stage keeps while it decides. */
@@ -1275,6 +1286,7 @@ export async function runApStage(input: ApStageInput): Promise<number> {
           reasoning: invoice.agent_reasoning,
           txRef: invoice.tx_ref,
           discount: invoiceDiscount(invoice),
+          currency: invoiceCurrency(invoice.currency),
         },
         intent,
         { db, provider, operating }

@@ -416,6 +416,41 @@ describe("approveAndPay", () => {
     expect(patchBodies(fake.requests, "/rest/v1/invoices")).toHaveLength(0);
   });
 
+  describe("a EURC payable (EURC invoices design E5)", () => {
+    const eurcInvoice = (r: RecordedRequest) => (r.params.get("id") ? { body: invoiceRow({ currency: "EURC" }) } : undefined);
+
+    it("is paid in EURC, and the entry says so", async () => {
+      payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", operatingBalance: null, amountPaid: 150, discountTaken: 0 });
+      const { fake, run } = approvalsFake({ invoice: eurcInvoice });
+
+      await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+
+      expect(payInvoiceMock.mock.calls[0][0]).toMatchObject({ amount: 150, currency: "EURC" });
+      const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+      expect(append).toMatchObject({ p_summary: "Approved and paid 150 EURC to Acme Supplies", p_detail: { amount: 150, currency: "EURC" } });
+    });
+
+    it("in live mode, checks the wallet's EURC, not its USDC, and refuses a short one before any claim", async () => {
+      const getTokenBalance = vi.fn(async () => ({ accountId: ACCOUNT_ID, chain: "ARC-TESTNET", token: "EURC", balance: 100 }));
+      getChainProviderMock.mockReturnValue({ mode: "live", earnMode: "simulate", estimatedFeeUsd: 0.003, getTokenBalance });
+      const { fake, run } = approvalsFake({ invoice: eurcInvoice, account: () => ({ body: accountRow("999") }) });
+
+      const attempt = run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+      await expect(attempt).rejects.toMatchObject({ code: "insufficient_funds" });
+      await expect(attempt).rejects.toThrow("The operating wallet holds 100 EURC, less than this invoice.");
+      expect(getTokenBalance).toHaveBeenCalledWith(ACCOUNT_ID, "EURC");
+      expect(syncOperatingBalanceMock).not.toHaveBeenCalled();
+      expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
+    });
+
+    it("in a sandbox, is not held back by the USDC balance, and has no EURC balance to check", async () => {
+      payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "sim_1", execution: null, note: "", operatingBalance: null, amountPaid: 150, discountTaken: 0 });
+      const { run } = approvalsFake({ invoice: eurcInvoice, account: () => ({ body: accountRow("40") }) });
+
+      await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).resolves.toMatchObject({ status: "paid" });
+    });
+  });
+
   it("claims, pays once, updates the invoice with the reasoning note, and appends approval_paid", async () => {
     payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", operatingBalance: 350 });
     const { fake, run } = approvalsFake();
@@ -429,7 +464,7 @@ describe("approveAndPay", () => {
     expect(payInvoiceMock).toHaveBeenCalledTimes(1);
     // A person's approval is the one caller that may send a terminally failed payment again.
     expect(payInvoiceMock).toHaveBeenCalledWith(
-      { invoiceId: INVOICE_ID, counterpartyId: COUNTERPARTY_ID, address: "0xdead", amount: 150, discount: null },
+      { invoiceId: INVOICE_ID, counterpartyId: COUNTERPARTY_ID, address: "0xdead", amount: 150, discount: null, currency: "USDC" },
       { provider: { mode: "simulate", earnMode: "simulate", estimatedFeeUsd: 0.01 }, operating: { id: ACCOUNT_ID }, retryTerminalFailure: true }
     );
 
@@ -608,6 +643,7 @@ describe("approveAndPay after Circle ended the last attempt in a terminal failur
       invoiceId: INVOICE_ID,
       counterpartyId: COUNTERPARTY_ID,
       amount: 150,
+      currency: "USDC",
       overrode: "held",
       txRef: "0xhash2",
       status: "paid",
@@ -837,7 +873,7 @@ describe("approveAndPay with an early-payment discount", () => {
     expect(load.params.get("select")).toContain("discount_due_date");
     expect(payInvoiceMock.mock.calls[0][0]).toEqual({
       invoiceId: INVOICE_ID, counterpartyId: COUNTERPARTY_ID, address: "0xdead", amount: 150,
-      discount: { pct: 2, deadline: "2026-10-11T12:00:00+00:00" },
+      discount: { pct: 2, deadline: "2026-10-11T12:00:00+00:00" }, currency: "USDC",
     });
 
     const [update] = patchBodies(fake.requests, "/rest/v1/invoices");
@@ -1101,9 +1137,11 @@ describe("listWaitingPayables", () => {
         address: "0xdead",
         lastAttempt: null,
         discount: null,
+        currency: "USDC",
       },
     ]);
     const listing = fake.requests.find((r) => r.path === "/rest/v1/invoices" && r.method === "GET" && !r.params.get("id"));
+    expect(listing?.params.get("select")).toContain("currency");
     expect(listing?.params.get("direction")).toBe("eq.payable");
     expect(listing?.params.get("status")).toBe("in.(held,flagged,awaiting_info,processing)");
     expect(listing?.params.get("order")).toBe("due_date.asc");

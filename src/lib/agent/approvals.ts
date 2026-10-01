@@ -1,6 +1,6 @@
 import { currentOrgId } from "../context";
 import { db, unwrap } from "../dal";
-import { getChainProvider } from "../circle";
+import { getChainProvider, type Stablecoin } from "../circle";
 import { confirmCounterpartyAddress, sameAddress } from "../counterparty-address";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { isTerminalFailure } from "../payments";
@@ -260,6 +260,8 @@ export interface WaitingPayable {
   lastAttempt: LastPaymentAttempt;
   /** The invoice's early-payment discount, read as `payInvoice` applies it, so the approval dialog can say what will leave; null without one. */
   discount: InvoiceDiscount | null;
+  /** What the invoice is in, and what Approve and pay sends: USDC or EURC (EURC invoices design E4). */
+  currency: Stablecoin;
 }
 
 /** Every payable currently waiting for a person's decision — held, flagged, awaiting more information, or claimed by someone else right now. */
@@ -268,7 +270,7 @@ export async function listWaitingPayables(): Promise<WaitingPayable[]> {
     await db()
       .from("invoices")
       .select(
-        "id, amount, due_date, status, agent_reasoning, decided_at, created_by, reviewed_at, counterparty_id, early_pay_discount_pct, discount_due_date, counterparties(name, risk_level, address)"
+        "id, amount, currency, due_date, status, agent_reasoning, decided_at, created_by, reviewed_at, counterparty_id, early_pay_discount_pct, discount_due_date, counterparties(name, risk_level, address)"
       )
       .eq("direction", "payable")
       .in("status", WAITING_STATUSES)
@@ -276,6 +278,7 @@ export async function listWaitingPayables(): Promise<WaitingPayable[]> {
   ) as unknown as Array<{
     id: string;
     amount: string;
+    currency?: string | null;
     due_date: string;
     status: WaitingPayable["status"];
     agent_reasoning: string | null;
@@ -320,8 +323,14 @@ export async function listWaitingPayables(): Promise<WaitingPayable[]> {
       address: row.counterparties?.address ?? null,
       lastAttempt: lastAttemptOf(intent),
       discount: invoiceDiscount(row),
+      currency: currencyOf(row.currency),
     };
   });
+}
+
+/** An invoice's currency as read: EURC, or USDC for anything else, a row from before 0040 included. */
+function currencyOf(value: string | null | undefined): Stablecoin {
+  return value === "EURC" ? "EURC" : "USDC";
 }
 
 interface LoadedInvoice {
@@ -336,13 +345,14 @@ interface LoadedInvoice {
   address: string | null;
   /** The invoice's early-payment discount, applied by `payInvoice` exactly as for the agent. */
   discount: InvoiceDiscount | null;
+  currency: Stablecoin;
 }
 
 async function loadWaitingPayable(invoiceId: string): Promise<LoadedInvoice> {
   const result = await db()
     .from("invoices")
     .select(
-      "id, amount, status, direction, agent_reasoning, created_by, counterparty_id, early_pay_discount_pct, discount_due_date, counterparties(name, risk_level, address)"
+      "id, amount, currency, status, direction, agent_reasoning, created_by, counterparty_id, early_pay_discount_pct, discount_due_date, counterparties(name, risk_level, address)"
     )
     .eq("id", invoiceId)
     .maybeSingle();
@@ -351,6 +361,7 @@ async function loadWaitingPayable(invoiceId: string): Promise<LoadedInvoice> {
   const row = result.data as {
     id: string;
     amount: string;
+    currency?: string | null;
     status: string;
     direction: string;
     agent_reasoning: string | null;
@@ -376,6 +387,7 @@ async function loadWaitingPayable(invoiceId: string): Promise<LoadedInvoice> {
     riskLevel: row.counterparties?.risk_level ?? null,
     address: row.counterparties?.address ?? null,
     discount: invoiceDiscount(row),
+    currency: currencyOf(row.currency),
   };
 }
 
@@ -396,14 +408,15 @@ function approvalPaidSummary(
   status: "paid" | "matched" | "held",
   amount: number,
   name: string,
-  payment: { amountPaid: number; discountTaken: number }
+  payment: { amountPaid: number; discountTaken: number },
+  currency: Stablecoin = "USDC"
 ): string {
   const discounted = payment.discountTaken > 0;
   const sent = discounted ? payment.amountPaid : amount;
-  const less = discounted ? ` (${amount} USDC less a ${payment.discountTaken} USDC early-payment discount)` : "";
-  if (status === "paid") return `Approved and paid ${sent} USDC to ${name}${less}`;
-  if (status === "matched") return `Approved; payment of ${sent} USDC to ${name} submitted${less}`;
-  return `Approved; payment of ${sent} USDC to ${name} failed${less}`;
+  const less = discounted ? ` (${amount} ${currency} less a ${payment.discountTaken} ${currency} early-payment discount)` : "";
+  if (status === "paid") return `Approved and paid ${sent} ${currency} to ${name}${less}`;
+  if (status === "matched") return `Approved; payment of ${sent} ${currency} to ${name} submitted${less}`;
+  return `Approved; payment of ${sent} ${currency} to ${name} failed${less}`;
 }
 
 /**
@@ -436,10 +449,18 @@ export async function approveAndPay(
   // is checked like any new payment.
   const provider = getChainProvider();
   const alreadySent = transferExists(await paymentIntentOf(invoice.id));
-  if (!alreadySent) {
+  if (!alreadySent && invoice.currency === "USDC") {
     const balance = provider.mode === "live" ? await syncOperatingBalance(operating.id) : operating.balance;
     if (balance < invoice.amount) {
       throw new ApprovalError("insufficient_funds", `The operating account holds ${balance} USDC, less than this invoice.`);
+    }
+  }
+  // A EURC payable is paid from the wallet's EURC, read from the chain. A
+  // sandbox simulates its payments and has no EURC balance to check (E7).
+  if (!alreadySent && invoice.currency === "EURC" && provider.mode === "live" && provider.getTokenBalance) {
+    const { balance } = await provider.getTokenBalance(operating.id, "EURC");
+    if (balance < invoice.amount) {
+      throw new ApprovalError("insufficient_funds", `The operating wallet holds ${balance} EURC, less than this invoice.`);
     }
   }
 
@@ -474,6 +495,7 @@ export async function approveAndPay(
         // The same discount rule as the agent's: off the transfer through the
         // deadline's UTC day. The funds check above stays on the full amount.
         discount: invoice.discount,
+        currency: invoice.currency,
       },
       // A person's approval is the one caller that may send a payment Circle
       // ended in a terminal failure again, and only when the failure was
@@ -533,12 +555,13 @@ export async function approveAndPay(
     actor: "human",
     domain: "ap",
     action: "approval_paid",
-    summary: approvalPaidSummary(result.status, invoice.amount, invoice.counterpartyName, result),
+    summary: approvalPaidSummary(result.status, invoice.amount, invoice.counterpartyName, result, invoice.currency),
     detail: {
       by: input.actorId,
       invoiceId: invoice.id,
       counterpartyId: invoice.counterpartyId,
       amount: invoice.amount,
+      currency: invoice.currency,
       // What the transfer carried and what the discount took off it; null
       // when nothing went out.
       amountPaid: sent ? result.amountPaid : null,

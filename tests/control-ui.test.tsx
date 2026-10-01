@@ -55,6 +55,7 @@ function payable(overrides: Partial<WaitingPayable> = {}): WaitingPayable {
     address: "0x1948aB0000000000000000000000000000c345a0",
     lastAttempt: null,
     discount: null,
+    currency: "USDC",
     ...overrides,
   };
 }
