@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/app/actions/treasury", () => ({ fundGatewayAction: vi.fn() }));
 
-import { GatewayPanel } from "@/components/GatewayPanel";
+import { GatewayPanel, nextRequestId } from "@/components/GatewayPanel";
 import { OurPayments } from "@/components/open/OurPayments";
 
 /**
@@ -12,11 +12,12 @@ import { OurPayments } from "@/components/open/OurPayments";
  * for a payout minted on another chain.
  */
 
+const REQUEST = "0b6c1c9e-4a4f-4a7e-9b1e-00000000f00d";
 const text = (markup: string) => markup.replace(/<[^>]+>/g, " ").replace(/&#x27;/g, "'").replace(/\s+/g, " ");
 
 describe("the Gateway panel", () => {
   it("says a workspace has no Gateway balance yet, and offers an owner or admin the funding form", () => {
-    const markup = renderToStaticMarkup(<GatewayPanel orgSlug="testnet-2" signerAddress={null} balanceUsdc={null} canFund />);
+    const markup = renderToStaticMarkup(<GatewayPanel orgSlug="testnet-2" signerAddress={null} balanceUsdc={null} canFund requestId={REQUEST} />);
     expect(text(markup)).toContain("Gateway balance");
     expect(text(markup)).toContain("Not funded yet.");
     expect(text(markup)).toContain("Amount to move from the operating wallet (USDC)");
@@ -27,14 +28,26 @@ describe("the Gateway panel", () => {
   });
 
   it("shows the balance and the signer, and no form to someone who may not fund it", () => {
-    const markup = renderToStaticMarkup(<GatewayPanel orgSlug="testnet-2" signerAddress="0x5aF3107A4000000000000000000000000000b0b0" balanceUsdc={2.95} canFund={false} />);
+    const markup = renderToStaticMarkup(<GatewayPanel orgSlug="testnet-2" signerAddress="0x5aF3107A4000000000000000000000000000b0b0" balanceUsdc={2.95} canFund={false} requestId={REQUEST} />);
     expect(text(markup)).toContain("2.95 USDC");
     expect(markup).toContain("0x5aF3107A4000000000000000000000000000b0b0");
     expect(markup).not.toMatch(/name="amount"/);
   });
 
+  it("carries the request id the page made, so the server's markup and the browser's agree (review M8)", () => {
+    const markup = renderToStaticMarkup(<GatewayPanel orgSlug="testnet-2" signerAddress={null} balanceUsdc={null} canFund requestId="0b6c1c9e-4a4f-4a7e-9b1e-00000000f00d" />);
+    expect(markup).toMatch(/<input[^>]*name="requestId"[^>]*value="0b6c1c9e-4a4f-4a7e-9b1e-00000000f00d"|<input[^>]*value="0b6c1c9e-4a4f-4a7e-9b1e-00000000f00d"[^>]*name="requestId"/);
+  });
+
+  it("makes a new request id after a deposit, and after a step Circle failed; keeps it after any other answer (review I5)", () => {
+    const make = () => "new-id";
+    expect(nextRequestId({ ok: true, message: "Deposited 1 USDC into Gateway." }, "old-id", make)).toBe("new-id");
+    expect(nextRequestId({ ok: false, message: "Circle did not complete the deposit into Gateway (FAILED).", renew: true }, "old-id", make)).toBe("new-id");
+    expect(nextRequestId({ ok: false, message: "Circle did not complete the deposit into Gateway (no answer yet)." }, "old-id", make)).toBe("old-id");
+  });
+
   it("says when Gateway did not answer", () => {
-    const markup = renderToStaticMarkup(<GatewayPanel orgSlug="testnet-2" signerAddress="0x5aF3107A4000000000000000000000000000b0b0" balanceUsdc={null} canFund={false} />);
+    const markup = renderToStaticMarkup(<GatewayPanel orgSlug="testnet-2" signerAddress="0x5aF3107A4000000000000000000000000000b0b0" balanceUsdc={null} canFund={false} requestId={REQUEST} />);
     expect(text(markup)).toContain("Gateway did not answer just now.");
   });
 });

@@ -39,15 +39,32 @@ interface SignerRow {
   delegate_tx_hash: string | null;
 }
 
+/**
+ * A step Circle ended without completing it (`FAILED`, `CANCELLED` or `DENIED`): nothing moved, and the
+ * same key would only be answered with the same failed transaction, so the request is made again as a
+ * new one (review I5). `transactionId` is Circle's id for the failed transaction.
+ */
+export class GatewayStepFailed extends Error {
+  readonly name = "GatewayStepFailed";
+  constructor(
+    message: string,
+    readonly transactionId: string
+  ) {
+    super(message);
+  }
+}
+
 const toUnits = (amount: number) => BigInt(Math.round(amount * 1_000_000)).toString();
 
-async function operatingWallet(): Promise<{ walletId: string; address: string }> {
-  const row = unwrap(await db().from("accounts").select("id, circle_wallet_id, address").eq("kind", "operating").single()) as {
+async function operatingWallet(): Promise<{ walletId: string; address: string; balance: number | null }> {
+  const row = unwrap(await db().from("accounts").select("id, circle_wallet_id, address, balance").eq("kind", "operating").single()) as {
     circle_wallet_id: string | null;
     address: string | null;
+    balance?: string | number | null;
   };
   if (!row.circle_wallet_id || !row.address) throw new Error("This workspace's operating wallet has not been created yet.");
-  return { walletId: row.circle_wallet_id, address: row.address };
+  const balance = row.balance == null ? null : Number(row.balance);
+  return { walletId: row.circle_wallet_id, address: row.address, balance: Number.isFinite(balance) ? balance : null };
 }
 
 async function readSigner(): Promise<SignerRow | null> {
@@ -72,6 +89,9 @@ async function execute(
   const id = created.data?.id;
   if (!id) throw new CircleCallFailed("createContractExecutionTransaction");
   const settled = await awaitSettlement(client, id);
+  if (settled.status === "failed") {
+    throw new GatewayStepFailed(`Circle did not complete the ${what} (${settled.transaction?.state ?? "FAILED"}). Nothing was moved into Gateway; try again.`, id);
+  }
   if (settled.status !== "confirmed") {
     throw new Error(`Circle did not complete the ${what} (${settled.transaction?.state ?? "no answer yet"}). Try again: the same request sends nothing twice.`);
   }
@@ -89,6 +109,10 @@ export async function fundGateway(
 
   const orgId = currentOrgId();
   const operating = await operatingWallet();
+  // Weighed before any call: a deposit the wallet cannot cover would only fail on chain (review I5).
+  if (operating.balance !== null && input.amount > operating.balance) {
+    throw new Error(`The operating wallet holds ${operating.balance} USDC, less than the ${input.amount} USDC to move into Gateway.`);
+  }
   const client = (options.client ?? initiateDeveloperControlledWalletsClient)({ apiKey: chain.circleApiKey, entitySecret: chain.circleEntitySecret });
 
   // The signer: one Circle EOA per workspace, under a key of its own.
@@ -124,15 +148,26 @@ export async function fundGateway(
     });
   }
 
-  // The delegate: once per workspace, from the operating wallet.
+  // The delegate: once per workspace, from the operating wallet. After one Circle failed, the next is
+  // keyed by the failed transaction, which its key would otherwise return forever (review I5).
   if (!signer.delegate_tx_hash) {
-    const delegated = await execute(
-      client,
-      operating.walletId,
-      { contractAddress: GATEWAY_WALLET, abiFunctionSignature: "addDelegate(address,address)", abiParameters: [ARC_TESTNET_USDC, signer.address] },
-      gatewayStepKey(`${orgId}/delegate`),
-      "delegate on Gateway"
-    );
+    const failedBefore = signer.delegate_tx_id;
+    let delegated: { id: string; txHash: string | null };
+    try {
+      delegated = await execute(
+        client,
+        operating.walletId,
+        { contractAddress: GATEWAY_WALLET, abiFunctionSignature: "addDelegate(address,address)", abiParameters: [ARC_TESTNET_USDC, signer.address] },
+        gatewayStepKey(failedBefore ? `${orgId}/delegate/after/${failedBefore}` : `${orgId}/delegate`),
+        "delegate on Gateway"
+      );
+    } catch (error) {
+      if (error instanceof GatewayStepFailed) {
+        const noted = await db().from("gateway_signers").update({ delegate_tx_id: error.transactionId, delegate_tx_hash: null }).eq("address", signer.address);
+        if (noted.error) throw new Error(noted.error.message);
+      }
+      throw error;
+    }
     const stored = await db().from("gateway_signers").update({ delegate_tx_id: delegated.id, delegate_tx_hash: delegated.txHash }).eq("address", signer.address);
     if (stored.error) throw new Error(stored.error.message);
     await appendLedgerEntry({

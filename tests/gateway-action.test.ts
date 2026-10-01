@@ -13,9 +13,13 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/auth/authorize", () => ({ authorize: authorizeMock }));
 vi.mock("@/lib/auth/revalidate", () => ({ revalidateOrgPages: vi.fn() }));
 vi.mock("@/lib/dal/scope", () => ({ inOrg: (_access: unknown, fn: () => Promise<unknown>) => fn() }));
-vi.mock("@/lib/circle/gateway-funding", () => ({ fundGateway }));
+vi.mock("@/lib/circle/gateway-funding", () => ({
+  fundGateway,
+  GatewayStepFailed: class GatewayStepFailed extends Error {},
+}));
 
 import { fundGatewayAction } from "@/app/actions/treasury";
+import { GatewayStepFailed } from "@/lib/circle/gateway-funding";
 
 const REQUEST = "0b6c1c9e-4a4f-4a7e-9b1e-00000000f00d";
 const access = (mode: "live" | "sandbox") => ({
@@ -71,6 +75,18 @@ describe("fundGatewayAction", () => {
     expect((await fundGatewayAction({ ok: false, message: "" }, form("1.1234567"))).ok).toBe(false);
     expect(await fundGatewayAction({ ok: false, message: "" }, form("1", "not-a-uuid"))).toEqual({ ok: false, message: "Reload the page and try again." });
     expect(fundGateway).not.toHaveBeenCalled();
+  });
+
+  it("asks the form for a new request id after Circle failed a step, and keeps the id otherwise (review I5)", async () => {
+    authorizeMock.mockResolvedValue(access("live"));
+    fundGateway.mockRejectedValueOnce(new GatewayStepFailed("Circle did not complete the deposit into Gateway (FAILED). Nothing was moved into Gateway; try again.", "tx-9"));
+    expect(await fundGatewayAction({ ok: false, message: "" }, form("1"))).toEqual({
+      ok: false,
+      message: "Circle did not complete the deposit into Gateway (FAILED). Nothing was moved into Gateway; try again.",
+      renew: true,
+    });
+    fundGateway.mockRejectedValueOnce(new Error("Circle did not complete the deposit into Gateway (no answer yet). Try again: the same request sends nothing twice."));
+    expect((await fundGatewayAction({ ok: false, message: "" }, form("1"))).renew).toBeUndefined();
   });
 
   it("says what failed in the funding's own words, and nothing else", async () => {

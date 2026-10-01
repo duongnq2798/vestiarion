@@ -6,7 +6,7 @@ import { z } from "zod";
 import { refreshOnChainBalances } from "@/lib/agent/balances";
 import { authorize } from "@/lib/auth/authorize";
 import { revalidateOrgPages } from "@/lib/auth/revalidate";
-import { fundGateway } from "@/lib/circle/gateway-funding";
+import { fundGateway, GatewayStepFailed } from "@/lib/circle/gateway-funding";
 import { CIRCLE_UNREACHABLE } from "@/lib/copy";
 import { inOrg } from "@/lib/dal/scope";
 import { firstZodMessage, usdcAmountSchema } from "@/lib/intake-validation";
@@ -54,6 +54,8 @@ export async function refreshOnChainBalanceAction(orgSlug: string): Promise<Refr
 export interface FundGatewayResult {
   ok: boolean;
   message: string;
+  /** Circle failed a step: the form makes a new request id, since the old one would only be answered with that failure (review I5). */
+  renew?: true;
 }
 
 const requestIdSchema = z.string().uuid();
@@ -85,6 +87,7 @@ export async function fundGatewayAction(_previous: FundGatewayResult, formData: 
       // Every error the funding raises is written for the person who asked: its own checks,
       // Circle's call and status (never Circle's text), or Gateway's refusal.
       console.error("fundGatewayAction failed", error instanceof Error ? error.name : "unknown");
+      if (error instanceof GatewayStepFailed) return { ok: false, message: error.message, renew: true };
       return { ok: false, message: error instanceof Error ? error.message : "The deposit into Gateway did not complete. Try again." };
     }
   });

@@ -15,28 +15,40 @@ import { Hash } from "@/components/vx/Primitives";
 const INITIAL: FundGatewayResult = { ok: false, message: "" };
 
 /**
+ * The request id the form carries after an answer: a new one after a deposit, and after a step Circle
+ * failed, which the old id would only be answered with again (review I5); the same one otherwise, so a
+ * retry of a request still settling deposits once.
+ */
+export function nextRequestId(state: FundGatewayResult, current: string, make: () => string): string {
+  return state.ok || state.renew ? make() : current;
+}
+
+/**
  * The workspace's Gateway balance on the Treasury page (Gateway payouts G1,
  * G5): what Circle Gateway holds for it, the signer that spends it, and for
  * an owner or admin the form that moves USDC into it from the operating
- * wallet. The form carries an id made when it was shown, so a double click
- * deposits once; a new id is made after each deposit.
+ * wallet. The form carries an id the page made when it was shown, so a double
+ * click deposits once and the server's markup and the browser's agree (review
+ * M8); a new id is made after each deposit, and after a step Circle failed.
  */
 export function GatewayPanel({
   orgSlug,
   signerAddress,
   balanceUsdc,
   canFund,
+  requestId: initialRequestId,
 }: {
   orgSlug: string;
   signerAddress: string | null;
   balanceUsdc: number | null;
   canFund: boolean;
+  requestId: string;
 }) {
-  const [requestId, setRequestId] = useState(() => crypto.randomUUID());
+  const [requestId, setRequestId] = useState(initialRequestId);
   const { state, formProps } = useActionForm(fundGatewayAction, INITIAL, {
     resetOnSuccess: true,
     toastOnSuccess: true,
-    onSuccess: () => setRequestId(crypto.randomUUID()),
+    onResult: (result) => setRequestId((current) => nextRequestId(result, current, () => crypto.randomUUID())),
   });
 
   return (

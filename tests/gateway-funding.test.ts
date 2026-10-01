@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv, type VestiarionConfig } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { GATEWAY_WALLET, gatewayStepKey } from "@/lib/circle/gateway";
-import { fundGateway, readGatewayState, type GatewayFundingClient } from "@/lib/circle/gateway-funding";
+import { fundGateway, GatewayStepFailed, readGatewayState, type GatewayFundingClient } from "@/lib/circle/gateway-funding";
 import { TREASURY_WALLET_SET, walletIdempotencyKey } from "@/lib/circle/provision";
 import { fakeSupabase, orgTestContext, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 
@@ -20,7 +20,7 @@ vi.mock("@/lib/ledger", async (importOriginal) => ({ ...(await importOriginal<ty
 
 const ORG = "0b6c1c9e-4a4f-4a7e-9b1e-000000000d1d";
 const USER = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000e1";
-const OPERATING = { id: "acct-op", circle_wallet_id: "wallet-op", address: "0x97F85033bBD83870a841cF7153F35b387746B6b6" };
+const OPERATING = { id: "acct-op", circle_wallet_id: "wallet-op", address: "0x97F85033bBD83870a841cF7153F35b387746B6b6", balance: "10" };
 const SIGNER_ADDRESS = "0x5aF3107A4000000000000000000000000000b0b0";
 const base = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k" });
 const config: VestiarionConfig = { ...base, chain: { ...base.chain, circleApiKey: "TEST_API_KEY:k:s", circleEntitySecret: "5eed".repeat(16) } };
@@ -55,7 +55,7 @@ function database(start: { signer?: SignerRow | null } = {}) {
   return { fake, signer: () => signer };
 }
 
-function circle(options: { failDeposit?: boolean } = {}) {
+function circle(options: { failDeposit?: boolean; failDelegate?: boolean } = {}) {
   const calls: Array<{ method: string; input: Record<string, unknown> }> = [];
   let executions = 0;
   const transactions = new Map<string, { state: string; txHash: string }>();
@@ -72,7 +72,9 @@ function circle(options: { failDeposit?: boolean } = {}) {
       calls.push({ method: "execute", input });
       executions += 1;
       const id = `tx-${executions}`;
-      const failed = options.failDeposit && input.abiFunctionSignature === "deposit(address,uint256)";
+      const failed =
+        (options.failDeposit && input.abiFunctionSignature === "deposit(address,uint256)") ||
+        (options.failDelegate && input.abiFunctionSignature === "addDelegate(address,address)");
       transactions.set(id, { state: failed ? "FAILED" : "COMPLETE", txHash: `0xhash${executions}` });
       return { data: { id } };
     }),
@@ -134,6 +136,30 @@ describe("funding a Gateway balance", () => {
     const db = database({ signer: { org_id: ORG, circle_wallet_id: "wallet-signer", address: SIGNER_ADDRESS, delegate_tx_id: "tx-0", delegate_tx_hash: "0xdelegated" } });
     await expect(fund(db, circle({ failDeposit: true }), "req-3", 1)).rejects.toThrow("Circle did not complete the deposit into Gateway (FAILED)");
     expect(appendLedgerEntry).not.toHaveBeenCalled();
+  });
+
+  it("says a step Circle failed moved nothing, and that the request may be made again as a new one (review I5)", async () => {
+    const db = database({ signer: { org_id: ORG, circle_wallet_id: "wallet-signer", address: SIGNER_ADDRESS, delegate_tx_id: "tx-0", delegate_tx_hash: "0xdelegated" } });
+    const failed = await fund(db, circle({ failDeposit: true }), "req-3", 1).catch((error: unknown) => error);
+    expect(failed).toBeInstanceOf(GatewayStepFailed);
+    expect((failed as Error).message).toBe("Circle did not complete the deposit into Gateway (FAILED). Nothing was moved into Gateway; try again.");
+  });
+
+  it("adds the delegate under a new key after Circle failed the first one, never answered with the failed one again (review I5)", async () => {
+    const db = database();
+    await expect(fund(db, circle({ failDelegate: true }), "req-5", 1)).rejects.toBeInstanceOf(GatewayStepFailed);
+    expect(db.signer()).toMatchObject({ delegate_tx_id: "tx-1", delegate_tx_hash: null });
+
+    const again = circle();
+    await fund(db, again, "req-6", 1);
+    expect(again.calls.find((call) => call.input.abiFunctionSignature === "addDelegate(address,address)")?.input.idempotencyKey).toBe(gatewayStepKey(`${ORG}/delegate/after/tx-1`));
+    expect(db.signer()).toMatchObject({ delegate_tx_hash: "0xhash1" });
+  });
+
+  it("refuses more than the operating wallet holds, before calling Circle (review I5)", async () => {
+    const c = circle();
+    await expect(fund(database(), c, "req-7", 12)).rejects.toThrow("The operating wallet holds 10 USDC, less than the 12 USDC to move into Gateway.");
+    expect(c.calls).toEqual([]);
   });
 
   it("refuses an amount that is not positive, before calling Circle", async () => {

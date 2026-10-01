@@ -202,7 +202,13 @@ export default async function DashboardPage({
           <aside className="min-w-0 space-y-6 md:grid md:grid-cols-2 md:items-start md:gap-6 md:space-y-0 xl:block xl:space-y-6">
             <AccountsList accounts={accounts} />
             {gateway && (
-              <GatewayPanel orgSlug={slug} signerAddress={gateway.signerAddress} balanceUsdc={gateway.balanceUsdc} canFund={can(role, "treasury.manage")} />
+              <GatewayPanel
+                orgSlug={slug}
+                signerAddress={gateway.signerAddress}
+                balanceUsdc={gateway.balanceUsdc}
+                canFund={can(role, "treasury.manage")}
+                requestId={crypto.randomUUID()}
+              />
             )}
             {forecast && <ForecastPanel forecast={forecast} />}
           </aside>
