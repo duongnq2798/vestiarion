@@ -6,13 +6,17 @@ import type { OpenNumbers, Period, SideKey, SideNumbers } from "@/lib/platform/o
  * customers' workspaces, ours and the total. A `now` row is a total at the
  * moment of reading; every other row covers the chosen period.
  */
-export const OPEN_ROWS: ReadonlyArray<{ key: keyof SideNumbers; label: string; kind: "period" | "now"; format: "count" | "usdc" }> = [
+type Format = "count" | "usdc" | "duration";
+
+export const OPEN_ROWS: ReadonlyArray<{ key: keyof SideNumbers; label: string; kind: "period" | "now"; format: Format }> = [
   { key: "workspacesOpened", label: "Workspaces opened", kind: "period", format: "count" },
   { key: "liveWorkspaces", label: "Workspaces live on Arc testnet", kind: "now", format: "count" },
   { key: "people", label: "People in workspaces", kind: "now", format: "count" },
   { key: "payments", label: "Payments settled on Arc testnet", kind: "period", format: "count" },
   { key: "usdcPaid", label: "USDC paid", kind: "period", format: "usdc" },
   { key: "payees", label: "Payee wallets paid", kind: "period", format: "count" },
+  { key: "firstPayments", label: "Workspaces that made a first payment on Arc testnet", kind: "period", format: "count" },
+  { key: "medianMinutesToFirstPayment", label: "Median time from workspace opened to first payment", kind: "period", format: "duration" },
   { key: "invoicesDecided", label: "Invoices decided", kind: "period", format: "count" },
   { key: "milestonesReleased", label: "Contractor milestones paid on Arc testnet", kind: "period", format: "count" },
   { key: "cycles", label: "Agent cycles run", kind: "period", format: "count" },
@@ -31,8 +35,20 @@ const COLUMNS: ReadonlyArray<{ side: SideKey; label: string }> = [
 const COUNT = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 const USDC = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-export function formatFigure(value: number, format: "count" | "usdc"): string {
-  return format === "usdc" ? USDC.format(value) : COUNT.format(value);
+/** Minutes as minutes under an hour, hours and minutes under a day, and days and hours after that. */
+function formatDuration(minutes: number): string {
+  const total = Math.round(minutes);
+  if (total < 60) return `${total} min`;
+  if (total < 1440) return `${Math.floor(total / 60)} h ${total % 60} min`;
+  return `${Math.floor(total / 1440)} d ${Math.floor((total % 1440) / 60)} h`;
+}
+
+/** A figure as the table writes it; a missing one (a median of nothing) is a dash. */
+export function formatFigure(value: number | null, format: Format): string {
+  if (value === null) return "—";
+  if (format === "usdc") return USDC.format(value);
+  if (format === "duration") return formatDuration(value);
+  return COUNT.format(value);
 }
 
 export function OpenNumbersTable({ numbers, period }: { numbers: OpenNumbers; period: Period }) {

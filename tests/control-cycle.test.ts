@@ -251,7 +251,7 @@ describe("reconcileApInvoice — a matched payable with a payment in flight", ()
     expect(guardrailsMock).not.toHaveBeenCalled();
     expect(payInvoiceMock).toHaveBeenCalledTimes(1);
     expect(payInvoiceMock).toHaveBeenCalledWith(
-      { invoiceId: INVOICE_ID, counterpartyId: COUNTERPARTY_ID, address: "0xdead", amount: 150 },
+      { invoiceId: INVOICE_ID, counterpartyId: COUNTERPARTY_ID, address: "0xdead", amount: 150, discount: null },
       { provider, operating: { id: ACCOUNT_ID } }
     );
     // A transfer already exists, so nothing new can move: the pause is not consulted.
@@ -264,6 +264,8 @@ describe("reconcileApInvoice — a matched payable with a payment in flight", ()
     expect(body.tx_ref).toBe("0xhash");
     expect(typeof body.settled_at).toBe("string");
     expect(body.agent_reasoning).toBe(invoice.reasoning);
+    // The amount was recorded with the transfer that carried it; the reconcile keeps it.
+    expect(body).not.toHaveProperty("paid_amount");
 
     const [append] = rpcBodies(fake.requests, "append_ledger_entry");
     expect(append.p_action).toBe("ap_reconcile");
@@ -317,6 +319,8 @@ describe("reconcileApInvoice — a matched payable with a payment in flight", ()
     expect(body.status).toBe("held");
     expect(body.tx_ref).toBe("circle-tx-1");
     expect(body.agent_reasoning).toBe(`${invoice.reasoning} [transfer failed: provider reported failure]`);
+    // Nothing moved: no paid amount stands.
+    expect(body.paid_amount).toBeNull();
   });
 
   it("does not append a note the reasoning already ends with", async () => {
@@ -456,6 +460,25 @@ describe("reconcileApInvoice — a matched payable with a payment in flight", ()
 
     expect(payInvoiceMock).toHaveBeenCalledTimes(1);
     expect(outcome.status).toBe("paid");
+  });
+
+  it("resubmits with the invoice's discount, and records what the new transfer carried", async () => {
+    payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", operatingBalance: 200, amountPaid: 147, discountTaken: 3 });
+    const { fake, run } = cycleFake((r) => {
+      if (r.path === "/rest/v1/counterparties" && r.method === "GET") return { body: { risk_level: "low" } };
+      if (r.path === "/rest/v1/rpc/agent_paused") return { body: false };
+      return undefined;
+    });
+    const discount = { pct: 2, deadline: "2026-10-11T12:00:00+00:00" };
+
+    await run(() =>
+      reconcileApInvoice({ ...invoice, txRef: null, discount }, { providerTxId: null, status: "submitting" }, { db: db(), provider, operating: { id: ACCOUNT_ID } })
+    );
+
+    expect(payInvoiceMock.mock.calls[0][0]).toEqual({ invoiceId: INVOICE_ID, counterpartyId: COUNTERPARTY_ID, address: "0xdead", amount: 150, discount });
+    const body = invoicePatches(fake.requests)[0].body as Record<string, unknown>;
+    expect(body.status).toBe("paid");
+    expect(body.paid_amount).toBe(147);
   });
 
   it("fails closed when the counterparty's risk level cannot be read", async () => {

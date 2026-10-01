@@ -429,7 +429,7 @@ describe("approveAndPay", () => {
     expect(payInvoiceMock).toHaveBeenCalledTimes(1);
     // A person's approval is the one caller that may send a terminally failed payment again.
     expect(payInvoiceMock).toHaveBeenCalledWith(
-      { invoiceId: INVOICE_ID, counterpartyId: COUNTERPARTY_ID, address: "0xdead", amount: 150 },
+      { invoiceId: INVOICE_ID, counterpartyId: COUNTERPARTY_ID, address: "0xdead", amount: 150, discount: null },
       { provider: { mode: "simulate", earnMode: "simulate", estimatedFeeUsd: 0.01 }, operating: { id: ACCOUNT_ID }, retryTerminalFailure: true }
     );
 
@@ -791,6 +791,129 @@ describe("approveAndPay on a transfer Circle is found to have failed", () => {
   });
 });
 
+/**
+ * A person's Approve and pay applies the invoice's early-payment discount
+ * exactly as the agent does, because it goes through the same `payInvoice`
+ * (spec 2026-09-30-payment-timing §1): discounted through the end of the
+ * deadline's UTC day, the full amount after it. The funds check stays on the
+ * full amount (P5: never less).
+ */
+describe("approveAndPay with an early-payment discount", () => {
+  const TERMS = { early_pay_discount_pct: "2.00", discount_due_date: "2026-10-11T12:00:00+00:00" };
+  const withTerms = (r: RecordedRequest) => (r.params.get("id") ? { body: invoiceRow(TERMS) } : undefined);
+
+  class Circle implements ChainProvider {
+    readonly mode = "live" as const;
+    readonly earnMode = "simulate" as const;
+    readonly estimatedFeeUsd = 0.003;
+    transfers: TransferParams[] = [];
+    async transfer(params: TransferParams): Promise<TransferResult> {
+      this.transfers.push(params);
+      return {
+        providerTxId: "circle-tx-9", txHash: "0xhash9", txRef: "0xhash9", chain: "ARC-TESTNET", status: "confirmed",
+        feeUsd: 0.003, feeSource: "chain_reported", providerMode: "live", settledInMs: 4000, providerState: "COMPLETE", failureReason: null,
+      };
+    }
+    async reconcileTransfer(): Promise<TransferResult> { throw new Error("not used"); }
+    async getBalance(accountId: string): Promise<BalanceSnapshot> {
+      return { accountId, chain: "ARC-TESTNET", token: "USDC", balance: 500 };
+    }
+    async depositToEarn(): Promise<EarnResult> { throw new Error("not used"); }
+    async withdrawFromEarn(): Promise<EarnResult> { throw new Error("not used"); }
+  }
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("reads the terms with the invoice, passes the discount to payInvoice, and records what it took", async () => {
+    payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", operatingBalance: 353, amountPaid: 147, discountTaken: 3 });
+    const { fake, run } = approvalsFake({ invoice: withTerms });
+
+    await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+
+    const [load] = fake.requests.filter((r) => r.path === "/rest/v1/invoices" && r.method === "GET");
+    expect(load.params.get("select")).toContain("early_pay_discount_pct");
+    expect(load.params.get("select")).toContain("discount_due_date");
+    expect(payInvoiceMock.mock.calls[0][0]).toEqual({
+      invoiceId: INVOICE_ID, counterpartyId: COUNTERPARTY_ID, address: "0xdead", amount: 150,
+      discount: { pct: 2, deadline: "2026-10-11T12:00:00+00:00" },
+    });
+
+    const [update] = patchBodies(fake.requests, "/rest/v1/invoices");
+    expect(update.status).toBe("paid");
+    expect(update.paid_amount).toBe(147);
+
+    const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(append.p_action).toBe("approval_paid");
+    expect(append.p_summary).toBe("Approved and paid 147 USDC to Acme Supplies (150 USDC less a 3 USDC early-payment discount)");
+    expect(append.p_detail).toMatchObject({ amount: 150, amountPaid: 147, discountTaken: 3, status: "paid" });
+  });
+
+  it("records no paid amount when the transfer failed", async () => {
+    payInvoiceMock.mockResolvedValue({
+      status: "held", txRef: "circle-tx-1", execution: null, note: " [transfer failed: provider reported failure]", operatingBalance: null, amountPaid: 147, discountTaken: 3,
+    });
+    const { fake, run } = approvalsFake({ invoice: withTerms });
+
+    await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+
+    const [update] = patchBodies(fake.requests, "/rest/v1/invoices");
+    expect(update.status).toBe("held");
+    expect(update.paid_amount).toBeNull();
+    const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(append.p_detail).toMatchObject({ amountPaid: null, discountTaken: null, status: "held" });
+  });
+
+  it("still checks the funds against the full amount, never the discounted one", async () => {
+    // 148 USDC covers the 147 USDC that would leave, but not the invoice.
+    const { fake, run } = approvalsFake({ invoice: withTerms, account: () => ({ body: accountRow("148") }) });
+
+    await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).rejects.toMatchObject({ code: "insufficient_funds" });
+    expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+  });
+
+  it("transfers the discounted amount through the real payment step within the deadline", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-11T18:00:00.000Z"));
+    const actual = await vi.importActual<typeof import("@/lib/agent/pay")>("@/lib/agent/pay");
+    payInvoiceMock.mockImplementation(actual.payInvoice);
+    syncOperatingBalanceMock.mockResolvedValue(500);
+    const circle = new Circle();
+    getChainProviderMock.mockReturnValue(circle);
+    const { fake, run } = approvalsFake({ invoice: withTerms });
+
+    const result = await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+
+    expect(result.status).toBe("paid");
+    expect(circle.transfers).toHaveLength(1);
+    expect(circle.transfers[0].amount).toBe(147);
+    const [update] = patchBodies(fake.requests, "/rest/v1/invoices");
+    expect(update.paid_amount).toBe(147);
+    const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(append.p_detail).toMatchObject({ amount: 150, amountPaid: 147, discountTaken: 3 });
+  });
+
+  it("transfers the full amount through the real payment step after the deadline", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-12T00:00:01.000Z"));
+    const actual = await vi.importActual<typeof import("@/lib/agent/pay")>("@/lib/agent/pay");
+    payInvoiceMock.mockImplementation(actual.payInvoice);
+    syncOperatingBalanceMock.mockResolvedValue(500);
+    const circle = new Circle();
+    getChainProviderMock.mockReturnValue(circle);
+    const { fake, run } = approvalsFake({ invoice: withTerms });
+
+    await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+
+    expect(circle.transfers[0].amount).toBe(150);
+    const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(append.p_summary).toBe("Approved and paid 150 USDC to Acme Supplies");
+    expect(append.p_detail).toMatchObject({ amount: 150, amountPaid: 150, discountTaken: 0 });
+  });
+});
+
 describe("rejectInvoice", () => {
   it("claims with reject, sets rejected, and appends approval_rejected with the trimmed reason", async () => {
     const { fake, run } = approvalsFake();
@@ -977,12 +1100,33 @@ describe("listWaitingPayables", () => {
         paymentSent: false,
         address: "0xdead",
         lastAttempt: null,
+        discount: null,
       },
     ]);
     const listing = fake.requests.find((r) => r.path === "/rest/v1/invoices" && r.method === "GET" && !r.params.get("id"));
     expect(listing?.params.get("direction")).toBe("eq.payable");
     expect(listing?.params.get("status")).toBe("in.(held,flagged,awaiting_info,processing)");
     expect(listing?.params.get("order")).toBe("due_date.asc");
+  });
+
+  it("reads each row's early-payment discount the way payInvoice applies it, so the approval dialog can say what will leave", async () => {
+    const rows = [
+      invoiceRow({ id: "terms", early_pay_discount_pct: "2.00", discount_due_date: "2026-10-11T12:00:00+00:00" }),
+      invoiceRow({ id: "no-terms", early_pay_discount_pct: null, discount_due_date: null }),
+      invoiceRow({ id: "unreadable", early_pay_discount_pct: "0", discount_due_date: "2026-10-11T12:00:00+00:00" }),
+    ];
+    const { fake, run } = approvalsFake({ invoice: (r) => (r.params.get("id") ? undefined : { body: rows }) });
+
+    const listed = await run(() => listWaitingPayables());
+
+    expect(Object.fromEntries(listed.map((row) => [row.id, row.discount]))).toEqual({
+      terms: { pct: 2, deadline: "2026-10-11T12:00:00+00:00" },
+      "no-terms": null,
+      unreadable: null,
+    });
+    const listing = fake.requests.find((r) => r.path === "/rest/v1/invoices" && r.method === "GET" && !r.params.get("id"));
+    expect(listing?.params.get("select")).toContain("early_pay_discount_pct");
+    expect(listing?.params.get("select")).toContain("discount_due_date");
   });
 
   it("marks a processing row reclaimable once its claim is over 10 minutes old or has no reviewed_at, as the claim does", async () => {

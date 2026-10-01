@@ -6,6 +6,12 @@ export interface CycleMetrics {
   heldCount: number;
   flaggedCount: number;
   awaitingInfoCount: number;
+  /**
+   * Payables the agent committed to pay on a later day (spec
+   * 2026-09-30-payment-timing). Recorded in the cycle's closing ledger entry
+   * with the other outcomes; `cycle_runs` has no column for it yet.
+   */
+  scheduledCount: number;
   releasedCount: number;
   modelDecisionCount: number;
   heuristicDecisionCount: number;
@@ -21,6 +27,7 @@ export class CycleMetricsCollector {
     heldCount: 0,
     flaggedCount: 0,
     awaitingInfoCount: 0,
+    scheduledCount: 0,
     releasedCount: 0,
     modelDecisionCount: 0,
     heuristicDecisionCount: 0,
@@ -46,6 +53,7 @@ export class CycleMetricsCollector {
     if (status === "held") this.metrics.heldCount += 1;
     if (status === "flagged") this.metrics.flaggedCount += 1;
     if (status === "awaiting_info") this.metrics.awaitingInfoCount += 1;
+    if (status === "scheduled") this.metrics.scheduledCount += 1;
     if (guardrailBlocked) this.metrics.guardrailOverrideCount += 1;
   }
 

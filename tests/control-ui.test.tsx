@@ -54,6 +54,7 @@ function payable(overrides: Partial<WaitingPayable> = {}): WaitingPayable {
     paymentSent: false,
     address: "0x1948aB0000000000000000000000000000c345a0",
     lastAttempt: null,
+    discount: null,
     ...overrides,
   };
 }
@@ -234,6 +235,22 @@ describe("ApprovalCard", () => {
   it("asks before paying, and says when the payment is simulated", () => {
     expect(payConfirmTitle(payable(), false)).toBe("Pay 1,250.00 USDC to Northwind Supply now?");
     expect(payConfirmTitle(payable(), true)).toBe("Pay 1,250.00 USDC to Northwind Supply now? (simulated)");
+  });
+
+  it("asks to pay the amount that will leave while an early-payment discount still applies, and names the discount", () => {
+    const discounted = payable({ amount: 400, discount: { pct: 2, deadline: "2026-10-11T12:00:00+00:00" } });
+    const before = new Date("2026-10-05T09:00:00Z");
+    expect(payConfirmTitle(discounted, false, before)).toBe("Pay 392.00 USDC to Northwind Supply now? (2% discount through Oct 11, 2026)");
+    expect(payConfirmTitle(discounted, true, before)).toBe("Pay 392.00 USDC to Northwind Supply now? (2% discount through Oct 11, 2026) (simulated)");
+    // Through the end of the deadline's UTC day, as payInvoice applies it.
+    expect(payConfirmTitle(discounted, false, new Date("2026-10-11T23:59:59Z"))).toBe(
+      "Pay 392.00 USDC to Northwind Supply now? (2% discount through Oct 11, 2026)"
+    );
+  });
+
+  it("asks to pay the full amount once the discount's day has passed", () => {
+    const lapsed = payable({ amount: 400, discount: { pct: 2, deadline: "2026-10-11T12:00:00+00:00" } });
+    expect(payConfirmTitle(lapsed, false, new Date("2026-10-12T00:00:00Z"))).toBe("Pay 400.00 USDC to Northwind Supply now?");
   });
 
   it("says the transfer starts as soon as you confirm, with no prior attempt to report", () => {

@@ -58,6 +58,12 @@ export default function InvoiceIntake({ counterparties, orgSlug }: { counterpart
         <Field id="invoice-due" label="Due date">
           <Input name="dueDate" required type="date" />
         </Field>
+        <Field id="invoice-discount-pct" label="Early-payment discount (%)" optional>
+          <Input name="earlyPayDiscountPct" inputMode="decimal" placeholder="2" />
+        </Field>
+        <Field id="invoice-discount-deadline" label="Discount deadline" optional>
+          <Input name="discountDeadline" type="date" />
+        </Field>
         <Field id="invoice-memo" label="Memo" optional>
           <Input name="memo" maxLength={280} />
         </Field>

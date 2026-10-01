@@ -138,9 +138,16 @@ describe("sampleFixture", () => {
   it("dates everything from the moment it is loaded", () => {
     const due = (memo: string, status?: string) =>
       fixture.invoices.find((row) => row.memo === memo && row.status === status)?.due_date;
-    expect(due("Hosting — September")).toBe("2026-10-03T12:00:00.000Z");
+    expect(due("Hosting — September")).toBe("2026-09-30T12:00:00.000Z");
+    expect(due("Annual support plan")).toBe("2026-10-30T12:00:00.000Z");
     expect(due("Brochure print run", "paid")).toBe("2026-09-10T12:00:00.000Z");
     expect(due("Brochure print run")).toBe("2026-10-02T12:00:00.000Z");
+  });
+
+  it("schedules the support plan's discount deadline 10 days out, ahead of its due date", () => {
+    const supportPlan = fixture.invoices.find((row) => row.memo === "Annual support plan");
+    expect(supportPlan?.discount_due_date).toBe("2026-10-10T12:00:00.000Z");
+    expect(supportPlan?.early_pay_discount_pct).toBe(2);
   });
 
   it("sets up each outcome from the invoice facts and the limits alone", () => {
@@ -149,6 +156,14 @@ describe("sampleFixture", () => {
     expect(byMemo("Hosting — September")[0]).toMatchObject({ counterparty: "northwind", amount: 240, po_reference: "PO-1042", goods_received: true });
     // Awaiting information: no purchase order, nothing received.
     expect(byMemo("Bandwidth overage")[0]).toMatchObject({ po_reference: null, goods_received: false });
+    // Scheduled: a discount pair, distinct from the Hosting invoice (different memo, amount and PO), so neither reads as a duplicate of the other.
+    expect(byMemo("Annual support plan")[0]).toMatchObject({
+      counterparty: "northwind",
+      amount: 400,
+      po_reference: "PO-1044",
+      goods_received: true,
+      early_pay_discount_pct: 2,
+    });
     // Held: over Harbor's 500 limit.
     expect(byMemo("Standing desks")[0]).toMatchObject({ counterparty: "harbor", amount: 1200 });
     expect(fixture.counterparties.find((row) => row.key === "harbor")?.limit).toBe(500);
@@ -171,6 +186,11 @@ describe("sampleFixture", () => {
     const paying = fixture.invoices.find((row) => row.memo === "Hosting — September" && row.status !== "paid");
     expect(paying?.amount).toBeLessThanOrEqual(limitOf("northwind") * MEDIUM_FACTOR);
 
+    // The support plan is scheduled, not held, so it must also clear a quarter
+    // of Northwind's limit: 400 <= 2,000 * 0.25 (= 500).
+    const supportPlan = fixture.invoices.find((row) => row.memo === "Annual support plan");
+    expect(supportPlan?.amount).toBeLessThanOrEqual(limitOf("northwind") * MEDIUM_FACTOR);
+
     // Every verified milestone must still clear a quarter of its contractor's limit.
     for (const milestone of fixture.milestones.filter((row) => row.verified)) {
       expect(milestone.amount).toBeLessThanOrEqual(limitOf(milestone.contractor) * MEDIUM_FACTOR);
@@ -188,7 +208,7 @@ describe("loadSampleData", () => {
 
     const counts = await run(() => loadSampleData({ actorId: ACTOR, now: NOW }));
 
-    expect(counts).toEqual({ counterparties: 6, invoices: 6, milestones: 2 });
+    expect(counts).toEqual({ counterparties: 6, invoices: 7, milestones: 2 });
     const [counterparties] = requestsTo(fake.requests, "/rest/v1/counterparties", "POST");
     const rows = counterparties.body as Array<Record<string, unknown>>;
     expect(rows).toHaveLength(6);
@@ -200,7 +220,7 @@ describe("loadSampleData", () => {
     }
     const [invoices] = requestsTo(fake.requests, "/rest/v1/invoices", "POST");
     const invoiceRows = invoices.body as Array<Record<string, unknown>>;
-    expect(invoiceRows).toHaveLength(6);
+    expect(invoiceRows).toHaveLength(7);
     // Harbor is the second counterparty inserted, so its invoice points at the id the insert returned for it.
     expect(invoiceRows.find((row) => row.memo === "Standing desks")?.counterparty_id).toBe("cp-1");
     expect(invoiceRows.every((row) => !("counterparty" in row))).toBe(true);
@@ -219,7 +239,7 @@ describe("loadSampleData", () => {
     expect(entry.p_action).toBe("sample_data_loaded");
     expect(entry.p_domain).toBe("system");
     expect(entry.p_actor).toBe("human");
-    expect(entry.p_detail).toEqual({ by: ACTOR, counterparties: 6, invoices: 6, milestones: 2 });
+    expect(entry.p_detail).toEqual({ by: ACTOR, counterparties: 6, invoices: 7, milestones: 2 });
   });
 
   it.each([

@@ -168,3 +168,83 @@ describe("AP guardrails — a changed address no one has confirmed", () => {
     ).toEqual({ blocked: false, status: null, rule: null, reasoning: "Pay now." });
   });
 });
+
+describe("AP guardrails — schedule is bound exactly like pay", () => {
+  const settledTwin: DuplicateMatch = {
+    otherId: "inv-old",
+    otherStatus: "paid",
+    otherDueDate: "2026-09-27T00:00:00.000Z",
+    otherAmount: 240,
+    confidence: 0.95,
+    signals: ["same_purchase_order", "same_amount"],
+    explanation: "Bills the same purchase order for the same 240 USDC as invoice due 2026-09-27 (already paid).",
+    againstSettled: true,
+  };
+
+  it("refuses a schedule verdict above a screened-down limit, same rule id as pay", () => {
+    const result = enforceApGuardrails({
+      action: "schedule",
+      reasoning: "The model recommends scheduling for the discount deadline.",
+      amount: 0.9,
+      riskLevel: "medium",
+      paymentLimit: 0.5,
+    });
+    expect(result).toMatchObject({
+      blocked: true,
+      status: "held",
+      rule: "counterparty.payment_limit",
+    });
+    expect(result.reasoning).toContain("scheduling refused before execution");
+  });
+
+  it("refuses a schedule verdict for a high-risk counterparty", () => {
+    const result = enforceApGuardrails({
+      action: "schedule",
+      reasoning: "Schedule for the deadline.",
+      amount: 10,
+      riskLevel: "high",
+      paymentLimit: 0,
+    });
+    expect(result).toMatchObject({ blocked: true, status: "flagged", rule: "counterparty.high_risk" });
+    expect(result.reasoning).toContain("scheduling refused before execution");
+  });
+
+  it("refuses a schedule verdict that repeats an already-settled invoice", () => {
+    const result = enforceApGuardrails({
+      action: "schedule",
+      reasoning: "PO matches, goods received, counterparty clear, amount within limit.",
+      amount: 240,
+      riskLevel: "clear",
+      paymentLimit: 2000,
+      duplicates: [settledTwin],
+    });
+    expect(result).toMatchObject({ blocked: true, status: "flagged", rule: "invoice.duplicate_of_settled" });
+    expect(result.reasoning).toContain("scheduling refused before execution");
+  });
+
+  it("holds a schedule verdict while the counterparty's address change is unconfirmed", () => {
+    const result = enforceApGuardrails({
+      action: "schedule",
+      reasoning: "Schedule for the deadline.",
+      amount: 2,
+      riskLevel: "clear",
+      paymentLimit: 5,
+      addressChangedAt: "2026-09-30T12:00:00Z",
+      addressConfirmedAt: null,
+    });
+    expect(result).toMatchObject({ blocked: true, status: "held", rule: "counterparty.address_unconfirmed" });
+    // Unlike the "refused" rules, this reasoning was never "payment"-specific, and stays as-is.
+    expect(result.reasoning).toContain("held for a person to approve");
+  });
+
+  it("leaves a clean schedule verdict alone", () => {
+    const result = enforceApGuardrails({
+      action: "schedule",
+      reasoning: "Schedule for the deadline.",
+      amount: 10,
+      riskLevel: "clear",
+      paymentLimit: 100,
+    });
+    expect(result).toEqual({ blocked: false, status: null, rule: null, reasoning: "Schedule for the deadline." });
+  });
+});

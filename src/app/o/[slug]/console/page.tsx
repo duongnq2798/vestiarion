@@ -9,6 +9,7 @@ import { DecisionCard } from "@/components/vx/DecisionCard";
 import { GettingStarted } from "@/components/vx/GettingStarted";
 import { invoiceDecision, treasuryActionDecision, treasuryLedgerDecision } from "@/components/vx/map";
 import { Money } from "@/components/vx/Primitives";
+import { ScheduledPayments, scheduledPaymentRows } from "@/components/vx/ScheduledPayments";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
@@ -21,7 +22,7 @@ import { orgHref } from "@/lib/auth/org-paths";
 import { can } from "@/lib/auth/roles";
 import { chainModes } from "@/lib/circle";
 import { inOrg } from "@/lib/dal/scope";
-import { gettingStarted, ownInvoiceCount } from "@/lib/getting-started";
+import { gettingStarted, ownPayableCount } from "@/lib/getting-started";
 import { listLedgerEntries, listLedgerEntriesAfter, listLedgerEntriesByDomain, listLedgerEntriesForTargets } from "@/lib/ledger";
 import { pauseStateOf } from "@/lib/platform/pause";
 import { latestForecast, listAccounts, listCounterparties, listInvoices, listTreasuryActions, stats } from "@/lib/queries";
@@ -86,6 +87,9 @@ export default async function DashboardPage({
       invoiceDecision(invoice, counterpartiesById.get(invoice.counterparty_id), invoiceEntries)
     );
     const stopped = invoiceDecisions.filter((decision) => decision.outcome === "refused" || decision.outcome === "held");
+    // What the agent will pay next, soonest first (payment timing design §1):
+    // derived from the invoices already loaded above, no extra query.
+    const scheduledPayments = scheduledPaymentRows(invoices);
     const treasuryDecisions = treasuryEntries.map(treasuryLedgerDecision);
     const executedReserveMoves = actionRows.slice(0, 2).map(treasuryActionDecision);
     const headSeq = headEntries[0]?.seq ?? 0;
@@ -94,10 +98,18 @@ export default async function DashboardPage({
     const needsReview = waiting.filter((payable) => payable.status !== "processing" || payable.reclaimable).length;
     const paused = pause !== null;
     const role = access.membership.role;
-    // Computed from the rows above, with no extra read (getting-started design G1, G2). Only people who
-    // can act on it see it: owners and admins add records, and an owner takes the workspace live.
+    // Computed from the rows above, with no extra read (getting-started design G1, G2), until the first
+    // payment on Arc testnet (first-payment design §2). Only people who can act on it see it: owners and
+    // admins add records, and an owner takes the workspace live.
     const checklist = can(role, "records.write")
-      ? gettingStarted({ mode: access.membership.mode, accounts: accountsRows, counterparties, invoiceCount: ownInvoiceCount(invoices, counterparties) })
+      ? gettingStarted({
+          mode: access.membership.mode,
+          accounts: accountsRows,
+          counterparties,
+          payableCount: ownPayableCount(invoices, counterparties),
+          onchainPayments: dashboardStats.onchainTransfers,
+          waitingCount: needsReview,
+        })
       : null;
     // Sample data (sample-data design §1): offered in an empty simulated sandbox, and called out while it is loaded.
     const sampleOffered = offerSampleData({ canWrite: can(role, "records.write"), mode: access.membership.mode, chainMode: modes.mode, counterpartyCount: counterparties.length });
@@ -157,6 +169,8 @@ export default async function DashboardPage({
                 <div className="space-y-4">{stopped.slice(0, 3).map((decision) => <DecisionCard key={decision.id} decision={decision} orgSlug={slug} />)}</div>
               </section>
             )}
+
+            {scheduledPayments.length > 0 && <ScheduledPayments payments={scheduledPayments} />}
 
             <section>
               <SectionHeader title="Treasury decisions" meta="yield moves include their economics" action={<MoreLink href={orgHref(slug, "/audit?domain=treasury")}>Full audit log</MoreLink>} />
