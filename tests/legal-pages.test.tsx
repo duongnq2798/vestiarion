@@ -161,8 +161,11 @@ describe("the privacy page", () => {
 
   describe("what a model provider receives, held to the prompts in src/lib/agent/orchestrator.ts", () => {
     const orchestrator = source("src/lib/agent/orchestrator.ts");
-    /** Each `userPrompt: JSON.stringify({ … })`, up to its responseShape: the keys it sends, shorthand ones included. */
-    const prompts = [...orchestrator.matchAll(/userPrompt: JSON\.stringify\(\{([\s\S]*?)responseShape:/g)].map((match) =>
+    /**
+     * Each `userPrompt: JSON.stringify({ … })` up to its responseShape, and the payable's
+     * `userPrompt: apDecisionPrompt({ … })` up to its schema: the keys each sends, shorthand ones included.
+     */
+    const prompts = [...orchestrator.matchAll(/userPrompt: (?:JSON\.stringify|apDecisionPrompt)\(\{([\s\S]*?)(?:responseShape:|\}\),\s*schema: apDecisionSchema)/g)].map((match) =>
       new Set([...match[1].matchAll(/^\s*(\w+)(?::|,\s*$)/gm)].map((key) => key[1]))
     );
     const models = body.split("A model provider")[1]?.split("OpenSanctions")[0] ?? "";

@@ -104,7 +104,31 @@ The reasoning was right and the action was wrong. This is why code checks the ac
 - **Its confidence was lower where it differed**, but seven differences cannot show that confidence would separate the two.
 - **Code refused one payment in the week:** #505, the only decision where the model would have paid and the policy would not.
 
-Next, we will tell the model the policy's threshold: a match on amount and date alone, under a different purchase order, is not by itself duplicate billing. Code would still stop a true duplicate whatever the model says. The agreement rate on payables will show whether the false alarms stop, and this note will be updated with that result.
+
+## What we changed, and a replay
+
+The three duplicate flags came from the instructions. The written policy stops a payment as a duplicate only when it bills the same purchase order for the same amount. The model, though, was told that any repeat of an invoice already paid is duplicate billing.
+
+On 1 October we changed what the model is told:
+- A match that bills the same purchase order for the same amount as an invoice already paid, being paid, scheduled, or being decided by a person, is duplicate billing. Code stops it either way.
+- A match on amount and due dates alone, under a different purchase order or none, is a signal to weigh, not proof. The model is to flag it only when other facts point the same way.
+
+To see the effect without waiting for the same cases to happen again, `npm run research:replay` asks the model again about decisions it already made, three times each:
+- **The question** is today's, built by the same code the agent uses.
+- **The facts** are those recorded in the ledger entry of each decision. Timing figures were first recorded on 1 October, from entry #472 on, so four of the five entries have none. For those, the replay rebuilds the timing those invoices had: due that day, with nothing else falling due.
+- **Two controls** are true duplicates from the sample data, #385 and #545. Each bills the same purchase order for the same amount as an invoice already paid.
+
+| Entry | Recorded | Old instructions | New instructions |
+|---|---|---|---|
+| #426 | flag (policy: pay) | flag, flag, flag | pay, pay, pay |
+| #429 | flag (policy: pay) | flag, flag, flag | pay, flag, pay |
+| #387 | flag (policy: pay) | flag, pay, pay | pay, pay, pay |
+| #385 (control) | flag (policy: flag) | flag, flag, flag | flag, flag, flag |
+| #545 (control) | flag (policy: flag) | flag, flag, flag | flag, flag, flag |
+
+With the old instructions, the three false alarms were flagged 7 times in 9. With the new ones, they were flagged once in 9. The true duplicates were flagged every time, before and after.
+
+A replay of three runs per case is a check, not proof. The agreement rate on payables in production will show whether the change holds, and this note will be updated with it.
 
 ## The limits of this note
 
@@ -119,3 +143,4 @@ Next, we will tell the model the policy's threshold: a match on amount and date 
 
 - Every entry named here is signed with Ed25519 and linked to the entry before it, in its workspace's ledger. A member of the workspace can export that ledger and check it without Vestiarion; see [Verify an audit export](/docs/guides/audit-export).
 - With access to the production database, `npm run research:model-vs-policy` recomputes the counts, the rates and the table of differences, read-only. It counts a customer's workspace but never names it. The rest is read from the entries named here.
+- `npm run research:replay -- 426 429 387 385 545 --runs 3` repeats the replay. It reads the database read-only and records nothing; a model answers differently from run to run, so expect the same pattern, not the same answers.
