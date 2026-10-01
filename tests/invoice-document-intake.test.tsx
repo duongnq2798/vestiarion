@@ -4,7 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("@/app/actions/intake", () => ({ createInvoiceAction: vi.fn() }));
 vi.mock("@/app/actions/invoice-document", () => ({ readInvoiceDocumentAction: vi.fn() }));
 
-import InvoiceDocumentIntake, { DocumentDraft } from "@/components/intake/InvoiceDocumentIntake";
+import InvoiceDocumentIntake, { DocumentDraft, documentFileProblem } from "@/components/intake/InvoiceDocumentIntake";
+import InvoiceIntake from "@/components/intake/InvoiceIntake";
 import type { DocumentReadResult } from "@/app/actions/invoice-document";
 
 const COUNTERPARTIES = [
@@ -47,6 +48,35 @@ describe("the From a document tab", () => {
     expect(markup).toContain("Or paste the invoice&#x27;s text");
     expect(markup).toMatch(/<textarea[^>]*name="text"/);
     expect(markup).toContain(">Read invoice<");
+  });
+});
+
+describe("a file chosen for reading", () => {
+  it("is refused in the browser when it is over 4 MB, before anything is sent", () => {
+    expect(documentFileProblem({ size: 4_000_001 })).toBe("Choose a file of at most 4 MB.");
+    expect(documentFileProblem({ size: 4_000_000 })).toBeNull();
+  });
+});
+
+describe("the draft's form beside the typed-in one", () => {
+  const draft = renderToStaticMarkup(<DocumentDraft result={RESULT} orgSlug="acme" counterparties={COUNTERPARTIES} />);
+  const manual = renderToStaticMarkup(<InvoiceIntake orgSlug="acme" counterparties={COUNTERPARTIES} />);
+
+  it("has ids of its own, so its labels name its own fields", () => {
+    expect(manual).toContain('id="invoice-amount"');
+    expect(draft).toContain('id="invoice-document-draft-amount"');
+    expect(draft).toContain('for="invoice-document-draft-amount"');
+    expect(draft).not.toContain('id="invoice-amount"');
+  });
+
+  it("leaves the currency for the member to choose when the document named none", () => {
+    const unnamed = renderToStaticMarkup(
+      <DocumentDraft result={{ ...RESULT, draft: { ...RESULT.draft!, currency: null } }} orgSlug="acme" counterparties={COUNTERPARTIES} />
+    );
+    expect(unnamed).toContain("Choose USDC or EURC");
+    expect(unnamed).toMatch(/<select[^>]*required=""[^>]*name="currency"/);
+    expect(draft).not.toContain("Choose USDC or EURC");
+    expect(manual).not.toContain("Choose USDC or EURC");
   });
 });
 

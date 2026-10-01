@@ -86,16 +86,17 @@ describe("reading an invoice document", () => {
   });
 
   it("says when a PDF is a scan", async () => {
-    expect(await read({ file: fixture("scan.pdf") })).toEqual({ ok: false, message: "This PDF has no text to read; it may be a scan. Paste the invoice's text instead." });
+    // The file is let go, so the text pasted next is what gets read (review I3).
+    expect(await read({ file: fixture("scan.pdf") })).toEqual({ ok: false, message: "This PDF has no text to read; it may be a scan. Paste the invoice's text instead.", clearFile: true });
   });
 
   it("refuses a file over the size limit before reading it", async () => {
     const big = new File([new Uint8Array(4_000_001)], "big.pdf", { type: "application/pdf" });
-    expect(await read({ file: big })).toEqual({ ok: false, message: "Choose a file of at most 4 MB." });
+    expect(await read({ file: big })).toEqual({ ok: false, message: "Choose a file of at most 4 MB.", clearFile: true });
   });
 
   it("asks for a file or text when given neither", async () => {
-    expect(await read({})).toEqual({ ok: false, message: "There is no text to read. Choose a file or paste the invoice's text." });
+    expect(await read({})).toEqual({ ok: false, message: "There is no text to read. Choose a file or paste the invoice's text.", clearFile: false });
   });
 
   it("refuses someone who may not add invoices, before reading anything", async () => {

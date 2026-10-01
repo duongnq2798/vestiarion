@@ -30,6 +30,8 @@ export interface DocumentReadResult {
   document?: { kind: "pdf" | "text"; sha256: string; truncated: boolean };
   /** Changes on every read, so the form below remounts with the new values. */
   nonce?: number;
+  /** On a refusal about the file chosen: let it go, so text pasted next is what is read (review I3). */
+  clearFile?: boolean;
 }
 
 /** The file chosen, when there is one, or else the text pasted. A file over the limit is refused before its bytes are read. */
@@ -51,6 +53,8 @@ async function documentInput(source: File | string): Promise<DocumentInput> {
 export async function readInvoiceDocumentAction(_previous: DocumentReadResult, formData: FormData): Promise<DocumentReadResult> {
   const auth = await authorize(formData.get("orgSlug"), "records.write");
   if (!auth.ok) return { ok: false, message: auth.message };
+  const file = formData.get("file");
+  const fromFile = file instanceof File && file.size > 0;
   return inOrg(auth, async () => {
     try {
       // The size is checked before the bytes are read, and the limit before the model is called.
@@ -85,7 +89,7 @@ export async function readInvoiceDocumentAction(_previous: DocumentReadResult, f
         nonce: Date.now(),
       };
     } catch (error) {
-      if (error instanceof DocumentReadError) return { ok: false, message: error.message };
+      if (error instanceof DocumentReadError) return { ok: false, message: error.message, clearFile: fromFile };
       console.error("invoice document read failed", error instanceof Error ? error.message : "unknown error");
       return { ok: false, message: "The invoice could not be read. Try again in a moment." };
     }

@@ -45,16 +45,22 @@ export default function InvoiceIntake({
   initial,
   document,
   onAdded,
+  idPrefix = "invoice",
 }: {
   counterparties: IntakeCounterparty[];
   orgSlug: string;
   initial?: InvoiceFormInitial;
   document?: InvoiceFormDocument;
   onAdded?: () => void;
+  /** Distinct per form on a page, so each label names its own field (review I5). */
+  idPrefix?: string;
 }) {
   const { state, formProps } = useActionForm(createInvoiceAction, INITIAL, { resetOnSuccess: true, toastOnSuccess: true, onSuccess: onAdded });
   const none = counterparties.length === 0;
   const start = (value: string | null | undefined) => value ?? undefined;
+  // Typed in, an invoice is in USDC unless changed. Read from a document that names no currency, the member chooses.
+  const currency = initial ? (initial.currency === "USDC" || initial.currency === "EURC" ? initial.currency : undefined) : "USDC";
+  const id = (field: string) => `${idPrefix}-${field}`;
 
   return (
     <form {...formProps} className="space-y-4">
@@ -68,7 +74,7 @@ export default function InvoiceIntake({
         </>
       )}
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field id="invoice-direction" label="Direction">
+        <Field id={id("direction")} label="Direction">
           <Select name="direction" defaultValue="payable">
             <SelectTrigger>
               <SelectValue />
@@ -79,7 +85,7 @@ export default function InvoiceIntake({
             </SelectContent>
           </Select>
         </Field>
-        <Field id="invoice-counterparty" label="Counterparty" description={none ? "Add a counterparty first — every invoice is against one." : undefined}>
+        <Field id={id("counterparty")} label="Counterparty" description={none ? "Add a counterparty first — every invoice is against one." : undefined}>
           <Select name="counterpartyId" required disabled={none} defaultValue={start(initial?.counterpartyId)}>
             <SelectTrigger>
               <SelectValue placeholder="Select a counterparty" />
@@ -93,13 +99,13 @@ export default function InvoiceIntake({
             </SelectContent>
           </Select>
         </Field>
-        <Field id="invoice-amount" label="Amount">
+        <Field id={id("amount")} label="Amount">
           <Input name="amount" required inputMode="decimal" placeholder="1250.00" defaultValue={start(initial?.amount)} />
         </Field>
-        <Field id="invoice-currency" label="Currency" description="A EURC payable is paid in EURC, and checked against the payment limit at its USDC value.">
-          <Select name="currency" defaultValue={initial?.currency === "EURC" ? "EURC" : "USDC"}>
+        <Field id={id("currency")} label="Currency" description="A EURC payable is paid in EURC, and checked against the payment limit at its USDC value.">
+          <Select name="currency" defaultValue={currency} required={currency === undefined}>
             <SelectTrigger>
-              <SelectValue />
+              <SelectValue placeholder="Choose USDC or EURC" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="USDC">USDC</SelectItem>
@@ -107,19 +113,19 @@ export default function InvoiceIntake({
             </SelectContent>
           </Select>
         </Field>
-        <Field id="invoice-due" label="Due date">
+        <Field id={id("due")} label="Due date">
           <Input name="dueDate" required type="date" defaultValue={start(initial?.dueDate)} />
         </Field>
-        <Field id="invoice-discount-pct" label="Early-payment discount (%)" optional>
+        <Field id={id("discount-pct")} label="Early-payment discount (%)" optional>
           <Input name="earlyPayDiscountPct" inputMode="decimal" placeholder="2" defaultValue={start(initial?.earlyPayDiscountPct)} />
         </Field>
-        <Field id="invoice-discount-deadline" label="Discount deadline" optional>
+        <Field id={id("discount-deadline")} label="Discount deadline" optional>
           <Input name="discountDeadline" type="date" defaultValue={start(initial?.discountDeadline)} />
         </Field>
-        <Field id="invoice-memo" label="Memo" optional>
+        <Field id={id("memo")} label="Memo" optional>
           <Input name="memo" maxLength={280} defaultValue={start(initial?.memo)} />
         </Field>
-        <Field id="invoice-po" label="PO reference" optional>
+        <Field id={id("po")} label="PO reference" optional>
           <Input name="poReference" maxLength={100} placeholder="PO-100" defaultValue={start(initial?.poReference)} />
         </Field>
       </div>
