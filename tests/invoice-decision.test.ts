@@ -383,3 +383,67 @@ describe("invoiceDecision: a EURC invoice paid from USDC by a swap (EURC swap sp
     expect(decision.guardrail).toEqual({ rule: "fx.swap_usdc_short", attempted: 4.492616, attemptedToken: "USDC", limit: 5, limitToken: "USDC", note: "USDC left after the swap, against what falls due within 7 days" });
   });
 });
+
+describe("invoiceDecision: a receivable (receivables on Arc)", () => {
+  // A receivable is money a client owes the business. Its card must not read like a payable's (PO, goods
+  // received, payment limit, the payee's chain) nor say the agent never evaluated it once a transfer settled it
+  // (the partner's test, 2026-10-02: "Recorded", "The agent has not evaluated this invoice yet.").
+  const receivable = (overrides: Partial<InvoiceRow> = {}) =>
+    invoice({ direction: "receivable", counterparty_name: "CME", amount: 1.25, memo: "Rec", po_reference: "PO-111", ...overrides });
+  const received = {
+    seq: 653,
+    ts: "2026-10-01T17:21:00.000Z",
+    actor: "agent",
+    domain: "ar",
+    action: "ar_received",
+    summary: "Received 1.25 USDC from CME on Arc testnet",
+    detail: {
+      invoiceId: "inv-1",
+      counterpartyId: "cp-1",
+      amount: 1.25,
+      currency: "USDC",
+      txHash: `0x4bdd${"0".repeat(56)}8c81`,
+      from: "0x351d50ac54274fbda179dee81c94d7378df06833",
+      circleTxId: "circle-1",
+      matchedBy: "amount",
+      receivedAt: "2026-10-01T17:03:08.000Z",
+    },
+  } as unknown as LedgerEntry;
+
+  it("reads Received on Arc with its transaction, and says how the transfer was matched", () => {
+    const decision = invoiceDecision(receivable({ status: "received", tx_ref: `0x4bdd${"0".repeat(56)}8c81` }), undefined, [received]);
+    expect(decision.domain).toBe("ar");
+    expect(decision.outcome).toBe("settled");
+    expect(decision.outcomeLabel).toBe("Received on Arc");
+    expect(decision.txHash).toBe(`0x4bdd${"0".repeat(56)}8c81`);
+    expect(decision.auditSeq).toBe(653);
+    expect(decision.reasoning).toBe(
+      "Received 1.25 USDC from 0x351d…6833 on Arc testnet on Oct 1, 2026, and matched it to this invoice: it is the only open receivable of that amount, and CME was sent its pay link."
+    );
+    expect(decision.evidence).toEqual([
+      { label: "Due", value: "10/30/2026", state: "neutral" },
+      { label: "Received from", value: "0x351d…6833", state: "ok" },
+      { label: "Matched by", value: "amount, through the pay link", state: "ok" },
+    ]);
+  });
+
+  it("says the client's own address matched it", () => {
+    const bySender = { ...received, detail: { ...received.detail, matchedBy: "sender" } } as unknown as LedgerEntry;
+    const decision = invoiceDecision(receivable({ status: "received", tx_ref: "0xabc" }), undefined, [bySender]);
+    expect(decision.reasoning).toContain("it came from CME's address on file");
+    expect(decision.evidence).toContainEqual({ label: "Matched by", value: "the client's address", state: "ok" });
+  });
+
+  it("waits on the client while it is open, with nothing of a payable's", () => {
+    const decision = invoiceDecision(receivable({ status: "pending" }), undefined, []);
+    expect(decision.outcomeLabel).toBe("Awaiting payment");
+    expect(decision.reasoning).toBe(
+      "Waiting for CME to pay. When the exact amount arrives in the operating wallet on Arc testnet, the agent matches it to this invoice."
+    );
+    expect(decision.evidence).toEqual([{ label: "Due", value: "10/30/2026", state: "neutral" }]);
+  });
+
+  it("reads Received for one a person marked received without a transfer", () => {
+    expect(invoiceDecision(receivable({ status: "received", tx_ref: null }), undefined, []).outcomeLabel).toBe("Received");
+  });
+});
