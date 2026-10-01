@@ -200,7 +200,7 @@ describe("the overview's card grid", () => {
     expect(open).toBeGreaterThan(-1);
     expect(grid.startsWith("<a ")).toBe(true);
     expect(grid).not.toMatch(/<p[^>]*><a /);
-    expect(grid.match(/<a [^>]*href="\/docs[^"]*"/g)).toHaveLength(6);
+    expect(grid.match(/<a [^>]*href="\/docs[^"]*"/g)).toHaveLength(7);
   });
 });
 

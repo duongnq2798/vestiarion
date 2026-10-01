@@ -12,7 +12,7 @@ import { GoLiveError, type GoLiveErrorCode } from "@/lib/platform/go-live";
  * button in the app fails this test until the guide says the new name.
  */
 
-type GuideSlug = "guides/go-live" | "guides/first-payment" | "guides/pay-a-contractor" | "guides/audit-export";
+type GuideSlug = "guides/try-it" | "guides/go-live" | "guides/first-payment" | "guides/pay-a-contractor" | "guides/audit-export";
 
 const PANEL = "src/components/GoLivePanel.tsx";
 const GO_LIVE_ACTIONS = "src/app/actions/go-live.ts";
@@ -48,9 +48,39 @@ const MILESTONE_FORM = "src/components/intake/MilestoneIntake.tsx";
 const MILESTONE_ACTIONS = "src/app/actions/milestones.ts";
 const MILESTONE_CHECK = "src/components/MilestoneVerification.tsx";
 const GITHUB_CHECK = "src/lib/milestone-verification.ts";
+const LOGIN_PAGE = "src/app/login/page.tsx";
+const LOGIN_FORM = "src/components/auth/LoginForm.tsx";
+const WORKSPACE_FORM = "src/components/CreateWorkspaceForm.tsx";
+const OPEN_TABLE = "src/components/open/OpenNumbersTable.tsx";
+const APPROVALS_LIST = "src/app/o/[slug]/approvals/page.tsx";
 
 /** Each guide's quoted UI strings, as `[text, the file it must appear in]`. */
 const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
+  "guides/try-it": [
+    ["Continue with Google", LOGIN_PAGE],
+    ["Work email", LOGIN_FORM],
+    ["Email me a sign-in link", LOGIN_FORM],
+    ["Workspace name", WORKSPACE_FORM],
+    ["Create workspace", WORKSPACE_FORM],
+    ["Treasury", APP_NAV],
+    ["Try it with sample data", SAMPLE_PANEL],
+    ["Load sample data", SAMPLE_PANEL],
+    ["Run cycle now", RUN],
+    ["AP / AR", APP_NAV],
+    ["Agent’s reasoning", DECISION_CARD],
+    ["Blocked by code, not by the model", DECISION_CARD],
+    ["Approvals", APP_NAV],
+    ["Approve and pay", APPROVAL_CARD],
+    ["Pay now", APPROVAL_CARD],
+    ["Nothing is waiting for a decision.", APPROVALS_LIST],
+    ["Audit log", APP_NAV],
+    ["Verify hash chain", VERIFY_BADGE],
+    ["Chain intact", VERIFY_BADGE],
+    ["Payments settled on Arc testnet", OPEN_TABLE],
+    ["Remove sample data", SAMPLE_PANEL],
+    ["Remove the sample data first. It exists only to try the agent with simulated payments.", GO_LIVE_LIBRARY],
+    ["Get started", CHECKLIST],
+  ],
   "guides/go-live": [
     ["Settings", APP_NAV],
     ["Get started", CHECKLIST],
@@ -267,6 +297,7 @@ const sourceFile = (file: string) => readFileSync(path.join(process.cwd(), file)
  * bar is lower, but still enough to show it is grounded in the real UI.
  */
 const MIN_QUOTED: Record<GuideSlug, number> = {
+  "guides/try-it": 20,
   "guides/go-live": 20,
   "guides/first-payment": 20,
   "guides/pay-a-contractor": 20,
@@ -324,6 +355,7 @@ describe("the Go live guide's failure table", () => {
 describe("the way into the guides", () => {
   it("is linked from the docs Overview and from the API Quickstart", () => {
     expect(readSource("")).toContain('href="/docs/guides/go-live"');
+    expect(readSource("")).toContain('href="/docs/guides/try-it"');
     expect(readSource("get-started/quickstart")).toContain("Using the app rather than the API? Start with [Go live on Arc testnet](/docs/guides/go-live).");
   });
 });

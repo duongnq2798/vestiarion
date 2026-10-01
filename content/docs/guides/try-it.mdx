@@ -1,0 +1,50 @@
+In five minutes, with no wallet and no keys, you can watch Vestiarion's agent decide a small business's payables, make one decision yourself, and check that every decision is signed. Ten minutes more takes the same workspace to real payments on Arc testnet.
+
+## 1. Sign in
+
+Open [www.vestiarion.xyz/login](https://www.vestiarion.xyz/login). Choose **Continue with Google**, or enter a **Work email** and choose **Email me a sign-in link**, then open the link it sends.
+
+## 2. Create a workspace
+
+Under **Workspace name**, type any name and choose **Create workspace**. The workspace starts as a sandbox: its payments are simulated, and nothing reaches a chain until you take it live. You land on **Treasury**, the console.
+
+## 3. Load sample data
+
+The console offers **Try it with sample data**. Choose **Load sample data**. It adds six example counterparties with invoices and milestones, chosen so that one cycle shows every outcome. Within about a minute the agent runs that cycle on its own, without anyone pressing **Run cycle now**. The console then shows what it decided:
+
+- a hosting invoice with a purchase order and goods received is paid;
+- an overage with no purchase order waits for information;
+- an invoice over its counterparty's limit is held for a person;
+- a print run billed again under a purchase order already paid is flagged;
+- a verified contractor milestone is released, and an unverified one waits.
+
+## 4. Read why
+
+Open **AP / AR**. Each decision is a card. **Agent’s reasoning** says why, citing the facts the agent was given: the amount, the purchase order, the risk level, the limit and the balance. Below it are the evidence it checked and its ledger entry. When the model wanted to pay and a guardrail in code stopped it, the card says "Blocked by code, not by the model" and names the rule.
+
+
+## 5. Decide one yourself
+
+Open **Approvals**. The held and flagged payables wait there for a person. On the held one, choose **Approve and pay**, then **Pay now**. In a sandbox the payment is simulated, and the ledger records that you approved it. When the list is empty it reads "Nothing is waiting for a decision."
+
+## 6. Check the ledger
+
+Open **Audit log** and choose **Verify hash chain**. Every entry is signed with Ed25519 and linked to the one before it. When every signature and link holds, it answers "Chain intact". To check a workspace's ledger outside the app, see [Verify an audit export](/docs/guides/audit-export).
+
+
+## 7. See it on Arc testnet
+
+[www.vestiarion.xyz/open](https://www.vestiarion.xyz/open) shows the platform's own numbers, read from the production database: **Payments settled on Arc testnet**, USDC paid, payees, decisions, and how quickly workspaces reach a first payment. It also lists our own workspaces' latest payments, each linked to the Arc testnet explorer. Among them:
+
+- a payment in EURC, weighed against its counterparty's USDC limit at a rate quoted by Circle;
+- a payout to a vendor on Base Sepolia, listed by its burn on Arc testnet. Circle forwarded the mint to the vendor on Base Sepolia.
+
+## Go further: a real payment on Arc testnet
+
+About ten minutes more takes your workspace from simulated payments to real ones on Arc testnet:
+
+1. On the console, choose **Remove sample data**. A workspace with sample data loaded cannot connect Circle: "Remove the sample data first. It exists only to try the agent with simulated payments."
+2. Follow [Go live on Arc testnet](/docs/guides/go-live): create a hosted wallet in one click, get testnet USDC from Circle's faucet for its address, and go live. The console's **Get started** checklist walks you through it.
+3. Follow [Your first payment](/docs/guides/first-payment): add a payee with an address you control, and add a payable due today. The agent decides on it within a minute. Its card links the payment on the Arc testnet explorer.
+
+A payee can also be paid in EURC, or on Base, Arbitrum or Ethereum Sepolia. Your first payment explains both.

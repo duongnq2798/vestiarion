@@ -44,6 +44,7 @@ export const DOCS_NAV: NavSection[] = [
   {
     title: "Guides",
     pages: [
+      { slug: "guides/try-it", title: "Try it in 5 minutes", description: "Sign in, load sample data, watch the agent decide, approve a payment and verify the signed ledger." },
       { slug: "guides/go-live", title: "Go live on Arc testnet", description: "Create the workspace's wallets, fund them with testnet USDC and take the agent live." },
       { slug: "guides/first-payment", title: "Your first payment", description: "Add a counterparty and an invoice, run a cycle, and follow the payment to the explorer and the ledger." },
       { slug: "guides/pay-a-contractor", title: "Pay a contractor for delivered work", description: "Add a milestone, verify the work by hand or by a merged pull request, and let the agent release the pay." },
