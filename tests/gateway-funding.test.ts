@@ -95,7 +95,9 @@ function balances(...values: string[]): typeof fetch {
   }) as unknown as typeof fetch;
 }
 
-beforeEach(() => appendLedgerEntry.mockClear());
+beforeEach(() => {
+  appendLedgerEntry.mockClear();
+});
 
 async function fund(
   db: ReturnType<typeof database>,

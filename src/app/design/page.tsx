@@ -28,6 +28,9 @@ import MilestoneIntake from "@/components/intake/MilestoneIntake";
 import AgentControlsClient from "@/components/AgentControlsClient";
 import AgentPauseControl from "@/components/AgentPauseControl";
 import MembersPanel from "@/components/MembersPanel";
+import { ReceiptControl } from "@/components/ReceiptControl";
+import { ReceiptView } from "@/components/receipt/ReceiptView";
+import { designReceipt } from "./receipt-fixture";
 import MilestoneVerification from "@/components/MilestoneVerification";
 import VerifyLedgerBadge from "@/components/VerifyLedgerBadge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
@@ -495,6 +498,14 @@ export default function DesignPage() {
               <Eyebrow>Milestone verification</Eyebrow>
               <MilestoneVerification orgSlug={DESIGN_SLUG} milestoneId="00000000-0000-4000-8000-00000000000a" verified={false} />
             </Card>
+            <Card className="space-y-3 p-4 sm:p-5">
+              <Eyebrow>Payment receipt, on a paid payable&apos;s card</Eyebrow>
+              <ReceiptControl orgSlug={DESIGN_SLUG} invoiceId="00000000-0000-4000-8000-00000000000b" shared={false} />
+              <ReceiptControl orgSlug={DESIGN_SLUG} invoiceId="00000000-0000-4000-8000-00000000000b" shared />
+            </Card>
+            <div className="mx-auto w-full max-w-2xl">
+              <ReceiptView view={designReceipt()} />
+            </div>
             <MembersPanel
               orgSlug={DESIGN_SLUG}
               members={MEMBERS}

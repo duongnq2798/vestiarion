@@ -39,6 +39,7 @@ const CRUD_UPDATE: Record<string, { column: string; expr: string }> = {
   cycle_runs: { column: "sim_day", expr: "coalesce(sim_day, 0) + 1" },
   sim_clock: { column: "current_day", expr: "current_day + 1" },
   gateway_signers: { column: "delegate_tx_id", expr: "coalesce(delegate_tx_id, '') || '-changed'" },
+  payment_receipts: { column: "revoked_at", expr: "now()" },
 };
 
 beforeAll(async () => {

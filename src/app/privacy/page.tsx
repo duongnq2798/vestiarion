@@ -74,6 +74,11 @@ export default function PrivacyPage() {
           The public <LegalLink href="/open">open numbers</LegalLink> page shows counts and totals across all workspaces, such as how many payments settled
           and how much USDC they moved. It never names a workspace or a person, and never lists a customer&apos;s payment.
         </p>
+        <p>
+          An owner or admin can share one paid payment&apos;s receipt as a link. Anyone with the link sees that payment&apos;s amount, the payee&apos;s
+          chain and address, its transactions and its signed ledger entry, which already sit on a public chain or in the workspace&apos;s own ledger. It
+          shows no names. The link stops working when they stop sharing it or make a new one.
+        </p>
       </LegalSection>
 
       <LegalSection id="secrets" title="Secrets">
@@ -159,7 +164,8 @@ export default function PrivacyPage() {
         <p>When this deployment sets a measurement ID, Vestiarion counts page views with Google Analytics 4. Before a page view leaves your browser:</p>
         <ul>
           <li>
-            an invitation address becomes <code>/invite/:token</code>, and a workspace address has the workspace&apos;s slug replaced, as <code>/o/:org</code>;
+            an invitation address becomes <code>/invite/:token</code>, a payee link <code>/payee/:token</code> and a receipt link{" "}
+            <code>/receipt/:token</code>, and a workspace address has the workspace&apos;s slug replaced, as <code>/o/:org</code>;
           </li>
           <li>only the path is sent, never the query string or anything after a #;</li>
           <li>the title of a workspace page, which names the workspace, is replaced with its redacted path;</li>

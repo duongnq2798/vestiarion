@@ -1,5 +1,6 @@
 import { ArrowUpRight, Check, ShieldX, X } from "lucide-react";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Callout } from "@/components/ui/Callout";
 import { Card } from "@/components/ui/Card";
@@ -17,14 +18,25 @@ const CARD_TONE: Partial<Record<Outcome, "refused" | "held" | "simulated">> = {
 };
 
 /** One decision the agent made: what, how much, why, and the evidence and receipts behind it. */
-export function DecisionCard({ decision, compact = false, orgSlug }: { decision: Decision; compact?: boolean; orgSlug: string }) {
+export function DecisionCard({
+  decision,
+  compact = false,
+  orgSlug,
+  footerAction,
+}: {
+  decision: Decision;
+  compact?: boolean;
+  orgSlug: string;
+  /** Something a person can do with the decision, shown in its footer: a paid payable's receipt (payment receipts P6). */
+  footerAction?: ReactNode;
+}) {
   const refused = decision.outcome === "refused";
   const time = new Date(decision.at).toLocaleTimeString("en-GB", {
     hour: "2-digit",
     minute: "2-digit",
     timeZone: "UTC",
   });
-  const hasFooter = decision.evidence.length > 0 || Boolean(decision.txHash) || decision.auditSeq != null;
+  const hasFooter = decision.evidence.length > 0 || Boolean(decision.txHash) || decision.auditSeq != null || Boolean(footerAction);
 
   return (
     <Card asChild tone={CARD_TONE[decision.outcome] ?? "default"} className="overflow-hidden">
@@ -94,6 +106,7 @@ export function DecisionCard({ decision, compact = false, orgSlug }: { decision:
                   <Hash value={decision.mint.txHash} href={decision.mint.href} />
                 </span>
               )}
+              {footerAction}
             </div>
           </footer>
         )}

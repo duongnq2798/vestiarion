@@ -98,7 +98,7 @@ export async function createUser(db: PGlite, email: string): Promise<string> {
 
 export const TENANT_TABLES = [
   "accounts", "counterparties", "invoices", "milestones", "treasury_actions", "compliance_checks",
-  "forecasts", "ledger_entries", "payment_intents", "cycle_runs", "cycle_snapshots", "sim_clock", "gateway_signers",
+  "forecasts", "ledger_entries", "payment_intents", "cycle_runs", "cycle_snapshots", "sim_clock", "gateway_signers", "payment_receipts",
 ] as const;
 
 export interface SeededRows {
@@ -139,6 +139,10 @@ export async function seedOrgRows(db: PGlite, orgId: string, tag: string): Promi
      values ($1, $2, now(), '{}'::jsonb, 0, 0, 0, 0, 0, 0, 'simulate')`, [orgId, cycleRunId]);
   await db.query("select advance_sim_day($1::uuid)", [orgId]);
   await db.query("insert into gateway_signers (org_id, circle_wallet_id, address) values ($1, $2, '0x' || repeat('ab', 20))", [orgId, `signer-${tag}`]);
+  await db.query(
+    "insert into payment_receipts (org_id, invoice_id, entry_seq, token_hash) values ($1, $2, 1, encode(sha256(convert_to($3, 'utf8')), 'hex'))",
+    [orgId, invoiceId, `receipt-${tag}`]
+  );
   const key = crypto.generateKeyPairSync("ed25519");
   await appendSignedForOrg(db, orgId, { actor: "system", domain: "system", action: "note", summary: tag, detail: { tag } }, key.privateKey);
   return { counterpartyId, accountId, invoiceId, cycleRunId, idempotencyKey };

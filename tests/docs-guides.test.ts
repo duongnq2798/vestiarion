@@ -28,6 +28,8 @@ const INVOICES_PAGE = "src/app/o/[slug]/invoices/page.tsx";
 const DOCUMENT_TAB = "src/components/intake/InvoiceDocumentIntake.tsx";
 const DOCUMENT_READ = "src/lib/invoice-document/read.ts";
 const GATEWAY_PANEL = "src/components/GatewayPanel.tsx";
+const RECEIPT_CONTROL = "src/components/ReceiptControl.tsx";
+const RECEIPT_VIEW = "src/components/receipt/ReceiptView.tsx";
 const INTAKE_ACTIONS = "src/app/actions/intake.ts";
 const ORCHESTRATOR = "src/lib/agent/orchestrator.ts";
 const CONSOLE_PAGE = "src/app/o/[slug]/console/page.tsx";
@@ -157,6 +159,13 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["Gateway balance", GATEWAY_PANEL],
     ["Amount to move from the operating wallet (USDC)", GATEWAY_PANEL],
     ["Fund Gateway", GATEWAY_PANEL],
+    ["Share receipt", RECEIPT_CONTROL],
+    ["Receipt shared", RECEIPT_CONTROL],
+    ["New link", RECEIPT_CONTROL],
+    ["Stop sharing", RECEIPT_CONTROL],
+    ["Signed by the paying workspace", RECEIPT_VIEW],
+    ["Recorded when it was paid", RECEIPT_VIEW],
+    ["Check it yourself", RECEIPT_VIEW],
     ["Direction", INVOICE_FORM],
     ["Payable", INVOICE_FORM],
     ["Amount", INVOICE_FORM],
