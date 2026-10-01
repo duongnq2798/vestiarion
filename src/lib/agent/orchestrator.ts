@@ -99,6 +99,59 @@ When to pay an accounts-payable invoice:
 
 Respond with ONLY a single JSON object in the requested shape. No prose outside the JSON.`;
 
+/** The facts a payable is decided on, as the model is shown them (apDecisionPrompt). */
+export interface ApPromptFacts {
+  invoice: {
+    amount: number;
+    currency: Stablecoin;
+    usdcValue: number | null;
+    memo: string | null;
+    poReference: string | null;
+    goodsReceived: boolean;
+    dueDate: string;
+  };
+  terms: { earlyPayDiscount: unknown };
+  counterparty: { name: string; riskLevel: string; paymentLimit: number | null; performanceHistory: unknown };
+  treasury: Record<string, number | null>;
+  payout: unknown;
+  timing: unknown;
+  scheduledEarlier: { payOn: string; reasoning: string | null } | null;
+  duplicateMatches: Array<{
+    otherInvoiceStatus: string;
+    otherInvoiceDueDate: string | null;
+    otherInvoiceAmount: number;
+    confidence: number;
+    signals: string[];
+    finding: string;
+  }>;
+  duplicateMatchesTotal: number;
+}
+
+/** What the model is told about the payables that resemble this one. */
+export function duplicateNote(total: number, shown: number): string {
+  if (total === 0) return "No earlier payable from this counterparty resembles this invoice.";
+  return `${total} earlier payable(s) from this counterparty resemble this one; the ${shown} strongest are shown. A repeat of an invoice that is already paid, being paid, scheduled or being decided by a person is duplicate billing — flag it rather than paying or scheduling it a second time.`;
+}
+
+/**
+ * The model's question about one payable, with its facts: the one place the
+ * prompt is built, so a replay of recorded facts asks exactly what the
+ * agent asked (scripts/replay-ap-decisions.ts).
+ */
+export function apDecisionPrompt(facts: ApPromptFacts, note: string = duplicateNote(facts.duplicateMatchesTotal, facts.duplicateMatches.length)): string {
+  return JSON.stringify({
+    task: "Decide whether to pay this accounts-payable invoice, and when: now, or on a later day no later than its due date.",
+    ...facts,
+    duplicateNote: note,
+    responseShape: {
+      action: "pay | schedule | hold | flag_fraud | request_info",
+      payOn: "YYYY-MM-DD (UTC), with schedule only: after today, and no later than the due date",
+      reasoning: "string",
+      confidence: "number between 0 and 1",
+    },
+  });
+}
+
 const apDecisionSchema = z
   .object({
     action: z.enum(["pay", "schedule", "hold", "flag_fraud", "request_info"]),
@@ -1000,8 +1053,7 @@ async function decideApPayable(
 
   const { value: modelDecision, mode, reference, agreedWithReference: sameActionAsReference } = await decide<ApDecision>({
     systemPrompt: SYSTEM_PROMPT,
-    userPrompt: JSON.stringify({
-      task: "Decide whether to pay this accounts-payable invoice, and when: now, or on a later day no later than its due date.",
+    userPrompt: apDecisionPrompt({
       invoice: {
         amount,
         currency,
@@ -1037,16 +1089,6 @@ async function decideApPayable(
         finding: match.explanation,
       })),
       duplicateMatchesTotal: duplicateContext.total,
-      duplicateNote:
-        duplicates.length === 0
-          ? "No earlier payable from this counterparty resembles this invoice."
-          : `${duplicateContext.total} earlier payable(s) from this counterparty resemble this one; the ${duplicateContext.matches.length} strongest are shown. A repeat of an invoice that is already paid, being paid, scheduled or being decided by a person is duplicate billing — flag it rather than paying or scheduling it a second time.`,
-      responseShape: {
-        action: "pay | schedule | hold | flag_fraud | request_info",
-        payOn: "YYYY-MM-DD (UTC), with schedule only: after today, and no later than the due date",
-        reasoning: "string",
-        confidence: "number between 0 and 1",
-      },
     }),
     schema: apDecisionSchema,
     fallback: (): ApDecision => {
