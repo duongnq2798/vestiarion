@@ -113,4 +113,24 @@ Whether a 2 USDC invoice is worth a 1.85 USDC fee is exactly the kind of judgeme
 
 ## 7. Rollout record
 
-(pending)
+- **2026-10-01: 0044 applied, #89 merged as 090ff36.** Checked read-only before the merge:
+  - `counterparties_chain_check` is in place: four chains, and another chain only for a vendor.
+  - The intent's three new columns exist.
+  - `payee_link_chain` is a definer and only the service role can run it.
+  - 0038, 0040, 0042 and 0043 are intact.
+  - All 11 counterparties were on Arc testnet.
+- **The first payout across chains, in testnet-2.**
+  - At 03:41:23 UTC the vendor Gozo was added on Base Sepolia: limit 5 USDC, address `0x19801dAA…Fdd12`, the partner's own wallet.
+  - At 03:42:03 a 1 USDC payable due that day, with PO-107 and goods received, was added.
+  - The event cycle started at 03:42:09. Iris quoted a fee of 0.05482 USDC, 5.48% of the amount.
+  - The model (DeepSeek) and the written policy both decided to pay. The model's reasoning cites the route, the fee against the 10% hold threshold, and the 30-second settlement.
+  - At 03:42:41 the payment confirmed and the invoice was paid. The decision came 40 s after the payable was added, and covers the approve, the burn and the forwarded mint.
+  - Ledger #512 `ap_pay` carries `payout: { chain: "BASE-SEPOLIA", route: "cctp", domain: 6, feeUsdc: 0.05482 }`, and the mint in `execution`.
+- **On chain (public RPCs):**
+  - **Burn on Arc testnet:** tx `0xbc1961bbe2896e7e91d452498b595f1a1de8d45f34b7db8b3fd9d873d908d49c`, block 64884383, status 1. It was submitted through the ERC-4337 entry point for the operating SCA.
+    - 1.054821 USDC moved from the operating wallet `0x97f8…6b6` to the TokenMinter and was burned: the amount plus a `maxFee` of 0.054821.
+    - TokenMessengerV2 emitted its deposit event.
+  - **Mint on Base Sepolia:** tx `0x6c749323f9e36efe21fcd5c33df2e55ba5db82040dbd06ff2a8872045c6fef9a`, block 47528935, status 1. Base Sepolia USDC minted:
+    - **1.0** to the payee `0x19801daa…fdd12`;
+    - 0.054821 to the Forwarding Service's fee recipient.
+  - The payee got the invoice amount exactly; R3's "any part of the fee not charged" was nil here.
