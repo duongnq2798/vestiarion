@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { ChainProvider, TransferResult } from "./circle";
+import type { ChainProvider, Stablecoin, TransferResult } from "./circle";
 import { FAILED_STATES } from "./circle/settlement";
 import { db, unwrap } from "./dal";
 
@@ -99,6 +99,8 @@ export interface PaymentRequest {
   destination: string;
   amount: number;
   memo: string;
+  /** What the transfer moves: USDC unless the invoice is in EURC (EURC invoices design E5). */
+  token?: Stablecoin;
 }
 
 /** The terminally failed attempt a retry followed: ids and Circle's states only. */
@@ -209,6 +211,9 @@ export class SupabasePaymentIntentStore implements PaymentIntentStore {
       provider_mode: input.provider === "circle" ? "live" : "simulate",
       amount: input.amount,
       destination: input.destination,
+      // USDC is the column's default (0040): only a EURC payment names its token,
+      // so USDC payments do not depend on the column existing yet.
+      ...(input.token && input.token !== "USDC" ? { token: input.token } : {}),
     }, { onConflict: "source_type,source_id", ignoreDuplicates: true });
     if (result.error) throw new Error(result.error.message);
     return this.getBySource(input.sourceType, input.sourceId);
@@ -388,6 +393,7 @@ export async function executePayment(
       amount: request.amount,
       memo: request.memo,
       idempotencyKey,
+      token: request.token ?? "USDC",
     });
     intent = await store.recordResult(idempotencyKey, result);
     return execution(intent, false, retriedAfter);

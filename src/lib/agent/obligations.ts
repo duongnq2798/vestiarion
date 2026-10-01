@@ -1,7 +1,20 @@
 export const OPEN_PAYABLE_STATUSES = ["pending", "matched", "held", "awaiting_info", "scheduled"] as const;
 
+/**
+ * The USDC amounts of `rows` added up. A row with no currency is USDC; a EURC
+ * one is left out: every treasury figure stays USDC, so no USDC total quietly
+ * includes euros (EURC invoices design R3).
+ */
+export function sumUsdcAmounts(rows: ReadonlyArray<{ amount: string | number; currency?: string | null }>): number {
+  return rows
+    .filter((row) => (row.currency ?? "USDC") === "USDC")
+    .reduce((sum, row) => sum + (typeof row.amount === "number" ? row.amount : Number(row.amount)), 0);
+}
+
 export interface PayableObligation {
   amount: string | number;
+  /** USDC when absent. A EURC payable is paid from EURC, so the USDC buffer leaves it out. */
+  currency?: string | null;
   due_date: string;
   status: string;
   /** Set once a `scheduled` invoice has a target day; that day, not `due_date`, is when the cash leaves. */
@@ -20,7 +33,9 @@ export interface PayableObligationSummary {
  * in the liquidity buffer until paid or explicitly rejected.
  */
 export function summarizePayableObligations(rows: PayableObligation[], now = Date.now()): PayableObligationSummary {
-  const open = rows.filter((row) => OPEN_PAYABLE_STATUSES.includes(row.status as (typeof OPEN_PAYABLE_STATUSES)[number]));
+  const open = rows.filter(
+    (row) => OPEN_PAYABLE_STATUSES.includes(row.status as (typeof OPEN_PAYABLE_STATUSES)[number]) && (row.currency ?? "USDC") === "USDC"
+  );
   const amount = (row: PayableObligation) => typeof row.amount === "number" ? row.amount : Number(row.amount);
   // A scheduled row leaves the account on scheduled_for, not on due_date —
   // that is the date the buffer has to hold cash for. Every other row (and a

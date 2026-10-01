@@ -61,7 +61,8 @@ const openNumbersSchema = z.object({
   generatedAt: z.string(),
   sides: z.object({ customers: sideSchema, ours: sideSchema, total: sideSchema }),
   daily: z.array(dailySchema),
-  ourPayments: z.array(z.object({ at: z.string(), amount: figure, txHash: z.string(), chain: z.string().nullable() })),
+  // `token` arrives once 0040 is applied; a payment without one is USDC.
+  ourPayments: z.array(z.object({ at: z.string(), amount: figure, token: z.string().optional(), txHash: z.string(), chain: z.string().nullable() })),
 });
 
 export type SideKey = "customers" | "ours" | "total";

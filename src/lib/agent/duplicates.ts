@@ -28,6 +28,8 @@ export interface InvoiceLike {
   id: string;
   counterpartyId: string;
   amount: number;
+  /** USDC when absent. The same figure in two currencies is not the same amount. */
+  currency?: string;
   memo: string | null;
   poReference: string | null;
   dueDate: string;
@@ -144,13 +146,13 @@ function describe(
         : ` ${gapDays.toFixed(0)} day(s) apart`;
 
   if (signals.includes("same_purchase_order") && signals.includes("same_amount")) {
-    return `Bills the same purchase order for the same ${candidate.amount} USDC as invoice due ${when} (${state})${gap}. Paying both would pay one obligation twice.`;
+    return `Bills the same purchase order for the same ${candidate.amount} ${candidate.currency ?? "USDC"} as invoice due ${when} (${state})${gap}. Paying both would pay one obligation twice.`;
   }
   if (signals.includes("purchase_order_rebilled")) {
-    return `Cites the same purchase order as invoice due ${when} (${state}) but for a different amount (${candidate.amount} USDC). Either an amendment or the order being billed twice; the difference needs confirming before payment.`;
+    return `Cites the same purchase order as invoice due ${when} (${state}) but for a different amount (${candidate.amount} ${candidate.currency ?? "USDC"}). Either an amendment or the order being billed twice; the difference needs confirming before payment.`;
   }
   if (signals.includes("same_amount") && signals.includes("same_memo")) {
-    return `Same counterparty, same ${candidate.amount} USDC, same description as invoice due ${when} (${state})${gap}, and no purchase order distinguishes them.`;
+    return `Same counterparty, same ${candidate.amount} ${candidate.currency ?? "USDC"}, same description as invoice due ${when} (${state})${gap}, and no purchase order distinguishes them.`;
   }
   return `Resembles invoice due ${when} (${state}): ${signals.join(", ")}. Confidence ${confidence.toFixed(2)}.`;
 }
@@ -172,7 +174,10 @@ export function scoreDuplicate(
   const po = normalisePo(invoice.poReference);
   const candidatePo = normalisePo(candidate.poReference);
   const samePo = po != null && candidatePo != null && po === candidatePo;
-  const sameAmount = sameMoney(invoice.amount, candidate.amount);
+  // The same figure in another currency is a different amount: 100 EURC is not
+  // 100 USDC. A purchase order billed again in the other currency is still
+  // reported below, as a re-bill to confirm (EURC invoices design, review I1).
+  const sameAmount = (invoice.currency ?? "USDC") === (candidate.currency ?? "USDC") && sameMoney(invoice.amount, candidate.amount);
   const memo = normaliseText(invoice.memo);
   const candidateMemo = normaliseText(candidate.memo);
   const sameMemo = memo != null && candidateMemo != null && memo === candidateMemo;

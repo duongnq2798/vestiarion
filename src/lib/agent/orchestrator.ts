@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { db, unwrap, type OrgDb } from "../dal";
 import { appendLedgerEntry } from "../ledger";
-import { getChainProvider, type ChainProvider } from "../circle";
+import { getChainProvider, type ChainProvider, type Stablecoin } from "../circle";
 import { cycleClockMode, type CycleClockMode } from "../clock";
 import { runComplianceSweep, screeningMode as complianceScreeningMode } from "../compliance";
 import { refreshGitHubMilestones } from "../milestone-verification";
@@ -28,8 +28,10 @@ import {
   type InvoiceLike,
 } from "./duplicates";
 import { followUpConfig, planFollowUp, type DecisionFacts, type FollowUpConfig, type FollowUpPlan } from "./follow-up";
-import { OPEN_PAYABLE_STATUSES, summarizePayableObligations } from "./obligations";
+import { OPEN_PAYABLE_STATUSES, summarizePayableObligations, sumUsdcAmounts } from "./obligations";
+import { ARC_TESTNET_EURC, quoteEurcInUsdc, type EurcQuote } from "../fx/quote";
 import {
+  amountToPay,
   boundPayOn,
   invoiceDiscount,
   planPaymentTiming,
@@ -75,6 +77,7 @@ const SYSTEM_PROMPT = `You are Vestiarion, an autonomous treasury agent operatin
 Rules you must follow:
 - Never pay a counterparty whose risk level is "high".
 - Never authorise an amount above the counterparty's current payment limit.
+- An invoice is in USDC or EURC. Payment limits are in USDC: a EURC invoice is weighed at its USDC value (invoice.usdcValue, from Circle's quote), and it is paid in EURC from the wallet's EURC (treasury.eurcBalance), never with USDC. When usdcValue is null there is no rate, so hold it. When treasury.eurcBalance is null, payments are simulated here or the balance could not be read; code checks it before any EURC leaves.
 - When a three-way match is incomplete (no purchase order on file, or goods not confirmed received), request information instead of paying.
 - When evidence suggests fraud — a duplicate invoice, a mismatched PO, a counterparty whose risk just changed — flag it rather than holding quietly.
 - Keep enough liquid operating cash to cover every obligation due in the next 7 days before sweeping anything into yield.
@@ -164,7 +167,7 @@ function performanceEvidence(
  */
 export async function applyFollowUp(
   orgDb: OrgDb,
-  row: { id: string; status: string; amount: number },
+  row: { id: string; status: string; amount: number; currency?: string },
   plan: FollowUpPlan,
   followUp: FollowUpConfig,
   now: number
@@ -190,8 +193,8 @@ export async function applyFollowUp(
     action: plan.action === "reopen" ? "invoice_reopened" : "invoice_escalated",
     summary:
       plan.action === "reopen"
-        ? `Reopened ${row.status.replace("_", " ")} invoice for ${row.amount} USDC: evidence changed`
-        : `Escalated ${row.status.replace("_", " ")} invoice for ${row.amount} USDC to a human`,
+        ? `Reopened ${row.status.replace("_", " ")} invoice for ${row.amount} ${row.currency ?? "USDC"}: evidence changed`
+        : `Escalated ${row.status.replace("_", " ")} invoice for ${row.amount} ${row.currency ?? "USDC"} to a human`,
     detail: {
       invoiceId: row.id,
       followUp: {
@@ -210,8 +213,8 @@ export async function applyFollowUp(
     domain: "ap",
     message:
       plan.action === "reopen"
-        ? `Reopened ${row.amount} USDC invoice: ${plan.changes.join("; ") || "no recorded decision facts"}`
-        : `Escalated ${row.amount} USDC invoice for human review`,
+        ? `Reopened ${row.amount} ${row.currency ?? "USDC"} invoice: ${plan.changes.join("; ") || "no recorded decision facts"}`
+        : `Escalated ${row.amount} ${row.currency ?? "USDC"} invoice for human review`,
   };
 }
 
@@ -246,7 +249,7 @@ interface PayStepOutcome {
  * one branch does.
  */
 export async function payApInvoiceIfNotPaused(
-  input: { invoiceId: string; counterpartyId: string; address: string | null; amount: number; discount?: InvoiceDiscount | null },
+  input: { invoiceId: string; counterpartyId: string; address: string | null; amount: number; discount?: InvoiceDiscount | null; currency?: Stablecoin },
   deps: { provider: ChainProvider; operating: { id: string } | null }
 ): Promise<PayStepOutcome & { payment?: { amountPaid: number; discountTaken: number } }> {
   const pauseNote = await pausedPaymentNote();
@@ -421,6 +424,8 @@ export async function reconcileApInvoice(
     reasoning: string | null;
     txRef: string | null;
     discount?: InvoiceDiscount | null;
+    /** USDC unless the invoice is in EURC; the in-flight transfer moves this token (EURC invoices design E5). */
+    currency?: Stablecoin;
   },
   intent: ExistingPaymentIntent,
   deps: { db: OrgDb; provider: ChainProvider; operating: { id: string } | null }
@@ -431,7 +436,9 @@ export async function reconcileApInvoice(
     address: invoice.address,
     amount: invoice.amount,
     discount: invoice.discount ?? null,
+    currency: invoice.currency ?? "USDC",
   };
+  const currency = input.currency;
   const transferExists = intent.providerTxId !== null || intent.status === "confirmed";
   const name = invoice.counterpartyName;
 
@@ -439,7 +446,7 @@ export async function reconcileApInvoice(
     return {
       status: "matched",
       operatingBalance: null,
-      line: { domain: "ap", message: `${name}: in-flight payment left pending, no operating account to reconcile it against (${invoice.amount} USDC)` },
+      line: { domain: "ap", message: `${name}: in-flight payment left pending, no operating account to reconcile it against (${invoice.amount} ${currency})` },
     };
   }
 
@@ -462,7 +469,7 @@ export async function reconcileApInvoice(
         actor: "agent",
         domain: "ap",
         action: "ap_reconcile",
-        summary: `RECONCILE invoice from ${name} for ${invoice.amount} USDC: not completed, left pending`,
+        summary: `RECONCILE invoice from ${name} for ${invoice.amount} ${currency}: not completed, left pending`,
         detail: {
           invoiceId: invoice.id,
           counterpartyId: invoice.counterpartyId,
@@ -480,7 +487,7 @@ export async function reconcileApInvoice(
       return {
         status: "matched",
         operatingBalance: null,
-        line: { domain: "ap", message: `${name}: could not reconcile the in-flight payment, left pending for the next cycle (${invoice.amount} USDC)` },
+        line: { domain: "ap", message: `${name}: could not reconcile the in-flight payment, left pending for the next cycle (${invoice.amount} ${currency})` },
       };
     }
     outcome = {
@@ -533,7 +540,7 @@ export async function reconcileApInvoice(
     actor: "agent",
     domain: "ap",
     action: "ap_reconcile",
-    summary: `RECONCILE invoice from ${invoice.counterpartyName} for ${invoice.amount} USDC: ${status}`,
+    summary: `RECONCILE invoice from ${invoice.counterpartyName} for ${invoice.amount} ${currency}: ${status}`,
     detail: {
       invoiceId: invoice.id,
       counterpartyId: invoice.counterpartyId,
@@ -556,16 +563,16 @@ export async function reconcileApInvoice(
   });
 
   const message = outcome.heldBecausePaused
-    ? `${invoice.counterpartyName}: not paid, the agent was paused (${invoice.amount} USDC)`
+    ? `${invoice.counterpartyName}: not paid, the agent was paused (${invoice.amount} ${currency})`
     : notResubmitted === "counterparty.high_risk"
-      ? `${name}: not resubmitted, the counterparty is now screened high risk (${invoice.amount} USDC)`
+      ? `${name}: not resubmitted, the counterparty is now screened high risk (${invoice.amount} ${currency})`
       : notResubmitted === "counterparty.address_unconfirmed"
-      ? `${name}: not resubmitted, the counterparty's address changed and no one has confirmed it (${invoice.amount} USDC)`
+      ? `${name}: not resubmitted, the counterparty's address changed and no one has confirmed it (${invoice.amount} ${currency})`
       : status === "paid"
-      ? `${invoice.counterpartyName}: reconciled an in-flight payment, now paid (${invoice.amount} USDC)`
+      ? `${invoice.counterpartyName}: reconciled an in-flight payment, now paid (${invoice.amount} ${currency})`
       : status === "matched"
-        ? `${invoice.counterpartyName}: reconciled an in-flight payment, still pending (${invoice.amount} USDC)`
-        : `${invoice.counterpartyName}: reconciled an in-flight payment, now held (${invoice.amount} USDC)`;
+        ? `${invoice.counterpartyName}: reconciled an in-flight payment, still pending (${invoice.amount} ${currency})`
+        : `${invoice.counterpartyName}: reconciled an in-flight payment, now held (${invoice.amount} ${currency})`;
   return { status, operatingBalance: outcome.operatingBalance, line: { domain: "ap", message } };
 }
 
@@ -584,6 +591,8 @@ interface ApPayableRow {
   early_pay_discount_pct?: string | number | null;
   discount_due_date?: string | null;
   scheduled_for?: string | null;
+  /** USDC or EURC (0040); absent on rows read before it. */
+  currency?: string | null;
   counterparties: {
     id: string;
     name: string;
@@ -625,10 +634,17 @@ export function dueForDecision(
   return scheduledOn <= today || dueOn <= today;
 }
 
+/** An invoice's currency as read: EURC, or USDC for anything else, a row from before 0040 included. */
+export function invoiceCurrency(value: string | null | undefined): Stablecoin {
+  return value === "EURC" ? "EURC" : "USDC";
+}
+
 /** One payable in the book the AP stage keeps while it decides. */
 export interface PayableBookRow {
   id: string;
   amount: number;
+  /** USDC when absent. */
+  currency?: Stablecoin;
   due_date: string;
   status: string;
   scheduled_for?: string | null;
@@ -652,12 +668,16 @@ export interface ObligationsDue {
  */
 export function obligationsDueBy(
   book: ReadonlyArray<PayableBookRow>,
-  input: { excludeId: string; by: string; today: string; milestones: ObligationsDue }
+  input: { excludeId: string; by: string; today: string; milestones: ObligationsDue; currency?: Stablecoin }
 ): ObligationsDue {
-  let total = input.milestones.total;
-  let count = input.milestones.count;
+  // Money competes only with money of its own kind: a EURC payable is paid
+  // from EURC, and milestones are always USDC (EURC invoices design P1).
+  const currency = input.currency ?? "USDC";
+  let total = currency === "USDC" ? input.milestones.total : 0;
+  let count = currency === "USDC" ? input.milestones.count : 0;
   for (const row of book) {
     if (row.id === input.excludeId) continue;
+    if ((row.currency ?? "USDC") !== currency) continue;
     if (!(OPEN_PAYABLE_STATUSES as readonly string[]).includes(row.status)) continue;
     const day = row.status === "matched" ? input.today : utcDayOf(row.scheduled_for ?? row.due_date);
     if (day === null || day <= input.by) {
@@ -722,19 +742,21 @@ function timingFacts(timing: ApTiming) {
  * it for a person, rather than scheduling or paying it into a transfer the
  * balance cannot make.
  */
-function shortfallReasoning(timing: ApTiming, operatingBalance: number, reserveBalance: number): string {
+function shortfallReasoning(timing: ApTiming, operatingBalance: number, reserveBalance: number, currency: Stablecoin = "USDC"): string {
   const { total, count } = timing.earlierObligations;
   const later = timing.targetOn > timing.today;
   const alternative = later ? "scheduling" : "paying";
   const cash =
-    later && reserveBalance > 0
-      ? `Operating balance ${operatingBalance} USDC plus ${reserveBalance} USDC in the reserve`
-      : `Operating balance ${operatingBalance} USDC`;
+    currency === "EURC"
+      ? `The wallet's ${operatingBalance} EURC`
+      : later && reserveBalance > 0
+        ? `Operating balance ${operatingBalance} USDC plus ${reserveBalance} USDC in the reserve`
+        : `Operating balance ${operatingBalance} USDC`;
   if (count === 0) {
-    return `${cash} cannot cover the ${timing.amountDueAtTarget} USDC this invoice needs on ${utcDay(timing.targetOn)}; holding it rather than ${alternative} it into a shortfall.`;
+    return `${cash} cannot cover the ${timing.amountDueAtTarget} ${currency} this invoice needs on ${utcDay(timing.targetOn)}; holding it rather than ${alternative} it into a shortfall.`;
   }
   const obligations = plural(count, "1 obligation", `${count} obligations`);
-  return `${cash}, less ${total} USDC for ${obligations} falling due on or before ${utcDay(timing.targetOn)}, cannot cover the ${timing.amountDueAtTarget} USDC this invoice needs then; holding it rather than ${alternative} it into a shortfall.`;
+  return `${cash}, less ${total} ${currency} for ${obligations} falling due on or before ${utcDay(timing.targetOn)}, cannot cover the ${timing.amountDueAtTarget} ${currency} this invoice needs then; holding it rather than ${alternative} it into a shortfall.`;
 }
 
 /**
@@ -825,8 +847,9 @@ async function decideApPayable(
     reserveApy: number;
     /** What sits in the reserve today — counts in the shortfall check for an invoice targeted at a later day (see `PaymentTimingInput.reserveBalance`). */
     reserveBalance: number;
-    obligationsBy: (targetOn: string, today: string) => ObligationsDue;
+    obligationsBy: (targetOn: string, today: string, currency: Stablecoin) => ObligationsDue;
     metrics: CycleMetricsCollector;
+    eurc: EurcFunds;
   }
 ): Promise<{ status: string; scheduledFor: string | null; operatingBalance: number | null; line: CycleLogLine }> {
   const { db, provider, operating, operatingBalance, history, metrics } = ctx;
@@ -836,7 +859,26 @@ async function decideApPayable(
   // the model's date are both measured against it.
   const now = new Date();
   const limit = counterparty.payment_limit == null ? null : num(counterparty.payment_limit);
-  const overLimit = limit != null && amount > limit;
+  // A EURC payable (EURC invoices design): weighed at its USDC value from a
+  // Circle quote (E2, E3), timed and paid with the wallet's EURC (E5, P1). No
+  // quote leaves it with no USDC value, which the guardrails hold (E4). A
+  // sandbox has no EURC balance to check (E7).
+  const currency = invoiceCurrency(invoice.currency);
+  const isEurc = currency === "EURC";
+  let fx: EurcQuote | null = null;
+  if (isEurc) {
+    try {
+      fx = await ctx.eurc.quote(amount);
+    } catch (error) {
+      console.error("ap: no EURC quote", invoice.id, error instanceof Error ? error.message : error);
+    }
+  }
+  const usdcValue = isEurc ? (fx ? fx.usdcEstimated : null) : amount;
+  const eurcRead = isEurc ? await ctx.eurc.balance() : null;
+  const eurcUnreadable = eurcRead === "unreadable";
+  const eurcBalance = typeof eurcRead === "number" ? eurcRead : null;
+  const overLimit = limit != null && usdcValue != null && usdcValue > limit;
+  const priced = isEurc ? `${amount} EURC (${usdcValue} USDC at the quoted rate)` : `${amount} USDC`;
   const highRisk = counterparty.risk_level === "high";
 
   // The system prompt has always told the model to flag a duplicate invoice.
@@ -851,6 +893,7 @@ async function decideApPayable(
       id: invoice.id,
       counterpartyId: invoice.counterparty_id,
       amount,
+      currency,
       memo: invoice.memo,
       poReference: invoice.po_reference,
       dueDate: invoice.due_date,
@@ -866,9 +909,21 @@ async function decideApPayable(
   // the date it was scheduled for and why.
   const discount = invoiceDiscount(invoice);
   const terms = { earlyPayDiscount: discount ? { percent: discount.pct, deadline: discount.deadline } : null };
+  // EURC money only for a EURC payable (P1): the wallet's EURC — all of it
+  // in a sandbox, which does not track one — no USDC reserve, and only the
+  // other EURC payables falling due first.
   const timing = planApTiming(
-    { now, amount, dueDate: invoice.due_date, discount, operatingBalance, reserveApy: ctx.reserveApy, reserveBalance: ctx.reserveBalance },
-    ctx.obligationsBy
+    {
+      now,
+      amount,
+      dueDate: invoice.due_date,
+      discount,
+      operatingBalance: isEurc ? (eurcUnreadable ? 0 : (eurcBalance ?? Number.POSITIVE_INFINITY)) : operatingBalance,
+      reserveApy: isEurc ? 0 : ctx.reserveApy,
+      reserveBalance: isEurc ? 0 : ctx.reserveBalance,
+      currency,
+    },
+    (targetOn, today) => ctx.obligationsBy(targetOn, today, currency)
   );
   const previouslyScheduledFor = invoice.status === "scheduled" ? (invoice.scheduled_for ?? null) : null;
   const scheduledEarlier = previouslyScheduledFor
@@ -881,6 +936,9 @@ async function decideApPayable(
       task: "Decide whether to pay this accounts-payable invoice, and when: now, or on a later day no later than its due date.",
       invoice: {
         amount,
+        currency,
+        // What counts against the USDC limit; null for a EURC invoice with no quote.
+        usdcValue,
         memo: invoice.memo,
         poReference: invoice.po_reference,
         goodsReceived: invoice.goods_received,
@@ -898,7 +956,7 @@ async function decideApPayable(
           counterparty.performance_inputs
         ),
       },
-      treasury: { operatingBalance, reserveBalance: ctx.reserveBalance },
+      treasury: isEurc ? { eurcBalance, reserveBalance: 0 } : { operatingBalance, reserveBalance: ctx.reserveBalance },
       timing: timingFacts(timing),
       scheduledEarlier,
       duplicateMatches: duplicateContext.matches.map((match) => ({
@@ -938,10 +996,20 @@ async function decideApPayable(
           confidence: 0.95,
         };
       }
+      if (isEurc && usdcValue === null) {
+        return {
+          action: "hold",
+          reasoning:
+            limit == null
+              ? `No EURC→USDC rate from Circle's Stablecoin Service, so the USDC value of ${amount} EURC is not known.`
+              : `No EURC→USDC rate from Circle's Stablecoin Service, so ${amount} EURC cannot be checked against ${counterparty.name}'s ${limit} USDC payment limit.`,
+          confidence: 0.9,
+        };
+      }
       if (overLimit) {
         return {
           action: "hold",
-          reasoning: `Invoice amount ${amount} USDC exceeds ${counterparty.name}'s payment limit of ${limit} USDC.`,
+          reasoning: `Invoice amount ${priced} exceeds ${counterparty.name}'s payment limit of ${limit} USDC.`,
           confidence: 0.9,
         };
       }
@@ -956,10 +1024,14 @@ async function decideApPayable(
       // or before its day, waits for a person rather than for a transfer
       // that would fail.
       if (timing.shortfall) {
-        return { action: "hold", reasoning: shortfallReasoning(timing, operatingBalance, ctx.reserveBalance), confidence: 0.8 };
+        return {
+          action: "hold",
+          reasoning: shortfallReasoning(timing, isEurc ? (eurcBalance ?? 0) : operatingBalance, isEurc ? 0 : ctx.reserveBalance, currency),
+          confidence: 0.8,
+        };
       }
       // A correct invoice is paid on the policy's day: now, or scheduled.
-      const reasoning = `PO ${invoice.po_reference} matches, goods confirmed received, ${counterparty.name} screened clear, and ${amount} USDC is within the ${limit} USDC limit. ${timing.reason}`;
+      const reasoning = `PO ${invoice.po_reference} matches, goods confirmed received, ${counterparty.name} screened clear, and ${priced} is within the ${limit} USDC limit. ${timing.reason}`;
       return timing.recommendation.action === "schedule"
         ? { action: "schedule", payOn: timing.recommendation.payOn, reasoning, confidence: 0.85 }
         : { action: "pay", reasoning, confidence: 0.85 };
@@ -978,15 +1050,25 @@ async function decideApPayable(
 
   // A payment the agent commits to must be one it would be allowed to make:
   // `schedule` is refused exactly as `pay` is, against the full amount.
+  // For EURC, what counts against the USDC limit is the USDC value (P3), and
+  // a live payment must fit in the wallet's EURC, after any discount.
+  const eurcNeeded = isEurc ? amountToPay(amount, discount, now).amountPaid : 0;
   const guardrail = enforceApGuardrails({
     action: decision.action,
     reasoning: decision.reasoning + timingNote,
-    amount,
+    amount: usdcValue ?? amount,
     riskLevel: counterparty.risk_level,
     paymentLimit: limit,
     duplicates,
     addressChangedAt: counterparty.address_changed_at,
     addressConfirmedAt: counterparty.address_confirmed_at,
+    currency,
+    fxAvailable: !isEurc || fx !== null,
+    eurcShort: eurcUnreadable
+      ? { balance: null, needed: eurcNeeded }
+      : isEurc && eurcBalance !== null && eurcBalance < eurcNeeded
+        ? { balance: eurcBalance, needed: eurcNeeded }
+        : null,
   });
   metrics.recordDecisionMode(mode, agreedWithReference);
   let status = guardrail.status ?? STATUS_FOR_AP_ACTION[decision.action];
@@ -1012,6 +1094,7 @@ async function decideApPayable(
           address: counterparty.address,
           amount,
           discount,
+          currency,
         },
         { provider, operating }
       );
@@ -1022,6 +1105,8 @@ async function decideApPayable(
       heldBecausePaused = outcome.heldBecausePaused;
       operatingBalanceAfter = outcome.operatingBalance;
       payment = outcome.payment ?? null;
+      // What left the wallet's EURC, so the next EURC payable this cycle sees it gone.
+      if (isEurc && payment && (status === "paid" || status === "matched")) ctx.eurc.spent(payment.amountPaid);
     }
   }
 
@@ -1056,10 +1141,10 @@ async function decideApPayable(
     action: `ap_${decision.action}`,
     summary:
       decision.action === "schedule"
-        ? `SCHEDULE invoice from ${counterparty.name} for ${amount} USDC on ${payOn}`
+        ? `SCHEDULE invoice from ${counterparty.name} for ${amount} ${currency} on ${payOn}`
         : sent && sent.discountTaken > 0
-          ? `PAY invoice from ${counterparty.name} for ${amount} USDC: ${sent.amountPaid} USDC with the early-payment discount`
-          : `${decision.action.toUpperCase()} invoice from ${counterparty.name} for ${amount} USDC`,
+          ? `PAY invoice from ${counterparty.name} for ${amount} ${currency}: ${sent.amountPaid} ${currency} with the early-payment discount`
+          : `${decision.action.toUpperCase()} invoice from ${counterparty.name} for ${amount} ${currency}`,
     detail: {
       invoiceId: invoice.id,
       counterpartyId: counterparty.id,
@@ -1069,6 +1154,15 @@ async function decideApPayable(
       agreedWithReference,
       guardrailBlocked,
       guardrailRule: guardrail.rule,
+      currency,
+      // A EURC payable's USDC value and the quote it came from (E2); null when there was none.
+      ...(isEurc
+        ? {
+            usdcValue,
+            fx: fx ? { rate: fx.rate, source: fx.source, quotedAt: fx.quotedAt, usdcMinimum: fx.usdcMinimum } : null,
+            eurcBalance,
+          }
+        : {}),
       // When to pay: the figures the decision was made with, any correction
       // code made to the model's date, and the invoice's terms.
       timing,
@@ -1129,12 +1223,12 @@ async function decideApPayable(
   });
 
   const message = heldBecausePaused
-    ? `${counterparty.name}: not paid, the agent was paused (${amount} USDC)`
+    ? `${counterparty.name}: not paid, the agent was paused (${amount} ${currency})`
     : scheduledFor
-      ? `${counterparty.name}: scheduled for ${payOn} (${amount} USDC)`
+      ? `${counterparty.name}: scheduled for ${payOn} (${amount} ${currency})`
       : sent && discount && sent.discountTaken > 0
-        ? `${counterparty.name}: pay (${sent.amountPaid} USDC after a ${discount.pct}% early-payment discount on ${amount} USDC)`
-        : `${counterparty.name}: ${decision.action} (${amount} USDC)`;
+        ? `${counterparty.name}: pay (${sent.amountPaid} ${currency} after a ${discount.pct}% early-payment discount on ${amount} ${currency})`
+        : `${counterparty.name}: ${decision.action} (${amount} ${currency})`;
   return { status, scheduledFor, operatingBalance: operatingBalanceAfter, line: { domain: "ap", message } };
 }
 
@@ -1150,6 +1244,22 @@ export interface ApStageInput {
   reserveBalance: number;
   metrics: CycleMetricsCollector;
   lines: CycleLogLine[];
+  /** The operating wallet's address, which a EURC quote is asked for; null when it has none. */
+  operatingAddress?: string | null;
+  /** What a EURC amount is worth in USDC now (E2); Circle's Stablecoin Service unless a test passes its own. */
+  quoteEurc?: (amountEurc: number) => Promise<EurcQuote>;
+}
+
+/**
+ * The wallet's EURC, as the AP stage tracks it: a quote for an amount, the
+ * balance read from the chain once per stage (null in a sandbox, which has
+ * none to check), and what this stage's EURC payments already took from it.
+ */
+interface EurcFunds {
+  quote: (amountEurc: number) => Promise<EurcQuote>;
+  /** The wallet's EURC; null when payments are simulated; "unreadable" when the read failed. */
+  balance: () => Promise<number | null | "unreadable">;
+  spent: (amountEurc: number) => void;
 }
 
 /**
@@ -1166,6 +1276,30 @@ export async function runApStage(input: ApStageInput): Promise<number> {
   const { db, provider, operating, reserveApy, reserveBalance, metrics, lines } = input;
   let operatingBalance = input.operatingBalance;
   const now = new Date();
+
+  // Read only when a EURC payable is decided, once per stage, and only live.
+  let eurcHeld: number | null | undefined;
+  const eurc: EurcFunds = {
+    // Any address will do for a quote, which moves nothing: the wallet's own when it has one.
+    quote: input.quoteEurc ?? ((amountEurc) => quoteEurcInUsdc(amountEurc, { fromAddress: input.operatingAddress ?? ARC_TESTNET_EURC })),
+    balance: async () => {
+      if (provider.mode !== "live" || !provider.getTokenBalance || !operating) return null;
+      if (eurcHeld === undefined) {
+        // A failed read holds the EURC payable it was for; it must not stop
+        // the stage, and the next EURC payable tries again.
+        try {
+          eurcHeld = (await provider.getTokenBalance(operating.id, "EURC")).balance;
+        } catch (error) {
+          console.error("ap: EURC balance not read", error instanceof Error ? error.message : error);
+          return "unreadable";
+        }
+      }
+      return eurcHeld;
+    },
+    spent: (amountEurc) => {
+      if (typeof eurcHeld === "number") eurcHeld = Number((eurcHeld - amountEurc).toFixed(6));
+    },
+  };
 
   // In the order they were submitted (id breaks a tie), so each cycle decides
   // them in the same order: of two identical invoices, the one submitted
@@ -1190,12 +1324,13 @@ export async function runApStage(input: ApStageInput): Promise<number> {
   const payableHistory = unwrap(
     await db
       .from("invoices")
-      .select("id, counterparty_id, amount, memo, po_reference, due_date, status, scheduled_for")
+      .select("id, counterparty_id, amount, currency, memo, po_reference, due_date, status, scheduled_for")
       .eq("direction", "payable")
   ) as Array<{
     id: string;
     counterparty_id: string;
     amount: string;
+    currency?: string | null;
     memo: string | null;
     po_reference: string | null;
     due_date: string;
@@ -1207,6 +1342,7 @@ export async function runApStage(input: ApStageInput): Promise<number> {
     id: row.id,
     counterpartyId: row.counterparty_id,
     amount: num(row.amount),
+    currency: invoiceCurrency(row.currency),
     memo: row.memo,
     poReference: row.po_reference,
     dueDate: row.due_date,
@@ -1220,6 +1356,7 @@ export async function runApStage(input: ApStageInput): Promise<number> {
   const book: PayableBookRow[] = payableHistory.map((row) => ({
     id: row.id,
     amount: num(row.amount),
+    currency: invoiceCurrency(row.currency),
     due_date: row.due_date,
     status: row.status,
     scheduled_for: row.scheduled_for ?? null,
@@ -1269,6 +1406,7 @@ export async function runApStage(input: ApStageInput): Promise<number> {
           reasoning: invoice.agent_reasoning,
           txRef: invoice.tx_ref,
           discount: invoiceDiscount(invoice),
+          currency: invoiceCurrency(invoice.currency),
         },
         intent,
         { db, provider, operating }
@@ -1289,7 +1427,8 @@ export async function runApStage(input: ApStageInput): Promise<number> {
       reserveApy,
       reserveBalance,
       metrics,
-      obligationsBy: (targetOn, today) => obligationsDueBy(book, { excludeId: invoice.id, by: targetOn, today, milestones }),
+      obligationsBy: (targetOn, today, currency) => obligationsDueBy(book, { excludeId: invoice.id, by: targetOn, today, milestones, currency }),
+      eurc,
     });
     if (decided.operatingBalance !== null) operatingBalance = decided.operatingBalance;
     record(invoice.id, decided.status, decided.scheduledFor);
@@ -1915,7 +2054,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     await db
       .from("invoices")
       .select(
-        "id, status, amount, due_date, decided_at, escalated_at, po_reference, goods_received, counterparties(risk_level, payment_limit)"
+        "id, status, amount, currency, due_date, decided_at, escalated_at, po_reference, goods_received, counterparties(risk_level, payment_limit)"
       )
       .eq("direction", "payable")
       .in("status", ["held", "awaiting_info", "flagged"])
@@ -1924,6 +2063,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     id: string;
     status: string;
     amount: string;
+    currency?: string | null;
     due_date: string;
     decided_at: string | null;
     escalated_at: string | null;
@@ -1964,6 +2104,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           id: row.id,
           status: row.status,
           amount: num(row.amount),
+          currency: invoiceCurrency(row.currency),
           dueDate: row.due_date,
           decidedAt: row.decided_at,
           escalatedAt: row.escalated_at,
@@ -1980,7 +2121,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
 
       if (plan.action === "wait") continue;
 
-      const line = await applyFollowUp(db, { id: row.id, status: row.status, amount: num(row.amount) }, plan, followUp, now);
+      const line = await applyFollowUp(db, { id: row.id, status: row.status, amount: num(row.amount), currency: invoiceCurrency(row.currency) }, plan, followUp, now);
       if (line) lines.push(line);
     }
   }
@@ -2007,6 +2148,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     db,
     provider,
     operating: operating ? { id: operating.id } : null,
+    operatingAddress: (operating as { address?: string | null } | undefined)?.address ?? null,
     operatingBalance,
     reserveApy: num(accounts.find((a) => a.kind === "reserve")?.apy),
     reserveBalance: num(accounts.find((a) => a.kind === "reserve")?.balance),
@@ -2241,10 +2383,10 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
   const openInvoices = unwrap(
     await db
       .from("invoices")
-      .select("amount, due_date, status, scheduled_for")
+      .select("amount, due_date, status, scheduled_for, currency")
       .eq("direction", "payable")
       .in("status", [...OPEN_PAYABLE_STATUSES])
-  ) as Array<{ amount: string; due_date: string; status: string; scheduled_for: string | null }>;
+  ) as Array<{ amount: string; due_date: string; status: string; scheduled_for: string | null; currency: string | null }>;
   const openMilestones = unwrap(
     await db.from("milestones").select("amount").in("status", ["pending", "verified"])
   ) as Array<{ amount: string }>;
@@ -2411,9 +2553,10 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
   await stage("forecast", async () => {
   // ------------------------------------------------------------------ 5. forecast
   const receivables = unwrap(
-    await db.from("invoices").select("amount").eq("direction", "receivable").in("status", ["pending", "matched"])
-  ) as Array<{ amount: string }>;
-  projectedInflow = receivables.reduce((s, r) => s + num(r.amount), 0);
+    await db.from("invoices").select("amount, currency").eq("direction", "receivable").in("status", ["pending", "matched"])
+  ) as Array<{ amount: string; currency: string | null }>;
+  // USDC only: the forecast is set against USDC balances (EURC invoices design R3).
+  projectedInflow = sumUsdcAmounts(receivables);
 
   const forecast = await db.from("forecasts").insert({
     as_of: new Date().toISOString(),

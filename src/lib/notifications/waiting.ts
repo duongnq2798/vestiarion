@@ -23,6 +23,8 @@ export interface WaitingInvoice {
   id: string;
   counterpartyName: string;
   amount: number;
+  /** USDC unless the invoice is in EURC. */
+  currency: string;
   status: "held" | "flagged" | "awaiting_info";
   reasoning: string | null;
   /** Told before, and escalated since: `escalated_at > notified_at`. */
@@ -61,13 +63,14 @@ export async function waitingToNotify(): Promise<WaitingInvoice[]> {
   const rows = unwrap(
     await db()
       .from("invoices")
-      .select("id, amount, status, agent_reasoning, notified_at, escalated_at, counterparties(name)")
+      .select("id, amount, currency, status, agent_reasoning, notified_at, escalated_at, counterparties(name)")
       .eq("direction", "payable")
       .in("status", WAITING_STATUSES)
       .order("due_date", { ascending: true })
   ) as unknown as Array<{
     id: string;
     amount: string | number;
+    currency?: string | null;
     status: WaitingInvoice["status"];
     agent_reasoning: string | null;
     notified_at: string | null;
@@ -86,6 +89,7 @@ export async function waitingToNotify(): Promise<WaitingInvoice[]> {
       id: row.id,
       counterpartyName: row.counterparties?.name ?? "unknown",
       amount: num(row.amount),
+      currency: row.currency === "EURC" ? "EURC" : "USDC",
       status: row.status,
       reasoning: row.agent_reasoning,
       escalated,
@@ -184,6 +188,7 @@ export async function notifyWaitingDecisions(): Promise<{ sent: number; failed: 
     const items: DigestItem[] = waiting.map((invoice) => ({
       counterpartyName: invoice.counterpartyName,
       amount: invoice.amount,
+      currency: invoice.currency,
       status: invoice.status,
       reason: invoice.reasoning,
       escalated: invoice.escalated,

@@ -96,6 +96,17 @@ describe("createInvoiceAction's counterparty lookup", () => {
     expect(insert?.body).toMatchObject({ counterparty_id: COUNTERPARTY, org_id: ORG, created_by: USER });
   });
 
+  it("inserts the invoice's currency: EURC when the form says so, and USDC by default", async () => {
+    for (const [currency, expected] of [["EURC", "EURC"], [null, "USDC"]] as const) {
+      const fake = fakeSupabase(organizationDatabase([{ id: COUNTERPARTY, name: "Acme Supplies" }]));
+      const form = invoiceForm();
+      if (currency) form.set("currency", currency);
+      await runWith({ config, db: fake.client, fetch: fake.fetch }, () => createInvoiceAction({ ok: false, message: "" }, form));
+      const insert = fake.requests.find((sent) => sent.path === "/rest/v1/invoices" && sent.method === "POST");
+      expect(insert?.body).toMatchObject({ currency: expected });
+    }
+  });
+
   it("inserts no discount terms when the form leaves them blank", async () => {
     const fake = fakeSupabase(organizationDatabase([{ id: COUNTERPARTY, name: "Acme Supplies" }]));
     await runWith({ config, db: fake.client, fetch: fake.fetch }, () => createInvoiceAction({ ok: false, message: "" }, invoiceForm()));
@@ -154,5 +165,14 @@ describe("importInvoicesAction's insert", () => {
       discount_due_date: "2026-10-20T12:00:00.000Z",
     });
     expect(body[1]).toMatchObject({ counterparty_id: COUNTERPARTY, po_reference: "PO-43", early_pay_discount_pct: null, discount_due_date: null });
+  });
+
+  it("inserts each row's currency, USDC where the row leaves it blank", async () => {
+    const fake = fakeSupabase(organizationDatabase([{ id: COUNTERPARTY, name: "Acme Supplies" }]));
+    const rows = [csvRow({ currency: "EURC" }), csvRow({ po_reference: "PO-43", currency: "" })];
+    await runWith({ config, db: fake.client, fetch: fake.fetch }, () => importInvoicesAction({ ok: false, message: "" }, importForm(rows)));
+    const insert = fake.requests.find((sent) => sent.path === "/rest/v1/invoices" && sent.method === "POST");
+    const body = insert?.body as Array<Record<string, unknown>>;
+    expect(body.map((row) => row.currency)).toEqual(["EURC", "USDC"]);
   });
 });

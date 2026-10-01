@@ -1035,6 +1035,17 @@ describe("obligationsDueBy — what falls due by an invoice's payment date", () 
 
   const NONE = { total: 0, count: 0 };
 
+  it("counts only payables in the deciding invoice's currency, and milestones only for USDC (EURC design P1)", () => {
+    const mixed = [
+      { id: "u", amount: 100, due_date: "2026-10-05T12:00:00Z", status: "pending", scheduled_for: null },
+      { id: "e1", amount: 40, due_date: "2026-10-05T12:00:00Z", status: "pending", scheduled_for: null, currency: "EURC" as const },
+      { id: "e2", amount: 60, due_date: "2026-10-06T12:00:00Z", status: "held", scheduled_for: null, currency: "EURC" as const },
+    ];
+    const milestones = { total: 25, count: 1 };
+    expect(obligationsDueBy(mixed, { excludeId: "self", by: "2026-10-10", today: TODAY, milestones })).toEqual({ total: 125, count: 2 });
+    expect(obligationsDueBy(mixed, { excludeId: "self", by: "2026-10-10", today: TODAY, milestones, currency: "EURC" })).toEqual({ total: 100, count: 2 });
+  });
+
   it("sums the open payables dated on or before the target, by scheduled day where there is one, not this invoice, plus the milestones, and counts them", () => {
     expect(obligationsDueBy(book, { excludeId: "self", by: "2026-10-10", today: TODAY, milestones: NONE })).toEqual({ total: 450, count: 5 });
     expect(obligationsDueBy(book, { excludeId: "self", by: "2026-10-10", today: TODAY, milestones: { total: 25.5, count: 1 } })).toEqual({ total: 475.5, count: 6 });
@@ -1065,7 +1076,7 @@ describe("the cycle's obligation measurement", () => {
     const source = readFileSync(path.join(process.cwd(), "src", "lib", "agent", "orchestrator.ts"), "utf8");
     const measurement = source.slice(source.indexOf("shared obligation measurement"));
     expect(measurement).toMatch(
-      /\.select\("amount, due_date, status, scheduled_for"\)\s*\.eq\("direction", "payable"\)\s*\.in\("status", \[\.\.\.OPEN_PAYABLE_STATUSES\]\)/
+      /\.select\("amount, due_date, status, scheduled_for, currency"\)\s*\.eq\("direction", "payable"\)\s*\.in\("status", \[\.\.\.OPEN_PAYABLE_STATUSES\]\)/
     );
   });
 });

@@ -146,6 +146,25 @@ describe("payInvoice", () => {
     expect(provider.transfers[0].idempotencyKey).toBe(paymentIdempotencyKey("invoice", INVOICE_ID));
   });
 
+  it("pays a EURC invoice in EURC, records the token, and leaves the stored USDC balance alone", async () => {
+    const provider = new FakeProvider();
+    provider.transferResults.push(transferResult("confirmed"));
+    const backend = paymentIntentsBackend();
+    const requests: RecordedRequest[] = [];
+
+    const result = await inOrg((sent) => {
+      requests.push(sent);
+      return backend.respond(sent);
+    }, () => payInvoice({ ...input, currency: "EURC" }, { provider, operating: { id: OPERATING_ACCOUNT_ID } }));
+
+    expect(result.status).toBe("paid");
+    expect(result.operatingBalance).toBeNull();
+    expect(provider.transfers[0]).toMatchObject({ token: "EURC", amount: 12.5 });
+    expect(backend.rows[0]).toMatchObject({ token: "EURC" });
+    // No balance read and no write: the USDC the operating account holds did not move.
+    expect(requests.some((sent) => sent.path === "/rest/v1/accounts")).toBe(false);
+  });
+
   it("stays paid, with its txRef and execution, when the balance sync fails after a confirmed transfer", async () => {
     const provider = new FakeProvider();
     provider.transferResults.push(transferResult("confirmed"));

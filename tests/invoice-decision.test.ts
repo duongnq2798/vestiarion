@@ -186,3 +186,53 @@ describe("invoiceDecision: what a discounted payment actually paid", () => {
     expect(decision.evidence.find((item) => item.label === "Paid")).toBeUndefined();
   });
 });
+
+describe("invoiceDecision: a EURC invoice (EURC invoices design E6)", () => {
+  const decided = (detail: Record<string, unknown>, action = "ap_pay"): LedgerEntry =>
+    ({ seq: 9, id: "e9", ts: "2026-10-01T09:00:00.000Z", actor: "agent", domain: "ap", action, summary: "", detail: { invoiceId: "inv-1", ...detail } }) as unknown as LedgerEntry;
+
+  it("shows its amount in EURC, and the USDC value it was weighed at", () => {
+    const decision = invoiceDecision(
+      invoice({ currency: "EURC", amount: 100, status: "paid", tx_ref: "0xabc" }),
+      undefined,
+      [decided({ currency: "EURC", usdcValue: 117, fx: { rate: 1.17, source: "circle-stablecoin-quote", quotedAt: "2026-10-01T09:00:00.000Z" } })]
+    );
+    expect(decision.token).toBe("EURC");
+    expect(decision.amount).toBe(100);
+    expect(decision.evidence).toContainEqual({ label: "USDC value", value: "117.00 USDC at 1.17", state: "neutral" });
+  });
+
+  it("says there was no rate when Circle gave none, and names that rule in the band", () => {
+    const decision = invoiceDecision(
+      invoice({ currency: "EURC", amount: 100, status: "held" }),
+      undefined,
+      [decided({ currency: "EURC", usdcValue: null, fx: null, guardrailBlocked: true, guardrailRule: "fx.rate_unavailable", observed: { paymentLimit: 200 } })]
+    );
+    expect(decision.evidence).toContainEqual({ label: "USDC value", value: "no rate", state: "missing" });
+    expect(decision.guardrail).toMatchObject({ rule: "fx.rate_unavailable", attempted: 100, attemptedToken: "EURC", limit: 200, limitToken: "USDC" });
+  });
+
+  it("sets what it would send against the wallet's EURC when that was short", () => {
+    const decision = invoiceDecision(
+      invoice({ currency: "EURC", amount: 100, status: "held" }),
+      undefined,
+      [decided({ currency: "EURC", usdcValue: 117, eurcBalance: 40, guardrailBlocked: true, guardrailRule: "treasury.insufficient_eurc", observed: { paymentLimit: 200 } })]
+    );
+    expect(decision.guardrail).toMatchObject({ rule: "treasury.insufficient_eurc", attempted: 100, attemptedToken: "EURC", limit: 40, limitToken: "EURC" });
+  });
+
+  it("says what a discounted EURC payment paid in EURC", () => {
+    const decision = invoiceDecision(invoice({ currency: "EURC", amount: 100, status: "paid", paid_amount: 98, early_pay_discount_pct: "2.00" }), undefined, []);
+    expect(decision.evidence).toContainEqual({ label: "Paid", value: "98.00 EURC (2% discount)", state: "ok" });
+  });
+
+  it("weighs the limit evidence on the USDC value, not on the face value", () => {
+    const decision = invoiceDecision(
+      invoice({ currency: "EURC", amount: 100, status: "held" }),
+      { payment_limit: 110 } as never,
+      [decided({ currency: "EURC", usdcValue: 117, guardrailBlocked: true, guardrailRule: "counterparty.payment_limit", observed: { paymentLimit: 110 } })]
+    );
+    expect(decision.evidence.find((item) => item.label === "Limit")?.state).toBe("missing");
+    expect(decision.guardrail).toMatchObject({ rule: "counterparty.payment_limit", attempted: 117, attemptedToken: "USDC", limit: 110, limitToken: "USDC" });
+  });
+});

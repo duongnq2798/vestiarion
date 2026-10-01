@@ -41,6 +41,8 @@ export interface PaymentTimingInput {
   reserveBalance: number;
   /** Open payables (and verified milestones) due on or before this invoice's target date, excluding this invoice. */
   earlierObligations: number;
+  /** What the amounts are in, for the reason's wording: USDC unless the invoice is in EURC. */
+  currency?: string;
 }
 
 export interface PaymentTiming {
@@ -190,6 +192,7 @@ function buildReason(args: {
   targetOn: string;
 }): string {
   const { input, today, dueOn, deadlineOn, discountValue, floatValueToDue, discountWins, targetOn } = args;
+  const unit = input.currency ?? "USDC";
 
   if (dueOn <= today) {
     return dueOn === today ? "Due today; paying now." : `Overdue since ${utcDay(dueOn)}; paying now.`;
@@ -202,20 +205,20 @@ function buildReason(args: {
       // overstate an exact tie.
       const comparison = discountValue === floatValueToDue ? "is worth at least as much as" : "is worth more than";
       return targetOn === today
-        ? `A ${input.discount!.pct}% early-payment discount (${discountValue} USDC) ${comparison} holding the cash to the due date (${floatValueToDue} USDC of yield); the discount deadline is today, so paying now.`
-        : `A ${input.discount!.pct}% early-payment discount (${discountValue} USDC) ${comparison} holding the cash to the due date (${floatValueToDue} USDC of yield); paying on the discount deadline, ${utcDay(deadlineOn)}.`;
+        ? `A ${input.discount!.pct}% early-payment discount (${discountValue} ${unit}) ${comparison} holding the cash to the due date (${floatValueToDue} ${unit} of yield); the discount deadline is today, so paying now.`
+        : `A ${input.discount!.pct}% early-payment discount (${discountValue} ${unit}) ${comparison} holding the cash to the due date (${floatValueToDue} ${unit} of yield); paying on the discount deadline, ${utcDay(deadlineOn)}.`;
     }
-    return `Yield to the due date (${floatValueToDue} USDC) is worth more than the ${input.discount!.pct}% early-payment discount (${discountValue} USDC); paying on the due date, ${utcDay(dueOn)}.`;
+    return `Yield to the due date (${floatValueToDue} ${unit}) is worth more than the ${input.discount!.pct}% early-payment discount (${discountValue} ${unit}); paying on the due date, ${utcDay(dueOn)}.`;
   }
 
   if (input.discount && deadlineOn) {
     // "ended with", not "lapsed on" — the discount was valid through the
     // whole of that UTC day (discountApplies is inclusive), so it did not
     // stop being valid on that date; it stopped the day after.
-    return `The ${input.discount.pct}% early-payment discount ended with ${utcDay(deadlineOn)}; paying on the due date, ${utcDay(dueOn)}, keeps ${input.amount} USDC available until then.`;
+    return `The ${input.discount.pct}% early-payment discount ended with ${utcDay(deadlineOn)}; paying on the due date, ${utcDay(dueOn)}, keeps ${input.amount} ${unit} available until then.`;
   }
 
-  return `No early-payment discount; paying on the due date, ${utcDay(dueOn)}, keeps ${input.amount} USDC available until then.`;
+  return `No early-payment discount; paying on the due date, ${utcDay(dueOn)}, keeps ${input.amount} ${unit} available until then.`;
 }
 
 /**

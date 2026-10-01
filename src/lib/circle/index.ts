@@ -3,6 +3,7 @@ import type {
   ChainProvider,
   EarnDepositParams,
   EarnResult,
+  Stablecoin,
   TransferParams,
   TransferResult,
 } from "./types";
@@ -43,6 +44,10 @@ class HybridProvider implements ChainProvider {
 
   getBalance(accountId: string): Promise<BalanceSnapshot> {
     return this.live.getBalance(accountId);
+  }
+
+  getTokenBalance(accountId: string, token: Stablecoin): Promise<BalanceSnapshot> {
+    return this.live.getTokenBalance(accountId, token);
   }
 
   depositToEarn(params: EarnDepositParams): Promise<EarnResult> {
@@ -110,4 +115,5 @@ export type {
   EarnDepositParams,
   EarnResult,
   BalanceSnapshot,
+  Stablecoin,
 } from "./types";

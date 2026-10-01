@@ -25,7 +25,9 @@ export function OurPayments({ payments }: { payments: OurPayment[] }) {
               <time dateTime={payment.at} className="font-mono text-xs text-ink-3">
                 {utcMinute(payment.at)}
               </time>
-              <span className="font-mono tabular-nums text-ink">{formatFigure(payment.amount, "usdc")} USDC</span>
+              <span className="font-mono tabular-nums text-ink">
+                {formatFigure(payment.amount, "usdc")} {payment.token ?? "USDC"}
+              </span>
               <Hash value={payment.txHash} href={explorerTx(payment.txHash)} />
             </li>
           ))}

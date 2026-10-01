@@ -25,7 +25,7 @@ export function paymentIntentsBackend(orgId: string) {
     "id", "org_id", "source_type", "source_id", "idempotency_key", "provider", "provider_tx_id", "tx_hash",
     "amount", "destination", "status", "attempt_count", "last_error", "confirmed_at", "chain",
     "provider_mode", "fee_usd", "fee_source", "settled_in_ms", "executed_at", "provider_state", "failure_reason",
-    "transfer_attempt", "previous_attempts", "created_at", "updated_at",
+    "transfer_attempt", "previous_attempts", "created_at", "updated_at", "token",
   ];
   // No matching row: every field null, the same shape PostgREST sends when a
   // `returns payment_intents` function's UPDATE matched nothing.
@@ -49,6 +49,7 @@ export function paymentIntentsBackend(orgId: string) {
       confirmed_at: null,
       chain: null,
       provider_mode: body.provider_mode,
+      token: body.token ?? "USDC",
       fee_usd: null,
       fee_source: null,
       settled_in_ms: null,

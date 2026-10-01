@@ -2,13 +2,32 @@ import { z } from "zod";
 
 const USDC_PATTERN = /^(?:0|[1-9]\d{0,13})(?:\.\d{1,6})?$/;
 
-export const usdcAmountSchema = z.string().trim()
-  .regex(USDC_PATTERN, "Use a positive USDC amount with at most 6 decimal places")
-  .refine((value) => {
-    if (!USDC_PATTERN.test(value)) return false;
-    const [whole, fraction = ""] = value.split(".");
-    return BigInt(whole) * BigInt(1_000_000) + BigInt(fraction.padEnd(6, "0")) > BigInt(0);
-  }, "Amount must be greater than zero");
+/** A positive amount with at most 6 decimals, kept as the string entered: both USDC and EURC have 6 decimals. */
+const positiveAmountSchema = (message: string) =>
+  z.string().trim()
+    .regex(USDC_PATTERN, message)
+    .refine((value) => {
+      if (!USDC_PATTERN.test(value)) return false;
+      const [whole, fraction = ""] = value.split(".");
+      return BigInt(whole) * BigInt(1_000_000) + BigInt(fraction.padEnd(6, "0")) > BigInt(0);
+    }, "Amount must be greater than zero");
+
+/** A payment limit, which is always in USDC. */
+export const usdcAmountSchema = positiveAmountSchema("Use a positive USDC amount with at most 6 decimal places");
+
+/** An invoice's amount, in the invoice's own currency. */
+const invoiceAmountSchema = positiveAmountSchema("Use a positive amount with at most 6 decimal places");
+
+/** The currencies an invoice can be in (EURC invoices design E1; `invoices_currency_check`, 0040). */
+export const INVOICE_CURRENCIES = ["USDC", "EURC"] as const;
+export type InvoiceCurrency = (typeof INVOICE_CURRENCIES)[number];
+
+/** USDC when left out or blank; read without regard to case, so a CSV's "eurc" is EURC. */
+export const invoiceCurrencySchema = z
+  .string()
+  .optional()
+  .transform((value) => (value ?? "").trim().toUpperCase() || "USDC")
+  .pipe(z.enum(INVOICE_CURRENCIES, { message: "Choose USDC or EURC as the currency." }));
 
 const optionalText = (max: number) => z.string().trim().max(max).transform((value) => value || null);
 
@@ -91,7 +110,8 @@ export const invoiceInputSchema = z
   .object({
     direction: z.enum(["payable", "receivable"]),
     counterpartyId: z.string().uuid(),
-    amount: usdcAmountSchema,
+    amount: invoiceAmountSchema,
+    currency: invoiceCurrencySchema,
     memo: optionalText(280),
     poReference: optionalText(100),
     goodsReceived: z.boolean(),
@@ -116,7 +136,8 @@ export const csvInvoiceInputSchema = z
   .object({
     direction: z.string().trim().toLowerCase().pipe(z.enum(["payable", "receivable"])),
     counterparty: z.string().trim().min(1).max(160),
-    amount: usdcAmountSchema,
+    amount: invoiceAmountSchema,
+    currency: invoiceCurrencySchema,
     memo: optionalText(280),
     po_reference: optionalText(100),
     goods_received: csvBooleanSchema,

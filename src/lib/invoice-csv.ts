@@ -8,6 +8,8 @@ export interface InvoiceCsvRow {
   due_date: string;
   early_pay_discount_pct: string;
   discount_deadline: string;
+  /** USDC or EURC; blank means USDC. */
+  currency: string;
 }
 
 const REQUIRED_HEADERS = [
@@ -20,8 +22,11 @@ const REQUIRED_HEADERS = [
   "due_date",
 ] as const;
 
-/** Early-payment terms, same rules as the invoice form (src/lib/intake-validation.ts): both or neither. */
-const OPTIONAL_HEADERS = ["early_pay_discount_pct", "discount_deadline"] as const;
+/**
+ * Early-payment terms, same rules as the invoice form (src/lib/intake-validation.ts): both or neither.
+ * And the currency, USDC or EURC, which is USDC when the column is missing or blank.
+ */
+const OPTIONAL_HEADERS = ["early_pay_discount_pct", "discount_deadline", "currency"] as const;
 const ALL_HEADERS = [...REQUIRED_HEADERS, ...OPTIONAL_HEADERS] as const;
 
 function rowsFromCsv(csv: string): string[][] {
@@ -78,4 +83,4 @@ export function parseInvoiceCsv(csv: string): InvoiceCsvRow[] {
 }
 
 /** Every column, the two optional discount ones included but blank in the sample row: an invoice without early-payment terms. */
-export const INVOICE_CSV_TEMPLATE = `${ALL_HEADERS.join(",")}\npayable,Vendor name,100.00,Invoice memo,PO-100,true,2026-10-15,,`;
+export const INVOICE_CSV_TEMPLATE = `${ALL_HEADERS.join(",")}\npayable,Vendor name,100.00,Invoice memo,PO-100,true,2026-10-15,,,USDC`;

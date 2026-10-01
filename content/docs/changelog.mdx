@@ -1,5 +1,19 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-01: Invoices in EURC
+
+- An invoice can be in EURC as well as USDC. `GET /api/v1/invoices` returns its `currency`, which is now `USDC` or `EURC`; `amount` and `paidAmount` are in that currency.
+- A EURC payable is paid in EURC from the operating wallet. Its decision entry (`ap_pay`, `ap_hold`, `ap_flag_fraud`, `ap_request_info`, `ap_schedule`) carries `currency` in `detail`, and, for EURC only:
+  - `usdcValue`, its value in USDC, which is what counts against the counterparty's limit;
+  - `fx: { rate, source: "circle-stablecoin-quote", quotedAt, usdcMinimum }`, or `null` when Circle gave no quote;
+  - `eurcBalance`, the operating wallet's EURC as read for the decision, or `null` when payments are simulated or the balance could not be read.
+
+  Those five decision entries carry `currency: "USDC"` for a USDC invoice. `ap_reconcile` carries no `currency`.
+- Two new values of `guardrailRule` for a EURC payable, both of which hold it for a person: `fx.rate_unavailable`, when there was no quote to weigh it at, and `treasury.insufficient_eurc`, when the wallet's EURC cannot cover the payment or could not be read. As with every rule, `guardrailRule` is set when code refuses a payment or schedule the model decided on; a payable the model held itself for the same reason has `guardrailRule: null`, with `usdcValue: null` or an `eurcBalance` below `observed.amount` in its `detail`.
+- A duplicate is the same amount only in the same currency. A purchase order billed in one currency and again in the other is reported as `purchase_order_rebilled`, which goes to the model and does not block on its own.
+- `approval_paid` and the `create_invoice` and `import_invoice` entries gain `currency` in `detail`, and their summaries name it.
+- The invoice CSV import takes an optional `currency` column. A blank or missing value means USDC.
+
 ## 2026-10-01: Milestones added in the app
 
 - A member can now add a contractor milestone on the Contractors page. It starts `pending` and unverified, like any milestone in `GET /api/v1/milestones`.

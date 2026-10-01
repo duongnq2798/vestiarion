@@ -265,3 +265,22 @@ describe("blockingDuplicate", () => {
     expect(blockingDuplicate(detected)?.otherId).toBe("settled-repeat");
   });
 });
+
+describe("scoreDuplicate — currencies (EURC invoices design, review I1)", () => {
+  it("still reports a purchase order billed again in the other currency, as a re-bill to confirm, never as the same amount", () => {
+    const match = scoreDuplicate(inv({ currency: "EURC", amount: 240 }), paid({ currency: "USDC", amount: 240 }));
+    expect(match).toMatchObject({ signals: ["purchase_order_rebilled"], confidence: 0.55 });
+    expect(match?.explanation).toContain("240 USDC");
+    expect(blockingDuplicate(match ? [match] : [])).toBeNull();
+  });
+
+  it("does not take the same figure in two currencies for the same amount", () => {
+    expect(scoreDuplicate(inv({ currency: "EURC", poReference: null }), paid({ currency: "USDC", poReference: null }))).toBeNull();
+  });
+
+  it("blocks a EURC bill sent again in EURC, and says EURC", () => {
+    const match = scoreDuplicate(inv({ currency: "EURC" }), paid({ currency: "EURC" }));
+    expect(match).toMatchObject({ signals: ["same_purchase_order", "same_amount"], confidence: 0.95 });
+    expect(match?.explanation).toContain("the same 240 EURC");
+  });
+});

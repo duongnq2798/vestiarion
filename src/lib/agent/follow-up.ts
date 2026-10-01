@@ -38,6 +38,8 @@ export interface FrozenInvoice {
   id: string;
   status: string;
   amount: number;
+  /** USDC unless the invoice is in EURC; the payment limit is always USDC. */
+  currency?: string;
   dueDate: string;
   /** When the agent last ruled on it. Null means it never did. */
   decidedAt: string | null;
@@ -177,7 +179,7 @@ export function planFollowUp(
       ...base,
       action: "escalate",
       changes: [],
-      reason: `Past its ${invoice.dueDate.slice(0, 10)} due date and still ${invoice.status.replace("_", " ")} with no change in the evidence. ${invoice.amount} USDC needs a human decision.`,
+      reason: `Past its ${invoice.dueDate.slice(0, 10)} due date and still ${invoice.status.replace("_", " ")} with no change in the evidence. ${invoice.amount} ${invoice.currency ?? "USDC"} needs a human decision.`,
     };
   }
 

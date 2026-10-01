@@ -168,7 +168,7 @@ describe("the payee's page", () => {
     lib.previewPayeeLink.mockResolvedValue({ orgName: "Acme", counterpartyName: "Northwind", expiresAt: "2026-10-07T12:00:00+00:00" });
     const markup = await render();
     const page = text(markup);
-    expect(page).toContain("Acme wants to pay Northwind in USDC on Arc testnet");
+    expect(page).toContain("Acme wants to pay Northwind on Arc testnet");
     expect(page).toContain("Acme confirms it before paying you");
     expect(markup).toMatch(/<input[^>]*name="address"/);
     expect(markup).toContain(`value="${TOKEN}"`);

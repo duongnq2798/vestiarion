@@ -16,6 +16,8 @@ export interface ScheduledPaymentRow {
   date: string;
   /** What the agent will actually transfer on that day: discounted, when the discount still applies then. */
   amount: number;
+  /** What the amount is in: USDC, or EURC for a EURC invoice. */
+  currency: string;
   /** The first sentence of the agent's reasoning. */
   reasoning: string;
 }
@@ -42,6 +44,7 @@ export function scheduledPaymentRows(invoices: ReadonlyArray<InvoiceRow>): Sched
       counterparty: invoice.counterparty_name,
       date: invoice.scheduled_for,
       amount: amountToPay(invoice.amount, invoiceDiscount(invoice), new Date(invoice.scheduled_for)).amountPaid,
+      currency: invoice.currency ?? "USDC",
       reasoning: firstSentence(invoice.agent_reasoning ?? ""),
     }));
 }
@@ -60,7 +63,7 @@ export function ScheduledPayments({ payments }: { payments: ScheduledPaymentRow[
             <li key={payment.id} className="px-4 py-3 sm:px-5">
               <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
                 <span className="min-w-0 truncate text-sm font-medium text-ink">{payment.counterparty}</span>
-                <Money value={payment.amount} className="text-sm text-ink" />
+                <Money value={payment.amount} token={payment.currency} className="text-sm text-ink" />
               </div>
               <p className="mt-0.5 font-mono text-xs text-ink-3">{utcDay(payment.date)}</p>
               {payment.reasoning && <Reasoning text={payment.reasoning} className="mt-1 text-[0.8125rem]" />}

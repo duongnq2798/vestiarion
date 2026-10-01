@@ -44,6 +44,44 @@ describe("invoice intake", () => {
     expect(invoiceInputSchema.safeParse(base).success).toBe(true);
   });
 
+  describe("currency (EURC invoices design E1)", () => {
+    it("is USDC unless the invoice says EURC", () => {
+      expect(invoiceInputSchema.parse(base).currency).toBe("USDC");
+      expect(invoiceInputSchema.parse({ ...base, currency: "EURC" }).currency).toBe("EURC");
+      expect(invoiceInputSchema.parse({ ...base, currency: "" }).currency).toBe("USDC");
+    });
+
+    it.each(["EUR", "GBP", "usd"])("refuses %s, naming the two it takes", (currency) => {
+      const result = invoiceInputSchema.safeParse({ ...base, currency });
+      expect(result.success).toBe(false);
+      if (!result.success) expect(firstZodMessage(result.error)).toContain("USDC or EURC");
+    });
+
+    it("reads a CSV row's currency without regard to case, and a blank one as USDC", () => {
+      const row = {
+        direction: "payable",
+        counterparty: "Example Supplier",
+        amount: "1.00",
+        memo: "",
+        po_reference: "",
+        goods_received: "true",
+        due_date: "2026-10-31",
+        early_pay_discount_pct: "",
+        discount_deadline: "",
+      };
+      expect(csvInvoiceInputSchema.parse({ ...row, currency: "eurc" }).currency).toBe("EURC");
+      expect(csvInvoiceInputSchema.parse({ ...row, currency: "" }).currency).toBe("USDC");
+      expect(csvInvoiceInputSchema.parse(row).currency).toBe("USDC");
+      expect(csvInvoiceInputSchema.safeParse({ ...row, currency: "EUR" }).success).toBe(false);
+    });
+
+    it("says nothing about USDC when an amount cannot be read", () => {
+      const result = invoiceInputSchema.safeParse({ ...base, amount: "ten", currency: "EURC" });
+      expect(result.success).toBe(false);
+      if (!result.success) expect(firstZodMessage(result.error)).toContain("Use a positive amount with at most 6 decimal places");
+    });
+  });
+
   it.each(["2026-02-30", "2026-13-01", "31-10-2026", ""])("rejects invalid due date %s", (dueDate) => {
     expect(invoiceInputSchema.safeParse({ ...base, dueDate }).success).toBe(false);
   });
@@ -186,6 +224,7 @@ describe("invoice CSV parser", () => {
       due_date: "2026-10-31",
       early_pay_discount_pct: "",
       discount_deadline: "",
+      currency: "",
     }]);
   });
 
@@ -209,15 +248,20 @@ describe("invoice CSV parser", () => {
   it("offers a template with the optional discount columns in its header, blank in the sample row, that imports as it is", () => {
     const [templateHeader, sample, ...rest] = INVOICE_CSV_TEMPLATE.split("\n");
     expect(rest).toEqual([]);
-    expect(templateHeader).toBe(`${header},early_pay_discount_pct,discount_deadline`);
-    expect(sample).toBe("payable,Vendor name,100.00,Invoice memo,PO-100,true,2026-10-15,,");
+    expect(templateHeader).toBe(`${header},early_pay_discount_pct,discount_deadline,currency`);
+    expect(sample).toBe("payable,Vendor name,100.00,Invoice memo,PO-100,true,2026-10-15,,,USDC");
 
     const rows = parseInvoiceCsv(INVOICE_CSV_TEMPLATE);
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ counterparty: "Vendor name", due_date: "2026-10-15", early_pay_discount_pct: "", discount_deadline: "" });
     const result = csvInvoiceInputSchema.safeParse(rows[0]);
     expect(result.success).toBe(true);
-    if (result.success) expect(result.data).toMatchObject({ early_pay_discount_pct: null, discount_deadline: null });
+    if (result.success) expect(result.data).toMatchObject({ early_pay_discount_pct: null, discount_deadline: null, currency: "USDC" });
+  });
+
+  it("parses an optional currency column", () => {
+    const rows = parseInvoiceCsv(`${header},currency\npayable,Acme,100.00,memo,PO-1,true,2026-10-31,EURC`);
+    expect(rows[0]).toMatchObject({ currency: "EURC" });
   });
 
   it("parses the optional discount columns when present, and leaves them blank when absent", () => {

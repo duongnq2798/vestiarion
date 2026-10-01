@@ -4,6 +4,7 @@ import type {
   ChainProvider,
   EarnDepositParams,
   EarnResult,
+  Stablecoin,
   TransferParams,
   TransferResult,
 } from "./types";
@@ -48,13 +49,17 @@ export class SimulateProvider implements ChainProvider {
 
   async transfer(params: TransferParams): Promise<TransferResult> {
     const account = await this.account(params.fromAccountId);
-    const balance = Number(account.balance);
-    if (balance < params.amount) {
-      throw new Error(
-        `Insufficient balance: account holds ${balance}, tried to send ${params.amount}`
-      );
+    // A simulated account holds USDC only: an EURC payment is simulated like a
+    // USDC one but never moves the USDC balance (EURC invoices spec E7).
+    if ((params.token ?? "USDC") === "USDC") {
+      const balance = Number(account.balance);
+      if (balance < params.amount) {
+        throw new Error(
+          `Insufficient balance: account holds ${balance}, tried to send ${params.amount}`
+        );
+      }
+      await this.addBalance(account.id, -params.amount, balance);
     }
-    await this.addBalance(account.id, -params.amount, balance);
     const providerTxId = `sim_${params.idempotencyKey}`;
     return {
       providerTxId,
@@ -109,6 +114,12 @@ export class SimulateProvider implements ChainProvider {
       positionValue: params.amount,
       apy: Number(account.apy),
     };
+  }
+
+  async getTokenBalance(accountId: string, token: Stablecoin): Promise<BalanceSnapshot> {
+    if (token === "USDC") return this.getBalance(accountId);
+    const account = await this.account(accountId);
+    return { accountId, chain: account.chain, token, balance: 0 };
   }
 
   async getBalance(accountId: string): Promise<BalanceSnapshot> {

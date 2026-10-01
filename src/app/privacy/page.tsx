@@ -87,7 +87,7 @@ export default function PrivacyPage() {
 
       <LegalSection id="wallets" title="Wallets and payments">
         <p>
-          Payments are USDC transfers on Arc testnet through Circle Developer-Controlled Wallets. A workspace that connects its own Circle account keeps its
+          Payments are USDC or EURC transfers on Arc testnet through Circle Developer-Controlled Wallets. A workspace that connects its own Circle account keeps its
           wallets in that account. A workspace that chooses hosted wallets has them created in Vestiarion&apos;s own Circle testnet account, so Vestiarion
           holds them; you fund them from Circle&apos;s faucet.
         </p>
@@ -113,8 +113,9 @@ export default function PrivacyPage() {
             the agent asks it about, and nothing else:
             <ul>
               <li>
-                for an invoice: its amount, memo, purchase order reference, due date, early-payment discount and whether the goods were received; the
-                counterparty&apos;s name, risk level, payment limit and performance score; the operating balance and the reserve balance; the payment timing worked out from those:
+                for an invoice: its amount and currency, its value in USDC for an invoice in EURC, memo, purchase order reference, due date, early-payment discount and
+                whether the goods were received; the counterparty&apos;s name, risk level, payment limit and performance score; the operating balance and the reserve
+                balance, or for an invoice in EURC the wallet&apos;s EURC balance; the payment timing worked out from those:
                 today&apos;s date and the due date, what the discount is worth and the last day it applies, the yield from keeping the cash to the due date,
                 the day the written policy would pay on and the amount due that day, the total and number of payments that fall due on or before that day,
                 and whether the cash available by that day falls short of covering this invoice after them; when the agent scheduled the invoice earlier, the date it

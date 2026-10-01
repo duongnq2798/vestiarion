@@ -1,5 +1,5 @@
 import { db } from "../dal";
-import { getChainProvider, type ChainProvider } from "../circle";
+import { getChainProvider, type ChainProvider, type Stablecoin } from "../circle";
 import { executePayment, type PaymentExecution } from "../payments";
 import { amountToPay, type InvoiceDiscount } from "./payment-timing";
 
@@ -47,6 +47,8 @@ export interface PayInvoiceInput {
   amount: number;
   /** Lowers the transfer through the end of the deadline's UTC day, never after it (spec 2026-09-30-payment-timing P5). */
   discount?: InvoiceDiscount | null;
+  /** The invoice's currency, which the transfer moves: an EURC invoice is paid in EURC, never in USDC (EURC invoices design E5). */
+  currency?: Stablecoin;
 }
 
 export interface PayInvoiceResult {
@@ -115,6 +117,7 @@ export async function payInvoice(
         destination: payoutAddress(input.address, input.counterpartyId),
         amount: amountPaid,
         memo: `Invoice ${input.invoiceId}`,
+        token: input.currency ?? "USDC",
       },
       { provider, retryTerminalFailure }
     );
@@ -138,12 +141,12 @@ export async function payInvoice(
     note = ` [transfer failed: ${result.error ?? "provider reported failure"}]`;
   } else if (result.status === "pending") {
     note = " [transfer submitted; awaiting provider confirmation]";
-  } else {
+  } else if ((input.currency ?? "USDC") === "USDC") {
     // The transfer is already confirmed — status, txRef and execution below
     // are real regardless of what happens next. A sync failure here must not
     // demote a confirmed payment back to "held": that would understate money
     // that actually moved, and the agent would never look at this invoice
-    // again.
+    // again. A EURC payment leaves the stored balance, which is USDC, as it is.
     try {
       operatingBalance = await syncOperatingBalance(operating.id);
     } catch (err) {

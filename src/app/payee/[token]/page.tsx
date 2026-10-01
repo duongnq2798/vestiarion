@@ -50,7 +50,7 @@ export default async function PayeePage({ params }: PayeePageProps) {
                 <Eyebrow className="text-agent">Payment address</Eyebrow>
               </p>
               <h1 className="mt-2 text-2xl font-semibold tracking-[-0.02em] text-ink">
-                {preview.orgName} wants to pay {preview.counterpartyName} in USDC on Arc testnet
+                {preview.orgName} wants to pay {preview.counterpartyName} on Arc testnet
               </h1>
               <p className="mt-3 text-sm leading-6 text-ink-2">
                 Enter the wallet address where you want to receive it. {preview.orgName} confirms it before paying you. This link works once.

@@ -14,13 +14,24 @@ export interface ApGuardrailInput {
   addressChangedAt?: string | null;
   /** When a person last confirmed the counterparty's address. */
   addressConfirmedAt?: string | null;
+  /**
+   * The invoice's currency (EURC invoices design). For EURC, `amount` is its
+   * USDC value at the quoted rate, which is what counts against the limit;
+   * `fxAvailable` false means there was no quote, so there is no USDC value.
+   */
+  currency?: "USDC" | "EURC";
+  fxAvailable?: boolean;
+  /** A live EURC payment the wallet's EURC cannot cover: what it holds (null when it could not be read) and what the payment sends. */
+  eurcShort?: { balance: number | null; needed: number } | null;
 }
 
 export type ApGuardrailRule =
   | "counterparty.high_risk"
   | "counterparty.payment_limit"
   | "counterparty.address_unconfirmed"
-  | "invoice.duplicate_of_settled";
+  | "invoice.duplicate_of_settled"
+  | "fx.rate_unavailable"
+  | "treasury.insufficient_eurc";
 
 export interface ApGuardrailResult {
   blocked: boolean;
@@ -74,12 +85,36 @@ export function enforceApGuardrails(input: ApGuardrailInput): ApGuardrailResult 
       reasoning: `${input.reasoning} [guardrail override: the counterparty's address changed on ${(changedAt as string).slice(0, 10)} and no one has confirmed it — held for a person to approve]`,
     };
   }
+  // A EURC payable with no quote has no USDC value, so its limit cannot be
+  // checked: it waits for a person, who sees the EURC amount (E4).
+  if (input.currency === "EURC" && input.fxAvailable === false) {
+    return {
+      blocked: true,
+      status: "held",
+      rule: "fx.rate_unavailable",
+      reasoning: `${input.reasoning} [guardrail override: no EURC→USDC rate from Circle's Stablecoin Service, so the payment limit cannot be checked — held for a person to approve]`,
+    };
+  }
   if (input.paymentLimit != null && input.amount > input.paymentLimit) {
+    const amount = input.currency === "EURC" ? `its USDC value at the quoted rate, ${input.amount} USDC,` : "amount";
     return {
       blocked: true,
       status: "held",
       rule: "counterparty.payment_limit",
-      reasoning: `${input.reasoning} [guardrail override: amount exceeds the ${input.paymentLimit} USDC payment limit — ${verb} refused before execution]`,
+      reasoning: `${input.reasoning} [guardrail override: ${amount} exceeds the ${input.paymentLimit} USDC payment limit — ${verb} refused before execution]`,
+    };
+  }
+  // A EURC invoice is paid from EURC, never from USDC (E5): a payment the
+  // wallet's EURC cannot cover now waits for a person.
+  if (input.action === "pay" && input.eurcShort) {
+    return {
+      blocked: true,
+      status: "held",
+      rule: "treasury.insufficient_eurc",
+      reasoning:
+        input.eurcShort.balance === null
+          ? `${input.reasoning} [guardrail override: the operating wallet's EURC could not be read, so the ${input.eurcShort.needed} EURC this payment sends cannot be checked — held for a person]`
+          : `${input.reasoning} [guardrail override: the operating wallet holds ${input.eurcShort.balance} EURC, less than the ${input.eurcShort.needed} EURC this payment sends — held for a person; fund EURC from Circle's faucet first]`,
     };
   }
   return { blocked: false, status: null, rule: null, reasoning: input.reasoning };
