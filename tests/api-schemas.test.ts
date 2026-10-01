@@ -50,6 +50,14 @@ describe("schemas mirror the payload interfaces exactly", () => {
   });
 });
 
+describe("what an invoice's txHash is", () => {
+  it("says a payout from a Gateway balance settles with the mint on the payee's chain, not on Arc (Gateway review M10)", () => {
+    expect(S.InvoiceSchema.shape.txHash.description).toBe(
+      "An on-chain hash once the payment settled, else null: on Arc testnet, or for a payout from a Gateway balance the mint on the payee's chain."
+    );
+  });
+});
+
 describe("every documented example is a real response of the current shape", () => {
   it.each(OPERATIONS.map((op) => [op.id, op] as const))("%s", (_id, op) => {
     expect(() => op.response.parse(op.example)).not.toThrow();

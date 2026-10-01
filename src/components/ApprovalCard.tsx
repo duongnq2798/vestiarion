@@ -57,7 +57,7 @@ export function payConfirmTitle(
  * otherwise this is the first attempt.
  */
 export function payConfirmDescription(payable: Pick<WaitingPayable, "paymentSent" | "lastAttempt">): string {
-  if (payable.paymentSent || payable.lastAttempt?.state === "in_flight") {
+  if (payable.paymentSent || payable.lastAttempt?.state === "in_flight" || (payable.lastAttempt?.state === "failed" && payable.lastAttempt.resend === false)) {
     return "Nothing new is sent: Vestiarion checks the transfer already made with Circle, and the ledger records who approved it.";
   }
   if (payable.lastAttempt?.state === "failed") {
@@ -149,7 +149,10 @@ export default function ApprovalCard({
           )}
           {payable.lastAttempt?.state === "failed" && (
             <Callout tone="refused" className="mt-2">
-              The last payment attempt failed: {payable.lastAttempt.reason}. Approving sends a new transfer.
+              The last payment attempt failed: {payable.lastAttempt.reason}.{" "}
+              {payable.lastAttempt.resend === false
+                ? "Approving sends nothing new: check with Circle whether it was minted, and reject or return the invoice if it was not."
+                : "Approving sends a new transfer."}
             </Callout>
           )}
           {payable.lastAttempt?.state === "in_flight" && (

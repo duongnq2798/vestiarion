@@ -101,6 +101,7 @@ describe("0023 is idempotent", () => {
          order by 1, 2`);
       expect(keys.rows).toEqual([
         { tbl: "api_keys", col: "created_by", action: "n" },
+        { tbl: "gateway_signers", col: "created_by", action: "n" },
         { tbl: "invitations", col: "invited_by", action: "c" },
         { tbl: "invoices", col: "created_by", action: "n" },
         { tbl: "invoices", col: "reviewed_by", action: "n" },

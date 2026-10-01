@@ -3,6 +3,7 @@ import { refreshOnChainBalanceAction } from "@/app/actions/treasury";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import AgentControls from "@/components/AgentControls";
 import AgentPauseControl from "@/components/AgentPauseControl";
+import { GatewayPanel } from "@/components/GatewayPanel";
 import { SampleDataLoaded, SampleDataOffer } from "@/components/SampleDataPanel";
 import { CycleReport } from "@/components/vx/CycleReport";
 import { DecisionCard } from "@/components/vx/DecisionCard";
@@ -21,6 +22,7 @@ import { requireMembership } from "@/lib/auth/membership";
 import { orgHref } from "@/lib/auth/org-paths";
 import { can } from "@/lib/auth/roles";
 import { chainModes } from "@/lib/circle";
+import { readGatewayState } from "@/lib/circle/gateway-funding";
 import { inOrg } from "@/lib/dal/scope";
 import { gettingStarted, ownPayableCount } from "@/lib/getting-started";
 import { listLedgerEntries, listLedgerEntriesAfter, listLedgerEntriesByDomain, listLedgerEntriesForTargets } from "@/lib/ledger";
@@ -78,10 +80,18 @@ export default async function DashboardPage({
       : undefined;
     const sinceValue = typeof query.since === "string" ? Number(query.since) : undefined;
     const since = Number.isFinite(sinceValue) ? sinceValue : undefined;
-    const [invoiceEntries, treasuryEntries, cycleEntries] = await Promise.all([
+    const [invoiceEntries, treasuryEntries, cycleEntries, gateway] = await Promise.all([
       listLedgerEntriesForTargets({ invoiceIds: invoices.map((invoice) => invoice.id) }),
       listLedgerEntriesByDomain("treasury", 2),
       since == null ? Promise.resolve([]) : listLedgerEntriesAfter(since),
+      // A live workspace's Gateway balance (Gateway payouts G5), read alongside the ledger rather than
+      // after it (review M4). Best effort: a read that fails shows no panel.
+      access.membership.mode === "live"
+        ? readGatewayState().catch((error: unknown) => {
+            console.error("console: Gateway state not loaded", access.membership.orgId, error instanceof Error ? error.message : error);
+            return null;
+          })
+        : Promise.resolve(null),
     ]);
     const invoiceDecisions = invoices.map((invoice) =>
       invoiceDecision(invoice, counterpartiesById.get(invoice.counterparty_id), invoiceEntries)
@@ -191,6 +201,15 @@ export default async function DashboardPage({
 
           <aside className="min-w-0 space-y-6 md:grid md:grid-cols-2 md:items-start md:gap-6 md:space-y-0 xl:block xl:space-y-6">
             <AccountsList accounts={accounts} />
+            {gateway && (
+              <GatewayPanel
+                orgSlug={slug}
+                signerAddress={gateway.signerAddress}
+                balanceUsdc={gateway.balanceUsdc}
+                canFund={can(role, "treasury.manage")}
+                requestId={crypto.randomUUID()}
+              />
+            )}
             {forecast && <ForecastPanel forecast={forecast} />}
           </aside>
         </div>

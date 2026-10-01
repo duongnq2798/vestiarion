@@ -168,7 +168,16 @@ function paymentWasSent(intent: IntentState | null): boolean {
   if (!intent) return false;
   if (intent.status === "confirmed" || intent.status === "pending" || intent.status === "submitting") return true;
   if (intent.provider_tx_id === null) return false;
-  return !failedTerminally(intent);
+  return !failedTerminally(intent) && !gatewayFailed(intent);
+}
+
+/**
+ * Whether Gateway reported the intent's transfer `failed` (recorded `GATEWAY_FAILED`): its
+ * attestation may still be minted, so approving reads it again and sends nothing, but a person
+ * who has checked with Circle may reject or return the invoice (Gateway review I2).
+ */
+function gatewayFailed(intent: IntentState): boolean {
+  return intent.status === "failed" && intent.provider_tx_id?.startsWith("gateway:") === true && intent.provider_state === "GATEWAY_FAILED";
 }
 
 /**
@@ -184,7 +193,11 @@ function transferExists(intent: IntentState | null): boolean {
 }
 
 /** What the approval card says about the last payment attempt (see `WaitingPayable.lastAttempt`). */
-export type LastPaymentAttempt = { state: "failed"; reason: string } | { state: "in_flight" } | null;
+export type LastPaymentAttempt =
+  /** `resend: false`: approving reads the failed transfer again and sends nothing new (a Gateway transfer that failed). */
+  | { state: "failed"; reason: string; resend?: false }
+  | { state: "in_flight" }
+  | null;
 
 /**
  * Circle's own failure codes, in plain words, for the reasons a person is
@@ -211,6 +224,9 @@ const REASON_IN_PLAIN_WORDS: Record<string, string> = {
  */
 function lastAttemptOf(intent: IntentState | null, token: Stablecoin = "USDC"): LastPaymentAttempt {
   if (!intent || intent.provider_tx_id === null || intent.status === "confirmed") return null;
+  if (gatewayFailed(intent)) {
+    return { state: "failed", reason: intent.failure_reason ? `Gateway could not mint it (${intent.failure_reason})` : "Gateway could not mint it", resend: false };
+  }
   if (failedTerminally(intent)) {
     const reason = intent.failure_reason;
     return {

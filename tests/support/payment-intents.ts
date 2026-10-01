@@ -50,6 +50,9 @@ export function paymentIntentsBackend(orgId: string) {
       chain: null,
       provider_mode: body.provider_mode,
       token: body.token ?? "USDC",
+      // A bridged payment's chain and the route its first attempt chose, as the real table keeps them (0044, 0045).
+      destination_chain: body.destination_chain ?? null,
+      payout_route: body.payout_route ?? null,
       fee_usd: null,
       fee_source: null,
       settled_in_ms: null,

@@ -12,6 +12,7 @@ const TABLE: Array<[Permission, { owner: boolean; admin: boolean; approver: bool
   ["members.manage",   { owner: true,  admin: true,  approver: false, viewer: false }],
   ["api_keys.manage",  { owner: true,  admin: true,  approver: false, viewer: false }],
   ["webhooks.manage",  { owner: true,  admin: true,  approver: false, viewer: false }],
+  ["treasury.manage",  { owner: true,  admin: true,  approver: false, viewer: false }],
   ["org.administer",   { owner: true,  admin: false, approver: false, viewer: false }],
 ];
 

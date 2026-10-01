@@ -147,6 +147,8 @@ export function invoiceDecision(invoice: InvoiceRow, counterparty: CounterpartyR
   const eurc = currency === "EURC";
   const usdcValue = eurc ? (numberValue(entry?.detail.usdcValue) ?? null) : invoice.amount;
   const rate = numberValue(record(entry?.detail.fx)?.rate);
+  const route = routeOf(invoice.id, entries);
+  const mint = mintOf(invoice.id, entries);
 
   return {
     id: invoice.id,
@@ -172,16 +174,32 @@ export function invoiceDecision(invoice: InvoiceRow, counterparty: CounterpartyR
       { label: "Due", value: new Date(invoice.due_date).toLocaleDateString("en-US"), state: "neutral" },
       termsEvidence(invoice),
       paidEvidence(invoice),
-      paidAcrossChains(counterparty?.chain) ? { label: "Payee's chain", value: `${payeeChain(counterparty?.chain).label}, through CCTP`, state: "neutral" as const } : null,
+      paidAcrossChains(counterparty?.chain) ? { label: "Payee's chain", value: `${payeeChain(counterparty?.chain).label}, through ${route}`, state: "neutral" as const } : null,
       duplicateEvidence(observed),
     ].filter((item): item is Evidence => item !== null),
     guardrail: guardrailBlocked ? invoiceGuardrail(invoice.amount, currency, usdcValue, limit, risk, rule, entry?.detail) : null,
     decisionMode: stringValue(entry?.detail.decisionMode),
-    txHash: invoice.tx_ref?.startsWith("0x") ? invoice.tx_ref : null,
-    mint: mintOf(invoice.id, entries),
+    // A Gateway payout has no Arc transaction of its own: its hash is the mint, linked below on the payee's
+    // chain. No mint is ever linked to Arc's explorer (Gateway review I4).
+    txHash: invoice.tx_ref?.startsWith("0x") && route !== "Gateway" && invoice.tx_ref !== mint?.txHash ? invoice.tx_ref : null,
+    mint,
     auditSeq: entry?.seq,
     at: entry?.ts ?? invoice.due_date,
   };
+}
+
+/** The route a payout across chains took, as its decision recorded it: Gateway, or CCTP (the only route before Gateway). */
+function payoutRouteLabel(detail: Record<string, unknown> | undefined): "Gateway" | "CCTP" {
+  return stringValue(record(detail?.payout)?.route) === "gateway" ? "Gateway" : "CCTP";
+}
+
+/**
+ * The route a payout across chains took, from whichever of the invoice's entries recorded one (Gateway
+ * review I4): a later reconcile records none of its own. CCTP when none did.
+ */
+function routeOf(invoiceId: string, entries: LedgerEntry[]): "Gateway" | "CCTP" {
+  const decided = entries.find((entry) => entry.detail.invoiceId === invoiceId && stringValue(record(entry.detail.payout)?.route) !== undefined);
+  return payoutRouteLabel(decided?.detail);
 }
 
 /** A bridged payment's mint, from whichever of the invoice's entries recorded it: the decision, or a later reconcile. */
@@ -218,9 +236,15 @@ function invoiceGuardrail(
   // own rule, and for a costly one the fee against what 10% of the invoice allows.
   if (recorded === "bridge.fee_above_cap") {
     const fee = numberValue(record(detail?.payout)?.feeUsdc) ?? 0;
-    return { rule: recorded, attempted: fee, limit: Math.round(amount * BRIDGE_FEE_CAP_PERCENT * 10_000) / 1_000_000, note: `CCTP fee, against ${BRIDGE_FEE_CAP_PERCENT}% of the invoice` };
+    return { rule: recorded, attempted: fee, limit: Math.round(amount * BRIDGE_FEE_CAP_PERCENT * 10_000) / 1_000_000, note: `${payoutRouteLabel(detail)} fee, against ${BRIDGE_FEE_CAP_PERCENT}% of the invoice` };
   }
-  if (recorded === "bridge.fee_unavailable") return { rule: recorded, attempted: amount, limit, note: "no CCTP fee from Circle" };
+  if (recorded === "bridge.fee_unavailable") return { rule: recorded, attempted: amount, limit, note: `no ${payoutRouteLabel(detail)} fee from Circle` };
+  // A payout its first attempt sent through Gateway, and the Gateway balance no longer covers (Gateway review I3).
+  if (recorded === "bridge.gateway_balance_short") {
+    const payout = record(detail?.payout);
+    const needed = Math.round((amount + (numberValue(payout?.feeUsdc) ?? 0)) * 1_000_000) / 1_000_000;
+    return { rule: recorded, attempted: needed, limit: numberValue(payout?.gatewayBalanceUsdc) ?? 0, note: "the Gateway balance, which an earlier attempt's route requires" };
+  }
   if (recorded === "bridge.unsupported_token") return { rule: recorded, attempted: amount, attemptedToken: currency, limit, limitToken: "USDC", note: "only USDC crosses chains" };
   if (currency !== "EURC") {
     return { rule: inferredRule, attempted: amount, limit, note: risk === "high" ? "risk tier high" : "amount above screened limit" };

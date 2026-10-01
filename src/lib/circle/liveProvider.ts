@@ -15,12 +15,13 @@ import { ARC_FEE_USD } from "./types";
 import { fetchArcFeeUsd } from "./arcFees";
 import { awaitSettlement, FAILED_STATES, withDeadline, type Settlement } from "./settlement";
 import { BridgeFeeError, bridgeFee, bridgeStepKey, burnCalls, forwardedMint, type ContractCall } from "./cctp";
+import { burnIntent, burnIntentTypedData, estimateGateway, gatewaySalt, gatewayTransferStatus, submitGatewayTransfer, type GatewayTransferStatus } from "./gateway";
 import { payeeChain, paidAcrossChains } from "../payee-chains";
 import type { ChainConfig } from "../config";
 
 export type LiveProviderClient = Pick<
   CircleDeveloperControlledWalletsClient,
-  "createTransaction" | "getWalletTokenBalance" | "getTransaction" | "createContractExecutionTransaction"
+  "createTransaction" | "getWalletTokenBalance" | "getTransaction" | "createContractExecutionTransaction" | "signTypedData"
 >;
 
 /**
@@ -33,6 +34,19 @@ const BRIDGE_MINT_POLL_MS = 3_000;
 /** A bridge's provider id: its burn, or its approve when the burn was never sent (X9). */
 const BURN_ID = "cctp:";
 const APPROVE_ID = "cctp-approve:";
+const GATEWAY_ID = "gateway:";
+
+/**
+ * The state a Gateway payout is recorded with (review I2). An expired attestation can never be
+ * minted, so no money left the Gateway balance: it is Circle's `FAILED`, which a person may pay
+ * again as a new attempt, under a new salt. A failed transfer may still be minted with its
+ * attestation: `GATEWAY_FAILED` is never a reason to send again. Otherwise Gateway's own word.
+ */
+function gatewayProviderState(transfer: GatewayTransferStatus): string {
+  if (transfer.state === "expired") return "FAILED";
+  if (transfer.state === "failed") return "GATEWAY_FAILED";
+  return transfer.status;
+}
 
 const CREATE_TRANSACTION_DEADLINE_MS = 20_000;
 const BALANCE_READ_DEADLINE_MS = 15_000;
@@ -43,6 +57,7 @@ interface AccountRow {
   chain: string;
   token: string;
   circle_wallet_id: string | null;
+  address?: string | null;
 }
 
 function measuredSettlementMs(transaction: { createDate: string; firstConfirmDate?: string }): number | null {
@@ -127,7 +142,7 @@ export class LiveProvider implements ChainProvider {
     const row = unwrap(
       await db()
         .from("accounts")
-        .select("id, chain, token, circle_wallet_id")
+        .select("id, chain, token, circle_wallet_id, address")
         .eq("id", accountId)
         .single<AccountRow>()
     );
@@ -182,7 +197,9 @@ export class LiveProvider implements ChainProvider {
     }
 
     const account = await this.account(params.fromAccountId);
-    if (paidAcrossChains(params.destinationChain)) return this.bridge(params, account);
+    if (paidAcrossChains(params.destinationChain)) {
+      return params.route === "gateway" ? this.gatewayPayout(params, account) : this.bridge(params, account);
+    }
     const tokenId = await this.resolveTokenId(account.walletId, params.token ?? "USDC");
     const started = Date.now();
 
@@ -277,6 +294,92 @@ export class LiveProvider implements ChainProvider {
     return this.bridgeResult(`${BURN_ID}${burnId}`, burned, base, mint, started);
   }
 
+  /**
+   * Pays a payee on another chain from the workspace's Gateway balance
+   * (Gateway payouts G3): the Gateway signer signs a burn intent whose salt
+   * comes from the attempt's key, Gateway's API takes it with the Forwarding
+   * Service, and Circle mints on the payee's chain. Every attempt under the
+   * same key asks for the same transfer, which GatewayWallet spends once, so
+   * sending it again can never pay twice. Nothing leaves the operating wallet:
+   * the balance was deposited when the workspace funded it.
+   */
+  private async gatewayPayout(params: TransferParams, account: AccountRow & { walletId: string }): Promise<TransferResult> {
+    if ((params.token ?? "USDC") !== "USDC") {
+      throw new Error("Only USDC crosses chains through Gateway; a EURC payment is paid on Arc testnet only.");
+    }
+    const chain = payeeChain(params.destinationChain);
+    const found = await db().from("gateway_signers").select("circle_wallet_id, address").maybeSingle();
+    if (found.error) throw new Error(found.error.message);
+    const signer = found.data as { circle_wallet_id: string; address: string } | null;
+    if (!signer) throw new Error("This workspace has no Gateway balance yet: an owner or admin funds one on Treasury.");
+    if (!account.address) throw new Error("The operating wallet has no address; nothing was sent.");
+
+    const payout = { depositor: account.address, signer: signer.address, recipient: params.toAddress, chain: chain.id, amount: params.amount, salt: gatewaySalt(params.idempotencyKey) };
+    const estimate = await estimateGateway(payout, { fetch: this.fetch });
+    // The fee is read here, just before the payout; one above what this payment may pay sends nothing.
+    // Weighed as the larger of the fee Gateway quotes and the fee the intent is signed to allow (review M2).
+    const signedFeeUsdc = Math.max(estimate.feeUsdc, Number(estimate.maxFee) / 1_000_000);
+    if (params.maxBridgeFeeUsdc != null && signedFeeUsdc > params.maxBridgeFeeUsdc) {
+      throw new BridgeFeeError(
+        `The Gateway fee to ${chain.label}, ${signedFeeUsdc} USDC, is above the ${params.maxBridgeFeeUsdc} USDC this payment may pay; nothing was sent.`
+      );
+    }
+    const intent = burnIntent({ ...payout, maxFee: estimate.maxFee, maxBlockHeight: estimate.maxBlockHeight });
+    const signed = await withDeadline(
+      this.client.signTypedData({ walletId: signer.circle_wallet_id, data: JSON.stringify(burnIntentTypedData(intent)), memo: params.memo }),
+      CREATE_TRANSACTION_DEADLINE_MS,
+      `Circle did not sign the Gateway transfer within ${CREATE_TRANSACTION_DEADLINE_MS} ms; nothing was sent`
+    );
+    const signature = signed.data?.signature;
+    if (!signature) throw new Error("Circle returned no signature for the Gateway transfer; nothing was sent");
+
+    const started = Date.now();
+    const transferId = await submitGatewayTransfer(intent, signature, { fetch: this.fetch });
+    // From here the transfer exists: a status read that fails leaves it in flight, for
+    // reconciliation to read, never recorded as not sent (review I1).
+    let status: GatewayTransferStatus;
+    try {
+      status = await this.awaitGatewayMint(transferId);
+    } catch {
+      status = { status: "pending", state: "pending", mintTxHash: null, failureReason: null, destinationChain: chain.id };
+    }
+    return this.gatewayResult(`${GATEWAY_ID}${transferId}`, status, chain.id, estimate.feeUsdc, started);
+  }
+
+  /** A Gateway transfer's status, read until it is minted or failed, or the wait runs out. */
+  private async awaitGatewayMint(transferId: string): Promise<GatewayTransferStatus> {
+    const deadline = Date.now() + this.bridgeMintWaitMs;
+    for (;;) {
+      const status = await gatewayTransferStatus(transferId, { fetch: this.fetch });
+      if (status.status !== "pending" || Date.now() + BRIDGE_MINT_POLL_MS > deadline) return status;
+      await new Promise((resolve) => setTimeout(resolve, BRIDGE_MINT_POLL_MS));
+    }
+  }
+
+  private gatewayResult(providerTxId: string, transfer: GatewayTransferStatus, destinationChain: string | null, feeUsdc: number | null, started: number | null): TransferResult {
+    // Paid once the payee has the money: on the mint, as a CCTP payout is (R5 there).
+    const chain = transfer.destinationChain ?? destinationChain;
+    return {
+      providerTxId,
+      txHash: transfer.mintTxHash,
+      txRef: transfer.mintTxHash ?? providerTxId,
+      // The mint is on the payee's chain, and no Arc transaction belongs to one payout: Gateway burns in batches (G5).
+      // Unknown on a reconcile whose answer named no chain: left as recorded (review M3).
+      chain: chain ?? "",
+      status: transfer.status,
+      feeUsd: 0,
+      feeSource: "provider_estimate",
+      providerMode: "live",
+      settledInMs: transfer.status === "confirmed" && started !== null ? Date.now() - started : null,
+      providerState: gatewayProviderState(transfer),
+      failureReason: transfer.failureReason,
+      mintTxHash: transfer.mintTxHash,
+      destinationChain: chain,
+      ...(feeUsdc != null ? { bridgeFeeUsdc: feeUsdc } : {}),
+      route: "gateway",
+    };
+  }
+
   private async execute(walletId: string, call: ContractCall, idempotencyKey: string, memo: string | undefined): Promise<string> {
     const created = await withDeadline(
       this.client.createContractExecutionTransaction({
@@ -336,6 +439,11 @@ export class LiveProvider implements ChainProvider {
 
   async reconcileTransfer(providerTxId: string): Promise<TransferResult> {
     if (providerTxId.startsWith(BURN_ID) || providerTxId.startsWith(APPROVE_ID)) return this.reconcileBridge(providerTxId);
+    // A Gateway payout, read again: it signs and sends nothing (G4).
+    if (providerTxId.startsWith(GATEWAY_ID)) {
+      const status = await gatewayTransferStatus(providerTxId.slice(GATEWAY_ID.length), { fetch: this.fetch });
+      return this.gatewayResult(providerTxId, status, null, null, null);
+    }
     const started = Date.now();
     const response = await withDeadline(
       this.client.getTransaction({ id: providerTxId }),

@@ -2,10 +2,14 @@
 
 import "server-only";
 
+import { z } from "zod";
 import { refreshOnChainBalances } from "@/lib/agent/balances";
 import { authorize } from "@/lib/auth/authorize";
+import { revalidateOrgPages } from "@/lib/auth/revalidate";
+import { fundGateway, GatewayStepFailed } from "@/lib/circle/gateway-funding";
 import { CIRCLE_UNREACHABLE } from "@/lib/copy";
 import { inOrg } from "@/lib/dal/scope";
+import { firstZodMessage, usdcAmountSchema } from "@/lib/intake-validation";
 
 export interface RefreshBalanceResult {
   ok: boolean;
@@ -43,6 +47,48 @@ export async function refreshOnChainBalanceAction(orgSlug: string): Promise<Refr
     } catch {
       console.error("refreshOnChainBalanceAction failed");
       return { ok: false, balance: null, syncedAt: null, message: CIRCLE_UNREACHABLE };
+    }
+  });
+}
+
+export interface FundGatewayResult {
+  ok: boolean;
+  message: string;
+  /** Circle failed a step: the form makes a new request id, since the old one would only be answered with that failure (review I5). */
+  renew?: true;
+}
+
+const requestIdSchema = z.string().uuid();
+
+/**
+ * Funds the workspace's Gateway balance from its operating wallet (Gateway
+ * payouts G1): an owner's or admin's deliberate move of treasury cash, never
+ * the agent's. The form carries an id made when it was shown, so a double
+ * click or a retry deposits once: every Circle call is keyed by it.
+ */
+export async function fundGatewayAction(_previous: FundGatewayResult, formData: FormData): Promise<FundGatewayResult> {
+  const auth = await authorize(formData.get("orgSlug"), "treasury.manage");
+  if (!auth.ok) return { ok: false, message: auth.message };
+  if (auth.membership.mode !== "live") {
+    return { ok: false, message: "Gateway is for a live workspace on Arc testnet. Take this workspace live first." };
+  }
+  const amount = usdcAmountSchema.safeParse(String(formData.get("amount") ?? ""));
+  if (!amount.success) return { ok: false, message: firstZodMessage(amount.error).replace(/^input: /, "") };
+  const requestId = requestIdSchema.safeParse(formData.get("requestId"));
+  if (!requestId.success) return { ok: false, message: "Reload the page and try again." };
+
+  return inOrg(auth, async () => {
+    try {
+      const funded = await fundGateway({ actorId: auth.user.id, amount: Number(amount.data), requestId: requestId.data });
+      revalidateOrgPages();
+      const held = funded.balanceUsdc === null ? "" : ` The Gateway balance is ${funded.balanceUsdc} USDC.`;
+      return { ok: true, message: `Deposited ${Number(amount.data)} USDC into Gateway.${held}` };
+    } catch (error) {
+      // Every error the funding raises is written for the person who asked: its own checks,
+      // Circle's call and status (never Circle's text), or Gateway's refusal.
+      console.error("fundGatewayAction failed", error instanceof Error ? error.name : "unknown");
+      if (error instanceof GatewayStepFailed) return { ok: false, message: error.message, renew: true };
+      return { ok: false, message: error instanceof Error ? error.message : "The deposit into Gateway did not complete. Try again." };
     }
   });
 }

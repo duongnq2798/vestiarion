@@ -187,6 +187,15 @@ describe("ApprovalCard", () => {
     expect(markup).not.toMatch(APPROVE_DISABLED);
   });
 
+  it("says approving sends nothing new after a Gateway transfer that failed, and that it may be rejected or returned once Circle says it was not minted (Gateway review I2)", () => {
+    const markup = card({ lastAttempt: { state: "failed", reason: "Gateway could not mint it (out of gas)", resend: false } });
+    expect(markup).toContain(
+      "The last payment attempt failed: Gateway could not mint it (out of gas). Approving sends nothing new: check with Circle whether it was minted, and reject or return the invoice if it was not."
+    );
+    expect(markup).not.toContain("Approving sends a new transfer.");
+    expect(markup).toContain("Reject");
+  });
+
   it("says a payment still in flight can only be approved, which checks it again", () => {
     const markup = card({ lastAttempt: { state: "in_flight" } });
     expect(markup).toContain(
@@ -271,6 +280,12 @@ describe("ApprovalCard", () => {
   it("says a new transfer starts after a failed attempt", () => {
     expect(payConfirmDescription(payable({ lastAttempt: { state: "failed", reason: "Insufficient funds" } }))).toBe(
       "A new transfer starts as soon as you confirm, and the ledger records who approved it."
+    );
+  });
+
+  it("says nothing new is sent after a Gateway transfer that failed (Gateway review I2)", () => {
+    expect(payConfirmDescription(payable({ lastAttempt: { state: "failed", reason: "Gateway could not mint it (out of gas)", resend: false } }))).toBe(
+      "Nothing new is sent: Vestiarion checks the transfer already made with Circle, and the ledger records who approved it."
     );
   });
 

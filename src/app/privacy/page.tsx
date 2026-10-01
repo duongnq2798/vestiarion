@@ -102,7 +102,7 @@ export default function PrivacyPage() {
             <strong>Supabase</strong> holds the database and runs sign-in.
           </li>
           <li>
-            <strong>Circle</strong> creates the wallets and moves the payments, so it receives wallet addresses and payment amounts.
+            <strong>Circle</strong> creates the wallets and moves the payments, through Developer-Controlled Wallets, CCTP and Gateway, so it receives wallet addresses and payment amounts.
           </li>
           <li>
             <strong>Resend</strong> sends transactional email: invitations to a workspace, and digests of the payments waiting for a decision. It receives each
@@ -115,7 +115,7 @@ export default function PrivacyPage() {
               <li>
                 for an invoice: its amount and currency, its value in USDC for an invoice in EURC, memo, purchase order reference, due date, early-payment discount and
                 whether the goods were received; the counterparty&apos;s name, risk level, payment limit and performance score; the operating balance and the reserve
-                balance, or for an invoice in EURC the wallet&apos;s EURC balance; how the payee is paid, on Arc or across chains through CCTP with its fee
+                balance, or for an invoice in EURC the wallet&apos;s EURC balance; how the payee is paid, on Arc or across chains through CCTP or a Gateway balance with its fee
                 and expected time; the payment timing worked out from those:
                 today&apos;s date and the due date, what the discount is worth and the last day it applies, the yield from keeping the cash to the due date,
                 the day the written policy would pay on and the amount due that day, the total and number of payments that fall due on or before that day,
@@ -127,6 +127,10 @@ export default function PrivacyPage() {
               <li>
                 for a contractor milestone: its title, amount and verification source, and the contractor&apos;s name, risk level, payment limit and
                 performance score;
+              </li>
+              <li>
+                for an invoice document a member chooses to read (a PDF, an email or pasted text): the document&apos;s text, up to 20,000 characters, to read
+                its vendor, amounts, dates, terms and payment address into the invoice form. The document itself is not kept;
               </li>
               <li>
                 for a treasury move: the operating and reserve balances, the reserve&apos;s yield, the obligations due in the next 7 and 14 days, the total open

@@ -1,5 +1,6 @@
 import { db } from "../dal";
 import { getChainProvider, type ChainProvider, type Stablecoin } from "../circle";
+import type { PayoutRoute } from "../circle/types";
 import { executePayment, type PaymentExecution } from "../payments";
 import { amountToPay, type InvoiceDiscount } from "./payment-timing";
 
@@ -53,6 +54,8 @@ export interface PayInvoiceInput {
   destinationChain?: string;
   /** The most the CCTP fee may be, in USDC; a higher fee read at the burn sends nothing (review I4). */
   maxBridgeFeeUsdc?: number;
+  /** How a payment across chains goes, for its first attempt: the intent keeps it after (Gateway payouts G2). */
+  route?: PayoutRoute;
 }
 
 export interface PayInvoiceResult {
@@ -124,6 +127,7 @@ export async function payInvoice(
         token: input.currency ?? "USDC",
         ...(input.destinationChain ? { destinationChain: input.destinationChain } : {}),
         ...(input.maxBridgeFeeUsdc != null ? { maxBridgeFeeUsdc: input.maxBridgeFeeUsdc } : {}),
+        ...(input.route ? { route: input.route } : {}),
       },
       { provider, retryTerminalFailure }
     );
