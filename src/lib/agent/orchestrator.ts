@@ -31,6 +31,8 @@ import { followUpConfig, planFollowUp, type DecisionFacts, type FollowUpConfig, 
 import { OPEN_PAYABLE_STATUSES, summarizePayableObligations, sumUsdcAmounts } from "./obligations";
 import { ARC_TESTNET_EURC, quoteEurcInUsdc, type EurcQuote } from "../fx/quote";
 import { bridgeFee as irisBridgeFee, EXPECTED_BRIDGE_SECONDS, type BridgeFee } from "../circle/cctp";
+import { EXPECTED_GATEWAY_SECONDS, estimateGateway, gatewayBalance, gatewaySalt } from "../circle/gateway";
+import type { PayoutRoute } from "../circle/types";
 import { BRIDGE_FEE_CAP_PERCENT, payeeChain } from "../payee-chains";
 import {
   amountToPay,
@@ -329,6 +331,7 @@ export async function payApInvoiceIfNotPaused(
     currency?: Stablecoin;
     destinationChain?: string;
     maxBridgeFeeUsdc?: number;
+    route?: PayoutRoute;
   },
   deps: { provider: ChainProvider; operating: { id: string } | null }
 ): Promise<PayStepOutcome & { payment?: { amountPaid: number; discountTaken: number } }> {
@@ -601,11 +604,12 @@ export async function reconcileApInvoice(
     // A bridge burned on Arc whose mint has not come long after: a person
     // looks, rather than the invoice waiting in flight unseen (review I5).
     // Approve and pay then only reads the transfer again; it never sends.
-    if (result.status === "matched" && intent.providerTxId?.startsWith("cctp:") && mintOverdue(invoice.decidedAt ?? null)) {
+    const viaGateway = intent.providerTxId?.startsWith("gateway:") ?? false;
+    if (result.status === "matched" && (intent.providerTxId?.startsWith("cctp:") || viaGateway) && mintOverdue(invoice.decidedAt ?? null)) {
       outcome = {
         ...outcome,
         status: "held",
-        reasoningSuffix: ` [not minted on the payee's chain ${MINT_OVERDUE_HOURS} hours after the burn on Arc testnet (${result.txRef ?? intent.providerTxId}); held for a person to check the transfer with Circle]`,
+        reasoningSuffix: ` [not minted on the payee's chain ${MINT_OVERDUE_HOURS} hours after ${viaGateway ? "it was sent through Gateway" : "the burn on Arc testnet"} (${result.txRef ?? intent.providerTxId}); held for a person to check the transfer with Circle]`,
       };
     }
     if (result.status === "held") paidAmount = null;
@@ -766,6 +770,39 @@ export interface PayableBookRow {
 }
 
 /** Payments that fall due by a date: their total (USDC, full amounts) and how many there are. */
+/** What a payout from the workspace's Gateway balance would cost, and what that balance holds (Gateway payouts G2). */
+export interface GatewayQuote {
+  feeUsdc: number;
+  balanceUsdc: number;
+}
+
+/**
+ * Reads a workspace's Gateway quote for a payout: the fee Gateway estimates
+ * now and the balance its operating wallet has deposited. Null in a sandbox,
+ * or without a Gateway signer (nothing was ever funded). The signer and the
+ * operating wallet's address are read once per stage.
+ */
+function gatewayQuoter(provider: ChainProvider, db: OrgDb): (chain: string, amount: number) => Promise<GatewayQuote | null> {
+  let parties: Promise<{ signer: string; depositor: string } | null> | undefined;
+  return async (chain, amount) => {
+    if (provider.mode !== "live") return null;
+    parties ??= (async () => {
+      const signer = await db.from("gateway_signers").select("address").maybeSingle();
+      if (signer.error || !signer.data) return null;
+      const operating = await db.from("accounts").select("address").eq("kind", "operating").maybeSingle();
+      const depositor = (operating.data as { address: string | null } | null)?.address;
+      return depositor ? { signer: (signer.data as { address: string }).address, depositor } : null;
+    })();
+    const known = await parties;
+    if (!known) return null;
+    const [estimate, balanceUsdc] = await Promise.all([
+      estimateGateway({ depositor: known.depositor, signer: known.signer, recipient: known.depositor, chain, amount, salt: gatewaySalt("quote") }),
+      gatewayBalance(known.depositor),
+    ]);
+    return { feeUsdc: estimate.feeUsdc, balanceUsdc };
+  };
+}
+
 export interface ObligationsDue {
   total: number;
   count: number;
@@ -966,6 +1003,7 @@ async function decideApPayable(
     metrics: CycleMetricsCollector;
     eurc: EurcFunds;
     bridgeFee: (chain: string, amount: number) => Promise<BridgeFee>;
+    gatewayQuote: (chain: string, amount: number) => Promise<GatewayQuote | null>;
   }
 ): Promise<{ status: string; scheduledFor: string | null; operatingBalance: number | null; line: CycleLogLine }> {
   const { db, provider, operating, operatingBalance, history, metrics } = ctx;
@@ -1001,18 +1039,32 @@ async function decideApPayable(
   const destination = payeeChain(counterparty.chain);
   const crossChain = destination.id !== "ARC-TESTNET";
   let fee: BridgeFee | null = null;
+  let gateway: GatewayQuote | null = null;
   if (crossChain && !isEurc) {
     try {
       fee = await ctx.bridgeFee(destination.id, amount);
     } catch (error) {
       console.error("ap: no CCTP fee", invoice.id, error instanceof Error ? error.message : error);
     }
+    try {
+      gateway = await ctx.gatewayQuote(destination.id, amount);
+    } catch (error) {
+      console.error("ap: no Gateway quote", invoice.id, error instanceof Error ? error.message : error);
+    }
   }
+  // The route (Gateway payouts G2): the workspace's Gateway balance when it
+  // covers the amount and its fee, and that fee is no higher than CCTP's;
+  // CCTP otherwise. The fee weighed from here on is the chosen route's.
+  const route: PayoutRoute =
+    gateway !== null && gateway.balanceUsdc >= amount + gateway.feeUsdc && (fee === null || gateway.feeUsdc <= fee.feeUsdc) ? "gateway" : "cctp";
+  const viaGateway = crossChain && route === "gateway" && gateway !== null;
+  const routeLabel = viaGateway ? "Gateway" : "CCTP";
+  const routeFeeUsdc = viaGateway ? gateway!.feeUsdc : (fee?.feeUsdc ?? null);
   // The cap is weighed on the ratio itself (review M6); the model is shown it rounded.
-  const feeRatioPercent = fee ? (fee.feeUsdc / amount) * 100 : null;
+  const feeRatioPercent = routeFeeUsdc !== null ? (routeFeeUsdc / amount) * 100 : null;
   const feePercent = feeRatioPercent === null ? null : Math.round(feeRatioPercent * 100) / 100;
   const payout = crossChain
-    ? { chain: destination.label, route: "cctp", feeUsdc: fee?.feeUsdc ?? null, feePercent, expectedSeconds: EXPECTED_BRIDGE_SECONDS }
+    ? { chain: destination.label, route, feeUsdc: routeFeeUsdc, feePercent, expectedSeconds: viaGateway ? EXPECTED_GATEWAY_SECONDS : EXPECTED_BRIDGE_SECONDS }
     : { chain: destination.label, route: "direct" };
   const highRisk = counterparty.risk_level === "high";
 
@@ -1053,12 +1105,17 @@ async function decideApPayable(
       amount,
       dueDate: invoice.due_date,
       discount,
-      operatingBalance: isEurc ? (eurcUnreadable ? 0 : (eurcBalance ?? Number.POSITIVE_INFINITY)) : operatingBalance - (fee?.feeUsdc ?? 0),
-      reserveApy: isEurc ? 0 : ctx.reserveApy,
-      reserveBalance: isEurc ? 0 : ctx.reserveBalance,
+      operatingBalance: isEurc
+        ? (eurcUnreadable ? 0 : (eurcBalance ?? Number.POSITIVE_INFINITY))
+        : viaGateway
+          ? gateway!.balanceUsdc - gateway!.feeUsdc
+          : operatingBalance - (fee?.feeUsdc ?? 0),
+      reserveApy: isEurc || viaGateway ? 0 : ctx.reserveApy,
+      reserveBalance: isEurc || viaGateway ? 0 : ctx.reserveBalance,
       currency,
     },
-    (targetOn, today) => ctx.obligationsBy(targetOn, today, currency)
+    // A Gateway payout's money is set aside in the Gateway balance: what falls due from the operating wallet does not count against it.
+    (targetOn, today) => (viaGateway ? { total: 0, count: 0 } : ctx.obligationsBy(targetOn, today, currency))
   );
   const previouslyScheduledFor = invoice.status === "scheduled" ? (invoice.scheduled_for ?? null) : null;
   const scheduledEarlier = previouslyScheduledFor
@@ -1142,12 +1199,12 @@ async function decideApPayable(
         return { action: "hold", reasoning: `Only USDC crosses chains, and this invoice is in EURC; ${counterparty.name} is paid on ${destination.label}.`, confidence: 0.9 };
       }
       if (crossChain && feePercent === null) {
-        return { action: "hold", reasoning: `Circle gave no CCTP fee for paying ${counterparty.name} on ${destination.label}, so the cost of the payout is not known.`, confidence: 0.85 };
+        return { action: "hold", reasoning: `Circle gave no ${routeLabel} fee for paying ${counterparty.name} on ${destination.label}, so the cost of the payout is not known.`, confidence: 0.85 };
       }
       if (crossChain && feeRatioPercent !== null && feeRatioPercent > BRIDGE_FEE_CAP_PERCENT) {
         return {
           action: "hold",
-          reasoning: `Paying ${counterparty.name} on ${destination.label} through CCTP costs ${fee?.feeUsdc} USDC, ${feePercent}% of the ${amount} USDC invoice, above the ${BRIDGE_FEE_CAP_PERCENT}% the policy pays.`,
+          reasoning: `Paying ${counterparty.name} on ${destination.label} through ${routeLabel} costs ${routeFeeUsdc} USDC, ${feePercent}% of the ${amount} USDC invoice, above the ${BRIDGE_FEE_CAP_PERCENT}% the policy pays.`,
           confidence: 0.85,
         };
       }
@@ -1234,7 +1291,7 @@ async function decideApPayable(
           amount,
           discount,
           currency,
-          ...(crossChain ? { destinationChain: destination.id, maxBridgeFeeUsdc: bridgeFeeCeiling(amount) } : {}),
+          ...(crossChain ? { destinationChain: destination.id, maxBridgeFeeUsdc: bridgeFeeCeiling(amount), route } : {}),
         },
         { provider, operating }
       );
@@ -1296,7 +1353,7 @@ async function decideApPayable(
       guardrailRule: guardrail.rule,
       currency,
       // A payee on another chain: the route and the fee read for this decision (CCTP payouts X11).
-      ...(crossChain ? { payout: { chain: destination.id, route: "cctp", domain: destination.domain, feeUsdc: fee?.feeUsdc ?? null } } : {}),
+      ...(crossChain ? { payout: { chain: destination.id, route, domain: destination.domain, feeUsdc: routeFeeUsdc } } : {}),
       // A EURC payable's USDC value and the quote it came from (E2); null when there was none.
       ...(isEurc
         ? {
@@ -1394,6 +1451,8 @@ export interface ApStageInput {
   quoteEurc?: (amountEurc: number) => Promise<EurcQuote>;
   /** The CCTP fee to a payee's chain now (CCTP payouts X3); Iris unless a test passes its own. */
   bridgeFee?: (chain: string, amount: number) => Promise<BridgeFee>;
+  /** The workspace's Gateway fee and balance for a payout, or null without a Gateway balance; read from Gateway when absent. */
+  gatewayQuote?: (chain: string, amount: number) => Promise<GatewayQuote | null>;
 }
 
 /**
@@ -1420,6 +1479,8 @@ interface EurcFunds {
  */
 export async function runApStage(input: ApStageInput): Promise<number> {
   const { db, provider, operating, reserveApy, reserveBalance, metrics, lines } = input;
+  // One quoter per stage, so the signer is read once however many payouts it weighs.
+  let gatewayQuote: ((chain: string, amount: number) => Promise<GatewayQuote | null>) | undefined;
   let operatingBalance = input.operatingBalance;
   const now = new Date();
 
@@ -1578,6 +1639,7 @@ export async function runApStage(input: ApStageInput): Promise<number> {
       obligationsBy: (targetOn, today, currency) => obligationsDueBy(book, { excludeId: invoice.id, by: targetOn, today, milestones, currency }),
       eurc,
       bridgeFee: input.bridgeFee ?? ((chain, amount) => irisBridgeFee(chain, amount)),
+      gatewayQuote: gatewayQuote ??= input.gatewayQuote ?? gatewayQuoter(provider, db),
     });
     if (decided.operatingBalance !== null) operatingBalance = decided.operatingBalance;
     record(invoice.id, decided.status, decided.scheduledFor);
