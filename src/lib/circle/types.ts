@@ -143,6 +143,19 @@ export interface SwapCallResult {
   execute: SwapStep | null;
 }
 
+/** One completed inbound transfer to a workspace wallet, as Circle reports it (receivables on Arc §2). */
+export interface InboundTransfer {
+  circleTxId: string;
+  txHash: string | null;
+  /** The sender's address, when Circle knows it. */
+  from: string | null;
+  amount: number;
+  token: Stablecoin;
+  chain: string;
+  /** When it was first confirmed (or, failing that, last updated). */
+  receivedAt: string;
+}
+
 export interface ChainProvider {
   readonly mode: "simulate" | "live";
   readonly earnMode: "simulate" | "live";
@@ -169,4 +182,9 @@ export interface ChainProvider {
    * Optional: a provider without it is never offered a swap.
    */
   swapForEurc?(params: SwapCallParams): Promise<SwapCallResult>;
+  /**
+   * Completed inbound USDC and EURC transfers to an account's wallet since a time, or the last 50
+   * (receivables on Arc §2). Optional: a provider without a real wallet (a sandbox's) has none.
+   */
+  listInboundTransfers?(accountId: string, since: string | null): Promise<InboundTransfer[]>;
 }
