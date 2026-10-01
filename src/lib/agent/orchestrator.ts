@@ -1582,14 +1582,9 @@ export async function runApStage(input: ApStageInput): Promise<number> {
     status: row.status,
     scheduled_for: row.scheduled_for ?? null,
   }));
-  const verifiedMilestones =
-    payables.length === 0
-      ? []
-      : (unwrap(await db.from("milestones").select("amount").eq("verified", true).eq("status", "verified")) as Array<{
-          amount: string;
-        }>);
+  const verifiedMilestones = payables.length === 0 ? [] : await openMilestoneAmounts(db, { statuses: ["verified"], verifiedOnly: true });
   const milestones: ObligationsDue = {
-    total: verifiedMilestones.reduce((sum, row) => sum + num(row.amount), 0),
+    total: verifiedMilestones.reduce((sum, amount) => sum + amount, 0),
     count: verifiedMilestones.length,
   };
   // Each outcome is written back into both the book and the duplicate
@@ -1698,19 +1693,52 @@ export async function releaseMilestoneIfNotPaused(
  * than pay again. Mirrors `payInvoice` (src/lib/agent/pay.ts) for invoices.
  */
 /**
+ * The amounts of the open milestones the treasury and payment timing count as owed. A milestone whose hold is
+ * funded is not: its USDC already left the operating wallet (milestone escrow, review I2). Before migration 0047
+ * there are no escrow columns, and every one counts, as it always did.
+ */
+export async function openMilestoneAmounts(orgDb: OrgDb, filter: { statuses: string[]; verifiedOnly?: boolean }): Promise<number[]> {
+  const ask = (columns: string) => {
+    const selected = orgDb.from("milestones").select(columns);
+    const query = filter.statuses.length === 1 ? selected.eq("status", filter.statuses[0]) : selected.in("status", filter.statuses);
+    return filter.verifiedOnly ? query.eq("verified", true) : query;
+  };
+  const withEscrow = await ask("amount, escrow_state");
+  if (withEscrow.error?.code === "42703") return (unwrap(await ask("amount")) as unknown as Array<{ amount: string }>).map((row) => num(row.amount));
+  const rows = unwrap(withEscrow) as unknown as Array<{ amount: string; escrow_state?: string | null }>;
+  return rows.filter((row) => row.escrow_state !== "funded").map((row) => num(row.amount));
+}
+
+/**
  * A milestone locked in escrow is paid by releasing its hold (milestone escrow E4): the workspace's contract
  * and the hold's id. A hold whose amount no longer matches the milestone's is not released: a person decides.
  * Null for a milestone with no funded hold. A read that fails throws: paying without knowing could send a
  * transfer on top of a hold.
  */
-async function escrowReleaseOf(milestoneId: string, amount: number): Promise<{ contract: string; holdId: string } | { mismatch: string } | null> {
-  const found = await db().from("milestones").select("escrow_state, escrow_amount").eq("id", milestoneId).maybeSingle();
+async function escrowReleaseOf(
+  milestoneId: string,
+  amount: number,
+  destination: string
+): Promise<{ contract: string; holdId: string } | { held: string } | null> {
+  const found = await db().from("milestones").select("escrow_state, escrow_amount, escrow_payee, escrow_refund_after").eq("id", milestoneId).maybeSingle();
+  // Before migration 0047 there are no escrow columns, and no hold can exist (review I4).
+  if (found.error?.code === "42703") return null;
   if (found.error) throw new Error(found.error.message);
-  const row = found.data as { escrow_state?: string | null; escrow_amount?: string | number | null } | null;
-  if (!row || typeof row !== "object" || row.escrow_state !== "funded") return null;
+  const row = found.data as { escrow_state?: string | null; escrow_amount?: string | number | null; escrow_payee?: string | null; escrow_refund_after?: string | null } | null;
+  if (!row || typeof row !== "object") return null;
+  if (row.escrow_state === "funding") return { held: " [not paid: it is being locked in escrow; verify it again once the lock has finished]" };
+  if (row.escrow_state !== "funded") return null;
   const held = Number(row.escrow_amount);
   if (Math.round(held * 1_000_000) !== Math.round(amount * 1_000_000)) {
-    return { mismatch: ` [not paid: ${held} USDC is locked in escrow for this milestone, which now asks ${amount} USDC; held for a person]` };
+    return { held: ` [not paid: ${held} USDC is locked in escrow for this milestone, which now asks ${amount} USDC; held for a person]` };
+  }
+  // A hold pays the address it was locked for: one that is no longer the contractor's is held (review C1).
+  if (row.escrow_payee && row.escrow_payee.toLowerCase() !== destination.toLowerCase()) {
+    const date = new Date(row.escrow_refund_after ?? "");
+    const day = Number.isNaN(date.getTime())
+      ? "its refund date"
+      : `${date.getUTCDate()} ${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][date.getUTCMonth()]} ${date.getUTCFullYear()}`;
+    return { held: ` [not paid: the escrow hold pays ${row.escrow_payee}, which is no longer this contractor's address; refund it from ${day} and pay again]` };
   }
   const contract = await readEscrowContract();
   if (!contract?.address) throw new Error("This milestone is locked in escrow, but the workspace's escrow contract could not be read.");
@@ -1724,9 +1752,9 @@ async function releaseMilestone(
   let result;
   let escrow: { contract: string; holdId: string } | null = null;
   try {
-    const found = await escrowReleaseOf(input.milestoneId, input.amount);
-    if (found && "mismatch" in found) {
-      return { status: "held", txRef: null, paymentExecution: null, reasoningSuffix: found.mismatch, heldBecausePaused: false, operatingBalance: null };
+    const found = await escrowReleaseOf(input.milestoneId, input.amount, input.destination);
+    if (found && "held" in found) {
+      return { status: "held", txRef: null, paymentExecution: null, reasoningSuffix: found.held, heldBecausePaused: false, operatingBalance: null };
     }
     escrow = found;
     result = await executePayment(
@@ -1756,7 +1784,7 @@ async function releaseMilestone(
   const status = result.status === "confirmed" ? "paid" : result.status === "pending" ? "verified" : "held";
   // A confirmed release from escrow: the milestone's hold is released, with its transaction (milestone escrow E4).
   // Best effort, as the balance sync below: the payment is real whatever this write does.
-  if (escrow && result.status === "confirmed") {
+  if (escrow && result.status === "confirmed" && result.route === "escrow") {
     try {
       const released = await db()
         .from("milestones")
@@ -2652,14 +2680,12 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
       .eq("direction", "payable")
       .in("status", [...OPEN_PAYABLE_STATUSES])
   ) as Array<{ amount: string; due_date: string; status: string; scheduled_for: string | null; currency: string | null }>;
-  const openMilestones = unwrap(
-    await db.from("milestones").select("amount").in("status", ["pending", "verified"])
-  ) as Array<{ amount: string }>;
+  const openMilestones = await openMilestoneAmounts(db, { statuses: ["pending", "verified"] });
 
   // Milestones carry no due date because a verified one is payable the same
   // day — that is the whole RFB3 argument — so every open milestone counts
   // against the near-term buffer regardless of horizon.
-  const milestoneTotal = openMilestones.reduce((s, r) => s + num(r.amount), 0);
+  const milestoneTotal = openMilestones.reduce((s, amount) => s + amount, 0);
   const payableSummary = summarizePayableObligations(openInvoices);
 
   // The buffer the agent must not sweep below is what is actually due soon,

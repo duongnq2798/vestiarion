@@ -31,7 +31,7 @@ const config: VestiarionConfig = { ...base, chain: { ...base.chain, circleApiKey
 function database(milestone: Record<string, unknown> = {}, operating: Record<string, unknown> = {}, intents: Array<Record<string, unknown>> = []) {
   let row: Record<string, unknown> = {
     id: MILESTONE, status: "pending", amount: "2", escrow_state: null,
-    counterparties: { address: PAYEE, chain: "ARC-TESTNET", name: "Centronex" }, ...milestone,
+    counterparties: { address: PAYEE, chain: "ARC-TESTNET", name: "Centronex", address_changed_at: null, address_confirmed_at: null }, ...milestone,
   };
   const fake = fakeSupabase((request: RecordedRequest): FakeReply => {
     const wantsObject = request.headers.get("accept")?.includes("application/vnd.pgrst.object+json") ?? false;
@@ -47,8 +47,11 @@ function database(milestone: Record<string, unknown> = {}, operating: Record<str
     if (request.path === "/rest/v1/milestones") {
       if (request.method === "GET") return { body: wantsObject ? row : [row] };
       if (request.method === "PATCH") {
+        // The lock's claim matches only a pending milestone with no hold, or one whose lock was interrupted.
+        const claiming = (request.body as Record<string, unknown>).escrow_state === "funding";
+        if (claiming && (row.status !== "pending" || (row.escrow_state !== null && row.escrow_state !== "funding"))) return { body: [] };
         row = { ...row, ...(request.body as Record<string, unknown>) };
-        return { body: [] };
+        return { body: [{ id: MILESTONE }] };
       }
     }
     throw new Error(`unexpected request ${request.method} ${request.path}`);
@@ -106,7 +109,10 @@ describe("lockMilestone", () => {
       ["wallet-op", USDC, "approve(address,uint256)", [ESCROW, "2000000"], escrowStepKey(`${ORG}/hold/${MILESTONE}/${REQUEST}/approve`)],
       ["wallet-op", ESCROW, "fund(bytes32,address,uint256,uint64)", [holdId(MILESTONE), PAYEE, "2000000", REFUND_UNIX], escrowStepKey(`${ORG}/hold/${MILESTONE}/${REQUEST}/fund`)],
     ]);
-    expect(db.milestone()).toMatchObject({ escrow_state: "funded", escrow_amount: 2, escrow_refund_after: "2026-10-31T00:00:00.000Z" });
+    expect(db.milestone()).toMatchObject({ escrow_state: "funded", escrow_amount: 2, escrow_refund_after: "2026-10-31T00:00:00.000Z", escrow_payee: PAYEE });
+    // Claimed before anything was sent, so the agent never pays it while it is being locked (review I1).
+    const claim = db.fake.requests.find((r) => r.path === "/rest/v1/milestones" && r.method === "PATCH");
+    expect(claim?.body).toEqual({ escrow_state: "funding" });
     expect(String(db.milestone().escrow_fund_tx_hash)).toMatch(/^0x2a/);
     expect(appendLedgerEntry).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -117,12 +123,19 @@ describe("lockMilestone", () => {
     );
   });
 
-  it("records a hold the chain already has, and sends nothing: a fund whose answer was lost", async () => {
+  it("records a hold the chain already has, as the chain has it, and sends nothing: a fund whose answer was lost (review M1)", async () => {
     const db = database();
     const c = circle();
-    await lock(db, c, chain(1));
+    await lock(db, c, chain(1), "2026-11-15");
     expect(c.calls).toEqual([]);
-    expect(db.milestone()).toMatchObject({ escrow_state: "funded", escrow_amount: 2 });
+    // The chain's refund date and payee, not the form's.
+    expect(db.milestone()).toMatchObject({ escrow_state: "funded", escrow_amount: 2, escrow_refund_after: "2026-10-31T00:00:00.000Z", escrow_payee: PAYEE.toLowerCase() });
+  });
+
+  it("lets go of its claim when Circle failed a step, so the milestone can be locked again or paid", async () => {
+    const db = database();
+    await expect(lock(db, circle({ failFund: true }), chain(0, 0))).rejects.toBeInstanceOf(EscrowHoldError);
+    expect(db.milestone().escrow_state).toBeNull();
   });
 
   it("checks the chain after a fund Circle failed: funded means recorded, not funded means try again", async () => {
@@ -139,7 +152,15 @@ describe("lockMilestone", () => {
 
   it.each([
     ["a milestone already locked", { escrow_state: "funded" }, {}, REFUND, "This milestone is already locked in escrow."],
-    ["a paid milestone", { status: "paid" }, {}, REFUND, "Only a milestone that is not paid yet can be locked in escrow."],
+    ["a paid milestone", { status: "paid" }, {}, REFUND, "Only a milestone not yet verified can be locked in escrow."],
+    ["a verified milestone, which the agent may be paying (review I1)", { status: "verified" }, {}, REFUND, "Only a milestone not yet verified can be locked in escrow."],
+    [
+      "a contractor whose changed address no one has confirmed (review C1)",
+      { counterparties: { address: PAYEE, chain: "ARC-TESTNET", name: "Centronex", address_changed_at: "2026-10-01T10:00:00Z", address_confirmed_at: null } },
+      {},
+      REFUND,
+      "Centronex's address changed and no one has confirmed it. Confirm it on Counterparties before locking a milestone for it.",
+    ],
     ["a contractor with no Arc testnet address", { counterparties: { address: null, chain: "ARC-TESTNET", name: "Centronex" } }, {}, REFUND, "Centronex has no Arc testnet address to lock this milestone for."],
     ["a contractor paid on another chain", { counterparties: { address: PAYEE, chain: "BASE-SEPOLIA", name: "Centronex" } }, {}, REFUND, "Escrow pays on Arc testnet; Centronex is paid on another chain."],
     ["a refund date in the past", {}, {}, "2026-09-30", "Choose a refund date after today, and within a year."],
@@ -183,9 +204,6 @@ describe("refundMilestone", () => {
     const c = circle();
     await expect(refund(database(funded), c, chain(1), new Date("2026-10-30T23:59:59Z"))).rejects.toEqual(new EscrowHoldError("This hold can be refunded from 31 Oct 2026."));
     await expect(refund(database(), c, chain(1), new Date("2026-11-01T00:00:00Z"))).rejects.toEqual(new EscrowHoldError("This milestone has no hold in escrow to refund."));
-    await expect(refund(database({ ...funded, status: "paid" }), c, chain(1), new Date("2026-11-01T00:00:00Z"))).rejects.toEqual(
-      new EscrowHoldError("This milestone is paid; its hold went to the contractor.")
-    );
     expect(c.calls).toEqual([]);
   });
 
@@ -198,6 +216,15 @@ describe("refundMilestone", () => {
     await refund(refunded, c, chain(3), new Date("2026-11-01T00:00:00Z"));
     expect(refunded.milestone()).toMatchObject({ escrow_state: "refunded", escrow_refund_tx_hash: null });
     expect(c.calls).toEqual([]);
+    // Money moved back to the workspace is in the ledger, however it was found (review I3).
+    expect(appendLedgerEntry).toHaveBeenCalledWith(expect.objectContaining({ action: "escrow_refunded", detail: expect.objectContaining({ milestoneId: MILESTONE, refundTxHash: null }) }));
+  });
+
+  it("refunds a hold the chain still holds whatever the milestone's status says, from its date (review I1)", async () => {
+    const db = database({ ...funded, status: "paid" });
+    const c = circle();
+    await refund(db, c, chain(1), new Date("2026-11-01T00:00:00Z"));
+    expect(c.calls.map((call) => call.abiFunctionSignature)).toEqual(["refund(bytes32)"]);
   });
 });
 

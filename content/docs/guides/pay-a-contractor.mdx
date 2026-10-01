@@ -42,14 +42,18 @@ A live workspace can lock a milestone's USDC in a contract on Arc testnet before
   - deploys the contract through Circle's Smart Contract Platform.
 
   If it is interrupted, choose **Finish setting up**: nothing is deployed twice.
-- **Lock a milestone.** Under a milestone that is not paid yet, set **Refundable to this workspace from** and choose **Lock in escrow**. The contractor needs an Arc testnet address. The card then reads, for example, "2 USDC locked in escrow until 31 Oct 2026", with the transaction that funded it.
+- **Lock a milestone.** Under a milestone that is not verified yet, set **Refundable to this workspace from** and choose **Lock in escrow**.
+  - The contractor needs a confirmed Arc testnet address. The form names the address the hold will pay; that address cannot change afterwards.
+  - The card then reads, for example, "2 USDC locked in escrow for 0x67C8…0504 until 31 Oct 2026", with the transaction that funded it.
 - **What the contract allows.** Only the workspace's operating wallet can call it, and only two things can happen to a hold, once:
   - it is released to the contractor's address;
   - from the refund date, it is refunded to the workspace.
 
   Before that date, the money can go nowhere but to the contractor.
-- **Release.** Once the milestone is verified, the agent pays it by releasing the hold instead of sending a transfer. A milestone whose amount changed after it was locked is held for a person.
-- **Refund.** After the refund date, an unpaid milestone shows **Refund from escrow**.
+- **Release.** Once the milestone is verified, the agent pays it by releasing the hold instead of sending a transfer. It holds the milestone for a person instead when:
+  - its amount changed after it was locked;
+  - the contractor's address is no longer the one the hold pays. Refund it from its date, then pay the new address.
+- **Refund.** From the refund date, a hold that is still on chain shows **Refund from escrow**.
 
 The contract was written for Vestiarion and is not audited.
 

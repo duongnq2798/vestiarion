@@ -53,6 +53,8 @@ describe("a milestone's hold (0047)", () => {
       )
     ).rows[0].id;
     await db.query("update public.milestones set escrow_state = 'released', escrow_release_tx_hash = '0x' || repeat('2', 64) where id = $1", [id]);
+    // A lock in progress, and the address the hold pays (escrow review I1, C1).
+    await db.query("update public.milestones set escrow_state = 'funding', escrow_payee = '0x' || repeat('ab', 20) where id = $1", [id]);
     await expect(db.query("update public.milestones set escrow_state = 'gone' where id = $1", [id])).rejects.toThrow(/milestones_escrow_state_check/);
   });
 });

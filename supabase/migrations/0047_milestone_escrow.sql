@@ -6,8 +6,11 @@
 -- the deployment is under way, so a setup that was interrupted resumes from
 -- the Circle ids it recorded instead of deploying twice.
 --
--- A milestone records its hold: whether it is funded, released or refunded,
--- the amount and refund date it was funded with, and each transaction (E3–E5).
+-- A milestone records its hold: whether it is being locked (`funding`, the
+-- lock's claim, so the agent never pays it meanwhile), funded, released or
+-- refunded; the address it pays, the amount and refund date it was funded
+-- with, and each transaction (E3–E5). A release pays only that address: the
+-- agent holds one whose contractor's address has changed since.
 --
 -- payment_intents.payout_route gains 'escrow': a milestone paid by releasing
 -- its hold keeps that route on every later attempt, so a release whose answer
@@ -46,6 +49,7 @@ create policy tenant_isolation_guard on public.escrow_contracts as restrictive f
 
 alter table public.milestones add column if not exists escrow_state text;
 alter table public.milestones add column if not exists escrow_amount numeric(20, 6);
+alter table public.milestones add column if not exists escrow_payee text;
 alter table public.milestones add column if not exists escrow_refund_after timestamptz;
 alter table public.milestones add column if not exists escrow_fund_tx_hash text;
 alter table public.milestones add column if not exists escrow_release_tx_hash text;
@@ -54,7 +58,7 @@ do $$
 begin
   if not exists (select 1 from pg_constraint where conname = 'milestones_escrow_state_check') then
     alter table public.milestones
-      add constraint milestones_escrow_state_check check (escrow_state in ('funded', 'released', 'refunded'));
+      add constraint milestones_escrow_state_check check (escrow_state in ('funding', 'funded', 'released', 'refunded'));
   end if;
 end $$;
 
@@ -68,7 +72,7 @@ notify pgrst, 'reload schema';
 -- alter table public.payment_intents drop constraint if exists payment_intents_payout_route_check;
 -- alter table public.payment_intents add constraint payment_intents_payout_route_check check (payout_route in ('cctp', 'gateway'));
 -- alter table public.milestones drop constraint if exists milestones_escrow_state_check;
--- alter table public.milestones drop column if exists escrow_state, drop column if exists escrow_amount,
+-- alter table public.milestones drop column if exists escrow_state, drop column if exists escrow_amount, drop column if exists escrow_payee,
 --   drop column if exists escrow_refund_after, drop column if exists escrow_fund_tx_hash,
 --   drop column if exists escrow_release_tx_hash, drop column if exists escrow_refund_tx_hash;
 -- drop table if exists public.escrow_contracts;

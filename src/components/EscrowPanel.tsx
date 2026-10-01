@@ -24,9 +24,9 @@ export function EscrowPanel({ orgSlug, address, deploying, canSetUp }: { orgSlug
     <Card className="space-y-3 p-4 sm:p-6">
       <SectionHeader title="Milestone escrow" meta="a contract on Arc testnet" />
       <p className="text-sm leading-6 text-ink-2">
-        Lock a milestone&apos;s USDC before the work starts. The contract pays it to the contractor when the milestone is verified, or, from a refund date
-        you set, back to this workspace; before that date it can go nowhere else. Only this workspace&apos;s operating wallet can call it. The contract
-        was written for Vestiarion and is not audited.
+        Lock a milestone&apos;s USDC before the work starts. Once the milestone is verified, the agent releases it to the contractor, under the same
+        checks as any payment; from a refund date you set, it can come back to this workspace instead. Before that date it can go nowhere else. Only this
+        workspace&apos;s operating wallet can call the contract, which was written for Vestiarion and is not audited.
       </p>
       {address ? (
         <p className="flex flex-wrap items-center gap-2 text-sm text-ink-2">

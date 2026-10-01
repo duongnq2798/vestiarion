@@ -154,6 +154,8 @@ export interface PaymentExecution {
   /** A bridged payment's chain and its mint, once the Forwarding Service submitted it. */
   destinationChain?: string | null;
   mintTxHash?: string | null;
+  /** The route the intent keeps: an escrow release is told from a transfer by it (milestone escrow, review I1). */
+  route?: PayoutRoute | null;
 }
 
 /**
@@ -358,6 +360,7 @@ function execution(intent: PaymentIntent, reconciled: boolean, retriedAfter: Ret
     retriedAfter,
     destinationChain: intent.destinationChain ?? null,
     mintTxHash: intent.mintTxHash ?? null,
+    route: intent.route ?? null,
   };
 }
 
