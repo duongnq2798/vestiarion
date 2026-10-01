@@ -157,7 +157,62 @@ function statusOutcome(status: string, txRef: string | null, guardrailBlocked: b
   return "scheduled";
 }
 
+const shortAddress = (address: string) => (address.length > 12 ? `${address.slice(0, 6)}…${address.slice(-4)}` : address);
+
+/**
+ * A receivable's card (receivables on Arc): money a client owes the business. It shows none of a payable's
+ * facts (purchase order, goods received, payment limit, the payee's chain); while open it waits on the
+ * client, and once a transfer settled it, it says who sent it and how the agent matched it, from the signed
+ * `ar_received` entry, with the transaction.
+ */
+function receivableDecision(invoice: InvoiceRow, entries: LedgerEntry[]): Decision {
+  const received = entries.find((entry) => entry.action === "ar_received" && entry.detail.invoiceId === invoice.id);
+  const detail = received?.detail;
+  const currency = invoice.currency ?? "USDC";
+  const from = stringValue(detail?.from);
+  const matchedBy = stringValue(detail?.matchedBy);
+  const onArc = invoice.tx_ref?.startsWith("0x") ?? false;
+  const settled = invoice.status === "received" || invoice.status === "paid";
+
+  const reasoning = received
+    ? `Received ${fmt(numberValue(detail?.amount) ?? invoice.amount)} ${stringValue(detail?.currency) ?? currency}${from ? ` from ${shortAddress(from)}` : ""} on Arc testnet` +
+      `${stringValue(detail?.receivedAt) ? ` on ${utcDay(stringValue(detail?.receivedAt) as string)}` : ""}, and matched it to this invoice: ` +
+      (matchedBy === "sender"
+        ? `it came from ${invoice.counterparty_name}'s address on file.`
+        : `it is the only open receivable of that amount, and ${invoice.counterparty_name} was sent its pay link.`)
+    : settled
+      ? invoice.agent_reasoning ?? `Marked received.`
+      : invoice.status === "rejected"
+        ? invoice.agent_reasoning ?? "Rejected."
+        : `Waiting for ${invoice.counterparty_name} to pay. When the exact amount arrives in the operating wallet on Arc testnet, the agent matches it to this invoice.`;
+
+  const evidence: Evidence[] = [{ label: "Due", value: new Date(invoice.due_date).toLocaleDateString("en-US"), state: "neutral" }];
+  if (from) evidence.push({ label: "Received from", value: shortAddress(from), state: "ok" });
+  if (matchedBy) evidence.push({ label: "Matched by", value: matchedBy === "sender" ? "the client's address" : "amount, through the pay link", state: "ok" });
+
+  return {
+    id: invoice.id,
+    domain: "ar",
+    action: "Collect from",
+    subject: invoice.counterparty_name,
+    memo: invoice.memo ?? undefined,
+    amount: invoice.amount,
+    token: currency,
+    outcome: settled && onArc ? "settled" : statusOutcome(invoice.status, invoice.tx_ref, false),
+    outcomeLabel: settled ? (onArc ? "Received on Arc" : "Received") : invoiceOutcomeLabel(invoice, false),
+    reasoning,
+    evidence,
+    guardrail: null,
+    decisionMode: undefined,
+    txHash: onArc ? invoice.tx_ref : null,
+    mint: null,
+    auditSeq: received?.seq,
+    at: received?.ts ?? invoice.due_date,
+  };
+}
+
 export function invoiceDecision(invoice: InvoiceRow, counterparty: CounterpartyRow | undefined, entries: LedgerEntry[]): Decision {
+  if (invoice.direction === "receivable") return receivableDecision(invoice, entries);
   const entry = matchingEntry(entries, "invoiceId", invoice.id);
   const observed = record(entry?.detail.observed);
   const guardrailBlocked = entry?.detail.guardrailBlocked === true;
