@@ -208,6 +208,11 @@ export async function submitGatewayTransfer(intent: BurnIntent, signature: strin
 
 export interface GatewayTransferStatus {
   status: "pending" | "confirmed" | "failed";
+  /**
+   * Gateway's own word for the transfer. `failed` and `expired` are both a failed payout, but only
+   * an expired attestation can never be minted; a failed one still can (review I2).
+   */
+  state: "pending" | "confirmed" | "finalized" | "failed" | "expired";
   /** The mint on the payee's chain, once confirmed. */
   mintTxHash: string | null;
   failureReason: string | null;
@@ -226,9 +231,9 @@ export async function gatewayTransferStatus(transferId: string, options: { fetch
   const destinationChain = PAYEE_CHAINS.find((chain) => chain.domain === answer?.destinationDomain && chain.id !== "ARC-TESTNET")?.id ?? null;
   const status = answer?.status;
   if (status === "confirmed" || status === "finalized") {
-    return { status: "confirmed", mintTxHash: typeof answer?.transactionHash === "string" ? answer.transactionHash : null, failureReason: null, destinationChain };
+    return { status: "confirmed", state: status, mintTxHash: typeof answer?.transactionHash === "string" ? answer.transactionHash : null, failureReason: null, destinationChain };
   }
-  if (status === "failed") return { status: "failed", mintTxHash: null, failureReason: answer?.forwardingDetails?.failureReason ?? "Gateway reported the transfer failed.", destinationChain };
-  if (status === "expired") return { status: "failed", mintTxHash: null, failureReason: "The attestation expired before the mint.", destinationChain };
-  return { status: "pending", mintTxHash: null, failureReason: null, destinationChain };
+  if (status === "failed") return { status: "failed", state: "failed", mintTxHash: null, failureReason: answer?.forwardingDetails?.failureReason ?? "Gateway reported the transfer failed", destinationChain };
+  if (status === "expired") return { status: "failed", state: "expired", mintTxHash: null, failureReason: "Gateway's attestation expired before the mint", destinationChain };
+  return { status: "pending", state: "pending", mintTxHash: null, failureReason: null, destinationChain };
 }

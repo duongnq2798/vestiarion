@@ -141,6 +141,14 @@ describe("LiveProvider: a payout from the Gateway balance", () => {
     expect(g.raw).not.toHaveBeenCalled();
   });
 
+  it("records an expired transfer as Circle's FAILED, which may be paid again, and a failed one as GATEWAY_FAILED, which is never re-sent (review I2)", async () => {
+    const reconcile = (status: string) => new LiveProvider(CHAIN, { client: circle().client, fetch: gateway({ status }).fetch }).reconcileTransfer("gateway:tr-1");
+    // An expired attestation can no longer be minted: no money left the Gateway balance, so a new attempt may pay it.
+    expect(await reconcile("expired")).toMatchObject({ status: "failed", providerState: "FAILED", failureReason: "Gateway's attestation expired before the mint", mintTxHash: null });
+    // A failed one may still be minted with its attestation: no new attempt is opened for it.
+    expect(await reconcile("failed")).toMatchObject({ status: "failed", providerState: "GATEWAY_FAILED", mintTxHash: null });
+  });
+
   it("reconciles a Gateway payout by reading the transfer: never signing or sending", async () => {
     const c = circle();
     const g = gateway();

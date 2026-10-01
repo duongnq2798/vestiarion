@@ -1251,6 +1251,23 @@ describe("listWaitingPayables", () => {
     expect(lookup.params.get("source_id")).toBe("in.(sent,pending,unreadable,provider-failed,stuck,legacy-failed,none)");
   });
 
+  it("lets a Gateway payout that failed be rejected or returned, says approving sends nothing new, and pays an expired one again (Gateway review I2)", async () => {
+    const { run } = approvalsFake({
+      invoice: (r) => (r.params.get("id") ? undefined : { body: ["gw-failed", "gw-expired"].map((id) => invoiceRow({ id })) }),
+      intents: [
+        { source_id: "gw-failed", status: "failed", provider_tx_id: "gateway:tr-1", last_error: null, provider_state: "GATEWAY_FAILED", failure_reason: "out of gas" },
+        { source_id: "gw-expired", status: "failed", provider_tx_id: "gateway:tr-2", last_error: null, provider_state: "FAILED", failure_reason: "Gateway's attestation expired before the mint" },
+      ],
+    });
+
+    const listed = await run(() => listWaitingPayables());
+
+    expect(Object.fromEntries(listed.map((row) => [row.id, { paymentSent: row.paymentSent, lastAttempt: row.lastAttempt }]))).toEqual({
+      "gw-failed": { paymentSent: false, lastAttempt: { state: "failed", reason: "Gateway could not mint it (out of gas)", resend: false } },
+      "gw-expired": { paymentSent: false, lastAttempt: { state: "failed", reason: "Gateway's attestation expired before the mint" } },
+    });
+  });
+
   it("names the invoice's own token when Circle says the wallet does not hold enough of it (review I2)", async () => {
     const { run } = approvalsFake({
       invoice: (r) => (r.params.get("id") ? undefined : { body: [invoiceRow({ id: "eurc", currency: "EURC" })] }),

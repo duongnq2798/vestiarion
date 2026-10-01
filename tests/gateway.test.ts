@@ -111,11 +111,13 @@ describe("the Gateway API", () => {
 
   it("reads a transfer's status: the mint on the payee's chain once confirmed or finalized; failed when it failed or expired", async () => {
     const read = (body: unknown) => gatewayTransferStatus("tr-1", { fetch: (async () => respond(200, body)) as unknown as typeof globalThis.fetch });
-    expect(await read({ status: "pending", destinationDomain: 6 })).toEqual({ status: "pending", mintTxHash: null, failureReason: null, destinationChain: "BASE-SEPOLIA" });
-    expect(await read({ status: "confirmed", destinationDomain: 3, transactionHash: "0xmint" })).toEqual({ status: "confirmed", mintTxHash: "0xmint", failureReason: null, destinationChain: "ARB-SEPOLIA" });
-    expect(await read({ status: "finalized", transactionHash: "0xmint" })).toMatchObject({ status: "confirmed", mintTxHash: "0xmint", destinationChain: null });
-    expect(await read({ status: "failed", destinationDomain: 6, forwardingDetails: { forwardingEnabled: true, failureReason: "out of gas" } })).toEqual({ status: "failed", mintTxHash: null, failureReason: "out of gas", destinationChain: "BASE-SEPOLIA" });
-    expect(await read({ status: "expired", destinationDomain: 0 })).toEqual({ status: "failed", mintTxHash: null, failureReason: "The attestation expired before the mint.", destinationChain: "ETH-SEPOLIA" });
+    expect(await read({ status: "pending", destinationDomain: 6 })).toEqual({ status: "pending", state: "pending", mintTxHash: null, failureReason: null, destinationChain: "BASE-SEPOLIA" });
+    expect(await read({ status: "confirmed", destinationDomain: 3, transactionHash: "0xmint" })).toEqual({ status: "confirmed", state: "confirmed", mintTxHash: "0xmint", failureReason: null, destinationChain: "ARB-SEPOLIA" });
+    expect(await read({ status: "finalized", transactionHash: "0xmint" })).toMatchObject({ status: "confirmed", state: "finalized", mintTxHash: "0xmint", destinationChain: null });
+    // Gateway's own word is kept: a failed transfer may still be minted, an expired one never can (review I2).
+    expect(await read({ status: "failed", destinationDomain: 6, forwardingDetails: { forwardingEnabled: true, failureReason: "out of gas" } })).toEqual({ status: "failed", state: "failed", mintTxHash: null, failureReason: "out of gas", destinationChain: "BASE-SEPOLIA" });
+    expect(await read({ status: "failed", destinationDomain: 6 })).toMatchObject({ failureReason: "Gateway reported the transfer failed" });
+    expect(await read({ status: "expired", destinationDomain: 0 })).toEqual({ status: "failed", state: "expired", mintTxHash: null, failureReason: "Gateway's attestation expired before the mint", destinationChain: "ETH-SEPOLIA" });
   });
 
   it("turns an HTTP error or no answer into a GatewayError, with Gateway's own message", async () => {

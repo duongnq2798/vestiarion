@@ -307,6 +307,27 @@ describe("payment idempotency", () => {
     }
   });
 
+  it("never opens a new attempt after a Gateway transfer that failed, which may still be minted, and opens one after an expired one (review I2)", async () => {
+    const afterGateway = async (providerState: string) => {
+      const store = new MemoryStore();
+      await store.ensure({ ...request, destinationChain: "BASE-SEPOLIA", route: "gateway", idempotencyKey: paymentIdempotencyKey("invoice", request.sourceId), provider: "circle" });
+      store.intent = { ...store.intent!, status: "pending", attemptCount: 1, providerTxId: "gateway:tr-1" };
+      const provider = new FakeProvider();
+      provider.reconcileResults.push({ ...transferResult("failed", "gateway:tr-1"), providerState, route: "gateway" });
+      provider.transferResults.push(transferResult("confirmed", "gateway:tr-2"));
+      const execution = await executePayment({ ...request, destinationChain: "BASE-SEPOLIA" }, { provider, store, retryTerminalFailure: true });
+      return { execution, provider };
+    };
+
+    const failed = await afterGateway("GATEWAY_FAILED");
+    expect(failed.provider.transfers).toEqual([]);
+    expect(failed.execution).toMatchObject({ status: "failed", reconciled: true, attempt: 1 });
+
+    const expired = await afterGateway("FAILED");
+    expect(expired.provider.transfers).toHaveLength(1);
+    expect(expired.provider.transfers[0]).toMatchObject({ route: "gateway", idempotencyKey: paymentIdempotencyKey("invoice", request.sourceId, 2) });
+  });
+
   it("sends a Gateway retry with the same amount, payee and chain as before, in whatever case the address is written", async () => {
     const store = new MemoryStore();
     await store.ensure({ ...request, destination: "0xAbCd", destinationChain: "BASE-SEPOLIA", route: "gateway", idempotencyKey: paymentIdempotencyKey("invoice", request.sourceId), provider: "circle" });

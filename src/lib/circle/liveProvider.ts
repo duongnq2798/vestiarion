@@ -36,6 +36,18 @@ const BURN_ID = "cctp:";
 const APPROVE_ID = "cctp-approve:";
 const GATEWAY_ID = "gateway:";
 
+/**
+ * The state a Gateway payout is recorded with (review I2). An expired attestation can never be
+ * minted, so no money left the Gateway balance: it is Circle's `FAILED`, which a person may pay
+ * again as a new attempt, under a new salt. A failed transfer may still be minted with its
+ * attestation: `GATEWAY_FAILED` is never a reason to send again. Otherwise Gateway's own word.
+ */
+function gatewayProviderState(transfer: GatewayTransferStatus): string {
+  if (transfer.state === "expired") return "FAILED";
+  if (transfer.state === "failed") return "GATEWAY_FAILED";
+  return transfer.status;
+}
+
 const CREATE_TRANSACTION_DEADLINE_MS = 20_000;
 const BALANCE_READ_DEADLINE_MS = 15_000;
 const RECONCILE_TRANSFER_DEADLINE_MS = 15_000;
@@ -329,7 +341,7 @@ export class LiveProvider implements ChainProvider {
     try {
       status = await this.awaitGatewayMint(transferId);
     } catch {
-      status = { status: "pending", mintTxHash: null, failureReason: null, destinationChain: chain.id };
+      status = { status: "pending", state: "pending", mintTxHash: null, failureReason: null, destinationChain: chain.id };
     }
     return this.gatewayResult(`${GATEWAY_ID}${transferId}`, status, chain.id, estimate.feeUsdc, started);
   }
@@ -359,7 +371,7 @@ export class LiveProvider implements ChainProvider {
       feeSource: "provider_estimate",
       providerMode: "live",
       settledInMs: transfer.status === "confirmed" && started !== null ? Date.now() - started : null,
-      providerState: transfer.status,
+      providerState: gatewayProviderState(transfer),
       failureReason: transfer.failureReason,
       mintTxHash: transfer.mintTxHash,
       destinationChain: chain,
