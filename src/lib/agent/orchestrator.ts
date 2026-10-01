@@ -782,7 +782,6 @@ export interface PayableBookRow {
   scheduled_for?: string | null;
 }
 
-/** Payments that fall due by a date: their total (USDC, full amounts) and how many there are. */
 /** What a payout from the workspace's Gateway balance would cost, and what that balance holds (Gateway payouts G2). */
 export interface GatewayQuote {
   feeUsdc: number;
@@ -816,6 +815,7 @@ function gatewayQuoter(provider: ChainProvider, db: OrgDb): (chain: string, amou
   };
 }
 
+/** Payments that fall due by a date: their total (USDC, full amounts) and how many there are. */
 export interface ObligationsDue {
   total: number;
   count: number;

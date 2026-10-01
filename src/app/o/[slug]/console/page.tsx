@@ -80,10 +80,18 @@ export default async function DashboardPage({
       : undefined;
     const sinceValue = typeof query.since === "string" ? Number(query.since) : undefined;
     const since = Number.isFinite(sinceValue) ? sinceValue : undefined;
-    const [invoiceEntries, treasuryEntries, cycleEntries] = await Promise.all([
+    const [invoiceEntries, treasuryEntries, cycleEntries, gateway] = await Promise.all([
       listLedgerEntriesForTargets({ invoiceIds: invoices.map((invoice) => invoice.id) }),
       listLedgerEntriesByDomain("treasury", 2),
       since == null ? Promise.resolve([]) : listLedgerEntriesAfter(since),
+      // A live workspace's Gateway balance (Gateway payouts G5), read alongside the ledger rather than
+      // after it (review M4). Best effort: a read that fails shows no panel.
+      access.membership.mode === "live"
+        ? readGatewayState().catch((error: unknown) => {
+            console.error("console: Gateway state not loaded", access.membership.orgId, error instanceof Error ? error.message : error);
+            return null;
+          })
+        : Promise.resolve(null),
     ]);
     const invoiceDecisions = invoices.map((invoice) =>
       invoiceDecision(invoice, counterpartiesById.get(invoice.counterparty_id), invoiceEntries)
@@ -100,14 +108,6 @@ export default async function DashboardPage({
     const needsReview = waiting.filter((payable) => payable.status !== "processing" || payable.reclaimable).length;
     const paused = pause !== null;
     const role = access.membership.role;
-    // A live workspace's Gateway balance (Gateway payouts G5). Best effort: a read that fails shows no panel.
-    const gateway =
-      access.membership.mode === "live"
-        ? await readGatewayState().catch((error: unknown) => {
-            console.error("console: Gateway state not loaded", access.membership.orgId, error instanceof Error ? error.message : error);
-            return null;
-          })
-        : null;
     // Computed from the rows above, with no extra read (getting-started design G1, G2), until the first
     // payment on Arc testnet (first-payment design §2). Only people who can act on it see it: owners and
     // admins add records, and an owner takes the workspace live.
