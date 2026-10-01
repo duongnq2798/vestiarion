@@ -8,15 +8,19 @@ import type {
   ChainProvider,
   EarnResult,
   Stablecoin,
+  SwapCallParams,
+  SwapCallResult,
+  SwapStep,
   TransferParams,
   TransferResult,
 } from "./types";
 import { ARC_FEE_USD } from "./types";
 import { fetchArcFeeUsd } from "./arcFees";
 import { awaitSettlement, FAILED_STATES, withDeadline, type Settlement } from "./settlement";
-import { BridgeFeeError, bridgeFee, bridgeStepKey, burnCalls, forwardedMint, type ContractCall } from "./cctp";
+import { ARC_TESTNET_USDC, BridgeFeeError, bridgeFee, bridgeStepKey, burnCalls, forwardedMint, type ContractCall } from "./cctp";
 import { burnIntent, burnIntentTypedData, estimateGateway, gatewaySalt, gatewayTransferStatus, submitGatewayTransfer, type GatewayTransferStatus } from "./gateway";
 import { payeeChain, paidAcrossChains } from "../payee-chains";
+import { toBaseUnits } from "../fx/quote";
 import type { ChainConfig } from "../config";
 
 export type LiveProviderClient = Pick<
@@ -556,6 +560,38 @@ export class LiveProvider implements ChainProvider {
 
   getBalance(accountId: string): Promise<BalanceSnapshot> {
     return this.getTokenBalance(accountId, "USDC");
+  }
+
+  /**
+   * A USDC→EURC swap's two calls from the operating wallet (EURC swap spec S6): approve the Adapter for
+   * the USDC, then send it the swap's call, each under its own key and waited for. The keys are the
+   * swap's, so a call whose answer was lost is the same call when the swap is resumed. No swap is sent
+   * when the approval did not confirm.
+   */
+  async swapForEurc(params: SwapCallParams): Promise<SwapCallResult> {
+    const account = await this.account(params.fromAccountId);
+    const send = async (call: Record<string, unknown>, key: string): Promise<SwapStep> => {
+      const created = await withDeadline(
+        this.client.createContractExecutionTransaction({
+          walletId: account.walletId,
+          ...call,
+          idempotencyKey: key,
+          fee: { type: "level", config: { feeLevel: "MEDIUM" } },
+        } as Parameters<LiveProviderClient["createContractExecutionTransaction"]>[0]),
+        CREATE_TRANSACTION_DEADLINE_MS,
+        `Circle did not answer a swap call within ${CREATE_TRANSACTION_DEADLINE_MS} ms; it may or may not have been accepted`
+      );
+      const txId = created.data?.id;
+      if (!txId) throw new Error("Circle did not return a transaction id");
+      const { status, transaction } = await awaitSettlement(this.client, txId);
+      return { status, txId, txHash: transaction?.txHash ?? null, state: transaction?.state ?? null };
+    };
+    // In base units the way the swap's call was built (src/lib/fx/swap-service.ts), never by a float multiply (review #10).
+    const units = toBaseUnits(params.usdcIn);
+    const approve = await send({ contractAddress: ARC_TESTNET_USDC, abiFunctionSignature: "approve(address,uint256)", abiParameters: [params.adapter, units] }, params.approveKey);
+    if (approve.status !== "confirmed") return { approve, execute: null };
+    const execute = await send({ contractAddress: params.adapter, callData: params.callData }, params.executeKey);
+    return { approve, execute };
   }
 
   async getTokenBalance(accountId: string, token: Stablecoin): Promise<BalanceSnapshot> {

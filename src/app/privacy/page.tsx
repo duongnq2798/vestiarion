@@ -107,7 +107,7 @@ export default function PrivacyPage() {
             <strong>Supabase</strong> holds the database and runs sign-in.
           </li>
           <li>
-            <strong>Circle</strong> creates the wallets and moves the payments, through Developer-Controlled Wallets, CCTP, Gateway and its Smart Contract Platform, so it receives wallet addresses and payment amounts.
+            <strong>Circle</strong> creates the wallets and moves the payments, through Developer-Controlled Wallets, CCTP, Gateway and its Smart Contract Platform, so it receives wallet addresses and payment amounts. Its Stablecoin Service quotes EURC in USDC and builds the swaps of USDC for EURC, so it receives the operating wallet&apos;s address and the amounts.
           </li>
           <li>
             <strong>Resend</strong> sends transactional email: invitations to a workspace, and digests of the payments waiting for a decision. It receives each
@@ -120,7 +120,9 @@ export default function PrivacyPage() {
               <li>
                 for an invoice: its amount and currency, its value in USDC for an invoice in EURC, memo, purchase order reference, due date, early-payment discount and
                 whether the goods were received; the counterparty&apos;s name, risk level, payment limit and performance score; the operating balance and the reserve
-                balance, or for an invoice in EURC the wallet&apos;s EURC balance; how the payee is paid, on Arc or across chains through CCTP or a Gateway balance with its fee
+                balance, or for an invoice in EURC the wallet&apos;s EURC balance, its USDC balance and the USDC due within 7 days, and, when its EURC falls short,
+                the swap of USDC for EURC that could fund it (the USDC it takes, the EURC it gives at least and as estimated, and what it costs above the
+                quoted rate), or why there is none; how the payee is paid, on Arc or across chains through CCTP or a Gateway balance with its fee
                 and expected time; the payment timing worked out from those:
                 today&apos;s date and the due date, what the discount is worth and the last day it applies, the yield from keeping the cash to the due date,
                 the day the written policy would pay on and the amount due that day, the total and number of payments that fall due on or before that day,

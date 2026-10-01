@@ -48,12 +48,12 @@ const baseUnits = z.string().regex(/^\d+$/);
 const answerSchema = z.object({ quote: z.object({ estimatedAmount: baseUnits, minAmount: baseUnits }) });
 
 /** A 6-decimal amount as base units, from its fixed-point string (0.30000000000000004 → "300000"). */
-function toBaseUnits(amount: number): string {
+export function toBaseUnits(amount: number): string {
   const [whole, fraction = ""] = amount.toFixed(6).split(".");
   return BigInt(`${whole}${fraction.padEnd(6, "0").slice(0, 6)}`).toString();
 }
 
-const fromBaseUnits = (units: string) => Number(BigInt(units)) / 1_000_000;
+export const fromBaseUnits = (units: string) => Number(BigInt(units)) / 1_000_000;
 
 const cache = new Map<string, { at: number; value: EurcQuote }>();
 

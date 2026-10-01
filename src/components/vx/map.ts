@@ -6,6 +6,7 @@ import type { CounterpartyRow, InvoiceRow, MilestoneRow, TreasuryActionRow } fro
 import type { Decision, Evidence, Guardrail, Outcome } from "./types";
 import { fmt } from "./Primitives";
 import { BRIDGE_FEE_CAP_PERCENT, paidAcrossChains, payeeChain } from "@/lib/payee-chains";
+import { SWAP_COST_CAP_PERCENT } from "@/lib/fx/swap-limits";
 
 /**
  * Renders the duplicate-billing check as evidence in its own right — including
@@ -79,6 +80,28 @@ function termsEvidence(invoice: InvoiceRow): Evidence | null {
  * early-payment discount taken. `invoice.amount` is never reduced, so this is
  * the only place the discounted transfer is shown next to the decision.
  */
+/**
+ * The swap of USDC for EURC that funded a EURC payment, linked to its transaction on Arc testnet, or a
+ * swap that failed or is still in flight (EURC swap spec S9). Null when no swap was made.
+ */
+function swapEvidence(detail: Record<string, unknown> | undefined): Evidence | null {
+  const swap = record(detail?.swap);
+  const state = stringValue(swap?.state);
+  if (state === "confirmed") {
+    const hash = stringValue(swap?.swapTxHash);
+    const received = numberValue(swap?.eurcReceived);
+    return {
+      label: "Funded by swap",
+      value: `${numberValue(swap?.usdcIn)} USDC → ${received ?? "?"} EURC`,
+      ...(hash ? { href: `${payeeChain("ARC-TESTNET").explorerTx}${hash}` } : {}),
+      state: "ok",
+    };
+  }
+  if (state === "failed") return { label: "Swap", value: "failed", state: "missing" };
+  if (state === "pending") return { label: "Swap", value: "in flight", state: "neutral" };
+  return null;
+}
+
 function paidEvidence(invoice: InvoiceRow): Evidence | null {
   if (invoice.status !== "paid" || invoice.paid_amount == null || invoice.paid_amount >= invoice.amount) return null;
   const pct = invoice.early_pay_discount_pct == null ? null : Number(invoice.early_pay_discount_pct);
@@ -176,6 +199,7 @@ export function invoiceDecision(invoice: InvoiceRow, counterparty: CounterpartyR
       { label: "Due", value: new Date(invoice.due_date).toLocaleDateString("en-US"), state: "neutral" },
       termsEvidence(invoice),
       paidEvidence(invoice),
+      eurc ? swapEvidence(entry?.detail) : null,
       paidAcrossChains(counterparty?.chain) ? { label: "Payee's chain", value: `${payeeChain(counterparty?.chain).label}, through ${route}${routeFees ?? ""}`, state: "neutral" as const } : null,
       duplicateEvidence(observed),
     ].filter((item): item is Evidence => item !== null),
@@ -268,6 +292,21 @@ function invoiceGuardrail(
   if (recorded === "fx.rate_unavailable") {
     return { rule: recorded, attempted: amount, attemptedToken: "EURC", limit, limitToken: "USDC", note: "no EURC→USDC rate to weigh it at" };
   }
+  // A swap code refused to fund the payment with (EURC swap spec S5).
+  if (recorded === "fx.swap_cost_above_cap") {
+    return { rule: recorded, attempted: numberValue(record(detail?.swapOffer)?.costPercent) ?? 0, attemptedToken: "%", limit: SWAP_COST_CAP_PERCENT, limitToken: "%", note: "the swap's cost above the quoted rate" };
+  }
+  if (recorded === "fx.swap_usdc_short") {
+    const left = (numberValue(record(detail?.observed)?.operatingBalance) ?? 0) - (numberValue(record(detail?.swapOffer)?.usdcIn) ?? 0);
+    return {
+      rule: recorded,
+      attempted: Math.round(left * 1_000_000) / 1_000_000,
+      attemptedToken: "USDC",
+      limit: numberValue(detail?.usdcDueWithin7Days) ?? 0,
+      limitToken: "USDC",
+      note: "USDC left after the swap, against what falls due within 7 days",
+    };
+  }
   if (recorded === "treasury.insufficient_eurc") {
     return { rule: recorded, attempted: amount, attemptedToken: "EURC", limit: numberValue(detail?.eurcBalance) ?? 0, limitToken: "EURC", note: "EURC in the operating wallet" };
   }
@@ -325,6 +364,17 @@ export function milestoneDecision(milestone: MilestoneRow, entries: LedgerEntry[
     auditSeq: entry?.seq,
     at: entry?.ts ?? new Date().toISOString(),
   };
+}
+
+const TREASURY_DECISIONS = new Set(["hold", "sweep_to_usyc", "redeem_from_usyc"]);
+
+/**
+ * The treasury stage's own decisions among treasury-domain entries, newest first, at most `count`. A swap
+ * of USDC for EURC or a Gateway deposit is in the same domain but is no decision on the reserve, and is
+ * never shown as one (EURC swap review #8).
+ */
+export function treasuryDecisionEntries(entries: LedgerEntry[], count: number): LedgerEntry[] {
+  return entries.filter((entry) => TREASURY_DECISIONS.has(entry.action)).slice(0, count);
 }
 
 export function treasuryLedgerDecision(entry: LedgerEntry): Decision {

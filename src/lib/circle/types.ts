@@ -117,6 +117,32 @@ export interface BalanceSnapshot {
  * Arc testnet for real while the USYC leg is still simulated. Labelling that
  * honestly matters more than a dashboard that looks uniformly "live".
  */
+/** One of a swap's two calls, as Circle last reported it (EURC swap spec S6). */
+export interface SwapStep {
+  status: TransferResult["status"];
+  txId: string;
+  txHash: string | null;
+  state: string | null;
+}
+
+/** A USDC→EURC swap's two calls from the operating wallet: approve the Adapter, then the swap itself. */
+export interface SwapCallParams {
+  fromAccountId: string;
+  /** The Adapter contract the swap's call is sent to, and approved for the USDC. */
+  adapter: string;
+  usdcIn: number;
+  /** The Adapter's `execute(...)` call, as built from the Stablecoin Service's answer. */
+  callData: string;
+  approveKey: string;
+  executeKey: string;
+}
+
+export interface SwapCallResult {
+  approve: SwapStep;
+  /** Null when the approval did not confirm, so the swap was not sent. */
+  execute: SwapStep | null;
+}
+
 export interface ChainProvider {
   readonly mode: "simulate" | "live";
   readonly earnMode: "simulate" | "live";
@@ -138,4 +164,9 @@ export interface ChainProvider {
    * then has no EURC balance to rely on.
    */
   getTokenBalance?(accountId: string, token: Stablecoin): Promise<BalanceSnapshot>;
+  /**
+   * Swaps USDC for EURC through the Adapter App Kit names (EURC swap spec S6), under the swap's keys.
+   * Optional: a provider without it is never offered a swap.
+   */
+  swapForEurc?(params: SwapCallParams): Promise<SwapCallResult>;
 }
