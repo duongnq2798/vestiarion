@@ -1,6 +1,7 @@
 import { db } from "../dal";
 import { getChainProvider, type ChainProvider } from "../circle";
 import { executePayment, type PaymentExecution } from "../payments";
+import { amountToPay, type InvoiceDiscount } from "./payment-timing";
 
 const num = (v: unknown) => (typeof v === "number" ? v : Number(v ?? 0));
 
@@ -42,7 +43,10 @@ export interface PayInvoiceInput {
   invoiceId: string;
   counterpartyId: string;
   address: string | null;
+  /** The invoice's full amount: what any limit or funds check is made against. */
   amount: number;
+  /** Lowers the transfer through the end of the deadline's UTC day, never after it (spec 2026-09-30-payment-timing P5). */
+  discount?: InvoiceDiscount | null;
 }
 
 export interface PayInvoiceResult {
@@ -53,6 +57,14 @@ export interface PayInvoiceResult {
   note: string;
   /** The operating balance after a confirmed payment, else null. */
   operatingBalance: number | null;
+  /**
+   * What this payment's transfer carries: the discounted amount through the
+   * discount deadline's UTC day, the full amount otherwise. Whether it moved
+   * is `status`.
+   */
+  amountPaid: number;
+  /** `amount` less `amountPaid`: 0 without a discount, or once its deadline has passed. */
+  discountTaken: number;
 }
 
 /**
@@ -62,6 +74,10 @@ export interface PayInvoiceResult {
  * account holds the invoice without ever calling the provider; otherwise the
  * transfer's outcome (confirmed, pending, failed, or thrown) maps to the same
  * status and the same note text as before.
+ *
+ * The transfer is `amountToPay` (./payment-timing.ts) of the invoice: the
+ * early-payment discount comes off through the end of its deadline's UTC
+ * day, the same rule for the agent and for a person's approval.
  *
  * `retryTerminalFailure` is `executePayment`'s: only a person's Approve and
  * pay sets it, so that a payment Circle ended in a terminal failure is sent
@@ -73,6 +89,9 @@ export async function payInvoice(
   deps: { provider: ChainProvider; operating: { id: string } | null; retryTerminalFailure?: boolean }
 ): Promise<PayInvoiceResult> {
   const { provider, operating, retryTerminalFailure = false } = deps;
+  // Decided at the moment of payment, not when the invoice was scheduled: a
+  // transfer made the day after the discount deadline is the full amount.
+  const { amountPaid, discountTaken } = amountToPay(input.amount, input.discount ?? null, new Date());
 
   if (!operating) {
     return {
@@ -81,6 +100,8 @@ export async function payInvoice(
       execution: null,
       note: " [no operating account configured]",
       operatingBalance: null,
+      amountPaid,
+      discountTaken,
     };
   }
 
@@ -92,7 +113,7 @@ export async function payInvoice(
         sourceId: input.invoiceId,
         fromAccountId: operating.id,
         destination: payoutAddress(input.address, input.counterpartyId),
-        amount: input.amount,
+        amount: amountPaid,
         memo: `Invoice ${input.invoiceId}`,
       },
       { provider, retryTerminalFailure }
@@ -105,6 +126,8 @@ export async function payInvoice(
       execution: null,
       note: ` [execution failed: ${(err as Error).message}]`,
       operatingBalance: null,
+      amountPaid,
+      discountTaken,
     };
   }
 
@@ -128,5 +151,5 @@ export async function payInvoice(
     }
   }
 
-  return { status, txRef: result.txRef, execution: result, note, operatingBalance };
+  return { status, txRef: result.txRef, execution: result, note, operatingBalance, amountPaid, discountTaken };
 }

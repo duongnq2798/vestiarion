@@ -132,11 +132,20 @@ export const InvoiceSchema = z
     poReference: z.string().nullable(),
     goodsReceived: z.boolean(),
     dueDate: z.string(),
+    scheduledFor: z.string().nullable().describe("ISO timestamp the agent has committed to pay this on, once scheduled; else null."),
+    earlyPayDiscount: z
+      .object({ percent: z.number(), deadline: z.string() })
+      .nullable()
+      .describe("The early-payment discount this invoice carries, if any: the percent off and the deadline's ISO timestamp."),
     decidedAt: z.string().nullable(),
     settledAt: z.string().nullable(),
     escalatedAt: z.string().nullable(),
     agentReasoning: z.string().nullable().describe("Why the agent ruled as it did, verbatim from the decision."),
     txHash: z.string().nullable().describe("An on-chain hash when the payment settled on Arc, else null."),
+    paidAmount: z
+      .number()
+      .nullable()
+      .describe("What actually left once this invoice was paid; null otherwise, even while a submitted transfer already carries an amount."),
     counterparty: z.object({ id: z.string(), name: z.string(), riskLevel: z.string() }).nullable(),
     createdAt: z.string(),
   })

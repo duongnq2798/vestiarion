@@ -40,6 +40,8 @@ const ADDRESS_LIBRARY = "src/lib/counterparty-address.ts";
 const EXPORT_MENU = "src/components/AuditExportMenu.tsx";
 const VERIFIER = "public/tools/verify-ledger-export.mjs";
 const LEDGER_KEY_PANEL = "src/components/LedgerKeyPanel.tsx";
+const MAP = "src/components/vx/map.ts";
+const SCHEDULED_PAYMENTS = "src/components/vx/ScheduledPayments.tsx";
 
 /** Each guide's quoted UI strings, as `[text, the file it must appear in]`. */
 const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
@@ -164,6 +166,13 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["Sample data is loaded", SAMPLE_PANEL],
     ["Remove sample data", SAMPLE_PANEL],
     ["Remove the sample data first. It exists only to try the agent with simulated payments.", GO_LIVE_LIBRARY],
+    ["Early-payment discount (%)", INVOICE_FORM],
+    ["Discount deadline", INVOICE_FORM],
+    ["Scheduled for", MAP],
+    ["% off if paid by", MAP],
+    ["Not yet decided", MAP],
+    ["Payment in flight", MAP],
+    ["Scheduled payments", SCHEDULED_PAYMENTS],
   ],
   "guides/audit-export": [
     ["Audit log", APP_NAV],
@@ -239,6 +248,27 @@ describe.each(Object.entries(QUOTED) as Array<[GuideSlug, Array<readonly [string
   it("names Arc testnet plainly, without disclaimers", () => {
     expect(guide).toMatch(/Arc testnet/);
     for (const disclaimer of DISCLAIMERS) expect(guide).not.toMatch(disclaimer);
+  });
+});
+
+describe("the first-payment guide's steps", () => {
+  const guide = readSource("guides/first-payment");
+  const sections = [...guide.matchAll(/^## (.+)$/gm)].map((match) => match[1]);
+
+  it("numbers every section after the sample-data tour, in order", () => {
+    const steps = sections.slice(sections.findIndex((title) => /^1\. /.test(title)));
+    expect(steps.length).toBeGreaterThan(1);
+    steps.forEach((title, index) => expect(title, title).toMatch(new RegExp(`^${index + 1}\\. `)));
+  });
+
+  it("counts scheduling among what a cycle does, and among a card's outcomes", () => {
+    expect(guide).toContain("pays, schedules, holds or flags each one");
+    expect(guide).toContain('the outcome: "Settled on Arc", "Scheduled for *date*", "Held for you" or "Refused by guardrail";');
+  });
+
+  it("says the sample data's annual support plan is scheduled for its discount deadline", () => {
+    const tour = guide.split("## Try it with sample data first")[1]?.split("\n## ")[0] ?? "";
+    expect(tour).toMatch(/^- an annual support plan .*scheduled for its discount deadline/m);
   });
 });
 

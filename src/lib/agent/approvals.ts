@@ -5,6 +5,7 @@ import { confirmCounterpartyAddress, sameAddress } from "../counterparty-address
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { isTerminalFailure } from "../payments";
 import { payInvoice, syncOperatingBalance } from "./pay";
+import { invoiceDiscount, type InvoiceDiscount } from "./payment-timing";
 
 /**
  * The approvals library (spec §6): lets a person pay, reject or return a
@@ -257,6 +258,8 @@ export interface WaitingPayable {
   address: string | null;
   /** The last payment attempt, when Circle ended it in a terminal failure (Approve and pay sends a new transfer) or it is still in flight; else null. */
   lastAttempt: LastPaymentAttempt;
+  /** The invoice's early-payment discount, read as `payInvoice` applies it, so the approval dialog can say what will leave; null without one. */
+  discount: InvoiceDiscount | null;
 }
 
 /** Every payable currently waiting for a person's decision — held, flagged, awaiting more information, or claimed by someone else right now. */
@@ -264,7 +267,9 @@ export async function listWaitingPayables(): Promise<WaitingPayable[]> {
   const rows = unwrap(
     await db()
       .from("invoices")
-      .select("id, amount, due_date, status, agent_reasoning, decided_at, created_by, reviewed_at, counterparty_id, counterparties(name, risk_level, address)")
+      .select(
+        "id, amount, due_date, status, agent_reasoning, decided_at, created_by, reviewed_at, counterparty_id, early_pay_discount_pct, discount_due_date, counterparties(name, risk_level, address)"
+      )
       .eq("direction", "payable")
       .in("status", WAITING_STATUSES)
       .order("due_date", { ascending: true })
@@ -278,6 +283,8 @@ export async function listWaitingPayables(): Promise<WaitingPayable[]> {
     created_by: string | null;
     reviewed_at: string | null;
     counterparty_id: string;
+    early_pay_discount_pct?: string | number | null;
+    discount_due_date?: string | null;
     counterparties: { name: string; risk_level: string; address: string | null } | null;
   }>;
 
@@ -312,6 +319,7 @@ export async function listWaitingPayables(): Promise<WaitingPayable[]> {
       paymentSent: paymentWasSent(intent),
       address: row.counterparties?.address ?? null,
       lastAttempt: lastAttemptOf(intent),
+      discount: invoiceDiscount(row),
     };
   });
 }
@@ -326,12 +334,16 @@ interface LoadedInvoice {
   counterpartyName: string;
   riskLevel: string | null;
   address: string | null;
+  /** The invoice's early-payment discount, applied by `payInvoice` exactly as for the agent. */
+  discount: InvoiceDiscount | null;
 }
 
 async function loadWaitingPayable(invoiceId: string): Promise<LoadedInvoice> {
   const result = await db()
     .from("invoices")
-    .select("id, amount, status, direction, agent_reasoning, created_by, counterparty_id, counterparties(name, risk_level, address)")
+    .select(
+      "id, amount, status, direction, agent_reasoning, created_by, counterparty_id, early_pay_discount_pct, discount_due_date, counterparties(name, risk_level, address)"
+    )
     .eq("id", invoiceId)
     .maybeSingle();
   if (result.error) throw new Error(result.error.message);
@@ -344,6 +356,8 @@ async function loadWaitingPayable(invoiceId: string): Promise<LoadedInvoice> {
     agent_reasoning: string | null;
     created_by: string | null;
     counterparty_id: string;
+    early_pay_discount_pct: string | number | null;
+    discount_due_date: string | null;
     counterparties: { name: string; risk_level: string; address: string | null } | null;
   } | null;
 
@@ -361,6 +375,7 @@ async function loadWaitingPayable(invoiceId: string): Promise<LoadedInvoice> {
     counterpartyName: row.counterparties?.name ?? "unknown",
     riskLevel: row.counterparties?.risk_level ?? null,
     address: row.counterparties?.address ?? null,
+    discount: invoiceDiscount(row),
   };
 }
 
@@ -372,11 +387,23 @@ async function operatingAccount(): Promise<{ id: string; balance: number } | nul
   return row ? { id: row.id, balance: num(row.balance) } : null;
 }
 
-/** The `approval_paid` entry's summary, which says what actually happened to the transfer. */
-function approvalPaidSummary(status: "paid" | "matched" | "held", amount: number, name: string): string {
-  if (status === "paid") return `Approved and paid ${amount} USDC to ${name}`;
-  if (status === "matched") return `Approved; payment of ${amount} USDC to ${name} submitted`;
-  return `Approved; payment of ${amount} USDC to ${name} failed`;
+/**
+ * The `approval_paid` entry's summary, which says what actually happened to
+ * the transfer — and, when an early-payment discount came off it, how much
+ * left against the invoice's amount.
+ */
+function approvalPaidSummary(
+  status: "paid" | "matched" | "held",
+  amount: number,
+  name: string,
+  payment: { amountPaid: number; discountTaken: number }
+): string {
+  const discounted = payment.discountTaken > 0;
+  const sent = discounted ? payment.amountPaid : amount;
+  const less = discounted ? ` (${amount} USDC less a ${payment.discountTaken} USDC early-payment discount)` : "";
+  if (status === "paid") return `Approved and paid ${sent} USDC to ${name}${less}`;
+  if (status === "matched") return `Approved; payment of ${sent} USDC to ${name} submitted${less}`;
+  return `Approved; payment of ${sent} USDC to ${name} failed${less}`;
 }
 
 /**
@@ -439,7 +466,15 @@ export async function approveAndPay(
   let result;
   try {
     result = await payInvoice(
-      { invoiceId: invoice.id, counterpartyId: invoice.counterpartyId, address: invoice.address, amount: invoice.amount },
+      {
+        invoiceId: invoice.id,
+        counterpartyId: invoice.counterpartyId,
+        address: invoice.address,
+        amount: invoice.amount,
+        // The same discount rule as the agent's: off the transfer through the
+        // deadline's UTC day. The funds check above stays on the full amount.
+        discount: invoice.discount,
+      },
       // A person's approval is the one caller that may send a payment Circle
       // ended in a terminal failure again, and only when the failure was
       // already recorded (`!alreadySent`): that is the approval that ran the
@@ -471,6 +506,9 @@ export async function approveAndPay(
     throw err;
   }
 
+  // A transfer that went out (confirmed, or submitted and awaiting Circle)
+  // carried `amountPaid`; one that failed moved nothing.
+  const sent = result.status === "paid" || result.status === "matched";
   const now = new Date().toISOString();
   const update = await db()
     .from("invoices")
@@ -480,6 +518,9 @@ export async function approveAndPay(
       decided_at: now,
       settled_at: result.status === "paid" ? now : null,
       tx_ref: result.txRef,
+      // Written with the transfer that carried it, so the cycle that later
+      // reconciles a submitted payment records it as is.
+      paid_amount: sent ? result.amountPaid : null,
     })
     .eq("id", invoice.id);
   if (update.error) {
@@ -492,12 +533,16 @@ export async function approveAndPay(
     actor: "human",
     domain: "ap",
     action: "approval_paid",
-    summary: approvalPaidSummary(result.status, invoice.amount, invoice.counterpartyName),
+    summary: approvalPaidSummary(result.status, invoice.amount, invoice.counterpartyName, result),
     detail: {
       by: input.actorId,
       invoiceId: invoice.id,
       counterpartyId: invoice.counterpartyId,
       amount: invoice.amount,
+      // What the transfer carried and what the discount took off it; null
+      // when nothing went out.
+      amountPaid: sent ? result.amountPaid : null,
+      discountTaken: sent ? result.discountTaken : null,
       overrode: previous,
       txRef: result.txRef,
       status: result.status,

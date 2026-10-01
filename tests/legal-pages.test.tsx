@@ -168,13 +168,16 @@ describe("the privacy page", () => {
     const models = body.split("A model provider")[1]?.split("OpenSanctions")[0] ?? "";
 
     // Structure and the task's own words, not data about the workspace.
-    const FRAME = ["task", "invoice", "counterparty", "treasury", "milestone", "contractor", "economics", "note", "duplicateNote", "duplicateMatchesTotal"];
+    const FRAME = ["task", "invoice", "terms", "counterparty", "treasury", "milestone", "contractor", "economics", "note", "duplicateNote", "duplicateMatchesTotal"];
     const PHRASES: Record<string, string> = {
       amount: "amount",
       memo: "memo",
       poReference: "purchase order reference",
       goodsReceived: "whether the goods were received",
       dueDate: "due date",
+      earlyPayDiscount: "early-payment discount",
+      timing: "the payment timing worked out from those",
+      scheduledEarlier: "when the agent scheduled the invoice earlier, the date it chose and its reasoning",
       name: "name",
       riskLevel: "risk level",
       paymentLimit: "payment limit",
@@ -215,6 +218,26 @@ describe("the privacy page", () => {
         expect(PHRASES, `orchestrator.ts sends ${key}; add it to the privacy page and to PHRASES`).toHaveProperty(key);
         expect(models, key).toContain(PHRASES[key]);
       }
+    });
+
+    it("names each payment timing fact the invoice prompt sends, as timingFacts lists them, and not the policy's answer", () => {
+      const facts = orchestrator.split("function timingFacts(")[1]?.split("\n}\n")[0] ?? "";
+      const keys = [...facts.matchAll(/^\s+(\w+): timing\.\w+,$/gm)].map((m) => m[1]);
+      const TIMING: Record<string, string> = {
+        today: "today's date",
+        dueOn: "the due date",
+        discountValue: "what the discount is worth",
+        discountAvailableUntil: "the last day it applies",
+        floatValueToDue: "the yield from keeping the cash to the due date",
+        targetOn: "the day the written policy would pay on",
+        amountDueAtTarget: "the amount due that day",
+        earlierObligations: "the total and number of payments that fall due on or before that day",
+        shortfall: "whether the operating balance falls short of covering this invoice after them",
+      };
+      expect(keys.sort()).toEqual(Object.keys(TIMING).sort());
+      for (const key of keys) expect(models, key).toContain(TIMING[key]);
+      expect(models).not.toMatch(/falls? due before/);
+      expect(models).not.toContain("would pay on and why");
     });
 
     it("says the performance history is a score and the counts it is computed from, as counterparty-history.ts has them", () => {

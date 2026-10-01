@@ -51,12 +51,37 @@ export interface DuplicateMatch {
   signals: DuplicateSignal[];
   /** Plain-language account of the match, written into the ledger verbatim. */
   explanation: string;
-  /** True when the match is against an invoice whose money has already gone. */
+  /**
+   * True when the match is against an invoice whose money has already gone
+   * or is committed to go: paid, a payment in flight, scheduled, or being
+   * approved and paid by a person right now.
+   */
   againstSettled: boolean;
 }
 
-/** A repeat of an invoice that was already paid is the one that costs money. */
-const SETTLED_STATUSES = new Set(["paid", "received"]);
+/**
+ * A repeat of an invoice whose money has left, or is committed to leave, is
+ * the one that costs money: paid (`paid`, or `received` on the other side of
+ * the book), a payment in flight (`matched`), one the agent has scheduled to
+ * pay (`scheduled`), or one a person has claimed on Approvals and is paying
+ * right now (`processing`, `claim_invoice_decision` in migration 0025). A
+ * repeat of a scheduled invoice scheduled too would be paid twice on the day;
+ * so would one paid while the first is in flight, or while a person pays it.
+ */
+const COMMITTED_STATUSES = new Set(["paid", "received", "matched", "scheduled", "processing"]);
+
+/**
+ * How a committed invoice is described in a match's explanation, and on the
+ * decision card's duplicate evidence (src/components/vx/map.ts); null for a
+ * status whose money is not committed.
+ */
+export function committedState(status: string): string | null {
+  if (status === "paid" || status === "received") return "already paid";
+  if (status === "matched") return "already being paid";
+  if (status === "scheduled") return "already scheduled";
+  if (status === "processing") return "already being decided by a person";
+  return null;
+}
 
 /** At or above this, the agent refuses in code rather than asking the model. */
 export const DUPLICATE_BLOCK_CONFIDENCE = 0.9;
@@ -110,7 +135,7 @@ function describe(
   gapDays: number | null
 ): string {
   const when = candidate.dueDate.slice(0, 10);
-  const state = SETTLED_STATUSES.has(candidate.status) ? "already paid" : `status ${candidate.status}`;
+  const state = committedState(candidate.status) ?? `status ${candidate.status}`;
   const gap =
     gapDays == null
       ? ""
@@ -189,10 +214,11 @@ export function scoreDuplicate(
     return null;
   }
 
-  const againstSettled = SETTLED_STATUSES.has(candidate.status);
-  // A repeat of an invoice that is itself still unpaid is worth raising, but it
-  // is not yet a loss — nothing has left the account. Only a repeat of settled
-  // money justifies refusing in code.
+  const againstSettled = COMMITTED_STATUSES.has(candidate.status);
+  // A repeat of an invoice that is itself still undecided or held is worth
+  // raising, but it is not yet a loss — nothing has left the account, or is
+  // committed to. Only a repeat of paid or committed money justifies refusing
+  // in code.
   if (!againstSettled) confidence = Math.min(confidence, 0.85);
 
   if (confidence < DUPLICATE_REPORT_CONFIDENCE) return null;
@@ -247,7 +273,8 @@ export function duplicateMatchContext(
 
 /**
  * The match that justifies refusing payment outright, if there is one: a
- * high-confidence repeat of money that has already left the account.
+ * high-confidence repeat of money that has already left the account, or is
+ * committed to — in flight, scheduled, or being paid by a person.
  */
 export function blockingDuplicate(matches: DuplicateMatch[]): DuplicateMatch | null {
   return (

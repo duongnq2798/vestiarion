@@ -88,6 +88,14 @@ export interface InvoiceRow {
   status: string;
   agent_reasoning: string | null;
   tx_ref: string | null;
+  /** The day the agent committed to pay (migration 0038); set only while `status` is `scheduled`. */
+  scheduled_for: string | null;
+  /** The early-payment discount's percent, when the invoice carries one (numeric(5,2) — a string from PostgREST). */
+  early_pay_discount_pct: string | number | null;
+  /** The last day the discount applies, when there is one. */
+  discount_due_date: string | null;
+  /** What actually left when this invoice was paid: the discounted amount when it was paid by the deadline, the full amount otherwise, null until it is paid. */
+  paid_amount: number | null;
 }
 
 export async function listInvoices(): Promise<InvoiceRow[]> {
@@ -102,6 +110,7 @@ export async function listInvoices(): Promise<InvoiceRow[]> {
     ...(r as unknown as InvoiceRow),
     amount: num(r.amount),
     counterparty_name: r.counterparties?.name ?? "unknown",
+    paid_amount: r.paid_amount == null ? null : num(r.paid_amount),
   }));
 }
 
@@ -201,7 +210,7 @@ export async function stats(): Promise<DashboardStats> {
   const client = db();
 
   const [paidInvoices, paidMilestones, clock, decisions, flagged, latestCycle] = await Promise.all([
-    client.from("invoices").select("amount, tx_ref").eq("status", "paid"),
+    client.from("invoices").select("amount, paid_amount, tx_ref").eq("status", "paid"),
     client.from("milestones").select("amount, tx_ref").eq("status", "paid"),
     // No row yet is not an error: an organization that has never run a
     // simulated cycle has no sim_clock row until its first one.
@@ -211,8 +220,14 @@ export async function stats(): Promise<DashboardStats> {
     client.from("ledger_entries").select("ts").eq("action", "cycle_complete").order("seq", { ascending: false }).limit(1).maybeSingle(),
   ]);
 
+  // What actually left: an invoice paid with an early-payment discount
+  // records the transfer's amount in paid_amount (migration 0038); one paid
+  // without, or before that column existed, left its full amount.
   const paid = [
-    ...((paidInvoices.data ?? []) as Array<{ amount: unknown; tx_ref: string | null }>),
+    ...((paidInvoices.data ?? []) as Array<{ amount: unknown; paid_amount: unknown; tx_ref: string | null }>).map((row) => ({
+      amount: row.paid_amount ?? row.amount,
+      tx_ref: row.tx_ref,
+    })),
     ...((paidMilestones.data ?? []) as Array<{ amount: unknown; tx_ref: string | null }>),
   ];
 
