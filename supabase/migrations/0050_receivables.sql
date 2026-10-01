@@ -12,7 +12,8 @@
 -- service role only. Only an open or received receivable with a live link is
 -- found; the page gets the workspace's and client's names, the amount,
 -- currency, due date and memo, and the operating wallet's Arc testnet address
--- (R2). The workspace and invoice ids are for the server, never shown.
+-- (R2). The workspace and invoice ids, and who made the link, are for the
+-- server, never shown.
 
 do $$
 begin
@@ -85,6 +86,7 @@ as $$
   select jsonb_build_object(
            'orgId', o.id,
            'invoiceId', i.id,
+           'createdBy', l.created_by,
            'orgName', o.name,
            'clientName', c.name,
            'amount', i.amount,

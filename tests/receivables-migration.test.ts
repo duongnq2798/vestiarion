@@ -119,6 +119,7 @@ describe("pay_link_preview (0050)", () => {
     expect(await preview("1".repeat(64))).toEqual({
       orgId,
       invoiceId,
+      createdBy: null,
       orgName: "ar-preview Studio",
       clientName: "Acme Corp",
       amount: 12.5,
