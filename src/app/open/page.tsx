@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { OpenNumbersTable } from "@/components/open/OpenNumbersTable";
+import { OpenNumbersTable, OUTCOME_ROWS } from "@/components/open/OpenNumbersTable";
 import { OurPayments } from "@/components/open/OurPayments";
 import { PaymentsChart } from "@/components/open/PaymentsChart";
 import { PeriodNav } from "@/components/open/PeriodNav";
@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Open numbers",
   description:
-    "How much Vestiarion is used, read live from its production database: workspaces, payments settled on Arc testnet, USDC paid and the agent's decisions, with customers counted apart from our own workspaces.",
+    "How much Vestiarion is used, read live from its production database: workspaces, payments settled on Arc testnet, USDC paid, and how the agent's payment decisions turned out, with customers counted apart from our own workspaces.",
   alternates: { canonical: "/open" },
 };
 
@@ -68,6 +68,18 @@ export default async function OpenPage({ searchParams }: OpenPageProps) {
               <div className="mt-6">
                 <OpenNumbersTable numbers={numbers} period={period} />
               </div>
+              <section aria-labelledby="outcomes" className="mt-12">
+                <h2 id="outcomes" className="text-xl font-semibold tracking-tight text-ink">
+                  Outcomes
+                </h2>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-ink-2">
+                  How the agent&apos;s payment decisions turned out: what it carried out itself, what it handed to a person, what people did
+                  with its warnings, and whether invoices were paid on time.
+                </p>
+                <div className="mt-4">
+                  <OpenNumbersTable numbers={numbers} period={period} rows={OUTCOME_ROWS} label="Outcomes" />
+                </div>
+              </section>
               <PaymentsChart series={dailySeries(numbers.daily, period)} />
               <OurPayments payments={numbers.ourPayments} />
             </>
@@ -89,6 +101,24 @@ export default async function OpenPage({ searchParams }: OpenPageProps) {
               </li>
               <li>A person counts as a customer when they are not on the team and belong to a customer&apos;s workspace.</li>
               <li>A contractor milestone counts once a settled Arc testnet payment has paid it.</li>
+              <li>
+                A payment decision is the agent&apos;s decision on an invoice to pay or a contractor milestone, counted by what happened.
+                Paid, sent or scheduled is carried out by the agent itself; held, flagged or waiting for information is escalated to a
+                person. A payment a model proposed and code refused counts as escalated.
+              </li>
+              <li>
+                A flag is the agent saying an invoice should not be paid. A person upholds it by rejecting the invoice and overturns it
+                by paying it; sending it back to the agent counts as neither. A hold or a request for information asks a person to
+                decide, so it is not counted as agreement either way.
+              </li>
+              <li>
+                An invoice is paid on time when its Arc testnet payment settles on or before its due day (UTC). No person involved means
+                nobody approved, rejected or returned it; entering the invoice does not count.
+              </li>
+              <li>
+                A duplicate is caught when the agent stopped an invoice that repeats one already paid or on its way to being paid, with
+                the same purchase order and amount, and it was never paid since.
+              </li>
               <li>
                 A workspace&apos;s first payment is the first one Circle confirms on Arc testnet, and the time to it runs from when the
                 workspace was opened. A workspace holding payments from before it was opened counts, but not towards the time.
