@@ -27,6 +27,7 @@ import {
   findDuplicates,
   type InvoiceLike,
 } from "./duplicates";
+import { milestoneVerification } from "./milestone-evidence";
 import {
   followUpConfig,
   planFollowUp,
@@ -2789,7 +2790,10 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     status: string;
     title: string;
     amount: string;
+    verified: boolean;
+    verification_method: string | null;
     verification_source: string | null;
+    verification_detail: unknown;
     contractor_id: string;
     agent_reasoning: string | null;
     tx_ref: string | null;
@@ -2860,11 +2864,15 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     const { value: decision, mode, reference, agreedWithReference } = await decide<MilestoneDecision>({
       systemPrompt: SYSTEM_PROMPT,
       userPrompt: JSON.stringify({
-        task: "Decide whether to release this verified contractor milestone immediately, rather than waiting for a Net-30 cycle.",
+        task:
+          "Decide whether to release this verified contractor milestone immediately, rather than waiting for a Net-30 cycle. " +
+          "`verification` says how the work was verified: by a merged pull request, a timesheet, or a person here who checked it by hand (method manual, with their note). " +
+          "A missing evidence link does not make it unverified.",
         milestone: {
           title: milestone.title,
           amount,
           verificationSource: milestone.verification_source,
+          verification: milestoneVerification(milestone),
         },
         contractor: {
           name: contractor.name,
@@ -2962,6 +2970,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
             contractor.performance_inputs
           ),
           verificationSource: milestone.verification_source,
+          verification: milestoneVerification(milestone),
         },
         execution: {
           txRef,
