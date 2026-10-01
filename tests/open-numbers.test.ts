@@ -42,9 +42,20 @@ const FIRSTS = {
   },
 };
 
+/** What PostgREST returns for open_outcomes (0049): counts, which can arrive as strings. */
+const OUTCOME_SIDE = {
+  decisionsCarriedOut: 5, decisionsEscalated: 10, escalationsResolved: 5, flagsResolved: 3, flagsUpheld: 1,
+  invoicesPaidOnArc: 4, invoicesPaidOnTime: 3, invoicesPaidOnTimeUntouched: 1, duplicatesCaught: 2,
+};
+const OUTCOMES = { sides: { customers: OUTCOME_SIDE, ours: { ...OUTCOME_SIDE, decisionsCarriedOut: "7" }, total: OUTCOME_SIDE } };
+
 /** Each function's document, by the path it is called at. */
 const reply = (request: RecordedRequest): FakeReply =>
-  request.path === "/rest/v1/rpc/open_first_payments" ? { body: FIRSTS } : { body: DOCUMENT };
+  request.path === "/rest/v1/rpc/open_first_payments"
+    ? { body: FIRSTS }
+    : request.path === "/rest/v1/rpc/open_outcomes"
+      ? { body: OUTCOMES }
+      : { body: DOCUMENT };
 
 describe("parsePeriod", () => {
   it("is all time with no parameters", () => {
@@ -120,12 +131,13 @@ describe("dailySeries", () => {
 describe("readOpenNumbers", () => {
   const since = (date: string) => parsePeriod({ since: date }, NOW);
 
-  it("asks open_numbers and open_first_payments for the period's start and reads figures sent as strings", async () => {
+  it("asks open_numbers, open_first_payments and open_outcomes for the period's start and reads figures sent as strings", async () => {
     const { fake, result } = platform(() => readOpenNumbers(since("2026-09-20"), NOW.getTime()), reply);
     const numbers = await result;
     expect(fake.requests.map((request) => [request.path, request.body]).sort()).toEqual([
       ["/rest/v1/rpc/open_first_payments", { p_since: "2026-09-20T00:00:00.000Z" }],
       ["/rest/v1/rpc/open_numbers", { p_since: "2026-09-20T00:00:00.000Z" }],
+      ["/rest/v1/rpc/open_outcomes", { p_since: "2026-09-20T00:00:00.000Z" }],
     ]);
     expect(numbers.sides.ours.usdcPaid).toBe(3);
     expect(numbers.daily[0]).toEqual({ day: "2026-09-28", customers: 1, ours: 2, oursUsdc: 5 });
@@ -158,11 +170,36 @@ describe("readOpenNumbers", () => {
     logged.mockRestore();
   });
 
+  it("merges the outcomes into each side", async () => {
+    const { result } = platform(() => readOpenNumbers(since("2026-09-18"), NOW.getTime()), reply);
+    const numbers = await result;
+    expect(numbers.sides.customers).toMatchObject({ payments: 2, ...OUTCOME_SIDE });
+    expect(numbers.sides.ours.decisionsCarriedOut).toBe(7);
+  });
+
+  it("still reads every other figure when open_outcomes cannot be read, with no outcome figures", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { result } = platform(
+      () => readOpenNumbers(since("2026-09-17"), 1_000),
+      (request) =>
+        request.path === "/rest/v1/rpc/open_outcomes"
+          ? { status: 404, body: { message: "function open_outcomes does not exist" } }
+          : reply(request)
+    );
+    const numbers = await result;
+    expect(numbers.sides.customers).toMatchObject({ payments: 2, firstPayments: 2 });
+    for (const side of [numbers.sides.customers, numbers.sides.ours, numbers.sides.total]) {
+      for (const key of Object.keys(OUTCOME_SIDE)) expect(side).toHaveProperty(key, null);
+    }
+    expect(logged).toHaveBeenCalledWith(expect.stringContaining("open_outcomes"), expect.anything());
+    logged.mockRestore();
+  });
+
   it("sends a null start for all time", async () => {
     const all = parsePeriod({}, NOW);
     const { fake, result } = platform(() => readOpenNumbers(all, NOW.getTime() + 10 * 60_000), reply);
     await result;
-    expect(fake.requests.map((request) => request.body)).toEqual([{ p_since: null }, { p_since: null }]);
+    expect(fake.requests.map((request) => request.body)).toEqual([{ p_since: null }, { p_since: null }, { p_since: null }]);
   });
 
   it("answers the same period from memory for 60 seconds, then reads again", async () => {
@@ -174,7 +211,7 @@ describe("readOpenNumbers", () => {
     expect(second.fake.requests).toEqual([]);
     const third = platform(() => readOpenNumbers(period, 61_001), reply);
     await third.result;
-    expect(third.fake.requests).toHaveLength(2);
+    expect(third.fake.requests).toHaveLength(3);
   });
 
   it("forgets a failed read, so the next request tries again", async () => {
@@ -183,7 +220,7 @@ describe("readOpenNumbers", () => {
     await expect(failing.result).rejects.toThrow(/open_numbers/);
     const retry = platform(() => readOpenNumbers(period, 2_000), reply);
     await retry.result;
-    expect(retry.fake.requests).toHaveLength(2);
+    expect(retry.fake.requests).toHaveLength(3);
   });
 
   it("refuses a document of the wrong shape", async () => {
