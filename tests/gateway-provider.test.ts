@@ -74,6 +74,24 @@ beforeEach(() => {
   signer.current = SIGNER;
 });
 
+describe("LiveProvider: a release from the workspace's escrow (milestone escrow E4)", () => {
+  it("calls release(bytes32) on the escrow from the operating wallet, under the attempt's key, and transfers nothing", async () => {
+    const c = circle();
+    const execute = vi.fn(async () => ({ data: { id: "circle-release-1" } }));
+    const getTransaction = vi.fn(async () => ({ data: { transaction: { id: "circle-release-1", state: "COMPLETE", txHash: `0x${"3".repeat(64)}` } } }));
+    Object.assign(c.raw, { createContractExecutionTransaction: execute, getTransaction });
+    const escrow = { contract: `0x${"e5".repeat(20)}`, holdId: `0x${"1".repeat(64)}` };
+    const result = await new LiveProvider(CHAIN, { client: c.client, fetch: gateway().fetch }).transfer({
+      fromAccountId: "account-1", toAddress: PAYEE, amount: 2, memo: "Milestone m-1", idempotencyKey: KEY, route: "escrow", escrow,
+    });
+    expect(execute).toHaveBeenCalledWith(
+      expect.objectContaining({ walletId: "wallet-op", contractAddress: escrow.contract, abiFunctionSignature: "release(bytes32)", abiParameters: [escrow.holdId], idempotencyKey: KEY })
+    );
+    expect(c.raw.createTransaction).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ providerTxId: "circle-release-1", status: "confirmed", txHash: `0x${"3".repeat(64)}`, chain: "ARC-TESTNET", route: "escrow" });
+  });
+});
+
 describe("LiveProvider: a payout from the Gateway balance", () => {
   it("signs a burn intent salted by the attempt with the signer, sends it with forwarding, and is paid on the mint", async () => {
     const c = circle();

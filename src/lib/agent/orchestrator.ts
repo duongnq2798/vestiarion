@@ -32,10 +32,12 @@ import { OPEN_PAYABLE_STATUSES, summarizePayableObligations, sumUsdcAmounts } fr
 import { ARC_TESTNET_EURC, quoteEurcInUsdc, type EurcQuote } from "../fx/quote";
 import { bridgeFee as irisBridgeFee, EXPECTED_BRIDGE_SECONDS, type BridgeFee } from "../circle/cctp";
 import { EXPECTED_GATEWAY_SECONDS } from "../circle/gateway";
+import { holdId } from "../circle/escrow-holds";
+import { readEscrowContract } from "../circle/escrow-setup";
 import { gatewayQuoter, type GatewayQuote } from "../circle/gateway-quote";
 
 export type { GatewayQuote };
-import type { PayoutRoute } from "../circle/types";
+import type { CrossChainRoute, PayoutRoute } from "../circle/types";
 import { BRIDGE_FEE_CAP_PERCENT, payeeChain } from "../payee-chains";
 import {
   amountToPay,
@@ -476,7 +478,7 @@ async function paymentIntentsFor(
  * decision weighs that route and no other (review I3). Null with no intent,
  * or one from before routes were kept.
  */
-async function pinnedPayoutRoute(orgDb: OrgDb, invoiceId: string): Promise<PayoutRoute | null> {
+async function pinnedPayoutRoute(orgDb: OrgDb, invoiceId: string): Promise<CrossChainRoute | null> {
   const result = await orgDb.from("payment_intents").select("payout_route").eq("source_type", "invoice").eq("source_id", invoiceId).maybeSingle();
   if (result.error) throw new Error(result.error.message);
   const route = (result.data as { payout_route?: string | null } | null)?.payout_route;
@@ -1041,7 +1043,7 @@ async function decideApPayable(
   // balance when it covers the amount and its fee, and that fee is no higher
   // than CCTP's; CCTP otherwise. The fee weighed from here on is the route's.
   const pinned = crossChain && !isEurc ? await pinnedPayoutRoute(db, invoice.id) : null;
-  const route: PayoutRoute =
+  const route: CrossChainRoute =
     pinned ??
     (gateway !== null && gateway.balanceUsdc >= amount + gateway.feeUsdc && (fee === null || gateway.feeUsdc <= fee.feeUsdc) ? "gateway" : "cctp");
   const viaGateway = crossChain && route === "gateway";
@@ -1695,12 +1697,38 @@ export async function releaseMilestoneIfNotPaused(
  * idempotency key makes `executePayment` reconcile an existing intent rather
  * than pay again. Mirrors `payInvoice` (src/lib/agent/pay.ts) for invoices.
  */
+/**
+ * A milestone locked in escrow is paid by releasing its hold (milestone escrow E4): the workspace's contract
+ * and the hold's id. A hold whose amount no longer matches the milestone's is not released: a person decides.
+ * Null for a milestone with no funded hold. A read that fails throws: paying without knowing could send a
+ * transfer on top of a hold.
+ */
+async function escrowReleaseOf(milestoneId: string, amount: number): Promise<{ contract: string; holdId: string } | { mismatch: string } | null> {
+  const found = await db().from("milestones").select("escrow_state, escrow_amount").eq("id", milestoneId).maybeSingle();
+  if (found.error) throw new Error(found.error.message);
+  const row = found.data as { escrow_state?: string | null; escrow_amount?: string | number | null } | null;
+  if (!row || typeof row !== "object" || row.escrow_state !== "funded") return null;
+  const held = Number(row.escrow_amount);
+  if (Math.round(held * 1_000_000) !== Math.round(amount * 1_000_000)) {
+    return { mismatch: ` [not paid: ${held} USDC is locked in escrow for this milestone, which now asks ${amount} USDC; held for a person]` };
+  }
+  const contract = await readEscrowContract();
+  if (!contract?.address) throw new Error("This milestone is locked in escrow, but the workspace's escrow contract could not be read.");
+  return { contract: contract.address, holdId: holdId(milestoneId) };
+}
+
 async function releaseMilestone(
   input: { milestoneId: string; destination: string; amount: number },
   deps: { provider: ChainProvider; operatingAccountId: string }
 ): Promise<PayStepOutcome> {
   let result;
+  let escrow: { contract: string; holdId: string } | null = null;
   try {
+    const found = await escrowReleaseOf(input.milestoneId, input.amount);
+    if (found && "mismatch" in found) {
+      return { status: "held", txRef: null, paymentExecution: null, reasoningSuffix: found.mismatch, heldBecausePaused: false, operatingBalance: null };
+    }
+    escrow = found;
     result = await executePayment(
       {
         sourceType: "milestone",
@@ -1709,6 +1737,7 @@ async function releaseMilestone(
         destination: input.destination,
         amount: input.amount,
         memo: `Milestone ${input.milestoneId}`,
+        ...(escrow ? { route: "escrow" as const, escrow } : {}),
       },
       { provider: deps.provider }
     );
@@ -1725,6 +1754,19 @@ async function releaseMilestone(
   }
 
   const status = result.status === "confirmed" ? "paid" : result.status === "pending" ? "verified" : "held";
+  // A confirmed release from escrow: the milestone's hold is released, with its transaction (milestone escrow E4).
+  // Best effort, as the balance sync below: the payment is real whatever this write does.
+  if (escrow && result.status === "confirmed") {
+    try {
+      const released = await db()
+        .from("milestones")
+        .update({ escrow_state: "released", escrow_release_tx_hash: result.txHash ?? null })
+        .eq("id", input.milestoneId);
+      if (released.error) console.error("escrow: the release was not recorded on the milestone", input.milestoneId, released.error.message);
+    } catch (error) {
+      console.error("escrow: the release was not recorded on the milestone", input.milestoneId, error instanceof Error ? error.message : error);
+    }
+  }
   let reasoningSuffix = "";
   let operatingBalance: number | null = null;
   if (result.status === "failed") {

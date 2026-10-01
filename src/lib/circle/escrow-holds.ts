@@ -118,6 +118,11 @@ export async function lockMilestone(
   if (milestone.status === "paid") throw new EscrowHoldError("Only a milestone that is not paid yet can be locked in escrow.");
   if (!contractor?.address) throw new EscrowHoldError(`${contractor?.name ?? "The contractor"} has no Arc testnet address to lock this milestone for.`);
   if ((contractor.chain ?? "ARC-TESTNET") !== "ARC-TESTNET") throw new EscrowHoldError(`Escrow pays on Arc testnet; ${contractor.name} is paid on another chain.`);
+  // A milestone whose payment has started is paid by it: locking it too would commit its amount twice.
+  const started = unwrap(
+    await db().from("payment_intents").select("id").eq("source_type", "milestone").eq("source_id", milestone.id).limit(1)
+  ) as Array<{ id: string }>;
+  if (started.length > 0) throw new EscrowHoldError("This milestone's payment has already started, so it cannot be locked in escrow.");
 
   const now = input.now ?? new Date();
   const refundAfter = new Date(`${input.refundAfter}T00:00:00Z`);

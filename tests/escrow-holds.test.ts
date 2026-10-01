@@ -28,7 +28,7 @@ const REFUND_UNIX = String(Date.parse("2026-10-31T00:00:00Z") / 1000);
 const base = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k" });
 const config: VestiarionConfig = { ...base, chain: { ...base.chain, circleApiKey: "TEST_API_KEY:k:s", circleEntitySecret: "5eed".repeat(16) } };
 
-function database(milestone: Record<string, unknown> = {}, operating: Record<string, unknown> = {}) {
+function database(milestone: Record<string, unknown> = {}, operating: Record<string, unknown> = {}, intents: Array<Record<string, unknown>> = []) {
   let row: Record<string, unknown> = {
     id: MILESTONE, status: "pending", amount: "2", escrow_state: null,
     counterparties: { address: PAYEE, chain: "ARC-TESTNET", name: "Centronex" }, ...milestone,
@@ -39,6 +39,7 @@ function database(milestone: Record<string, unknown> = {}, operating: Record<str
       const account = { id: "acct-op", circle_wallet_id: "wallet-op", address: "0x97F85033bBD83870a841cF7153F35b387746B6b6", balance: "10", ...operating };
       return { body: wantsObject ? account : [account] };
     }
+    if (request.path === "/rest/v1/payment_intents") return { body: intents };
     if (request.path === "/rest/v1/escrow_contracts") {
       const contract = { id: "esc-1", address: ESCROW };
       return { body: wantsObject ? contract : [contract] };
@@ -147,6 +148,16 @@ describe("lockMilestone", () => {
   ])("refuses %s, before calling Circle", async (_what, milestone, operating, refundAfter, message) => {
     const c = circle();
     await expect(lock(database(milestone, operating), c, chain(0), refundAfter)).rejects.toEqual(new EscrowHoldError(message));
+    expect(c.calls).toEqual([]);
+  });
+});
+
+describe("a milestone whose payment has started", () => {
+  it("is never locked in escrow: a transfer and a hold would both commit its amount (review focus 1)", async () => {
+    const c = circle();
+    await expect(lock(database({}, {}, [{ id: "intent-1" }]), c, chain(0))).rejects.toEqual(
+      new EscrowHoldError("This milestone's payment has already started, so it cannot be locked in escrow.")
+    );
     expect(c.calls).toEqual([]);
   });
 });

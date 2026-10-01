@@ -121,6 +121,8 @@ export interface PaymentRequest {
    * whatever a request says then.
    */
   route?: PayoutRoute;
+  /** A milestone locked in escrow: the hold its payment releases, on the `escrow` route (milestone escrow E4). */
+  escrow?: { contract: string; holdId: string };
 }
 
 /** The terminally failed attempt a retry followed: ids and Circle's states only. */
@@ -216,7 +218,7 @@ function fromRow(row: PaymentIntentRow): PaymentIntent {
     updatedAt: row.updated_at,
     destinationChain: row.destination_chain ?? null,
     mintTxHash: row.mint_tx_hash ?? null,
-    route: row.payout_route === "gateway" || row.payout_route === "cctp" ? row.payout_route : null,
+    route: row.payout_route === "gateway" || row.payout_route === "cctp" || row.payout_route === "escrow" ? row.payout_route : null,
   };
 }
 
@@ -243,6 +245,8 @@ export class SupabasePaymentIntentStore implements PaymentIntentStore {
       // Written for a bridged payment only, like token: a payment on Arc does not need the column (0044).
       // The route is written with it, once: a duplicate insert is ignored, so the first attempt's route stays (0045).
       ...(paidAcrossChains(input.destinationChain) ? { destination_chain: input.destinationChain, payout_route: input.route ?? "cctp" } : {}),
+      // A milestone locked in escrow keeps the escrow route from its first attempt: never a transfer after a release.
+      ...(input.escrow ? { payout_route: "escrow" } : {}),
     }, { onConflict: "source_type,source_id", ignoreDuplicates: true });
     if (result.error) throw new Error(result.error.message);
     return this.getBySource(input.sourceType, input.sourceId);
@@ -435,7 +439,14 @@ export async function executePayment(
     // A Gateway transfer is refused again only when its whole spec repeats: the same
     // salt with another amount (a discount that lapsed), payee or chain would be a
     // second transfer. A later attempt is sent only as the first one asked (review C1).
-    const route = paidAcrossChains(request.destinationChain) ? (intent.route ?? "cctp") : null;
+    const route = intent.route === "escrow" ? "escrow" : paidAcrossChains(request.destinationChain) ? (intent.route ?? "cctp") : null;
+    // A release from escrow and a transfer are never both sent for one payment (milestone escrow E4).
+    if (route === "escrow" && !request.escrow) {
+      throw new Error("This milestone's payment is a release from escrow; nothing was sent. Check its hold on Arc testnet before paying it another way.");
+    }
+    if (request.escrow && route !== "escrow") {
+      throw new Error("This milestone is locked in escrow, but its payment was started as a transfer; nothing was sent. Check it before paying it.");
+    }
     if (route === "gateway" && !sameGatewayPayout(intent, request)) {
       throw new Error(
         "This payout was first sent through Gateway with another amount, payee or chain; nothing was sent. Check with Circle whether the first transfer was made before paying it again."
@@ -452,6 +463,7 @@ export async function executePayment(
       ...(request.maxBridgeFeeUsdc != null ? { maxBridgeFeeUsdc: request.maxBridgeFeeUsdc } : {}),
       // The intent's route, never the request's: an intent from before routes were kept went through CCTP.
       ...(route ? { route } : {}),
+      ...(route === "escrow" && request.escrow ? { escrow: request.escrow } : {}),
     });
     intent = await store.recordResult(idempotencyKey, result);
     return execution(intent, false, retriedAfter);

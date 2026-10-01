@@ -77,7 +77,7 @@ class MemoryStore implements PaymentIntentStore {
       previousAttempts: [],
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
-      route: input.destinationChain && input.destinationChain !== "ARC-TESTNET" ? (input.route ?? "cctp") : null,
+      route: input.escrow ? "escrow" : input.destinationChain && input.destinationChain !== "ARC-TESTNET" ? (input.route ?? "cctp") : null,
       destinationChain: input.destinationChain && input.destinationChain !== "ARC-TESTNET" ? input.destinationChain : null,
     };
     return { ...this.intent };
@@ -326,6 +326,38 @@ describe("payment idempotency", () => {
     const expired = await afterGateway("FAILED");
     expect(expired.provider.transfers).toHaveLength(1);
     expect(expired.provider.transfers[0]).toMatchObject({ route: "gateway", idempotencyKey: paymentIdempotencyKey("invoice", request.sourceId, 2) });
+  });
+
+  it("keeps a milestone's escrow release an escrow release, and never releases a payment started as a transfer (milestone escrow E4)", async () => {
+    const ESCROW = { contract: `0x${"e5".repeat(20)}`, holdId: `0x${"1".repeat(64)}` };
+    const escrowed = { ...request, sourceType: "milestone" as const, escrow: ESCROW, route: "escrow" as const };
+
+    // The first attempt: the intent keeps the escrow route, and the release goes out with its hold.
+    const first = new MemoryStore();
+    const provider = new FakeProvider();
+    provider.transferResults.push(transferResult("confirmed"));
+    await executePayment(escrowed, { provider, store: first });
+    expect(first.intent?.route).toBe("escrow");
+    expect(provider.transfers[0]).toMatchObject({ route: "escrow", escrow: ESCROW });
+
+    // A later attempt asked without the hold: nothing is transferred instead.
+    const pinned = new MemoryStore();
+    await pinned.ensure({ ...escrowed, idempotencyKey: paymentIdempotencyKey("milestone", request.sourceId), provider: "circle" });
+    pinned.intent = { ...pinned.intent!, status: "failed", attemptCount: 1 };
+    const plain = new FakeProvider();
+    const refused = await executePayment({ ...request, sourceType: "milestone" }, { provider: plain, store: pinned });
+    expect(plain.transfers).toEqual([]);
+    expect(refused.status).toBe("failed");
+    expect(refused.error).toBe("This milestone's payment is a release from escrow; nothing was sent. Check its hold on Arc testnet before paying it another way.");
+
+    // A payment started as a transfer is never released from escrow on top of it.
+    const transferred = new MemoryStore();
+    await transferred.ensure({ ...request, sourceType: "milestone", idempotencyKey: paymentIdempotencyKey("milestone", request.sourceId), provider: "circle" });
+    transferred.intent = { ...transferred.intent!, status: "failed", attemptCount: 1 };
+    const both = new FakeProvider();
+    const stopped = await executePayment(escrowed, { provider: both, store: transferred });
+    expect(both.transfers).toEqual([]);
+    expect(stopped.error).toBe("This milestone is locked in escrow, but its payment was started as a transfer; nothing was sent. Check it before paying it.");
   });
 
   it("sends a Gateway retry with the same amount, payee and chain as before, in whatever case the address is written", async () => {
