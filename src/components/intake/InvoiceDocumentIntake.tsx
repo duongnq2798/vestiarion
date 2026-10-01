@@ -42,7 +42,8 @@ export function DocumentDraft({
   result: DocumentReadResult;
   counterparties: IntakeCounterparty[];
   orgSlug: string;
-  onAdded: () => void;
+  /** Runs once the invoice is added: the tab hides this draft. */
+  onAdded?: () => void;
 }) {
   const { draft, document } = result;
   if (!draft || !document) return null;
@@ -63,7 +64,7 @@ export function DocumentDraft({
   };
 
   return (
-    <div className="space-y-4 border-t border-line pt-6">
+    <div className="space-y-4">
       <Callout tone={issues.length > 0 ? "held" : "agent"}>
         <div className="space-y-2">
           <p>
@@ -120,16 +121,18 @@ export default function InvoiceDocumentIntake({ counterparties, orgSlug }: { cou
         </div>
       </form>
       {state.ok && state.nonce !== added && (
-        <DocumentDraft
-          key={state.nonce}
-          result={state}
-          counterparties={counterparties}
-          orgSlug={orgSlug}
-          onAdded={() => {
-            setAdded(state.nonce ?? null);
-            if (inputRef.current) inputRef.current.value = "";
-          }}
-        />
+        <div className="border-t border-line pt-6">
+          <DocumentDraft
+            key={state.nonce}
+            result={state}
+            counterparties={counterparties}
+            orgSlug={orgSlug}
+            onAdded={() => {
+              setAdded(state.nonce ?? null);
+              if (inputRef.current) inputRef.current.value = "";
+            }}
+          />
+        </div>
       )}
     </div>
   );

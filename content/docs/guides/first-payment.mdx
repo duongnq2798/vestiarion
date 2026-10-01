@@ -98,6 +98,12 @@ Choose **Add invoice**. The page confirms with "Invoice added for *Name*. The ag
 
 Instead of typing an invoice in, choose **From a document**. Choose a PDF or an email, or paste the invoice's text under **Or paste the invoice's text**, then choose **Read invoice**. The workspace's model reads the vendor, the amount, the currency, the due date, the purchase order, any early-payment discount and the address the invoice asks to be paid to. It fills in the invoice form below with them. Nothing is added until you check the form and choose **Add invoice**.
 
+<Screenshot
+  src="/docs/guides/first-payment-document.png"
+  alt="An invoice from Northstar Studio read from a PDF by DeepSeek, on the AP / AR page. A callout asks for every field to be checked and warns that the invoice asks to be paid to a different address than the one on file. Below it, the invoice form is filled in: Counterparty Northstar Studio · vendor, Amount 12.50, Currency USDC, Due date 10/15/2026, Memo October design retainer, PO reference PO-2207, and Goods or services received left unticked."
+  caption="An invoice read from a PDF, with its address checked against the one on file. Nothing is added until you choose Add invoice."
+/>
+
 What the model read is checked before you see it:
 
 - An amount, purchase order or address that the document does not contain is left blank: "The amount the model gave is not in the document, so it was left blank."

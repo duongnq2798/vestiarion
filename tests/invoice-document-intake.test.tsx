@@ -51,7 +51,7 @@ describe("the From a document tab", () => {
 });
 
 describe("an invoice read from a document", () => {
-  const markup = renderToStaticMarkup(<DocumentDraft result={RESULT} orgSlug="acme" counterparties={COUNTERPARTIES} onAdded={() => {}} />);
+  const markup = renderToStaticMarkup(<DocumentDraft result={RESULT} orgSlug="acme" counterparties={COUNTERPARTIES} />);
 
   it("names the reader and asks for every field to be checked", () => {
     expect(markup).toContain("Read the invoice from Northwind Hosting. Check every field before adding it.");
