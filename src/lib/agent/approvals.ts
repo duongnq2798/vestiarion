@@ -8,6 +8,7 @@ import { payInvoice, syncOperatingBalance } from "./pay";
 import { invoiceDiscount, type InvoiceDiscount } from "./payment-timing";
 import { paidAcrossChains, payeeChain } from "../payee-chains";
 import { bridgeFee, type BridgeFee } from "../circle/cctp";
+import { gatewayQuoter, type GatewayQuote } from "../circle/gateway-quote";
 
 /**
  * The approvals library (spec §6): lets a person pay, reject or return a
@@ -138,6 +139,8 @@ interface IntentState {
   provider_state: string | null;
   /** Circle's `errorReason`; read only by the listing. */
   failure_reason?: string | null;
+  /** The route a payment across chains took on its first attempt (Gateway payouts G2); read only by the approval. */
+  payout_route?: string | null;
 }
 
 /**
@@ -241,7 +244,7 @@ function lastAttemptOf(intent: IntentState | null, token: Stablecoin = "USDC"): 
 async function paymentIntentOf(invoiceId: string): Promise<IntentState | null> {
   const result = await db()
     .from("payment_intents")
-    .select("status, provider_tx_id, last_error, provider_state")
+    .select("status, provider_tx_id, last_error, provider_state, payout_route")
     .eq("source_type", "invoice")
     .eq("source_id", invoiceId)
     .maybeSingle();
@@ -475,7 +478,11 @@ function approvalPaidSummary(
  * approved a payment to it, having seen it.
  */
 export async function approveAndPay(
-  input: { actorId: string; invoiceId: string; shownAddress?: string }
+  input: { actorId: string; invoiceId: string; shownAddress?: string },
+  options: {
+    bridgeFee?: (chain: string, amount: number) => Promise<BridgeFee>;
+    gatewayQuote?: (chain: string, amount: number) => Promise<GatewayQuote | null>;
+  } = {}
 ): Promise<{ status: "paid" | "matched" | "held"; txRef: string | null; note: string }> {
   const orgId = currentOrgId();
   const invoice = await loadWaitingPayable(input.invoiceId);
@@ -499,7 +506,8 @@ export async function approveAndPay(
   // Circle ended in a terminal failure moved nothing and is sent again, so it
   // is checked like any new payment.
   const provider = getChainProvider();
-  const alreadySent = transferExists(await paymentIntentOf(invoice.id));
+  const intent = await paymentIntentOf(invoice.id);
+  const alreadySent = transferExists(intent);
   if (!alreadySent && invoice.currency === "USDC") {
     const balance = provider.mode === "live" ? await syncOperatingBalance(operating.id) : operating.balance;
     if (balance < invoice.amount) {
@@ -514,6 +522,16 @@ export async function approveAndPay(
       throw new ApprovalError("insufficient_funds", `The operating wallet holds ${balance} EURC, less than this invoice.`);
     }
   }
+
+  // A new payment to another chain records both routes' fees, read now, with the route it takes, so the
+  // card can set one against the other. A transfer already sent is only reconciled: its decision recorded them.
+  const payout =
+    !alreadySent && invoice.currency === "USDC" && paidAcrossChains(invoice.destinationChain)
+      ? await payoutEvidence(invoice.destinationChain as string, invoice.amount, intent?.payout_route ?? null, {
+          bridgeFee: options.bridgeFee ?? ((chain, amount) => bridgeFee(chain, amount)),
+          gatewayQuote: options.gatewayQuote ?? gatewayQuoter(provider, db()),
+        })
+      : null;
 
   const claim = await db()
     .rpc("claim_invoice_decision", { p_invoice_id: invoice.id, p_by: input.actorId, p_decision: "approve" })
@@ -627,10 +645,45 @@ export async function approveAndPay(
       // attempt Circle failed before it: ids and states only.
       ...(result.execution ? { attempt: result.execution.attempt } : {}),
       ...(result.execution?.retriedAfter ? { retriedAfter: result.execution.retriedAfter } : {}),
+      // A new payment to another chain: the route it took and both routes' fees, as an ap_pay entry records them.
+      ...(payout ? { payout } : {}),
     },
   });
 
   return { status: result.status, txRef: result.txRef, note: result.note };
+}
+
+/**
+ * What an approved payment to another chain records of its route: the route it takes (the one an
+ * earlier attempt took, which every later attempt keeps; CCTP for a first one, Gateway payouts R7),
+ * that route's fee, and both routes' fees, read now. A fee that cannot be read is null: reading it
+ * never stops an approval.
+ */
+async function payoutEvidence(
+  chain: string,
+  amount: number,
+  pinned: string | null,
+  read: {
+    bridgeFee: (chain: string, amount: number) => Promise<BridgeFee>;
+    gatewayQuote: (chain: string, amount: number) => Promise<GatewayQuote | null>;
+  }
+): Promise<Record<string, unknown>> {
+  const [cctpFeeUsdc, gateway] = await Promise.all([
+    read.bridgeFee(chain, amount).then(
+      (fee) => fee.feeUsdc,
+      () => null
+    ),
+    read.gatewayQuote(chain, amount).catch(() => null),
+  ]);
+  const route = pinned === "gateway" ? "gateway" : "cctp";
+  return {
+    chain,
+    route,
+    domain: payeeChain(chain).domain,
+    feeUsdc: route === "gateway" ? (gateway?.feeUsdc ?? null) : cctpFeeUsdc,
+    ...(route === "gateway" && gateway ? { gatewayBalanceUsdc: gateway.balanceUsdc } : {}),
+    quotes: { cctpFeeUsdc, gatewayFeeUsdc: gateway?.feeUsdc ?? null },
+  };
 }
 
 export async function rejectInvoice(input: { actorId: string; invoiceId: string; reason?: string }): Promise<void> {
