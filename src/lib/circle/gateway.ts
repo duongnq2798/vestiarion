@@ -50,6 +50,20 @@ export function gatewaySalt(attemptKey: string): `0x${string}` {
   return `0x${createHash("sha256").update(`${attemptKey}:gateway`, "utf8").digest("hex")}`;
 }
 
+/**
+ * A Circle idempotency key for one Gateway step, from its seed: the same for
+ * every run of that step, so Circle answers a retry with the transaction it
+ * already made. Circle takes a UUID; this is the first 16 bytes of
+ * sha256(`vestiarion/gateway/v1/<seed>`), shaped as one, as `bridgeStepKey` does.
+ */
+export function gatewayStepKey(seed: string): string {
+  const hash = createHash("sha256").update(`vestiarion/gateway/v1/${seed}`, "utf8").digest();
+  hash[6] = (hash[6] & 0x0f) | 0x50;
+  hash[8] = (hash[8] & 0x3f) | 0x80;
+  const hex = hash.subarray(0, 16).toString("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+}
+
 export interface GatewayPayout {
   /** The operating wallet: the Gateway balance's depositor. */
   depositor: string;

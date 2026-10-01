@@ -20,6 +20,8 @@ export const PERMISSIONS = {
   "members.manage": ["owner", "admin"],
   "api_keys.manage": ["owner", "admin"],
   "webhooks.manage": ["owner", "admin"],
+  // Moving treasury cash between the workspace's own wallets, such as into its Gateway balance.
+  "treasury.manage": ["owner", "admin"],
   "org.administer": ["owner"],
 } as const satisfies Record<string, readonly OrgRole[]>;
 
