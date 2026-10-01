@@ -31,6 +31,7 @@ describe("CycleJournal — recording", () => {
     expect(j.failedStage()).toBe("ap");
     expect(j.stages().filter((s) => s.status === "completed").map((s) => s.stage)).toEqual([
       "reconcile",
+      "receipts",
       "compliance",
       "follow_up",
     ]);
