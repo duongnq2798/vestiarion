@@ -31,6 +31,19 @@ describe("DecisionCard", () => {
     expect(html(<DecisionCard decision={base} orgSlug="acme" />)).not.toContain("<footer");
   });
 
+  it.each(["deepseek", "anthropic", "openai", "llm"])("names no model when %s decided: its reasoning is the agent's", (mode) => {
+    const markup = html(<DecisionCard decision={{ ...base, decisionMode: mode }} orgSlug="acme" />);
+    expect(markup.toLowerCase()).not.toContain(mode);
+    expect(markup).not.toContain("Written policy");
+  });
+
+  it("marks a decision the written policy made because no model answered", () => {
+    const markup = html(<DecisionCard decision={{ ...base, decisionMode: "heuristic" }} orgSlug="acme" />);
+    expect(markup).toContain("Written policy");
+    expect(markup).toContain('title="No model answered, so the written policy decided."');
+    expect(markup).not.toContain("heuristic");
+  });
+
   it("links its audit entry and its transaction", () => {
     const markup = html(<DecisionCard decision={{ ...base, auditSeq: 42, txHash: `0x${"ab".repeat(32)}` }} orgSlug="acme" />);
     expect(markup).toContain('href="/o/acme/audit#seq-42"');

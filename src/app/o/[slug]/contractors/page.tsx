@@ -76,12 +76,12 @@ export default async function ContractorsPage({ params }: { params: Promise<{ sl
             {decisions.map((decision, index) => (
               <div key={decision.id}>
                 <DecisionCard decision={decision} orgSlug={slug} />
-                {canWrite && (
+                {/* A paid milestone cannot be unverified (the action refuses it), so it has no controls. */}
+                {canWrite && milestones[index].status !== "paid" && (
                   <MilestoneVerification
                     orgSlug={slug}
                     milestoneId={milestones[index].id}
                     verified={milestones[index].verified}
-                    disabled={milestones[index].status === "paid"}
                   />
                 )}
               </div>

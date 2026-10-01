@@ -9,7 +9,7 @@ import { useActionForm } from "@/components/ui/useActionForm";
 const INITIAL: MilestoneActionResult = { ok: false, message: "" };
 
 /** A person's own check of a milestone, recorded with a note; the agent pays verified milestones. */
-export default function MilestoneVerification({ milestoneId, verified, disabled, orgSlug }: { milestoneId: string; verified: boolean; disabled?: boolean; orgSlug: string }) {
+export default function MilestoneVerification({ milestoneId, verified, orgSlug }: { milestoneId: string; verified: boolean; orgSlug: string }) {
   const { state, pending, formProps } = useActionForm(manualMilestoneVerificationAction, INITIAL, { resetOnSuccess: true, toastOnSuccess: true });
   const noteId = `milestone-note-${milestoneId}`;
 
@@ -28,11 +28,11 @@ export default function MilestoneVerification({ milestoneId, verified, disabled,
           required
           minLength={3}
           maxLength={280}
-          disabled={disabled || pending}
+          disabled={pending}
           placeholder={verified ? "Reason for revoking verification" : "Evidence checked or approver note"}
           className="h-11 sm:h-8"
         />
-        <SubmitButton name="intent" value={verified ? "revoke" : "verify"} variant="secondary" size="sm" disabled={disabled} pendingLabel="Recording…" className="h-11 shrink-0 sm:h-8">
+        <SubmitButton name="intent" value={verified ? "revoke" : "verify"} variant="secondary" size="sm" pendingLabel="Recording…" className="h-11 shrink-0 sm:h-8">
           {verified ? "Revoke manually" : "Verify manually"}
         </SubmitButton>
       </div>
