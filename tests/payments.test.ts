@@ -78,6 +78,7 @@ class MemoryStore implements PaymentIntentStore {
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
       route: input.destinationChain && input.destinationChain !== "ARC-TESTNET" ? (input.route ?? "cctp") : null,
+      destinationChain: input.destinationChain && input.destinationChain !== "ARC-TESTNET" ? input.destinationChain : null,
     };
     return { ...this.intent };
   }
@@ -281,6 +282,39 @@ describe("payment idempotency", () => {
       await executePayment({ ...request, destinationChain: "BASE-SEPOLIA", route: asked }, { provider, store });
       expect(provider.transfers[0].route, `kept ${kept}, asked ${asked}`).toBe(kept);
     }
+  });
+
+  it("sends a Gateway retry only as the first attempt asked: the same amount, payee and chain, or not at all (review C1)", async () => {
+    // Gateway refuses a transfer spec it has seen, keyed on the whole spec: the same salt with
+    // another amount (a discount that lapsed), another address or another chain is a new transfer.
+    const changes: Array<[string, Partial<PaymentRequest>]> = [
+      ["amount", { amount: 13 }],
+      ["destination", { destination: "0x9999" }],
+      ["chain", { destinationChain: "ARB-SEPOLIA" }],
+    ];
+    for (const [what, change] of changes) {
+      const store = new MemoryStore();
+      await store.ensure({ ...request, destinationChain: "BASE-SEPOLIA", route: "gateway", idempotencyKey: paymentIdempotencyKey("invoice", request.sourceId), provider: "circle" });
+      store.intent = { ...store.intent!, status: "failed", attemptCount: 1, lastError: "Gateway did not answer the transfer" };
+      const provider = new FakeProvider();
+      provider.transferResults.push(transferResult("confirmed"));
+      const execution = await executePayment({ ...request, destinationChain: "BASE-SEPOLIA", ...change }, { provider, store });
+      expect(provider.transfers, what).toEqual([]);
+      expect(execution.status, what).toBe("failed");
+      expect(execution.error, what).toBe(
+        "This payout was first sent through Gateway with another amount, payee or chain; nothing was sent. Check with Circle whether the first transfer was made before paying it again."
+      );
+    }
+  });
+
+  it("sends a Gateway retry with the same amount, payee and chain as before, in whatever case the address is written", async () => {
+    const store = new MemoryStore();
+    await store.ensure({ ...request, destination: "0xAbCd", destinationChain: "BASE-SEPOLIA", route: "gateway", idempotencyKey: paymentIdempotencyKey("invoice", request.sourceId), provider: "circle" });
+    store.intent = { ...store.intent!, status: "failed", attemptCount: 1 };
+    const provider = new FakeProvider();
+    provider.transferResults.push(transferResult("confirmed"));
+    await executePayment({ ...request, destination: "0xabcd", destinationChain: "BASE-SEPOLIA" }, { provider, store });
+    expect(provider.transfers[0]).toMatchObject({ amount: 12.5, route: "gateway", destinationChain: "BASE-SEPOLIA" });
   });
 
   it("pays an intent from before routes were kept through CCTP, as it was", async () => {

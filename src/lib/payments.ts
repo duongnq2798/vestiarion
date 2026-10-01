@@ -356,6 +356,15 @@ function execution(intent: PaymentIntent, reconciled: boolean, retriedAfter: Ret
   };
 }
 
+/** Whether a request asks for the transfer its intent's first attempt asked for: the same amount, payee and chain. */
+function sameGatewayPayout(intent: PaymentIntent, request: PaymentRequest): boolean {
+  return (
+    Math.round(intent.amount * 1_000_000) === Math.round(request.amount * 1_000_000) &&
+    intent.destination.toLowerCase() === request.destination.toLowerCase() &&
+    (intent.destinationChain ?? null) === (request.destinationChain ?? null)
+  );
+}
+
 /**
  * Pays a source at most once per attempt, and never while an earlier
  * transfer could still settle.
@@ -422,6 +431,15 @@ export async function executePayment(
   }
 
   try {
+    // A Gateway transfer is refused again only when its whole spec repeats: the same
+    // salt with another amount (a discount that lapsed), payee or chain would be a
+    // second transfer. A later attempt is sent only as the first one asked (review C1).
+    const route = paidAcrossChains(request.destinationChain) ? (intent.route ?? "cctp") : null;
+    if (route === "gateway" && !sameGatewayPayout(intent, request)) {
+      throw new Error(
+        "This payout was first sent through Gateway with another amount, payee or chain; nothing was sent. Check with Circle whether the first transfer was made before paying it again."
+      );
+    }
     const result = await dependencies.provider.transfer({
       fromAccountId: request.fromAccountId,
       toAddress: request.destination,
@@ -432,7 +450,7 @@ export async function executePayment(
       ...(request.destinationChain ? { destinationChain: request.destinationChain } : {}),
       ...(request.maxBridgeFeeUsdc != null ? { maxBridgeFeeUsdc: request.maxBridgeFeeUsdc } : {}),
       // The intent's route, never the request's: an intent from before routes were kept went through CCTP.
-      ...(paidAcrossChains(request.destinationChain) ? { route: intent.route ?? "cctp" } : {}),
+      ...(route ? { route } : {}),
     });
     intent = await store.recordResult(idempotencyKey, result);
     return execution(intent, false, retriedAfter);
