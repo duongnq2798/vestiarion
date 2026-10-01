@@ -77,6 +77,7 @@ class MemoryStore implements PaymentIntentStore {
       previousAttempts: [],
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
+      route: input.destinationChain && input.destinationChain !== "ARC-TESTNET" ? (input.route ?? "cctp") : null,
     };
     return { ...this.intent };
   }
@@ -260,6 +261,43 @@ describe("payment idempotency", () => {
     expect(new Set(keys).size).toBe(3);
     expect(paymentIdempotencyKey("milestone", request.sourceId, 2)).toBe(attemptKey("milestone", request.sourceId, 2));
     expect(paymentIdempotencyKey("milestone", request.sourceId, 2)).not.toBe(keys[1]);
+  });
+
+  it("sends a payment across chains by the route its first attempt chose (Gateway payouts G2)", async () => {
+    const provider = new FakeProvider();
+    provider.transferResults.push(transferResult("confirmed"));
+    await executePayment({ ...request, destinationChain: "BASE-SEPOLIA", route: "gateway" }, { provider, store: new MemoryStore() });
+    expect(provider.transfers[0].route).toBe("gateway");
+  });
+
+  it("keeps an intent's route for every later attempt, whatever the request says now", async () => {
+    // A Gateway transfer whose answer was lost must never be followed by a CCTP one: that would pay twice.
+    for (const [kept, asked] of [["gateway", "cctp"], ["cctp", "gateway"]] as const) {
+      const store = new MemoryStore();
+      await store.ensure({ ...request, destinationChain: "BASE-SEPOLIA", route: kept, idempotencyKey: paymentIdempotencyKey("invoice", request.sourceId), provider: "circle" });
+      store.intent = { ...store.intent!, status: "failed", lastError: "Gateway did not answer the transfer" };
+      const provider = new FakeProvider();
+      provider.transferResults.push(transferResult("confirmed"));
+      await executePayment({ ...request, destinationChain: "BASE-SEPOLIA", route: asked }, { provider, store });
+      expect(provider.transfers[0].route, `kept ${kept}, asked ${asked}`).toBe(kept);
+    }
+  });
+
+  it("pays an intent from before routes were kept through CCTP, as it was", async () => {
+    const store = new MemoryStore();
+    await store.ensure({ ...request, destinationChain: "BASE-SEPOLIA", idempotencyKey: paymentIdempotencyKey("invoice", request.sourceId), provider: "circle" });
+    store.intent = { ...store.intent!, route: null, status: "failed" };
+    const provider = new FakeProvider();
+    provider.transferResults.push(transferResult("confirmed"));
+    await executePayment({ ...request, destinationChain: "BASE-SEPOLIA", route: "gateway" }, { provider, store });
+    expect(provider.transfers[0].route).toBe("cctp");
+  });
+
+  it("sends no route for a payment on Arc testnet", async () => {
+    const provider = new FakeProvider();
+    provider.transferResults.push(transferResult("confirmed"));
+    await executePayment({ ...request, route: "gateway" }, { provider, store: new MemoryStore() });
+    expect(provider.transfers[0]).not.toHaveProperty("route");
   });
 
   it("passes the payee's chain to the provider (CCTP payouts X2)", async () => {
@@ -627,6 +665,20 @@ describe("SupabasePaymentIntentStore by source, and its attempts", () => {
     await result;
     const [insert] = fake.requests;
     expect(Array.isArray(insert.body) ? insert.body[0] : insert.body).toMatchObject({ token: "EURC" });
+  });
+
+  it("writes a bridged payment's route on its first attempt, CCTP unless it says Gateway, and none on Arc", async () => {
+    const respond = (sent: RecordedRequest) => ({ body: sent.path === "/rest/v1/payment_intents" && sent.method === "GET" ? intentRow({ status: "created", payout_route: "gateway" }) : [] });
+    const body = (fake: { requests: RecordedRequest[] }) => (Array.isArray(fake.requests[0].body) ? fake.requests[0].body[0] : fake.requests[0].body);
+    const gateway = inOrganization(respond, () => new SupabasePaymentIntentStore().ensure({ ...input, destinationChain: "BASE-SEPOLIA", route: "gateway" }));
+    expect((await gateway.result).route).toBe("gateway");
+    expect(body(gateway.fake)).toMatchObject({ payout_route: "gateway" });
+    const cctp = inOrganization(respond, () => new SupabasePaymentIntentStore().ensure({ ...input, destinationChain: "BASE-SEPOLIA" }));
+    await cctp.result;
+    expect(body(cctp.fake)).toMatchObject({ payout_route: "cctp" });
+    const onArc = inOrganization(respond, () => new SupabasePaymentIntentStore().ensure({ ...input, destinationChain: "ARC-TESTNET", route: "gateway" }));
+    await onArc.result;
+    expect(body(onArc.fake)).not.toHaveProperty("payout_route");
   });
 
   it("records where a bridged payment goes, and only for one (CCTP payouts X8)", async () => {

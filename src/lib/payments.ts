@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { ChainProvider, Stablecoin, TransferResult } from "./circle";
+import type { PayoutRoute } from "./circle/types";
 import { FAILED_STATES } from "./circle/settlement";
 import { db, unwrap } from "./dal";
 import { paidAcrossChains } from "./payee-chains";
@@ -50,6 +51,8 @@ export interface PaymentIntent {
   /** A bridged payment's chain and mint (CCTP payouts X8); null or absent for a payment on Arc. */
   destinationChain?: string | null;
   mintTxHash?: string | null;
+  /** The route a bridged payment's first attempt chose (Gateway payouts G2); null for one on Arc, or from before 0045. */
+  route?: PayoutRoute | null;
 }
 
 interface PaymentIntentRow {
@@ -80,6 +83,7 @@ interface PaymentIntentRow {
   updated_at: string;
   destination_chain?: string | null;
   mint_tx_hash?: string | null;
+  payout_route?: string | null;
 }
 
 export interface PaymentIntentStore {
@@ -111,6 +115,12 @@ export interface PaymentRequest {
   destinationChain?: string;
   /** The most a bridged payment's CCTP fee may be, in USDC (review I4). */
   maxBridgeFeeUsdc?: number;
+  /**
+   * How a payment across chains goes, as chosen for its first attempt (Gateway
+   * payouts G2). The intent keeps it: a later attempt uses the intent's route,
+   * whatever a request says then.
+   */
+  route?: PayoutRoute;
 }
 
 /** The terminally failed attempt a retry followed: ids and Circle's states only. */
@@ -206,6 +216,7 @@ function fromRow(row: PaymentIntentRow): PaymentIntent {
     updatedAt: row.updated_at,
     destinationChain: row.destination_chain ?? null,
     mintTxHash: row.mint_tx_hash ?? null,
+    route: row.payout_route === "gateway" || row.payout_route === "cctp" ? row.payout_route : null,
   };
 }
 
@@ -230,7 +241,8 @@ export class SupabasePaymentIntentStore implements PaymentIntentStore {
       // so USDC payments do not depend on the column existing yet.
       ...(input.token && input.token !== "USDC" ? { token: input.token } : {}),
       // Written for a bridged payment only, like token: a payment on Arc does not need the column (0044).
-      ...(paidAcrossChains(input.destinationChain) ? { destination_chain: input.destinationChain } : {}),
+      // The route is written with it, once: a duplicate insert is ignored, so the first attempt's route stays (0045).
+      ...(paidAcrossChains(input.destinationChain) ? { destination_chain: input.destinationChain, payout_route: input.route ?? "cctp" } : {}),
     }, { onConflict: "source_type,source_id", ignoreDuplicates: true });
     if (result.error) throw new Error(result.error.message);
     return this.getBySource(input.sourceType, input.sourceId);
@@ -419,6 +431,8 @@ export async function executePayment(
       token: request.token ?? "USDC",
       ...(request.destinationChain ? { destinationChain: request.destinationChain } : {}),
       ...(request.maxBridgeFeeUsdc != null ? { maxBridgeFeeUsdc: request.maxBridgeFeeUsdc } : {}),
+      // The intent's route, never the request's: an intent from before routes were kept went through CCTP.
+      ...(paidAcrossChains(request.destinationChain) ? { route: intent.route ?? "cctp" } : {}),
     });
     intent = await store.recordResult(idempotencyKey, result);
     return execution(intent, false, retriedAfter);
