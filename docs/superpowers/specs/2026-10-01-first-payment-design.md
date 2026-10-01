@@ -67,7 +67,9 @@ other's definition.
   is a suggestion, and every step can be done in any order.
 - **R3: time to first payment starts when the workspace is created.** Sign-up time would also count
   people who create a second workspace. Cost if wrong: the figure understates for people who first
-  explored a sandbox.
+  explored a sandbox. A workspace whose first payment is older than the workspace (the founding one,
+  whose rows were moved into it at 0015) is counted but left out of the median: there is no time to
+  measure. Found in production after merge, where flooring it at 0 minutes halved our median.
 - **R4: the payee step needs a confirmed address.** An address that is waiting for confirmation
   cannot be paid, so ticking the step for it would send the user to a payable the agent must hold.
 - **R6 (review I2): funding stays undone while the operating wallet holds no USDC, even when live.**
