@@ -1,5 +1,6 @@
 import { explorerTx, Hash } from "@/components/vx/Primitives";
 import { utcMinute } from "@/lib/copy";
+import { paidAcrossChains, payeeChain } from "@/lib/payee-chains";
 import type { OurPayment } from "@/lib/platform/open-numbers";
 import { formatFigure } from "./OpenNumbersTable";
 
@@ -28,7 +29,8 @@ export function OurPayments({ payments }: { payments: OurPayment[] }) {
               <span className="font-mono tabular-nums text-ink">
                 {formatFigure(payment.amount, "usdc")} {payment.token ?? "USDC"}
               </span>
-              <Hash value={payment.txHash} href={explorerTx(payment.txHash)} />
+              {/* A Gateway payout's hash is its mint on the payee's chain (Gateway payouts G5); everything else is on Arc testnet. */}
+              <Hash value={payment.txHash} href={paidAcrossChains(payment.chain) ? `${payeeChain(payment.chain).explorerTx}${payment.txHash}` : explorerTx(payment.txHash)} />
             </li>
           ))}
         </ul>

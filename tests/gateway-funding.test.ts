@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv, type VestiarionConfig } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { GATEWAY_WALLET, gatewayStepKey } from "@/lib/circle/gateway";
-import { fundGateway, type GatewayFundingClient } from "@/lib/circle/gateway-funding";
+import { fundGateway, readGatewayState, type GatewayFundingClient } from "@/lib/circle/gateway-funding";
 import { TREASURY_WALLET_SET, walletIdempotencyKey } from "@/lib/circle/provision";
 import { fakeSupabase, orgTestContext, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 
@@ -140,5 +140,27 @@ describe("funding a Gateway balance", () => {
     const c = circle();
     await expect(fund(database(), c, "req-4", 0)).rejects.toThrow("Enter an amount greater than zero.");
     expect(c.calls).toEqual([]);
+  });
+});
+
+describe("what the Treasury page shows of the Gateway balance", () => {
+  const read = (db: ReturnType<typeof database>, fetcher: typeof fetch = balance) =>
+    runWith(orgTestContext({ config, client: db.fake.client, orgId: ORG, userId: USER }), () => readGatewayState({ fetch: fetcher }));
+
+  it("is nothing before the first funding", async () => {
+    expect(await read(database())).toEqual({ signerAddress: null, balanceUsdc: null });
+  });
+
+  it("is the signer and the balance Gateway holds for the operating wallet", async () => {
+    const db = database({ signer: { org_id: ORG, circle_wallet_id: "wallet-signer", address: SIGNER_ADDRESS, delegate_tx_id: "tx-0", delegate_tx_hash: "0xdelegated" } });
+    expect(await read(db)).toEqual({ signerAddress: SIGNER_ADDRESS, balanceUsdc: 3 });
+  });
+
+  it("is the signer with no balance when Gateway does not answer", async () => {
+    const db = database({ signer: { org_id: ORG, circle_wallet_id: "wallet-signer", address: SIGNER_ADDRESS, delegate_tx_id: "tx-0", delegate_tx_hash: "0xdelegated" } });
+    const down = (async () => {
+      throw new Error("ECONNRESET");
+    }) as unknown as typeof fetch;
+    expect(await read(db, down)).toEqual({ signerAddress: SIGNER_ADDRESS, balanceUsdc: null });
   });
 });

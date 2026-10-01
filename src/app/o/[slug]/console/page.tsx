@@ -3,6 +3,7 @@ import { refreshOnChainBalanceAction } from "@/app/actions/treasury";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import AgentControls from "@/components/AgentControls";
 import AgentPauseControl from "@/components/AgentPauseControl";
+import { GatewayPanel } from "@/components/GatewayPanel";
 import { SampleDataLoaded, SampleDataOffer } from "@/components/SampleDataPanel";
 import { CycleReport } from "@/components/vx/CycleReport";
 import { DecisionCard } from "@/components/vx/DecisionCard";
@@ -21,6 +22,7 @@ import { requireMembership } from "@/lib/auth/membership";
 import { orgHref } from "@/lib/auth/org-paths";
 import { can } from "@/lib/auth/roles";
 import { chainModes } from "@/lib/circle";
+import { readGatewayState } from "@/lib/circle/gateway-funding";
 import { inOrg } from "@/lib/dal/scope";
 import { gettingStarted, ownPayableCount } from "@/lib/getting-started";
 import { listLedgerEntries, listLedgerEntriesAfter, listLedgerEntriesByDomain, listLedgerEntriesForTargets } from "@/lib/ledger";
@@ -98,6 +100,14 @@ export default async function DashboardPage({
     const needsReview = waiting.filter((payable) => payable.status !== "processing" || payable.reclaimable).length;
     const paused = pause !== null;
     const role = access.membership.role;
+    // A live workspace's Gateway balance (Gateway payouts G5). Best effort: a read that fails shows no panel.
+    const gateway =
+      access.membership.mode === "live"
+        ? await readGatewayState().catch((error: unknown) => {
+            console.error("console: Gateway state not loaded", access.membership.orgId, error instanceof Error ? error.message : error);
+            return null;
+          })
+        : null;
     // Computed from the rows above, with no extra read (getting-started design G1, G2), until the first
     // payment on Arc testnet (first-payment design §2). Only people who can act on it see it: owners and
     // admins add records, and an owner takes the workspace live.
@@ -191,6 +201,9 @@ export default async function DashboardPage({
 
           <aside className="min-w-0 space-y-6 md:grid md:grid-cols-2 md:items-start md:gap-6 md:space-y-0 xl:block xl:space-y-6">
             <AccountsList accounts={accounts} />
+            {gateway && (
+              <GatewayPanel orgSlug={slug} signerAddress={gateway.signerAddress} balanceUsdc={gateway.balanceUsdc} canFund={can(role, "treasury.manage")} />
+            )}
             {forecast && <ForecastPanel forecast={forecast} />}
           </aside>
         </div>

@@ -172,16 +172,22 @@ export function invoiceDecision(invoice: InvoiceRow, counterparty: CounterpartyR
       { label: "Due", value: new Date(invoice.due_date).toLocaleDateString("en-US"), state: "neutral" },
       termsEvidence(invoice),
       paidEvidence(invoice),
-      paidAcrossChains(counterparty?.chain) ? { label: "Payee's chain", value: `${payeeChain(counterparty?.chain).label}, through CCTP`, state: "neutral" as const } : null,
+      paidAcrossChains(counterparty?.chain) ? { label: "Payee's chain", value: `${payeeChain(counterparty?.chain).label}, through ${payoutRouteLabel(entry?.detail)}`, state: "neutral" as const } : null,
       duplicateEvidence(observed),
     ].filter((item): item is Evidence => item !== null),
     guardrail: guardrailBlocked ? invoiceGuardrail(invoice.amount, currency, usdcValue, limit, risk, rule, entry?.detail) : null,
     decisionMode: stringValue(entry?.detail.decisionMode),
-    txHash: invoice.tx_ref?.startsWith("0x") ? invoice.tx_ref : null,
+    // A Gateway payout has no Arc transaction of its own: its hash is the mint, linked below on the payee's chain.
+    txHash: invoice.tx_ref?.startsWith("0x") && payoutRouteLabel(entry?.detail) !== "Gateway" ? invoice.tx_ref : null,
     mint: mintOf(invoice.id, entries),
     auditSeq: entry?.seq,
     at: entry?.ts ?? invoice.due_date,
   };
+}
+
+/** The route a payout across chains took, as its decision recorded it: Gateway, or CCTP (the only route before Gateway). */
+function payoutRouteLabel(detail: Record<string, unknown> | undefined): "Gateway" | "CCTP" {
+  return stringValue(record(detail?.payout)?.route) === "gateway" ? "Gateway" : "CCTP";
 }
 
 /** A bridged payment's mint, from whichever of the invoice's entries recorded it: the decision, or a later reconcile. */
@@ -218,9 +224,9 @@ function invoiceGuardrail(
   // own rule, and for a costly one the fee against what 10% of the invoice allows.
   if (recorded === "bridge.fee_above_cap") {
     const fee = numberValue(record(detail?.payout)?.feeUsdc) ?? 0;
-    return { rule: recorded, attempted: fee, limit: Math.round(amount * BRIDGE_FEE_CAP_PERCENT * 10_000) / 1_000_000, note: `CCTP fee, against ${BRIDGE_FEE_CAP_PERCENT}% of the invoice` };
+    return { rule: recorded, attempted: fee, limit: Math.round(amount * BRIDGE_FEE_CAP_PERCENT * 10_000) / 1_000_000, note: `${payoutRouteLabel(detail)} fee, against ${BRIDGE_FEE_CAP_PERCENT}% of the invoice` };
   }
-  if (recorded === "bridge.fee_unavailable") return { rule: recorded, attempted: amount, limit, note: "no CCTP fee from Circle" };
+  if (recorded === "bridge.fee_unavailable") return { rule: recorded, attempted: amount, limit, note: `no ${payoutRouteLabel(detail)} fee from Circle` };
   if (recorded === "bridge.unsupported_token") return { rule: recorded, attempted: amount, attemptedToken: currency, limit, limitToken: "USDC", note: "only USDC crosses chains" };
   if (currency !== "EURC") {
     return { rule: inferredRule, attempted: amount, limit, note: risk === "high" ? "risk tier high" : "amount above screened limit" };

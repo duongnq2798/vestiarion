@@ -184,3 +184,19 @@ export async function fundGateway(
   });
   return { signerAddress: signer.address, depositTxHash: deposited.txHash, balanceUsdc };
 }
+
+/**
+ * What the Treasury page shows of the Gateway balance (G5): the signer, and
+ * the balance Gateway holds for the operating wallet, read now. Nothing
+ * before the first funding; no balance when Gateway does not answer.
+ */
+export async function readGatewayState(options: { fetch?: typeof fetch } = {}): Promise<{ signerAddress: string | null; balanceUsdc: number | null }> {
+  const signer = await readSigner();
+  if (!signer) return { signerAddress: null, balanceUsdc: null };
+  try {
+    const operating = await operatingWallet();
+    return { signerAddress: signer.address, balanceUsdc: await gatewayBalance(operating.address, { fetch: options.fetch }) };
+  } catch {
+    return { signerAddress: signer.address, balanceUsdc: null };
+  }
+}
