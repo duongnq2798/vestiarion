@@ -149,6 +149,39 @@ describe("screenName with OpenSanctions", () => {
     });
   });
 
+  describe("a match a person dismissed as not the same person (dismiss screening match R2)", () => {
+    const answer = (results: Array<{ id: string; caption: string; score: number; topics: string[] }>) =>
+      vi.fn().mockResolvedValue(new Response(JSON.stringify({
+        responses: {
+          counterparty: {
+            status: 200,
+            results: results.map((r) => ({ id: r.id, caption: r.caption, score: r.score, target: true, properties: { topics: r.topics } })),
+          },
+        },
+      }), { status: 200 }));
+
+    it("skips the dismissed entity and is clear when nothing else matched", async () => {
+      vi.stubGlobal("fetch", answer([{ id: "Q-PEP", caption: "Dương Trung Quốc", score: 0.909, topics: ["role.pep"] }]));
+      const result = await runWithConfig(withYente(), () => screenName("Quoc Duong", null, new Set(["Q-PEP"])));
+      expect(result).toMatchObject({ riskLevel: "clear", matchedEntityId: null, notes: "OpenSanctions returned no matching entity" });
+    });
+
+    it("still counts another entity that matched", async () => {
+      vi.stubGlobal("fetch", answer([
+        { id: "Q-PEP", caption: "Dương Trung Quốc", score: 0.909, topics: ["role.pep"] },
+        { id: "Q-OTHER", caption: "Duong Quoc", score: 0.81, topics: ["role.pep"] },
+      ]));
+      const result = await runWithConfig(withYente(), () => screenName("Quoc Duong", null, new Set(["Q-PEP"])));
+      expect(result).toMatchObject({ riskLevel: "medium", matchedEntityId: "Q-OTHER" });
+    });
+
+    it("judges the best match as before when nothing was dismissed", async () => {
+      vi.stubGlobal("fetch", answer([{ id: "Q-PEP", caption: "Dương Trung Quốc", score: 0.909, topics: ["role.pep"] }]));
+      const result = await runWithConfig(withYente(), () => screenName("Quoc Duong"));
+      expect(result).toMatchObject({ riskLevel: "medium", matchedEntityId: "Q-PEP" });
+    });
+  });
+
   it("throws on an unavailable provider instead of returning clear", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("unavailable", { status: 503 })));
     await expect(

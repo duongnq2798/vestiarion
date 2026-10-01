@@ -1,5 +1,13 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-01: Dismissing a screening match
+
+- **New ledger action `screening_match_dismissed`**, in the `compliance` domain, delivered as a `ledger.appended` event. It is appended when a member who can decide approvals dismisses a counterparty's screening match as not the same person.
+  - Its `detail` is `{ by, counterpartyId, matchedEntityId, matchedCaption, matchedScore, screenedName, reason }`.
+  - `matchedEntityId` is the screening service's id for the entity dismissed; `screenedName` is the counterparty's name when it was dismissed.
+- Screening skips a dismissed entity for that counterparty while its name stays the same, and judges the next match, if any. The counterparty is screened again at once, so a `screen_counterparty` entry with its new verdict follows.
+- An event cycle's `detail.events` can include **`match_dismissed`**.
+
 ## 2026-10-01: Held milestones decided again
 
 - **New ledger action `milestone_reopened`**, in the `contractor` domain, delivered as a `ledger.appended` event. The agent appends it when it returns a held milestone to `verified` because a fact its decision rested on changed: the contractor's risk level or payment limit, the milestone's verification source, or the agent was paused when it held it.

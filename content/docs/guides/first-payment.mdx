@@ -38,6 +38,8 @@ A counterparty is a business or person the workspace pays or invoices. Open **Co
 
 Then choose **Add and screen**. The counterparty is screened as soon as it is saved, and a message gives the result: "*Name* added and screened: *level* risk." The agent never pays a counterparty screened high risk.
 
+If screening matched someone else with the same name, the counterparty's card shows it under **Screening match**, with what that does to its limit. A member who can approve payments can choose **Not this person**, say why, and confirm with **Dismiss the match**. The counterparty is screened again at once without that match (a match with anyone else still counts), the ledger records `screening_match_dismissed` with the reason, and payments held on the old risk are decided again within a minute.
+
 <Callout title="Without an address, a payment is held">
 The form marks **Payment address** "Optional until payment setup", but the agent can pay only a counterparty that has one. As the Go live page puts it, "A payment to a counterparty without one is held for review." You can add it later with **Edit address** on the counterparty's card.
 </Callout>

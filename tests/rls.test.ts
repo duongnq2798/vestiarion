@@ -42,6 +42,7 @@ const CRUD_UPDATE: Record<string, { column: string; expr: string }> = {
   payment_receipts: { column: "revoked_at", expr: "now()" },
   escrow_contracts: { column: "circle_contract_id", expr: "coalesce(circle_contract_id, '') || '-changed'" },
   fx_swaps: { column: "failure", expr: "coalesce(failure, '') || '-changed'" },
+  screening_dismissals: { column: "reason", expr: "'changed'" },
 };
 
 beforeAll(async () => {

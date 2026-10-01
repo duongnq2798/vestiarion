@@ -4,6 +4,7 @@ import { AutoRefresh } from "@/components/AutoRefresh";
 import CounterpartyAddress from "@/components/intake/CounterpartyAddressEdit";
 import CounterpartyIntake from "@/components/intake/CounterpartyIntake";
 import CounterpartyLimitEdit from "@/components/intake/CounterpartyLimitEdit";
+import ScreeningMatch from "@/components/intake/ScreeningMatch";
 import PayeeLinkControl from "@/components/intake/PayeeLinkControl";
 import { Badge, type BadgeProps } from "@/components/ui/Badge";
 import { Callout } from "@/components/ui/Callout";
@@ -100,6 +101,17 @@ export default async function CounterpartiesPage({ params }: { params: Promise<{
                         {counterparty.risk_level}
                       </Badge>
                     </div>
+                    <ScreeningMatch
+                      orgSlug={slug}
+                      counterparty={{
+                        id: counterparty.id,
+                        name: counterparty.name,
+                        riskLevel: counterparty.risk_level,
+                        riskNotes: counterparty.risk_notes,
+                        riskEntityId: counterparty.risk_entity_id ?? null,
+                      }}
+                      canDismiss={canConfirm}
+                    />
                     <PerformanceHistory
                       score={counterparty.performance_score}
                       inputs={counterparty.performance_inputs}

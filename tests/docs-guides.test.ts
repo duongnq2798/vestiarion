@@ -32,6 +32,7 @@ const ESCROW_PANEL = "src/components/EscrowPanel.tsx";
 const MILESTONE_ESCROW = "src/components/MilestoneEscrow.tsx";
 const RECEIPT_CONTROL = "src/components/ReceiptControl.tsx";
 const RECEIPT_VIEW = "src/components/receipt/ReceiptView.tsx";
+const SCREENING_MATCH = "src/components/intake/ScreeningMatch.tsx";
 const PAY_FREELANCER_FORM = "src/components/intake/PayFreelancerForm.tsx";
 const PAY_FREELANCER_LIBRARY = "src/lib/pay-freelancer.ts";
 const INTAKE_ACTIONS = "src/app/actions/intake.ts";
@@ -138,6 +139,9 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["Something went wrong; try again.", GO_LIVE_ACTIONS],
   ],
   "guides/first-payment": [
+    ["Screening match", SCREENING_MATCH],
+    ["Not this person", SCREENING_MATCH],
+    ["Dismiss the match", SCREENING_MATCH],
     ["Counterparties", APP_NAV],
     ["Add counterparty", COUNTERPARTIES_PAGE],
     ["Only an owner or admin of this workspace can add counterparties.", COUNTERPARTIES_PAGE],

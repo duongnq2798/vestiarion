@@ -132,7 +132,7 @@ export default function PrivacyPage() {
                 and what the match found;
               </li>
               <li>
-                for a contractor milestone: its title, amount and verification source, and the contractor&apos;s name, risk level, payment limit and
+                for a contractor milestone: its title, amount and verification source, how it was verified (whether, by what method, and the verifier&apos;s note), and the contractor&apos;s name, risk level, payment limit and
                 performance score;
               </li>
               <li>

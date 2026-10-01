@@ -36,3 +36,28 @@ describe("the decision card's width", () => {
     expect(markup.match(/PO-103/g)?.length).toBe(3);
   });
 });
+
+describe("a long piece of evidence", () => {
+  // Real decisions cite "Duplicate check: clear against 1 earlier invoice" and "Payee's chain: Base Sepolia, through
+  // CCTP"; in the 15rem column those chips ran past the card's edge (partner's screenshot, 2026-10-01).
+  const long = {
+    ...decision,
+    evidence: [
+      { label: "Duplicate check", value: "clear against 1 earlier invoice", state: "ok" },
+      { label: "Payee's chain", value: "Base Sepolia, through CCTP", state: "neutral" },
+    ],
+  } as unknown as Decision;
+  const markup = renderToStaticMarkup(<DecisionCard decision={long} orgSlug="testnet-2" />);
+  const items = [...markup.matchAll(/<li([^>]*)><span[^>]*class="([^"]*)"/g)];
+
+  it("keeps each chip within its column, wrapping its words onto more lines rather than overflowing", () => {
+    expect(items.length).toBe(4); // the column and the footer row, two chips each
+    for (const [, li, badge] of items) {
+      expect(li).toMatch(/class="[^"]*max-w-full[^"]*"/);
+      expect(li).toMatch(/min-w-0/);
+      expect(badge).toMatch(/whitespace-normal/);
+      expect(badge).not.toMatch(/whitespace-nowrap/);
+      expect(badge).toMatch(/flex-wrap/);
+    }
+  });
+});
