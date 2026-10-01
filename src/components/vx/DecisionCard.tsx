@@ -40,7 +40,7 @@ export function DecisionCard({
   const hasFooter = hasFacts || Boolean(footerAction);
 
   return (
-    <Card asChild tone={CARD_TONE[decision.outcome] ?? "default"} className="overflow-hidden">
+    <Card asChild tone={CARD_TONE[decision.outcome] ?? "default"} className="@container overflow-hidden">
       <article>
         <header className="flex flex-col gap-3 px-4 pt-4 sm:flex-row sm:items-start sm:justify-between sm:px-5">
           <div className="min-w-0">
@@ -79,16 +79,31 @@ export function DecisionCard({
 
         {refused && decision.guardrail && <GuardrailBand guardrail={decision.guardrail} token={decision.token} action={decision.action.toLowerCase()} />}
 
-        <div className={compact ? "px-4 pb-3 pt-3 sm:px-5" : "px-4 pb-4 pt-4 sm:px-5"}>
-          <Eyebrow className="text-agent">{refused ? "What the agent argued" : "Agent’s reasoning"}</Eyebrow>
-          <Reasoning text={decision.reasoning} className="mt-1.5" />
+        {/* A wide card (Invoices has no sidebar) sets the evidence beside the reasoning, so the reasoning keeps a
+            readable line and no half of the card stands empty; a narrow one keeps it in the footer. */}
+        <div
+          className={cn(
+            compact ? "px-4 pb-3 pt-3 sm:px-5" : "px-4 pb-4 pt-4 sm:px-5",
+            decision.evidence.length > 0 && "@4xl:grid @4xl:grid-cols-[minmax(0,1fr)_15rem] @4xl:gap-8"
+          )}
+        >
+          <div className="min-w-0">
+            <Eyebrow className="text-agent">{refused ? "What the agent argued" : "Agent’s reasoning"}</Eyebrow>
+            <Reasoning text={decision.reasoning} className={cn("mt-1.5", decision.evidence.length > 0 && "@4xl:max-w-none")} />
+          </div>
+          {decision.evidence.length > 0 && (
+            <aside aria-label="Evidence cited by this decision" className="hidden @4xl:block">
+              <Eyebrow>Evidence</Eyebrow>
+              <EvidenceRow items={decision.evidence} className="mt-2 flex-col items-start" />
+            </aside>
+          )}
         </div>
 
         {hasFooter && (
           <footer className="border-t border-line bg-ground/40">
             {hasFacts && (
               <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-                <EvidenceRow items={decision.evidence} />
+                <EvidenceRow items={decision.evidence} className="@4xl:hidden" />
                 <div className="flex shrink-0 flex-wrap items-center gap-4">
                   {decision.auditSeq != null && (
                     <Link
@@ -146,10 +161,10 @@ function GuardrailBand({ guardrail, token = "USDC", action }: { guardrail: Guard
   );
 }
 
-function EvidenceRow({ items }: { items: Evidence[] }) {
+function EvidenceRow({ items, className }: { items: Evidence[]; className?: string }) {
   if (items.length === 0) return <span />;
   return (
-    <ul aria-label="Evidence cited by this decision" className="flex flex-wrap gap-1.5">
+    <ul aria-label="Evidence cited by this decision" className={cn("flex flex-wrap gap-1.5", className)}>
       {items.map((item) => (
         <li key={`${item.label}-${item.value}`}>
           <Badge
