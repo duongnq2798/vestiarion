@@ -19,6 +19,8 @@ The console offers **Try it with sample data**. Choose **Load sample data**. It 
 - a print run billed again under a purchase order that was already paid is flagged;
 - a verified contractor milestone is released, and an unverified one waits.
 
+**Safe to spend today** on the console starts from the operating wallet and takes off what the agent already counts as owed: what is due within 30 days, every open milestone, and a 15% cushion on the next 7 days. Receivables are shown as expected, not counted. **Next 30 days** lists each day money is due or expected, with the balance after it, and says on which day the wallet would run short.
+
 ## 4. Read why
 
 Open **AP / AR**. Each decision is a card. **Agent’s reasoning** says why, citing the facts the agent was given: the amount, the purchase order, the risk level, the limit and the balance. Below it are the evidence it checked and its ledger entry. When the model wanted to pay and a guardrail in code stopped it, the card says "Blocked by code, not by the model" and names the rule.
