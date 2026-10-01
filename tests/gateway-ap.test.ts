@@ -248,6 +248,52 @@ describe("a payee on Base Sepolia, with a Gateway balance", () => {
     expect((entries(fake.requests)[0].p_detail.referenceDecision as { reasoning: string }).reasoning).toContain("through Gateway costs 0.2 USDC");
   });
 
+  // A submission whose answer was lost leaves an intent with no provider id: the payable is decided again, and
+  // executePayment sends it on the route the intent keeps. The decision weighs that route, not today's cheaper one (review I3).
+  const LOST = { status: "failed", provider_tx_id: null, destination_chain: "BASE-SEPOLIA" };
+
+  it("weighs and records the route an earlier attempt took: CCTP, though Gateway is cheaper now (review I3)", async () => {
+    model("pay");
+    const { fake, chain, stage } = apFake({ book: [payable()], gateway: FUNDED, intent: { ...LOST, payout_route: "cctp" } });
+    await stage();
+    expect(promptOf().payout).toMatchObject({ route: "cctp", feeUsdc: 0.054613, expectedSeconds: 30 });
+    expect(chain.transfers[0]).toMatchObject({ route: "cctp" });
+    expect(entries(fake.requests)[0].p_detail).toMatchObject({ payout: { route: "cctp", feeUsdc: 0.054613 } });
+  });
+
+  it("weighs and records the route an earlier attempt took: Gateway, though CCTP is cheaper now (review I3)", async () => {
+    model("pay");
+    const { fake, chain, stage } = apFake({ book: [payable()], gateway: async () => ({ feeUsdc: 0.06, balanceUsdc: 5 }), intent: { ...LOST, payout_route: "gateway" } });
+    await stage();
+    expect(promptOf().payout).toMatchObject({ route: "gateway", feeUsdc: 0.06, expectedSeconds: 5 });
+    expect(chain.transfers[0]).toMatchObject({ route: "gateway" });
+    expect(entries(fake.requests)[0].p_detail).toMatchObject({ payout: { route: "gateway", feeUsdc: 0.06, gatewayBalanceUsdc: 5 } });
+  });
+
+  it("holds a payout an earlier attempt sent through Gateway when the Gateway balance no longer covers it, whatever the model says (review I3)", async () => {
+    model("pay");
+    const { fake, chain, stage } = apFake({ book: [payable()], gateway: async () => ({ feeUsdc: 0.0505, balanceUsdc: 1 }), intent: { ...LOST, payout_route: "gateway" } });
+    await stage();
+    expect(chain.transfers).toEqual([]);
+    const detail = entries(fake.requests)[0].p_detail;
+    expect(detail).toMatchObject({ guardrailRule: "bridge.gateway_balance_short", payout: { route: "gateway", feeUsdc: 0.0505, gatewayBalanceUsdc: 1 } });
+    expect((detail.referenceDecision as { reasoning: string }).reasoning).toBe(
+      "An earlier attempt to pay Northwind on Base went through Gateway, so this payout goes through Gateway too, and the Gateway balance, 1 USDC, does not cover 1.5 USDC and its 0.0505 USDC fee. Held for a person to check the earlier transfer with Circle."
+    );
+    expect(patches(fake.requests)[0]).toMatchObject({ status: "held" });
+  });
+
+  it("holds a payout an earlier attempt sent through Gateway when Gateway gives no quote, and names Gateway (review I3)", async () => {
+    model("pay");
+    const { fake, chain, stage } = apFake({ book: [payable()], gateway: async () => null, intent: { ...LOST, payout_route: "gateway" } });
+    await stage();
+    expect(chain.transfers).toEqual([]);
+    const detail = entries(fake.requests)[0].p_detail;
+    expect(detail).toMatchObject({ guardrailRule: "bridge.fee_unavailable", payout: { route: "gateway", feeUsdc: null } });
+    expect((detail.referenceDecision as { reasoning: string }).reasoning).toContain("Circle gave no Gateway fee");
+    expect((detail.decision as { reasoning: string }).reasoning).toBeDefined();
+  });
+
   it("holds a Gateway payout still not minted two hours after it was sent, for a person, and sends nothing", async () => {
     const { fake, chain, stage } = apFake({
       book: [payable({ status: "matched", tx_ref: "gateway:tr-1", decided_at: "2026-10-01T06:00:00Z" })],

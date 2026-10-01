@@ -27,7 +27,14 @@ export interface ApGuardrailInput {
    * as a percent of the amount (null when Iris gave none), and whether the
    * invoice is in a token that does not cross. Null for a payee on Arc.
    */
-  bridge?: { feePercent: number | null; unsupportedToken: boolean } | null;
+  bridge?: {
+    feePercent: number | null;
+    unsupportedToken: boolean;
+    /** The route the fee is for (Gateway payouts G2); CCTP when not given. */
+    route?: "cctp" | "gateway";
+    /** A payout an earlier attempt sent through Gateway, which the Gateway balance no longer covers (review I3). */
+    gatewayShort?: { balanceUsdc: number; neededUsdc: number } | null;
+  } | null;
   /** A live EURC payment the wallet's EURC cannot cover: what it holds (null when it could not be read) and what the payment sends. */
   eurcShort?: { balance: number | null; needed: number } | null;
 }
@@ -41,7 +48,8 @@ export type ApGuardrailRule =
   | "treasury.insufficient_eurc"
   | "bridge.unsupported_token"
   | "bridge.fee_unavailable"
-  | "bridge.fee_above_cap";
+  | "bridge.fee_above_cap"
+  | "bridge.gateway_balance_short";
 
 export { BRIDGE_FEE_CAP_PERCENT };
 
@@ -50,6 +58,10 @@ export interface ApGuardrailResult {
   status: "held" | "flagged" | null;
   rule: ApGuardrailRule | null;
   reasoning: string;
+}
+
+function routeName(bridge: NonNullable<ApGuardrailInput["bridge"]>): string {
+  return bridge.route === "gateway" ? "Gateway" : "CCTP";
 }
 
 /** The final code boundary between a model's recommendation and execution. */
@@ -131,7 +143,7 @@ export function enforceApGuardrails(input: ApGuardrailInput): ApGuardrailResult 
       blocked: true,
       status: "held",
       rule: "bridge.fee_unavailable",
-      reasoning: `${input.reasoning} [guardrail override: Circle gave no CCTP fee for this payee's chain, so its cost is not known — held for a person]`,
+      reasoning: `${input.reasoning} [guardrail override: Circle gave no ${routeName(input.bridge)} fee for this payee's chain, so its cost is not known — held for a person]`,
     };
   }
   if (input.bridge && input.bridge.feePercent !== null && input.bridge.feePercent > BRIDGE_FEE_CAP_PERCENT) {
@@ -139,7 +151,18 @@ export function enforceApGuardrails(input: ApGuardrailInput): ApGuardrailResult 
       blocked: true,
       status: "held",
       rule: "bridge.fee_above_cap",
-      reasoning: `${input.reasoning} [guardrail override: the CCTP fee is ${input.bridge.feePercent.toFixed(2)}% of the amount, above the ${BRIDGE_FEE_CAP_PERCENT}% a payout may cost — ${verb} refused before execution]`,
+      reasoning: `${input.reasoning} [guardrail override: the ${routeName(input.bridge)} fee is ${input.bridge.feePercent.toFixed(2)}% of the amount, above the ${BRIDGE_FEE_CAP_PERCENT}% a payout may cost — ${verb} refused before execution]`,
+    };
+  }
+  // A payout keeps the route its first attempt took: one sent through Gateway
+  // is never sent again through CCTP, so a Gateway balance that no longer
+  // covers it waits for a person (Gateway payouts review I3).
+  if (input.bridge?.gatewayShort) {
+    return {
+      blocked: true,
+      status: "held",
+      rule: "bridge.gateway_balance_short",
+      reasoning: `${input.reasoning} [guardrail override: an earlier attempt went through Gateway, and the Gateway balance, ${input.bridge.gatewayShort.balanceUsdc} USDC, does not cover the ${input.bridge.gatewayShort.neededUsdc} USDC this payout needs with its fee — ${verb} refused; held for a person to check the earlier transfer with Circle]`,
     };
   }
   // A EURC invoice is paid from EURC, never from USDC (E5): a payment the

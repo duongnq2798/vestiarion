@@ -467,6 +467,19 @@ async function paymentIntentsFor(
   return new Map(inFlight.map((row) => [row.source_id, { providerTxId: row.provider_tx_id, status: row.status }]));
 }
 
+/**
+ * The route an earlier attempt to pay this invoice took, kept on its payment
+ * intent (Gateway payouts G2): every later attempt goes the same way, so the
+ * decision weighs that route and no other (review I3). Null with no intent,
+ * or one from before routes were kept.
+ */
+async function pinnedPayoutRoute(orgDb: OrgDb, invoiceId: string): Promise<PayoutRoute | null> {
+  const result = await orgDb.from("payment_intents").select("payout_route").eq("source_type", "invoice").eq("source_id", invoiceId).maybeSingle();
+  if (result.error) throw new Error(result.error.message);
+  const route = (result.data as { payout_route?: string | null } | null)?.payout_route;
+  return route === "gateway" || route === "cctp" ? route : null;
+}
+
 /** `reasoning` with `note` appended, unless it already ends with it — a
  * source that churns through the same outcome every cycle does not repeat it. */
 function withNote(reasoning: string | null, note: string): string {
@@ -1052,14 +1065,22 @@ async function decideApPayable(
       console.error("ap: no Gateway quote", invoice.id, error instanceof Error ? error.message : error);
     }
   }
-  // The route (Gateway payouts G2): the workspace's Gateway balance when it
-  // covers the amount and its fee, and that fee is no higher than CCTP's;
-  // CCTP otherwise. The fee weighed from here on is the chosen route's.
+  // The route (Gateway payouts G2): the one an earlier attempt took, which
+  // every later attempt keeps (review I3); otherwise the workspace's Gateway
+  // balance when it covers the amount and its fee, and that fee is no higher
+  // than CCTP's; CCTP otherwise. The fee weighed from here on is the route's.
+  const pinned = crossChain && !isEurc ? await pinnedPayoutRoute(db, invoice.id) : null;
   const route: PayoutRoute =
-    gateway !== null && gateway.balanceUsdc >= amount + gateway.feeUsdc && (fee === null || gateway.feeUsdc <= fee.feeUsdc) ? "gateway" : "cctp";
-  const viaGateway = crossChain && route === "gateway" && gateway !== null;
+    pinned ??
+    (gateway !== null && gateway.balanceUsdc >= amount + gateway.feeUsdc && (fee === null || gateway.feeUsdc <= fee.feeUsdc) ? "gateway" : "cctp");
+  const viaGateway = crossChain && route === "gateway";
   const routeLabel = viaGateway ? "Gateway" : "CCTP";
-  const routeFeeUsdc = viaGateway ? gateway!.feeUsdc : (fee?.feeUsdc ?? null);
+  const routeFeeUsdc = viaGateway ? (gateway?.feeUsdc ?? null) : (fee?.feeUsdc ?? null);
+  // Only a route an earlier attempt took can leave a Gateway payout its balance does not cover.
+  const gatewayShort =
+    viaGateway && gateway !== null && gateway.balanceUsdc < amount + gateway.feeUsdc
+      ? { balanceUsdc: gateway.balanceUsdc, neededUsdc: Math.round((amount + gateway.feeUsdc) * 1_000_000) / 1_000_000 }
+      : null;
   // The cap is weighed on the ratio itself (review M6); the model is shown it rounded.
   const feeRatioPercent = routeFeeUsdc !== null ? (routeFeeUsdc / amount) * 100 : null;
   const feePercent = feeRatioPercent === null ? null : Math.round(feeRatioPercent * 100) / 100;
@@ -1108,7 +1129,7 @@ async function decideApPayable(
       operatingBalance: isEurc
         ? (eurcUnreadable ? 0 : (eurcBalance ?? Number.POSITIVE_INFINITY))
         : viaGateway
-          ? gateway!.balanceUsdc - gateway!.feeUsdc
+          ? (gateway ? gateway.balanceUsdc - gateway.feeUsdc : 0)
           : operatingBalance - (fee?.feeUsdc ?? 0),
       reserveApy: isEurc || viaGateway ? 0 : ctx.reserveApy,
       reserveBalance: isEurc || viaGateway ? 0 : ctx.reserveBalance,
@@ -1208,6 +1229,13 @@ async function decideApPayable(
           confidence: 0.85,
         };
       }
+      if (gatewayShort) {
+        return {
+          action: "hold",
+          reasoning: `An earlier attempt to pay ${counterparty.name} went through Gateway, so this payout goes through Gateway too, and the Gateway balance, ${gatewayShort.balanceUsdc} USDC, does not cover ${amount} USDC and its ${routeFeeUsdc} USDC fee. Held for a person to check the earlier transfer with Circle.`,
+          confidence: 0.85,
+        };
+      }
       if (!invoice.goods_received || !invoice.po_reference) {
         return {
           action: "request_info",
@@ -1259,7 +1287,7 @@ async function decideApPayable(
     addressConfirmedAt: counterparty.address_confirmed_at,
     currency,
     fxAvailable: !isEurc || fx !== null,
-    bridge: crossChain ? { feePercent: isEurc ? 0 : feeRatioPercent, unsupportedToken: isEurc } : null,
+    bridge: crossChain ? { feePercent: isEurc ? 0 : feeRatioPercent, unsupportedToken: isEurc, route, gatewayShort } : null,
     eurcShort: eurcUnreadable
       ? { balance: null, needed: eurcNeeded }
       : isEurc && eurcBalance !== null && eurcBalance < eurcNeeded
@@ -1353,7 +1381,10 @@ async function decideApPayable(
       guardrailRule: guardrail.rule,
       currency,
       // A payee on another chain: the route and the fee read for this decision (CCTP payouts X11).
-      ...(crossChain ? { payout: { chain: destination.id, route, domain: destination.domain, feeUsdc: routeFeeUsdc } } : {}),
+      // A Gateway payout also records the Gateway balance it was weighed against.
+      ...(crossChain
+        ? { payout: { chain: destination.id, route, domain: destination.domain, feeUsdc: routeFeeUsdc, ...(viaGateway && gateway ? { gatewayBalanceUsdc: gateway.balanceUsdc } : {}) } }
+        : {}),
       // A EURC payable's USDC value and the quote it came from (E2); null when there was none.
       ...(isEurc
         ? {

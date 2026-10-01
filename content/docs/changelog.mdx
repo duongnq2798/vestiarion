@@ -2,7 +2,8 @@ Changes to the API and webhooks that affect an integration, newest first. Change
 
 ## 2026-10-01: Payouts from a Gateway balance
 
-- A payout to a payee on another chain can go from the workspace's Circle Gateway balance as well as through CCTP. Its decision entry's `payout.route` is then `gateway`, and `payout.feeUsdc` is Gateway's fee.
+- A payout to a payee on another chain can go from the workspace's Circle Gateway balance as well as through CCTP. Its decision entry's `payout.route` is then `gateway`, `payout.feeUsdc` is Gateway's fee, and `payout.gatewayBalanceUsdc` is the Gateway balance it was weighed against.
+- A payout keeps the route its first attempt took. A new value of `guardrailRule`, `bridge.gateway_balance_short`, holds one that went through Gateway when the Gateway balance no longer covers it with its fee.
 - For a Gateway payout:
   - the decision entry's `execution.txRef` is the mint on the payee's chain, with `execution.destinationChain` and `execution.mintTxHash`. No Arc transaction belongs to one Gateway payout: Gateway burns on Arc in batches;
   - `GET /api/v1/invoices` returns that mint as the invoice's transaction once it is paid. Until then the invoice is `matched`, as a CCTP payout is.

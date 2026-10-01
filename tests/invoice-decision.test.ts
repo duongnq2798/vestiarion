@@ -274,6 +274,13 @@ describe("invoiceDecision: a payout code held (review I1, M3, M14)", () => {
     expect(decision.guardrail).toMatchObject({ rule: "bridge.fee_unavailable", note: "no CCTP fee from Circle" });
   });
 
+  it("names a payout held because the Gateway balance no longer covers the route its first attempt took (Gateway review I3)", () => {
+    const decision = invoiceDecision(invoice({ amount: 1.5, status: "held" }), { payment_limit: 50, chain: "BASE-SEPOLIA" } as never, [
+      held("bridge.gateway_balance_short", { chain: "BASE-SEPOLIA", route: "gateway", domain: 6, feeUsdc: 0.0505, gatewayBalanceUsdc: 1 }),
+    ]);
+    expect(decision.guardrail).toEqual({ rule: "bridge.gateway_balance_short", attempted: 1.5505, limit: 1, note: "the Gateway balance, which an earlier attempt's route requires" });
+  });
+
   it("calls the payee's chain what it is, paid or not", () => {
     const decision = invoiceDecision(invoice({ status: "held" }), { payment_limit: 50, chain: "BASE-SEPOLIA" } as never, []);
     expect(decision.evidence).toContainEqual({ label: "Payee's chain", value: "Base Sepolia, through CCTP", state: "neutral" });

@@ -227,6 +227,12 @@ function invoiceGuardrail(
     return { rule: recorded, attempted: fee, limit: Math.round(amount * BRIDGE_FEE_CAP_PERCENT * 10_000) / 1_000_000, note: `${payoutRouteLabel(detail)} fee, against ${BRIDGE_FEE_CAP_PERCENT}% of the invoice` };
   }
   if (recorded === "bridge.fee_unavailable") return { rule: recorded, attempted: amount, limit, note: `no ${payoutRouteLabel(detail)} fee from Circle` };
+  // A payout its first attempt sent through Gateway, and the Gateway balance no longer covers (Gateway review I3).
+  if (recorded === "bridge.gateway_balance_short") {
+    const payout = record(detail?.payout);
+    const needed = Math.round((amount + (numberValue(payout?.feeUsdc) ?? 0)) * 1_000_000) / 1_000_000;
+    return { rule: recorded, attempted: needed, limit: numberValue(payout?.gatewayBalanceUsdc) ?? 0, note: "the Gateway balance, which an earlier attempt's route requires" };
+  }
   if (recorded === "bridge.unsupported_token") return { rule: recorded, attempted: amount, attemptedToken: currency, limit, limitToken: "USDC", note: "only USDC crosses chains" };
   if (currency !== "EURC") {
     return { rule: inferredRule, attempted: amount, limit, note: risk === "high" ? "risk tier high" : "amount above screened limit" };
