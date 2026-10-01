@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PAYEE_CHAIN_IDS } from "./payee-chains";
 
 const USDC_PATTERN = /^(?:0|[1-9]\d{0,13})(?:\.\d{1,6})?$/;
 
@@ -40,14 +41,25 @@ const optionalText = (max: number) => z.string().trim().max(max).transform((valu
  */
 const optionalCsvText = (max: number) => z.string().trim().max(max).nullish().transform((value) => value || null);
 
+/** A payee's chain (CCTP payouts X1): read without regard to case. */
+const payeeChainSchema = z
+  .string()
+  .transform((value) => value.trim().toUpperCase())
+  .pipe(z.enum(PAYEE_CHAIN_IDS, { message: "Choose a chain Vestiarion can pay on: Arc testnet, Base Sepolia, Arbitrum Sepolia or Ethereum Sepolia." }));
+
 export const counterpartyInputSchema = z.object({
   name: z.string().trim().min(2).max(160),
   role: z.enum(["vendor", "client", "contractor"]),
   address: optionalText(200),
-  chain: z.string().trim().min(2).max(40),
+  chain: payeeChainSchema,
   jurisdiction: optionalText(80),
   paymentLimit: z.string().trim(),
 }).superRefine((value, context) => {
+  // A contractor's milestones are released on Arc testnet: only a vendor is
+  // paid on another chain, through CCTP (CCTP payouts, review C1).
+  if (value.chain !== "ARC-TESTNET" && value.role !== "vendor") {
+    context.addIssue({ code: "custom", path: ["chain"], message: "Only a vendor can be paid on another chain; a contractor's milestones are released on Arc testnet." });
+  }
   if (value.role === "client" && value.paymentLimit === "") return;
   const parsed = usdcAmountSchema.safeParse(value.paymentLimit);
   if (!parsed.success) {

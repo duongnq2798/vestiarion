@@ -5,6 +5,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
 import { previewPayeeLink, type PayeeLinkPreview } from "@/lib/platform/payee-links";
+import { payeeChain } from "@/lib/payee-chains";
 
 export const dynamic = "force-dynamic";
 
@@ -50,13 +51,13 @@ export default async function PayeePage({ params }: PayeePageProps) {
                 <Eyebrow className="text-agent">Payment address</Eyebrow>
               </p>
               <h1 className="mt-2 text-2xl font-semibold tracking-[-0.02em] text-ink">
-                {preview.orgName} wants to pay {preview.counterpartyName} on Arc testnet
+                {preview.orgName} wants to pay {preview.counterpartyName} on {payeeChain(preview.chain).label}
               </h1>
               <p className="mt-3 text-sm leading-6 text-ink-2">
                 Enter the wallet address where you want to receive it. {preview.orgName} confirms it before paying you. This link works once.
               </p>
               <div className="mt-6">
-                <PayeeAddressForm token={token} />
+                <PayeeAddressForm token={token} chainLabel={payeeChain(preview.chain).label} />
               </div>
             </section>
           )}

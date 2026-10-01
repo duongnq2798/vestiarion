@@ -42,6 +42,13 @@ export interface TransferParams {
   idempotencyKey: string;
   memo?: string;
   /** What is sent; USDC when absent. */
+  /**
+   * The payee's chain (CCTP payouts X2): absent or ARC-TESTNET pays on Arc; any
+   * other is paid from Arc through CCTP V2 with the Forwarding Service.
+   */
+  destinationChain?: string;
+  /** For a bridged payment, the most its CCTP fee may be, in USDC: a higher fee read at the burn sends nothing (review I4). */
+  maxBridgeFeeUsdc?: number;
   token?: Stablecoin;
 }
 
@@ -59,6 +66,12 @@ export interface TransferResult {
   providerState: string | null;
   /** Circle's `errorReason` for a FAILED transaction, or null. */
   failureReason: string | null;
+  /** A bridged payment's mint on the payee's chain, once the Forwarding Service submitted it; null before. */
+  mintTxHash?: string | null;
+  /** The chain a bridged payment is minted on; absent for a payment on Arc. */
+  destinationChain?: string | null;
+  /** The CCTP fee paid on top of a bridged payment, in USDC. */
+  bridgeFeeUsdc?: number | null;
 }
 
 export interface EarnDepositParams {

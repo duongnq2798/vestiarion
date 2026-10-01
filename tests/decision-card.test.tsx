@@ -51,6 +51,18 @@ describe("DecisionCard", () => {
     expect(markup).toContain("https://testnet.arcscan.app/tx/0x");
   });
 
+  it("links the mint on the payee's chain after the burn on Arc (CCTP payouts X11)", () => {
+    const markup = html(
+      <DecisionCard
+        decision={{ ...base, txHash: `0x${"ab".repeat(32)}`, mint: { chainLabel: "Base Sepolia", txHash: `0x${"cd".repeat(32)}`, href: `https://sepolia.basescan.org/tx/0x${"cd".repeat(32)}` } }}
+        orgSlug="acme"
+      />
+    );
+    expect(markup).toContain("https://testnet.arcscan.app/tx/0x");
+    expect(markup).toContain(`href="https://sepolia.basescan.org/tx/0x${"cd".repeat(32)}"`);
+    expect(markup).toContain("minted on Base Sepolia");
+  });
+
   it("shows the rule a refused decision broke, and says nothing was sent", () => {
     const refused: Decision = {
       ...base,

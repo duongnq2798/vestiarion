@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/Input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
+import { PAYEE_CHAINS } from "@/lib/payee-chains";
 
 const INITIAL: IntakeActionResult = { ok: false, message: "" };
 
@@ -39,8 +40,19 @@ export default function CounterpartyIntake({ orgSlug }: { orgSlug: string }) {
           <Field id="cp-limit" label="Payment limit (USDC)" description="May be blank for clients">
             <Input name="paymentLimit" inputMode="decimal" placeholder="5000.00" />
           </Field>
-          <Field id="cp-chain" label="Chain">
-            <Input name="chain" required maxLength={40} defaultValue="ARC-TESTNET" />
+          <Field id="cp-chain" label="Chain" description="Another chain is paid from Arc through CCTP, for a fee">
+            <Select name="chain" defaultValue="ARC-TESTNET">
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PAYEE_CHAINS.map((chain) => (
+                  <SelectItem key={chain.id} value={chain.id}>
+                    {chain.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </Field>
           <Field id="cp-address" label="Payment address" description="Optional until payment setup">
             <Input name="address" maxLength={200} autoComplete="off" className="font-mono" />

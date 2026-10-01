@@ -19,6 +19,7 @@ import { withSuccessToast } from "@/components/withSuccessToast";
 import type { WaitingPayable } from "@/lib/agent/approvals";
 import { amountToPay } from "@/lib/agent/payment-timing";
 import { utcDay, utcMinute } from "@/lib/copy";
+import { paidAcrossChains, payeeChain } from "@/lib/payee-chains";
 
 const INITIAL: ActionResult = { ok: false, message: "" };
 const approve = withSuccessToast(approveInvoiceAction);
@@ -32,13 +33,21 @@ const giveBack = withSuccessToast(returnInvoiceAction);
  * sandbox's payment is simulated, and says so.
  */
 export function payConfirmTitle(
-  payable: Pick<WaitingPayable, "amount" | "counterpartyName" | "discount"> & { currency?: WaitingPayable["currency"] },
+  payable: Pick<WaitingPayable, "amount" | "counterpartyName" | "discount"> &
+    Partial<Pick<WaitingPayable, "currency" | "payeeChain" | "bridgeFeeUsdc">>,
   sandbox: boolean,
   now: Date = new Date()
 ): string {
   const { amountPaid, discountTaken } = amountToPay(payable.amount, payable.discount, now);
   const discount = discountTaken > 0 && payable.discount ? ` (${payable.discount.pct}% discount through ${utcDay(payable.discount.deadline)})` : "";
-  return `Pay ${fmt(amountPaid)} ${payable.currency ?? "USDC"} to ${payable.counterpartyName} now?${discount}${sandbox ? " (simulated)" : ""}`;
+  // A payee on another chain: where the money goes, and the fee on top of it (CCTP payouts, review I2).
+  const elsewhere = paidAcrossChains(payable.payeeChain) ? ` on ${payeeChain(payable.payeeChain).label}` : "";
+  const fee = !elsewhere
+    ? ""
+    : payable.bridgeFeeUsdc != null
+      ? ` The CCTP fee, about ${payable.bridgeFeeUsdc} USDC, comes on top.`
+      : " A CCTP fee comes on top.";
+  return `Pay ${fmt(amountPaid)} ${payable.currency ?? "USDC"} to ${payable.counterpartyName}${elsewhere} now?${discount}${sandbox ? " (simulated)" : ""}${fee}`;
 }
 
 /**
@@ -127,6 +136,7 @@ export default function ApprovalCard({
           <p className="mt-2 min-w-0 truncate text-xs text-ink-3" title={payable.address ?? undefined}>
             Pays to{" "}
             {payable.address ? <span className="font-mono text-ink-2">{payable.address}</span> : "no address set"}
+            {paidAcrossChains(payable.payeeChain) && ` on ${payeeChain(payable.payeeChain).label}`}
           </p>
           {unfinished && (
             <p className="mt-2 text-sm text-ink-2">

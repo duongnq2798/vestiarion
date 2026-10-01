@@ -42,7 +42,12 @@ export async function POST(request: Request) {
     // tick's wall time is the sum of their cycles, not the slowest one.
     // `maxDuration` is 300 seconds, while a fully hung payment can consume
     // about 115 seconds across balance/token reads, submission and settlement.
-    // Revisit sequential execution before a second organization goes live.
+    // A payout to another chain through CCTP is two such transactions (an
+    // approve and a burn) plus a mint wait of at most 20 s, so a fully hung
+    // one can take about 235 seconds; two in one tick can outrun the budget.
+    // A killed tick pays nothing twice: the intent resends under the same
+    // Circle keys. Revisit sequential execution before a second organization
+    // goes live.
     //
     // Each scheduled cycle is followed by the digest of payables waiting for
     // a decision (notifications design N1, N2); it never changes the result.

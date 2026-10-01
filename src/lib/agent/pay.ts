@@ -49,6 +49,10 @@ export interface PayInvoiceInput {
   discount?: InvoiceDiscount | null;
   /** The invoice's currency, which the transfer moves: an EURC invoice is paid in EURC, never in USDC (EURC invoices design E5). */
   currency?: Stablecoin;
+  /** The payee's chain: another than Arc testnet is paid through CCTP, in flight until the mint (CCTP payouts X2, X8). */
+  destinationChain?: string;
+  /** The most the CCTP fee may be, in USDC; a higher fee read at the burn sends nothing (review I4). */
+  maxBridgeFeeUsdc?: number;
 }
 
 export interface PayInvoiceResult {
@@ -118,6 +122,8 @@ export async function payInvoice(
         amount: amountPaid,
         memo: `Invoice ${input.invoiceId}`,
         token: input.currency ?? "USDC",
+        ...(input.destinationChain ? { destinationChain: input.destinationChain } : {}),
+        ...(input.maxBridgeFeeUsdc != null ? { maxBridgeFeeUsdc: input.maxBridgeFeeUsdc } : {}),
       },
       { provider, retryTerminalFailure }
     );

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { ChainProvider, Stablecoin, TransferResult } from "./circle";
 import { FAILED_STATES } from "./circle/settlement";
 import { db, unwrap } from "./dal";
+import { paidAcrossChains } from "./payee-chains";
 
 export type PaymentSourceType = "invoice" | "milestone";
 export type PaymentIntentStatus = "created" | "submitting" | "pending" | "confirmed" | "failed";
@@ -46,6 +47,9 @@ export interface PaymentIntent {
   previousAttempts: PreviousPaymentAttempt[];
   createdAt: string;
   updatedAt: string;
+  /** A bridged payment's chain and mint (CCTP payouts X8); null or absent for a payment on Arc. */
+  destinationChain?: string | null;
+  mintTxHash?: string | null;
 }
 
 interface PaymentIntentRow {
@@ -74,6 +78,8 @@ interface PaymentIntentRow {
   previous_attempts: PreviousPaymentAttempt[];
   created_at: string;
   updated_at: string;
+  destination_chain?: string | null;
+  mint_tx_hash?: string | null;
 }
 
 export interface PaymentIntentStore {
@@ -101,6 +107,10 @@ export interface PaymentRequest {
   memo: string;
   /** What the transfer moves: USDC unless the invoice is in EURC (EURC invoices design E5). */
   token?: Stablecoin;
+  /** The payee's chain: another than Arc testnet is paid through CCTP (CCTP payouts X2). */
+  destinationChain?: string;
+  /** The most a bridged payment's CCTP fee may be, in USDC (review I4). */
+  maxBridgeFeeUsdc?: number;
 }
 
 /** The terminally failed attempt a retry followed: ids and Circle's states only. */
@@ -129,6 +139,9 @@ export interface PaymentExecution {
   attempt: number;
   /** Set only when this execution opened a new attempt after Circle ended the previous one in a terminal failure. */
   retriedAfter: RetriedAfter | null;
+  /** A bridged payment's chain and its mint, once the Forwarding Service submitted it. */
+  destinationChain?: string | null;
+  mintTxHash?: string | null;
 }
 
 /**
@@ -191,6 +204,8 @@ function fromRow(row: PaymentIntentRow): PaymentIntent {
     previousAttempts: row.previous_attempts,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    destinationChain: row.destination_chain ?? null,
+    mintTxHash: row.mint_tx_hash ?? null,
   };
 }
 
@@ -214,6 +229,8 @@ export class SupabasePaymentIntentStore implements PaymentIntentStore {
       // USDC is the column's default (0040): only a EURC payment names its token,
       // so USDC payments do not depend on the column existing yet.
       ...(input.token && input.token !== "USDC" ? { token: input.token } : {}),
+      // Written for a bridged payment only, like token: a payment on Arc does not need the column (0044).
+      ...(paidAcrossChains(input.destinationChain) ? { destination_chain: input.destinationChain } : {}),
     }, { onConflict: "source_type,source_id", ignoreDuplicates: true });
     if (result.error) throw new Error(result.error.message);
     return this.getBySource(input.sourceType, input.sourceId);
@@ -267,6 +284,10 @@ export class SupabasePaymentIntentStore implements PaymentIntentStore {
       failure_reason: result.failureReason,
       executed_at: now,
       updated_at: now,
+      // A bridged payment's mint and fee (CCTP payouts X8), only when there are any.
+      ...(result.mintTxHash ? { mint_tx_hash: result.mintTxHash } : {}),
+      ...(result.destinationChain ? { destination_chain: result.destinationChain } : {}),
+      ...(result.bridgeFeeUsdc != null ? { bridge_fee: result.bridgeFeeUsdc } : {}),
     }).eq("idempotency_key", idempotencyKey);
     if (update.error) throw new Error(update.error.message);
     return this.get(idempotencyKey);
@@ -318,6 +339,8 @@ function execution(intent: PaymentIntent, reconciled: boolean, retriedAfter: Ret
     executedAt: intent.executedAt,
     attempt: intent.transferAttempt,
     retriedAfter,
+    destinationChain: intent.destinationChain ?? null,
+    mintTxHash: intent.mintTxHash ?? null,
   };
 }
 
@@ -394,6 +417,8 @@ export async function executePayment(
       memo: request.memo,
       idempotencyKey,
       token: request.token ?? "USDC",
+      ...(request.destinationChain ? { destinationChain: request.destinationChain } : {}),
+      ...(request.maxBridgeFeeUsdc != null ? { maxBridgeFeeUsdc: request.maxBridgeFeeUsdc } : {}),
     });
     intent = await store.recordResult(idempotencyKey, result);
     return execution(intent, false, retriedAfter);

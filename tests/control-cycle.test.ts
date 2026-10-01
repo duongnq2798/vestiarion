@@ -486,6 +486,19 @@ describe("reconcileApInvoice — a matched payable with a payment in flight", ()
     expect(outcome.status).toBe("paid");
   });
 
+  it("resubmits a payment to a payee on another chain to that chain, its fee bounded (CCTP payouts, review I7)", async () => {
+    payInvoiceMock.mockResolvedValue({ status: "matched", txRef: "0xburn", execution: null, note: "", operatingBalance: null, amountPaid: 150, discountTaken: 0 });
+    const { run } = cycleFake((r) => {
+      if (r.path === "/rest/v1/counterparties" && r.method === "GET") return { body: { risk_level: "low" } };
+      if (r.path === "/rest/v1/rpc/agent_paused") return { body: false };
+      return undefined;
+    });
+    await run(() =>
+      reconcileApInvoice({ ...invoice, txRef: null, destinationChain: "BASE-SEPOLIA" }, { providerTxId: null, status: "submitting" }, { db: db(), provider, operating: { id: ACCOUNT_ID } })
+    );
+    expect(payInvoiceMock.mock.calls[0][0]).toMatchObject({ destinationChain: "BASE-SEPOLIA", maxBridgeFeeUsdc: 15 });
+  });
+
   it("resubmits with the invoice's discount, and records what the new transfer carried", async () => {
     payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", operatingBalance: 200, amountPaid: 147, discountTaken: 3 });
     const { fake, run } = cycleFake((r) => {

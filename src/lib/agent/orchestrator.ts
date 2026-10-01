@@ -30,6 +30,8 @@ import {
 import { followUpConfig, planFollowUp, type DecisionFacts, type FollowUpConfig, type FollowUpPlan } from "./follow-up";
 import { OPEN_PAYABLE_STATUSES, summarizePayableObligations, sumUsdcAmounts } from "./obligations";
 import { ARC_TESTNET_EURC, quoteEurcInUsdc, type EurcQuote } from "../fx/quote";
+import { bridgeFee as irisBridgeFee, EXPECTED_BRIDGE_SECONDS, type BridgeFee } from "../circle/cctp";
+import { BRIDGE_FEE_CAP_PERCENT, payeeChain } from "../payee-chains";
 import {
   amountToPay,
   boundPayOn,
@@ -78,6 +80,7 @@ Rules you must follow:
 - Never pay a counterparty whose risk level is "high".
 - Never authorise an amount above the counterparty's current payment limit.
 - An invoice is in USDC or EURC. Payment limits are in USDC: a EURC invoice is weighed at its USDC value (invoice.usdcValue, from Circle's quote), and it is paid in EURC from the wallet's EURC (treasury.eurcBalance), never with USDC. When usdcValue is null there is no rate, so hold it. When treasury.eurcBalance is null, payments are simulated here or the balance could not be read; code checks it before any EURC leaves.
+- A payee on another chain is paid from Arc through Circle's CCTP: payout gives the route, the fee paid on top of the invoice and the expected time. Weigh whether the fee is worth paying for this invoice; code holds a payout whose fee is above 10% of the amount.
 - When a three-way match is incomplete (no purchase order on file, or goods not confirmed received), request information instead of paying.
 - When evidence suggests fraud — a duplicate invoice, a mismatched PO, a counterparty whose risk just changed — flag it rather than holding quietly.
 - Keep enough liquid operating cash to cover every obligation due in the next 7 days before sweeping anything into yield.
@@ -249,7 +252,16 @@ interface PayStepOutcome {
  * one branch does.
  */
 export async function payApInvoiceIfNotPaused(
-  input: { invoiceId: string; counterpartyId: string; address: string | null; amount: number; discount?: InvoiceDiscount | null; currency?: Stablecoin },
+  input: {
+    invoiceId: string;
+    counterpartyId: string;
+    address: string | null;
+    amount: number;
+    discount?: InvoiceDiscount | null;
+    currency?: Stablecoin;
+    destinationChain?: string;
+    maxBridgeFeeUsdc?: number;
+  },
   deps: { provider: ChainProvider; operating: { id: string } | null }
 ): Promise<PayStepOutcome & { payment?: { amountPaid: number; discountTaken: number } }> {
   const pauseNote = await pausedPaymentNote();
@@ -275,6 +287,19 @@ export async function payApInvoiceIfNotPaused(
     // its deadline's day; present only when `payInvoice` ran.
     payment: { amountPaid: result.amountPaid, discountTaken: result.discountTaken },
   };
+}
+
+/** A bridge whose mint has not come this long after its decision is held for a person (CCTP payouts, review I5). */
+const MINT_OVERDUE_HOURS = 2;
+
+function mintOverdue(decidedAt: string | null): boolean {
+  const at = decidedAt ? Date.parse(decidedAt) : Number.NaN;
+  return Number.isFinite(at) && Date.now() - at > MINT_OVERDUE_HOURS * 3_600_000;
+}
+
+/** The most a payout's CCTP fee may be, in USDC: the cap's share of the amount, read again at the burn (review I4). */
+function bridgeFeeCeiling(amount: number): number {
+  return Math.round(amount * BRIDGE_FEE_CAP_PERCENT * 10_000) / 1_000_000;
 }
 
 /** Appended to a held invoice's reasoning when a resubmission was refused because screening now says high risk. */
@@ -426,6 +451,10 @@ export async function reconcileApInvoice(
     discount?: InvoiceDiscount | null;
     /** USDC unless the invoice is in EURC; the in-flight transfer moves this token (EURC invoices design E5). */
     currency?: Stablecoin;
+    /** The payee's chain, for a payment resubmitted through CCTP (CCTP payouts X2). */
+    destinationChain?: string;
+    /** When the agent decided it: a bridge still not minted long after is held for a person (review I5). */
+    decidedAt?: string | null;
   },
   intent: ExistingPaymentIntent,
   deps: { db: OrgDb; provider: ChainProvider; operating: { id: string } | null }
@@ -437,6 +466,9 @@ export async function reconcileApInvoice(
     amount: invoice.amount,
     discount: invoice.discount ?? null,
     currency: invoice.currency ?? "USDC",
+    ...(invoice.destinationChain
+      ? { destinationChain: invoice.destinationChain, maxBridgeFeeUsdc: bridgeFeeCeiling(invoice.amount) }
+      : {}),
   };
   const currency = input.currency;
   const transferExists = intent.providerTxId !== null || intent.status === "confirmed";
@@ -498,6 +530,16 @@ export async function reconcileApInvoice(
       heldBecausePaused: false,
       operatingBalance: result.operatingBalance,
     };
+    // A bridge burned on Arc whose mint has not come long after: a person
+    // looks, rather than the invoice waiting in flight unseen (review I5).
+    // Approve and pay then only reads the transfer again; it never sends.
+    if (result.status === "matched" && intent.providerTxId?.startsWith("cctp:") && mintOverdue(invoice.decidedAt ?? null)) {
+      outcome = {
+        ...outcome,
+        status: "held",
+        reasoningSuffix: ` [not minted on the payee's chain ${MINT_OVERDUE_HOURS} hours after the burn on Arc testnet (${result.txRef ?? intent.providerTxId}); held for a person to check the transfer with Circle]`,
+      };
+    }
     if (result.status === "held") paidAmount = null;
   } else if (blocker) {
     notResubmitted = blocker;
@@ -557,6 +599,8 @@ export async function reconcileApInvoice(
         settledInMs: execution?.settledInMs ?? null,
         executedAt: execution?.executedAt ?? null,
         reconciled: execution?.reconciled ?? false,
+        // A bridged payment's mint, once the Forwarding Service submitted it (CCTP payouts X8).
+        ...(execution?.destinationChain ? { destinationChain: execution.destinationChain, mintTxHash: execution.mintTxHash } : {}),
         ...heldBecausePausedDetail(outcome.heldBecausePaused),
       },
     },
@@ -588,6 +632,7 @@ interface ApPayableRow {
   counterparty_id: string;
   agent_reasoning: string | null;
   tx_ref: string | null;
+  decided_at?: string | null;
   early_pay_discount_pct?: string | number | null;
   discount_due_date?: string | null;
   scheduled_for?: string | null;
@@ -603,6 +648,8 @@ interface ApPayableRow {
     address: string | null;
     address_changed_at: string | null;
     address_confirmed_at: string | null;
+    /** The payee's chain (0044): another than Arc testnet is paid through CCTP. */
+    chain?: string | null;
   };
 }
 
@@ -850,6 +897,7 @@ async function decideApPayable(
     obligationsBy: (targetOn: string, today: string, currency: Stablecoin) => ObligationsDue;
     metrics: CycleMetricsCollector;
     eurc: EurcFunds;
+    bridgeFee: (chain: string, amount: number) => Promise<BridgeFee>;
   }
 ): Promise<{ status: string; scheduledFor: string | null; operatingBalance: number | null; line: CycleLogLine }> {
   const { db, provider, operating, operatingBalance, history, metrics } = ctx;
@@ -879,6 +927,25 @@ async function decideApPayable(
   const eurcBalance = typeof eurcRead === "number" ? eurcRead : null;
   const overLimit = limit != null && usdcValue != null && usdcValue > limit;
   const priced = isEurc ? `${amount} EURC (${usdcValue} USDC at the quoted rate)` : `${amount} USDC`;
+  // A payee on another chain is paid from Arc through CCTP (CCTP payouts X2–X7):
+  // the fee, read now, is weighed by the model, bounded by code, and paid on
+  // top of the invoice out of the operating USDC. Only USDC crosses.
+  const destination = payeeChain(counterparty.chain);
+  const crossChain = destination.id !== "ARC-TESTNET";
+  let fee: BridgeFee | null = null;
+  if (crossChain && !isEurc) {
+    try {
+      fee = await ctx.bridgeFee(destination.id, amount);
+    } catch (error) {
+      console.error("ap: no CCTP fee", invoice.id, error instanceof Error ? error.message : error);
+    }
+  }
+  // The cap is weighed on the ratio itself (review M6); the model is shown it rounded.
+  const feeRatioPercent = fee ? (fee.feeUsdc / amount) * 100 : null;
+  const feePercent = feeRatioPercent === null ? null : Math.round(feeRatioPercent * 100) / 100;
+  const payout = crossChain
+    ? { chain: destination.label, route: "cctp", feeUsdc: fee?.feeUsdc ?? null, feePercent, expectedSeconds: EXPECTED_BRIDGE_SECONDS }
+    : { chain: destination.label, route: "direct" };
   const highRisk = counterparty.risk_level === "high";
 
   // The system prompt has always told the model to flag a duplicate invoice.
@@ -918,7 +985,7 @@ async function decideApPayable(
       amount,
       dueDate: invoice.due_date,
       discount,
-      operatingBalance: isEurc ? (eurcUnreadable ? 0 : (eurcBalance ?? Number.POSITIVE_INFINITY)) : operatingBalance,
+      operatingBalance: isEurc ? (eurcUnreadable ? 0 : (eurcBalance ?? Number.POSITIVE_INFINITY)) : operatingBalance - (fee?.feeUsdc ?? 0),
       reserveApy: isEurc ? 0 : ctx.reserveApy,
       reserveBalance: isEurc ? 0 : ctx.reserveBalance,
       currency,
@@ -957,6 +1024,7 @@ async function decideApPayable(
         ),
       },
       treasury: isEurc ? { eurcBalance, reserveBalance: 0 } : { operatingBalance, reserveBalance: ctx.reserveBalance },
+      payout,
       timing: timingFacts(timing),
       scheduledEarlier,
       duplicateMatches: duplicateContext.matches.map((match) => ({
@@ -1013,6 +1081,19 @@ async function decideApPayable(
           confidence: 0.9,
         };
       }
+      if (crossChain && isEurc) {
+        return { action: "hold", reasoning: `Only USDC crosses chains, and this invoice is in EURC; ${counterparty.name} is paid on ${destination.label}.`, confidence: 0.9 };
+      }
+      if (crossChain && feePercent === null) {
+        return { action: "hold", reasoning: `Circle gave no CCTP fee for paying ${counterparty.name} on ${destination.label}, so the cost of the payout is not known.`, confidence: 0.85 };
+      }
+      if (crossChain && feeRatioPercent !== null && feeRatioPercent > BRIDGE_FEE_CAP_PERCENT) {
+        return {
+          action: "hold",
+          reasoning: `Paying ${counterparty.name} on ${destination.label} through CCTP costs ${fee?.feeUsdc} USDC, ${feePercent}% of the ${amount} USDC invoice, above the ${BRIDGE_FEE_CAP_PERCENT}% the policy pays.`,
+          confidence: 0.85,
+        };
+      }
       if (!invoice.goods_received || !invoice.po_reference) {
         return {
           action: "request_info",
@@ -1064,6 +1145,7 @@ async function decideApPayable(
     addressConfirmedAt: counterparty.address_confirmed_at,
     currency,
     fxAvailable: !isEurc || fx !== null,
+    bridge: crossChain ? { feePercent: isEurc ? 0 : feeRatioPercent, unsupportedToken: isEurc } : null,
     eurcShort: eurcUnreadable
       ? { balance: null, needed: eurcNeeded }
       : isEurc && eurcBalance !== null && eurcBalance < eurcNeeded
@@ -1095,6 +1177,7 @@ async function decideApPayable(
           amount,
           discount,
           currency,
+          ...(crossChain ? { destinationChain: destination.id, maxBridgeFeeUsdc: bridgeFeeCeiling(amount) } : {}),
         },
         { provider, operating }
       );
@@ -1155,6 +1238,8 @@ async function decideApPayable(
       guardrailBlocked,
       guardrailRule: guardrail.rule,
       currency,
+      // A payee on another chain: the route and the fee read for this decision (CCTP payouts X11).
+      ...(crossChain ? { payout: { chain: destination.id, route: "cctp", domain: destination.domain, feeUsdc: fee?.feeUsdc ?? null } } : {}),
       // A EURC payable's USDC value and the quote it came from (E2); null when there was none.
       ...(isEurc
         ? {
@@ -1214,6 +1299,8 @@ async function decideApPayable(
         settledInMs: paymentExecution?.settledInMs ?? null,
         executedAt: paymentExecution?.executedAt ?? null,
         reconciled: paymentExecution?.reconciled ?? false,
+        // A bridged payment: where it mints, and the mint when it came at once (CCTP payouts X8).
+        ...(paymentExecution?.destinationChain ? { destinationChain: paymentExecution.destinationChain, mintTxHash: paymentExecution.mintTxHash ?? null } : {}),
         // D6: the ledger says the pause is why this held, not just the
         // reasoning text — set only when it is, so it is unambiguous from
         // a hold for a missing operating account or a failed transfer.
@@ -1248,6 +1335,8 @@ export interface ApStageInput {
   operatingAddress?: string | null;
   /** What a EURC amount is worth in USDC now (E2); Circle's Stablecoin Service unless a test passes its own. */
   quoteEurc?: (amountEurc: number) => Promise<EurcQuote>;
+  /** The CCTP fee to a payee's chain now (CCTP payouts X3); Iris unless a test passes its own. */
+  bridgeFee?: (chain: string, amount: number) => Promise<BridgeFee>;
 }
 
 /**
@@ -1307,7 +1396,7 @@ export async function runApStage(input: ApStageInput): Promise<number> {
   const loaded = unwrap(
     await db
       .from("invoices")
-      .select("*, counterparties(id, name, risk_level, payment_limit, performance_score, performance_inputs, address, address_changed_at, address_confirmed_at)")
+      .select("*, counterparties(id, name, risk_level, payment_limit, performance_score, performance_inputs, address, address_changed_at, address_confirmed_at, chain)")
       .eq("direction", "payable")
       .in("status", ["pending", "matched", "scheduled"])
       .order("created_at", { ascending: true })
@@ -1407,6 +1496,8 @@ export async function runApStage(input: ApStageInput): Promise<number> {
           txRef: invoice.tx_ref,
           discount: invoiceDiscount(invoice),
           currency: invoiceCurrency(invoice.currency),
+          ...(payeeChain(counterparty.chain).id !== "ARC-TESTNET" ? { destinationChain: payeeChain(counterparty.chain).id } : {}),
+          decidedAt: invoice.decided_at ?? null,
         },
         intent,
         { db, provider, operating }
@@ -1429,6 +1520,7 @@ export async function runApStage(input: ApStageInput): Promise<number> {
       metrics,
       obligationsBy: (targetOn, today, currency) => obligationsDueBy(book, { excludeId: invoice.id, by: targetOn, today, milestones, currency }),
       eurc,
+      bridgeFee: input.bridgeFee ?? ((chain, amount) => irisBridgeFee(chain, amount)),
     });
     if (decided.operatingBalance !== null) operatingBalance = decided.operatingBalance;
     record(invoice.id, decided.status, decided.scheduledFor);

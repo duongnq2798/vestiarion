@@ -165,6 +165,17 @@ describe("payInvoice", () => {
     expect(requests.some((sent) => sent.path === "/rest/v1/accounts")).toBe(false);
   });
 
+  it("sends a payment to a payee on another chain with that chain (CCTP payouts X2)", async () => {
+    const provider = new FakeProvider();
+    provider.transferResults.push(transferResult("pending", "cctp:burn-1"));
+    const backend = paymentIntentsBackend();
+    const result = await inOrg((sent) => backend.respond(sent), () =>
+      payInvoice({ ...input, destinationChain: "BASE-SEPOLIA" }, { provider, operating: { id: OPERATING_ACCOUNT_ID } })
+    );
+    expect(provider.transfers[0]).toMatchObject({ destinationChain: "BASE-SEPOLIA", token: "USDC" });
+    expect(result.status).toBe("matched");
+  });
+
   it("stays paid, with its txRef and execution, when the balance sync fails after a confirmed transfer", async () => {
     const provider = new FakeProvider();
     provider.transferResults.push(transferResult("confirmed"));

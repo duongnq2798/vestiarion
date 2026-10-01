@@ -104,7 +104,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["Only an owner or admin of this workspace can add counterparties.", COUNTERPARTIES_PAGE],
     ["Legal or trading name", COUNTERPARTY_FORM],
     ["Payment limit (USDC)", COUNTERPARTY_FORM],
-    ["ARC-TESTNET", COUNTERPARTY_FORM],
+    ["Another chain is paid from Arc through CCTP, for a fee", COUNTERPARTY_FORM],
     ["Payment address", COUNTERPARTY_FORM],
     ["Optional until payment setup", COUNTERPARTY_FORM],
     ["Jurisdiction", COUNTERPARTY_FORM],
