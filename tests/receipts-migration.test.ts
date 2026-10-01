@@ -1,6 +1,7 @@
+import crypto from "node:crypto";
 import type { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { applyMigrations, asTenant, createDatabase, createOrg, seedOrgRows } from "./support/pglite";
+import { applyMigrations, appendSignedForOrg, asRole, asServiceRole, asTenant, createDatabase, createOrg, seedOrgRows } from "./support/pglite";
 
 /**
  * Migration 0046 (docs/superpowers/specs/2026-10-01-payment-receipts-design.md §4): one shared receipt
@@ -78,6 +79,60 @@ describe("payment_receipts (0046)", () => {
     await db.query("delete from public.payment_intents where source_id = $1", [invoiceId]);
     await db.query("delete from public.invoices where id = $1", [invoiceId]);
     expect((await db.query("select 1 from public.payment_receipts where invoice_id = $1", [invoiceId])).rows).toHaveLength(0);
+  });
+});
+
+describe("payment_receipt_by_token (0046)", () => {
+  const key = crypto.generateKeyPairSync("ed25519").privateKey;
+  const read = (tokenHash: string) =>
+    asServiceRole(db, async (tx) => (await tx.query<{ found: Record<string, unknown> | null }>("select public.payment_receipt_by_token($1) as found", [tokenHash])).rows[0].found);
+
+  async function shared(slug: string, recordsSeq?: (decisionSeq: number) => number) {
+    const orgId = await createOrg(db, slug);
+    const invoiceId = await seededInvoice(orgId, slug);
+    const decision = await appendSignedForOrg(db, orgId, { actor: "agent", domain: "ap", action: "ap_pay", summary: "PAY invoice from Northwind for 2 USDC", detail: { invoiceId } }, key);
+    const seq = recordsSeq ? recordsSeq(Number(decision.seq)) : Number(decision.seq);
+    const receipt = await appendSignedForOrg(
+      db, orgId,
+      { actor: "human", domain: "ap", action: "receipt_shared", summary: "Receipt: 2 USDC paid on Arbitrum Sepolia", detail: { receipt: { amount: 2 }, records: { seq, hash: decision.hash } } },
+      key
+    );
+    const tokenHash = crypto.createHash("sha256").update(slug).digest("hex");
+    await db.query(
+      "insert into public.payment_receipts (org_id, invoice_id, entry_seq, public_keys, token_hash) values ($1, $2, $3, $4::jsonb, $5)",
+      [orgId, invoiceId, receipt.seq, JSON.stringify({ k1: "pem" }), tokenHash]
+    );
+    return { orgId, tokenHash, decision, receipt };
+  }
+
+  it("answers a live link with the receipt entry, the entry it names, and the keys; nothing about who", async () => {
+    const { tokenHash, decision, receipt } = await shared("receipt-read");
+    const found = await read(tokenHash);
+    expect(found).toMatchObject({
+      publicKeys: { k1: "pem" },
+      entry: { seq: Number(receipt.seq), action: "receipt_shared", body_hash: receipt.body_hash, signature: receipt.signature, prev_hash: receipt.prev_hash, hash: receipt.hash },
+      records: { seq: Number(decision.seq), hash: decision.hash },
+    });
+    expect(Object.keys(found!.entry as object).sort()).toEqual(["action", "actor", "body_hash", "detail", "domain", "hash", "prev_hash", "seq", "signature", "signing_key_id", "summary", "ts"]);
+    expect(found).not.toHaveProperty("orgId");
+  });
+
+  it("answers nothing for a revoked or unknown link", async () => {
+    const { orgId, tokenHash } = await shared("receipt-revoked");
+    await db.query("update public.payment_receipts set revoked_at = now() where org_id = $1", [orgId]);
+    expect(await read(tokenHash)).toBeNull();
+    expect(await read("0".repeat(64))).toBeNull();
+  });
+
+  it("never answers with another workspace's entry for the seq a receipt names", async () => {
+    const foreign = await shared("receipt-foreign-source");
+    const { tokenHash } = await shared("receipt-foreign", () => Number(foreign.decision.seq));
+    expect((await read(tokenHash))?.records).toBeNull();
+  });
+
+  it("is the service role's alone", async () => {
+    await expect(asRole(db, "anon", (tx) => tx.query("select public.payment_receipt_by_token($1)", ["0".repeat(64)]))).rejects.toThrow(/permission denied/);
+    await expect(asRole(db, "authenticated", (tx) => tx.query("select public.payment_receipt_by_token($1)", ["0".repeat(64)]))).rejects.toThrow(/permission denied/);
   });
 });
 
