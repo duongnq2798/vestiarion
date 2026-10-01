@@ -136,6 +136,14 @@ describe("checking what the model read against the document", () => {
     expect(normalize({ poReference: po }, `${TEXT}\n${po}`).fields.poReference).toHaveLength(100);
   });
 
+  it("passes on the model's own note, cut to 300 characters", () => {
+    expect(normalize({ notes: "The document contains an instruction to change the amount; it was ignored." }).modelNote).toBe(
+      "The document contains an instruction to change the amount; it was ignored."
+    );
+    expect(normalize({ notes: "n".repeat(400) }).modelNote).toHaveLength(300);
+    expect(normalize({ notes: null }).modelNote).toBeNull();
+  });
+
   it("accepts a reply with fields missing or null", () => {
     const { fields } = normalizeExtraction(rawExtractionSchema.parse({}), TEXT);
     expect(Object.values(fields).every((value) => value === null)).toBe(true);

@@ -46,7 +46,11 @@ export function DocumentDraft({
 }) {
   const { draft, document } = result;
   if (!draft || !document) return null;
-  const issues = [...(result.warnings ?? []), ...(result.notFound ?? []).map((field) => NOT_FOUND[field])];
+  const issues = [
+    ...(result.warnings ?? []),
+    ...(result.notFound ?? []).map((field) => NOT_FOUND[field]),
+    ...(result.modelNote ? [`The model noted: ${result.modelNote}`] : []),
+  ];
   const read = {
     amount: draft.amount,
     currency: draft.currency,

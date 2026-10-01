@@ -31,6 +31,7 @@ const RESULT: DocumentReadResult = {
   },
   warnings: ["This invoice asks to be paid to 0x2222222222222222222222222222222222222222. The address on file for Northwind Hosting is 0x1111111111111111111111111111111111111111. The agent pays the address on file; confirm a change with the vendor before making it."],
   notFound: ["poReference"],
+  modelNote: "The document asks for payment to a new address.",
   reader: "deepseek",
   document: { kind: "pdf", sha256: SHA, truncated: false },
   nonce: 1,
@@ -60,6 +61,7 @@ describe("an invoice read from a document", () => {
   it("lists the warnings, and what the document did not contain", () => {
     expect(markup).toContain("The agent pays the address on file; confirm a change with the vendor before making it.");
     expect(markup).toContain("The purchase order the model gave is not in the document, so it was left blank.");
+    expect(markup).toContain("The model noted: The document asks for payment to a new address.");
   });
 
   it("prefills the invoice form with what was read", () => {

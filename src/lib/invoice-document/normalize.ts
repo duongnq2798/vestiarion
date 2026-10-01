@@ -55,6 +55,8 @@ export interface NormalizedExtraction {
   notFound: NotFoundField[];
   /** Why a value was left out, in words for the member. */
   notes: string[];
+  /** The model's own note on what to check, shown as the model's: it can be wrong. */
+  modelNote: string | null;
 }
 
 const AMOUNT_PATTERN = /^(?:0|[1-9]\d{0,13})(?:\.\d{1,6})?$/;
@@ -170,5 +172,6 @@ export function normalizeExtraction(raw: RawExtraction, text: string): Normalize
     },
     notFound,
     notes,
+    modelNote: cut(raw.notes, 300),
   };
 }

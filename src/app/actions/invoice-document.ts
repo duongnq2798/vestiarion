@@ -24,6 +24,8 @@ export interface DocumentReadResult {
   draft?: InvoiceDraft & { counterpartyId: string | null };
   warnings?: string[];
   notFound?: NotFoundField[];
+  /** The model's own note on what to check, or null. */
+  modelNote?: string | null;
   reader?: DecisionMode;
   document?: { kind: "pdf" | "text"; sha256: string; truncated: boolean };
   /** Changes on every read, so the form below remounts with the new values. */
@@ -60,7 +62,7 @@ export async function readInvoiceDocumentAction(_previous: DocumentReadResult, f
       const counterparties = unwrap(await db().from("counterparties").select("id, name, role, address").order("name")) as MatchableCounterparty[];
 
       const { raw, reader } = await extractInvoice(document.text, new Date().toISOString().slice(0, 10));
-      const { fields, notFound, notes } = normalizeExtraction(raw, document.text);
+      const { fields, notFound, notes, modelNote } = normalizeExtraction(raw, document.text);
       const match = matchCounterparty(fields, counterparties);
       const matched = counterparties.find((counterparty) => counterparty.id === match.counterpartyId);
 
@@ -70,6 +72,7 @@ export async function readInvoiceDocumentAction(_previous: DocumentReadResult, f
         draft: { ...fields, counterpartyId: match.counterpartyId },
         warnings: [...match.warnings, ...notes, ...(document.truncated ? ["Only the first 20,000 characters were read."] : [])],
         notFound,
+        modelNote,
         reader,
         document: { kind: document.kind, sha256: document.sha256, truncated: document.truncated },
         nonce: Date.now(),
