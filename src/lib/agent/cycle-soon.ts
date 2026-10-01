@@ -29,6 +29,7 @@ import { SANDBOX_DAILY_CYCLES, SandboxCapReachedError } from "./sandbox-cap";
 export type CycleEventKind =
   | "invoice_added"
   | "milestone_verified"
+  | "milestone_added"
   | "payable_returned"
   | "address_confirmed"
   | "agent_resumed"

@@ -170,6 +170,17 @@ export function invoiceDecision(invoice: InvoiceRow, counterparty: CounterpartyR
   };
 }
 
+/** A milestone's evidence as a link a person can open: an https address, other than a pull request (the Verified by row links that). */
+function milestoneEvidenceLink(source: string | null, githubSource: string | undefined): { href: string; host: string } | null {
+  if (!source || githubSource) return null;
+  try {
+    const url = new URL(source);
+    return url.protocol === "https:" && url.hostname ? { href: url.href, host: url.hostname } : null;
+  } catch {
+    return null;
+  }
+}
+
 export function milestoneDecision(milestone: MilestoneRow, entries: LedgerEntry[]): Decision {
   const entry = matchingEntry(entries, "milestoneId", milestone.id);
   const observed = record(entry?.detail.observed);
@@ -180,6 +191,7 @@ export function milestoneDecision(milestone: MilestoneRow, entries: LedgerEntry[
   const verificationLabel = milestone.verification_method === "github"
     ? milestone.verification_status === "verified" ? "merged PR" : milestone.verification_status.replace("_", " ")
     : milestone.verification_method === "manual" ? "manual approval" : milestone.verification_method === "seed" ? "demo fixture" : "not verified";
+  const evidenceLink = milestoneEvidenceLink(milestone.verification_source, githubSource);
   return {
     id: milestone.id,
     domain: "contractor",
@@ -193,6 +205,7 @@ export function milestoneDecision(milestone: MilestoneRow, entries: LedgerEntry[
     evidence: [
       { label: "Verified by", value: verificationLabel, href: githubSource, state: milestone.verified ? "ok" : "missing" },
       { label: "Verified", value: milestone.verified ? "yes" : "not yet", state: milestone.verified ? "ok" : "missing" },
+      ...(evidenceLink ? [{ label: "Evidence", value: evidenceLink.host, href: evidenceLink.href, state: "neutral" as const }] : []),
       { label: "Risk", value: risk, state: risk === "high" ? "missing" : "neutral" },
     ],
     guardrail: guardrailBlocked ? { rule: risk === "high" ? "counterparty.high_risk" : "counterparty.payment_limit", attempted: milestone.amount, limit, note: risk === "high" ? "risk tier high" : "amount above screened limit" } : null,
