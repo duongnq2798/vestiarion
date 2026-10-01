@@ -201,3 +201,73 @@ export function planFollowUp(
       : `Decided ${ageDays.toFixed(1)} day(s) ago; not yet stale and no evidence has changed.`,
   };
 }
+
+/**
+ * A contractor milestone the agent held. It has no approval inbox, so until
+ * this a held milestone stayed held for good unless a person revoked its
+ * verification and verified it again (milestone form T6, known limit).
+ */
+export interface HeldMilestone {
+  id: string;
+  title: string;
+  amount: number;
+  riskLevel: string;
+  paymentLimit: number | null;
+  verificationSource: string | null;
+}
+
+/** What the milestone decision rested on, from its ledger entry's `observed` and `execution`. */
+export interface MilestoneDecisionFacts {
+  riskLevel: string;
+  paymentLimit: number | null;
+  verificationSource: string | null;
+  /** Held only because the agent was paused (`execution.heldBecause`), not by the model or a guardrail. */
+  heldBecausePaused: boolean;
+}
+
+export interface MilestoneFollowUpPlan {
+  action: "reopen" | "wait";
+  reason: string;
+  changes: string[];
+}
+
+/**
+ * Whether a held milestone goes back to the decision loop. Only reopening:
+ * a held milestone has no approval path to escalate to, and re-deciding
+ * identical facts would repeat the same answer at the cost of a model call.
+ * The facts compared are the ones the milestone decision reasons from, plus
+ * the pause: a milestone held because the agent was paused is released by the
+ * first cycle that runs after it resumes (a paused agent runs no cycle).
+ */
+export function planMilestoneFollowUp(milestone: HeldMilestone, atDecision: MilestoneDecisionFacts | null): MilestoneFollowUpPlan {
+  if (!atDecision) {
+    return {
+      action: "reopen",
+      changes: [],
+      reason: "No recorded decision facts for this milestone, so it is returned to the decision loop rather than left held on an assumption.",
+    };
+  }
+
+  const changes: string[] = [];
+  if (milestone.riskLevel !== atDecision.riskLevel) {
+    changes.push(`contractor risk moved ${atDecision.riskLevel} → ${milestone.riskLevel}`);
+  }
+  if (milestone.paymentLimit !== atDecision.paymentLimit) {
+    changes.push(`payment limit moved ${describeLimit(atDecision.paymentLimit)} → ${describeLimit(milestone.paymentLimit)}`);
+  }
+  if ((milestone.verificationSource ?? null) !== (atDecision.verificationSource ?? null)) {
+    changes.push(`evidence of the work is now ${milestone.verificationSource ?? "none"}`);
+  }
+  if (atDecision.heldBecausePaused) {
+    changes.push("the agent was paused when it was held, and is running again");
+  }
+
+  if (changes.length > 0) {
+    return {
+      action: "reopen",
+      changes,
+      reason: `The evidence this decision rested on has changed: ${changes.join("; ")}. Returning it to the decision loop.`,
+    };
+  }
+  return { action: "wait", changes: [], reason: "Held, and nothing it rested on has changed since." };
+}

@@ -5,9 +5,12 @@ import {
   factChanges,
   followUpConfig,
   planFollowUp,
+  planMilestoneFollowUp,
   type DecisionFacts,
   type FollowUpConfig,
   type FrozenInvoice,
+  type HeldMilestone,
+  type MilestoneDecisionFacts,
 } from "@/lib/agent/follow-up";
 
 const NOW = Date.parse("2026-09-24T12:00:00.000Z");
@@ -246,5 +249,60 @@ describe("planFollowUp — a EURC invoice (review I2)", () => {
     );
     expect(plan.action).toBe("escalate");
     expect(plan.reason).toContain("100 EURC needs a human decision");
+  });
+});
+
+describe("planMilestoneFollowUp — a held milestone goes back to the agent when its facts change", () => {
+  const atDecision: MilestoneDecisionFacts = { riskLevel: "clear", paymentLimit: 1, verificationSource: "PR #84", heldBecausePaused: false };
+  const held = (over: Partial<HeldMilestone> = {}): HeldMilestone => ({
+    id: "ms-1",
+    title: "Thumbnails",
+    amount: 2,
+    riskLevel: "clear",
+    paymentLimit: 1,
+    verificationSource: "PR #84",
+    ...over,
+  });
+
+  it("reopens when the contractor's limit was raised", () => {
+    const plan = planMilestoneFollowUp(held({ paymentLimit: 5 }), atDecision);
+    expect(plan.action).toBe("reopen");
+    expect(plan.changes).toEqual(["payment limit moved 1 USDC → 5 USDC"]);
+    expect(plan.reason).toContain("evidence this decision rested on has changed");
+  });
+
+  it("reopens when screening moved the contractor's risk", () => {
+    const plan = planMilestoneFollowUp(held(), { ...atDecision, riskLevel: "high" });
+    expect(plan.action).toBe("reopen");
+    expect(plan.changes).toEqual(["contractor risk moved high → clear"]);
+  });
+
+  it("reopens when the evidence of the work changed", () => {
+    const plan = planMilestoneFollowUp(held({ verificationSource: "https://github.com/acme/app/pull/12" }), { ...atDecision, verificationSource: null });
+    expect(plan.action).toBe("reopen");
+    expect(plan.changes).toEqual(["evidence of the work is now https://github.com/acme/app/pull/12"]);
+  });
+
+  it("reopens a milestone held only because the agent was paused, now that a cycle runs", () => {
+    const plan = planMilestoneFollowUp(held(), { ...atDecision, heldBecausePaused: true });
+    expect(plan.action).toBe("reopen");
+    expect(plan.changes).toEqual(["the agent was paused when it was held, and is running again"]);
+  });
+
+  it("reports every change, not just the first", () => {
+    const plan = planMilestoneFollowUp(held({ paymentLimit: 5, riskLevel: "medium" }), atDecision);
+    expect(plan.changes).toHaveLength(2);
+  });
+
+  it("waits, with no model call, when nothing it rested on has changed", () => {
+    const plan = planMilestoneFollowUp(held(), atDecision);
+    expect(plan.action).toBe("wait");
+    expect(plan.changes).toEqual([]);
+  });
+
+  it("reopens rather than assuming, when no decision facts were recorded", () => {
+    const plan = planMilestoneFollowUp(held(), null);
+    expect(plan.action).toBe("reopen");
+    expect(plan.reason).toContain("No recorded decision facts");
   });
 });
