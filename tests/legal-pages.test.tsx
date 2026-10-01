@@ -171,6 +171,9 @@ describe("the privacy page", () => {
     const FRAME = ["task", "invoice", "terms", "counterparty", "treasury", "milestone", "contractor", "economics", "note", "duplicateNote", "duplicateMatchesTotal"];
     const PHRASES: Record<string, string> = {
       amount: "amount",
+      currency: "currency",
+      usdcValue: "its value in USDC for an invoice in EURC",
+      eurcBalance: "the wallet&apos;s EURC balance",
       memo: "memo",
       poReference: "purchase order reference",
       goodsReceived: "whether the goods were received",
