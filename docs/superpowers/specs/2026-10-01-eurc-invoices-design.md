@@ -119,4 +119,21 @@ two changes from overwriting the other:
 
 ## 7. Rollout record
 
-(pending)
+- **2026-10-01: 0040 applied, #85 merged as 4340809.** Read-only check before merge:
+  - `payment_intents.token` exists, defaults to `USDC` and holds 18 USDC intents;
+  - `invoices_currency_check` and `payment_intents_token_check` are in place;
+  - `open_numbers` counts USDC only for the USDC figures;
+  - 0042's median fix, 0043 and 0038's `invoices_scheduled_has_date` are intact.
+
+  testnet-2's operating wallet already held 20 EURC on chain.
+- **The first EURC payment on Arc testnet.**
+  - At 02:10:57 UTC, a 1.50 EURC payable from Centronex was added in testnet-2, due the same day, with a PO and goods received. Centronex's limit is 2 USDC.
+  - The event cycle started at 02:11:02. The quote at 02:11:11 valued it at 1.82397 USDC, a rate of 1.21598 (`circle-stablecoin-quote`).
+  - With an EURC balance of 20, the model (DeepSeek) and the written policy both decided to pay. Its reasoning cites the USDC value against the limit and the EURC balance.
+  - Paid at 02:11:19, 22 s after it was added: ledger #494 `ap_pay`, "PAY invoice from Centronex for 1.5 EURC". The intent's `token` is `EURC`, confirmed, `COMPLETE`.
+  - On chain, tx `0x2e66257f2cf478ecd2d0f7e263e1ad78bf9877b0afb93f3679c0601ef7328f58` (block 64873638) is a `Transfer` of 1.5 from the EURC contract to Centronex's address. The wallet's EURC then read 18.5.
+- **A hold for want of a rate.**
+  - At 02:12:07, a 1.90 EURC payable from Trading Handrock was added (limit 2 USDC).
+  - Circle's quote answered `No route available` (331001). The payable was held with `usdcValue: null` (ledger #500 `ap_hold`); the model and the policy both held it, citing the missing rate.
+  - Asked again a second later, the same amount was quoted at 2.310362 USDC. The route on Arc testnet comes and goes, so the quote now asks once more before holding (`fix/eurc-quote-retry`).
+  - Returned to the agent, this payable is over its limit at the rate (2.31 > 2) though not at face value (1.90 < 2).

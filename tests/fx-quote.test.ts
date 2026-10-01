@@ -64,24 +64,37 @@ describe("quoteEurcInUsdc", () => {
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 
-  it("says there is no route when the service has none", async () => {
-    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ code: 331001, message: "No route available" }), { status: 400 }));
-    await expect(quoteEurcInUsdc(10, { fromAddress: FROM, now: NOW, fetch })).rejects.toMatchObject({ code: "no_route" });
+  const noRoute = () => new Response(JSON.stringify({ code: 331001, message: "No route available" }), { status: 404 });
+
+  it("asks once more when the service answers no route, as Arc testnet's route comes and goes (seen 2026-10-01)", async () => {
+    const fetch = vi.fn().mockResolvedValueOnce(noRoute()).mockResolvedValueOnce(answer("2310362", "2241051"));
+    const quote = await quoteEurcInUsdc(1.9, { fromAddress: FROM, now: NOW, fetch, retryDelayMs: 0 });
+    expect(quote.usdcEstimated).toBe(2.310362);
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
 
-  it("says it is unavailable when the service fails or does not answer in time", async () => {
+  it("says there is no route when the service has none twice", async () => {
+    const fetch = vi.fn().mockImplementation(async () => noRoute());
+    await expect(quoteEurcInUsdc(10, { fromAddress: FROM, now: NOW, fetch, retryDelayMs: 0 })).rejects.toMatchObject({ code: "no_route" });
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("says it is unavailable when the service fails or does not answer in time, after one more try", async () => {
     const down = vi.fn().mockRejectedValue(new TypeError("fetch failed"));
-    await expect(quoteEurcInUsdc(10, { fromAddress: FROM, now: NOW, fetch: down })).rejects.toMatchObject({ code: "unavailable" });
+    await expect(quoteEurcInUsdc(10, { fromAddress: FROM, now: NOW, fetch: down, retryDelayMs: 0 })).rejects.toMatchObject({ code: "unavailable" });
+    expect(down).toHaveBeenCalledTimes(2);
     const slow = vi.fn().mockImplementation((_url: string, init: RequestInit) => {
       expect(init.signal).toBeInstanceOf(AbortSignal);
       return Promise.reject(new DOMException("The operation was aborted due to timeout", "TimeoutError"));
     });
-    await expect(quoteEurcInUsdc(11, { fromAddress: FROM, now: NOW, fetch: slow })).rejects.toBeInstanceOf(FxQuoteError);
+    await expect(quoteEurcInUsdc(11, { fromAddress: FROM, now: NOW, fetch: slow, retryDelayMs: 0 })).rejects.toBeInstanceOf(FxQuoteError);
   });
 
   it("refuses an answer of the wrong shape, or with no USDC out", async () => {
     const malformed = vi.fn().mockResolvedValue(new Response(JSON.stringify({ quote: {} }), { status: 200 }));
     await expect(quoteEurcInUsdc(10, { fromAddress: FROM, now: NOW, fetch: malformed })).rejects.toMatchObject({ code: "malformed" });
+    // An answer that came back and cannot be read is not asked for again.
+    expect(malformed).toHaveBeenCalledTimes(1);
     const zero = vi.fn().mockResolvedValue(answer("0", "0"));
     await expect(quoteEurcInUsdc(12, { fromAddress: FROM, now: NOW, fetch: zero })).rejects.toMatchObject({ code: "malformed" });
   });

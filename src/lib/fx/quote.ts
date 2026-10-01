@@ -63,7 +63,7 @@ const cache = new Map<string, { at: number; value: EurcQuote }>();
  */
 export async function quoteEurcInUsdc(
   amountEurc: number,
-  options: { fromAddress: string; now?: number; fetch?: typeof fetch }
+  options: { fromAddress: string; now?: number; fetch?: typeof fetch; retryDelayMs?: number }
 ): Promise<EurcQuote> {
   if (!Number.isFinite(amountEurc) || amountEurc <= 0) throw new RangeError("An EURC amount to quote must be positive");
   const now = options.now ?? Date.now();
@@ -71,21 +71,38 @@ export async function quoteEurcInUsdc(
   const held = cache.get(amount);
   if (held && now - held.at <= CACHE_MS) return held.value;
 
+  // Arc testnet's route comes and goes: on 2026-10-01 the same 1.9 EURC was
+  // answered "No route available" and, a second later, quoted at 2.310362 USDC.
+  // So a no-route or failed answer is asked for once more before the payable
+  // is held for want of a rate (E4). An answer that cannot be read is not.
+  try {
+    return await askForQuote(amount, options.fromAddress, now, options.fetch);
+  } catch (error) {
+    if (!(error instanceof FxQuoteError) || error.code === "malformed") throw error;
+    await new Promise((resolve) => setTimeout(resolve, options.retryDelayMs ?? RETRY_DELAY_MS));
+    return askForQuote(amount, options.fromAddress, now, options.fetch);
+  }
+}
+
+const RETRY_DELAY_MS = 750;
+
+/** One request to the Stablecoin Service for `amount` base units of EURC, cached when it answers. */
+async function askForQuote(amount: string, fromAddress: string, now: number, fetchImpl: typeof fetch | undefined): Promise<EurcQuote> {
   const url = new URL(QUOTE_URL);
   url.search = new URLSearchParams({
     tokenInAddress: ARC_TESTNET_EURC,
     tokenInChain: "Arc_Testnet",
     tokenOutAddress: ARC_TESTNET_USDC,
     tokenOutChain: "Arc_Testnet",
-    fromAddress: options.fromAddress,
-    toAddress: options.fromAddress,
+    fromAddress,
+    toAddress: fromAddress,
     amount,
     slippageBps: String(SLIPPAGE_BPS),
   }).toString();
 
   let response: Response;
   try {
-    response = await (options.fetch ?? fetch)(url.toString(), { signal: AbortSignal.timeout(DEADLINE_MS), cache: "no-store" });
+    response = await (fetchImpl ?? fetch)(url.toString(), { signal: AbortSignal.timeout(DEADLINE_MS), cache: "no-store" });
   } catch {
     throw new FxQuoteError("unavailable");
   }
