@@ -19,7 +19,9 @@ An autonomous treasury agent for a small business, settled in USDC on Arc.
   - a payout to a vendor on Base Sepolia through CCTP. The burn is on Arc,
     [`0xbc1961bb…d49c`](https://testnet.arcscan.app/tx/0xbc1961bbe2896e7e91d452498b595f1a1de8d45f34b7db8b3fd9d873d908d49c),
     and Circle forwarded the mint of exactly 1 USDC on Base Sepolia,
-    [`0x6c749323…ef9a`](https://sepolia.basescan.org/tx/0x6c749323f9e36efe21fcd5c33df2e55ba5db82040dbd06ff2a8872045c6fef9a).
+    [`0x6c749323…ef9a`](https://sepolia.basescan.org/tx/0x6c749323f9e36efe21fcd5c33df2e55ba5db82040dbd06ff2a8872045c6fef9a);
+  - an invoice read from a PDF by the model, checked by a person, and paid 16 seconds after it was added:
+    [`0x197e979f…64b3`](https://testnet.arcscan.app/tx/0x197e979f3b108d759f5e5e5ee0d7bc67e67acb1c520de1b3c7e969ae689c64b3).
 
   Each feature's design under `docs/superpowers/specs/` ends with its rollout record: what was run in production, with its ledger entries and transactions.
 
