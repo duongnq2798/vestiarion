@@ -20,6 +20,17 @@ describe("counterparty intake", () => {
     expect(counterpartyInputSchema.safeParse({ ...base, role: "contractor", paymentLimit: "" }).success).toBe(false);
   });
 
+  it("takes a chain Vestiarion can pay on, without regard to case, and refuses any other (CCTP payouts X1)", () => {
+    for (const chain of ["ARC-TESTNET", "base-sepolia", "ARB-SEPOLIA", "ETH-SEPOLIA"]) {
+      const result = counterpartyInputSchema.safeParse({ ...base, chain });
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.data.chain).toBe(chain.toUpperCase());
+    }
+    const elsewhere = counterpartyInputSchema.safeParse({ ...base, chain: "POLYGON-AMOY" });
+    expect(elsewhere.success).toBe(false);
+    if (!elsewhere.success) expect(firstZodMessage(elsewhere.error)).toContain("Choose a chain Vestiarion can pay on");
+  });
+
   it("allows a client with no outbound payment authority", () => {
     const result = counterpartyInputSchema.safeParse({ ...base, role: "client", paymentLimit: "" });
     expect(result.success).toBe(true);

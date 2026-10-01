@@ -28,3 +28,12 @@ describe("the CSV import's preview (review M2)", () => {
     expect(source).toContain('{row.currency ? row.currency.toUpperCase() : "USDC"}');
   });
 });
+
+describe("the counterparty form's chain (CCTP payouts X1)", () => {
+  it("offers the chains Vestiarion pays on, Arc testnet first", async () => {
+    const { readFileSync } = await import("node:fs");
+    const source = readFileSync("src/components/intake/CounterpartyIntake.tsx", "utf8");
+    expect(source).toContain('<Select name="chain" defaultValue="ARC-TESTNET">');
+    expect(source).toContain("PAYEE_CHAINS.map");
+  });
+});

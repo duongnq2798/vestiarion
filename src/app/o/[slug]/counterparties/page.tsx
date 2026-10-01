@@ -23,6 +23,7 @@ import { inOrg } from "@/lib/dal/scope";
 import { listLedgerEntries } from "@/lib/ledger";
 import { listActivePayeeLinks } from "@/lib/platform/payee-links";
 import { listCounterparties, stats } from "@/lib/queries";
+import { payeeChain } from "@/lib/payee-chains";
 
 export const dynamic = "force-dynamic";
 
@@ -91,7 +92,7 @@ export default async function CounterpartiesPage({ params }: { params: Promise<{
                           <span className="truncate">{counterparty.name}</span>
                           {counterparty.sample && <Badge size="sm" tone="simulated" shape="tag">Sample</Badge>}
                         </h3>
-                        <p className="mt-0.5 text-xs capitalize text-ink-3">{counterparty.role} · {counterparty.chain || "chain not set"}</p>
+                        <p className="mt-0.5 text-xs capitalize text-ink-3">{counterparty.role} · {payeeChain(counterparty.chain).label}</p>
                       </div>
                       <Badge size="sm" dot tone={RISK_TONE[counterparty.risk_level] ?? "neutral"} className="shrink-0 capitalize">
                         {counterparty.risk_level}
