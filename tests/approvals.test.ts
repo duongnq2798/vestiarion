@@ -423,8 +423,76 @@ describe("approveAndPay", () => {
     it("sends the payment to the payee's chain, and lets its fee be at most the invoice", async () => {
       payInvoiceMock.mockResolvedValue({ status: "matched", txRef: "0xburn", execution: null, note: "", operatingBalance: null, amountPaid: 150, discountTaken: 0 });
       const { run } = approvalsFake({ invoice: onBase });
-      await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+      // The fees it records are read from stand-ins: no test reads Circle.
+      const quotes = { bridgeFee: vi.fn(async () => ({ feeUsdc: 0.054597, maxFeeUnits: BigInt(54597), domain: 6 })), gatewayQuote: vi.fn(async () => null) };
+      await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }, quotes));
       expect(payInvoiceMock.mock.calls[0][0]).toMatchObject({ destinationChain: "BASE-SEPOLIA", maxBridgeFeeUsdc: 150 });
+    });
+
+    describe("records both routes' fees with the route the approval takes (route evidence)", () => {
+      const onArb = (r: RecordedRequest) =>
+        r.params.get("id") ? { body: invoiceRow({ counterparties: { name: "STM", risk_level: "medium", address: "0xdead", chain: "ARB-SEPOLIA" } }) } : undefined;
+      const paid = () => payInvoiceMock.mockResolvedValue({ status: "matched", txRef: "0xburn", execution: null, note: "", operatingBalance: null, amountPaid: 150, discountTaken: 0 });
+      const approvalEntry = (requests: RecordedRequest[]) => rpcBodies(requests, "append_ledger_entry").find((body) => body.p_action === "approval_paid")?.p_detail as Record<string, unknown>;
+      const cctpFee = () => vi.fn(async () => ({ feeUsdc: 0.135342, maxFeeUnits: BigInt(135342), domain: 3 }));
+      const gatewayQuote = () => vi.fn(async () => ({ feeUsdc: 0.105944, balanceUsdc: 5 }));
+
+      it("a new payout goes through CCTP, and its entry sets that fee against Gateway's", async () => {
+        paid();
+        const { fake, run } = approvalsFake({ invoice: onArb });
+        await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }, { bridgeFee: cctpFee(), gatewayQuote: gatewayQuote() }));
+        expect(approvalEntry(fake.requests).payout).toEqual({
+          chain: "ARB-SEPOLIA",
+          route: "cctp",
+          domain: 3,
+          feeUsdc: 0.135342,
+          quotes: { cctpFeeUsdc: 0.135342, gatewayFeeUsdc: 0.105944 },
+        });
+      });
+
+      it("a payout an earlier attempt sent through Gateway records Gateway, its fee and its balance", async () => {
+        paid();
+        const { fake, run } = approvalsFake({
+          invoice: onArb,
+          intents: [intentRow({ status: "failed", provider_tx_id: "gateway:tr-1", provider_state: "FAILED", payout_route: "gateway", destination_chain: "ARB-SEPOLIA" })],
+        });
+        await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }, { bridgeFee: cctpFee(), gatewayQuote: gatewayQuote() }));
+        expect(approvalEntry(fake.requests).payout).toEqual({
+          chain: "ARB-SEPOLIA",
+          route: "gateway",
+          domain: 3,
+          feeUsdc: 0.105944,
+          gatewayBalanceUsdc: 5,
+          quotes: { cctpFeeUsdc: 0.135342, gatewayFeeUsdc: 0.105944 },
+        });
+      });
+
+      it("a fee that cannot be read is null, and never stops the approval", async () => {
+        paid();
+        const { fake, run } = approvalsFake({ invoice: onArb });
+        await run(() =>
+          approveAndPay(
+            { actorId: ACTOR, invoiceId: INVOICE_ID },
+            { bridgeFee: vi.fn(async () => { throw new Error("Iris did not answer"); }), gatewayQuote: vi.fn(async () => { throw new Error("Gateway did not answer"); }) }
+          )
+        );
+        expect(payInvoiceMock).toHaveBeenCalledTimes(1);
+        expect(approvalEntry(fake.requests).payout).toEqual({ chain: "ARB-SEPOLIA", route: "cctp", domain: 3, feeUsdc: null, quotes: { cctpFeeUsdc: null, gatewayFeeUsdc: null } });
+      });
+
+      it("reads no fee for a transfer already sent, which is only reconciled, and for a payee on Arc", async () => {
+        paid();
+        const bridgeFee = cctpFee();
+        const sent = approvalsFake({ invoice: onArb, intents: [intentRow({ status: "pending", provider_tx_id: "cctp:burn-1", provider_state: "COMPLETE", payout_route: "cctp" })] });
+        await sent.run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }, { bridgeFee, gatewayQuote: gatewayQuote() }));
+        expect(bridgeFee).not.toHaveBeenCalled();
+        expect(approvalEntry(sent.fake.requests)).not.toHaveProperty("payout");
+
+        const onArc = approvalsFake({});
+        await onArc.run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }, { bridgeFee, gatewayQuote: gatewayQuote() }));
+        expect(bridgeFee).not.toHaveBeenCalled();
+        expect(approvalEntry(onArc.fake.requests)).not.toHaveProperty("payout");
+      });
     });
 
     it("refuses an EURC invoice to such a payee before any claim: only USDC crosses (review M11)", async () => {

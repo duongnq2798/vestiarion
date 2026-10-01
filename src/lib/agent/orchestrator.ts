@@ -31,7 +31,10 @@ import { followUpConfig, planFollowUp, type DecisionFacts, type FollowUpConfig, 
 import { OPEN_PAYABLE_STATUSES, summarizePayableObligations, sumUsdcAmounts } from "./obligations";
 import { ARC_TESTNET_EURC, quoteEurcInUsdc, type EurcQuote } from "../fx/quote";
 import { bridgeFee as irisBridgeFee, EXPECTED_BRIDGE_SECONDS, type BridgeFee } from "../circle/cctp";
-import { EXPECTED_GATEWAY_SECONDS, estimateGateway, gatewayBalance, gatewaySalt } from "../circle/gateway";
+import { EXPECTED_GATEWAY_SECONDS } from "../circle/gateway";
+import { gatewayQuoter, type GatewayQuote } from "../circle/gateway-quote";
+
+export type { GatewayQuote };
 import type { PayoutRoute } from "../circle/types";
 import { BRIDGE_FEE_CAP_PERCENT, payeeChain } from "../payee-chains";
 import {
@@ -782,38 +785,6 @@ export interface PayableBookRow {
   scheduled_for?: string | null;
 }
 
-/** What a payout from the workspace's Gateway balance would cost, and what that balance holds (Gateway payouts G2). */
-export interface GatewayQuote {
-  feeUsdc: number;
-  balanceUsdc: number;
-}
-
-/**
- * Reads a workspace's Gateway quote for a payout: the fee Gateway estimates
- * now and the balance its operating wallet has deposited. Null in a sandbox,
- * or without a Gateway signer (nothing was ever funded). The signer and the
- * operating wallet's address are read once per stage.
- */
-function gatewayQuoter(provider: ChainProvider, db: OrgDb): (chain: string, amount: number) => Promise<GatewayQuote | null> {
-  let parties: Promise<{ signer: string; depositor: string } | null> | undefined;
-  return async (chain, amount) => {
-    if (provider.mode !== "live") return null;
-    parties ??= (async () => {
-      const signer = await db.from("gateway_signers").select("address").maybeSingle();
-      if (signer.error || !signer.data) return null;
-      const operating = await db.from("accounts").select("address").eq("kind", "operating").maybeSingle();
-      const depositor = (operating.data as { address: string | null } | null)?.address;
-      return depositor ? { signer: (signer.data as { address: string }).address, depositor } : null;
-    })();
-    const known = await parties;
-    if (!known) return null;
-    const [estimate, balanceUsdc] = await Promise.all([
-      estimateGateway({ depositor: known.depositor, signer: known.signer, recipient: known.depositor, chain, amount, salt: gatewaySalt("quote") }),
-      gatewayBalance(known.depositor),
-    ]);
-    return { feeUsdc: estimate.feeUsdc, balanceUsdc };
-  };
-}
 
 /** Payments that fall due by a date: their total (USDC, full amounts) and how many there are. */
 export interface ObligationsDue {
