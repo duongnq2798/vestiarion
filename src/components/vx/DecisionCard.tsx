@@ -7,7 +7,7 @@ import { cn } from "@/components/ui/cn";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { orgHref } from "@/lib/auth/org-paths";
 import { DOMAIN_NAME, DomainGlyph } from "./Glyphs";
-import { explorerTx, fmt, Hash, ModeBadge, Money, OutcomeBadge, Reasoning } from "./Primitives";
+import { explorerTx, fmt, Hash, Money, OutcomeBadge, Reasoning } from "./Primitives";
 import type { Decision, Evidence, Guardrail, Outcome } from "./types";
 
 const CARD_TONE: Partial<Record<Outcome, "refused" | "held" | "simulated">> = {
@@ -36,7 +36,13 @@ export function DecisionCard({ decision, compact = false, orgSlug }: { decision:
               <Eyebrow>
                 {DOMAIN_NAME[decision.domain]} · {time} UTC
               </Eyebrow>
-              <ModeBadge mode={decision.decisionMode} />
+              {/* A model's decision needs no tag: its reasoning is the agent's, and the audit log names the model.
+                  A fallback does, so the written policy's reasoning is never read as the model's judgement. */}
+              {decision.decisionMode === "heuristic" && (
+                <Badge size="sm" title="No model answered, so the written policy decided." className="font-mono uppercase tracking-wide">
+                  Written policy
+                </Badge>
+              )}
             </div>
             <h3 className="mt-1.5 text-base font-semibold leading-snug text-ink">
               {refused && <span className="font-normal text-ink-3">Tried to </span>}
