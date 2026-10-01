@@ -23,7 +23,7 @@ export function ReceiptControl({ orgSlug, invoiceId, shared }: { orgSlug: string
   const error = (!share.state.ok && share.state.message) || (!stop.state.ok && stop.state.message) || null;
 
   return (
-    <div className="flex min-w-0 flex-col gap-2">
+    <div className="flex w-full min-w-0 flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
         {shared && (
           <span className="inline-flex items-center gap-1.5 text-xs text-ink-3">
@@ -48,18 +48,26 @@ export function ReceiptControl({ orgSlug, invoiceId, shared }: { orgSlug: string
           </form>
         )}
       </div>
-      {url && (
-        <div className="space-y-1.5 rounded-lg border border-line bg-surface p-2.5">
-          <div className="flex min-w-0 items-center gap-2">
-            <Input readOnly value={url} aria-label="Receipt link" className="min-w-0 flex-1 font-mono text-xs" onFocus={(event) => event.currentTarget.select()} />
-            <CopyButton value={url} size="sm" variant="secondary" />
-          </div>
-          <p className="text-xs text-ink-3">
-            {share.state.message} Anyone with this link sees the amount, the payee&apos;s address and the transactions, and can check them. It shows no names.
-          </p>
-        </div>
-      )}
+      {url && <ReceiptLink url={url} message={share.state.message} />}
       {error && <FormMessage tone="error">{error}</FormMessage>}
+    </div>
+  );
+}
+
+/**
+ * A link just made, shown once: the whole width it is given, the field beside Copy, and what anyone who
+ * opens it sees. The field scrolls a long link inside itself; the card never widens for it.
+ */
+export function ReceiptLink({ url, message }: { url: string; message: string }) {
+  return (
+    <div className="w-full min-w-0 space-y-1.5 rounded-lg border border-line bg-surface p-2.5">
+      <div className="flex w-full min-w-0 items-center gap-2">
+        <Input readOnly value={url} aria-label="Receipt link" className="min-w-0 flex-1 font-mono text-xs" onFocus={(event) => event.currentTarget.select()} />
+        <CopyButton value={url} size="sm" variant="secondary" />
+      </div>
+      <p className="text-xs leading-5 text-ink-3">
+        {message} Anyone with this link sees the amount, the payee&apos;s address and the transactions, and can check them. It shows no names.
+      </p>
     </div>
   );
 }

@@ -36,7 +36,8 @@ export function DecisionCard({
     minute: "2-digit",
     timeZone: "UTC",
   });
-  const hasFooter = decision.evidence.length > 0 || Boolean(decision.txHash) || decision.auditSeq != null || Boolean(footerAction);
+  const hasFacts = decision.evidence.length > 0 || Boolean(decision.txHash) || decision.auditSeq != null;
+  const hasFooter = hasFacts || Boolean(footerAction);
 
   return (
     <Card asChild tone={CARD_TONE[decision.outcome] ?? "default"} className="overflow-hidden">
@@ -84,30 +85,39 @@ export function DecisionCard({
         </div>
 
         {hasFooter && (
-          <footer className="flex flex-col gap-3 border-t border-line bg-ground/40 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-            <EvidenceRow items={decision.evidence} />
-            <div className="flex shrink-0 flex-wrap items-center gap-4">
-              {decision.auditSeq != null && (
-                <Link
-                  href={orgHref(orgSlug, `/audit#seq-${decision.auditSeq}`)}
-                  className="font-mono text-xs text-ink-3 transition-colors duration-150 ease-standard hover:text-ink hover:underline"
-                >
-                  audit #{String(decision.auditSeq).padStart(4, "0")}
-                </Link>
-              )}
-              {decision.txHash ? (
-                <Hash value={decision.txHash} href={explorerTx(decision.txHash)} />
-              ) : refused ? (
-                <span className="font-mono text-xs text-refused">no transaction sent</span>
-              ) : null}
-              {decision.mint && (
-                <span className="inline-flex items-center gap-1.5 text-xs text-ink-3">
-                  minted on {decision.mint.chainLabel}
-                  <Hash value={decision.mint.txHash} href={decision.mint.href} />
-                </span>
-              )}
-              {footerAction}
-            </div>
+          <footer className="border-t border-line bg-ground/40">
+            {hasFacts && (
+              <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+                <EvidenceRow items={decision.evidence} />
+                <div className="flex shrink-0 flex-wrap items-center gap-4">
+                  {decision.auditSeq != null && (
+                    <Link
+                      href={orgHref(orgSlug, `/audit#seq-${decision.auditSeq}`)}
+                      className="font-mono text-xs text-ink-3 transition-colors duration-150 ease-standard hover:text-ink hover:underline"
+                    >
+                      audit #{String(decision.auditSeq).padStart(4, "0")}
+                    </Link>
+                  )}
+                  {decision.txHash ? (
+                    <Hash value={decision.txHash} href={explorerTx(decision.txHash)} />
+                  ) : refused ? (
+                    <span className="font-mono text-xs text-refused">no transaction sent</span>
+                  ) : null}
+                  {decision.mint && (
+                    <span className="inline-flex items-center gap-1.5 text-xs text-ink-3">
+                      minted on {decision.mint.chainLabel}
+                      <Hash value={decision.mint.txHash} href={decision.mint.href} />
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+            {/* A row of its own, the card's full width: what a person can do here may hold a long link (receipts). */}
+            {footerAction && (
+              <div data-slot="decision-action" className={cn("min-w-0 px-4 py-3 sm:px-5", hasFacts && "border-t border-line")}>
+                {footerAction}
+              </div>
+            )}
           </footer>
         )}
       </article>

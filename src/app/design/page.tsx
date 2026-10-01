@@ -28,7 +28,7 @@ import MilestoneIntake from "@/components/intake/MilestoneIntake";
 import AgentControlsClient from "@/components/AgentControlsClient";
 import AgentPauseControl from "@/components/AgentPauseControl";
 import MembersPanel from "@/components/MembersPanel";
-import { ReceiptControl } from "@/components/ReceiptControl";
+import { ReceiptControl, ReceiptLink } from "@/components/ReceiptControl";
 import { ReceiptView } from "@/components/receipt/ReceiptView";
 import { designReceipt } from "./receipt-fixture";
 import MilestoneVerification from "@/components/MilestoneVerification";
@@ -503,6 +503,19 @@ export default function DesignPage() {
               <ReceiptControl orgSlug={DESIGN_SLUG} invoiceId="00000000-0000-4000-8000-00000000000b" shared={false} />
               <ReceiptControl orgSlug={DESIGN_SLUG} invoiceId="00000000-0000-4000-8000-00000000000b" shared />
             </Card>
+            <DecisionCard
+              decision={DECISIONS.find((decision) => decision.txHash) ?? DECISIONS[0]}
+              orgSlug={DESIGN_SLUG}
+              footerAction={
+                <div className="space-y-2">
+                  <ReceiptControl orgSlug={DESIGN_SLUG} invoiceId="00000000-0000-4000-8000-00000000000b" shared />
+                  <ReceiptLink
+                    url="https://www.vestiarion.xyz/receipt/vxr_kvtVqZq_uaT2ghKUNa3hfeooIjwAI3D9swSt8McVrQx"
+                    message="Receipt shared. Copy the link now: it is shown only once."
+                  />
+                </div>
+              }
+            />
             <div className="mx-auto w-full max-w-2xl">
               <ReceiptView view={designReceipt()} />
             </div>
