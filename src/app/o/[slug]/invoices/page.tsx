@@ -6,6 +6,7 @@ import AgentControls from "@/components/AgentControls";
 import InvoiceCsvImport from "@/components/intake/InvoiceCsvImport";
 import InvoiceDocumentIntake from "@/components/intake/InvoiceDocumentIntake";
 import InvoiceIntake from "@/components/intake/InvoiceIntake";
+import { ReceiptControl } from "@/components/ReceiptControl";
 import { Callout } from "@/components/ui/Callout";
 import { Card } from "@/components/ui/Card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
@@ -23,6 +24,8 @@ import { chainModes } from "@/lib/circle";
 import { inOrg } from "@/lib/dal/scope";
 import { listLedgerEntries, listLedgerEntriesForTargets } from "@/lib/ledger";
 import { listCounterparties, listInvoices, stats } from "@/lib/queries";
+import { receiptShareable } from "@/lib/receipts/facts";
+import { sharedReceipts } from "@/lib/receipts/share";
 
 export const dynamic = "force-dynamic";
 
@@ -58,6 +61,17 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
     const receivables = decisions.filter((decision) => decision.domain === "ar");
     const refused = payables.filter((decision) => decision.outcome === "refused");
     const ordinaryPayables = payables.filter((decision) => decision.outcome !== "refused");
+    // A paid payable with a transaction on chain offers its receipt to an owner or admin (payment receipts P6).
+    const invoicesById = new Map(shown.map((invoice) => [invoice.id, invoice]));
+    const shareable = canWrite
+      ? new Set(ordinaryPayables.filter((decision) => {
+          const invoice = invoicesById.get(decision.id);
+          return invoice !== undefined && receiptShareable(invoice, decision);
+        }).map((decision) => decision.id))
+      : new Set<string>();
+    const shared = await sharedReceipts([...shareable]);
+    const receiptFor = (decision: ReturnType<typeof invoiceDecision>) =>
+      shareable.has(decision.id) ? <ReceiptControl orgSlug={slug} invoiceId={decision.id} shared={shared.has(decision.id)} /> : undefined;
 
     return (
       <ProductShell day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()}>
@@ -126,7 +140,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
               <div className="space-y-4">{refused.map((decision) => <DecisionCard key={decision.id} decision={decision} orgSlug={slug} />)}</div>
             </section>
           )}
-          <InvoiceSection title="Payables" meta={`${payables.length} invoices`} decisions={ordinaryPayables} orgSlug={slug} />
+          <InvoiceSection title="Payables" meta={`${payables.length} invoices`} decisions={ordinaryPayables} orgSlug={slug} footerFor={receiptFor} />
           <InvoiceSection title="Receivables" meta={`${receivables.length} invoices`} decisions={receivables} orgSlug={slug} />
         </div>
       </ProductShell>
@@ -134,14 +148,30 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
   });
 }
 
-function InvoiceSection({ title, meta, decisions, orgSlug }: { title: string; meta: string; decisions: ReturnType<typeof invoiceDecision>[]; orgSlug: string }) {
+function InvoiceSection({
+  title,
+  meta,
+  decisions,
+  orgSlug,
+  footerFor,
+}: {
+  title: string;
+  meta: string;
+  decisions: ReturnType<typeof invoiceDecision>[];
+  orgSlug: string;
+  footerFor?: (decision: ReturnType<typeof invoiceDecision>) => React.ReactNode;
+}) {
   return (
     <section>
       <SectionHeader title={title} meta={meta} />
       {decisions.length === 0 ? (
         <EmptyState compact title={`No ${title.toLowerCase()} here`} body="There are no records in this view." />
       ) : (
-        <div className="space-y-4">{decisions.map((decision) => <DecisionCard key={decision.id} decision={decision} orgSlug={orgSlug} />)}</div>
+        <div className="space-y-4">
+          {decisions.map((decision) => (
+            <DecisionCard key={decision.id} decision={decision} orgSlug={orgSlug} footerAction={footerFor?.(decision)} />
+          ))}
+        </div>
       )}
     </section>
   );

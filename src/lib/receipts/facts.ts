@@ -103,6 +103,14 @@ function recordingEntry(invoiceId: string, entries: LedgerEntry[], txHash: strin
   return recording.find((entry) => contains(entry, txHash)) ?? (sourceTxHash ? recording.find((entry) => contains(entry, sourceTxHash)) : undefined) ?? null;
 }
 
+/**
+ * Whether Invoices offers a receipt for a payable (P6): paid, with a transaction on chain — the transfer, or
+ * the mint on the payee's chain. A simulated payment has neither. The share itself checks the payment again.
+ */
+export function receiptShareable(invoice: { status: string; direction: string }, decision: { txHash?: string | null; mint?: { txHash: string } | null }): boolean {
+  return invoice.direction === "payable" && invoice.status === "paid" && Boolean(decision.txHash || decision.mint);
+}
+
 /** The receipt entry's summary: the amount and the chain, and no names. */
 export function receiptSummary(facts: ReceiptFacts): string {
   return `Receipt: ${facts.amount} ${facts.token} paid on ${payeeChain(facts.chain).label}`;
