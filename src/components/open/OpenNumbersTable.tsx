@@ -72,12 +72,19 @@ const COUNT = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 const PERCENT = new Intl.NumberFormat("en-US", { style: "percent", maximumFractionDigits: 0 });
 const USDC = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+/**
+ * A no-break space. A narrow table may wrap a figure between its parts
+ * ("1 h" / "40 min"), but never between a number and its unit, nor inside a
+ * ratio, so a phone-width /open never shows "15 of" over "17".
+ */
+const NB = " ";
+
 /** Minutes as minutes under an hour, hours and minutes under a day, and days and hours after that. */
 function formatDuration(minutes: number): string {
   const total = Math.round(minutes);
-  if (total < 60) return `${total} min`;
-  if (total < 1440) return `${Math.floor(total / 60)} h ${total % 60} min`;
-  return `${Math.floor(total / 1440)} d ${Math.floor((total % 1440) / 60)} h`;
+  if (total < 60) return `${total}${NB}min`;
+  if (total < 1440) return `${Math.floor(total / 60)}${NB}h ${total % 60}${NB}min`;
+  return `${Math.floor(total / 1440)}${NB}d ${Math.floor((total % 1440) / 60)}${NB}h`;
 }
 
 /** A figure as the table writes it; a missing one (a median of nothing) is a dash. */
@@ -100,7 +107,7 @@ export function formatRow(side: SideNumbers, row: OpenRow): string {
   if (value === null || parts.some((part) => part === null)) return "—";
   const whole = parts.reduce<number>((sum, part) => sum + (part ?? 0), 0);
   if (whole === 0) return "—";
-  return row.format === "percent" ? PERCENT.format(value / whole) : `${COUNT.format(value)} of ${COUNT.format(whole)}`;
+  return row.format === "percent" ? PERCENT.format(value / whole) : `${COUNT.format(value)}${NB}of${NB}${COUNT.format(whole)}`;
 }
 
 export function OpenNumbersTable({
@@ -121,7 +128,8 @@ export function OpenNumbersTable({
         <TableRow>
           <TableHead>Figure</TableHead>
           {COLUMNS.map((column) => (
-            <TableHead key={column.side} className="text-right">
+            // The same width in both tables on /open, so their figures line up.
+            <TableHead key={column.side} className="text-right sm:w-40">
               {column.label}
             </TableHead>
           ))}

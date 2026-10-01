@@ -36,6 +36,9 @@ const side = (scale: number) => ({
   duplicatesCaught: 0,
 });
 
+/** A no-break space: a figure's number and unit, or a ratio, stay on one line in a narrow table. */
+const NB = " ";
+
 /** The cells of the row whose label is `label`, in column order. */
 function cellsOf(markup: string, label: string): string[] {
   const row = markup.slice(markup.indexOf(`${label}</th>`));
@@ -120,18 +123,19 @@ describe("the /open page", () => {
     expect(formatRow({ ...side(1), decisionsCarriedOut: 2, decisionsEscalated: 1 }, share)).toBe("67%");
     expect(formatRow({ ...side(1), decisionsCarriedOut: 0, decisionsEscalated: 0 }, share)).toBe("—");
     expect(formatRow({ ...side(1), invoicesPaidOnTime: 0, invoicesPaidOnArc: 0 }, onTime)).toBe("—");
-    expect(formatRow({ ...side(1), invoicesPaidOnTime: 0, invoicesPaidOnArc: 3 }, onTime)).toBe("0 of 3");
+    // A ratio never breaks across lines.
+    expect(formatRow({ ...side(1), invoicesPaidOnTime: 0, invoicesPaidOnArc: 3 }, onTime)).toBe(`0${NB}of${NB}3`);
     expect(formatRow({ ...side(1), invoicesPaidOnTime: null, invoicesPaidOnArc: 3 }, onTime)).toBe("—");
   });
 
-  it("writes a duration in minutes, hours or days", () => {
+  it("writes a duration in minutes, hours or days, each number kept with its unit", () => {
     expect(formatFigure(null, "duration")).toBe("—");
-    expect(formatFigure(0, "duration")).toBe("0 min");
-    expect(formatFigure(12.6, "duration")).toBe("13 min");
-    expect(formatFigure(60, "duration")).toBe("1 h 0 min");
-    expect(formatFigure(1439, "duration")).toBe("23 h 59 min");
-    expect(formatFigure(1440, "duration")).toBe("1 d 0 h");
-    expect(formatFigure(7290, "duration")).toBe("5 d 1 h");
+    expect(formatFigure(0, "duration")).toBe(`0${NB}min`);
+    expect(formatFigure(12.6, "duration")).toBe(`13${NB}min`);
+    expect(formatFigure(60, "duration")).toBe(`1${NB}h 0${NB}min`);
+    expect(formatFigure(1439, "duration")).toBe(`23${NB}h 59${NB}min`);
+    expect(formatFigure(1440, "duration")).toBe(`1${NB}d 0${NB}h`);
+    expect(formatFigure(7290, "duration")).toBe(`5${NB}d 1${NB}h`);
     expect(formatFigure(3, "count")).toBe("3");
   });
 
