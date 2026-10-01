@@ -13,6 +13,15 @@ Changes to the API and webhooks that affect an integration, newest first. Change
 - `approval_paid` and the `create_invoice` and `import_invoice` entries gain `currency` in `detail`, and their summaries name it.
 - The invoice CSV import takes an optional `currency` column. A blank or missing value means USDC.
 
+## 2026-10-01: Milestones added in the app
+
+- A member can now add a contractor milestone on the Contractors page. It starts `pending` and unverified, like any milestone in `GET /api/v1/milestones`.
+- Its `verificationSource` is the evidence link the member gave, or `null`: a GitHub pull request in its canonical form (`https://github.com/<owner>/<repo>/pull/<number>`, which the cycle checks for a merge as before), or any other `https://` address, which only a person verifies.
+- A new ledger action, delivered as a `ledger.appended` event: `create_milestone`, in the `contractor` domain with `actor: "human"`. Its `detail` is `{ by, milestoneId, counterpartyId, counterpartyName, amount, verificationSource }`, with `amount` as the decimal string entered.
+- A new event kind, `milestone_added`, may appear in an event cycle's `detail.events`. It is raised only for a milestone whose evidence is a pull request, so the merge is checked within a minute.
+
+No `/api/v1` endpoint, parameter or response schema changed.
+
 ## 2026-10-01: Payment timing
 
 - An invoice can carry early-payment terms: a percent off and the date it lapses, set on the invoice form or by CSV import. `GET /api/v1/invoices` now returns `earlyPayDiscount: { percent, deadline } | null` for any invoice that carries them.

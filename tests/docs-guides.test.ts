@@ -12,7 +12,7 @@ import { GoLiveError, type GoLiveErrorCode } from "@/lib/platform/go-live";
  * button in the app fails this test until the guide says the new name.
  */
 
-type GuideSlug = "guides/go-live" | "guides/first-payment" | "guides/audit-export";
+type GuideSlug = "guides/go-live" | "guides/first-payment" | "guides/pay-a-contractor" | "guides/audit-export";
 
 const PANEL = "src/components/GoLivePanel.tsx";
 const GO_LIVE_ACTIONS = "src/app/actions/go-live.ts";
@@ -42,6 +42,12 @@ const VERIFIER = "public/tools/verify-ledger-export.mjs";
 const LEDGER_KEY_PANEL = "src/components/LedgerKeyPanel.tsx";
 const MAP = "src/components/vx/map.ts";
 const SCHEDULED_PAYMENTS = "src/components/vx/ScheduledPayments.tsx";
+const PAYEE_LINK = "src/components/intake/PayeeLinkControl.tsx";
+const CONTRACTORS_PAGE = "src/app/o/[slug]/contractors/page.tsx";
+const MILESTONE_FORM = "src/components/intake/MilestoneIntake.tsx";
+const MILESTONE_ACTIONS = "src/app/actions/milestones.ts";
+const MILESTONE_CHECK = "src/components/MilestoneVerification.tsx";
+const GITHUB_CHECK = "src/lib/milestone-verification.ts";
 
 /** Each guide's quoted UI strings, as `[text, the file it must appear in]`. */
 const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
@@ -176,6 +182,35 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["Payment in flight", MAP],
     ["Scheduled payments", SCHEDULED_PAYMENTS],
   ],
+  "guides/pay-a-contractor": [
+    ["Counterparties", APP_NAV],
+    ["Role", COUNTERPARTY_FORM],
+    ["Contractor", COUNTERPARTY_FORM],
+    ["Payment limit (USDC)", COUNTERPARTY_FORM],
+    ["Ask for address", PAYEE_LINK],
+    ["Create link", PAYEE_LINK],
+    ["Confirm address", ADDRESS_CONTROLS],
+    ["Contractors", APP_NAV],
+    ["Milestone intake", CONTRACTORS_PAGE],
+    ["Contractor", MILESTONE_FORM],
+    ["Amount (USDC)", MILESTONE_FORM],
+    ["Work delivered", MILESTONE_FORM],
+    ["Evidence link", MILESTONE_FORM],
+    ["Add milestone", MILESTONE_FORM],
+    ["The agent is waiting for milestone verification.", MAP],
+    ["create_milestone", MILESTONE_ACTIONS],
+    ["The agent checks the pull request within a minute, and decides on pay once it is merged.", MILESTONE_ACTIONS],
+    ["Verified by", MAP],
+    ["merged PR", MAP],
+    ["verify_milestone_github", GITHUB_CHECK],
+    ["Verify it once the work is delivered, and the agent decides on pay within a minute.", MILESTONE_ACTIONS],
+    ["Evidence", MAP],
+    ["Evidence checked or approver note", MILESTONE_CHECK],
+    ["Verify manually", MILESTONE_CHECK],
+    ["verify_milestone_manual", MILESTONE_ACTIONS],
+    ["Revoke manually", MILESTONE_CHECK],
+    ["Audit log", APP_NAV],
+  ],
   "guides/audit-export": [
     ["Audit log", APP_NAV],
     ["Download", EXPORT_MENU],
@@ -232,6 +267,7 @@ const sourceFile = (file: string) => readFileSync(path.join(process.cwd(), file)
 const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/go-live": 20,
   "guides/first-payment": 20,
+  "guides/pay-a-contractor": 20,
   "guides/audit-export": 5,
 };
 

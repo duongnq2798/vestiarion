@@ -1,0 +1,37 @@
+A milestone pays a contractor for a piece of work once that work is verified, instead of on an invoice's due date: five social posts delivered, a design approved, a pull request merged. You add the milestone, someone verifies the work (or GitHub does, for a pull request), and the agent decides on the release within a minute and pays it in USDC on Arc testnet. Start with a workspace that is live and has testnet USDC in its operating wallet; [Go live on Arc testnet](/docs/guides/go-live) sets that up.
+
+Owners and admins add milestones and verify them. Other members see every milestone and its decision, but have no controls here.
+
+## 1. Add the contractor
+
+Open **Counterparties** and add the person or studio you pay, with **Role** set to **Contractor** and a **Payment limit (USDC)** at least as large as the milestones you will add. A vendor can be paid for milestones too; a client cannot.
+
+The agent pays to the counterparty's Arc address. To have the contractor enter it themselves, choose **Ask for address** on their card, then **Create link**, and send them the link. They need no account. Once they have entered it, choose **Confirm address**: until someone confirms a new address, the agent waits.
+
+## 2. Add the milestone
+
+Open **Contractors**. Under **Milestone intake**:
+
+- **Contractor**: who is paid.
+- **Amount (USDC)**: what the work is worth.
+- **Work delivered**: what they did, in a few words. It is the title on the milestone's card.
+- **Evidence link** (optional): where the work can be seen. A GitHub pull request is checked for you. Any other `https://` link, to a design file or a shared folder, is kept on the card for whoever verifies the work.
+
+Choose **Add milestone**. The milestone starts pending, and its card says "The agent is waiting for milestone verification." Adding it is signed in the audit log as `create_milestone`.
+
+## 3. Verify the work
+
+How a milestone becomes verified depends on its evidence:
+
+- **A GitHub pull request.** The form answers "The agent checks the pull request within a minute, and decides on pay once it is merged." Each cycle asks GitHub whether the pull request was merged. Once it was, the card's **Verified by** reads "merged PR", linked to the pull request, and the ledger records `verify_milestone_github`.
+- **Anything else.** The form answers "Verify it once the work is delivered, and the agent decides on pay within a minute." When the work is in, open it from the card's **Evidence** link, type what you checked into the box under the card (it reads "Evidence checked or approver note") and choose **Verify manually**. The ledger records `verify_milestone_manual`, with your note and who you are. **Revoke manually** takes it back, until the milestone is paid.
+
+## 4. The agent releases the pay
+
+Within a minute of a milestone being verified, the agent decides whether to release it now, and writes its reasoning on the card: who the contractor is, their screening, and their history with the workspace. The decision is signed as `milestone_release` or `milestone_hold`.
+
+Code checks every release the model asks for. It refuses one for a contractor screened high risk, or one above the contractor's payment limit, and the card says so. A released milestone's card links its transaction on Arc testnet.
+
+## 5. Read it in the audit log
+
+Open **Audit log** to see the milestone's whole story in order, each entry signed: `create_milestone` when it was added, the verification, and the agent's release decision with its reasoning and its transaction. [Verify an audit export](/docs/guides/audit-export) shows how someone outside the workspace can check the same entries.

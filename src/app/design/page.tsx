@@ -24,6 +24,7 @@ import { Tooltip } from "@/components/ui/Tooltip";
 import CounterpartyIntake from "@/components/intake/CounterpartyIntake";
 import InvoiceCsvImport from "@/components/intake/InvoiceCsvImport";
 import InvoiceIntake from "@/components/intake/InvoiceIntake";
+import MilestoneIntake from "@/components/intake/MilestoneIntake";
 import AgentControlsClient from "@/components/AgentControlsClient";
 import AgentPauseControl from "@/components/AgentPauseControl";
 import MembersPanel from "@/components/MembersPanel";
@@ -486,6 +487,9 @@ export default function DesignPage() {
                   <InvoiceCsvImport orgSlug={DESIGN_SLUG} />
                 </TabsContent>
               </Tabs>
+            </Card>
+            <Card className="p-4 sm:p-6">
+              <MilestoneIntake orgSlug={DESIGN_SLUG} contractors={COUNTERPARTIES.filter((counterparty) => counterparty.role !== "client")} />
             </Card>
             <Card className="p-4 sm:p-5">
               <Eyebrow>Milestone verification</Eyebrow>

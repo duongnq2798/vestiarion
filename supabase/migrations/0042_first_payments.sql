@@ -6,8 +6,11 @@
 -- payment (R3), split into customers' workspaces, ours and the total by the
 -- same rule as open_numbers (0037). A workspace's first payment is its
 -- earliest confirmed live Circle transfer; a later payment inside the period
--- never makes it a first. A payment timed before the workspace's own creation
--- counts as 0 minutes. With no first payment in the period, the median is null.
+-- never makes it a first. A workspace whose first payment is older than the
+-- workspace itself (the founding workspace: its rows were moved into it when
+-- workspaces were introduced, 0015) made a first payment, but has no time to
+-- it, so it is counted and left out of the median. With no time to measure in
+-- the period, the median is null.
 --
 -- A function of its own, not a change to open_numbers, which the EURC branch's
 -- 0040 redefines: the two can land in either order. Like open_numbers, only
@@ -35,7 +38,8 @@ as $$
      group by p.org_id
   ),
   firsts as (
-    select s.side, greatest(extract(epoch from (f.at - s.created_at)) / 60, 0) as minutes
+    select s.side,
+           case when f.at >= s.created_at then extract(epoch from (f.at - s.created_at)) / 60 end as minutes
       from first_pay f
       join org_side s on s.id = f.org_id
      where f.at >= coalesce(p_since, '-infinity'::timestamptz)
@@ -45,7 +49,8 @@ as $$
       select jsonb_object_agg(sd.side, jsonb_build_object(
         'firstPayments', (select count(*) from firsts x where sd.side in ('total', x.side)),
         'medianMinutesToFirstPayment',
-          (select percentile_cont(0.5) within group (order by x.minutes) from firsts x where sd.side in ('total', x.side))
+          (select percentile_cont(0.5) within group (order by x.minutes)
+             from firsts x where sd.side in ('total', x.side) and x.minutes is not null)
       ))
       from sides sd
     )
