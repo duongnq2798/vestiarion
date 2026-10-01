@@ -4,6 +4,8 @@ import type {
   EarnDepositParams,
   EarnResult,
   Stablecoin,
+  SwapCallParams,
+  SwapCallResult,
   TransferParams,
   TransferResult,
 } from "./types";
@@ -48,6 +50,15 @@ class HybridProvider implements ChainProvider {
 
   getTokenBalance(accountId: string, token: Stablecoin): Promise<BalanceSnapshot> {
     return this.live.getTokenBalance(accountId, token);
+  }
+
+  /**
+   * The swap is a payment-side call, so it goes to the live leg. Without it the
+   * agent's `provider.swapForEurc` check failed for every live workspace, and
+   * a EURC payable short of EURC was never offered a swap (EURC swap spec S6).
+   */
+  swapForEurc(params: SwapCallParams): Promise<SwapCallResult> {
+    return this.live.swapForEurc(params);
   }
 
   depositToEarn(params: EarnDepositParams): Promise<EarnResult> {
