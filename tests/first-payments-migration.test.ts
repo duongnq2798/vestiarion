@@ -73,7 +73,8 @@ beforeAll(async () => {
   await payment(custD, "2026-09-15T00:00:00Z");
   await payment(custD, "2026-09-26T00:00:00Z");
 
-  // E: a payment timed before the workspace's own creation counts as 0 minutes, never negative.
+  // E: holds a payment from before the workspace was opened (as the founding workspace does: its rows were moved
+  // into it when workspaces were introduced). It made a first payment, but there is no time to it to measure.
   const custE = await org("cust-e", e, "2026-09-30T12:00:00Z");
   await payment(custE, "2026-09-30T11:00:00Z");
 }, 60_000);
@@ -85,22 +86,22 @@ afterAll(async () => {
 describe("open_first_payments (0042)", () => {
   it("counts each workspace once, by its first confirmed live payment, with the median minutes from its creation", async () => {
     const { sides } = await firstPayments(null);
-    // Customers: A 120, B 1440, D 7200, E 0. Ours: 30.
-    expect(numeric(sides.customers)).toEqual({ firstPayments: 4, median: 780 });
+    // Customers: A 120, B 1440, D 7200, and E with no time. Ours: 30.
+    expect(numeric(sides.customers)).toEqual({ firstPayments: 4, median: 1440 });
     expect(numeric(sides.ours)).toEqual({ firstPayments: 1, median: 30 });
-    expect(numeric(sides.total)).toEqual({ firstPayments: 5, median: 120 });
+    expect(numeric(sides.total)).toEqual({ firstPayments: 5, median: 780 });
   });
 
   it("counts a workspace in a period only when its first payment falls in it", async () => {
     const { sides } = await firstPayments("2026-09-18T00:00:00Z");
     // D's first payment was before the period; its later one does not make it a first.
-    expect(numeric(sides.customers)).toEqual({ firstPayments: 3, median: 120 });
-    expect(numeric(sides.total)).toEqual({ firstPayments: 4, median: 75 });
+    expect(numeric(sides.customers)).toEqual({ firstPayments: 3, median: 780 });
+    expect(numeric(sides.total)).toEqual({ firstPayments: 4, median: 120 });
   });
 
-  it("never measures a negative time", async () => {
+  it("counts a first payment from before the workspace was opened, but leaves it out of the time", async () => {
     const { sides } = await firstPayments("2026-09-30T00:00:00Z");
-    expect(numeric(sides.customers)).toEqual({ firstPayments: 1, median: 0 });
+    expect(numeric(sides.customers)).toEqual({ firstPayments: 1, median: null });
   });
 
   it("has no median for a period with no first payment", async () => {
