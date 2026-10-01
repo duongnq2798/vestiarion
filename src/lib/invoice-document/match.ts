@@ -31,7 +31,7 @@ function nameKey(name: string): string {
   return name
     .toLowerCase()
     .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, " ")
     .split(" ")
     .filter((word) => word && !LEGAL_SUFFIXES.has(word))
@@ -56,6 +56,16 @@ function byName(vendorName: string, counterparties: MatchableCounterparty[]): Ma
 
 const sameAddress = (a: string | null, b: string | null) => a !== null && b !== null && a.toLowerCase() === b.toLowerCase();
 
+/**
+ * A name the document gave, in quotes, on one line and at most 60 characters:
+ * it is the vendor's text, and must not read as Vestiarion's own words inside
+ * a warning (review I7).
+ */
+function quoted(name: string): string {
+  const line = name.replace(/\s+/g, " ").trim();
+  return `“${line.length > 60 ? `${line.slice(0, 60).trimEnd()}…` : line}”`;
+}
+
 export function matchCounterparty(draft: InvoiceDraft, counterparties: MatchableCounterparty[]): CounterpartyMatch {
   const named = draft.vendorName ? byName(draft.vendorName, counterparties) : [];
   const byAddress = draft.payToAddress ? counterparties.find((counterparty) => sameAddress(counterparty.address, draft.payToAddress)) : undefined;
@@ -63,7 +73,7 @@ export function matchCounterparty(draft: InvoiceDraft, counterparties: Matchable
   if (byAddress) {
     const warnings =
       named.length === 1 && named[0].id !== byAddress.id
-        ? [`This invoice names ${draft.vendorName} but asks to be paid to ${draft.payToAddress}, the address on file for ${byAddress.name}. Check which counterparty sent it.`]
+        ? [`This invoice names ${quoted(draft.vendorName ?? "")} but asks to be paid to ${draft.payToAddress}, the address on file for ${byAddress.name}. Check which counterparty sent it.`]
         : [];
     return { counterpartyId: byAddress.id, matchedBy: "address", warnings };
   }
@@ -85,8 +95,8 @@ export function matchCounterparty(draft: InvoiceDraft, counterparties: Matchable
     matchedBy: null,
     warnings: [
       named.length > 1
-        ? `More than one counterparty matches ${draft.vendorName}. Choose one.`
-        : `No counterparty matches ${draft.vendorName}. Add it on Counterparties first, or choose one.`,
+        ? `More than one counterparty matches ${quoted(draft.vendorName)}. Choose one.`
+        : `No counterparty matches ${quoted(draft.vendorName)}. Add it on Counterparties first, or choose one.`,
     ],
   };
 }

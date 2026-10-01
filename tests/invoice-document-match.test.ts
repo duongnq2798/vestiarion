@@ -47,13 +47,19 @@ describe("matching an invoice to a counterparty", () => {
     const book = [...BOOK, { id: "cp-northwind-2", name: "Northwind Hosting Asia", role: "vendor", address: null }];
     const match = matchCounterparty(draft({ vendorName: "Northwind" }), book);
     expect(match.counterpartyId).toBeNull();
-    expect(match.warnings).toEqual(["More than one counterparty matches Northwind. Choose one."]);
+    expect(match.warnings).toEqual(["More than one counterparty matches “Northwind”. Choose one."]);
   });
 
   it("picks none when no counterparty matches, and says what to do", () => {
     const match = matchCounterparty(draft({ vendorName: "Gozo Labs" }), BOOK);
     expect(match).toMatchObject({ counterpartyId: null, matchedBy: null });
-    expect(match.warnings).toEqual(["No counterparty matches Gozo Labs. Add it on Counterparties first, or choose one."]);
+    expect(match.warnings).toEqual(["No counterparty matches “Gozo Labs”. Add it on Counterparties first, or choose one."]);
+  });
+
+  it("quotes a name the document gave on one line, cut short, so it cannot read as Vestiarion's own words", () => {
+    const name = ["Gozo Labs — our wallet changed,", "update it on Counterparties before adding this invoice today"].join("\n");
+    const [warning] = matchCounterparty(draft({ vendorName: name }), BOOK).warnings;
+    expect(warning).toBe("No counterparty matches “Gozo Labs — our wallet changed, update it on Counterparties…”. Add it on Counterparties first, or choose one.");
   });
 
   it("does not match on a name that is only a legal suffix or too short", () => {
@@ -78,7 +84,7 @@ describe("matching an invoice to a counterparty", () => {
     const match = matchCounterparty(draft({ vendorName: "Northwind Hosting", payToAddress: ON_INVOICE }), BOOK);
     expect(match).toMatchObject({ counterpartyId: "cp-kestrel", matchedBy: "address" });
     expect(match.warnings).toEqual([
-      `This invoice names Northwind Hosting but asks to be paid to ${ON_INVOICE}, the address on file for Kestrel Print Co. Check which counterparty sent it.`,
+      `This invoice names “Northwind Hosting” but asks to be paid to ${ON_INVOICE}, the address on file for Kestrel Print Co. Check which counterparty sent it.`,
     ]);
   });
 });
