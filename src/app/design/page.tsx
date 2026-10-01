@@ -43,10 +43,11 @@ import { InsightsCharts } from "@/components/vx/InsightsCharts";
 import { PerformanceHistory } from "@/components/vx/PerformanceHistory";
 import { ProvenanceBar } from "@/components/vx/Provenance";
 import { RiskDial } from "@/components/vx/RiskDial";
+import { CashCalendar, SafeToSpendPanel } from "@/components/vx/CashOutlook";
 import { AccountsList, BalanceTile, ForecastPanel, StatTile } from "@/components/vx/Treasury";
 import { derivePerformanceScore } from "@/lib/agent/counterparty-history";
 import { PageHead } from "@/components/vx/Shell";
-import { ACCOUNTS, COUNTERPARTIES, DECISIONS, DESIGN_SLUG, FORECAST, HISTORY, INSIGHTS, INVITATIONS, LEDGER, MEMBERS, PROVENANCE } from "./fixtures";
+import { ACCOUNTS, COUNTERPARTIES, DECISIONS, DESIGN_SLUG, FORECAST, HISTORY, INSIGHTS, INVITATIONS, LEDGER, MEMBERS, OUTLOOK, PROVENANCE } from "./fixtures";
 import { FeedbackDemo, FormLab, OverlayDemo, TabsDemo } from "./Demos";
 import { FrameDemo } from "./Screens";
 
@@ -432,6 +433,8 @@ export default function DesignPage() {
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
               <AccountsList accounts={ACCOUNTS} />
               <ForecastPanel forecast={FORECAST} />
+              <SafeToSpendPanel outlook={OUTLOOK} />
+              <CashCalendar outlook={OUTLOOK} />
             </div>
             <div className="space-y-4">
               {DECISIONS.map((decision) => (

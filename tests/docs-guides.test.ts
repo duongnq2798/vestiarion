@@ -69,6 +69,8 @@ const APPROVALS_LIST = "src/app/o/[slug]/approvals/page.tsx";
 /** Each guide's quoted UI strings, as `[text, the file it must appear in]`. */
 const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
   "guides/try-it": [
+    ["Safe to spend today", "src/components/vx/CashOutlook.tsx"],
+    ["Next 30 days", "src/components/vx/CashOutlook.tsx"],
     ["Continue with Google", LOGIN_PAGE],
     ["Work email", LOGIN_FORM],
     ["Email me a sign-in link", LOGIN_FORM],

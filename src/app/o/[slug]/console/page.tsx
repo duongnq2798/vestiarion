@@ -10,6 +10,7 @@ import { DecisionCard } from "@/components/vx/DecisionCard";
 import { GettingStarted } from "@/components/vx/GettingStarted";
 import { invoiceDecision, treasuryActionDecision, treasuryDecisionEntries, treasuryLedgerDecision } from "@/components/vx/map";
 import { Money } from "@/components/vx/Primitives";
+import { CashCalendar, SafeToSpendPanel } from "@/components/vx/CashOutlook";
 import { ScheduledPayments, scheduledPaymentRows } from "@/components/vx/ScheduledPayments";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SectionHeader } from "@/components/ui/SectionHeader";
@@ -27,7 +28,8 @@ import { inOrg } from "@/lib/dal/scope";
 import { gettingStarted, ownPayableCount } from "@/lib/getting-started";
 import { listLedgerEntries, listLedgerEntriesAfter, listLedgerEntriesByDomain, listLedgerEntriesForTargets } from "@/lib/ledger";
 import { pauseStateOf } from "@/lib/platform/pause";
-import { latestForecast, listAccounts, listCounterparties, listInvoices, listTreasuryActions, stats } from "@/lib/queries";
+import { cashOutlook } from "@/lib/cash-outlook";
+import { latestForecast, listAccounts, listCounterparties, listInvoices, listMilestones, listTreasuryActions, stats } from "@/lib/queries";
 import { offerSampleData } from "@/lib/sample-data-offer";
 
 export const dynamic = "force-dynamic";
@@ -45,7 +47,7 @@ export default async function DashboardPage({
   const access = await requireMembership(slug);
   return inOrg(access, async () => {
     const query = await searchParams;
-    const [accountsRows, actionRows, forecastRow, dashboardStats, invoices, counterparties, headEntries, waiting, pause] = await Promise.all([
+    const [accountsRows, actionRows, forecastRow, dashboardStats, invoices, counterparties, headEntries, waiting, pause, milestones] = await Promise.all([
       listAccounts(),
       listTreasuryActions(),
       latestForecast(),
@@ -60,6 +62,7 @@ export default async function DashboardPage({
         console.error("console: pause state not loaded", access.membership.orgId, error);
         return null;
       }),
+      listMilestones(),
     ]);
     // Modes, not the provider: the page must still render when the
     // organization's Circle credentials cannot be read (R12).
@@ -101,6 +104,19 @@ export default async function DashboardPage({
     // What the agent will pay next, soonest first (payment timing design §1):
     // derived from the invoices already loaded above, no extra query.
     const scheduledPayments = scheduledPaymentRows(invoices);
+    // Safe to spend today and the next 30 days (safe to spend design), from the rows already loaded: the
+    // operating wallet's USDC less what the agent counts as owed.
+    const outlook = cashOutlook({
+      now: Date.now(),
+      operatingUsdc: Number(accountsRows.find((account) => account.kind === "operating")?.balance ?? 0),
+      payables: invoices
+        .filter((invoice) => invoice.direction === "payable")
+        .map((invoice) => ({ ...invoice, counterparty: invoice.counterparty_name, currency: invoice.currency ?? null, scheduled_for: invoice.scheduled_for ?? null })),
+      milestones: milestones.map((milestone) => ({ ...milestone, contractor: milestone.contractor_name })),
+      receivables: invoices
+        .filter((invoice) => invoice.direction === "receivable")
+        .map((invoice) => ({ ...invoice, counterparty: invoice.counterparty_name, currency: invoice.currency ?? null })),
+    });
     const treasuryDecisions = treasuryDecisionEntries(treasuryEntries, 2).map(treasuryLedgerDecision);
     const executedReserveMoves = actionRows.slice(0, 2).map(treasuryActionDecision);
     const headSeq = headEntries[0]?.seq ?? 0;
@@ -183,6 +199,8 @@ export default async function DashboardPage({
 
             {scheduledPayments.length > 0 && <ScheduledPayments payments={scheduledPayments} />}
 
+            <CashCalendar outlook={outlook} />
+
             <section>
               <SectionHeader title="Treasury decisions" meta="yield moves include their economics" action={<MoreLink href={orgHref(slug, "/audit?domain=treasury")}>Full audit log</MoreLink>} />
               {treasuryDecisions.length === 0 ? (
@@ -201,6 +219,7 @@ export default async function DashboardPage({
           </div>
 
           <aside className="min-w-0 space-y-6 md:grid md:grid-cols-2 md:items-start md:gap-6 md:space-y-0 xl:block xl:space-y-6">
+            <SafeToSpendPanel outlook={outlook} />
             <AccountsList accounts={accounts} />
             {gateway && (
               <GatewayPanel

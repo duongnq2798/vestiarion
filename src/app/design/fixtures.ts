@@ -1,3 +1,4 @@
+import { cashOutlook, type CashOutlook } from "@/lib/cash-outlook";
 import type { IntakeCounterparty } from "@/components/intake/InvoiceIntake";
 import type { WorkspaceSummary } from "@/components/vx/workspace";
 import type { Member, OpenInvitation } from "@/lib/platform/members";
@@ -124,3 +125,16 @@ export const INSIGHTS: InsightsData = {
     { id: "design-sc3", counterpartyId: COUNTERPARTIES[1].id, counterpartyName: "Grace Hopper Studio", riskLevel: "clear", previousRiskLevel: null, tierChanged: false, mode: "simulate", source: "bundled list", status: "failed", createdAt: "2026-09-29T10:00:07Z" },
   ],
 };
+
+/** Safe to spend and the next 30 days, short on one day before a receivable lands. */
+export const OUTLOOK: CashOutlook = cashOutlook({
+  now: Date.parse("2026-10-02T09:00:00Z"),
+  operatingUsdc: 40,
+  payables: [
+    { id: "o1", counterparty: "Northwind Supply", amount: 12.5, currency: "USDC", due_date: "2026-10-04T12:00:00Z", status: "scheduled", scheduled_for: "2026-10-04T00:00:00Z" },
+    { id: "o2", counterparty: "Harbor Office Supply", amount: 30, currency: "USDC", due_date: "2026-10-09T12:00:00Z", status: "pending", scheduled_for: null },
+    { id: "o3", counterparty: "Jiren", amount: 17, currency: "EURC", due_date: "2026-10-03T12:00:00Z", status: "held", scheduled_for: null },
+  ],
+  milestones: [{ id: "m1", title: "10 Canva posts", contractor: "Linh Tran", amount: 5, status: "verified", escrow_state: null }],
+  receivables: [{ id: "r1", counterparty: "CME", amount: 25, currency: "USDC", due_date: "2026-10-12T12:00:00Z", status: "pending" }],
+});
