@@ -12,6 +12,15 @@ export const usdcAmountSchema = z.string().trim()
 
 const optionalText = (max: number) => z.string().trim().max(max).transform((value) => value || null);
 
+/**
+ * Like `optionalText`, but also accepts the key being absent entirely — for
+ * CSV rows that were not built by `parseInvoiceCsv` (which always fills in
+ * every optional column as `""`), such as a row object a caller constructs
+ * by hand in the old, pre-discount column shape. Absent means the same as
+ * blank: no discount.
+ */
+const optionalCsvText = (max: number) => z.string().trim().max(max).nullish().transform((value) => value || null);
+
 export const counterpartyInputSchema = z.object({
   name: z.string().trim().min(2).max(160),
   role: z.enum(["vendor", "client", "contractor"]),
@@ -27,20 +36,72 @@ export const counterpartyInputSchema = z.object({
   }
 });
 
-const dueDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use a YYYY-MM-DD due date").refine((value) => {
+/** A real `YYYY-MM-DD` calendar date — rejects both malformed strings and rolled-over ones like Feb 30. */
+function isRealCalendarDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const parsed = new Date(`${value}T12:00:00.000Z`);
   return !Number.isNaN(parsed.valueOf()) && parsed.toISOString().startsWith(value);
-}, "Due date is not a real calendar date");
+}
 
-export const invoiceInputSchema = z.object({
-  direction: z.enum(["payable", "receivable"]),
-  counterpartyId: z.string().uuid(),
-  amount: usdcAmountSchema,
-  memo: optionalText(280),
-  poReference: optionalText(100),
-  goodsReceived: z.boolean(),
-  dueDate: dueDateSchema,
-});
+const dueDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use a YYYY-MM-DD due date").refine(isRealCalendarDate, "Due date is not a real calendar date");
+
+// 0 < pct < 100, at most 2 decimal places, no leading zeros (mirrors usdcAmountSchema's strictness).
+const DISCOUNT_PCT_PATTERN = /^(?:0|[1-9]\d?)(?:\.\d{1,2})?$/;
+
+function isValidDiscountPct(value: string): boolean {
+  return DISCOUNT_PCT_PATTERN.test(value) && Number(value) > 0;
+}
+
+/**
+ * The early-payment discount pair, on an invoice form or a CSV row: both
+ * fields or neither, a percent strictly between 0 and 100, a real deadline,
+ * and a deadline no later than the due date (migration 0038's own checks).
+ */
+function checkDiscountPair(
+  context: z.RefinementCtx,
+  pctPath: string,
+  deadlinePath: string,
+  pct: string | null,
+  deadline: string | null,
+  dueDate: string
+): void {
+  if ((pct === null) !== (deadline === null)) {
+    context.addIssue({ code: "custom", path: [pctPath], message: "Enter both the discount and its deadline, or neither." });
+    return;
+  }
+  if (pct === null || deadline === null) return;
+  if (!isValidDiscountPct(pct)) {
+    context.addIssue({
+      code: "custom",
+      path: [pctPath],
+      message: "Enter a discount percent greater than 0 and less than 100, with at most 2 decimal places.",
+    });
+    return;
+  }
+  if (!isRealCalendarDate(deadline)) {
+    context.addIssue({ code: "custom", path: [deadlinePath], message: "Discount deadline is not a real calendar date" });
+    return;
+  }
+  if (isRealCalendarDate(dueDate) && deadline > dueDate) {
+    context.addIssue({ code: "custom", path: [deadlinePath], message: "The discount deadline must be on or before the due date." });
+  }
+}
+
+export const invoiceInputSchema = z
+  .object({
+    direction: z.enum(["payable", "receivable"]),
+    counterpartyId: z.string().uuid(),
+    amount: usdcAmountSchema,
+    memo: optionalText(280),
+    poReference: optionalText(100),
+    goodsReceived: z.boolean(),
+    dueDate: dueDateSchema,
+    earlyPayDiscountPct: optionalText(10),
+    discountDeadline: optionalText(10),
+  })
+  .superRefine((value, context) => {
+    checkDiscountPair(context, "earlyPayDiscountPct", "discountDeadline", value.earlyPayDiscountPct, value.discountDeadline, value.dueDate);
+  });
 
 const csvBooleanSchema = z.union([z.boolean(), z.string()]).transform((value, context) => {
   if (typeof value === "boolean") return value;
@@ -51,15 +112,21 @@ const csvBooleanSchema = z.union([z.boolean(), z.string()]).transform((value, co
   return z.NEVER;
 });
 
-export const csvInvoiceInputSchema = z.object({
-  direction: z.string().trim().toLowerCase().pipe(z.enum(["payable", "receivable"])),
-  counterparty: z.string().trim().min(1).max(160),
-  amount: usdcAmountSchema,
-  memo: optionalText(280),
-  po_reference: optionalText(100),
-  goods_received: csvBooleanSchema,
-  due_date: dueDateSchema,
-});
+export const csvInvoiceInputSchema = z
+  .object({
+    direction: z.string().trim().toLowerCase().pipe(z.enum(["payable", "receivable"])),
+    counterparty: z.string().trim().min(1).max(160),
+    amount: usdcAmountSchema,
+    memo: optionalText(280),
+    po_reference: optionalText(100),
+    goods_received: csvBooleanSchema,
+    due_date: dueDateSchema,
+    early_pay_discount_pct: optionalCsvText(10),
+    discount_deadline: optionalCsvText(10),
+  })
+  .superRefine((value, context) => {
+    checkDiscountPair(context, "early_pay_discount_pct", "discount_deadline", value.early_pay_discount_pct, value.discount_deadline, value.due_date);
+  });
 
 export type CsvInvoiceInput = z.input<typeof csvInvoiceInputSchema>;
 

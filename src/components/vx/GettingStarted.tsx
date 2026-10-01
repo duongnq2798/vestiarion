@@ -8,11 +8,11 @@ import { orgHref } from "@/lib/auth/org-paths";
 import type { GettingStarted as Checklist } from "@/lib/getting-started";
 
 /**
- * The console's Get started checklist (getting-started design §1): five steps
- * to a first payment, ticked from the workspace's own rows, with the next one
- * highlighted and linked. The console renders it for owners and admins while
- * the workspace is not live; `isOwner` says whether the owner-only steps are
- * this person's to take.
+ * The console's Get started checklist (getting-started design §1, first-payment
+ * design §2): six steps to a first payment on Arc testnet, ticked from the
+ * workspace's own rows, with the next one highlighted and linked. The console
+ * renders it for owners and admins until that payment; `isOwner` says whether
+ * the owner-only steps are this person's to take.
  */
 export function GettingStarted({ slug, checklist, isOwner }: { slug: string; checklist: Checklist; isOwner: boolean }) {
   if (!checklist.show) return null;
@@ -26,7 +26,7 @@ export function GettingStarted({ slug, checklist, isOwner }: { slug: string; che
         meta={`${doneCount} of ${checklist.steps.length} done`}
         action={
           <Button asChild size="sm" variant="ghost">
-            <Link href="/docs/guides/go-live">
+            <Link href={`/docs/guides/${checklist.guide}`}>
               <BookOpen aria-hidden />
               Read the guide
             </Link>

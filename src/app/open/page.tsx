@@ -89,6 +89,10 @@ export default async function OpenPage({ searchParams }: OpenPageProps) {
               </li>
               <li>A person counts as a customer when they are not on the team and belong to a customer&apos;s workspace.</li>
               <li>A contractor milestone counts once a settled Arc testnet payment has paid it.</li>
+              <li>
+                A workspace&apos;s first payment is the first one Circle confirms on Arc testnet, and the time to it runs from when the
+                workspace was opened. A dash means no workspace made its first payment in the period.
+              </li>
               <li>USDC in wallets is Arc testnet USDC in live workspaces&apos; Circle wallets, as last read from the chain.</li>
               <li>Customers&apos; payments appear only as counts and totals, never one by one or as a day&apos;s amount.</li>
               <li>Sample data that a workspace loads to try the product never counts.</li>

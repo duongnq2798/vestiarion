@@ -73,6 +73,43 @@ describe("scoreDuplicate — the case that costs money", () => {
   });
 });
 
+describe("scoreDuplicate — money already committed", () => {
+  // A repeat of an invoice whose payment is in flight (`matched`), that the
+  // agent has scheduled to pay, or that a person is approving and paying right
+  // now (`processing`) costs the same as a repeat of one already paid: both
+  // would leave. So it blocks, and says which it is.
+  it.each([
+    ["matched", "already being paid"],
+    ["scheduled", "already scheduled"],
+    ["processing", "already being decided by a person"],
+    ["paid", "already paid"],
+    ["received", "already paid"],
+  ])("blocks on a same-order repeat of an invoice %s, and says it is %s", (status, words) => {
+    const match = scoreDuplicate(inv(), inv({ id: "inv-old", status }))!;
+    expect(match.againstSettled).toBe(true);
+    expect(match.confidence).toBeGreaterThanOrEqual(DUPLICATE_BLOCK_CONFIDENCE);
+    expect(match.explanation).toContain(`(${words})`);
+    expect(blockingDuplicate([match])?.otherId).toBe("inv-old");
+  });
+
+  it.each(["pending", "held", "awaiting_info", "flagged", "rejected"])(
+    "still only raises, never blocks, a repeat of an invoice %s",
+    (status) => {
+      const match = scoreDuplicate(inv(), inv({ id: "inv-old", status }))!;
+      expect(match.againstSettled).toBe(false);
+      expect(match.confidence).toBeLessThan(DUPLICATE_BLOCK_CONFIDENCE);
+      expect(match.explanation).toContain(`(status ${status})`);
+      expect(blockingDuplicate([match])).toBeNull();
+    }
+  );
+
+  it("does not flag a monthly recurring charge against a scheduled one", () => {
+    const october = inv({ poReference: null, dueDate: "2026-10-27T00:00:00.000Z" });
+    const september = inv({ id: "inv-old", status: "scheduled", poReference: null, dueDate: "2026-09-27T00:00:00.000Z" });
+    expect(scoreDuplicate(october, september)).toBeNull();
+  });
+});
+
 describe("scoreDuplicate — what it must not flag", () => {
   it("does not flag a monthly recurring charge", () => {
     // The whole reason amount-matching alone is useless: a subscription repeats

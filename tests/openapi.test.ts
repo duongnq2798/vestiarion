@@ -237,3 +237,33 @@ describe("each route's real 200 parses", () => {
     expect(operationById("get-counterparty")!.errors).toContain(body.error.code);
   });
 });
+
+describe("invoice payment-timing fields (migration 0038)", () => {
+  const ROW_BASE = {
+    direction: "payable", amount: "400", currency: "USDC", memo: null, po_reference: null, goods_received: true,
+    due_date: AT, decided_at: null, settled_at: null, escalated_at: null, agent_reasoning: null, tx_ref: null, created_at: AT, counterparties: null,
+  };
+
+  it("exposes paidAmount only once status is paid, passes scheduledFor through, and reports a malformed discount as none", async () => {
+    const rows = [
+      // A transfer already carries paid_amount while only matched: not exposed yet.
+      { ...ROW_BASE, id: "i-1", status: "matched", paid_amount: "392", scheduled_for: null, early_pay_discount_pct: "2", discount_due_date: "2026-10-10T12:00:00.000Z" },
+      // Paid: the discounted amount that actually left is exposed.
+      { ...ROW_BASE, id: "i-2", status: "paid", paid_amount: "392", scheduled_for: "2026-10-10T00:00:00.000Z", early_pay_discount_pct: "2", discount_due_date: "2026-10-10T12:00:00.000Z" },
+      // Scheduled, with a stored percent the database would never allow (<= 0): reported as no discount.
+      { ...ROW_BASE, id: "i-3", status: "scheduled", paid_amount: null, scheduled_for: "2026-10-20T00:00:00.000Z", early_pay_discount_pct: "0", discount_due_date: "2026-10-10T12:00:00.000Z" },
+    ];
+    const response = await call({ "/rest/v1/invoices": rows }, getInvoices, "/api/v1/invoices");
+    const body = (await response.json()) as { data: Array<Record<string, unknown>> };
+    const byId = Object.fromEntries(body.data.map((row) => [row.id as string, row]));
+
+    expect(byId["i-1"]).toMatchObject({ paidAmount: null, earlyPayDiscount: { percent: 2, deadline: "2026-10-10T12:00:00.000Z" } });
+    expect(byId["i-2"]).toMatchObject({ paidAmount: 392, scheduledFor: "2026-10-10T00:00:00.000Z" });
+    expect(byId["i-3"]).toMatchObject({ earlyPayDiscount: null, scheduledFor: "2026-10-20T00:00:00.000Z" });
+  });
+
+  it("accepts status=scheduled as a filter", async () => {
+    const response = await call({ "/rest/v1/invoices": [] }, getInvoices, "/api/v1/invoices?status=scheduled");
+    expect(response.status).toBe(200);
+  });
+});

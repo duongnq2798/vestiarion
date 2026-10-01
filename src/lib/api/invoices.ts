@@ -5,5 +5,5 @@
  */
 export const INVOICE_DIRECTIONS = ["payable", "receivable"] as const;
 export const INVOICE_STATUSES = [
-  "pending", "matched", "paid", "held", "flagged", "awaiting_info", "received", "rejected",
+  "pending", "matched", "scheduled", "paid", "held", "flagged", "awaiting_info", "received", "rejected",
 ] as const;

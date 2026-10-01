@@ -195,13 +195,21 @@ export function rescreenIntervalMs(): number {
   return currentConfig().compliance.rescreenIntervalHours * 3_600_000;
 }
 
+/**
+ * Whether a counterparty needs screening now. With `mode`, the source in use,
+ * a verdict another source produced (or one whose source is unknown) is due
+ * however fresh it is: turning live screening on must not leave bundled-list
+ * verdicts standing for up to a day (migration 0041).
+ */
 export function isScreeningDue(
-  row: { risk_level: string; last_screened_at: string | null },
+  row: { risk_level: string; last_screened_at: string | null; last_screening_mode?: string | null },
   now: number,
-  intervalMs: number
+  intervalMs: number,
+  mode?: "live" | "simulate"
 ): boolean {
   if (row.risk_level === "unscreened" || !row.last_screened_at) return true;
   if (intervalMs === 0) return true;
+  if (mode !== undefined && row.last_screening_mode !== mode) return true;
   return now - Date.parse(row.last_screened_at) >= intervalMs;
 }
 
@@ -223,6 +231,8 @@ export interface CounterpartyScreeningRow {
   payment_limit: string | number | null;
   baseline_payment_limit: string | number | null;
   last_screened_at: string | null;
+  /** The source of the current verdict: 'live', 'simulate', or null when unknown (migration 0041). */
+  last_screening_mode?: string | null;
   jurisdiction?: string | null;
   performance_score?: string | number | null;
   performance_inputs?: CounterpartyHistoryInputs | null;
@@ -231,7 +241,7 @@ export interface CounterpartyScreeningRow {
 const toNum = (v: string | number | null) => (v == null ? null : Number(v));
 
 const SCREENING_COLUMNS =
-  "id, name, risk_level, payment_limit, baseline_payment_limit, last_screened_at, jurisdiction, performance_score, performance_inputs";
+  "id, name, risk_level, payment_limit, baseline_payment_limit, last_screened_at, last_screening_mode, jurisdiction, performance_score, performance_inputs";
 
 /**
  * Decides what a screen should write, without touching the database. The
@@ -301,6 +311,7 @@ async function applyScreening(cp: CounterpartyScreeningRow): Promise<ScreeningOu
       risk_level: plan.result.riskLevel,
       risk_notes: plan.result.notes,
       last_screened_at: now,
+      last_screening_mode: plan.result.screeningMode,
       baseline_payment_limit: plan.baseline,
       payment_limit: plan.newLimit,
     })
@@ -535,7 +546,7 @@ export async function runComplianceSweep(): Promise<SweepResult> {
 
   const interval = rescreenIntervalMs();
   const now = Date.now();
-  const due = rows.filter((r) => isScreeningDue(r, now, interval));
+  const due = rows.filter((r) => isScreeningDue(r, now, interval, screeningMode()));
 
   const screened: ScreeningOutcome[] = [];
   const failures: SweepResult["failures"] = [];

@@ -113,9 +113,14 @@ export default function PrivacyPage() {
             the agent asks it about, and nothing else:
             <ul>
               <li>
-                for an invoice: its amount, memo, purchase order reference, due date and whether the goods were received; the counterparty&apos;s name, risk
-                level, payment limit and performance score; the operating balance; and any earlier invoices from the same counterparty that look like
-                duplicates of it, each with its amount, due date and status, the signals that matched, how strong the match is and what the match found;
+                for an invoice: its amount, memo, purchase order reference, due date, early-payment discount and whether the goods were received; the
+                counterparty&apos;s name, risk level, payment limit and performance score; the operating balance and the reserve balance; the payment timing worked out from those:
+                today&apos;s date and the due date, what the discount is worth and the last day it applies, the yield from keeping the cash to the due date,
+                the day the written policy would pay on and the amount due that day, the total and number of payments that fall due on or before that day,
+                and whether the cash available by that day falls short of covering this invoice after them; when the agent scheduled the invoice earlier, the date it
+                chose and its reasoning; and any earlier invoices from the same
+                counterparty that look like duplicates of it, each with its amount, due date and status, the signals that matched, how strong the match is
+                and what the match found;
               </li>
               <li>
                 for a contractor milestone: its title, amount and verification source, and the contractor&apos;s name, risk level, payment limit and

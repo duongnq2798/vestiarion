@@ -14,16 +14,19 @@ describe("cycle metrics", () => {
     metrics.recordMilestone("paid", false);
     metrics.recordDecisionMode("heuristic", null);
     metrics.recordMilestone("held", true);
+    metrics.recordDecisionMode("heuristic", null);
+    metrics.recordInvoice("scheduled", false);
 
     expect(metrics.snapshot()).toEqual({
-      decisionCount: 5,
+      decisionCount: 6,
       paidCount: 1,
       heldCount: 2,
       flaggedCount: 0,
       awaitingInfoCount: 1,
+      scheduledCount: 1,
       releasedCount: 1,
       modelDecisionCount: 3,
-      heuristicDecisionCount: 2,
+      heuristicDecisionCount: 3,
       guardrailOverrideCount: 2,
       referenceDisagreementCount: 1,
     });
