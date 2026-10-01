@@ -114,6 +114,19 @@ describe("runAgentCycle — one cycle at a time in a workspace", () => {
     expect(check?.params.get("org_id")).toBe(`eq.${ORG}`);
     expect(check?.params.get("started_at")).toMatch(/^gt\./);
   });
+
+  it("refuses as well when begin_cycle_run finds a run another instance opened after the check (0043)", async () => {
+    const fake = fakeSupabase((request) =>
+      request.path === "/rest/v1/rpc/begin_cycle_run"
+        ? { status: 400, body: { code: "P0001", message: "cycle_running: a cycle is already running in this workspace" } }
+        : { body: [] }
+    );
+
+    await expect(runWith(orgTestContext({ config, client: fake.client, orgId: ORG }), () => runAgentCycle())).rejects.toBeInstanceOf(
+      CycleRunningError
+    );
+    expect(fake.requests.some((request) => request.path === "/rest/v1/rpc/advance_sim_day")).toBe(false);
+  });
 });
 
 describe("triggerDetail — what started a cycle, as cycle_complete records it", () => {

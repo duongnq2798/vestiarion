@@ -92,6 +92,8 @@ describe("begin_cycle_run", () => {
     asTenant(db, orgId, async (tx) =>
       (await tx.query<{ id: string }>(
         "select public.begin_cycle_run($1, $2, now(), 'real', 'simulate', 'simulate') as id", [orgId, cap])).rows[0].id);
+  // A run must finish before the next opens (0043); the cap counts today's runs whatever their status.
+  const finish = (id: string) => db.query("update public.cycle_runs set status = 'completed', finished_at = now() where id = $1", [id]);
 
   it("opens a running run and returns its id", async () => {
     const orgId = await createOrg(db, "runs-co");
@@ -106,14 +108,14 @@ describe("begin_cycle_run", () => {
     await db.query(
       "insert into public.cycle_runs (org_id, started_at, clock_mode, chain_mode, screening_mode) values ($1, now() - interval '2 days', 'real', 'simulate', 'simulate')",
       [orgId]);
-    await begin(orgId, 2);
-    await begin(orgId, 2);
+    await finish(await begin(orgId, 2));
+    await finish(await begin(orgId, 2));
     await expect(begin(orgId, 2)).rejects.toThrow(/sandbox_cap_reached/);
   });
 
   it("has no cap when p_daily_cap is null", async () => {
     const orgId = await createOrg(db, "uncapped-co");
-    for (let i = 0; i < 3; i++) await begin(orgId, null);
+    for (let i = 0; i < 3; i++) await finish(await begin(orgId, null));
     await expect(begin(orgId, null)).resolves.toBeTruthy();
   });
 
