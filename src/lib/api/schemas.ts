@@ -141,7 +141,10 @@ export const InvoiceSchema = z
     settledAt: z.string().nullable(),
     escalatedAt: z.string().nullable(),
     agentReasoning: z.string().nullable().describe("Why the agent ruled as it did, verbatim from the decision."),
-    txHash: z.string().nullable().describe("An on-chain hash when the payment settled on Arc, else null."),
+    txHash: z
+      .string()
+      .nullable()
+      .describe("An on-chain hash once the payment settled, else null: on Arc testnet, or for a payout from a Gateway balance the mint on the payee's chain."),
     paidAmount: z
       .number()
       .nullable()
