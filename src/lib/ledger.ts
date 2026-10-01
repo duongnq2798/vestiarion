@@ -3,6 +3,7 @@ import { db, unwrap } from "./dal";
 import { currentOrgConfig, currentSecretWarnings } from "./context";
 import type { VestiarionConfig } from "./config";
 import { dispatchWebhooksSoon } from "./webhooks/dispatch-soon";
+import { canonicalJson } from "./canonical-json";
 import {
   detectKeyRotation,
   ledgerKeyId,
@@ -40,6 +41,9 @@ import {
  * belongs in a KMS, which would replace where `orgConfig` reads it from and
  * nothing else.
  */
+
+// Shared with the receipt page's browser check, so the two can never hash an entry differently.
+export { canonicalJson };
 
 const GENESIS_HASH = "0".repeat(64);
 
@@ -128,22 +132,6 @@ export interface LedgerRow {
    * under whatever key the label names.
    */
   signing_key_id?: string | null;
-}
-
-/**
- * Stable JSON: keys sorted at every level, so the same logical entry always
- * hashes identically regardless of property insertion order. `JSON.stringify`
- * with a sorted key array only sorts the top level, which is the classic way
- * to get a hash chain that silently fails to reproduce.
- */
-export function canonicalJson(value: unknown): string {
-  if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
-  const entries = Object.entries(value as Record<string, unknown>)
-    .filter(([, v]) => v !== undefined)
-    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-    .map(([k, v]) => `${JSON.stringify(k)}:${canonicalJson(v)}`);
-  return `{${entries.join(",")}}`;
 }
 
 export function bodyHashOf(input: LedgerEntryInput): string {
