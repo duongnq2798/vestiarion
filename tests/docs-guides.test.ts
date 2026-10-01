@@ -25,6 +25,8 @@ const COUNTERPARTY_FORM = "src/components/intake/CounterpartyIntake.tsx";
 const COUNTERPARTIES_PAGE = "src/app/o/[slug]/counterparties/page.tsx";
 const INVOICE_FORM = "src/components/intake/InvoiceIntake.tsx";
 const INVOICES_PAGE = "src/app/o/[slug]/invoices/page.tsx";
+const DOCUMENT_TAB = "src/components/intake/InvoiceDocumentIntake.tsx";
+const DOCUMENT_READ = "src/lib/invoice-document/read.ts";
 const INTAKE_ACTIONS = "src/app/actions/intake.ts";
 const ORCHESTRATOR = "src/lib/agent/orchestrator.ts";
 const CONSOLE_PAGE = "src/app/o/[slug]/console/page.tsx";
@@ -145,6 +147,12 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["Invoice intake", INVOICES_PAGE],
     ["Enter one invoice", INVOICES_PAGE],
     ["Import CSV", INVOICES_PAGE],
+    ["From a document", INVOICES_PAGE],
+    ["Or paste the invoice's text", DOCUMENT_TAB],
+    ["Read invoice", DOCUMENT_TAB],
+    ["The amount the model gave is not in the document, so it was left blank.", DOCUMENT_TAB],
+    ["A document cannot say this; tick it only if you received them.", INVOICE_FORM],
+    ["This PDF has no text to read; it may be a scan. Paste the invoice's text instead.", DOCUMENT_READ],
     ["Direction", INVOICE_FORM],
     ["Payable", INVOICE_FORM],
     ["Amount", INVOICE_FORM],
