@@ -10,7 +10,7 @@ import { currentConfig } from "@/lib/context";
 import { db, unwrap } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
 import { parseGitHubPullRequestUrl } from "@/lib/github-verification";
-import { usdcAmountSchema } from "@/lib/intake-validation";
+import { isHttpsLink, usdcAmountSchema } from "@/lib/intake-validation";
 import { appendLedgerEntry } from "@/lib/ledger";
 
 export interface MilestoneActionResult {
@@ -21,15 +21,6 @@ export interface MilestoneActionResult {
 function formString(formData: FormData, key: string): string {
   const value = formData.get(key);
   return typeof value === "string" ? value : "";
-}
-
-function isHttpsLink(value: string): boolean {
-  try {
-    const url = new URL(value);
-    return url.protocol === "https:" && url.hostname.length > 0;
-  } catch {
-    return false;
-  }
 }
 
 const milestoneInputSchema = z.object({

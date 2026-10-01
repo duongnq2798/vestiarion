@@ -16,6 +16,16 @@ const positiveAmountSchema = (message: string) =>
 /** A payment limit, which is always in USDC. */
 export const usdcAmountSchema = positiveAmountSchema("Use a positive USDC amount with at most 6 decimal places");
 
+/** An https link with a host: the only kind of evidence link a milestone takes. */
+export function isHttpsLink(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && url.hostname.length > 0;
+  } catch {
+    return false;
+  }
+}
+
 /** An invoice's amount, in the invoice's own currency. */
 const invoiceAmountSchema = positiveAmountSchema("Use a positive amount with at most 6 decimal places");
 

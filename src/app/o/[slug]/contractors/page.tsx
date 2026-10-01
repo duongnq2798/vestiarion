@@ -5,6 +5,7 @@ import { EscrowPanel } from "@/components/EscrowPanel";
 import { MilestoneEscrow } from "@/components/MilestoneEscrow";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import MilestoneIntake from "@/components/intake/MilestoneIntake";
+import PayFreelancerForm from "@/components/intake/PayFreelancerForm";
 import MilestoneVerification from "@/components/MilestoneVerification";
 import { Callout } from "@/components/ui/Callout";
 import { Card } from "@/components/ui/Card";
@@ -70,6 +71,15 @@ export default async function ContractorsPage({ params }: { params: Promise<{ sl
         {/* The agent decides within a minute of a milestone being verified: the page re-reads its
             data every 20 s, and at once on return to the tab, so the release appears without a reload. */}
         <AutoRefresh intervalMs={20_000} />
+
+        {canWrite && (
+          <section className="mb-8">
+            <SectionHeader title="Pay a freelancer" meta="one form: they get a link, you confirm their address, the agent pays" />
+            <Card className="p-4 sm:p-6">
+              <PayFreelancerForm orgSlug={slug} live={live} />
+            </Card>
+          </section>
+        )}
 
         <section className="mb-8">
           <SectionHeader title="Milestone intake" meta="work a contractor is paid for once it is verified" />

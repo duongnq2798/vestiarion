@@ -32,6 +32,8 @@ const ESCROW_PANEL = "src/components/EscrowPanel.tsx";
 const MILESTONE_ESCROW = "src/components/MilestoneEscrow.tsx";
 const RECEIPT_CONTROL = "src/components/ReceiptControl.tsx";
 const RECEIPT_VIEW = "src/components/receipt/ReceiptView.tsx";
+const PAY_FREELANCER_FORM = "src/components/intake/PayFreelancerForm.tsx";
+const PAY_FREELANCER_LIBRARY = "src/lib/pay-freelancer.ts";
 const INTAKE_ACTIONS = "src/app/actions/intake.ts";
 const ORCHESTRATOR = "src/lib/agent/orchestrator.ts";
 const CONSOLE_PAGE = "src/app/o/[slug]/console/page.tsx";
@@ -238,6 +240,14 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["Scheduled payments", SCHEDULED_PAYMENTS],
   ],
   "guides/pay-a-contractor": [
+    ["Pay a freelancer", "src/app/o/[slug]/contractors/page.tsx"],
+    ["Name", PAY_FREELANCER_FORM],
+    ["Email", PAY_FREELANCER_FORM],
+    ["What they delivered", PAY_FREELANCER_FORM],
+    ["Link to the work", PAY_FREELANCER_FORM],
+    ["Set up payment", PAY_FREELANCER_FORM],
+    ["Copy link", PAY_FREELANCER_FORM],
+    ["Delivered work confirmed when the payment was set up", PAY_FREELANCER_LIBRARY],
     ["Set up escrow", ESCROW_PANEL],
     ["Milestone escrow", ESCROW_PANEL],
     ["Finish setting up", ESCROW_PANEL],

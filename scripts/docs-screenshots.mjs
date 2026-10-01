@@ -95,6 +95,15 @@ const SHOTS = {
     await page.click(`[...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Verify hash chain")`);
     await page.waitFor(`document.querySelector("[data-docs-shot]").textContent.includes("Chain intact")`);
   },
+  "pay-freelancer": async (page) => {
+    await page.fill({
+      "freelancer-name": "Linh Tran",
+      "freelancer-email": "linh@example.com",
+      "freelancer-work": "10 social posts for October",
+      "freelancer-amount": "25.00",
+      "freelancer-evidence": "https://www.canva.com/design/october-posts/view",
+    });
+  },
 };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

@@ -8,6 +8,7 @@ import CounterpartyIntake from "@/components/intake/CounterpartyIntake";
 import InvoiceCsvImport from "@/components/intake/InvoiceCsvImport";
 import InvoiceDocumentIntake, { DocumentDraft } from "@/components/intake/InvoiceDocumentIntake";
 import InvoiceIntake from "@/components/intake/InvoiceIntake";
+import PayFreelancerForm, { PaymentLinkReady } from "@/components/intake/PayFreelancerForm";
 import { Card } from "@/components/ui/Card";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Eyebrow } from "@/components/ui/Eyebrow";
@@ -41,7 +42,7 @@ import { DESIGN_SLUG, LEDGER } from "../design/fixtures";
 
 export interface DocsShot {
   /** The guide the picture belongs to. */
-  guide: "go-live" | "first-payment";
+  guide: "go-live" | "first-payment" | "pay-a-contractor";
   /** The workspace page it is on: its title heads the frame. */
   page: NavKey;
   /** The page's line under its title, where the real page has one. */
@@ -386,6 +387,27 @@ export const DOCS_SHOTS = {
           <HashChain entries={ENTRIES} />
           <AuditLedger entries={ENTRIES} />
         </>
+      );
+    },
+  },
+  "pay-freelancer": {
+    guide: "pay-a-contractor",
+    page: "contractors",
+    render: function PayFreelancerShot() {
+      return (
+        <section>
+          <SectionHeader title="Pay a freelancer" meta="one form: they get a link, you confirm their address, the agent pays" />
+          <Card className="p-4 sm:p-6">
+            <PayFreelancerForm orgSlug={SLUG} live />
+          </Card>
+          <div className="mt-4">
+            <PaymentLinkReady
+              message="Emailed Linh Tran a link to add the address to be paid at. When they add their address you get an email; confirm it on Counterparties and the agent pays within a minute."
+              url={`https://www.vestiarion.xyz/payee/vxp_${"d0c5".repeat(10)}abc`}
+              expiresAt="2026-10-08T15:00:00Z"
+            />
+          </div>
+        </section>
       );
     },
   },
