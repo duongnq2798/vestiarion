@@ -60,7 +60,7 @@ function circle() {
     getWalletTokenBalance: vi.fn(() => Promise.reject(new Error("unexpected"))),
     createContractExecutionTransaction: vi.fn(() => Promise.reject(new Error("a Gateway payout makes no contract call"))),
     getTransaction: vi.fn(() => Promise.reject(new Error("unexpected"))),
-    signTypedData: vi.fn(async (_input: { walletId: string; data: string }) => ({ data: { signature: "0xsigned" } })),
+    signTypedData: vi.fn<(input: { walletId: string; data: string }) => Promise<{ data: { signature: string } }>>(async () => ({ data: { signature: "0xsigned" } })),
   };
   return { client: client as unknown as LiveProviderClient, raw: client };
 }
