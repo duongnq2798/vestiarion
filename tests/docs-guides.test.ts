@@ -343,6 +343,17 @@ describe("the first-payment guide's steps", () => {
   });
 });
 
+describe("the Try it guide's sample outcomes", () => {
+  const bullets = (text: string) => [...text.matchAll(/^- (.+)$/gm)].map((match) => match[1]);
+
+  it("lists the same outcomes as the first-payment guide's sample-data tour", () => {
+    const tour = readSource("guides/first-payment").split("## Try it with sample data first")[1]?.split("\n## ")[0] ?? "";
+    const step = readSource("guides/try-it").split("## 3. Load sample data")[1]?.split("\n## ")[0] ?? "";
+    expect(bullets(tour).length).toBeGreaterThan(4);
+    expect(bullets(step)).toEqual(bullets(tour));
+  });
+});
+
 describe("the Go live guide's failure table", () => {
   const guide = readSource("guides/go-live");
 
