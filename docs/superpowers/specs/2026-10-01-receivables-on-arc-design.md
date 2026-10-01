@@ -41,10 +41,13 @@ business's money". It also means one traction figure can never move: total USDC 
 
 ## 3. Rulings
 
-- **R1 — exact amount.** No memo travels with a USDC transfer on Arc, so the match is by
-  currency and amount (to the 6th decimal), then by sender and due date. Two open receivables
-  with the same amount and no sender on file are ambiguous: the transfer stays unmatched for a
-  person. Cost if wrong: a person assigns a few by hand.
+- **R1 — exact amount, after the receivable, from the client or through its link.** No memo travels
+  with a USDC transfer on Arc, so a transfer settles an open receivable of the same currency and amount
+  (to the 6th decimal) that existed when it arrived. From the client's address on file it is trusted
+  outright (oldest due first); from any other address only when it is the one such receivable and its
+  client was sent its pay link. Anything else stays unmatched for a person. Found against testnet-2's
+  real inbound transfers: they are all faucet drips of 20 USDC or EURC, which a 20 USDC receivable with
+  no address on file would otherwise have swallowed. Cost if wrong: a person settles a few by hand.
 - **R2 — the pay link shows only what the client needs.** The link token is hashed, revocable,
   and does not expire while the invoice is open. The page never shows other invoices, names of
   people or the ledger.

@@ -237,3 +237,13 @@ A payee, an accountant or anyone else can check a payment without an account: sh
   - **Stop sharing** turns the link off.
   - A link that no longer works says so and shows nothing else.
 - **Which payments.** Only live payments have receipts: a simulated payment has nothing on chain to show. A CCTP payout can be shared once the payee's chain has minted it.
+
+## 9. Get paid by a client
+
+A receivable is money a client owes the business. In a live workspace, an owner or admin can send the client a link to pay it on Arc testnet:
+
+1. **Make the link.** On **AP / AR**, under **Receivables**, choose **Get paid on Arc** on the invoice, then **Copy link** and send it. A new link replaces the old one.
+2. **The client pays.** The link opens a page with the amount, the due date, what it is for, and the workspace's address on Arc testnet. The client sends exactly that amount from any wallet and can choose **I have paid**, which only asks Vestiarion to look now.
+3. **The agent matches it.** Every cycle, and on **I have paid**, Vestiarion reads the transfers that arrived in the operating wallet from Circle. A transfer of the same currency and amount as an open receivable, arriving after the receivable was added, settles it: from the client's own address on file, or, from any address, when it is the only such receivable and its client was sent the link. The receivable becomes received with its transaction, and the ledger records `ar_received`. Two open receivables of the same amount, with nothing to tell them apart, stay open for a person.
+
+Only a matched transfer counts as money received. Testnet faucet drips and swaps also arrive in the wallet, and they settle nothing.
