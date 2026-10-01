@@ -2,6 +2,7 @@ import { Flag } from "lucide-react";
 import type { Metadata } from "next";
 import AgentControls from "@/components/AgentControls";
 import { EscrowPanel } from "@/components/EscrowPanel";
+import { MilestoneEscrow } from "@/components/MilestoneEscrow";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import MilestoneIntake from "@/components/intake/MilestoneIntake";
 import MilestoneVerification from "@/components/MilestoneVerification";
@@ -47,6 +48,8 @@ export default async function ContractorsPage({ params }: { params: Promise<{ sl
     ]);
     const entries = await listLedgerEntriesForTargets({ milestoneIds: milestones.map((milestone) => milestone.id) });
     const decisions = milestones.map((milestone) => milestoneDecision(milestone, entries));
+    // Made here, not in the browser, so the server's markup and the browser's agree (as the Gateway form's id is).
+    const defaultRefundDate = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
     // Clients pay the business; contractors are listed first, then vendors.
     const payees = counterparties
       .filter((counterparty) => counterparty.role !== "client")
@@ -99,6 +102,29 @@ export default async function ContractorsPage({ params }: { params: Promise<{ sl
                     orgSlug={slug}
                     milestoneId={milestones[index].id}
                     verified={milestones[index].verified}
+                  />
+                )}
+                {live && (
+                  <MilestoneEscrow
+                    orgSlug={slug}
+                    milestoneId={milestones[index].id}
+                    requestId={crypto.randomUUID()}
+                    defaultRefundDate={defaultRefundDate}
+                    escrowReady={Boolean(escrow?.address)}
+                    canManage={canManageTreasury}
+                    paid={milestones[index].status === "paid"}
+                    hold={
+                      milestones[index].escrow_state
+                        ? {
+                            state: milestones[index].escrow_state as "funded" | "released" | "refunded",
+                            refundAfter: milestones[index].escrow_refund_after ?? "",
+                            amount: Number(milestones[index].escrow_amount ?? milestones[index].amount),
+                            fundTxHash: milestones[index].escrow_fund_tx_hash ?? null,
+                            releaseTxHash: milestones[index].escrow_release_tx_hash ?? null,
+                            refundTxHash: milestones[index].escrow_refund_tx_hash ?? null,
+                          }
+                        : null
+                    }
                   />
                 )}
               </div>
