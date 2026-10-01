@@ -3,6 +3,7 @@ import type {
   ChainProvider,
   EarnDepositParams,
   EarnResult,
+  InboundTransfer,
   Stablecoin,
   SwapCallParams,
   SwapCallResult,
@@ -59,6 +60,11 @@ class HybridProvider implements ChainProvider {
    */
   swapForEurc(params: SwapCallParams): Promise<SwapCallResult> {
     return this.live.swapForEurc(params);
+  }
+
+  /** Money in is read from the real wallet (receivables on Arc §2), like every other payment-side call. */
+  listInboundTransfers(accountId: string, since: string | null): Promise<InboundTransfer[]> {
+    return this.live.listInboundTransfers(accountId, since);
   }
 
   depositToEarn(params: EarnDepositParams): Promise<EarnResult> {
