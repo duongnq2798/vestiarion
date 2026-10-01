@@ -207,3 +207,21 @@ If a payment attempt fails, the card says "The last payment attempt failed: " an
 />
 
 To check a signature yourself, see [Verifying signatures](/docs/webhooks/verify). To read the ledger from your own code, see [List ledger entries](/docs/api/list-ledger-entries) and [Verify the ledger](/docs/api/verify-ledger).
+
+## 8. Share a receipt
+
+A payee, an accountant or anyone else can check a payment without an account: share its receipt.
+
+- **Sharing it.** On **Invoices**, a paid payable with a transaction on chain shows **Share receipt** to an owner or admin. It makes a link to a public page. Copy the link then: it is shown only once.
+- **What the page shows.** The amount, the payee's chain and address, and how it was paid, with the fee. It also shows the transaction, linked to its explorer; for a CCTP payout, the burn on Arc testnet as well.
+- **The three checks the page makes.**
+  - **Signed by the paying workspace.** The receipt is a ledger entry the workspace signed when it was shared. Its signature, body hash and chain hash are checked, and checked again in the reader's browser.
+  - **Recorded when it was paid.** The entry that recorded the payment is checked and found to name its transaction. Its content stays private.
+  - **On the payee's chain.** The chain shows a transfer of the amount to the payee in that transaction.
+- **Check it yourself.** This section holds the signed entry, its hashes and the workspace's public key, for checking without Vestiarion.
+- **No names.** The page shows no business, payee or person names, and no reasoning.
+- **Changing the link.** A shared receipt shows **Receipt shared**:
+  - **New link** makes a new link, and the old one stops working.
+  - **Stop sharing** turns the link off.
+  - A link that no longer works says so and shows nothing else.
+- **Which payments.** Only live payments have receipts: a simulated payment has nothing on chain to show. A CCTP payout can be shared once the payee's chain has minted it.

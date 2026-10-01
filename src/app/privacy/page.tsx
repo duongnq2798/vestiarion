@@ -74,6 +74,11 @@ export default function PrivacyPage() {
           The public <LegalLink href="/open">open numbers</LegalLink> page shows counts and totals across all workspaces, such as how many payments settled
           and how much USDC they moved. It never names a workspace or a person, and never lists a customer&apos;s payment.
         </p>
+        <p>
+          An owner or admin can share one paid payment&apos;s receipt as a link. Anyone with the link sees that payment&apos;s amount, the payee&apos;s
+          chain and address, its transactions and its signed ledger entry, which already sit on a public chain or in the workspace&apos;s own ledger. It
+          shows no names. The link stops working when they stop sharing it or make a new one.
+        </p>
       </LegalSection>
 
       <LegalSection id="secrets" title="Secrets">

@@ -1,5 +1,17 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-01: Payment receipts
+
+- An owner or admin can share a paid payable's receipt as a public link. Three new ledger actions, in the `ap` domain, are delivered as `ledger.appended` events:
+  - `receipt_shared`, appended once per payment, the first time it is shared. Its `detail` is `{ receipt, records }` and holds no names and no user ids:
+    - `receipt` is `{ amount, token, paidAt, payee, chain, txHash, route, sourceTxHash?, feeUsdc? }`;
+    - `chain` and `txHash` are where the payee was paid: the transfer on Arc testnet, or the mint on the payee's chain;
+    - `route` is `direct`, `cctp` or `gateway`;
+    - `sourceTxHash` is a CCTP payout's burn;
+    - `records` is `{ seq, hash }` of the entry that recorded the payment.
+  - `receipt_link_renewed`, when a new link replaces an earlier one or a revoked receipt is shared again. Its `detail` is `{ by, invoiceId, receiptId }`.
+  - `receipt_revoked`, when a receipt's link is turned off. Its `detail` is `{ by, invoiceId, receiptId }`.
+
 ## 2026-10-01: Payouts from a Gateway balance
 
 - A payout to a payee on another chain can go from the workspace's Circle Gateway balance as well as through CCTP. Its decision entry's `payout.route` is then `gateway`, `payout.feeUsdc` is Gateway's fee, and `payout.gatewayBalanceUsdc` is the Gateway balance it was weighed against.
