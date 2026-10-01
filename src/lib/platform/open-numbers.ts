@@ -1,18 +1,20 @@
 import { z } from "zod";
 import { utcDay } from "../copy";
-import { platformDb, unwrap } from "../dal";
+import { platformDb, unwrap, type PlatformRpc } from "../dal";
 
 /**
  * The open numbers (docs/superpowers/specs/2026-09-30-open-numbers-design.md):
  * platform-wide usage for the public /open page and `npm run numbers`.
  *
- * Every figure comes from two database functions, the only readers that cross
- * workspaces (R2): `open_numbers(p_since)`, and `open_first_payments(p_since)`
- * for the first payments and the time to them (first-payment design §3). They
- * return aggregates only, split into customers' workspaces, ours, and the
- * total (R3); this module validates both documents, merges them into one set
- * of figures per side, and keeps it for 60 seconds per period, so a busy
- * public page cannot hammer the database (R9).
+ * Every figure comes from three database functions, the only readers that
+ * cross workspaces (R2): `open_numbers(p_since)`; `open_first_payments(p_since)`
+ * for the first payments and the time to them (first-payment design §3); and
+ * `open_outcomes(p_since)` for how the agent's payment decisions turned out
+ * (docs/superpowers/specs/2026-10-01-open-outcomes-design.md). They return
+ * aggregates only, split into customers' workspaces, ours, and the total (R3);
+ * this module validates the documents, merges them into one set of figures per
+ * side, and keeps it for 60 seconds per period, so a busy public page cannot
+ * hammer the database (R9).
  */
 
 const figure = z.coerce.number();
@@ -49,6 +51,32 @@ const firstPaymentsSchema = z.object({
   sides: z.object({ customers: firstSideSchema, ours: firstSideSchema, total: firstSideSchema }),
 });
 
+/**
+ * From open_outcomes (0049), all counts (outcomes design §3). Every one is
+ * null when the function could not be read, so /open still shows the rest.
+ */
+const outcomeSideSchema = z.object({
+  decisionsCarriedOut: figure.nullable(),
+  decisionsEscalated: figure.nullable(),
+  escalationsResolved: figure.nullable(),
+  flagsResolved: figure.nullable(),
+  flagsUpheld: figure.nullable(),
+  invoicesPaidOnArc: figure.nullable(),
+  invoicesPaidOnTime: figure.nullable(),
+  invoicesPaidOnTimeUntouched: figure.nullable(),
+  duplicatesCaught: figure.nullable(),
+});
+
+type OutcomeSide = z.infer<typeof outcomeSideSchema>;
+
+const NO_OUTCOMES = Object.fromEntries(Object.keys(outcomeSideSchema.shape).map((key) => [key, null])) as {
+  [K in keyof OutcomeSide]: null;
+};
+
+const outcomesSchema = z.object({
+  sides: z.object({ customers: outcomeSideSchema, ours: outcomeSideSchema, total: outcomeSideSchema }),
+});
+
 /** Payments settled on one UTC day. A customer's amounts never appear by day, only their count (spec R6). */
 const dailySchema = z.object({
   day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -66,7 +94,7 @@ const openNumbersSchema = z.object({
 });
 
 export type SideKey = "customers" | "ours" | "total";
-export type SideNumbers = z.infer<typeof sideSchema> & z.infer<typeof firstSideSchema>;
+export type SideNumbers = z.infer<typeof sideSchema> & z.infer<typeof firstSideSchema> & OutcomeSide;
 export type DailyPayments = z.infer<typeof dailySchema>;
 export type OpenNumbers = Omit<z.infer<typeof openNumbersSchema>, "sides"> & { sides: Record<SideKey, SideNumbers> };
 export type OurPayment = OpenNumbers["ourPayments"][number];
@@ -145,27 +173,30 @@ function memoKey(period: Period): string {
   return period.key === "since" && period.since ? `since:${period.since.toISOString()}` : period.key;
 }
 
+/**
+ * Reads one function whose figures stand on their own: when it cannot be read
+ * (before its migration is applied, say), every side gets `missing` and the
+ * rest of /open still shows.
+ */
+function readSides<S>(fn: PlatformRpc, since: { p_since: string | null }, schema: z.ZodType<{ sides: Record<SideKey, S> }>, missing: S) {
+  return Promise.resolve(platformDb().rpc(fn, since))
+    .then((result) => schema.parse(unwrap(result)).sides)
+    .catch((error: unknown): Record<SideKey, S> => {
+      console.error(`open numbers: ${fn} not read`, error instanceof Error ? error.message : error);
+      return { customers: missing, ours: missing, total: missing };
+    });
+}
+
 async function fetchOpenNumbers(period: Period): Promise<OpenNumbers> {
   const since = { p_since: period.since ? period.since.toISOString() : null };
-  const [numbers, first] = await Promise.all([
+  const [numbers, first, outcomes] = await Promise.all([
     platformDb().rpc("open_numbers", since),
-    // Figures of their own: when they cannot be read (before migration 0042, say), the rest of /open still shows.
-    Promise.resolve(platformDb().rpc("open_first_payments", since))
-      .then((result) => firstPaymentsSchema.parse(unwrap(result)).sides)
-      .catch((error: unknown) => {
-        console.error("open numbers: open_first_payments not read", error instanceof Error ? error.message : error);
-        return { customers: NO_FIRSTS, ours: NO_FIRSTS, total: NO_FIRSTS };
-      }),
+    readSides("open_first_payments", since, firstPaymentsSchema, NO_FIRSTS),
+    readSides<OutcomeSide>("open_outcomes", since, outcomesSchema, NO_OUTCOMES),
   ]);
   const document = openNumbersSchema.parse(unwrap(numbers));
-  return {
-    ...document,
-    sides: {
-      customers: { ...document.sides.customers, ...first.customers },
-      ours: { ...document.sides.ours, ...first.ours },
-      total: { ...document.sides.total, ...first.total },
-    },
-  };
+  const merge = (side: SideKey): SideNumbers => ({ ...document.sides[side], ...first[side], ...outcomes[side] });
+  return { ...document, sides: { customers: merge("customers"), ours: merge("ours"), total: merge("total") } };
 }
 
 /** The open numbers for a period, read at most once a minute per period on this instance. */
