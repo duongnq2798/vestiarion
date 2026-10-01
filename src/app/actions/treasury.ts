@@ -8,6 +8,7 @@ import { authorize } from "@/lib/auth/authorize";
 import { revalidateOrgPages } from "@/lib/auth/revalidate";
 import { fundGateway, GatewayStepFailed } from "@/lib/circle/gateway-funding";
 import { CIRCLE_UNREACHABLE } from "@/lib/copy";
+import { operatingEurcBalance } from "@/lib/fx/eurc-balance";
 import { inOrg } from "@/lib/dal/scope";
 import { firstZodMessage, usdcAmountSchema } from "@/lib/intake-validation";
 
@@ -18,6 +19,8 @@ export interface RefreshBalanceResult {
   /** When the operating account's balance was last read from the chain, if ever. */
   syncedAt: string | null;
   message?: string;
+  /** The operating wallet's EURC, read from the chain just now; absent when it could not be read, or in a sandbox. */
+  eurc?: number;
 }
 
 /**
@@ -39,11 +42,13 @@ export async function refreshOnChainBalanceAction(orgSlug: string): Promise<Refr
   if (!auth.ok) return { ok: false, balance: null, syncedAt: null, message: auth.message };
   return inOrg(auth, async () => {
     try {
-      const result = await refreshOnChainBalances();
+      // The EURC is read from Arc testnet's public RPC, not from Circle: it is not held to the USDC read's cooldown.
+      const [result, eurc] = await Promise.all([refreshOnChainBalances(), operatingEurcBalance().catch(() => null)]);
+      const withEurc = eurc === null ? {} : { eurc };
       if (result.reason === "unavailable") {
-        return { ok: false, balance: result.balance, syncedAt: result.syncedAt, message: result.message ?? CIRCLE_UNREACHABLE };
+        return { ok: false, balance: result.balance, syncedAt: result.syncedAt, message: result.message ?? CIRCLE_UNREACHABLE, ...withEurc };
       }
-      return { ok: true, balance: result.balance, syncedAt: result.syncedAt };
+      return { ok: true, balance: result.balance, syncedAt: result.syncedAt, ...withEurc };
     } catch {
       console.error("refreshOnChainBalanceAction failed");
       return { ok: false, balance: null, syncedAt: null, message: CIRCLE_UNREACHABLE };

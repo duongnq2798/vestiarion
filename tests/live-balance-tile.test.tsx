@@ -78,6 +78,18 @@ describe("LiveBalanceView", () => {
     expect(html(<LiveBalanceView {...base} pending={false} failure={null} />)).toContain("Checked 3 min ago");
   });
 
+  it("shows the operating wallet's EURC beside its USDC when it holds some", () => {
+    const markup = html(<LiveBalanceView {...base} eurc={16.6} pending={false} failure={null} />);
+    expect(markup).toContain("16.60");
+    expect(markup).toContain("EURC");
+    expect(markup).toContain("in the operating wallet");
+  });
+
+  it("shows no EURC line when it holds none, or none was read", () => {
+    expect(html(<LiveBalanceView {...base} eurc={0} pending={false} failure={null} />)).not.toContain("EURC");
+    expect(html(<LiveBalanceView {...base} eurc={null} pending={false} failure={null} />)).not.toContain("EURC");
+  });
+
   it("disables the Refresh button and shows the spinner while a read is pending", () => {
     const markup = html(<LiveBalanceView {...base} pending failure={null} />);
     expect(markup).toMatch(/<button[^>]*disabled=""[^>]*aria-label="Refresh the on-chain balance"|<button[^>]*aria-label="Refresh the on-chain balance"[^>]*disabled=""/);
@@ -117,6 +129,13 @@ describe("nextTileState", () => {
     expect(nextTileState({ ...previous, failure: FAILED }, { ok: true, balance: 120, syncedAt: "2026-09-30T12:00:00.000Z" })).toEqual({
       balance: 120, syncedAt: "2026-09-30T12:00:00.000Z", failure: null,
     });
+  });
+
+  it("takes the EURC a read brought, and keeps the last one when a read brought none", () => {
+    const withEurc = nextTileState(previous, { ok: true, balance: 120, syncedAt: "2026-09-30T12:00:00.000Z", eurc: 16.6 });
+    expect(withEurc.eurc).toBe(16.6);
+    expect(nextTileState(withEurc, { ok: true, balance: 121, syncedAt: "2026-09-30T12:01:00.000Z" }).eurc).toBe(16.6);
+    expect(nextTileState(withEurc, { ok: false, balance: null, syncedAt: null, message: FAILED }).eurc).toBe(16.6);
   });
 
   it("uses the partial figures a failed read still brought back, with the failure beside them", () => {

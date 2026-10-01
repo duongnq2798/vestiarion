@@ -24,6 +24,9 @@ vi.mock("@/lib/agent/balances", async (importOriginal) => ({
   refreshOnChainBalances: refreshMock,
 }));
 
+const { eurcMock } = vi.hoisted(() => ({ eurcMock: vi.fn(async (): Promise<number | null> => null) }));
+vi.mock("@/lib/fx/eurc-balance", () => ({ operatingEurcBalance: eurcMock }));
+
 import { refreshOnChainBalanceAction } from "@/app/actions/treasury";
 
 const config = configFromEnv({
@@ -43,6 +46,7 @@ function run<T>(fn: () => Promise<T>): Promise<T> {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  eurcMock.mockResolvedValue(null);
 });
 
 describe("refreshOnChainBalanceAction", () => {
@@ -78,6 +82,20 @@ describe("refreshOnChainBalanceAction", () => {
     expect(result).toEqual({ ok: true, balance: 120, syncedAt: "2026-09-30T12:00:00.000Z" });
     // The client updates the tile itself; nothing re-renders the layout.
     expect(revalidatePathMock).not.toHaveBeenCalled();
+  });
+
+  it("adds the operating wallet's EURC, read from the chain, when it holds some", async () => {
+    authorizeMock.mockResolvedValueOnce({ ok: true, user: { id: "u1" }, membership: MEMBERSHIP });
+    refreshMock.mockResolvedValueOnce({ refreshed: true, balance: 120, syncedAt: "2026-09-30T12:00:00.000Z" });
+    eurcMock.mockResolvedValueOnce(16.6);
+    expect(await run(() => refreshOnChainBalanceAction("northstar"))).toEqual({ ok: true, balance: 120, syncedAt: "2026-09-30T12:00:00.000Z", eurc: 16.6 });
+  });
+
+  it("adds it even when the USDC read was skipped for its cooldown: it is not Circle's to ration", async () => {
+    authorizeMock.mockResolvedValueOnce({ ok: true, user: { id: "u1" }, membership: MEMBERSHIP });
+    refreshMock.mockResolvedValueOnce({ refreshed: false, reason: "cooldown", balance: 100, syncedAt: "2026-09-30T11:59:50.000Z" });
+    eurcMock.mockResolvedValueOnce(0);
+    expect(await run(() => refreshOnChainBalanceAction("northstar"))).toEqual({ ok: true, balance: 100, syncedAt: "2026-09-30T11:59:50.000Z", eurc: 0 });
   });
 
   it.each(["cooldown", "cycle_running", "not_live", "no_wallet"])("treats a skipped read (%s) as a success carrying the stored figures", async (reason) => {
