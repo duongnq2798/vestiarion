@@ -67,7 +67,7 @@ export class SimulateProvider implements ChainProvider {
     const providerTxId = `sim_${params.idempotencyKey}`;
     // A simulated bridge: the burn and the mint at once (CCTP payouts X10).
     const bridged = paidAcrossChains(params.destinationChain)
-      ? { destinationChain: params.destinationChain as string, mintTxHash: `sim_mint_${params.idempotencyKey}` }
+      ? { destinationChain: params.destinationChain as string, mintTxHash: `sim_mint_${params.idempotencyKey}`, route: params.route ?? ("cctp" as const) }
       : {};
     return {
       ...bridged,

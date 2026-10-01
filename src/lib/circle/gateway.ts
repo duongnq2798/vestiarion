@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { payeeChain, type PayeeChain } from "../payee-chains";
+import { PAYEE_CHAINS, payeeChain, type PayeeChain } from "../payee-chains";
 import { ARC_TESTNET_DOMAIN, ARC_TESTNET_USDC } from "./cctp";
 
 /**
@@ -211,20 +211,24 @@ export interface GatewayTransferStatus {
   /** The mint on the payee's chain, once confirmed. */
   mintTxHash: string | null;
   failureReason: string | null;
+  /** The payee's chain, from the transfer's destination domain; null when Gateway did not say. */
+  destinationChain: PayeeChain | null;
 }
 
 /** A transfer's state, read again: it sends nothing. */
 export async function gatewayTransferStatus(transferId: string, options: { fetch?: typeof fetch } = {}): Promise<GatewayTransferStatus> {
   const answer = (await call("status read", `${GATEWAY_API}/transfer/${encodeURIComponent(transferId)}`, { method: "GET" }, options.fetch ?? fetch)) as {
     status?: string;
+    destinationDomain?: number;
     transactionHash?: string;
     forwardingDetails?: { failureReason?: string };
   } | null;
+  const destinationChain = PAYEE_CHAINS.find((chain) => chain.domain === answer?.destinationDomain && chain.id !== "ARC-TESTNET")?.id ?? null;
   const status = answer?.status;
   if (status === "confirmed" || status === "finalized") {
-    return { status: "confirmed", mintTxHash: typeof answer?.transactionHash === "string" ? answer.transactionHash : null, failureReason: null };
+    return { status: "confirmed", mintTxHash: typeof answer?.transactionHash === "string" ? answer.transactionHash : null, failureReason: null, destinationChain };
   }
-  if (status === "failed") return { status: "failed", mintTxHash: null, failureReason: answer?.forwardingDetails?.failureReason ?? "Gateway reported the transfer failed." };
-  if (status === "expired") return { status: "failed", mintTxHash: null, failureReason: "The attestation expired before the mint." };
-  return { status: "pending", mintTxHash: null, failureReason: null };
+  if (status === "failed") return { status: "failed", mintTxHash: null, failureReason: answer?.forwardingDetails?.failureReason ?? "Gateway reported the transfer failed.", destinationChain };
+  if (status === "expired") return { status: "failed", mintTxHash: null, failureReason: "The attestation expired before the mint.", destinationChain };
+  return { status: "pending", mintTxHash: null, failureReason: null, destinationChain };
 }

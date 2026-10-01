@@ -50,7 +50,16 @@ export interface TransferParams {
   /** For a bridged payment, the most its CCTP fee may be, in USDC: a higher fee read at the burn sends nothing (review I4). */
   maxBridgeFeeUsdc?: number;
   token?: Stablecoin;
+  /**
+   * How a payment across chains goes (Gateway payouts G2): from the workspace's
+   * Gateway balance, or through CCTP when absent. The payment intent keeps it
+   * from its first attempt.
+   */
+  route?: PayoutRoute;
 }
+
+/** The two ways a payee on another chain is paid from Arc testnet. */
+export type PayoutRoute = "cctp" | "gateway";
 
 export interface TransferResult {
   providerTxId: string;
@@ -72,6 +81,8 @@ export interface TransferResult {
   destinationChain?: string | null;
   /** The CCTP fee paid on top of a bridged payment, in USDC. */
   bridgeFeeUsdc?: number | null;
+  /** The route a payment across chains took; absent for a payment on Arc. */
+  route?: PayoutRoute;
 }
 
 export interface EarnDepositParams {

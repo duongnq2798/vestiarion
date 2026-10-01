@@ -111,11 +111,11 @@ describe("the Gateway API", () => {
 
   it("reads a transfer's status: the mint on the payee's chain once confirmed or finalized; failed when it failed or expired", async () => {
     const read = (body: unknown) => gatewayTransferStatus("tr-1", { fetch: (async () => respond(200, body)) as unknown as typeof globalThis.fetch });
-    expect(await read({ status: "pending" })).toEqual({ status: "pending", mintTxHash: null, failureReason: null });
-    expect(await read({ status: "confirmed", transactionHash: "0xmint" })).toEqual({ status: "confirmed", mintTxHash: "0xmint", failureReason: null });
-    expect(await read({ status: "finalized", transactionHash: "0xmint" })).toMatchObject({ status: "confirmed", mintTxHash: "0xmint" });
-    expect(await read({ status: "failed", forwardingDetails: { forwardingEnabled: true, failureReason: "out of gas" } })).toEqual({ status: "failed", mintTxHash: null, failureReason: "out of gas" });
-    expect(await read({ status: "expired" })).toEqual({ status: "failed", mintTxHash: null, failureReason: "The attestation expired before the mint." });
+    expect(await read({ status: "pending", destinationDomain: 6 })).toEqual({ status: "pending", mintTxHash: null, failureReason: null, destinationChain: "BASE-SEPOLIA" });
+    expect(await read({ status: "confirmed", destinationDomain: 3, transactionHash: "0xmint" })).toEqual({ status: "confirmed", mintTxHash: "0xmint", failureReason: null, destinationChain: "ARB-SEPOLIA" });
+    expect(await read({ status: "finalized", transactionHash: "0xmint" })).toMatchObject({ status: "confirmed", mintTxHash: "0xmint", destinationChain: null });
+    expect(await read({ status: "failed", destinationDomain: 6, forwardingDetails: { forwardingEnabled: true, failureReason: "out of gas" } })).toEqual({ status: "failed", mintTxHash: null, failureReason: "out of gas", destinationChain: "BASE-SEPOLIA" });
+    expect(await read({ status: "expired", destinationDomain: 0 })).toEqual({ status: "failed", mintTxHash: null, failureReason: "The attestation expired before the mint.", destinationChain: "ETH-SEPOLIA" });
   });
 
   it("turns an HTTP error or no answer into a GatewayError, with Gateway's own message", async () => {
