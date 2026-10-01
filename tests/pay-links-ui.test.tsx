@@ -88,6 +88,15 @@ describe("checkPaymentAction", () => {
     expect(result.received).toBe(outcome === "received");
   });
 
+  it("answers a failure with a sentence, never a broken page", async () => {
+    checkMock.mockRejectedValueOnce(new Error("Supabase returned no data"));
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const result = await checkPaymentAction({ ok: false, message: "" }, form({ token: TOKEN }));
+    expect(result).toEqual({ ok: false, message: "We could not check just now. Try again in a minute." });
+    expect(logged).toHaveBeenCalled();
+    logged.mockRestore();
+  });
+
   it("is the one action of the page, gated by the link itself, never a session or a workspace of its own", () => {
     const source = readFileSync(path.join(process.cwd(), "src", "app", "pay", "[token]", "actions.ts"), "utf8");
     expect([...source.matchAll(/export async function (\w+)/g)].map((m) => m[1])).toEqual(["checkPaymentAction"]);

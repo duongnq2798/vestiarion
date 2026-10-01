@@ -24,6 +24,12 @@ const MESSAGES = {
  */
 export async function checkPaymentAction(_previous: PaymentCheckResult, formData: FormData): Promise<PaymentCheckResult> {
   const token = formData.get("token");
-  const outcome = await checkPayLink(typeof token === "string" ? token : "");
-  return { ok: outcome !== "invalid", message: MESSAGES[outcome], received: outcome === "received" };
+  try {
+    const outcome = await checkPayLink(typeof token === "string" ? token : "");
+    return { ok: outcome !== "invalid", message: MESSAGES[outcome], received: outcome === "received" };
+  } catch (error) {
+    // The client sees a sentence, not a broken page; the cause stays in the server log.
+    console.error("pay link check failed", error instanceof Error ? error.message : error);
+    return { ok: false, message: "We could not check just now. Try again in a minute." };
+  }
 }

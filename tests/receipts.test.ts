@@ -81,8 +81,12 @@ describe("recordIncomingTransfers", () => {
       if (r.path === "/rest/v1/incoming_transfers" && r.method === "GET") {
         return r.params.has("invoice_id") ? { body: over.unmatched ?? UNMATCHED } : { body: over.latest ?? [] };
       }
-      if (r.path === "/rest/v1/incoming_transfers" && r.method === "POST") return { body: [] };
-      if (r.path === "/rest/v1/incoming_transfers" && r.method === "PATCH") return { body: [{ id: "row-1" }] };
+      // As PostgREST answers a write that asks for nothing back (return=minimal): no body at all. A fake that
+      // answered [] here hid a production failure ("Supabase returned no data", 2026-10-02).
+      if (r.path === "/rest/v1/incoming_transfers" && r.method === "POST") return { status: 201, body: null };
+      if (r.path === "/rest/v1/incoming_transfers" && r.method === "PATCH") {
+        return r.params.get("select") ? { body: [{ id: "row-1" }] } : { status: 200, body: null };
+      }
       if (r.path === "/rest/v1/invoices" && r.method === "GET") return { body: over.open ?? OPEN };
       if (r.path === "/rest/v1/receivable_links" && r.method === "GET") return { body: [{ invoice_id: "inv-1" }] };
       if (r.path === "/rest/v1/invoices" && r.method === "PATCH") return { body: over.invoicePatch ?? [{ id: "inv-1" }] };
