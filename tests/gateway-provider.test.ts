@@ -27,8 +27,10 @@ vi.mock("@/lib/dal", () => ({
       update: () => ({ eq: async () => ({ error: null }) }),
     }),
   }),
+  // As the real unwrap: no row is an error, so a reader of an optional row must not use it (review M1).
   unwrap: (result: { data: unknown; error?: { message: string } | null }) => {
     if (result.error) throw new Error(result.error.message);
+    if (result.data === null) throw new Error("Supabase returned no data");
     return result.data;
   },
 }));
@@ -42,13 +44,16 @@ const TRANSFER = { fromAccountId: "account-1", toAddress: PAYEE, amount: 1, memo
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
-function gateway(options: { status?: string; fee?: string } = {}) {
+function gateway(options: { status?: string; fee?: string; statusDown?: boolean; maxFee?: string } = {}) {
   const posted: Array<{ url: string; body: unknown }> = [];
   const fetch = vi.fn(async (url: string, init?: RequestInit) => {
     if (init?.body) posted.push({ url, body: JSON.parse(String(init.body)) });
-    if (url.includes("/estimate")) return json({ body: [{ burnIntent: { maxFee: "56724", maxBlockHeight: "66288611" } }], fees: { total: options.fee ?? "0.056724" } });
+    if (url.includes("/estimate")) return json({ body: [{ burnIntent: { maxFee: options.maxFee ?? "56724", maxBlockHeight: "66288611" } }], fees: { total: options.fee ?? "0.056724" } });
     if (url.includes("/transfer?")) return json({ transferId: "tr-1" });
-    if (url.includes("/transfer/tr-1")) return json({ status: options.status ?? "confirmed", destinationDomain: 6, transactionHash: "0xmint" });
+    if (url.includes("/transfer/tr-1")) {
+      if (options.statusDown) return json({ message: "Service unavailable" }, 503);
+      return json({ status: options.status ?? "confirmed", destinationDomain: 6, transactionHash: "0xmint" });
+    }
     throw new Error(`unexpected ${url}`);
   });
   return { fetch: fetch as unknown as typeof globalThis.fetch, posted, raw: fetch };
@@ -102,6 +107,19 @@ describe("LiveProvider: a payout from the Gateway balance", () => {
   it("is in flight while Gateway has not minted yet", async () => {
     const result = await new LiveProvider(CHAIN, { client: circle().client, fetch: gateway({ status: "pending" }).fetch, bridgeMintWaitMs: 0 }).transfer(TRANSFER);
     expect(result).toMatchObject({ providerTxId: "gateway:tr-1", status: "pending", txHash: null, txRef: "gateway:tr-1", mintTxHash: null });
+  });
+
+  it("keeps the transfer it sent when the status read right after fails: in flight, never 'not sent' (review I1)", async () => {
+    const result = await new LiveProvider(CHAIN, { client: circle().client, fetch: gateway({ statusDown: true }).fetch, bridgeMintWaitMs: 0 }).transfer(TRANSFER);
+    expect(result).toMatchObject({ providerTxId: "gateway:tr-1", status: "pending", mintTxHash: null, route: "gateway", destinationChain: "BASE-SEPOLIA", chain: "BASE-SEPOLIA" });
+  });
+
+  it("weighs the fee it signs, not only the fee Gateway quotes (review M2)", async () => {
+    const c = circle();
+    await expect(
+      new LiveProvider(CHAIN, { client: c.client, fetch: gateway({ fee: "0.05", maxFee: "200000" }).fetch, bridgeMintWaitMs: 0 }).transfer({ ...TRANSFER, maxBridgeFeeUsdc: 0.1 })
+    ).rejects.toThrow(BridgeFeeError);
+    expect(c.raw.signTypedData).not.toHaveBeenCalled();
   });
 
   it("sends nothing when Gateway's fee is above what the payment may pay", async () => {

@@ -296,16 +296,20 @@ export class LiveProvider implements ChainProvider {
       throw new Error("Only USDC crosses chains through Gateway; a EURC payment is paid on Arc testnet only.");
     }
     const chain = payeeChain(params.destinationChain);
-    const signer = unwrap(await db().from("gateway_signers").select("circle_wallet_id, address").maybeSingle()) as { circle_wallet_id: string; address: string } | null;
+    const found = await db().from("gateway_signers").select("circle_wallet_id, address").maybeSingle();
+    if (found.error) throw new Error(found.error.message);
+    const signer = found.data as { circle_wallet_id: string; address: string } | null;
     if (!signer) throw new Error("This workspace has no Gateway balance yet: an owner or admin funds one on Treasury.");
     if (!account.address) throw new Error("The operating wallet has no address; nothing was sent.");
 
     const payout = { depositor: account.address, signer: signer.address, recipient: params.toAddress, chain: chain.id, amount: params.amount, salt: gatewaySalt(params.idempotencyKey) };
     const estimate = await estimateGateway(payout, { fetch: this.fetch });
     // The fee is read here, just before the payout; one above what this payment may pay sends nothing.
-    if (params.maxBridgeFeeUsdc != null && estimate.feeUsdc > params.maxBridgeFeeUsdc) {
+    // Weighed as the larger of the fee Gateway quotes and the fee the intent is signed to allow (review M2).
+    const signedFeeUsdc = Math.max(estimate.feeUsdc, Number(estimate.maxFee) / 1_000_000);
+    if (params.maxBridgeFeeUsdc != null && signedFeeUsdc > params.maxBridgeFeeUsdc) {
       throw new BridgeFeeError(
-        `The Gateway fee to ${chain.label}, ${estimate.feeUsdc} USDC, is above the ${params.maxBridgeFeeUsdc} USDC this payment may pay; nothing was sent.`
+        `The Gateway fee to ${chain.label}, ${signedFeeUsdc} USDC, is above the ${params.maxBridgeFeeUsdc} USDC this payment may pay; nothing was sent.`
       );
     }
     const intent = burnIntent({ ...payout, maxFee: estimate.maxFee, maxBlockHeight: estimate.maxBlockHeight });
@@ -319,7 +323,14 @@ export class LiveProvider implements ChainProvider {
 
     const started = Date.now();
     const transferId = await submitGatewayTransfer(intent, signature, { fetch: this.fetch });
-    const status = await this.awaitGatewayMint(transferId);
+    // From here the transfer exists: a status read that fails leaves it in flight, for
+    // reconciliation to read, never recorded as not sent (review I1).
+    let status: GatewayTransferStatus;
+    try {
+      status = await this.awaitGatewayMint(transferId);
+    } catch {
+      status = { status: "pending", mintTxHash: null, failureReason: null, destinationChain: chain.id };
+    }
     return this.gatewayResult(`${GATEWAY_ID}${transferId}`, status, chain.id, estimate.feeUsdc, started);
   }
 
@@ -341,7 +352,8 @@ export class LiveProvider implements ChainProvider {
       txHash: transfer.mintTxHash,
       txRef: transfer.mintTxHash ?? providerTxId,
       // The mint is on the payee's chain, and no Arc transaction belongs to one payout: Gateway burns in batches (G5).
-      chain: chain ?? "ARC-TESTNET",
+      // Unknown on a reconcile whose answer named no chain: left as recorded (review M3).
+      chain: chain ?? "",
       status: transfer.status,
       feeUsd: 0,
       feeSource: "provider_estimate",

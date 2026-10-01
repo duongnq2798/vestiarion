@@ -287,7 +287,8 @@ export class SupabasePaymentIntentStore implements PaymentIntentStore {
       status: result.status,
       last_error: null,
       confirmed_at: result.status === "confirmed" ? now : null,
-      chain: result.chain,
+      // A reconcile that cannot say which chain a payout is on leaves the chain it was recorded with (review M3).
+      ...(result.chain ? { chain: result.chain } : {}),
       provider_mode: result.providerMode,
       fee_usd: result.feeUsd,
       fee_source: result.feeSource,

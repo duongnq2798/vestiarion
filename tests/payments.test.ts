@@ -715,6 +715,13 @@ describe("SupabasePaymentIntentStore by source, and its attempts", () => {
     expect(body(onArc.fake)).not.toHaveProperty("payout_route");
   });
 
+  it("keeps the chain it knows when a reconcile cannot say which chain a Gateway payout is on (review M3)", async () => {
+    const respond = (sent: RecordedRequest) => ({ body: sent.path === "/rest/v1/payment_intents" && sent.method === "GET" ? intentRow({ status: "pending" }) : [] });
+    const recorded = inOrganization(respond, () => new SupabasePaymentIntentStore().recordResult("k-1", { ...transferResult("pending"), chain: "" }));
+    await recorded.result;
+    expect(recorded.fake.requests[0].body).not.toHaveProperty("chain");
+  });
+
   it("records where a bridged payment goes, and only for one (CCTP payouts X8)", async () => {
     const respond = (sent: RecordedRequest) => ({ body: sent.path === "/rest/v1/payment_intents" && sent.method === "GET" ? intentRow({ status: "created" }) : [] });
     const bridged = inOrganization(respond, () => new SupabasePaymentIntentStore().ensure({ ...input, destinationChain: "BASE-SEPOLIA" }));
