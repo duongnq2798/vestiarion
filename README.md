@@ -10,6 +10,7 @@ An autonomous treasury agent for a small business, settled in USDC on Arc.
   3. watch the agent decide within a minute;
   4. approve a payment yourself;
   5. verify the signed ledger.
+- **Research:** [When the model and the policy disagree](https://www.vestiarion.xyz/docs/research/model-vs-policy). In the agent's first week in production, 139 decisions were recorded beside the written policy's answer to the same facts. On payables, the model chose the policy's action 32 times in 39. Of the 7 differences, 6 were more cautious than the policy. The one that would have paid over a limit was refused by code.
 - **Live numbers:** [www.vestiarion.xyz/open](https://www.vestiarion.xyz/open) shows the payments, payees and decisions, read from the production database, with our own workspaces counted apart from customers'.
 - **Real payments on Arc testnet**, made by the agent in production:
   - a USDC payable paid 53 seconds after it was added, with no one pressing Run:

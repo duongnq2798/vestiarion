@@ -1,0 +1,105 @@
+Vestiarion's agent decides with a language model. For the same facts, the code also works out what a written policy would decide, and the signed ledger records both answers side by side. Whatever either says, guardrails in code still decide whether money moves.
+
+This note reads every decision the agent has made in production so far. It covers how often the model chose the policy's action, where it did not, and what followed.
+
+The figures are as of 1 October 2026, 05:30 UTC, and come from `npm run research:model-vs-policy`. The running totals are on [www.vestiarion.xyz/open](https://www.vestiarion.xyz/open).
+
+## How it is measured
+
+- **The model** (DeepSeek in production) is given the facts of a decision:
+  - the invoice, its purchase order and receipt;
+  - the counterparty's risk level, limit and history;
+  - the balances;
+  - the duplicate check;
+  - the payment timing figures.
+
+  It answers with an action, its reasoning and a confidence between 0 and 1.
+- **The written policy** is the same rules, written as code. `decide()` works out the policy's answer for every decision, and uses it when the model fails.
+  - The model never sees that answer. For payment timing, the policy's recommendation is left out of the facts on purpose, so that agreement measures the model's own judgement, not copying.
+- **The ledger entry** for each decision records:
+  - `decision`, the model's answer;
+  - `referenceDecision`, the policy's answer;
+  - `agreedWithReference`;
+  - `guardrailRule`, when code refused the model.
+
+  Two answers agree when they choose the same action, and, for two schedules, the same day.
+- **Guardrails** run after the model, whatever it says. Code refuses, and holds for a person, any payment that:
+  - is over the counterparty's limit;
+  - goes to a counterparty screened as high risk;
+  - goes to an address not confirmed since it changed;
+  - is beyond the money available.
+
+## What happened
+
+From 24 September to 1 October 2026, the agent made 139 decisions in 5 workspaces, all of them by DeepSeek. The rule-based fallback never had to decide.
+
+The first 14, on 24 September, were made before the policy's answer was recorded beside the model's. That leaves 125 to compare.
+
+| | Compared | Same action as the policy |
+|---|---|---|
+| Payables | 39 | 32 (82.1%) |
+| Contractor milestones | 4 | 4 |
+| Treasury | 82 | 82 |
+| **All** | **125** | **118 (94.4%)** |
+
+The total flatters the model. Every treasury decision was to hold, with nothing to move: the yield reserve is not live yet. The decisions that test judgement are the payables, and there the model and the policy chose differently 7 times in 39.
+
+The model's own confidence tracked this. It averaged 0.94 where the model chose the policy's action, and 0.75 where it did not.
+
+## The seven differences
+
+| Entry | Invoice | Model | Policy | Confidence | What followed |
+|---|---|---|---|---|---|
+| #343 | Centronex, 3 USDC | flag | hold | 0.85 | A person approved and paid it. |
+| #386 | Harbor Office Supply, 1,200 USDC (sample data) | request information | hold | 0.95 | The sample data was removed. |
+| #387 | Kestrel Print Co, 180 USDC (sample data) | flag | pay | 0.6 | The sample data was removed. |
+| #426 | Centronex, 2 USDC, PO-100 | flag | pay | 0.6 | Waiting for a person. |
+| #429 | Centronex, 2 USDC, PO-103 | flag | pay | 0.85 | Waiting for a person. |
+| #462 | Zenith Trading LLC, 2.6 USDC | request information | hold | 0.88 | Waiting for the information. |
+| #505 | Trading Handrock, 1.9 EURC | pay | hold | 0.5 | Refused by code, and held for a person. |
+
+They fall into three kinds.
+
+### Stricter than the policy: three possible duplicates
+
+Three times the policy would have paid, and the model flagged the invoice instead (#387, #426, #429). Each time, the duplicate check had found an earlier invoice from the same vendor, with the same amount and a close due date, at a confidence of 0.60. In #426 and #429 one of those earlier invoices was already paid.
+
+The policy stops a payment as a duplicate only on a match of 0.9 or more against an invoice already paid, being paid or scheduled. These matches were weaker, and the purchase orders differed, so the policy paid.
+
+The model is shown the same matches, with a note that a repeat of an invoice already paid is duplicate billing, and it stopped. Both Centronex invoices were tests that one of us ran against the same small vendor. These were false alarms: they cost a person's attention, not money.
+
+A treasury can afford to err this way more than the other way. It still matters, because a person who clears flags all day stops reading them.
+
+### A different stop: three invoices over their limit
+
+Three invoices were over the counterparty's limit, so neither the model nor the policy would pay them. The policy holds such an invoice for a person to raise the limit or refuse it. The model chose a more specific stop:
+- It asked for information where the three-way match was incomplete as well: in #386 the goods were not received, and in #462 there was no purchase order and no receipt.
+- It flagged #343, where the same purchase order had been billed before at a different amount. A person later paid #343: the re-billed order was one of our tests, not fraud.
+
+### Looser than the policy: one payment over a limit, refused by code
+
+Entry #505 is the only decision where the model would have moved money that the policy would not. The invoice was 1.9 EURC, worth 2.310316 USDC at Circle's quote, against a counterparty limit of 2 USDC.
+
+The model's own reasoning says the invoice is "ABOVE that limit — a hard guardrail breach". It answered `pay` all the same, with a confidence of 0.5. The payment-limit guardrail refused the payment, and the invoice was held for a person.
+
+The reasoning was right and the action was wrong. This is why code checks the action, not the prose.
+
+## What we take from it
+
+- **The model was more careful than the written policy far more often than less.** Of its seven differences on payables, six stopped a payment the policy would have made or chose a more specific stop; one would have paid where the policy would not.
+- **It was wrong in both directions.** At least three of its flags were false alarms, and its one looser answer contradicted its own reasoning. Neither moved money wrongly: a person decided the flags, and code refused the payment.
+- **Its confidence carried information.** The answers that departed from the policy averaged 0.75, against 0.94 for those that matched it. The answer that code refused carried 0.5.
+- **The guardrails did real work.** In a week of production decisions they refused one, and it was the one that mattered.
+
+Next, we will tell the model the policy's threshold: a match on amount and date alone, under a different purchase order, is not by itself duplicate billing. The agreement rate on payables will then show whether the false alarms stop, and this note will be updated with that result.
+
+## The limits of this note
+
+- **The sample is small.** 139 decisions over one week, by one model, cannot show a trend.
+- **Every decision so far was made in a workspace we run or test with:** the founding workspace, testnet-2, two sandboxes, and a fresh account one of us opened to test [Try it in 5 minutes](/docs/guides/try-it). Several scenarios were built to exercise a rule, which raises the rate of differences above what everyday invoices would show. No outside business's invoice has been decided yet.
+- **Agreement compares actions, not reasons.** Two holds for different reasons count as agreeing.
+
+## Check it yourself
+
+- Every entry named here is signed with Ed25519 and linked to the entry before it, in its workspace's ledger. A member of the workspace can export that ledger and check it without Vestiarion; see [Verify an audit export](/docs/guides/audit-export).
+- `npm run research:model-vs-policy` recomputes every figure here from the database, read-only. It counts a customer's workspace but never names it.
