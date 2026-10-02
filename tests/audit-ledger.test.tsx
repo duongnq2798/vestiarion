@@ -35,6 +35,28 @@ function anchor(markup: string, text: string): string {
 }
 
 describe("AuditLedger", () => {
+  it("groups a real-clock day's entries under its date, its cycles included, never under Day 0", () => {
+    const realDay = (seq: number, overrides: Partial<LedgerEntry> = {}) => entry(seq, { ts: "2026-10-02T07:16:00Z", detail: {}, ...overrides });
+    const markup = html(
+      <AuditLedger
+        entries={[
+          realDay(1),
+          realDay(2, { action: "cycle_complete", actor: "system", domain: "system", detail: { day: 0, clockMode: "real" } }),
+          realDay(3),
+          realDay(4, { action: "cycle_complete", actor: "system", domain: "system", detail: { day: 0, clockMode: "real" } }),
+        ]}
+      />
+    );
+    expect(markup).not.toContain("Day 0");
+    expect(markup.match(/aria-label="2026-10-02"/g)).toHaveLength(1);
+  });
+
+  it("keeps a simulated cycle's day, recorded with its clock or from before the clock was", () => {
+    expect(html(<AuditLedger entries={[entry(1, { detail: { day: 4, clockMode: "simulate" } })]} />)).toContain('aria-label="Day 4"');
+    expect(html(<AuditLedger entries={[entry(1)]} />)).toContain('aria-label="Day 3"');
+    expect(html(<AuditLedger entries={[entry(1, { detail: { day: 0 } })]} />)).toContain('aria-label="2026-09-29"');
+  });
+
   it("renders each entry as a closed disclosure anchored by its sequence number", () => {
     const markup = html(<AuditLedger entries={[entry(1), entry(2)]} />);
     expect(markup).toContain('id="seq-2"');
