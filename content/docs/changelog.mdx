@@ -1,5 +1,17 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-02: A real USYC reserve
+
+- A live workspace's owner or admin can turn on a real USYC reserve on Arc testnet, once Circle has allowlisted its operating and reserve wallets. Until then, the reserve stays simulated, as before.
+- **New ledger action `usyc_reserve_enabled`**, in the `treasury` domain, appended when the reserve is turned on. Its `detail` is `{ by, operatingAddress, reserveAddress }`.
+- **Treasury decision entries** (`sweep_to_usyc`, `redeem_from_usyc`, `hold`) of a workspace with a real reserve:
+  - carry `earnMode: "live"`;
+  - carry `usycSubscriptionsOpen`: whether USYC could be bought then, or `null` when that could not be read;
+  - when a move was made, carry `execution`. A sweep's is `{ approveTxHash, depositTxHash, shares, price }`; a redemption's is `{ redeemTxHash, shares, price }`. `shares` is in USYC, `price` in USDC per USYC.
+- A sweep decided while USYC cannot be bought has `executed: false`, and an `executionNote` saying so.
+- In `GET /api/v1/status`, `data.provenance.yield` reads `live` for such a workspace.
+- The reserve account's `balance` is its USYC's value in USDC at the latest price, read from Arc testnet every cycle.
+
 ## 2026-10-02: The agent's spending limit
 
 - An owner or admin can set what the agent may pay on its own per UTC day and per 7 days, in USDC. A payment past either is held for a person.

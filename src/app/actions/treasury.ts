@@ -11,6 +11,7 @@ import { CIRCLE_UNREACHABLE } from "@/lib/copy";
 import { operatingEurcBalance } from "@/lib/fx/eurc-balance";
 import { inOrg } from "@/lib/dal/scope";
 import { firstZodMessage, usdcAmountSchema } from "@/lib/intake-validation";
+import { enableUsycReserve, UsycReserveError } from "@/lib/platform/usyc-reserve";
 
 export interface RefreshBalanceResult {
   ok: boolean;
@@ -104,6 +105,32 @@ export async function fundGatewayAction(_previous: FundGatewayResult, formData: 
       console.error("fundGatewayAction failed", error instanceof Error ? error.name : "unknown");
       if (error instanceof GatewayStepFailed) return { ok: false, message: error.message, renew: true };
       return { ok: false, message: error instanceof Error ? error.message : "The deposit into Gateway did not complete. Try again." };
+    }
+  });
+}
+
+export interface UsycReserveActionResult {
+  ok: boolean;
+  message: string;
+}
+
+/**
+ * Turns the workspace's real USYC reserve on (USYC live design R1): an owner's or admin's deliberate
+ * choice (`treasury.manage`), after Circle allowlisted its wallets. Every refusal is written for the
+ * person who asked; the on-chain check names any wallet Circle has still to allowlist.
+ */
+export async function enableUsycReserveAction(_previous: UsycReserveActionResult, formData: FormData): Promise<UsycReserveActionResult> {
+  const auth = await authorize(formData.get("orgSlug"), "treasury.manage");
+  if (!auth.ok) return { ok: false, message: auth.message };
+  return inOrg(auth, async () => {
+    try {
+      await enableUsycReserve({ orgId: auth.membership.orgId, actorId: auth.user.id });
+      revalidateOrgPages();
+      return { ok: true, message: "The USYC reserve is on. The agent sweeps idle cash into real USYC on Arc testnet from its next cycle." };
+    } catch (error) {
+      if (error instanceof UsycReserveError) return { ok: false, message: error.message };
+      console.error("enableUsycReserveAction failed", error instanceof Error ? error.name : "unknown");
+      return { ok: false, message: "That did not work. Try again in a moment." };
     }
   });
 }
