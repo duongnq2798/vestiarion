@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { refreshOnChainBalanceAction } from "@/app/actions/treasury";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import AgentControls from "@/components/AgentControls";
+import { AgentBudgetPanel } from "@/components/AgentBudgetPanel";
 import AgentPauseControl from "@/components/AgentPauseControl";
 import { GatewayPanel } from "@/components/GatewayPanel";
 import { SampleDataLoaded, SampleDataOffer } from "@/components/SampleDataPanel";
@@ -18,6 +19,7 @@ import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { sectionTitle } from "@/components/vx/nav";
 import { AccountsList, BalanceTile, balanceTileMode, ForecastPanel, MoreLink, StatTile } from "@/components/vx/Treasury";
 import type { Account, Forecast } from "@/components/vx/types";
+import { agentBudgetStatus } from "@/lib/agent-budget";
 import { listWaitingPayables } from "@/lib/agent/approvals";
 import { requireMembership } from "@/lib/auth/membership";
 import { orgHref } from "@/lib/auth/org-paths";
@@ -47,7 +49,7 @@ export default async function DashboardPage({
   const access = await requireMembership(slug);
   return inOrg(access, async () => {
     const query = await searchParams;
-    const [accountsRows, actionRows, forecastRow, dashboardStats, invoices, counterparties, headEntries, waiting, pause, milestones] = await Promise.all([
+    const [accountsRows, actionRows, forecastRow, dashboardStats, invoices, counterparties, headEntries, waiting, pause, milestones, budget] = await Promise.all([
       listAccounts(),
       listTreasuryActions(),
       latestForecast(),
@@ -63,6 +65,12 @@ export default async function DashboardPage({
         return null;
       }),
       listMilestones(),
+      // The agent's spending limit and what it paid against it (outflow budget spec §4). Best effort: the
+      // limit is enforced in the cycle either way; an unreadable one here only hides the panel.
+      agentBudgetStatus().catch((error: unknown) => {
+        console.error("console: spending limit not loaded", access.membership.orgId, error instanceof Error ? error.message : error);
+        return null;
+      }),
     ]);
     // Modes, not the provider: the page must still render when the
     // organization's Circle credentials cannot be read (R12).
@@ -220,6 +228,19 @@ export default async function DashboardPage({
 
           <aside className="min-w-0 space-y-6 md:grid md:grid-cols-2 md:items-start md:gap-6 md:space-y-0 xl:block xl:space-y-6">
             <SafeToSpendPanel outlook={outlook} />
+            {budget && (
+              <AgentBudgetPanel
+                orgSlug={slug}
+                canEdit={can(role, "agent.budget")}
+                view={{
+                  dailyUsdc: budget.budget?.dailyUsdc ?? null,
+                  weeklyUsdc: budget.budget?.weeklyUsdc ?? null,
+                  spentToday: budget.spent.today,
+                  spentThisWeek: budget.spent.week,
+                  remaining: budget.room?.remaining ?? null,
+                }}
+              />
+            )}
             <AccountsList accounts={accounts} />
             {gateway && (
               <GatewayPanel

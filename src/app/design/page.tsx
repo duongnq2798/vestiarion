@@ -26,6 +26,7 @@ import InvoiceCsvImport from "@/components/intake/InvoiceCsvImport";
 import InvoiceIntake from "@/components/intake/InvoiceIntake";
 import MilestoneIntake from "@/components/intake/MilestoneIntake";
 import AgentControlsClient from "@/components/AgentControlsClient";
+import { AgentBudgetPanel } from "@/components/AgentBudgetPanel";
 import AgentPauseControl from "@/components/AgentPauseControl";
 import MembersPanel from "@/components/MembersPanel";
 import { ReceiptControl, ReceiptLink } from "@/components/ReceiptControl";
@@ -435,6 +436,8 @@ export default function DesignPage() {
               <ForecastPanel forecast={FORECAST} />
               <SafeToSpendPanel outlook={OUTLOOK} />
               <CashCalendar outlook={OUTLOOK} />
+              <AgentBudgetPanel orgSlug={DESIGN_SLUG} canEdit view={{ dailyUsdc: 500, weeklyUsdc: 2000, spentToday: 320, spentThisWeek: 1240.5, remaining: 180 }} />
+              <AgentBudgetPanel orgSlug={DESIGN_SLUG} canEdit view={{ dailyUsdc: null, weeklyUsdc: null, spentToday: 12.5, spentThisWeek: 40, remaining: null }} />
             </div>
             <div className="space-y-4">
               {DECISIONS.map((decision) => (

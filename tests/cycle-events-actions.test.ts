@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { returnInvoiceAction } from "@/app/actions/approvals";
-import { resumeAgentAction } from "@/app/actions/agent";
+import { resumeAgentAction, setAgentBudgetAction } from "@/app/actions/agent";
 import { confirmCounterpartyAddressAction, createInvoiceAction, importInvoicesAction, updateCounterpartyLimitAction } from "@/app/actions/intake";
 import { manualMilestoneVerificationAction } from "@/app/actions/milestones";
 import { loadSampleDataAction } from "@/app/actions/sample-data";
@@ -27,6 +27,7 @@ const { ORG, USER, raiseMock, authorizeMock, mocks } = vi.hoisted(() => ({
     resumeAgent: vi.fn(),
     confirmCounterpartyAddress: vi.fn(),
     changeCounterpartyLimit: vi.fn(),
+    changeAgentBudget: vi.fn(),
     loadSampleData: vi.fn(),
     refreshOnChainBalances: vi.fn(),
     appendLedgerEntry: vi.fn(),
@@ -54,6 +55,10 @@ vi.mock("@/lib/counterparty-address", async (importOriginal) => ({
 vi.mock("@/lib/counterparty-limit", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/counterparty-limit")>()),
   changeCounterpartyLimit: mocks.changeCounterpartyLimit,
+}));
+vi.mock("@/lib/agent-budget", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/agent-budget")>()),
+  changeAgentBudget: mocks.changeAgentBudget,
 }));
 vi.mock("@/lib/sample-data", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/sample-data")>()),
@@ -194,6 +199,34 @@ describe("confirming a changed address", () => {
     mocks.confirmCounterpartyAddress.mockResolvedValue(false);
     await confirmCounterpartyAddressAction(empty, form({ counterpartyId: COUNTERPARTY, address: "0xabc" }));
     expect(raiseMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("changing the agent's spending limit", () => {
+  const change = (daily: string, weekly = "") => setAgentBudgetAction(empty, form({ daily, weekly }));
+
+  it("raises budget_raised when a figure rose or was removed, so a payment held under it is decided again", async () => {
+    mocks.changeAgentBudget.mockResolvedValue({ from: { dailyUsdc: 100, weeklyUsdc: null }, to: { dailyUsdc: 200, weeklyUsdc: null }, loosened: true });
+    expect(await change("200")).toEqual({ ok: true, message: "The agent may now pay up to 200 USDC a day on its own, with no 7-day limit." });
+    expect(raiseMock).toHaveBeenCalledWith(ACCESS, "budget_raised");
+    expect(mocks.changeAgentBudget).toHaveBeenCalledWith({ actorId: USER, daily: "200", weekly: "" });
+  });
+
+  it("raises nothing when the limit was set or tightened", async () => {
+    mocks.changeAgentBudget.mockResolvedValue({ from: { dailyUsdc: 200, weeklyUsdc: null }, to: { dailyUsdc: 50, weeklyUsdc: 300 }, loosened: false });
+    expect(await change("50", "300")).toEqual({ ok: true, message: "The agent may now pay up to 50 USDC a day and 300 USDC in 7 days on its own." });
+    expect(raiseMock).not.toHaveBeenCalled();
+  });
+
+  it("says when no limit is left", async () => {
+    mocks.changeAgentBudget.mockResolvedValue({ from: { dailyUsdc: 200, weeklyUsdc: null }, to: { dailyUsdc: null, weeklyUsdc: null }, loosened: true });
+    expect(await change("")).toEqual({ ok: true, message: "Spending limit removed. The agent pays within each counterparty's own limit." });
+  });
+
+  it("asks for agent.budget", async () => {
+    mocks.changeAgentBudget.mockResolvedValue({ from: { dailyUsdc: null, weeklyUsdc: null }, to: { dailyUsdc: 5, weeklyUsdc: null }, loosened: false });
+    await change("5");
+    expect(authorizeMock).toHaveBeenCalledWith("northstar", "agent.budget");
   });
 });
 

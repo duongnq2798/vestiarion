@@ -2,6 +2,7 @@
 
 import "server-only";
 
+import { AgentBudgetError, changeAgentBudget } from "@/lib/agent-budget";
 import { agentCycleSuccessMessage, runAgentCycle } from "@/lib/agent/orchestrator";
 import { CycleRunningError } from "@/lib/agent/cycle-running";
 import { AgentPausedError } from "@/lib/agent/pause";
@@ -81,6 +82,35 @@ export async function resumeAgentAction(_previous: AgentActionResult, formData: 
     } catch (error) {
       if (error instanceof PauseError) return { ok: false, message: error.message };
       console.error("resume agent failed", error);
+      return { ok: false, message: "That did not work. Try again in a moment." };
+    }
+  });
+}
+
+/** What the agent may now pay on its own, as the form's answer says it. */
+function budgetMessage(to: { dailyUsdc: number | null; weeklyUsdc: number | null }): string {
+  if (to.dailyUsdc === null && to.weeklyUsdc === null) return "Spending limit removed. The agent pays within each counterparty's own limit.";
+  if (to.weeklyUsdc === null) return `The agent may now pay up to ${to.dailyUsdc} USDC a day on its own, with no 7-day limit.`;
+  if (to.dailyUsdc === null) return `The agent may now pay up to ${to.weeklyUsdc} USDC in 7 days on its own, with no daily limit.`;
+  return `The agent may now pay up to ${to.dailyUsdc} USDC a day and ${to.weeklyUsdc} USDC in 7 days on its own.`;
+}
+
+/**
+ * Sets the agent's spending limit (outflow budget spec R7). A looser limit may let a payment held
+ * under the old one through, so the agent looks again within a minute; a tighter one frees nothing.
+ */
+export async function setAgentBudgetAction(_previous: AgentActionResult, formData: FormData): Promise<AgentActionResult> {
+  const auth = await authorize(formData.get("orgSlug"), "agent.budget");
+  if (!auth.ok) return { ok: false, message: auth.message };
+  return inOrg(auth, async () => {
+    try {
+      const result = await changeAgentBudget({ actorId: auth.user.id, daily: formString(formData, "daily"), weekly: formString(formData, "weekly") });
+      revalidateOrgPages();
+      if (result.loosened) raiseCycleEvent(auth, "budget_raised");
+      return { ok: true, message: budgetMessage(result.to) };
+    } catch (error) {
+      if (error instanceof AgentBudgetError) return { ok: false, message: error.message };
+      console.error("agent budget change failed", error instanceof Error ? error.message : "unknown error");
       return { ok: false, message: "That did not work. Try again in a moment." };
     }
   });
