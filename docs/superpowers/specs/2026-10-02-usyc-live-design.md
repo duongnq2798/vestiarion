@@ -45,6 +45,12 @@ contract's `canCall` is true for `Teller.deposit`, `Teller.redeem` and USYC tran
 - **R3 — the reserve's balance is read from the chain**, every reconcile: its USYC × the oracle's
   latest price, in USDC. The stored figure is a cache of it. The notional carve-out from the
   operating balance applies only while the reserve is simulated.
+  - The reserve's yield is read from the chain too: the latest price against the newest round at
+    least 5 days older, annualized. A round more than 5% off is skipped as a bad print; the oracle
+    posted 154 USDC on Sep 30.
+  - This replaces the configured APY. That was 0 for testnet-2's hosted reserve, so its agent could
+    never find a sweep worth making.
+  - Cost if wrong: a sweep is priced at the fund's recent yield, not a promise of the next.
 - **R4 — outside the subscription window, no sweep.** The model is told whether USYC can be bought
   now. A sweep it decides while the window is closed is not attempted, and the ledger says why.
   Redemptions are never blocked by the window.
@@ -68,5 +74,4 @@ contract's `canCall` is true for `Teller.deposit`, `Teller.redeem` and USYC tran
 
 ## 5. Not in this PR
 
-- A yield rate read from the oracle's history. The reserve's configured APY still prices a sweep.
 - Turning USYC off again. It can be added once a reserve can be emptied on request.

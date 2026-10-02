@@ -28,6 +28,7 @@ import type { ChainConfig } from "../config";
 import {
   fromUnits,
   priceValue,
+  readUsycApy,
   readUsycPrice,
   readUsycShares,
   sharesToRedeem,
@@ -612,8 +613,8 @@ export class LiveProvider implements ChainProvider {
     const reserve = await this.account(reserveAccountId);
     if (!reserve.address) throw new Error(`Account ${reserveAccountId} has no address`);
     const read = { rpcUrl: this.arcRpcUrl, fetch: this.fetch };
-    const [price, shares] = await Promise.all([readUsycPrice(read), readUsycShares(reserve.address, read)]);
-    return { shares: fromUnits(shares), valueUsdc: fromUnits(sharesValue(shares, price)), price: priceValue(price) };
+    const [price, shares, apy] = await Promise.all([readUsycPrice(read), readUsycShares(reserve.address, read), readUsycApy(read).catch(() => null)]);
+    return { shares: fromUnits(shares), valueUsdc: fromUnits(sharesValue(shares, price)), price: priceValue(price), apy };
   }
 
   private async usycAccounts(params: EarnDepositParams) {

@@ -170,6 +170,12 @@ export async function syncOnChainBalances(provider: ChainProvider, orgDb: OrgDb,
   if (provider.earnMode === "live" && provider.getEarnPosition && reserve) {
     try {
       const position = await provider.getEarnPosition(reserve.id);
+      // The fund's real yield, which prices every sweep (planTreasury), in place of a configured
+      // figure. Best effort: a yield that could not be worked out leaves the stored one.
+      if (typeof position.apy === "number") {
+        const res = await orgDb.from("accounts").update({ apy: position.apy }).eq("id", reserve.id);
+        if (res.error) console.error("syncOnChainBalances: USYC yield not recorded", res.error.message);
+      }
       const stored = num(reserve.balance);
       if (Math.abs(position.valueUsdc - stored) < 0.000001) {
         outcomes.push({ kind: "unchanged", accountId: reserve.id, name: reserve.name, balance: stored });

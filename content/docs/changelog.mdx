@@ -10,7 +10,7 @@ Changes to the API and webhooks that affect an integration, newest first. Change
   - when a move was made, carry `execution`. A sweep's is `{ approveTxHash, depositTxHash, shares, price }`; a redemption's is `{ redeemTxHash, shares, price }`. `shares` is in USYC, `price` in USDC per USYC.
 - A sweep decided while USYC cannot be bought has `executed: false`, and an `executionNote` saying so.
 - In `GET /api/v1/status`, `data.provenance.yield` reads `live` for such a workspace.
-- The reserve account's `balance` is its USYC's value in USDC at the latest price, read from Arc testnet every cycle.
+- The reserve account's `balance` is its USYC's value in USDC at the latest price, read from Arc testnet every cycle. Its `apy` is the fund's yield over at least the last 5 days, from the same oracle.
 
 ## 2026-10-02: The agent's spending limit
 

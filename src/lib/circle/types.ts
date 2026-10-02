@@ -124,6 +124,8 @@ export interface EarnPosition {
   shares: number;
   valueUsdc: number;
   price: number;
+  /** The fund's yield a year from the oracle's history, or null when it could not be worked out. */
+  apy?: number | null;
 }
 
 export interface BalanceSnapshot {

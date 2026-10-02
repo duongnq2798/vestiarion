@@ -160,6 +160,7 @@ describe("LiveProvider: a redemption from USYC", () => {
 describe("LiveProvider: the reserve's position (R3)", () => {
   it("is its USYC at the oracle's latest price", async () => {
     const c = circle();
-    expect(await new LiveProvider(CHAIN, { client: c.client, fetch: arc({ open: false, shares: 5_000_000n }) }).getEarnPosition("reserve-1")).toEqual({ shares: 5, valueUsdc: 5.694489, price: 1.138897 });
+    // This node has no round history, so the yield is null and the stored one stands.
+    expect(await new LiveProvider(CHAIN, { client: c.client, fetch: arc({ open: false, shares: 5_000_000n }) }).getEarnPosition("reserve-1")).toEqual({ shares: 5, valueUsdc: 5.694489, price: 1.138897, apy: null });
   });
 });

@@ -312,7 +312,7 @@ describe("the reconcile stage — unchanged by the extraction, in its lines and 
 describe("syncOnChainBalances — a real USYC reserve (USYC live design R3)", () => {
   const LIVE_RESERVE: Row = { id: "acct-res", name: "USYC reserve", kind: "reserve", balance: "30.000000", circle_wallet_id: "w-res" };
   class UsycChain extends FakeChain {
-    constructor(private readonly position: { shares: number; valueUsdc: number; price: number } | Error) {
+    constructor(private readonly position: { shares: number; valueUsdc: number; price: number; apy?: number | null } | Error) {
       super({ "acct-op": 150 }, "live");
     }
     async getEarnPosition() {
@@ -323,7 +323,9 @@ describe("syncOnChainBalances — a real USYC reserve (USYC live design R3)", ()
 
   it("writes the reserve's balance from its USYC at the oracle's price, and names both in the line", async () => {
     const fake = accountsFake([OPERATING, LIVE_RESERVE]);
-    const sync = await inScope(fake, () => syncOnChainBalances(new UsycChain({ shares: 30, valueUsdc: 34.166935, price: 1.138897 }), db()));
+    const sync = await inScope(fake, () => syncOnChainBalances(new UsycChain({ shares: 30, valueUsdc: 34.166935, price: 1.138897, apy: 0.0345 }), db()));
+    // The fund's real yield replaces the configured one, so a sweep is priced at it.
+    expect(patchesOf(fake.requests)).toContainEqual({ query: `org_id=eq.${ORG}&id=eq.acct-res`, body: { apy: 0.0345 } });
     expect(balancePatches(fake.requests)).toContainEqual({ query: `org_id=eq.${ORG}&id=eq.acct-res&select=id`, body: { balance: 34.166935 } });
     // The operating wallet's USDC is all spendable: nothing is carved out for a real reserve.
     expect(balancePatches(fake.requests)).toContainEqual({ query: `org_id=eq.${ORG}&id=eq.acct-op`, body: { balance: 150 } });

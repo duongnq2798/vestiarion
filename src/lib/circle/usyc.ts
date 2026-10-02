@@ -22,7 +22,10 @@ const TELLER_ABI = parseAbi([
   "function deposit(uint256 assets, address receiver) returns (uint256)",
   "function redeem(uint256 shares, address receiver, address account) returns (uint256)",
 ]);
-const ORACLE_ABI = parseAbi(["function latestRoundData() view returns (uint80, int256, uint256, uint256, uint80)"]);
+const ORACLE_ABI = parseAbi([
+  "function latestRoundData() view returns (uint80, int256, uint256, uint256, uint80)",
+  "function getRoundData(uint80) view returns (uint80, int256, uint256, uint256, uint80)",
+]);
 const ERC20_ABI = parseAbi(["function balanceOf(address) view returns (uint256)"]);
 const ENTITLEMENTS_ABI = parseAbi(["function canCall(address user, address target, bytes4 functionSig) view returns (bool)"]);
 
@@ -51,11 +54,7 @@ async function call(to: string, data: Hex, options: UsycReadOptions): Promise<He
 
 /** USYC's latest price in USDC, as the oracle the Teller reads it from has it (18 decimals). */
 export async function readUsycPrice(options: UsycReadOptions = {}): Promise<bigint> {
-  const oracle = decodeFunctionResult({
-    abi: TELLER_ABI,
-    functionName: "oracle",
-    data: await call(USYC_TELLER, encodeFunctionData({ abi: TELLER_ABI, functionName: "oracle" }), options),
-  });
+  const oracle = await oracleAddress(options);
   const round = decodeFunctionResult({
     abi: ORACLE_ABI,
     functionName: "latestRoundData",
@@ -64,6 +63,49 @@ export async function readUsycPrice(options: UsycReadOptions = {}): Promise<bigi
   const price = round[1];
   if (price <= 0n) throw new Error("USYC's oracle has no price");
   return price;
+}
+
+async function oracleAddress(options: UsycReadOptions): Promise<Hex> {
+  return decodeFunctionResult({
+    abi: TELLER_ABI,
+    functionName: "oracle",
+    data: await call(USYC_TELLER, encodeFunctionData({ abi: TELLER_ABI, functionName: "oracle" }), options),
+  });
+}
+
+const DAY_SECONDS = 86_400n;
+
+/**
+ * The fund's yield a year, from the oracle's own history: the latest price against the newest round at
+ * least `minDays` older, annualized. A round more than 5% from the latest price is skipped as a bad
+ * print (Arc testnet's oracle once posted 154 USDC for a day). Null when no round fits; the reserve
+ * then keeps the yield it had. It replaces a configured figure, which for a hosted workspace was 0.
+ */
+export async function readUsycApy(options: UsycReadOptions & { minDays?: number; maxRounds?: number } = {}): Promise<number | null> {
+  const oracle = await oracleAddress(options);
+  const latest = decodeFunctionResult({
+    abi: ORACLE_ABI,
+    functionName: "latestRoundData",
+    data: await call(oracle, encodeFunctionData({ abi: ORACLE_ABI, functionName: "latestRoundData" }), options),
+  });
+  const [roundId, price, , updatedAt] = latest;
+  if (price <= 0n) return null;
+  const minSeconds = BigInt(options.minDays ?? 5) * DAY_SECONDS;
+  for (let back = 1n; back <= BigInt(options.maxRounds ?? 12) && back < roundId; back += 1n) {
+    const round = decodeFunctionResult({
+      abi: ORACLE_ABI,
+      functionName: "getRoundData",
+      data: await call(oracle, encodeFunctionData({ abi: ORACLE_ABI, functionName: "getRoundData", args: [roundId - back] }), options),
+    });
+    const [, earlier, , at] = round;
+    if (earlier <= 0n || updatedAt - at < minSeconds) continue;
+    const ratio = Number(price) / Number(earlier);
+    if (Math.abs(ratio - 1) > 0.05) continue;
+    const years = Number(updatedAt - at) / (365 * 86_400);
+    const apy = Math.pow(ratio, 1 / years) - 1;
+    return apy >= 0 && apy < 1 ? Math.round(apy * 10_000) / 10_000 : null;
+  }
+  return null;
 }
 
 /**

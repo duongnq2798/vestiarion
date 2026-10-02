@@ -4,6 +4,7 @@ import {
   ARC_TESTNET_USYC,
   fromUnits,
   priceValue,
+  readUsycApy,
   readUsycPrice,
   readUsycShares,
   sharesToRedeem,
@@ -109,5 +110,46 @@ describe("USYC arithmetic", () => {
   it("converts amounts without a float drifting them", () => {
     expect(toUnits(0.1 + 0.2)).toBe(300_000n);
     expect(priceValue(PRICE)).toBe(1.138897);
+  });
+});
+
+describe("readUsycApy", () => {
+  const DAY = 86_400n;
+  const NOW = 1_790_000_000n;
+  const ROUNDS: Record<string, [bigint, bigint]> = {
+    // id: [price, updatedAt]
+    "159": [1_138_897_837_595_301_387n, NOW],
+    "158": [154_347_916_944_950_234_951n, NOW - DAY], // a bad print, skipped
+    "157": [1_138_791_921_727_117_319n, NOW - 2n * DAY], // too recent to annualize
+    "156": [1_138_263_180_605_557_151n, NOW - 6n * DAY],
+  };
+  const ABI_R = parseAbi([
+    "function oracle() view returns (address)",
+    "function latestRoundData() view returns (uint80, int256, uint256, uint256, uint80)",
+    "function getRoundData(uint80) view returns (uint80, int256, uint256, uint256, uint80)",
+  ]);
+  const roundData = (id: bigint, rounds: Record<string, [bigint, bigint]>) =>
+    encodeAbiParameters([{ type: "uint80" }, { type: "int256" }, { type: "uint256" }, { type: "uint256" }, { type: "uint80" }], [id, rounds[String(id)]?.[0] ?? 0n, 0n, rounds[String(id)]?.[1] ?? 0n, id]);
+  const oracleNode = (rounds: Record<string, [bigint, bigint]>) =>
+    (async (_url: string, init: RequestInit) => {
+      const { params } = JSON.parse(String(init.body)) as { params: [{ data: Hex }] };
+      const decoded = decodeFunctionData({ abi: ABI_R, data: params[0].data });
+      const result =
+        decoded.functionName === "oracle"
+          ? encodeAbiParameters([{ type: "address" }], [ORACLE])
+          : decoded.functionName === "latestRoundData"
+            ? roundData(159n, rounds)
+            : roundData((decoded.args as [bigint])[0], rounds);
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result }), { status: 200 });
+    }) as unknown as typeof fetch;
+
+  it("annualizes the latest price against the newest round old enough, skipping a bad print", async () => {
+    // 1.138897 over 1.138263 in six days is about 3.4% a year.
+    expect(await readUsycApy({ fetch: oracleNode(ROUNDS) })).toBe(0.0345);
+  });
+
+  it("is null when no round is old enough, so the stored yield stands", async () => {
+    const recent = { "159": ROUNDS["159"], "158": ROUNDS["158"], "157": ROUNDS["157"] };
+    expect(await readUsycApy({ fetch: oracleNode(recent) })).toBeNull();
   });
 });
