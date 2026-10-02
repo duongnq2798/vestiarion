@@ -19,6 +19,7 @@ import { sectionTitle } from "@/components/vx/nav";
 import { viewerCan } from "@/lib/auth/authorize";
 import { requireMembership } from "@/lib/auth/membership";
 import { chainModes } from "@/lib/circle";
+import { screeningMode } from "@/lib/compliance";
 import { counterpartiesRefreshMs } from "@/lib/counterparties-refresh";
 import { addressUnconfirmed } from "@/lib/counterparty-address";
 import { inOrg } from "@/lib/dal/scope";
@@ -35,6 +36,8 @@ export default async function CounterpartiesPage({ params }: { params: Promise<{
   const { slug } = await params;
   const access = await requireMembership(slug);
   return inOrg(access, async () => {
+    // A live match names the entity it matched, which Not this person dismisses (dismiss screening match R6).
+    const liveScreening = screeningMode() === "live";
     const [counterparties, dashboardStats, entries, canWrite, canConfirm] = await Promise.all([
       listCounterparties(),
       stats(),
@@ -94,6 +97,7 @@ export default async function CounterpartiesPage({ params }: { params: Promise<{
                           riskEntityId: counterparty.risk_entity_id ?? null,
                         }}
                         canDismiss={canConfirm}
+                        liveScreening={liveScreening}
                       />
                       <PerformanceHistory
                         score={counterparty.performance_score}

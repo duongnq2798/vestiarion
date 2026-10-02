@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { dismissScreeningMatchAction } from "@/app/actions/compliance";
+import { dismissScreeningMatchAction, screenAgainAction } from "@/app/actions/compliance";
 import { DismissalError } from "@/lib/screening-dismissal";
 
 /**
@@ -8,13 +8,14 @@ import { DismissalError } from "@/lib/screening-dismissal";
  * is tested in tests/screening-dismissal.test.ts.
  */
 
-const { authorizeMock, dismissMock, raiseMock } = vi.hoisted(() => ({ authorizeMock: vi.fn(), dismissMock: vi.fn(), raiseMock: vi.fn() }));
+const { authorizeMock, dismissMock, raiseMock, screenMock } = vi.hoisted(() => ({ authorizeMock: vi.fn(), dismissMock: vi.fn(), raiseMock: vi.fn(), screenMock: vi.fn() }));
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/auth/authorize", () => ({ authorize: authorizeMock }));
 vi.mock("@/lib/auth/revalidate", () => ({ revalidateOrgPages: vi.fn() }));
 vi.mock("@/lib/agent/cycle-soon", () => ({ raiseCycleEvent: raiseMock }));
 vi.mock("@/lib/dal/scope", () => ({ inOrg: (_access: unknown, fn: () => Promise<unknown>) => fn() }));
+vi.mock("@/lib/compliance", () => ({ screenCounterparty: screenMock }));
 vi.mock("@/lib/screening-dismissal", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/screening-dismissal")>()),
   dismissScreeningMatch: dismissMock,
@@ -36,6 +37,7 @@ beforeEach(() => {
   authorizeMock.mockReset().mockResolvedValue(ACCESS);
   dismissMock.mockReset().mockResolvedValue({ name: "Quoc Duong", rescreened: true, riskLevel: "clear", paymentLimit: 1 });
   raiseMock.mockReset();
+  screenMock.mockReset().mockResolvedValue({ counterpartyId: CP, name: "Quoc Duong", riskLevel: "medium", previousRiskLevel: "medium" });
 });
 
 describe("dismissScreeningMatchAction", () => {
@@ -76,5 +78,34 @@ describe("dismissScreeningMatchAction", () => {
 
   it("refuses a malformed counterparty", async () => {
     expect(await dismissScreeningMatchAction(empty, form({ counterpartyId: "nope" }))).toEqual({ ok: false, message: "Counterparty not found." });
+  });
+});
+
+describe("screenAgainAction", () => {
+  it("asks for approval.decide, and screens nothing when refused", async () => {
+    authorizeMock.mockResolvedValueOnce({ ok: false, message: "You cannot decide approvals here." });
+    expect(await screenAgainAction(empty, form())).toEqual({ ok: false, message: "You cannot decide approvals here." });
+    expect(authorizeMock).toHaveBeenCalledWith("studio", "approval.decide");
+    expect(screenMock).not.toHaveBeenCalled();
+  });
+
+  it("screens the counterparty again and points to Not this person while the match stands; no cycle when nothing changed", async () => {
+    expect(await screenAgainAction(empty, form())).toEqual({ ok: true, message: "Quoc Duong screened again: medium risk. If it is someone else, choose Not this person." });
+    expect(screenMock).toHaveBeenCalledWith(CP);
+    expect(raiseMock).not.toHaveBeenCalled();
+  });
+
+  it("starts a cycle when the verdict changed", async () => {
+    screenMock.mockResolvedValueOnce({ counterpartyId: CP, name: "Quoc Duong", riskLevel: "clear", previousRiskLevel: "medium" });
+    expect((await screenAgainAction(empty, form())).message).toBe("Quoc Duong screened again: clear risk.");
+    expect(raiseMock).toHaveBeenCalledWith(ACCESS, "match_dismissed");
+  });
+
+  it("says when screening could not be reached, and refuses a malformed counterparty", async () => {
+    screenMock.mockRejectedValueOnce(new Error("timeout"));
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(await screenAgainAction(empty, form())).toEqual({ ok: false, message: "Screening could not be reached just now. Try again in a moment." });
+    logged.mockRestore();
+    expect(await screenAgainAction(empty, form({ counterpartyId: "nope" }))).toEqual({ ok: false, message: "Counterparty not found." });
   });
 });
