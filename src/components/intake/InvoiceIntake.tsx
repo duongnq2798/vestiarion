@@ -1,6 +1,7 @@
 "use client";
 
 import { Plus } from "lucide-react";
+import { useState } from "react";
 import { createInvoiceAction, type IntakeActionResult } from "@/app/actions/intake";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Field } from "@/components/ui/Field";
@@ -61,9 +62,24 @@ export default function InvoiceIntake({
   // Typed in, an invoice is in USDC unless changed. Read from a document that names no currency, the member chooses.
   const currency = initial ? (initial.currency === "USDC" || initial.currency === "EURC" ? initial.currency : undefined) : "USDC";
   const id = (field: string) => `${idPrefix}-${field}`;
+  const fieldError = (field: keyof NonNullable<IntakeActionResult["fieldErrors"]>) => (state.ok ? undefined : state.fieldErrors?.[field]);
+
+  // A discount comes with its deadline: once either half is filled in, the other is required, and the
+  // deadline can be no later than the due date. Tracked as typed; the fields themselves stay uncontrolled,
+  // so a reset after an invoice is added clears them, and these go back with them.
+  const [discountPct, setDiscountPct] = useState(initial?.earlyPayDiscountPct ?? "");
+  const [discountDeadline, setDiscountDeadline] = useState(initial?.discountDeadline ?? "");
+  const [dueDate, setDueDate] = useState(initial?.dueDate ?? "");
+  const pctEntered = discountPct.trim() !== "";
+  const deadlineEntered = discountDeadline !== "";
+  function resetDiscount() {
+    setDiscountPct(initial?.earlyPayDiscountPct ?? "");
+    setDiscountDeadline(initial?.discountDeadline ?? "");
+    setDueDate(initial?.dueDate ?? "");
+  }
 
   return (
-    <form {...formProps} className="space-y-4">
+    <form {...formProps} onReset={resetDiscount} className="space-y-4">
       <input type="hidden" name="orgSlug" value={orgSlug} />
       {document && (
         <>
@@ -74,7 +90,7 @@ export default function InvoiceIntake({
         </>
       )}
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field id={id("direction")} label="Direction">
+        <Field id={id("direction")} label="Direction" error={fieldError("direction")}>
           <Select name="direction" defaultValue="payable">
             <SelectTrigger>
               <SelectValue />
@@ -85,7 +101,12 @@ export default function InvoiceIntake({
             </SelectContent>
           </Select>
         </Field>
-        <Field id={id("counterparty")} label="Counterparty" description={none ? "Add a counterparty first — every invoice is against one." : undefined}>
+        <Field
+          id={id("counterparty")}
+          label="Counterparty"
+          description={none ? "Add a counterparty first — every invoice is against one." : undefined}
+          error={fieldError("counterpartyId")}
+        >
           <Select name="counterpartyId" required disabled={none} defaultValue={start(initial?.counterpartyId)}>
             <SelectTrigger>
               <SelectValue placeholder="Select a counterparty" />
@@ -99,10 +120,15 @@ export default function InvoiceIntake({
             </SelectContent>
           </Select>
         </Field>
-        <Field id={id("amount")} label="Amount">
+        <Field id={id("amount")} label="Amount" error={fieldError("amount")}>
           <Input name="amount" required inputMode="decimal" placeholder="1250.00" defaultValue={start(initial?.amount)} />
         </Field>
-        <Field id={id("currency")} label="Currency" description="A EURC payable is paid in EURC, and checked against the payment limit at its USDC value.">
+        <Field
+          id={id("currency")}
+          label="Currency"
+          description="A EURC payable is paid in EURC, and checked against the payment limit at its USDC value."
+          error={fieldError("currency")}
+        >
           <Select name="currency" defaultValue={currency} required={currency === undefined}>
             <SelectTrigger>
               <SelectValue placeholder="Choose USDC or EURC" />
@@ -113,19 +139,39 @@ export default function InvoiceIntake({
             </SelectContent>
           </Select>
         </Field>
-        <Field id={id("due")} label="Due date">
-          <Input name="dueDate" required type="date" defaultValue={start(initial?.dueDate)} />
+        <Field id={id("due")} label="Due date" error={fieldError("dueDate")}>
+          <Input name="dueDate" required type="date" defaultValue={start(initial?.dueDate)} onChange={(event) => setDueDate(event.target.value)} />
         </Field>
-        <Field id={id("discount-pct")} label="Early-payment discount (%)" optional>
-          <Input name="earlyPayDiscountPct" inputMode="decimal" placeholder="2" defaultValue={start(initial?.earlyPayDiscountPct)} />
+        <Field id={id("discount-pct")} label="Early-payment discount (%)" optional={!deadlineEntered} error={fieldError("earlyPayDiscountPct")}>
+          {/* No placeholder: an example percent in an empty field reads as one already entered. */}
+          <Input
+            name="earlyPayDiscountPct"
+            inputMode="decimal"
+            required={deadlineEntered}
+            defaultValue={start(initial?.earlyPayDiscountPct)}
+            onChange={(event) => setDiscountPct(event.target.value)}
+          />
         </Field>
-        <Field id={id("discount-deadline")} label="Discount deadline" optional>
-          <Input name="discountDeadline" type="date" defaultValue={start(initial?.discountDeadline)} />
+        <Field
+          id={id("discount-deadline")}
+          label="Discount deadline"
+          optional={!pctEntered}
+          description="Needed with a discount: the last day it applies, on or before the due date."
+          error={fieldError("discountDeadline")}
+        >
+          <Input
+            name="discountDeadline"
+            type="date"
+            required={pctEntered}
+            max={dueDate || undefined}
+            defaultValue={start(initial?.discountDeadline)}
+            onChange={(event) => setDiscountDeadline(event.target.value)}
+          />
         </Field>
-        <Field id={id("memo")} label="Memo" optional>
+        <Field id={id("memo")} label="Memo" optional error={fieldError("memo")}>
           <Input name="memo" maxLength={280} defaultValue={start(initial?.memo)} />
         </Field>
-        <Field id={id("po")} label="PO reference" optional>
+        <Field id={id("po")} label="PO reference" optional error={fieldError("poReference")}>
           <Input name="poReference" maxLength={100} placeholder="PO-100" defaultValue={start(initial?.poReference)} />
         </Field>
       </div>

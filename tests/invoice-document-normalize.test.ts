@@ -112,17 +112,31 @@ describe("checking what the model read against the document", () => {
     expect(normalize({ dueDate: "31/10/2026", earlyPayDiscountPct: null, discountDeadline: null }).fields.dueDate).toBeNull();
   });
 
-  it("drops a discount whose deadline is after the due date, and says why", () => {
+  // A percent the document states is never dropped for want of a deadline: the form
+  // then requires one, so the member enters it or clears the discount (intake rule, 2026-10-02).
+  it("keeps a stated percent whose deadline is after the due date, leaves the deadline blank, and says why", () => {
     const { fields, notes } = normalize({ discountDeadline: "2026-11-15" });
-    expect(fields.earlyPayDiscountPct).toBeNull();
+    expect(fields.earlyPayDiscountPct).toBe("2");
     expect(fields.discountDeadline).toBeNull();
-    expect(notes).toEqual(["The early-payment discount was left out: its deadline is after the due date."]);
+    expect(notes).toEqual([
+      "The discount deadline was left blank: the invoice's is after its due date. Enter the last day the discount applies, on or before the due date, or clear the discount.",
+    ]);
   });
 
-  it("drops half a discount, and says why", () => {
-    const { fields, notes } = normalize({ discountDeadline: null });
+  it.each([null, "11/10/2026", "2026-02-30"])("keeps a stated percent whose deadline is missing or unreadable (%s), and asks for the deadline", (discountDeadline) => {
+    const { fields, notes } = normalize({ discountDeadline });
+    expect(fields.earlyPayDiscountPct).toBe("2");
+    expect(fields.discountDeadline).toBeNull();
+    expect(notes).toEqual([
+      "The discount deadline was left blank: the invoice does not give one that could be read. Enter the last day the discount applies, or clear the discount.",
+    ]);
+  });
+
+  it("drops a deadline that comes without a percent, and says why", () => {
+    const { fields, notes } = normalize({ earlyPayDiscountPct: null });
     expect(fields.earlyPayDiscountPct).toBeNull();
-    expect(notes).toEqual(["The early-payment discount was left out: the invoice gives its percent or its deadline, not both."]);
+    expect(fields.discountDeadline).toBeNull();
+    expect(notes).toEqual(["The early-payment discount was left out: the invoice gives its deadline but not its percent."]);
   });
 
   it("drops a discount percent outside 0 to 100", () => {

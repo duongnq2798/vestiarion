@@ -12,10 +12,13 @@ import { db, unwrap } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
 import {
   counterpartyInputSchema,
+  csvBatchMessage,
   csvInvoiceInputSchema,
   dueDateIso,
   firstZodMessage,
+  invoiceFormRefusal,
   invoiceInputSchema,
+  type InvoiceField,
 } from "@/lib/intake-validation";
 import {
   changeCounterpartyAddress,
@@ -31,6 +34,8 @@ export interface IntakeActionResult {
   message: string;
   created?: number;
   verdict?: string;
+  /** The invoice form's refused fields, each with its first error, shown under the field. */
+  fieldErrors?: Partial<Record<InvoiceField, string>>;
 }
 
 function formString(formData: FormData, key: string): string {
@@ -226,7 +231,7 @@ export async function createInvoiceAction(
       earlyPayDiscountPct: formString(formData, "earlyPayDiscountPct"),
       discountDeadline: formString(formData, "discountDeadline"),
     });
-    if (!parsed.success) return { ok: false, message: firstZodMessage(parsed.error) };
+    if (!parsed.success) return { ok: false, ...invoiceFormRefusal(parsed.error) };
 
     const input = parsed.data;
     try {
@@ -320,7 +325,7 @@ export async function importInvoicesAction(
       return { ok: false, message: "CSV preview is invalid. Choose the file again." };
     }
     const parsed = csvBatchSchema.safeParse(decoded);
-    if (!parsed.success) return { ok: false, message: firstZodMessage(parsed.error) };
+    if (!parsed.success) return { ok: false, message: csvBatchMessage(parsed.error) };
 
     try {
       const counterparties = unwrap(

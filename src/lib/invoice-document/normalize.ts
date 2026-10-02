@@ -189,6 +189,9 @@ export function normalizeExtraction(raw: RawExtraction, text: string): Normalize
 
   const dueDate = isRealDate(raw.dueDate) ? raw.dueDate : null;
 
+  // A percent the document states reaches the form even when its deadline cannot be used: the form then
+  // requires a deadline, so the member enters it or clears the discount, rather than adding the invoice
+  // without a discount the vendor offered (the intake rule in src/lib/intake-validation.ts).
   let earlyPayDiscountPct: string | null = null;
   let discountDeadline: string | null = null;
   const pct = raw.earlyPayDiscountPct?.replace(/\s*%$/, "") ?? null;
@@ -196,12 +199,18 @@ export function normalizeExtraction(raw: RawExtraction, text: string): Normalize
   if (pct !== null || deadline !== null) {
     if (pct !== null && !(DISCOUNT_PCT_PATTERN.test(pct) && Number(pct) > 0)) {
       notes.push("The early-payment discount was left out: its percent is not between 0 and 100.");
-    } else if (pct === null || !isRealDate(deadline)) {
-      notes.push("The early-payment discount was left out: the invoice gives its percent or its deadline, not both.");
+    } else if (pct === null) {
+      notes.push("The early-payment discount was left out: the invoice gives its deadline but not its percent.");
     } else if (!statesPercent(text, pct)) {
       notes.push("The early-payment discount was left out: the document does not state that percent.");
+    } else if (!isRealDate(deadline)) {
+      earlyPayDiscountPct = pct;
+      notes.push("The discount deadline was left blank: the invoice does not give one that could be read. Enter the last day the discount applies, or clear the discount.");
     } else if (dueDate !== null && deadline > dueDate) {
-      notes.push("The early-payment discount was left out: its deadline is after the due date.");
+      earlyPayDiscountPct = pct;
+      notes.push(
+        "The discount deadline was left blank: the invoice's is after its due date. Enter the last day the discount applies, on or before the due date, or clear the discount."
+      );
     } else {
       earlyPayDiscountPct = pct;
       discountDeadline = deadline;
