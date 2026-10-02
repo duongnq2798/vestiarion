@@ -154,6 +154,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
   ],
   "guides/first-payment": [
     ["Service budget", "src/components/ServiceBudgetPanel.tsx"],
+    ["Manage", "src/components/ServiceBudgetPanel.tsx"],
     ["Add to the budget", "src/components/ServiceBudgetPanel.tsx"],
     ["service_budget_funded", "src/lib/circle/gateway-funding.ts"],
     ["service_purchased", "src/lib/agent/services.ts"],
