@@ -12,7 +12,7 @@ import { DecisionCard } from "@/components/vx/DecisionCard";
 import { GettingStarted } from "@/components/vx/GettingStarted";
 import { invoiceDecision, treasuryActionDecision, treasuryDecisionEntries, treasuryLedgerDecision } from "@/components/vx/map";
 import { Money } from "@/components/vx/Primitives";
-import { CashCalendar, SafeToSpendPanel } from "@/components/vx/CashOutlook";
+import { CashOutlookPanel, SafeToSpendFigure } from "@/components/vx/CashOutlook";
 import { ScheduledPayments, scheduledPaymentRows } from "@/components/vx/ScheduledPayments";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SectionHeader } from "@/components/ui/SectionHeader";
@@ -194,11 +194,12 @@ export default async function DashboardPage({
             refreshAction={refreshOnChainBalanceAction}
             syncedAt={accountsRows.find((account) => account.kind === "operating" && account.circle_wallet_id)?.balance_synced_at ?? null}
           />
+          {/* The figure; how it is reached, and the 30 days behind it, are the Next 30 days section below. */}
+          <StatTile label="Safe to spend today" tone={outlook.safeToSpend < 0 ? "held" : "default"} href="#cash-outlook" sub="After everything already owed">
+            <SafeToSpendFigure outlook={outlook} />
+          </StatTile>
           <StatTile label="Paid out to date" sub={`${dashboardStats.onchainTransfers} settled on-chain`}>
             <Money value={dashboardStats.totalPaidOut} />
-          </StatTile>
-          <StatTile label="Decisions logged" href={orgHref(slug, "/audit")} sub="Every entry is hash-linked and signed">
-            <span className="tabular-nums">{dashboardStats.decisionsLogged}</span>
           </StatTile>
           <StatTile label="Needs you" tone={needsReview > 0 ? "held" : "default"} href={orgHref(slug, "/approvals")} sub={needsReview > 0 ? "Waiting for a person's decision" : "Nothing waiting"}>
             <span className="tabular-nums">{needsReview}</span>
@@ -216,27 +217,33 @@ export default async function DashboardPage({
 
             {scheduledPayments.length > 0 && <ScheduledPayments payments={scheduledPayments} />}
 
-            <CashCalendar outlook={outlook} />
+            <CashOutlookPanel outlook={outlook} />
 
             <section>
-              <SectionHeader title="Treasury decisions" meta="yield moves include their economics" action={<MoreLink href={orgHref(slug, "/audit?domain=treasury")}>Full audit log</MoreLink>} />
+              <SectionHeader
+                title="Treasury decisions"
+                meta={`${dashboardStats.decisionsLogged} decisions logged, each hash-linked and signed`}
+                action={<MoreLink href={orgHref(slug, "/audit?domain=treasury")}>Full audit log</MoreLink>}
+              />
               {treasuryDecisions.length === 0 ? (
                 <EmptyState compact title="No treasury decisions yet" body="Run an agent cycle to see why cash was swept, redeemed, or held liquid." />
               ) : (
-                <div className="space-y-4">{treasuryDecisions.map((decision) => <DecisionCard key={decision.id} decision={decision} orgSlug={slug} />)}</div>
+                // Scanned, not read: each shows its first lines, with "View reasoning" for the rest.
+                <div className="space-y-4">{treasuryDecisions.map((decision) => <DecisionCard key={decision.id} decision={decision} orgSlug={slug} collapseReasoning />)}</div>
               )}
             </section>
 
             {executedReserveMoves.length > 0 && (
               <section>
                 <SectionHeader title="Executed reserve movements" meta="recorded treasury actions" />
-                <div className="space-y-4">{executedReserveMoves.map((decision) => <DecisionCard key={decision.id} decision={decision} compact orgSlug={slug} />)}</div>
+                <div className="space-y-4">{executedReserveMoves.map((decision) => <DecisionCard key={decision.id} decision={decision} compact orgSlug={slug} collapseReasoning />)}</div>
               </section>
             )}
           </div>
 
+          {/* Short by design: the limits and accounts people check, then the funds outside the wallet, whose
+              explanations and forms stay folded until someone opens them. */}
           <aside className="min-w-0 space-y-6 md:grid md:grid-cols-2 md:items-start md:gap-6 md:space-y-0 xl:block xl:space-y-6">
-            <SafeToSpendPanel outlook={outlook} />
             {budget && (
               <AgentBudgetPanel
                 orgSlug={slug}
@@ -251,6 +258,7 @@ export default async function DashboardPage({
               />
             )}
             <AccountsList accounts={accounts} />
+            {forecast && <ForecastPanel forecast={forecast} />}
             {gateway && (
               <GatewayPanel
                 orgSlug={slug}
@@ -263,7 +271,6 @@ export default async function DashboardPage({
             {serviceBudget && (
               <ServiceBudgetPanel orgSlug={slug} budget={serviceBudget} canFund={can(role, "treasury.manage")} requestId={crypto.randomUUID()} />
             )}
-            {forecast && <ForecastPanel forecast={forecast} />}
           </aside>
         </div>
       </ProductShell>

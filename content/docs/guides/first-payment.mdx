@@ -21,7 +21,7 @@ Sample payments are simulated. While **Sample data is loaded**, the console offe
 
 ## 1. Add a counterparty with an Arc address
 
-A counterparty is a business or person the workspace pays or invoices. Open **Counterparties**, and fill in the form under **Add counterparty**:
+A counterparty is a business or person the workspace pays or invoices. Open **Counterparties**, open **Add counterparty**, and fill in the form:
 
 - **Legal or trading name**.
 - **Role**: **Vendor** or **Contractor** for someone you pay.
@@ -32,13 +32,15 @@ A counterparty is a business or person the workspace pays or invoices. Open **Co
 
 <Screenshot
   src="/docs/guides/first-payment-counterparty.png"
-  alt="The Add counterparty form on the Counterparties page, filled in: Legal or trading name Northstar Studio, Role Vendor, Payment limit (USDC) 50.00, Chain Arc testnet, a Payment address starting 0x, and Jurisdiction US. The Add and screen button is at the bottom right."
+  alt="Add counterparty opened on the Counterparties page, its form filled in: Legal or trading name Northstar Studio, Role Vendor, Payment limit (USDC) 50.00, Chain Arc testnet, a Payment address starting 0x, and Jurisdiction US. The Add and screen button is at the bottom right."
   caption="A vendor with a payment limit and an Arc testnet address, ready to add and screen."
 />
 
 Then choose **Add and screen**. The counterparty is screened as soon as it is saved, and a message gives the result: "*Name* added and screened: *level* risk." The agent never pays a counterparty screened high risk.
 
-If screening matched someone else with the same name, the counterparty's card shows it under **Screening match**, with what that does to its limit. A member who can approve payments can choose **Not this person**, say why, and confirm with **Dismiss the match**. The counterparty is screened again at once without that match (a match with anyone else still counts), the ledger records `screening_match_dismissed` with the reason, and payments held on the old risk are decided again within a minute.
+Under **Counterparty book**, each counterparty is one row: its role and chain, its risk, what it may be paid now (**Allowed now**), its address, and what it needs before the agent can pay it. The rows that need someone come first: **Review match**, **Confirm address** and **Address needed**, then **Ready to pay**. Open a row for its screening, limits, history and address.
+
+If screening matched someone else with the same name, the counterparty's row reads **Review match**; open it to see the match under **Screening match**, with what that does to its limit. A member who can approve payments can choose **Not this person**, say why, and confirm with **Dismiss the match**. The counterparty is screened again at once without that match (a match with anyone else still counts), the ledger records `screening_match_dismissed` with the reason, and payments held on the old risk are decided again within a minute.
 
 <Callout title="Without an address, a payment is held">
 The form marks **Payment address** "Optional until payment setup", but the agent can pay only a counterparty that has one. As the Go live page puts it, "A payment to a counterparty without one is held for review." You can add it later with **Edit address** on the counterparty's card.
@@ -46,29 +48,29 @@ The form marks **Payment address** "Optional until payment setup", but the agent
 
 ### Changing a payment limit
 
-Owners and admins change a counterparty's limit with **Edit limit**, under **Configured limit** on its card. Enter the new **Payment limit (USDC)** and choose **Save limit**. The card's **Current authority** follows at once: the whole limit for a counterparty screened clear, a quarter of it for medium risk, and 0 for high risk. A vendor or contractor always has a limit, because without one the agent could pay any amount. The ledger records who changed the limit, and from what to what.
+Owners and admins open the counterparty's row and change its limit with **Edit limit**, under **Configured limit**. Enter the new **Payment limit (USDC)** and choose **Save limit**. **Allowed now** follows at once: the whole limit for a counterparty screened clear, a quarter of it for medium risk, and 0 for high risk. A vendor or contractor always has a limit, because without one the agent could pay any amount. The ledger records who changed the limit, and from what to what.
 
 ### Ask a payee for their address
 
-You don't have to collect a payee's address yourself. On the counterparty's card, owners and admins choose **Ask for address**, then **Create link**:
+You don't have to collect a payee's address yourself. In the counterparty's row, owners and admins choose **Ask for address**, then **Create link**:
 
 - The link is shown once, with **Copy link**. Send it to the payee however you usually reach them.
 - The payee opens it without an account. They see which business wants to pay them and enter their own Arc address.
-- The link works once and expires after 7 days. A new link replaces the payee's unused one, and **Revoke** on the card stops it.
-- An address that comes in through a link counts as a change, like any other: the card says "not yet confirmed", and the agent holds payments to that payee until someone here confirms it, as below.
+- The link works once and expires after 7 days. A new link replaces the payee's unused one, and **Revoke** in the row stops it.
+- An address that comes in through a link counts as a change, like any other: the row says "not yet confirmed", and the agent holds payments to that payee until someone here confirms it, as below.
 
 ### Changing an address
 
-Owners and admins change a counterparty's address with **Edit address** on its card: enter the new **Arc address**, or leave it empty to clear it, and choose **Save address**.
+Owners and admins change a counterparty's address with **Edit address** in its row: enter the new **Arc address**, or leave it empty to clear it, and choose **Save address**.
 
-Changing where a counterparty is paid is how payments get redirected to the wrong wallet. So after a change, the card says "not yet confirmed", and the agent holds every payment to that counterparty, whatever the amount, until a person confirms the new address. There are two ways to confirm it:
+Changing where a counterparty is paid is how payments get redirected to the wrong wallet. So after a change, the row reads **Confirm address** and says "not yet confirmed", and the agent holds every payment to that counterparty, whatever the amount, until a person confirms the new address. There are two ways to confirm it:
 
 - **Approve and pay** on a held payment to it. The approval card shows where the money goes, after "Pays to". If the address changed after the page loaded, the approval is refused with "This counterparty's address changed after this page loaded. Check the new address and try again."
-- **Confirm address** on the counterparty's card, without a payment. Owners, admins and approvers see it.
+- **Confirm address** in the counterparty's row, without a payment. Owners, admins and approvers see it.
 
 <Screenshot
   src="/docs/guides/first-payment-address.png"
-  alt="A counterparty card for Northstar Studio on the Counterparties page, with its new Arc address, an Edit address button, a badge reading Changed 2026-09-30, not yet confirmed, and a Confirm address button."
+  alt="Northstar Studio's row in the Counterparty book: Vendor on Arc testnet, clear risk, Allowed now 50.00 USDC, and a badge reading Confirm address. The row is open, showing its configured limit, what it may be paid now, its jurisdiction and when it was last screened, then the new Arc address, an Edit address button, a badge reading Changed 2026-09-30, not yet confirmed, and a Confirm address button."
   caption="A changed address waits for a person to confirm it."
 />
 
@@ -78,7 +80,7 @@ Anyone who may not add records sees "Only an owner or admin of this workspace ca
 
 ## 2. Add an invoice
 
-Open **AP / AR**. Under **Invoice intake**, choose **Enter one invoice**, **From a document** to have the model read it from a PDF or an email (see [Read an invoice from a document](#read-an-invoice-from-a-document)), or **Import CSV** to add several from a file.
+Open **AP / AR** and open **New invoice**. Choose **Enter one invoice**, **From a document** to have the model read it from a PDF or an email (see [Read an invoice from a document](#read-an-invoice-from-a-document)), or **Import CSV** to add several from a file.
 
 - **Direction**: **Payable**, for an invoice you pay.
 - **Counterparty**: the one you just added.
@@ -91,7 +93,7 @@ Open **AP / AR**. Under **Invoice intake**, choose **Enter one invoice**, **From
 
 <Screenshot
   src="/docs/guides/first-payment-invoice.png"
-  alt="The Invoice intake form on the AP / AR page, on the Enter one invoice tab, filled in: Direction Payable, Counterparty Northstar Studio · vendor, Amount 12.50, Currency USDC, Due date 10/15/2026, Early-payment discount and Discount deadline left blank, Memo October design retainer, PO reference PO-2207, and Goods or services received ticked. The Add invoice button is below."
+  alt="The New invoice form on the AP / AR page, on the Enter one invoice tab, filled in: Direction Payable, Counterparty Northstar Studio · vendor, Amount 12.50, Currency USDC, Due date 10/15/2026, Early-payment discount and Discount deadline left blank, Memo October design retainer, PO reference PO-2207, and Goods or services received ticked. The Add invoice button is below."
   caption="A payable within the counterparty's limit, with its PO reference and the goods received."
 />
 
@@ -103,7 +105,7 @@ Instead of typing an invoice in, choose **From a document**. Choose a PDF or an 
 
 <Screenshot
   src="/docs/guides/first-payment-document.png"
-  alt="An invoice from Northstar Studio read from a PDF by DeepSeek, on the AP / AR page. A callout asks for every field to be checked and warns that the invoice asks to be paid to a different address than the one on file. Below it, the invoice form is filled in: Counterparty Northstar Studio · vendor, Amount 12.50, Currency USDC, Due date 10/15/2026, Early-payment discount and Discount deadline left blank, Memo October design retainer, PO reference PO-2207, and Goods or services received left unticked."
+  alt="An invoice from Northstar Studio read from a PDF by DeepSeek, under New invoice on the AP / AR page. A callout asks for every field to be checked and warns that the invoice asks to be paid to a different address than the one on file. Below it, the invoice form is filled in: Counterparty Northstar Studio · vendor, Amount 12.50, Currency USDC, Due date 10/15/2026, Early-payment discount and Discount deadline left blank, Memo October design retainer, PO reference PO-2207, and Goods or services received left unticked."
   caption="An invoice read from a PDF, with its address checked against the one on file. Nothing is added until you choose Add invoice."
 />
 
@@ -144,7 +146,7 @@ A vendor who wants USDC on Base, Arbitrum or Ethereum Sepolia is still paid from
 - **How it is paid.** The agent burns the USDC on Arc through Circle's Cross-Chain Transfer Protocol (CCTP), and Circle's Forwarding Service mints it to the payee on their chain. The payee is minted the invoice amount, and the fee comes on top of it, from the operating wallet.
 - **The fee.** Before it decides, the agent asks Circle what the transfer costs, and weighs it. The fee depends on the chain: on 2026-10-01 it was about 0.05 USDC to Base Sepolia, 0.13 to Arbitrum Sepolia and 1.85 to Ethereum Sepolia. A payout whose fee is above 10% of the invoice is held for a person, and so is one Circle gave no fee for.
 - **From a Gateway balance.** A live workspace can also hold a balance in Circle Gateway, which pays out on another chain at once.
-  - On **Treasury**, an owner or admin enters an amount under **Gateway balance**, in **Amount to move from the operating wallet (USDC)**, and chooses **Fund Gateway**. The first funding creates the workspace's Gateway signer, a Circle wallet that signs Gateway's transfers; Circle holds its key. USDC moved into Gateway stays there until it is paid out.
+  - On **Treasury**, an owner or admin opens **Manage** under **Gateway balance**, enters an amount in **Amount to move from the operating wallet (USDC)**, and chooses **Fund Gateway**. The first funding creates the workspace's Gateway signer, a Circle wallet that signs Gateway's transfers; Circle holds its key. USDC moved into Gateway stays there until it is paid out.
   - For each payout to another chain, the agent asks both Gateway and CCTP what it costs. It pays from the Gateway balance when that balance covers the payout and Gateway's fee is no higher than CCTP's; otherwise it pays through CCTP.
   - The card names the route the payout took, under **Payee's chain**, with its fee against the other route's, and links the mint on the payee's chain. Once a payout has started on a route, every later attempt uses that route.
 - **USDC only.** An invoice in EURC to a payee on another chain is held: only USDC crosses chains.
@@ -160,7 +162,7 @@ To run one yourself, open **Treasury**, the console, and choose **Run cycle now*
 
 ## 4. Read the decision and its reasoning
 
-Each invoice's decision is a card on **AP / AR**, under **Payables**. The console's **Stopped** section also shows the latest decisions the agent stopped. A card shows:
+On **AP / AR**, the tiles at the top count what needs you, what is due within 7 days, what is overdue, and what is still to pay. Under **Payables**, each invoice is one row, in three groups: **Needs you** (held, or refused by code), **Upcoming** (not yet paid, with the day it pays or falls due) and **Paid and closed** (the latest ten; **Show all** lists every one). Open a row to see its decision as a card. The console's **Stopped** section also shows the latest decisions the agent stopped. A card shows:
 
 - the outcome: "Settled on Arc", "Scheduled for *date*", "Held for you" or "Refused by guardrail";
 - the amount and the counterparty;
@@ -169,7 +171,7 @@ Each invoice's decision is a card on **AP / AR**, under **Payables**. The consol
 
 <Screenshot
   src="/docs/guides/first-payment-decision.png"
-  alt="A decision card under Payables: Pay Northstar Studio, October design retainer, 12.50 USDC, marked Settled on Arc. The agent's reasoning reads: Paid 12.50 USDC to Northstar Studio: PO-2207 matches and the work was received, Northstar Studio screened clear with a 50.00 USDC limit, and the operating wallet holds 20.00 USDC. Below are the evidence chips PO, Goods received, Risk, Limit and Due, then the link to ledger entry 5 and the transaction hash."
+  alt="The Payables list on AP / AR, its Paid and closed group holding one row: Northstar Studio, October design retainer, Due Oct 15, 2026, 12.50 USDC, Settled on Arc. The row is open on its decision card: Pay Northstar Studio, 12.50 USDC, marked Settled on Arc. The agent's reasoning reads: Paid 12.50 USDC to Northstar Studio: PO-2207 matches and the work was received, Northstar Studio screened clear with a 50.00 USDC limit, and the operating wallet holds 20.00 USDC. Below are the evidence chips PO, Goods received, Risk, Limit and Due, then the link to ledger entry 5 and the transaction hash."
   caption="A settled payment: the agent's reasoning, the evidence it checked, the ledger entry and the transaction."
 />
 
@@ -192,7 +194,7 @@ An invoice with an early-payment discount shows its terms on its card as "*pct*%
 
 ### Pay something every period
 
-A retainer, a subscription or a monthly fee does not need a new invoice each time. Under **Invoice intake**, open **Recurring** and fill in the form:
+A retainer, a subscription or a monthly fee does not need a new invoice each time. Under **New invoice**, open **Recurring** and fill in the form:
 
 - **Pay**: a vendor or contractor.
 - **For**: what it is for.
@@ -224,7 +226,7 @@ Before the agent pays an address for the first time, it can buy that address's p
 
 The agent pays for each answer itself, 0.001 USDC over **x402**, the HTTP payment standard, settled through Circle Gateway on Arc testnet. Vestiarion is the seller. Today no other x402 seller accepts Arc testnet, so the agent buys only from Vestiarion.
 
-- **The service budget.** The agent pays from its own small balance, never from the operating wallet. On the console's **Service budget** panel, an owner or admin enters an amount (at most 1 USDC at a time) and chooses **Add to the budget**. The operating wallet moves it into Gateway for the workspace's Gateway signer in one transaction. The panel appears once the workspace has funded Gateway, which creates that signer. Each deposit is signed as `service_budget_funded`.
+- **The service budget.** The agent pays from its own small balance, never from the operating wallet. On the console's **Service budget** panel, an owner or admin opens **Manage**, enters an amount (at most 1 USDC at a time) and chooses **Add to the budget**. The operating wallet moves it into Gateway for the workspace's Gateway signer in one transaction. The panel appears once the workspace has funded Gateway, which creates that signer. Each deposit is signed as `service_budget_funded`.
 - **When it buys.** A payable or milestone must be waiting for a decision, the counterparty's Arc address must be confirmed, and this workspace must never have paid that address. An answer counts for 7 days.
 - **Code's limits.** The agent pays only Vestiarion's own endpoint, only the offer it expects, at most 0.01 USDC a call, at most 0.05 USDC a day, and at most 3 purchases a cycle. It buys nothing while it is paused. A purchase code refuses is not tried again for a day.
 - **In the audit log.** A purchase is `service_purchased`, with the price, the authorization's nonce, Gateway's settlement and the answer. A refusal is `service_purchase_refused`, with the rule, and a failure is `service_purchase_failed`. The decision that follows carries the answer in its observed facts as `addressHistory`.
@@ -279,7 +281,7 @@ To check a signature yourself, see [Verifying signatures](/docs/webhooks/verify)
 
 A payee, an accountant or anyone else can check a payment without an account: share its receipt.
 
-- **Sharing it.** On **Invoices**, a paid payable with a transaction on chain shows **Share receipt** to an owner or admin. It makes a link to a public page. Copy the link then: it is shown only once.
+- **Sharing it.** On **AP / AR**, open a paid payable's row: one with a transaction on chain shows **Share receipt** to an owner or admin. It makes a link to a public page. Copy the link then: it is shown only once.
 - **What the page shows.** The amount, the payee's chain and address, and how it was paid, with the fee. It also shows the transaction, linked to its explorer; for a CCTP payout, the burn on Arc testnet as well.
 - **The three checks the page makes.**
   - **Signed by the paying workspace.** The receipt is a ledger entry the workspace signed when it was shared. Its signature, body hash and chain hash are checked, and checked again in the reader's browser.
@@ -297,7 +299,7 @@ A payee, an accountant or anyone else can check a payment without an account: sh
 
 A receivable is money a client owes the business. In a live workspace, an owner or admin can send the client a link to pay it on Arc testnet:
 
-1. **Make the link.** On **AP / AR**, under **Receivables**, choose **Get paid on Arc** on the invoice, then **Copy link** and send it. A new link replaces the old one.
+1. **Make the link.** On **AP / AR**, under **Receivables**, open the invoice's row and choose **Get paid on Arc**, then **Copy link** and send it. A new link replaces the old one.
 2. **The client pays.** The link opens a page with the amount, the due date, what it is for, and the workspace's address on Arc testnet. The client sends exactly that amount from any wallet and can choose **I have paid**, which only asks Vestiarion to look now.
 3. **The agent matches it.** Every cycle, and on **I have paid**, Vestiarion reads the transfers that arrived in the operating wallet from Circle. A transfer of the same currency and amount as an open receivable, arriving after the receivable was added, settles it: from the client's own address on file, or, from any address, when it is the only such receivable and its client was sent the link. The receivable becomes received with its transaction, and the ledger records `ar_received`. Two open receivables of the same amount, with nothing to tell them apart, stay open for a person.
 

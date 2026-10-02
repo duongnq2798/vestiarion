@@ -17,12 +17,24 @@ const ARCSCAN_ADDRESS = "https://testnet.arcscan.app/address/";
  * E2, E6): what it is, its contract once deployed, and for an owner or admin the button that sets it up, or
  * finishes a setup that was interrupted.
  */
-export function EscrowPanel({ orgSlug, address, deploying, canSetUp }: { orgSlug: string; address: string | null; deploying: boolean; canSetUp: boolean }) {
+export function EscrowPanel({
+  orgSlug,
+  address,
+  deploying,
+  canSetUp,
+  bare = false,
+}: {
+  orgSlug: string;
+  address: string | null;
+  deploying: boolean;
+  canSetUp: boolean;
+  /** Inside a section that already names it (Contractors folds it): no card, no heading. */
+  bare?: boolean;
+}) {
   const { state, formProps } = useActionForm(setUpEscrowAction, INITIAL, { toastOnSuccess: true });
 
-  return (
-    <Card className="space-y-3 p-4 sm:p-6">
-      <SectionHeader title="Milestone escrow" meta="a contract on Arc testnet" />
+  const content = (
+    <>
       <p className="text-sm leading-6 text-ink-2">
         Lock a milestone&apos;s USDC before the work starts. Once the milestone is verified, the agent releases it to the contractor, under the same
         checks as any payment; from a refund date you set, it can come back to this workspace instead. Before that date it can go nowhere else. Only this
@@ -44,6 +56,13 @@ export function EscrowPanel({ orgSlug, address, deploying, canSetUp }: { orgSlug
           </SubmitButton>
         </form>
       )}
+    </>
+  );
+  if (bare) return <div className="space-y-3">{content}</div>;
+  return (
+    <Card className="space-y-3 p-4 sm:p-6">
+      <SectionHeader title="Milestone escrow" meta="a contract on Arc testnet" />
+      {content}
     </Card>
   );
 }

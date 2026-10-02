@@ -1,7 +1,9 @@
-import { FileSpreadsheet, FileText, PenLine } from "lucide-react";
+import { FileSpreadsheet, FileText, ListChecks, PenLine, Repeat, UserPlus } from "lucide-react";
 import type { ReactNode } from "react";
 import ApprovalCard from "@/components/ApprovalCard";
+import { CounterpartyRow as CounterpartyRowView } from "@/components/CounterpartyRow";
 import GoLivePanel from "@/components/GoLivePanel";
+import { HeldMilestoneActions } from "@/components/HeldMilestoneActions";
 import VerifyLedgerBadge from "@/components/VerifyLedgerBadge";
 import CounterpartyAddress from "@/components/intake/CounterpartyAddressEdit";
 import CounterpartyIntake from "@/components/intake/CounterpartyIntake";
@@ -16,17 +18,19 @@ import { Eyebrow } from "@/components/ui/Eyebrow";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { AuditLedger, pad } from "@/components/vx/AuditLedger";
-import { DecisionCard } from "@/components/vx/DecisionCard";
+import { DecisionRows, RowGroupHeading } from "@/components/vx/DecisionRows";
+import { IntakeFold } from "@/components/vx/IntakeFold";
 import { GettingStarted } from "@/components/vx/GettingStarted";
-import { invoiceDecision } from "@/components/vx/map";
+import { invoiceDecision, milestoneDecision } from "@/components/vx/map";
 import type { NavKey } from "@/components/vx/nav";
 import { Hash } from "@/components/vx/Primitives";
 import type { WaitingPayable } from "@/lib/agent/approvals";
+import { heldReason } from "@/lib/agent/milestone-decisions";
 import type { LedgerEntry } from "@/lib/ledger";
 import type { PayeeLinkStatus } from "@/lib/payee-journey";
 import type { GoLiveStatus } from "@/lib/platform/go-live";
 import { gettingStarted } from "@/lib/getting-started";
-import type { CounterpartyRow, InvoiceRow } from "@/lib/queries";
+import type { CounterpartyRow, InvoiceRow, MilestoneRow } from "@/lib/queries";
 import { DESIGN_SLUG, LEDGER } from "../design/fixtures";
 
 /**
@@ -158,6 +162,55 @@ const PAYMENT_ENTRY: LedgerEntry = {
 
 const ENTRIES: LedgerEntry[] = [...EARLIER, PAYMENT_ENTRY];
 
+// A milestone whose batch Circle failed, held, as Contractors shows it (held milestone actions R1).
+const HELD_MILESTONE: MilestoneRow = {
+  id: "00000000-0000-4000-8000-0000000000f1",
+  contractor_id: "00000000-0000-4000-8000-0000000000f2",
+  contractor_name: "Puka Hotel",
+  title: "Clean service",
+  amount: 0.3,
+  verification_source: null,
+  verification_method: "manual",
+  verification_status: "verified",
+  verification_checked_at: "2026-10-02T06:58:00Z",
+  verified_at: "2026-10-02T06:58:00Z",
+  verification_detail: { note: "Rooms checked after the clean" },
+  verified: true,
+  status: "held",
+  agent_reasoning:
+    "Puka Hotel's cleaning was verified by hand, the contractor is screened clear, and 0.30 USDC is within its 5 USDC limit, so I release it today rather than on Net-30. [transfer failed: provider reported failure]",
+  tx_ref: null,
+};
+
+const HELD_ENTRY: LedgerEntry = {
+  ...PAYMENT_ENTRY,
+  seq: PAYMENT_ENTRY.seq + 1,
+  id: "docs-held-milestone",
+  ts: "2026-10-02T07:00:00Z",
+  domain: "contractor",
+  action: "milestone_release",
+  summary: 'RELEASE milestone "Clean service" for Puka Hotel (0.3 USDC)',
+  detail: { milestoneId: HELD_MILESTONE.id, decisionMode: "llm", guardrailBlocked: false, observed: { riskLevel: "clear", paymentLimit: 5 }, execution: { txRef: null, resultingStatus: "held" } },
+};
+
+const HELD_REASON = heldReason({
+  amount: HELD_MILESTONE.amount,
+  agentReasoning: HELD_MILESTONE.agent_reasoning,
+  contractor: {
+    name: HELD_MILESTONE.contractor_name,
+    riskLevel: "clear",
+    riskNotes: null,
+    paymentLimit: 5,
+    baselinePaymentLimit: 5,
+    address: `0x${"7ab1e".repeat(8)}`,
+    addressChangedAt: null,
+    addressConfirmedAt: null,
+  },
+  intent: { status: "failed", provider_tx_id: "circle-batch", last_error: null, provider_state: "FAILED", failure_reason: "ESTIMATION_ERROR" },
+  lastEntry: { action: HELD_ENTRY.action, detail: HELD_ENTRY.detail },
+  live: true,
+});
+
 const HELD: WaitingPayable = {
   id: "00000000-0000-4000-8000-0000000000e2",
   counterpartyId: "00000000-0000-4000-8000-0000000000d2",
@@ -280,10 +333,9 @@ export const DOCS_SHOTS = {
     page: "counterparties",
     render: function CounterpartyShot() {
       return (
-        <section>
-          <SectionHeader title="Add counterparty" meta="human-entered · screened on submission" />
-          <CounterpartyIntake orgSlug={SLUG} />
-        </section>
+        <IntakeFold label="Add counterparty" meta="human-entered · screened on submission" defaultOpen className="">
+          <CounterpartyIntake orgSlug={SLUG} framed={false} />
+        </IntakeFold>
       );
     },
   },
@@ -292,19 +344,29 @@ export const DOCS_SHOTS = {
     page: "counterparties",
     render: function AddressShot() {
       return (
-        <section className="max-w-md">
-          <Card className="min-w-0 p-4">
-            <h3 className="truncate text-sm font-semibold text-ink">{COUNTERPARTY.name}</h3>
-            <p className="mt-0.5 text-xs capitalize text-ink-3">
-              {COUNTERPARTY.role} · {COUNTERPARTY.chain}
-            </p>
-            <CounterpartyAddress
-              orgSlug={SLUG}
-              counterparty={{ id: COUNTERPARTY.id, name: COUNTERPARTY.name, address: COUNTERPARTY.address }}
-              unconfirmedSince="2026-09-30T12:20:00Z"
-              canWrite
-              canConfirm
-            />
+        <section>
+          <SectionHeader title="Counterparty book" meta="1 record · what needs someone first · open one for the rest" />
+          <Card className="overflow-hidden">
+            <ul className="divide-y divide-line">
+              <li>
+                <CounterpartyRowView counterparty={{ ...COUNTERPARTY, address_changed_at: "2026-09-30T12:20:00Z", address_confirmed_at: null }} defaultOpen>
+                  {/* As the page shows it above the address: the limits, where it is, when it was screened. */}
+                  <dl className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3 text-xs sm:grid-cols-4">
+                    <div><dt className="text-ink-3">Configured limit</dt><dd className="mt-0.5 text-ink">50.00 USDC</dd></div>
+                    <div><dt className="text-ink-3">Allowed now</dt><dd className="mt-0.5 text-ink">50.00 USDC</dd></div>
+                    <div><dt className="text-ink-3">Jurisdiction</dt><dd className="mt-0.5 text-ink">US</dd></div>
+                    <div><dt className="text-ink-3">Last screened</dt><dd className="mt-0.5 text-ink">9/30/2026, 12:00:00 PM</dd></div>
+                  </dl>
+                  <CounterpartyAddress
+                    orgSlug={SLUG}
+                    counterparty={{ id: COUNTERPARTY.id, name: COUNTERPARTY.name, address: COUNTERPARTY.address }}
+                    unconfirmedSince="2026-09-30T12:20:00Z"
+                    canWrite
+                    canConfirm
+                  />
+                </CounterpartyRowView>
+              </li>
+            </ul>
           </Card>
         </section>
       );
@@ -315,11 +377,9 @@ export const DOCS_SHOTS = {
     page: "invoices",
     render: function InvoiceShot() {
       return (
-        <section>
-          <SectionHeader title="Invoice intake" meta="typed in, read from a document, or imported from a CSV, and confirmed" />
-          <Card className="p-4 sm:p-6">
+        <IntakeFold label="New invoice" meta="typed in, read from a document, imported from a CSV, or recurring" defaultOpen className="">
             <Tabs defaultValue="manual">
-              <TabsList aria-label="Invoice intake">
+              <TabsList aria-label="New invoice">
                 <TabsTrigger value="manual">
                   <PenLine aria-hidden />
                   Enter one invoice
@@ -332,6 +392,10 @@ export const DOCS_SHOTS = {
                   <FileSpreadsheet aria-hidden />
                   Import CSV
                 </TabsTrigger>
+                <TabsTrigger value="recurring">
+                  <Repeat aria-hidden />
+                  Recurring
+                </TabsTrigger>
               </TabsList>
               <TabsContent value="manual" forceMount className="data-[state=inactive]:hidden">
                 <InvoiceIntake orgSlug={SLUG} counterparties={[{ id: COUNTERPARTY.id, name: COUNTERPARTY.name, role: COUNTERPARTY.role }]} />
@@ -343,8 +407,7 @@ export const DOCS_SHOTS = {
                 <InvoiceCsvImport orgSlug={SLUG} />
               </TabsContent>
             </Tabs>
-          </Card>
-        </section>
+        </IntakeFold>
       );
     },
   },
@@ -354,9 +417,7 @@ export const DOCS_SHOTS = {
     render: function DocumentShot() {
       const asked = `0x${"5af3107a".repeat(5)}`;
       return (
-        <section>
-          <SectionHeader title="Invoice intake" meta="typed in, read from a document, or imported from a CSV, and confirmed" />
-          <Card className="p-4 sm:p-6">
+        <IntakeFold label="New invoice" meta="typed in, read from a document, imported from a CSV, or recurring" defaultOpen className="">
             <DocumentDraft
               orgSlug={SLUG}
               counterparties={[{ id: COUNTERPARTY.id, name: COUNTERPARTY.name, role: COUNTERPARTY.role }]}
@@ -386,8 +447,7 @@ export const DOCS_SHOTS = {
                 nonce: 1,
               }}
             />
-          </Card>
-        </section>
+        </IntakeFold>
       );
     },
   },
@@ -397,8 +457,9 @@ export const DOCS_SHOTS = {
     render: function DecisionShot() {
       return (
         <section>
-          <SectionHeader title="Payables" />
-          <DecisionCard decision={invoiceDecision(INVOICE, COUNTERPARTY, ENTRIES)} orgSlug={SLUG} />
+          <SectionHeader title="Payables" meta="1 invoice · open one for the agent's reasoning" />
+          <RowGroupHeading title="Paid and closed" count={1} />
+          <DecisionRows orgSlug={SLUG} items={[{ decision: invoiceDecision(INVOICE, COUNTERPARTY, ENTRIES), date: { label: "Due Oct 15, 2026" }, open: true }]} />
         </section>
       );
     },
@@ -431,10 +492,24 @@ export const DOCS_SHOTS = {
     render: function PayFreelancerShot() {
       return (
         <section>
-          <SectionHeader title="Pay a freelancer" meta="one form: they get a link, you confirm their address, the agent pays" />
-          <Card className="p-4 sm:p-6">
-            <PayFreelancerForm orgSlug={SLUG} live />
-          </Card>
+          <IntakeFold label="New payment" meta="pay a freelancer in one step, or add a milestone for a contractor on file" defaultOpen className="">
+            <Tabs defaultValue="freelancer">
+              <TabsList aria-label="New payment">
+                <TabsTrigger value="freelancer">
+                  <UserPlus aria-hidden />
+                  Pay a freelancer
+                </TabsTrigger>
+                <TabsTrigger value="milestone">
+                  <ListChecks aria-hidden />
+                  Milestone intake
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="freelancer">
+                <p className="mb-4 text-[0.8125rem] text-ink-3">One form: they get a link, you confirm their address, the agent pays.</p>
+                <PayFreelancerForm orgSlug={SLUG} live />
+              </TabsContent>
+            </Tabs>
+          </IntakeFold>
           <div className="mt-4">
             <PaymentLinkReady
               message="Emailed Linh Tran a link to add the address to be paid at. When they add their address you get an email; confirm it on Counterparties and the agent pays within a minute."
@@ -445,6 +520,37 @@ export const DOCS_SHOTS = {
         </section>
       );
     },
+  },
+  "held-milestone": {
+    guide: "pay-a-contractor",
+    page: "contractors",
+    render: () => (
+      <section>
+        <SectionHeader title="Milestones" meta="1 · open one for the agent's reasoning, its verification and its escrow" />
+        <RowGroupHeading title="Needs you" count={1} />
+        <DecisionRows
+          orgSlug={SLUG}
+          items={[
+            {
+              decision: milestoneDecision(HELD_MILESTONE, [HELD_ENTRY]),
+              date: { label: "Held Oct 2, 2026", tone: "held" },
+              hint: HELD_REASON.hint,
+              before: (
+                <HeldMilestoneActions
+                  orgSlug={SLUG}
+                  milestone={{ id: HELD_MILESTONE.id, title: HELD_MILESTONE.title, amount: HELD_MILESTONE.amount, contractorName: HELD_MILESTONE.contractor_name }}
+                  reason={HELD_REASON}
+                  canDecide
+                  selfAdded={false}
+                  sandbox={false}
+                />
+              ),
+              open: true,
+            },
+          ]}
+        />
+      </section>
+    ),
   },
   "get-paid-address": { guide: "get-paid", render: () => <PayeeShot status={PAYEE_OPEN} /> },
   "get-paid-check": { guide: "get-paid", render: () => <PayeeShot status={PAYEE_OPEN} /> },

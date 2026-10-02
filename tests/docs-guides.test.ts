@@ -72,6 +72,8 @@ const PAYEE_STATES = "src/lib/payee-journey.ts";
 const PAYEE_PAGE = "src/app/payee/[token]/page.tsx";
 const PAYEE_ACTIONS = "src/app/payee/[token]/actions.ts";
 const PAYEE_EMAIL = "src/lib/email/payee-link.ts";
+const HELD_ACTIONS = "src/components/HeldMilestoneActions.tsx";
+const MILESTONE_DECISIONS = "src/lib/agent/milestone-decisions.ts";
 
 /** Each guide's quoted UI strings, as `[text, the file it must appear in]`. */
 const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
@@ -154,6 +156,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
   ],
   "guides/first-payment": [
     ["Service budget", "src/components/ServiceBudgetPanel.tsx"],
+    ["Manage", "src/components/ServiceBudgetPanel.tsx"],
     ["Add to the budget", "src/components/ServiceBudgetPanel.tsx"],
     ["service_budget_funded", "src/lib/circle/gateway-funding.ts"],
     ["service_purchased", "src/lib/agent/services.ts"],
@@ -209,7 +212,10 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["added and screened:", INTAKE_ACTIONS],
     ["A payment to a counterparty without one is held for review.", PANEL],
     ["AP / AR", APP_NAV],
-    ["Invoice intake", INVOICES_PAGE],
+    ["New invoice", INVOICES_PAGE],
+    ["Needs you", INVOICES_PAGE],
+    ["Upcoming", INVOICES_PAGE],
+    ["Paid and closed", INVOICES_PAGE],
     ["Enter one invoice", INVOICES_PAGE],
     ["Import CSV", INVOICES_PAGE],
     ["From a document", INVOICES_PAGE],
@@ -259,7 +265,10 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["Edit limit", "src/components/intake/CounterpartyLimitEdit.tsx"],
     ["Save limit", "src/components/intake/CounterpartyLimitEdit.tsx"],
     ["Configured limit", COUNTERPARTIES_PAGE],
-    ["Current authority", COUNTERPARTIES_PAGE],
+    ["Allowed now", COUNTERPARTIES_PAGE],
+    ["Review match", "src/components/CounterpartyRow.tsx"],
+    ["Address needed", "src/components/CounterpartyRow.tsx"],
+    ["Ready to pay", "src/components/CounterpartyRow.tsx"],
     ["Edit address", ADDRESS_CONTROLS],
     ["Arc address", ADDRESS_CONTROLS],
     ["Save address", ADDRESS_CONTROLS],
@@ -356,6 +365,8 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["Confirm address", ADDRESS_CONTROLS],
     ["Contractors", APP_NAV],
     ["Milestone intake", CONTRACTORS_PAGE],
+    ["New payment", CONTRACTORS_PAGE],
+    ["In progress", CONTRACTORS_PAGE],
     ["Contractor", MILESTONE_FORM],
     ["Amount (USDC)", MILESTONE_FORM],
     ["Work delivered", MILESTONE_FORM],
@@ -373,6 +384,16 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["Verify manually", MILESTONE_CHECK],
     ["verify_milestone_manual", MILESTONE_ACTIONS],
     ["Revoke manually", MILESTONE_CHECK],
+    ["Paid and closed", CONTRACTORS_PAGE],
+    ["What it waits for", HELD_ACTIONS],
+    ["Pay now", HELD_ACTIONS],
+    ["Close without paying", HELD_ACTIONS],
+    ["You added this milestone, so someone else must approve paying it.", HELD_ACTIONS],
+    ["Circle did not send it", MILESTONE_DECISIONS],
+    ["Limit lowered by a screening match", MILESTONE_DECISIONS],
+    ["milestone_approval_paid", MILESTONE_DECISIONS],
+    ["milestone_closed", MILESTONE_DECISIONS],
+    ["Closed without paying", MAP],
     ["Audit log", APP_NAV],
   ],
   "guides/audit-export": [

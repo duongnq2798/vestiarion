@@ -337,7 +337,8 @@ export async function applyFollowUp(
  * `execution.heldBecause`, newest entry first; entries without a decision
  * (verification, reopening) carry none. Each write is a compare-and-set on
  * `held`, like the invoices': a person who revoked the verification meanwhile
- * keeps their change, and nothing is recorded for that milestone. Exported to
+ * keeps their change, and nothing is recorded for that milestone; so does a
+ * person deciding it right now (`claim_milestone_decision`, 0059). Exported to
  * be tested without a full cycle.
  *
  * A milestone held only for the spending limit is reopened once the limit has
@@ -403,8 +404,10 @@ export async function followUpHeldMilestones(orgDb: OrgDb, budget?: BudgetGate):
     );
     if (plan.action !== "reopen") continue;
 
+    // A milestone a person is deciding now (claimed in the last 10 minutes) stays theirs (held milestone actions R2).
+    const claimFree = `decision_claimed_at.is.null,decision_claimed_at.lt.${new Date(Date.now() - 10 * 60_000).toISOString()}`;
     const changed = unwrap(
-      await orgDb.from("milestones").update({ status: "verified" }).eq("id", row.id).eq("status", "held").select("id")
+      await orgDb.from("milestones").update({ status: "verified" }).eq("id", row.id).eq("status", "held").or(claimFree).select("id")
     ) as Array<{ id: string }>;
     if (changed.length === 0) continue;
 
@@ -430,7 +433,7 @@ export async function followUpHeldMilestones(orgDb: OrgDb, budget?: BudgetGate):
 /** What a paused-or-not payment step in the AP or contractor stage decided,
  * in the shape each stage already carries as local variables — so wiring
  * one in is an assignment, not a restructure. */
-interface PayStepOutcome {
+export interface PayStepOutcome {
   status: string;
   txRef: string | null;
   paymentExecution: PaymentExecution | null;
@@ -2228,9 +2231,21 @@ async function escrowReleaseOf(
   return { contract: contract.address, holdId: holdId(milestoneId) };
 }
 
-async function releaseMilestone(
+/**
+ * A person's release of a held milestone (held milestone actions R2): the same release as the agent's, from
+ * escrow when the milestone is locked there, without the pause (a person may pay while the agent is paused, as
+ * Approvals does), and the one caller that may send again a transfer Circle ended in a terminal failure.
+ */
+export async function releaseHeldMilestone(
   input: { milestoneId: string; destination: string; amount: number },
   deps: { provider: ChainProvider; operatingAccountId: string }
+): Promise<PayStepOutcome> {
+  return releaseMilestone(input, { ...deps, retryTerminalFailure: true });
+}
+
+async function releaseMilestone(
+  input: { milestoneId: string; destination: string; amount: number },
+  deps: { provider: ChainProvider; operatingAccountId: string; retryTerminalFailure?: boolean }
 ): Promise<PayStepOutcome> {
   let result;
   let escrow: { contract: string; holdId: string } | null = null;
@@ -2250,7 +2265,8 @@ async function releaseMilestone(
         memo: `Milestone ${input.milestoneId}`,
         ...(escrow ? { route: "escrow" as const, escrow } : {}),
       },
-      { provider: deps.provider }
+      // Only a person's Pay now sends a terminally failed release again (held milestone actions R2).
+      deps.retryTerminalFailure ? { provider: deps.provider, retryTerminalFailure: true } : { provider: deps.provider }
     );
   } catch (err) {
     // Nothing is known to have moved: no transfer result exists at all.
@@ -3165,10 +3181,11 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     // A contractor whose address a person changed, and no one has confirmed
     // since, is not paid (spec 2026-09-30-counterparty-address-edit E4); nor,
     // in a live workspace, one with no address yet, whose payee has still to
-    // add it through their link (pay a freelancer R5). A held milestone has no
-    // approval path, so the milestone stays `verified` and waits: no model
-    // call and no ledger entry each cycle, and the first cycle after the
-    // address is in and confirmed decides it as usual.
+    // add it through their link (pay a freelancer R5). Holding it would only
+    // ask a person for what the payee or an address confirmation settles, so
+    // the milestone stays `verified` and waits: no model call and no ledger
+    // entry each cycle, and the first cycle after the address is in and
+    // confirmed decides it as usual.
     const waiting = payeeNotReady(contractor, provider.mode === "live");
     if (waiting) {
       lines.push({

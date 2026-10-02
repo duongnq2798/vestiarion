@@ -104,6 +104,7 @@ const SHOTS = {
       "freelancer-evidence": "https://www.canva.com/design/october-posts/view",
     });
   },
+  "held-milestone": async () => {},
   "get-paid-address": async (page) => {
     await page.fill({ "payee-address": `0x${"5a1e".repeat(10)}` });
   },

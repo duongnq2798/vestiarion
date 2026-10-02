@@ -14,11 +14,12 @@ import { PAYEE_CHAINS } from "@/lib/payee-chains";
 const INITIAL: IntakeActionResult = { ok: false, message: "" };
 
 /** A new counterparty is screened the moment it is saved; the toast carries the verdict. */
-export default function CounterpartyIntake({ orgSlug }: { orgSlug: string }) {
+/** `framed={false}` inside a section that already frames it (Counterparties folds it under Add counterparty). */
+export default function CounterpartyIntake({ orgSlug, framed = true }: { orgSlug: string; framed?: boolean }) {
   const { state, formProps } = useActionForm(createCounterpartyAction, INITIAL, { resetOnSuccess: true, toastOnSuccess: true });
 
   return (
-    <Card asChild className="p-4 sm:p-6">
+    <Card asChild className={framed ? "p-4 sm:p-6" : "border-0 bg-transparent p-0 shadow-none"}>
       <form {...formProps}>
         <input type="hidden" name="orgSlug" value={orgSlug} />
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

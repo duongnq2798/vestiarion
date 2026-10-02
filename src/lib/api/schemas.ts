@@ -210,6 +210,8 @@ export const MilestoneSchema = z
     verified: z.boolean(),
     decidedAt: z.string().nullable(),
     settledAt: z.string().nullable(),
+    closedAt: z.string().nullable().describe("When a person closed the milestone without paying it (status closed), else null."),
+    closeReason: z.string().nullable().describe("The reason the person gave for closing it without paying, else null."),
     agentReasoning: z.string().nullable(),
     txHash: z.string().nullable().describe("An on-chain hash when the payment settled on Arc, else null."),
     contractor: z.object({ id: z.string(), name: z.string(), riskLevel: z.string() }).nullable(),

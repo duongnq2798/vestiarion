@@ -72,11 +72,16 @@ function EmptyChart({ what }: { what: string }) {
   return <EmptyState compact title={`No ${what} recorded yet`} body="Run an agent cycle to populate this." />;
 }
 
+/**
+ * A chart's every reading, folded under it: newest first, in a frame of its own height that scrolls under a
+ * header that stays, so opening a table of fifty cycles never stretches the page or the card beside it.
+ */
 function DetailsTable({ summary, headers, rows }: {
   summary: string;
   headers: string[];
   rows: ReactNode[][];
 }) {
+  const newestFirst = [...rows].reverse();
   return (
     <Disclosure
       variant="bare"
@@ -90,18 +95,21 @@ function DetailsTable({ summary, headers, rows }: {
         </span>
       }
     >
-      <Table label={summary} className="min-w-[34rem] text-xs">
+      <p className="mb-2 text-xs text-ink-3">
+        {rows.length} {rows.length === 1 ? "row" : "rows"}, newest first.
+      </p>
+      <Table label={summary} className="min-w-[34rem] text-xs" containerClassName="max-h-80 overflow-auto rounded-lg border border-line">
         <TableHeader>
           <TableRow>
             {headers.map((header) => (
-              <TableHead key={header} className="px-2 py-2">
+              <TableHead key={header} className="sticky top-0 z-10 bg-surface px-2 py-2">
                 {header}
               </TableHead>
             ))}
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.map((row, rowIndex) => (
+          {newestFirst.map((row, rowIndex) => (
             <TableRow key={rowIndex}>
               {row.map((cell, cellIndex) => (
                 <TableCell key={cellIndex} className="whitespace-nowrap px-2 py-2 tabular-nums text-ink-2">
@@ -389,23 +397,36 @@ const outcomes: Array<{ key: OutcomeKey; label: string; color: string; value: (r
   { key: "awaiting", label: "Awaiting info", color: "var(--color-ink-3)", value: (run) => run.awaitingInfoCount },
 ];
 
+/** The bars drawn per cycle, and the batches drawn for screening: the latest ones. Each chart's table lists every one read. */
+const RECENT_CYCLES = 15;
+const RECENT_BATCHES = 12;
+
+/** Says the bars are the latest few, when they are, and that the table holds the rest. */
+function Recent({ shown, total, what }: { shown: number; total: number; what: string }) {
+  if (shown >= total) return null;
+  return <p className="mt-2 text-xs text-ink-3">The latest {shown} of {total} {what}; the table below lists every one.</p>;
+}
+
 function OutcomeChart({ runs }: { runs: CycleRunTelemetry[] }) {
   if (runs.length === 0) {
     return <ChartCard title="Decision outcomes per cycle" description="Executed and refused outcomes counted where each decision occurs."><EmptyChart what="cycles" /></ChartCard>;
   }
-  const totals = runs.map((run) => outcomes.reduce((sum, outcome) => sum + outcome.value(run), 0));
+  const shown = runs.slice(-RECENT_CYCLES);
+  const offset = runs.length - shown.length;
+  const totals = shown.map((run) => outcomes.reduce((sum, outcome) => sum + outcome.value(run), 0));
   const width = scaleLinear().domain([0, Math.max(...totals, 1)]).range([0, 100]);
   return (
     <ChartCard title="Decision outcomes per cycle" description="Each horizontal bar is one cycle; segments are observed outcomes, not a fitted trend. A cycle that failed partway is marked as such, because its counts are real but stop where it stopped." provenance={<Provenance modes={runs.map((run) => run.chainMode)} detail="Cycles" />}>
       <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-ink-2">
         {outcomes.map((outcome) => <span key={outcome.key}><span className="mr-1.5 inline-block size-2 rounded-full" style={{ background: outcome.color }} />{outcome.label}</span>)}
       </div>
+      <Recent shown={shown.length} total={runs.length} what="cycles" />
       <ol className="mt-4 space-y-3">
-        {runs.map((run, index) => {
+        {shown.map((run, index) => {
           const total = totals[index];
           const failed = run.status === "failed" || run.status === "partial";
           return <li key={run.id} className="grid grid-cols-[3.5rem_minmax(0,1fr)_2rem] items-center gap-2 text-xs">
-            <span className="font-mono text-ink-3">#{index + 1}</span>
+            <span className="font-mono text-ink-3">#{offset + index + 1}</span>
             <div className={`flex h-5 min-w-0 overflow-hidden rounded-full ${failed && total === 0 ? "bg-refused-soft" : "bg-raised"}`} aria-label={`${total} outcomes`}>
               {total === 0 ? <span className={`m-auto text-[0.625rem] ${failed ? "text-refused" : "text-ink-2"}`}>{failed ? `${run.status} — ${run.failedStage ?? "a stage"} failed` : run.status === "running" ? "still running" : "no outcomes"}</span> : outcomes.map((outcome) => {
                 const value = outcome.value(run);
@@ -425,16 +446,19 @@ function DecisionModeChart({ runs }: { runs: CycleRunTelemetry[] }) {
   if (runs.length === 0) {
     return <ChartCard title="Model vs heuristic" description="Which decision engine actually returned each verdict."><EmptyChart what="cycles" /></ChartCard>;
   }
-  const totals = runs.map((run) => run.modelDecisionCount + run.heuristicDecisionCount);
+  const shown = runs.slice(-RECENT_CYCLES);
+  const offset = runs.length - shown.length;
+  const totals = shown.map((run) => run.modelDecisionCount + run.heuristicDecisionCount);
   const width = scaleLinear().domain([0, Math.max(...totals, 1)]).range([0, 100]);
   return (
     <ChartCard title="Model vs heuristic" description="The model share and rule-based fallback are persisted by the orchestrator, including cycles where one side is zero. Where the model was consulted, its verdict is scored against the same written policy the fallback applies." provenance={<Provenance modes={runs.map((run) => run.chainMode)} detail="Cycles" />}>
       <div className="flex gap-4 text-xs text-ink-2"><span><span className="mr-1.5 inline-block size-2 rounded-full bg-agent" />Model</span><span><span className="mr-1.5 inline-block size-2 rounded-full bg-line-strong" />Heuristic</span><span className="text-refused">&#9670; Departed from policy</span></div>
+      <Recent shown={shown.length} total={runs.length} what="cycles" />
       <ol className="mt-4 space-y-3">
-        {runs.map((run, index) => {
+        {shown.map((run, index) => {
           const total = totals[index];
           return <li key={run.id} className="grid grid-cols-[3.5rem_minmax(0,1fr)_3.5rem] items-center gap-2 text-xs">
-            <span className="font-mono text-ink-3">#{index + 1}</span>
+            <span className="font-mono text-ink-3">#{offset + index + 1}</span>
             <div className="flex h-5 min-w-0 overflow-hidden rounded-full bg-raised">
               {total === 0 ? <span className="m-auto text-[0.625rem] text-ink-2">no decisions</span> : <>
                 {run.modelDecisionCount > 0 && <span title={`Model: ${run.modelDecisionCount}`} className="bg-agent" style={{ width: `${width(run.modelDecisionCount)}%` }} />}
@@ -477,7 +501,9 @@ function ScreeningChart({ screenings }: { screenings: ScreeningTelemetry[] }) {
   if (screenings.length === 0) {
     return <ChartCard title="Screening coverage" description="Completed and failed counterparty checks, with observed tier transitions."><EmptyChart what="screening checks" /></ChartCard>;
   }
-  const batches = screeningBatches(screenings);
+  const allBatches = screeningBatches(screenings);
+  const batches = allBatches.slice(-RECENT_BATCHES);
+  const drawn = batches.reduce((sum, batch) => sum + batch.rows.length, 0);
   return (
     <ChartCard title="Screening coverage" description="Consecutive checks within two minutes are displayed as one observed batch. A red segment is a failed lookup; the previous verdict stayed in force." provenance={<Provenance modes={screenings.map((row) => row.mode)} detail="Screening" />}>
       <div className="mt-1 flex flex-wrap gap-4 text-xs text-ink-2" aria-hidden>
@@ -485,7 +511,8 @@ function ScreeningChart({ screenings }: { screenings: ScreeningTelemetry[] }) {
         <span><span className="mr-1.5 inline-block size-2 rounded-full bg-refused" />Failed lookup</span>
         <span><span className="mr-1.5 text-held">◆</span>Tier change</span>
       </div>
-      {FRAMES.map((frame) => <ScreeningSvg key={frame} frame={frame} batches={batches} checks={screenings.length} />)}
+      <Recent shown={batches.length} total={allBatches.length} what="batches" />
+      {FRAMES.map((frame) => <ScreeningSvg key={frame} frame={frame} batches={batches} checks={drawn} />)}
       <DetailsTable summary="Screening receipt table" headers={["Checked", "Counterparty", "Mode", "Result", "Transition", "Source"]} rows={screenings.map((row) => [when(row.createdAt), row.counterpartyName, row.mode === "live" ? "LIVE" : "SIMULATED", row.status === "failed" ? "failed — retained" : row.riskLevel, row.tierChanged ? `${row.previousRiskLevel} → ${row.riskLevel}` : "none observed", row.source])} />
     </ChartCard>
   );
@@ -537,7 +564,8 @@ export function InsightsCharts({ data }: { data: InsightsData }) {
     <div className="space-y-5">
       <TransferChart transfers={data.transfers} />
       <BalanceChart snapshots={data.snapshots} moves={data.treasuryMoves} />
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+      {/* Each card its own height: one opened table never stretches the card beside it. */}
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-2 xl:items-start">
         <OutcomeChart runs={data.runs} />
         <DecisionModeChart runs={data.runs} />
       </div>

@@ -417,8 +417,11 @@ function milestoneEvidenceLink(source: string | null, githubSource: string | und
 
 export function milestoneDecision(milestone: MilestoneRow, entries: LedgerEntry[]): Decision {
   const entry = matchingEntry(entries, "milestoneId", milestone.id);
-  const observed = record(entry?.detail.observed);
-  const guardrailBlocked = entry?.detail.guardrailBlocked === true;
+  // What the agent observed when it last decided: a person's decision after it (Pay now, Close) records none.
+  const decided = entries.find((candidate) => candidate.detail.milestoneId === milestone.id && record(candidate.detail.observed));
+  const observed = record(decided?.detail.observed);
+  const closed = milestone.status === "closed";
+  const guardrailBlocked = !closed && entry?.detail.guardrailBlocked === true;
   const limit = numberValue(observed?.paymentLimit) ?? 0;
   const risk = stringValue(observed?.riskLevel) ?? "unscreened";
   const githubSource = milestone.verification_source?.match(/^https:\/\/github\.com\/[^/]+\/[^/]+\/pull\/\d+\/?$/)?.[0];
@@ -434,7 +437,8 @@ export function milestoneDecision(milestone: MilestoneRow, entries: LedgerEntry[
     memo: milestone.title,
     amount: milestone.amount,
     token: "USDC",
-    outcome: statusOutcome(milestone.status, milestone.tx_ref, guardrailBlocked),
+    outcome: closed ? "recorded" : statusOutcome(milestone.status, milestone.tx_ref, guardrailBlocked),
+    ...(closed ? { outcomeLabel: "Closed without paying" } : {}),
     reasoning: milestone.agent_reasoning ?? "The agent is waiting for milestone verification.",
     evidence: [
       { label: "Verified by", value: verificationLabel, href: githubSource, state: milestone.verified ? "ok" : "missing" },
@@ -446,7 +450,7 @@ export function milestoneDecision(milestone: MilestoneRow, entries: LedgerEntry[
       ? (entry?.detail.guardrailRule === "workspace.outflow_budget" ? budgetGuardrail(milestone.amount, entry.detail) : null) ??
         { rule: risk === "high" ? "counterparty.high_risk" : "counterparty.payment_limit", attempted: milestone.amount, limit, note: risk === "high" ? "risk tier high" : "amount above screened limit" }
       : null,
-    decisionMode: stringValue(entry?.detail.decisionMode),
+    decisionMode: stringValue(decided?.detail.decisionMode ?? entry?.detail.decisionMode),
     txHash: milestone.tx_ref?.startsWith("0x") ? milestone.tx_ref : null,
     auditSeq: entry?.seq,
     at: entry?.ts ?? new Date().toISOString(),

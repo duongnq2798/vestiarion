@@ -227,6 +227,8 @@ describe("followUpHeldMilestones — a held milestone goes back to the agent whe
       expect(patch.body).toEqual({ status: "verified" });
       expect(patch.params.get("status")).toBe("eq.held");
       expect(patch.params.get("select")).toBe("id");
+      // Never one a person is deciding right now (held milestone actions R2).
+      expect(patch.params.get("or")).toMatch(/^\(decision_claimed_at\.is\.null,decision_claimed_at\.lt\.\d{4}-\d{2}-\d{2}T[\d:.]+Z\)$/);
     }
     const appends = rpcBodies(fake.requests, "append_ledger_entry");
     expect(appends.map((a) => a.p_action)).toEqual(["milestone_reopened", "milestone_reopened"]);

@@ -43,11 +43,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { AuditLedger, DomainFilter } from "@/components/vx/AuditLedger";
 import { CycleReport } from "@/components/vx/CycleReport";
 import { DecisionCard } from "@/components/vx/DecisionCard";
+import { DecisionRows, RowGroupHeading } from "@/components/vx/DecisionRows";
 import { InsightsCharts } from "@/components/vx/InsightsCharts";
 import { PerformanceHistory } from "@/components/vx/PerformanceHistory";
 import { ProvenanceBar } from "@/components/vx/Provenance";
 import { RiskDial } from "@/components/vx/RiskDial";
-import { CashCalendar, SafeToSpendPanel } from "@/components/vx/CashOutlook";
+import { CashCalendar, CashOutlookPanel, SafeToSpendPanel } from "@/components/vx/CashOutlook";
+import { GatewayPanel } from "@/components/GatewayPanel";
+import { ServiceBudgetPanel } from "@/components/ServiceBudgetPanel";
 import { AccountsList, BalanceTile, ForecastPanel, StatTile } from "@/components/vx/Treasury";
 import { derivePerformanceScore } from "@/lib/agent/counterparty-history";
 import { PageHead } from "@/components/vx/Shell";
@@ -439,6 +442,24 @@ export default function DesignPage() {
               <ForecastPanel forecast={FORECAST} />
               <SafeToSpendPanel outlook={OUTLOOK} />
               <CashCalendar outlook={OUTLOOK} />
+              <div className="md:col-span-2">
+                <CashOutlookPanel outlook={OUTLOOK} />
+              </div>
+              <GatewayPanel orgSlug={DESIGN_SLUG} signerAddress={`0x${"325d".repeat(10)}`} balanceUsdc={4.5} canFund requestId="00000000-0000-4000-8000-000000000001" />
+              <ServiceBudgetPanel
+                orgSlug={DESIGN_SLUG}
+                canFund
+                requestId="00000000-0000-4000-8000-000000000002"
+                budget={{
+                  signerAddress: `0x${"325d".repeat(10)}`,
+                  balanceUsdc: 0.049,
+                  spentToday: 0.001,
+                  dailyCapUsdc: 0.05,
+                  recent: [
+                    { id: "p1", counterpartyName: "API Service", address: `0x${"bb12".repeat(10)}`, status: "paid", priceUsdc: 0.001, workspacesPaid: 1, paymentsConfirmed: 5, reason: null, createdAt: "2026-10-02T07:16:45Z" },
+                  ],
+                }}
+              />
               <AgentBudgetPanel orgSlug={DESIGN_SLUG} canEdit view={{ dailyUsdc: 500, weeklyUsdc: 2000, spentToday: 320, spentThisWeek: 1240.5, remaining: 180 }} />
               <AgentBudgetPanel orgSlug={DESIGN_SLUG} canEdit view={{ dailyUsdc: null, weeklyUsdc: null, spentToday: 12.5, spentThisWeek: 40, remaining: null }} />
               <ProposalCard
@@ -477,6 +498,25 @@ export default function DesignPage() {
               {DECISIONS.map((decision) => (
                 <DecisionCard key={decision.id} decision={decision} orgSlug={DESIGN_SLUG} />
               ))}
+              {/* As AP / AR and Contractors list them: one row each, the card inside. */}
+              <div>
+                <RowGroupHeading title="Upcoming" count={DECISIONS.length} />
+                <DecisionRows
+                  orgSlug={DESIGN_SLUG}
+                  items={DECISIONS.map((decision, index) => ({ decision, date: index === 1 ? { label: "Overdue Sep 30, 2026", tone: "held" as const } : { label: "Due Oct 5, 2026" } }))}
+                />
+              </div>
+              {/* As the console lists them: the reasoning folded to its first lines. */}
+              <DecisionCard
+                decision={{
+                  ...DECISIONS[0],
+                  id: "folded",
+                  reasoning:
+                    "Idle operating cash above the required buffer is 28.13 USDC (operating balance 30.54 less the 2.42 buffer), and with only 2.10 USDC due in under a day the cash would sit idle about one day. The projected yield on it, 0.0027 USDC, is less than the round-trip cost of 0.0064 USDC, so sweeping would lose money. USYC subscriptions are also closed until the next price update. Hold, and keep the cash liquid.",
+                }}
+                orgSlug={DESIGN_SLUG}
+                collapseReasoning
+              />
             </div>
             <CycleReport entries={LEDGER} day={27} since={3} clockMode="simulate" completedAt={null} orgSlug={DESIGN_SLUG} />
             <DomainFilter orgSlug={DESIGN_SLUG} active="ap" />
