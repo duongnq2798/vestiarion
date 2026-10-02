@@ -1,6 +1,7 @@
-import { FileSpreadsheet, FileText, PenLine } from "lucide-react";
+import { FileSpreadsheet, FileText, ListChecks, PenLine, Repeat, UserPlus } from "lucide-react";
 import type { ReactNode } from "react";
 import ApprovalCard from "@/components/ApprovalCard";
+import { CounterpartyRow as CounterpartyRowView } from "@/components/CounterpartyRow";
 import GoLivePanel from "@/components/GoLivePanel";
 import VerifyLedgerBadge from "@/components/VerifyLedgerBadge";
 import CounterpartyAddress from "@/components/intake/CounterpartyAddressEdit";
@@ -16,7 +17,8 @@ import { Eyebrow } from "@/components/ui/Eyebrow";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { AuditLedger, pad } from "@/components/vx/AuditLedger";
-import { DecisionCard } from "@/components/vx/DecisionCard";
+import { DecisionRows, RowGroupHeading } from "@/components/vx/DecisionRows";
+import { IntakeFold } from "@/components/vx/IntakeFold";
 import { GettingStarted } from "@/components/vx/GettingStarted";
 import { invoiceDecision } from "@/components/vx/map";
 import type { NavKey } from "@/components/vx/nav";
@@ -280,10 +282,9 @@ export const DOCS_SHOTS = {
     page: "counterparties",
     render: function CounterpartyShot() {
       return (
-        <section>
-          <SectionHeader title="Add counterparty" meta="human-entered · screened on submission" />
-          <CounterpartyIntake orgSlug={SLUG} />
-        </section>
+        <IntakeFold label="Add counterparty" meta="human-entered · screened on submission" defaultOpen className="">
+          <CounterpartyIntake orgSlug={SLUG} framed={false} />
+        </IntakeFold>
       );
     },
   },
@@ -292,19 +293,29 @@ export const DOCS_SHOTS = {
     page: "counterparties",
     render: function AddressShot() {
       return (
-        <section className="max-w-md">
-          <Card className="min-w-0 p-4">
-            <h3 className="truncate text-sm font-semibold text-ink">{COUNTERPARTY.name}</h3>
-            <p className="mt-0.5 text-xs capitalize text-ink-3">
-              {COUNTERPARTY.role} · {COUNTERPARTY.chain}
-            </p>
-            <CounterpartyAddress
-              orgSlug={SLUG}
-              counterparty={{ id: COUNTERPARTY.id, name: COUNTERPARTY.name, address: COUNTERPARTY.address }}
-              unconfirmedSince="2026-09-30T12:20:00Z"
-              canWrite
-              canConfirm
-            />
+        <section>
+          <SectionHeader title="Counterparty book" meta="1 record · what needs someone first · open one for the rest" />
+          <Card className="overflow-hidden">
+            <ul className="divide-y divide-line">
+              <li>
+                <CounterpartyRowView counterparty={{ ...COUNTERPARTY, address_changed_at: "2026-09-30T12:20:00Z", address_confirmed_at: null }} defaultOpen>
+                  {/* As the page shows it above the address: the limits, where it is, when it was screened. */}
+                  <dl className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3 text-xs sm:grid-cols-4">
+                    <div><dt className="text-ink-3">Configured limit</dt><dd className="mt-0.5 text-ink">50.00 USDC</dd></div>
+                    <div><dt className="text-ink-3">Allowed now</dt><dd className="mt-0.5 text-ink">50.00 USDC</dd></div>
+                    <div><dt className="text-ink-3">Jurisdiction</dt><dd className="mt-0.5 text-ink">US</dd></div>
+                    <div><dt className="text-ink-3">Last screened</dt><dd className="mt-0.5 text-ink">9/30/2026, 12:00:00 PM</dd></div>
+                  </dl>
+                  <CounterpartyAddress
+                    orgSlug={SLUG}
+                    counterparty={{ id: COUNTERPARTY.id, name: COUNTERPARTY.name, address: COUNTERPARTY.address }}
+                    unconfirmedSince="2026-09-30T12:20:00Z"
+                    canWrite
+                    canConfirm
+                  />
+                </CounterpartyRowView>
+              </li>
+            </ul>
           </Card>
         </section>
       );
@@ -315,9 +326,7 @@ export const DOCS_SHOTS = {
     page: "invoices",
     render: function InvoiceShot() {
       return (
-        <section>
-          <SectionHeader title="New invoice" meta="typed in, read from a document, imported from a CSV, or recurring" />
-          <Card className="p-4 sm:p-6">
+        <IntakeFold label="New invoice" meta="typed in, read from a document, imported from a CSV, or recurring" defaultOpen className="">
             <Tabs defaultValue="manual">
               <TabsList aria-label="New invoice">
                 <TabsTrigger value="manual">
@@ -332,6 +341,10 @@ export const DOCS_SHOTS = {
                   <FileSpreadsheet aria-hidden />
                   Import CSV
                 </TabsTrigger>
+                <TabsTrigger value="recurring">
+                  <Repeat aria-hidden />
+                  Recurring
+                </TabsTrigger>
               </TabsList>
               <TabsContent value="manual" forceMount className="data-[state=inactive]:hidden">
                 <InvoiceIntake orgSlug={SLUG} counterparties={[{ id: COUNTERPARTY.id, name: COUNTERPARTY.name, role: COUNTERPARTY.role }]} />
@@ -343,8 +356,7 @@ export const DOCS_SHOTS = {
                 <InvoiceCsvImport orgSlug={SLUG} />
               </TabsContent>
             </Tabs>
-          </Card>
-        </section>
+        </IntakeFold>
       );
     },
   },
@@ -354,9 +366,7 @@ export const DOCS_SHOTS = {
     render: function DocumentShot() {
       const asked = `0x${"5af3107a".repeat(5)}`;
       return (
-        <section>
-          <SectionHeader title="New invoice" meta="typed in, read from a document, imported from a CSV, or recurring" />
-          <Card className="p-4 sm:p-6">
+        <IntakeFold label="New invoice" meta="typed in, read from a document, imported from a CSV, or recurring" defaultOpen className="">
             <DocumentDraft
               orgSlug={SLUG}
               counterparties={[{ id: COUNTERPARTY.id, name: COUNTERPARTY.name, role: COUNTERPARTY.role }]}
@@ -386,8 +396,7 @@ export const DOCS_SHOTS = {
                 nonce: 1,
               }}
             />
-          </Card>
-        </section>
+        </IntakeFold>
       );
     },
   },
@@ -397,8 +406,9 @@ export const DOCS_SHOTS = {
     render: function DecisionShot() {
       return (
         <section>
-          <SectionHeader title="Payables" />
-          <DecisionCard decision={invoiceDecision(INVOICE, COUNTERPARTY, ENTRIES)} orgSlug={SLUG} />
+          <SectionHeader title="Payables" meta="1 invoice · open one for the agent's reasoning" />
+          <RowGroupHeading title="Paid and closed" count={1} />
+          <DecisionRows orgSlug={SLUG} items={[{ decision: invoiceDecision(INVOICE, COUNTERPARTY, ENTRIES), date: { label: "Due Oct 15, 2026" }, open: true }]} />
         </section>
       );
     },
@@ -431,10 +441,24 @@ export const DOCS_SHOTS = {
     render: function PayFreelancerShot() {
       return (
         <section>
-          <SectionHeader title="Pay a freelancer" meta="one form: they get a link, you confirm their address, the agent pays" />
-          <Card className="p-4 sm:p-6">
-            <PayFreelancerForm orgSlug={SLUG} live />
-          </Card>
+          <IntakeFold label="New payment" meta="pay a freelancer in one step, or add a milestone for a contractor on file" defaultOpen className="">
+            <Tabs defaultValue="freelancer">
+              <TabsList aria-label="New payment">
+                <TabsTrigger value="freelancer">
+                  <UserPlus aria-hidden />
+                  Pay a freelancer
+                </TabsTrigger>
+                <TabsTrigger value="milestone">
+                  <ListChecks aria-hidden />
+                  Milestone intake
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="freelancer">
+                <p className="mb-4 text-[0.8125rem] text-ink-3">One form: they get a link, you confirm their address, the agent pays.</p>
+                <PayFreelancerForm orgSlug={SLUG} live />
+              </TabsContent>
+            </Tabs>
+          </IntakeFold>
           <div className="mt-4">
             <PaymentLinkReady
               message="Emailed Linh Tran a link to add the address to be paid at. When they add their address you get an email; confirm it on Counterparties and the agent pays within a minute."

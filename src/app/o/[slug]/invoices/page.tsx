@@ -1,4 +1,4 @@
-import { FileSpreadsheet, FileText, ListFilter, PenLine, Plus, Repeat } from "lucide-react";
+import { FileSpreadsheet, FileText, ListFilter, PenLine, Repeat } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AutoRefresh } from "@/components/AutoRefresh";
@@ -11,8 +11,8 @@ import { PayLinkControl } from "@/components/PayLinkControl";
 import { ReceiptControl } from "@/components/ReceiptControl";
 import { Callout } from "@/components/ui/Callout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
-import { Disclosure } from "@/components/ui/Disclosure";
 import { DecisionRows, RowGroupHeading, type DecisionRowItem } from "@/components/vx/DecisionRows";
+import { IntakeFold } from "@/components/vx/IntakeFold";
 import { Money } from "@/components/vx/Primitives";
 import { StatTile } from "@/components/vx/StatTile";
 import { invoiceDecision } from "@/components/vx/map";
@@ -28,7 +28,7 @@ import { chainModes } from "@/lib/circle";
 import { inOrg } from "@/lib/dal/scope";
 import { listLedgerEntries, listLedgerEntriesForTargets } from "@/lib/ledger";
 import { listCounterparties, listInvoices, stats, type InvoiceRow } from "@/lib/queries";
-import { utcDay } from "@/lib/copy";
+import { plural, utcDay } from "@/lib/copy";
 import { listRecurringPayables } from "@/lib/recurring-payables";
 import { receiptShareable } from "@/lib/receipts/facts";
 import { sharedReceipts } from "@/lib/receipts/share";
@@ -165,19 +165,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
 
         {canWrite ? (
           // Folded until it is needed; open on a workspace with no invoice yet, where adding one is the next step.
-          <Disclosure
-            className="mb-8"
-            defaultOpen={invoices.length === 0}
-            summary={
-              <span className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-0.5">
-                <span className="inline-flex items-center gap-1.5 text-ink">
-                  <Plus aria-hidden className="size-4" />
-                  New invoice
-                </span>
-                <span className="text-[0.8125rem] font-normal text-ink-3">typed in, read from a document, imported from a CSV, or recurring</span>
-              </span>
-            }
-          >
+          <IntakeFold label="New invoice" meta="typed in, read from a document, imported from a CSV, or recurring" defaultOpen={invoices.length === 0}>
             <Tabs defaultValue="manual">
               <TabsList aria-label="New invoice">
                 <TabsTrigger value="manual">
@@ -211,7 +199,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
                 <RecurringPayableIntake orgSlug={slug} counterparties={counterparties.map(({ id, name, role }) => ({ id, name, role }))} />
               </TabsContent>
             </Tabs>
-          </Disclosure>
+          </IntakeFold>
         ) : (
           <Callout className="mb-8">Only an owner or admin of this workspace can add or import invoices.</Callout>
         )}
@@ -225,7 +213,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
 
         <div className="space-y-10">
           <section>
-            <SectionHeader title="Payables" meta={`${payables.length} invoices · open one for the agent's reasoning`} />
+            <SectionHeader title="Payables" meta={`${payables.length} ${plural(payables.length, "invoice", "invoices")} · open one for the agent's reasoning`} />
             {payables.length === 0 ? (
               <EmptyState compact title="No payables here" body="There are no records in this view." />
             ) : (
@@ -273,7 +261,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
           </section>
 
           <section>
-            <SectionHeader title="Receivables" meta={`${receivables.length} invoices`} />
+            <SectionHeader title="Receivables" meta={`${receivables.length} ${plural(receivables.length, "invoice", "invoices")}`} />
             {receivables.length === 0 ? (
               <EmptyState compact title="No receivables here" body="There are no records in this view." />
             ) : (

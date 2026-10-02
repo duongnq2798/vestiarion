@@ -1,4 +1,4 @@
-import { Flag, ListChecks, Plus, UserPlus } from "lucide-react";
+import { Flag, ListChecks, UserPlus } from "lucide-react";
 import Link from "next/link";
 import type { Metadata } from "next";
 import AgentControls from "@/components/AgentControls";
@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/Button";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { DecisionRows, RowGroupHeading, type DecisionRowItem } from "@/components/vx/DecisionRows";
+import { IntakeFold } from "@/components/vx/IntakeFold";
 import { Money } from "@/components/vx/Primitives";
 import { StatTile } from "@/components/vx/StatTile";
 import { milestoneDecision } from "@/components/vx/map";
@@ -158,19 +159,7 @@ export default async function ContractorsPage({ params, searchParams }: { params
 
         {canWrite ? (
           // Folded until it is needed; open on a workspace with no milestone yet, where adding one is the next step.
-          <Disclosure
-            className="mb-8"
-            defaultOpen={milestones.length === 0}
-            summary={
-              <span className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-0.5">
-                <span className="inline-flex items-center gap-1.5 text-ink">
-                  <Plus aria-hidden className="size-4" />
-                  New payment
-                </span>
-                <span className="text-[0.8125rem] font-normal text-ink-3">pay a freelancer in one step, or add a milestone for a contractor on file</span>
-              </span>
-            }
-          >
+          <IntakeFold label="New payment" meta="pay a freelancer in one step, or add a milestone for a contractor on file" defaultOpen={milestones.length === 0}>
             <Tabs defaultValue="freelancer">
               <TabsList aria-label="New payment">
                 <TabsTrigger value="freelancer">
@@ -192,7 +181,7 @@ export default async function ContractorsPage({ params, searchParams }: { params
                 <MilestoneIntake orgSlug={slug} contractors={payees} />
               </TabsContent>
             </Tabs>
-          </Disclosure>
+          </IntakeFold>
         ) : (
           <Callout className="mb-8">Only an owner or admin of this workspace can add milestones.</Callout>
         )}

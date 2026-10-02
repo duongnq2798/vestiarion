@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { readiness } from "@/components/CounterpartyRow";
 import { DecisionRows } from "@/components/vx/DecisionRows";
 import type { Decision } from "@/components/vx/types";
 
@@ -58,8 +59,7 @@ describe("the AP / AR page", () => {
   });
 
   it("folds New invoice, open only for a workspace with no invoice yet", () => {
-    expect(page).toContain("defaultOpen={invoices.length === 0}");
-    expect(page.indexOf("New invoice")).toBeGreaterThan(page.indexOf("<Disclosure"));
+    expect(page).toMatch(/<IntakeFold label="New invoice"[^>]*defaultOpen=\{invoices\.length === 0\}>/);
   });
 
   it("groups payables into Needs you, Upcoming, and Paid and closed, the latest ten of those until Show all", () => {
@@ -76,9 +76,8 @@ describe("the Contractors page", () => {
   const page = readFileSync(path.join(process.cwd(), "src", "app", "o", "[slug]", "contractors", "page.tsx"), "utf8");
 
   it("puts both ways to pay under one folded New payment, open only for a workspace with no milestone yet", () => {
-    const fold = page.slice(page.indexOf("<Disclosure"), page.indexOf("</Disclosure>"));
-    expect(fold).toContain("defaultOpen={milestones.length === 0}");
-    expect(fold).toContain("New payment");
+    const fold = page.slice(page.indexOf("<IntakeFold"), page.indexOf("</IntakeFold>"));
+    expect(fold).toMatch(/<IntakeFold label="New payment"[^>]*defaultOpen=\{milestones\.length === 0\}>/);
     expect(fold).toContain("<PayFreelancerForm");
     expect(fold).toContain("<MilestoneIntake");
   });
@@ -97,16 +96,26 @@ describe("the Counterparties page", () => {
   const page = readFileSync(path.join(process.cwd(), "src", "app", "o", "[slug]", "counterparties", "page.tsx"), "utf8");
 
   it("folds Add counterparty, open only for a workspace with none yet", () => {
-    expect(page).toContain("defaultOpen={counterparties.length === 0}");
+    expect(page).toMatch(/<IntakeFold label="Add counterparty"[^>]*defaultOpen=\{counterparties\.length === 0\}>/);
   });
 
   it("lists each counterparty as a row with what it needs, the ones that need someone first", () => {
-    const ranks = ["Review match", "Confirm address", "Address needed", "Ready to pay", "Client"].map((label) => {
-      const match = page.match(new RegExp(`label: "${label}", tone: "[a-z]+", rank: ([0-9])`));
-      return match ? Number(match[1]) : -1;
-    });
-    expect(ranks).toEqual([0, 1, 2, 3, 4]);
+    const base = { risk_level: "clear", risk_notes: null, address: "0x840de234Bfc3F66fA380888A0a8204D9487D60d4", address_changed_at: null, address_confirmed_at: null, role: "vendor" };
+    const cases = [
+      { ...base, risk_level: "medium", risk_notes: "Matched a politically exposed person" },
+      { ...base, address_changed_at: "2026-10-02T09:00:00Z" },
+      { ...base, address: null },
+      base,
+      { ...base, role: "client", address: null },
+    ];
+    expect(cases.map((counterparty) => [readiness(counterparty).label, readiness(counterparty).rank])).toEqual([
+      ["Review match", 0],
+      ["Confirm address", 1],
+      ["Address needed", 2],
+      ["Ready to pay", 3],
+      ["Client", 4],
+    ]);
     expect(page).toContain("readiness(a).rank - readiness(b).rank || a.name.localeCompare(b.name)");
-    expect(page).toContain("{ordered.map((counterparty) => {");
+    expect(page).toContain("{ordered.map((counterparty) => (");
   });
 });
