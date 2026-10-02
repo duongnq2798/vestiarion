@@ -35,6 +35,7 @@ import { milestoneVerification } from "./milestone-evidence";
 import { recordIncomingTransfers } from "./receipts";
 import { createRecurringInvoices } from "./recurring";
 import { proposeLimitChanges } from "./proposals";
+import { buyPayeeHistories, type AddressHistoryFact } from "./services";
 import { cadenceLabel, type RecurringUnit } from "../recurring";
 import {
   followUpConfig,
@@ -141,7 +142,7 @@ export interface ApPromptFacts {
     recurring?: { period: string; cadence: string | null };
   };
   terms: { earlyPayDiscount: unknown };
-  counterparty: { name: string; riskLevel: string; paymentLimit: number | null; performanceHistory: unknown };
+  counterparty: { name: string; riskLevel: string; paymentLimit: number | null; performanceHistory: unknown; addressHistory?: AddressHistoryFact };
   treasury: Record<string, number | null>;
   payout: unknown;
   timing: unknown;
@@ -1166,6 +1167,8 @@ async function decideApPayable(
     swap: { quote: (usdcIn: number) => Promise<SwapQuote>; run: SwapRunner } | null;
     /** The agent's spending limit as this cycle has it (outflow budget spec R5). */
     budget: BudgetGate;
+    /** The payment history the agent bought for a counterparty's address within 7 days, if any (x402 payee history R6). */
+    addressHistory?: (counterpartyId: string) => AddressHistoryFact | null;
   }
 ): Promise<{ status: string; scheduledFor: string | null; operatingBalance: number | null; line: CycleLogLine }> {
   const { db, provider, operating, operatingBalance, history, metrics } = ctx;
@@ -1365,6 +1368,8 @@ async function decideApPayable(
           counterparty.performance_score,
           counterparty.performance_inputs
         ),
+        // Absent (undefined, so left out) unless the agent bought it before this first payment (x402 payee history R6).
+        addressHistory: ctx.addressHistory?.(counterparty.id) ?? undefined,
       },
       treasury: isEurc
         ? {
@@ -1705,6 +1710,7 @@ async function decideApPayable(
         ),
         poReference: invoice.po_reference,
         goodsReceived: invoice.goods_received,
+        ...(ctx.addressHistory?.(counterparty.id) ? { addressHistory: ctx.addressHistory(counterparty.id) } : {}),
         operatingBalance: operatingBalanceAfter ?? operatingBalance,
         addressUnconfirmed: addressUnconfirmed(counterparty.address_changed_at, counterparty.address_confirmed_at),
         // Recorded whether or not anything matched. "We looked and found
@@ -1781,6 +1787,8 @@ export interface ApStageInput {
   swaps?: { run: SwapRunner; resumeAll: () => Promise<SwapSweep> };
   /** The agent's spending limit, shared with the contractor stage (outflow budget spec R5); read from the workspace when absent. */
   budget?: BudgetGate;
+  /** Payment histories the `services` stage bought, by counterparty (x402 payee history R6). */
+  addressHistory?: Map<string, AddressHistoryFact>;
 }
 
 /** Makes a swap to fund one EURC payment (src/lib/fx/swap.ts `swapForPayment`, bound to the stage's wallet). */
@@ -2026,6 +2034,7 @@ export async function runApStage(input: ApStageInput): Promise<number> {
       gatewayQuote: gatewayQuote ??= input.gatewayQuote ?? gatewayQuoter(provider, db),
       swap: swaps ? { quote: quoteSwap, run: swaps.run } : null,
       budget,
+      addressHistory: (counterpartyId) => input.addressHistory?.get(counterpartyId) ?? null,
     });
     if (decided.operatingBalance !== null) operatingBalance = decided.operatingBalance;
     record(invoice.id, decided.status, decided.scheduledFor);
@@ -2973,6 +2982,12 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
   // it stood when the cycle began.
   let operatingBalance = num(operating?.balance);
 
+  // Payment histories bought before first payments, for this cycle's decisions (x402 payee history R3–R6).
+  let addressHistory = new Map<string, AddressHistoryFact>();
+  await stage("services", async () => {
+    addressHistory = await buyPayeeHistories({ db, live: provider.mode === "live", lines });
+  });
+
   await stage("ap", async () => {
   // ----------------------------------------------------------------------- 2. AP
   // Whether, and when, to pay each payable: see runApStage.
@@ -2987,6 +3002,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     metrics,
     lines,
     budget,
+    addressHistory,
   });
 
   });
@@ -3091,6 +3107,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           ),
           verificationSource: milestone.verification_source,
           verification: milestoneVerification(milestone),
+          ...(addressHistory.get(contractor.id) ? { addressHistory: addressHistory.get(contractor.id) } : {}),
         },
         execution: {
           txRef,
@@ -3188,6 +3205,8 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
             contractor.performance_score,
             contractor.performance_inputs
           ),
+          // Absent unless the agent bought it before this first payment (x402 payee history R6).
+          addressHistory: addressHistory.get(contractor.id) ?? undefined,
         },
         responseShape: {
           action: "release | hold",

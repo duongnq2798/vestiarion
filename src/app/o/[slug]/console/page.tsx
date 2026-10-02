@@ -5,6 +5,7 @@ import AgentControls from "@/components/AgentControls";
 import { AgentBudgetPanel } from "@/components/AgentBudgetPanel";
 import AgentPauseControl from "@/components/AgentPauseControl";
 import { GatewayPanel } from "@/components/GatewayPanel";
+import { ServiceBudgetPanel } from "@/components/ServiceBudgetPanel";
 import { SampleDataLoaded, SampleDataOffer } from "@/components/SampleDataPanel";
 import { CycleReport } from "@/components/vx/CycleReport";
 import { DecisionCard } from "@/components/vx/DecisionCard";
@@ -26,6 +27,7 @@ import { orgHref } from "@/lib/auth/org-paths";
 import { can } from "@/lib/auth/roles";
 import { chainModes } from "@/lib/circle";
 import { readGatewayState } from "@/lib/circle/gateway-funding";
+import { readServiceBudget } from "@/lib/service-budget";
 import { inOrg } from "@/lib/dal/scope";
 import { gettingStarted, ownPayableCount } from "@/lib/getting-started";
 import { listLedgerEntries, listLedgerEntriesAfter, listLedgerEntriesByDomain, listLedgerEntriesForTargets } from "@/lib/ledger";
@@ -91,7 +93,7 @@ export default async function DashboardPage({
       : undefined;
     const sinceValue = typeof query.since === "string" ? Number(query.since) : undefined;
     const since = Number.isFinite(sinceValue) ? sinceValue : undefined;
-    const [invoiceEntries, treasuryEntries, cycleEntries, gateway] = await Promise.all([
+    const [invoiceEntries, treasuryEntries, cycleEntries, gateway, serviceBudget] = await Promise.all([
       listLedgerEntriesForTargets({ invoiceIds: invoices.map((invoice) => invoice.id) }),
       // The latest two decisions, read from enough entries that swaps and Gateway steps in between do not crowd them out.
       listLedgerEntriesByDomain("treasury", 30),
@@ -101,6 +103,13 @@ export default async function DashboardPage({
       access.membership.mode === "live"
         ? readGatewayState().catch((error: unknown) => {
             console.error("console: Gateway state not loaded", access.membership.orgId, error instanceof Error ? error.message : error);
+            return null;
+          })
+        : Promise.resolve(null),
+      // The agent's service budget (x402 payee history R4), once the workspace has a Gateway signer. Best effort.
+      access.membership.mode === "live"
+        ? readServiceBudget().catch((error: unknown) => {
+            console.error("console: service budget not loaded", access.membership.orgId, error instanceof Error ? error.message : error);
             return null;
           })
         : Promise.resolve(null),
@@ -250,6 +259,9 @@ export default async function DashboardPage({
                 canFund={can(role, "treasury.manage")}
                 requestId={crypto.randomUUID()}
               />
+            )}
+            {serviceBudget && (
+              <ServiceBudgetPanel orgSlug={slug} budget={serviceBudget} canFund={can(role, "treasury.manage")} requestId={crypto.randomUUID()} />
             )}
             {forecast && <ForecastPanel forecast={forecast} />}
           </aside>

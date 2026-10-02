@@ -2,6 +2,8 @@ import { initiateDeveloperControlledWalletsClient, type CircleDeveloperControlle
 import { currentOrgConfig, currentOrgId } from "../context";
 import { db, unwrap } from "../dal";
 import { appendLedgerEntry } from "../ledger";
+import { encodeFunctionData, getAddress, parseAbi } from "viem";
+import { SCA_EXECUTE_BATCH } from "./batch";
 import { ARC_TESTNET_USDC } from "./cctp";
 import { GATEWAY_WALLET, gatewayBalance, gatewayStepKey } from "./gateway";
 import { circleCall, CircleCallFailed, treasuryWalletSetId, walletIdempotencyKey } from "./provision";
@@ -77,13 +79,19 @@ async function readSigner(): Promise<SignerRow | null> {
 async function execute(
   client: GatewayFundingClient,
   walletId: string,
-  call: { contractAddress: string; abiFunctionSignature: string; abiParameters: string[] },
+  call: { contractAddress: string; abiFunctionSignature: string; abiParameters: unknown[] },
   key: string,
   what: string
 ): Promise<{ id: string; txHash: string | null }> {
   const created = await circleCall(
     "createContractExecutionTransaction",
-    () => client.createContractExecutionTransaction({ walletId, ...call, idempotencyKey: key, fee: { type: "level", config: { feeLevel: "MEDIUM" } } }),
+    () =>
+      client.createContractExecutionTransaction({
+        walletId,
+        ...call,
+        idempotencyKey: key,
+        fee: { type: "level", config: { feeLevel: "MEDIUM" } },
+      } as Parameters<GatewayFundingClient["createContractExecutionTransaction"]>[0]),
     true
   );
   const id = created.data?.id;
@@ -268,4 +276,75 @@ export async function readGatewayState(options: { fetch?: typeof fetch } = {}): 
   } catch {
     return { signerAddress: signer.address, balanceUsdc: null };
   }
+}
+
+const FUNDING_ABI = parseAbi([
+  "function approve(address spender, uint256 amount) returns (bool)",
+  "function depositFor(address token, address depositor, uint256 value)",
+]);
+
+/** The most one deposit adds to the agent's service budget: it pays for lookups, not payments. */
+export const SERVICE_BUDGET_MAX_DEPOSIT_USDC = 1;
+
+/**
+ * Adds to the agent's service budget (docs/superpowers/specs/2026-10-02-x402-payee-history-design.md R4): a
+ * person's move of USDC from the operating wallet into Gateway for the workspace's Gateway signer, the EOA
+ * that pays for x402 services. One transaction, the operating wallet's own `executeBatch` of `approve` and
+ * `depositFor`, under this request's key. The signer is the one Gateway funding created: fund Gateway once
+ * first. Never the agent's.
+ */
+export async function fundServiceBudget(
+  input: { actorId: string; amount: number; requestId: string },
+  options: {
+    client?: (credentials: { apiKey: string; entitySecret: string }) => GatewayFundingClient;
+    fetch?: typeof fetch;
+    balanceWaitMs?: number;
+    balancePollMs?: number;
+  } = {}
+): Promise<{ signerAddress: string; txHash: string | null; balanceUsdc: number | null }> {
+  if (!Number.isFinite(input.amount) || input.amount <= 0) throw new Error("Enter an amount greater than zero.");
+  if (input.amount > SERVICE_BUDGET_MAX_DEPOSIT_USDC) {
+    throw new Error(`Add at most ${SERVICE_BUDGET_MAX_DEPOSIT_USDC} USDC at a time: the budget pays for lookups of a thousandth of a USDC.`);
+  }
+  const chain = currentOrgConfig().chain;
+  if (chain.credentialsUnreadable) throw new Error("This workspace's Circle credentials are stored but could not be read.");
+  if (!chain.circleApiKey || !chain.circleEntitySecret) throw new Error("This workspace has no Circle credentials.");
+  const signer = await readSigner();
+  if (!signer) throw new Error("Fund Gateway once first: that creates the signer the agent pays services with.");
+  const operating = await operatingWallet();
+  if (operating.balance !== null && input.amount > operating.balance) {
+    throw new Error(`The operating wallet holds ${operating.balance} USDC, less than the ${input.amount} USDC to add.`);
+  }
+  const client = (options.client ?? initiateDeveloperControlledWalletsClient)({ apiKey: chain.circleApiKey, entitySecret: chain.circleEntitySecret });
+  const units = BigInt(toUnits(input.amount));
+  const before = await readBalance(signer.address, options.fetch);
+  const funded = await execute(
+    client,
+    operating.walletId,
+    {
+      // The operating wallet itself: Circle runs its executeBatch, so both calls are one transaction.
+      contractAddress: operating.address,
+      abiFunctionSignature: SCA_EXECUTE_BATCH,
+      abiParameters: [
+        [
+          [ARC_TESTNET_USDC, "0", encodeFunctionData({ abi: FUNDING_ABI, functionName: "approve", args: [getAddress(GATEWAY_WALLET), units] })],
+          [GATEWAY_WALLET, "0", encodeFunctionData({ abi: FUNDING_ABI, functionName: "depositFor", args: [getAddress(ARC_TESTNET_USDC), getAddress(signer.address), units] })],
+        ],
+      ],
+    },
+    gatewayStepKey(`${currentOrgId()}/service-budget/${input.requestId}`),
+    "deposit into the agent's service budget"
+  );
+  const balanceUsdc =
+    before === null
+      ? null
+      : await countedBalance(signer.address, before + input.amount, { fetch: options.fetch, waitMs: options.balanceWaitMs ?? 20_000, pollMs: options.balancePollMs ?? 2_000 });
+  await appendLedgerEntry({
+    actor: "human",
+    domain: "treasury",
+    action: "service_budget_funded",
+    summary: `Added ${input.amount} USDC to the agent's service budget`,
+    detail: { by: input.actorId, amountUsdc: input.amount, signer: signer.address, depositor: operating.address, txHash: funded.txHash, balanceUsdc },
+  });
+  return { signerAddress: signer.address, txHash: funded.txHash, balanceUsdc };
 }

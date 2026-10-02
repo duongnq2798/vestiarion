@@ -214,6 +214,17 @@ The console's **Agent spending limit** panel shows what the agent has paid on it
 - **It comes back by itself.** When the limit has room again (a new day, a higher figure, or no limit), the agent decides the held payment again. Raising a figure brings it back within a minute, and the audit log records the reopening with "the agent's spending limit has room for it again".
 - **Schedules are checked on their day.** Scheduling a payment does not count against the limit; paying it does.
 
+### The agent checks a new payee's history
+
+Before the agent pays an address for the first time, it can buy that address's payment history across Vestiarion. The answer says how many other workspaces here have paid the address, how many payments were confirmed, and when the first and last were made. It names no workspace and no amount. The model weighs it with the payment's other facts: an address no business here has paid deserves a closer look. Code does not act on it.
+
+The agent pays for each answer itself, 0.001 USDC over **x402**, the HTTP payment standard, settled through Circle Gateway on Arc testnet. Vestiarion is the seller. Today no other x402 seller accepts Arc testnet, so the agent buys only from Vestiarion.
+
+- **The service budget.** The agent pays from its own small balance, never from the operating wallet. On the console's **Service budget** panel, an owner or admin enters an amount (at most 1 USDC at a time) and chooses **Add to the budget**. The operating wallet moves it into Gateway for the workspace's Gateway signer in one transaction. The panel appears once the workspace has funded Gateway, which creates that signer. Each deposit is signed as `service_budget_funded`.
+- **When it buys.** A payable or milestone must be waiting for a decision, the counterparty's Arc address must be confirmed, and this workspace must never have paid that address. An answer counts for 7 days.
+- **Code's limits.** The agent pays only Vestiarion's own endpoint, only the offer it expects, at most 0.01 USDC a call, at most 0.05 USDC a day, and at most 3 purchases a cycle. It buys nothing while it is paused. A purchase code refuses is not tried again for a day.
+- **In the audit log.** A purchase is `service_purchased`, with the price, the authorization's nonce, Gateway's settlement and the answer. A refusal is `service_purchase_refused`, with the rule, and a failure is `service_purchase_failed`. The decision that follows carries the answer in its observed facts as `addressHistory`.
+
 ## 6. Approve a held payment
 
 **Approvals** lists every payable the agent would not pay on its own, oldest due date first, each marked held, flagged or awaiting information and shown with the agent's reasoning. When the list is empty, it says "Nothing is waiting for a decision."

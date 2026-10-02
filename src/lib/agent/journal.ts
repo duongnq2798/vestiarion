@@ -27,6 +27,7 @@ export const CYCLE_STAGES = [
   "compliance",
   "follow_up",
   "recurring",
+  "services",
   "ap",
   "contractors",
   "treasury",
@@ -57,6 +58,8 @@ export type CycleStage = (typeof CYCLE_STAGES)[number];
  *   treasury    reconcile. Sweeping moves the business's own money between its
  *               own accounts, so it needs accurate balances but no counterparty
  *               screening at all.
+ *   services    Nothing. It buys facts the decisions after it read (a payee's history over x402);
+ *               a failure leaves them without those facts, never without a decision.
  *   proposals   Nothing. It proposes raising a counterparty's limit when people keep approving
  *               payments above it; a person accepts or dismisses the proposal, and nothing
  *               changes until then. Last, so it never delays a payment.
@@ -70,6 +73,7 @@ export const STAGE_REQUIRES: Record<CycleStage, readonly CycleStage[]> = {
   compliance: [],
   follow_up: ["compliance"],
   recurring: [],
+  services: [],
   ap: ["reconcile", "compliance"],
   contractors: ["reconcile", "compliance"],
   treasury: ["reconcile"],

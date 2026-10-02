@@ -153,6 +153,13 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["Something went wrong; try again.", GO_LIVE_ACTIONS],
   ],
   "guides/first-payment": [
+    ["Service budget", "src/components/ServiceBudgetPanel.tsx"],
+    ["Add to the budget", "src/components/ServiceBudgetPanel.tsx"],
+    ["service_budget_funded", "src/lib/circle/gateway-funding.ts"],
+    ["service_purchased", "src/lib/agent/services.ts"],
+    ["service_purchase_refused", "src/lib/agent/services.ts"],
+    ["service_purchase_failed", "src/lib/agent/services.ts"],
+    ["addressHistory", "src/lib/agent/orchestrator.ts"],
     ["Suggested by the agent", "src/app/o/[slug]/approvals/page.tsx"],
     ["Accept", "src/components/ProposalCard.tsx"],
     ["Dismiss", "src/components/ProposalCard.tsx"],

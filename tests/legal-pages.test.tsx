@@ -193,6 +193,7 @@ describe("the privacy page", () => {
       riskLevel: "risk level",
       paymentLimit: "payment limit",
       performanceHistory: "performance score",
+      addressHistory: "how many workspaces here have paid its address",
       operatingBalance: "operating balance",
       duplicateMatches: "look like duplicates of it",
       otherInvoiceStatus: "status",
