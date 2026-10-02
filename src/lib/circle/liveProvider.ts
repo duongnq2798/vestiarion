@@ -17,6 +17,7 @@ import type {
   SwapStep,
   TransferParams,
   TransferResult,
+  SpendingLimitPayment,
 } from "./types";
 import { ARC_FEE_USD } from "./types";
 import { fetchArcFeeUsd } from "./arcFees";
@@ -26,6 +27,7 @@ import { ARC_TESTNET_USDC, BridgeFeeError, bridgeFee, bridgeStepKey, burnCalls, 
 import { burnIntent, burnIntentTypedData, estimateGateway, gatewaySalt, gatewayTransferStatus, submitGatewayTransfer, type GatewayTransferStatus } from "./gateway";
 import { payeeChain, paidAcrossChains } from "../payee-chains";
 import { toBaseUnits } from "../fx/quote";
+import { PAY_SIGNATURE, usdcUnits } from "../spending-limit/onchain";
 import type { ChainConfig } from "../config";
 import {
   fromUnits,
@@ -219,6 +221,7 @@ export class LiveProvider implements ChainProvider {
       );
     }
 
+    if (params.spendingLimit) return this.spendingLimitPay(params, params.spendingLimit);
     const account = await this.account(params.fromAccountId);
     if (params.route === "escrow") return this.escrowRelease(params, account);
     if (paidAcrossChains(params.destinationChain)) {
@@ -355,6 +358,50 @@ export class LiveProvider implements ChainProvider {
     if (found) return this.reconcileTransfer(found.id);
     if (transactions.length >= 50) throw new Error("Circle listed 50 transactions around the batch without it; it could not be looked for in full");
     return null;
+  }
+
+  /**
+   * Pays through the workspace's spending limit contract (onchain spending limit R3, R12): `pay` from the agent's
+   * own wallet, which holds no USDC, so the contract draws the amount from the operating wallet within the daily and
+   * 7-day figures, and pays each ref once. Only USDC on Arc goes this way; anything else sends nothing. A plain Circle
+   * transaction, so reconciliation reads it as it reads a transfer.
+   */
+  private async spendingLimitPay(params: TransferParams, limit: SpendingLimitPayment): Promise<TransferResult> {
+    if ((params.token ?? "USDC") !== "USDC" || paidAcrossChains(params.destinationChain) || params.route || params.escrow) {
+      throw new Error("Only USDC paid on Arc testnet goes through the spending limit contract; nothing was sent.");
+    }
+    const started = Date.now();
+    const created = await withDeadline(
+      this.client.createContractExecutionTransaction({
+        walletId: limit.agentWalletId,
+        contractAddress: limit.contract,
+        abiFunctionSignature: PAY_SIGNATURE,
+        abiParameters: [params.toAddress, usdcUnits(params.amount).toString(), limit.ref],
+        idempotencyKey: params.idempotencyKey,
+        refId: params.memo,
+        fee: { type: "level", config: { feeLevel: "MEDIUM" } },
+      }),
+      CREATE_TRANSACTION_DEADLINE_MS,
+      `Circle did not answer the payment through the spending limit contract within ${CREATE_TRANSACTION_DEADLINE_MS} ms; it may or may not have been accepted`
+    );
+    const txId = created.data?.id;
+    if (!txId) throw new Error("Circle did not return a transaction id");
+    const { status, transaction } = await awaitSettlement(this.client, txId);
+    const txHash = transaction?.txHash ?? null;
+    const fee = transaction ? await resolveFee(this.arcRpcUrl, transaction.networkFeeInUSD, txHash ?? undefined) : { feeUsd: ARC_FEE_USD, feeSource: "provider_estimate" as const };
+    return {
+      providerTxId: txId,
+      txHash,
+      txRef: txHash ?? txId,
+      chain: "ARC-TESTNET",
+      status,
+      feeUsd: fee.feeUsd,
+      feeSource: fee.feeSource,
+      providerMode: "live",
+      settledInMs: status === "confirmed" ? (transaction ? (measuredSettlementMs(transaction) ?? Date.now() - started) : Date.now() - started) : null,
+      providerState: transaction?.state ?? null,
+      failureReason: transaction?.errorReason ?? null,
+    };
   }
 
   /**

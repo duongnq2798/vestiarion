@@ -58,6 +58,18 @@ export interface TransferParams {
   route?: PayoutRoute;
   /** The escrow route's hold (milestone escrow E4): the workspace's escrow contract and the milestone's hold id. */
   escrow?: { contract: string; holdId: string };
+  /**
+   * An agent's payment while its spending limit is enforced on Arc (onchain spending limit R3): `pay` on the
+   * workspace's contract, from the agent's own wallet, naming the payment by `ref`. USDC on Arc only.
+   */
+  spendingLimit?: SpendingLimitPayment;
+}
+
+/** Where an agent's payment goes when its spending limit is enforced on Arc: the contract, the agent's wallet, and the payment's ref. */
+export interface SpendingLimitPayment {
+  contract: string;
+  agentWalletId: string;
+  ref: string;
 }
 
 /** One transfer in a batch (batch payouts R1): USDC on Arc testnet, to the payee's address. */

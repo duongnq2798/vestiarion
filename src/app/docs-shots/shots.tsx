@@ -1,5 +1,6 @@
 import { FileSpreadsheet, FileText, ListChecks, PenLine, Repeat, UserPlus } from "lucide-react";
 import type { ReactNode } from "react";
+import { AgentBudgetPanel } from "@/components/AgentBudgetPanel";
 import ApprovalCard from "@/components/ApprovalCard";
 import { CounterpartyRow as CounterpartyRowView } from "@/components/CounterpartyRow";
 import GoLivePanel from "@/components/GoLivePanel";
@@ -480,6 +481,29 @@ export const DOCS_SHOTS = {
     render: function OwnApprovalShot() {
       // The workspace's only approver, looking at a payable they entered themselves (sole approver R5).
       return <ApprovalCard orgSlug={SLUG} payable={{ ...HELD, createdBy: "docs-sample-owner" }} canDecide viewerId="docs-sample-owner" sandbox={false} soleApprover />;
+    },
+  },
+  "first-payment-onchain-limit": {
+    guide: "first-payment",
+    page: "treasury",
+    render: function OnChainLimitShot() {
+      // The spending limit enforced on Arc (onchain spending limit §4): sample addresses, the contract's own count.
+      return (
+        <div className="mx-auto max-w-sm">
+          <AgentBudgetPanel
+            orgSlug={SLUG}
+            canEdit
+            live
+            view={{ dailyUsdc: 5, weeklyUsdc: 20, spentToday: 1.2, spentThisWeek: 3.7, remaining: 3.8 }}
+            onChain={{
+              state: "enforced",
+              contract: "0x5e11a1700d0c5000000000000000000000001111",
+              agent: "0xa9e700d0c5000000000000000000000000000a9e",
+              reading: { dailyUsdc: 5, weeklyUsdc: 20, spentToday: 1.2, spentThisWeek: 3.7 },
+            }}
+          />
+        </div>
+      );
     },
   },
   "first-payment-audit": {

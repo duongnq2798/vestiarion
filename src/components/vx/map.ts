@@ -362,6 +362,12 @@ function invoiceGuardrail(
   // The agent's spending limit (outflow budget spec §4): the USDC value against what the limit left.
   const budget = recorded === "workspace.outflow_budget" ? budgetGuardrail(usdcValue ?? amount, detail) : null;
   if (budget) return budget;
+  // The same limit on Arc (onchain spending limit §4): the contract's own figures, or why it could not carry the payment.
+  if (recorded === "workspace.onchain_limit_route") {
+    return { rule: recorded, attempted: amount, attemptedToken: currency, limit, limitToken: "USDC", note: "the spending limit contract on Arc carries USDC paid on Arc only" };
+  }
+  const onChain = recorded === "workspace.onchain_limit" ? onChainGuardrail(amount, detail) : null;
+  if (onChain) return onChain;
   if (currency !== "EURC") {
     return { rule: inferredRule, attempted: amount, limit, note: risk === "high" ? "risk tier high" : "amount above screened limit" };
   }
@@ -416,6 +422,31 @@ function budgetGuardrail(attemptedUsdc: number, detail: Record<string, unknown> 
     note: week
       ? `left of the ${fmt(figure)} USDC 7-day spending limit; ${fmt(spent)} USDC already paid in the last 7 days`
       : `left of the ${fmt(figure)} USDC daily spending limit; ${fmt(spent)} USDC already paid today`,
+  };
+}
+
+/**
+ * The band for a payment the spending limit contract on Arc would have refused (onchain spending limit §4): what it
+ * would have sent against what the contract's figure left, by the contract's own count. Null when no verdict was recorded.
+ */
+function onChainGuardrail(attemptedUsdc: number, detail: Record<string, unknown> | undefined): Guardrail | null {
+  const verdict = record(record(detail?.onChainLimit)?.verdict);
+  if (!verdict || verdict.state !== "refused") return null;
+  const spent = numberValue(verdict.spent);
+  const figure = numberValue(verdict.limit);
+  const weekly = verdict.error === "OverWeeklyLimit";
+  if (spent === undefined || figure === undefined) {
+    return { rule: "workspace.onchain_limit", attempted: attemptedUsdc, attemptedToken: "USDC", limit: 0, limitToken: "USDC", note: `the contract on Arc answered ${String(verdict.error)}` };
+  }
+  return {
+    rule: "workspace.onchain_limit",
+    attempted: numberValue(verdict.amount) ?? attemptedUsdc,
+    attemptedToken: "USDC",
+    limit: Math.max(0, Math.round((figure - spent) * 1_000_000) / 1_000_000),
+    limitToken: "USDC",
+    note: weekly
+      ? `left of the contract's ${fmt(figure)} USDC 7-day limit on Arc; ${fmt(spent)} USDC already paid through it in the last 7 days`
+      : `left of the contract's ${fmt(figure)} USDC daily limit on Arc; ${fmt(spent)} USDC already paid through it today`,
   };
 }
 
@@ -491,7 +522,11 @@ export function milestoneDecision(milestone: MilestoneRow, entries: LedgerEntry[
       { label: "Risk", value: risk, state: risk === "high" ? "missing" : "neutral" },
     ],
     guardrail: guardrailBlocked
-      ? (entry?.detail.guardrailRule === "workspace.outflow_budget" ? budgetGuardrail(milestone.amount, entry.detail) : null) ??
+      ? (entry?.detail.guardrailRule === "workspace.outflow_budget"
+          ? budgetGuardrail(milestone.amount, entry.detail)
+          : entry?.detail.guardrailRule === "workspace.onchain_limit"
+            ? onChainGuardrail(milestone.amount, entry.detail)
+            : null) ??
         { rule: risk === "high" ? "counterparty.high_risk" : "counterparty.payment_limit", attempted: milestone.amount, limit, note: risk === "high" ? "risk tier high" : "amount above screened limit" }
       : null,
     decisionMode: stringValue(decided?.detail.decisionMode ?? entry?.detail.decisionMode),

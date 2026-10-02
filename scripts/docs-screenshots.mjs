@@ -82,6 +82,7 @@ const SHOTS = {
   "first-payment-decision": async () => {},
   "first-payment-approval": async () => {},
   "first-payment-approval-own": async () => {},
+  "first-payment-onchain-limit": async () => {},
   "first-payment-audit": async (page) => {
     // Verify asks /api/ledger/verify, which needs a signed-in member and a ledger. The frame carries the
     // answer this chain would get; the page's fetch is answered with it, and the component does the rest.

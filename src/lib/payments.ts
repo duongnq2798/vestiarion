@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { ChainProvider, Stablecoin, TransferResult } from "./circle";
-import type { PayoutRoute } from "./circle/types";
+import type { PayoutRoute, SpendingLimitPayment } from "./circle/types";
 import { BatchNotSentError, MAX_BATCH_SIZE } from "./circle/batch";
 import { FAILED_STATES } from "./circle/settlement";
 import { db, unwrap } from "./dal";
@@ -143,6 +143,11 @@ export interface PaymentRequest {
   route?: PayoutRoute;
   /** A milestone locked in escrow: the hold its payment releases, on the `escrow` route (milestone escrow E4). */
   escrow?: { contract: string; holdId: string };
+  /**
+   * An agent's payment while its spending limit is enforced on Arc (onchain spending limit R3): sent as `pay` on the
+   * contract from the agent's wallet, never in a batch. Only the agent's own sends carry it; a person's never do (R6).
+   */
+  spendingLimit?: SpendingLimitPayment;
 }
 
 /** The terminally failed attempt a retry followed: ids and Circle's states only. */
@@ -599,6 +604,10 @@ async function sendClaimed(
     if (request.escrow && route !== "escrow") {
       throw new Error("This milestone is locked in escrow, but its payment was started as a transfer; nothing was sent. Check it before paying it.");
     }
+    // The contract carries USDC paid on Arc only: not a release from escrow, not a payout to another chain (R3, R4).
+    if (request.spendingLimit && route !== null) {
+      throw new Error("This payment cannot go through the spending limit contract; nothing was sent.");
+    }
     if (route === "gateway" && !sameGatewayPayout(intent, request)) {
       throw new Error(
         "This payout was first sent through Gateway with another amount, payee or chain; nothing was sent. Check with Circle whether the first transfer was made before paying it again."
@@ -616,6 +625,7 @@ async function sendClaimed(
       // The intent's route, never the request's: an intent from before routes were kept went through CCTP.
       ...(route ? { route } : {}),
       ...(route === "escrow" && request.escrow ? { escrow: request.escrow } : {}),
+      ...(request.spendingLimit ? { spendingLimit: request.spendingLimit } : {}),
     });
     return execution(await store.recordResult(idempotencyKey, result), false, retriedAfter);
   } catch (error) {
@@ -625,7 +635,7 @@ async function sendClaimed(
 
 /** Whether a request may go in a batch at all (batch payouts R1): USDC on Arc, not a release from escrow. */
 function batchable(request: PaymentRequest): boolean {
-  return !request.escrow && !request.route && !paidAcrossChains(request.destinationChain) && (request.token ?? "USDC") === "USDC";
+  return !request.escrow && !request.route && !request.spendingLimit && !paidAcrossChains(request.destinationChain) && (request.token ?? "USDC") === "USDC";
 }
 
 interface Claimed {

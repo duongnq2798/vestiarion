@@ -9,8 +9,12 @@ import { fakeSupabase, orgTestContext, type FakeReply, type RecordedRequest } fr
  * one row per workspace, written as a whole, refused while a cycle runs, each change in the ledger.
  */
 
-const { ledgerMock } = vi.hoisted(() => ({ ledgerMock: vi.fn() }));
+const { ledgerMock, setLimitsMock } = vi.hoisted(() => ({ ledgerMock: vi.fn(), setLimitsMock: vi.fn() }));
 vi.mock("@/lib/ledger-best-effort", () => ({ appendLedgerEntryBestEffort: ledgerMock }));
+vi.mock("@/lib/circle/spending-limit-setup", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/circle/spending-limit-setup")>()),
+  setLimitsOnChain: setLimitsMock,
+}));
 
 const config = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k" });
 const ORG = "0b6c1c9e-4a4f-4a7e-9b1e-000000000c0c";
@@ -19,8 +23,9 @@ const ACTOR = "a1b2c3d4-0000-4000-8000-000000000001";
 let fake: ReturnType<typeof fakeSupabase>;
 const run = <T,>(fn: () => Promise<T>) => runWith(orgTestContext({ config, client: fake.client, orgId: ORG, userId: ACTOR }), fn);
 
-function workspace(over: { budget?: unknown[]; running?: unknown[]; payments?: unknown[]; upsert?: FakeReply } = {}) {
+function workspace(over: { budget?: unknown[]; running?: unknown[]; payments?: unknown[]; upsert?: FakeReply; onChain?: Record<string, unknown> } = {}) {
   return (r: RecordedRequest): FakeReply => {
+    if (r.path === "/rest/v1/spending_limit_contracts") return { body: over.onChain ?? null };
     if (r.path === "/rest/v1/agent_budgets" && r.method === "GET") return { body: over.budget ?? [] };
     if (r.path === "/rest/v1/agent_budgets" && r.method === "POST") return over.upsert ?? { status: 201, body: null };
     if (r.path === "/rest/v1/cycle_runs") return { body: over.running ?? [] };
@@ -31,6 +36,56 @@ function workspace(over: { budget?: unknown[]; running?: unknown[]; payments?: u
 
 beforeEach(() => {
   ledgerMock.mockReset().mockResolvedValue(undefined);
+  setLimitsMock.mockReset().mockResolvedValue({ contract: ENFORCED.address, txHash: "0xset" });
+});
+
+const ENFORCED = {
+  id: "lim-1",
+  address: "0x11a1700000000000000000000000000000001111",
+  agent_wallet_id: "wallet-agent",
+  agent_address: "0xA9e7000000000000000000000000000000000A9e",
+  approve_tx_id: "tx-a",
+  enforced: true,
+};
+
+describe("changeAgentBudget while the limit is enforced on Arc (onchain spending limit R10)", () => {
+  it("changes the contract first, then saves the figures and records the change with its transaction", async () => {
+    fake = fakeSupabase(workspace({ budget: [{ daily_usdc: "5", weekly_usdc: "20" }], onChain: ENFORCED }));
+    await run(() => changeAgentBudget({ actorId: ACTOR, daily: "8", weekly: "30" }));
+
+    expect(setLimitsMock).toHaveBeenCalledWith({ dailyUsdc: 8, weeklyUsdc: 30 });
+    const post = fake.requests.find((r) => r.path === "/rest/v1/agent_budgets" && r.method === "POST");
+    expect(post?.body).toMatchObject({ daily_usdc: 8, weekly_usdc: 30 });
+    expect(ledgerMock.mock.calls[0][1].detail).toEqual({
+      by: ACTOR,
+      from: { dailyUsdc: 5, weeklyUsdc: 20 },
+      to: { dailyUsdc: 8, weeklyUsdc: 30 },
+      onChain: { contract: ENFORCED.address, txHash: "0xset" },
+    });
+  });
+
+  it("changes nothing when Circle does not change the contract", async () => {
+    setLimitsMock.mockRejectedValue(new Error("Circle did not change the figures on the contract (FAILED). The limit was not changed."));
+    fake = fakeSupabase(workspace({ budget: [{ daily_usdc: "5", weekly_usdc: "20" }], onChain: ENFORCED }));
+    const attempt = run(() => changeAgentBudget({ actorId: ACTOR, daily: "8", weekly: "30" }));
+    await expect(attempt).rejects.toBeInstanceOf(AgentBudgetError);
+    await expect(attempt).rejects.toThrow(/The limit was not changed/);
+    expect(fake.requests.some((r) => r.path === "/rest/v1/agent_budgets" && r.method === "POST")).toBe(false);
+    expect(ledgerMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses removing both figures while it is enforced, before anything reaches Circle", async () => {
+    fake = fakeSupabase(workspace({ budget: [{ daily_usdc: "5", weekly_usdc: "20" }], onChain: ENFORCED }));
+    await expect(run(() => changeAgentBudget({ actorId: ACTOR, daily: "", weekly: "" }))).rejects.toThrow(/Keep a daily or 7-day figure while the limit is enforced on Arc/);
+    expect(setLimitsMock).not.toHaveBeenCalled();
+  });
+
+  it("leaves the contract alone when the limit is not enforced on Arc", async () => {
+    fake = fakeSupabase(workspace({ budget: [{ daily_usdc: "5", weekly_usdc: "20" }], onChain: { ...ENFORCED, enforced: false } }));
+    await run(() => changeAgentBudget({ actorId: ACTOR, daily: "8", weekly: "30" }));
+    expect(setLimitsMock).not.toHaveBeenCalled();
+    expect(ledgerMock.mock.calls[0][1].detail).not.toHaveProperty("onChain");
+  });
 });
 
 describe("changeAgentBudget", () => {

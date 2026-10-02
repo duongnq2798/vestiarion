@@ -110,6 +110,23 @@ describe("releaseMilestones", () => {
     expect(payMock.mock.calls[0][0]).toMatchObject({ sourceId: ESCROWED, route: "escrow" });
   });
 
+  it("sends each release through the spending limit contract alone, never in a batch (onchain spending limit R3)", async () => {
+    const limited = RELEASES.map((release) => ({ ...release, spendingLimit: { contract: `0x${"11".repeat(20)}`, agentWalletId: "wallet-agent", ref: `0x${release.amount.toString().repeat(64)}` } }));
+    const outcomes = await run(limited);
+    expect(batchMock).not.toHaveBeenCalled();
+    expect(payMock).toHaveBeenCalledTimes(3);
+    expect(payMock.mock.calls.map((call) => (call[0] as PaymentRequest).spendingLimit?.ref)).toEqual(limited.map((release) => release.spendingLimit.ref));
+    expect(outcomes.map((outcome) => outcome.status)).toEqual(["paid", "paid", "paid"]);
+  });
+
+  it("releases a milestone locked in escrow from the escrow even while the limit is enforced on Arc (R5)", async () => {
+    const release = { ...RELEASES[1], milestoneId: ESCROWED, spendingLimit: { contract: `0x${"11".repeat(20)}`, agentWalletId: "wallet-agent", ref: `0x${"2".repeat(64)}` } };
+    await run([release]);
+    expect(payMock).toHaveBeenCalledTimes(1);
+    expect(payMock.mock.calls[0][0]).toMatchObject({ sourceId: ESCROWED, route: "escrow" });
+    expect(payMock.mock.calls[0][0]).not.toHaveProperty("spendingLimit");
+  });
+
   it("holds every release while the agent is paused, and sends nothing", async () => {
     paused = true;
     const outcomes = await run(RELEASES);

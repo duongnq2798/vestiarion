@@ -27,6 +27,7 @@ import { orgHref } from "@/lib/auth/org-paths";
 import { can } from "@/lib/auth/roles";
 import { chainModes } from "@/lib/circle";
 import { readGatewayState } from "@/lib/circle/gateway-funding";
+import { spendingLimitStatus } from "@/lib/circle/spending-limit-setup";
 import { readServiceBudget } from "@/lib/service-budget";
 import { inOrg } from "@/lib/dal/scope";
 import { gettingStarted, ownPayableCount } from "@/lib/getting-started";
@@ -51,7 +52,7 @@ export default async function DashboardPage({
   const access = await requireMembership(slug);
   return inOrg(access, async () => {
     const query = await searchParams;
-    const [accountsRows, actionRows, forecastRow, dashboardStats, invoices, counterparties, headEntries, waiting, pause, milestones, budget] = await Promise.all([
+    const [accountsRows, actionRows, forecastRow, dashboardStats, invoices, counterparties, headEntries, waiting, pause, milestones, budget, onChainLimit] = await Promise.all([
       listAccounts(),
       listTreasuryActions(),
       latestForecast(),
@@ -71,6 +72,12 @@ export default async function DashboardPage({
       // limit is enforced in the cycle either way; an unreadable one here only hides the panel.
       agentBudgetStatus().catch((error: unknown) => {
         console.error("console: spending limit not loaded", access.membership.orgId, error instanceof Error ? error.message : error);
+        return null;
+      }),
+      // The same limit on Arc, as its contract counts it (onchain spending limit R14). Best effort: the contract
+      // enforces it either way; one that cannot be read shows as not set up here.
+      spendingLimitStatus().catch((error: unknown) => {
+        console.error("console: spending limit on Arc not loaded", access.membership.orgId, error instanceof Error ? error.message : error);
         return null;
       }),
     ]);
@@ -248,6 +255,8 @@ export default async function DashboardPage({
               <AgentBudgetPanel
                 orgSlug={slug}
                 canEdit={can(role, "agent.budget")}
+                live={access.membership.mode === "live"}
+                onChain={onChainLimit ? { ...onChainLimit, reading: onChainLimit.reading?.state === "read" ? onChainLimit.reading : null } : null}
                 view={{
                   dailyUsdc: budget.budget?.dailyUsdc ?? null,
                   weeklyUsdc: budget.budget?.weeklyUsdc ?? null,

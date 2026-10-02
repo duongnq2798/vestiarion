@@ -1,6 +1,6 @@
 import { db } from "../dal";
 import { getChainProvider, type ChainProvider, type Stablecoin } from "../circle";
-import type { PayoutRoute } from "../circle/types";
+import type { PayoutRoute, SpendingLimitPayment } from "../circle/types";
 import { executePayment, type PaymentExecution } from "../payments";
 import { amountToPay, type InvoiceDiscount } from "./payment-timing";
 
@@ -56,6 +56,8 @@ export interface PayInvoiceInput {
   maxBridgeFeeUsdc?: number;
   /** How a payment across chains goes, for its first attempt: the intent keeps it after (Gateway payouts G2). */
   route?: PayoutRoute;
+  /** The agent's payment while its spending limit is enforced on Arc: sent through the contract (onchain spending limit R3). Never a person's. */
+  spendingLimit?: SpendingLimitPayment;
 }
 
 export interface PayInvoiceResult {
@@ -128,6 +130,7 @@ export async function payInvoice(
         ...(input.destinationChain ? { destinationChain: input.destinationChain } : {}),
         ...(input.maxBridgeFeeUsdc != null ? { maxBridgeFeeUsdc: input.maxBridgeFeeUsdc } : {}),
         ...(input.route ? { route: input.route } : {}),
+        ...(input.spendingLimit ? { spendingLimit: input.spendingLimit } : {}),
       },
       { provider, retryTerminalFailure }
     );
