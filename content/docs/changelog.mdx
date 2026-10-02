@@ -1,5 +1,19 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-02: The agent buys payee history over x402
+
+- **New public endpoint:** `GET /api/x402/payee-history?address=0x…`. It is paid per call over x402: 0.001 USDC on Arc testnet (`eip155:5042002`), scheme `exact`, settled through Circle Gateway batching (`GatewayWalletBatched`, GatewayWallet `0x0077777d7EBA4688BDeF3E311b846F25870A19B9`).
+  - Without a `PAYMENT-SIGNATURE` header it answers `402` with the offer in `PAYMENT-REQUIRED`.
+  - With a payment Circle's facilitator verifies and settles, it answers `200` with `{ address, workspacesPaid, paymentsConfirmed, firstPaidAt, lastPaidAt, asOf, seller, priceUsdc }` and the settlement in `PAYMENT-RESPONSE`.
+  - A missing or malformed address answers `400` before any offer. When the history cannot be read, it answers `503` and nothing is charged.
+- **New ledger actions:**
+  - `service_purchased` (actor `agent`, domain `compliance`). Its `detail` is `{ purchaseId, counterpartyId, address, seller, priceUsdc, payer, payTo, nonce, settlement, result }`.
+  - `service_purchase_refused` (actor `agent`, domain `compliance`). Its `detail` is `{ purchaseId, counterpartyId, address, seller, rule, reason }`. `rule` is one of `seller.not_allowed`, `offer.mismatch`, `price.above_max`, `budget.day` or `purse.short`.
+  - `service_purchase_failed` (actor `agent`, domain `compliance`). Its `detail` is `{ purchaseId, counterpartyId, address, seller, reason }`.
+  - `service_budget_funded` (actor `human`, domain `treasury`). Its `detail` is `{ by, amountUsdc, signer, depositor, txHash, balanceUsdc }`.
+- AP decision entries and `milestone_release` / `milestone_hold` entries carry `observed.addressHistory` when the agent bought the counterparty's address history within 7 days: `{ about, workspacesPaid, paymentsConfirmed, firstPaidAt, lastPaidAt, boughtAt, priceUsdc }`.
+- A cycle's `detail.stages` includes `services`, which runs after `recurring` and before `ap`.
+
 ## 2026-10-02: Batches through the operating wallet's own executeBatch
 
 - A batch of milestones is now one call to the operating wallet's own `executeBatch`, as Circle documents for its smart accounts. The wallet sends USDC to each payee in turn, and if one transfer fails, none happens.

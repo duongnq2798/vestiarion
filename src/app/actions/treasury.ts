@@ -6,7 +6,7 @@ import { z } from "zod";
 import { refreshOnChainBalances, syncWalletBalances } from "@/lib/agent/balances";
 import { authorize } from "@/lib/auth/authorize";
 import { revalidateOrgPages } from "@/lib/auth/revalidate";
-import { fundGateway, GatewayStepFailed } from "@/lib/circle/gateway-funding";
+import { fundGateway, fundServiceBudget, GatewayStepFailed } from "@/lib/circle/gateway-funding";
 import { CIRCLE_UNREACHABLE } from "@/lib/copy";
 import { operatingEurcBalance } from "@/lib/fx/eurc-balance";
 import { inOrg } from "@/lib/dal/scope";
@@ -105,6 +105,44 @@ export async function fundGatewayAction(_previous: FundGatewayResult, formData: 
       console.error("fundGatewayAction failed", error instanceof Error ? error.name : "unknown");
       if (error instanceof GatewayStepFailed) return { ok: false, message: error.message, renew: true };
       return { ok: false, message: error instanceof Error ? error.message : "The deposit into Gateway did not complete. Try again." };
+    }
+  });
+}
+
+/**
+ * Adds to the agent's service budget (x402 payee history R4): an owner's or admin's move of USDC from the
+ * operating wallet into Gateway for the signer that pays for lookups, never the agent's. Keyed by the form's
+ * request id, like the Gateway funding, so a double click deposits once.
+ */
+export async function fundServiceBudgetAction(_previous: FundGatewayResult, formData: FormData): Promise<FundGatewayResult> {
+  const auth = await authorize(formData.get("orgSlug"), "treasury.manage");
+  if (!auth.ok) return { ok: false, message: auth.message };
+  if (auth.membership.mode !== "live") {
+    return { ok: false, message: "The service budget is for a live workspace on Arc testnet. Take this workspace live first." };
+  }
+  const amount = usdcAmountSchema.safeParse(String(formData.get("amount") ?? ""));
+  if (!amount.success) return { ok: false, message: firstZodMessage(amount.error).replace(/^input: /, "") };
+  const requestId = requestIdSchema.safeParse(formData.get("requestId"));
+  if (!requestId.success) return { ok: false, message: "Reload the page and try again." };
+
+  return inOrg(auth, async () => {
+    try {
+      const funded = await fundServiceBudget({ actorId: auth.user.id, amount: Number(amount.data), requestId: requestId.data });
+      try {
+        await syncWalletBalances();
+      } catch {
+        console.error("fundServiceBudgetAction: the balance read after the deposit did not complete");
+      }
+      revalidateOrgPages();
+      const held =
+        funded.balanceUsdc === null
+          ? " Gateway counts it once Arc testnet finalizes the deposit, usually within a minute."
+          : ` The service budget is ${funded.balanceUsdc} USDC.`;
+      return { ok: true, message: `Added ${Number(amount.data)} USDC to the agent's service budget.${held}` };
+    } catch (error) {
+      console.error("fundServiceBudgetAction failed", error instanceof Error ? error.name : "unknown");
+      if (error instanceof GatewayStepFailed) return { ok: false, message: error.message, renew: true };
+      return { ok: false, message: error instanceof Error ? error.message : "The deposit into the service budget did not complete. Try again." };
     }
   });
 }

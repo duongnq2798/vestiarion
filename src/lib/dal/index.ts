@@ -37,6 +37,7 @@ export const TENANT_TABLES = [
   "accounts", "counterparties", "invoices", "milestones", "treasury_actions", "compliance_checks",
   "forecasts", "ledger_entries", "payment_intents", "cycle_runs", "cycle_snapshots", "sim_clock", "gateway_signers", "payment_receipts", "escrow_contracts",
   "fx_swaps", "screening_dismissals", "receivable_links", "incoming_transfers", "agent_budgets", "recurring_payables", "policy_proposals",
+  "service_purchases",
 ] as const;
 export type TenantTable = (typeof TENANT_TABLES)[number];
 
@@ -47,7 +48,7 @@ export const TENANT_RPCS = [
 export type TenantRpc = (typeof TENANT_RPCS)[number];
 
 export const PLATFORM_TABLES = [
-  "orgs", "memberships", "invitations", "api_keys", "webhook_endpoints", "webhook_deliveries", "payee_links",
+  "orgs", "memberships", "invitations", "api_keys", "webhook_endpoints", "webhook_deliveries", "payee_links", "x402_sales",
 ] as const;
 export type PlatformTable = (typeof PLATFORM_TABLES)[number];
 
@@ -58,7 +59,7 @@ export const PLATFORM_RPCS = [
   "claim_webhook_deliveries", "record_webhook_failure", "create_webhook_endpoint", "choose_hosted_wallet", "delete_org",
   "open_numbers", "open_first_payments", "open_outcomes", "set_platform_team_member", "platform_team_members",
   "create_payee_link", "payee_link_preview", "payee_link_chain", "claim_payee_link", "release_payee_link", "revoke_payee_link", "payee_link_status",
-  "payment_receipt_by_token", "pay_link_preview", "enable_usyc_reserve",
+  "payment_receipt_by_token", "pay_link_preview", "enable_usyc_reserve", "payee_history",
 ] as const;
 export type PlatformRpc = (typeof PLATFORM_RPCS)[number];
 

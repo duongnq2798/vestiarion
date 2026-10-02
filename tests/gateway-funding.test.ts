@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv, type VestiarionConfig } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { GATEWAY_WALLET, gatewayStepKey } from "@/lib/circle/gateway";
-import { fundGateway, GatewayStepFailed, readGatewayState, type GatewayFundingClient } from "@/lib/circle/gateway-funding";
+import { fundGateway, fundServiceBudget, GatewayStepFailed, readGatewayState, type GatewayFundingClient } from "@/lib/circle/gateway-funding";
+import { decodeFunctionData, parseAbi, type Hex } from "viem";
 import { TREASURY_WALLET_SET, walletIdempotencyKey } from "@/lib/circle/provision";
 import { fakeSupabase, orgTestContext, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 
@@ -221,5 +222,35 @@ describe("what the Treasury page shows of the Gateway balance", () => {
       throw new Error("ECONNRESET");
     }) as unknown as typeof fetch;
     expect(await read(db, down)).toEqual({ signerAddress: SIGNER_ADDRESS, balanceUsdc: null });
+  });
+});
+
+describe("adding to the agent's service budget (x402 payee history R4)", () => {
+  const SIGNER: SignerRow = { org_id: ORG, circle_wallet_id: "wallet-signer", address: SIGNER_ADDRESS, delegate_tx_id: "tx-d", delegate_tx_hash: "0xdelegate" };
+  const ABI = parseAbi(["function approve(address spender, uint256 amount) returns (bool)", "function depositFor(address token, address depositor, uint256 value)"]);
+  const add = (db: ReturnType<typeof database>, c: ReturnType<typeof circle>, amount = 0.05) =>
+    runWith(orgTestContext({ config, client: db.fake.client, orgId: ORG, userId: USER }), () =>
+      fundServiceBudget({ actorId: USER, amount, requestId: "req-sb" }, { client: () => c.client, fetch: balances("0", String(amount)), balanceWaitMs: 0, balancePollMs: 1 })
+    );
+
+  it("deposits for the Gateway signer in one transaction, the operating wallet's own executeBatch of approve and depositFor, and signs it", async () => {
+    const db = database({ signer: SIGNER });
+    const c = circle();
+    expect(await add(db, c)).toEqual({ signerAddress: SIGNER_ADDRESS, txHash: "0xhash1", balanceUsdc: 0.05 });
+    expect(c.calls).toHaveLength(1);
+    const { input } = c.calls[0];
+    expect(input).toMatchObject({ walletId: "wallet-op", contractAddress: OPERATING.address, abiFunctionSignature: "executeBatch((address,uint256,bytes)[])", idempotencyKey: gatewayStepKey(`${ORG}/service-budget/req-sb`) });
+    const [[approve, deposit]] = input.abiParameters as [Array<[string, string, Hex]>];
+    expect([approve[0], approve[1]]).toEqual(["0x3600000000000000000000000000000000000000", "0"]);
+    expect(decodeFunctionData({ abi: ABI, data: approve[2] }).args).toEqual([GATEWAY_WALLET, 50_000n]);
+    expect([deposit[0], deposit[1]]).toEqual([GATEWAY_WALLET, "0"]);
+    const depositArgs = decodeFunctionData({ abi: ABI, data: deposit[2] }).args as readonly [string, string, bigint];
+    expect([depositArgs[0].toLowerCase(), depositArgs[1].toLowerCase(), depositArgs[2]]).toEqual(["0x3600000000000000000000000000000000000000", SIGNER_ADDRESS.toLowerCase(), 50_000n]);
+    expect(appendLedgerEntry).toHaveBeenCalledWith(expect.objectContaining({ action: "service_budget_funded", detail: expect.objectContaining({ amountUsdc: 0.05, signer: SIGNER_ADDRESS, txHash: "0xhash1", balanceUsdc: 0.05 }) }));
+  });
+
+  it("needs the signer Gateway funding created, and keeps each deposit small", async () => {
+    await expect(add(database(), circle())).rejects.toThrow(/Fund Gateway once first/);
+    await expect(add(database({ signer: SIGNER }), circle(), 2)).rejects.toThrow(/at most 1 USDC/);
   });
 });

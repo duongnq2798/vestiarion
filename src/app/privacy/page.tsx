@@ -96,6 +96,11 @@ export default function PrivacyPage() {
           wallets in that account. A workspace that chooses hosted wallets has them created in Vestiarion&apos;s own Circle testnet account, so Vestiarion
           holds them; you fund them from Circle&apos;s faucet.
         </p>
+        <p>
+          Payee history: anyone who pays for it over x402 can ask, for one Arc address, how many workspaces here have paid it with live payments, how many such
+          payments were confirmed, and when the first and the last were made. The answer names no workspace and no amount. A workspace&apos;s agent can buy the
+          same answer before its first payment to an address, from a service budget a person gives it.
+        </p>
       </LegalSection>
 
       <LegalSection id="services" title="Services that receive data">
@@ -107,7 +112,7 @@ export default function PrivacyPage() {
             <strong>Supabase</strong> holds the database and runs sign-in.
           </li>
           <li>
-            <strong>Circle</strong> creates the wallets and moves the payments, through Developer-Controlled Wallets, CCTP, Gateway and its Smart Contract Platform, so it receives wallet addresses and payment amounts. Its Stablecoin Service quotes EURC in USDC and builds the swaps of USDC for EURC, so it receives the operating wallet&apos;s address and the amounts.
+            <strong>Circle</strong> creates the wallets and moves the payments, through Developer-Controlled Wallets, CCTP, Gateway and its Smart Contract Platform, so it receives wallet addresses and payment amounts. Its Stablecoin Service quotes EURC in USDC and builds the swaps of USDC for EURC, so it receives the operating wallet&apos;s address and the amounts. Gateway also verifies and settles the x402 payments for payee history, so it receives each signed payment: the paying wallet, the payee and the amount.
           </li>
           <li>
             <strong>Resend</strong> sends transactional email: invitations to a workspace, and digests of the payments waiting for a decision. It receives each
@@ -119,7 +124,7 @@ export default function PrivacyPage() {
             <ul>
               <li>
                 for an invoice: its amount and currency, its value in USDC for an invoice in EURC, memo, purchase order reference, due date, early-payment discount and
-                whether the goods were received, and, for one a recurring payment created, its period and how often it repeats; the counterparty&apos;s name, risk level, payment limit and performance score; the operating balance and the reserve
+                whether the goods were received, and, for one a recurring payment created, its period and how often it repeats; the counterparty&apos;s name, risk level, payment limit and performance score, and, when the agent bought it before a first payment, how many workspaces here have paid its address, how often, and when first and last; the operating balance and the reserve
                 balance, or for an invoice in EURC the wallet&apos;s EURC balance, its USDC balance and the USDC due within 7 days, and, when its EURC falls short,
                 the swap of USDC for EURC that could fund it (the USDC it takes, the EURC it gives at least and as estimated, and what it costs above the
                 quoted rate), or why there is none; how the payee is paid, on Arc or across chains through CCTP or a Gateway balance with its fee
@@ -133,7 +138,7 @@ export default function PrivacyPage() {
               </li>
               <li>
                 for a contractor milestone: its title, amount and verification source, how it was verified (whether, by what method, and the verifier&apos;s note), and the contractor&apos;s name, risk level, payment limit and
-                performance score;
+                performance score, and, when the agent bought it before a first payment, how many workspaces here have paid its address, how often, and when first and last;
               </li>
               <li>
                 for an invoice document a member chooses to read (a PDF, an email or pasted text): the document&apos;s text, up to 20,000 characters, to read

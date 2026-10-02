@@ -35,6 +35,7 @@ describe("CycleJournal — recording", () => {
       "compliance",
       "follow_up",
       "recurring",
+      "services",
     ]);
   });
 

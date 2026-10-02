@@ -149,7 +149,7 @@ describe.each(TENANT_TABLES)("%s", (table) => {
   });
 
   it("cannot change or remove another organization's rows", async () => {
-    if (table === "ledger_entries" || table === "cycle_snapshots") {
+    if (table === "ledger_entries" || table === "cycle_snapshots" || table === "service_purchases") {
       // Append-only tables: the tenant role holds no UPDATE/DELETE privilege
       // at all, cross-org or not, so each statement is refused on its own —
       // the first failure would abort the transaction before the second ran.
@@ -166,7 +166,7 @@ describe.each(TENANT_TABLES)("%s", (table) => {
 });
 
 describe("history is append-only for the tenant role", () => {
-  it.each(["ledger_entries", "cycle_snapshots"])("%s refuses UPDATE and DELETE even on the tenant's own rows", async (table) => {
+  it.each(["ledger_entries", "cycle_snapshots", "service_purchases"])("%s refuses UPDATE and DELETE even on the tenant's own rows", async (table) => {
     await expect(asTenant(db, A, (tx) => tx.query(`update public.${table} set org_id = org_id`))).rejects.toThrow(/permission denied/);
     await expect(asTenant(db, A, (tx) => tx.query(`delete from public.${table}`))).rejects.toThrow(/permission denied/);
   });
