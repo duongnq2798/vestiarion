@@ -27,9 +27,17 @@ export function entryOutcome(entry: LedgerEntry): Outcome | null {
   return null;
 }
 
+/**
+ * The group an entry is listed under: its simulated day for a cycle run on the simulated clock, else its UTC date.
+ * A cycle on the real clock records `day` too, always 0 (the simulated day never moves), with `clockMode: "real"`:
+ * grouped by it, every cycle cut the day's entries into a "Day 0" of its own. An entry from before `clockMode` was
+ * recorded counts as simulated only when its day had moved.
+ */
 function entryDay(entry: LedgerEntry) {
   const day = typeof entry.detail.day === "number" ? entry.detail.day : undefined;
-  return day != null ? `Day ${day}` : entry.ts.slice(0, 10);
+  const clock = entry.detail.clockMode;
+  const simulated = clock === "simulate" || (clock === undefined && day !== undefined && day > 0);
+  return simulated && day !== undefined ? `Day ${day}` : entry.ts.slice(0, 10);
 }
 
 export const pad = (value: number) => String(value).padStart(4, "0");
