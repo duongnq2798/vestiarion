@@ -34,6 +34,7 @@ import {
 import { milestoneVerification } from "./milestone-evidence";
 import { recordIncomingTransfers } from "./receipts";
 import { createRecurringInvoices } from "./recurring";
+import { proposeLimitChanges } from "./proposals";
 import { cadenceLabel, type RecurringUnit } from "../recurring";
 import {
   followUpConfig,
@@ -3359,6 +3360,13 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
         : "Liquidity healthy.",
   });
   if (forecast.error) throw new Error(forecast.error.message);
+  });
+
+  await stage("proposals", async () => {
+  // ----------------------------------------------------------- 6. proposals
+  // When people keep approving one counterparty's payments above its limit,
+  // the agent proposes a higher one for a person to accept (limit proposals).
+  lines.push(...(await proposeLimitChanges(db)));
   });
 
   const finishedAt = new Date().toISOString();
