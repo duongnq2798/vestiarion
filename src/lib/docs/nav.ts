@@ -48,6 +48,7 @@ export const DOCS_NAV: NavSection[] = [
       { slug: "guides/go-live", title: "Go live on Arc testnet", description: "Create the workspace's wallets, fund them with testnet USDC and take the agent live." },
       { slug: "guides/first-payment", title: "Your first payment", description: "Add a counterparty and an invoice, run a cycle, and follow the payment to the explorer and the ledger." },
       { slug: "guides/pay-a-contractor", title: "Pay a contractor for delivered work", description: "Add a milestone, verify the work by hand or by a merged pull request, and let the agent release the pay." },
+      { slug: "guides/get-paid", title: "Get paid as a freelancer", description: "For the person being paid: add your wallet address through the link a business sent, follow each step, and check the payment on Arc testnet." },
       { slug: "guides/audit-export", title: "Verify an audit export", description: "Download a workspace's signed ledger and check it with a standalone verifier." },
     ],
   },

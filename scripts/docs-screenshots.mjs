@@ -104,6 +104,20 @@ const SHOTS = {
       "freelancer-evidence": "https://www.canva.com/design/october-posts/view",
     });
   },
+  "get-paid-address": async (page) => {
+    await page.fill({ "payee-address": `0x${"5a1e".repeat(10)}` });
+  },
+  "get-paid-check": async (page) => {
+    await page.fill({ "payee-address": `0x${"5a1e".repeat(10)}` });
+    await page.click(`[...document.querySelectorAll("[data-docs-shot] button")].find((b) => b.textContent.trim() === "Continue")`);
+    await page.waitFor(`document.querySelector("[data-docs-shot]").textContent.includes("Check your address")`);
+    await page.click(`document.querySelectorAll("[data-docs-shot] [role=checkbox]")[0]`);
+    await page.click(`document.querySelectorAll("[data-docs-shot] [role=checkbox]")[1]`);
+    await page.click(`document.querySelectorAll("[data-docs-shot] [role=checkbox]")[2]`);
+    await page.waitFor(`[...document.querySelectorAll("[data-docs-shot] button")].some((b) => b.textContent.trim() === "Send my address" && !b.disabled)`);
+  },
+  "get-paid-confirming": async () => {},
+  "get-paid-paid": async () => {},
 };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

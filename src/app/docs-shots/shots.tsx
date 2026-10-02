@@ -9,6 +9,7 @@ import InvoiceCsvImport from "@/components/intake/InvoiceCsvImport";
 import InvoiceDocumentIntake, { DocumentDraft } from "@/components/intake/InvoiceDocumentIntake";
 import InvoiceIntake from "@/components/intake/InvoiceIntake";
 import PayFreelancerForm, { PaymentLinkReady } from "@/components/intake/PayFreelancerForm";
+import { PayeeJourney } from "@/components/payee/PayeeJourney";
 import { Card } from "@/components/ui/Card";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Eyebrow } from "@/components/ui/Eyebrow";
@@ -22,6 +23,7 @@ import type { NavKey } from "@/components/vx/nav";
 import { Hash } from "@/components/vx/Primitives";
 import type { WaitingPayable } from "@/lib/agent/approvals";
 import type { LedgerEntry } from "@/lib/ledger";
+import type { PayeeLinkStatus } from "@/lib/payee-journey";
 import type { GoLiveStatus } from "@/lib/platform/go-live";
 import { gettingStarted } from "@/lib/getting-started";
 import type { CounterpartyRow, InvoiceRow } from "@/lib/queries";
@@ -42,9 +44,9 @@ import { DESIGN_SLUG, LEDGER } from "../design/fixtures";
 
 export interface DocsShot {
   /** The guide the picture belongs to. */
-  guide: "go-live" | "first-payment" | "pay-a-contractor";
-  /** The workspace page it is on: its title heads the frame. */
-  page: NavKey;
+  guide: "go-live" | "first-payment" | "pay-a-contractor" | "get-paid";
+  /** The workspace page it is on: its title heads the frame. None for a public page, such as a payee's link. */
+  page?: NavKey;
   /** The page's line under its title, where the real page has one. */
   sub?: string;
   /** What `/api/ledger/verify` answers in this shot; the script serves it to the page, so Verify reaches a verdict without a ledger. */
@@ -211,6 +213,39 @@ function HashChain({ entries }: { entries: LedgerEntry[] }) {
         </div>
       </section>
     </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Get paid as a freelancer: a payee's link, at each step
+
+const PAYEE_ADDRESS = `0x${"5a1e".repeat(10)}`;
+const PAYEE_WORK = { kind: "milestone", title: "10 social posts for October", amount: 25, currency: "USDC", txRef: null, settledAt: null, scheduledFor: null } as const;
+const PAYEE_OPEN: PayeeLinkStatus = {
+  orgName: "Northstar Studio",
+  payeeName: "Linh Tran",
+  chain: "ARC-TESTNET",
+  linkState: "open",
+  expiresAt: "2026-10-09T09:00:00Z",
+  usedAt: null,
+  statusUntil: "2026-10-09T09:00:00Z",
+  address: null,
+  addressConfirmed: false,
+  payments: [{ ...PAYEE_WORK, status: "verified" }],
+};
+const PAYEE_CONFIRMING: PayeeLinkStatus = { ...PAYEE_OPEN, linkState: "used", usedAt: "2026-10-02T09:00:00Z", statusUntil: "2026-11-01T09:00:00Z", address: PAYEE_ADDRESS };
+const PAYEE_PAID: PayeeLinkStatus = {
+  ...PAYEE_CONFIRMING,
+  addressConfirmed: true,
+  payments: [{ ...PAYEE_WORK, status: "paid", txRef: `0x${"7e57ab1e".repeat(8)}`, settledAt: "2026-10-02T09:14:00Z" }],
+};
+
+/** The payee's page as the link shows it: the card alone, at the page's width, without the site's header. */
+function PayeeShot({ status }: { status: PayeeLinkStatus }) {
+  return (
+    <div className="mx-auto max-w-md">
+      <PayeeJourney token={`vxp_${"d0c5".repeat(10)}abc`} status={status} refresh={false} />
+    </div>
   );
 }
 
@@ -411,6 +446,10 @@ export const DOCS_SHOTS = {
       );
     },
   },
+  "get-paid-address": { guide: "get-paid", render: () => <PayeeShot status={PAYEE_OPEN} /> },
+  "get-paid-check": { guide: "get-paid", render: () => <PayeeShot status={PAYEE_OPEN} /> },
+  "get-paid-confirming": { guide: "get-paid", render: () => <PayeeShot status={PAYEE_CONFIRMING} /> },
+  "get-paid-paid": { guide: "get-paid", render: () => <PayeeShot status={PAYEE_PAID} /> },
 } satisfies Record<string, DocsShot>;
 
 export type DocsShotName = keyof typeof DOCS_SHOTS;
