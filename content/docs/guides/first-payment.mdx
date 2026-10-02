@@ -85,12 +85,13 @@ Open **AP / AR**. Under **Invoice intake**, choose **Enter one invoice**, **From
 - **Amount**: within the counterparty's payment limit. The agent does not pay an invoice over the limit; it holds it for you.
 - **Currency**: USDC, or EURC for a vendor that bills in euros. See [Invoices in EURC](#invoices-in-eurc).
 - **Due date**.
+- **Early-payment discount (%)** and **Discount deadline**, if the vendor offers one. See [When the agent pays](#5-when-the-agent-pays).
 - **Memo**, if you like.
 - **PO reference**, and tick **Goods or services received**. Without a purchase order or confirmed receipt, the three-way match is incomplete, and the agent asks for more information instead of paying.
 
 <Screenshot
   src="/docs/guides/first-payment-invoice.png"
-  alt="The Invoice intake form on the AP / AR page, on the Enter one invoice tab, filled in: Direction Payable, Counterparty Northstar Studio · vendor, Amount 12.50, Currency USDC, Due date 10/15/2026, Memo October design retainer, PO reference PO-2207, and Goods or services received ticked. The Add invoice button is below."
+  alt="The Invoice intake form on the AP / AR page, on the Enter one invoice tab, filled in: Direction Payable, Counterparty Northstar Studio · vendor, Amount 12.50, Currency USDC, Due date 10/15/2026, Early-payment discount and Discount deadline left blank, Memo October design retainer, PO reference PO-2207, and Goods or services received ticked. The Add invoice button is below."
   caption="A payable within the counterparty's limit, with its PO reference and the goods received."
 />
 
@@ -102,7 +103,7 @@ Instead of typing an invoice in, choose **From a document**. Choose a PDF or an 
 
 <Screenshot
   src="/docs/guides/first-payment-document.png"
-  alt="An invoice from Northstar Studio read from a PDF by DeepSeek, on the AP / AR page. A callout asks for every field to be checked and warns that the invoice asks to be paid to a different address than the one on file. Below it, the invoice form is filled in: Counterparty Northstar Studio · vendor, Amount 12.50, Currency USDC, Due date 10/15/2026, Memo October design retainer, PO reference PO-2207, and Goods or services received left unticked."
+  alt="An invoice from Northstar Studio read from a PDF by DeepSeek, on the AP / AR page. A callout asks for every field to be checked and warns that the invoice asks to be paid to a different address than the one on file. Below it, the invoice form is filled in: Counterparty Northstar Studio · vendor, Amount 12.50, Currency USDC, Due date 10/15/2026, Early-payment discount and Discount deadline left blank, Memo October design retainer, PO reference PO-2207, and Goods or services received left unticked."
   caption="An invoice read from a PDF, with its address checked against the one on file. Nothing is added until you choose Add invoice."
 />
 
@@ -112,6 +113,7 @@ What the model read is checked before you see it:
 - The counterparty is matched by its address on file, or else by its name. When none matches, the form says so: add it on **Counterparties** first, or choose one.
 - When the invoice asks to be paid to another address than the one on file, the form warns you. The agent pays the address on file; a document never changes it.
 - **Goods or services received** is never ticked for you: "A document cannot say this; tick it only if you received them."
+- An early-payment discount whose percent the document states is filled in even when its deadline cannot be used, and the form then asks you for the deadline: "The discount deadline was left blank: the invoice does not give one that could be read. Enter the last day the discount applies, or clear the discount."
 
 A PDF is read from its text, and an email (an `.eml` file) from its own text and the PDFs attached to it. A scanned PDF has no text: "This PDF has no text to read; it may be a scan. Paste the invoice's text instead." A file can be up to 4 MB, and a workspace can read five a minute. The document itself is not kept. The invoice's ledger entry records the document's SHA-256 hash, which model read it, and which fields you changed.
 
@@ -176,6 +178,8 @@ When the model decided to pay but a guardrail stopped it, the card also has a "B
 ## 5. When the agent pays
 
 An invoice does not have to be paid the moment it is decided. At intake, a payable can carry an early-payment discount: **Early-payment discount (%)** and **Discount deadline**, alongside its other fields. On a cycle, the agent chooses not only whether to pay an invoice but when, within a bound code enforces: never later than the invoice's due date.
+
+A discount needs its deadline. Once you enter a percent, **Discount deadline** is no longer optional. As the form says, "Needed with a discount: the last day it applies, on or before the due date." An invoice with a percent and no deadline is not added, and the form says under the field: "Enter the last day the discount applies, on or before the due date, or clear the discount." A CSV row's `early_pay_discount_pct` and `discount_deadline` columns follow the same rule: both, or neither.
 
 - With an early-payment discount still available, it schedules the payment for the discount's last day, and pays the discounted amount then.
 - Otherwise, it schedules the payment for the due date, holding the cash until it is owed.
