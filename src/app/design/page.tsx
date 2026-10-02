@@ -27,6 +27,7 @@ import InvoiceIntake from "@/components/intake/InvoiceIntake";
 import MilestoneIntake from "@/components/intake/MilestoneIntake";
 import AgentControlsClient from "@/components/AgentControlsClient";
 import { AgentBudgetPanel } from "@/components/AgentBudgetPanel";
+import { ProposalCard } from "@/components/ProposalCard";
 import RecurringPayableIntake, { RecurringPayablesList } from "@/components/intake/RecurringPayableIntake";
 import { UsycReservePanel } from "@/components/UsycReservePanel";
 import AgentPauseControl from "@/components/AgentPauseControl";
@@ -440,6 +441,24 @@ export default function DesignPage() {
               <CashCalendar outlook={OUTLOOK} />
               <AgentBudgetPanel orgSlug={DESIGN_SLUG} canEdit view={{ dailyUsdc: 500, weeklyUsdc: 2000, spentToday: 320, spentThisWeek: 1240.5, remaining: 180 }} />
               <AgentBudgetPanel orgSlug={DESIGN_SLUG} canEdit view={{ dailyUsdc: null, weeklyUsdc: null, spentToday: 12.5, spentThisWeek: 40, remaining: null }} />
+              <ProposalCard
+                orgSlug={DESIGN_SLUG}
+                canDecide
+                proposal={{
+                  id: "design-proposal",
+                  counterpartyId: "cp-centronex",
+                  counterpartyName: "Centronex",
+                  fromLimit: 2,
+                  toLimit: 6,
+                  reasoning: "People approved three payments to Centronex above its 2 USDC limit in three days, the largest 5 USDC, and rejected none. A 6 USDC limit covers them with a small margin.",
+                  evidence: [
+                    { invoiceId: "i1", amountUsdc: 3, approvedAt: "2026-09-30T05:20:00Z", agentAction: "ap_flag_fraud" },
+                    { invoiceId: "i2", amountUsdc: 5, approvedAt: "2026-09-30T05:21:00Z", agentAction: "ap_hold" },
+                    { invoiceId: "i3", amountUsdc: 5, approvedAt: "2026-10-02T03:46:00Z", agentAction: "ap_hold" },
+                  ],
+                  createdAt: "2026-10-02T05:00:00Z",
+                }}
+              />
               <Card className="p-4 sm:p-6">
                 <RecurringPayableIntake orgSlug={DESIGN_SLUG} counterparties={[{ id: "cp-linh", name: "Linh Design", role: "contractor" }, { id: "cp-host", name: "Hosting Co", role: "vendor" }]} />
               </Card>

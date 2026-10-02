@@ -234,6 +234,18 @@ Owners, admins and approvers decide each one:
 
 If a payment attempt fails, the card says "The last payment attempt failed: " and Circle's reason, then "Approving sends a new transfer." Fix the cause first if you need to — for example, fund the operating wallet — then choose **Approve and pay** again to send it. Vestiarion never sends a second transfer while the first could still settle: a payment still in flight on Arc testnet instead says "The payment is still in flight on Arc testnet. It cannot be rejected or returned until Circle settles it; approving checks it again." Only **Reject** and **Return to agent** go away then — **Approve and pay** stays: for an invoice waiting here, approving is how its in-flight transfer is checked again, and it never sends a second one.
 
+### When the agent suggests a higher limit
+
+When people keep approving one counterparty's payments above its payment limit, the agent notices. It proposes a higher limit, so payments like these stop waiting for a person.
+
+- **When.** At least two payments approved above the limit in the last 30 days, and none rejected. The counterparty must be screened clear.
+- **What it proposes.** The model decides whether to propose and which limit. Code accepts a limit only between the largest approved payment and twice it; otherwise the proposal is the largest plus 10%, rounded up.
+- **Where it shows.** It appears at the top of **Approvals** under **Suggested by the agent**: the new limit, why, and each approval it rests on. The proposal is signed as `policy_proposal_made`.
+- **Accept** changes the limit exactly as editing it on **Counterparties** would. Payments held under the old limit are decided again within a minute. It is signed as `policy_proposal_accepted`.
+- **Dismiss** changes nothing, and is signed as `policy_proposal_dismissed`. The agent suggests a limit for that counterparty again only after a new approval above it.
+
+Only owners and admins accept or dismiss, as for any limit change.
+
 ## 7. See it on Arc and in the audit log
 
 **On the Arc explorer.** On a settled decision card, the transaction hash is a link. It opens the transaction on the Arc testnet explorer, at `https://testnet.arcscan.app/tx/` followed by the hash, in a new tab.
