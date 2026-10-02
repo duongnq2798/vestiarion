@@ -75,6 +75,12 @@ export interface ChainConfig {
    * wallet set by it (H3), so the set and the entity always agree.
    */
   walletHost?: "own" | "hosted" | null;
+  /**
+   * Whether the organization's reserve is real USYC on Arc testnet: set only by `orgConfig`, from
+   * the row's `usyc_live_at` (0054). Unset or false, the reserve is simulated, as it always was
+   * (USYC live design R1).
+   */
+  usycLive?: boolean;
 }
 
 export interface LlmConfig {
