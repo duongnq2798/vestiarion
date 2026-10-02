@@ -31,6 +31,7 @@ export const CYCLE_STAGES = [
   "contractors",
   "treasury",
   "forecast",
+  "proposals",
 ] as const;
 
 export type CycleStage = (typeof CYCLE_STAGES)[number];
@@ -56,6 +57,9 @@ export type CycleStage = (typeof CYCLE_STAGES)[number];
  *   treasury    reconcile. Sweeping moves the business's own money between its
  *               own accounts, so it needs accurate balances but no counterparty
  *               screening at all.
+ *   proposals   Nothing. It proposes raising a counterparty's limit when people keep approving
+ *               payments above it; a person accepts or dismisses the proposal, and nothing
+ *               changes until then. Last, so it never delays a payment.
  *   forecast    Nothing. It reads and records; it authorises nothing. It is the
  *               stage most worth keeping alive after a failure, because it is
  *               what tells a human where the cycle left the book.
@@ -70,6 +74,7 @@ export const STAGE_REQUIRES: Record<CycleStage, readonly CycleStage[]> = {
   contractors: ["reconcile", "compliance"],
   treasury: ["reconcile"],
   forecast: [],
+  proposals: [],
 };
 
 export interface StageRecord {

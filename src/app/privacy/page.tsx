@@ -140,6 +140,10 @@ export default function PrivacyPage() {
                 its vendor, amounts, dates, terms and payment address into the invoice form. The document itself is not kept;
               </li>
               <li>
+                for a proposed payment limit: the counterparty&apos;s name, limit, risk level and performance score, and each payment people approved above
+                that limit in the last 30 days (its amount, when, and what the agent had done with it), with how many were rejected;
+              </li>
+              <li>
                 for a treasury move: the operating and reserve balances, the reserve&apos;s yield, the obligations due in the next 7 and 14 days, the total open
                 obligations and the days until the next one is due, and the sweep&apos;s economics worked out from those: the cash above the required buffer, how
                 long it could stay swept, the projected yield and the cost of the transfers; and, for a real USYC reserve, that it is real and whether USYC

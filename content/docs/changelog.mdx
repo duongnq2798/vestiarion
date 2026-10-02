@@ -1,5 +1,15 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-02: The agent proposes limits from people's approvals
+
+- When people approve at least two payments to one counterparty above its payment limit within 30 days, and reject none, the agent may propose raising the limit. The counterparty must be screened clear. An owner or admin accepts or dismisses the proposal in Approvals.
+- **New ledger actions**, in the `compliance` domain:
+  - `policy_proposal_made` (actor `agent`). Its `detail` is `{ proposalId, counterpartyId, kind, fromLimit, toLimit, evidence, reasoning, decisionMode, referenceLimit, agreedWithReference }`. `kind` is `raise_limit`. `evidence` lists the approvals it rests on: `{ invoiceId, amountUsdc, approvedAt, approvedBy, agentAction, guardrailRule }`.
+  - `policy_proposal_declined` (actor `agent`): the model decided not to propose. Its `detail` is `{ counterpartyId, currentLimit, evidence, reasoning, decisionMode, agreedWithReference }`.
+  - `policy_proposal_accepted` (actor `human`). Its `detail` is `{ by, proposalId, counterpartyId, fromLimit, toLimit, currentLimit }`. A `counterparty_limit_changed` entry precedes it, as for any limit change.
+  - `policy_proposal_dismissed` (actor `human`). Its `detail` is `{ by, proposalId, counterpartyId, toLimit }`.
+- A cycle's `detail.stages` includes `proposals`, which runs last, after `forecast`.
+
 ## 2026-10-02: Recurring payments
 
 - An owner or admin can set up a payment that repeats every N days, weeks or months. Each period's invoice is created as it comes near and decided like any other.

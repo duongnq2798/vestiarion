@@ -153,6 +153,12 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["Something went wrong; try again.", GO_LIVE_ACTIONS],
   ],
   "guides/first-payment": [
+    ["Suggested by the agent", "src/app/o/[slug]/approvals/page.tsx"],
+    ["Accept", "src/components/ProposalCard.tsx"],
+    ["Dismiss", "src/components/ProposalCard.tsx"],
+    ["policy_proposal_made", "src/lib/agent/proposals.ts"],
+    ["policy_proposal_accepted", "src/lib/policy-proposals.ts"],
+    ["policy_proposal_dismissed", "src/lib/policy-proposals.ts"],
     ["Recurring", "src/app/o/[slug]/invoices/page.tsx"],
     ["Recurring payments", "src/app/o/[slug]/invoices/page.tsx"],
     ["Pay", "src/components/intake/RecurringPayableIntake.tsx"],
