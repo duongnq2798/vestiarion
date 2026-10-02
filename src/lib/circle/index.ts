@@ -2,6 +2,7 @@ import type {
   BalanceSnapshot,
   ChainProvider,
   EarnDepositParams,
+  EarnPosition,
   EarnResult,
   InboundTransfer,
   Stablecoin,
@@ -17,24 +18,25 @@ import type { VestiarionConfig } from "../config";
 
 /**
  * Payments settle on Arc testnet through Circle's Developer-Controlled
- * Wallets; the USYC leg falls back to the simulator until EarnKit is wired
- * up with a KIT_KEY and a vault id. Both facts are reported (`mode`,
- * `earnMode`) rather than hidden behind a single "live" flag — Circle's own
- * arc-fintech sample mocks reward accrual on Arc testnet for the same
- * reason.
+ * Wallets. The USYC reserve is real once an owner or admin turned it on for
+ * the workspace, after Circle allowlisted its wallets (USYC live design R1);
+ * until then it is simulated. Both facts are reported (`mode`, `earnMode`)
+ * rather than hidden behind a single "live" flag.
  */
 class HybridProvider implements ChainProvider {
   readonly mode = "live" as const;
-  readonly earnMode = "simulate" as const;
+  readonly earnMode: "live" | "simulate";
   readonly estimatedFeeUsd: number;
 
   constructor(
     private readonly live: LiveProvider,
-    private readonly simulated: SimulateProvider
+    private readonly simulated: SimulateProvider,
+    usycLive = false
   ) {
     // Payments are the real leg, so the real leg's fee is the one that prices
     // a round trip.
     this.estimatedFeeUsd = live.estimatedFeeUsd;
+    this.earnMode = usycLive ? "live" : "simulate";
   }
 
   transfer(params: TransferParams): Promise<TransferResult> {
@@ -68,11 +70,17 @@ class HybridProvider implements ChainProvider {
   }
 
   depositToEarn(params: EarnDepositParams): Promise<EarnResult> {
-    return this.simulated.depositToEarn(params);
+    return this.earnMode === "live" ? this.live.depositToEarn(params) : this.simulated.depositToEarn(params);
   }
 
   withdrawFromEarn(params: EarnDepositParams): Promise<EarnResult> {
-    return this.simulated.withdrawFromEarn(params);
+    return this.earnMode === "live" ? this.live.withdrawFromEarn(params) : this.simulated.withdrawFromEarn(params);
+  }
+
+  /** Only a real reserve has a position on chain to read. */
+  getEarnPosition(reserveAccountId: string): Promise<EarnPosition> {
+    if (this.earnMode !== "live") return Promise.reject(new Error("The USYC reserve is simulated"));
+    return this.live.getEarnPosition(reserveAccountId);
   }
 }
 
@@ -107,7 +115,7 @@ export function getChainProvider(): ChainProvider {
   }
   const provider: ChainProvider =
     circleApiKey && circleEntitySecret
-      ? new HybridProvider(new LiveProvider(config.chain), new SimulateProvider())
+      ? new HybridProvider(new LiveProvider(config.chain), new SimulateProvider(), config.chain.usycLive === true)
       : new SimulateProvider();
 
   providers.set(config, provider);
@@ -130,6 +138,7 @@ export type {
   TransferParams,
   TransferResult,
   EarnDepositParams,
+  EarnPosition,
   EarnResult,
   BalanceSnapshot,
   Stablecoin,
