@@ -47,6 +47,7 @@ function payable(overrides: Partial<WaitingPayable> = {}): WaitingPayable {
     dueDate: "2026-10-03",
     status: "held",
     reasoning: "Above the auto-pay limit for a new vendor.",
+    explanation: "Above the auto-pay limit for a new vendor.",
     decidedAt: "2026-09-29T14:05:12.345+00:00",
     createdBy: CREATOR,
     reviewedAt: null,

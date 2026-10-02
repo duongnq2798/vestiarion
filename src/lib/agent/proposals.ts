@@ -3,6 +3,7 @@ import { unwrap, type OrgDb } from "../dal";
 import { appendLedgerEntry } from "../ledger";
 import { decide } from "./decide";
 import type { CycleLogLine } from "./orchestrator";
+import { REASONING_RULE, REASONING_SHAPE } from "../reasoning-copy";
 
 /**
  * The cycle's proposals stage (docs/superpowers/specs/2026-10-02-limit-proposals-design.md): when
@@ -177,6 +178,7 @@ Now decide whether people's decisions show that a counterparty's payment limit i
 - Propose only when the approvals show a steady pattern of legitimate payments above the limit, not a one-off.
 - The new limit should cover the payments people approved, with a small margin, and not much more: a limit is a control, and a higher one lets larger payments go without a person.
 - Cite the approvals you rely on: their amounts and dates.
+- ${REASONING_RULE}
 
 Respond with ONLY a single JSON object in the requested shape. No prose outside the JSON.`;
 
@@ -251,7 +253,7 @@ export async function proposeLimitChanges(orgDb: OrgDb, now: Date = new Date()):
         rejectedAboveLimit: candidate.rejections,
         windowDays: WINDOW_DAYS,
         bounds: { minimum: candidate.maxOverride, maximum: Number((candidate.maxOverride * 2).toFixed(6)) },
-        responseShape: { action: "propose | no_change", newLimit: "number (when proposing)", reasoning: "string" },
+        responseShape: { action: "propose | no_change", newLimit: "number (when proposing)", reasoning: REASONING_SHAPE },
       }),
       schema: proposalSchema,
       fallback: () => reference,

@@ -220,6 +220,7 @@ const HELD: WaitingPayable = {
   dueDate: "2026-10-09",
   status: "held",
   reasoning: "Held 8.00 USDC for Bluebird Logistics: no receipt is recorded for PO-2213, so the three-way match is incomplete.",
+  explanation: "Held 8.00 USDC for Bluebird Logistics: no receipt is recorded for PO-2213, so the three-way match is incomplete.",
   decidedAt: "2026-09-30T12:04:00Z",
   createdBy: "docs-sample-admin",
   reviewedAt: null,

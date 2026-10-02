@@ -9,6 +9,7 @@ import { useActionForm } from "@/components/ui/useActionForm";
 import { Money } from "@/components/vx/Primitives";
 import { utcDay } from "@/lib/copy";
 import type { ProposalView } from "@/lib/policy-proposals";
+import { presentReasoning } from "@/lib/reasoning-copy";
 
 const INITIAL: ProposalActionResult = { ok: false, message: "" };
 
@@ -31,7 +32,7 @@ export function ProposalCard({ proposal, orgSlug, canDecide }: { proposal: Propo
           <h3 id={`proposal-${proposal.id}`} className="text-base font-semibold text-ink [overflow-wrap:anywhere]">
             Raise {proposal.counterpartyName}&apos;s payment limit from {proposal.fromLimit ?? "none"} to {proposal.toLimit} USDC
           </h3>
-          <p className="text-sm leading-6 text-ink-2">{proposal.reasoning}</p>
+          <p className="text-sm leading-6 text-ink-2">{presentReasoning(proposal.reasoning) || "The agent's full reasoning is in the audit log."}</p>
           {proposal.evidence.length > 0 && (
             <div>
               <p className="text-xs text-ink-3">People approved, above the limit:</p>

@@ -3,6 +3,8 @@ import { db, unwrap } from "../dal";
 import { getChainProvider, type Stablecoin } from "../circle";
 import { confirmCounterpartyAddress, sameAddress } from "../counterparty-address";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
+import { listLedgerEntriesForTargets } from "../ledger";
+import { explainPayable, presentReasoning } from "../reasoning-copy";
 import { isTerminalFailure } from "../payments";
 import { payInvoice, syncOperatingBalance } from "./pay";
 import { invoiceDiscount, type InvoiceDiscount } from "./payment-timing";
@@ -275,6 +277,8 @@ export interface WaitingPayable {
   dueDate: string;
   status: "held" | "flagged" | "awaiting_info" | "processing";
   reasoning: string | null;
+  /** The reasoning as a person reads it: plain sentences, never field names (src/lib/reasoning-copy.ts). */
+  explanation: string;
   decidedAt: string | null;
   createdBy: string | null;
   reviewedAt: string | null;
@@ -304,7 +308,7 @@ export async function listWaitingPayables(
     await db()
       .from("invoices")
       .select(
-        "id, amount, currency, due_date, status, agent_reasoning, decided_at, created_by, reviewed_at, counterparty_id, early_pay_discount_pct, discount_due_date, counterparties(name, risk_level, address, chain)"
+        "id, amount, currency, due_date, status, agent_reasoning, decided_at, created_by, reviewed_at, counterparty_id, early_pay_discount_pct, discount_due_date, po_reference, goods_received, counterparties(name, risk_level, address, chain)"
       )
       .eq("direction", "payable")
       .in("status", WAITING_STATUSES)
@@ -322,8 +326,13 @@ export async function listWaitingPayables(
     counterparty_id: string;
     early_pay_discount_pct?: string | number | null;
     discount_due_date?: string | null;
+    po_reference?: string | null;
+    goods_received?: boolean | null;
     counterparties: { name: string; risk_level: string; address: string | null; chain?: string | null } | null;
   }>;
+
+  // The decision each was held on, with its facts: what its reasoning is explained from (plain reasoning R3).
+  const entries = rows.length > 0 ? await listLedgerEntriesForTargets({ invoiceIds: rows.map((row) => row.id) }) : [];
 
   // The fee to a payee on another chain, read now, so the person approving
   // sees what leaves (CCTP payouts, review I2). One that cannot be read is null.
@@ -365,6 +374,18 @@ export async function listWaitingPayables(
       dueDate: row.due_date,
       status: row.status,
       reasoning: row.agent_reasoning,
+      explanation: presentReasoning(
+        row.agent_reasoning,
+        explainPayable({
+          name: row.counterparties?.name ?? "The counterparty",
+          amount: num(row.amount),
+          currency: currencyOf(row.currency),
+          dueDate: row.due_date,
+          poReference: row.po_reference ?? null,
+          goodsReceived: row.goods_received === true,
+          entry: entries.find((entry) => entry.detail.invoiceId === row.id && entry.detail.observed !== undefined) ?? null,
+        })
+      ),
       decidedAt: row.decided_at,
       createdBy: row.created_by,
       reviewedAt: row.reviewed_at,
