@@ -1,16 +1,15 @@
 import type { Metadata } from "next";
 import { CloudOff, Unlink } from "lucide-react";
-import PayeeAddressForm from "@/components/PayeeAddressForm";
+import { PayeeJourney } from "@/components/payee/PayeeJourney";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { Eyebrow } from "@/components/ui/Eyebrow";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
-import { previewPayeeLink, type PayeeLinkPreview } from "@/lib/platform/payee-links";
-import { payeeChain } from "@/lib/payee-chains";
+import { payeeLinkStatus } from "@/lib/platform/payee-links";
+import type { PayeeLinkStatus } from "@/lib/payee-journey";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Your payment address",
+  title: "Your payment",
   robots: { index: false, follow: false },
 };
 
@@ -19,20 +18,20 @@ type PayeePageProps = {
 };
 
 /**
- * Where a payee link opens (spec 2026-09-30-payee-links-design.md §2). No
- * session: the link is the credential. A usable link shows which business
- * wants to pay which payee, and one field (R4); every unusable link — used,
- * revoked, expired or unknown — shows the same sentence and names no one.
+ * Where a payee link opens (spec 2026-09-30-payee-links-design.md §2, and the freelancer journey,
+ * 2026-10-02-freelancer-journey-design.md). No session: the link is the credential. A usable link
+ * asks for the payee's address; a link used within 30 days shows that payee's status, step by step,
+ * up to the payment (R1). A revoked, expired or unknown link shows one sentence and names no one.
  * Opening it changes nothing; only the submitted form uses the link.
  */
 export default async function PayeePage({ params }: PayeePageProps) {
   const { token } = await params;
-  let preview: PayeeLinkPreview | null = null;
+  let status: PayeeLinkStatus | null = null;
   let failed = false;
   try {
-    preview = await previewPayeeLink(token);
+    status = await payeeLinkStatus(token);
   } catch {
-    console.error("payee link preview failed");
+    console.error("payee link status failed");
     failed = true;
   }
 
@@ -43,23 +42,10 @@ export default async function PayeePage({ params }: PayeePageProps) {
         <div className="w-full max-w-md">
           {failed ? (
             <EmptyState icon={<CloudOff />} titleAs="h1" title="This page could not load. Try again in a moment." />
-          ) : !preview ? (
+          ) : !status ? (
             <EmptyState icon={<Unlink />} titleAs="h1" title="This link is no longer valid. Ask the business that sent it for a new one." />
           ) : (
-            <section className="rounded-2xl border border-line bg-surface p-6 shadow-surface">
-              <p>
-                <Eyebrow className="text-agent">Payment address</Eyebrow>
-              </p>
-              <h1 className="mt-2 text-2xl font-semibold tracking-[-0.02em] text-ink">
-                {preview.orgName} wants to pay {preview.counterpartyName} on {payeeChain(preview.chain).label}
-              </h1>
-              <p className="mt-3 text-sm leading-6 text-ink-2">
-                Enter the wallet address where you want to receive it. {preview.orgName} confirms it before paying you. This link works once.
-              </p>
-              <div className="mt-6">
-                <PayeeAddressForm token={token} chainLabel={payeeChain(preview.chain).label} />
-              </div>
-            </section>
+            <PayeeJourney token={token} status={status} />
           )}
         </div>
       </main>

@@ -36,7 +36,11 @@ describe("payeeLinkEmail", () => {
     expect(hrefs(email.html)).toContain(LINK);
     expect(email.text).toContain(LINK);
     expect(email.text).toContain("2026-10-08");
-    expect(email.text).toContain("works once");
+    expect(email.text).toContain("takes your address once");
+  });
+
+  it("says the same link shows the payment's status afterwards (freelancer journey R1)", () => {
+    expect(email.text).toContain("After that, the same link shows your payment's status, step by step, for 30 days.");
   });
 
   it("escapes every value a person typed", () => {

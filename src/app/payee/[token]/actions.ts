@@ -2,6 +2,7 @@
 
 import "server-only";
 
+import { NOT_AN_ADDRESS } from "@/lib/payee-journey";
 import { submitPayeeAddress } from "@/lib/platform/payee-links";
 
 /**
@@ -30,7 +31,7 @@ export async function submitPayeeAddressAction(_previous: PayeeAddressResult, fo
         : { ok: true, message: `Thanks. ${result.orgName} will confirm your address before paying you.` };
     }
     return result.reason === "invalid_address"
-      ? { ok: false, message: "Enter an Arc address: 0x followed by 40 hex characters." }
+      ? { ok: false, message: NOT_AN_ADDRESS }
       : { ok: false, message: "This link is no longer valid. Ask the business that sent it for a new one." };
   } catch {
     console.error("payee address submission failed");
