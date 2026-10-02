@@ -430,7 +430,30 @@ function milestoneEvidenceLink(source: string | null, githubSource: string | und
   }
 }
 
-export function milestoneDecision(milestone: MilestoneRow, entries: LedgerEntry[]): Decision {
+/**
+ * What the card knows of the contractor now, beyond the decision's own record: its screening, for a milestone
+ * the agent has not decided yet, and what a verified milestone waits for before the agent pays it (the
+ * contractor stage's payeeNotReady): an address someone must confirm, or one the payee has still to add.
+ */
+export interface MilestoneContext {
+  riskLevel?: string | null;
+  waiting?: "unconfirmed" | "no_address" | null;
+}
+
+/** A milestone not yet decided, or decided and on its way, as its card says it (never "Scheduled"). */
+function milestoneProgress(milestone: MilestoneRow, waiting: MilestoneContext["waiting"]): { label: string; line: string } | null {
+  const name = milestone.contractor_name;
+  if (milestone.status === "pending") return { label: "Awaiting verification", line: "The agent is waiting for milestone verification." };
+  if (milestone.status !== "verified") return null;
+  if (waiting === "unconfirmed") {
+    return { label: "Address to confirm", line: `Verified. ${name}'s address changed and no one has confirmed it yet: confirm it on Counterparties, and the agent decides on pay within a minute.` };
+  }
+  if (waiting === "no_address") return { label: "Waiting for an address", line: `Verified. ${name} has not added an address yet: the agent pays once they add one through their payee link.` };
+  if (milestone.tx_ref) return { label: "Payment in flight", line: "Verified. The payment was sent and is waiting for Circle to confirm it." };
+  return { label: "Being decided", line: "Verified. The agent decides on pay within a minute." };
+}
+
+export function milestoneDecision(milestone: MilestoneRow, entries: LedgerEntry[], context: MilestoneContext = {}): Decision {
   const entry = matchingEntry(entries, "milestoneId", milestone.id);
   // What the agent observed when it last decided: a person's decision after it (Pay now, Close) records none.
   const decided = entries.find((candidate) => candidate.detail.milestoneId === milestone.id && record(candidate.detail.observed));
@@ -438,7 +461,12 @@ export function milestoneDecision(milestone: MilestoneRow, entries: LedgerEntry[
   const closed = milestone.status === "closed";
   const guardrailBlocked = !closed && entry?.detail.guardrailBlocked === true;
   const limit = numberValue(observed?.paymentLimit) ?? 0;
-  const risk = stringValue(observed?.riskLevel) ?? "unscreened";
+  // The screening the agent decided on, or, before any decision, the contractor's own.
+  const risk = stringValue(observed?.riskLevel) ?? context.riskLevel ?? "unscreened";
+  const progress = closed ? null : milestoneProgress(milestone, context.waiting);
+  // A verified milestone held back for a person to confirm an address waits on someone, as a held one does.
+  const waitsOnPerson = milestone.status === "verified" && context.waiting === "unconfirmed";
+  const presented = presentReasoning(milestone.agent_reasoning, explainMilestone({ name: milestone.contractor_name, amount: milestone.amount, entry: decided ? { detail: decided.detail } : null }));
   const githubSource = milestone.verification_source?.match(/^https:\/\/github\.com\/[^/]+\/[^/]+\/pull\/\d+\/?$/)?.[0];
   const verificationLabel = milestone.verification_method === "github"
     ? milestone.verification_status === "verified" ? "merged PR" : milestone.verification_status.replace("_", " ")
@@ -452,11 +480,10 @@ export function milestoneDecision(milestone: MilestoneRow, entries: LedgerEntry[
     memo: milestone.title,
     amount: milestone.amount,
     token: "USDC",
-    outcome: closed ? "recorded" : statusOutcome(milestone.status, milestone.tx_ref, guardrailBlocked),
-    ...(closed ? { outcomeLabel: "Closed without paying" } : {}),
-    reasoning:
-      presentReasoning(milestone.agent_reasoning, explainMilestone({ name: milestone.contractor_name, amount: milestone.amount, entry: decided ? { detail: decided.detail } : null })) ||
-      "The agent is waiting for milestone verification.",
+    outcome: closed ? "recorded" : waitsOnPerson ? "held" : statusOutcome(milestone.status, milestone.tx_ref, guardrailBlocked),
+    ...(closed ? { outcomeLabel: "Closed without paying" } : progress && !guardrailBlocked ? { outcomeLabel: progress.label } : {}),
+    // What it waits for now comes after what the agent last decided, if it decided before.
+    reasoning: [presented, progress && (milestone.status !== "pending" || !presented) ? progress.line : ""].filter(Boolean).join(" ") || "The agent is waiting for milestone verification.",
     evidence: [
       { label: "Verified by", value: verificationLabel, href: githubSource, state: milestone.verified ? "ok" : "missing" },
       { label: "Verified", value: milestone.verified ? "yes" : "not yet", state: milestone.verified ? "ok" : "missing" },

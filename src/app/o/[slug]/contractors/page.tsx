@@ -27,7 +27,7 @@ import { viewerCan } from "@/lib/auth/authorize";
 import { requireMembership } from "@/lib/auth/membership";
 import { chainModes } from "@/lib/circle";
 import { readEscrowContract } from "@/lib/circle/escrow-setup";
-import { addressUnconfirmed } from "@/lib/counterparty-address";
+import { addressUnconfirmed, payeeNotReady } from "@/lib/counterparty-address";
 import { inOrg } from "@/lib/dal/scope";
 import { listLedgerEntries, listLedgerEntriesForTargets } from "@/lib/ledger";
 import { orgHref } from "@/lib/auth/org-paths";
@@ -68,13 +68,20 @@ export default async function ContractorsPage({ params, searchParams }: { params
       listLedgerEntriesForTargets({ milestoneIds: milestones.map((milestone) => milestone.id) }),
       milestoneIntents(held.map((milestone) => milestone.id)),
     ]);
-    const decisions = milestones.map((milestone) => milestoneDecision(milestone, entries));
+    const contractorsById = new Map(counterparties.map((counterparty) => [counterparty.id, counterparty]));
+    // What a verified milestone waits for before the agent pays it: an address to confirm, or one to add.
+    const waitingOf = (milestone: MilestoneRow) => {
+      const contractor = contractorsById.get(milestone.contractor_id);
+      return milestone.status === "verified" && contractor ? payeeNotReady(contractor, live) : null;
+    };
+    const decisions = milestones.map((milestone) =>
+      milestoneDecision(milestone, entries, { riskLevel: contractorsById.get(milestone.contractor_id)?.risk_level ?? null, waiting: waitingOf(milestone) })
+    );
     const milestonesById = new Map(milestones.map((milestone) => [milestone.id, milestone]));
     // Made here, not in the browser, so the server's markup and the browser's agree (as the Gateway form's id is).
     const defaultRefundDate = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
     const minRefundDate = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
     const maxRefundDate = new Date(Date.now() + 365 * 86_400_000).toISOString().slice(0, 10);
-    const contractorsById = new Map(counterparties.map((counterparty) => [counterparty.id, counterparty]));
     // Clients pay the business; contractors are listed first, then vendors.
     const payees = counterparties
       .filter((counterparty) => counterparty.role !== "client")
@@ -151,6 +158,24 @@ export default async function ContractorsPage({ params, searchParams }: { params
     const row = (decision: (typeof decisions)[number]): DecisionRowItem => {
       const milestone = milestonesById.get(decision.id) as MilestoneRow;
       const item: DecisionRowItem = { decision, date: milestoneDate(milestone, decision.at), after: controls(milestone) };
+      const waiting = waitingOf(milestone);
+      if (waiting === "no_address") return { ...item, hint: "Waiting for an address" };
+      if (waiting === "unconfirmed") {
+        return {
+          ...item,
+          hint: "Address to confirm",
+          before: (
+            <Callout tone="held" title="What it waits for">
+              <p>
+                {milestone.contractor_name}&apos;s address changed and no one has confirmed it yet. Confirm it on Counterparties, and the agent decides on pay within a minute.{" "}
+                <Button asChild variant="link">
+                  <Link href={orgHref(slug, "/counterparties")}>Open Counterparties</Link>
+                </Button>
+              </p>
+            </Callout>
+          ),
+        };
+      }
       if (milestone.status !== "held") return item;
       const reason = waitingFor(milestone);
       return {
@@ -171,8 +196,13 @@ export default async function ContractorsPage({ params, searchParams }: { params
     // The work, not the record (Contractors layout): what waits for a person, what is under way, what is done.
     const statusOf = (decision: (typeof decisions)[number]) => milestonesById.get(decision.id)?.status ?? "";
     const done = (decision: (typeof decisions)[number]) => ["paid", "closed"].includes(statusOf(decision));
-    const needsYou = decisions.filter((decision) => statusOf(decision) === "held" || (decision.outcome === "refused" && !done(decision)));
-    const inProgress = decisions.filter((decision) => decision.outcome !== "refused" && ["pending", "verified"].includes(statusOf(decision)));
+    // An address to confirm waits on a person too: the agent pays nothing to an address no one has confirmed.
+    const confirming = (decision: (typeof decisions)[number]) => {
+      const milestone = milestonesById.get(decision.id);
+      return milestone !== undefined && waitingOf(milestone) === "unconfirmed";
+    };
+    const needsYou = decisions.filter((decision) => statusOf(decision) === "held" || confirming(decision) || (decision.outcome === "refused" && !done(decision)));
+    const inProgress = decisions.filter((decision) => decision.outcome !== "refused" && !confirming(decision) && ["pending", "verified"].includes(statusOf(decision)));
     const paid = decisions.filter(done).sort((a, b) => b.at.localeCompare(a.at));
     const paidCount = milestones.filter((milestone) => milestone.status === "paid").length;
     const awaiting = milestones.filter((milestone) => milestone.status === "pending");
@@ -190,7 +220,7 @@ export default async function ContractorsPage({ params, searchParams }: { params
         <AutoRefresh intervalMs={20_000} />
 
         <div className="mb-6 grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 xl:grid-cols-4">
-          <StatTile label="Needs you" tone={needsYou.length > 0 ? "held" : "default"} sub={needsYou.length > 0 ? "Held, or refused by code" : "Nothing held"}>
+          <StatTile label="Needs you" tone={needsYou.length > 0 ? "held" : "default"} sub={needsYou.length > 0 ? "Held, or an address to confirm" : "Nothing held"}>
             <span className="tabular-nums">{needsYou.length}</span>
           </StatTile>
           <StatTile label="Awaiting verification" sub={<Money value={awaiting.reduce((sum, milestone) => sum + Number(milestone.amount), 0)} />}>

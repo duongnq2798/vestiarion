@@ -387,6 +387,8 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["verify_milestone_manual", MILESTONE_ACTIONS],
     ["Revoke manually", MILESTONE_CHECK],
     ["Paid and closed", CONTRACTORS_PAGE],
+    ["Address to confirm", CONTRACTORS_PAGE],
+    ["Waiting for an address", CONTRACTORS_PAGE],
     ["What it waits for", HELD_ACTIONS],
     ["Pay now", HELD_ACTIONS],
     ["Close without paying", HELD_ACTIONS],
