@@ -83,6 +83,14 @@ describe("getChainProvider — a live workspace's provider offers everything its
     expect(swap).toHaveBeenCalledWith(params);
   });
 
+  it("pays each milestone alone: a smart-account wallet cannot batch through Multicall3From", async () => {
+    // Circle refused the first live batch at estimation, "sender spoofing requires tx.origin as sender"
+    // (batch payouts, testnet-2 2026-10-02): the agent must not try one from a live workspace.
+    await inLiveWorkspace(async () => {
+      expect(getChainProvider().batchTransfer).toBeUndefined();
+    });
+  });
+
   it("reads inbound transfers through the live leg (receivables on Arc)", async () => {
     const inbound = vi.spyOn(LiveProvider.prototype, "listInboundTransfers").mockResolvedValue([]);
     await inLiveWorkspace(async () => {
