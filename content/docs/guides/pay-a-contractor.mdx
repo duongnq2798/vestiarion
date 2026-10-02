@@ -4,7 +4,7 @@ Owners and admins add milestones and verify them. Other members see every milest
 
 ## Pay someone new in one step
 
-To pay someone who is not yet on file for work they have delivered, open **Contractors** and fill in **Pay a freelancer** with their details, not yours: **Freelancer's name**, **Freelancer's email** if you have it, **What they delivered**, the **Amount (USDC)** and, if there is one, a **Link to the work**. Choose **Set up payment**. Vestiarion then:
+To pay someone who is not yet on file for work they have delivered, open **Contractors**, open **New payment**, and fill in **Pay a freelancer** with their details, not yours: **Freelancer's name**, **Freelancer's email** if you have it, **What they delivered**, the **Amount (USDC)** and, if there is one, a **Link to the work**. Choose **Set up payment**. Vestiarion then:
 
 - adds them as a contractor, with that amount as their payment limit, and screens them;
 - adds the work as a milestone, verified by you, with the note "Delivered work confirmed when the payment was set up";
@@ -26,7 +26,7 @@ The agent pays to the counterparty's Arc address. To have the contractor enter i
 
 ## 2. Add the milestone
 
-Open **Contractors**. Under **Milestone intake**:
+Open **Contractors**, open **New payment**, and choose **Milestone intake**:
 
 - **Contractor**: who is paid.
 - **Amount (USDC)**: what the work is worth.
@@ -37,10 +37,12 @@ Choose **Add milestone**. The milestone starts pending, and its card says "The a
 
 ## 3. Verify the work
 
+On **Contractors**, the tiles count what needs you, what waits for verification, what is verified and being paid, and what has been paid. Under **Milestones**, each milestone is one row, in three groups: **Needs you** (held, or refused by code), **In progress** (waiting for verification, or verified) and **Paid** (the latest ten; **Show all** lists every one). Open a row to see its card, and under it the milestone's verification and escrow.
+
 How a milestone becomes verified depends on its evidence:
 
 - **A GitHub pull request.** The form answers "The agent checks the pull request within a minute, and decides on pay once it is merged." Each cycle asks GitHub whether the pull request was merged. Once it was, the card's **Verified by** reads "merged PR", linked to the pull request, and the ledger records `verify_milestone_github`.
-- **Anything else.** The form answers "Verify it once the work is delivered, and the agent decides on pay within a minute." When the work is in, open it from the card's **Evidence** link, type what you checked into the box under the card (it reads "Evidence checked or approver note") and choose **Verify manually**. The ledger records `verify_milestone_manual`, with your note and who you are. **Revoke manually** takes it back, until the milestone is paid.
+- **Anything else.** The form answers "Verify it once the work is delivered, and the agent decides on pay within a minute." When the work is in, open the milestone's row, open the work from the card's **Evidence** link, type what you checked into the box under the card (it reads "Evidence checked or approver note") and choose **Verify manually**. The ledger records `verify_milestone_manual`, with your note and who you are. **Revoke manually** takes it back, until the milestone is paid.
 
 ## 4. The agent releases the pay
 
@@ -64,13 +66,13 @@ When a cycle releases two or more milestones, the agent pays them together: one 
 
 A live workspace can lock a milestone's USDC in a contract on Arc testnet before the work starts, so the contractor can see the money is set aside for them.
 
-- **Set it up once.** On **Contractors**, an owner or admin chooses **Set up escrow** under **Milestone escrow**. Setting it up:
+- **Set it up once.** On **Contractors**, an owner or admin opens **Milestone escrow** and chooses **Set up escrow**. Setting it up:
   - creates a deployer wallet;
   - sends that wallet 0.1 USDC of gas from the operating wallet;
   - deploys the contract through Circle's Smart Contract Platform.
 
   If it is interrupted, choose **Finish setting up**: nothing is deployed twice.
-- **Lock a milestone.** Under a milestone that is not verified yet, set **Refundable to this workspace from** and choose **Lock in escrow**.
+- **Lock a milestone.** Open the row of a milestone that is not verified yet; under its card, set **Refundable to this workspace from** and choose **Lock in escrow**.
   - The contractor needs a confirmed Arc testnet address. The form names the address the hold will pay; that address cannot change afterwards.
   - The card then reads, for example, "2 USDC locked in escrow for 0x67C8…0504 until 31 Oct 2026", with the transaction that funded it.
 - **What the contract allows.** Only the workspace's operating wallet can call it, and only two things can happen to a hold, once:
