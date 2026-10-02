@@ -95,6 +95,7 @@ export default async function CounterpartiesPage({ params }: { params: Promise<{
                           riskLevel: counterparty.risk_level,
                           riskNotes: counterparty.risk_notes,
                           riskEntityId: counterparty.risk_entity_id ?? null,
+                          matches: counterparty.risk_matches ?? null,
                         }}
                         canDismiss={canConfirm}
                         liveScreening={liveScreening}

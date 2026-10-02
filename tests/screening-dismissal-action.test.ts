@@ -15,7 +15,7 @@ vi.mock("@/lib/auth/authorize", () => ({ authorize: authorizeMock }));
 vi.mock("@/lib/auth/revalidate", () => ({ revalidateOrgPages: vi.fn() }));
 vi.mock("@/lib/agent/cycle-soon", () => ({ raiseCycleEvent: raiseMock }));
 vi.mock("@/lib/dal/scope", () => ({ inOrg: (_access: unknown, fn: () => Promise<unknown>) => fn() }));
-vi.mock("@/lib/compliance", () => ({ screenCounterparty: screenMock }));
+vi.mock("@/lib/compliance", () => ({ screenCounterparty: screenMock, MATCHES_KEPT: 25 }));
 vi.mock("@/lib/screening-dismissal", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/screening-dismissal")>()),
   dismissScreeningMatch: dismissMock,
@@ -33,9 +33,17 @@ function form(fields: Record<string, string> = {}): FormData {
   return data;
 }
 
+/** A card that listed several matches sends each one's id. */
+function formListing(ids: string[]): FormData {
+  const data = form();
+  data.delete("matchedEntityId");
+  for (const id of ids) data.append("matchedEntityId", id);
+  return data;
+}
+
 beforeEach(() => {
   authorizeMock.mockReset().mockResolvedValue(ACCESS);
-  dismissMock.mockReset().mockResolvedValue({ name: "Quoc Duong", rescreened: true, riskLevel: "clear", paymentLimit: 1 });
+  dismissMock.mockReset().mockResolvedValue({ name: "Quoc Duong", rescreened: true, riskLevel: "clear", paymentLimit: 1, dismissed: 1 });
   raiseMock.mockReset();
   screenMock.mockReset().mockResolvedValue({ counterpartyId: CP, name: "Quoc Duong", riskLevel: "medium", previousRiskLevel: "medium" });
 });
@@ -50,7 +58,7 @@ describe("dismissScreeningMatchAction", () => {
 
   it("dismisses as the signed-in person, says the new verdict, and starts a cycle", async () => {
     const answer = await dismissScreeningMatchAction(empty, form());
-    expect(dismissMock).toHaveBeenCalledWith({ counterpartyId: CP, matchedEntityId: "Q-PEP", actorId: USER, reason: "Our freelancer, not the politician" });
+    expect(dismissMock).toHaveBeenCalledWith({ counterpartyId: CP, matchedEntityIds: ["Q-PEP"], actorId: USER, reason: "Our freelancer, not the politician" });
     expect(answer).toEqual({
       ok: true,
       message: "Dismissed. Quoc Duong screened again: clear risk, limit 1 USDC. Payments held on the old risk are decided again within a minute.",
@@ -59,7 +67,7 @@ describe("dismissScreeningMatchAction", () => {
   });
 
   it("starts no cycle when screening could not run again", async () => {
-    dismissMock.mockResolvedValueOnce({ name: "Quoc Duong", rescreened: false, riskLevel: "medium", paymentLimit: null });
+    dismissMock.mockResolvedValueOnce({ name: "Quoc Duong", rescreened: false, riskLevel: "medium", paymentLimit: null, dismissed: 1 });
     expect((await dismissScreeningMatchAction(empty, form())).message).toContain("screened again at the next cycle");
     expect(raiseMock).not.toHaveBeenCalled();
   });
@@ -78,6 +86,13 @@ describe("dismissScreeningMatchAction", () => {
 
   it("refuses a malformed counterparty", async () => {
     expect(await dismissScreeningMatchAction(empty, form({ counterpartyId: "nope" }))).toEqual({ ok: false, message: "Counterparty not found." });
+  });
+
+  it("passes every match the card listed, and says how many it dismissed", async () => {
+    dismissMock.mockResolvedValueOnce({ name: "Quoc Duong", rescreened: true, riskLevel: "clear", paymentLimit: 1, dismissed: 3 });
+    const answer = await dismissScreeningMatchAction(empty, formListing(["Q-TAN", "Q-YANG", "Q-LE"]));
+    expect(dismissMock).toHaveBeenCalledWith(expect.objectContaining({ matchedEntityIds: ["Q-TAN", "Q-YANG", "Q-LE"] }));
+    expect(answer.message).toBe("Dismissed 3 matches. Quoc Duong screened again: clear risk, limit 1 USDC. Payments held on the old risk are decided again within a minute.");
   });
 });
 

@@ -1,4 +1,5 @@
 import { db, unwrap } from "./dal";
+import type { ScreeningCandidate } from "./compliance";
 import { cycleClockMode, type CycleClockMode } from "./clock";
 import type { CounterpartyHistoryInputs } from "./agent/counterparty-history";
 
@@ -48,6 +49,8 @@ export interface CounterpartyRow {
   risk_notes: string | null;
   /** The screening entity the current verdict matched, when a live screen matched one (migration 0051). */
   risk_entity_id?: string | null;
+  /** Every match of the latest live screening no one has dismissed, best first (migration 0060); null otherwise. */
+  risk_matches?: ScreeningCandidate[] | null;
   payment_limit: number | null;
   baseline_payment_limit: number | null;
   last_screened_at: string | null;
