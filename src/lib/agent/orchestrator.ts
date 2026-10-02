@@ -18,6 +18,9 @@ import { syncOnChainBalances, type BalanceSync } from "./balances";
 import { CycleRunningError, hasRunningCycle } from "./cycle-running";
 import { decide } from "./decide";
 import { budgetClause, enforceApGuardrails } from "./guardrails";
+import { usycSubscriptionsOpen, UsycSubscriptionsClosedError } from "../circle/usyc";
+import { arcRpcUrl } from "../circle/arcFees";
+import type { UsycExecution } from "../circle/types";
 import { budgetGate, countedUsdc, exceedsBudget, HELD_FOR_BUDGET, type BudgetGate, type BudgetRoom } from "./outflow-budget";
 import { addressUnconfirmed, payeeNotReady } from "../counterparty-address";
 import { SandboxCapReachedError } from "./sandbox-cap";
@@ -2353,6 +2356,8 @@ interface TreasuryMoveOutcome {
   executed: boolean;
   executionNote: string | null;
   heldBecausePaused: boolean;
+  /** A real USYC move's transactions (USYC live design R7); absent for a simulated one. */
+  execution?: UsycExecution;
 }
 
 /**
@@ -2376,6 +2381,8 @@ export async function moveTreasuryIfNotPaused(
     reserveAccountId: string;
     operatingBalance: number;
     reserveBalance: number;
+    /** The seed of a real move's idempotency keys: the cycle, so a retried cycle never moves twice (USYC live R6). */
+    moveKey?: string;
   }
 ): Promise<TreasuryMoveOutcome> {
   const wouldMove =
@@ -2389,10 +2396,17 @@ export async function moveTreasuryIfNotPaused(
     return { executed: false, executionNote: pauseNote, heldBecausePaused: true };
   }
 
+  const live = ctx.provider.earnMode === "live";
+  const move = {
+    accountId: ctx.operatingAccountId,
+    reserveAccountId: ctx.reserveAccountId,
+    key: `${ctx.moveKey ?? crypto.randomUUID()}/${decision.action}`,
+  };
   try {
+    let execution: UsycExecution | undefined;
     if (decision.action === "sweep_to_usyc") {
       const amount = Math.min(decision.amount, ctx.operatingBalance);
-      await ctx.provider.depositToEarn({ accountId: ctx.operatingAccountId, amount });
+      execution = (await ctx.provider.depositToEarn({ ...move, amount })).execution;
       const res = await ctx.db
         .from("accounts")
         .update({ balance: Number((ctx.reserveBalance + amount).toFixed(6)) })
@@ -2400,16 +2414,35 @@ export async function moveTreasuryIfNotPaused(
       if (res.error) throw new Error(res.error.message);
     } else {
       const amount = Math.min(decision.amount, ctx.reserveBalance);
-      await ctx.provider.withdrawFromEarn({ accountId: ctx.operatingAccountId, amount });
+      execution = (await ctx.provider.withdrawFromEarn({ ...move, amount })).execution;
       const res = await ctx.db
         .from("accounts")
         .update({ balance: Number((ctx.reserveBalance - amount).toFixed(6)) })
         .eq("id", ctx.reserveAccountId);
       if (res.error) throw new Error(res.error.message);
     }
-    return { executed: true, executionNote: null, heldBecausePaused: false };
+    // A real move changed both wallets on chain: the stored figures follow from the chain at once
+    // (R3), best effort, since the next reconcile reads them again either way.
+    if (live) await refreshTreasuryBalances(ctx);
+    return { executed: true, executionNote: null, heldBecausePaused: false, ...(execution ? { execution } : {}) };
   } catch (err) {
+    if (err instanceof UsycSubscriptionsClosedError) return { executed: false, executionNote: err.message, heldBecausePaused: false };
     return { executed: false, executionNote: `execution failed: ${(err as Error).message}`, heldBecausePaused: false };
+  }
+}
+
+/** The operating wallet's USDC and the reserve's USYC value, read from the chain after a real move (USYC live R3). */
+async function refreshTreasuryBalances(ctx: { db: OrgDb; provider: ChainProvider; operatingAccountId: string; reserveAccountId: string }): Promise<void> {
+  try {
+    const [operating, reserve] = await Promise.all([
+      ctx.provider.getBalance(ctx.operatingAccountId),
+      ctx.provider.getEarnPosition ? ctx.provider.getEarnPosition(ctx.reserveAccountId) : Promise.resolve(null),
+    ]);
+    const writes = [ctx.db.from("accounts").update({ balance: operating.balance }).eq("id", ctx.operatingAccountId)];
+    if (reserve) writes.push(ctx.db.from("accounts").update({ balance: reserve.valueUsdc }).eq("id", ctx.reserveAccountId));
+    for (const res of await Promise.all(writes)) if (res.error) throw new Error(res.error.message);
+  } catch (error) {
+    console.error("treasury: balances not read again after a USYC move", error instanceof Error ? error.message : error);
   }
 }
 
@@ -3132,6 +3165,20 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
       daysUntilNextObligation,
       roundTripCostUsd: provider.estimatedFeeUsd * 2,
     });
+    // A real reserve can be bought into only in USYC's daily window (USYC live R4). Unknown (null)
+    // when the read failed: the sweep is then refused by the Teller's own check before anything moves.
+    let subscriptionsOpen: boolean | null = null;
+    if (provider.earnMode === "live") {
+      try {
+        subscriptionsOpen = await usycSubscriptionsOpen({ rpcUrl: arcRpcUrl() });
+      } catch (error) {
+        console.error("treasury: USYC window not read", error instanceof Error ? error.message : error);
+      }
+    }
+    const referencePlan: TreasuryDecision =
+      subscriptionsOpen === false && plan.decision.action === "sweep_to_usyc"
+        ? { action: "hold", amount: 0, reasoning: `${plan.decision.reasoning} USYC cannot be bought until its next daily price update, so the cash stays liquid until then.` }
+        : plan.decision;
 
     const { value: decision, mode, reference, agreedWithReference } = await decide<TreasuryDecision>({
       systemPrompt: SYSTEM_PROMPT,
@@ -3154,6 +3201,15 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           roundTripCostUsd: plan.roundTripCostUsd,
           note: "A sweep costs one transfer now and one redemption later. Sweeping is only worth doing when projectedYieldUsd exceeds roundTripCostUsd.",
         },
+        ...(provider.earnMode === "live"
+          ? {
+              usyc: {
+                reserveIsRealUsyc: true,
+                subscriptionsOpen,
+                note: "USYC can be bought only between its daily price update and 14:00 New York time on business days; a sweep while subscriptionsOpen is false is not executed. Redemptions are always possible.",
+              },
+            }
+          : {}),
         responseShape: {
           action: "sweep_to_usyc | redeem_from_usyc | hold",
           amount: "number",
@@ -3161,7 +3217,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
         },
       }),
       schema: treasuryDecisionSchema,
-      fallback: (): TreasuryDecision => plan.decision,
+      fallback: (): TreasuryDecision => referencePlan,
     });
     metrics.recordDecisionMode(mode, agreedWithReference);
 
@@ -3172,6 +3228,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
       reserveAccountId: reserveNow.id,
       operatingBalance,
       reserveBalance,
+      moveKey: cycleRunId,
     });
     const executed = moveOutcome.executed;
     const executionNote = moveOutcome.executionNote;
@@ -3203,9 +3260,12 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
         // D6: same marker as the AP and contractor stages (see the comment
         // there). No `execution` sub-object here, so it sits at the top.
         ...heldBecausePausedDetail(heldBecausePaused),
-        // The USYC leg is simulated until EarnKit is wired up; recording that
-        // here means the audit trail never overstates what actually happened.
+        // Whether the reserve is real USYC on Arc testnet (USYC live R1): recording it here means
+        // the audit trail never overstates what actually happened.
         earnMode: provider.earnMode,
+        // A real move's transactions, shares and price (R7), and whether USYC could be bought (R4).
+        ...(moveOutcome.execution ? { execution: moveOutcome.execution } : {}),
+        ...(provider.earnMode === "live" ? { usycSubscriptionsOpen: subscriptionsOpen } : {}),
         observed: {
           operatingBalance,
           reserveBalance,

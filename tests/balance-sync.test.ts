@@ -308,3 +308,42 @@ describe("the reconcile stage — unchanged by the extraction, in its lines and 
     ]);
   });
 });
+
+describe("syncOnChainBalances — a real USYC reserve (USYC live design R3)", () => {
+  const LIVE_RESERVE: Row = { id: "acct-res", name: "USYC reserve", kind: "reserve", balance: "30.000000", circle_wallet_id: "w-res" };
+  class UsycChain extends FakeChain {
+    constructor(private readonly position: { shares: number; valueUsdc: number; price: number } | Error) {
+      super({ "acct-op": 150 }, "live");
+    }
+    async getEarnPosition() {
+      if (this.position instanceof Error) throw this.position;
+      return this.position;
+    }
+  }
+
+  it("writes the reserve's balance from its USYC at the oracle's price, and names both in the line", async () => {
+    const fake = accountsFake([OPERATING, LIVE_RESERVE]);
+    const sync = await inScope(fake, () => syncOnChainBalances(new UsycChain({ shares: 30, valueUsdc: 34.166935, price: 1.138897 }), db()));
+    expect(balancePatches(fake.requests)).toContainEqual({ query: `org_id=eq.${ORG}&id=eq.acct-res&select=id`, body: { balance: 34.166935 } });
+    // The operating wallet's USDC is all spendable: nothing is carved out for a real reserve.
+    expect(balancePatches(fake.requests)).toContainEqual({ query: `org_id=eq.${ORG}&id=eq.acct-op`, body: { balance: 150 } });
+    expect(sync.changes).toContainEqual({ accountId: "acct-res", name: "USYC reserve", from: 30, to: 34.166935, note: "30 USYC at 1.138897 USDC" });
+  });
+
+  it("records a reserve it could not read as a failure, and leaves its balance as it was", async () => {
+    const fake = accountsFake([OPERATING, LIVE_RESERVE]);
+    const sync = await inScope(fake, () => syncOnChainBalances(new UsycChain(new Error("Arc testnet did not answer a USYC read")), db()));
+    expect(sync.failures).toContainEqual({ accountId: "acct-res", name: "USYC reserve", message: "Arc testnet did not answer a USYC read" });
+    expect(balancePatches(fake.requests).some((p) => p.query.includes("acct-res"))).toBe(false);
+  });
+
+  it("reads no position for a simulated reserve", async () => {
+    const fake = accountsFake([OPERATING, LIVE_RESERVE]);
+    const chain = new FakeChain({ "acct-op": 150 }, "simulate") as FakeChain & { getEarnPosition?: () => never };
+    chain.getEarnPosition = () => {
+      throw new Error("a simulated reserve has no position");
+    };
+    const sync = await inScope(fake, () => syncOnChainBalances(chain, db()));
+    expect(sync.failures).toEqual([]);
+  });
+});
