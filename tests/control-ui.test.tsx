@@ -3,7 +3,7 @@ import path from "node:path";
 import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import ApprovalCard, { payConfirmDescription, payConfirmTitle } from "@/components/ApprovalCard";
+import ApprovalCard, { OWN_ENTRY_RECORDED, OWN_INVOICE_NOTE, payConfirmDescription, payConfirmTitle } from "@/components/ApprovalCard";
 import AgentPauseControl, { PAUSE_DIALOG_DESCRIPTION } from "@/components/AgentPauseControl";
 import { AgentPausedBanner, pausedBanner } from "@/components/AgentPausedBanner";
 import type { WaitingPayable } from "@/lib/agent/approvals";
@@ -63,8 +63,17 @@ function payable(overrides: Partial<WaitingPayable> = {}): WaitingPayable {
   };
 }
 
-function card(overrides: Partial<WaitingPayable> = {}, props: Partial<{ canDecide: boolean; viewerId: string; sandbox: boolean }> = {}) {
-  return html(<ApprovalCard orgSlug="acme" payable={payable(overrides)} canDecide={props.canDecide ?? true} viewerId={props.viewerId ?? VIEWER} sandbox={props.sandbox ?? false} />);
+function card(overrides: Partial<WaitingPayable> = {}, props: Partial<{ canDecide: boolean; viewerId: string; sandbox: boolean; soleApprover: boolean }> = {}) {
+  return html(
+    <ApprovalCard
+      orgSlug="acme"
+      payable={payable(overrides)}
+      canDecide={props.canDecide ?? true}
+      viewerId={props.viewerId ?? VIEWER}
+      sandbox={props.sandbox ?? false}
+      soleApprover={props.soleApprover ?? false}
+    />
+  );
 }
 
 describe("utcMinute", () => {
@@ -229,6 +238,32 @@ describe("ApprovalCard", () => {
     const markup = card({ createdBy: VIEWER });
     expect(markup).toContain("You created this invoice");
     expect(markup).toMatch(APPROVE_DISABLED);
+  });
+
+  it("lets the workspace's sole approver pay an invoice they entered, and says the ledger records it", () => {
+    const markup = card({ createdBy: VIEWER }, { soleApprover: true });
+    expect(markup).not.toContain("You created this invoice");
+    expect(markup).not.toMatch(APPROVE_DISABLED);
+    expect(markup.replace(/&#x27;/g, "'")).toContain(OWN_INVOICE_NOTE);
+  });
+
+  it("says nothing about a sole approver on an invoice someone else entered", () => {
+    const markup = card({ createdBy: CREATOR }, { soleApprover: true });
+    expect(markup.replace(/&#x27;/g, "'")).not.toContain(OWN_INVOICE_NOTE);
+    expect(markup).not.toMatch(APPROVE_DISABLED);
+  });
+
+  it("still refuses a high-risk counterparty to a sole approver", () => {
+    const markup = card({ createdBy: VIEWER, riskLevel: "high" }, { soleApprover: true });
+    expect(markup).toContain("Screened high risk");
+    expect(markup).toMatch(APPROVE_DISABLED);
+    expect(markup.replace(/&#x27;/g, "'")).not.toContain(OWN_INVOICE_NOTE);
+  });
+
+  it("adds to the confirm dialog that the ledger records a sole approver's own entry", () => {
+    const first = payConfirmDescription({ paymentSent: false, lastAttempt: null }, true);
+    expect(first).toBe(`The transfer starts as soon as you confirm, and the ledger records who approved it. ${OWN_ENTRY_RECORDED}`);
+    expect(payConfirmDescription({ paymentSent: false, lastAttempt: null })).not.toContain(OWN_ENTRY_RECORDED);
   });
 
   it("does not let a high-risk counterparty be paid, and says why", () => {

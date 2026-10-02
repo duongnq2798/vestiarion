@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { HeldMilestoneActions } from "@/components/HeldMilestoneActions";
+import { HeldMilestoneActions, OWN_MILESTONE_NOTE } from "@/components/HeldMilestoneActions";
 import type { HeldReason } from "@/lib/agent/milestone-decisions";
 
 vi.mock("@/app/actions/milestones", () => ({
@@ -25,8 +25,18 @@ const FAILED: HeldReason = {
   override: false,
 };
 
-const render = (reason: HeldReason, options: { canDecide?: boolean; selfAdded?: boolean } = {}) =>
-  renderToStaticMarkup(<HeldMilestoneActions orgSlug="testnet-2" milestone={MILESTONE} reason={reason} canDecide={options.canDecide ?? true} selfAdded={options.selfAdded ?? false} sandbox={false} />);
+const render = (reason: HeldReason, options: { canDecide?: boolean; selfAdded?: boolean; soleApprover?: boolean } = {}) =>
+  renderToStaticMarkup(
+    <HeldMilestoneActions
+      orgSlug="testnet-2"
+      milestone={MILESTONE}
+      reason={reason}
+      canDecide={options.canDecide ?? true}
+      selfAdded={options.selfAdded ?? false}
+      sandbox={false}
+      soleApprover={options.soleApprover ?? false}
+    />
+  );
 
 describe("HeldMilestoneActions", () => {
   it("says what it waits for, and offers Pay now and Close without paying", () => {
@@ -49,6 +59,18 @@ describe("HeldMilestoneActions", () => {
     const markup = render({ ...FAILED, kind: "agent_held", override: true }, { selfAdded: true });
     expect(markup).toMatch(/<button[^>]*disabled=""[^>]*aria-describedby="pay-held-m-1-blocked"/);
     expect(text(markup)).toContain("You added this milestone, so someone else must approve paying it.");
+  });
+
+  it("lets the workspace's sole approver override the hold on a milestone they added, and says the ledger records it", () => {
+    const markup = render({ ...FAILED, kind: "agent_held", override: true }, { selfAdded: true, soleApprover: true });
+    expect(markup).not.toMatch(/<button[^>]*disabled=""/);
+    expect(text(markup)).not.toContain("so someone else must approve paying it");
+    expect(text(markup)).toContain(OWN_MILESTONE_NOTE);
+  });
+
+  it("says nothing about a sole approver when Pay now overrides nothing", () => {
+    const markup = render(FAILED, { selfAdded: true, soleApprover: true });
+    expect(text(markup)).not.toContain(OWN_MILESTONE_NOTE);
   });
 
   it("shows only the reason to someone who cannot decide it", () => {

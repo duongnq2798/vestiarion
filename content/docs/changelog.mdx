@@ -1,5 +1,9 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-03: A workspace's only approver may approve what they entered
+
+- When the person who entered a payable, or added a milestone, is the only member of the workspace who may approve payments (the only owner, admin or approver), they may now approve it themselves. The `approval_paid` or `milestone_approval_paid` entry then carries `soleApprover: true` in its `detail`, and its `summary` ends "(entered and approved by the workspace's only approver)". An approval by anyone else carries neither. Once a second member may approve, the person who entered a record cannot approve it again.
+
 ## 2026-10-02: The agent's reasoning is written in plain English
 
 - New decisions' `agentReasoning` in `/api/v1/invoices` and `/api/v1/milestones`, and `detail.decision.reasoning` in ledger entries, are written as 2 to 4 plain-English sentences, without the field names of the facts the agent was shown. Nothing about earlier records changes: the API and the ledger return what was stored.

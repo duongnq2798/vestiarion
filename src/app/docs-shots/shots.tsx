@@ -473,6 +473,15 @@ export const DOCS_SHOTS = {
       return <ApprovalCard orgSlug={SLUG} payable={HELD} canDecide viewerId="docs-sample-owner" sandbox={false} />;
     },
   },
+  "first-payment-approval-own": {
+    guide: "first-payment",
+    page: "approvals",
+    sub: "Payables the agent would not pay on its own, oldest due date first. Pay one now, reject it, or return it to the agent's next cycle.",
+    render: function OwnApprovalShot() {
+      // The workspace's only approver, looking at a payable they entered themselves (sole approver R5).
+      return <ApprovalCard orgSlug={SLUG} payable={{ ...HELD, createdBy: "docs-sample-owner" }} canDecide viewerId="docs-sample-owner" sandbox={false} soleApprover />;
+    },
+  },
   "first-payment-audit": {
     guide: "first-payment",
     page: "audit",

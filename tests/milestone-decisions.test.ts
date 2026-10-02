@@ -180,6 +180,8 @@ function world(options: {
   last?: ReturnType<typeof entryRow>;
   balance?: string;
   claim?: () => FakeReply;
+  /** `sole_approver`'s reply (migration 0061); unset falls through to the default `[]`, which is not `true`. */
+  soleApprover?: FakeReply;
 } = {}) {
   const fake = fakeSupabase((request: RecordedRequest) => {
     if (request.path === "/rest/v1/orgs") return { body: orgRow() };
@@ -189,6 +191,7 @@ function world(options: {
     if (request.path === "/rest/v1/rpc/ledger_entries_for_targets") return { body: [options.last ?? entryRow("milestone_release", {})] };
     if (request.path === "/rest/v1/accounts") return { body: { id: "acct-1", balance: options.balance ?? "8" } };
     if (request.path === "/rest/v1/rpc/claim_milestone_decision") return options.claim ? options.claim() : { body: milestoneRow() };
+    if (request.path === "/rest/v1/rpc/sole_approver" && options.soleApprover) return options.soleApprover;
     if (request.path === "/rest/v1/rpc/append_ledger_entry") {
       return { body: { ...entryRow("x", {}), seq: 800, actor: "human" } };
     }
@@ -252,6 +255,34 @@ describe("Pay now", () => {
     const { run, claimed } = world({ milestone: { created_by: ACTOR }, intent: null, last: entryRow("milestone_hold", { guardrailBlocked: false }) });
     expect(await refusal(run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE })))).toBe("self_approval");
     expect(claimed()).toBe(false);
+  });
+
+  it("lets the workspace's sole approver override the agent's hold on a milestone they added, and the ledger says so", async () => {
+    releaseHeldMilestoneMock.mockResolvedValue({ ...PAID, paymentExecution: { attempt: 1, retriedAfter: null } });
+    const { fake, run, claimed, ledger } = world({
+      milestone: { created_by: ACTOR },
+      intent: null,
+      last: entryRow("milestone_hold", { guardrailBlocked: false }),
+      soleApprover: { body: true },
+    });
+    await run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }));
+
+    expect(fake.requests.filter((request) => request.path === "/rest/v1/rpc/sole_approver").map((request) => request.body)).toEqual([
+      { p_org_id: ORG, p_user_id: ACTOR },
+    ]);
+    expect(claimed()).toBe(true);
+    const [entry] = ledger();
+    expect(entry.p_summary).toBe(`Paid milestone "Clean service" to Puka Hotel now: 0.3 USDC (entered and approved by the workspace's only approver)`);
+    expect(entry.p_detail).toMatchObject({ by: ACTOR, soleApprover: true, status: "paid" });
+  });
+
+  it("does not ask about a sole approver when someone other than whoever added it pays it now", async () => {
+    releaseHeldMilestoneMock.mockResolvedValue(PAID);
+    const { fake, run, ledger } = world({ intent: null, last: entryRow("milestone_hold", { guardrailBlocked: false }), soleApprover: { body: true } });
+    await run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }));
+
+    expect(fake.requests.some((request) => request.path === "/rest/v1/rpc/sole_approver")).toBe(false);
+    expect(ledger()[0].p_detail).not.toHaveProperty("soleApprover");
   });
 
   it("checks the balance for a new transfer, and not for one already sent", async () => {

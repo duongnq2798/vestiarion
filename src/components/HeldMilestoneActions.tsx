@@ -19,13 +19,19 @@ import type { HeldReason } from "@/lib/agent/milestone-decisions";
 import { orgHref } from "@/lib/auth/org-paths";
 
 const INITIAL: ActionResult = { ok: false, message: "" };
+
+/** What the row says to a sole approver about a held milestone they added (sole approver R5). */
+export const OWN_MILESTONE_NOTE =
+  "You added this milestone. You are the only person in this workspace who can approve payments, so you can pay it yourself, and the ledger records that you did.";
+const OWN_MILESTONE_RECORDED = "It also records that you added it yourself, as the workspace's only approver.";
 const pay = withSuccessToast(payHeldMilestoneAction);
 const close = withSuccessToast(closeMilestoneAction);
 
 /**
  * A held milestone's row, opened (held milestone actions R1–R3): what it waits for, where to act on that, and a
  * person's two decisions on it, Pay now and Close without paying. Only someone who may approve a held payable
- * sees the decisions.
+ * sees the decisions. Overriding the agent's own hold needs someone other than whoever added the milestone,
+ * unless they are the workspace's sole approver, and then the row says so (sole approver R5).
  */
 export function HeldMilestoneActions({
   orgSlug,
@@ -34,6 +40,7 @@ export function HeldMilestoneActions({
   canDecide,
   selfAdded,
   sandbox,
+  soleApprover = false,
 }: {
   orgSlug: string;
   milestone: { id: string; title: string; amount: number; contractorName: string };
@@ -42,11 +49,15 @@ export function HeldMilestoneActions({
   /** The viewer added this milestone: overriding the agent's hold on it needs someone else. */
   selfAdded: boolean;
   sandbox: boolean;
+  /** The viewer is the only member of the workspace who may approve payments: they may override a hold on what they added. */
+  soleApprover?: boolean;
 }) {
   const payForm = useActionForm(pay, INITIAL);
   const payId = `pay-held-${milestone.id}`;
   const blockedId = `${payId}-blocked`;
-  const selfBlocked = reason.canPay && reason.override && selfAdded;
+  const ownOverride = reason.canPay && reason.override && selfAdded;
+  const selfBlocked = ownOverride && !soleApprover;
+  const ownEntry = ownOverride && soleApprover;
 
   return (
     <Callout tone="held" title="What it waits for">
@@ -80,13 +91,13 @@ export function HeldMilestoneActions({
                       </Button>
                     }
                     title={`Pay ${fmt(milestone.amount)} USDC to ${milestone.contractorName} now?${sandbox ? " (simulated)" : ""}`}
-                    description={
+                    description={`${
                       reason.kind === "in_flight"
                         ? "Nothing new is sent: Vestiarion checks the transfer already made with Circle, and the ledger records who approved it."
                         : reason.kind === "transfer_failed"
                           ? "A new transfer starts as soon as you confirm, and the ledger records who approved it."
                           : "The transfer starts as soon as you confirm, and the ledger records who approved it."
-                    }
+                    }${ownEntry ? ` ${OWN_MILESTONE_RECORDED}` : ""}`}
                     confirmLabel="Pay now"
                   />
                 </>
@@ -98,6 +109,7 @@ export function HeldMilestoneActions({
                 </p>
               )}
             </div>
+            {ownEntry && <p className="mt-2 text-xs text-ink-3">{OWN_MILESTONE_NOTE}</p>}
             {/* Takes no room until Pay now has something to say. */}
             <FormMessage tone={payForm.state.message ? (payForm.state.ok ? "success" : "error") : "neutral"} className={payForm.state.message ? "mt-2" : "min-h-0"}>
               {payForm.state.message}

@@ -156,6 +156,8 @@ function approvalsFake(options: {
   counterparty?: Record<string, unknown>;
   /** The ledger entries about the listed invoices, as `ledger_entries_for_targets` returns them; none by default. */
   ledgerTargets?: Array<Record<string, unknown>>;
+  /** `sole_approver`'s reply (migration 0061); unset falls through to the default `[]`, which is not `true`. */
+  soleApprover?: FakeReply;
 } = {}) {
   const intents = options.intents ?? [];
   const eq = (request: RecordedRequest, column: string) => request.params.get(column)?.match(/^eq\.(.+)$/)?.[1];
@@ -234,6 +236,7 @@ function approvalsFake(options: {
       return { body: { ...invoiceRow(), status: "processing", reviewed_by: body.p_by, reviewed_at: "2026-09-29T00:00:00Z" } };
     }
     if (request.path === "/rest/v1/rpc/ledger_entries_for_targets") return { body: options.ledgerTargets ?? [] };
+    if (request.path === "/rest/v1/rpc/sole_approver" && options.soleApprover) return options.soleApprover;
     if (request.path === "/rest/v1/rpc/append_ledger_entry") {
       if (options.ledgerFails) return { status: 500, body: { message: "ledger unavailable" } };
       return {
@@ -300,6 +303,45 @@ describe("approveAndPay", () => {
     await expect(attempt).rejects.toThrow("You created this invoice, so someone else must approve it.");
     expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
     expect(payInvoiceMock).not.toHaveBeenCalled();
+  });
+
+  it("lets the workspace's sole approver approve and pay an invoice they entered, and the ledger says so", async () => {
+    payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", operatingBalance: 0 });
+    const { fake, run } = approvalsFake({ soleApprover: { body: true } });
+
+    const result = await run(() => approveAndPay({ actorId: CREATOR, invoiceId: INVOICE_ID }));
+
+    expect(result.status).toBe("paid");
+    expect(rpcBodies(fake.requests, "sole_approver")).toEqual([{ p_org_id: ORG, p_user_id: CREATOR }]);
+    expect(rpcBodies(fake.requests, "claim_invoice_decision")).toEqual([{ p_org_id: ORG, p_invoice_id: INVOICE_ID, p_by: CREATOR, p_decision: "approve" }]);
+    const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(append).toMatchObject({
+      p_action: "approval_paid",
+      p_summary: "Approved and paid 150 USDC to Acme Supplies (entered and approved by the workspace's only approver)",
+      p_detail: { by: CREATOR, soleApprover: true, status: "paid" },
+    });
+  });
+
+  it("keeps the self-approval refusal when whether they are the sole approver cannot be read", async () => {
+    const { fake, run } = approvalsFake({ soleApprover: { status: 404, body: { code: "PGRST202", message: "Could not find the function public.sole_approver" } } });
+
+    await expect(run(() => approveAndPay({ actorId: CREATOR, invoiceId: INVOICE_ID }))).rejects.toThrow(
+      "You created this invoice, so someone else must approve it."
+    );
+    expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+  });
+
+  it("does not ask about a sole approver, nor record one, when someone else approves", async () => {
+    payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", operatingBalance: 0 });
+    const { fake, run } = approvalsFake({ soleApprover: { body: true } });
+
+    await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+
+    expect(rpcBodies(fake.requests, "sole_approver")).toHaveLength(0);
+    const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(append.p_summary).toBe("Approved and paid 150 USDC to Acme Supplies");
+    expect(append.p_detail).not.toHaveProperty("soleApprover");
   });
 
   it("refuses a high-risk counterparty before any claim", async () => {

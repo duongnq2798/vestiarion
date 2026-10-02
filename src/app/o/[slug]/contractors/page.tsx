@@ -23,6 +23,7 @@ import { milestoneDecision } from "@/components/vx/map";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { sectionTitle } from "@/components/vx/nav";
 import { heldReason, milestoneIntents } from "@/lib/agent/milestone-decisions";
+import { isSoleApprover } from "@/lib/agent/sole-approver";
 import { viewerCan } from "@/lib/auth/authorize";
 import { requireMembership } from "@/lib/auth/membership";
 import { chainModes } from "@/lib/circle";
@@ -64,9 +65,11 @@ export default async function ContractorsPage({ params, searchParams }: { params
         : Promise.resolve(undefined),
     ]);
     const held = milestones.filter((milestone) => milestone.status === "held");
-    const [entries, intents] = await Promise.all([
+    const [entries, intents, soleApprover] = await Promise.all([
       listLedgerEntriesForTargets({ milestoneIds: milestones.map((milestone) => milestone.id) }),
       milestoneIntents(held.map((milestone) => milestone.id)),
+      // Whether this person may override a hold on a milestone they added themselves (sole approver R5).
+      canDecide && held.some((milestone) => milestone.created_by === access.user.id) ? isSoleApprover(access.user.id) : Promise.resolve(false),
     ]);
     const contractorsById = new Map(counterparties.map((counterparty) => [counterparty.id, counterparty]));
     // What a verified milestone waits for before the agent pays it: an address to confirm, or one to add.
@@ -188,6 +191,7 @@ export default async function ContractorsPage({ params, searchParams }: { params
             reason={reason}
             canDecide={canDecide}
             selfAdded={Boolean(milestone.created_by) && milestone.created_by === access.user.id}
+            soleApprover={soleApprover}
             sandbox={!live}
           />
         ),
