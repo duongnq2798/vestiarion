@@ -21,6 +21,8 @@ export interface DecisionRowItem {
   footerAction?: ReactNode;
   /** A form under the card, such as a milestone's verification. */
   after?: ReactNode;
+  /** Open from the start: for a screenshot of the opened row. */
+  open?: boolean;
 }
 
 export function DecisionRows({ items, orgSlug, className }: { items: DecisionRowItem[]; orgSlug: string; className?: string }) {
@@ -43,7 +45,8 @@ function DecisionRow({ item, orgSlug }: { item: DecisionRowItem; orgSlug: string
   return (
     <Disclosure
       variant="bare"
-      summaryClassName="grid grid-cols-[minmax(0,1fr)_auto_1rem] items-center gap-x-4 gap-y-1 px-4 py-3 transition-colors duration-150 ease-standard hover:bg-ground/50 sm:grid-cols-[minmax(0,1fr)_10.5rem_8rem_auto_1rem] sm:px-5"
+      defaultOpen={item.open}
+      summaryClassName="grid grid-cols-[minmax(0,1fr)_auto_1rem] items-center gap-x-4 gap-y-1 px-4 py-3 transition-colors duration-150 ease-standard hover:bg-ground/50 sm:grid-cols-[minmax(0,1fr)_9.5rem_7.5rem_12.5rem_1rem] sm:px-5"
       summary={
         <>
           <span className="min-w-0">
