@@ -46,6 +46,7 @@ const CRUD_UPDATE: Record<string, { column: string; expr: string }> = {
   receivable_links: { column: "revoked_at", expr: "now()" },
   incoming_transfers: { column: "matched_by", expr: "'person'" },
   agent_budgets: { column: "daily_usdc", expr: "coalesce(daily_usdc, 1) + 1" },
+  recurring_payables: { column: "memo", expr: "'changed'" },
 };
 
 beforeAll(async () => {
