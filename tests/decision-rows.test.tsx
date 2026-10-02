@@ -106,6 +106,12 @@ describe("the Contractors page", () => {
     expect(page).toContain("hint: reason.hint,");
     expect(page).toContain("<HeldMilestoneActions");
   });
+
+  it("puts a verified milestone whose address no one has confirmed under Needs you, with where to confirm it", () => {
+    expect(page).toContain("statusOf(decision) === \"held\" || confirming(decision)");
+    expect(page).toContain('hint: "Address to confirm"');
+    expect(page).toContain('<Link href={orgHref(slug, "/counterparties")}>Open Counterparties</Link>');
+  });
 });
 
 describe("the Counterparties page", () => {

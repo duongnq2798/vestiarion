@@ -67,3 +67,28 @@ describe("milestoneDecision: a release held for the agent's spending limit (outf
     expect(decision.guardrail).toEqual({ rule: "workspace.outflow_budget", attempted: 12.5, attemptedToken: "USDC", limit: 5, limitToken: "USDC", note: "left of the 20.00 USDC daily spending limit; 15.00 USDC already paid today" });
   });
 });
+
+describe("milestoneDecision: a milestone the agent has not paid yet says what it waits for", () => {
+  const verified = milestone({ status: "verified", verified: true, verification_method: "manual", verification_status: "verified", contractor_name: "Mr Pop", amount: 1 });
+
+  it("waits on a person to confirm the payee's new address: held for them, never Scheduled, with the contractor's own screening", () => {
+    const decision = milestoneDecision(verified, [], { riskLevel: "clear", waiting: "unconfirmed" });
+    expect(decision.outcome).toBe("held");
+    expect(decision.outcomeLabel).toBe("Address to confirm");
+    expect(decision.reasoning).toBe(
+      "Verified. Mr Pop's address changed and no one has confirmed it yet: confirm it on Counterparties, and the agent decides on pay within a minute."
+    );
+    expect(decision.evidence.find((item) => item.label === "Risk")?.value).toBe("clear");
+  });
+
+  it("waits for the payee to add an address, or for the agent's decision", () => {
+    expect(milestoneDecision(verified, [], { waiting: "no_address" })).toMatchObject({ outcomeLabel: "Waiting for an address" });
+    const deciding = milestoneDecision(verified, []);
+    expect(deciding).toMatchObject({ outcomeLabel: "Being decided", reasoning: "Verified. The agent decides on pay within a minute." });
+    expect(deciding.outcome).not.toBe("held");
+  });
+
+  it("waits for verification while pending", () => {
+    expect(milestoneDecision(milestone(), [])).toMatchObject({ outcomeLabel: "Awaiting verification", reasoning: "The agent is waiting for milestone verification." });
+  });
+});
