@@ -316,10 +316,10 @@ export const DOCS_SHOTS = {
     render: function InvoiceShot() {
       return (
         <section>
-          <SectionHeader title="Invoice intake" meta="typed in, read from a document, or imported from a CSV, and confirmed" />
+          <SectionHeader title="New invoice" meta="typed in, read from a document, imported from a CSV, or recurring" />
           <Card className="p-4 sm:p-6">
             <Tabs defaultValue="manual">
-              <TabsList aria-label="Invoice intake">
+              <TabsList aria-label="New invoice">
                 <TabsTrigger value="manual">
                   <PenLine aria-hidden />
                   Enter one invoice
@@ -355,7 +355,7 @@ export const DOCS_SHOTS = {
       const asked = `0x${"5af3107a".repeat(5)}`;
       return (
         <section>
-          <SectionHeader title="Invoice intake" meta="typed in, read from a document, or imported from a CSV, and confirmed" />
+          <SectionHeader title="New invoice" meta="typed in, read from a document, imported from a CSV, or recurring" />
           <Card className="p-4 sm:p-6">
             <DocumentDraft
               orgSlug={SLUG}
