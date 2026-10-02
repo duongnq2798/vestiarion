@@ -15,6 +15,9 @@ import { groupAddress, looksLikeAddress, NOT_AN_ADDRESS } from "@/lib/payee-jour
 
 const INITIAL: PayeeAddressResult = { ok: false, message: "" };
 
+/** Why Send my address is not pressable yet: a checklist read as a choice of one left a payee guessing (2026-10-02 test). */
+export const SEND_HINT = "Tick all three boxes to send your address.";
+
 /** What the payee ticks before sending an address the link cannot take back (freelancer journey R6). */
 export const ADDRESS_CHECKS = [
   "It's my own wallet, and I can open it.",
@@ -110,7 +113,7 @@ export default function PayeeAddressForm({
         </p>
       </div>
       <fieldset className="grid gap-3">
-        <legend className="mb-1 text-sm font-medium text-ink">Before you send it</legend>
+        <legend className="mb-1 text-sm font-medium text-ink">Before you send it, tick all three</legend>
         {ADDRESS_CHECKS.map((label, index) => (
           <Checkbox
             key={label}
@@ -128,10 +131,15 @@ export default function PayeeAddressForm({
         <Button type="button" variant="ghost" icon={<PenLine />} onClick={() => setStep("enter")}>
           Edit address
         </Button>
-        <SubmitButton pendingLabel="Sending…" disabled={!ready}>
+        <SubmitButton pendingLabel="Sending…" disabled={!ready} aria-describedby={ready ? undefined : "payee-send-hint"}>
           Send my address
         </SubmitButton>
       </div>
+      {!ready && (
+        <p id="payee-send-hint" className="-mt-2 text-right text-xs text-ink-3 max-sm:text-center">
+          {SEND_HINT}
+        </p>
+      )}
     </form>
   );
 }
