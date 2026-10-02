@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { ChainProvider, Stablecoin, TransferResult } from "./circle";
 import type { PayoutRoute } from "./circle/types";
+import { MAX_BATCH_SIZE } from "./circle/batch";
 import { FAILED_STATES } from "./circle/settlement";
 import { db, unwrap } from "./dal";
 import { paidAcrossChains } from "./payee-chains";
@@ -53,6 +54,10 @@ export interface PaymentIntent {
   mintTxHash?: string | null;
   /** The route a bridged payment's first attempt chose (Gateway payouts G2); null for one on Arc, or from before 0045. */
   route?: PayoutRoute | null;
+  /** The batch the first attempt was sent in (batch payouts R4): its key, size, and when it was sent; null when sent alone. */
+  batchKey?: string | null;
+  batchSize?: number | null;
+  batchSentAt?: string | null;
 }
 
 interface PaymentIntentRow {
@@ -84,6 +89,9 @@ interface PaymentIntentRow {
   destination_chain?: string | null;
   mint_tx_hash?: string | null;
   payout_route?: string | null;
+  batch_key?: string | null;
+  batch_size?: number | null;
+  batch_sent_at?: string | null;
 }
 
 export interface PaymentIntentStore {
@@ -100,6 +108,18 @@ export interface PaymentIntentStore {
    * it is not retryable).
    */
   beginRetry(intent: PaymentIntent): Promise<PaymentIntent | null>;
+}
+
+/** What a batch needs from the store beyond one intent (batch payouts R4, R5). */
+export interface PaymentBatchStore {
+  /**
+   * Writes the batch on every member in one statement, each still claimed and never sent; how many it
+   * reached. 0 before migration 0057, when there are no batch columns.
+   */
+  joinBatch(memberKeys: string[], batch: { key: string; size: number; sentAt: string }): Promise<number>;
+  /** Takes the batch off every member Circle has no id for. */
+  leaveBatch(batchKey: string): Promise<void>;
+  batchMembers(batchKey: string): Promise<PaymentIntent[]>;
 }
 
 export interface PaymentRequest {
@@ -156,6 +176,8 @@ export interface PaymentExecution {
   mintTxHash?: string | null;
   /** The route the intent keeps: an escrow release is told from a transfer by it (milestone escrow, review I1). */
   route?: PayoutRoute | null;
+  /** The batch this payment was sent in, shared with its other members (batch payouts §2); null when sent alone. */
+  batch?: { key: string; size: number } | null;
 }
 
 /**
@@ -191,6 +213,15 @@ export function paymentIdempotencyKey(sourceType: PaymentSourceType, sourceId: s
   return asUuid(hash);
 }
 
+/**
+ * A batch's key (batch payouts R3): Circle's idempotency key for the batch and its transaction's refId,
+ * from its members' keys sorted, so the same payments always make the same batch.
+ */
+export function batchIdempotencyKey(memberKeys: string[]): string {
+  const path = `vestiarion/payment-batch/v1/${[...memberKeys].sort().join(",")}`;
+  return asUuid(createHash("sha256").update(path, "utf8").digest());
+}
+
 function fromRow(row: PaymentIntentRow): PaymentIntent {
   return {
     id: row.id,
@@ -221,8 +252,14 @@ function fromRow(row: PaymentIntentRow): PaymentIntent {
     destinationChain: row.destination_chain ?? null,
     mintTxHash: row.mint_tx_hash ?? null,
     route: row.payout_route === "gateway" || row.payout_route === "cctp" || row.payout_route === "escrow" ? row.payout_route : null,
+    batchKey: row.batch_key ?? null,
+    batchSize: row.batch_size ?? null,
+    batchSentAt: row.batch_sent_at ?? null,
   };
 }
+
+/** A column this database does not have yet: Postgres's own code, or PostgREST's for a write naming it. */
+const missingColumn = (code: string | undefined) => code === "42703" || code === "PGRST204";
 
 /**
  * `payment_intents` through the tenant client. The row is one per source
@@ -231,7 +268,7 @@ function fromRow(row: PaymentIntentRow): PaymentIntent {
  * write after that names the current key, so a write about an attempt that
  * another request already moved on matches nothing.
  */
-export class SupabasePaymentIntentStore implements PaymentIntentStore {
+export class SupabasePaymentIntentStore implements PaymentIntentStore, PaymentBatchStore {
   async ensure(input: PaymentRequest & { idempotencyKey: string; provider: "circle" | "simulate" }): Promise<PaymentIntent> {
     const result = await db().from("payment_intents").upsert({
       source_type: input.sourceType,
@@ -337,10 +374,43 @@ export class SupabasePaymentIntentStore implements PaymentIntentStore {
     // request already opened the next attempt, or this one is not retryable.
     return result.data?.id ? fromRow(result.data) : null;
   }
+
+  async joinBatch(memberKeys: string[], batch: { key: string; size: number; sentAt: string }): Promise<number> {
+    const result = await db()
+      .from("payment_intents")
+      .update({ batch_key: batch.key, batch_size: batch.size, batch_sent_at: batch.sentAt, updated_at: batch.sentAt })
+      .in("idempotency_key", memberKeys)
+      .eq("status", "submitting")
+      .is("provider_tx_id", null)
+      .is("batch_key", null)
+      .select("idempotency_key");
+    // Before migration 0057 no member can join: each is paid alone, as before.
+    if (missingColumn(result.error?.code)) return 0;
+    if (result.error) throw new Error(result.error.message);
+    return (result.data ?? []).length;
+  }
+
+  async leaveBatch(batchKey: string): Promise<void> {
+    const result = await db()
+      .from("payment_intents")
+      .update({ batch_key: null, batch_size: null, batch_sent_at: null })
+      .eq("batch_key", batchKey)
+      .is("provider_tx_id", null);
+    if (missingColumn(result.error?.code)) return;
+    if (result.error) throw new Error(result.error.message);
+  }
+
+  async batchMembers(batchKey: string): Promise<PaymentIntent[]> {
+    const rows = unwrap(await db().from("payment_intents").select("*").eq("batch_key", batchKey)) as PaymentIntentRow[];
+    return rows.map(fromRow);
+  }
 }
 
+/** A batch member Circle has no id for may have gone out with its batch: in flight until it is found, or known never sent (R5). */
+const inLostBatch = (intent: PaymentIntent) => Boolean(intent.batchKey) && intent.transferAttempt === 1 && !intent.providerTxId && intent.status !== "confirmed";
+
 function execution(intent: PaymentIntent, reconciled: boolean, retriedAfter: RetriedAfter | null = null): PaymentExecution {
-  const status = intent.status === "confirmed" ? "confirmed" : intent.status === "failed" ? "failed" : "pending";
+  const status = intent.status === "confirmed" ? "confirmed" : intent.status === "failed" && !inLostBatch(intent) ? "failed" : "pending";
   return {
     idempotencyKey: intent.idempotencyKey,
     providerTxId: intent.providerTxId,
@@ -361,7 +431,65 @@ function execution(intent: PaymentIntent, reconciled: boolean, retriedAfter: Ret
     destinationChain: intent.destinationChain ?? null,
     mintTxHash: intent.mintTxHash ?? null,
     route: intent.route ?? null,
+    // Only the first attempt was in a batch: a later one is a transfer of its own (R7).
+    batch: intent.batchKey && intent.batchSize && intent.transferAttempt === 1 ? { key: intent.batchKey, size: intent.batchSize } : null,
   };
+}
+
+/** One member's part of a batch's transaction: the batch's fee shared equally (batch payouts R6). */
+function shareOf(result: TransferResult, size: number): TransferResult {
+  return { ...result, feeUsd: Number((result.feeUsd / size).toFixed(6)) };
+}
+
+function asBatchStore(store: PaymentIntentStore): PaymentIntentStore & PaymentBatchStore {
+  const candidate = store as PaymentIntentStore & Partial<PaymentBatchStore>;
+  if (!candidate.joinBatch || !candidate.leaveBatch || !candidate.batchMembers) throw new Error("This payment store cannot keep batches");
+  return candidate as PaymentIntentStore & PaymentBatchStore;
+}
+
+/** How long a batch Circle does not list may still be its pipeline catching up, rather than never accepted (R5). */
+export const BATCH_LOOKUP_GRACE_MS = 15 * 60_000;
+
+/**
+ * A first attempt sent in a batch whose answer was lost (batch payouts R5): looked for on Circle by the
+ * batch's refId, never sent again alone, since Circle may have the batch. Found, every member still
+ * without its id gets it, with its share of the fee, and this one's execution is returned. Not found
+ * within the grace period, or not looked for in full, it stays in flight. Not found after it, Circle
+ * never accepted the batch: it is taken off every member, and null says this one is an ordinary
+ * payment never sent.
+ */
+async function resolveLostBatch(
+  intent: PaymentIntent,
+  request: PaymentRequest,
+  provider: ChainProvider,
+  store: PaymentIntentStore,
+  now = Date.now()
+): Promise<PaymentExecution | null> {
+  const batches = asBatchStore(store);
+  const key = intent.batchKey as string;
+  const sentAt = Date.parse(intent.batchSentAt ?? "");
+  let found: TransferResult | null;
+  try {
+    if (!provider.findTransferByRef || Number.isNaN(sentAt)) throw new Error("this provider cannot look a batch up");
+    found = await provider.findTransferByRef(request.fromAccountId, key, {
+      from: new Date(sentAt - 5 * 60_000).toISOString(),
+      to: new Date(sentAt + 2 * BATCH_LOOKUP_GRACE_MS).toISOString(),
+    });
+  } catch (error) {
+    // A lookup that did not complete says nothing about the batch: still in flight, looked for again.
+    return { ...execution(intent, true), error: `Its batch could not be looked for on Circle: ${error instanceof Error ? error.message : "lookup failed"}` };
+  }
+  if (found) {
+    for (const member of await batches.batchMembers(key)) {
+      if (!member.providerTxId) await store.recordResult(member.idempotencyKey, shareOf(found, member.batchSize ?? intent.batchSize ?? 1));
+    }
+    return execution(await store.get(intent.idempotencyKey), true);
+  }
+  if (now - sentAt < BATCH_LOOKUP_GRACE_MS) {
+    return { ...execution(intent, true), error: "Its batch is not on Circle yet; it is looked for again next cycle" };
+  }
+  await batches.leaveBatch(key);
+  return null;
 }
 
 /** Whether a request asks for the transfer its intent's first attempt asked for: the same amount, payee and chain. */
@@ -400,6 +528,14 @@ export async function executePayment(
 
   if (intent.status === "confirmed") return execution(intent, false);
 
+  // A first attempt sent in a batch whose answer was lost is looked for, never sent again alone (batch payouts R5).
+  if (intent.batchKey && !intent.providerTxId && intent.transferAttempt === 1) {
+    const resolved = await resolveLostBatch(intent, request, dependencies.provider, store);
+    if (resolved) return resolved;
+    // Circle never had the batch: this is a payment never sent, sent alone below under its own key.
+    intent = await store.get(intent.idempotencyKey);
+  }
+
   let retriedAfter: RetriedAfter | null = null;
 
   // Provider identity means a transfer already exists. Reconcile it before
@@ -408,6 +544,8 @@ export async function executePayment(
     let reported: TransferResult;
     try {
       reported = await dependencies.provider.reconcileTransfer(intent.providerTxId);
+      // A batch's transaction is read whole: this payment records its share of the fee (batch payouts R6).
+      if (intent.batchSize && intent.transferAttempt === 1) reported = shareOf(reported, intent.batchSize);
       intent = await store.recordResult(intent.idempotencyKey, reported);
     } catch (error) {
       // A read that did not complete says nothing about the transfer: record
@@ -437,7 +575,18 @@ export async function executePayment(
     // second provider call; the next cycle will reconcile its recorded ID.
     return execution(await store.get(idempotencyKey), false, retriedAfter);
   }
+  return sendClaimed(intent, request, dependencies.provider, store, retriedAfter);
+}
 
+/** A claimed attempt, sent alone under its own key: `executePayment`'s send, and a batch member's when it cannot go in a batch. */
+async function sendClaimed(
+  intent: PaymentIntent,
+  request: PaymentRequest,
+  provider: ChainProvider,
+  store: PaymentIntentStore,
+  retriedAfter: RetriedAfter | null
+): Promise<PaymentExecution> {
+  const idempotencyKey = intent.idempotencyKey;
   try {
     // A Gateway transfer is refused again only when its whole spec repeats: the same
     // salt with another amount (a discount that lapsed), payee or chain would be a
@@ -455,7 +604,7 @@ export async function executePayment(
         "This payout was first sent through Gateway with another amount, payee or chain; nothing was sent. Check with Circle whether the first transfer was made before paying it again."
       );
     }
-    const result = await dependencies.provider.transfer({
+    const result = await provider.transfer({
       fromAccountId: request.fromAccountId,
       toAddress: request.destination,
       amount: request.amount,
@@ -468,10 +617,140 @@ export async function executePayment(
       ...(route ? { route } : {}),
       ...(route === "escrow" && request.escrow ? { escrow: request.escrow } : {}),
     });
-    intent = await store.recordResult(idempotencyKey, result);
-    return execution(intent, false, retriedAfter);
+    return execution(await store.recordResult(idempotencyKey, result), false, retriedAfter);
   } catch (error) {
-    intent = await store.recordError(idempotencyKey, error instanceof Error ? error.message : "Transfer failed");
-    return execution(intent, false, retriedAfter);
+    return execution(await store.recordError(idempotencyKey, error instanceof Error ? error.message : "Transfer failed"), false, retriedAfter);
   }
+}
+
+/** Whether a request may go in a batch at all (batch payouts R1): USDC on Arc, not a release from escrow. */
+function batchable(request: PaymentRequest): boolean {
+  return !request.escrow && !request.route && !paidAcrossChains(request.destinationChain) && (request.token ?? "USDC") === "USDC";
+}
+
+interface Claimed {
+  index: number;
+  request: PaymentRequest;
+  intent: PaymentIntent;
+}
+
+/**
+ * Pays several sources, sending together those that can share one transaction (batch payouts §2,
+ * R1-R4). A request that may be batched and whose intent is new (a first attempt, never sent) is
+ * claimed; the claimed ones from one account go out in batches of up to MAX_BATCH_SIZE, split evenly,
+ * through the provider's `batchTransfer`. Everything else, and everything when the provider cannot
+ * batch, goes through `executePayment` as before, as does a lone claimed one (sent alone under its
+ * own key). Returns each request's execution, in the requests' order.
+ */
+export async function executePaymentBatch(
+  requests: PaymentRequest[],
+  dependencies: { provider: ChainProvider; store?: PaymentIntentStore & PaymentBatchStore }
+): Promise<PaymentExecution[]> {
+  const store = dependencies.store ?? new SupabasePaymentIntentStore();
+  const provider = dependencies.provider;
+  const results: PaymentExecution[] = new Array(requests.length);
+  const claimed: Claimed[] = [];
+  for (const [index, request] of requests.entries()) {
+    if (!provider.batchTransfer || requests.length < 2 || !batchable(request)) {
+      results[index] = await executePayment(request, { provider, store });
+      continue;
+    }
+    const intent = await store.ensure({
+      ...request,
+      idempotencyKey: paymentIdempotencyKey(request.sourceType, request.sourceId),
+      provider: provider.mode === "live" ? "circle" : "simulate",
+    });
+    // Only a payment never sent joins a batch (R1): anything else goes its usual way, reconciled or sent alone.
+    if (intent.status !== "created" || intent.providerTxId || intent.batchKey || intent.transferAttempt !== 1 || intent.route) {
+      results[index] = await executePayment(request, { provider, store });
+      continue;
+    }
+    const claim = await store.claim(intent.idempotencyKey);
+    if (!claim) {
+      results[index] = execution(await store.get(intent.idempotencyKey), false);
+      continue;
+    }
+    claimed.push({ index, request, intent: claim });
+  }
+
+  // One wallet's transaction: grouped by the account paid from, then split evenly into batches no larger than the most.
+  const byAccount = new Map<string, Claimed[]>();
+  for (const member of claimed) byAccount.set(member.request.fromAccountId, [...(byAccount.get(member.request.fromAccountId) ?? []), member]);
+  for (const group of byAccount.values()) {
+    const size = Math.ceil(group.length / Math.ceil(group.length / MAX_BATCH_SIZE));
+    for (let start = 0; start < group.length; start += size) {
+      const chunk = group.slice(start, start + size);
+      if (chunk.length === 1) {
+        results[chunk[0].index] = await sendClaimed(chunk[0].intent, chunk[0].request, provider, store, null);
+        continue;
+      }
+      for (const [index, outcome] of await sendBatch(chunk, provider, store)) results[index] = outcome;
+    }
+  }
+  return results;
+}
+
+/**
+ * One batch of claimed payments (batch payouts R3-R6). The batch is written on every member in one
+ * statement before Circle is called; when it does not reach every member it is undone and each is
+ * sent alone. A send whose answer was lost leaves every member carrying the batch, looked for on
+ * Circle next time (R5). Each member records the batch's transaction with its share of the fee.
+ */
+async function sendBatch(
+  members: Claimed[],
+  provider: ChainProvider,
+  store: PaymentIntentStore & PaymentBatchStore
+): Promise<Array<[number, PaymentExecution]>> {
+  const sorted = [...members].sort((a, b) => (a.intent.idempotencyKey < b.intent.idempotencyKey ? -1 : a.intent.idempotencyKey > b.intent.idempotencyKey ? 1 : 0));
+  const keys = sorted.map((member) => member.intent.idempotencyKey);
+  const batch = { key: batchIdempotencyKey(keys), size: keys.length, sentAt: new Date().toISOString() };
+  const each = async (fn: (member: Claimed) => Promise<PaymentExecution>) => {
+    const out: Array<[number, PaymentExecution]> = [];
+    for (const member of sorted) out.push([member.index, await fn(member)]);
+    return out;
+  };
+
+  let joined: number | null;
+  try {
+    joined = await store.joinBatch(keys, batch);
+  } catch (error) {
+    console.error("payments: the batch was not recorded", error instanceof Error ? error.message : error);
+    joined = null;
+  }
+  if (joined !== keys.length) {
+    // Not every member carries the batch, so it is not sent (R4): undone, then each is paid alone under its own key.
+    if (joined !== 0) {
+      try {
+        await store.leaveBatch(batch.key);
+      } catch (error) {
+        // Some may still carry it: they are looked for on Circle, which never had it, then paid alone (R5).
+        const message = `The batch could not be recorded; nothing was sent: ${error instanceof Error ? error.message : "write failed"}`;
+        return each(async (member) => execution(await store.recordError(member.intent.idempotencyKey, message), false));
+      }
+    }
+    return each((member) => sendClaimed(member.intent, member.request, provider, store, null));
+  }
+
+  let result: TransferResult;
+  try {
+    result = await (provider.batchTransfer as NonNullable<ChainProvider["batchTransfer"]>)({
+      fromAccountId: sorted[0].request.fromAccountId,
+      transfers: sorted.map((member) => ({ toAddress: member.intent.destination, amount: member.intent.amount })),
+      idempotencyKey: batch.key,
+    });
+  } catch (error) {
+    // Circle may or may not have the batch: every member keeps it, and is looked for rather than sent again (R5).
+    const message = error instanceof Error ? error.message : "Batch transfer failed";
+    return each(async (member) => execution(await store.recordError(member.intent.idempotencyKey, message), false));
+  }
+  const share = shareOf(result, keys.length);
+  return each(async (member) => {
+    try {
+      return execution(await store.recordResult(member.intent.idempotencyKey, share), false);
+    } catch (error) {
+      // Circle has the batch; this member's record of it did not land. It is found by the batch's refId next time (R5).
+      console.error("payments: a batch member's result was not recorded", member.intent.idempotencyKey, error instanceof Error ? error.message : error);
+      return { ...execution({ ...member.intent, batchKey: batch.key, batchSize: batch.size, batchSentAt: batch.sentAt }, false), txHash: result.txHash, txRef: result.txRef };
+    }
+  });
 }

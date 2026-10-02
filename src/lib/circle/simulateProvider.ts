@@ -1,6 +1,7 @@
 import { db, unwrap } from "../dal";
 import type {
   BalanceSnapshot,
+  BatchTransferParams,
   ChainProvider,
   EarnDepositParams,
   EarnResult,
@@ -85,6 +86,34 @@ export class SimulateProvider implements ChainProvider {
       providerState: null,
       failureReason: null,
     };
+  }
+
+  /** A simulated batch (batch payouts §2): every transfer or none, one fee for the whole transaction. */
+  async batchTransfer(params: BatchTransferParams): Promise<TransferResult> {
+    const account = await this.account(params.fromAccountId);
+    const total = Number(params.transfers.reduce((sum, transfer) => sum + transfer.amount, 0).toFixed(6));
+    const balance = Number(account.balance);
+    if (balance < total) throw new Error(`Insufficient balance: account holds ${balance}, tried to send ${total} in one batch`);
+    await this.addBalance(account.id, -total, balance);
+    const providerTxId = `sim_${params.idempotencyKey}`;
+    return {
+      providerTxId,
+      txHash: providerTxId,
+      txRef: providerTxId,
+      chain: account.chain,
+      status: "confirmed",
+      feeUsd: ARC_FEE_USD,
+      feeSource: "simulated_profile",
+      providerMode: "simulate",
+      settledInMs: ARC_SETTLEMENT_MS_MIN + Math.floor(Math.random() * (ARC_SETTLEMENT_MS_MAX - ARC_SETTLEMENT_MS_MIN + 1)),
+      providerState: null,
+      failureReason: null,
+    };
+  }
+
+  /** A simulated batch is recorded in the same call that makes it, so there is never one to find (R5). */
+  async findTransferByRef(): Promise<TransferResult | null> {
+    return null;
   }
 
   async reconcileTransfer(providerTxId: string): Promise<TransferResult> {

@@ -57,16 +57,19 @@ describe("the contractor stage's decision", () => {
 describe("the contractor stage and the agent's spending limit (outflow budget spec R4–R6)", () => {
   const source = readFileSync(path.join(process.cwd(), "src", "lib", "agent", "orchestrator.ts"), "utf8");
   const stage = source.slice(source.indexOf("// --------------------------------------------------------------- 3. contractors"));
-  const release = stage.slice(stage.indexOf('if (decision.action === "release") {'), stage.indexOf("const now = new Date().toISOString();"));
+  const release = stage.slice(stage.indexOf('if (decision.action === "release") {'), stage.indexOf("await writeDecision({"));
 
   it("weighs a release against what the limit leaves, after the contractor's own checks and before anything is sent", () => {
     expect(release).toContain("outflowBudget = highRisk || overLimit ? null : await budget.room();");
-    expect(release.indexOf("exceedsBudget(amount, outflowBudget)")).toBeLessThan(release.indexOf("releaseMilestoneIfNotPaused("));
+    expect(release.indexOf("exceedsBudget(amount, outflowBudget)")).toBeLessThan(release.indexOf("planned.push("));
     expect(release).toContain('guardrailRule = "workspace.outflow_budget";');
+    // Sent only after every milestone is decided (batch payouts §2).
+    expect(stage.indexOf("planned.push(")).toBeLessThan(stage.indexOf("await releaseMilestones("));
   });
 
-  it("counts a release that went out, so the next payment this cycle sees it", () => {
-    expect(release).toContain('if (status === "paid" || status === "matched") budget.spend(amount);');
+  it("counts a release when it is planned, so the releases of one cycle never pass the limit together", () => {
+    expect(release.indexOf("budget.spend(amount);")).toBeGreaterThan(-1);
+    expect(release.indexOf("budget.spend(amount);")).toBeLessThan(release.indexOf("planned.push("));
   });
 
   it("records the rule, the limit it was weighed against, and why it held, for the follow-up stage", () => {

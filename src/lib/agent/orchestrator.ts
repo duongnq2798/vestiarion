@@ -6,7 +6,7 @@ import { cycleClockMode, type CycleClockMode } from "../clock";
 import { runComplianceSweep, screeningMode as complianceScreeningMode } from "../compliance";
 import { refreshGitHubMilestones } from "../milestone-verification";
 import { seedScale } from "../seed";
-import { executePayment, type PaymentExecution, type PaymentSourceType } from "../payments";
+import { executePayment, executePaymentBatch, type PaymentExecution, type PaymentSourceType } from "../payments";
 import { payInvoice, syncOperatingBalance, payoutAddress } from "./pay";
 import { CycleMetricsCollector } from "./cycle-metrics";
 import {
@@ -16,7 +16,7 @@ import {
 import { CycleJournal, messageOf, type CycleStage } from "./journal";
 import { syncOnChainBalances, type BalanceSync } from "./balances";
 import { CycleRunningError, hasRunningCycle } from "./cycle-running";
-import { decide } from "./decide";
+import { decide, type DecideResult } from "./decide";
 import { budgetClause, enforceApGuardrails } from "./guardrails";
 import { usycSubscriptionsOpen, UsycSubscriptionsClosedError } from "../circle/usyc";
 import { arcRpcUrl } from "../circle/arcFees";
@@ -2061,6 +2061,103 @@ export async function releaseMilestoneIfNotPaused(
   return releaseMilestone(input, deps);
 }
 
+/** A release that did not go out, held with a note appended to its reasoning. */
+const heldRelease = (reasoningSuffix: string, heldBecausePaused = false): PayStepOutcome => ({
+  status: "held",
+  txRef: null,
+  paymentExecution: null,
+  reasoningSuffix,
+  heldBecausePaused,
+  operatingBalance: null,
+});
+
+/**
+ * The contractor stage's releases, once every milestone is decided (batch payouts §2): those that may
+ * share one Arc transaction go out together through `executePaymentBatch`, all or none. A release from
+ * escrow is its own call, as is a release whose hold is held for a person. The batch is sent only when
+ * the operating balance covers it (R2); otherwise, or with fewer than two, or with a provider that
+ * cannot batch, each goes alone exactly as `releaseMilestoneIfNotPaused` always did. Held while the
+ * agent is paused. One outcome per release, in order.
+ */
+export async function releaseMilestones(
+  releases: Array<{ milestoneId: string; destination: string; amount: number }>,
+  deps: { provider: ChainProvider; operatingAccountId: string; operatingBalance: number | null }
+): Promise<PayStepOutcome[]> {
+  const alone = async (list: typeof releases, release: typeof releaseMilestone) => {
+    const out: PayStepOutcome[] = [];
+    for (const item of list) out.push(await release(item, deps));
+    return out;
+  };
+  if (releases.length < 2 || !deps.provider.batchTransfer) return alone(releases, releaseMilestoneIfNotPaused);
+  const pauseNote = await pausedPaymentNote();
+  if (pauseNote) return releases.map(() => heldRelease(pauseNote, true));
+
+  const outcomes: PayStepOutcome[] = new Array(releases.length);
+  const batchable: Array<{ index: number; release: (typeof releases)[number] }> = [];
+  for (const [index, release] of releases.entries()) {
+    let escrow: Awaited<ReturnType<typeof escrowReleaseOf>>;
+    try {
+      escrow = await escrowReleaseOf(release.milestoneId, release.amount, release.destination);
+    } catch (err) {
+      outcomes[index] = heldRelease(` [execution failed: ${(err as Error).message}]`);
+      continue;
+    }
+    if (escrow) outcomes[index] = await releaseMilestone(release, deps);
+    else batchable.push({ index, release });
+  }
+  const total = batchable.reduce((sum, item) => sum + item.release.amount, 0);
+  // All or nothing, so only when the money is there (R2): otherwise as many as the balance allows go alone.
+  if (batchable.length < 2 || (deps.operatingBalance !== null && deps.operatingBalance + 1e-9 < total)) {
+    for (const item of batchable) outcomes[item.index] = await releaseMilestone(item.release, deps);
+    return outcomes;
+  }
+
+  let executions: PaymentExecution[];
+  try {
+    executions = await executePaymentBatch(
+      batchable.map(({ release }) => ({
+        sourceType: "milestone" as const,
+        sourceId: release.milestoneId,
+        fromAccountId: deps.operatingAccountId,
+        destination: release.destination,
+        amount: release.amount,
+        memo: `Milestone ${release.milestoneId}`,
+      })),
+      { provider: deps.provider }
+    );
+  } catch (err) {
+    for (const item of batchable) outcomes[item.index] = heldRelease(` [execution failed: ${(err as Error).message}]`);
+    return outcomes;
+  }
+
+  // As releaseMilestone: a confirmed payment is real whatever the balance sync does after it.
+  let operatingBalance: number | null = null;
+  let syncNote = "";
+  if (executions.some((result) => result.status === "confirmed")) {
+    try {
+      operatingBalance = await syncOperatingBalance(deps.operatingAccountId);
+    } catch (err) {
+      syncNote = ` [balance sync failed: ${(err as Error).message}]`;
+    }
+  }
+  for (const [position, item] of batchable.entries()) {
+    const result = executions[position];
+    const others = result.batch ? result.batch.size - 1 : 0;
+    const together = others > 0 ? ` [paid in one Arc transaction with ${others} other ${plural(others, "milestone", "milestones")}]` : "";
+    const status = result.status === "confirmed" ? "paid" : result.status === "pending" ? "verified" : "held";
+    const reasoningSuffix =
+      result.status === "failed"
+        ? ` [transfer failed: ${result.error ?? "provider reported failure"}]`
+        : result.status === "pending"
+          ? result.batch && result.error
+            ? ` [sent in a batch whose answer was lost (${result.error}); it is looked for on Circle, never sent again]`
+            : " [transfer submitted; awaiting provider confirmation]"
+          : together + syncNote;
+    outcomes[item.index] = { status, txRef: result.txRef, paymentExecution: result, reasoningSuffix, heldBecausePaused: false, operatingBalance };
+  }
+  return outcomes;
+}
+
 /**
  * The one release step for a milestone, without the pause check: what
  * `releaseMilestoneIfNotPaused` does once it knows the agent is not paused,
@@ -2931,6 +3028,98 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
   // flight: it is reconciled, not decided again (see reconcileMilestone).
   const releasesInFlight = await existingMilestoneIntents(db, milestones);
 
+  type ContractorGuardrailRule = "counterparty.high_risk" | "counterparty.payment_limit" | "workspace.outflow_budget";
+  type Decided = {
+    milestone: (typeof milestones)[number];
+    amount: number;
+    limit: number | null;
+    decided: DecideResult<MilestoneDecision>;
+    reasoning: string;
+    outflowBudget: BudgetRoom | null;
+  };
+  // Releases that passed every check, sent once every milestone is decided (batch payouts §2).
+  const planned: Decided[] = [];
+
+  /** A milestone's decision and what came of it: its row, the metrics, its signed entry and its line. */
+  const writeDecision = async (entry: Decided & { guardrailBlocked: boolean; guardrailRule: ContractorGuardrailRule | null; outcome: PayStepOutcome | null }) => {
+    const { milestone, amount, limit, guardrailBlocked, guardrailRule, outflowBudget, outcome } = entry;
+    const { value: decision, mode, reference, agreedWithReference } = entry.decided;
+    const contractor = milestone.counterparties;
+    const status = outcome?.status ?? "held";
+    const txRef = outcome?.txRef ?? null;
+    const paymentExecution = outcome?.paymentExecution ?? null;
+    const reasoning = entry.reasoning + (outcome?.reasoningSuffix ?? "");
+    const heldBecausePaused = outcome?.heldBecausePaused ?? false;
+
+    const now = new Date().toISOString();
+    const update = await db
+      .from("milestones")
+      .update({
+        status,
+        agent_reasoning: reasoning,
+        decided_at: now,
+        settled_at: status === "paid" ? now : null,
+        tx_ref: txRef,
+      })
+      .eq("id", milestone.id);
+    if (update.error) throw new Error(update.error.message);
+    metrics.recordMilestone(status, guardrailBlocked);
+
+    await appendLedgerEntry({
+      actor: "agent",
+      domain: "contractor",
+      action: `milestone_${decision.action}`,
+      summary: `${decision.action.toUpperCase()} milestone "${milestone.title}" for ${contractor.name} (${amount} USDC)`,
+      detail: {
+        milestoneId: milestone.id,
+        counterpartyId: contractor.id,
+        decision,
+        decisionMode: mode,
+        referenceDecision: reference,
+        agreedWithReference,
+        guardrailBlocked,
+        guardrailRule,
+        // The spending limit a release was weighed against (outflow budget spec R4); absent with none set.
+        ...(outflowBudget ? { outflowBudget } : {}),
+        observed: {
+          amount,
+          paymentLimit: limit,
+          riskLevel: contractor.risk_level,
+          performanceHistory: performanceEvidence(
+            contractor.performance_score,
+            contractor.performance_inputs
+          ),
+          verificationSource: milestone.verification_source,
+          verification: milestoneVerification(milestone),
+        },
+        execution: {
+          txRef,
+          chainMode: paymentExecution?.providerMode ?? provider.mode,
+          resultingStatus: status,
+          settlementRequired: true,
+          feeUsd: paymentExecution?.feeUsd ?? null,
+          feeSource: paymentExecution?.feeSource ?? null,
+          settledInMs: paymentExecution?.settledInMs ?? null,
+          executedAt: paymentExecution?.executedAt ?? null,
+          reconciled: paymentExecution?.reconciled ?? false,
+          // D6: same marker as the AP stage, for the same reason — see the
+          // comment there.
+          ...heldBecausePausedDetail(heldBecausePaused),
+          ...(guardrailRule === "workspace.outflow_budget" ? { heldBecause: HELD_FOR_BUDGET } : {}),
+          // Sent together with other milestones in one transaction: how many, under which key (batch payouts §5).
+          ...(paymentExecution?.batch ? { batch: paymentExecution.batch } : {}),
+        },
+      },
+    });
+
+    lines.push({
+      domain: "contractor",
+      message: heldBecausePaused
+        ? `${contractor.name}: not paid, the agent was paused (${amount} USDC)`
+        : `${contractor.name}: ${decision.action} "${milestone.title}"`,
+    });
+  };
+
   for (const milestone of milestones) {
     const contractor = milestone.counterparties;
     const amount = num(milestone.amount);
@@ -3024,13 +3213,9 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     });
     metrics.recordDecisionMode(mode, agreedWithReference);
 
-    let status = "held";
-    let txRef: string | null = null;
-    let paymentExecution: PaymentExecution | null = null;
     let reasoning = decision.reasoning;
     let guardrailBlocked = false;
-    let guardrailRule: "counterparty.high_risk" | "counterparty.payment_limit" | "workspace.outflow_budget" | null = null;
-    let heldBecausePaused = false;
+    let guardrailRule: ContractorGuardrailRule | null = null;
     let outflowBudget: BudgetRoom | null = null;
 
     if (decision.action === "release") {
@@ -3047,86 +3232,60 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
         guardrailRule = "workspace.outflow_budget";
         reasoning += ` [guardrail override: releasing ${amount} USDC would take the agent past ${budgetClause(outflowBudget)}, ${outflowBudget.remaining} USDC left — release refused; decided again once the limit has room]`;
       } else if (operating) {
-        const outcome = await releaseMilestoneIfNotPaused(
-          { milestoneId: milestone.id, destination: payoutAddress(contractor.address, contractor.id), amount },
-          { provider, operatingAccountId: operating.id }
-        );
-        status = outcome.status;
-        txRef = outcome.txRef;
-        paymentExecution = outcome.paymentExecution;
-        reasoning += outcome.reasoningSuffix;
-        heldBecausePaused = outcome.heldBecausePaused;
-        if (outcome.operatingBalance !== null) operatingBalance = outcome.operatingBalance;
-        // What it counts against the spending limit, so the next payment this cycle sees it (R5).
-        if (status === "paid" || status === "matched") budget.spend(amount);
+        // Sent once every milestone is decided, together where they can be (batch payouts §2). It counts
+        // against the spending limit now, so the releases of one cycle never pass it together (R5).
+        budget.spend(amount);
+        planned.push({ milestone, amount, limit, decided: { value: decision, mode, reference, agreedWithReference }, reasoning, outflowBudget });
+        continue;
       }
     }
 
-    const now = new Date().toISOString();
-    const update = await db
-      .from("milestones")
-      .update({
-        status,
-        agent_reasoning: reasoning,
-        decided_at: now,
-        settled_at: status === "paid" ? now : null,
-        tx_ref: txRef,
-      })
-      .eq("id", milestone.id);
-    if (update.error) throw new Error(update.error.message);
-    metrics.recordMilestone(status, guardrailBlocked);
+    await writeDecision({
+      milestone,
+      amount,
+      limit,
+      decided: { value: decision, mode, reference, agreedWithReference },
+      reasoning,
+      outflowBudget,
+      guardrailBlocked,
+      guardrailRule,
+      outcome: null,
+    });
+  }
 
-    await appendLedgerEntry({
-      actor: "agent",
-      domain: "contractor",
-      action: `milestone_${decision.action}`,
-      summary: `${decision.action.toUpperCase()} milestone "${milestone.title}" for ${contractor.name} (${amount} USDC)`,
-      detail: {
+  // Every release decided above goes out now: together in one Arc transaction where it can (batch payouts §2).
+  if (planned.length > 0 && operating) {
+    const outcomes = await releaseMilestones(
+      planned.map(({ milestone, amount }) => ({
         milestoneId: milestone.id,
-        counterpartyId: contractor.id,
-        decision,
-        decisionMode: mode,
-        referenceDecision: reference,
-        agreedWithReference,
-        guardrailBlocked,
-        guardrailRule,
-        // The spending limit a release was weighed against (outflow budget spec R4); absent with none set.
-        ...(outflowBudget ? { outflowBudget } : {}),
-        observed: {
-          amount,
-          paymentLimit: limit,
-          riskLevel: contractor.risk_level,
-          performanceHistory: performanceEvidence(
-            contractor.performance_score,
-            contractor.performance_inputs
-          ),
-          verificationSource: milestone.verification_source,
-          verification: milestoneVerification(milestone),
-        },
-        execution: {
-          txRef,
-          chainMode: paymentExecution?.providerMode ?? provider.mode,
-          resultingStatus: status,
-          settlementRequired: true,
-          feeUsd: paymentExecution?.feeUsd ?? null,
-          feeSource: paymentExecution?.feeSource ?? null,
-          settledInMs: paymentExecution?.settledInMs ?? null,
-          executedAt: paymentExecution?.executedAt ?? null,
-          reconciled: paymentExecution?.reconciled ?? false,
-          // D6: same marker as the AP stage, for the same reason — see the
-          // comment there.
-          ...heldBecausePausedDetail(heldBecausePaused),
-          ...(guardrailRule === "workspace.outflow_budget" ? { heldBecause: HELD_FOR_BUDGET } : {}),
-        },
-      },
-    });
-
-    lines.push({
-      domain: "contractor",
-      message: heldBecausePaused
-        ? `${contractor.name}: not paid, the agent was paused (${amount} USDC)`
-        : `${contractor.name}: ${decision.action} "${milestone.title}"`,
-    });
+        destination: payoutAddress(milestone.counterparties.address, milestone.counterparties.id),
+        amount,
+      })),
+      { provider, operatingAccountId: operating.id, operatingBalance }
+    );
+    for (const [position, entry] of planned.entries()) {
+      const outcome = outcomes[position];
+      if (outcome.operatingBalance !== null) operatingBalance = outcome.operatingBalance;
+      await writeDecision({ ...entry, guardrailBlocked: false, guardrailRule: null, outcome });
+    }
+    // One line per batch, after its milestones' own.
+    const batches = new Map<string, { size: number; paid: number; txRef: string | null }>();
+    for (const outcome of outcomes) {
+      const batch = outcome.paymentExecution?.batch;
+      if (!batch) continue;
+      const seen = batches.get(batch.key) ?? { size: batch.size, paid: 0, txRef: outcome.txRef };
+      if (outcome.status === "paid") seen.paid += 1;
+      batches.set(batch.key, seen);
+    }
+    for (const batch of batches.values()) {
+      lines.push({
+        domain: "contractor",
+        message:
+          batch.paid === batch.size
+            ? `Paid ${batch.size} milestones in one Arc transaction${batch.txRef ? ` (${batch.txRef})` : ""}`
+            : `Sent ${batch.size} milestones in one Arc transaction; ${batch.paid} confirmed so far`,
+      });
+    }
   }
 
   });

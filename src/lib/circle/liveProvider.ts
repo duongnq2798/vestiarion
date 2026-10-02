@@ -5,6 +5,7 @@ import {
 import { db, unwrap } from "../dal";
 import type {
   BalanceSnapshot,
+  BatchTransferParams,
   ChainProvider,
   EarnDepositParams,
   EarnPosition,
@@ -20,6 +21,7 @@ import type {
 import { ARC_FEE_USD } from "./types";
 import { fetchArcFeeUsd } from "./arcFees";
 import { awaitSettlement, FAILED_STATES, withDeadline, type Settlement } from "./settlement";
+import { batchCallData, MULTICALL3_FROM } from "./batch";
 import { ARC_TESTNET_USDC, BridgeFeeError, bridgeFee, bridgeStepKey, burnCalls, forwardedMint, type ContractCall } from "./cctp";
 import { burnIntent, burnIntentTypedData, estimateGateway, gatewaySalt, gatewayTransferStatus, submitGatewayTransfer, type GatewayTransferStatus } from "./gateway";
 import { payeeChain, paidAcrossChains } from "../payee-chains";
@@ -273,6 +275,76 @@ export class LiveProvider implements ChainProvider {
       providerState: transaction?.state ?? null,
       failureReason: transaction?.errorReason ?? null,
     };
+  }
+
+  /**
+   * Several USDC transfers on Arc testnet in one transaction (batch payouts §2): `aggregate3` on
+   * Multicall3From from the operating wallet, one `USDC.transfer` per payment, none allowed to fail, so all
+   * happen or none does. The batch's key is Circle's idempotency key and the transaction's refId (R3, R5).
+   * The result is the whole transaction's: its fee is the batch's, shared by the caller (R6).
+   */
+  async batchTransfer(params: BatchTransferParams): Promise<TransferResult> {
+    const unpaid = params.transfers.find((transfer) => transfer.toAddress.startsWith("sim:"));
+    if (unpaid) {
+      throw new Error(`Counterparty has no on-chain address (${unpaid.toAddress}). Add this counterparty's Arc address on the Counterparties page.`);
+    }
+    const callData = batchCallData(params.transfers);
+    const account = await this.account(params.fromAccountId);
+    const started = Date.now();
+    const created = await withDeadline(
+      this.client.createContractExecutionTransaction({
+        walletId: account.walletId,
+        contractAddress: MULTICALL3_FROM,
+        callData,
+        idempotencyKey: params.idempotencyKey,
+        refId: params.idempotencyKey,
+        fee: { type: "level", config: { feeLevel: "MEDIUM" } },
+      } as Parameters<LiveProviderClient["createContractExecutionTransaction"]>[0]),
+      CREATE_TRANSACTION_DEADLINE_MS,
+      `Circle did not answer the batch within ${CREATE_TRANSACTION_DEADLINE_MS} ms; it may or may not have been accepted`
+    );
+    const txId = created.data?.id;
+    if (!txId) throw new Error("Circle did not return a transaction id");
+    const { status, transaction } = await awaitSettlement(this.client, txId);
+    const txHash = transaction?.txHash ?? null;
+    const fee = transaction ? await resolveFee(this.arcRpcUrl, transaction.networkFeeInUSD, txHash ?? undefined) : { feeUsd: ARC_FEE_USD, feeSource: "provider_estimate" as const };
+    return {
+      providerTxId: txId,
+      txHash,
+      txRef: txHash ?? txId,
+      chain: account.chain,
+      status,
+      feeUsd: fee.feeUsd,
+      feeSource: fee.feeSource,
+      providerMode: "live",
+      settledInMs: status === "confirmed" ? (transaction ? (measuredSettlementMs(transaction) ?? Date.now() - started) : Date.now() - started) : null,
+      providerState: transaction?.state ?? null,
+      failureReason: transaction?.errorReason ?? null,
+    };
+  }
+
+  /**
+   * A batch whose answer was lost, found by its refId among the account's transactions created within the
+   * window, and read again (batch payouts R5). It sends nothing. Circle lists 50 at most: a full page without
+   * it cannot say the batch is not there, so that throws rather than answer null.
+   */
+  async findTransferByRef(fromAccountId: string, refId: string, window: { from: string; to: string }): Promise<TransferResult | null> {
+    const account = await this.account(fromAccountId);
+    const listed = await withDeadline(
+      this.client.listTransactions({
+        walletIds: [account.walletId],
+        from: window.from,
+        to: window.to,
+        pageSize: 50,
+      } as Parameters<LiveProviderClient["listTransactions"]>[0]),
+      BALANCE_READ_DEADLINE_MS,
+      `no answer from Circle listTransactions within ${BALANCE_READ_DEADLINE_MS} ms`
+    );
+    const transactions = listed.data?.transactions ?? [];
+    const found = transactions.find((transaction) => transaction.refId === refId);
+    if (found) return this.reconcileTransfer(found.id);
+    if (transactions.length >= 50) throw new Error("Circle listed 50 transactions around the batch without it; it could not be looked for in full");
+    return null;
   }
 
   /**

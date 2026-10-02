@@ -60,6 +60,20 @@ export interface TransferParams {
   escrow?: { contract: string; holdId: string };
 }
 
+/** One transfer in a batch (batch payouts R1): USDC on Arc testnet, to the payee's address. */
+export interface BatchTransfer {
+  toAddress: string;
+  amount: number;
+}
+
+/** Several USDC transfers on Arc testnet in one transaction, through Multicall3From (batch payouts §2). */
+export interface BatchTransferParams {
+  fromAccountId: string;
+  transfers: BatchTransfer[];
+  /** The batch's key (R3): Circle's idempotency key, and the transaction's refId so a lost answer can be found (R5). */
+  idempotencyKey: string;
+}
+
 /** The two ways a payee on another chain is paid from Arc testnet. */
 /** How a payment goes: across chains through CCTP or a Gateway balance, or, for a milestone locked in escrow, by releasing its hold. */
 export type PayoutRoute = "cctp" | "gateway" | "escrow";
@@ -195,6 +209,16 @@ export interface ChainProvider {
   readonly estimatedFeeUsd: number;
   transfer(params: TransferParams): Promise<TransferResult>;
   reconcileTransfer(providerTxId: string): Promise<TransferResult>;
+  /**
+   * Several USDC transfers on Arc testnet in one transaction, all or none (batch payouts §2). The result is
+   * the whole transaction's, its fee included. Optional: a provider without it pays each payment alone.
+   */
+  batchTransfer?(params: BatchTransferParams): Promise<TransferResult>;
+  /**
+   * The account's transaction with this refId, created within the window, read again; null when Circle lists
+   * none there (batch payouts R5). It sends nothing. Throws when the window holds too many to be sure.
+   */
+  findTransferByRef?(fromAccountId: string, refId: string, window: { from: string; to: string }): Promise<TransferResult | null>;
   depositToEarn(params: EarnDepositParams): Promise<EarnResult>;
   withdrawFromEarn(params: EarnDepositParams): Promise<EarnResult>;
   /** The real reserve's position, read from the chain; only a provider whose `earnMode` is live has one (R3). */
