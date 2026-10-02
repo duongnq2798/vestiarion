@@ -220,6 +220,25 @@ The console's **Agent spending limit** panel shows what the agent has paid on it
 - **It comes back by itself.** When the limit has room again (a new day, a higher figure, or no limit), the agent decides the held payment again. Raising a figure brings it back within a minute, and the audit log records the reopening with "the agent's spending limit has room for it again".
 - **Schedules are checked on their day.** Scheduling a payment does not count against the limit; paying it does.
 
+### Enforce the limit on Arc
+
+The limit above is checked in Vestiarion's code. Under its figures, the panel's **On Arc** part makes the same limit binding on Arc testnet too: the agent's own payments then leave through a contract that refuses anything past it, whatever the agent decided. In a live workspace with a daily or 7-day figure, an owner or admin chooses **Enforce on Arc**.
+
+- **What it sets up.** A contract on Arc testnet that holds the figures, and a wallet of the agent's own that holds no USDC: Circle's Gas Station pays its gas. The operating wallet keeps its money and approves the contract to draw from it. Setting up sends 0.1 USDC from the operating wallet to the deployer for gas, and is signed in the audit log as `spending_limit_enforced`. If it is interrupted, the button reads **Finish enforcing on Arc** and picks up where it stopped.
+- **The agent's payments go through the contract.** Each payment the agent makes on its own in USDC on Arc testnet is sent by its own wallet to the contract, which draws the amount from the operating wallet. The contract refuses a payment past the daily figure (the current UTC day) or past the 7-day figure (that day and the six before it), and it pays each invoice or milestone once. The panel shows what the contract counts, **Paid through it today** and **In the last 7 days**, with links to the contract and to the agent's wallet on the Arc testnet explorer.
+- **Vestiarion asks the contract first.** Before each payment, it asks the contract whether it would pay, without sending anything. If the contract would refuse, nothing is sent: the payment is held with the rule `workspace.onchain_limit`, and its card shows the contract's own figures. The check in code still runs first, so this hold means the two disagreed. Each decision records the contract's answer as `onChainLimit`.
+- **What the contract cannot carry waits for you.** While the limit is enforced on Arc, the agent does not send a payment in EURC, or one to a payee on another chain: it is held with the rule `workspace.onchain_limit_route`, and you pay it from **Approvals**. A milestone locked in escrow is released from the escrow as before; its money left the operating wallet when it was locked.
+- **People's payments do not go through it.** **Approve and pay** and **Pay now** are transfers from the operating wallet, as before, outside the agent's limit.
+- **Changing the figures changes the contract first.** The new figures are saved once Circle confirms the change on Arc testnet, and `agent_budget_changed` records its transaction. While the limit is enforced, a figure must stay set.
+- **Turning it off.** **Turn off on Arc** sets the operating wallet's approval to 0, so the contract can draw nothing, and the agent's payments are checked in code only. The contract stays on Arc testnet; **Enforce on Arc** uses it again. It is signed as `spending_limit_unenforced`.
+- **Who holds the keys.** The operating wallet, the agent's wallet and the deployer are developer-controlled wallets: Circle signs for them on Vestiarion's behalf. The contract keeps the agent, and the code that pays for it, within the limit. It does not protect against someone who took over Vestiarion's server, who could also sign for the operating wallet.
+
+<Screenshot
+  src="/docs/guides/first-payment-onchain-limit.png"
+  alt="The Agent spending limit panel with 3.80 USDC left, 1.20 of 5.00 USDC paid today and 3.70 of 20.00 USDC in the last 7 days. Under it, On Arc: enforced on Arc, with links to the contract and the agent's wallet, the contract's own count of what was paid through it today and in the last 7 days, and Turn off on Arc."
+  caption="The limit enforced on Arc, with what the contract itself counts."
+/>
+
 ### The agent checks a new payee's history
 
 Before the agent pays an address for the first time, it can buy that address's payment history across Vestiarion. The answer says how many other workspaces here have paid the address, how many payments were confirmed, and when the first and last were made. It names no workspace and no amount. The model weighs it with the payment's other facts: an address no business here has paid deserves a closer look. Code does not act on it.
