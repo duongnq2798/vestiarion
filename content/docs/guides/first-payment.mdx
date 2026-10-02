@@ -78,7 +78,7 @@ Anyone who may not add records sees "Only an owner or admin of this workspace ca
 
 ## 2. Add an invoice
 
-Open **AP / AR**. Under **Invoice intake**, choose **Enter one invoice**, **From a document** to have the model read it from a PDF or an email (see [Read an invoice from a document](#read-an-invoice-from-a-document)), or **Import CSV** to add several from a file.
+Open **AP / AR** and open **New invoice**. Choose **Enter one invoice**, **From a document** to have the model read it from a PDF or an email (see [Read an invoice from a document](#read-an-invoice-from-a-document)), or **Import CSV** to add several from a file.
 
 - **Direction**: **Payable**, for an invoice you pay.
 - **Counterparty**: the one you just added.
@@ -90,7 +90,7 @@ Open **AP / AR**. Under **Invoice intake**, choose **Enter one invoice**, **From
 
 <Screenshot
   src="/docs/guides/first-payment-invoice.png"
-  alt="The Invoice intake form on the AP / AR page, on the Enter one invoice tab, filled in: Direction Payable, Counterparty Northstar Studio · vendor, Amount 12.50, Currency USDC, Due date 10/15/2026, Memo October design retainer, PO reference PO-2207, and Goods or services received ticked. The Add invoice button is below."
+  alt="The New invoice form on the AP / AR page, on the Enter one invoice tab, filled in: Direction Payable, Counterparty Northstar Studio · vendor, Amount 12.50, Currency USDC, Due date 10/15/2026, Memo October design retainer, PO reference PO-2207, and Goods or services received ticked. The Add invoice button is below."
   caption="A payable within the counterparty's limit, with its PO reference and the goods received."
 />
 
@@ -158,7 +158,7 @@ To run one yourself, open **Treasury**, the console, and choose **Run cycle now*
 
 ## 4. Read the decision and its reasoning
 
-Each invoice's decision is a card on **AP / AR**, under **Payables**. The console's **Stopped** section also shows the latest decisions the agent stopped. A card shows:
+On **AP / AR**, the tiles at the top count what needs you, what is due within 7 days, what is overdue, and what is still to pay. Under **Payables**, each invoice is one row, in three groups: **Needs you** (held, or refused by code), **Upcoming** (not yet paid, with the day it pays or falls due) and **Paid and closed** (the latest ten; **Show all** lists every one). Open a row to see its decision as a card. The console's **Stopped** section also shows the latest decisions the agent stopped. A card shows:
 
 - the outcome: "Settled on Arc", "Scheduled for *date*", "Held for you" or "Refused by guardrail";
 - the amount and the counterparty;
@@ -188,7 +188,7 @@ An invoice with an early-payment discount shows its terms on its card as "*pct*%
 
 ### Pay something every period
 
-A retainer, a subscription or a monthly fee does not need a new invoice each time. Under **Invoice intake**, open **Recurring** and fill in the form:
+A retainer, a subscription or a monthly fee does not need a new invoice each time. Under **New invoice**, open **Recurring** and fill in the form:
 
 - **Pay**: a vendor or contractor.
 - **For**: what it is for.
@@ -275,7 +275,7 @@ To check a signature yourself, see [Verifying signatures](/docs/webhooks/verify)
 
 A payee, an accountant or anyone else can check a payment without an account: share its receipt.
 
-- **Sharing it.** On **Invoices**, a paid payable with a transaction on chain shows **Share receipt** to an owner or admin. It makes a link to a public page. Copy the link then: it is shown only once.
+- **Sharing it.** On **AP / AR**, open a paid payable's row: one with a transaction on chain shows **Share receipt** to an owner or admin. It makes a link to a public page. Copy the link then: it is shown only once.
 - **What the page shows.** The amount, the payee's chain and address, and how it was paid, with the fee. It also shows the transaction, linked to its explorer; for a CCTP payout, the burn on Arc testnet as well.
 - **The three checks the page makes.**
   - **Signed by the paying workspace.** The receipt is a ledger entry the workspace signed when it was shared. Its signature, body hash and chain hash are checked, and checked again in the reader's browser.
@@ -293,7 +293,7 @@ A payee, an accountant or anyone else can check a payment without an account: sh
 
 A receivable is money a client owes the business. In a live workspace, an owner or admin can send the client a link to pay it on Arc testnet:
 
-1. **Make the link.** On **AP / AR**, under **Receivables**, choose **Get paid on Arc** on the invoice, then **Copy link** and send it. A new link replaces the old one.
+1. **Make the link.** On **AP / AR**, under **Receivables**, open the invoice's row and choose **Get paid on Arc**, then **Copy link** and send it. A new link replaces the old one.
 2. **The client pays.** The link opens a page with the amount, the due date, what it is for, and the workspace's address on Arc testnet. The client sends exactly that amount from any wallet and can choose **I have paid**, which only asks Vestiarion to look now.
 3. **The agent matches it.** Every cycle, and on **I have paid**, Vestiarion reads the transfers that arrived in the operating wallet from Circle. A transfer of the same currency and amount as an open receivable, arriving after the receivable was added, settles it: from the client's own address on file, or, from any address, when it is the only such receivable and its client was sent the link. The receivable becomes received with its transaction, and the ledger records `ar_received`. Two open receivables of the same amount, with nothing to tell them apart, stay open for a person.
 

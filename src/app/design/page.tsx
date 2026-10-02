@@ -43,6 +43,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { AuditLedger, DomainFilter } from "@/components/vx/AuditLedger";
 import { CycleReport } from "@/components/vx/CycleReport";
 import { DecisionCard } from "@/components/vx/DecisionCard";
+import { DecisionRows, RowGroupHeading } from "@/components/vx/DecisionRows";
 import { InsightsCharts } from "@/components/vx/InsightsCharts";
 import { PerformanceHistory } from "@/components/vx/PerformanceHistory";
 import { ProvenanceBar } from "@/components/vx/Provenance";
@@ -497,6 +498,14 @@ export default function DesignPage() {
               {DECISIONS.map((decision) => (
                 <DecisionCard key={decision.id} decision={decision} orgSlug={DESIGN_SLUG} />
               ))}
+              {/* As AP / AR and Contractors list them: one row each, the card inside. */}
+              <div>
+                <RowGroupHeading title="Upcoming" count={DECISIONS.length} />
+                <DecisionRows
+                  orgSlug={DESIGN_SLUG}
+                  items={DECISIONS.map((decision, index) => ({ decision, date: index === 1 ? { label: "Overdue Sep 30, 2026", tone: "held" as const } : { label: "Due Oct 5, 2026" } }))}
+                />
+              </div>
               {/* As the console lists them: the reasoning folded to its first lines. */}
               <DecisionCard
                 decision={{
