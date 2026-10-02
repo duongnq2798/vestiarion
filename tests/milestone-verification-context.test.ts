@@ -53,3 +53,33 @@ describe("the contractor stage's decision", () => {
     expect(observed).toContain("verification: milestoneVerification(milestone)");
   });
 });
+
+describe("the contractor stage and the agent's spending limit (outflow budget spec R4–R6)", () => {
+  const source = readFileSync(path.join(process.cwd(), "src", "lib", "agent", "orchestrator.ts"), "utf8");
+  const stage = source.slice(source.indexOf("// --------------------------------------------------------------- 3. contractors"));
+  const release = stage.slice(stage.indexOf('if (decision.action === "release") {'), stage.indexOf("const now = new Date().toISOString();"));
+
+  it("weighs a release against what the limit leaves, after the contractor's own checks and before anything is sent", () => {
+    expect(release).toContain("outflowBudget = highRisk || overLimit ? null : await budget.room();");
+    expect(release.indexOf("exceedsBudget(amount, outflowBudget)")).toBeLessThan(release.indexOf("releaseMilestoneIfNotPaused("));
+    expect(release).toContain('guardrailRule = "workspace.outflow_budget";');
+  });
+
+  it("counts a release that went out, so the next payment this cycle sees it", () => {
+    expect(release).toContain('if (status === "paid" || status === "matched") budget.spend(amount);');
+  });
+
+  it("records the rule, the limit it was weighed against, and why it held, for the follow-up stage", () => {
+    const entry = stage.slice(stage.indexOf("action: `milestone_${decision.action}`"));
+    expect(entry).toContain("guardrailRule,");
+    expect(entry).toContain("...(outflowBudget ? { outflowBudget } : {}),");
+    expect(entry).toContain('...(guardrailRule === "workspace.outflow_budget" ? { heldBecause: HELD_FOR_BUDGET } : {}),');
+  });
+
+  it("shares one running total with the AP stage, made before the follow-up stage", () => {
+    const cycle = source.slice(source.indexOf("async function executeCycle("));
+    expect(cycle.indexOf("const budget = budgetGate(db);")).toBeLessThan(cycle.indexOf('await stage("follow_up"'));
+    expect(cycle).toContain("followUpHeldMilestones(db, budget)");
+    expect(cycle.slice(cycle.indexOf('await stage("ap"'), cycle.indexOf('await stage("contractors"'))).toContain("budget,");
+  });
+});

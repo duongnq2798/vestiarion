@@ -169,10 +169,20 @@ function orderedAs(rows: Array<Record<string, unknown>>, order: string | null): 
  * the stage's load gets the rows whose status its `in` filter names, in the
  * order it asks for, the duplicate-detection history gets all of them.
  */
-function apFake(options: { book: Array<Record<string, unknown>>; paused?: boolean; milestones?: Array<{ amount: string }> }) {
+function apFake(options: {
+  book: Array<Record<string, unknown>>;
+  paused?: boolean;
+  milestones?: Array<{ amount: string }>;
+  /** The agent's spending limit row, and its payment decisions in the 7-day window (outflow budget spec). */
+  budget?: { daily_usdc: string | null; weekly_usdc: string | null };
+  agentPayments?: Array<Record<string, unknown>>;
+}) {
   const intents = paymentIntentsBackend(ORG);
   const fake = fakeSupabase((request) => {
     if (request.path === "/rest/v1/orgs") return { body: orgRow() };
+    if (request.path === "/rest/v1/agent_budgets") return { body: options.budget ? [options.budget] : [] };
+    // The spending limit's read of the agent's payments (filtered by actor), not the ledger's own head read.
+    if (request.path === "/rest/v1/ledger_entries" && request.method === "GET" && request.params.has("actor")) return { body: options.agentPayments ?? [] };
     if (request.path === "/rest/v1/rpc/append_ledger_entry") return { body: LEDGER_ROW };
     if (request.path === "/rest/v1/rpc/agent_paused") return { body: options.paused ?? false };
     if (request.path === "/rest/v1/invoices" && request.method === "GET") {
@@ -1078,5 +1088,78 @@ describe("the cycle's obligation measurement", () => {
     expect(measurement).toMatch(
       /\.select\("amount, due_date, status, scheduled_for, currency"\)\s*\.eq\("direction", "payable"\)\s*\.in\("status", \[\.\.\.OPEN_PAYABLE_STATUSES\]\)/
     );
+  });
+});
+
+describe("the AP stage and the agent's spending limit (outflow budget spec)", () => {
+  const plain = { early_pay_discount_pct: null, discount_due_date: null };
+  const northwind = () => payable({ amount: "300", ...plain });
+  const contoso = () =>
+    payable({
+      id: OTHER_INVOICE_ID, amount: "250", memo: "Hosting", po_reference: "PO-2001", counterparty_id: CONTOSO, ...plain,
+      counterparties: counterparty({ id: CONTOSO, name: "Contoso", address: "0xcontoso" }),
+    });
+  const payNow = () => model(() => ({ action: "pay", reasoning: "Matched and within the limit; paying now.", confidence: 0.9 }));
+
+  it("pays what fits, then holds the payment that would take the agent past the day's limit", async () => {
+    today("2026-10-02T09:00:00.000Z");
+    payNow();
+    const { fake, chain, stage } = apFake({ book: [northwind(), contoso()], budget: { daily_usdc: "500.000000", weekly_usdc: null } });
+
+    await stage();
+
+    expect(chain.transfers.map((t) => t.amount)).toEqual([300]);
+    const [paid, held] = invoicePatches(fake.requests);
+    expect(paid.body).toMatchObject({ status: "paid" });
+    expect(held.params.get("id")).toBe(`eq.${OTHER_INVOICE_ID}`);
+    expect(held.body).toMatchObject({ status: "held" });
+    expect((held.body as Record<string, string>).agent_reasoning).toContain(
+      "paying 250 USDC would take the agent past its 500 USDC daily spending limit: 300 USDC already paid today, 200 USDC left — held for a person to approve"
+    );
+    const [, entry] = ledger(fake.requests);
+    expect(entry.p_detail).toMatchObject({
+      guardrailBlocked: true,
+      guardrailRule: "workspace.outflow_budget",
+      outflowBudget: { dailyUsdc: 500, weeklyUsdc: null, spentToday: 300, remaining: 200, binding: "day" },
+      execution: { resultingStatus: "held", heldBecause: "outflow_budget" },
+    });
+  });
+
+  it("counts what the agent already paid this week, read once from its signed decisions", async () => {
+    today("2026-10-02T09:00:00.000Z");
+    payNow();
+    const earlier = { actor: "agent", action: "ap_pay", ts: "2026-09-30T10:00:00Z", detail: { currency: "USDC", amountPaid: 900, execution: { resultingStatus: "paid" } } };
+    const { fake, chain, stage } = apFake({ book: [northwind(), contoso()], budget: { daily_usdc: null, weekly_usdc: "1200" }, agentPayments: [earlier] });
+
+    await stage();
+
+    expect(chain.transfers.map((t) => t.amount)).toEqual([300]);
+    expect((invoicePatches(fake.requests)[1].body as Record<string, string>).agent_reasoning).toContain(
+      "past its 1200 USDC 7-day spending limit: 1200 USDC already paid in the last 7 days, 0 USDC left"
+    );
+    expect(fake.requests.filter((r) => r.path === "/rest/v1/ledger_entries" && r.params.has("actor"))).toHaveLength(1);
+  });
+
+  it("schedules past the limit, since a scheduled payable is decided again on its day", async () => {
+    today("2026-10-02T09:00:00.000Z");
+    model(() => ({ action: "schedule", payOn: "2026-10-20", reasoning: "Pay on the due date.", confidence: 0.9 }));
+    const { fake, chain, stage } = apFake({ book: [northwind()], budget: { daily_usdc: "10", weekly_usdc: null } });
+
+    await stage();
+
+    expect(chain.transfers).toEqual([]);
+    expect(invoicePatches(fake.requests)[0].body).toMatchObject({ status: "scheduled" });
+    expect(fake.requests.some((r) => r.path === "/rest/v1/agent_budgets")).toBe(false);
+  });
+
+  it("pays as before with no limit set", async () => {
+    today("2026-10-02T09:00:00.000Z");
+    payNow();
+    const { fake, chain, stage } = apFake({ book: [northwind(), contoso()] });
+
+    await stage();
+
+    expect(chain.transfers.map((t) => t.amount)).toEqual([300, 250]);
+    expect(ledger(fake.requests).every((e) => !("outflowBudget" in (e.p_detail as Record<string, unknown>)))).toBe(true);
   });
 });

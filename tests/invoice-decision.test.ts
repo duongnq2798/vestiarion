@@ -447,3 +447,23 @@ describe("invoiceDecision: a receivable (receivables on Arc)", () => {
     expect(invoiceDecision(receivable({ status: "received", tx_ref: null }), undefined, []).outcomeLabel).toBe("Received");
   });
 });
+
+describe("invoiceDecision: a payment held for the agent's spending limit (outflow budget spec §4)", () => {
+  const entry = (detail: Record<string, unknown>) =>
+    ({ seq: 21, id: "e21", ts: "2026-10-02T09:00:00.000Z", actor: "agent", domain: "ap", action: "ap_pay", summary: "",
+      detail: { invoiceId: "inv-1", guardrailBlocked: true, guardrailRule: "workspace.outflow_budget", observed: { paymentLimit: 500, riskLevel: "clear" }, ...detail } }) as unknown as LedgerEntry;
+  const room = { dailyUsdc: 500, weeklyUsdc: 2000, spentToday: 300, spentThisWeek: 300, remaining: 200, binding: "day" };
+
+  it("sets the amount against what the limit left, naming the figure and what was already paid", () => {
+    const decision = invoiceDecision(invoice({ amount: 250, status: "held" }), { payment_limit: 500 } as never, [entry({ currency: "USDC", outflowBudget: room })]);
+    expect(decision.outcome).toBe("refused");
+    expect(decision.guardrail).toEqual({ rule: "workspace.outflow_budget", attempted: 250, attemptedToken: "USDC", limit: 200, limitToken: "USDC", note: "left of the 500.00 USDC daily spending limit; 300.00 USDC already paid today" });
+  });
+
+  it("names the 7-day figure, and weighs a EURC payable at its USDC value", () => {
+    const decision = invoiceDecision(invoice({ amount: 100, currency: "EURC", status: "held" }), { payment_limit: 500 } as never, [
+      entry({ currency: "EURC", usdcValue: 117, outflowBudget: { ...room, spentThisWeek: 1950, remaining: 50, binding: "week" } }),
+    ]);
+    expect(decision.guardrail).toEqual({ rule: "workspace.outflow_budget", attempted: 117, attemptedToken: "USDC", limit: 50, limitToken: "USDC", note: "left of the 2,000.00 USDC 7-day spending limit; 1,950.00 USDC already paid in the last 7 days" });
+  });
+});

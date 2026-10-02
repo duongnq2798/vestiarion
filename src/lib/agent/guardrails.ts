@@ -3,6 +3,7 @@ import { blockingDuplicate } from "./duplicates";
 import { addressUnconfirmed } from "../counterparty-address";
 import { BRIDGE_FEE_CAP_PERCENT } from "../payee-chains";
 import { SWAP_COST_CAP_PERCENT } from "../fx/swap-limits";
+import { exceedsBudget, type BudgetRoom } from "./outflow-budget";
 
 export interface ApGuardrailInput {
   action: "pay" | "schedule" | "hold" | "flag_fraud" | "request_info";
@@ -47,6 +48,11 @@ export interface ApGuardrailInput {
      */
     swap?: { requested: boolean; offer: { usdcIn: number; costPercent: number } | null; usdcBalance: number; usdcDueWithin7Days: number };
   } | null;
+  /**
+   * What the agent's spending limit leaves this cycle (outflow budget spec R4, R5), null when the
+   * workspace set none. `amount` is weighed against `remaining`.
+   */
+  outflowBudget?: BudgetRoom | null;
 }
 
 export type ApGuardrailRule =
@@ -61,7 +67,8 @@ export type ApGuardrailRule =
   | "bridge.unsupported_token"
   | "bridge.fee_unavailable"
   | "bridge.fee_above_cap"
-  | "bridge.gateway_balance_short";
+  | "bridge.gateway_balance_short"
+  | "workspace.outflow_budget";
 
 export { BRIDGE_FEE_CAP_PERCENT };
 
@@ -74,6 +81,13 @@ export interface ApGuardrailResult {
 
 function routeName(bridge: NonNullable<ApGuardrailInput["bridge"]>): string {
   return bridge.route === "gateway" ? "Gateway" : "CCTP";
+}
+
+/** Which figure of the spending limit stops a payment, and what the agent already paid against it. */
+export function budgetClause(budget: BudgetRoom): string {
+  return budget.binding === "day"
+    ? `its ${budget.dailyUsdc} USDC daily spending limit: ${budget.spentToday} USDC already paid today`
+    : `its ${budget.weeklyUsdc} USDC 7-day spending limit: ${budget.spentThisWeek} USDC already paid in the last 7 days`;
 }
 
 /** The final code boundary between a model's recommendation and execution. */
@@ -175,6 +189,18 @@ export function enforceApGuardrails(input: ApGuardrailInput): ApGuardrailResult 
       status: "held",
       rule: "bridge.gateway_balance_short",
       reasoning: `${input.reasoning} [guardrail override: an earlier attempt went through Gateway, and the Gateway balance, ${input.bridge.gatewayShort.balanceUsdc} USDC, does not cover the ${input.bridge.gatewayShort.neededUsdc} USDC this payout needs with its fee — ${verb} refused; held for a person to check the earlier transfer with Circle]`,
+    };
+  }
+  // The agent's spending limit (outflow budget spec R4): what it may pay on its own today and in 7
+  // days. Only a payment now: a schedule is decided again, with this check, on its day. Ahead of the
+  // EURC funding below, so no swap is made for a payment the limit would refuse.
+  const budget = input.outflowBudget ?? null;
+  if (input.action === "pay" && exceedsBudget(input.amount, budget)) {
+    return {
+      blocked: true,
+      status: "held",
+      rule: "workspace.outflow_budget",
+      reasoning: `${input.reasoning} [guardrail override: paying ${input.amount} USDC would take the agent past ${budgetClause(budget)}, ${budget.remaining} USDC left — held for a person to approve]`,
     };
   }
   // A EURC invoice is paid from EURC, never sent as USDC (E5). A payment the
