@@ -54,17 +54,22 @@ export function payConfirmTitle(
  * What the confirm dialog says will happen when Approve and pay is chosen. A
  * transfer already sent — including one still in flight — is only checked,
  * never sent again; a terminal failure is sent again, as a new transfer;
- * otherwise this is the first attempt.
+ * otherwise this is the first attempt. A sole approver approving what they
+ * entered is told the ledger records that too (sole approver R5).
  */
-export function payConfirmDescription(payable: Pick<WaitingPayable, "paymentSent" | "lastAttempt">): string {
+export function payConfirmDescription(payable: Pick<WaitingPayable, "paymentSent" | "lastAttempt">, ownEntry = false): string {
+  const own = ownEntry ? ` ${OWN_ENTRY_RECORDED}` : "";
   if (payable.paymentSent || payable.lastAttempt?.state === "in_flight" || (payable.lastAttempt?.state === "failed" && payable.lastAttempt.resend === false)) {
-    return "Nothing new is sent: Vestiarion checks the transfer already made with Circle, and the ledger records who approved it.";
+    return `Nothing new is sent: Vestiarion checks the transfer already made with Circle, and the ledger records who approved it.${own}`;
   }
   if (payable.lastAttempt?.state === "failed") {
-    return "A new transfer starts as soon as you confirm, and the ledger records who approved it.";
+    return `A new transfer starts as soon as you confirm, and the ledger records who approved it.${own}`;
   }
-  return "The transfer starts as soon as you confirm, and the ledger records who approved it.";
+  return `The transfer starts as soon as you confirm, and the ledger records who approved it.${own}`;
 }
+
+/** The confirm dialog's added sentence when a sole approver approves what they entered themselves. */
+export const OWN_ENTRY_RECORDED = "It also records that you entered it yourself, as the workspace's only approver.";
 
 const STATUS: Record<WaitingPayable["status"], { label: string; tone: BadgeProps["tone"] }> = {
   held: { label: "Held", tone: "held" },
@@ -94,7 +99,9 @@ const UNFINISHED: { label: string; tone: BadgeProps["tone"] } = { label: "Unfini
  *
  * Paying is refused here before the server refuses it — the person who
  * created the invoice cannot approve it, nor can anyone pay a counterparty
- * screened high risk — and the card says which.
+ * screened high risk — and the card says which. The workspace's sole approver
+ * may approve what they entered (`soleApprover`: the viewer is the only
+ * member who may approve payments), and the card says that instead.
  */
 export default function ApprovalCard({
   orgSlug,
@@ -102,14 +109,18 @@ export default function ApprovalCard({
   canDecide,
   viewerId,
   sandbox,
+  soleApprover = false,
 }: {
   orgSlug: string;
   payable: WaitingPayable;
   canDecide: boolean;
   viewerId: string;
   sandbox: boolean;
+  /** The viewer is the only member of the workspace who may approve payments. */
+  soleApprover?: boolean;
 }) {
   const unfinished = payable.status === "processing" && payable.reclaimable;
+  const ownEntry = soleApprover && payable.createdBy === viewerId;
   const status = unfinished ? UNFINISHED : STATUS[payable.status];
   const processing = payable.status === "processing" && !payable.reclaimable;
 
@@ -147,6 +158,7 @@ export default function ApprovalCard({
           {payable.paymentSent && payable.lastAttempt?.state !== "in_flight" && (
             <p className="mt-2 text-sm text-ink-2">A payment was already sent; Approve and pay records it.</p>
           )}
+          {canDecide && !processing && ownEntry && payable.riskLevel !== "high" && <p className="mt-2 text-sm text-ink-2">{OWN_INVOICE_NOTE}</p>}
           {payable.lastAttempt?.state === "failed" && (
             <Callout tone="refused" className="mt-2">
               The last payment attempt failed: {payable.lastAttempt.reason}.{" "}
@@ -166,21 +178,39 @@ export default function ApprovalCard({
             <p className="text-sm text-ink-2">Being decided by someone else right now.</p>
           </CardFooter>
         ) : canDecide ? (
-          <Decisions orgSlug={orgSlug} payable={payable} viewerId={viewerId} sandbox={sandbox} />
+          <Decisions orgSlug={orgSlug} payable={payable} viewerId={viewerId} sandbox={sandbox} ownEntry={ownEntry} />
         ) : null}
       </article>
     </Card>
   );
 }
 
-function Decisions({ orgSlug, payable, viewerId, sandbox }: { orgSlug: string; payable: WaitingPayable; viewerId: string; sandbox: boolean }) {
+/** What the card says to a sole approver about an invoice they entered (sole approver R5). */
+export const OWN_INVOICE_NOTE =
+  "You entered this invoice. You are the only person in this workspace who can approve payments, so you can approve it yourself, and the ledger records that you did.";
+
+function Decisions({
+  orgSlug,
+  payable,
+  viewerId,
+  sandbox,
+  ownEntry,
+}: {
+  orgSlug: string;
+  payable: WaitingPayable;
+  viewerId: string;
+  sandbox: boolean;
+  /** A sole approver deciding an invoice they entered: Approve and pay stays enabled. */
+  ownEntry: boolean;
+}) {
   const approveForm = useActionForm(approve, INITIAL);
   const returnForm = useActionForm(giveBack, INITIAL);
   // Both forms report in one place: whichever was submitted last.
   const [last, setLast] = useState<"approve" | "return" | null>(null);
   const shown = last === "approve" ? approveForm.state : last === "return" ? returnForm.state : INITIAL;
 
-  const blocked = payable.createdBy === viewerId ? "You created this invoice" : payable.riskLevel === "high" ? "Screened high risk" : null;
+  const blocked =
+    payable.createdBy === viewerId && !ownEntry ? "You created this invoice" : payable.riskLevel === "high" ? "Screened high risk" : null;
   const approveId = `approve-${payable.id}`;
   const returnId = `return-${payable.id}`;
   const blockedId = `${approveId}-blocked`;
@@ -215,7 +245,7 @@ function Decisions({ orgSlug, payable, viewerId, sandbox }: { orgSlug: string; p
             </Button>
           }
           title={payConfirmTitle(payable, sandbox)}
-          description={payConfirmDescription(payable)}
+          description={payConfirmDescription(payable, ownEntry)}
           confirmLabel="Pay now"
         />
         {!payable.paymentSent && payable.lastAttempt?.state !== "in_flight" && (

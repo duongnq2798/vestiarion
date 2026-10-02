@@ -11,6 +11,7 @@ import { invoiceDiscount, type InvoiceDiscount } from "./payment-timing";
 import { paidAcrossChains, payeeChain } from "../payee-chains";
 import { bridgeFee, type BridgeFee } from "../circle/cctp";
 import { gatewayQuoter, type GatewayQuote } from "../circle/gateway-quote";
+import { isSoleApprover } from "./sole-approver";
 
 /**
  * The approvals library (spec §6): lets a person pay, reject or return a
@@ -20,7 +21,9 @@ import { gatewayQuoter, type GatewayQuote } from "../circle/gateway-quote";
  * The decision itself is claimed through `claim_invoice_decision` (migration
  * 0025) before anything else changes — a compare-and-set in the database, so
  * two people racing the same invoice cannot both act on it, and a person
- * cannot approve an invoice they created themselves. Everything checked
+ * cannot approve an invoice they created themselves — unless they are the
+ * workspace's sole approver (migration 0061, `sole_approver`), when there is
+ * nobody else to, and the ledger entry says so. Everything checked
  * before that claim (self-approval, high risk, funds) is a refusal that
  * never sends the claim at all, so a rejected attempt never even contends
  * for the row.
@@ -485,15 +488,20 @@ function approvalPaidSummary(
   amount: number,
   name: string,
   payment: { amountPaid: number; discountTaken: number },
-  currency: Stablecoin = "USDC"
+  currency: Stablecoin = "USDC",
+  soleApprover = false
 ): string {
   const discounted = payment.discountTaken > 0;
   const sent = discounted ? payment.amountPaid : amount;
   const less = discounted ? ` (${amount} ${currency} less a ${payment.discountTaken} ${currency} early-payment discount)` : "";
-  if (status === "paid") return `Approved and paid ${sent} ${currency} to ${name}${less}`;
-  if (status === "matched") return `Approved; payment of ${sent} ${currency} to ${name} submitted${less}`;
-  return `Approved; payment of ${sent} ${currency} to ${name} failed${less}`;
+  const own = soleApprover ? ` ${SOLE_APPROVER_NOTE}` : "";
+  if (status === "paid") return `Approved and paid ${sent} ${currency} to ${name}${less}${own}`;
+  if (status === "matched") return `Approved; payment of ${sent} ${currency} to ${name} submitted${less}${own}`;
+  return `Approved; payment of ${sent} ${currency} to ${name} failed${less}${own}`;
 }
+
+/** How a ledger summary marks an approval by the person who entered the record, as the workspace's only approver (sole approver R4). */
+export const SOLE_APPROVER_NOTE = "(entered and approved by the workspace's only approver)";
 
 /**
  * `shownAddress` is the counterparty address the approval card showed the
@@ -513,7 +521,10 @@ export async function approveAndPay(
   const invoice = await loadWaitingPayable(input.invoiceId);
 
   // Early refusals, before any claim — none of these contend for the row.
-  if (invoice.createdBy === input.actorId) raise("self_approval");
+  // Whoever entered the invoice may approve it only as the workspace's sole
+  // approver; the claim asks the database the same question again.
+  const soleApprover = invoice.createdBy === input.actorId;
+  if (soleApprover && !(await isSoleApprover(input.actorId))) raise("self_approval");
   if (invoice.riskLevel === "high") raise("high_risk");
   const shownAddress = input.shownAddress?.trim();
   if (shownAddress !== undefined && !sameAddress(invoice.address, shownAddress === "" ? null : shownAddress)) {
@@ -652,7 +663,7 @@ export async function approveAndPay(
     actor: "human",
     domain: "ap",
     action: "approval_paid",
-    summary: approvalPaidSummary(result.status, invoice.amount, invoice.counterpartyName, result, invoice.currency),
+    summary: approvalPaidSummary(result.status, invoice.amount, invoice.counterpartyName, result, invoice.currency, soleApprover),
     detail: {
       by: input.actorId,
       invoiceId: invoice.id,
@@ -672,6 +683,8 @@ export async function approveAndPay(
       ...(result.execution?.retriedAfter ? { retriedAfter: result.execution.retriedAfter } : {}),
       // A new payment to another chain: the route it took and both routes' fees, as an ap_pay entry records them.
       ...(payout ? { payout } : {}),
+      // The person who entered it approved it, as the workspace's only approver.
+      ...(soleApprover ? { soleApprover: true } : {}),
     },
   });
 

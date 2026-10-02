@@ -4,11 +4,12 @@ import { getChainProvider } from "../circle";
 import { payeeNotReady } from "../counterparty-address";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { listLedgerEntriesForTargets } from "../ledger";
-import { lastAttemptOf, paymentWasSent, transferExists, type IntentState } from "./approvals";
+import { lastAttemptOf, paymentWasSent, SOLE_APPROVER_NOTE, transferExists, type IntentState } from "./approvals";
 import { releaseHeldMilestone } from "./orchestrator";
 import { HELD_FOR_BUDGET } from "./outflow-budget";
 import { payoutAddress, syncOperatingBalance } from "./pay";
 import { HELD_BECAUSE_PAUSED } from "./pause";
+import { isSoleApprover } from "./sole-approver";
 
 /**
  * A person decides a held milestone (docs/superpowers/specs/2026-10-02-held-milestone-actions-design.md): every
@@ -21,7 +22,8 @@ import { HELD_BECAUSE_PAUSED } from "./pause";
  * the agent's spending limit, as a person's Approve and pay on a payable is not. A transfer Circle ended in a
  * terminal failure is sent again (`retryTerminalFailure`); one that may still settle is only reconciled.
  * Overriding a hold the agent chose (rather than sending again a release it decided) needs someone other than
- * whoever added the milestone, as approving a held payable does.
+ * whoever added the milestone, as approving a held payable does — unless they are the workspace's sole approver
+ * (docs/superpowers/specs/2026-10-03-sole-approver-design.md), and then the ledger entry says so.
  *
  * Both decisions are claimed through `claim_milestone_decision` (migration 0059) first, so two people never
  * decide one milestone at once; the milestone stays `held` while claimed, where the agent's cycle never looks.
@@ -322,6 +324,7 @@ export async function payHeldMilestone(input: { actorId: string; milestoneId: st
 
   const reason = heldReason(milestone.facts);
   const alreadySent = transferExists(milestone.facts.intent);
+  let soleApprover = false;
   // A transfer that already exists is recorded whatever stands in the way now: nothing new can move.
   if (!alreadySent) {
     const blocked: Partial<Record<HeldReasonKind, MilestoneDecisionErrorCode>> = {
@@ -333,7 +336,10 @@ export async function payHeldMilestone(input: { actorId: string; milestoneId: st
     };
     const code = blocked[reason.kind];
     if (code) raise(code);
-    if (reason.override && milestone.createdBy === input.actorId) raise("self_approval");
+    if (reason.override && milestone.createdBy === input.actorId) {
+      if (!(await isSoleApprover(input.actorId))) raise("self_approval");
+      soleApprover = true;
+    }
   }
 
   const operatingRead = await db().from("accounts").select("id, balance").eq("kind", "operating").maybeSingle();
@@ -378,16 +384,17 @@ export async function payHeldMilestone(input: { actorId: string; milestoneId: st
 
   const name = milestone.facts.contractor.name;
   const execution = outcome.paymentExecution;
+  const own = soleApprover ? ` ${SOLE_APPROVER_NOTE}` : "";
   await appendLedgerEntryBestEffort(orgId, {
     actor: "human",
     domain: "contractor",
     action: "milestone_approval_paid",
     summary:
       outcome.status === "paid"
-        ? `Paid milestone "${milestone.title}" to ${name} now: ${milestone.amount} USDC`
+        ? `Paid milestone "${milestone.title}" to ${name} now: ${milestone.amount} USDC${own}`
         : outcome.status === "verified"
-          ? `Approved milestone "${milestone.title}"; payment of ${milestone.amount} USDC to ${name} submitted`
-          : `Approved milestone "${milestone.title}"; payment of ${milestone.amount} USDC to ${name} failed`,
+          ? `Approved milestone "${milestone.title}"; payment of ${milestone.amount} USDC to ${name} submitted${own}`
+          : `Approved milestone "${milestone.title}"; payment of ${milestone.amount} USDC to ${name} failed${own}`,
     detail: {
       by: input.actorId,
       milestoneId: milestone.id,
@@ -400,6 +407,8 @@ export async function payHeldMilestone(input: { actorId: string; milestoneId: st
       status: outcome.status,
       ...(execution ? { attempt: execution.attempt } : {}),
       ...(execution?.retriedAfter ? { retriedAfter: execution.retriedAfter } : {}),
+      // The person who added it overrode the hold, as the workspace's only approver.
+      ...(soleApprover ? { soleApprover: true } : {}),
     },
   });
 

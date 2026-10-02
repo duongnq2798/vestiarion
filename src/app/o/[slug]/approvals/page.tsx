@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { sectionTitle } from "@/components/vx/nav";
 import { listWaitingPayables } from "@/lib/agent/approvals";
+import { isSoleApprover } from "@/lib/agent/sole-approver";
 import { requireMembership } from "@/lib/auth/membership";
 import { can } from "@/lib/auth/roles";
 import { chainModes } from "@/lib/circle";
@@ -25,7 +26,7 @@ export default async function ApprovalsPage({ params }: { params: Promise<{ slug
   return inOrg(access, async () => {
     const { user, membership } = access;
     const canDecide = can(membership.role, "approval.decide");
-    const [waiting, dashboardStats, proposals] = await Promise.all([
+    const [waiting, dashboardStats, proposals, soleApprover] = await Promise.all([
       listWaitingPayables(),
       stats(),
       // Best effort: suggestions that cannot be read hide their section, nothing else.
@@ -33,6 +34,8 @@ export default async function ApprovalsPage({ params }: { params: Promise<{ slug
         console.error("approvals: proposals not loaded", error instanceof Error ? error.message : error);
         return [];
       }),
+      // Whether this person may approve what they entered themselves (sole approver R5).
+      canDecide ? isSoleApprover(user.id) : Promise.resolve(false),
     ]);
 
     return (
@@ -64,7 +67,15 @@ export default async function ApprovalsPage({ params }: { params: Promise<{ slug
         ) : (
           <div className="space-y-4">
             {waiting.map((payable) => (
-              <ApprovalCard key={payable.id} orgSlug={slug} payable={payable} canDecide={canDecide} viewerId={user.id} sandbox={membership.mode === "sandbox"} />
+              <ApprovalCard
+                key={payable.id}
+                orgSlug={slug}
+                payable={payable}
+                canDecide={canDecide}
+                viewerId={user.id}
+                sandbox={membership.mode === "sandbox"}
+                soleApprover={soleApprover}
+              />
             ))}
           </div>
         )}
