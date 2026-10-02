@@ -1,5 +1,6 @@
 import type {
   BalanceSnapshot,
+  BatchTransferParams,
   ChainProvider,
   EarnDepositParams,
   EarnPosition,
@@ -45,6 +46,15 @@ class HybridProvider implements ChainProvider {
 
   reconcileTransfer(providerTxId: string): Promise<TransferResult> {
     return this.live.reconcileTransfer(providerTxId);
+  }
+
+  /** A batch is a payment, so it is the live leg's (batch payouts §2), as is finding one whose answer was lost (R5). */
+  batchTransfer(params: BatchTransferParams): Promise<TransferResult> {
+    return this.live.batchTransfer(params);
+  }
+
+  findTransferByRef(fromAccountId: string, refId: string, window: { from: string; to: string }): Promise<TransferResult | null> {
+    return this.live.findTransferByRef(fromAccountId, refId, window);
   }
 
   getBalance(accountId: string): Promise<BalanceSnapshot> {
@@ -134,6 +144,7 @@ export function chainModes(): { mode: "live" | "simulate"; earnMode: "live" | "s
 }
 
 export type {
+  BatchTransferParams,
   ChainProvider,
   TransferParams,
   TransferResult,
