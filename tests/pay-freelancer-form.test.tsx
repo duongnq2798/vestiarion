@@ -22,7 +22,7 @@ describe("PayFreelancerForm", () => {
     for (const name of ["name", "email", "work", "amount", "evidence"]) expect(markup).toContain(`name="${name}"`);
     expect(markup).toContain('name="orgSlug" value="mai"');
     const page = text(markup);
-    for (const label of ["Name", "Email", "What they delivered", "Amount (USDC)", "Link to the work", "Set up payment"]) expect(page).toContain(label);
+    for (const label of ["Freelancer's name", "Freelancer's email", "What they delivered", "Amount (USDC)", "Link to the work", "Set up payment"]) expect(page).toContain(label);
   });
 
   it("says a live workspace pays only once the address is added and confirmed", () => {

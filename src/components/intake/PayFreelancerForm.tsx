@@ -25,10 +25,10 @@ export default function PayFreelancerForm({ orgSlug, live }: { orgSlug: string; 
       <form {...formProps} className="space-y-4">
         <input type="hidden" name="orgSlug" value={orgSlug} />
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field id="freelancer-name" label="Name">
+          <Field id="freelancer-name" label="Freelancer's name">
             <Input name="name" required minLength={2} maxLength={160} placeholder="Linh Tran" autoComplete="off" />
           </Field>
-          <Field id="freelancer-email" label="Email" optional description="They get the link to add the address they want to be paid at.">
+          <Field id="freelancer-email" label="Freelancer's email" optional description="They get the link to add the address they want to be paid at.">
             <Input name="email" type="email" maxLength={254} placeholder="linh@example.com" autoComplete="off" />
           </Field>
           <Field id="freelancer-work" label="What they delivered" className="sm:col-span-2">
