@@ -323,7 +323,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
   "guides/pay-a-contractor": [
     ["Pay a freelancer", "src/app/o/[slug]/contractors/page.tsx"],
     ["paid in one Arc transaction with", "src/lib/agent/orchestrator.ts"],
-    ["Multicall3From", "src/lib/circle/batch.ts"],
+    ["executeBatch", "src/lib/circle/batch.ts"],
     ["Freelancer's name", PAY_FREELANCER_FORM],
     ["Freelancer's email", PAY_FREELANCER_FORM],
     ["What they delivered", PAY_FREELANCER_FORM],

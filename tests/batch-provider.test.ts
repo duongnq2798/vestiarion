@@ -1,13 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
-import { MULTICALL3_FROM } from "@/lib/circle/batch";
+import { BatchNotSentError, SCA_EXECUTE_BATCH } from "@/lib/circle/batch";
+import { ARC_TESTNET_USDC } from "@/lib/circle/cctp";
 import { LiveProvider, type LiveProviderClient } from "@/lib/circle/liveProvider";
 import { SimulateProvider } from "@/lib/circle/simulateProvider";
 import type { ChainConfig } from "@/lib/config";
 
 /**
  * The live provider's batch (docs/superpowers/specs/2026-10-02-batch-payouts-design.md §2, R3, R5): one
- * contract execution on Multicall3From from the operating wallet, under the batch's key, which is also
- * its refId; and a batch whose answer was lost, found among the wallet's transactions by that refId.
+ * contract execution of the operating wallet's own executeBatch, under the batch's key, which is also its
+ * refId; and a batch whose answer was lost, found among the wallet's transactions by that refId.
  */
 
 vi.mock("server-only", () => ({}));
@@ -67,20 +68,24 @@ function circle(listed: Array<{ id: string; refId?: string }> = []) {
 }
 
 describe("LiveProvider.batchTransfer", () => {
-  it("sends one contract execution to Multicall3From from the operating wallet, under the batch's key and refId", async () => {
+  it("sends one contract execution of the operating wallet's own executeBatch, under the batch's key and refId", async () => {
     const { client, created } = circle();
     const result = await new LiveProvider(CHAIN, { client }).batchTransfer({ fromAccountId: "operating-1", transfers: TRANSFERS, idempotencyKey: KEY });
     expect(created).toHaveLength(1);
-    expect(created[0]).toMatchObject({ walletId: "wallet-op", contractAddress: MULTICALL3_FROM, idempotencyKey: KEY, refId: KEY });
-    expect(String(created[0].callData).slice(0, 10)).toBe("0x82ad56cb");
+    expect(created[0]).toMatchObject({ walletId: "wallet-op", contractAddress: `0x${"9".repeat(40)}`, abiFunctionSignature: SCA_EXECUTE_BATCH, idempotencyKey: KEY, refId: KEY });
+    const [calls] = created[0].abiParameters as [Array<[string, string, string]>];
+    expect(calls.map(([target, value, data]) => [target, value, data.slice(0, 10)])).toEqual([
+      [ARC_TESTNET_USDC, "0", "0xa9059cbb"],
+      [ARC_TESTNET_USDC, "0", "0xa9059cbb"],
+    ]);
     expect(result).toMatchObject({ providerTxId: "tx-batch", status: "confirmed", txHash: `0x${"c".repeat(64)}`, feeUsd: 0.009, feeSource: "chain_reported", settledInMs: 2000 });
   });
 
-  it("sends nothing to a payee with no Arc address", async () => {
+  it("sends nothing to a payee with no Arc address, and says nothing was sent", async () => {
     const { client, created } = circle();
-    await expect(
-      new LiveProvider(CHAIN, { client }).batchTransfer({ fromAccountId: "operating-1", transfers: [TRANSFERS[0], { toAddress: "sim:cp-2", amount: 1 }], idempotencyKey: KEY })
-    ).rejects.toThrow(/no on-chain address/);
+    const sent = new LiveProvider(CHAIN, { client }).batchTransfer({ fromAccountId: "operating-1", transfers: [TRANSFERS[0], { toAddress: "sim:cp-2", amount: 1 }], idempotencyKey: KEY });
+    await expect(sent).rejects.toThrow(BatchNotSentError);
+    await expect(sent).rejects.toThrow(/no on-chain address/);
     expect(created).toEqual([]);
   });
 });

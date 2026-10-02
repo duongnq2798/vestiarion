@@ -54,9 +54,7 @@ A held milestone is decided again once something it was held for changes: the co
 
 When a cycle releases two or more milestones, the agent pays them together: one transaction on Arc testnet pays every contractor. Each milestone is still decided and checked on its own, and keeps its own signed `milestone_release` entry.
 
-This is off in workspaces with live Circle wallets for now, and each milestone there is paid alone. Their wallets are Circle smart accounts, and Multicall3From does not accept a smart account as the sender.
-
-- **One transaction, all or none.** The batch goes through Arc's Multicall3From contract, from the operating wallet. If any transfer in it fails, none happens. So the agent sends a batch only when the operating balance covers all of it. Otherwise it pays each milestone alone, as many as the balance allows.
+- **One transaction, all or none.** The operating wallet is a Circle smart account, and the batch is one call to its own `executeBatch`. The wallet sends USDC to each contractor in turn, and if any transfer fails, none happens. So the agent sends a batch only when the operating balance covers all of it. Otherwise it pays each milestone alone, as many as the balance allows.
 - **What the card says.** A milestone paid this way says it was paid in one Arc transaction with the others, for example "paid in one Arc transaction with 2 other milestones". It links the shared transaction. The ledger entry's `execution.batch` holds the batch's key and size.
 - **Fees.** The transaction's fee is split equally between its milestones.
 - **What is never batched.** A milestone locked in escrow is released on its own, as is the only milestone released in a cycle.

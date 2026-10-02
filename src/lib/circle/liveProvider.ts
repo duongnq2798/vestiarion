@@ -21,7 +21,7 @@ import type {
 import { ARC_FEE_USD } from "./types";
 import { fetchArcFeeUsd } from "./arcFees";
 import { awaitSettlement, FAILED_STATES, withDeadline, type Settlement } from "./settlement";
-import { batchCallData, MULTICALL3_FROM } from "./batch";
+import { batchCalls, BatchNotSentError, SCA_EXECUTE_BATCH } from "./batch";
 import { ARC_TESTNET_USDC, BridgeFeeError, bridgeFee, bridgeStepKey, burnCalls, forwardedMint, type ContractCall } from "./cctp";
 import { burnIntent, burnIntentTypedData, estimateGateway, gatewaySalt, gatewayTransferStatus, submitGatewayTransfer, type GatewayTransferStatus } from "./gateway";
 import { payeeChain, paidAcrossChains } from "../payee-chains";
@@ -278,24 +278,34 @@ export class LiveProvider implements ChainProvider {
   }
 
   /**
-   * Several USDC transfers on Arc testnet in one transaction (batch payouts §2): `aggregate3` on
-   * Multicall3From from the operating wallet, one `USDC.transfer` per payment, none allowed to fail, so all
-   * happen or none does. The batch's key is Circle's idempotency key and the transaction's refId (R3, R5).
-   * The result is the whole transaction's: its fee is the batch's, shared by the caller (R6).
+   * Several USDC transfers on Arc testnet in one transaction (batch payouts §2): a contract execution of the
+   * operating wallet's own `executeBatch`, as Circle documents for its smart accounts. The wallet calls
+   * `USDC.transfer` once per payment, as itself, and reverts them all if one fails. The batch's key is
+   * Circle's idempotency key and the transaction's refId (R3, R5). The result is the whole transaction's:
+   * its fee is the batch's, shared by the caller (R6). A batch that cannot be built throws
+   * `BatchNotSentError` before Circle is called.
    */
   async batchTransfer(params: BatchTransferParams): Promise<TransferResult> {
     const unpaid = params.transfers.find((transfer) => transfer.toAddress.startsWith("sim:"));
     if (unpaid) {
-      throw new Error(`Counterparty has no on-chain address (${unpaid.toAddress}). Add this counterparty's Arc address on the Counterparties page.`);
+      throw new BatchNotSentError(`Counterparty has no on-chain address (${unpaid.toAddress}). Add this counterparty's Arc address on the Counterparties page`);
     }
-    const callData = batchCallData(params.transfers);
-    const account = await this.account(params.fromAccountId);
+    const calls = batchCalls(params.transfers);
+    let account: AccountRow & { walletId: string };
+    try {
+      account = await this.account(params.fromAccountId);
+    } catch (error) {
+      throw new BatchNotSentError(error instanceof Error ? error.message.replace(/\.$/, "") : "The operating wallet could not be read");
+    }
+    if (!account.address) throw new BatchNotSentError("The operating wallet's address is not known");
     const started = Date.now();
     const created = await withDeadline(
       this.client.createContractExecutionTransaction({
         walletId: account.walletId,
-        contractAddress: MULTICALL3_FROM,
-        callData,
+        // The wallet itself: Circle runs `executeBatch` on the smart account rather than wrapping it in `execute`.
+        contractAddress: account.address,
+        abiFunctionSignature: SCA_EXECUTE_BATCH,
+        abiParameters: [calls],
         idempotencyKey: params.idempotencyKey,
         refId: params.idempotencyKey,
         fee: { type: "level", config: { feeLevel: "MEDIUM" } },
