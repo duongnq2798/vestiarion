@@ -96,7 +96,10 @@ The `eth_call` that cleared it before merging called Multicall3From with the wal
 which makes the wallet `tx.origin` too, so it could not see this. The check for this version
 simulates `executeBatch` from EntryPoint v0.7, the path a user operation takes: three transfers
 succeed from the testnet-2 and founding wallets (gas 123,678), an overdraft in any of them reverts
-the whole batch, and a call from any other address reverts.
+the whole batch, and a call from any other address reverts. Circle's own fee estimate
+(`estimateContractExecutionFee`, which creates no transaction) accepts the exact call from the
+testnet-2 wallet to three of its contractors (gas limit 416,567), and refuses the Multicall3From
+call ("Estimate fee execution reverted"), reproducing the refusal.
 
 PR #129 turned batches off for live workspaces until this version.
 
