@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import ScreeningMatch from "@/components/intake/ScreeningMatch";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 
-vi.mock("@/app/actions/compliance", () => ({ dismissScreeningMatchAction: vi.fn() }));
+vi.mock("@/app/actions/compliance", () => ({ dismissScreeningMatchAction: vi.fn(), screenAgainAction: vi.fn() }));
 
 /**
  * A counterparty's screening match on its card (dismiss screening match §2): the match and what it
@@ -31,6 +31,18 @@ describe("ScreeningMatch", () => {
   it("offers no dismissal to a member who cannot decide approvals, or for a match with no entity", () => {
     expect(text(render(<ScreeningMatch orgSlug="studio" counterparty={MATCHED} canDismiss={false} />))).not.toContain("Not this person");
     expect(text(render(<ScreeningMatch orgSlug="studio" counterparty={{ ...MATCHED, riskEntityId: null }} canDismiss />))).not.toContain("Not this person");
+  });
+
+  it("offers Screen again for a live match recorded before verdicts kept the entity they matched", () => {
+    const old = { ...MATCHED, riskEntityId: null };
+    const page = text(render(<ScreeningMatch orgSlug="studio" counterparty={old} canDismiss liveScreening />));
+    expect(page).toContain("This match was recorded before Vestiarion kept who it matched.");
+    expect(page).toContain("Screen again");
+    expect(page).not.toContain("Not this person");
+    // Not for a bundled match, which never names one, nor for a member who cannot dismiss, nor once it names one.
+    expect(text(render(<ScreeningMatch orgSlug="studio" counterparty={old} canDismiss />))).not.toContain("Screen again");
+    expect(text(render(<ScreeningMatch orgSlug="studio" counterparty={old} canDismiss={false} liveScreening />))).not.toContain("Screen again");
+    expect(text(render(<ScreeningMatch orgSlug="studio" counterparty={MATCHED} canDismiss liveScreening />))).not.toContain("Screen again");
   });
 
   it("shows nothing for a clear counterparty", () => {

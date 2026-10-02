@@ -6,6 +6,7 @@ import { z } from "zod";
 import { raiseCycleEvent } from "@/lib/agent/cycle-soon";
 import { authorize } from "@/lib/auth/authorize";
 import { revalidateOrgPages } from "@/lib/auth/revalidate";
+import { screenCounterparty } from "@/lib/compliance";
 import { inOrg } from "@/lib/dal/scope";
 import { DismissalError, dismissScreeningMatch } from "@/lib/screening-dismissal";
 
@@ -51,6 +52,36 @@ export async function dismissScreeningMatchAction(_previous: DismissMatchResult,
       if (error instanceof DismissalError) return { ok: false, message: error.message };
       console.error("dismiss screening match failed", error instanceof Error ? error.message : error);
       return { ok: false, message: "That did not work. Try again in a moment." };
+    }
+  });
+}
+
+/**
+ * Screens one counterparty again, now. For a match recorded before each verdict kept the entity it matched
+ * (migration 0051): until it is screened again it has no entity to dismiss, so Not this person cannot be offered.
+ * The same members who may dismiss a match may ask for it.
+ */
+export async function screenAgainAction(_previous: DismissMatchResult, formData: FormData): Promise<DismissMatchResult> {
+  const auth = await authorize(formData.get("orgSlug"), "approval.decide");
+  if (!auth.ok) return { ok: false, message: auth.message };
+  return inOrg(auth, async () => {
+    const parsed = inputSchema.shape.counterpartyId.safeParse(formString(formData, "counterpartyId"));
+    if (!parsed.success) return { ok: false, message: "Counterparty not found." };
+    try {
+      const outcome = await screenCounterparty(parsed.data);
+      revalidateOrgPages();
+      // A changed verdict changes what the agent may pay: payments held on the old one are decided again.
+      if (outcome.riskLevel !== outcome.previousRiskLevel) raiseCycleEvent(auth, "match_dismissed");
+      const still = outcome.riskLevel === "medium" || outcome.riskLevel === "high";
+      return {
+        ok: true,
+        message: still
+          ? `${outcome.name} screened again: ${outcome.riskLevel} risk. If it is someone else, choose Not this person.`
+          : `${outcome.name} screened again: ${outcome.riskLevel} risk.`,
+      };
+    } catch (error) {
+      console.error("screen again failed", error instanceof Error ? error.message : error);
+      return { ok: false, message: "Screening could not be reached just now. Try again in a moment." };
     }
   });
 }

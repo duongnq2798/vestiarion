@@ -194,6 +194,8 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["the agent's spending limit has room for it again", "src/lib/agent/follow-up.ts"],
     ["Screening match", SCREENING_MATCH],
     ["Not this person", SCREENING_MATCH],
+    ["Screen again", SCREENING_MATCH],
+    ["This match was recorded before Vestiarion kept who it matched.", SCREENING_MATCH],
     ["Dismiss the match", SCREENING_MATCH],
     ["Get paid on Arc", PAY_LINK_CONTROL],
     ["Copy link", PAY_LINK_CONTROL],
