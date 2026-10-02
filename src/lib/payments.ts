@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { ChainProvider, Stablecoin, TransferResult } from "./circle";
 import type { PayoutRoute } from "./circle/types";
-import { MAX_BATCH_SIZE } from "./circle/batch";
+import { BatchNotSentError, MAX_BATCH_SIZE } from "./circle/batch";
 import { FAILED_STATES } from "./circle/settlement";
 import { db, unwrap } from "./dal";
 import { paidAcrossChains } from "./payee-chains";
@@ -739,6 +739,16 @@ async function sendBatch(
       idempotencyKey: batch.key,
     });
   } catch (error) {
+    // Nothing reached Circle: the batch is undone and each is sent alone at once, under its own key (R4).
+    if (error instanceof BatchNotSentError) {
+      try {
+        await store.leaveBatch(batch.key);
+      } catch {
+        // Still carried: looked for on Circle, which never had it, and paid alone after (R5).
+        return each(async (member) => execution(await store.recordError(member.intent.idempotencyKey, error.message), false));
+      }
+      return each((member) => sendClaimed(member.intent, member.request, provider, store, null));
+    }
     // Circle may or may not have the batch: every member keeps it, and is looked for rather than sent again (R5).
     const message = error instanceof Error ? error.message : "Batch transfer failed";
     return each(async (member) => execution(await store.recordError(member.intent.idempotencyKey, message), false));

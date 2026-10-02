@@ -1,13 +1,14 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
-## 2026-10-02: Batches are off for live wallets
+## 2026-10-02: Batches through the operating wallet's own executeBatch
 
-- A workspace with live Circle wallets pays each milestone alone again, as before batches. Its wallets are Circle smart accounts, and Arc's Multicall3From keeps the sender only when the sender signed the transaction itself. Circle refused such a batch at estimation, and no money moved.
-- The milestones of that batch were held, and their `milestone_release` entries carry `execution.batch` with `resultingStatus: "held"`.
+- A batch of milestones is now one call to the operating wallet's own `executeBatch`, as Circle documents for its smart accounts. The wallet sends USDC to each payee in turn, and if one transfer fails, none happens.
+- The first version sent batches through Arc's Multicall3From. Multicall3From keeps the sender only when the sender signed the transaction itself, and a Circle smart account's transaction is sent by Circle's bundler. Circle refused that batch at estimation (`ESTIMATION_ERROR`), and no money moved. Its milestones were held, and their `milestone_release` entries carry `execution.batch` with `resultingStatus: "held"`.
+- For a short time in between, workspaces with live wallets paid each milestone alone.
 
 ## 2026-10-02: Several milestones in one transaction
 
-- When a cycle releases two or more milestones paid in USDC on Arc testnet, they go out in one transaction, through Arc's Multicall3From contract. Each is still decided, checked and signed on its own. A milestone locked in escrow is always released on its own.
+- When a cycle releases two or more milestones paid in USDC on Arc testnet, they go out in one transaction. Each is still decided, checked and signed on its own. A milestone locked in escrow is always released on its own.
 - A `milestone_release` entry for a milestone paid this way carries `execution.batch`: `{ key, size }`. `key` identifies the batch, and `size` is how many milestones it paid.
   - `execution.txRef` is the batch's transaction, shared with the other milestones in it.
   - `execution.feeUsd` is this milestone's share of the transaction's fee.

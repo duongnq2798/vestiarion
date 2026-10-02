@@ -66,7 +66,7 @@ export interface BatchTransfer {
   amount: number;
 }
 
-/** Several USDC transfers on Arc testnet in one transaction, through Multicall3From (batch payouts §2). */
+/** Several USDC transfers on Arc testnet in one transaction, the operating wallet's own `executeBatch` (batch payouts §2). */
 export interface BatchTransferParams {
   fromAccountId: string;
   transfers: BatchTransfer[];

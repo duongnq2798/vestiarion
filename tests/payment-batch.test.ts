@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { decodeFunctionData, parseAbi, type Hex } from "viem";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
-import { batchCallData, MAX_BATCH_SIZE, MULTICALL3_FROM } from "@/lib/circle/batch";
+import { batchCalls, BatchNotSentError, MAX_BATCH_SIZE, SCA_EXECUTE_BATCH } from "@/lib/circle/batch";
 import { ARC_TESTNET_USDC } from "@/lib/circle/cctp";
 import {
   BATCH_LOOKUP_GRACE_MS,
@@ -165,35 +165,32 @@ describe("batchIdempotencyKey", () => {
   });
 });
 
-describe("batchCallData", () => {
-  const multicall = parseAbi(["function aggregate3((address target, bool allowFailure, bytes callData)[] calls) payable returns ((bool success, bytes returnData)[] returnData)"]);
+describe("batchCalls", () => {
   const erc20 = parseAbi(["function transfer(address to, uint256 amount) returns (bool)"]);
 
-  it("is aggregate3 on Multicall3From, one USDC transfer per payment in 6-decimal units, none allowed to fail", () => {
-    const data = batchCallData([
+  it("is one USDC transfer per payment for the wallet's executeBatch, in 6-decimal units, sending no native value", () => {
+    const calls = batchCalls([
       { toAddress: "0x67C8000000000000000000000000000000000504", amount: 1.5 },
       { toAddress: "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd", amount: 0.000001 },
     ]);
-    expect(data.slice(0, 10)).toBe("0x82ad56cb");
-    const { args } = decodeFunctionData({ abi: multicall, data });
-    const calls = args[0];
+    expect(SCA_EXECUTE_BATCH).toBe("executeBatch((address,uint256,bytes)[])");
     expect(calls).toHaveLength(2);
-    for (const call of calls) {
-      expect(call.target.toLowerCase()).toBe(ARC_TESTNET_USDC);
-      expect(call.allowFailure).toBe(false);
+    for (const [target, value] of calls) {
+      expect(target).toBe(ARC_TESTNET_USDC);
+      expect(value).toBe("0");
     }
-    const [to, units] = decodeFunctionData({ abi: erc20, data: calls[0].callData as Hex }).args;
+    const [to, units] = decodeFunctionData({ abi: erc20, data: calls[0][2] as Hex }).args;
     expect([to.toLowerCase(), units]).toEqual(["0x67c8000000000000000000000000000000000504", 1_500_000n]);
-    expect(decodeFunctionData({ abi: erc20, data: calls[1].callData as Hex }).args[1]).toBe(1n);
-    expect(MULTICALL3_FROM).toBe("0x522fAf9A91c41c443c66765030741e4AaCe147D0");
+    expect(decodeFunctionData({ abi: erc20, data: calls[1][2] as Hex }).args[1]).toBe(1n);
   });
 
-  it("refuses fewer than two, more than the most, an address not on Arc, and nothing to send", () => {
+  it("refuses fewer than two, more than the most, an address not on Arc, and nothing to send, before anything is sent", () => {
     const one = { toAddress: `0x${"1".repeat(40)}`, amount: 1 };
-    expect(() => batchCallData([one])).toThrow(/2 to 20/);
-    expect(() => batchCallData(Array.from({ length: MAX_BATCH_SIZE + 1 }, () => one))).toThrow(/2 to 20/);
-    expect(() => batchCallData([one, { toAddress: "sim:cp-1", amount: 1 }])).toThrow(/Arc address/);
-    expect(() => batchCallData([one, { ...one, amount: 0 }])).toThrow(/more than 0/);
+    expect(() => batchCalls([one])).toThrow(BatchNotSentError);
+    expect(() => batchCalls([one])).toThrow(/2 to 20/);
+    expect(() => batchCalls(Array.from({ length: MAX_BATCH_SIZE + 1 }, () => one))).toThrow(/2 to 20/);
+    expect(() => batchCalls([one, { toAddress: "sim:cp-1", amount: 1 }])).toThrow(/Arc address/);
+    expect(() => batchCalls([one, { ...one, amount: 0 }])).toThrow(/more than 0.*nothing was sent/);
   });
 });
 
@@ -245,6 +242,17 @@ describe("executePaymentBatch", () => {
     expect(chain.transfers.map((transfer) => transfer.idempotencyKey).sort()).toEqual([keyOf(1), keyOf(2)].sort());
     expect([...store.intents.values()].every((intent) => intent.batchKey === null)).toBe(true);
     expect(results.every((result) => result.batch === null)).toBe(true);
+  });
+
+  it("sends each alone at once when the batch could not be built, since nothing reached Circle", async () => {
+    const chain = new Chain();
+    chain.batchFails = new BatchNotSentError("The operating wallet's address is not known");
+    const store = new Store();
+    const results = await executePaymentBatch([request(1), request(2)], { provider: chain, store });
+    expect(chain.batches).toHaveLength(1);
+    expect(chain.transfers.map((transfer) => transfer.idempotencyKey).sort()).toEqual([keyOf(1), keyOf(2)].sort());
+    expect(results.map((result) => [result.status, result.batch])).toEqual([["confirmed", null], ["confirmed", null]]);
+    expect([...store.intents.values()].every((intent) => intent.batchKey === null)).toBe(true);
   });
 
   it("keeps a batch whose answer was lost on every member, in flight, and sends nothing alone", async () => {
