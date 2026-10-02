@@ -33,6 +33,8 @@ import {
 } from "./duplicates";
 import { milestoneVerification } from "./milestone-evidence";
 import { recordIncomingTransfers } from "./receipts";
+import { createRecurringInvoices } from "./recurring";
+import { cadenceLabel, type RecurringUnit } from "../recurring";
 import {
   followUpConfig,
   planFollowUp,
@@ -134,6 +136,8 @@ export interface ApPromptFacts {
     poReference: string | null;
     goodsReceived: boolean;
     dueDate: string;
+    /** Created for one period of a recurring payment (recurring payments R7); absent for a typed invoice. */
+    recurring?: { period: string; cadence: string | null };
   };
   terms: { earlyPayDiscount: unknown };
   counterparty: { name: string; riskLevel: string; paymentLimit: number | null; performanceHistory: unknown };
@@ -877,6 +881,10 @@ interface ApPayableRow {
   scheduled_for?: string | null;
   /** USDC or EURC (0040); absent on rows read before it. */
   currency?: string | null;
+  /** The recurring payment and period it was created for (0055); null for a typed invoice. */
+  recurring_id?: string | null;
+  recurring_period?: string | null;
+  recurring_payables?: { every_count: number; every_unit: RecurringUnit } | null;
   counterparties: {
     id: string;
     name: string;
@@ -1246,6 +1254,8 @@ async function decideApPayable(
       poReference: invoice.po_reference,
       dueDate: invoice.due_date,
       status: "pending",
+      recurringId: invoice.recurring_id ?? null,
+      recurringPeriod: invoice.recurring_period ?? null,
     },
     history
   );
@@ -1334,6 +1344,14 @@ async function decideApPayable(
         poReference: invoice.po_reference,
         goodsReceived: invoice.goods_received,
         dueDate: invoice.due_date,
+        ...(invoice.recurring_id && invoice.recurring_period
+          ? {
+              recurring: {
+                period: invoice.recurring_period,
+                cadence: invoice.recurring_payables ? cadenceLabel(invoice.recurring_payables.every_count, invoice.recurring_payables.every_unit) : null,
+              },
+            }
+          : {}),
       },
       terms: {
         earlyPayDiscount: terms.earlyPayDiscount,
@@ -1873,7 +1891,7 @@ export async function runApStage(input: ApStageInput): Promise<number> {
   const loaded = unwrap(
     await db
       .from("invoices")
-      .select("*, counterparties(id, name, risk_level, payment_limit, performance_score, performance_inputs, address, address_changed_at, address_confirmed_at, chain)")
+      .select("*, counterparties(id, name, risk_level, payment_limit, performance_score, performance_inputs, address, address_changed_at, address_confirmed_at, chain), recurring_payables(every_count, every_unit)")
       .eq("direction", "payable")
       .in("status", ["pending", "matched", "scheduled"])
       .order("created_at", { ascending: true })
@@ -1890,7 +1908,7 @@ export async function runApStage(input: ApStageInput): Promise<number> {
   const payableHistory = unwrap(
     await db
       .from("invoices")
-      .select("id, counterparty_id, amount, currency, memo, po_reference, due_date, status, scheduled_for")
+      .select("id, counterparty_id, amount, currency, memo, po_reference, due_date, status, scheduled_for, recurring_id, recurring_period")
       .eq("direction", "payable")
   ) as Array<{
     id: string;
@@ -1902,6 +1920,8 @@ export async function runApStage(input: ApStageInput): Promise<number> {
     due_date: string;
     status: string;
     scheduled_for?: string | null;
+    recurring_id?: string | null;
+    recurring_period?: string | null;
   }>;
 
   const asInvoiceLike = (row: (typeof payableHistory)[number]): InvoiceLike => ({
@@ -1913,6 +1933,8 @@ export async function runApStage(input: ApStageInput): Promise<number> {
     poReference: row.po_reference,
     dueDate: row.due_date,
     status: row.status,
+    recurringId: row.recurring_id ?? null,
+    recurringPeriod: row.recurring_period ?? null,
   });
   const history = payableHistory.map(asInvoiceLike);
 
@@ -2831,6 +2853,13 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
   // contractor stage below decides in this same cycle.
   lines.push(...(await followUpHeldMilestones(db, budget)));
 
+  });
+
+  await stage("recurring", async () => {
+  // ----------------------------------------------------------- 1c. recurring
+  // Each recurring payment's period, as it comes near, becomes an invoice the
+  // AP stage below decides like any other (recurring payments R1–R5).
+  lines.push(...(await createRecurringInvoices(db)));
   });
 
   // ------------------------------------------------------------------ shared state

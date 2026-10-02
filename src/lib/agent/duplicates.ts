@@ -34,6 +34,9 @@ export interface InvoiceLike {
   poReference: string | null;
   dueDate: string;
   status: string;
+  /** The recurring payment it was created for, and its period, when it was (recurring payments R1, R4). */
+  recurringId?: string | null;
+  recurringPeriod?: string | null;
 }
 
 export type DuplicateSignal =
@@ -169,6 +172,18 @@ export function scoreDuplicate(
   if (candidate.id === invoice.id) return null;
   // Two vendors sending the same amount is a coincidence, not a duplicate.
   if (candidate.counterpartyId !== invoice.counterpartyId) return null;
+  // Two periods of one recurring payment are two obligations by construction: the schedule makes
+  // one invoice a period, and the database refuses a second (recurring payments R1, R4). A typed
+  // invoice that repeats one of them is still checked like any other.
+  if (
+    invoice.recurringId &&
+    invoice.recurringId === candidate.recurringId &&
+    invoice.recurringPeriod &&
+    candidate.recurringPeriod &&
+    invoice.recurringPeriod !== candidate.recurringPeriod
+  ) {
+    return null;
+  }
 
   const signals: DuplicateSignal[] = [];
   const po = normalisePo(invoice.poReference);
