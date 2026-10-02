@@ -71,3 +71,24 @@ describe("the AP / AR page", () => {
     expect(payables).toContain("settled.slice(0, HISTORY_SHOWN)");
   });
 });
+
+describe("the Contractors page", () => {
+  const page = readFileSync(path.join(process.cwd(), "src", "app", "o", "[slug]", "contractors", "page.tsx"), "utf8");
+
+  it("puts both ways to pay under one folded New payment, open only for a workspace with no milestone yet", () => {
+    const fold = page.slice(page.indexOf("<Disclosure"), page.indexOf("</Disclosure>"));
+    expect(fold).toContain("defaultOpen={milestones.length === 0}");
+    expect(fold).toContain("New payment");
+    expect(fold).toContain("<PayFreelancerForm");
+    expect(fold).toContain("<MilestoneIntake");
+  });
+
+  it("groups milestones into Needs you, In progress and Paid, and shows verification and escrow only inside an opened row", () => {
+    const list = page.slice(page.indexOf('title="Milestones"'));
+    const order = ['title="Needs you"', 'title="In progress"', 'title="Paid"'].map((title) => list.indexOf(title));
+    expect(order.every((at) => at >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    expect(page).toContain("after: controls(milestone)");
+    expect(list).not.toContain("<MilestoneVerification");
+  });
+});

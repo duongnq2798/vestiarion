@@ -1,4 +1,5 @@
-import { Flag } from "lucide-react";
+import { Flag, ListChecks, Plus, UserPlus } from "lucide-react";
+import Link from "next/link";
 import type { Metadata } from "next";
 import AgentControls from "@/components/AgentControls";
 import { EscrowPanel } from "@/components/EscrowPanel";
@@ -8,10 +9,14 @@ import MilestoneIntake from "@/components/intake/MilestoneIntake";
 import PayFreelancerForm from "@/components/intake/PayFreelancerForm";
 import MilestoneVerification from "@/components/MilestoneVerification";
 import { Callout } from "@/components/ui/Callout";
-import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SectionHeader } from "@/components/ui/SectionHeader";
-import { DecisionCard } from "@/components/vx/DecisionCard";
+import { Button } from "@/components/ui/Button";
+import { Disclosure } from "@/components/ui/Disclosure";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
+import { DecisionRows, RowGroupHeading, type DecisionRowItem } from "@/components/vx/DecisionRows";
+import { Money } from "@/components/vx/Primitives";
+import { StatTile } from "@/components/vx/StatTile";
 import { milestoneDecision } from "@/components/vx/map";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { sectionTitle } from "@/components/vx/nav";
@@ -22,16 +27,22 @@ import { readEscrowContract } from "@/lib/circle/escrow-setup";
 import { addressUnconfirmed } from "@/lib/counterparty-address";
 import { inOrg } from "@/lib/dal/scope";
 import { listLedgerEntries, listLedgerEntriesForTargets } from "@/lib/ledger";
-import { listCounterparties, listMilestones, stats } from "@/lib/queries";
+import { orgHref } from "@/lib/auth/org-paths";
+import { utcDay } from "@/lib/copy";
+import { listCounterparties, listMilestones, stats, type MilestoneRow } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = { title: sectionTitle("contractors") };
 
-export default async function ContractorsPage({ params }: { params: Promise<{ slug: string }> }) {
+/** Paid milestones shown before "Show all". */
+const PAID_SHOWN = 10;
+
+export default async function ContractorsPage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ history?: string | string[] }> }) {
   const { slug } = await params;
   const access = await requireMembership(slug);
   return inOrg(access, async () => {
+    const showAllPaid = (await searchParams).history === "all";
     const live = access.membership.mode === "live";
     const [milestones, counterparties, headEntries, dashboardStats, canWrite, canManageTreasury, escrow] = await Promise.all([
       listMilestones(),
@@ -50,6 +61,7 @@ export default async function ContractorsPage({ params }: { params: Promise<{ sl
     ]);
     const entries = await listLedgerEntriesForTargets({ milestoneIds: milestones.map((milestone) => milestone.id) });
     const decisions = milestones.map((milestone) => milestoneDecision(milestone, entries));
+    const milestonesById = new Map(milestones.map((milestone) => [milestone.id, milestone]));
     // Made here, not in the browser, so the server's markup and the browser's agree (as the Gateway form's id is).
     const defaultRefundDate = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
     const minRefundDate = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
@@ -60,6 +72,63 @@ export default async function ContractorsPage({ params }: { params: Promise<{ sl
       .filter((counterparty) => counterparty.role !== "client")
       .sort((a, b) => Number(b.role === "contractor") - Number(a.role === "contractor"))
       .map(({ id, name, role }) => ({ id, name, role }));
+
+    // Under a milestone's card once its row is opened: its verification, and its escrow hold.
+    const controls = (milestone: MilestoneRow) => (
+      <>
+        {/* A paid milestone cannot be unverified (the action refuses it), so it has no controls. */}
+        {canWrite && milestone.status !== "paid" && <MilestoneVerification orgSlug={slug} milestoneId={milestone.id} verified={milestone.verified} />}
+        {live && (
+          <MilestoneEscrow
+            orgSlug={slug}
+            milestoneId={milestone.id}
+            requestId={crypto.randomUUID()}
+            defaultRefundDate={defaultRefundDate}
+            minRefundDate={minRefundDate}
+            maxRefundDate={maxRefundDate}
+            payee={contractorsById.get(milestone.contractor_id)?.address ?? null}
+            amount={milestone.amount}
+            lockable={(() => {
+              const contractor = contractorsById.get(milestone.contractor_id);
+              return (
+                milestone.status === "pending" &&
+                Boolean(contractor?.address) &&
+                (contractor?.chain ?? "ARC-TESTNET") === "ARC-TESTNET" &&
+                !addressUnconfirmed(contractor?.address_changed_at ?? null, contractor?.address_confirmed_at ?? null)
+              );
+            })()}
+            escrowReady={Boolean(escrow?.address)}
+            canManage={canManageTreasury}
+            paid={milestone.status === "paid"}
+            refundable={Boolean(milestone.escrow_refund_after) && Date.parse(milestone.escrow_refund_after ?? "") <= Date.now()}
+            hold={
+              milestone.escrow_state && milestone.escrow_state !== "funding"
+                ? {
+                    state: milestone.escrow_state as "funded" | "released" | "refunded",
+                    payee: milestone.escrow_payee ?? null,
+                    refundAfter: milestone.escrow_refund_after ?? "",
+                    amount: Number(milestone.escrow_amount ?? milestone.amount),
+                    fundTxHash: milestone.escrow_fund_tx_hash ?? null,
+                    releaseTxHash: milestone.escrow_release_tx_hash ?? null,
+                    refundTxHash: milestone.escrow_refund_tx_hash ?? null,
+                  }
+                : null
+            }
+          />
+        )}
+      </>
+    );
+    const row = (decision: (typeof decisions)[number]): DecisionRowItem => {
+      const milestone = milestonesById.get(decision.id) as MilestoneRow;
+      return { decision, date: milestoneDate(milestone, decision.at), after: controls(milestone) };
+    };
+    // The work, not the record (Contractors layout): what waits for a person, what is under way, what is paid.
+    const statusOf = (decision: (typeof decisions)[number]) => milestonesById.get(decision.id)?.status ?? "";
+    const needsYou = decisions.filter((decision) => decision.outcome === "refused" || statusOf(decision) === "held");
+    const inProgress = decisions.filter((decision) => decision.outcome !== "refused" && ["pending", "verified"].includes(statusOf(decision)));
+    const paid = decisions.filter((decision) => decision.outcome !== "refused" && statusOf(decision) === "paid").sort((a, b) => b.at.localeCompare(a.at));
+    const awaiting = milestones.filter((milestone) => milestone.status === "pending");
+    const paidTotal = milestones.filter((milestone) => milestone.status === "paid").reduce((sum, milestone) => sum + Number(milestone.amount), 0);
 
     return (
       <ProductShell day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()}>
@@ -72,30 +141,76 @@ export default async function ContractorsPage({ params }: { params: Promise<{ sl
             data every 20 s, and at once on return to the tab, so the release appears without a reload. */}
         <AutoRefresh intervalMs={20_000} />
 
-        {canWrite && (
-          <section className="mb-8">
-            <SectionHeader title="Pay a freelancer" meta="one form: they get a link, you confirm their address, the agent pays" />
-            <Card className="p-4 sm:p-6">
-              <PayFreelancerForm orgSlug={slug} live={live} />
-            </Card>
-          </section>
+        <div className="mb-6 grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 xl:grid-cols-4">
+          <StatTile label="Needs you" tone={needsYou.length > 0 ? "held" : "default"} sub={needsYou.length > 0 ? "Held, or refused by code" : "Nothing held"}>
+            <span className="tabular-nums">{needsYou.length}</span>
+          </StatTile>
+          <StatTile label="Awaiting verification" sub={<Money value={awaiting.reduce((sum, milestone) => sum + Number(milestone.amount), 0)} />}>
+            <span className="tabular-nums">{awaiting.length}</span>
+          </StatTile>
+          <StatTile label="Verified, being paid" sub="The agent decides within a minute">
+            <span className="tabular-nums">{milestones.filter((milestone) => milestone.status === "verified").length}</span>
+          </StatTile>
+          <StatTile label="Paid" sub={`${paid.length} ${paid.length === 1 ? "milestone" : "milestones"}`}>
+            <Money value={paidTotal} />
+          </StatTile>
+        </div>
+
+        {canWrite ? (
+          // Folded until it is needed; open on a workspace with no milestone yet, where adding one is the next step.
+          <Disclosure
+            className="mb-8"
+            defaultOpen={milestones.length === 0}
+            summary={
+              <span className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-0.5">
+                <span className="inline-flex items-center gap-1.5 text-ink">
+                  <Plus aria-hidden className="size-4" />
+                  New payment
+                </span>
+                <span className="text-[0.8125rem] font-normal text-ink-3">pay a freelancer in one step, or add a milestone for a contractor on file</span>
+              </span>
+            }
+          >
+            <Tabs defaultValue="freelancer">
+              <TabsList aria-label="New payment">
+                <TabsTrigger value="freelancer">
+                  <UserPlus aria-hidden />
+                  Pay a freelancer
+                </TabsTrigger>
+                <TabsTrigger value="milestone">
+                  <ListChecks aria-hidden />
+                  Milestone intake
+                </TabsTrigger>
+              </TabsList>
+              {/* Both stay mounted, so switching tabs never loses what was typed. */}
+              <TabsContent value="freelancer" forceMount className="data-[state=inactive]:hidden">
+                <p className="mb-4 text-[0.8125rem] text-ink-3">One form: they get a link, you confirm their address, the agent pays.</p>
+                <PayFreelancerForm orgSlug={slug} live={live} />
+              </TabsContent>
+              <TabsContent value="milestone" forceMount className="data-[state=inactive]:hidden">
+                <p className="mb-4 text-[0.8125rem] text-ink-3">Work a contractor on file is paid for once it is verified.</p>
+                <MilestoneIntake orgSlug={slug} contractors={payees} />
+              </TabsContent>
+            </Tabs>
+          </Disclosure>
+        ) : (
+          <Callout className="mb-8">Only an owner or admin of this workspace can add milestones.</Callout>
         )}
 
-        <section className="mb-8">
-          <SectionHeader title="Milestone intake" meta="work a contractor is paid for once it is verified" />
-          {canWrite ? (
-            <Card className="p-4 sm:p-6">
-              <MilestoneIntake orgSlug={slug} contractors={payees} />
-            </Card>
-          ) : (
-            <Callout>Only an owner or admin of this workspace can add milestones.</Callout>
-          )}
-        </section>
-
         {live && escrow !== undefined && (
-          <section className="mb-8">
-            <EscrowPanel orgSlug={slug} address={escrow?.address ?? null} deploying={Boolean(escrow && !escrow.address)} canSetUp={canManageTreasury} />
-          </section>
+          // Set up once, then rarely looked at: folded, and open while it has not been set up.
+          <Disclosure
+            className="mb-8"
+            defaultOpen={!escrow?.address}
+            summary={
+              <span className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-0.5">
+                <span className="text-ink">Milestone escrow</span>
+                <span className="text-[0.8125rem] font-normal text-ink-3">{escrow?.address ? "a contract on Arc testnet · lock a milestone from its row" : "a contract on Arc testnet · not set up yet"}</span>
+              </span>
+            }
+          >
+            <EscrowPanel orgSlug={slug} address={escrow?.address ?? null} deploying={Boolean(escrow && !escrow.address)} canSetUp={canManageTreasury} bare />
+          </Disclosure>
         )}
 
         {decisions.length === 0 ? (
@@ -106,61 +221,51 @@ export default async function ContractorsPage({ params }: { params: Promise<{ sl
             body="Milestones appear here once they are added. Pay is released when the work is verified."
           />
         ) : (
-          <div className="space-y-5">
-            {decisions.map((decision, index) => (
-              <div key={decision.id}>
-                <DecisionCard decision={decision} orgSlug={slug} />
-                {/* A paid milestone cannot be unverified (the action refuses it), so it has no controls. */}
-                {canWrite && milestones[index].status !== "paid" && (
-                  <MilestoneVerification
-                    orgSlug={slug}
-                    milestoneId={milestones[index].id}
-                    verified={milestones[index].verified}
-                  />
-                )}
-                {live && (
-                  <MilestoneEscrow
-                    orgSlug={slug}
-                    milestoneId={milestones[index].id}
-                    requestId={crypto.randomUUID()}
-                    defaultRefundDate={defaultRefundDate}
-                    minRefundDate={minRefundDate}
-                    maxRefundDate={maxRefundDate}
-                    payee={contractorsById.get(milestones[index].contractor_id)?.address ?? null}
-                    amount={milestones[index].amount}
-                    lockable={(() => {
-                      const contractor = contractorsById.get(milestones[index].contractor_id);
-                      return (
-                        milestones[index].status === "pending" &&
-                        Boolean(contractor?.address) &&
-                        (contractor?.chain ?? "ARC-TESTNET") === "ARC-TESTNET" &&
-                        !addressUnconfirmed(contractor?.address_changed_at ?? null, contractor?.address_confirmed_at ?? null)
-                      );
-                    })()}
-                    escrowReady={Boolean(escrow?.address)}
-                    canManage={canManageTreasury}
-                    paid={milestones[index].status === "paid"}
-                    refundable={Boolean(milestones[index].escrow_refund_after) && Date.parse(milestones[index].escrow_refund_after ?? "") <= Date.now()}
-                    hold={
-                      milestones[index].escrow_state && milestones[index].escrow_state !== "funding"
-                        ? {
-                            state: milestones[index].escrow_state as "funded" | "released" | "refunded",
-                            payee: milestones[index].escrow_payee ?? null,
-                            refundAfter: milestones[index].escrow_refund_after ?? "",
-                            amount: Number(milestones[index].escrow_amount ?? milestones[index].amount),
-                            fundTxHash: milestones[index].escrow_fund_tx_hash ?? null,
-                            releaseTxHash: milestones[index].escrow_release_tx_hash ?? null,
-                            refundTxHash: milestones[index].escrow_refund_tx_hash ?? null,
-                          }
-                        : null
-                    }
-                  />
-                )}
-              </div>
-            ))}
-          </div>
+          <section>
+            <SectionHeader title="Milestones" meta={`${decisions.length} · open one for the agent's reasoning, its verification and its escrow`} />
+            {needsYou.length > 0 && (
+              <>
+                <RowGroupHeading title="Needs you" count={needsYou.length} />
+                <DecisionRows orgSlug={slug} items={needsYou.map(row)} />
+              </>
+            )}
+            {inProgress.length > 0 && (
+              <>
+                <RowGroupHeading title="In progress" count={inProgress.length} />
+                <DecisionRows orgSlug={slug} items={inProgress.map(row)} />
+              </>
+            )}
+            {paid.length > 0 && (
+              <>
+                <RowGroupHeading
+                  title="Paid"
+                  count={paid.length}
+                  action={
+                    paid.length > PAID_SHOWN ? (
+                      <Button asChild variant="link" className="text-[0.8125rem]">
+                        <Link href={orgHref(slug, showAllPaid ? "/contractors" : "/contractors?history=all")} scroll={false}>
+                          {showAllPaid ? `Show the latest ${PAID_SHOWN}` : `Show all ${paid.length}`}
+                        </Link>
+                      </Button>
+                    ) : undefined
+                  }
+                />
+                <DecisionRows orgSlug={slug} items={(showAllPaid ? paid : paid.slice(0, PAID_SHOWN)).map(row)} />
+              </>
+            )}
+          </section>
         )}
       </ProductShell>
     );
   });
+}
+
+/** The date a milestone's row leads with: when it was paid or held, when it was verified, or that it waits for verification. */
+function milestoneDate(milestone: MilestoneRow | undefined, decidedAt: string): DecisionRowItem["date"] {
+  if (!milestone) return null;
+  const day = (at: string) => utcDay(at);
+  if (milestone.status === "paid") return { label: `Paid ${day(decidedAt)}` };
+  if (milestone.status === "held") return { label: `Held ${day(decidedAt)}`, tone: "held" };
+  if (milestone.status === "verified") return { label: milestone.verified_at ? `Verified ${day(milestone.verified_at)}` : "Verified" };
+  return { label: "Awaiting verification" };
 }

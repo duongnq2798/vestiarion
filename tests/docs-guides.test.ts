@@ -357,6 +357,8 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["Confirm address", ADDRESS_CONTROLS],
     ["Contractors", APP_NAV],
     ["Milestone intake", CONTRACTORS_PAGE],
+    ["New payment", CONTRACTORS_PAGE],
+    ["In progress", CONTRACTORS_PAGE],
     ["Contractor", MILESTONE_FORM],
     ["Amount (USDC)", MILESTONE_FORM],
     ["Work delivered", MILESTONE_FORM],
