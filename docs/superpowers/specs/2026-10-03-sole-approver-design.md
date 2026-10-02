@@ -1,6 +1,6 @@
 # Sole approver
 
-Date: 2026-10-03. Status: implemented on `fix/sole-approver`.
+Date: 2026-10-03. Status: shipped (PR #147) and proven in production; see §5.
 
 ## 1. The problem
 
@@ -69,3 +69,21 @@ exception in both its claim and its error branch, and keeps the grants. Additive
 3. In a workspace with one owner: add a payable the agent holds, approve and pay it as that owner; check the
    `approval_paid` entry carries `soleApprover: true`, and the transfer on Arc testnet.
 4. Record the result here.
+
+### Rollout record (2026-10-02, UTC)
+
+- PR #147 merged as `d4dc1ab` at 18:20:55, with CI `verify` and the Vercel build green. Production then served
+  the new guide text, `first-payment-approval-own.png` and the changelog entry.
+- 0061 was applied by the partner. A read-only catalog probe afterwards: `sole_approver(uuid, uuid)` exists, is
+  security definer with `search_path=""`, and is executable by `vestiarion_tenant` and `service_role` but not by
+  `anon` or `authenticated`; `claim_invoice_decision` has one overload, which calls `sole_approver`. At that
+  moment 10 of the 11 workspaces with members had exactly one member who may approve payments, 4 of them live.
+- Proof in `demo-wp`, a live team workspace with one approver:
+  - #913, 18:25:36: the owner added a 1.2 USDC payable for Loto, with PO-100 and goods received.
+  - #916, 18:25:54: the agent held it, 19 s later in an event cycle. Its reasoning: the amount is above Loto's
+    1 USDC payment limit, which is the binding constraint.
+  - #919, 18:27:12: the same owner approved and paid it. The entry is `approval_paid` with `soleApprover: true`,
+    `overrode: "held"`, `status: "paid"`, signed by key `b827238f60f6d11c`, and its summary reads "Approved and paid
+    1.2 USDC to Loto (entered and approved by the workspace's only approver)".
+  - The transfer: tx `0xc8884ba49a37ae1f18efd4a59f18946b9fb10d04d56ae6ceeb118ca496cdf30c`, receipt status 1,
+    block 65157967 on Arc testnet.
