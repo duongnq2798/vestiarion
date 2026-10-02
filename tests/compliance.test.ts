@@ -142,7 +142,8 @@ describe("screenName with OpenSanctions", () => {
     expect(result).toMatchObject({ riskLevel: "high", rawScore: 0.93, matchedEntityId: "NK-live" });
     expect(fetchMock).toHaveBeenCalledOnce();
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe("https://yente.internal/match/default");
+    // Twenty-five candidates, not the service's default five (review every match R1).
+    expect(url).toBe("https://yente.internal/match/default?limit=25");
     expect(init.headers).toMatchObject({ Authorization: "ApiKey secret-key" });
     expect(JSON.parse(String(init.body))).toMatchObject({
       queries: { counterparty: { properties: { name: ["Acme Limited"], jurisdiction: ["gb"] } } },
@@ -173,6 +174,34 @@ describe("screenName with OpenSanctions", () => {
       ]));
       const result = await runWithConfig(withYente(), () => screenName("Quoc Duong", null, new Set(["Q-PEP"])));
       expect(result).toMatchObject({ riskLevel: "medium", matchedEntityId: "Q-OTHER" });
+    });
+
+    it("asks for the dismissed ones on top of twenty-five, so they never crowd out one that is not (review every match R1)", async () => {
+      const fetchMock = answer([{ id: "Q-6", caption: "Lê Quốc Dung", score: 0.818, topics: ["role.pep"] }]);
+      vi.stubGlobal("fetch", fetchMock);
+      const dismissed = new Set(["Q-1", "Q-2", "Q-3", "Q-4", "Q-5"]);
+      const result = await runWithConfig(withYente(), () => screenName("Quoc Duong", null, dismissed));
+      expect(String(fetchMock.mock.calls[0][0])).toBe("https://yente.internal/match/default?limit=30");
+      expect(result).toMatchObject({ riskLevel: "medium", matchedEntityId: "Q-6" });
+    });
+
+    it("keeps every match no one dismissed, best first, for the card to list (review every match R2)", async () => {
+      vi.stubGlobal("fetch", answer([
+        { id: "Q-PEP", caption: "Dương Trung Quốc", score: 0.909, topics: ["role.pep"] },
+        { id: "Q-TAN", caption: "Tan Guoqiang", score: 0.9090909, topics: ["role.pep", "role.diplo"] },
+        { id: "Q-LE", caption: "Lê Quốc Dung", score: 0.818, topics: [] },
+      ]));
+      const result = await runWithConfig(withYente(), () => screenName("Quoc Duong", null, new Set(["Q-PEP"])));
+      expect(result.matches).toEqual([
+        { id: "Q-TAN", caption: "Tan Guoqiang", score: 0.909, topics: ["role.pep", "role.diplo"] },
+        { id: "Q-LE", caption: "Lê Quốc Dung", score: 0.818, topics: [] },
+      ]);
+    });
+
+    it("keeps none when nothing is left to review", async () => {
+      vi.stubGlobal("fetch", answer([{ id: "Q-PEP", caption: "Dương Trung Quốc", score: 0.909, topics: ["role.pep"] }]));
+      const result = await runWithConfig(withYente(), () => screenName("Quoc Duong", null, new Set(["Q-PEP"])));
+      expect(result.matches).toBeUndefined();
     });
 
     it("judges the best match as before when nothing was dismissed", async () => {

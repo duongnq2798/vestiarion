@@ -39,8 +39,8 @@ function workspace(over: { counterparty?: unknown; insert?: FakeReply } = {}) {
   };
 }
 const run = <T,>(fn: () => Promise<T>) => runWith(orgTestContext({ config, client: fake.client, orgId: ORG, userId: USER }), fn);
-const dismiss = (over: Partial<{ matchedEntityId: string; reason: string }> = {}) =>
-  run(() => dismissScreeningMatch({ actorId: USER, counterpartyId: CP, matchedEntityId: "Q-PEP", reason: "Our freelancer, not the politician", ...over }));
+const dismiss = (over: Partial<{ matchedEntityIds: string[]; reason: string }> = {}) =>
+  run(() => dismissScreeningMatch({ actorId: USER, counterpartyId: CP, matchedEntityIds: ["Q-PEP"], reason: "Our freelancer, not the politician", ...over }));
 
 beforeEach(() => {
   fake = fakeSupabase(workspace());
@@ -52,7 +52,8 @@ describe("dismissScreeningMatch", () => {
   it("records the dismissal for this counterparty, entity and name, with who and why", async () => {
     await dismiss();
     const insert = fake.requests.find((r) => r.path === "/rest/v1/screening_dismissals" && r.method === "POST")!;
-    expect(insert.body).toMatchObject({
+    expect(insert.body).toHaveLength(1);
+    expect((insert.body as unknown[])[0]).toMatchObject({
       org_id: ORG,
       counterparty_id: CP,
       matched_entity_id: "Q-PEP",
@@ -77,6 +78,7 @@ describe("dismissScreeningMatch", () => {
         matchedEntityId: "Q-PEP",
         matchedCaption: "Dương Trung Quốc",
         matchedScore: 0.909,
+        matchedEntities: [{ id: "Q-PEP", caption: "Dương Trung Quốc", score: 0.909 }],
         screenedName: "Quoc Duong",
         reason: "Our freelancer, not the politician",
       },
@@ -84,20 +86,22 @@ describe("dismissScreeningMatch", () => {
   });
 
   it("screens the counterparty again at once and says what it is now", async () => {
-    expect(await dismiss()).toEqual({ name: "Quoc Duong", rescreened: true, riskLevel: "clear", paymentLimit: 1 });
+    expect(await dismiss()).toEqual({ name: "Quoc Duong", rescreened: true, riskLevel: "clear", paymentLimit: 1, dismissed: 1 });
     expect(screenMock).toHaveBeenCalledWith(CP);
   });
 
   it("keeps the dismissal when screening cannot be reached, for the next cycle to apply", async () => {
     screenMock.mockRejectedValueOnce(new Error("OpenSanctions screening failed with HTTP 503"));
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
-    expect(await dismiss()).toEqual({ name: "Quoc Duong", rescreened: false, riskLevel: "medium", paymentLimit: null });
+    expect(await dismiss()).toEqual({ name: "Quoc Duong", rescreened: false, riskLevel: "medium", paymentLimit: null, dismissed: 1 });
     expect(ledgerMock).toHaveBeenCalled();
     logged.mockRestore();
   });
 
   it("refuses a page that showed another match, recording nothing (R4)", async () => {
-    await expect(dismiss({ matchedEntityId: "Q-OLD" })).rejects.toMatchObject({ code: "stale" });
+    await expect(dismiss({ matchedEntityIds: ["Q-OLD"] })).rejects.toMatchObject({ code: "stale" });
+    // A verdict from before the screening kept its matches can only dismiss that verdict's own match.
+    await expect(dismiss({ matchedEntityIds: ["Q-PEP", "Q-OTHER"] })).rejects.toMatchObject({ code: "stale" });
     expect(fake.requests.some((r) => r.path === "/rest/v1/screening_dismissals")).toBe(false);
     expect(ledgerMock).not.toHaveBeenCalled();
   });
@@ -106,6 +110,37 @@ describe("dismissScreeningMatch", () => {
     await expect(dismiss({ reason: " no " })).rejects.toMatchObject({ code: "invalid" });
     fake = fakeSupabase(workspace({ counterparty: null }));
     await expect(dismiss()).rejects.toMatchObject({ code: "not_found" });
+  });
+
+  describe("a name that matched several people (review every match)", () => {
+    const MATCHES = [
+      { id: "Q-TAN", caption: "Tan Guoqiang", score: 0.909, topics: ["role.pep", "role.diplo"] },
+      { id: "Q-YANG", caption: "Yang Guoping", score: 0.909, topics: ["mil"] },
+      { id: "Q-LE", caption: "Lê Quốc Dung", score: 0.818, topics: ["role.pep", "role.pol"] },
+    ];
+    const MANY = { ...COUNTERPARTY, risk_notes: "Tan Guoqiang matched at 0.909 (role.pep, role.diplo)", risk_entity_id: "Q-TAN", risk_matches: MATCHES };
+
+    it("dismisses every match the card listed in one review: each recorded, one signed entry naming them all", async () => {
+      fake = fakeSupabase(workspace({ counterparty: MANY }));
+      expect(await dismiss({ matchedEntityIds: ["Q-YANG", "Q-LE", "Q-TAN"] })).toMatchObject({ dismissed: 3 });
+      const insert = fake.requests.find((r) => r.path === "/rest/v1/screening_dismissals" && r.method === "POST")!;
+      expect((insert.body as Array<Record<string, unknown>>).map((row) => [row.matched_entity_id, row.matched_caption, row.matched_score])).toEqual([
+        ["Q-TAN", "Tan Guoqiang", 0.909],
+        ["Q-YANG", "Yang Guoping", 0.909],
+        ["Q-LE", "Lê Quốc Dung", 0.818],
+      ]);
+      expect(ledgerMock).toHaveBeenCalledTimes(1);
+      const entry = ledgerMock.mock.calls[0][0];
+      expect(entry.summary).toBe("Dismissed 3 screening matches for Quoc Duong: not the same person as Tan Guoqiang or 2 others");
+      expect(entry.detail).toMatchObject({ matchedEntityId: "Q-TAN", matchedCaption: "Tan Guoqiang", matchedEntities: [{ id: "Q-TAN" }, { id: "Q-YANG" }, { id: "Q-LE" }] });
+    });
+
+    it("refuses a list without the verdict's own match, or with one the screening did not keep (R4)", async () => {
+      fake = fakeSupabase(workspace({ counterparty: MANY }));
+      await expect(dismiss({ matchedEntityIds: ["Q-YANG", "Q-LE"] })).rejects.toMatchObject({ code: "stale" });
+      await expect(dismiss({ matchedEntityIds: ["Q-TAN", "Q-UNLISTED"] })).rejects.toMatchObject({ code: "stale" });
+      expect(fake.requests.some((r) => r.path === "/rest/v1/screening_dismissals")).toBe(false);
+    });
   });
 
   it("says when that match was already dismissed", async () => {
