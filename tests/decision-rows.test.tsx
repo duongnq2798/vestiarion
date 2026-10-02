@@ -102,7 +102,7 @@ describe("the Counterparties page", () => {
 
   it("lists each counterparty as a row with what it needs, the ones that need someone first", () => {
     const ranks = ["Review match", "Confirm address", "Address needed", "Ready to pay", "Client"].map((label) => {
-      const match = page.match(new RegExp(`label: "${label}", tone: "\w+", rank: (\d)`));
+      const match = page.match(new RegExp(`label: "${label}", tone: "[a-z]+", rank: ([0-9])`));
       return match ? Number(match[1]) : -1;
     });
     expect(ranks).toEqual([0, 1, 2, 3, 4]);
