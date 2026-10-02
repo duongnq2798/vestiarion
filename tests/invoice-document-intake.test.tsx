@@ -132,4 +132,12 @@ describe("an invoice read from a document", () => {
       counterpartyId: COUNTERPARTIES[0].id,
     });
   });
+
+  it("asks for the deadline when the document gave a percent without one", () => {
+    const halfRead: DocumentReadResult = { ...RESULT, draft: { ...RESULT.draft!, discountDeadline: null } };
+    const markup = renderToStaticMarkup(<DocumentDraft result={halfRead} orgSlug="acme" counterparties={COUNTERPARTIES} />);
+    const deadline = markup.match(/<input[^>]*name="discountDeadline"[^>]*>/)?.[0] ?? "";
+    expect(deadline).toContain('required=""');
+    expect(deadline).toContain('max="2026-10-31"');
+  });
 });
