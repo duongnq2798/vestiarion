@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { utcDay } from "./copy";
 import { usdcAmountSchema } from "./intake-validation";
 
 /**
@@ -81,6 +82,37 @@ export function cadenceLabel(everyCount: number, everyUnit: RecurringUnit): stri
 }
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * The schedule a half-filled form describes, in one sentence, so a person reads what they are about
+ * to set up before they set it up: "Pays Jiren 0.3 USDC every day, from Oct 2, 2026 to Oct 3, 2026:
+ * 2 payments." Null until who, how much, how often and from when make sense. (A monthly schedule
+ * typed as "daily" was set up unnoticed on 2026-10-02: the period's default was easy to miss.)
+ */
+export function scheduleSummary(input: {
+  payee: string | null;
+  amount: string;
+  currency: string;
+  everyCount: string;
+  everyUnit: string;
+  startsOn: string;
+  endsOn: string;
+}): string | null {
+  const amount = Number(input.amount.trim());
+  const every = Number(input.everyCount.trim());
+  const unit = input.everyUnit;
+  if (!input.payee || !(amount > 0) || !Number.isInteger(every) || every < 1 || every > 366) return null;
+  if (unit !== "day" && unit !== "week" && unit !== "month") return null;
+  if (!DAY.test(input.startsOn)) return null;
+  const cadence = cadenceLabel(every, unit);
+  const first = utcDay(`${input.startsOn}T00:00:00Z`);
+  const head = `Pays ${input.payee} ${amount} ${input.currency} ${cadence}, from ${first}`;
+  if (!input.endsOn) return `${head} until you stop it.`;
+  if (!DAY.test(input.endsOn) || input.endsOn < input.startsOn) return null;
+  let count = 0;
+  while (count < 1000 && dueOn({ startsOn: input.startsOn, everyCount: every, everyUnit: unit }, count) <= input.endsOn) count += 1;
+  return `${head} to ${utcDay(`${input.endsOn}T00:00:00Z`)}: ${count === 1000 ? "1000 or more" : count} payment${count === 1 ? "" : "s"}.`;
+}
 
 const recurringFormSchema = z
   .object({

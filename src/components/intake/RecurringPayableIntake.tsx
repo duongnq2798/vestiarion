@@ -1,6 +1,7 @@
 "use client";
 
 import { Repeat, Square } from "lucide-react";
+import { useState, type FormEvent } from "react";
 import { createRecurringPayableAction, stopRecurringPayableAction, type RecurringActionResult } from "@/app/actions/recurring";
 import { Badge } from "@/components/ui/Badge";
 import { Checkbox } from "@/components/ui/Checkbox";
@@ -12,6 +13,7 @@ import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
 import { Money } from "@/components/vx/Primitives";
 import { utcDay } from "@/lib/copy";
+import { scheduleSummary } from "@/lib/recurring";
 import type { RecurringPayableView } from "@/lib/recurring-payables";
 import type { IntakeCounterparty } from "./InvoiceIntake";
 
@@ -23,11 +25,31 @@ const INITIAL: RecurringActionResult = { ok: false, message: "" };
  * decided by the agent like any other.
  */
 export default function RecurringPayableIntake({ counterparties, orgSlug }: { counterparties: IntakeCounterparty[]; orgSlug: string }) {
-  const { state, formProps } = useActionForm(createRecurringPayableAction, INITIAL, { resetOnSuccess: true, toastOnSuccess: true });
+  const [summary, setSummary] = useState<string | null>(null);
+  const { state, formProps } = useActionForm(createRecurringPayableAction, INITIAL, { resetOnSuccess: true, toastOnSuccess: true, onSuccess: () => setSummary(null) });
   const payees = counterparties.filter((counterparty) => counterparty.role !== "client");
   const none = payees.length === 0;
+  // Read back on every change, so the schedule is in words before it is set up.
+  const describe = (event: FormEvent<HTMLFormElement>) => {
+    const data = new FormData(event.currentTarget);
+    const field = (key: string) => {
+      const value = data.get(key);
+      return typeof value === "string" ? value : "";
+    };
+    setSummary(
+      scheduleSummary({
+        payee: payees.find((counterparty) => counterparty.id === field("counterpartyId"))?.name ?? null,
+        amount: field("amount"),
+        currency: field("currency"),
+        everyCount: field("everyCount"),
+        everyUnit: field("everyUnit"),
+        startsOn: field("startsOn"),
+        endsOn: field("endsOn"),
+      })
+    );
+  };
   return (
-    <form {...formProps} className="space-y-4">
+    <form {...formProps} onChange={describe} onInput={describe} className="space-y-4">
       <input type="hidden" name="orgSlug" value={orgSlug} />
       <div className="grid gap-4 sm:grid-cols-2">
         <Field id="recurring-counterparty" label="Pay" description={none ? "Add a vendor or contractor first." : undefined}>
@@ -94,6 +116,10 @@ export default function RecurringPayableIntake({ counterparties, orgSlug }: { co
         label="Delivered every period"
         description="Each period's invoice counts as received, as you confirm the work or service continues. Untick it to confirm each period yourself."
       />
+      <p aria-live="polite" className="flex items-start gap-2 rounded-xl border border-line bg-raised px-3 py-2.5 text-sm text-ink">
+        <Repeat aria-hidden className="mt-0.5 size-4 shrink-0 text-agent" />
+        <span>{summary ?? "Choose who is paid, how much, how often and from when, and the schedule reads back here."}</span>
+      </p>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <FormMessage tone="error">{state.ok ? null : state.message}</FormMessage>
         <SubmitButton icon={<Repeat />} disabled={none} pendingLabel="Setting up…" className="shrink-0">

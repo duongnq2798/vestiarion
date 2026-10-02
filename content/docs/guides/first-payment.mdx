@@ -197,7 +197,7 @@ A retainer, a subscription or a monthly fee does not need a new invoice each tim
 - **First due date**, and a **Last due date** if it ends (optional).
 - A **Contract or PO reference** if you have one.
 
-Choose **Set up recurring payment**. The setup is signed in the audit log as `recurring_payable_created`.
+Above the button, the form reads the schedule back as you fill it in, for example "Pays Jiren 0.3 USDC every day, from Oct 2, 2026 to Oct 3, 2026: 2 payments.". Check the period and the number of payments there before you go on. Choose **Set up recurring payment**. The setup is signed in the audit log as `recurring_payable_created`.
 
 - **Each period becomes an invoice as it comes near.** At most a week before its due date, a cycle creates it: a daily one on its day, a weekly one 6 days ahead, a monthly one 7 days ahead. The agent then decides it like any other: when to pay, within every guardrail. Each one is signed as `recurring_invoice_created` and appears under **Payables**, named after the period.
 - **Months are counted from the first due date.** A payment due on the 31st falls on the last day of a shorter month and goes back to the 31st after.
