@@ -57,7 +57,7 @@ export const PLATFORM_RPCS = [
   "pending_invitations_for", "accept_invitation_by_id", "pause_agent", "resume_agent", "create_api_key",
   "claim_webhook_deliveries", "record_webhook_failure", "create_webhook_endpoint", "choose_hosted_wallet", "delete_org",
   "open_numbers", "open_first_payments", "open_outcomes", "set_platform_team_member", "platform_team_members",
-  "create_payee_link", "payee_link_preview", "payee_link_chain", "claim_payee_link", "release_payee_link", "revoke_payee_link",
+  "create_payee_link", "payee_link_preview", "payee_link_chain", "claim_payee_link", "release_payee_link", "revoke_payee_link", "payee_link_status",
   "payment_receipt_by_token", "pay_link_preview",
 ] as const;
 export type PlatformRpc = (typeof PLATFORM_RPCS)[number];
