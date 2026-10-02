@@ -212,7 +212,7 @@ describe("counterparty read payload", () => {
 describe("milestone read payload", () => {
   it("rejects an unknown status instead of ignoring it", () => {
     expect(milestoneStatusError("complete")).toBe(
-      "status must be one of pending, verified, paid, held."
+      "status must be one of pending, verified, paid, held, closed."
     );
   });
 

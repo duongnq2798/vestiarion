@@ -143,6 +143,10 @@ export interface MilestoneRow {
   escrow_fund_tx_hash?: string | null;
   escrow_release_tx_hash?: string | null;
   escrow_refund_tx_hash?: string | null;
+  created_by?: string | null;
+  /** Closed without paying by a person (held milestone actions R3): when, and why. */
+  closed_at?: string | null;
+  close_reason?: string | null;
 }
 
 export async function listMilestones(): Promise<MilestoneRow[]> {

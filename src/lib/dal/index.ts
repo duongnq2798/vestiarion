@@ -43,7 +43,7 @@ export type TenantTable = (typeof TENANT_TABLES)[number];
 
 export const TENANT_RPCS = [
   "append_ledger_entry", "advance_sim_day", "claim_payment_intent", "ledger_entries_for_targets",
-  "begin_cycle_run", "agent_paused", "claim_invoice_decision", "begin_payment_retry",
+  "begin_cycle_run", "agent_paused", "claim_invoice_decision", "begin_payment_retry", "claim_milestone_decision",
 ] as const;
 export type TenantRpc = (typeof TENANT_RPCS)[number];
 

@@ -45,7 +45,7 @@ export async function GET(request: Request) {
       let query = db()
         .from("milestones")
         .select(
-          "id, title, amount, status, verification_source, verification_method, verification_status, verification_checked_at, verified_at, verification_detail, verified, decided_at, settled_at, agent_reasoning, tx_ref, created_at, counterparties(id, name, risk_level)"
+          "id, title, amount, status, verification_source, verification_method, verification_status, verification_checked_at, verified_at, verification_detail, verified, decided_at, settled_at, closed_at, close_reason, agent_reasoning, tx_ref, created_at, counterparties(id, name, risk_level)"
         )
         .order("created_at", { ascending: false })
         .order("id", { ascending: false })

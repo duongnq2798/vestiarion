@@ -45,6 +45,16 @@ describe("DecisionRows", () => {
     expect(card).toContain("Share receipt");
   });
 
+  it("says under the title what a row waits for, and puts what a person decides above its card", () => {
+    const markup = renderToStaticMarkup(
+      <DecisionRows orgSlug="testnet-2" items={[{ decision: DECISION, hint: "Circle did not send it", before: <p>Pay now or close it</p> }]} />
+    );
+    const summary = markup.slice(markup.indexOf("<summary"), markup.indexOf("</summary>"));
+    expect(summary).toMatch(/text-held">Circle did not send it</);
+    const opened = text(markup.slice(markup.indexOf("</summary>")));
+    expect(opened.indexOf("Pay now or close it")).toBeLessThan(opened.indexOf("Three-way match complete"));
+  });
+
   it("marks a date past due", () => {
     const markup = renderToStaticMarkup(<DecisionRows orgSlug="testnet-2" items={[{ decision: DECISION, date: { label: "Overdue Sep 30, 2026", tone: "held" } }]} />);
     expect(markup).toMatch(/text-held[^"]*">Overdue Sep 30, 2026/);
@@ -82,13 +92,19 @@ describe("the Contractors page", () => {
     expect(fold).toContain("<MilestoneIntake");
   });
 
-  it("groups milestones into Needs you, In progress and Paid, and shows verification and escrow only inside an opened row", () => {
+  it("groups milestones into Needs you, In progress, and Paid and closed, and shows verification and escrow only inside an opened row", () => {
     const list = page.slice(page.indexOf('title="Milestones"'));
-    const order = ['title="Needs you"', 'title="In progress"', 'title="Paid"'].map((title) => list.indexOf(title));
+    const order = ['title="Needs you"', 'title="In progress"', 'title="Paid and closed"'].map((title) => list.indexOf(title));
     expect(order.every((at) => at >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
     expect(page).toContain("after: controls(milestone)");
     expect(list).not.toContain("<MilestoneVerification");
+  });
+
+  it("says on each held row what it waits for, with Pay now and Close without paying once it is opened", () => {
+    expect(page).toContain('if (milestone.status !== "held") return item;');
+    expect(page).toContain("hint: reason.hint,");
+    expect(page).toContain("<HeldMilestoneActions");
   });
 });
 

@@ -12,6 +12,7 @@ import { inOrg } from "@/lib/dal/scope";
 import { parseGitHubPullRequestUrl } from "@/lib/github-verification";
 import { isHttpsLink, usdcAmountSchema } from "@/lib/intake-validation";
 import { appendLedgerEntry } from "@/lib/ledger";
+import { closeMilestone, MilestoneDecisionError, payHeldMilestone } from "@/lib/agent/milestone-decisions";
 
 export interface MilestoneActionResult {
   ok: boolean;
@@ -152,6 +153,10 @@ export async function manualMilestoneVerificationAction(
     if (milestone.status === "paid" && intent === "revoke") {
       return { ok: false, message: "A paid milestone cannot be unverified; record a correcting audit action instead." };
     }
+    // Closed without paying is final: verifying it again would have the agent pay it.
+    if (milestone.status === "closed") {
+      return { ok: false, message: "This milestone was closed without paying. Add it again if the work is still owed." };
+    }
 
     const verified = intent === "verify";
     const now = new Date().toISOString();
@@ -186,5 +191,54 @@ export async function manualMilestoneVerificationAction(
     // A verified milestone that is not yet paid is one the agent can release.
     if (verified && milestone.status !== "paid") raiseCycleEvent(auth, "milestone_verified");
     return { ok: true, message: verified ? "Manual verification recorded." : "Verification revoked and recorded." };
+  });
+}
+
+const milestoneIdSchema = z.string().uuid();
+
+/** A `MilestoneDecisionError` carries a message safe to show; anything else stays in the server log. */
+function decisionFailed(error: unknown): MilestoneActionResult {
+  if (error instanceof MilestoneDecisionError) return { ok: false, message: error.message };
+  console.error("milestone decision failed", error instanceof Error ? error.message : error);
+  return { ok: false, message: "That did not work. Try again in a moment: nothing is sent twice." };
+}
+
+/**
+ * Pays a held milestone now (held milestone actions R2): a person's decision, by anyone who may approve a
+ * held payable. The release still passes the contractor's risk, limit and address checks.
+ */
+export async function payHeldMilestoneAction(_previous: MilestoneActionResult, formData: FormData): Promise<MilestoneActionResult> {
+  const auth = await authorize(formData.get("orgSlug"), "approval.decide");
+  if (!auth.ok) return { ok: false, message: auth.message };
+  return inOrg(auth, async () => {
+    const parsed = milestoneIdSchema.safeParse(formString(formData, "milestoneId"));
+    if (!parsed.success) return { ok: false, message: "Milestone not found." };
+    try {
+      const result = await payHeldMilestone({ actorId: auth.user.id, milestoneId: parsed.data });
+      revalidateOrgPages();
+      if (result.status === "paid") return { ok: true, message: "Paid." };
+      if (result.status === "verified") return { ok: true, message: "Payment submitted; waiting for Circle to confirm it." };
+      const reason = /\[(?:transfer|execution) failed:\s*(.+?)\]\s*$/.exec(result.note)?.[1] ?? /\[not paid:\s*(.+?)\]\s*$/.exec(result.note)?.[1];
+      return { ok: false, message: reason ? `Not paid: ${reason}. The milestone is still held.` : "Not paid. The milestone is still held." };
+    } catch (error) {
+      return decisionFailed(error);
+    }
+  });
+}
+
+/** Closes a held milestone without paying it, with the reason a person gives (held milestone actions R3). */
+export async function closeMilestoneAction(_previous: MilestoneActionResult, formData: FormData): Promise<MilestoneActionResult> {
+  const auth = await authorize(formData.get("orgSlug"), "approval.decide");
+  if (!auth.ok) return { ok: false, message: auth.message };
+  return inOrg(auth, async () => {
+    const parsed = milestoneIdSchema.safeParse(formString(formData, "milestoneId"));
+    if (!parsed.success) return { ok: false, message: "Milestone not found." };
+    try {
+      await closeMilestone({ actorId: auth.user.id, milestoneId: parsed.data, reason: formString(formData, "reason") });
+      revalidateOrgPages();
+      return { ok: true, message: "Closed without paying." };
+    } catch (error) {
+      return decisionFailed(error);
+    }
   });
 }

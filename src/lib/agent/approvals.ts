@@ -130,8 +130,11 @@ function isReclaimable(status: string, reviewedAt: string | null, now: number): 
   return Number.isNaN(claimedAt) || claimedAt < now - RECLAIM_AFTER_MS;
 }
 
-/** The columns of an invoice's payment intent (`payment_intents`, see `src/lib/payments.ts`) these rules read. */
-interface IntentState {
+/**
+ * The columns of a payment intent (`payment_intents`, see `src/lib/payments.ts`) these rules read. A held
+ * milestone's decision reads them by the same rules (src/lib/agent/milestone-decisions.ts).
+ */
+export interface IntentState {
   status: string;
   provider_tx_id: string | null;
   last_error: string | null;
@@ -167,7 +170,7 @@ function failedTerminally(intent: IntentState): boolean {
  * recorded state, since before migration 0036 a `STUCK` transfer was
  * recorded `failed` (R1).
  */
-function paymentWasSent(intent: IntentState | null): boolean {
+export function paymentWasSent(intent: IntentState | null): boolean {
   if (!intent) return false;
   if (intent.status === "confirmed" || intent.status === "pending" || intent.status === "submitting") return true;
   if (intent.provider_tx_id === null) return false;
@@ -190,7 +193,7 @@ function gatewayFailed(intent: IntentState): boolean {
  * is sent again on approval, so it is a new payment and the balance is
  * checked for it.
  */
-function transferExists(intent: IntentState | null): boolean {
+export function transferExists(intent: IntentState | null): boolean {
   if (intent === null) return false;
   return intent.status === "confirmed" || (intent.provider_tx_id !== null && !failedTerminally(intent));
 }
@@ -212,6 +215,7 @@ const REASON_IN_PLAIN_WORDS: Record<string, string> = {
   // The invoice's own token: a EURC payment fails for want of EURC.
   INSUFFICIENT_TOKEN: "the operating wallet does not hold enough {token} (Circle: INSUFFICIENT_TOKEN)",
   FAILED_ON_CHAIN: "the transfer failed on chain (Circle: FAILED_ON_CHAIN)",
+  ESTIMATION_ERROR: "Circle could not prepare the transaction (Circle: ESTIMATION_ERROR)",
 };
 
 /**
@@ -225,7 +229,7 @@ const REASON_IN_PLAIN_WORDS: Record<string, string> = {
  * `failed` intent from before Circle's state was kept, which Approve and pay
  * reads from Circle.
  */
-function lastAttemptOf(intent: IntentState | null, token: Stablecoin = "USDC"): LastPaymentAttempt {
+export function lastAttemptOf(intent: IntentState | null, token: Stablecoin = "USDC"): LastPaymentAttempt {
   if (!intent || intent.provider_tx_id === null || intent.status === "confirmed") return null;
   if (gatewayFailed(intent)) {
     return { state: "failed", reason: intent.failure_reason ? `Gateway could not mint it (${intent.failure_reason})` : "Gateway could not mint it", resend: false };

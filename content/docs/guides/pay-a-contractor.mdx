@@ -1,6 +1,6 @@
 A milestone pays a contractor for a piece of work once that work is verified, instead of on an invoice's due date: five social posts delivered, a design approved, a pull request merged. You add the milestone, someone verifies the work (or GitHub does, for a pull request), and the agent decides on the release within a minute and pays it in USDC on Arc testnet. Start with a workspace that is live and has testnet USDC in its operating wallet; [Go live on Arc testnet](/docs/guides/go-live) sets that up.
 
-Owners and admins add milestones and verify them. Other members see every milestone and its decision, but have no controls here.
+Owners and admins add milestones and verify them. Owners, admins and approvers decide a milestone the agent held. Other members see every milestone and its decision, but have no controls here.
 
 ## Pay someone new in one step
 
@@ -37,7 +37,7 @@ Choose **Add milestone**. The milestone starts pending, and its card says "The a
 
 ## 3. Verify the work
 
-On **Contractors**, the tiles count what needs you, what waits for verification, what is verified and being paid, and what has been paid. Under **Milestones**, each milestone is one row, in three groups: **Needs you** (held, or refused by code), **In progress** (waiting for verification, or verified) and **Paid** (the latest ten; **Show all** lists every one). Open a row to see its card, and under it the milestone's verification and escrow.
+On **Contractors**, the tiles count what needs you, what waits for verification, what is verified and being paid, and what has been paid. Under **Milestones**, each milestone is one row, in three groups: **Needs you** (held, or refused by code), **In progress** (waiting for verification, or verified) and **Paid and closed** (the latest ten; **Show all** lists every one). Open a row to see its card, and under it the milestone's verification and escrow.
 
 How a milestone becomes verified depends on its evidence:
 
@@ -61,6 +61,26 @@ When a cycle releases two or more milestones, the agent pays them together: one 
 - **Fees.** The transaction's fee is split equally between its milestones.
 - **What is never batched.** A milestone locked in escrow is released on its own, as is the only milestone released in a cycle.
 - **If Circle's answer is lost.** The milestone stays verified, and the agent looks the batch up on Circle the next cycle. It never sends the batch's payments again alone while Circle might have it. If Circle never received the batch, each milestone is then paid alone.
+
+## When a milestone is held
+
+A held milestone is listed under **Needs you**, and its row says in a few words what it waits for, under its title: for example "Circle did not send it" or "Limit lowered by a screening match". Open the row. Above its card, **What it waits for** says it in a sentence, with a link to where it is settled.
+
+<Screenshot
+  src="/docs/guides/held-milestone.png"
+  alt="A held milestone's row opened under Needs you on the Contractors page: Puka Hotel, Clean service, Held Oct 2, 2026, 0.30 USDC, with Circle did not send it under the title. Above the card, What it waits for reads: Circle did not send it: Circle could not prepare the transaction (Circle: ESTIMATION_ERROR). Nothing moved. Pay now sends it again. Below that are the Pay now and Close without paying buttons."
+  caption="Each held row says what it waits for; opened, it offers Pay now and Close without paying."
+/>
+
+What it waits for decides what you can do:
+
+- **The contractor's screening, limit or address.** For example "A screening match lowered Quoc Duong's limit to 0.25 USDC, below this milestone's 1 USDC." Settle it on **Counterparties**: review the match, raise the limit, or confirm the address. Once the limit or the screening changes, the agent decides the milestone again within a minute. It cannot be paid by hand before then.
+- **Circle did not send it.** Nothing moved. **Pay now** sends it again, on its own, as a new attempt.
+- **The agent held it**, by its own reasoning or because paying it would have taken the agent past its spending limit. **Pay now** overrides the hold. Someone other than whoever added the milestone must choose it: "You added this milestone, so someone else must approve paying it."
+
+**Pay now** asks first, naming the amount and who is paid. It then pays the milestone as the agent would, from escrow if it is locked there. It still refuses a contractor screened high risk, a milestone above the contractor's limit, an address no one has confirmed, and an operating balance below the milestone. A transfer that may still settle is never sent twice: **Pay now** only records it. The audit log signs the payment as `milestone_approval_paid`, with who chose it.
+
+**Close without paying** asks for a reason. The reason is kept on the milestone and in the audit log, signed as `milestone_closed`. The milestone moves to **Paid and closed**, marked "Closed without paying", and is never paid after: it cannot be verified again, and the agent never decides it. Closing is refused while a transfer for the milestone may still settle, and while its USDC is locked in escrow: refund the hold first.
 
 ## Lock a milestone in escrow
 

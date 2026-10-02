@@ -1,5 +1,17 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-02: A person decides a held milestone
+
+- **Milestones can be `closed`.** In `/api/v1/milestones`, `status` may be `closed`: a person closed the milestone without paying it, and it is never paid after. `?status=closed` lists them. Every milestone has two new fields, `null` unless it is closed:
+  - `closedAt`: when it was closed;
+  - `closeReason`: the reason the person gave.
+- **New ledger actions**, delivered to webhooks like every entry:
+  - `milestone_approval_paid` (actor `human`, domain `contractor`): a person paid a held milestone. Its `detail` is `{ by, milestoneId, counterpartyId, amount, currency, overrode, heldFor, txRef, status, attempt?, retriedAfter? }`.
+    - `status` is `paid`, `verified` (submitted, not yet confirmed) or `held` (the transfer failed).
+    - `heldFor` says what it was held for: for example `transfer_failed`, `agent_held` or `outflow_budget`.
+    - `retriedAfter` is present when Circle had failed the previous attempt, which this one sent again.
+  - `milestone_closed` (actor `human`, domain `contractor`): a person closed a held milestone without paying it. Its `detail` is `{ by, milestoneId, counterpartyId, amount, currency, heldFor, reason }`.
+
 ## 2026-10-02: The agent buys payee history over x402
 
 - **New public endpoint:** `GET /api/x402/payee-history?address=0x…`. It is paid per call over x402: 0.001 USDC on Arc testnet (`eip155:5042002`), scheme `exact`, settled through Circle Gateway batching (`GatewayWalletBatched`, GatewayWallet `0x0077777d7EBA4688BDeF3E311b846F25870A19B9`).
