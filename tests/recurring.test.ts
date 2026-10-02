@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cadenceLabel, dueOn, leadDays, MAX_PERIODS_PER_CYCLE, parseRecurringForm, periodsDue, type RecurringSchedule } from "@/lib/recurring";
+import { cadenceLabel, dueOn, leadDays, MAX_PERIODS_PER_CYCLE, parseRecurringForm, periodsDue, scheduleSummary, type RecurringSchedule } from "@/lib/recurring";
 
 /** Recurring payments (docs/superpowers/specs/2026-10-02-recurring-payables-design.md R2, R3). */
 
@@ -87,5 +87,23 @@ describe("parseRecurringForm", () => {
     expect(parseRecurringForm({ ...raw, endsOn: "2026-10-30" }, TODAY)).toEqual({ ok: false, message: "The last due date cannot be before the first" });
     expect(parseRecurringForm({ ...raw, everyCount: "0" }, TODAY)).toEqual({ ok: false, message: "Every must be at least 1" });
     expect(parseRecurringForm({ ...raw, memo: " " }, TODAY)).toEqual({ ok: false, message: "Say what it is for" });
+  });
+});
+
+describe("scheduleSummary", () => {
+  const form = { payee: "Jiren", amount: "0.3", currency: "USDC", everyCount: "1", everyUnit: "day", startsOn: "2026-10-02", endsOn: "2026-10-03" };
+
+  it("says who is paid how much, how often, from when to when, and how many times", () => {
+    expect(scheduleSummary(form)).toBe("Pays Jiren 0.3 USDC every day, from Oct 2, 2026 to Oct 3, 2026: 2 payments.");
+    expect(scheduleSummary({ ...form, everyUnit: "month" })).toBe("Pays Jiren 0.3 USDC every month, from Oct 2, 2026 to Oct 3, 2026: 1 payment.");
+    expect(scheduleSummary({ ...form, everyUnit: "week", everyCount: "2", endsOn: "" })).toBe("Pays Jiren 0.3 USDC every 2 weeks, from Oct 2, 2026 until you stop it.");
+  });
+
+  it("says nothing until the form makes sense", () => {
+    expect(scheduleSummary({ ...form, payee: null })).toBeNull();
+    expect(scheduleSummary({ ...form, amount: "" })).toBeNull();
+    expect(scheduleSummary({ ...form, everyCount: "0" })).toBeNull();
+    expect(scheduleSummary({ ...form, startsOn: "" })).toBeNull();
+    expect(scheduleSummary({ ...form, endsOn: "2026-10-01" })).toBeNull();
   });
 });
