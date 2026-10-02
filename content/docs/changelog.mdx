@@ -1,5 +1,16 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-02: Recurring payments
+
+- An owner or admin can set up a payment that repeats every N days, weeks or months. Each period's invoice is created as it comes near and decided like any other.
+- **New ledger actions**, in the `ap` domain:
+  - `recurring_payable_created` (actor `human`). Its `detail` is `{ by, recurringId, counterpartyId, amount, currency, memo, poReference, goodsReceived, everyCount, everyUnit, startsOn, endsOn }`.
+  - `recurring_invoice_created` (actor `agent`), when a cycle creates a period's invoice. Its `detail` is `{ invoiceId, recurringId, period, counterpartyId, amount, currency, goodsReceived }`. `period` is the invoice's due date, `YYYY-MM-DD`.
+  - `recurring_payable_stopped` (actor `human`). Its `detail` is `{ by, recurringId }`.
+- A cycle's `detail.stages` includes `recurring`, which runs after `follow_up` and before `ap`.
+- An event cycle's `detail.events` can include **`recurring_added`**: someone set up a recurring payment.
+- Two invoices created for different periods of one recurring payment are never reported as duplicates of each other. Their decision entries' `observed.duplicateCheck` reflects that.
+
 ## 2026-10-02: A real USYC reserve
 
 - A live workspace's owner or admin can turn on a real USYC reserve on Arc testnet, once Circle has allowlisted its operating and reserve wallets. Until then, the reserve stays simulated, as before.

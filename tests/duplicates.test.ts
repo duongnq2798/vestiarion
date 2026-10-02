@@ -284,3 +284,25 @@ describe("scoreDuplicate — currencies (EURC invoices design, review I1)", () =
     expect(match?.explanation).toContain("the same 240 EURC");
   });
 });
+
+describe("scoreDuplicate — periods of one recurring payment (recurring payments R4)", () => {
+  const weekly = (id: string, period: string, status = "pending") =>
+    inv({ id, status, memo: "Weekly retainer", dueDate: `${period}T12:00:00.000Z`, recurringId: "rec-1", recurringPeriod: period });
+
+  it("never takes two periods of one schedule for a duplicate, however alike, even a week apart with one paid", () => {
+    expect(scoreDuplicate(weekly("w2", "2026-10-10"), weekly("w1", "2026-10-03", "paid"))).toBeNull();
+    expect(findDuplicates(weekly("w3", "2026-10-17"), [weekly("w1", "2026-10-03", "paid"), weekly("w2", "2026-10-10", "scheduled")])).toEqual([]);
+  });
+
+  it("still catches a typed invoice that repeats a scheduled period", () => {
+    const typed = inv({ id: "typed", memo: "Weekly retainer", dueDate: "2026-10-10T12:00:00.000Z" });
+    const match = scoreDuplicate(typed, weekly("w2", "2026-10-10", "paid"));
+    expect(match?.confidence).toBeGreaterThanOrEqual(DUPLICATE_BLOCK_CONFIDENCE);
+  });
+
+  it("still catches the same period twice, and periods of two different schedules", () => {
+    expect(scoreDuplicate(weekly("w2b", "2026-10-10"), weekly("w2", "2026-10-10", "paid"))).not.toBeNull();
+    const other = inv({ id: "o1", status: "paid", memo: "Weekly retainer", dueDate: "2026-10-03T12:00:00.000Z", recurringId: "rec-2", recurringPeriod: "2026-10-03" });
+    expect(scoreDuplicate(weekly("w2", "2026-10-10"), other)).not.toBeNull();
+  });
+});

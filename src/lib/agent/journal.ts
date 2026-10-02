@@ -26,6 +26,7 @@ export const CYCLE_STAGES = [
   "receipts",
   "compliance",
   "follow_up",
+  "recurring",
   "ap",
   "contractors",
   "treasury",
@@ -45,6 +46,9 @@ export type CycleStage = (typeof CYCLE_STAGES)[number];
  *   compliance  Nothing. It is the source of risk truth, not a consumer of it.
  *   follow_up   compliance — it reopens invoices by comparing today's risk tier
  *               and limit against the ones a past decision rested on.
+ *   recurring   Nothing. It creates the invoice of each recurring payment's period as it comes
+ *               near; it authorises nothing leaving, and the AP stage decides those invoices
+ *               with every check. If it fails, the AP stage still decides everything else.
  *   ap          reconcile + compliance. Paying a counterparty needs both a
  *               current balance and a current risk verdict. Neither is
  *               negotiable; this is the fail-closed boundary.
@@ -61,6 +65,7 @@ export const STAGE_REQUIRES: Record<CycleStage, readonly CycleStage[]> = {
   receipts: [],
   compliance: [],
   follow_up: ["compliance"],
+  recurring: [],
   ap: ["reconcile", "compliance"],
   contractors: ["reconcile", "compliance"],
   treasury: ["reconcile"],

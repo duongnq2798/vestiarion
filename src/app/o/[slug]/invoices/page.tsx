@@ -1,4 +1,4 @@
-import { FileSpreadsheet, FileText, ListFilter, PenLine } from "lucide-react";
+import { FileSpreadsheet, FileText, ListFilter, PenLine, Repeat } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AutoRefresh } from "@/components/AutoRefresh";
@@ -6,6 +6,7 @@ import AgentControls from "@/components/AgentControls";
 import InvoiceCsvImport from "@/components/intake/InvoiceCsvImport";
 import InvoiceDocumentIntake from "@/components/intake/InvoiceDocumentIntake";
 import InvoiceIntake from "@/components/intake/InvoiceIntake";
+import RecurringPayableIntake, { RecurringPayablesList } from "@/components/intake/RecurringPayableIntake";
 import { PayLinkControl } from "@/components/PayLinkControl";
 import { ReceiptControl } from "@/components/ReceiptControl";
 import { Callout } from "@/components/ui/Callout";
@@ -25,6 +26,7 @@ import { chainModes } from "@/lib/circle";
 import { inOrg } from "@/lib/dal/scope";
 import { listLedgerEntries, listLedgerEntriesForTargets } from "@/lib/ledger";
 import { listCounterparties, listInvoices, stats } from "@/lib/queries";
+import { listRecurringPayables } from "@/lib/recurring-payables";
 import { receiptShareable } from "@/lib/receipts/facts";
 import { sharedReceipts } from "@/lib/receipts/share";
 
@@ -46,12 +48,17 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
   const access = await requireMembership(slug);
   return inOrg(access, async () => {
     const query = await searchParams;
-    const [invoices, counterparties, headEntries, dashboardStats, canWrite] = await Promise.all([
+    const [invoices, counterparties, headEntries, dashboardStats, canWrite, schedules] = await Promise.all([
       listInvoices(),
       listCounterparties(),
       listLedgerEntries(1),
       stats(),
       viewerCan(slug, "records.write"),
+      // Best effort: a list that cannot be read hides its section, nothing else.
+      listRecurringPayables().catch((error: unknown) => {
+        console.error("invoices: recurring payments not loaded", error instanceof Error ? error.message : error);
+        return [];
+      }),
     ]);
     const entries = await listLedgerEntriesForTargets({ invoiceIds: invoices.map((invoice) => invoice.id) });
     const filter = typeof query.status === "string" ? query.status : undefined;
@@ -125,6 +132,10 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
                     <FileSpreadsheet aria-hidden />
                     Import CSV
                   </TabsTrigger>
+                  <TabsTrigger value="recurring">
+                    <Repeat aria-hidden />
+                    Recurring
+                  </TabsTrigger>
                 </TabsList>
                 {/* Both stay mounted, so switching tabs never loses what was typed. */}
                 <TabsContent value="manual" forceMount className="data-[state=inactive]:hidden">
@@ -136,12 +147,22 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
                 <TabsContent value="csv" forceMount className="data-[state=inactive]:hidden">
                   <InvoiceCsvImport orgSlug={slug} />
                 </TabsContent>
+                <TabsContent value="recurring" forceMount className="data-[state=inactive]:hidden">
+                  <RecurringPayableIntake orgSlug={slug} counterparties={counterparties.map(({ id, name, role }) => ({ id, name, role }))} />
+                </TabsContent>
               </Tabs>
             </Card>
           ) : (
             <Callout>Only an owner or admin of this workspace can add or import invoices.</Callout>
           )}
         </section>
+
+        {schedules.length > 0 && (
+          <section className="mb-8">
+            <SectionHeader title="Recurring payments" meta="each period's invoice is created as it comes near, and decided like any other" />
+            <RecurringPayablesList schedules={schedules} orgSlug={slug} canWrite={canWrite} />
+          </section>
+        )}
 
         <div className="space-y-8">
           {refused.length > 0 && (

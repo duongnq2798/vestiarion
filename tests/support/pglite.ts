@@ -99,7 +99,7 @@ export async function createUser(db: PGlite, email: string): Promise<string> {
 export const TENANT_TABLES = [
   "accounts", "counterparties", "invoices", "milestones", "treasury_actions", "compliance_checks",
   "forecasts", "ledger_entries", "payment_intents", "cycle_runs", "cycle_snapshots", "sim_clock", "gateway_signers", "payment_receipts", "escrow_contracts",
-  "fx_swaps", "screening_dismissals", "receivable_links", "incoming_transfers", "agent_budgets",
+  "fx_swaps", "screening_dismissals", "receivable_links", "incoming_transfers", "agent_budgets", "recurring_payables",
 ] as const;
 
 export interface SeededRows {
@@ -163,6 +163,10 @@ export async function seedOrgRows(db: PGlite, orgId: string, tag: string): Promi
     [orgId, `circle-${tag}`]
   );
   await db.query("insert into agent_budgets (org_id, daily_usdc, weekly_usdc) values ($1, 100, 500)", [orgId]);
+  await db.query(
+    "insert into recurring_payables (org_id, counterparty_id, amount, memo, every_count, every_unit, starts_on) values ($1, $2, 5, $3, 1, 'month', '2026-10-31')",
+    [orgId, counterpartyId, `recurring-${tag}`]
+  );
   const key = crypto.generateKeyPairSync("ed25519");
   await appendSignedForOrg(db, orgId, { actor: "system", domain: "system", action: "note", summary: tag, detail: { tag } }, key.privateKey);
   return { counterpartyId, accountId, invoiceId, cycleRunId, idempotencyKey };

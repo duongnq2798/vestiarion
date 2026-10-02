@@ -27,6 +27,7 @@ import InvoiceIntake from "@/components/intake/InvoiceIntake";
 import MilestoneIntake from "@/components/intake/MilestoneIntake";
 import AgentControlsClient from "@/components/AgentControlsClient";
 import { AgentBudgetPanel } from "@/components/AgentBudgetPanel";
+import RecurringPayableIntake, { RecurringPayablesList } from "@/components/intake/RecurringPayableIntake";
 import { UsycReservePanel } from "@/components/UsycReservePanel";
 import AgentPauseControl from "@/components/AgentPauseControl";
 import MembersPanel from "@/components/MembersPanel";
@@ -439,6 +440,17 @@ export default function DesignPage() {
               <CashCalendar outlook={OUTLOOK} />
               <AgentBudgetPanel orgSlug={DESIGN_SLUG} canEdit view={{ dailyUsdc: 500, weeklyUsdc: 2000, spentToday: 320, spentThisWeek: 1240.5, remaining: 180 }} />
               <AgentBudgetPanel orgSlug={DESIGN_SLUG} canEdit view={{ dailyUsdc: null, weeklyUsdc: null, spentToday: 12.5, spentThisWeek: 40, remaining: null }} />
+              <Card className="p-4 sm:p-6">
+                <RecurringPayableIntake orgSlug={DESIGN_SLUG} counterparties={[{ id: "cp-linh", name: "Linh Design", role: "contractor" }, { id: "cp-host", name: "Hosting Co", role: "vendor" }]} />
+              </Card>
+              <RecurringPayablesList
+                orgSlug={DESIGN_SLUG}
+                canWrite
+                schedules={[
+                  { id: "r1", counterpartyName: "Linh Design", amount: 250, currency: "USDC", memo: "Monthly design retainer", cadence: "every month", nextDueOn: "2026-10-31", endsOn: null, status: "active" },
+                  { id: "r2", counterpartyName: "Hosting Co", amount: 12, currency: "EURC", memo: "Weekly hosting", cadence: "every week", nextDueOn: null, endsOn: "2026-10-30", status: "stopped" },
+                ]}
+              />
               <UsycReservePanel orgSlug={DESIGN_SLUG} canManage status={{ liveAt: null, mode: "live", operatingAddress: `0x${"5eed".repeat(10)}`, reserveAddress: `0x${"7e5e".repeat(10)}`, reserveBalance: 0 }} />
               <UsycReservePanel orgSlug={DESIGN_SLUG} canManage status={{ liveAt: "2026-10-02T12:40:00Z", mode: "live", operatingAddress: `0x${"5eed".repeat(10)}`, reserveAddress: `0x${"7e5e".repeat(10)}`, reserveBalance: 25.042 }} />
             </div>

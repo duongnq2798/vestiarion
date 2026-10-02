@@ -186,6 +186,25 @@ A scheduled invoice's decision card reads "Scheduled for *date*", with the agent
 
 An invoice with an early-payment discount shows its terms on its card as "*pct*% off if paid by *date*". Until the agent has decided a payable, its card reads "Not yet decided", and while its transfer is in flight, "Payment in flight". The console's **Scheduled payments** section lists what the agent will pay next, soonest first: the date, the counterparty, the amount it will actually transfer — discounted, when the discount will still apply that day — and why.
 
+### Pay something every period
+
+A retainer, a subscription or a monthly fee does not need a new invoice each time. Under **Invoice intake**, open **Recurring** and fill in the form:
+
+- **Pay**: a vendor or contractor.
+- **For**: what it is for.
+- **Amount each period**, in USDC or EURC.
+- How often: **Every** 1 or more days, weeks or months.
+- **First due date**, and a **Last due date** if it ends (optional).
+- A **Contract or PO reference** if you have one.
+
+Choose **Set up recurring payment**. The setup is signed in the audit log as `recurring_payable_created`.
+
+- **Each period becomes an invoice as it comes near.** At most a week before its due date, a cycle creates it: a daily one on its day, a weekly one 6 days ahead, a monthly one 7 days ahead. The agent then decides it like any other: when to pay, within every guardrail. Each one is signed as `recurring_invoice_created` and appears under **Payables**, named after the period.
+- **Months are counted from the first due date.** A payment due on the 31st falls on the last day of a shorter month and goes back to the 31st after.
+- **Periods of one schedule are never taken for duplicates of each other.** The same retainer billed every week is not refused as a repeat bill. An invoice typed by hand that repeats one of them still is.
+- **Delivered every period** is ticked by default: you confirm the work or service continues, so each period's invoice counts as received. Untick it to confirm each period yourself.
+- **Stopping.** The **Recurring payments** list shows each schedule's next due date and status. **Stop** ends it, signed as `recurring_payable_stopped`; invoices it already created stay as they are.
+
 ### Cap what the agent pays on its own
 
 The console's **Agent spending limit** panel shows what the agent has paid on its own today (UTC) and in the last 7 days. To cap it, an owner or admin chooses **Set limit** and fills in **Per day (USDC)**, **Per 7 days (USDC)**, or both, then **Save limit**. A blank figure means no limit. Each change is recorded in the audit log as `agent_budget_changed`.
