@@ -92,3 +92,21 @@ describe("the Contractors page", () => {
     expect(list).not.toContain("<MilestoneVerification");
   });
 });
+
+describe("the Counterparties page", () => {
+  const page = readFileSync(path.join(process.cwd(), "src", "app", "o", "[slug]", "counterparties", "page.tsx"), "utf8");
+
+  it("folds Add counterparty, open only for a workspace with none yet", () => {
+    expect(page).toContain("defaultOpen={counterparties.length === 0}");
+  });
+
+  it("lists each counterparty as a row with what it needs, the ones that need someone first", () => {
+    const ranks = ["Review match", "Confirm address", "Address needed", "Ready to pay", "Client"].map((label) => {
+      const match = page.match(new RegExp(`label: "${label}", tone: "\w+", rank: (\d)`));
+      return match ? Number(match[1]) : -1;
+    });
+    expect(ranks).toEqual([0, 1, 2, 3, 4]);
+    expect(page).toContain("readiness(a).rank - readiness(b).rank || a.name.localeCompare(b.name)");
+    expect(page).toContain("{ordered.map((counterparty) => {");
+  });
+});

@@ -21,7 +21,7 @@ Sample payments are simulated. While **Sample data is loaded**, the console offe
 
 ## 1. Add a counterparty with an Arc address
 
-A counterparty is a business or person the workspace pays or invoices. Open **Counterparties**, and fill in the form under **Add counterparty**:
+A counterparty is a business or person the workspace pays or invoices. Open **Counterparties**, open **Add counterparty**, and fill in the form:
 
 - **Legal or trading name**.
 - **Role**: **Vendor** or **Contractor** for someone you pay.
@@ -38,7 +38,9 @@ A counterparty is a business or person the workspace pays or invoices. Open **Co
 
 Then choose **Add and screen**. The counterparty is screened as soon as it is saved, and a message gives the result: "*Name* added and screened: *level* risk." The agent never pays a counterparty screened high risk.
 
-If screening matched someone else with the same name, the counterparty's card shows it under **Screening match**, with what that does to its limit. A member who can approve payments can choose **Not this person**, say why, and confirm with **Dismiss the match**. The counterparty is screened again at once without that match (a match with anyone else still counts), the ledger records `screening_match_dismissed` with the reason, and payments held on the old risk are decided again within a minute.
+Under **Counterparty book**, each counterparty is one row: its role and chain, its risk, what it may be paid now (**Allowed now**), its address, and what it needs before the agent can pay it. The rows that need someone come first: **Review match**, **Confirm address** and **Address needed**, then **Ready to pay**. Open a row for its screening, limits, history and address.
+
+If screening matched someone else with the same name, the counterparty's row reads **Review match**; open it to see the match under **Screening match**, with what that does to its limit. A member who can approve payments can choose **Not this person**, say why, and confirm with **Dismiss the match**. The counterparty is screened again at once without that match (a match with anyone else still counts), the ledger records `screening_match_dismissed` with the reason, and payments held on the old risk are decided again within a minute.
 
 <Callout title="Without an address, a payment is held">
 The form marks **Payment address** "Optional until payment setup", but the agent can pay only a counterparty that has one. As the Go live page puts it, "A payment to a counterparty without one is held for review." You can add it later with **Edit address** on the counterparty's card.
@@ -46,25 +48,25 @@ The form marks **Payment address** "Optional until payment setup", but the agent
 
 ### Changing a payment limit
 
-Owners and admins change a counterparty's limit with **Edit limit**, under **Configured limit** on its card. Enter the new **Payment limit (USDC)** and choose **Save limit**. The card's **Current authority** follows at once: the whole limit for a counterparty screened clear, a quarter of it for medium risk, and 0 for high risk. A vendor or contractor always has a limit, because without one the agent could pay any amount. The ledger records who changed the limit, and from what to what.
+Owners and admins open the counterparty's row and change its limit with **Edit limit**, under **Configured limit**. Enter the new **Payment limit (USDC)** and choose **Save limit**. **Allowed now** follows at once: the whole limit for a counterparty screened clear, a quarter of it for medium risk, and 0 for high risk. A vendor or contractor always has a limit, because without one the agent could pay any amount. The ledger records who changed the limit, and from what to what.
 
 ### Ask a payee for their address
 
-You don't have to collect a payee's address yourself. On the counterparty's card, owners and admins choose **Ask for address**, then **Create link**:
+You don't have to collect a payee's address yourself. In the counterparty's row, owners and admins choose **Ask for address**, then **Create link**:
 
 - The link is shown once, with **Copy link**. Send it to the payee however you usually reach them.
 - The payee opens it without an account. They see which business wants to pay them and enter their own Arc address.
-- The link works once and expires after 7 days. A new link replaces the payee's unused one, and **Revoke** on the card stops it.
-- An address that comes in through a link counts as a change, like any other: the card says "not yet confirmed", and the agent holds payments to that payee until someone here confirms it, as below.
+- The link works once and expires after 7 days. A new link replaces the payee's unused one, and **Revoke** in the row stops it.
+- An address that comes in through a link counts as a change, like any other: the row says "not yet confirmed", and the agent holds payments to that payee until someone here confirms it, as below.
 
 ### Changing an address
 
-Owners and admins change a counterparty's address with **Edit address** on its card: enter the new **Arc address**, or leave it empty to clear it, and choose **Save address**.
+Owners and admins change a counterparty's address with **Edit address** in its row: enter the new **Arc address**, or leave it empty to clear it, and choose **Save address**.
 
-Changing where a counterparty is paid is how payments get redirected to the wrong wallet. So after a change, the card says "not yet confirmed", and the agent holds every payment to that counterparty, whatever the amount, until a person confirms the new address. There are two ways to confirm it:
+Changing where a counterparty is paid is how payments get redirected to the wrong wallet. So after a change, the row reads **Confirm address** and says "not yet confirmed", and the agent holds every payment to that counterparty, whatever the amount, until a person confirms the new address. There are two ways to confirm it:
 
 - **Approve and pay** on a held payment to it. The approval card shows where the money goes, after "Pays to". If the address changed after the page loaded, the approval is refused with "This counterparty's address changed after this page loaded. Check the new address and try again."
-- **Confirm address** on the counterparty's card, without a payment. Owners, admins and approvers see it.
+- **Confirm address** in the counterparty's row, without a payment. Owners, admins and approvers see it.
 
 <Screenshot
   src="/docs/guides/first-payment-address.png"
