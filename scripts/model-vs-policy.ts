@@ -4,6 +4,7 @@
  * from the database the app runs on.
  *
  *   npm run research:model-vs-policy
+ *   npm run research:model-vs-policy -- --from 2026-10-01T05:48:00Z [--to …]   one window (from inclusive, to exclusive)
  *
  * Read-only: the query runs in a read-only transaction. Needs SUPABASE_PROJECT_ID and
  * SUPABASE_DATABASE_PASSWORD (or SUPABASE_DB_URL), as `npm run db:migrate`
@@ -12,7 +13,15 @@
  */
 import { config } from "dotenv";
 import { Client } from "pg";
-import { summarizeDecisions, summaryMarkdown, type RecordedDecision } from "../src/lib/research/model-vs-policy";
+import {
+  peopleMarkdown,
+  summarizeDecisions,
+  summarizePeople,
+  summaryMarkdown,
+  within,
+  type PersonDecision,
+  type RecordedDecision,
+} from "../src/lib/research/model-vs-policy";
 
 config({ path: [".env.local", ".env"], quiet: true });
 
@@ -49,6 +58,62 @@ const DECISIONS = `
      and not (e.detail ? 'guardrailFixture')
    order by e.seq`;
 
+// What people decided about what the agent left them, each beside the agent's last decision on the same invoice or
+// milestone before it (I2). Screening reviews and limit proposals have no such decision.
+const PEOPLE = `
+  select p.seq, p.ts, p.action,
+         case when o.created_by is not null and not exists (select 1 from public.platform_team t where t.user_id = o.created_by)
+              then 'customers' else 'ours' end as side,
+         o.slug,
+         a.agent_action,
+         a.policy_action,
+         coalesce(a.refused, false) as refused,
+         case when p.action = 'screening_match_dismissed'
+              then coalesce(jsonb_array_length(case when jsonb_typeof(p.detail->'matchedEntities') = 'array' then p.detail->'matchedEntities' end), 1)
+              else 0 end as dismissed
+    from public.ledger_entries p
+    join public.orgs o on o.id = p.org_id
+    left join lateral (
+      select e.detail->'decision'->>'action' as agent_action,
+             e.detail->'referenceDecision'->>'action' as policy_action,
+             (nullif(e.detail->>'guardrailRule', '') is not null or coalesce((e.detail->>'guardrailBlocked')::boolean, false)) as refused
+        from public.ledger_entries e
+       where e.org_id = p.org_id and e.actor = 'agent' and e.detail ? 'decisionMode' and e.seq < p.seq
+         and not (e.detail ? 'guardrailFixture')
+         and ((p.detail ? 'invoiceId' and e.detail->>'invoiceId' = p.detail->>'invoiceId')
+           or (p.detail ? 'milestoneId' and e.detail->>'milestoneId' = p.detail->>'milestoneId'))
+       order by e.seq desc
+       limit 1
+    ) a on true
+   where p.actor = 'human'
+     and p.action in ('approval_paid', 'approval_rejected', 'approval_returned', 'milestone_approval_paid', 'milestone_closed',
+                      'screening_match_dismissed', 'policy_proposal_accepted', 'policy_proposal_dismissed')
+   order by p.seq`;
+
+interface PersonRow {
+  seq: string;
+  ts: Date;
+  action: string;
+  side: "ours" | "customers";
+  slug: string;
+  agent_action: string | null;
+  policy_action: string | null;
+  refused: boolean;
+  dismissed: number;
+}
+
+/** `--from <iso>` and `--to <iso>`: the window to measure; open on either side when left out. */
+function windowArgs(argv: string[]): { from?: string; to?: string } {
+  const value = (flag: string) => {
+    const at = argv.indexOf(flag);
+    if (at < 0) return undefined;
+    const raw = argv[at + 1];
+    if (!raw || Number.isNaN(Date.parse(raw))) throw new Error(`${flag} needs a date, such as 2026-10-01T05:48:00Z`);
+    return new Date(raw).toISOString();
+  };
+  return { from: value("--from"), to: value("--to") };
+}
+
 interface Row {
   seq: string;
   ts: Date;
@@ -73,7 +138,9 @@ async function main() {
     // A read-only transaction, which holds through a transaction-mode pooler as a session setting may not.
     await client.query("begin transaction read only");
     const { rows } = await client.query<Row>(DECISIONS);
+    const people = (await client.query<PersonRow>(PEOPLE)).rows;
     await client.query("commit");
+    const { from, to } = windowArgs(process.argv.slice(2));
     const decisions: RecordedDecision[] = rows.map((row) => ({
       seq: Number(row.seq),
       ts: row.ts.toISOString(),
@@ -89,9 +156,22 @@ async function main() {
       summary: row.side === "ours" ? row.summary : "—",
       outcome: row.outcome,
     }));
-    const customers = rows.filter((row) => row.side === "customers").length;
-    console.log(summaryMarkdown(summarizeDecisions(decisions)));
+    const measured = within(decisions, from, to);
+    const customers = within(rows.map((row) => ({ ...row, ts: row.ts.toISOString() })), from, to).filter((row) => row.side === "customers").length;
+    if (from || to) console.log(`Window: ${from ?? "the start"} to ${to ?? "now"}.\n`);
+    console.log(summaryMarkdown(summarizeDecisions(measured)));
     console.log(`\n${customers} of these decisions were made in customers' workspaces, as /open counts them.`);
+    const decidedByPeople: PersonDecision[] = people.map((row) => ({
+      seq: Number(row.seq),
+      ts: row.ts.toISOString(),
+      workspace: row.side === "ours" ? row.slug : "a customer's workspace",
+      action: row.action,
+      agentAction: row.agent_action,
+      policyAction: row.policy_action,
+      refusedByCode: row.refused,
+      dismissed: Number(row.dismissed),
+    }));
+    console.log(`\n${peopleMarkdown(summarizePeople(within(decidedByPeople, from, to)))}`);
   } finally {
     await client.end();
   }

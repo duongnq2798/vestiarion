@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { summarizeDecisions, summaryMarkdown, type RecordedDecision } from "@/lib/research/model-vs-policy";
+import { peopleMarkdown, stopKind, summarizeDecisions, summarizePeople, summaryMarkdown, within, type PersonDecision, type RecordedDecision } from "@/lib/research/model-vs-policy";
 
 /**
  * The research note's numbers (I1): every decision the agent's model made,
@@ -122,5 +122,57 @@ describe("the summary as Markdown", () => {
 
   it("lists every disagreement with its ledger entry", () => {
     expect(markdown).toContain("| #505 | testnet-2 | PAY invoice from Centronex for 2 USDC | pay | hold | 0.5 | counterparty.payment_limit | held |");
+  });
+});
+
+describe("what people did with what the agent left them (I2)", () => {
+  const person = (overrides: Partial<PersonDecision>): PersonDecision => ({
+    seq: 900,
+    ts: "2026-10-02T09:00:00.000Z",
+    workspace: "testnet-2",
+    action: "approval_paid",
+    agentAction: "hold",
+    policyAction: "hold",
+    refusedByCode: false,
+    dismissed: 0,
+    ...overrides,
+  });
+
+  it("says why each one waited: a stop the policy makes too, one only the model made, code's refusal, or a payment that did not go through", () => {
+    expect(stopKind(person({}))).toBe("policy_stop");
+    expect(stopKind(person({ agentAction: "flag_fraud", policyAction: "pay" }))).toBe("model_stop");
+    expect(stopKind(person({ agentAction: "pay", policyAction: "hold", refusedByCode: true }))).toBe("code_refused");
+    expect(stopKind(person({ agentAction: "release", policyAction: "release" }))).toBe("not_completed");
+    expect(stopKind(person({ agentAction: null, policyAction: null }))).toBe("no_decision");
+  });
+
+  it("counts what people did with each, the model's own stops they upheld, screening reviews and limit proposals", () => {
+    const summary = summarizePeople([
+      person({ seq: 585, agentAction: "flag_fraud", policyAction: "pay" }),
+      person({ seq: 586, agentAction: "flag_fraud", policyAction: "pay", action: "approval_rejected" }),
+      person({ seq: 673, action: "approval_rejected" }),
+      person({ seq: 503, action: "approval_returned" }),
+      person({ seq: 717, agentAction: "pay", refusedByCode: true }),
+      person({ seq: 800, action: "milestone_closed", agentAction: "release", policyAction: "release" }),
+      person({ seq: 902, action: "screening_match_dismissed", agentAction: null, policyAction: null, dismissed: 15 }),
+      person({ seq: 811, action: "screening_match_dismissed", agentAction: null, policyAction: null, dismissed: 1 }),
+      person({ seq: 740, action: "policy_proposal_accepted", agentAction: null, policyAction: null }),
+    ]);
+    expect(summary.decidedTotal).toBe(6);
+    expect(summary.decided.model_stop).toEqual({ paid: 1, upheld: 1, returned: 0 });
+    expect(summary.decided.policy_stop).toEqual({ paid: 0, upheld: 1, returned: 1 });
+    expect(summary.decided.code_refused.paid).toBe(1);
+    expect(summary.decided.not_completed.upheld).toBe(1);
+    expect(summary.modelStopsUpheld).toEqual({ upheld: 1, of: 2 });
+    expect(summary.screening).toEqual({ reviews: 2, matchesDismissed: 16 });
+    expect(summary.proposals).toEqual({ accepted: 1, dismissed: 0 });
+    expect(peopleMarkdown(summary)).toContain("| The model stopped it; the policy would have paid | 1 | 1 | 0 |");
+  });
+
+  it("measures one window at a time: from inclusive, to exclusive", () => {
+    const rows = [{ ts: "2026-10-01T05:47:59.000Z" }, { ts: "2026-10-01T05:48:00.000Z" }, { ts: "2026-10-02T00:00:00.000Z" }];
+    expect(within(rows, "2026-10-01T05:48:00.000Z")).toHaveLength(2);
+    expect(within(rows, undefined, "2026-10-01T05:48:00.000Z")).toHaveLength(1);
+    expect(within(rows)).toHaveLength(3);
   });
 });

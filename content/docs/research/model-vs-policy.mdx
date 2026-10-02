@@ -1,8 +1,8 @@
 Vestiarion's agent decides with a language model. For the same facts, the code also works out what a written policy would decide, and the signed ledger records both answers side by side. Whatever either says, guardrails in code still decide whether a payment is made.
 
-This note reads every decision the agent has made in production so far. It covers how often the model chose the policy's action, where it did not, and what followed.
+This note reads every decision the agent has made in production so far. It covers how often the model chose the policy's action, where it did not, and what followed. Since its second week, it also covers what people did with what the agent left them.
 
-The figures are as of 1 October 2026, 05:48 UTC, and come from `npm run research:model-vs-policy`. The running totals are on [www.vestiarion.xyz/open](https://www.vestiarion.xyz/open).
+The first week's figures are as of 1 October 2026, 05:48 UTC; the second week's, as of 2 October 2026, 16:43 UTC. Both come from `npm run research:model-vs-policy`; `-- --from` and `-- --to` measure one window. The running totals are on [www.vestiarion.xyz/open](https://www.vestiarion.xyz/open).
 
 ## How it is measured
 
@@ -35,13 +35,18 @@ The figures are as of 1 October 2026, 05:48 UTC, and come from `npm run research
   - is in EURC with no rate or not enough EURC;
   - goes to a payee on another chain in EURC, or with no acceptable fee.
 
-  Code leaves the invoice held or flagged for a person. For a milestone, it checks the risk level and the limit.
+  Code leaves the invoice held or flagged for a person. For a milestone, it checks the risk level and the limit. For both, a daily spending limit set on the workspace is checked last.
+- **What people did** is in the ledger too: Approve and pay, Reject and Return on a payable; Pay now and Close without paying on a milestone. For each, the script finds the agent's last decision on the same invoice or milestone, and says why it waited for a person:
+  - the agent stopped it as the written policy would, for example above a limit;
+  - the model stopped it where the policy would have paid;
+  - code refused the model's payment;
+  - or the agent paid, and the payment did not go through.
 
-## What happened
+## Week one
 
 From 24 September to 1 October 2026, the agent made 141 decisions in 5 workspaces. Some were made in production on Arc testnet, and some in sandboxes. DeepSeek made every one of them; the rule-based fallback never had to decide.
 
-The first 14, on 24 September, were made before the policy's answer was recorded beside the model's. That leaves 127 to compare.
+The first 14, on 24 September, were made before the policy's answer was recorded beside the model's. That leaves 127 to compare. Two of them, treasury holds, were in a workspace deleted since, so the script now counts 139 decisions and 125 compared for this week; nothing else changes.
 
 | | Compared | Same action as the policy |
 |---|---|---|
@@ -54,7 +59,7 @@ The total flatters the model. Every treasury decision was to hold: at testnet ba
 
 The model's stated confidence was lower where it differed. It averaged 0.75 across those seven, against 0.94 across the 36 payable and milestone decisions where it matched; treasury decisions record none. Four of the seven still carried 0.85 or more.
 
-## The seven differences
+### The seven differences
 
 | Entry | Invoice | Model | Policy | Confidence | What followed |
 |---|---|---|---|---|---|
@@ -68,7 +73,7 @@ The model's stated confidence was lower where it differed. It averaged 0.75 acro
 
 They fall into three kinds.
 
-### Stricter than the policy: three possible duplicates
+#### Stricter than the policy: three possible duplicates
 
 Three times the policy would have paid, and the model flagged the invoice instead (#387, #426, #429). Each time, the duplicate check had found another invoice from the same vendor, with the same amount and a close due date, at a confidence of 0.60. No purchase order matched. In #426 and #429, one of the matching invoices was already paid.
 
@@ -78,13 +83,13 @@ The model was shown the same matches, with a note that a repeat of an invoice al
 
 A treasury can afford to err this way more than the other way. It still matters, because a person who clears flags all day stops reading them.
 
-### A different stop: three invoices over their limit
+#### A different stop: three invoices over their limit
 
 Three invoices were over the counterparty's limit, so neither the model nor the policy would pay them. The policy holds such an invoice for a person to approve and pay, reject or return. The model chose a different stop:
 - It asked for information where the three-way match was incomplete as well: in #386 the goods were not received, and in #462 there was no purchase order and no receipt. The policy checks the limit before the three-way match, so within the limit it would have asked for information too.
 - It flagged #343, where the same purchase order had been billed before at a different amount. A person later paid #343: the re-billed order was one of our tests, not fraud.
 
-### Looser than the policy: one payment over a limit, refused by code
+#### Looser than the policy: one payment over a limit, refused by code
 
 Entry #505 is the only one of the 127 compared where the model would have paid and the policy would not. The invoice was 1.9 EURC, worth 2.310316 USDC at Circle's quote, against a counterparty limit of 2 USDC.
 
@@ -92,7 +97,7 @@ The model's own reasoning says the invoice is "ABOVE that limit — a hard guard
 
 The reasoning was right and the action was wrong. This is why code checks the action, not the prose.
 
-## What we take from it
+### What we took from week one
 
 - **It stopped payments the policy would have made more often than the reverse: three times to one**, in a small sample. In the other three differences, the policy stopped the payment too.
 - **It was wrong in both directions.**
@@ -128,12 +133,83 @@ To see the effect without waiting for the same cases to happen again, `npm run r
 
 With the old instructions, the three false alarms were flagged 7 times in 9. With the new ones, they were flagged once in 9. The true duplicates were flagged every time, before and after.
 
-A replay of three runs per case is a check, not proof. The agreement rate on payables in production will show whether the change holds, and this note will be updated with it.
+A replay of three runs per case is a check, not proof. The agreement rate on payables in production would show whether the change holds. Week two is the first look.
+
+## Week two
+
+From 1 October, 05:48 UTC, to 2 October, 16:43 UTC, the agent made 72 decisions in 5 workspaces, all by DeepSeek, and every one recorded the policy's answer beside the model's. Eight were in one live workspace that /open counts as a customer's, because its creator is not on the platform team.
+
+| | Compared | Same action as the policy |
+|---|---|---|
+| Payables | 13 | 10 (76.9%) |
+| Contractor milestones | 12 | 11 |
+| Treasury | 46 | 46 |
+| Limit proposals | 1 | 1 |
+| **All** | **72** | **68 (94.4%)** |
+
+Across both weeks, the model chose the policy's action 186 times in 197: 94.4%, and 42 times in 52 on payables (80.8%). Treasury decisions were all holds again, for the same reason as in week one.
+
+The model's confidence was again lower where it differed: 0.86 on average across the four differences, against 0.93 where it matched.
+
+### The four differences
+
+| Entry | Decision | Model | Policy | Confidence | What followed |
+|---|---|---|---|---|---|
+| #570 | Gozo, 1 USDC, PO-108 | flag | pay | 0.7 | A person approved and paid it (#588). |
+| #622 | an invoice in the workspace /open counts as a customer's | hold | request information | 0.9 | Waiting for a person. |
+| #641 | Quoc Duong, milestone, 1 USDC | hold | release | 0.9 | Paid by the agent a day later (#908), once a person had reviewed its screening. |
+| #686 | CME, 0.6 USDC, to a payee on Arbitrum Sepolia | pay | hold | 0.93 | Refused by code; a person approved and paid it (#717). |
+
+#### The duplicate change mostly held
+
+#570 is the one possible duplicate the model flagged where the policy would have paid. It was decided at 08:22 UTC on 1 October, an hour and a half after the instructions changed. The match was the same kind as before: an earlier Gozo invoice, already paid, with the same amount and a close due date, at a confidence of 0.60.
+
+The model's reasoning quotes the new instruction: a match on amount and dates alone "is only a signal, not proof". It then counts the same amount and the close date as the other facts that point the same way, and flags. A person paid it. That is one flag in the 13 payables this week, against three in 39 the week before, and as in the replay, not none.
+
+#### Right reasoning, wrong action, again
+
+#686 is the week's only decision where the model would have paid and the policy would not. The payee is on Arbitrum Sepolia, and Circle's CCTP fee was 0.112521 USDC: 18.75% of a 0.6 USDC invoice, above the 10% a payout may cost. The model's reasoning says the fee is "above the 10% threshold, so the payout is refused". It then decides to pay "on Arc in USDC", which this payee cannot receive. Code refused it, and a person paid it with the fee.
+
+This is #505 again: the reasoning names the rule, and the action breaks it. Code checks the action.
+
+#### A milestone held for two reasons, one of them wrong
+
+In #641, the model held a 1 USDC milestone for two reasons. The first was right: a screening match had cut the contractor's limit to 0.25 USDC, so code would have refused the release anyway. The second was wrong: it read a milestone verified by hand as not verified, because the facts it was shown did not say how a milestone was verified. That was fixed 17 minutes later, and the model is now told whether a person, a merged pull request or a timesheet verified the work.
+
+The screening match was a namesake. The name matched 19 politically exposed people, and a person dismissed them all, the last 15 in a single review. Screening then cleared the contractor, the agent reopened the milestone, and released it within a minute (#908).
+
+#### Code refused three payments
+
+Besides #686, code refused two payments the model and the policy both chose. Each would have taken the agent past the workspace's 5 USDC daily spending limit:
+- #691, for 0.6 USDC. When the limit had room again, the agent reopened it and paid it itself (#697).
+- #817, for 3 USDC. It is waiting for a person.
+
+That makes four payments refused by code in two weeks, out of 211 decisions: #505, #686, #691 and #817.
+
+## People and the agent
+
+In both weeks together, people decided 15 payables and milestones the agent had left them.
+
+| Why it waited for a person | Paid | Rejected or closed | Returned to the agent |
+|---|---|---|---|
+| The agent stopped it, as the written policy would | 5 | 1 | 1 |
+| The model stopped it; the policy would have paid | 3 | 0 | 0 |
+| Code refused the model's payment | 2 | 0 | 0 |
+| The agent paid, and the payment did not go through | 2 | 1 | 0 |
+
+- **Every stop only the model made was overruled.** All three were possible duplicates (#426, #429, #570), and a person paid each one. On this evidence, the model's extra caution on duplicates costs attention and has caught nothing yet.
+- **Stops the policy makes too mostly ended in a payment.** A payable above its limit waits for a person to approve it: that is the rule, not a disagreement. People paid five of these, rejected one and returned one to the agent. One of the five was a true duplicate in the sample-data sandbox (#391), paid by one of us testing the approval path.
+- **Both refusals by code that reached a person were paid.** One was above the limit (#505), one cost more than the fee cap (#686). Code moved each decision to a person, who accepted the amount or the fee.
+- **Three milestone payments did not go through.** Circle refused the first batch of three at estimation, and nothing moved. A person sent two again with Pay now, and closed the third without paying.
+- **Screening was overruled by name.** Five reviews dismissed 19 screening matches, all for one contractor, as other people with a similar name.
+- **The one limit the agent proposed raising was accepted.**
+
+People agreed with the model's own extra stops none of the three times they decided one. That is the clearest signal in two weeks, and it points the same way as week one.
 
 ## The limits of this note
 
-- **The sample is small.** 141 decisions over one week, from one provider, cannot show a trend.
-- **Every decision so far was made in a workspace we run or test with:** the founding workspace, testnet-2, two sandboxes, and a fresh account one of us opened to test [Try it in 5 minutes](/docs/guides/try-it).
+- **The sample is small.** 211 decisions over two weeks, from one provider, cannot show a trend. The people figures rest on 15 decisions.
+- **Nearly every decision was made in a workspace we run or test with:** the founding workspace, testnet-2, sandboxes, a fresh account one of us opened to test [Try it in 5 minutes](/docs/guides/try-it), and two workspaces made to test the freelancer and milestone paths. The exception is the live workspace in week two that /open counts as a customer's.
   - /open counts that last account as a customer's, because its creator is not on the platform team, so its 14 decisions appear on the customers' side there.
   - Several of the invoices were built to exercise a rule, so the rate says little about everyday invoices.
   - No outside business's invoice has been decided yet.
@@ -142,5 +218,5 @@ A replay of three runs per case is a check, not proof. The agreement rate on pay
 ## Check it yourself
 
 - Every entry named here is signed with Ed25519 and linked to the entry before it, in its workspace's ledger. A member of the workspace can export that ledger and check it without Vestiarion; see [Verify an audit export](/docs/guides/audit-export).
-- With access to the production database, `npm run research:model-vs-policy` recomputes the counts, the rates and the table of differences, read-only. It counts a customer's workspace but never names it. The rest is read from the entries named here.
+- With access to the production database, `npm run research:model-vs-policy` recomputes the counts, the rates, the table of differences and what people did, read-only; `-- --from 2026-10-01T05:48:00Z` measures week two alone. It counts a customer's workspace but never names it. The rest is read from the entries named here.
 - `npm run research:replay -- 426 429 387 385 545 --runs 3` repeats the replay. It reads the database read-only and records nothing; a model answers differently from run to run, so expect the same pattern, not the same answers.
