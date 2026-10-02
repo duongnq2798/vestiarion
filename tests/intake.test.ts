@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { INVOICE_CSV_TEMPLATE, parseInvoiceCsv } from "@/lib/invoice-csv";
-import { counterpartyInputSchema, csvInvoiceInputSchema, firstZodMessage, invoiceInputSchema, usdcAmountSchema } from "@/lib/intake-validation";
+import { counterpartyInputSchema, csvInvoiceInputSchema, firstZodMessage, invoiceFormRefusal, invoiceInputSchema, usdcAmountSchema } from "@/lib/intake-validation";
 
 describe("USDC intake precision", () => {
   it.each(["0.000001", "100.123456", "1", "99999999999999.999999", " 42.50 "])("accepts %s without numeric coercion", (amount) => {
@@ -134,13 +134,50 @@ describe("invoice intake", () => {
       if (result.success) expect(result.data).toMatchObject({ earlyPayDiscountPct: "2", discountDeadline: "2026-10-31" });
     });
 
-    it.each([
-      ["2", ""],
-      ["", "2026-10-10"],
-    ])("requires both the discount and its deadline, or neither (pct=%s, deadline=%s)", (earlyPayDiscountPct, discountDeadline) => {
-      const result = invoiceInputSchema.safeParse({ ...base, earlyPayDiscountPct, discountDeadline });
+    it("refuses a percent without a deadline, on the deadline field, so the discount is never dropped", () => {
+      // 2026-10-02, testnet-2: a payable entered with 2% and no deadline was added without its discount.
+      const result = invoiceInputSchema.safeParse({ ...base, earlyPayDiscountPct: "2", discountDeadline: "" });
       expect(result.success).toBe(false);
-      if (!result.success) expect(firstZodMessage(result.error)).toBe("earlyPayDiscountPct: Enter both the discount and its deadline, or neither.");
+      if (!result.success) {
+        expect(result.error.issues).toHaveLength(1);
+        expect(firstZodMessage(result.error)).toBe("discountDeadline: Enter the last day the discount applies, on or before the due date, or clear the discount.");
+      }
+    });
+
+    it("refuses a deadline without a percent, on the percent field", () => {
+      const result = invoiceInputSchema.safeParse({ ...base, earlyPayDiscountPct: "", discountDeadline: "2026-10-10" });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues).toHaveLength(1);
+        expect(firstZodMessage(result.error)).toBe("earlyPayDiscountPct: Enter the discount percent, or clear the discount deadline.");
+      }
+    });
+
+    it("names both fields when a malformed percent comes without a deadline", () => {
+      const result = invoiceInputSchema.safeParse({ ...base, earlyPayDiscountPct: "abc", discountDeadline: "" });
+      expect(result.success).toBe(false);
+      if (!result.success) expect(result.error.issues.map((issue) => issue.path.join("."))).toEqual(["earlyPayDiscountPct", "discountDeadline"]);
+    });
+
+    it("turns a refusal into a message naming the field's label, and an error for that field alone", () => {
+      const result = invoiceInputSchema.safeParse({ ...base, earlyPayDiscountPct: "2", discountDeadline: "" });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(invoiceFormRefusal(result.error)).toEqual({
+          message: "Discount deadline: Enter the last day the discount applies, on or before the due date, or clear the discount.",
+          fieldErrors: { discountDeadline: "Enter the last day the discount applies, on or before the due date, or clear the discount." },
+        });
+      }
+    });
+
+    it("keeps only the first error for a field that has several", () => {
+      const result = invoiceInputSchema.safeParse({ ...base, amount: "-1", earlyPayDiscountPct: "abc", discountDeadline: "" });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        const refusal = invoiceFormRefusal(result.error);
+        expect(Object.keys(refusal.fieldErrors).sort()).toEqual(["amount", "discountDeadline", "earlyPayDiscountPct"]);
+        expect(refusal.message.startsWith("Amount: ")).toBe(true);
+      }
     });
 
     it.each(["0", "100", "100.00", "12.345", "abc", "-5", "0.001"])("rejects an out-of-range or malformed percent %s", (earlyPayDiscountPct) => {
@@ -182,7 +219,7 @@ describe("invoice intake", () => {
         discount_deadline: "",
       });
       expect(rejected.success).toBe(false);
-      if (!rejected.success) expect(firstZodMessage(rejected.error)).toBe("early_pay_discount_pct: Enter both the discount and its deadline, or neither.");
+      if (!rejected.success) expect(firstZodMessage(rejected.error)).toBe("discount_deadline: Enter the last day the discount applies, on or before the due date, or clear the discount.");
 
       const accepted = csvInvoiceInputSchema.safeParse({
         direction: "payable",

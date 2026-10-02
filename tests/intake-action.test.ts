@@ -125,6 +125,21 @@ describe("createInvoiceAction's counterparty lookup", () => {
     const insert = fake.requests.find((sent) => sent.path === "/rest/v1/invoices" && sent.method === "POST");
     expect(insert?.body).toMatchObject({ early_pay_discount_pct: "2", discount_due_date: "2026-10-20T12:00:00.000Z" });
   });
+
+  it("refuses a discount percent without its deadline with an error on the deadline field, and adds nothing", async () => {
+    const fake = fakeSupabase(organizationDatabase([{ id: COUNTERPARTY, name: "Acme Supplies" }]));
+    const form = invoiceForm();
+    form.set("earlyPayDiscountPct", "2");
+    form.set("discountDeadline", "");
+    const result = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => createInvoiceAction({ ok: false, message: "" }, form));
+
+    expect(result).toEqual({
+      ok: false,
+      message: "Discount deadline: Enter the last day the discount applies, on or before the due date, or clear the discount.",
+      fieldErrors: { discountDeadline: "Enter the last day the discount applies, on or before the due date, or clear the discount." },
+    });
+    expect(fake.requests.some((sent) => sent.path === "/rest/v1/invoices")).toBe(false);
+  });
 });
 
 describe("importInvoicesAction's insert", () => {
@@ -174,5 +189,17 @@ describe("importInvoicesAction's insert", () => {
     const insert = fake.requests.find((sent) => sent.path === "/rest/v1/invoices" && sent.method === "POST");
     const body = insert?.body as Array<Record<string, unknown>>;
     expect(body.map((row) => row.currency)).toEqual(["EURC", "USDC"]);
+  });
+
+  it("refuses a row with a discount percent and no deadline, naming the row and its column, and imports nothing", async () => {
+    const fake = fakeSupabase(organizationDatabase([{ id: COUNTERPARTY, name: "Acme Supplies" }]));
+    const rows = [csvRow(), csvRow({ po_reference: "PO-43", early_pay_discount_pct: "2" })];
+    const result = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => importInvoicesAction({ ok: false, message: "" }, importForm(rows)));
+
+    expect(result).toEqual({
+      ok: false,
+      message: "Row 2: discount_deadline: Enter the last day the discount applies, on or before the due date, or clear the discount.",
+    });
+    expect(fake.requests.some((sent) => sent.path === "/rest/v1/invoices")).toBe(false);
   });
 });

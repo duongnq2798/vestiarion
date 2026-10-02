@@ -97,6 +97,11 @@ function isValidDiscountPct(value: string): boolean {
  * The early-payment discount pair, on an invoice form or a CSV row: both
  * fields or neither, a percent strictly between 0 and 100, a real deadline,
  * and a deadline no later than the due date (migration 0038's own checks).
+ *
+ * A missing half is named on the field that is missing, so a percent entered
+ * without its deadline is refused at the deadline rather than added without
+ * its discount: on 2026-10-02 a payable entered with 2% and no deadline was
+ * added with no discount at all, and the agent scheduled the full amount.
  */
 function checkDiscountPair(
   context: z.RefinementCtx,
@@ -106,19 +111,24 @@ function checkDiscountPair(
   deadline: string | null,
   dueDate: string
 ): void {
-  if ((pct === null) !== (deadline === null)) {
-    context.addIssue({ code: "custom", path: [pctPath], message: "Enter both the discount and its deadline, or neither." });
-    return;
-  }
-  if (pct === null || deadline === null) return;
-  if (!isValidDiscountPct(pct)) {
+  if (pct !== null && !isValidDiscountPct(pct)) {
     context.addIssue({
       code: "custom",
       path: [pctPath],
       message: "Enter a discount percent greater than 0 and less than 100, with at most 2 decimal places.",
     });
-    return;
   }
+  if (pct === null && deadline !== null) {
+    context.addIssue({ code: "custom", path: [pctPath], message: "Enter the discount percent, or clear the discount deadline." });
+  }
+  if (pct !== null && deadline === null) {
+    context.addIssue({
+      code: "custom",
+      path: [deadlinePath],
+      message: "Enter the last day the discount applies, on or before the due date, or clear the discount.",
+    });
+  }
+  if (pct === null || deadline === null || !isValidDiscountPct(pct)) return;
   if (!isRealCalendarDate(deadline)) {
     context.addIssue({ code: "custom", path: [deadlinePath], message: "Discount deadline is not a real calendar date" });
     return;
@@ -180,4 +190,44 @@ export function dueDateIso(value: string): string {
 export function firstZodMessage(error: z.ZodError): string {
   const issue = error.issues[0];
   return issue ? `${issue.path.join(".") || "input"}: ${issue.message}` : "Invalid input";
+}
+
+/** The invoice form's fields as its labels name them (src/components/intake/InvoiceIntake.tsx), so a refusal names the field the person sees. */
+export const INVOICE_FIELD_LABELS = {
+  direction: "Direction",
+  counterpartyId: "Counterparty",
+  amount: "Amount",
+  currency: "Currency",
+  dueDate: "Due date",
+  earlyPayDiscountPct: "Early-payment discount (%)",
+  discountDeadline: "Discount deadline",
+  memo: "Memo",
+  poReference: "PO reference",
+} as const;
+
+export type InvoiceField = keyof typeof INVOICE_FIELD_LABELS;
+
+/**
+ * A refused invoice form: each field's first error, to show under that field,
+ * and a message for the whole form that names the first one by its label.
+ */
+export function invoiceFormRefusal(error: z.ZodError): { message: string; fieldErrors: Partial<Record<InvoiceField, string>> } {
+  const fieldErrors: Partial<Record<InvoiceField, string>> = {};
+  let message: string | null = null;
+  for (const issue of error.issues) {
+    const field = issue.path[0];
+    if (typeof field !== "string" || !(field in INVOICE_FIELD_LABELS)) continue;
+    const key = field as InvoiceField;
+    fieldErrors[key] ??= issue.message;
+    message ??= `${INVOICE_FIELD_LABELS[key]}: ${issue.message}`;
+  }
+  return { message: message ?? firstZodMessage(error), fieldErrors };
+}
+
+/** A refused CSV import, naming the row as the preview counts them, from 1, and the column. */
+export function csvBatchMessage(error: z.ZodError): string {
+  const issue = error.issues[0];
+  const [row, ...column] = issue?.path ?? [];
+  if (typeof row !== "number") return firstZodMessage(error);
+  return `Row ${row + 1}: ${column.length > 0 ? `${column.join(".")}: ` : ""}${issue.message}`;
 }
