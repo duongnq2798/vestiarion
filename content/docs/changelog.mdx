@@ -1,5 +1,10 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-02: Batches are off for live wallets
+
+- A workspace with live Circle wallets pays each milestone alone again, as before batches. Its wallets are Circle smart accounts, and Arc's Multicall3From keeps the sender only when the sender signed the transaction itself. Circle refused such a batch at estimation, and no money moved.
+- The milestones of that batch were held, and their `milestone_release` entries carry `execution.batch` with `resultingStatus: "held"`.
+
 ## 2026-10-02: Several milestones in one transaction
 
 - When a cycle releases two or more milestones paid in USDC on Arc testnet, they go out in one transaction, through Arc's Multicall3From contract. Each is still decided, checked and signed on its own. A milestone locked in escrow is always released on its own.

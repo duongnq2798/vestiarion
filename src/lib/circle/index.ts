@@ -1,6 +1,5 @@
 import type {
   BalanceSnapshot,
-  BatchTransferParams,
   ChainProvider,
   EarnDepositParams,
   EarnPosition,
@@ -48,11 +47,14 @@ class HybridProvider implements ChainProvider {
     return this.live.reconcileTransfer(providerTxId);
   }
 
-  /** A batch is a payment, so it is the live leg's (batch payouts §2), as is finding one whose answer was lost (R5). */
-  batchTransfer(params: BatchTransferParams): Promise<TransferResult> {
-    return this.live.batchTransfer(params);
-  }
+  /*
+   * No `batchTransfer` here: live workspaces pay each milestone alone. Their operating wallets are Circle
+   * smart accounts, and Arc's CallFrom precompile behind Multicall3From keeps the sender only when it is
+   * tx.origin, which a smart account's transaction never is (the bundler sends it). Circle refuses such a
+   * batch at estimation: "sender spoofing requires tx.origin as sender" (testnet-2, 2026-10-02).
+   */
 
+  /** Finding a batch whose answer was lost is a read of the live leg (batch payouts R5). */
   findTransferByRef(fromAccountId: string, refId: string, window: { from: string; to: string }): Promise<TransferResult | null> {
     return this.live.findTransferByRef(fromAccountId, refId, window);
   }
