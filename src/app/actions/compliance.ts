@@ -6,13 +6,18 @@ import { z } from "zod";
 import { raiseCycleEvent } from "@/lib/agent/cycle-soon";
 import { authorize } from "@/lib/auth/authorize";
 import { revalidateOrgPages } from "@/lib/auth/revalidate";
-import { screenCounterparty } from "@/lib/compliance";
+import { MATCHES_KEPT, screenCounterparty } from "@/lib/compliance";
 import { inOrg } from "@/lib/dal/scope";
 import { DismissalError, dismissScreeningMatch } from "@/lib/screening-dismissal";
 
 export interface DismissMatchResult {
   ok: boolean;
   message: string;
+}
+
+/** "Dismissed." for the one match a card showed, "Dismissed 16 matches." for a review of several. */
+function dismissedWord(count: number): string {
+  return count > 1 ? `Dismissed ${count} matches.` : "Dismissed.";
 }
 
 function formString(formData: FormData, key: string): string {
@@ -22,7 +27,8 @@ function formString(formData: FormData, key: string): string {
 
 const inputSchema = z.object({
   counterpartyId: z.string().uuid(),
-  matchedEntityId: z.string().trim().min(1).max(200),
+  // Every match the card listed (review every match R3).
+  matchedEntityIds: z.array(z.string().trim().min(1).max(200)).min(1).max(MATCHES_KEPT),
 });
 
 /**
@@ -34,19 +40,22 @@ export async function dismissScreeningMatchAction(_previous: DismissMatchResult,
   const auth = await authorize(formData.get("orgSlug"), "approval.decide");
   if (!auth.ok) return { ok: false, message: auth.message };
   return inOrg(auth, async () => {
-    const parsed = inputSchema.safeParse({ counterpartyId: formString(formData, "counterpartyId"), matchedEntityId: formString(formData, "matchedEntityId") });
+    const parsed = inputSchema.safeParse({
+      counterpartyId: formString(formData, "counterpartyId"),
+      matchedEntityIds: formData.getAll("matchedEntityId").filter((value): value is string => typeof value === "string"),
+    });
     if (!parsed.success) return { ok: false, message: "Counterparty not found." };
     try {
       const result = await dismissScreeningMatch({ ...parsed.data, actorId: auth.user.id, reason: formString(formData, "reason") });
       revalidateOrgPages();
       if (!result.rescreened) {
-        return { ok: true, message: `Dismissed. Screening could not be reached just now; ${result.name} is screened again at the next cycle.` };
+        return { ok: true, message: `${dismissedWord(result.dismissed)} Screening could not be reached just now; ${result.name} is screened again at the next cycle.` };
       }
       raiseCycleEvent(auth, "match_dismissed");
       const limit = result.paymentLimit == null ? "" : `, limit ${result.paymentLimit} USDC`;
       return {
         ok: true,
-        message: `Dismissed. ${result.name} screened again: ${result.riskLevel} risk${limit}. Payments held on the old risk are decided again within a minute.`,
+        message: `${dismissedWord(result.dismissed)} ${result.name} screened again: ${result.riskLevel} risk${limit}. Payments held on the old risk are decided again within a minute.`,
       };
     } catch (error) {
       if (error instanceof DismissalError) return { ok: false, message: error.message };

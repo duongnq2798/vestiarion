@@ -52,7 +52,20 @@ export interface ScreeningResult {
   rawScore: number | null;
   matchedEntityId: string | null;
   matchedTopics: string[];
+  /** Every match a live screening found that no one has dismissed, best first (review every match R2); absent otherwise. */
+  matches?: ScreeningCandidate[];
 }
+
+/** One match of a live screening, as the card lists it and Not this person dismisses it. */
+export interface ScreeningCandidate {
+  id: string;
+  caption: string;
+  score: number;
+  topics: string[];
+}
+
+/** How many matches a counterparty keeps for review (migration 0060's bound). */
+export const MATCHES_KEPT = 25;
 
 export const STRONG_SANCTIONS_MATCH_THRESHOLD = 0.85;
 
@@ -130,9 +143,11 @@ export function classifyOpenSanctionsCandidate(candidate: OpenSanctionsCandidate
   };
 }
 
-function matchEndpoint(baseUrl: string): string {
+function matchEndpoint(baseUrl: string, limit: number): string {
   const trimmed = baseUrl.replace(/\/+$/, "");
-  return /\/match\/[^/]+$/.test(trimmed) ? trimmed : `${trimmed}/match/default`;
+  const url = new URL(/\/match\/[^/]+$/.test(trimmed) ? trimmed : `${trimmed}/match/default`);
+  url.searchParams.set("limit", String(limit));
+  return url.toString();
 }
 
 /**
@@ -147,7 +162,9 @@ export async function screenName(name: string, jurisdiction?: string | null, dis
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (openSanctionsApiKey) headers.Authorization = `ApiKey ${openSanctionsApiKey}`;
 
-  const response = await fetch(matchEndpoint(baseUrl), {
+  // Enough candidates that the dismissed ones can never crowd out one that is not (review every match R1):
+  // asked for only the service's default five, five dismissals would read as no match at all.
+  const response = await fetch(matchEndpoint(baseUrl, Math.min(200, dismissed.size + MATCHES_KEPT)), {
     method: "POST",
     headers,
     body: JSON.stringify({
@@ -170,7 +187,19 @@ export async function screenName(name: string, jurisdiction?: string | null, dis
   if (!parsed.success) throw new Error("OpenSanctions returned an invalid match response");
   const query = parsed.data.responses.counterparty;
   if (!query || query.status >= 400) throw new Error(`OpenSanctions query failed with status ${query?.status ?? "missing"}`);
-  return classifyOpenSanctionsCandidate(query.results.find((candidate) => !dismissed.has(candidate.id)));
+  const remaining = query.results.filter((candidate) => !dismissed.has(candidate.id));
+  const result = classifyOpenSanctionsCandidate(remaining[0]);
+  return remaining.length === 0
+    ? result
+    : {
+        ...result,
+        matches: remaining.slice(0, MATCHES_KEPT).map((candidate) => ({
+          id: candidate.id,
+          caption: candidate.caption ?? candidate.id,
+          score: Number(candidate.score.toFixed(3)),
+          topics: candidate.properties.topics ?? [],
+        })),
+      };
 }
 
 /**
@@ -346,8 +375,10 @@ async function applyScreening(cp: CounterpartyScreeningRow, dismissed?: Readonly
       last_screening_mode: plan.result.screeningMode,
       baseline_payment_limit: plan.baseline,
       payment_limit: plan.newLimit,
-      // The entity the verdict matched, which the card offers to dismiss (dismiss screening match R4).
+      // The entity the verdict matched, which the card offers to dismiss (dismiss screening match R4),
+      // and every match left to review with it (review every match R2).
       risk_entity_id: plan.result.matchedEntityId,
+      risk_matches: plan.result.matches && plan.result.matches.length > 0 ? plan.result.matches : null,
     })
     .eq("id", cp.id);
   if (update.error) throw new Error(update.error.message);

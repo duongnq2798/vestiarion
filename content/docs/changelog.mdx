@@ -4,6 +4,11 @@ Changes to the API and webhooks that affect an integration, newest first. Change
 
 - New decisions' `agentReasoning` in `/api/v1/invoices` and `/api/v1/milestones`, and `detail.decision.reasoning` in ledger entries, are written as 2 to 4 plain-English sentences, without the field names of the facts the agent was shown. Nothing about earlier records changes: the API and the ledger return what was stored.
 
+## 2026-10-02: One review dismisses every screening match
+
+- A `screening_match_dismissed` entry can now dismiss several matches at once: the ones the person reviewed together. Its `detail` gains `matchedEntities: [{ id, caption, score }]`, every match it dismissed. `matchedEntityId`, `matchedCaption` and `matchedScore` still name the counterparty's verdict match, the first in the list.
+- Screening now reads every candidate it needs. Previously, after five dismissals of one name, a re-screen could read `clear` while further matches were never looked at. Such a counterparty may now be screened `medium` or `high` again, with a `risk_level_changed` entry.
+
 ## 2026-10-02: A person decides a held milestone
 
 - **Milestones can be `closed`.** In `/api/v1/milestones`, `status` may be `closed`: a person closed the milestone without paying it, and it is never paid after. `?status=closed` lists them. Every milestone has two new fields, `null` unless it is closed:
