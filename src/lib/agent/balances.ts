@@ -164,6 +164,44 @@ export async function syncOnChainBalances(provider: ChainProvider, orgDb: OrgDb,
     }
   }
 
+  // A real USYC reserve (USYC live design R3): its balance is its USYC at the oracle's latest price,
+  // read from the chain like every other wallet's, never a figure the database keeps on its own.
+  const reserve = rows.find((a) => a.kind === "reserve" && !!a.circle_wallet_id);
+  if (provider.earnMode === "live" && provider.getEarnPosition && reserve) {
+    try {
+      const position = await provider.getEarnPosition(reserve.id);
+      // The fund's real yield, which prices every sweep (planTreasury), in place of a configured
+      // figure. Best effort: a yield that could not be worked out leaves the stored one.
+      if (typeof position.apy === "number") {
+        const res = await orgDb.from("accounts").update({ apy: position.apy }).eq("id", reserve.id);
+        if (res.error) console.error("syncOnChainBalances: USYC yield not recorded", res.error.message);
+      }
+      const stored = num(reserve.balance);
+      if (Math.abs(position.valueUsdc - stored) < 0.000001) {
+        outcomes.push({ kind: "unchanged", accountId: reserve.id, name: reserve.name, balance: stored });
+      } else {
+        let query = orgDb.from("accounts").update({ balance: position.valueUsdc }).eq("id", reserve.id);
+        if (options.compareAndSet) query = query.eq("balance", reserve.balance);
+        const res = await query.select("id");
+        if (res.error) throw new Error(res.error.message);
+        if (options.compareAndSet && (!res.data || res.data.length === 0)) {
+          outcomes.push({ kind: "superseded", accountId: reserve.id, name: reserve.name });
+        } else {
+          outcomes.push({
+            kind: "changed",
+            accountId: reserve.id,
+            name: reserve.name,
+            from: stored,
+            to: position.valueUsdc,
+            note: `${position.shares} USYC at ${position.price} USDC`,
+          });
+        }
+      }
+    } catch (err) {
+      outcomes.push({ kind: "failed", accountId: reserve.id, name: reserve.name, message: (err as Error).message });
+    }
+  }
+
   await recordSyncedAt(
     orgDb,
     outcomes.filter((o) => o.kind === "changed" || o.kind === "unchanged").map((o) => o.accountId),

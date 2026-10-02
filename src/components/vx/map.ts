@@ -468,6 +468,9 @@ export function treasuryLedgerDecision(entry: LedgerEntry): Decision {
   const amount = numberValue(decision?.amount) ?? 0;
   const earnMode = stringValue(entry.detail.earnMode);
   const executed = entry.detail.executed === true;
+  // A real USYC move's transaction (USYC live design R7): the deposit or the redemption.
+  const execution = record(entry.detail.execution);
+  const moveTx = stringValue(execution?.depositTxHash) ?? stringValue(execution?.redeemTxHash);
   const outcome: Outcome = action === "hold" ? "held" : earnMode === "live" && executed ? "recorded" : "simulated";
   const title = action === "sweep_to_usyc" ? "Sweep" : action === "redeem_from_usyc" ? "Redeem" : "Hold";
   const evidence = [
@@ -490,6 +493,7 @@ export function treasuryLedgerDecision(entry: LedgerEntry): Decision {
     reasoning: stringValue(decision?.reasoning) ?? entry.summary,
     evidence,
     decisionMode: stringValue(entry.detail.decisionMode),
+    txHash: earnMode === "live" && executed && moveTx?.startsWith("0x") ? moveTx : null,
     auditSeq: entry.seq,
     at: entry.ts,
   };

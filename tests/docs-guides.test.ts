@@ -103,6 +103,9 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["Get started", CHECKLIST],
   ],
   "guides/go-live": [
+    ["USYC reserve", "src/components/UsycReservePanel.tsx"],
+    ["Turn on", "src/components/UsycReservePanel.tsx"],
+    ["usyc_reserve_enabled", "src/lib/platform/usyc-reserve.ts"],
     ["Settings", APP_NAV],
     ["Get started", CHECKLIST],
     ["Read the guide", CHECKLIST],

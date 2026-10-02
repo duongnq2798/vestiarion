@@ -101,3 +101,35 @@ describe("getChainProvider — a live workspace's provider offers everything its
     expect(balance).toHaveBeenCalledWith("operating", "EURC");
   });
 });
+
+describe("getChainProvider — the USYC reserve (USYC live design R1)", () => {
+  const readable = (usycLive: boolean) => ({ ...config, chain: { ...config.chain, circleApiKey: "placeholder-api-key", circleEntitySecret: "placeholder-entity-secret", usycLive } });
+  const inWorkspace = <T,>(usycLive: boolean, fn: () => T) => runWith({ ...orgTestContext({ config, client: fakeSupabase().client, orgId: ORG }), config: readable(usycLive) }, fn);
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("is real USYC, through the live leg, once the workspace turned it on", async () => {
+    const result = { txRef: "0xd", positionValue: 10, apy: 0 };
+    const deposit = vi.spyOn(LiveProvider.prototype, "depositToEarn").mockResolvedValue(result);
+    const position = vi.spyOn(LiveProvider.prototype, "getEarnPosition").mockResolvedValue({ shares: 1, valueUsdc: 1.13, price: 1.13 });
+    await inWorkspace(true, async () => {
+      expect(chainModes()).toEqual({ mode: "live", earnMode: "live" });
+      const params = { accountId: "op", reserveAccountId: "res", key: "k", amount: 10 };
+      expect(await getChainProvider().depositToEarn(params)).toBe(result);
+      expect(await getChainProvider().getEarnPosition!("res")).toEqual({ shares: 1, valueUsdc: 1.13, price: 1.13 });
+    });
+    expect(deposit).toHaveBeenCalledWith({ accountId: "op", reserveAccountId: "res", key: "k", amount: 10 });
+    expect(position).toHaveBeenCalledWith("res");
+  });
+
+  it("stays simulated, never touching the live leg, until it is turned on", async () => {
+    const deposit = vi.spyOn(LiveProvider.prototype, "depositToEarn");
+    await inWorkspace(false, async () => {
+      expect(chainModes()).toEqual({ mode: "live", earnMode: "simulate" });
+      await expect(getChainProvider().getEarnPosition!("res")).rejects.toThrow("The USYC reserve is simulated");
+    });
+    expect(deposit).not.toHaveBeenCalled();
+  });
+});

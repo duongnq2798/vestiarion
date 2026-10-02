@@ -6,6 +6,8 @@ import { db, unwrap } from "../dal";
 import type {
   BalanceSnapshot,
   ChainProvider,
+  EarnDepositParams,
+  EarnPosition,
   EarnResult,
   InboundTransfer,
   Stablecoin,
@@ -23,6 +25,20 @@ import { burnIntent, burnIntentTypedData, estimateGateway, gatewaySalt, gatewayT
 import { payeeChain, paidAcrossChains } from "../payee-chains";
 import { toBaseUnits } from "../fx/quote";
 import type { ChainConfig } from "../config";
+import {
+  fromUnits,
+  priceValue,
+  readUsycApy,
+  readUsycPrice,
+  readUsycShares,
+  sharesToRedeem,
+  sharesValue,
+  toUnits as usycUnits,
+  USYC_TELLER,
+  usycStepKey,
+  usycSubscriptionsOpen,
+  UsycSubscriptionsClosedError,
+} from "./usyc";
 
 export type LiveProviderClient = Pick<
   CircleDeveloperControlledWalletsClient,
@@ -547,16 +563,76 @@ export class LiveProvider implements ChainProvider {
     return this.bridgeResult(providerTxId, settlement, { chain: transaction.blockchain, providerMode: "live", destinationChain: null, bridgeFeeUsdc: null }, mint?.mintTxHash ?? null, started);
   }
 
-  async depositToEarn(): Promise<EarnResult> {
-    throw new Error(
-      "EarnKit (USYC) live integration needs KIT_KEY plus a selected vault id — see src/lib/circle/liveProvider.ts"
-    );
+  /**
+   * A sweep into real USYC (USYC live design R2, R4, R6): the operating wallet approves the Teller for
+   * the USDC, then deposits it with the reserve wallet as receiver, each call under its own key and
+   * waited for. Refused before anything is sent while USYC cannot be bought.
+   */
+  async depositToEarn(params: EarnDepositParams): Promise<EarnResult> {
+    const { operating, reserve, key } = await this.usycAccounts(params);
+    const read = { rpcUrl: this.arcRpcUrl, fetch: this.fetch };
+    if (!(await usycSubscriptionsOpen(read))) throw new UsycSubscriptionsClosedError();
+    const units = usycUnits(params.amount).toString();
+    const approve = await this.usycCall(operating.walletId, { contractAddress: ARC_TESTNET_USDC, abiFunctionSignature: "approve(address,uint256)", abiParameters: [USYC_TELLER, units] }, `${key}/approve`);
+    const deposit = await this.usycCall(operating.walletId, { contractAddress: USYC_TELLER, abiFunctionSignature: "deposit(uint256,address)", abiParameters: [units, reserve.address] }, `${key}/deposit`);
+    const price = await readUsycPrice(read);
+    const shares = (BigInt(units) * 10n ** 18n) / price;
+    return {
+      txRef: deposit,
+      positionValue: params.amount,
+      apy: 0,
+      execution: { approveTxHash: approve, depositTxHash: deposit, shares: fromUnits(shares), price: priceValue(price) },
+    };
   }
 
-  async withdrawFromEarn(): Promise<EarnResult> {
-    throw new Error(
-      "EarnKit (USYC) live integration needs KIT_KEY plus a selected vault id — see src/lib/circle/liveProvider.ts"
+  /**
+   * A redemption from real USYC (R2, R5, R6): the reserve wallet redeems the whole shares that cover
+   * the USDC asked, never more than it holds, with the operating wallet as receiver.
+   */
+  async withdrawFromEarn(params: EarnDepositParams): Promise<EarnResult> {
+    const { operating, reserve, key } = await this.usycAccounts(params);
+    const read = { rpcUrl: this.arcRpcUrl, fetch: this.fetch };
+    const [price, held] = await Promise.all([readUsycPrice(read), readUsycShares(reserve.address, read)]);
+    if (held === 0n) throw new Error("The reserve wallet holds no USYC to redeem");
+    const shares = sharesToRedeem(usycUnits(params.amount), price, held);
+    const redeem = await this.usycCall(
+      reserve.walletId,
+      { contractAddress: USYC_TELLER, abiFunctionSignature: "redeem(uint256,address,address)", abiParameters: [shares.toString(), operating.address, reserve.address] },
+      `${key}/redeem`
     );
+    return {
+      txRef: redeem,
+      positionValue: fromUnits(sharesValue(held - shares, price)),
+      apy: 0,
+      execution: { redeemTxHash: redeem, shares: fromUnits(shares), price: priceValue(price) },
+    };
+  }
+
+  /** The reserve's USYC and its USDC value at the oracle's latest price (R3). */
+  async getEarnPosition(reserveAccountId: string): Promise<EarnPosition> {
+    const reserve = await this.account(reserveAccountId);
+    if (!reserve.address) throw new Error(`Account ${reserveAccountId} has no address`);
+    const read = { rpcUrl: this.arcRpcUrl, fetch: this.fetch };
+    const [price, shares, apy] = await Promise.all([readUsycPrice(read), readUsycShares(reserve.address, read), readUsycApy(read).catch(() => null)]);
+    return { shares: fromUnits(shares), valueUsdc: fromUnits(sharesValue(shares, price)), price: priceValue(price), apy };
+  }
+
+  private async usycAccounts(params: EarnDepositParams) {
+    if (!params.reserveAccountId || !params.key) throw new Error("A USYC move needs the reserve account and a key");
+    const [operating, reserve] = await Promise.all([this.account(params.accountId), this.account(params.reserveAccountId)]);
+    if (!operating.address || !reserve.address) throw new Error("The operating and reserve wallets need addresses for USYC");
+    return { operating: { ...operating, address: operating.address }, reserve: { ...reserve, address: reserve.address }, key: params.key };
+  }
+
+  /** One USYC call, sent under its step's key and waited for; its transaction hash, or a throw saying what Circle reported. */
+  private async usycCall(walletId: string, call: ContractCall, seed: string): Promise<string> {
+    const txId = await this.execute(walletId, call, usycStepKey(seed), undefined);
+    const { status, transaction } = await awaitSettlement(this.client, txId);
+    if (status !== "confirmed" || !transaction?.txHash) {
+      const name = call.abiFunctionSignature.split("(")[0];
+      throw new Error(`${name} ${status === "failed" ? `failed (${transaction?.state ?? "unknown"})` : "did not confirm in time"} on Arc testnet`);
+    }
+    return transaction.txHash;
   }
 
   getBalance(accountId: string): Promise<BalanceSnapshot> {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { UsycSubscriptionsClosedError } from "@/lib/circle/usyc";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { db } from "@/lib/dal";
@@ -142,7 +143,7 @@ describe("heldBecausePausedDetail — the ledger marker (D6)", () => {
  */
 class SpyProvider implements ChainProvider {
   readonly mode = "simulate" as const;
-  readonly earnMode = "simulate" as const;
+  readonly earnMode: "simulate" | "live" = "simulate";
   readonly estimatedFeeUsd = 0.01;
   transferCalls: TransferParams[] = [];
   depositCalls: EarnDepositParams[] = [];
@@ -262,7 +263,7 @@ function confirmedTransferResult(): TransferResult {
  * payment happened, then something else failed" tests below. */
 class ConfirmingProvider implements ChainProvider {
   readonly mode = "live" as const;
-  readonly earnMode = "simulate" as const;
+  readonly earnMode: "simulate" | "live" = "simulate";
   readonly estimatedFeeUsd = 0.01;
   async transfer(): Promise<TransferResult> {
     return confirmedTransferResult();
@@ -491,5 +492,57 @@ describe("moveTreasuryIfNotPaused — the treasury stage's real call site", () =
 
     expect(outcome).toEqual({ executed: false, executionNote: null, heldBecausePaused: false });
     expect(fake.requests.some((r) => r.path === "/rest/v1/rpc/agent_paused")).toBe(false);
+  });
+});
+
+/**
+ * A real USYC reserve (docs/superpowers/specs/2026-10-02-usyc-live-design.md R2–R7): the move names
+ * the reserve and a key from the cycle, records its transactions, reads both balances back from the
+ * chain, and a sweep refused because USYC cannot be bought now is not executed, saying why.
+ */
+describe("moveTreasuryIfNotPaused — a real USYC reserve", () => {
+  const ctxBase = { operatingAccountId: "operating-1", reserveAccountId: "reserve-1", operatingBalance: 1000, reserveBalance: 500, moveKey: "cycle-9" };
+  const EXECUTION = { approveTxHash: "0xa", depositTxHash: "0xd", shares: 263.4, price: 1.138897 };
+
+  class LiveEarn extends SpyProvider {
+    readonly earnMode = "live" as const;
+    constructor(private readonly closed = false) {
+      super();
+    }
+    async depositToEarn(params: EarnDepositParams): Promise<EarnResult> {
+      this.depositCalls.push(params);
+      if (this.closed) throw new UsycSubscriptionsClosedError();
+      return { txRef: "0xd", positionValue: params.amount, apy: 0, execution: EXECUTION };
+    }
+    async getBalance(): Promise<BalanceSnapshot> {
+      return { accountId: "operating-1", chain: "ARC-TESTNET", token: "USDC", balance: 700 };
+    }
+    async getEarnPosition() {
+      return { shares: 702.5, valueUsdc: 800.08, price: 1.138897 };
+    }
+  }
+  const agentRunning = () => fakeSupabase((r) => (r.path === "/rest/v1/rpc/agent_paused" ? { body: false } : { body: [] }));
+
+  it("sweeps with the reserve and a key from the cycle, keeps the transactions, and reads both balances back", async () => {
+    const provider = new LiveEarn();
+    const fake = agentRunning();
+    const outcome = await runWith(orgTestContext({ config, client: fake.client, orgId: ORG }), () =>
+      moveTreasuryIfNotPaused({ action: "sweep_to_usyc", amount: 300, reasoning: "idle cash" }, { db: db(), provider, ...ctxBase })
+    );
+    expect(outcome).toEqual({ executed: true, executionNote: null, heldBecausePaused: false, execution: EXECUTION });
+    expect(provider.depositCalls).toEqual([{ accountId: "operating-1", reserveAccountId: "reserve-1", key: "cycle-9/sweep_to_usyc", amount: 300 }]);
+    const balances = fake.requests.filter((r) => r.path === "/rest/v1/accounts" && r.method === "PATCH").map((r) => [r.params.get("id"), (r.body as { balance: number }).balance]);
+    expect(balances).toContainEqual(["eq.operating-1", 700]);
+    expect(balances).toContainEqual(["eq.reserve-1", 800.08]);
+  });
+
+  it("does not sweep while USYC cannot be bought, and says why rather than calling it a failure (R4)", async () => {
+    const provider = new LiveEarn(true);
+    const fake = agentRunning();
+    const outcome = await runWith(orgTestContext({ config, client: fake.client, orgId: ORG }), () =>
+      moveTreasuryIfNotPaused({ action: "sweep_to_usyc", amount: 300, reasoning: "idle cash" }, { db: db(), provider, ...ctxBase })
+    );
+    expect(outcome).toEqual({ executed: false, executionNote: new UsycSubscriptionsClosedError().message, heldBecausePaused: false });
+    expect(fake.requests.some((r) => r.path === "/rest/v1/accounts" && r.method === "PATCH")).toBe(false);
   });
 });

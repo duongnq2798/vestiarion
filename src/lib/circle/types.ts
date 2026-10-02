@@ -91,14 +91,41 @@ export interface TransferResult {
 }
 
 export interface EarnDepositParams {
+  /** The operating account: where a sweep's USDC comes from and a redemption's goes. */
   accountId: string;
   amount: number;
+  /** The reserve account a real USYC move buys into or sells from (USYC live design R2). */
+  reserveAccountId?: string;
+  /** The seed of the move's Circle idempotency keys, one per step, so a retried cycle never moves twice (R6). */
+  key?: string;
+}
+
+/** What a real USYC move did on Arc testnet (USYC live design R7). */
+export interface UsycExecution {
+  approveTxHash?: string | null;
+  depositTxHash?: string | null;
+  redeemTxHash?: string | null;
+  /** USYC bought or sold. */
+  shares: number;
+  /** USDC per USYC it moved at. */
+  price: number;
 }
 
 export interface EarnResult {
   txRef: string;
   positionValue: number;
   apy: number;
+  /** Set for a real USYC move. */
+  execution?: UsycExecution;
+}
+
+/** The reserve's USYC as the chain has it, and what it is worth in USDC at the oracle's latest price (R3). */
+export interface EarnPosition {
+  shares: number;
+  valueUsdc: number;
+  price: number;
+  /** The fund's yield a year from the oracle's history, or null when it could not be worked out. */
+  apy?: number | null;
 }
 
 export interface BalanceSnapshot {
@@ -170,6 +197,8 @@ export interface ChainProvider {
   reconcileTransfer(providerTxId: string): Promise<TransferResult>;
   depositToEarn(params: EarnDepositParams): Promise<EarnResult>;
   withdrawFromEarn(params: EarnDepositParams): Promise<EarnResult>;
+  /** The real reserve's position, read from the chain; only a provider whose `earnMode` is live has one (R3). */
+  getEarnPosition?(reserveAccountId: string): Promise<EarnPosition>;
   getBalance(accountId: string): Promise<BalanceSnapshot>;
   /**
    * One token's balance in an account's wallet (EURC invoices spec E5).

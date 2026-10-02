@@ -116,6 +116,19 @@ describe("orgConfig", () => {
   });
 });
 
+describe("orgConfig — the USYC reserve (USYC live design R1)", () => {
+  it("is real only for a live workspace whose owner turned it on", () => {
+    const live = { ...row(FOUNDING_ORG_ID), mode: "live" as const };
+    expect(orgConfig(base, { ...live, usyc_live_at: "2026-10-02T04:00:00Z" }, keys).config.chain.usycLive).toBe(true);
+    expect(orgConfig(base, { ...live, usyc_live_at: null }, keys).config.chain.usycLive).toBe(false);
+    expect(orgConfig(base, { ...live, mode: "sandbox", usyc_live_at: "2026-10-02T04:00:00Z" }, keys).config.chain.usycLive).toBe(false);
+  });
+
+  it("is read with the rest of the row", () => {
+    expect(ORG_SECRET_COLUMNS).toContain("usyc_live_at");
+  });
+});
+
 describe("orgConfig — credentialsUnreadable (R12)", () => {
   // A stored Circle secret this deployment cannot open must not look like
   // "no Circle credentials configured" — that is sandbox mode, and it would

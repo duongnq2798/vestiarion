@@ -16,10 +16,12 @@ export interface OrgRow {
   wallet_host: "own" | "hosted" | null;
   /** Public halves of this workspace's own retired ledger keys: `{ id, publicKeyPem, retiredAt }[]` (0035). */
   ledger_retired_keys?: unknown;
+  /** When an owner or admin turned the real USYC reserve on; null while it is simulated (0054). */
+  usyc_live_at?: string | null;
 }
 
 export const ORG_SECRET_COLUMNS =
-  "id, slug, name, mode, ledger_signing_key_enc, circle_api_key_enc, circle_entity_secret_enc, wallet_host, ledger_retired_keys";
+  "id, slug, name, mode, ledger_signing_key_enc, circle_api_key_enc, circle_entity_secret_enc, wallet_host, ledger_retired_keys, usyc_live_at";
 
 /** Why a hosted organization has no Circle credentials: this deployment lacks the hosted pair (H1, Review Focus 5). */
 export const HOSTED_NOT_CONFIGURED = "the hosted Circle account is not configured on this deployment";
@@ -175,6 +177,8 @@ export function orgConfig(
         credentialsUnreadable,
         hostedAvailable,
         walletHost,
+        // A live workspace whose owner turned the real reserve on (USYC live design R1).
+        usycLive: org.mode === "live" && Boolean(org.usyc_live_at),
       },
       ledgerSigningKey: open("ledger_signing_key_enc"),
       ledgerPublicKey: undefined,
