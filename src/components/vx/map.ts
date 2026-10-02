@@ -341,6 +341,9 @@ function invoiceGuardrail(
     return { rule: recorded, attempted: needed, limit: numberValue(payout?.gatewayBalanceUsdc) ?? 0, note: "the Gateway balance, which an earlier attempt's route requires" };
   }
   if (recorded === "bridge.unsupported_token") return { rule: recorded, attempted: amount, attemptedToken: currency, limit, limitToken: "USDC", note: "only USDC crosses chains" };
+  // The agent's spending limit (outflow budget spec §4): the USDC value against what the limit left.
+  const budget = recorded === "workspace.outflow_budget" ? budgetGuardrail(usdcValue ?? amount, detail) : null;
+  if (budget) return budget;
   if (currency !== "EURC") {
     return { rule: inferredRule, attempted: amount, limit, note: risk === "high" ? "risk tier high" : "amount above screened limit" };
   }
@@ -372,6 +375,29 @@ function invoiceGuardrail(
     limit,
     limitToken: "USDC",
     note: risk === "high" ? "risk tier high" : "USDC value above screened limit",
+  };
+}
+
+/**
+ * The band for a payment held for the agent's spending limit (outflow budget spec §4): what it
+ * would have sent, in USDC, against what the limit left, and which figure stopped it after what.
+ * Null when the decision recorded no limit.
+ */
+function budgetGuardrail(attemptedUsdc: number, detail: Record<string, unknown> | undefined): Guardrail | null {
+  const room = record(detail?.outflowBudget);
+  if (!room) return null;
+  const week = room.binding === "week";
+  const figure = numberValue(week ? room.weeklyUsdc : room.dailyUsdc) ?? 0;
+  const spent = numberValue(week ? room.spentThisWeek : room.spentToday) ?? 0;
+  return {
+    rule: "workspace.outflow_budget",
+    attempted: attemptedUsdc,
+    attemptedToken: "USDC",
+    limit: numberValue(room.remaining) ?? 0,
+    limitToken: "USDC",
+    note: week
+      ? `left of the ${fmt(figure)} USDC 7-day spending limit; ${fmt(spent)} USDC already paid in the last 7 days`
+      : `left of the ${fmt(figure)} USDC daily spending limit; ${fmt(spent)} USDC already paid today`,
   };
 }
 
@@ -413,7 +439,10 @@ export function milestoneDecision(milestone: MilestoneRow, entries: LedgerEntry[
       ...(evidenceLink ? [{ label: "Evidence", value: evidenceLink.host, href: evidenceLink.href, state: "neutral" as const }] : []),
       { label: "Risk", value: risk, state: risk === "high" ? "missing" : "neutral" },
     ],
-    guardrail: guardrailBlocked ? { rule: risk === "high" ? "counterparty.high_risk" : "counterparty.payment_limit", attempted: milestone.amount, limit, note: risk === "high" ? "risk tier high" : "amount above screened limit" } : null,
+    guardrail: guardrailBlocked
+      ? (entry?.detail.guardrailRule === "workspace.outflow_budget" ? budgetGuardrail(milestone.amount, entry.detail) : null) ??
+        { rule: risk === "high" ? "counterparty.high_risk" : "counterparty.payment_limit", attempted: milestone.amount, limit, note: risk === "high" ? "risk tier high" : "amount above screened limit" }
+      : null,
     decisionMode: stringValue(entry?.detail.decisionMode),
     txHash: milestone.tx_ref?.startsWith("0x") ? milestone.tx_ref : null,
     auditSeq: entry?.seq,

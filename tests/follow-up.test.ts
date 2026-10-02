@@ -306,3 +306,43 @@ describe("planMilestoneFollowUp — a held milestone goes back to the agent when
     expect(plan.reason).toContain("No recorded decision facts");
   });
 });
+
+describe("follow-up — held only for the agent's spending limit (outflow budget R6)", () => {
+  const heldForBudget: DecisionFacts = { ...facts, heldForBudgetUsdc: 1.5 };
+  const budgetHeld = (over: Partial<FrozenInvoice> = {}) => frozen({ status: "held", amount: 1.5, ...over });
+
+  it("reopens a payable once the limit has room for it again", () => {
+    const plan = planFollowUp(budgetHeld({ budgetRoom: 1.5 }), heldForBudget, NOW, config);
+    expect(plan.action).toBe("reopen");
+    expect(plan.changes).toEqual(["the agent's spending limit has room for it again (1.5 USDC left)"]);
+  });
+
+  it("reopens a payable once no limit is set", () => {
+    const plan = planFollowUp(budgetHeld({ budgetRoom: null }), heldForBudget, NOW, config);
+    expect(plan.changes).toEqual(["the agent's spending limit was removed"]);
+  });
+
+  it("waits while the limit still leaves less than it needs, or the room was not read", () => {
+    expect(planFollowUp(budgetHeld({ budgetRoom: 1.4 }), heldForBudget, NOW, config).action).toBe("wait");
+    expect(planFollowUp(budgetHeld(), heldForBudget, NOW, config).action).toBe("wait");
+  });
+
+  it("never reopens a payable held for another reason because the limit has room", () => {
+    expect(planFollowUp(budgetHeld({ budgetRoom: 100 }), facts, NOW, config).action).toBe("wait");
+  });
+
+  const atDecision: MilestoneDecisionFacts = { riskLevel: "clear", paymentLimit: 10, verificationSource: "PR #84", heldBecausePaused: false, heldForBudget: true };
+  const held = (over: Partial<HeldMilestone> = {}): HeldMilestone => ({
+    id: "ms-1", title: "Thumbnails", amount: 2, riskLevel: "clear", paymentLimit: 10, verificationSource: "PR #84", ...over,
+  });
+
+  it("reopens a milestone once the limit has room for it, and waits until then", () => {
+    expect(planMilestoneFollowUp(held({ budgetRoom: 2 }), atDecision)).toMatchObject({
+      action: "reopen",
+      changes: ["the agent's spending limit has room for it again (2 USDC left)"],
+    });
+    expect(planMilestoneFollowUp(held({ budgetRoom: null }), atDecision).changes).toEqual(["the agent's spending limit was removed"]);
+    expect(planMilestoneFollowUp(held({ budgetRoom: 1.99 }), atDecision).action).toBe("wait");
+    expect(planMilestoneFollowUp(held({ budgetRoom: 50 }), { ...atDecision, heldForBudget: false }).action).toBe("wait");
+  });
+});

@@ -17,7 +17,8 @@ import { CycleJournal, messageOf, type CycleStage } from "./journal";
 import { syncOnChainBalances, type BalanceSync } from "./balances";
 import { CycleRunningError, hasRunningCycle } from "./cycle-running";
 import { decide } from "./decide";
-import { enforceApGuardrails } from "./guardrails";
+import { budgetClause, enforceApGuardrails } from "./guardrails";
+import { budgetGate, countedUsdc, exceedsBudget, HELD_FOR_BUDGET, type BudgetGate, type BudgetRoom } from "./outflow-budget";
 import { addressUnconfirmed, payeeNotReady } from "../counterparty-address";
 import { SandboxCapReachedError } from "./sandbox-cap";
 import { AgentPausedError, HELD_BECAUSE_PAUSED, heldBecausePausedDetail, pausedPaymentNote, pausedTreasuryNote } from "./pause";
@@ -329,8 +330,11 @@ export async function applyFollowUp(
  * `held`, like the invoices': a person who revoked the verification meanwhile
  * keeps their change, and nothing is recorded for that milestone. Exported to
  * be tested without a full cycle.
+ *
+ * A milestone held only for the spending limit is reopened once the limit has
+ * room for it (outflow budget spec R6); `budget` is read only when one is.
  */
-export async function followUpHeldMilestones(orgDb: OrgDb): Promise<CycleLogLine[]> {
+export async function followUpHeldMilestones(orgDb: OrgDb, budget?: BudgetGate): Promise<CycleLogLine[]> {
   const held = unwrap(
     await orgDb
       .from("milestones")
@@ -366,8 +370,12 @@ export async function followUpHeldMilestones(orgDb: OrgDb): Promise<CycleLogLine
       paymentLimit: observed.paymentLimit == null ? null : num(observed.paymentLimit),
       verificationSource: (observed.verificationSource as string | null | undefined) ?? null,
       heldBecausePaused: execution?.heldBecause === HELD_BECAUSE_PAUSED,
+      heldForBudget: execution?.heldBecause === HELD_FOR_BUDGET,
     });
   }
+  // What the limit leaves now, read only when a milestone waits on it.
+  const budgetHeld = [...factsByMilestone.values()].some((facts) => facts.heldForBudget);
+  const room = budgetHeld ? await (budget ?? budgetGate(orgDb)).room() : undefined;
 
   const lines: CycleLogLine[] = [];
   for (const row of held) {
@@ -380,6 +388,7 @@ export async function followUpHeldMilestones(orgDb: OrgDb): Promise<CycleLogLine
         riskLevel: row.counterparties.risk_level,
         paymentLimit: row.counterparties.payment_limit == null ? null : num(row.counterparties.payment_limit),
         verificationSource: row.verification_source,
+        ...(room !== undefined ? { budgetRoom: room === null ? null : room.remaining } : {}),
       },
       factsByMilestone.get(row.id) ?? null
     );
@@ -1143,6 +1152,8 @@ async function decideApPayable(
     gatewayQuote: (chain: string, amount: number) => Promise<GatewayQuote | null>;
     /** A swap to fund a EURC payable the wallet is short of (EURC swap spec S1, S6); null when this workspace cannot make one. */
     swap: { quote: (usdcIn: number) => Promise<SwapQuote>; run: SwapRunner } | null;
+    /** The agent's spending limit as this cycle has it (outflow budget spec R5). */
+    budget: BudgetGate;
   }
 ): Promise<{ status: string; scheduledFor: string | null; operatingBalance: number | null; line: CycleLogLine }> {
   const { db, provider, operating, operatingBalance, history, metrics } = ctx;
@@ -1473,6 +1484,11 @@ async function decideApPayable(
   // still means the policy itself decided, so there was nothing to compare.
   const agreedWithReference = sameActionAsReference === null ? null : sameApDecision(decision, reference);
 
+  // The agent's spending limit (outflow budget spec R4): read only for a
+  // payment now, since a schedule is decided again on its day. A read that
+  // fails throws, and the stage pays nothing (R8).
+  const outflowBudget = decision.action === "pay" ? await ctx.budget.room() : null;
+
   // A payment the agent commits to must be one it would be allowed to make:
   // `schedule` is refused exactly as `pay` is, against the full amount.
   // For EURC, what counts against the USDC limit is the USDC value (P3), and
@@ -1498,7 +1514,9 @@ async function decideApPayable(
             swap: { requested: decision.fundWithSwap === true, offer: swapOffer, usdcBalance: operatingBalance, usdcDueWithin7Days },
           }
         : null,
+    outflowBudget,
   });
+  const heldForBudget = guardrail.rule === "workspace.outflow_budget";
   metrics.recordDecisionMode(mode, agreedWithReference);
   let status = guardrail.status ?? STATUS_FOR_AP_ACTION[decision.action];
   let txRef: string | null = null;
@@ -1553,6 +1571,8 @@ async function decideApPayable(
       }
       // What left the wallet's EURC, so the next EURC payable this cycle sees it gone.
       if (isEurc && payment && (status === "paid" || status === "matched")) ctx.eurc.spent(payment.amountPaid);
+      // And what it counts against the spending limit, so the next payment this cycle sees it (R5).
+      if (payment && (status === "paid" || status === "matched")) ctx.budget.spend(countedUsdc(payment.amountPaid, currency, usdcValue, amount));
     }
   }
 
@@ -1601,6 +1621,8 @@ async function decideApPayable(
       guardrailBlocked,
       guardrailRule: guardrail.rule,
       currency,
+      // The spending limit a payment now was weighed against (outflow budget spec R4); absent with none set.
+      ...(outflowBudget ? { outflowBudget } : {}),
       // A payee on another chain: the route and the fee read for this decision (CCTP payouts X11).
       // A Gateway payout also records the Gateway balance it was weighed against.
       ...(crossChain
@@ -1695,6 +1717,8 @@ async function decideApPayable(
         // reasoning text — set only when it is, so it is unambiguous from
         // a hold for a missing operating account or a failed transfer.
         ...heldBecausePausedDetail(heldBecausePaused),
+        // The spending limit is why this held, which the follow-up stage reopens once it has room (R6).
+        ...(heldForBudget ? { heldBecause: HELD_FOR_BUDGET } : {}),
       },
     },
   });
@@ -1733,6 +1757,8 @@ export interface ApStageInput {
   quoteSwap?: (usdcIn: number) => Promise<SwapQuote>;
   /** Making swaps, and finishing those in flight (S6, S7); src/lib/fx/swap.ts unless a test passes its own. */
   swaps?: { run: SwapRunner; resumeAll: () => Promise<SwapSweep> };
+  /** The agent's spending limit, shared with the contractor stage (outflow budget spec R5); read from the workspace when absent. */
+  budget?: BudgetGate;
 }
 
 /** Makes a swap to fund one EURC payment (src/lib/fx/swap.ts `swapForPayment`, bound to the stage's wallet). */
@@ -1768,6 +1794,7 @@ export async function runApStage(input: ApStageInput): Promise<number> {
   let gatewayQuote: ((chain: string, amount: number) => Promise<GatewayQuote | null>) | undefined;
   let operatingBalance = input.operatingBalance;
   const now = new Date();
+  const budget = input.budget ?? budgetGate(db);
 
   // Read only when a EURC payable is decided, once per stage, and only live.
   let eurcHeld: number | null | undefined;
@@ -1972,6 +1999,7 @@ export async function runApStage(input: ApStageInput): Promise<number> {
       bridgeFee: input.bridgeFee ?? ((chain, amount) => irisBridgeFee(chain, amount)),
       gatewayQuote: gatewayQuote ??= input.gatewayQuote ?? gatewayQuoter(provider, db),
       swap: swaps ? { quote: quoteSwap, run: swaps.run } : null,
+      budget,
     });
     if (decided.operatingBalance !== null) operatingBalance = decided.operatingBalance;
     record(invoice.id, decided.status, decided.scheduledFor);
@@ -2666,6 +2694,11 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
 
   });
 
+  // The agent's spending limit (outflow budget spec R5): read once, on first
+  // use, and shared by the follow-up, AP and contractor stages, so each
+  // payment this cycle makes counts against the next.
+  const budget = budgetGate(db);
+
   await stage("follow_up", async () => {
   // ------------------------------------------------------- 1b. follow up
   // Runs after screening and before AP on purpose: a risk tier that moved this
@@ -2716,13 +2749,20 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
       const invoiceId = entry.detail.invoiceId as string | undefined;
       const observed = entry.detail.observed as Record<string, unknown> | undefined;
       if (!invoiceId || !observed || factsByInvoice.has(invoiceId)) continue;
+      const execution = entry.detail.execution as Record<string, unknown> | undefined;
       factsByInvoice.set(invoiceId, {
         poReference: (observed.poReference as string | null) ?? null,
         goodsReceived: observed.goodsReceived === true,
         riskLevel: String(observed.riskLevel ?? "unscreened"),
         paymentLimit: observed.paymentLimit == null ? null : num(observed.paymentLimit),
+        // Held only for the spending limit: the USDC it was weighed at (R6).
+        heldForBudgetUsdc:
+          execution?.heldBecause === HELD_FOR_BUDGET ? num(entry.detail.usdcValue ?? observed.amount) : null,
       });
     }
+    // What the limit leaves now, read only when something waits on it.
+    const budgetHeld = [...factsByInvoice.values()].some((facts) => facts.heldForBudgetUsdc != null);
+    const room = budgetHeld ? await budget.room() : undefined;
 
     const now = Date.now();
     for (const row of frozenRows) {
@@ -2740,6 +2780,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           riskLevel: row.counterparties.risk_level,
           paymentLimit:
             row.counterparties.payment_limit == null ? null : num(row.counterparties.payment_limit),
+          ...(room !== undefined ? { budgetRoom: room === null ? null : room.remaining } : {}),
         },
         factsByInvoice.get(row.id) ?? null,
         now,
@@ -2755,7 +2796,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
 
   // Held milestones whose facts changed go back to `verified`, which the
   // contractor stage below decides in this same cycle.
-  lines.push(...(await followUpHeldMilestones(db)));
+  lines.push(...(await followUpHeldMilestones(db, budget)));
 
   });
 
@@ -2785,6 +2826,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     reserveBalance: num(accounts.find((a) => a.kind === "reserve")?.balance),
     metrics,
     lines,
+    budget,
   });
 
   });
@@ -2924,14 +2966,23 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     let paymentExecution: PaymentExecution | null = null;
     let reasoning = decision.reasoning;
     let guardrailBlocked = false;
+    let guardrailRule: "counterparty.high_risk" | "counterparty.payment_limit" | "workspace.outflow_budget" | null = null;
     let heldBecausePaused = false;
+    let outflowBudget: BudgetRoom | null = null;
 
     if (decision.action === "release") {
+      // The spending limit, after the contractor's own checks (outflow budget spec R4).
+      outflowBudget = highRisk || overLimit ? null : await budget.room();
       if (highRisk || overLimit) {
         guardrailBlocked = true;
+        guardrailRule = highRisk ? "counterparty.high_risk" : "counterparty.payment_limit";
         reasoning += highRisk
           ? " [guardrail override: contractor is high risk — release refused]"
           : ` [guardrail override: amount exceeds the ${limit} USDC limit — release refused]`;
+      } else if (exceedsBudget(amount, outflowBudget)) {
+        guardrailBlocked = true;
+        guardrailRule = "workspace.outflow_budget";
+        reasoning += ` [guardrail override: releasing ${amount} USDC would take the agent past ${budgetClause(outflowBudget)}, ${outflowBudget.remaining} USDC left — release refused; decided again once the limit has room]`;
       } else if (operating) {
         const outcome = await releaseMilestoneIfNotPaused(
           { milestoneId: milestone.id, destination: payoutAddress(contractor.address, contractor.id), amount },
@@ -2943,6 +2994,8 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
         reasoning += outcome.reasoningSuffix;
         heldBecausePaused = outcome.heldBecausePaused;
         if (outcome.operatingBalance !== null) operatingBalance = outcome.operatingBalance;
+        // What it counts against the spending limit, so the next payment this cycle sees it (R5).
+        if (status === "paid" || status === "matched") budget.spend(amount);
       }
     }
 
@@ -2973,6 +3026,9 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
         referenceDecision: reference,
         agreedWithReference,
         guardrailBlocked,
+        guardrailRule,
+        // The spending limit a release was weighed against (outflow budget spec R4); absent with none set.
+        ...(outflowBudget ? { outflowBudget } : {}),
         observed: {
           amount,
           paymentLimit: limit,
@@ -2997,6 +3053,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           // D6: same marker as the AP stage, for the same reason — see the
           // comment there.
           ...heldBecausePausedDetail(heldBecausePaused),
+          ...(guardrailRule === "workspace.outflow_budget" ? { heldBecause: HELD_FOR_BUDGET } : {}),
         },
       },
     });

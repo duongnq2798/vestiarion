@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { milestoneDecision } from "@/components/vx/map";
+import type { LedgerEntry } from "@/lib/ledger";
 import type { MilestoneRow } from "@/lib/queries";
 
 /**
@@ -50,5 +51,19 @@ describe("milestoneDecision: evidence link", () => {
 
   it.each([null, "timesheet:kimai", "http://example.com/work", "javascript:alert(1)"])("shows no link for %j", (source) => {
     expect(evidenceRow(milestone({ verification_source: source }))).toBeUndefined();
+  });
+});
+
+describe("milestoneDecision: a release held for the agent's spending limit (outflow budget spec §4)", () => {
+  it("sets the amount against what the limit left, and names the rule", () => {
+    const entry = {
+      seq: 22, id: "e22", ts: "2026-10-02T09:00:00.000Z", actor: "agent", domain: "contractor", action: "milestone_release", summary: "",
+      detail: {
+        milestoneId: "ms-1", guardrailBlocked: true, guardrailRule: "workspace.outflow_budget", observed: { paymentLimit: 50, riskLevel: "clear" },
+        outflowBudget: { dailyUsdc: 20, weeklyUsdc: null, spentToday: 15, spentThisWeek: 15, remaining: 5, binding: "day" },
+      },
+    } as unknown as LedgerEntry;
+    const decision = milestoneDecision(milestone({ status: "held", verified: true }), [entry]);
+    expect(decision.guardrail).toEqual({ rule: "workspace.outflow_budget", attempted: 12.5, attemptedToken: "USDC", limit: 5, limitToken: "USDC", note: "left of the 20.00 USDC daily spending limit; 15.00 USDC already paid today" });
   });
 });

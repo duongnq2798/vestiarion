@@ -250,6 +250,44 @@ describe("followUpHeldMilestones — a held milestone goes back to the agent whe
     expect(lines).toEqual([]);
   });
 
+  it("reopens a milestone held only for the spending limit once the limit has room for it, and leaves it while it has not", async () => {
+    const MILESTONE_D = "018f8ce0-1557-7b54-a931-4d777f6bc0d1";
+    const budgetHeld = [{ id: MILESTONE_D, title: "Docs", amount: "3", verification_source: "PR #87", counterparties: { risk_level: "clear", payment_limit: "5" } }];
+    const facts = [decision(MILESTONE_D, { riskLevel: "clear", paymentLimit: 5, verificationSource: "PR #87" }, { resultingStatus: "held", heldBecause: "outflow_budget" })];
+    const budgetFake = () =>
+      cycleFake((r) => {
+        if (r.path === "/rest/v1/milestones" && r.method === "GET") return { body: budgetHeld };
+        if (r.path === "/rest/v1/ledger_entries" && r.params.get("domain") === "eq.contractor") return { body: facts };
+        if (r.path === "/rest/v1/milestones" && r.method === "PATCH") return { body: [{ id: MILESTONE_D }] };
+        return undefined;
+      });
+    const gate = (remaining: number | null) => ({
+      room: vi.fn(async () =>
+        remaining === null ? null : { dailyUsdc: 10, weeklyUsdc: null, spentToday: 10 - remaining, spentThisWeek: 10 - remaining, remaining, binding: "day" as const }
+      ),
+      spend: vi.fn(),
+    });
+
+    const short = budgetFake();
+    expect(await short.run(() => followUpHeldMilestones(db(), gate(2)))).toEqual([]);
+    expect(milestonePatches(short.fake.requests)).toHaveLength(0);
+
+    const roomy = budgetFake();
+    const lines = await roomy.run(() => followUpHeldMilestones(db(), gate(3)));
+    expect(milestonePatches(roomy.fake.requests).map((p) => p.params.get("id"))).toEqual([`eq.${MILESTONE_D}`]);
+    expect(lines).toEqual([{ domain: "contractor", message: `Reopened 3 USDC milestone "Docs": the agent's spending limit has room for it again (3 USDC left)` }]);
+
+    const unlimited = budgetFake();
+    expect(await unlimited.run(() => followUpHeldMilestones(db(), gate(null)))).toHaveLength(1);
+  });
+
+  it("does not read the limit when no milestone waits on it", async () => {
+    const { run } = heldFake();
+    const budget = { room: vi.fn(), spend: vi.fn() };
+    await run(() => followUpHeldMilestones(db(), budget));
+    expect(budget.room).not.toHaveBeenCalled();
+  });
+
   it("reads nothing more when no milestone is held", async () => {
     const { fake, run } = cycleFake((r) => (r.path === "/rest/v1/milestones" ? { body: [] } : undefined));
     expect(await run(() => followUpHeldMilestones(db()))).toEqual([]);

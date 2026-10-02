@@ -172,6 +172,26 @@ describe("deriveCounterpartyHistories", () => {
     expect(histories.get("cp-1")).toEqual(inputs({ heldByOurPolicy: 3 }));
   });
 
+  it("never counts a payable or milestone held for the agent's spending limit against them (outflow budget spec)", () => {
+    const histories = deriveCounterpartyHistories(
+      [
+        {
+          domain: "ap",
+          action: "ap_pay",
+          detail: { invoiceId: "over-budget", guardrailBlocked: true, guardrailRule: "workspace.outflow_budget", currency: "USDC", observed: { amount: 30, paymentLimit: 100, riskLevel: "clear" } },
+        },
+        {
+          domain: "contractor",
+          action: "milestone_release",
+          detail: { milestoneId: "ms-over", guardrailBlocked: true, guardrailRule: "workspace.outflow_budget", observed: { amount: 3, paymentLimit: 10, riskLevel: "clear" } },
+        },
+      ],
+      { invoiceCounterparty: new Map([["over-budget", "cp-1"]]), milestoneCounterparty: new Map([["ms-over", "cp-1"]]) }
+    );
+    // Refused by code, as a payment over the counterparty's own limit is: neither paid nor held against them.
+    expect(histories.get("cp-1")).toEqual(inputs());
+  });
+
   it("counts a payment the reconcile later confirmed as paid, and one still pending as nothing yet", () => {
     const histories = deriveCounterpartyHistories(
       [

@@ -17,6 +17,8 @@ export const PERMISSIONS = {
   "records.write": ["owner", "admin"],
   "agent.run_cycle": ["owner", "admin"],
   "agent.resume": ["owner", "admin"],
+  // The agent's spending limit: loosening it is as deliberate as resuming the agent.
+  "agent.budget": ["owner", "admin"],
   "members.manage": ["owner", "admin"],
   "api_keys.manage": ["owner", "admin"],
   "webhooks.manage": ["owner", "admin"],

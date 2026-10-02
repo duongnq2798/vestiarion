@@ -49,6 +49,11 @@ export interface FrozenInvoice {
   goodsReceived: boolean;
   riskLevel: string;
   paymentLimit: number | null;
+  /**
+   * What the agent's spending limit leaves now, in USDC; null when none is set. Absent when it was
+   * not read, because nothing waited on it (outflow budget spec R6).
+   */
+  budgetRoom?: number | null;
 }
 
 /** The facts as they stood when the decision was taken, from the ledger. */
@@ -57,6 +62,8 @@ export interface DecisionFacts {
   goodsReceived: boolean;
   riskLevel: string;
   paymentLimit: number | null;
+  /** Held only for the spending limit (`execution.heldBecause`): the USDC it was weighed at. Null otherwise. */
+  heldForBudgetUsdc?: number | null;
 }
 
 export type FollowUpAction = "reopen" | "escalate" | "wait";
@@ -86,6 +93,17 @@ function ageInDays(since: string | null, now: number): number | null {
 }
 
 const describeLimit = (value: number | null) => (value == null ? "none" : `${value} USDC`);
+
+/**
+ * A hold for the spending limit ends when the limit has room for what was held: a new day, a
+ * higher figure, or no limit (outflow budget spec R6). Null while it still does not, or while the
+ * room was not read.
+ */
+function budgetRoomChange(room: number | null | undefined, needed: number): string | null {
+  if (room === undefined) return null;
+  if (room === null) return "the agent's spending limit was removed";
+  return room + 0.0000005 >= needed ? `the agent's spending limit has room for it again (${room} USDC left)` : null;
+}
 
 /**
  * Which of the facts the decision rested on have moved since. Only these four
@@ -152,6 +170,8 @@ export function planFollowUp(
     },
     atDecision
   );
+  const budgetChange = atDecision.heldForBudgetUsdc != null ? budgetRoomChange(invoice.budgetRoom, atDecision.heldForBudgetUsdc) : null;
+  if (budgetChange) changes.push(budgetChange);
 
   if (changes.length > 0) {
     return {
@@ -214,6 +234,8 @@ export interface HeldMilestone {
   riskLevel: string;
   paymentLimit: number | null;
   verificationSource: string | null;
+  /** What the agent's spending limit leaves now; null with none set; absent when not read (outflow budget spec R6). */
+  budgetRoom?: number | null;
 }
 
 /** What the milestone decision rested on, from its ledger entry's `observed` and `execution`. */
@@ -223,6 +245,8 @@ export interface MilestoneDecisionFacts {
   verificationSource: string | null;
   /** Held only because the agent was paused (`execution.heldBecause`), not by the model or a guardrail. */
   heldBecausePaused: boolean;
+  /** Held only for the agent's spending limit (`execution.heldBecause`). */
+  heldForBudget?: boolean;
 }
 
 export interface MilestoneFollowUpPlan {
@@ -261,6 +285,8 @@ export function planMilestoneFollowUp(milestone: HeldMilestone, atDecision: Mile
   if (atDecision.heldBecausePaused) {
     changes.push("the agent was paused when it was held, and is running again");
   }
+  const budgetChange = atDecision.heldForBudget ? budgetRoomChange(milestone.budgetRoom, milestone.amount) : null;
+  if (budgetChange) changes.push(budgetChange);
 
   if (changes.length > 0) {
     return {

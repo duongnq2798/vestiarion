@@ -1,5 +1,21 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-02: The agent's spending limit
+
+- An owner or admin can set what the agent may pay on its own per UTC day and per 7 days, in USDC. A payment past either is held for a person.
+- **New value of `guardrailRule`, `workspace.outflow_budget`**, on an `ap_pay` or `milestone_release` entry: paying it would have taken the agent past its limit.
+  - The entry's `execution.heldBecause` is `outflow_budget`.
+  - A payable goes to Approvals as `held`. A milestone stays `held` until the limit has room for it.
+- **New field `outflowBudget`** on an `ap_pay` or `milestone_release` entry, present when a limit is set: `{ dailyUsdc, weeklyUsdc, spentToday, spentThisWeek, remaining, binding }`.
+  - It is what the limit left when the payment was weighed.
+  - `binding` is `day` or `week`, whichever figure left less.
+- **Milestone decision entries now carry `guardrailRule`**: `counterparty.high_risk`, `counterparty.payment_limit`, `workspace.outflow_budget`, or `null`.
+- **New ledger action `agent_budget_changed`**, in the `system` domain, appended when someone changes the limit.
+  - Its `detail` is `{ by, from, to }`. `from` and `to` are each `{ dailyUsdc, weeklyUsdc }`, and `null` means no figure.
+- What counts against the limit is what the agent's own `ap_pay` and `milestone_release` decisions sent: entries whose `execution.resultingStatus` is `paid` or `matched`, at their USDC value. A payment a person approves does not count.
+- `invoice_reopened` and `milestone_reopened` entries can list the change "the agent's spending limit has room for it again" or "the agent's spending limit was removed".
+- An event cycle's `detail.events` can include **`budget_raised`**: someone raised or removed a figure of the limit.
+
 ## 2026-10-01: Receivables paid on Arc
 
 - **New ledger action `pay_link_created`**, in the `ar` domain: an owner or admin made a link for a client to pay a receivable. Its `detail` is `{ by, invoiceId, linkId }`.

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { enforceApGuardrails } from "@/lib/agent/guardrails";
 import type { DuplicateMatch } from "@/lib/agent/duplicates";
+import type { BudgetRoom } from "@/lib/agent/outflow-budget";
 
 describe("AP execution guardrails", () => {
   it("refuses a model pay verdict above a screened-down limit", () => {
@@ -295,5 +296,40 @@ describe("a EURC payment the wallet is short of, and the swap that could fund it
   it("still holds a payment whose EURC could not be read, swap or not", () => {
     const result = enforceApGuardrails({ ...base, eurcShort: { balance: null, needed: 2, swap: swap() } });
     expect(result).toMatchObject({ blocked: true, rule: "treasury.insufficient_eurc" });
+  });
+});
+
+describe("the agent's spending limit (outflow budget R4)", () => {
+  const room = (overrides: Partial<BudgetRoom> = {}): BudgetRoom => ({
+    dailyUsdc: 100, weeklyUsdc: 300, spentToday: 80, spentThisWeek: 120, remaining: 20, binding: "day", ...overrides,
+  });
+  const base = { action: "pay" as const, reasoning: "Pay now.", amount: 25, riskLevel: "clear", paymentLimit: 50 };
+
+  it("holds a payment that would take the agent past what the day leaves, naming what was paid", () => {
+    const result = enforceApGuardrails({ ...base, outflowBudget: room() });
+    expect(result).toMatchObject({ blocked: true, status: "held", rule: "workspace.outflow_budget" });
+    expect(result.reasoning).toContain("25 USDC would take the agent past its 100 USDC daily spending limit: 80 USDC already paid today, 20 USDC left");
+    expect(result.reasoning).toContain("held for a person to approve");
+  });
+
+  it("names the 7-day figure when that is the one that stops it", () => {
+    const result = enforceApGuardrails({ ...base, outflowBudget: room({ spentToday: 0, spentThisWeek: 290, remaining: 10, binding: "week" }) });
+    expect(result.reasoning).toContain("past its 300 USDC 7-day spending limit: 290 USDC already paid in the last 7 days, 10 USDC left");
+  });
+
+  it("lets through a payment that fits exactly, and any payment with no limit set", () => {
+    expect(enforceApGuardrails({ ...base, amount: 20, outflowBudget: room() }).blocked).toBe(false);
+    expect(enforceApGuardrails({ ...base, outflowBudget: null }).blocked).toBe(false);
+  });
+
+  it("does not hold a schedule: the payable is decided again on its day", () => {
+    expect(enforceApGuardrails({ ...base, action: "schedule", outflowBudget: room({ remaining: 0 }) }).blocked).toBe(false);
+  });
+
+  it("names a counterparty's own limit first, and holds before any EURC swap is made", () => {
+    expect(enforceApGuardrails({ ...base, amount: 60, outflowBudget: room() }).rule).toBe("counterparty.payment_limit");
+    const swap = { requested: true, offer: { usdcIn: 26, costPercent: 0.1 }, usdcBalance: 200, usdcDueWithin7Days: 0 };
+    const result = enforceApGuardrails({ ...base, currency: "EURC", fxAvailable: true, eurcShort: { balance: 0, needed: 22, swap }, outflowBudget: room() });
+    expect(result.rule).toBe("workspace.outflow_budget");
   });
 });
