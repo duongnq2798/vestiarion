@@ -132,7 +132,7 @@ export default function ApprovalCard({
           </div>
         </CardHeader>
         <CardContent>
-          <p className="text-reasoning text-ink-2">{payable.reasoning?.trim() || "The agent recorded no reasoning."}</p>
+          <p className="text-reasoning text-ink-2">{payable.explanation || "The agent recorded no reasoning."}</p>
           <p className="mt-2 min-w-0 truncate text-xs text-ink-3" title={payable.address ?? undefined}>
             Pays to{" "}
             {payable.address ? <span className="font-mono text-ink-2">{payable.address}</span> : "no address set"}

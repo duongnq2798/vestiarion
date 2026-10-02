@@ -154,6 +154,8 @@ function approvalsFake(options: {
   ledgerFails?: boolean;
   /** The counterparty row the address confirmation reads; none by default. */
   counterparty?: Record<string, unknown>;
+  /** The ledger entries about the listed invoices, as `ledger_entries_for_targets` returns them; none by default. */
+  ledgerTargets?: Array<Record<string, unknown>>;
 } = {}) {
   const intents = options.intents ?? [];
   const eq = (request: RecordedRequest, column: string) => request.params.get(column)?.match(/^eq\.(.+)$/)?.[1];
@@ -231,6 +233,7 @@ function approvalsFake(options: {
       const body = request.body as Record<string, unknown>;
       return { body: { ...invoiceRow(), status: "processing", reviewed_by: body.p_by, reviewed_at: "2026-09-29T00:00:00Z" } };
     }
+    if (request.path === "/rest/v1/rpc/ledger_entries_for_targets") return { body: options.ledgerTargets ?? [] };
     if (request.path === "/rest/v1/rpc/append_ledger_entry") {
       if (options.ledgerFails) return { status: 500, body: { message: "ledger unavailable" } };
       return {
@@ -1229,6 +1232,7 @@ describe("listWaitingPayables", () => {
         dueDate: "2026-10-05",
         status: "held",
         reasoning: "Held for manual review: over the daily limit.",
+        explanation: "Held for manual review: over the daily limit.",
         decidedAt: null,
         createdBy: CREATOR,
         reviewedAt: null,
@@ -1247,6 +1251,27 @@ describe("listWaitingPayables", () => {
     expect(listing?.params.get("direction")).toBe("eq.payable");
     expect(listing?.params.get("status")).toBe("in.(held,flagged,awaiting_info,processing)");
     expect(listing?.params.get("order")).toBe("due_date.asc");
+  });
+
+  it("explains reasoning that reads as a log from the facts its decision recorded, as a person reads it (plain reasoning R2)", async () => {
+    const technical = "Counterparty is riskLevel 'clear'; goodsReceived is true and duplicateMatchesTotal 0. [guardrail override: counterparty is high risk — pay refused before execution]";
+    const entry = {
+      seq: 9, id: "e9", ts: "2026-10-05T08:00:00Z", actor: "agent", domain: "ap", action: "ap_pay", summary: "",
+      detail: { invoiceId: INVOICE_ID, decision: { action: "pay" }, observed: { riskLevel: "medium", paymentLimit: 200, operatingBalance: 500, duplicateCheck: { matchesTotal: 0 } } },
+      body_hash: "00", signature: "00", prev_hash: null, hash: "00", signing_key_id: null,
+    };
+    const { run } = approvalsFake({
+      invoice: (r) => (r.params.get("id") ? undefined : { body: [invoiceRow({ agent_reasoning: technical, po_reference: "PO-7", goods_received: true })] }),
+      ledgerTargets: [entry],
+    });
+    const listed = await run(() => listWaitingPayables());
+    // What was stored stays as it was; only what a person reads changes.
+    expect(listed[0].reasoning).toBe(technical);
+    expect(listed[0].explanation).toBe(
+      "This invoice was due on the day the agent decided it. Acme Supplies has a screening match to review, and 150.00 USDC is within its 200.00 USDC limit. " +
+        "The purchase order PO-7 is on file and the goods were received. The operating wallet holds enough USDC to pay it. " +
+        "No duplicate or high-risk signals were found. The agent decided to pay it. Not paid: the counterparty is high risk."
+    );
   });
 
   it("reads each row's early-payment discount the way payInvoice applies it, so the approval dialog can say what will leave", async () => {

@@ -6,6 +6,7 @@ import { emailSettingsFromEnv, sendEmail } from "../email/send";
 import { waitingDigestEmail, type DigestItem } from "../email/waiting-digest";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { listMembers } from "../platform/members";
+import { presentReasoning } from "../reasoning-copy";
 
 /**
  * Telling the members who can decide payments which payables wait for them
@@ -190,7 +191,8 @@ export async function notifyWaitingDecisions(): Promise<{ sent: number; failed: 
       amount: invoice.amount,
       currency: invoice.currency,
       status: invoice.status,
-      reason: invoice.reasoning,
+      // As the approval card says it: plain sentences, never the model's field names (plain reasoning R4).
+      reason: presentReasoning(invoice.reasoning) || null,
       escalated: invoice.escalated,
     }));
     const origin = siteOrigin();

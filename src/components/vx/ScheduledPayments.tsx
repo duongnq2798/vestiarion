@@ -4,6 +4,7 @@ import type { InvoiceRow } from "@/lib/queries";
 import { Card } from "@/components/ui/Card";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Money, Reasoning } from "./Primitives";
+import { presentReasoning } from "@/lib/reasoning-copy";
 
 /** How many scheduled payables the console shows before the rest wait for the Invoices page. */
 const MAX_ROWS = 5;
@@ -45,7 +46,7 @@ export function scheduledPaymentRows(invoices: ReadonlyArray<InvoiceRow>): Sched
       date: invoice.scheduled_for,
       amount: amountToPay(invoice.amount, invoiceDiscount(invoice), new Date(invoice.scheduled_for)).amountPaid,
       currency: invoice.currency ?? "USDC",
-      reasoning: firstSentence(invoice.agent_reasoning ?? ""),
+      reasoning: firstSentence(presentReasoning(invoice.agent_reasoning)),
     }));
 }
 

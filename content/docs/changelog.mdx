@@ -1,5 +1,9 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-02: The agent's reasoning is written in plain English
+
+- New decisions' `agentReasoning` in `/api/v1/invoices` and `/api/v1/milestones`, and `detail.decision.reasoning` in ledger entries, are written as 2 to 4 plain-English sentences, without the field names of the facts the agent was shown. Nothing about earlier records changes: the API and the ledger return what was stored.
+
 ## 2026-10-02: A person decides a held milestone
 
 - **Milestones can be `closed`.** In `/api/v1/milestones`, `status` may be `closed`: a person closed the milestone without paying it, and it is never paid after. `?status=closed` lists them. Every milestone has two new fields, `null` unless it is closed:

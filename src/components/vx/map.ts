@@ -1,6 +1,7 @@
 import { committedState } from "@/lib/agent/duplicates";
 import { invoiceDiscount } from "@/lib/agent/payment-timing";
 import { utcDay } from "@/lib/copy";
+import { explainMilestone, explainPayable, explainTreasury, presentReasoning } from "@/lib/reasoning-copy";
 import type { LedgerEntry } from "@/lib/ledger";
 import type { CounterpartyRow, InvoiceRow, MilestoneRow, TreasuryActionRow } from "@/lib/queries";
 import type { Decision, Evidence, Guardrail, Outcome } from "./types";
@@ -181,9 +182,9 @@ function receivableDecision(invoice: InvoiceRow, entries: LedgerEntry[]): Decisi
         ? `it came from ${invoice.counterparty_name}'s address on file.`
         : `it is the only open receivable of that amount, and ${invoice.counterparty_name} was sent its pay link.`)
     : settled
-      ? invoice.agent_reasoning ?? `Marked received.`
+      ? presentReasoning(invoice.agent_reasoning) || `Marked received.`
       : invoice.status === "rejected"
-        ? invoice.agent_reasoning ?? "Rejected."
+        ? presentReasoning(invoice.agent_reasoning) || "Rejected."
         : `Waiting for ${invoice.counterparty_name} to pay. When the exact amount arrives in the operating wallet on Arc testnet, the agent matches it to this invoice.`;
 
   const evidence: Evidence[] = [{ label: "Due", value: new Date(invoice.due_date).toLocaleDateString("en-US"), state: "neutral" }];
@@ -215,6 +216,8 @@ export function invoiceDecision(invoice: InvoiceRow, counterparty: CounterpartyR
   if (invoice.direction === "receivable") return receivableDecision(invoice, entries);
   const entry = matchingEntry(entries, "invoiceId", invoice.id);
   const observed = record(entry?.detail.observed);
+  // The agent's own decision, with the facts it was made on: what its reasoning is explained from.
+  const decided = entries.find((candidate) => candidate.detail.invoiceId === invoice.id && record(candidate.detail.observed) !== undefined);
   const guardrailBlocked = entry?.detail.guardrailBlocked === true;
   const limit = numberValue(observed?.paymentLimit) ?? counterparty?.payment_limit ?? 0;
   const risk = stringValue(observed?.riskLevel) ?? counterparty?.risk_level ?? "unscreened";
@@ -243,7 +246,19 @@ export function invoiceDecision(invoice: InvoiceRow, counterparty: CounterpartyR
     token: currency,
     outcome,
     outcomeLabel: settledOn ? `Settled on ${settledOn}` : invoiceOutcomeLabel(invoice, guardrailBlocked),
-    reasoning: invoice.agent_reasoning ?? "The agent has not evaluated this invoice yet.",
+    reasoning:
+      presentReasoning(
+        invoice.agent_reasoning,
+        explainPayable({
+          name: invoice.counterparty_name,
+          amount: invoice.amount,
+          currency,
+          dueDate: invoice.due_date,
+          poReference: invoice.po_reference ?? null,
+          goodsReceived: invoice.goods_received === true,
+          entry: decided ? { ts: decided.ts, detail: decided.detail } : null,
+        })
+      ) || "The agent has not evaluated this invoice yet.",
     evidence: [
       { label: "PO", value: invoice.po_reference ?? "none", state: invoice.po_reference ? "ok" : "missing" },
       { label: "Goods received", value: invoice.goods_received ? "yes" : "no", state: invoice.goods_received ? "ok" : "missing" },
@@ -439,7 +454,9 @@ export function milestoneDecision(milestone: MilestoneRow, entries: LedgerEntry[
     token: "USDC",
     outcome: closed ? "recorded" : statusOutcome(milestone.status, milestone.tx_ref, guardrailBlocked),
     ...(closed ? { outcomeLabel: "Closed without paying" } : {}),
-    reasoning: milestone.agent_reasoning ?? "The agent is waiting for milestone verification.",
+    reasoning:
+      presentReasoning(milestone.agent_reasoning, explainMilestone({ name: milestone.contractor_name, amount: milestone.amount, entry: decided ? { detail: decided.detail } : null })) ||
+      "The agent is waiting for milestone verification.",
     evidence: [
       { label: "Verified by", value: verificationLabel, href: githubSource, state: milestone.verified ? "ok" : "missing" },
       { label: "Verified", value: milestone.verified ? "yes" : "not yet", state: milestone.verified ? "ok" : "missing" },
@@ -497,7 +514,7 @@ export function treasuryLedgerDecision(entry: LedgerEntry): Decision {
     token: "USDC",
     outcome,
     outcomeLabel: title === "Hold" ? "Held liquid" : undefined,
-    reasoning: stringValue(decision?.reasoning) ?? entry.summary,
+    reasoning: presentReasoning(stringValue(decision?.reasoning) ?? entry.summary, explainTreasury(entry.detail)) || entry.summary,
     evidence,
     decisionMode: stringValue(entry.detail.decisionMode),
     txHash: earnMode === "live" && executed && moveTx?.startsWith("0x") ? moveTx : null,
@@ -507,6 +524,7 @@ export function treasuryLedgerDecision(entry: LedgerEntry): Decision {
 }
 
 export function treasuryActionDecision(action: TreasuryActionRow): Decision {
+  const title = action.action === "sweep_to_usyc" ? "Sweep" : "Redeem";
   return {
     id: action.id,
     domain: "treasury",
@@ -515,7 +533,7 @@ export function treasuryActionDecision(action: TreasuryActionRow): Decision {
     amount: action.amount,
     token: "USDC",
     outcome: "simulated",
-    reasoning: action.reasoning,
+    reasoning: presentReasoning(action.reasoning) || `${title} of ${fmt(action.amount)} USDC, simulated.`,
     evidence: [],
     at: action.created_at,
   };
