@@ -72,11 +72,16 @@ function EmptyChart({ what }: { what: string }) {
   return <EmptyState compact title={`No ${what} recorded yet`} body="Run an agent cycle to populate this." />;
 }
 
+/**
+ * A chart's every reading, folded under it: newest first, in a frame of its own height that scrolls under a
+ * header that stays, so opening a table of fifty cycles never stretches the page or the card beside it.
+ */
 function DetailsTable({ summary, headers, rows }: {
   summary: string;
   headers: string[];
   rows: ReactNode[][];
 }) {
+  const newestFirst = [...rows].reverse();
   return (
     <Disclosure
       variant="bare"
@@ -90,18 +95,21 @@ function DetailsTable({ summary, headers, rows }: {
         </span>
       }
     >
-      <Table label={summary} className="min-w-[34rem] text-xs">
+      <p className="mb-2 text-xs text-ink-3">
+        {rows.length} {rows.length === 1 ? "row" : "rows"}, newest first.
+      </p>
+      <Table label={summary} className="min-w-[34rem] text-xs" containerClassName="max-h-80 overflow-auto rounded-lg border border-line">
         <TableHeader>
           <TableRow>
             {headers.map((header) => (
-              <TableHead key={header} className="px-2 py-2">
+              <TableHead key={header} className="sticky top-0 z-10 bg-surface px-2 py-2">
                 {header}
               </TableHead>
             ))}
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.map((row, rowIndex) => (
+          {newestFirst.map((row, rowIndex) => (
             <TableRow key={rowIndex}>
               {row.map((cell, cellIndex) => (
                 <TableCell key={cellIndex} className="whitespace-nowrap px-2 py-2 tabular-nums text-ink-2">
@@ -556,7 +564,8 @@ export function InsightsCharts({ data }: { data: InsightsData }) {
     <div className="space-y-5">
       <TransferChart transfers={data.transfers} />
       <BalanceChart snapshots={data.snapshots} moves={data.treasuryMoves} />
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+      {/* Each card its own height: one opened table never stretches the card beside it. */}
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-2 xl:items-start">
         <OutcomeChart runs={data.runs} />
         <DecisionModeChart runs={data.runs} />
       </div>
