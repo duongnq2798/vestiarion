@@ -162,3 +162,120 @@ export function summaryMarkdown(summary: DecisionSummary): string {
   ];
   return lines.join("\n");
 }
+
+// ---------------------------------------------------------------------------------------------------------
+// What people did with what the agent left them (the note's "People and the agent", I2).
+
+/** A person's decision on something the agent stopped, or on what screening and the agent proposed. */
+export interface PersonDecision {
+  seq: number;
+  ts: string;
+  workspace: string;
+  /**
+   * `approval_paid`, `approval_rejected`, `approval_returned` (a payable); `milestone_approval_paid`,
+   * `milestone_closed` (a milestone); `screening_match_dismissed`; `policy_proposal_accepted`, `policy_proposal_dismissed`.
+   */
+  action: string;
+  /** The model's action in the agent's last decision on the same invoice or milestone, before the person acted; null with none. */
+  agentAction: string | null;
+  /** The written policy's action in that decision; null when it was not recorded. */
+  policyAction: string | null;
+  /** Whether code refused that decision. */
+  refusedByCode: boolean;
+  /** Screening matches this decision dismissed: one per match a person reviewed. */
+  dismissed: number;
+}
+
+/**
+ * Why the agent left it to a person: a stop the written policy makes too (above a limit, an incomplete match),
+ * a stop only the model made, code's refusal of the model's payment, or a payment that did not go through.
+ */
+export type StopKind = "policy_stop" | "model_stop" | "code_refused" | "not_completed" | "no_decision";
+
+export function stopKind(decision: Pick<PersonDecision, "agentAction" | "policyAction" | "refusedByCode">): StopKind {
+  if (decision.agentAction === null) return "no_decision";
+  if (decision.refusedByCode) return "code_refused";
+  if (MOVES_MONEY.has(decision.agentAction)) return "not_completed";
+  return decision.policyAction !== null && MOVES_MONEY.has(decision.policyAction) ? "model_stop" : "policy_stop";
+}
+
+/** What the person did: paid it after all, upheld the stop (rejected or closed it), or gave it back to the agent. */
+export type Verdict = "paid" | "upheld" | "returned";
+
+const VERDICTS: Record<string, Verdict> = {
+  approval_paid: "paid",
+  milestone_approval_paid: "paid",
+  approval_rejected: "upheld",
+  milestone_closed: "upheld",
+  approval_returned: "returned",
+};
+
+export interface PeopleSummary {
+  /** Payables and milestones a person decided, by why the agent had stopped them and what the person did. */
+  decided: Record<StopKind, Record<Verdict, number>>;
+  decidedTotal: number;
+  /** Of the stops only the model made, how many a person upheld, of those a person paid or upheld. */
+  modelStopsUpheld: { upheld: number; of: number };
+  screening: { reviews: number; matchesDismissed: number };
+  proposals: { accepted: number; dismissed: number };
+}
+
+export function summarizePeople(rows: PersonDecision[]): PeopleSummary {
+  const empty = (): Record<Verdict, number> => ({ paid: 0, upheld: 0, returned: 0 });
+  const decided: Record<StopKind, Record<Verdict, number>> = { policy_stop: empty(), model_stop: empty(), code_refused: empty(), not_completed: empty(), no_decision: empty() };
+  let decidedTotal = 0;
+  for (const row of rows) {
+    const verdict = VERDICTS[row.action];
+    if (!verdict) continue;
+    decided[stopKind(row)][verdict] += 1;
+    decidedTotal += 1;
+  }
+  const own = decided.model_stop;
+  return {
+    decided,
+    decidedTotal,
+    modelStopsUpheld: { upheld: own.upheld, of: own.paid + own.upheld },
+    screening: {
+      reviews: rows.filter((row) => row.action === "screening_match_dismissed").length,
+      matchesDismissed: rows.filter((row) => row.action === "screening_match_dismissed").reduce((sum, row) => sum + row.dismissed, 0),
+    },
+    proposals: {
+      accepted: rows.filter((row) => row.action === "policy_proposal_accepted").length,
+      dismissed: rows.filter((row) => row.action === "policy_proposal_dismissed").length,
+    },
+  };
+}
+
+const STOP_LABELS: Record<StopKind, string> = {
+  policy_stop: "The agent stopped it, as the written policy would (a limit, an incomplete match)",
+  model_stop: "The model stopped it; the policy would have paid",
+  code_refused: "Code refused the agent's payment",
+  not_completed: "The agent paid, and the payment did not go through",
+  no_decision: "No agent decision recorded",
+};
+
+/** The people section's table, as the script prints it. */
+export function peopleMarkdown(summary: PeopleSummary): string {
+  const rows = (Object.keys(STOP_LABELS) as StopKind[])
+    .filter((kind) => kind !== "no_decision" || summary.decided.no_decision.paid + summary.decided.no_decision.upheld + summary.decided.no_decision.returned > 0)
+    .map((kind) => {
+      const { paid, upheld, returned } = summary.decided[kind];
+      return `| ${STOP_LABELS[kind]} | ${paid} | ${upheld} | ${returned} |`;
+    });
+  return [
+    `People decided ${summary.decidedTotal} payables and milestones the agent left them.`,
+    "",
+    "| Why it waited for a person | Paid | Rejected or closed | Returned to the agent |",
+    "|---|---|---|---|",
+    ...rows,
+    "",
+    `Of the stops only the model made, people upheld ${summary.modelStopsUpheld.upheld} of ${summary.modelStopsUpheld.of}.`,
+    `Screening: ${summary.screening.reviews} reviews dismissed ${summary.screening.matchesDismissed} matches as not the same person.`,
+    `Limit proposals: ${summary.proposals.accepted} accepted, ${summary.proposals.dismissed} dismissed.`,
+  ].join("\n");
+}
+
+/** Entries inside a window, by their time: `from` inclusive, `to` exclusive; either may be left open. */
+export function within<T extends { ts: string }>(rows: T[], from?: string, to?: string): T[] {
+  return rows.filter((row) => (!from || row.ts >= from) && (!to || row.ts < to));
+}
