@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { cn } from "@/components/ui/cn";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { orgHref } from "@/lib/auth/org-paths";
+import { CollapsibleReasoning } from "./CollapsibleReasoning";
 import { DOMAIN_NAME, DomainGlyph } from "./Glyphs";
 import { explorerTx, fmt, Hash, Money, OutcomeBadge, Reasoning } from "./Primitives";
 import type { Decision, Evidence, Guardrail, Outcome } from "./types";
@@ -23,10 +24,13 @@ export function DecisionCard({
   compact = false,
   orgSlug,
   footerAction,
+  collapseReasoning = false,
 }: {
   decision: Decision;
   compact?: boolean;
   orgSlug: string;
+  /** Shows the reasoning's first lines with "View reasoning", for a list of decisions to scan (the console). */
+  collapseReasoning?: boolean;
   /** Something a person can do with the decision, shown in its footer: a paid payable's receipt (payment receipts P6). */
   footerAction?: ReactNode;
 }) {
@@ -89,7 +93,11 @@ export function DecisionCard({
         >
           <div className="min-w-0">
             <Eyebrow className="text-agent">{refused ? "What the agent argued" : "Agent’s reasoning"}</Eyebrow>
-            <Reasoning text={decision.reasoning} className={cn("mt-1.5", decision.evidence.length > 0 && "@4xl:max-w-none")} />
+            {collapseReasoning ? (
+              <CollapsibleReasoning text={decision.reasoning} className={cn("mt-1.5", decision.evidence.length > 0 && "@4xl:max-w-none")} />
+            ) : (
+              <Reasoning text={decision.reasoning} className={cn("mt-1.5", decision.evidence.length > 0 && "@4xl:max-w-none")} />
+            )}
           </div>
           {decision.evidence.length > 0 && (
             <aside aria-label="Evidence cited by this decision" className="hidden @4xl:block">
