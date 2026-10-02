@@ -100,7 +100,7 @@ export const TENANT_TABLES = [
   "accounts", "counterparties", "invoices", "milestones", "treasury_actions", "compliance_checks",
   "forecasts", "ledger_entries", "payment_intents", "cycle_runs", "cycle_snapshots", "sim_clock", "gateway_signers", "payment_receipts", "escrow_contracts",
   "fx_swaps", "screening_dismissals", "receivable_links", "incoming_transfers", "agent_budgets", "recurring_payables", "policy_proposals",
-  "service_purchases",
+  "service_purchases", "spending_limit_contracts",
 ] as const;
 
 export interface SeededRows {
@@ -146,6 +146,7 @@ export async function seedOrgRows(db: PGlite, orgId: string, tag: string): Promi
     [orgId, invoiceId, `receipt-${tag}`]
   );
   await db.query("insert into escrow_contracts (org_id) values ($1)", [orgId]);
+  await db.query("insert into spending_limit_contracts (org_id) values ($1)", [orgId]);
   await db.query(
     `insert into fx_swaps (org_id, invoice_id, state, usdc_in, eurc_minimum, eurc_estimated, usdc_per_eurc, cost_percent, adapter, call_data, deadline)
      values ($1, $2, 'confirmed', 1, 0.8, 0.82, 1.2, 0, '0x' || repeat('bb', 20), '0x', now())`,
