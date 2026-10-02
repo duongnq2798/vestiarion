@@ -9,6 +9,7 @@ import {
   listActivePayeeLinks,
   PayeeLinkError,
   payeeLinkHash,
+  payeeLinkStatus,
   previewPayeeLink,
   revokePayeeLink,
   submitPayeeAddress,
@@ -176,6 +177,37 @@ describe("previewPayeeLink", () => {
     const malformed = platform(() => previewPayeeLink("not-a-token"));
     expect(await malformed.result).toBeNull();
     expect(malformed.fake.requests).toEqual([]);
+  });
+});
+
+describe("payeeLinkStatus (freelancer journey R1, R2)", () => {
+  const STATUS = {
+    orgName: "Acme", payeeName: "Northwind", chain: "ARC-TESTNET", linkState: "used", expiresAt: "2026-10-07T12:00:00+00:00",
+    usedAt: "2026-10-01T12:00:00+00:00", statusUntil: "2026-10-31T12:00:00+00:00", address: ADDRESS, addressConfirmed: true,
+    payments: [{ kind: "milestone", title: "10 social posts", amount: 25, currency: "USDC", status: "paid", txRef: "0xabc", settledAt: "2026-10-01T12:05:00+00:00", scheduledFor: null }],
+  };
+
+  it("reads the link's status by its hash", async () => {
+    const { fake, result } = platform(() => payeeLinkStatus(TOKEN), () => ({ body: STATUS }));
+    expect(await result).toEqual(STATUS);
+    expect(fake.requests[0].path).toBe("/rest/v1/rpc/payee_link_status");
+    expect(fake.requests[0].body).toEqual({ p_token_hash: HASH });
+  });
+
+  it("takes an amount PostgREST sent as text as a number, and an unknown currency as USDC", async () => {
+    const payments = [{ ...STATUS.payments[0], amount: "12.500000", currency: null }];
+    expect((await platform(() => payeeLinkStatus(TOKEN), () => ({ body: { ...STATUS, payments } })).result)?.payments[0]).toMatchObject({ amount: 12.5, currency: "USDC" });
+  });
+
+  it("is null for a link with no status, and asks nothing for a malformed token", async () => {
+    expect(await platform(() => payeeLinkStatus(TOKEN), () => ({ body: null })).result).toBeNull();
+    const malformed = platform(() => payeeLinkStatus("not-a-token"));
+    expect(await malformed.result).toBeNull();
+    expect(malformed.fake.requests).toEqual([]);
+  });
+
+  it("throws when the status cannot be read, so the page says so", async () => {
+    await expect(platform(() => payeeLinkStatus(TOKEN), () => ({ status: 500, body: { message: "connection reset" } })).result).rejects.toThrow(/connection reset/);
   });
 });
 

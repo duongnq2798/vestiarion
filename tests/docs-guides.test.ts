@@ -12,7 +12,7 @@ import { GoLiveError, type GoLiveErrorCode } from "@/lib/platform/go-live";
  * button in the app fails this test until the guide says the new name.
  */
 
-type GuideSlug = "guides/try-it" | "guides/go-live" | "guides/first-payment" | "guides/pay-a-contractor" | "guides/audit-export";
+type GuideSlug = "guides/try-it" | "guides/go-live" | "guides/first-payment" | "guides/pay-a-contractor" | "guides/get-paid" | "guides/audit-export";
 
 const PANEL = "src/components/GoLivePanel.tsx";
 const GO_LIVE_ACTIONS = "src/app/actions/go-live.ts";
@@ -65,6 +65,13 @@ const LOGIN_FORM = "src/components/auth/LoginForm.tsx";
 const WORKSPACE_FORM = "src/components/CreateWorkspaceForm.tsx";
 const OPEN_TABLE = "src/components/open/OpenNumbersTable.tsx";
 const APPROVALS_LIST = "src/app/o/[slug]/approvals/page.tsx";
+const PAYEE_FORM = "src/components/PayeeAddressForm.tsx";
+const PAYEE_STEPS = "src/components/payee/PayeeSteps.tsx";
+const PAYEE_JOURNEY = "src/components/payee/PayeeJourney.tsx";
+const PAYEE_STATES = "src/lib/payee-journey.ts";
+const PAYEE_PAGE = "src/app/payee/[token]/page.tsx";
+const PAYEE_ACTIONS = "src/app/payee/[token]/actions.ts";
+const PAYEE_EMAIL = "src/lib/email/payee-link.ts";
 
 /** Each guide's quoted UI strings, as `[text, the file it must appear in]`. */
 const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
@@ -143,6 +150,14 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["Something went wrong; try again.", GO_LIVE_ACTIONS],
   ],
   "guides/first-payment": [
+    ["Agent spending limit", "src/components/AgentBudgetPanel.tsx"],
+    ["Set limit", "src/components/AgentBudgetPanel.tsx"],
+    ["Per day (USDC)", "src/components/AgentBudgetPanel.tsx"],
+    ["Per 7 days (USDC)", "src/components/AgentBudgetPanel.tsx"],
+    ["Save limit", "src/components/AgentBudgetPanel.tsx"],
+    ["agent_budget_changed", "src/lib/agent-budget.ts"],
+    ["workspace.outflow_budget", "src/lib/agent/guardrails.ts"],
+    ["the agent's spending limit has room for it again", "src/lib/agent/follow-up.ts"],
     ["Screening match", SCREENING_MATCH],
     ["Not this person", SCREENING_MATCH],
     ["Dismiss the match", SCREENING_MATCH],
@@ -251,6 +266,35 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["Payment in flight", MAP],
     ["Scheduled payments", SCHEDULED_PAYMENTS],
   ],
+  "guides/get-paid": [
+    ["Your address", PAYEE_STEPS],
+    ["Confirmation", PAYEE_STEPS],
+    ["Payment", PAYEE_STEPS],
+    ["Add my address", PAYEE_EMAIL],
+    ["Vestiarion only needs your address. It never asks for your recovery phrase or private key.", PAYEE_JOURNEY],
+    ["Continue", PAYEE_FORM],
+    ["That doesn't look like a wallet address. It starts with 0x and has 42 characters in all.", PAYEE_STATES],
+    ["Check your address", PAYEE_FORM],
+    ["Before you send it", PAYEE_FORM],
+    ["It's my own wallet, and I can open it.", PAYEE_FORM],
+    ["It's not an exchange deposit address.", PAYEE_FORM],
+    ["The first and last characters match my wallet.", PAYEE_FORM],
+    ["Send my address", PAYEE_FORM],
+    ["Edit address", PAYEE_FORM],
+    ["Address sent", PAYEE_JOURNEY],
+    ["Your address is confirmed", PAYEE_JOURNEY],
+    ["View on Arcscan", PAYEE_JOURNEY],
+    ["to approve the work", PAYEE_STATES],
+    ["Being prepared", PAYEE_STATES],
+    ["Scheduled for", PAYEE_STATES],
+    ["for review", PAYEE_STATES],
+    ["On its way", PAYEE_STATES],
+    ["Paid", PAYEE_STATES],
+    ["This link is no longer valid. Ask the business that sent it for a new one.", PAYEE_PAGE],
+    ["This page could not load. Try again in a moment.", PAYEE_PAGE],
+    ["That did not work. Try again in a moment.", PAYEE_ACTIONS],
+    ["That is already the address", PAYEE_ACTIONS],
+  ],
   "guides/pay-a-contractor": [
     ["Pay a freelancer", "src/app/o/[slug]/contractors/page.tsx"],
     ["Name", PAY_FREELANCER_FORM],
@@ -352,6 +396,7 @@ const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/go-live": 20,
   "guides/first-payment": 20,
   "guides/pay-a-contractor": 20,
+  "guides/get-paid": 20,
   "guides/audit-export": 5,
 };
 

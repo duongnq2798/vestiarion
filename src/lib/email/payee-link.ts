@@ -17,7 +17,7 @@ export function payeeLinkEmail(input: {
   origin: string;
 }): { subject: string; html: string; text: string } {
   const { orgName, payeeName, work, amount, link, expiresAt, origin } = input;
-  const expiry = `The link works once and expires on ${expiresAt.toISOString().slice(0, 10)} (UTC).`;
+  const expiry = `The link takes your address once, before ${expiresAt.toISOString().slice(0, 10)} (UTC). After that, the same link shows your payment's status, step by step, for 30 days.`;
   const subject = `${orgName} wants to pay you ${amount} USDC`;
   const lead = `${orgName} wants to pay you ${amount} USDC on Arc testnet for: ${work}.`;
   const how = "Add the address you want to be paid at. Any EVM wallet address works, such as one from MetaMask.";

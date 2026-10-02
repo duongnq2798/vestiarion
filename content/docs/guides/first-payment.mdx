@@ -186,6 +186,15 @@ A scheduled invoice's decision card reads "Scheduled for *date*", with the agent
 
 An invoice with an early-payment discount shows its terms on its card as "*pct*% off if paid by *date*". Until the agent has decided a payable, its card reads "Not yet decided", and while its transfer is in flight, "Payment in flight". The console's **Scheduled payments** section lists what the agent will pay next, soonest first: the date, the counterparty, the amount it will actually transfer — discounted, when the discount will still apply that day — and why.
 
+### Cap what the agent pays on its own
+
+The console's **Agent spending limit** panel shows what the agent has paid on its own today (UTC) and in the last 7 days. To cap it, an owner or admin chooses **Set limit** and fills in **Per day (USDC)**, **Per 7 days (USDC)**, or both, then **Save limit**. A blank figure means no limit. Each change is recorded in the audit log as `agent_budget_changed`.
+
+- **Past the limit, a payment waits.** A payment or milestone release that would take the agent past either figure is held before anything is sent. Its card's "Blocked by code, not by the model" band names the rule, `workspace.outflow_budget`, with the amount attempted and what the limit had left.
+- **A person's approval does not count.** A held payable waits in **Approvals**, and what you approve there is never stopped by the limit, nor counted against it.
+- **It comes back by itself.** When the limit has room again (a new day, a higher figure, or no limit), the agent decides the held payment again. Raising a figure brings it back within a minute, and the audit log records the reopening with "the agent's spending limit has room for it again".
+- **Schedules are checked on their day.** Scheduling a payment does not count against the limit; paying it does.
+
 ## 6. Approve a held payment
 
 **Approvals** lists every payable the agent would not pay on its own, oldest due date first, each marked held, flagged or awaiting information and shown with the agent's reasoning. When the list is empty, it says "Nothing is waiting for a decision."

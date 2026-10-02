@@ -4,6 +4,7 @@ import { platformDb, unwrap } from "../dal";
 import { withOrg } from "../dal/scope";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { notifyPayeeAddress } from "../notifications/payee-address";
+import type { PayeeLinkStatus, PayeePayment } from "../payee-journey";
 
 /**
  * Payee links (docs/superpowers/specs/2026-09-30-payee-links-design.md).
@@ -147,6 +148,31 @@ export async function previewPayeeLink(token: string, options: { withChain?: boo
     }
   }
   return { orgName: row.org_name, counterpartyName: row.counterparty_name, expiresAt: row.expires_at, chain };
+}
+
+/**
+ * What a payee's link shows (freelancer journey R1, R2): for a usable link, or one used within 30
+ * days, the business, the payee, the address and whether it is confirmed, and the payee's payments;
+ * null for any other link. A read that fails throws, so the page can say it could not load.
+ */
+export async function payeeLinkStatus(token: string): Promise<PayeeLinkStatus | null> {
+  const hash = payeeLinkHash(token);
+  if (!hash) return null;
+  const result = await platformDb().rpc("payee_link_status", { p_token_hash: hash });
+  if (result.error) throw new Error(result.error.message);
+  const row = result.data as (Omit<PayeeLinkStatus, "payments"> & { payments: Array<Record<string, unknown>> }) | null;
+  if (!row) return null;
+  const payments: PayeePayment[] = (row.payments ?? []).map((payment) => ({
+    kind: payment.kind === "invoice" ? "invoice" : "milestone",
+    title: String(payment.title ?? ""),
+    amount: Number(payment.amount),
+    currency: payment.currency === "EURC" ? "EURC" : "USDC",
+    status: String(payment.status ?? ""),
+    txRef: typeof payment.txRef === "string" ? payment.txRef : null,
+    settledAt: typeof payment.settledAt === "string" ? payment.settledAt : null,
+    scheduledFor: typeof payment.scheduledFor === "string" ? payment.scheduledFor : null,
+  }));
+  return { ...row, payments };
 }
 
 export type PayeeSubmission =

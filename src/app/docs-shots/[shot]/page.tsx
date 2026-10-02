@@ -38,7 +38,7 @@ export default async function DocsShotPage({ params }: Props) {
           data-verify-response={shot.verification ? JSON.stringify(shot.verification) : undefined}
           className="mx-auto w-[760px] bg-ground p-8"
         >
-          <PageHead title={sectionTitle(shot.page)} sub={shot.sub} />
+          {shot.page && <PageHead title={sectionTitle(shot.page)} sub={shot.sub} />}
           {shot.render()}
         </div>
       </main>
