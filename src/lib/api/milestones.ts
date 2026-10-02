@@ -1,4 +1,4 @@
-export const MILESTONE_STATUSES = ["pending", "verified", "paid", "held"] as const;
+export const MILESTONE_STATUSES = ["pending", "verified", "paid", "held", "closed"] as const;
 
 export interface MilestonePayload {
   id: string;
@@ -14,6 +14,9 @@ export interface MilestonePayload {
   verified: boolean;
   decidedAt: string | null;
   settledAt: string | null;
+  /** Closed without paying by a person: when, and the reason they gave. */
+  closedAt: string | null;
+  closeReason: string | null;
   agentReasoning: string | null;
   txHash: string | null;
   contractor: { id: string; name: string; riskLevel: string } | null;
@@ -48,6 +51,8 @@ export function mapMilestone(row: Record<string, unknown>): MilestonePayload {
     verified: row.verified === true,
     decidedAt: nullableString(row.decided_at),
     settledAt: nullableString(row.settled_at),
+    closedAt: nullableString(row.closed_at),
+    closeReason: nullableString(row.close_reason),
     agentReasoning: nullableString(row.agent_reasoning),
     // Simulation references are receipts from this process, not chain hashes.
     txHash: txRef?.startsWith("0x") ? txRef : null,

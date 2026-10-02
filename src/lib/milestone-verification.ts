@@ -27,6 +27,8 @@ export async function refreshGitHubMilestones(): Promise<VerificationRefreshResu
       .from("milestones")
       .select("id, title, verification_source, verification_method, verification_status, verified, status")
       .neq("status", "paid")
+      // Closed without paying is final: verifying it again would have the agent pay it.
+      .neq("status", "closed")
   ) as MilestoneVerificationRow[];
 
   const candidates = rows

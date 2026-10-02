@@ -72,6 +72,8 @@ const PAYEE_STATES = "src/lib/payee-journey.ts";
 const PAYEE_PAGE = "src/app/payee/[token]/page.tsx";
 const PAYEE_ACTIONS = "src/app/payee/[token]/actions.ts";
 const PAYEE_EMAIL = "src/lib/email/payee-link.ts";
+const HELD_ACTIONS = "src/components/HeldMilestoneActions.tsx";
+const MILESTONE_DECISIONS = "src/lib/agent/milestone-decisions.ts";
 
 /** Each guide's quoted UI strings, as `[text, the file it must appear in]`. */
 const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
@@ -379,6 +381,16 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["Verify manually", MILESTONE_CHECK],
     ["verify_milestone_manual", MILESTONE_ACTIONS],
     ["Revoke manually", MILESTONE_CHECK],
+    ["Paid and closed", CONTRACTORS_PAGE],
+    ["What it waits for", HELD_ACTIONS],
+    ["Pay now", HELD_ACTIONS],
+    ["Close without paying", HELD_ACTIONS],
+    ["You added this milestone, so someone else must approve paying it.", HELD_ACTIONS],
+    ["Circle did not send it", MILESTONE_DECISIONS],
+    ["Limit lowered by a screening match", MILESTONE_DECISIONS],
+    ["milestone_approval_paid", MILESTONE_DECISIONS],
+    ["milestone_closed", MILESTONE_DECISIONS],
+    ["Closed without paying", MAP],
     ["Audit log", APP_NAV],
   ],
   "guides/audit-export": [

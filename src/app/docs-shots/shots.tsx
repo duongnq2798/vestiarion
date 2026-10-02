@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import ApprovalCard from "@/components/ApprovalCard";
 import { CounterpartyRow as CounterpartyRowView } from "@/components/CounterpartyRow";
 import GoLivePanel from "@/components/GoLivePanel";
+import { HeldMilestoneActions } from "@/components/HeldMilestoneActions";
 import VerifyLedgerBadge from "@/components/VerifyLedgerBadge";
 import CounterpartyAddress from "@/components/intake/CounterpartyAddressEdit";
 import CounterpartyIntake from "@/components/intake/CounterpartyIntake";
@@ -20,15 +21,16 @@ import { AuditLedger, pad } from "@/components/vx/AuditLedger";
 import { DecisionRows, RowGroupHeading } from "@/components/vx/DecisionRows";
 import { IntakeFold } from "@/components/vx/IntakeFold";
 import { GettingStarted } from "@/components/vx/GettingStarted";
-import { invoiceDecision } from "@/components/vx/map";
+import { invoiceDecision, milestoneDecision } from "@/components/vx/map";
 import type { NavKey } from "@/components/vx/nav";
 import { Hash } from "@/components/vx/Primitives";
 import type { WaitingPayable } from "@/lib/agent/approvals";
+import { heldReason } from "@/lib/agent/milestone-decisions";
 import type { LedgerEntry } from "@/lib/ledger";
 import type { PayeeLinkStatus } from "@/lib/payee-journey";
 import type { GoLiveStatus } from "@/lib/platform/go-live";
 import { gettingStarted } from "@/lib/getting-started";
-import type { CounterpartyRow, InvoiceRow } from "@/lib/queries";
+import type { CounterpartyRow, InvoiceRow, MilestoneRow } from "@/lib/queries";
 import { DESIGN_SLUG, LEDGER } from "../design/fixtures";
 
 /**
@@ -159,6 +161,55 @@ const PAYMENT_ENTRY: LedgerEntry = {
 };
 
 const ENTRIES: LedgerEntry[] = [...EARLIER, PAYMENT_ENTRY];
+
+// A milestone whose batch Circle failed, held, as Contractors shows it (held milestone actions R1).
+const HELD_MILESTONE: MilestoneRow = {
+  id: "00000000-0000-4000-8000-0000000000f1",
+  contractor_id: "00000000-0000-4000-8000-0000000000f2",
+  contractor_name: "Puka Hotel",
+  title: "Clean service",
+  amount: 0.3,
+  verification_source: null,
+  verification_method: "manual",
+  verification_status: "verified",
+  verification_checked_at: "2026-10-02T06:58:00Z",
+  verified_at: "2026-10-02T06:58:00Z",
+  verification_detail: { note: "Rooms checked after the clean" },
+  verified: true,
+  status: "held",
+  agent_reasoning:
+    "Puka Hotel's cleaning was verified by hand, the contractor is screened clear, and 0.30 USDC is within its 5 USDC limit, so I release it today rather than on Net-30. [transfer failed: provider reported failure]",
+  tx_ref: null,
+};
+
+const HELD_ENTRY: LedgerEntry = {
+  ...PAYMENT_ENTRY,
+  seq: PAYMENT_ENTRY.seq + 1,
+  id: "docs-held-milestone",
+  ts: "2026-10-02T07:00:00Z",
+  domain: "contractor",
+  action: "milestone_release",
+  summary: 'RELEASE milestone "Clean service" for Puka Hotel (0.3 USDC)',
+  detail: { milestoneId: HELD_MILESTONE.id, decisionMode: "llm", guardrailBlocked: false, observed: { riskLevel: "clear", paymentLimit: 5 }, execution: { txRef: null, resultingStatus: "held" } },
+};
+
+const HELD_REASON = heldReason({
+  amount: HELD_MILESTONE.amount,
+  agentReasoning: HELD_MILESTONE.agent_reasoning,
+  contractor: {
+    name: HELD_MILESTONE.contractor_name,
+    riskLevel: "clear",
+    riskNotes: null,
+    paymentLimit: 5,
+    baselinePaymentLimit: 5,
+    address: `0x${"7ab1e".repeat(8)}`,
+    addressChangedAt: null,
+    addressConfirmedAt: null,
+  },
+  intent: { status: "failed", provider_tx_id: "circle-batch", last_error: null, provider_state: "FAILED", failure_reason: "ESTIMATION_ERROR" },
+  lastEntry: { action: HELD_ENTRY.action, detail: HELD_ENTRY.detail },
+  live: true,
+});
 
 const HELD: WaitingPayable = {
   id: "00000000-0000-4000-8000-0000000000e2",
@@ -469,6 +520,37 @@ export const DOCS_SHOTS = {
         </section>
       );
     },
+  },
+  "held-milestone": {
+    guide: "pay-a-contractor",
+    page: "contractors",
+    render: () => (
+      <section>
+        <SectionHeader title="Milestones" meta="1 · open one for the agent's reasoning, its verification and its escrow" />
+        <RowGroupHeading title="Needs you" count={1} />
+        <DecisionRows
+          orgSlug={SLUG}
+          items={[
+            {
+              decision: milestoneDecision(HELD_MILESTONE, [HELD_ENTRY]),
+              date: { label: "Held Oct 2, 2026", tone: "held" },
+              hint: HELD_REASON.hint,
+              before: (
+                <HeldMilestoneActions
+                  orgSlug={SLUG}
+                  milestone={{ id: HELD_MILESTONE.id, title: HELD_MILESTONE.title, amount: HELD_MILESTONE.amount, contractorName: HELD_MILESTONE.contractor_name }}
+                  reason={HELD_REASON}
+                  canDecide
+                  selfAdded={false}
+                  sandbox={false}
+                />
+              ),
+              open: true,
+            },
+          ]}
+        />
+      </section>
+    ),
   },
   "get-paid-address": { guide: "get-paid", render: () => <PayeeShot status={PAYEE_OPEN} /> },
   "get-paid-check": { guide: "get-paid", render: () => <PayeeShot status={PAYEE_OPEN} /> },
