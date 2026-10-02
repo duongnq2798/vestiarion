@@ -229,6 +229,9 @@ export function invoiceDecision(invoice: InvoiceRow, counterparty: CounterpartyR
   const route = routeOf(invoice.id, entries);
   const routeFees = routeFeesOf(invoice.id, entries);
   const mint = mintOf(invoice.id, entries);
+  // A payout to another chain settles on that chain, not on Arc: named from its recorded mint, or
+  // from the payee's chain for one recorded before mints were.
+  const settledOn = outcome !== "settled" ? null : mint ? mint.chainLabel : paidAcrossChains(counterparty?.chain) ? payeeChain(counterparty?.chain).label : null;
 
   return {
     id: invoice.id,
@@ -239,7 +242,7 @@ export function invoiceDecision(invoice: InvoiceRow, counterparty: CounterpartyR
     amount: invoice.amount,
     token: currency,
     outcome,
-    outcomeLabel: invoiceOutcomeLabel(invoice, guardrailBlocked),
+    outcomeLabel: settledOn ? `Settled on ${settledOn}` : invoiceOutcomeLabel(invoice, guardrailBlocked),
     reasoning: invoice.agent_reasoning ?? "The agent has not evaluated this invoice yet.",
     evidence: [
       { label: "PO", value: invoice.po_reference ?? "none", state: invoice.po_reference ? "ok" : "missing" },

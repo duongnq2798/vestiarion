@@ -146,7 +146,7 @@ A vendor who wants USDC on Base, Arbitrum or Ethereum Sepolia is still paid from
   - For each payout to another chain, the agent asks both Gateway and CCTP what it costs. It pays from the Gateway balance when that balance covers the payout and Gateway's fee is no higher than CCTP's; otherwise it pays through CCTP.
   - The card names the route the payout took, under **Payee's chain**, with its fee against the other route's, and links the mint on the payee's chain. Once a payout has started on a route, every later attempt uses that route.
 - **USDC only.** An invoice in EURC to a payee on another chain is held: only USDC crosses chains.
-- **In flight, then paid.** The invoice reads "Payment in flight" from the burn on Arc until the mint lands, usually within half a minute. Its card then links both: the burn on arcscan, and the mint on the payee's chain. A payment still not minted two hours after it was sent is held for a person.
+- **In flight, then paid.** The invoice reads "Payment in flight" from the burn on Arc until the mint lands, usually within half a minute. Its card then reads "Settled on *chain*", naming the chain the money landed on, such as "Settled on Base Sepolia", and links both: the burn on arcscan, and the mint on the payee's chain. A payment still not minted two hours after it was sent is held for a person.
 - **Approving one.** On **Approvals**, the card names the payee's chain, and **Approve and pay** asks to pay the amount on that chain, with the CCTP fee on top. A payout the agent had already started through Gateway goes through Gateway.
 
 ## 3. Run a cycle
