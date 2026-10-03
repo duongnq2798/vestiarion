@@ -15,7 +15,7 @@ const WEBHOOK_SECRET = /^[A-Za-z0-9_-]{16,256}$/;
 /** Telegram's rule for a bot's username. */
 const BOT_USERNAME = /^[A-Za-z0-9_]{5,32}$/;
 
-export function telegramSettingsFromEnv(env: NodeJS.ProcessEnv = process.env): TelegramSettings | null {
+export function telegramSettingsFromEnv(env: Record<string, string | undefined> = process.env): TelegramSettings | null {
   const token = env.TELEGRAM_BOT_TOKEN?.trim();
   const webhookSecret = env.TELEGRAM_WEBHOOK_SECRET?.trim();
   const username = env.TELEGRAM_BOT_USERNAME?.trim().replace(/^@/, "");
