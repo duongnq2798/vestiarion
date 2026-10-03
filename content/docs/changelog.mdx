@@ -1,5 +1,11 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-03: Add what a held payable was missing
+
+- **New ledger action** `invoice_details_added`, actor `human`, domain `ap`, delivered to webhooks like every entry: a person added the purchase order a held, flagged or awaiting-information payable lacked, or marked its goods or services received. Its `detail` is `{ by, invoiceId, counterpartyId, added }`, where `added` holds `poReference`, `goodsReceived: true`, or both. Nothing already on the invoice changes, and its `status` stays as it was.
+- At its next cycle the agent reopens the payable with an `invoice_reopened` entry whose `followUp.changes` names what was added, and decides it again. Adding details starts that cycle within seconds, and its `cycle_complete` entry lists the new event kind `details_added` in `events`.
+- In `/api/v1/invoices`, the payable's `poReference` and `goodsReceived` show what was added.
+
 ## 2026-10-03: A sandbox screens against the bundled watchlist
 
 - `GET /api/v1/status` reports `screening: "simulate"` for a sandbox workspace, whatever the deployment configures; a live workspace reports `live` when OpenSanctions is configured, as before.

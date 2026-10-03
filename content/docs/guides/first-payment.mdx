@@ -274,11 +274,28 @@ If you are the only member of the workspace who can approve payments (the only o
 
 <Screenshot
   src="/docs/guides/first-payment-approval-own.png"
-  alt="The same approval card, seen by the workspace's only approver, who entered the invoice: under the reasoning it says You entered this invoice. You are the only person in this workspace who can approve payments, so you can approve it yourself, and the ledger records that you did. Approve and pay is enabled, beside Reject and Return to agent."
+  alt="The same approval card, seen by the workspace's only approver, who entered the invoice: under the reasoning it says You entered this invoice. You are the only person in this workspace who can approve payments, so you can approve it yourself, and the ledger records that you did. Approve and pay is enabled, beside Add details, Reject and Return to agent."
   caption="A payable you entered, when you are the workspace's only approver."
 />
 
 If a payment attempt fails, the card says "The last payment attempt failed: " and Circle's reason, then "Approving sends a new transfer." Fix the cause first if you need to — for example, fund the operating wallet — then choose **Approve and pay** again to send it. Vestiarion never sends a second transfer while the first could still settle: a payment still in flight on Arc testnet instead says "The payment is still in flight on Arc testnet. It cannot be rejected or returned until Circle settles it; approving checks it again." Only **Reject** and **Return to agent** go away then — **Approve and pay** stays: for an invoice waiting here, approving is how its in-flight transfer is checked again, and it never sends a second one.
+
+### Add what the agent was missing
+
+The agent pays an invoice on its own only when its three-way match is complete: a purchase order on file and the goods or services received. Without them it asks for more information, and the card is marked **Awaiting information**. When you have what it asked for, you do not need to approve the payment yourself: give the agent the facts, and it decides again.
+
+Owners and admins choose **Add details** on the card. The dialog offers only what the invoice is missing: a **PO reference**, the **Goods or services received** box, or both. Fill them in and choose **Add details**. A message says "Details added. The agent usually decides it again within a minute."
+
+<Screenshot
+  src="/docs/guides/first-payment-add-details.png"
+  alt="The Add details dialog over an approval card marked Awaiting information for Bluebird Logistics, 8.00 USDC. It explains that the agent pays an invoice on its own only with a purchase order on file and the goods or services received. The PO reference field holds PO-2213, Goods or services received is ticked, and the buttons are Cancel and Add details."
+  caption="Adding the purchase order and the goods receipt the agent asked for."
+/>
+
+- **The agent decides it again.** Until it does, the card says what you added, beginning "Since the agent stopped it", and ends "The agent decides it again at its next cycle, usually within a minute." That cycle starts within seconds. The agent sees that the facts changed since its decision, records `invoice_reopened` with what changed, and decides the invoice again with every check, as it would a new one. It may pay it, schedule it, or hold it again for another reason, such as the payment limit.
+- **Only what is missing.** A PO reference already on file, or goods already marked received, cannot be changed here.
+- **Recorded.** The ledger records what you added, and who added it, as `invoice_details_added`. A payment made after it is not counted as "Paid on time with no person involved" on [www.vestiarion.xyz/open](https://www.vestiarion.xyz/open).
+- **When it is offered.** Approvers decide payments but do not enter invoices, so they do not see **Add details**. It is not offered once a payment for the invoice was sent, or while someone else is deciding it.
 
 ### When the agent suggests a higher limit
 

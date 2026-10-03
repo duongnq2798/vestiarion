@@ -82,6 +82,13 @@ const SHOTS = {
   "first-payment-decision": async () => {},
   "first-payment-approval": async () => {},
   "first-payment-approval-own": async () => {},
+  "first-payment-add-details": async (page) => {
+    await page.click(`[...document.querySelectorAll("[data-docs-shot] button")].find((b) => b.textContent.trim() === "Add details")`);
+    await page.waitFor(`document.querySelector("[role=dialog]")?.textContent.includes("Add details to Bluebird Logistics")`);
+    await page.fill({ "details-po-00000000-0000-4000-8000-0000000000e3": "PO-2213" });
+    await page.click(`document.querySelector("[role=dialog] [role=checkbox]")`);
+    await page.waitFor(`document.querySelector("[role=dialog] [role=checkbox]")?.dataset.state === "checked"`);
+  },
   "first-payment-onchain-limit": async () => {},
   "first-payment-audit": async (page) => {
     // Verify asks /api/ledger/verify, which needs a signed-in member and a ledger. The frame carries the
