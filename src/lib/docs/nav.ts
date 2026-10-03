@@ -53,6 +53,7 @@ export const DOCS_NAV: NavSection[] = [
       { slug: "guides/telegram", title: "Get the agent's decisions in Telegram", description: "Connect your own Telegram chat to a workspace: the agent's decisions as it makes them, what is safe to spend and waiting, and invoices sent to the bot." },
       { slug: "guides/slack", title: "Get the agent's decisions in Slack", description: "Connect a workspace to a Slack channel: the agent's decisions as it makes them, /vestiarion for what is safe to spend and waiting, and stopped payments decided from Slack when an owner allows it." },
       { slug: "guides/api-invoices", title: "Add invoices from your own system", description: "Create a read-and-write API key, add a counterparty and an invoice through the API, confirm the address, and follow the agent's decision." },
+      { slug: "guides/api-milestones", title: "Pay for merged pull requests", description: "Add a contractor, a payee link and a milestone through the API, and the agent pays once the pull request is merged. With a GitHub Actions workflow." },
       { slug: "guides/audit-export", title: "Verify an audit export", description: "Download a workspace's signed ledger and check it with a standalone verifier." },
     ],
   },
@@ -95,7 +96,7 @@ export const DOCS_NAV: NavSection[] = [
     title: "AI integration",
     pages: [
       { slug: "ai-integration", title: "AI integration", description: "Markdown views, llms.txt and the OpenAPI document, for coding agents." },
-      { slug: "ai-integration/mcp", title: "MCP server", description: "Connect an AI agent to your workspace's records through MCP tools: every API read, and with a read-and-write key, adding counterparties and invoices." },
+      { slug: "ai-integration/mcp", title: "MCP server", description: "Connect an AI agent to your workspace's records through MCP tools: every API read, and with a read-and-write key, adding counterparties, invoices, milestones and payee links." },
     ],
   },
   {

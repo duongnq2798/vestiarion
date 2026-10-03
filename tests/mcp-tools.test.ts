@@ -30,15 +30,36 @@ describe("MCP_TOOLS", () => {
     expect(new Set(MCP_TOOLS.map((t) => t.name)).size).toBe(MCP_TOOLS.length);
   });
 
-  it("marks a read's tool read-only and idempotent, and a write's as adding records: not destructive, not idempotent (write API R9)", () => {
+  it("marks a read's tool read-only and idempotent, and a write's as adding records, not idempotent (write API R9)", () => {
     for (const op of OPERATIONS) {
       expect(tool(toolName(op.id)).annotations, op.id).toEqual(
         op.scope === "write"
-          ? { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }
+          ? { readOnlyHint: false, destructiveHint: op.destructive === true, idempotentHint: false, openWorldHint: false }
           : { readOnlyHint: true, openWorldHint: false, idempotentHint: true }
       );
     }
-    expect(MCP_TOOLS.filter((t) => !t.annotations.readOnlyHint).map((t) => t.name).sort()).toEqual(["create_counterparty", "create_invoice"]);
+    expect(MCP_TOOLS.filter((t) => !t.annotations.readOnlyHint).map((t) => t.name).sort()).toEqual([
+      "create_counterparty",
+      "create_invoice",
+      "create_milestone",
+      "create_payee_link",
+    ]);
+  });
+
+  it("says a payee link's tool can undo something: a new link revokes the payee's unused one (write API part 2, W3)", () => {
+    expect(tool("create_payee_link").annotations).toEqual({ readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false });
+    expect(MCP_TOOLS.filter((t) => !t.annotations.readOnlyHint && t.annotations.destructiveHint).map((t) => t.name)).toEqual(["create_payee_link"]);
+  });
+
+  it("offers an idempotencyKey, and tells the agent about it, only for a write that takes one (write API part 2, W3)", () => {
+    for (const op of OPERATIONS.filter((candidate) => candidate.scope === "write")) {
+      const t = tool(toolName(op.id));
+      const keyed = op.params.some((param) => param.name === "Idempotency-Key");
+      expect(Object.hasOwn(t.inputSchema.shape, "idempotencyKey"), op.id).toBe(keyed);
+      expect(t.description.includes("idempotencyKey"), op.id).toBe(keyed);
+    }
+    expect(Object.hasOwn(tool("create_milestone").inputSchema.shape, "idempotencyKey")).toBe(true);
+    expect(Object.hasOwn(tool("create_payee_link").inputSchema.shape, "idempotencyKey")).toBe(false);
   });
 
   it("titles and describes each tool from its operation, and tells a collection how to page", () => {

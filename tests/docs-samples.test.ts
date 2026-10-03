@@ -15,9 +15,9 @@ describe("code samples are generated from the operation", () => {
   });
 
   it.each(OPERATIONS.filter((op) => op.method === "post").map((op) => [op.id, op] as const))(
-    "%s sends its example body as JSON, with an Idempotency-Key, in every sample (write API R8)",
+    "%s sends its example body as JSON, with its Idempotency-Key when it takes one, in every sample (write API R8; part 2, W3)",
     (_id, op) => {
-      const key = op.params.find((param) => param.in === "header" && param.name === "Idempotency-Key")!;
+      const key = op.params.find((param) => param.in === "header" && param.name === "Idempotency-Key");
       const s = sampleRequest(op, "https://x.test");
 
       expect(s.curl.split("\n")).toEqual([
@@ -25,20 +25,32 @@ describe("code samples are generated from the operation", () => {
         "  -X POST \\",
         '  -H "Authorization: Bearer $VESTIARION_API_KEY" \\',
         '  -H "Content-Type: application/json" \\',
-        `  -H "Idempotency-Key: ${key.example}" \\`,
+        ...(key ? [`  -H "Idempotency-Key: ${key.example}" \\`] : []),
         `  -d '${JSON.stringify(op.requestExample)}'`,
       ]);
       expect(s.javascript).toContain('method: "POST"');
-      expect(s.javascript).toContain(`"Idempotency-Key": "${key.example}"`);
       expect(s.javascript).toContain('"Content-Type": "application/json"');
       const sent = s.javascript.match(/body: JSON\.stringify\((\{[\s\S]*?\n {2}\})\),/);
       expect(sent, s.javascript).not.toBeNull();
       expect(JSON.parse(sent![1])).toEqual(op.requestExample);
       expect(s.python).toContain(`requests.post(`);
-      expect(s.python).toContain(`"Idempotency-Key": "${key.example}",`);
       expect(s.python).toContain("    json={\n");
+      if (key) {
+        expect(s.javascript).toContain(`"Idempotency-Key": "${key.example}"`);
+        expect(s.python).toContain(`"Idempotency-Key": "${key.example}",`);
+      } else {
+        expect(s.javascript).not.toContain("Idempotency-Key");
+        expect(s.python).not.toContain("Idempotency-Key");
+      }
     }
   );
+
+  it("sends no Idempotency-Key for a payee link, which keeps no outcome for one (write API part 2, W3)", () => {
+    expect(operationById("create-payee-link")!.params).toEqual([]);
+    for (const op of OPERATIONS.filter((candidate) => candidate.method === "post" && candidate.id !== "create-payee-link")) {
+      expect(op.params.map((param) => param.name), op.id).toEqual(["Idempotency-Key"]);
+    }
+  });
 
   it("writes a body for Python with Python's literals", () => {
     const op = {

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { db, platformDb, unwrap } from "@/lib/dal";
-import { guardApiRequest, apiError, handleApiRequest } from "@/lib/api/guard";
+import { db, unwrap } from "@/lib/dal";
+import { guardApiRequest, guardApiWrite, apiError, handleApiRequest } from "@/lib/api/guard";
 import {
   decodeCursor,
   isTimestampCursor,
@@ -13,6 +13,7 @@ import { INVOICE_DIRECTIONS, INVOICE_SELECT, INVOICE_STATUSES, mapInvoice, type 
 import { CreateInvoiceBodySchema } from "@/lib/api/schemas";
 import { invalidBody, readJsonBody } from "@/lib/api/write";
 import { runCycleSoon } from "@/lib/agent/cycle-soon";
+import { cycleEventOf } from "@/lib/commands/actor";
 import { invoiceInputSchema } from "@/lib/intake-validation";
 import { createInvoice } from "@/lib/invoices/create";
 
@@ -101,10 +102,11 @@ const FORM_FIELDS = { earlyPayDiscountPct: "earlyPayDiscount.percent", discountD
  * checked against the invoice form's own rules and added through the same `createInvoice`, as the key's issuer's. The
  * agent decides it as one typed in, and a payable starts its cycle. The body is checked before an `Idempotency-Key` is
  * claimed, so a body that fails is never remembered. A counterparty the workspace does not hold is found only once the
- * write has started, so that answer is remembered (R5).
+ * write has started, so that answer is remembered (R5). The issuer, and the workspace's mode, are read by the guard
+ * before anything is written (part 2, W5).
  */
 export async function POST(request: Request) {
-  const guard = await guardApiRequest(request, { scope: "write" });
+  const guard = await guardApiWrite(request);
   if ("denied" in guard) return guard.denied;
   const body = await readJsonBody(request);
   if ("denied" in body) return body.denied;
@@ -129,19 +131,10 @@ export async function POST(request: Request) {
 
   return withIdempotency(request, guard.key, body.raw, () =>
     handleApiRequest("POST /api/v1/invoices", guard.key, async () => {
-      const issuer = guard.key.createdBy;
-      // Read before anything is written, so a failure here answers 500 with nothing added, and a retry is safe (R5).
-      const workspace =
-        invoice.direction === "payable" && issuer
-          ? (unwrap(await platformDb().from("orgs").select("mode").eq("id", guard.key.orgId).single()) as { mode: string })
-          : null;
-
-      const created = await createInvoice({ actorId: issuer, invoice, document: null, via: "api", apiKeyId: guard.key.keyId });
+      const created = await createInvoice({ actorId: guard.actor.userId, invoice, document: null, via: "api", apiKeyId: guard.key.keyId });
       if (!created) return apiError("invalid_request", "counterpartyId: No counterparty with this id in this workspace.");
-      // A payable starts the agent's cycle, as one typed in does. With its issuer's account gone, the schedule takes it.
-      if (workspace && issuer) {
-        runCycleSoon({ orgId: guard.key.orgId, userId: issuer, sandbox: workspace.mode === "sandbox", kind: "invoice_added" });
-      }
+      // A payable starts the agent's cycle, as one typed in does.
+      if (invoice.direction === "payable") runCycleSoon(cycleEventOf(guard.actor, "invoice_added"));
 
       const row = unwrap(await db().from("invoices").select(INVOICE_SELECT).eq("id", created.id).single()) as Record<string, unknown>;
       return NextResponse.json({ data: mapInvoice(row) }, { status: 201 });

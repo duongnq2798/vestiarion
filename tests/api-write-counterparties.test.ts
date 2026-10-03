@@ -56,6 +56,8 @@ const STORED = {
 
 function workspace() {
   const fake = fakeSupabase((sent: RecordedRequest) => {
+    // The key's issuer, read again at every write (part 2, W5): an admin, who may add records.
+    if (sent.path === "/rest/v1/memberships") return { body: [{ role: "admin" }] };
     if (sent.path === "/rest/v1/orgs") return { body: orgs.orgRow(ORG) };
     if (sent.path === "/rest/v1/counterparties" && sent.method === "POST") return { body: { id: CREATED, name: "Quill Studio" } };
     if (sent.path === "/rest/v1/counterparties" && sent.method === "GET") return { body: STORED };

@@ -5,6 +5,7 @@ import { withOrg } from "../dal/scope";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { notifyPayeeAddress } from "../notifications/payee-address";
 import type { PayeeLinkStatus, PayeePayment } from "../payee-journey";
+import type { Provenance } from "../provenance";
 
 /**
  * Payee links (docs/superpowers/specs/2026-09-30-payee-links-design.md).
@@ -49,12 +50,16 @@ export interface PayeeLink {
   expiresAt: string;
 }
 
-/** Makes a link for a counterparty of the workspace in scope, revoking the payee's unused one, and records it. */
+/**
+ * Makes a link for a counterparty of the workspace in scope, revoking the payee's unused one, and records it.
+ * `provenance` names the surface it came from in the entry (write API part 2, W3); the console passes none.
+ */
 export async function createPayeeLink(input: {
   orgId: string;
   actorId: string;
   counterpartyId: string;
   now?: number;
+  provenance?: Provenance;
 }): Promise<{ link: PayeeLink; token: string }> {
   const { token, secretHash } = generatePayeeLinkToken();
   const expiresAt = new Date((input.now ?? Date.now()) + PAYEE_LINK_TTL_MS).toISOString();
@@ -79,7 +84,7 @@ export async function createPayeeLink(input: {
     domain: "compliance",
     action: "payee_link_created",
     summary: "Created a one-time link for a payee to enter their own address",
-    detail: { by: input.actorId, counterpartyId: link.counterpartyId, linkId: link.id, expiresAt: link.expiresAt },
+    detail: { by: input.actorId, counterpartyId: link.counterpartyId, linkId: link.id, expiresAt: link.expiresAt, ...input.provenance },
   });
   return { link, token };
 }

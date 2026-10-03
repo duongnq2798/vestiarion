@@ -1,4 +1,6 @@
 import { after, NextResponse } from "next/server";
+import { can } from "../auth/roles";
+import { memberActor, type Actor } from "../commands/actor";
 import { withOrg } from "../dal/scope";
 import { authenticateApiKey, touchApiKeyUsed, type ApiKeyScope, type AuthenticatedKey } from "../platform/api-keys";
 import { takeAgentCycleToken, takeApiWriteToken } from "../rate-limit";
@@ -99,6 +101,32 @@ export async function guardApiRequest(
     void touchApiKeyUsed(keyId);
   }
   return { key };
+}
+
+/**
+ * The gate of an operation that adds records (write API part 2, W5): `guardApiRequest` for the `write` scope, then the
+ * person the key acts for, read now. An issuer who is no longer a member, or whose role can no longer add records
+ * (`records.write`), is refused with 403 before anything is written or remembered: an admin moved to approver keeps a
+ * key that still reads, but no longer writes. A failure reading the membership is not a verdict on the issuer, so it
+ * answers 500. The actor is the one every command takes, on the API's surface.
+ */
+export async function guardApiWrite(request: Request): Promise<{ denied: NextResponse } | { key: AuthenticatedKey; actor: Actor }> {
+  const guard = await guardApiRequest(request, { scope: "write" });
+  if ("denied" in guard) return guard;
+  const { key } = guard;
+  let actor: Actor | null = null;
+  if (key.createdBy) {
+    try {
+      actor = await memberActor(key.orgId, key.createdBy, { kind: "api", apiKeyId: key.keyId });
+    } catch (error) {
+      console.error("[api] the key's issuer could not be read", error instanceof Error ? error.message : error);
+      return { denied: apiError("internal", INTERNAL_MESSAGE) };
+    }
+  }
+  if (!actor || !can(actor.role, "records.write")) {
+    return { denied: apiError("forbidden", "This key's issuer can no longer add records in this workspace.") };
+  }
+  return { key, actor };
 }
 
 /**

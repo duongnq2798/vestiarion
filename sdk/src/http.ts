@@ -27,7 +27,8 @@ export interface RequestSpec {
   path: string;
   query?: object;
   body?: unknown;
-  idempotencyKey?: string;
+  /** A write's key: the caller's, or a fresh one when left out. `null` sends none, for a write that keeps no outcome for one. */
+  idempotencyKey?: string | null;
 }
 
 export interface Transport {
@@ -161,8 +162,9 @@ export function createTransport(options: TransportOptions): Transport {
     let body: string | undefined;
     if (spec.method === "POST") {
       headers["content-type"] = "application/json";
-      // Every write carries a key, so retrying it can never add the record twice (R6).
-      headers["idempotency-key"] = spec.idempotencyKey ?? uuid();
+      // Every write that keeps an outcome for a key carries one, so retrying it can never add the record twice (R6). A
+      // payee link keeps none, since that would store the link: a retry makes a new link, which replaces the first.
+      if (spec.idempotencyKey !== null) headers["idempotency-key"] = spec.idempotencyKey ?? uuid();
       body = JSON.stringify(spec.body ?? {});
     }
     for (let attempt = 0; ; attempt += 1) {

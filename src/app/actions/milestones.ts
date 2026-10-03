@@ -6,14 +6,12 @@ import { z } from "zod";
 import { raiseCycleEvent } from "@/lib/agent/cycle-soon";
 import { authorize } from "@/lib/auth/authorize";
 import { revalidateOrgPages } from "@/lib/auth/revalidate";
-import { currentConfig } from "@/lib/context";
-import { db, unwrap } from "@/lib/dal";
+import { db } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
-import { parseGitHubPullRequestUrl } from "@/lib/github-verification";
-import { isHttpsLink, usdcAmountSchema } from "@/lib/intake-validation";
+import { milestoneInputSchema } from "@/lib/intake-validation";
 import { appendLedgerEntry } from "@/lib/ledger";
 import { consoleActor } from "@/lib/commands/actor";
-import { closeMilestoneUnpaid, payMilestoneNow } from "@/lib/commands/milestones";
+import { addMilestone, closeMilestoneUnpaid, payMilestoneNow } from "@/lib/commands/milestones";
 import { consoleAnswer } from "./command-result";
 
 export interface MilestoneActionResult {
@@ -26,27 +24,9 @@ function formString(formData: FormData, key: string): string {
   return typeof value === "string" ? value : "";
 }
 
-const milestoneInputSchema = z.object({
-  contractorId: z.string().uuid("Choose a contractor"),
-  title: z.string().trim()
-    .min(3, "Say what was delivered, in at least 3 characters")
-    .max(160, "Keep the milestone to 160 characters"),
-  amount: usdcAmountSchema,
-  evidence: z.string().trim()
-    .max(500, "Keep the evidence link to 500 characters")
-    .refine((value) => value === "" || isHttpsLink(value), "The evidence link must start with https://")
-    .transform((value) => value || null),
-});
-
 /**
- * Records work a contractor is to be paid for, as a pending milestone. A
- * GitHub pull request link is kept in its canonical form, so the cycle's
- * GitHub check (`refreshGitHubMilestones`) verifies it once it is merged, and
- * the event has that check run within a minute. Without a GitHub token that
- * check reports itself unavailable, so the form promises it only when one is
- * configured. Any other link is evidence for the person who verifies the work
- * by hand. Either way the agent pays only a verified milestone, and only after
- * its own release decision and guardrails.
+ * Records work a contractor is to be paid for, as a pending milestone, through the command every surface shares
+ * (`addMilestone`, write API part 2 W4): the form's fields are checked here, the contractor and the rest there.
  */
 export async function createMilestoneAction(
   _previous: MilestoneActionResult,
@@ -62,62 +42,7 @@ export async function createMilestoneAction(
       evidence: formString(formData, "evidence"),
     });
     if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? "Invalid milestone input." };
-
-    const input = parsed.data;
-    // Scoped to the organization: another organization's counterparty id is
-    // answered exactly like one that does not exist.
-    const lookup = await db()
-      .from("counterparties")
-      .select("id, name, role")
-      .eq("id", input.contractorId)
-      .maybeSingle<{ id: string; name: string; role: string }>();
-    if (lookup.error) throw new Error(lookup.error.message);
-    const contractor = lookup.data;
-    if (!contractor) return { ok: false, message: "Contractor not found." };
-    if (contractor.role === "client") return { ok: false, message: "A client is not paid for milestones. Choose a contractor or vendor." };
-
-    const pullRequest = parseGitHubPullRequestUrl(input.evidence);
-    const verificationSource = pullRequest?.url ?? input.evidence;
-    const milestone = unwrap(
-      await db()
-        .from("milestones")
-        .insert({
-          contractor_id: contractor.id,
-          title: input.title,
-          amount: input.amount,
-          verification_source: verificationSource,
-        })
-        .select("id")
-        .single<{ id: string }>()
-    );
-
-    await appendLedgerEntry({
-      actor: "human",
-      domain: "contractor",
-      action: "create_milestone",
-      summary: `Added milestone “${input.title}” for ${contractor.name}: ${input.amount} USDC`,
-      detail: {
-        by: auth.user.id,
-        milestoneId: milestone.id,
-        counterpartyId: contractor.id,
-        counterpartyName: contractor.name,
-        amount: input.amount,
-        verificationSource,
-      },
-    });
-
-    revalidateOrgPages();
-    if (!pullRequest || !currentConfig().githubToken) {
-      return {
-        ok: true,
-        message: `Milestone added for ${contractor.name}. Verify it once the work is delivered, and the agent decides on pay within a minute.`,
-      };
-    }
-    raiseCycleEvent(auth, "milestone_added");
-    return {
-      ok: true,
-      message: `Milestone added for ${contractor.name}. The agent checks the pull request within a minute, and decides on pay once it is merged.`,
-    };
+    return consoleAnswer(await addMilestone(consoleActor(auth), { milestone: parsed.data }));
   });
 }
 

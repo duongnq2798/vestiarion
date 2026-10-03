@@ -356,15 +356,25 @@ describe("every /api/v1 route", () => {
     const handlers = source.split(/\n(?=export async function (?:GET|POST|PUT|PATCH|DELETE)\b)/).slice(1);
     expect(handlers.length).toBeGreaterThan(0);
     for (const handler of handlers) {
-      expect(awaitedNames(handler)[0]).toBe("guardApiRequest");
-      // A write asks for the write scope; every read, for read (write API R1).
-      const scope = /^export async function POST\b/.test(handler.trimStart()) ? "write" : "read";
-      const guard = handler.indexOf(`const guard = await guardApiRequest(request, { scope: "${scope}" });\n  if ("denied" in guard) return guard.denied;`);
+      // A write asks for the write scope and its issuer as they are now; every read, for read (write API R1; part 2, W5).
+      const write = /^export async function POST\b/.test(handler.trimStart());
+      expect(awaitedNames(handler)[0]).toBe(write ? "guardApiWrite" : "guardApiRequest");
+      const call = write ? "const guard = await guardApiWrite(request);" : 'const guard = await guardApiRequest(request, { scope: "read" });';
+      const guard = handler.indexOf(`${call}\n  if ("denied" in guard) return guard.denied;`);
       expect(guard).toBeGreaterThan(-1);
       const handle = handler.indexOf("handleApiRequest(");
       expect(handle).toBeGreaterThan(guard);
       expect(handler.slice(handle)).toMatch(/^handleApiRequest\(\s*"[^"]+",\s*guard\.key,/);
     }
+  });
+
+  it("checks a write's key and scope before it reads the key's issuer (write API part 2, W5)", () => {
+    const source = read(path.join(ROOT, "src/lib/api/guard.ts"));
+    const write = source.slice(source.indexOf("export async function guardApiWrite("));
+    const body = write.slice(0, write.indexOf("\n}\n"));
+    expect(awaitedNames(body)[0]).toBe("guardApiRequest");
+    expect(body).toContain('const guard = await guardApiRequest(request, { scope: "write" });\n  if ("denied" in guard) return guard;');
+    expect(body.indexOf("memberActor(")).toBeGreaterThan(body.indexOf("guardApiRequest("));
   });
 });
 

@@ -564,7 +564,7 @@ function buildPageMarkdown(slug: string, base: string, page: { title: string; de
 }
 
 const SUMMARY =
-  "Vestiarion is an autonomous treasury agent for stablecoin businesses on Arc. Its API reads a workspace's signed ledger, books, counterparties, milestones, treasury and insights, and adds counterparties and invoices for the agent to decide; signed webhooks push each ledger entry.";
+  "Vestiarion is an autonomous treasury agent for stablecoin businesses on Arc. Its API reads a workspace's signed ledger, books, counterparties, milestones, treasury and insights, and adds counterparties, invoices, milestones and payee links for the agent to decide; signed webhooks push each ledger entry.";
 
 /** `/llms.txt`: what Vestiarion is, then every page by its Markdown view, in nav order, then the OpenAPI document. */
 export function llmsIndex(origin: string): string {

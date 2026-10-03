@@ -26,6 +26,24 @@ export function isHttpsLink(value: string): boolean {
   }
 }
 
+/**
+ * Work a contractor is to be paid for, as the console's Add milestone form and `POST /api/v1/milestones` both check it
+ * (write API part 2, W2). `evidence` is a link to the delivered work, or null.
+ */
+export const milestoneInputSchema = z.object({
+  contractorId: z.string().uuid("Choose a contractor"),
+  title: z.string().trim()
+    .min(3, "Say what was delivered, in at least 3 characters")
+    .max(160, "Keep the milestone to 160 characters"),
+  amount: usdcAmountSchema,
+  evidence: z.string().trim()
+    .max(500, "Keep the evidence link to 500 characters")
+    .refine((value) => value === "" || isHttpsLink(value), "The evidence link must start with https://")
+    .transform((value) => value || null),
+});
+
+export type MilestoneInput = z.output<typeof milestoneInputSchema>;
+
 /** An invoice's amount, in the invoice's own currency. */
 const invoiceAmountSchema = positiveAmountSchema("Use a positive amount with at most 6 decimal places");
 

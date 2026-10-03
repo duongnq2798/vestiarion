@@ -102,6 +102,23 @@ describe("createPayeeLink", () => {
     });
   });
 
+  it("names the API and its key in the entry for a link made through it, and never the link (write API part 2, W3)", async () => {
+    const { result } = platform(
+      () => createPayeeLink({ orgId: ORG, actorId: USER, counterpartyId: PAYEE, now: NOW, provenance: { via: "api", apiKeyId: "3c3c3c3c-0000-4000-8000-000000000001" } }),
+      (request) => (rpc(request, "create_payee_link") ? { body: { id: LINK, counterparty_id: PAYEE, expires_at: "2026-10-07T12:00:00+00:00" } } : { body: [] })
+    );
+    const { token } = await result;
+    expect(ledgerMock.mock.calls[0][1].detail).toEqual({
+      by: USER,
+      counterpartyId: PAYEE,
+      linkId: LINK,
+      expiresAt: "2026-10-07T12:00:00+00:00",
+      via: "api",
+      apiKeyId: "3c3c3c3c-0000-4000-8000-000000000001",
+    });
+    expect(JSON.stringify(ledgerMock.mock.calls)).not.toContain(token.slice(4));
+  });
+
   it("says not found for a counterparty the workspace does not hold", async () => {
     const { result } = platform(
       () => createPayeeLink({ orgId: ORG, actorId: USER, counterpartyId: PAYEE, now: NOW }),

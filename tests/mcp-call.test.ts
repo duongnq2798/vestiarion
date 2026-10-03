@@ -239,6 +239,7 @@ describe("callOperation for a write", () => {
 
   function writable() {
     return fakeSupabase((request: RecordedRequest) => {
+      if (request.path === "/rest/v1/memberships") return { body: [{ role: "admin" }] };
       if (request.path === "/rest/v1/orgs") return { body: orgs.orgRow(ORG_A) };
       if (request.path === "/rest/v1/counterparties") return { body: [{ id: COUNTERPARTY, name: "Acme Supplies" }] };
       if (request.path === "/rest/v1/invoices" && request.method === "POST") return { body: { id: INVOICE_ID } };

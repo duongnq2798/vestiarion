@@ -87,12 +87,20 @@ describe("the OpenAPI document", () => {
     }
   });
 
-  it("describes a write's JSON body, its Idempotency-Key header, its 201 and its write errors (write API R8)", () => {
+  it("describes a write's JSON body, its Idempotency-Key header, its 201 and its write errors (write API R8; part 2, W3)", () => {
     const doc = buildOpenApiDocument("https://example.test") as {
       paths: Record<string, Record<string, { parameters: Array<Record<string, unknown>>; requestBody?: Record<string, unknown>; responses: Record<string, unknown> }>>;
       components: { schemas: Record<string, unknown> };
     };
-    for (const [id, name] of [["create-invoice", "CreateInvoiceRequest"], ["create-counterparty", "CreateCounterpartyRequest"]] as const) {
+    const writes = [
+      ["create-invoice", "CreateInvoiceRequest", true],
+      ["create-counterparty", "CreateCounterpartyRequest", true],
+      ["create-milestone", "CreateMilestoneRequest", true],
+      // A payee link keeps no outcome for a key, which would store the link: no header, and no conflict over one.
+      ["create-payee-link", "CreatePayeeLinkRequest", false],
+    ] as const;
+    expect(OPERATIONS.filter((op) => op.method === "post").map((op) => op.id).sort()).toEqual(writes.map(([id]) => id).sort());
+    for (const [id, name, keyed] of writes) {
       const op = operationById(id)!;
       expect(op).toMatchObject({ method: "post", scope: "write", status: 201 });
       const described = doc.paths[op.path].post;
@@ -101,8 +109,11 @@ describe("the OpenAPI document", () => {
         content: { "application/json": { schema: { $ref: `#/components/schemas/${name}` }, example: op.requestExample } },
       });
       expect(doc.components.schemas).toHaveProperty(name);
-      expect(described.parameters).toEqual([expect.objectContaining({ name: "Idempotency-Key", in: "header", required: false, schema: { type: "string" } })]);
-      expect(Object.keys(described.responses)).toEqual(expect.arrayContaining(["201", "400", "403", "409", "429"]));
+      expect(described.parameters, id).toEqual(
+        keyed ? [expect.objectContaining({ name: "Idempotency-Key", in: "header", required: false, schema: { type: "string" } })] : []
+      );
+      expect(Object.keys(described.responses)).toEqual(expect.arrayContaining(["201", "400", "403", "429"]));
+      expect(Object.hasOwn(described.responses, "409"), id).toBe(keyed);
       expect(described.responses).not.toHaveProperty("200");
     }
     // Every read stays a read: no body, and the scope it needs is read.
@@ -134,7 +145,9 @@ describe("the OpenAPI document", () => {
         "list-counterparties",
         "get-counterparty",
         "create-counterparty",
+        "create-payee-link",
         "list-milestones",
+        "create-milestone",
         "get-treasury",
         "get-insights",
       ]

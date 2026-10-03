@@ -15,7 +15,7 @@ Poll no more often than you need to. To react to each new ledger entry, [webhook
 
 ## Request bodies
 
-A write's body is one JSON object of at most 64 KB. A body that is larger, is not JSON, or has a field the operation does not take answers `400 invalid_request`, and nothing is written. To make a retry safe, send an `Idempotency-Key`: [Retrying safely](/docs/guides/api-invoices#retrying-safely) explains it.
+A write's body is one JSON object of at most 64 KB. A body that is larger, is not JSON, or has a field the operation does not take answers `400 invalid_request`, and nothing is written. To make a retry safe, send an `Idempotency-Key`: [Retrying safely](/docs/guides/api-invoices#retrying-safely) explains it. A payee link takes none: a repeat makes a new link, which replaces the first.
 
 ## Keys and endpoints per workspace
 

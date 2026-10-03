@@ -187,6 +187,17 @@ export interface Milestone {
   createdAt: string;
 }
 
+/** A one-time link for a payee to enter the address they are paid at. That address waits for a person in the workspace to confirm it before the agent pays to it. */
+export interface PayeeLink {
+  /** The link's own id. It is not the link: that is `url`. */
+  id: string;
+  counterpartyId: string;
+  /** The one-time page where the payee enters their address. It is in this answer only: Vestiarion keeps just its hash. Send it to the payee yourself. */
+  url: string;
+  /** When the link stops working, 7 days after it was made. It also stops once the payee has used it, or a newer link replaces it. */
+  expiresAt: string;
+}
+
 /** The workspace's accounts, reserve, obligations, latest forecast and recent treasury moves. */
 export interface Treasury {
   accounts: Array<{
@@ -351,6 +362,24 @@ export interface CreateCounterpartyInput {
   paymentLimit?: string | number;
   /** Where it is emailed once a payment to it is confirmed. */
   noticeEmail?: string;
+}
+
+/** A milestone to add. It starts pending: the agent pays it only once it is verified, by GitHub or by a person, and only after its own checks. */
+export interface CreateMilestoneInput {
+  /** The `id` of the contractor or vendor to pay, from `GET /api/v1/counterparties` or from the answer that added it. A client is not paid for milestones. */
+  contractorId: string;
+  /** What was delivered, 3 to 160 characters. */
+  title: string;
+  /** What the work is paid, in USDC, with at most 6 decimal places. A decimal string such as `"250.00"` keeps it exact; a number is read the same way. */
+  amount: string | number;
+  /** A link to the delivered work: https, up to 500 characters. A GitHub pull request (`https://github.com/<owner>/<repo>/pull/<number>`) is checked by the agent, which verifies the milestone once it is merged. Any other link is evidence for the person who verifies the milestone on Contractors. */
+  verificationSource?: string;
+}
+
+/** Who the link is for. */
+export interface CreatePayeeLinkInput {
+  /** The `id` of the vendor or contractor who is to enter the address they are paid at. A client gets no link: the agent never pays one. */
+  counterpartyId: string;
 }
 
 /** The query parameters of `list-ledger-entries`. */

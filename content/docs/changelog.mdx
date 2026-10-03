@@ -1,5 +1,23 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-03: Add milestones and payee links through the API
+
+- **[Add a milestone](/docs/api/create-milestone)**, `POST /api/v1/milestones`, with a read-and-write key.
+  - It takes `{ contractorId, title, amount, verificationSource? }`, checked by the rules of the console's Add milestone form, and answers `201` with the milestone, shaped as [List milestones](/docs/api/list-milestones) returns it.
+  - The milestone starts `pending`, and the API cannot verify it. A GitHub pull request in `verificationSource` is verified by the agent once it is merged; any other link waits for a person.
+  - It takes an `Idempotency-Key`, as every write does.
+  - It is recorded as `create_milestone` with `via: "api"` and `apiKeyId`.
+- **[Create a payee link](/docs/api/create-payee-link)**, `POST /api/v1/payee-links`, with a read-and-write key.
+  - It takes `{ counterpartyId }`, a vendor or a contractor, and answers `201` with `{ id, counterpartyId, url, expiresAt }`.
+  - `url` is in that answer only, which is sent with `Cache-Control: no-store`.
+  - The operation keeps no outcome for an `Idempotency-Key`, which would store the link. A repeat makes a new link, and the unused one stops working.
+  - It is recorded as `payee_link_created` with `via: "api"` and `apiKeyId`. The address a payee enters through it waits for a person to confirm it, as before.
+- **A write now checks the key's creator as they are now.** Only owners and admins can add records. If an owner moves the creator to approver or viewer, the key keeps reading, and every write, invoices and counterparties included, answers `403 forbidden`: "This key's issuer can no longer add records in this workspace."
+- **A milestone records who added it**, from the console, Pay a freelancer or the API. So the self-approval rule now applies to milestones too. When the agent held a milestone on its own judgment, the person who added it cannot choose **Pay now** for it, unless they are the workspace's only approver. Milestones added before keep no creator.
+- **MCP** gains `create_milestone` and `create_payee_link`. `create_payee_link` is marked destructive, because a new link revokes the unused one.
+- **`@vestiarion/sdk` 0.2.0** adds `milestones.create` and `payeeLinks.create`.
+- **Settings:** the box that gives a key write access is now **Can also add records**.
+
 ## 2026-10-03: Add an invoice from Slack
 
 - `create_invoice` entries gain `via: "slack"` and `linkId` when an owner or admin added the payable from a message in Slack with **Add invoice**. Such an entry carries `document` as one added from a document on AP / AR does, with `changed: []`.

@@ -63,6 +63,8 @@ const STORED = {
 function workspace(options: { mode?: "sandbox" | "live"; counterparties?: Array<{ id: string; name: string }> } = {}) {
   const counterparties = options.counterparties ?? [{ id: COUNTERPARTY, name: "Acme Supplies" }];
   const fake = fakeSupabase((sent: RecordedRequest) => {
+    // The key's issuer, read again at every write (part 2, W5): an admin, who may add records.
+    if (sent.path === "/rest/v1/memberships") return { body: [{ role: "admin" }] };
     if (sent.path === "/rest/v1/orgs") return { body: orgs.orgRow(ORG, { mode: options.mode ?? "sandbox" }) };
     if (sent.path === "/rest/v1/counterparties") return { body: counterparties.filter((row) => sent.params.get("id") === `eq.${row.id}`) };
     if (sent.path === "/rest/v1/invoices" && sent.method === "POST") return { body: { id: INVOICE } };
@@ -160,14 +162,6 @@ describe("POST /api/v1/invoices", () => {
     const { fake, send } = workspace();
     expect((await send({ ...valid, direction: "receivable", earlyPayDiscount: undefined })).status).toBe(201);
     expect(invoiceInsert(fake.requests)).toMatchObject({ direction: "receivable" });
-    expect(cycleMock).not.toHaveBeenCalled();
-  });
-
-  it("adds a key's invoice as nobody's once its issuer is gone, and leaves it to the schedule", async () => {
-    useKey({ createdBy: null });
-    const { fake, send } = workspace();
-    expect((await send(valid)).status).toBe(201);
-    expect(invoiceInsert(fake.requests)).toMatchObject({ created_by: null });
     expect(cycleMock).not.toHaveBeenCalled();
   });
 

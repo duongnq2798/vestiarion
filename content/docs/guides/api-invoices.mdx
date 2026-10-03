@@ -4,7 +4,7 @@ A key adds records. It never approves or pays, and an address it adds waits for 
 
 ## 1. Create a read-and-write key
 
-An owner or an admin opens **Settings** and, under **API keys**, chooses **Create key**. Name the key after the system that will use it, tick **Can also add counterparties and invoices**, and create it. The dialog shows the key once: "Copy this key now. It will not be shown again."
+An owner or an admin opens **Settings** and, under **API keys**, chooses **Create key**. Name the key after the system that will use it, tick **Can also add records**, and create it. The dialog shows the key once: "Copy this key now. It will not be shown again."
 
 In the list of keys, this one shows **Read and write**, and every other key **Read only**. Keep the key in an environment variable, `VESTIARION_API_KEY` below, as [Authentication](/docs/get-started/authentication) explains.
 
@@ -75,6 +75,6 @@ Writes are limited to 30 a minute per key. Over that, the answer is `429 rate_li
 
 - Approve, reject or pay a payment. That is the agent's decision, and a person's when the agent holds one.
 - Confirm an address.
-- Change or remove a record. The API adds counterparties and invoices, and nothing else.
+- Change or remove a record. The API adds counterparties, invoices, milestones and payee links, and nothing else.
 
-The same two operations are [MCP tools](/docs/ai-integration/mcp), `create_counterparty` and `create_invoice`, so an AI agent connected with a read-and-write key can add records under the same rules.
+The same two operations are [MCP tools](/docs/ai-integration/mcp), `create_counterparty` and `create_invoice`, so an AI agent connected with a read-and-write key can add records under the same rules. To pay contributors for merged pull requests, see [Pay for merged pull requests](/docs/guides/api-milestones).

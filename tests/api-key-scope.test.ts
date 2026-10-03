@@ -14,6 +14,7 @@ import { GET as getInvoices } from "@/app/api/v1/invoices/route";
 import { GET as getLedger } from "@/app/api/v1/ledger/route";
 import { GET as getLedgerVerify } from "@/app/api/v1/ledger/verify/route";
 import { GET as getMilestones } from "@/app/api/v1/milestones/route";
+import { POST as createPayeeLink } from "@/app/api/v1/payee-links/route";
 import { GET as getStatus } from "@/app/api/v1/status/route";
 import { GET as getTreasury } from "@/app/api/v1/treasury/route";
 import { carriesOrg, fakeSupabase, type RecordedRequest } from "./support/fake-supabase";
@@ -126,6 +127,14 @@ const ROUTES: Record<string, Route> = {
 };
 const ROUTE_CASES = Object.entries(ROUTES).map(([file, route]) => [route.url, file, route] as const);
 
+/**
+ * A route with nothing to read: only a write, which its own tests drive (tests/api-write-payee-links.test.ts). Here it
+ * is held to the key check every write has.
+ */
+const WRITE_ONLY_ROUTES: Record<string, { url: string; handler: (request: Request) => Promise<Response> }> = {
+  "payee-links/route.ts": { url: "/api/v1/payee-links", handler: createPayeeLink },
+};
+
 const previousToken = process.env.AGENT_API_TOKEN;
 
 beforeEach(() => {
@@ -152,7 +161,22 @@ describe("the routes under test", () => {
     const files = walk(dir).filter((file) => file.endsWith("route.ts")).map((file) => path.relative(dir, file).split(path.sep).join("/"));
     // The OpenAPI document is the one public v1 route: it describes the
     // surface, holds no workspace data and takes no key (tests/openapi.test.ts).
-    expect(files.filter((file) => file !== "openapi.json/route.ts").sort()).toEqual(Object.keys(ROUTES).sort());
+    expect(files.filter((file) => file !== "openapi.json/route.ts").sort()).toEqual([...Object.keys(ROUTES), ...Object.keys(WRITE_ONLY_ROUTES)].sort());
+  });
+
+  it.each(Object.entries(WRITE_ONLY_ROUTES))("refuse a read-only key on %s's write with 403, reaching no workspace data (write API R7)", async (_file, route) => {
+    vi.mocked(authenticateApiKey).mockResolvedValueOnce(KEY_A);
+    const fake = fakeSupabase(database());
+    const request = new Request(`https://vestiarion.invalid${route.url}`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${PRESENTED}`, "content-type": "application/json" },
+      body: JSON.stringify({ counterpartyId: COUNTERPARTY_ID }),
+    });
+    const response = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => route.handler(request));
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: { code: "forbidden", message: "This key cannot do that." } });
+    expect(fake.requests.filter((sent) => !PLATFORM_PATHS.has(sent.path))).toEqual([]);
   });
 });
 

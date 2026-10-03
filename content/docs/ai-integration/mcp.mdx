@@ -1,6 +1,6 @@
 Vestiarion runs a remote [MCP](https://modelcontextprotocol.io) server. Connect an AI agent to it with a workspace API key, and the agent can answer questions from your workspace's own records: which payments are held and why, whether the ledger is intact, what is due to contractors.
 
-Each tool is one of the API's operations. A tool call runs that operation with your key and returns its JSON exactly as the API does. With a read-only key, an agent connected here can read and explain, and nothing more. With a [read-and-write key](/docs/get-started/authentication#scopes), it can also add counterparties and invoices, which the agent in Vestiarion then decides as it decides any other. No tool approves or pays.
+Each tool is one of the API's operations. A tool call runs that operation with your key and returns its JSON exactly as the API does. With a read-only key, an agent connected here can read and explain, and nothing more. With a [read-and-write key](/docs/get-started/authentication#scopes), it can also add counterparties, invoices and milestones, which the agent in Vestiarion then decides as it decides any other, and make payee links. No tool verifies work, approves or pays.
 
 ## The server
 
@@ -31,7 +31,10 @@ Every tool call reads the key's own workspace and no other. Asking `get_counterp
 
 ## Tools
 
-One tool per [API operation](/docs/api). Its name is the operation's id in snake case, its arguments are the operation's parameters, or for a write the fields of its request body and an optional `idempotencyKey`, with their types, allowed values and bounds, and its description, which is what the agent reads, is the operation's summary and description from its reference page. A read's tool is marked read-only and idempotent. The two write tools, `create_counterparty` and `create_invoice`, are marked as adding records: not read-only, not destructive, and not idempotent, since a repeat adds another record unless it passes the same `idempotencyKey`.
+One tool per [API operation](/docs/api). Its name is the operation's id in snake case, its arguments are the operation's parameters, or for a write the fields of its request body and an optional `idempotencyKey`, with their types, allowed values and bounds, and its description, which is what the agent reads, is the operation's summary and description from its reference page. A read's tool is marked read-only and idempotent. The four write tools are marked as adding records: not read-only, and not idempotent.
+
+- `create_counterparty`, `create_invoice` and `create_milestone` are not destructive. A repeat adds another record, unless it passes the same `idempotencyKey`.
+- `create_payee_link` is marked destructive, because a new link revokes the payee's unused one. It takes no `idempotencyKey`: the link is in its answer only, so a repeat makes a new link.
 
 <McpToolTable />
 
@@ -131,8 +134,9 @@ Once the server is connected, ask in plain language. The agent picks the tools:
 - "How much do we hold in reserve, and what does the latest liquidity forecast say?" uses `get_treasury`.
 - "Are payments on this workspace live or simulated?" uses `get_status`.
 - With a read-and-write key, "Add Quill Studio's invoice for 420 USDC against PO-4012, due October 31; the work was delivered" uses `list_counterparties` to find Quill Studio, then `create_invoice`.
+- With a read-and-write key, "Pay Mona 150 USDC for https://github.com/acme/app/pull/42 once it is merged" uses `list_counterparties` to find Mona, then `create_milestone`.
 
 ## What it does not do
 
-- **It does not decide.** Approving or rejecting a payment, confirming an address, pausing the agent, and managing members, API keys or webhooks are a person's decisions, made in the console. No tool can make them, and the two write tools only add records.
+- **It does not decide.** Approving or rejecting a payment, confirming an address, pausing the agent, and managing members, API keys or webhooks are a person's decisions, made in the console. No tool can make them, and the write tools only add records.
 - **It has no OAuth.** The server authenticates with a key in a header and has no authorization server, so it cannot be added as a claude.ai web connector, which needs OAuth. Use a client that sends a header, like the ones above.

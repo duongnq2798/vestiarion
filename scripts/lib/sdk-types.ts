@@ -27,7 +27,8 @@ const NAMED: Array<{ name: string; at: string[]; same?: string[][] }> = [
   { name: "Invoice", at: ["ListInvoicesResponse", "data", "[]"], same: [["CreateInvoiceResponse", "data"]] },
   { name: "Counterparty", at: ["ListCounterpartiesResponse", "data", "[]"], same: [["CreateCounterpartyResponse", "data"]] },
   { name: "CounterpartyDetail", at: ["GetCounterpartyResponse", "data"] },
-  { name: "Milestone", at: ["ListMilestonesResponse", "data", "[]"] },
+  { name: "Milestone", at: ["ListMilestonesResponse", "data", "[]"], same: [["CreateMilestoneResponse", "data"]] },
+  { name: "PayeeLink", at: ["CreatePayeeLinkResponse", "data"] },
   { name: "Treasury", at: ["GetTreasuryResponse", "data"] },
   { name: "Insights", at: ["GetInsightsResponse", "data"] },
   {
@@ -37,6 +38,8 @@ const NAMED: Array<{ name: string; at: string[]; same?: string[][] }> = [
   },
   { name: "CreateInvoiceInput", at: ["CreateInvoiceRequest"] },
   { name: "CreateCounterpartyInput", at: ["CreateCounterpartyRequest"] },
+  { name: "CreateMilestoneInput", at: ["CreateMilestoneRequest"] },
+  { name: "CreatePayeeLinkInput", at: ["CreatePayeeLinkRequest"] },
 ];
 
 const HEADER = `// Generated from the API's OpenAPI document (/api/v1/openapi.json) by \`npm run sdk:types\`, with

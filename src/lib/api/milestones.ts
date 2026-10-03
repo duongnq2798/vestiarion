@@ -1,5 +1,9 @@
 export const MILESTONE_STATUSES = ["pending", "verified", "paid", "held", "closed"] as const;
 
+/** The columns a milestone is read with, for the list and for the answer that added one. */
+export const MILESTONE_SELECT =
+  "id, title, amount, status, verification_source, verification_method, verification_status, verification_checked_at, verified_at, verification_detail, verified, decided_at, settled_at, closed_at, close_reason, agent_reasoning, tx_ref, created_at, counterparties(id, name, risk_level)";
+
 export interface MilestonePayload {
   id: string;
   title: string;
