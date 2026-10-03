@@ -61,8 +61,11 @@ export function AgentActivity({ lastCycleAt: initialLastCycleAt }: { lastCycleAt
           if (since !== null && answer.items.length > 0) {
             tell(answer.items, since, (path) => router.push(orgHref(slug as string, path)));
           }
-          // A finished cycle, or anything new, is shown on the page at once rather than at its next refresh.
-          if ((wasRunning && answer.running === null) || answer.items.length > 0) router.refresh();
+          // A cycle starting (its payables read "Deciding now"), one finished, or anything new, is shown on the page
+          // at once rather than at its next refresh.
+          const started = since !== null && !wasRunning && answer.running !== null;
+          const finished = wasRunning && answer.running === null;
+          if (started || finished || answer.items.length > 0) router.refresh();
           wasRunning = answer.running !== null;
           cursor.current = Math.max(since ?? 0, answer.head, ...answer.items.map((item) => item.seq));
         }
@@ -129,11 +132,17 @@ function tell(items: ActivityItem[], since: number, go: (path: string) => void) 
   for (const item of items) {
     const raise = item.tone === "done" ? toast.success : toast.warning;
     raise(item.text, {
-      description: item.txHash ? (
-        <a href={explorerTx(item.txHash)} target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-ink">
-          View on Arcscan
-        </a>
-      ) : undefined,
+      description:
+        item.detail || item.txHash ? (
+          <span className="grid gap-1">
+            {item.detail && <span>{item.detail}</span>}
+            {item.txHash && (
+              <a href={explorerTx(item.txHash)} target="_blank" rel="noreferrer" className="w-fit underline underline-offset-2 hover:text-ink">
+                View on Arcscan
+              </a>
+            )}
+          </span>
+        ) : undefined,
       action: { label: item.pathLabel, onClick: () => go(item.path) },
       // Long enough to read and act on; a stop waits longer, since it waits for the person.
       duration: item.tone === "done" ? 8_000 : 12_000,

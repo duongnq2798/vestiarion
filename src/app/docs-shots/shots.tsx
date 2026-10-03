@@ -200,6 +200,51 @@ const STOP_ENTRY: LedgerEntry = {
   },
 };
 
+/** A payable completed by a person and paid by the agent, as its trail tells it (decision trail R2). */
+const TRAIL_INVOICE: InvoiceRow = {
+  ...INVOICE,
+  id: "00000000-0000-4000-8000-0000000000e7",
+  memo: "November design retainer",
+  po_reference: "PO-2215",
+  agent_reasoning: "The three-way match is now complete with PO-2215, and 12.50 USDC is well within Northstar Studio's limit, so I pay it today.",
+  tx_ref: `0x${"5c".repeat(32)}`,
+};
+
+const trailEntry = (seq: number, ts: string, actor: LedgerEntry["actor"], action: string, detail: Record<string, unknown>): LedgerEntry => ({
+  ...PAYMENT_ENTRY,
+  seq,
+  id: `docs-trail-${seq}`,
+  ts,
+  actor,
+  domain: "ap",
+  action,
+  summary: action,
+  detail: { invoiceId: TRAIL_INVOICE.id, ...detail },
+});
+
+/** Newest first, as the ledger reads them. */
+const TRAIL_ENTRIES: LedgerEntry[] = [
+  trailEntry(15, "2026-10-03T09:14:31Z", "agent", "ap_pay", {
+    decisionMode: "deepseek",
+    agreedWithReference: true,
+    decision: { action: "pay" },
+    observed: { riskLevel: "clear", paymentLimit: 50, poReference: "PO-2215", goodsReceived: true, amount: 12.5 },
+    onChainLimit: { verdict: { state: "allowed" } },
+    execution: { txRef: TRAIL_INVOICE.tx_ref, resultingStatus: "paid" },
+  }),
+  trailEntry(14, "2026-10-03T09:14:19Z", "agent", "invoice_reopened", {
+    followUp: { changes: ["purchase order PO-2215 has since been supplied", "goods have since been confirmed received"] },
+  }),
+  trailEntry(13, "2026-10-03T09:14:05Z", "human", "invoice_details_added", { added: { poReference: "PO-2215", goodsReceived: true } }),
+  trailEntry(12, "2026-10-03T09:00:31Z", "agent", "ap_request_info", {
+    decisionMode: "deepseek",
+    agreedWithReference: true,
+    decision: { action: "request_info" },
+    observed: { riskLevel: "clear", paymentLimit: 50, poReference: null, goodsReceived: false, amount: 12.5 },
+  }),
+  trailEntry(11, "2026-10-03T09:00:12Z", "human", "create_invoice", {}),
+];
+
 /** A payable the agent asked about, waiting on Invoices: nothing of its three-way match is on file (complete held invoice). */
 const ASKED_INVOICE: InvoiceRow = {
   ...INVOICE,
@@ -544,6 +589,14 @@ export const DOCS_SHOTS = {
           <DecisionRows orgSlug={SLUG} items={[{ decision: invoiceDecision(INVOICE, COUNTERPARTY, ENTRIES), date: { label: "Due Oct 15, 2026" }, open: true }]} />
         </section>
       );
+    },
+  },
+  "first-payment-trail": {
+    guide: "first-payment",
+    page: "invoices",
+    render: function TrailShot() {
+      // The card alone, as an opened row on AP / AR shows it; the script opens How the agent decided.
+      return <DecisionCard decision={invoiceDecision(TRAIL_INVOICE, COUNTERPARTY, TRAIL_ENTRIES)} orgSlug={SLUG} />;
     },
   },
   "first-payment-needs-you": {

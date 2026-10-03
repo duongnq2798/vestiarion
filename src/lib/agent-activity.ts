@@ -1,8 +1,11 @@
 /**
- * What the agent just did, for a person watching (agent activity, spec 2026-10-03-agent-activity-design): each
- * decision since the last one the page has seen, in a sentence, with where to look. Pure: the route reads the rows,
- * this says them, and the page decides how to show them.
+ * What the agent just did, for a person watching (agent activity, spec 2026-10-03-agent-activity-design; told with
+ * its reasons and timing, decision trail spec R4): each decision since the last one the page has seen, in a sentence,
+ * with who decided and what was checked, how long after the person's action, and where to look. Pure: the route reads
+ * the rows, this says them, and the page decides how to show them.
  */
+import { deciderName } from "./decision-trail";
+import { ruleNextStep } from "./next-step";
 
 /** The agent's ledger actions a person is told about as they happen. A treasury hold, every cycle, is not news. */
 export const ACTIVITY_ACTIONS = [
@@ -16,12 +19,17 @@ export const ACTIVITY_ACTIONS = [
   "ar_received",
 ] as const;
 
+/** The people's actions on an invoice that give the agent something to decide: how long after one it decided is told. */
+export const TRIGGER_ACTIONS = ["create_invoice", "invoice_details_added", "approval_returned"] as const;
+
 export type ActivityTone = "done" | "stopped";
 
 export interface ActivityItem {
   seq: number;
-  /** One sentence: what the agent did, to whom, for how much. */
+  /** One sentence: what the agent did, to whom, for how much, and how long after the person's action. */
   text: string;
+  /** Who decided and what was checked, or why it stopped; null when the entry says neither. */
+  detail: string | null;
   /** Done (paid, scheduled, released, received) or stopped (held, asked, flagged, refused by code). */
   tone: ActivityTone;
   /** Where in the workspace a person sees it, or handles it: an org path such as `/approvals#payable-<id>`. */
@@ -35,6 +43,7 @@ export interface ActivityItem {
 /** A ledger entry as the route reads it. */
 export interface ActivityEntry {
   seq: number;
+  ts?: string;
   action: string;
   detail: Record<string, unknown>;
 }
@@ -43,10 +52,16 @@ export interface ActivityEntry {
 export interface ActivityRefs {
   invoices: ReadonlyMap<string, { name: string; amount: number; currency: string; status: string; txRef: string | null; scheduledFor: string | null }>;
   milestones: ReadonlyMap<string, { name: string; title: string; amount: number; txRef: string | null }>;
+  /** Each invoice's people's actions that gave the agent work (`TRIGGER_ACTIONS`), any order. */
+  triggers?: ReadonlyMap<string, ReadonlyArray<{ seq: number; ts: string; action: string }>>;
 }
 
-const text = (value: unknown) => (typeof value === "string" ? value : null);
+const text = (value: unknown) => (typeof value === "string" && value.length > 0 ? value : null);
 const record = (value: unknown) => (value !== null && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null);
+const number = (value: unknown) => {
+  const parsed = typeof value === "number" ? value : typeof value === "string" ? Number(value) : Number.NaN;
+  return Number.isFinite(parsed) ? parsed : null;
+};
 
 const AMOUNT = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 });
 
@@ -63,6 +78,55 @@ function shortDay(value: string): string {
   return day.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 }
 
+const AFTER: Record<(typeof TRIGGER_ACTIONS)[number], string> = {
+  create_invoice: "after it was added",
+  invoice_details_added: "after details were added",
+  approval_returned: "after it was returned",
+};
+
+/** " · 26 s after it was added": from the latest person's action on the invoice before the decision, within an hour. */
+export function afterTrigger(entry: ActivityEntry, triggers: ReadonlyArray<{ seq: number; ts: string; action: string }> | undefined): string {
+  if (!entry.ts || !triggers) return "";
+  const latest = [...triggers].filter((trigger) => trigger.seq < entry.seq).sort((a, b) => b.seq - a.seq)[0];
+  if (!latest) return "";
+  const seconds = Math.round((Date.parse(entry.ts) - Date.parse(latest.ts)) / 1000);
+  if (!Number.isFinite(seconds) || seconds < 0 || seconds > 3_600) return "";
+  const words = AFTER[latest.action as keyof typeof AFTER];
+  if (!words) return "";
+  return ` · ${seconds < 120 ? `${seconds} s` : `${Math.round(seconds / 60)} min`} ${words}`;
+}
+
+/** Who decided, and whether the written policy agreed: "DeepSeek decided, as the written policy would." */
+function deciderLine(detail: Record<string, unknown>): string | null {
+  if (!("decisionMode" in detail)) return null;
+  const decider = deciderName(detail.decisionMode);
+  if (decider === "The written policy") return "Decided by the written policy: no model answered.";
+  const agreed = detail.agreedWithReference;
+  return agreed === true ? `${decider} decided, as the written policy would.` : agreed === false ? `${decider} decided; the written policy would have decided otherwise.` : `${decider} decided.`;
+}
+
+/** What a payment's decision checked, in one line, from the facts it recorded. */
+function checksLine(detail: Record<string, unknown>): string | null {
+  const observed = record(detail.observed) ?? {};
+  const checks: string[] = [];
+  if (text(observed.poReference) && observed.goodsReceived === true) checks.push("purchase order and goods received");
+  const limit = number(observed.paymentLimit);
+  if (limit !== null) checks.push(`within the ${AMOUNT.format(limit)} USDC limit`);
+  if (observed.riskLevel === "clear") checks.push("screened clear");
+  if (text(record(record(detail.onChainLimit)?.verdict)?.state) === "allowed") checks.push("the spending-limit contract allowed it");
+  return checks.length > 0 ? `Checked: ${checks.join(", ")}.` : null;
+}
+
+/** The first sentence of the model's reasoning, for why it stopped, cut to a toast's length. */
+function firstSentence(detail: Record<string, unknown>): string | null {
+  const reasoning = text(record(detail.decision)?.reasoning);
+  if (!reasoning) return null;
+  const sentence = reasoning.split(/(?<=[.!?])\s/)[0] ?? reasoning;
+  return sentence.length > 180 ? `${sentence.slice(0, 177).trimEnd()}…` : sentence;
+}
+
+const joined = (...parts: Array<string | null>) => parts.filter((part): part is string => part !== null).join(" ") || null;
+
 /** One entry in words, or null when it is not one a person is told about, or what it is about is gone. */
 export function activityItem(entry: ActivityEntry, refs: ActivityRefs): ActivityItem | null {
   if (!(ACTIVITY_ACTIONS as readonly string[]).includes(entry.action)) return null;
@@ -75,23 +139,41 @@ export function activityItem(entry: ActivityEntry, refs: ActivityRefs): Activity
     const what = `${activityAmount(milestone.amount, "USDC")} for ${milestone.title}`;
     if (entry.action === "milestone_release" && !blocked) {
       const tx = arcTx(text(record(entry.detail.execution)?.txRef)) ?? arcTx(milestone.txRef);
-      return { seq: entry.seq, text: `Released ${what} to ${milestone.name}.`, tone: "done", path: "/contractors", pathLabel: "Contractors", txHash: tx };
+      return { seq: entry.seq, text: `Released ${what} to ${milestone.name}.`, detail: deciderLine(entry.detail), tone: "done", path: "/contractors", pathLabel: "Contractors", txHash: tx };
     }
-    return { seq: entry.seq, text: `Held ${what} from ${milestone.name} for you.`, tone: "stopped", path: "/contractors", pathLabel: "Decide in Contractors", txHash: null };
+    return {
+      seq: entry.seq,
+      text: `Held ${what} from ${milestone.name} for you.`,
+      detail: firstSentence(entry.detail),
+      tone: "stopped",
+      path: "/contractors",
+      pathLabel: "Decide in Contractors",
+      txHash: null,
+    };
   }
 
   const id = text(entry.detail.invoiceId);
   const invoice = id ? refs.invoices.get(id) : undefined;
   if (!id || !invoice) return null;
   const amount = activityAmount(invoice.amount, invoice.currency);
+  const after = afterTrigger(entry, refs.triggers?.get(id));
+  const how = { path: `/invoices#trail-${id}`, pathLabel: "How it decided" };
 
   if (entry.action === "ar_received") {
-    return { seq: entry.seq, text: `Received ${amount} from ${invoice.name}.`, tone: "done", path: "/invoices", pathLabel: "AP / AR", txHash: arcTx(text(entry.detail.txHash)) };
+    return { seq: entry.seq, text: `Received ${amount} from ${invoice.name}.`, detail: null, tone: "done", path: "/invoices", pathLabel: "AP / AR", txHash: arcTx(text(entry.detail.txHash)) };
   }
   const decide = { path: `/approvals#payable-${id}`, pathLabel: "Decide in Approvals" };
   if (blocked) {
     const rule = text(entry.detail.guardrailRule);
-    return { seq: entry.seq, text: `Code stopped paying ${invoice.name} ${amount}${rule ? ` (${rule})` : ""}.`, tone: "stopped", ...decide, txHash: null };
+    const step = ruleNextStep(rule, { id: "", name: invoice.name });
+    return {
+      seq: entry.seq,
+      text: `Code stopped paying ${invoice.name} ${amount}${after}.`,
+      detail: joined(deciderLine(entry.detail), step?.sentence ?? (rule ? `Rule: ${rule}.` : null)),
+      tone: "stopped",
+      ...decide,
+      txHash: null,
+    };
   }
   switch (entry.action) {
     case "ap_pay": {
@@ -100,29 +182,37 @@ export function activityItem(entry: ActivityEntry, refs: ActivityRefs): Activity
       const resulting = text(execution?.resultingStatus) ?? invoice.status;
       // A payment that did not go out is held: say so, rather than "paid".
       if (resulting === "held" || resulting === "flagged") {
-        return { seq: entry.seq, text: `Tried to pay ${invoice.name} ${amount}; it is held for you.`, tone: "stopped", ...decide, txHash: null };
+        return { seq: entry.seq, text: `Tried to pay ${invoice.name} ${amount}; it is held for you.`, detail: deciderLine(entry.detail), tone: "stopped", ...decide, txHash: null };
       }
       const tx = arcTx(text(execution?.txRef)) ?? arcTx(invoice.txRef);
-      const sent = resulting === "matched" ? `Sent ${amount} to ${invoice.name}; Arc testnet is confirming it.` : `Paid ${invoice.name} ${amount}.`;
-      return { seq: entry.seq, text: sent, tone: "done", path: "/invoices", pathLabel: "AP / AR", txHash: tx };
+      const sent = resulting === "matched" ? `Sent ${amount} to ${invoice.name}${after}; Arc testnet is confirming it.` : `Paid ${invoice.name} ${amount}${after}.`;
+      return { seq: entry.seq, text: sent, detail: joined(deciderLine(entry.detail), checksLine(entry.detail)), tone: "done", ...how, txHash: tx };
     }
     case "ap_schedule": {
       const payOn = text(record(entry.detail.decision)?.payOn) ?? invoice.scheduledFor;
       return {
         seq: entry.seq,
-        text: `Scheduled ${invoice.name} ${amount}${payOn ? ` for ${shortDay(payOn)}` : ""}.`,
+        text: `Scheduled ${invoice.name} ${amount}${payOn ? ` for ${shortDay(payOn)}` : ""}${after}.`,
+        detail: joined(deciderLine(entry.detail), firstSentence(entry.detail)),
         tone: "done",
-        path: "/invoices",
-        pathLabel: "AP / AR",
+        ...how,
         txHash: null,
       };
     }
     case "ap_request_info":
-      return { seq: entry.seq, text: `Asked for details before paying ${invoice.name} ${amount}.`, tone: "stopped", path: "/invoices", pathLabel: "Add details", txHash: null };
+      return {
+        seq: entry.seq,
+        text: `Asked for details before paying ${invoice.name} ${amount}${after}.`,
+        detail: firstSentence(entry.detail),
+        tone: "stopped",
+        path: "/invoices",
+        pathLabel: "Add details",
+        txHash: null,
+      };
     case "ap_flag_fraud":
-      return { seq: entry.seq, text: `Flagged ${invoice.name} ${amount} for you to review.`, tone: "stopped", ...decide, txHash: null };
+      return { seq: entry.seq, text: `Flagged ${invoice.name} ${amount} for you to review${after}.`, detail: firstSentence(entry.detail), tone: "stopped", ...decide, txHash: null };
     default:
-      return { seq: entry.seq, text: `Held ${invoice.name} ${amount} for you.`, tone: "stopped", ...decide, txHash: null };
+      return { seq: entry.seq, text: `Held ${invoice.name} ${amount} for you${after}.`, detail: firstSentence(entry.detail), tone: "stopped", ...decide, txHash: null };
   }
 }
 

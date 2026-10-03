@@ -1,6 +1,6 @@
 import { db, unwrap } from "./dal";
 import { CYCLE_IN_PROGRESS_MS } from "./agent/balances";
-import { ACTIVITY_ACTIONS, activityItems, type ActivityEntry, type ActivityItem, type ActivityRefs } from "./agent-activity";
+import { ACTIVITY_ACTIONS, activityItems, TRIGGER_ACTIONS, type ActivityEntry, type ActivityItem, type ActivityRefs } from "./agent-activity";
 
 /** What the agent is doing in the workspace in scope, and what it decided after `since` (agent activity). */
 export interface AgentActivity {
@@ -46,7 +46,7 @@ export async function readAgentActivity(since: number | null, now: number = Date
   const entries = unwrap(
     await client
       .from("ledger_entries")
-      .select("seq, action, detail")
+      .select("seq, ts, action, detail")
       .eq("actor", "agent")
       .in("action", ACTIVITY_ACTIONS)
       .gt("seq", since)
@@ -57,14 +57,30 @@ export async function readAgentActivity(since: number | null, now: number = Date
 
   const invoiceIds = strings(entries.map((entry) => entry.detail.invoiceId));
   const milestoneIds = strings(entries.map((entry) => entry.detail.milestoneId));
-  const [invoiceRows, milestoneRows] = await Promise.all([
+  const [invoiceRows, milestoneRows, triggerRows] = await Promise.all([
     invoiceIds.length > 0
       ? client.from("invoices").select("id, amount, currency, status, tx_ref, scheduled_for, counterparties(name)").in("id", invoiceIds)
       : Promise.resolve({ data: [], error: null }),
     milestoneIds.length > 0
       ? client.from("milestones").select("id, title, amount, tx_ref, counterparties(name)").in("id", milestoneIds)
       : Promise.resolve({ data: [], error: null }),
+    // The people's actions that gave the agent each decision: how long after them it decided (decision trail R4).
+    invoiceIds.length > 0
+      ? client
+          .from("ledger_entries")
+          .select("seq, ts, action, detail->>invoiceId")
+          .eq("actor", "human")
+          .in("action", TRIGGER_ACTIONS)
+          .in("detail->>invoiceId", invoiceIds)
+          .order("seq", { ascending: false })
+          .limit(READ_AT_MOST * 3)
+      : Promise.resolve({ data: [], error: null }),
   ]);
+  const triggers = new Map<string, Array<{ seq: number; ts: string; action: string }>>();
+  for (const row of unwrap(triggerRows) as unknown as Array<{ seq: number; ts: string; action: string; invoiceId: string | null }>) {
+    if (!row.invoiceId) continue;
+    triggers.set(row.invoiceId, [...(triggers.get(row.invoiceId) ?? []), { seq: row.seq, ts: row.ts, action: row.action }]);
+  }
   const refs: ActivityRefs = {
     invoices: new Map(
       (unwrap(invoiceRows) as unknown as Array<{
@@ -92,6 +108,7 @@ export async function readAgentActivity(since: number | null, now: number = Date
         (row) => [row.id, { name: row.counterparties?.name ?? "a contractor", title: row.title, amount: Number(row.amount), txRef: row.tx_ref }]
       )
     ),
+    triggers,
   };
   return { ...base, items: activityItems(entries, refs) };
 }

@@ -1,5 +1,8 @@
 export type Domain = "ap" | "ar" | "contractor" | "treasury" | "compliance" | "system";
-export type Outcome = "settled" | "scheduled" | "held" | "refused" | "simulated" | "recorded";
+import type { TrailStep } from "@/lib/decision-trail";
+
+/** `deciding`: a payable not yet decided while a cycle runs, which is deciding it (decision trail R1). */
+export type Outcome = "settled" | "scheduled" | "held" | "refused" | "simulated" | "recorded" | "deciding";
 export type RiskTier = "unscreened" | "clear" | "medium" | "high";
 
 export interface Evidence {
@@ -38,6 +41,8 @@ export interface Decision {
   mint?: { chainLabel: string; txHash: string; href: string } | null;
   auditSeq?: number;
   at: string;
+  /** How the agent decided it, step by step, from the signed entries about it (decision trail R2). */
+  trail?: TrailStep[];
 }
 
 export interface Account {

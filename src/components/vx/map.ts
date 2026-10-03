@@ -3,6 +3,7 @@ import { invoiceDiscount } from "@/lib/agent/payment-timing";
 import { utcDay } from "@/lib/copy";
 import { explainMilestone, explainPayable, explainTreasury, presentReasoning } from "@/lib/reasoning-copy";
 import { recordedFacts } from "@/lib/added-details";
+import { invoiceTrail } from "@/lib/decision-trail";
 import type { LedgerEntry } from "@/lib/ledger";
 import type { CounterpartyRow, InvoiceRow, MilestoneRow, TreasuryActionRow } from "@/lib/queries";
 import type { Decision, Evidence, Guardrail, Outcome } from "./types";
@@ -213,8 +214,19 @@ function receivableDecision(invoice: InvoiceRow, entries: LedgerEntry[]): Decisi
   };
 }
 
-export function invoiceDecision(invoice: InvoiceRow, counterparty: CounterpartyRow | undefined, entries: LedgerEntry[]): Decision {
+/** What a payable being decided says, until the cycle deciding it ends (decision trail R1). */
+export const DECIDING_NOW =
+  "The agent is deciding this invoice now. It checks the purchase order and goods receipt, the counterparty's screening and limit, the balance and what else falls due, then pays, schedules or holds it.";
+
+export function invoiceDecision(
+  invoice: InvoiceRow,
+  counterparty: CounterpartyRow | undefined,
+  entries: LedgerEntry[],
+  options: { deciding?: boolean } = {}
+): Decision {
   if (invoice.direction === "receivable") return receivableDecision(invoice, entries);
+  // A payable not yet decided while a cycle runs is being decided now (decision trail R1).
+  const deciding = options.deciding === true && invoice.status === "pending";
   const entry = matchingEntry(entries, "invoiceId", invoice.id);
   const observed = record(entry?.detail.observed);
   // The agent's own decision, with the facts it was made on: what its reasoning is explained from.
@@ -247,10 +259,11 @@ export function invoiceDecision(invoice: InvoiceRow, counterparty: CounterpartyR
     memo: invoice.memo ?? undefined,
     amount: invoice.amount,
     token: currency,
-    outcome,
-    outcomeLabel: settledOn ? `Settled on ${settledOn}` : invoiceOutcomeLabel(invoice, guardrailBlocked),
-    reasoning:
-      presentReasoning(
+    outcome: deciding ? "deciding" : outcome,
+    outcomeLabel: deciding ? undefined : settledOn ? `Settled on ${settledOn}` : invoiceOutcomeLabel(invoice, guardrailBlocked),
+    reasoning: deciding
+      ? DECIDING_NOW
+      : presentReasoning(
         invoice.agent_reasoning,
         explainPayable({
           name: invoice.counterparty_name,
@@ -287,6 +300,7 @@ export function invoiceDecision(invoice: InvoiceRow, counterparty: CounterpartyR
     mint,
     auditSeq: entry?.seq,
     at: entry?.ts ?? invoice.due_date,
+    trail: invoiceTrail(entries, invoice.id),
   };
 }
 

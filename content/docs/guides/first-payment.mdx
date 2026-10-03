@@ -164,7 +164,14 @@ To run one yourself, open **Treasury**, the console, and choose **Run cycle now*
 
 ### Watch the agent work
 
-The line at the top of every workspace page says when the last cycle ran. While a cycle runs, it reads "The agent is working · *n* s" instead, counting the seconds. When the agent has decided, a message says what it did, one per decision. For example, "Paid Jiren 0.30 USDC." comes with **View on Arcscan**, for its transaction, and a button to the page that shows it. "Held CME 0.33 USDC for you." comes with **Decide in Approvals**. When a cycle decides more than two things, one message says "The agent made *n* decisions." and **See them** opens the console's report of that cycle. Either way the page shows what changed at once, without a reload.
+The line at the top of every workspace page says when the last cycle ran. While a cycle runs, it reads "The agent is working · *n* s" instead, counting the seconds, and on **AP / AR** each payable not yet decided reads **Deciding now**.
+
+When the agent has decided, a message says what it did, one per decision, how long after your action, who decided and what was checked. For example:
+
+- "Paid Jiren 0.30 USDC · 28 s after details were added.", then "DeepSeek decided, as the written policy would. Checked: purchase order and goods received, within the 30.00 USDC limit, screened clear, the spending-limit contract allowed it." It comes with **View on Arcscan**, for its transaction, and **How it decided**, which opens the payable's steps on **AP / AR**.
+- "Held CME 0.33 USDC for you.", with why it stopped and **Decide in Approvals**.
+
+When a cycle decides more than two things, one message says "The agent made *n* decisions." and **See them** opens the console's report of that cycle. Either way the page shows what changed at once, without a reload.
 
 A page tells what happens while it is open: a cycle started by your own action, by another member's, or by the 6-hourly schedule. It watches closely for a minute and a half after you add or change something, and less often otherwise.
 
@@ -179,11 +186,19 @@ On **AP / AR**, the tiles at the top count what needs you, what is due within 7 
 
 <Screenshot
   src="/docs/guides/first-payment-decision.png"
-  alt="The Payables list on AP / AR, its Paid and closed group holding one row: Northstar Studio, October design retainer, Due Oct 15, 2026, 12.50 USDC, Settled on Arc. The row is open on its decision card: Pay Northstar Studio, 12.50 USDC, marked Settled on Arc. The agent's reasoning reads: Paid 12.50 USDC to Northstar Studio: PO-2207 matches and the work was received, Northstar Studio screened clear with a 50.00 USDC limit, and the operating wallet holds 20.00 USDC. Below are the evidence chips PO, Goods received, Risk, Limit and Due, then the link to ledger entry 5 and the transaction hash."
+  alt="The Payables list on AP / AR, its Paid and closed group holding one row: Northstar Studio, October design retainer, Due Oct 15, 2026, 12.50 USDC, Settled on Arc. The row is open on its decision card: Pay Northstar Studio, 12.50 USDC, marked Settled on Arc. The agent's reasoning reads: Paid 12.50 USDC to Northstar Studio: PO-2207 matches and the work was received, Northstar Studio screened clear with a 50.00 USDC limit, and the operating wallet holds 20.00 USDC. Below are How the agent decided, folded, the evidence chips PO, Goods received, Risk, Limit and Due, then the link to ledger entry 5 and the transaction hash."
   caption="A settled payment: the agent's reasoning, the evidence it checked, the ledger entry and the transaction."
 />
 
 When the model decided to pay but a guardrail stopped it, the card also has a "Blocked by code, not by the model" band. The band names the rule, the amount attempted and the amount allowed.
+
+At the foot of a payable's card, **How the agent decided** opens its steps, oldest first, each a signed entry in the ledger: who added it, what a person changed, each decision with who decided and whether the written policy agreed, what it checked (the purchase order and goods, screening, the amount against the limit, duplicates), what code refused, what the spending-limit contract on Arc said, and the transaction that reached Arc testnet. Each step shows its time to the second, how long after the step before it, and the number of its entry in the audit log.
+
+<Screenshot
+  src="/docs/guides/first-payment-trail.png"
+  alt="A paid payable's card on AP / AR, Pay Northstar Studio, 12.50 USDC, Settled on Arc, with How the agent decided opened on 5 steps: a person added it; DeepSeek decided to ask for more information before paying it, with No purchase order on file; 14 min later a person added purchase order PO-2215 and goods received; 14 s later the agent saw the facts change and took it up again; 12 s later DeepSeek decided to pay it, as the written policy would, with each check passed, the spending-limit contract on Arc allowing it, and the transaction."
+  caption="How the agent decided: each step a signed entry, with what was checked."
+/>
 
 A payable the agent stopped also says what you can do about it, on the console's **Stopped** section as on **AP / AR**. Under the card, a line names the cause and the way through, for example "It is above CME's payment limit. Pay it in Approvals, or raise the limit." **Decide in Approvals** opens Approvals at that payable's card. Owners and admins also get the page that removes the cause:
 
@@ -196,7 +211,7 @@ A stop only a decision resolves, such as a payout fee above 10% of the invoice o
 
 <Screenshot
   src="/docs/guides/first-payment-stopped.png"
-  alt="The console's Stopped section with one card: Tried to pay Northstar Studio, 75.00 USDC struck through, Refused by guardrail. The band Blocked by code, not by the model names the rule counterparty.payment_limit, 75.00 USDC attempted against 50.00 USDC allowed. Under the agent's reasoning and its evidence, the card's last line reads: It is above Northstar Studio's payment limit. Pay it in Approvals, or raise the limit. The buttons are Edit limit and Decide in Approvals."
+  alt="The console's Stopped section with one card: Tried to pay Northstar Studio, 75.00 USDC struck through, Refused by guardrail. The band Blocked by code, not by the model names the rule counterparty.payment_limit, 75.00 USDC attempted against 50.00 USDC allowed. Under the agent's reasoning, How the agent decided, folded, and its evidence, the card's last line reads: It is above Northstar Studio's payment limit. Pay it in Approvals, or raise the limit. The buttons are Edit limit and Decide in Approvals."
   caption="A payment code refused, with the way through: raise the limit, or decide it in Approvals."
 />
 
@@ -326,7 +341,7 @@ On **AP / AR**, the payable waits under **Needs you**, and its row says what it 
 
 <Screenshot
   src="/docs/guides/first-payment-needs-you.png"
-  alt="AP / AR, under Payables, Needs you: one row for Northstar Studio, November design retainer, Needs a purchase order and goods received, due Oct 15, 2026, 12.50 USDC, marked Awaiting info. Opened, its card shows the agent's reasoning and the evidence PO none and Goods received no, and at the bottom: Add the purchase order and confirm the goods or services were received, and the agent decides it again, with the buttons Add details and Decide in Approvals."
+  alt="AP / AR, under Payables, Needs you: one row for Northstar Studio, November design retainer, Needs a purchase order and goods received, due Oct 15, 2026, 12.50 USDC, marked Awaiting info. Opened, its card shows the agent's reasoning, the evidence PO none and Goods received no, How the agent decided, folded, and at the bottom: Add the purchase order and confirm the goods or services were received, and the agent decides it again, with the buttons Add details and Decide in Approvals."
   caption="A payable waiting for its purchase order, on AP / AR."
 />
 
