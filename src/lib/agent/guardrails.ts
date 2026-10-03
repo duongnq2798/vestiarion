@@ -71,6 +71,7 @@ export interface OnChainLimitCheck {
 
 export type ApGuardrailRule =
   | "counterparty.high_risk"
+  | "counterparty.unscreened"
   | "counterparty.payment_limit"
   | "counterparty.address_unconfirmed"
   | "invoice.duplicate_of_settled"
@@ -168,6 +169,16 @@ export function enforceApGuardrails(input: ApGuardrailInput): ApGuardrailResult 
       status: "flagged",
       rule: "counterparty.high_risk",
       reasoning: `${input.reasoning} [guardrail override: counterparty is high risk — ${verb} refused before execution]`,
+    };
+  }
+  // A counterparty no screening has given a verdict on (unscreened hold R1, R2): screening could not run when it was
+  // added. Its limit means nothing yet, so it is paid nothing, now or on a date, until screening answers.
+  if (input.riskLevel === "unscreened") {
+    return {
+      blocked: true,
+      status: "held",
+      rule: "counterparty.unscreened",
+      reasoning: `${input.reasoning} [guardrail override: counterparty has not been screened yet — ${verb} refused before execution; decided again once screening gives a verdict]`,
     };
   }
   // Ahead of the limit so the reason names the change: an edited address is

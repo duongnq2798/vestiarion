@@ -359,6 +359,8 @@ function invoiceGuardrail(
     return { rule: recorded, attempted: needed, limit: numberValue(payout?.gatewayBalanceUsdc) ?? 0, note: "the Gateway balance, which an earlier attempt's route requires" };
   }
   if (recorded === "bridge.unsupported_token") return { rule: recorded, attempted: amount, attemptedToken: currency, limit, limitToken: "USDC", note: "only USDC crosses chains" };
+  // A counterparty no screening has given a verdict on yet (unscreened hold).
+  if (recorded === "counterparty.unscreened") return { rule: recorded, attempted: usdcValue ?? amount, attemptedToken: "USDC", limit, limitToken: "USDC", note: "not screened yet" };
   // The agent's spending limit (outflow budget spec §4): the USDC value against what the limit left.
   const budget = recorded === "workspace.outflow_budget" ? budgetGuardrail(usdcValue ?? amount, detail) : null;
   if (budget) return budget;
@@ -526,7 +528,9 @@ export function milestoneDecision(milestone: MilestoneRow, entries: LedgerEntry[
           ? budgetGuardrail(milestone.amount, entry.detail)
           : entry?.detail.guardrailRule === "workspace.onchain_limit"
             ? onChainGuardrail(milestone.amount, entry.detail)
-            : null) ??
+            : entry?.detail.guardrailRule === "counterparty.unscreened"
+              ? { rule: "counterparty.unscreened", attempted: milestone.amount, limit, note: "not screened yet" }
+              : null) ??
         { rule: risk === "high" ? "counterparty.high_risk" : "counterparty.payment_limit", attempted: milestone.amount, limit, note: risk === "high" ? "risk tier high" : "amount above screened limit" }
       : null,
     decisionMode: stringValue(decided?.detail.decisionMode ?? entry?.detail.decisionMode),

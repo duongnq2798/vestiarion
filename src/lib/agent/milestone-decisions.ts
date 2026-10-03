@@ -80,6 +80,7 @@ function raise(code: MilestoneDecisionErrorCode, message?: string): never {
 export type HeldReasonKind =
   | "in_flight"
   | "high_risk"
+  | "unscreened"
   | "screening_limit"
   | "above_limit"
   | "address_unconfirmed"
@@ -130,6 +131,7 @@ const COUNTERPARTIES = { label: "Counterparties", path: "/counterparties" };
 const HINTS: Record<HeldReasonKind, string> = {
   in_flight: "Transfer to record",
   high_risk: "Screened high risk",
+  unscreened: "Not screened yet",
   screening_limit: "Limit lowered by a screening match",
   above_limit: "Above the contractor's limit",
   address_unconfirmed: "Address to confirm",
@@ -163,6 +165,17 @@ function reasonOf(facts: HeldFacts): Omit<HeldReason, "hint"> {
   // What the agent's release enforces, and Pay now with it.
   if (contractor.riskLevel === "high") {
     return blocked("high_risk", `${name} is screened high risk, so it is not paid. Review the match on Counterparties: once the screening changes, the agent decides it again.`);
+  }
+  // Screening could not give a verdict yet (unscreened hold R4, R5): the agent waits for one; a person may pay it now.
+  if (contractor.riskLevel === "unscreened") {
+    return {
+      kind: "unscreened",
+      text: `${name} has not been screened yet, so the agent pays it nothing. Screening runs again at every cycle; once it gives a verdict, the agent decides this milestone again. Pay now pays it anyway.`,
+      link: COUNTERPARTIES,
+      canPay: true,
+      canClose: true,
+      override: true,
+    };
   }
   if (contractor.paymentLimit != null && facts.amount > contractor.paymentLimit) {
     const cut = contractor.riskNotes && contractor.baselinePaymentLimit != null && contractor.paymentLimit < contractor.baselinePaymentLimit;

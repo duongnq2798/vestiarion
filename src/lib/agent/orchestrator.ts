@@ -3131,6 +3131,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
 
   type ContractorGuardrailRule =
     | "counterparty.high_risk"
+    | "counterparty.unscreened"
     | "counterparty.payment_limit"
     | "workspace.outflow_budget"
     | "workspace.onchain_limit"
@@ -3277,6 +3278,8 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     }
     const limit = contractor.payment_limit == null ? null : num(contractor.payment_limit);
     const highRisk = contractor.risk_level === "high";
+    // No screening has given a verdict yet (unscreened hold R4): nothing is released to it until one does.
+    const unscreened = contractor.risk_level === "unscreened";
     const overLimit = limit != null && amount > limit;
 
     const { value: decision, mode, reference, agreedWithReference } = await decide<MilestoneDecision>({
@@ -3335,19 +3338,21 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
 
     if (decision.action === "release") {
       // The spending limit, after the contractor's own checks (outflow budget spec R4).
-      outflowBudget = highRisk || overLimit ? null : await budget.room();
+      outflowBudget = highRisk || unscreened || overLimit ? null : await budget.room();
       // The same limit on Arc (onchain spending limit R3, R5, R7): asked for a release not from escrow, whose money
       // left the treasury when a person locked it.
       const escrowed = ["funded", "funding"].includes(String((milestone as { escrow_state?: string | null }).escrow_state ?? ""));
       onChainCheck =
-        highRisk || overLimit || escrowed ? null : await onChainLimit.check({ sourceType: "milestone", sourceId: milestone.id, to: contractor.address, amount });
+        highRisk || unscreened || overLimit || escrowed ? null : await onChainLimit.check({ sourceType: "milestone", sourceId: milestone.id, to: contractor.address, amount });
       const onChainHold = onChainLimitHold(onChainCheck, reasoning);
-      if (highRisk || overLimit) {
+      if (highRisk || unscreened || overLimit) {
         guardrailBlocked = true;
-        guardrailRule = highRisk ? "counterparty.high_risk" : "counterparty.payment_limit";
+        guardrailRule = highRisk ? "counterparty.high_risk" : unscreened ? "counterparty.unscreened" : "counterparty.payment_limit";
         reasoning += highRisk
           ? " [guardrail override: contractor is high risk — release refused]"
-          : ` [guardrail override: amount exceeds the ${limit} USDC limit — release refused]`;
+          : unscreened
+            ? " [guardrail override: contractor has not been screened yet — release refused; decided again once screening gives a verdict]"
+            : ` [guardrail override: amount exceeds the ${limit} USDC limit — release refused]`;
       } else if (exceedsBudget(amount, outflowBudget)) {
         guardrailBlocked = true;
         guardrailRule = "workspace.outflow_budget";
