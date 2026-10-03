@@ -3,3 +3,13 @@ export { VestiarionError, type VestiarionErrorCode } from "./errors.js";
 export type { FetchLike } from "./http.js";
 export * from "./types.js";
 export { VERSION } from "./version.js";
+export {
+  verifyLedgerEntry,
+  verifyWebhook,
+  WEBHOOK_TOLERANCE_SECONDS,
+  WebhookVerificationError,
+  type EntryCheck,
+  type WebhookEvent,
+  type WebhookLedgerEntry,
+  type WebhookVerificationReason,
+} from "./webhooks.js";
