@@ -1,6 +1,6 @@
 # Write API, part 2: add milestones and payee links from your own system
 
-Date: 2026-10-03. Status: designed on `feat/write-api-2`. Decided under the standing autonomy grant. Builds on
+Date: 2026-10-03. Status: shipped in PR #182 (873bb7c, 2026-10-03 15:33 UTC), and proven in testnet-2 (§5). Decided under the standing autonomy grant. Builds on
 `2026-10-03-write-api-design.md` (part 1, PR #171: counterparties and invoices) and the TypeScript SDK
 (`2026-10-03-typescript-sdk-design.md`, PR #176).
 
@@ -162,3 +162,31 @@ No migration.
    4. The agent verifies the milestone and pays it: `verify_milestone_github`, then a payment with a transaction.
 3. The partner publishes `@vestiarion/sdk` 0.2.0 to npm.
 4. Record the entries and the transaction here.
+
+### Record
+
+PR #182 merged at 15:33 UTC. By 15:40 UTC, production served it:
+
+- the OpenAPI document lists `create-milestone` and `create-payee-link`;
+- `POST /api/v1/payee-links` answers `401` without a key;
+- the 0.2.0 tarball is served with the same SHA-512 as the committed file;
+- the guide and both reference pages answer `200`.
+
+The check ran in testnet-2 the same afternoon, with a read-and-write key the partner made for it. The API calls and
+the payee's page were driven from a script and a browser. The partner confirmed the address in the console. Every
+step is in the workspace's signed ledger:
+
+| Ledger | Time (UTC) | What happened |
+| --- | --- | --- |
+| #1200 | 15:41:55 | `create_counterparty`, `via: "api"`: "API Test Contractor", a contractor with no address and a 1 USDC limit. Screened clear 2 s later (#1201). |
+| #1202 | 15:42:05 | `payee_link_created`, `via: "api"`. The answer carried `Cache-Control: no-store`. |
+| #1203 | 15:42:52 | `counterparty_address_changed`, `via: "payee_link"`: the address entered on the link's page, which then said it waits for testnet-2 to confirm it. |
+| #1204 | 15:43:09 | `create_milestone`, `via: "api"`: 0.10 USDC, with merged PR #176 as `verificationSource`. The same request sent again with the same `Idempotency-Key` got the first answer back with `Idempotent-Replayed: true`, and the list held one milestone. |
+| #1206 | 15:43:26 | `verify_milestone_github`: verified from the merged pull request, 17 s after it was added. Nothing was paid, because the address was unconfirmed. |
+| #1209 | 15:44:17 | `counterparty_address_confirmed`: the partner confirmed the address on Counterparties. |
+| #1211 | 15:44:45 | `milestone_release`: 0.1 USDC, 27 s after the confirmation. The agent's reasoning: verified by a merged pull request, contractor screened clear, well within the 1 USDC limit. |
+
+The payment intent is `confirmed`, with Circle's state `COMPLETE`. The transaction on Arc testnet is
+`0x9c84f45d0bc9c72a3b07eb808c758f34ca1a391f09d03a3b7bb3da91be3efd44`. The partner revokes the test key afterwards.
+`content/docs/examples/create-milestone.json` is the captured `201`. `create-payee-link.json` keeps the captured
+ids but not the link: its `url` is an example, since a real link is never published.
