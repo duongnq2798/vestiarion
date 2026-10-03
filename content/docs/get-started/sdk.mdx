@@ -10,12 +10,18 @@ It has no dependencies. It runs on Node 20 or later, Deno, Bun and edge runtimes
 ## Install
 
 ```bash
+npm install @vestiarion/sdk
+```
+
+pnpm, Yarn and Bun install it by the same name, with `pnpm add`, `yarn add` or `bun add`. The package is ESM only.
+
+This site serves the same package, byte for byte, for a lockfile that should not depend on the npm registry:
+
+```bash
 npm install https://www.vestiarion.xyz/sdk/vestiarion-sdk-0.1.0.tgz
 ```
 
-pnpm, Yarn and Bun install from the same URL, with `pnpm add`, `yarn add` or `bun add`. The package is `@vestiarion/sdk`, and it is ESM only.
-
-Each version has its own URL, and the file behind it never changes, so the integrity hash in your lockfile keeps matching.
+Each version has its own URL there, and the file behind it never changes, so the integrity hash in your lockfile keeps matching.
 
 ## Create a client
 
