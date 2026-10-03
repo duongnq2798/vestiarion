@@ -14,8 +14,9 @@
  *
  *   **Reopening** happens when the *facts changed*. The purchase order arrived,
  *   the goods were received, screening moved the risk tier, the limit was
- *   raised. There is something new to decide, so the invoice goes back into the
- *   decision loop and the model rules on it again.
+ *   raised, a person confirmed the counterparty's new address. There is
+ *   something new to decide, so the invoice goes back into the decision loop
+ *   and the model rules on it again.
  *
  *   **Escalating** happens when *nothing changed and time passed*. Re-running
  *   the same decision over identical facts would produce the identical answer
@@ -59,6 +60,8 @@ export interface FrozenInvoice {
    * (reserve cash back R4).
    */
   cash?: { operating: number; reserve: number };
+  /** Whether the counterparty's address changed and no one has confirmed it, now. Absent when it was not read. */
+  addressUnconfirmed?: boolean;
 }
 
 /** The facts as they stood when the decision was taken, from the ledger. */
@@ -74,6 +77,11 @@ export interface DecisionFacts {
    * Null otherwise (reserve cash back R4).
    */
   heldForCash?: { needed: number; operating: number; reserve: number } | null;
+  /**
+   * Whether the counterparty's address waited for a person's confirmation (`observed.addressUnconfirmed`). False for a
+   * decision recorded before the address was observed.
+   */
+  addressUnconfirmed?: boolean;
 }
 
 export type FollowUpAction = "reopen" | "escalate" | "wait";
@@ -133,12 +141,20 @@ function cashChangeSince(now: { operating: number; reserve: number } | undefined
 }
 
 /**
- * Which of the facts the decision rested on have moved since. Only these four
- * are compared, because these are the four the AP decision actually reasons
- * from; a changed memo is not grounds to re-open a payment question.
+ * Which of the facts the decision rested on have moved since. Only these are
+ * compared, because these are what the AP decision actually reasons from; a
+ * changed memo is not grounds to re-open a payment question.
  */
 export function factChanges(current: DecisionFacts, atDecision: DecisionFacts): string[] {
   const changes: string[] = [];
+
+  // One way only. A payment decided while the counterparty's new address waited for a person was held for that
+  // (counterparty.address_unconfirmed); once someone confirms the address there is something new to decide. An address
+  // changed after a decision reopens nothing: what held the payment still holds it, and the guardrail would hold it for
+  // the new address in any case.
+  if (atDecision.addressUnconfirmed === true && current.addressUnconfirmed === false) {
+    changes.push("the counterparty's new address has since been confirmed");
+  }
 
   if ((current.poReference ?? null) !== (atDecision.poReference ?? null)) {
     changes.push(
@@ -194,6 +210,7 @@ export function planFollowUp(
       goodsReceived: invoice.goodsReceived,
       riskLevel: invoice.riskLevel,
       paymentLimit: invoice.paymentLimit,
+      addressUnconfirmed: invoice.addressUnconfirmed,
     },
     atDecision
   );
