@@ -23,6 +23,7 @@ const anything = (call: Call) => ({ status: call.method === "POST" ? 201 : 200, 
 
 const INVOICE = { counterpartyId: "6b361405-cfda-4400-a286-364b561911ce", amount: "0.10", dueDate: "2026-10-03" };
 const COUNTERPARTY = { name: "API Test Vendor", role: "vendor" as const };
+const MILESTONE = { contractorId: "cp_1", title: "TypeScript SDK for the API", amount: "0.10", verificationSource: "https://github.com/acme/widgets/pull/42" };
 
 /** How each operation is called through the SDK. */
 const CALLS: Record<string, (sdk: Vestiarion) => Promise<unknown>> = {
@@ -34,7 +35,9 @@ const CALLS: Record<string, (sdk: Vestiarion) => Promise<unknown>> = {
   "list-counterparties": (sdk) => sdk.counterparties.list(),
   "get-counterparty": (sdk) => sdk.counterparties.get("cp_1"),
   "create-counterparty": (sdk) => sdk.counterparties.create(COUNTERPARTY),
+  "create-payee-link": (sdk) => sdk.payeeLinks.create({ counterpartyId: "cp_1" }),
   "list-milestones": (sdk) => sdk.milestones.list(),
+  "create-milestone": (sdk) => sdk.milestones.create(MILESTONE),
   "get-treasury": (sdk) => sdk.treasury.get(),
   "get-insights": (sdk) => sdk.insights.get(),
 };
@@ -108,6 +111,18 @@ describe("the client's methods", () => {
     expect(await sdk.invoices.create(INVOICE, { idempotencyKey: "billing-inv-1" })).toEqual({ id: "i1" });
     expect(JSON.parse(calls[0].body!)).toEqual(INVOICE);
     expect(calls[0].headers["idempotency-key"]).toBe("billing-inv-1");
+    expect(await sdk.milestones.create(MILESTONE, { idempotencyKey: "ci-bounty-pr-42" })).toEqual({ id: "i1" });
+    expect(JSON.parse(calls[1].body!)).toEqual(MILESTONE);
+    expect(calls[1].headers["idempotency-key"]).toBe("ci-bounty-pr-42");
+  });
+
+  it("make a payee link with no Idempotency-Key, which the API keeps no outcome for, and return its address (write API part 2, W3)", async () => {
+    const link = { id: "l1", counterpartyId: "cp_1", url: "https://www.vestiarion.xyz/payee/vxp_x", expiresAt: "2026-10-10T15:00:00Z" };
+    const { calls, sdk } = client(() => ({ status: 201, body: { data: link } }));
+    expect(await sdk.payeeLinks.create({ counterpartyId: "cp_1" })).toEqual(link);
+    expect(JSON.parse(calls[0].body!)).toEqual({ counterpartyId: "cp_1" });
+    expect(calls[0].headers).not.toHaveProperty("idempotency-key");
+    expect(calls[0].headers["content-type"]).toBe("application/json");
   });
 });
 

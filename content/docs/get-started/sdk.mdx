@@ -18,10 +18,10 @@ The package is [@vestiarion/sdk on npm](https://www.npmjs.com/package/@vestiario
 This site serves the same package, byte for byte, for a lockfile that should not depend on the npm registry:
 
 ```bash
-npm install https://www.vestiarion.xyz/sdk/vestiarion-sdk-0.1.0.tgz
+npm install https://www.vestiarion.xyz/sdk/vestiarion-sdk-0.2.0.tgz
 ```
 
-Each version has its own URL there, and the file behind it never changes, so the integrity hash in your lockfile keeps matching.
+Each version has its own URL there, and the file behind it never changes, so the integrity hash in your lockfile keeps matching. Version 0.2.0 adds milestones and payee links; 0.1.0 is still served at its own URL.
 
 ## Create a client
 
@@ -63,7 +63,9 @@ Each result is typed from the API's [OpenAPI document](/api/v1/openapi.json), as
 | `vestiarion.counterparties.list(params)`, `vestiarion.counterparties.listAll(params)`, `vestiarion.counterparties.pages(params)` | [List counterparties](/docs/api/list-counterparties) |
 | `vestiarion.counterparties.get(id)` | [Get a counterparty](/docs/api/get-counterparty) |
 | `vestiarion.counterparties.create(input, options)` | [Add a counterparty](/docs/api/create-counterparty) |
+| `vestiarion.payeeLinks.create(input)` | [Create a payee link](/docs/api/create-payee-link) |
 | `vestiarion.milestones.list(params)`, `vestiarion.milestones.listAll(params)`, `vestiarion.milestones.pages(params)` | [List milestones](/docs/api/list-milestones) |
+| `vestiarion.milestones.create(input, options)` | [Add a milestone](/docs/api/create-milestone) |
 | `vestiarion.treasury.get()` | [Get the treasury](/docs/api/get-treasury) |
 | `vestiarion.insights.get()` | [Get insights](/docs/api/get-insights) |
 
@@ -89,12 +91,13 @@ for await (const { data, page } of vestiarion.ledger.pages({ cursor })) {
 
 ## Add records
 
-A key with [write access](/docs/get-started/authentication#scopes) adds counterparties and invoices:
+A key with [write access](/docs/get-started/authentication#scopes) adds counterparties, invoices, milestones and payee links:
 
 - The agent decides each invoice as it decides one typed into the console, with every guardrail.
-- An address added this way waits for a person in the workspace to confirm it.
+- A milestone starts pending. GitHub verifies it once its pull request is merged, or a person does; then the agent decides.
+- An address added this way, or entered by a payee through a link, waits for a person in the workspace to confirm it.
 
-[Add invoices from your own system](/docs/guides/api-invoices) walks through the whole flow.
+[Add invoices from your own system](/docs/guides/api-invoices) and [Pay for merged pull requests](/docs/guides/api-milestones) walk through each flow.
 
 ```ts
 const counterparty = await vestiarion.counterparties.create(
@@ -107,10 +110,23 @@ const invoice = await vestiarion.invoices.create(
 );
 ```
 
-Every write carries an `Idempotency-Key`:
+To pay a contributor once their pull request merges, add a milestone with the pull request as its evidence, and ask a new payee for their address with a link:
+
+```ts
+const milestone = await vestiarion.milestones.create(
+  { contractorId: contractor.id, title: "CSV export for EURC", amount: "150.00", verificationSource: "https://github.com/acme/app/pull/42" },
+  { idempotencyKey: "pr-acme-app-42" }
+);
+const link = await vestiarion.payeeLinks.create({ counterpartyId: contractor.id });
+// Send link.url to the payee: it is shown only in this answer.
+```
+
+Every write except a payee link carries an `Idempotency-Key`:
 
 - **Pass your own record's id.** Then a retry of your own job cannot add the record twice either.
 - **Pass nothing.** Then the SDK makes a fresh key for that call, so its own retries stay safe.
+
+A payee link takes no key. The API keeps only the link's hash, so it cannot give the same link back: a repeat makes a new link, and the unused one stops working.
 
 ## Errors and retries
 
@@ -142,7 +158,7 @@ By default a request is retried twice (`maxRetries`) after:
 
 A `400`, `401`, `403` or `404` is thrown at once.
 
-A write's retry repeats its key and its body, so it can never add the record twice. If the API is still handling the first attempt, it answers the retry with `409`, and the SDK waits that out too.
+A write's retry repeats its key and its body, so it can never add the record twice. If the API is still handling the first attempt, it answers the retry with `409`, and the SDK waits that out too. A payee link's retry makes a new link, which replaces the first.
 
 ## Webhooks
 
@@ -194,4 +210,4 @@ Pass it the public key from the workspace's Audit page, or, after a key rotation
 
 - **Every request** carries `Authorization: Bearer` with the key, and `User-Agent: vestiarion-sdk-js/` followed by the SDK's version.
 - **The key** never goes in a URL, and never appears in an error message.
-- **A write** also sends `Content-Type: application/json` and its `Idempotency-Key`.
+- **A write** also sends `Content-Type: application/json` and its `Idempotency-Key`, except a payee link, which sends no key.

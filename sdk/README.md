@@ -12,10 +12,11 @@ It has no dependencies, and runs on Node 20 or later, Deno, Bun and edge runtime
 ## Install
 
 ```bash
-npm install https://www.vestiarion.xyz/sdk/vestiarion-sdk-0.1.0.tgz
+npm install @vestiarion/sdk
 ```
 
-pnpm, Yarn and Bun take the same URL. The package is ESM only.
+pnpm, Yarn and Bun install it the same way. The package is ESM only. Each version is also served as a tarball, such as
+`https://www.vestiarion.xyz/sdk/vestiarion-sdk-0.2.0.tgz`, which `npm install` takes as it is.
 
 ## Read
 
@@ -38,9 +39,10 @@ workspace.
 
 ## Add records
 
-A key with write access ("Can also add counterparties and invoices") adds counterparties and invoices.
+A key with write access ("Can also add records") adds counterparties, invoices, milestones and payee links.
 - The agent decides each invoice as it decides one typed into the console, with every guardrail.
-- An address added this way waits for a person in the workspace to confirm it.
+- A milestone starts pending. GitHub verifies it once its pull request is merged, or a person does; then the agent decides.
+- An address added this way, or entered by a payee through a link, waits for a person in the workspace to confirm it.
 
 ```ts
 const counterparty = await vestiarion.counterparties.create(
@@ -55,6 +57,20 @@ const invoice = await vestiarion.invoices.create(
 
 Pass your own record's id as `idempotencyKey`, so that your own retries cannot add it twice either.
 
+Pay a contributor when their pull request merges, and ask a new payee for their address:
+
+```ts
+const milestone = await vestiarion.milestones.create(
+  { contractorId: contractor.id, title: "CSV export for EURC", amount: "150.00", verificationSource: "https://github.com/acme/app/pull/42" },
+  { idempotencyKey: "pr-acme-app-42" }
+);
+const link = await vestiarion.payeeLinks.create({ counterpartyId: contractor.id });
+// Send link.url to the payee: it is shown only in this answer.
+```
+
+A payee link takes no `idempotencyKey`: the API keeps only the link's hash, so a repeat makes a new link and the unused
+one stops working.
+
 ## Errors and retries
 
 Every failure is a `VestiarionError`. It carries:
@@ -68,7 +84,8 @@ A request is retried twice by default after:
 - a `500`, `502`, `503` or `504`;
 - a timeout or a network failure.
 
-A write always carries an `Idempotency-Key`, so retrying it never adds the record twice.
+A write carries an `Idempotency-Key`, so retrying it never adds the record twice. A payee link is the exception: a retry
+makes a new link, which replaces the first.
 
 ## Webhooks
 

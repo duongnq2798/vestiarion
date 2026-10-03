@@ -5,6 +5,8 @@ import type {
   CounterpartyDetail,
   CreateCounterpartyInput,
   CreateInvoiceInput,
+  CreateMilestoneInput,
+  CreatePayeeLinkInput,
   Insights,
   Invoice,
   LedgerEntry,
@@ -15,6 +17,7 @@ import type {
   ListMilestonesParams,
   Milestone,
   Page,
+  PayeeLink,
   Status,
   Treasury,
 } from "./types.js";
@@ -101,7 +104,12 @@ export class Vestiarion {
     get(id: string): Promise<CounterpartyDetail>;
     create(input: CreateCounterpartyInput, options?: WriteOptions): Promise<Counterparty>;
   };
-  readonly milestones: Collection<Milestone, ListMilestonesParams>;
+  readonly milestones: Collection<Milestone, ListMilestonesParams> & { create(input: CreateMilestoneInput, options?: WriteOptions): Promise<Milestone> };
+  /**
+   * One-time links where a payee enters the address they are paid at. A link's `url` is in the answer only: send it to
+   * the payee. Making one revokes the payee's unused link, so a retry gives a working link too.
+   */
+  readonly payeeLinks: { create(input: CreatePayeeLinkInput): Promise<PayeeLink> };
   readonly treasury: { get(): Promise<Treasury> };
   readonly insights: { get(): Promise<Insights> };
 
@@ -137,7 +145,15 @@ export class Vestiarion {
       get: (id) => one<CounterpartyDetail>(`/api/v1/counterparties/${encodeURIComponent(id)}`),
       create: (input, write) => add<Counterparty>("/api/v1/counterparties", input, write),
     };
-    this.milestones = collection<Milestone, ListMilestonesParams>(transport, "/api/v1/milestones");
+    this.milestones = {
+      ...collection<Milestone, ListMilestonesParams>(transport, "/api/v1/milestones"),
+      create: (input, write) => add<Milestone>("/api/v1/milestones", input, write),
+    };
+    // The API keeps no outcome for a payee link's key, so none is sent (write API part 2, W3).
+    this.payeeLinks = {
+      create: (input) =>
+        transport.request<{ data: PayeeLink }>({ method: "POST", path: "/api/v1/payee-links", body: input, idempotencyKey: null }).then((answer) => answer.data),
+    };
     this.treasury = { get: () => one<Treasury>("/api/v1/treasury") };
     this.insights = { get: () => one<Insights>("/api/v1/insights") };
   }
