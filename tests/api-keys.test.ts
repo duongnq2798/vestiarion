@@ -4,8 +4,10 @@ import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { withOrg } from "@/lib/dal/scope";
 import {
+  activeKeyNamesByCreator,
   API_KEY_SCOPES,
   ApiKeyError,
+  apiKeyRevokedEntry,
   authenticateApiKey,
   createApiKey,
   generateApiKey,
@@ -26,6 +28,7 @@ import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fa
 
 const ORG = "5d0f3a2e-8c1b-4f7a-9e6d-0000000000a9";
 const ACTOR = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000a7";
+const OTHER = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000b8";
 const KEY_ID = "7c3e9f1a-2b4d-4e6f-8a0b-0000000000ee";
 
 const config = configFromEnv({
@@ -382,8 +385,8 @@ describe("revokeApiKey", () => {
 
     const appends = rpcBodies(fake.requests, "append_ledger_entry");
     expect(appends).toHaveLength(1);
-    expect(appends[0]).toMatchObject({ p_org_id: ORG, p_action: "api_key_revoked" });
-    expect(appends[0].p_detail).toEqual({ by: ACTOR, keyId: KEY_ID });
+    expect(appends[0]).toMatchObject({ p_org_id: ORG, p_action: "api_key_revoked", p_summary: "An API key was revoked" });
+    expect(appends[0].p_detail).toEqual({ by: ACTOR, keyId: KEY_ID, reason: "person" });
   });
 
   it("raises not_found when no row changes, and records nothing", async () => {
@@ -400,6 +403,62 @@ describe("revokeApiKey", () => {
     await expect(run(() => withOrg(ORG, () => revokeApiKey({ orgId: ORG, actorId: ACTOR, keyId: "nope" }))))
       .rejects.toMatchObject({ code: "not_found" });
     expect(fake.requests.filter((request) => request.path === "/rest/v1/api_keys")).toHaveLength(0);
+  });
+});
+
+describe("apiKeyRevokedEntry", () => {
+  it.each([
+    ["person", "An API key was revoked"],
+    ["member_left", "An API key was revoked when the member who created it left"],
+    ["account_deleted", "An API key was revoked when the member who created it deleted their account"],
+  ] as const)("says why for %s, by id only", (reason, summary) => {
+    expect(apiKeyRevokedEntry({ reason, by: ACTOR, keyId: KEY_ID })).toEqual({
+      actor: "human",
+      domain: "system",
+      action: "api_key_revoked",
+      summary,
+      detail: { by: ACTOR, keyId: KEY_ID, reason },
+    });
+  });
+
+  it("names the member removed, as member_removed does, and the person who removed them as by", () => {
+    expect(apiKeyRevokedEntry({ reason: "member_removed", by: ACTOR, keyId: KEY_ID, member: OTHER })).toEqual({
+      actor: "human",
+      domain: "system",
+      action: "api_key_revoked",
+      summary: "An API key was revoked when the member who created it was removed",
+      detail: { by: ACTOR, keyId: KEY_ID, reason: "member_removed", member: OTHER },
+    });
+  });
+});
+
+describe("activeKeyNamesByCreator", () => {
+  it("asks for the organization's active keys, oldest first, and groups their names by who created them", async () => {
+    const { fake, run } = keysFake({
+      apiKeys: () => ({
+        body: [
+          { name: "deploy", created_by: ACTOR },
+          { name: "operator import", created_by: null },
+          { name: "reporting", created_by: OTHER },
+          { name: "backup", created_by: ACTOR },
+        ],
+      }),
+    });
+
+    const names = await run(() => activeKeyNamesByCreator(ORG));
+
+    expect(names).toEqual({ [ACTOR]: ["deploy", "backup"], [OTHER]: ["reporting"] });
+    const listing = fake.requests.find((request) => request.path === "/rest/v1/api_keys");
+    expect(listing?.method).toBe("GET");
+    expect(listing?.params.get("org_id")).toBe(`eq.${ORG}`);
+    expect(listing?.params.get("revoked_at")).toBe("is.null");
+    expect(listing?.params.get("select")).toBe("name,created_by");
+    expect(listing?.params.get("order")).toBe("created_at.asc");
+  });
+
+  it("is empty for a workspace with no active key", async () => {
+    const { run } = keysFake({ apiKeys: () => ({ body: [] }) });
+    await expect(run(() => activeKeyNamesByCreator(ORG))).resolves.toEqual({});
   });
 });
 
