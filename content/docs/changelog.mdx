@@ -1,5 +1,13 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-03: Payment notices
+
+- **New ledger actions**, delivered to webhooks like every entry:
+  - `payment_notice_sent`, actor `system`, domain `ap` or `contractor`: a payee was emailed that a payment to it was confirmed. Its `detail` is `{ invoiceId or milestoneId, counterpartyId, to, amount, token, txHash }`, where `to` is the address with most of its name hidden (`li***@example.com`).
+  - `counterparty_notice_email_changed`, actor `human`, domain `compliance`: a person set, changed or cleared where a counterparty's payment notices go. Its `detail` is `{ by, counterpartyId, from, to }`, both addresses hidden the same way, `null` for none.
+- `create_counterparty` entries gain `noticeEmail`, hidden the same way, or `null`.
+- The address itself is not part of `/api/v1/counterparties`.
+
 ## 2026-10-03: Add what a held payable was missing
 
 - **New ledger action** `invoice_details_added`, actor `human`, domain `ap`, delivered to webhooks like every entry: a person added the purchase order a held, flagged or awaiting-information payable lacked, or marked its goods or services received. Its `detail` is `{ by, invoiceId, counterpartyId, added }`, where `added` holds `poReference`, `goodsReceived: true`, or both. Nothing already on the invoice changes, and its `status` stays as it was.

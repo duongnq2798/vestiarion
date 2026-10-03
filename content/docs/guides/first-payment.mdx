@@ -29,10 +29,11 @@ A counterparty is a business or person the workspace pays or invoices. Open **Co
 - **Chain**: **Arc testnet** for a payee paid on Arc. For a payee who wants USDC on another chain, choose **Base Sepolia**, **Arbitrum Sepolia** or **Ethereum Sepolia**: see [Pay a payee on another chain](#pay-a-payee-on-another-chain).
 - **Payment address**: the counterparty's address on the chain you chose, `0x` followed by 40 hexadecimal characters.
 - **Jurisdiction**: an ISO code or a country name.
+- **Email for payment notices**, optional: where the counterparty is told each time it is paid (see [Tell the payee it was paid](#tell-the-payee-it-was-paid)).
 
 <Screenshot
   src="/docs/guides/first-payment-counterparty.png"
-  alt="Add counterparty opened on the Counterparties page, its form filled in: Legal or trading name Northstar Studio, Role Vendor, Payment limit (USDC) 50.00, Chain Arc testnet, a Payment address starting 0x, and Jurisdiction US. The Add and screen button is at the bottom right."
+  alt="Add counterparty opened on the Counterparties page, its form filled in: Legal or trading name Northstar Studio, Role Vendor, Payment limit (USDC) 50.00, Chain Arc testnet, a Payment address starting 0x, Jurisdiction US, and Email for payment notices accounts@northstar.example. The Add and screen button is at the bottom right."
   caption="A vendor with a payment limit and an Arc testnet address, ready to add and screen."
 />
 
@@ -349,6 +350,17 @@ On **AP / AR**, the payable waits under **Needs you**, and its row says what it 
 - **Only what is missing.** A PO reference already on file, or goods already marked received, cannot be changed here.
 - **Recorded.** The ledger records what you added, and who added it, as `invoice_details_added`. A payment made after it is not counted as "Paid on time with no person involved" on [www.vestiarion.xyz/open](https://www.vestiarion.xyz/open).
 - **When it is offered.** Approvers decide payments but do not enter invoices, so they do not see **Add details**. It is not offered once a payment for the invoice was sent, or while someone else is deciding it.
+
+### Tell the payee it was paid
+
+A business usually tells a supplier when it pays them. Give a counterparty an **Email for payment notices**, when you add it or later on its row on **Counterparties**, where **Payment notices** shows the address with **Add** or **Edit** (owners and admins; empty turns notices off). Someone you pay with **Pay a freelancer** gets them at the email you gave for the link.
+
+Each time a payment to it is confirmed on Arc testnet, whoever approved it, the agent or a person, Vestiarion emails that address from no-reply@vestiarion.xyz: "*Workspace* paid you *amount*", what it pays for (the invoice's memo and purchase order, or the milestone's title), the address it went to, when, and **View the transaction** on Arcscan.
+
+- **Real payments only.** Only a live workspace sends them: a sandbox's payments are simulated, and it emails no one.
+- **On Arc.** This version sends them for payments made on Arc testnet; a payee paid on another chain gets none yet.
+- **Once.** Each payment is told once. A notice that cannot be sent is tried again at the next cycle, for three days.
+- **Recorded.** Each notice sent is a `payment_notice_sent` entry in the audit log, with the address partly hidden.
 
 ### When the agent suggests a higher limit
 
