@@ -31,7 +31,8 @@
     "research:model-vs-policy": "tsx scripts/model-vs-policy.ts",
     "research:replay": "tsx scripts/replay-ap-decisions.ts",
     "telegram:setup": "tsx scripts/telegram-setup.ts",
-    "sdk:types": "tsx scripts/sdk-types.ts"
+    "sdk:types": "tsx scripts/sdk-types.ts",
+    "sdk:pack": "tsx scripts/sdk-pack.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",

@@ -3,5 +3,6 @@
 # builds them can differ by \r and nothing else.
 * text=auto eol=lf
 *.png binary
+*.tgz binary
 *.ico binary
 *.pem binary
