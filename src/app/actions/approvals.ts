@@ -3,13 +3,12 @@
 import "server-only";
 
 import { z } from "zod";
-import { addInvoiceDetails, approveAndPay, ApprovalError, rejectInvoice, returnInvoice } from "@/lib/agent/approvals";
-import { raiseCycleEvent } from "@/lib/agent/cycle-soon";
 import { authorize } from "@/lib/auth/authorize";
-import { revalidateOrgPages } from "@/lib/auth/revalidate";
+import { consoleActor } from "@/lib/commands/actor";
+import { addPayableDetails, approvePayable, rejectPayable, returnPayable } from "@/lib/commands/payables";
 import { inOrg } from "@/lib/dal/scope";
 import { invoiceDetailsInputSchema, invoiceFormRefusal } from "@/lib/intake-validation";
-import { sendNoticesSoon } from "@/lib/payment-notices-soon";
+import { consoleAnswer } from "./command-result";
 
 export interface ApprovalActionResult {
   ok: boolean;
@@ -23,44 +22,19 @@ function formString(formData: FormData, key: string): string {
   return typeof value === "string" ? value : "";
 }
 
-/** An `ApprovalError` carries a message safe to show; anything else stays in the server log. */
-function fail(error: unknown): ApprovalActionResult {
-  if (error instanceof ApprovalError) return { ok: false, message: error.message };
-  console.error("approval action failed", error);
-  return { ok: false, message: "That did not work. Try again in a moment." };
-}
-
 /**
- * `payInvoice`'s note on a failed transfer, via `approveAndPay`, reads
- * ` [transfer failed: <reason>]` (a payment that never reached the provider
- * reads ` [execution failed: <reason>]`). Pulls the reason out of either
- * shape for the message a person sees; a note that does not match either is
- * shown trimmed, whole, rather than dropped.
+ * The Approvals buttons. Each authorizes the session first, then runs the command every surface shares
+ * (src/lib/commands/payables.ts), which raises what follows the decision; the console refreshes its pages whenever
+ * the invoice changed, a failed transfer included.
  */
-function heldMessage(note: string): string {
-  const match = /\[(?:transfer|execution) failed:\s*(.+?)\]\s*$/.exec(note);
-  const reason = match ? match[1] : note.trim();
-  return `The transfer failed: ${reason}. The invoice is held.`;
-}
-
 export async function approveInvoiceAction(_previous: ApprovalActionResult, formData: FormData): Promise<ApprovalActionResult> {
   const auth = await authorize(formData.get("orgSlug"), "approval.decide");
   if (!auth.ok) return { ok: false, message: auth.message };
   return inOrg(auth, async () => {
     const parsed = invoiceIdSchema.safeParse(formString(formData, "invoiceId"));
     if (!parsed.success) return { ok: false, message: "That invoice is not waiting for a decision." };
-    try {
-      const result = await approveAndPay({ actorId: auth.user.id, invoiceId: parsed.data, shownAddress: formString(formData, "address") });
-      // The invoice changed either way, so the pages refresh; a transfer that ended held is still a failure
-      // to the person who pressed Approve and pay.
-      revalidateOrgPages();
-      if (result.status === "held") return { ok: false, message: heldMessage(result.note) };
-      // A confirmed payment's payee hears of it now, not at the next cycle (payment notices R5).
-      if (result.status === "paid") sendNoticesSoon(auth);
-      return { ok: true, message: result.status === "paid" ? "Paid." : "Payment submitted; waiting for confirmation." };
-    } catch (error) {
-      return fail(error);
-    }
+    // The address the card showed goes with the approval, so a changed one is refused rather than paid unseen.
+    return consoleAnswer(await approvePayable(consoleActor(auth), { invoiceId: parsed.data, shownAddress: formString(formData, "address") }));
   });
 }
 
@@ -70,13 +44,7 @@ export async function rejectInvoiceAction(_previous: ApprovalActionResult, formD
   return inOrg(auth, async () => {
     const parsed = invoiceIdSchema.safeParse(formString(formData, "invoiceId"));
     if (!parsed.success) return { ok: false, message: "That invoice is not waiting for a decision." };
-    try {
-      await rejectInvoice({ actorId: auth.user.id, invoiceId: parsed.data, reason: formString(formData, "reason") });
-      revalidateOrgPages();
-      return { ok: true, message: "Rejected." };
-    } catch (error) {
-      return fail(error);
-    }
+    return consoleAnswer(await rejectPayable(consoleActor(auth), { invoiceId: parsed.data, reason: formString(formData, "reason") }));
   });
 }
 
@@ -86,14 +54,7 @@ export async function returnInvoiceAction(_previous: ApprovalActionResult, formD
   return inOrg(auth, async () => {
     const parsed = invoiceIdSchema.safeParse(formString(formData, "invoiceId"));
     if (!parsed.success) return { ok: false, message: "That invoice is not waiting for a decision." };
-    try {
-      await returnInvoice({ actorId: auth.user.id, invoiceId: parsed.data });
-      revalidateOrgPages();
-      raiseCycleEvent(auth, "payable_returned");
-      return { ok: true, message: "Returned to the agent. It usually decides it again within a minute." };
-    } catch (error) {
-      return fail(error);
-    }
+    return consoleAnswer(await returnPayable(consoleActor(auth), { invoiceId: parsed.data }));
   });
 }
 
@@ -113,13 +74,6 @@ export async function addInvoiceDetailsAction(_previous: ApprovalActionResult, f
       goodsReceived: formData.get("goodsReceived") === "on",
     });
     if (!details.success) return { ok: false, message: invoiceFormRefusal(details.error).message };
-    try {
-      await addInvoiceDetails({ actorId: auth.user.id, invoiceId: invoiceId.data, ...details.data });
-      revalidateOrgPages();
-      raiseCycleEvent(auth, "details_added");
-      return { ok: true, message: "Details added. The agent usually decides it again within a minute." };
-    } catch (error) {
-      return fail(error);
-    }
+    return consoleAnswer(await addPayableDetails(consoleActor(auth), { invoiceId: invoiceId.data, ...details.data }));
   });
 }

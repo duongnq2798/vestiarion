@@ -69,3 +69,14 @@ const payCheckBuckets = new Map<string, Bucket>();
 export function takePayCheckToken(key: string, now = Date.now()): boolean {
   return take(payCheckBuckets, key, 3, 20_000, now);
 }
+
+const slackUserBuckets = new Map<string, Bucket>();
+
+/**
+ * Twenty commands and clicks a minute per Slack account (Slack design S6, S10), keyed by team and user: a click can
+ * move money and a command reads the workspace, so one account cannot repeat either without end. Single-instance,
+ * like the others.
+ */
+export function takeSlackUserToken(key: string, now = Date.now()): boolean {
+  return take(slackUserBuckets, key, 20, 3_000, now);
+}

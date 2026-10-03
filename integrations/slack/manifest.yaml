@@ -1,0 +1,33 @@
+display_information:
+  name: Vestiarion
+  description: The agent's payment decisions in your Slack, and held payments decided where your team works.
+  background_color: "#1f2937"
+features:
+  bot_user:
+    display_name: Vestiarion
+    always_online: false
+  slash_commands:
+    - command: /vestiarion
+      url: https://www.vestiarion.xyz/api/slack/commands
+      description: What is safe to spend, what waits for you, the ledger, pause the agent
+      usage_hint: "today | waiting | ledger | pause | connect | help"
+      should_escape: false
+oauth_config:
+  redirect_urls:
+    - https://www.vestiarion.xyz/api/slack/oauth
+  scopes:
+    bot:
+      - commands
+      - incoming-webhook
+settings:
+  event_subscriptions:
+    request_url: https://www.vestiarion.xyz/api/slack/events
+    bot_events:
+      - app_uninstalled
+      - tokens_revoked
+  interactivity:
+    is_enabled: true
+    request_url: https://www.vestiarion.xyz/api/slack/interactions
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false
