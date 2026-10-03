@@ -3,6 +3,7 @@
 import { Clock, LoaderCircle } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { Button } from "@/components/ui/Button";
 import { toast } from "@/components/ui/Toaster";
 import { explorerTx } from "@/components/vx/Primitives";
 import { AGENT_EXPECTED_EVENT, EXPECT_AGENT_MS, nextPollMs, TOLD_ONE_BY_ONE, workingLabel, type ActivityItem } from "@/lib/agent-activity";
@@ -119,31 +120,80 @@ export function AgentActivity({ lastCycleAt: initialLastCycleAt }: { lastCycleAt
   );
 }
 
+/**
+ * A toast's words and what to do: why, then the button and the transaction under it, so the words take the toast's
+ * whole width rather than a column beside a button (the partner's test: a stop's reason wrapped in a narrow column).
+ */
+export function ActivityToastBody({
+  detail,
+  action,
+  txHash,
+  primary,
+  onAction,
+}: {
+  detail: string | null;
+  action: string;
+  txHash: string | null;
+  /** The person's next step (a stop) is the toast's main button; a look at what happened is a quiet one. */
+  primary: boolean;
+  onAction: () => void;
+}) {
+  return (
+    <span className="mt-1 grid gap-2.5">
+      {detail && <span>{detail}</span>}
+      <span className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        <Button size="sm" variant={primary ? "primary" : "secondary"} onClick={onAction}>
+          {action}
+        </Button>
+        {txHash && (
+          <a href={explorerTx(txHash)} target="_blank" rel="noreferrer" className="text-xs font-medium text-agent underline-offset-2 hover:underline">
+            View on Arcscan
+          </a>
+        )}
+      </span>
+    </span>
+  );
+}
+
 /** The toasts for what the agent decided: one each for a few, one for many, which opens the cycle's report. */
 function tell(items: ActivityItem[], since: number, go: (path: string) => void) {
   if (items.length > TOLD_ONE_BY_ONE) {
+    const id = `agent-activity-${since}`;
     const waiting = items.filter((item) => item.tone === "stopped").length;
     toast.info(`The agent made ${items.length} decisions.`, {
-      description: waiting > 0 ? `${waiting} of them ${waiting === 1 ? "waits" : "wait"} for you.` : undefined,
-      action: { label: "See them", onClick: () => go(`/console?since=${since}`) },
+      id,
+      description: (
+        <ActivityToastBody
+          detail={waiting > 0 ? `${waiting} of them ${waiting === 1 ? "waits" : "wait"} for you.` : null}
+          action="See them"
+          txHash={null}
+          primary={waiting > 0}
+          onAction={() => {
+            toast.dismiss(id);
+            go(`/console?since=${since}`);
+          }}
+        />
+      ),
     });
     return;
   }
   for (const item of items) {
+    const id = `agent-activity-${item.seq}`;
     const raise = item.tone === "done" ? toast.success : toast.warning;
     raise(item.text, {
-      description:
-        item.detail || item.txHash ? (
-          <span className="grid gap-1">
-            {item.detail && <span>{item.detail}</span>}
-            {item.txHash && (
-              <a href={explorerTx(item.txHash)} target="_blank" rel="noreferrer" className="w-fit underline underline-offset-2 hover:text-ink">
-                View on Arcscan
-              </a>
-            )}
-          </span>
-        ) : undefined,
-      action: { label: item.pathLabel, onClick: () => go(item.path) },
+      id,
+      description: (
+        <ActivityToastBody
+          detail={item.detail}
+          action={item.pathLabel}
+          txHash={item.txHash}
+          primary={item.tone === "stopped"}
+          onAction={() => {
+            toast.dismiss(id);
+            go(item.path);
+          }}
+        />
+      ),
       // Long enough to read and act on; a stop waits longer, since it waits for the person.
       duration: item.tone === "done" ? 8_000 : 12_000,
     });

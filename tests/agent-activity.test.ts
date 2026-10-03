@@ -12,7 +12,7 @@ import {
   type ActivityRefs,
 } from "@/lib/agent-activity";
 import { readAgentActivity } from "@/lib/agent-activity-read";
-import { counterpartyPath, ruleNextStep } from "@/lib/next-step";
+import { counterpartyPath, ruleInBrief, ruleNextStep } from "@/lib/next-step";
 import { fakeSupabase, orgTestContext, type RecordedRequest } from "./support/fake-supabase";
 
 /**
@@ -42,8 +42,7 @@ describe("what the agent did, in words", () => {
     expect(activityItem(paid, refs())).toEqual({
       seq: 972,
       text: "Paid Jiren 0.30 USDC.",
-      detail:
-        "DeepSeek decided, as the written policy would. Checked: purchase order and goods received, within the 30.00 USDC limit, screened clear, the spending-limit contract allowed it.",
+      detail: "DeepSeek decided, as the written policy would. Checks passed: purchase order and goods, the 30.00 USDC limit, screening, the spending-limit contract.",
       tone: "done",
       path: `/invoices#trail-${INVOICE}`,
       pathLabel: "How it decided",
@@ -76,8 +75,7 @@ describe("what the agent did, in words", () => {
     );
     expect(refused).toMatchObject({
       text: "Code stopped paying Jiren 0.30 USDC.",
-      detail:
-        "DeepSeek decided; the written policy would have decided otherwise. The payout fee is above 10% of the invoice, more than the agent pays. Pay it with the fee in Approvals, or reject it.",
+      detail: "DeepSeek decided to pay it; code stopped it: the payout fee is above 10% of the invoice.",
       tone: "stopped",
       path: `/approvals#payable-${INVOICE}`,
       pathLabel: "Decide in Approvals",
@@ -131,6 +129,28 @@ describe("what the agent did, in words", () => {
   it("keeps the order things happened in", () => {
     const items = activityItems([entry("ap_pay", {}, 9), entry("ap_hold", {}, 7)], refs());
     expect(items.map((item) => item.seq)).toEqual([7, 9]);
+  });
+});
+
+describe("a code stop, in a few words", () => {
+  it("says why in one sentence, for every rule code holds by", () => {
+    const budget = activityItem(
+      entry("ap_pay", { decisionMode: "deepseek", guardrailBlocked: true, guardrailRule: "workspace.outflow_budget" }),
+      refs({ status: "held" })
+    );
+    expect(budget?.detail).toBe("DeepSeek decided to pay it; code stopped it: the agent's spending limit has no room today, and the agent pays it once there is.");
+    const rules = [
+      "bridge.fee_above_cap", "bridge.fee_unavailable", "bridge.gateway_balance_short", "bridge.unsupported_token",
+      "counterparty.address_unconfirmed", "counterparty.high_risk", "counterparty.payment_limit", "counterparty.unscreened",
+      "fx.rate_unavailable", "fx.swap_cost_above_cap", "fx.swap_usdc_short", "invoice.duplicate_of_settled",
+      "treasury.insufficient_eurc", "workspace.onchain_limit", "workspace.onchain_limit_route", "workspace.outflow_budget",
+    ];
+    for (const rule of rules) {
+      expect(ruleInBrief(rule), rule).not.toBeNull();
+      expect(ruleInBrief(rule), rule).not.toMatch(/^rule /);
+    }
+    expect(ruleInBrief("something.new")).toBe("rule something.new");
+    expect(ruleInBrief(null)).toBeNull();
   });
 });
 
