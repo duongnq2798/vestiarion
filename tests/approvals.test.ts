@@ -1434,6 +1434,7 @@ describe("listWaitingPayables", () => {
         poReference: null,
         goodsReceived: false,
         addedSinceDecision: null,
+        guardrailRule: null,
       },
     ]);
     const listing = fake.requests.find((r) => r.path === "/rest/v1/invoices" && r.method === "GET" && !r.params.get("id"));
@@ -1495,6 +1496,26 @@ describe("listWaitingPayables", () => {
     // The explanation describes the decision, from the facts it recorded: not a held payable whose match was complete.
     expect(row.explanation).toContain("No purchase order is on file.");
     expect(row.explanation).not.toContain("PO-100");
+  });
+
+  it("carries the rule that refused the agent's payment, and none for a stop the model chose", async () => {
+    const decided = (invoiceId: string, detail: Record<string, unknown>) => ({
+      seq: 9, id: `e-${invoiceId}`, ts: "2026-10-03T08:00:00Z", actor: "agent", domain: "ap", action: "ap_pay", summary: "",
+      detail: { invoiceId, decision: { action: "pay" }, observed: { riskLevel: "clear" }, ...detail },
+      body_hash: "00", signature: "00", prev_hash: null, hash: "00", signing_key_id: null,
+    });
+    const rows = [invoiceRow({ id: "budget" }), invoiceRow({ id: "model" })];
+    const { run } = approvalsFake({
+      invoice: (r) => (r.params.get("id") ? undefined : { body: rows }),
+      ledgerTargets: [
+        decided("budget", { guardrailBlocked: true, guardrailRule: "workspace.outflow_budget" }),
+        decided("model", { guardrailBlocked: false, guardrailRule: null }),
+      ],
+    });
+
+    const listed = await run(() => listWaitingPayables());
+
+    expect(Object.fromEntries(listed.map((row) => [row.id, row.guardrailRule]))).toEqual({ budget: "workspace.outflow_budget", model: null });
   });
 
   it("says nothing was added when the facts are those the decision recorded, or it recorded none", async () => {

@@ -3,7 +3,15 @@ import path from "node:path";
 import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import ApprovalCard, { OWN_ENTRY_RECORDED, OWN_INVOICE_NOTE, payConfirmDescription, payConfirmTitle } from "@/components/ApprovalCard";
+import ApprovalCard, {
+  HIGH_RISK_EXPLAINED,
+  OWN_ENTRY_RECORDED,
+  OWN_INVOICE_NOTE,
+  payConfirmDescription,
+  payConfirmTitle,
+  SELF_APPROVAL_EXPLAINED,
+} from "@/components/ApprovalCard";
+import { agentResumes } from "@/lib/next-step";
 import { WAITING_FOR_A_DECISION, WaitingPayableAction } from "@/components/WaitingPayableAction";
 import { addDetailsPrompt, addedDetailsSentence } from "@/lib/added-details";
 import AgentPauseControl, { PAUSE_DIALOG_DESCRIPTION } from "@/components/AgentPauseControl";
@@ -65,6 +73,7 @@ function payable(overrides: Partial<WaitingPayable> = {}): WaitingPayable {
     poReference: null,
     goodsReceived: false,
     addedSinceDecision: null,
+    guardrailRule: null,
     ...overrides,
   };
 }
@@ -665,6 +674,56 @@ describe("a payable waiting for a person, on its card on Invoices (complete held
 
   it("is the card Decide in Approvals opens at, on Approvals", () => {
     expect(card()).toContain(`id="payable-${ID}"`);
+  });
+});
+
+describe("why Approve and pay is off, and what to do instead (approval guidance)", () => {
+  const yours = { createdBy: VIEWER, guardrailRule: "workspace.outflow_budget" };
+
+  it("tells the person who entered the invoice who must approve it, and what happens without them", () => {
+    const markup = card(yours, { canEdit: true });
+    expect(markup).toContain("You entered this invoice");
+    expect(markup).toContain(SELF_APPROVAL_EXPLAINED);
+    expect(markup).toContain(agentResumes("workspace.outflow_budget")!);
+    expect(markup).toContain('href="/o/acme/console#agent-budget"');
+    expect(markup).toContain("Spending limit");
+    expect(markup).toContain('href="/o/acme/members"');
+    expect(markup).toContain("See who can approve");
+    // The short reason stays beside the disabled button, which it describes.
+    expect(markup).toContain("You created this invoice");
+    expect(markup).toMatch(APPROVE_DISABLED);
+  });
+
+  it("gives an approver who entered it no fix they cannot make", () => {
+    const markup = card(yours, { canEdit: false });
+    expect(markup).toContain(SELF_APPROVAL_EXPLAINED);
+    expect(markup).not.toContain('href="/o/acme/console#agent-budget"');
+    expect(markup).toContain("See who can approve");
+  });
+
+  it("says nothing about what happens on its own when no rule stopped it", () => {
+    const markup = card({ createdBy: VIEWER }, { canEdit: true });
+    expect(markup).toContain(SELF_APPROVAL_EXPLAINED);
+    expect(markup).not.toContain("on its own once");
+  });
+
+  it("says why a counterparty screened high risk is never paid, and where its match is reviewed", () => {
+    const markup = card({ riskLevel: "high" }, { canEdit: true });
+    expect(markup).toContain("Screened high risk");
+    expect(markup).toContain(HIGH_RISK_EXPLAINED);
+    expect(markup).toContain('href="/o/acme/counterparties#counterparty-1b6c1c9e-4a4f-4a7e-9b1e-0000000000a1"');
+  });
+
+  it("says nothing more when the viewer may approve it", () => {
+    const markup = card({}, { canEdit: true });
+    expect(markup).not.toContain("You entered this invoice");
+    expect(markup).not.toContain(HIGH_RISK_EXPLAINED);
+  });
+
+  it("tells the workspace's only approver they may approve what they entered, not that they may not", () => {
+    const markup = card({ createdBy: VIEWER }, { soleApprover: true, canEdit: true });
+    expect(markup).toContain(OWN_INVOICE_NOTE);
+    expect(markup).not.toContain(SELF_APPROVAL_EXPLAINED);
   });
 });
 
