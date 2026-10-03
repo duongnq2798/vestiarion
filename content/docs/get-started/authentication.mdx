@@ -30,18 +30,26 @@ A key belongs to the workspace it was created in, and reaches that workspace's d
 
 An owner or an admin creates keys on the workspace's Settings page, `/o/<slug>/settings`, under **API keys**. A key's name is 1 to 60 characters. A workspace holds at most 20 active keys; revoke one to make room for another. A key works for as long as the person who created it is a member of the workspace (see [Revoking a key](#revoking-a-key)). Every other member of the workspace sees the list of keys, without the controls to create or revoke one. The [Quickstart](/docs/get-started/quickstart#1-create-an-api-key) walks through it.
 
-Tick **Can also add counterparties and invoices** to give the key write access, and leave it clear for a key that only reads. A key's access is set when it is created: to change it, create a new key and revoke the old one.
+Tick **Can also add records** to give the key write access, and leave it clear for a key that only reads. A key's access is set when it is created: to change it, create a new key and revoke the old one.
 
 ## Scopes
 
 A key is read-only, or it reads and writes:
 
 - **Read only**, the scope `read`: every `GET` endpoint. Every key has it.
-- **Read and write**, the scopes `read` and `write`: also [Add a counterparty](/docs/api/create-counterparty) and [Add an invoice](/docs/api/create-invoice). The list of keys shows **Read and write** beside such a key.
+- **Read and write**, the scopes `read` and `write`: also [Add a counterparty](/docs/api/create-counterparty), [Add an invoice](/docs/api/create-invoice), [Add a milestone](/docs/api/create-milestone) and [Create a payee link](/docs/api/create-payee-link). The list of keys shows **Read and write** beside such a key.
 
 A key whose scopes do not cover a route answers `403 forbidden`, as a read-only key does on a write.
 
-Write access adds records, and nothing more. A key never approves, rejects or pays: the agent decides an invoice added with one as it decides one typed into the console, with every guardrail. An address added with one waits for a person in the workspace to confirm it, and the agent pays nothing to it until then. [Add invoices from your own system](/docs/guides/api-invoices) walks through it.
+A write also needs the person who created the key to be able to add records now, which owners and admins can. If an owner moves them to approver or viewer, the key keeps reading, and each write answers `403 forbidden`: "This key's issuer can no longer add records in this workspace."
+
+Write access adds records, and nothing more. A key never verifies work, approves, rejects or pays:
+
+- The agent decides an invoice added with one as it decides one typed into the console, with every guardrail.
+- A milestone added with one waits for GitHub, or a person, to verify it.
+- An address added with one, or entered by a payee through a link made with one, waits for a person in the workspace to confirm it, and the agent pays nothing to it until then.
+
+[Add invoices from your own system](/docs/guides/api-invoices) and [Pay for merged pull requests](/docs/guides/api-milestones) walk through it.
 
 ## Last used
 
@@ -81,7 +89,7 @@ If Vestiarion cannot look the key up at all, because of a database error, it ans
 
 ## Keeping a key safe
 
-A key reads the whole workspace: its invoices, counterparties, treasury and ledger. A read-and-write key can also add counterparties and invoices, so give write access only to a system that adds records.
+A key reads the whole workspace: its invoices, counterparties, treasury and ledger. A read-and-write key can also add counterparties, invoices, milestones and payee links, so give write access only to a system that adds records.
 
 - **Never put a key in a URL.** URLs end up in server logs, browser history and proxies. The API does not read a key from a query string anyway.
 - **Never put a key in client-side code**, such as a web page, a browser extension or a mobile app. Anyone who has the code can read the key. Call the API from your server, and pass on only what the client needs.

@@ -255,9 +255,11 @@ src/lib/webhooks/         Signing, SSRF-safe sending, and the retry/disable
 Each workspace creates and revokes its own API keys on
 `/o/<slug>/settings` (owner or admin only; see
 [Authentication](https://www.vestiarion.xyz/docs/get-started/authentication)). A
-key reads; one given write access can also add counterparties and invoices,
-which the agent decides like any other, and an address it adds waits for a
-person to confirm it. A key never approves or pays. It is shown once, in full,
+key reads; one given write access can also add counterparties, invoices and
+milestones, which the agent decides like any other, and make payee links. An
+address it adds, or a payee enters through its link, waits for a person to
+confirm it; a milestone waits for GitHub or a person to verify it. A key never
+approves or pays, and it writes only while its creator can still add records. It is shown once, in full,
 right after it is created, and authenticates `/api/v1` requests for that
 workspace alone — there is no shared or platform-wide credential on that
 surface. It stops working when the member who created it leaves the workspace,

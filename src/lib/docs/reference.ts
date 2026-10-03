@@ -77,7 +77,8 @@ export function referenceSectionIds(notes: string | null, shape: ReferenceShape 
 export const ERROR_MEANINGS: Record<ApiErrorCode, string> = {
   invalid_request: "An invalid `limit` or `cursor`, a filter value outside its allowed values, or a request body that does not validate. The message names the parameter or the field, and lists the accepted values.",
   unauthorized: "No key, or a malformed, unknown or revoked one: \"A valid API key is required.\"",
-  forbidden: "The key's scopes do not cover this route: \"This key cannot do that.\"",
+  forbidden:
+    "The key's scopes do not cover this route: \"This key cannot do that.\" Or, on a write, the person who created the key can no longer add records: \"This key's issuer can no longer add records in this workspace.\"",
   not_found: "The requested resource does not exist in the key's workspace.",
   conflict: "The `Idempotency-Key` was already used for a different request, or the first request with it is still being handled.",
   rate_limited: "Too many requests; wait as long as `Retry-After` says before trying again.",

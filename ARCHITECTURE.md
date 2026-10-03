@@ -359,7 +359,9 @@ no `via`, as before. The console's server actions keep `authorize` first and
 refresh their pages through `consoleAnswer`
 (`src/app/actions/command-result.ts`); the Telegram bot's **Add** and every
 Slack command and click build theirs with `memberActor`. `tests/commands-gates.test.ts` holds every command to
-its gate. The invoice form, the CSV import and the write API move onto
+its gate. The console's Add milestone and Create link, and the write API's
+milestones and payee links, run `addMilestone` and `issuePayeeLink`; the
+invoice form, the CSV import and the write API's invoices move onto
 `addInvoice` next.
 
 ## Notifications
@@ -524,14 +526,20 @@ mapping and validation live in `src/lib/api/counterparties.ts`,
 `src/lib/api/treasury.ts` so null preservation and chain-hash rules can be
 tested without a database.
 
-The two writes add records and nothing more. A key with the `write` scope
-(migration `0066_api_write.sql`) posts a JSON body that `src/lib/api/write.ts`
+The four writes add records and nothing more. A key with the `write` scope
+(migration `0066_api_write.sql`) passes `guardApiWrite`, which also reads the
+key's issuer with `memberActor` and refuses one who can no longer add records
+(`records.write`) with `403`. It posts a JSON body that `src/lib/api/write.ts`
 reads (one object, at most 64 KB) and two schemas check: the strict body
 schema in `src/lib/api/schemas.ts`, which refuses a field it does not take, then
 the console form's own schema. The record is added through the same
 `createCounterparty` (`src/lib/counterparties/create.ts`) and `createInvoice`
-(`src/lib/invoices/create.ts`) the console uses, as the key's issuer's, with
-`via: "api"` and `apiKeyId` in the ledger entry. An address added this way is
+(`src/lib/invoices/create.ts`) the console uses, or for a milestone and a payee
+link through the commands `addMilestone` and `issuePayeeLink`, whose refusals
+`refusalResponse` turns into the API's errors. Each is the key's issuer's, with
+`via: "api"` and `apiKeyId` in the ledger entry. A payee link's answer holds
+the link, which only this answer ever does, so that route keeps no outcome for
+an `Idempotency-Key` and answers with `Cache-Control: no-store`. An address added this way is
 stored as an unconfirmed change, so the agent holds payments to it until a
 person confirms it. A payable starts a cycle with `runCycleSoon`. Writes are
 counted per key (`takeApiWriteToken`, 30 a minute) after the scope check.

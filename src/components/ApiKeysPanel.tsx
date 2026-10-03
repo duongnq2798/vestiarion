@@ -84,8 +84,8 @@ function CreateKeyForm({ orgSlug, onDone }: { orgSlug: string; onDone: () => voi
         </Field>
         <Checkbox
           name="write"
-          label="Can also add counterparties and invoices"
-          description="The agent still decides every invoice, and an address added this way waits for a person to confirm it. A key never approves or pays."
+          label="Can also add records"
+          description="Counterparties, invoices, milestones and payee links. The agent still decides every payment, and an address added this way waits for a person to confirm it. A key never verifies work, approves or pays."
         />
         <FormMessage tone={state.message && !state.ok ? "error" : "neutral"}>{state.ok ? null : state.message}</FormMessage>
         <DialogFooter>
@@ -170,8 +170,8 @@ export default function ApiKeysPanel({ orgSlug, apiKeys, canManage }: { orgSlug:
             title="No API keys yet"
             body={
               canManage
-                ? "Create one to read this workspace's data, or to add counterparties and invoices from your own system."
-                : "An owner or admin can create one to read this workspace's data, or to add counterparties and invoices."
+                ? "Create one to read this workspace's data, or to add records from your own system."
+                : "An owner or admin can create one to read this workspace's data, or to add records."
             }
           />
         ) : (

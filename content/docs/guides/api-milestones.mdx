@@ -1,0 +1,125 @@
+Pay a contributor when their pull request is merged, from your own system: a CI job, a bounty board, a script. Through the API, that system adds the contributor as a contractor and sends them a link to add their address. It then adds a milestone whose evidence is the pull request. Vestiarion checks the pull request, verifies the milestone once it is merged, and the agent pays it on Arc testnet with every guardrail.
+
+A key adds records. It never verifies work, approves or pays. Every address waits for a person in the workspace to confirm it, so a key that leaks cannot point the agent's payments anywhere new.
+
+## 1. Create a read-and-write key
+
+An owner or an admin opens **Settings** and, under **API keys**, chooses **Create key**, ticks **Can also add records**, and creates it. In the list of keys, it shows **Read and write**. [Add invoices from your own system](/docs/guides/api-invoices#1-create-a-read-and-write-key) walks through this step.
+
+The key adds records as the person who created it, for as long as they can. If they leave the workspace, the key is revoked. If an owner moves them to approver or viewer, the key still reads, and each write answers `403 forbidden`: "This key's issuer can no longer add records in this workspace."
+
+## 2. Add the contributor
+
+[Add a counterparty](/docs/api/create-counterparty) with `role: "contractor"`. Give it no address: the contributor adds their own in the next step. Its `paymentLimit` is the most the agent pays them in one payment, so make it at least as large as a bounty:
+
+```bash
+curl https://www.vestiarion.xyz/api/v1/counterparties \
+  -X POST \
+  -H "Authorization: Bearer $VESTIARION_API_KEY" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: github-user-octocat" \
+  -d '{"name":"Mona Octocat","role":"contractor","paymentLimit":"500","noticeEmail":"mona@example.com"}'
+```
+
+Keep the answer's `id`. With a `noticeEmail`, Vestiarion emails the contributor once a payment to them is confirmed.
+
+## 3. Ask for their address
+
+[Create a payee link](/docs/api/create-payee-link) for the contractor:
+
+```bash
+curl https://www.vestiarion.xyz/api/v1/payee-links \
+  -X POST \
+  -H "Authorization: Bearer $VESTIARION_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"counterpartyId":"3d6f8a21-9c4b-4f0e-8b7a-5e2c1d9f6a48"}'
+```
+
+The answer's `url` is a one-time page where the contributor adds the address they want to be paid at. They need no account, and [Get paid as a freelancer](/docs/guides/get-paid) is the guide to send them with it. Send the link yourself, by email or in the pull request's thread:
+
+- **It is shown once.** Vestiarion keeps only its hash, so no request can give the same link back.
+- **It expires.** It works once, and expires after 7 days.
+- **A new one replaces it.** Asking again makes a new link, and the unused one stops working. That is also why this operation takes no `Idempotency-Key`.
+
+The ledger records it as `payee_link_created`, with `via: "api"`, and never the link itself.
+
+Once the contributor has added an address, the members who can confirm addresses get an email. On **Counterparties**, the contractor's card shows the address as "not yet confirmed". Check it with the contributor through a channel you already trust, then choose **Confirm address**. Until someone does, the agent pays nothing to it.
+
+## 4. Add the milestone
+
+When a pull request is to be paid for, [add a milestone](/docs/api/create-milestone) whose `verificationSource` is the pull request:
+
+```bash
+curl https://www.vestiarion.xyz/api/v1/milestones \
+  -X POST \
+  -H "Authorization: Bearer $VESTIARION_API_KEY" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: pr-acme-app-42" \
+  -d '{"contractorId":"3d6f8a21-9c4b-4f0e-8b7a-5e2c1d9f6a48","title":"CSV export for EURC","amount":"150.00","verificationSource":"https://github.com/acme/app/pull/42"}'
+```
+
+The answer is `201`, with the milestone in `status: "pending"`, as [List milestones](/docs/api/list-milestones) returns it. On **Contractors**, its card says "The agent is waiting for milestone verification." The ledger records it as `create_milestone`, with `via: "api"` and the key's id.
+
+The milestone is the key's issuer's. If the agent holds it on its own judgment, someone other than the issuer must choose **Pay now**, unless the issuer is the workspace's only approver.
+
+Add the milestone before the pull request is merged, or after: either way it is paid only once it is merged. Use the pull request as the `Idempotency-Key`, so that a job that runs twice adds it once.
+
+## 5. Merge, and the agent pays
+
+Each cycle asks GitHub whether the pull request was merged.
+
+1. **Merged.** The milestone is verified. On its card, **Verified by** reads "merged PR", and the ledger records `verify_milestone_github`.
+2. **The agent decides.** In the same cycle, it decides the payment with every guardrail:
+   - the contractor's screening and payment limit;
+   - a confirmed address;
+   - the workspace's spending limits, and its contract on Arc testnet.
+3. **Paid.** Read the milestone back with [List milestones](/docs/api/list-milestones), filtered by `contractorId`. `status` says what the agent did and `agentReasoning` says why, and a payment that settled carries its `txHash`.
+
+[Webhooks](/docs/webhooks) push each of these entries as it is written.
+
+If the contributor has not yet added an address, the verified milestone waits on Contractors, reading "Waiting for an address". Once they have added one that nobody has confirmed, it reads "Address to confirm". Either way, the agent pays once the address is confirmed.
+
+Vestiarion reads the pull request with its own GitHub access, so the repository must be public. For a private repository, or work that is not a pull request, any other `https` link is kept as evidence. A person checks the work and chooses **Verify manually** on the milestone's card.
+
+## From a GitHub Actions workflow
+
+This workflow adds a milestone when a pull request labelled `bounty` is merged. Keep the key as the repository secret `VESTIARION_API_KEY`, and the contractor's `id` as the variable `CONTRACTOR_ID`:
+
+```yaml
+name: Pay merged bounties
+on:
+  pull_request:
+    types: [closed]
+jobs:
+  milestone:
+    if: github.event.pull_request.merged && contains(github.event.pull_request.labels.*.name, 'bounty')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Add the milestone to Vestiarion
+        env:
+          VESTIARION_API_KEY: ${{ secrets.VESTIARION_API_KEY }}
+          CONTRACTOR_ID: ${{ vars.CONTRACTOR_ID }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          body=$(jq -n --arg c "$CONTRACTOR_ID" --arg t "$PR_TITLE" --arg u "$PR_URL" \
+            '{contractorId: $c, title: $t[0:160], amount: "150.00", verificationSource: $u}')
+          curl --fail-with-body https://www.vestiarion.xyz/api/v1/milestones \
+            -X POST \
+            -H "Authorization: Bearer $VESTIARION_API_KEY" \
+            -H "Content-Type: application/json" \
+            -H "Idempotency-Key: pr-$GITHUB_REPOSITORY-$PR_NUMBER" \
+            -d "$body"
+```
+
+The pull request's title and link reach the script as environment variables, never pasted into it, so a title cannot run as a command. With the [TypeScript SDK](/docs/get-started/sdk), the same call is `vestiarion.milestones.create(input, { idempotencyKey })`.
+
+## What a key cannot do
+
+- Verify a milestone. GitHub does, once the pull request is merged, or a person does.
+- Approve, reject or pay a payment. That is the agent's decision, and a person's when the agent holds one.
+- Confirm an address.
+- Change or remove a record. The API adds counterparties, invoices, milestones and payee links, and nothing else.
+
+The same operations are [MCP tools](/docs/ai-integration/mcp), `create_milestone` and `create_payee_link`, so an AI agent connected with a read-and-write key can add them under the same rules.

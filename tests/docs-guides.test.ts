@@ -21,6 +21,7 @@ type GuideSlug =
   | "guides/telegram"
   | "guides/slack"
   | "guides/api-invoices"
+  | "guides/api-milestones"
   | "guides/audit-export";
 
 const PANEL = "src/components/GoLivePanel.tsx";
@@ -67,6 +68,11 @@ const PAYEE_LINK = "src/components/intake/PayeeLinkControl.tsx";
 const CONTRACTORS_PAGE = "src/app/o/[slug]/contractors/page.tsx";
 const MILESTONE_FORM = "src/components/intake/MilestoneIntake.tsx";
 const MILESTONE_ACTIONS = "src/app/actions/milestones.ts";
+const MILESTONE_COMMAND = "src/lib/commands/milestones.ts";
+const MILESTONE_CREATE = "src/lib/milestones/create.ts";
+const PAYEE_LINKS_LIBRARY = "src/lib/platform/payee-links.ts";
+const API_ACTOR = "src/lib/commands/actor.ts";
+const API_GUARD = "src/lib/api/guard.ts";
 const TELEGRAM_CARD = "src/components/TelegramCard.tsx";
 const TELEGRAM_MESSAGES = "src/lib/telegram/messages.ts";
 const TELEGRAM_UPDATES = "src/lib/telegram/updates.ts";
@@ -476,12 +482,12 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["Evidence link", MILESTONE_FORM],
     ["Add milestone", MILESTONE_FORM],
     ["The agent is waiting for milestone verification.", MAP],
-    ["create_milestone", MILESTONE_ACTIONS],
-    ["The agent checks the pull request within a minute, and decides on pay once it is merged.", MILESTONE_ACTIONS],
+    ["create_milestone", MILESTONE_CREATE],
+    ["The agent checks the pull request within a minute, and decides on pay once it is merged.", MILESTONE_COMMAND],
     ["Verified by", MAP],
     ["merged PR", MAP],
     ["verify_milestone_github", GITHUB_CHECK],
-    ["Verify it once the work is delivered, and the agent decides on pay within a minute.", MILESTONE_ACTIONS],
+    ["Verify it once the work is delivered, and the agent decides on pay within a minute.", MILESTONE_COMMAND],
     ["Evidence", MAP],
     ["Evidence checked or approver note", MILESTONE_CHECK],
     ["Verify manually", MILESTONE_CHECK],
@@ -592,7 +598,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["Settings", APP_NAV],
     ["API keys", API_KEYS_PANEL],
     ["Create key", API_KEYS_PANEL],
-    ["Can also add counterparties and invoices", API_KEYS_PANEL],
+    ["Can also add records", API_KEYS_PANEL],
     ["Copy this key now. It will not be shown again.", API_KEYS_PANEL],
     ["Read and write", API_KEYS_PANEL],
     ["Read only", API_KEYS_PANEL],
@@ -604,6 +610,29 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ['via: "api"', INVOICES_ROUTE],
     ["Idempotent-Replayed", IDEMPOTENCY],
     ["the counterparty's new address has since been confirmed", FOLLOW_UP],
+  ],
+  "guides/api-milestones": [
+    ["Settings", APP_NAV],
+    ["API keys", API_KEYS_PANEL],
+    ["Create key", API_KEYS_PANEL],
+    ["Can also add records", API_KEYS_PANEL],
+    ["Read and write", API_KEYS_PANEL],
+    ["This key's issuer can no longer add records in this workspace.", API_GUARD],
+    ["payee_link_created", PAYEE_LINKS_LIBRARY],
+    ['via: "api"', API_ACTOR],
+    ["Counterparties", APP_NAV],
+    ["not yet confirmed", ADDRESS_CONTROLS],
+    ["Confirm address", ADDRESS_CONTROLS],
+    ["Contractors", APP_NAV],
+    ["The agent is waiting for milestone verification.", MAP],
+    ["create_milestone", MILESTONE_CREATE],
+    ["Pay now", HELD_ACTIONS],
+    ["Verified by", MAP],
+    ["merged PR", MAP],
+    ["verify_milestone_github", GITHUB_CHECK],
+    ["Waiting for an address", CONTRACTORS_PAGE],
+    ["Address to confirm", CONTRACTORS_PAGE],
+    ["Verify manually", MILESTONE_CHECK],
   ],
   "guides/audit-export": [
     ["Audit log", APP_NAV],
@@ -667,6 +696,7 @@ const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/telegram": 20,
   "guides/slack": 20,
   "guides/api-invoices": 10,
+  "guides/api-milestones": 10,
   "guides/audit-export": 5,
 };
 
