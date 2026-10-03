@@ -65,6 +65,7 @@ export const DOCS_NAV: NavSection[] = [
     title: "Get started",
     pages: [
       { slug: "get-started/quickstart", title: "Quickstart", description: "Create a workspace API key and make your first requests." },
+      { slug: "get-started/sdk", title: "TypeScript SDK", description: "A typed client for the API and its webhooks: every page, safe retries and signature checks." },
       { slug: "get-started/authentication", title: "Authentication", description: "Workspace API keys: their format, scope, revocation and use." },
       { slug: "get-started/errors", title: "Errors", description: "The error codes, their HTTP statuses and the error body." },
       { slug: "get-started/pagination", title: "Pagination", description: "Page through collections with limit and an opaque cursor." },

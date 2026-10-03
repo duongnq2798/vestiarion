@@ -1,5 +1,19 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-03: A TypeScript SDK
+
+- **`@vestiarion/sdk` 0.1.0**, installed with `npm install https://www.vestiarion.xyz/sdk/vestiarion-sdk-0.1.0.tgz`. It is a typed client for every `/api/v1` operation, with no dependencies, for Node 20 or later, Deno, Bun and edge runtimes. See [TypeScript SDK](/docs/get-started/sdk).
+- Its types are generated from the OpenAPI document, so they follow each change listed here.
+- `listAll` and `pages` follow `page.nextCursor` to the end of a collection.
+- Requests are retried after:
+  - a `429`, when its `Retry-After` is 60 seconds or less;
+  - a `5xx`;
+  - a timeout or a network failure.
+- Every write carries an `Idempotency-Key`, so a retry never adds a record twice.
+- `verifyWebhook` checks a delivery's `Vestiarion-Signature`.
+- `verifyLedgerEntry` checks an entry's body hash, Ed25519 signature and chain hash.
+- Nothing in the API or the webhooks changed.
+
 ## 2026-10-03: A payable held for an unconfirmed address goes back to the agent once it is confirmed
 
 - A payable the agent held because its counterparty's address changed and no one had confirmed it (`guardrailRule: "counterparty.address_unconfirmed"`, `observed.addressUnconfirmed: true`) now goes back to the agent when a person confirms the address: an `invoice_reopened` entry whose `followUp.changes` reads "the counterparty's new address has since been confirmed", then a new decision in the same cycle. Until now it stayed held until a person approved it. Approving it still pays it, and confirms the address.
