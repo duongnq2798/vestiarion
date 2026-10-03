@@ -37,7 +37,8 @@ that match the server's signing code.
   - The tarball is committed, so the bytes behind a URL never change and a lockfile's integrity hash keeps matching.
   - Install: `npm install https://www.vestiarion.xyz/sdk/vestiarion-sdk-0.1.0.tgz`. The same URL works with pnpm, Yarn
     and Bun.
-  - `/sdk/:path*` is served with `X-Content-Type-Options: nosniff` and a year's immutable cache.
+  - `/sdk/:path*` is served as the standalone verifier under `/tools/` is: as a download (`Content-Disposition:
+    attachment`) with `X-Content-Type-Options: nosniff`.
   - Publishing to the npm registry needs the partner's npm account. It is not part of this work, and the docs mention
     only the install that works today.
 - **R3. Types are generated from the OpenAPI document.**
