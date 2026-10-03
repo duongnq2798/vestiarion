@@ -94,3 +94,32 @@ describe("payable obligation buffer", () => {
     expect(result.daysUntilNext).toBe(3);
   });
 });
+
+describe("what falls due, each on its day (treasury hold horizon R1)", () => {
+  const now = Date.parse("2026-10-03T00:00:00Z");
+  const at = (days: number) => new Date(now + days * 86_400_000).toISOString();
+
+  it("lists each open USDC payable due within 30 days on its day, an overdue one today, a scheduled one on its scheduled day", () => {
+    const { schedule } = summarizePayableObligations(
+      [
+        { amount: "0.1", due_date: at(2), status: "scheduled", scheduled_for: at(1.5) },
+        { amount: "3", due_date: at(-1), status: "held" },
+        { amount: "5", due_date: at(12), status: "pending" },
+        { amount: "9", due_date: at(40), status: "pending" },
+        { amount: "7", due_date: at(4), status: "pending", currency: "EURC" },
+        { amount: "2", due_date: at(3), status: "paid" },
+      ],
+      now
+    );
+    expect(schedule).toEqual([
+      { days: 1.5, amount: 0.1 },
+      { days: 0, amount: 3 },
+      { days: 12, amount: 5 },
+    ]);
+  });
+
+  it("is handed to the treasury plan with every open milestone due today", () => {
+    const source = readFileSync(path.join(process.cwd(), "src", "lib", "agent", "orchestrator.ts"), "utf8");
+    expect(source).toContain("obligationSchedule: [...payableSummary.schedule, ...(milestoneTotal > 0 ? [{ days: 0, amount: milestoneTotal }] : [])],");
+  });
+});

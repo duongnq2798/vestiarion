@@ -3455,6 +3455,8 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
       apy,
       obligationsDue7d,
       daysUntilNextObligation,
+      // What falls due, each on its day, open milestones today: how long a sweep would really stay (hold horizon R1).
+      obligationSchedule: [...payableSummary.schedule, ...(milestoneTotal > 0 ? [{ days: 0, amount: milestoneTotal }] : [])],
       roundTripCostUsd: provider.estimatedFeeUsd * 2,
     });
     // A real reserve can be bought into only in USYC's daily window (USYC live R4). Unknown (null)
@@ -3493,7 +3495,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           expectedHoldDays: plan.holdDays,
           projectedYieldUsd: plan.projectedYieldUsd,
           roundTripCostUsd: plan.roundTripCostUsd,
-          note: "A sweep costs one transfer now and one redemption later. Sweeping is only worth doing when projectedYieldUsd exceeds roundTripCostUsd.",
+          note: "A sweep costs one transfer now and one redemption later. Sweeping is only worth doing when projectedYieldUsd exceeds roundTripCostUsd. expectedHoldDays is how long the swept cash would stay, on average over the next 30 days, before what falls due calls it back: only what the operating wallet cannot cover comes back, on its day.",
         },
         ...(provider.earnMode === "live"
           ? {

@@ -11,6 +11,10 @@ Changes to the API and webhooks that affect an integration, newest first. Change
 - **MCP:** two new tools, `create_counterparty` and `create_invoice`, annotated `readOnlyHint: false`, `destructiveHint: false`, `idempotentHint: false`, with an optional `idempotencyKey`. A read-only key gets the `403` as a tool error.
 - The OpenAPI document describes each write's request body, its `Idempotency-Key` header and its `201`.
 
+## 2026-10-03: A sweep's yield is counted over how long the cash would stay
+
+- In treasury entries (`sweep_to_usyc`, `redeem_from_usyc`, `hold`, actor `agent`), `economics.expectedHoldDays` is now how long the swept cash would stay in the reserve, on average over the next 30 days. What falls due is paid from the operating wallet first, and only what it cannot cover comes back, on its day. Before, it was the days until the next obligation. `economics.projectedYieldUsd` follows, and the written policy's `referenceDecision` with it.
+
 ## 2026-10-03: Code bounds the treasury's moves, and a payable to a client waits for a person
 
 - A new value of `guardrailRule`: `counterparty.client_payable`. The agent holds a payment, or a schedule, to a counterparty whose role is `client`, for a person: a client pays the business, so a payable to one is a refund, or an invoice entered in the wrong direction. A person may still approve it.
