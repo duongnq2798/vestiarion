@@ -101,6 +101,12 @@ describe("telegramClient", () => {
     expect(result).toEqual({ ok: true, result: new Uint8Array([37, 80, 68, 70]) });
   });
 
+  it("asks who the token belongs to", async () => {
+    const { sent, client } = recorder(() => ok({ id: 77, is_bot: true, username: "vestiarion_bot" }));
+    expect(await client.getMe()).toEqual({ ok: true, result: { id: 77, is_bot: true, username: "vestiarion_bot" } });
+    expect(sent[0].url).toBe(`https://api.telegram.org/bot${TOKEN}/getMe`);
+  });
+
   it("registers the webhook with the secret, for messages and button presses only, dropping what queued before", async () => {
     const { sent, client } = recorder(() => ok(true));
     await client.setWebhook("https://www.vestiarion.xyz/api/telegram");

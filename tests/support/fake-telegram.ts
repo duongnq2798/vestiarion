@@ -27,6 +27,7 @@ export function fakeTelegram(answer: (call: TelegramCall) => TelegramResult<unkn
     download: record("download"),
     setWebhook: record("setWebhook"),
     setMyCommands: record("setMyCommands"),
+    getMe: record("getMe"),
   } as unknown as TelegramClient;
   return {
     client,

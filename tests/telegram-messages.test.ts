@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ActivityItem } from "@/lib/agent-activity";
 import type { InvoiceDraftRead } from "@/lib/invoice-document/draft";
 import {
-  decisionsMessage, draftMessage, helpMessage, ledgerMessage, MESSAGE_MAX, missingMessage, plainText,
+  BOT_COMMANDS, decisionsMessage, draftMessage, helpMessage, ledgerMessage, MESSAGE_MAX, missingMessage, plainText,
 } from "@/lib/telegram/messages";
 
 /**
@@ -148,5 +148,15 @@ describe("helpMessage", () => {
     expect(message).toContain("Acme &amp; Sons");
     for (const command of ["/today", "/waiting", "/ledger", "/workspaces", "/disconnect"]) expect(message).toContain(command);
     expect(message).toContain("never approve or pay");
+  });
+
+  it("explains every command in the bot's menu, and the menu holds only commands Telegram accepts", () => {
+    const message = helpMessage(true, "Acme");
+    for (const { command, description } of BOT_COMMANDS) {
+      if (command !== "help") expect(message).toContain(`/${command}`);
+      expect(command).toMatch(/^[a-z_]{1,32}$/);
+      expect(description.length).toBeGreaterThanOrEqual(3);
+      expect(description.length).toBeLessThanOrEqual(256);
+    }
   });
 });

@@ -29,6 +29,8 @@ export interface TelegramClient {
   download(filePath: string): Promise<TelegramResult<Uint8Array>>;
   setWebhook(url: string): Promise<TelegramResult<unknown>>;
   setMyCommands(commands: Array<{ command: string; description: string }>): Promise<TelegramResult<unknown>>;
+  /** Who the token belongs to: the setup script checks it against TELEGRAM_BOT_USERNAME. */
+  getMe(): Promise<TelegramResult<{ id: number; username?: string }>>;
 }
 
 const API = "https://api.telegram.org";
@@ -78,5 +80,6 @@ export function telegramClient(settings: TelegramSettings, fetchImpl: typeof fet
     setWebhook: (url) =>
       call("setWebhook", { url, secret_token: settings.webhookSecret, allowed_updates: ["message", "callback_query"], drop_pending_updates: true }),
     setMyCommands: (commands) => call("setMyCommands", { commands }),
+    getMe: () => call("getMe", {}),
   };
 }

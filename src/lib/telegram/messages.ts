@@ -190,6 +190,16 @@ export function missingMessage(read: InvoiceDraftRead, reasons: string[], invoic
   );
 }
 
+/** The bot's command menu, as `npm run telegram:setup` registers it with Telegram. */
+export const BOT_COMMANDS = [
+  { command: "today", description: "Safe to spend today, what waits for a person, what the agent pays next" },
+  { command: "waiting", description: "The payments waiting for a person, and why" },
+  { command: "ledger", description: "Check that the signed ledger is intact" },
+  { command: "workspaces", description: "Switch between your connected workspaces" },
+  { command: "disconnect", description: "Stop sending this workspace's decisions here" },
+  { command: "help", description: "What the bot does, and what it never does" },
+] as const;
+
 /** What the bot does, for /help, /start without a code, and anything it does not understand. */
 export function helpMessage(connected: boolean, workspaceName?: string): string {
   if (!connected) {

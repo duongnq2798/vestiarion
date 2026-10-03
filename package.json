@@ -29,7 +29,8 @@
     "escrow:compile": "tsx scripts/compile-escrow.ts",
     "spending-limit:compile": "tsx scripts/compile-spending-limit.ts",
     "research:model-vs-policy": "tsx scripts/model-vs-policy.ts",
-    "research:replay": "tsx scripts/replay-ap-decisions.ts"
+    "research:replay": "tsx scripts/replay-ap-decisions.ts",
+    "telegram:setup": "tsx scripts/telegram-setup.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",

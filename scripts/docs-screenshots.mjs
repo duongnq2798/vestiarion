@@ -139,6 +139,7 @@ const SHOTS = {
   },
   "get-paid-confirming": async () => {},
   "get-paid-paid": async () => {},
+  "telegram-connect": async () => {},
 };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
