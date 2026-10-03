@@ -12,6 +12,7 @@ import { mrkdwn } from "../slack/blocks";
 import { workspaceOf } from "../slack/commands";
 import { installFor, webhookUrlOf } from "../slack/installs";
 import { inboxOfCode, type InvoiceInbox } from "./inboxes";
+import type { ShownRead } from "./list";
 import { downloadAttachment, fetchReceivedEmail, type ReceivedAttachment, type ReceivedEmail } from "./resend";
 import { codeOfAddress, type InboxSettings } from "./settings";
 import { svixRequestOf, verifySvix } from "./verify";
@@ -81,7 +82,7 @@ async function knownSender(counterpartyId: string | null, from: string): Promise
 }
 
 /** What the inbox shows of a read: the fields, what to check, and whether the sender is known. */
-function shown(read: InvoiceDraftRead, known: boolean) {
+function shown(read: InvoiceDraftRead, known: boolean): ShownRead {
   const { draft } = read;
   return {
     counterpartyName: read.counterpartyName,
