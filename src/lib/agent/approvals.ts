@@ -318,6 +318,8 @@ export interface WaitingPayable {
    * payable on at its next cycle (complete held invoice R4, R6); null when nothing was.
    */
   addedSinceDecision: AddedDetails | null;
+  /** The guardrail rule that refused the agent's payment, when code stopped it; null for a stop the model chose. */
+  guardrailRule: string | null;
 }
 
 
@@ -425,6 +427,7 @@ export async function listWaitingPayables(
       poReference: onFile.poReference,
       goodsReceived: onFile.goodsReceived,
       addedSinceDecision: addedSince(recorded, onFile),
+      guardrailRule: decision?.detail.guardrailBlocked === true && typeof decision.detail.guardrailRule === "string" ? decision.detail.guardrailRule : null,
     };
   });
 }

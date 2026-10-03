@@ -123,7 +123,8 @@ describe("what to do about a payable code stopped", () => {
       fix: { label: "Edit limit", path: counterpartyPath("cp-1") },
     });
     expect(ruleNextStep("counterparty.address_unconfirmed", counterparty)?.fix).toEqual({ label: "Confirm address", path: "/counterparties#counterparty-cp-1" });
-    expect(ruleNextStep("counterparty.high_risk", counterparty)?.fix).toEqual({ label: "Review screening", path: "/compliance" });
+    // "Not this person" is on the counterparty's row.
+    expect(ruleNextStep("counterparty.high_risk", counterparty)?.fix).toEqual({ label: "Review screening", path: "/counterparties#counterparty-cp-1" });
     expect(ruleNextStep("workspace.outflow_budget", counterparty)?.fix).toEqual({ label: "Spending limit", path: "/console#agent-budget" });
     expect(ruleNextStep("workspace.onchain_limit", counterparty)?.fix?.path).toBe("/console#agent-budget");
   });

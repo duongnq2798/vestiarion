@@ -1,6 +1,7 @@
 "use client";
 
 import { Banknote, Undo2, X } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useState, type FormEvent } from "react";
 import { approveInvoiceAction, rejectInvoiceAction, returnInvoiceAction } from "@/app/actions/approvals";
 import { AddDetailsDialog } from "@/components/AddDetailsDialog";
@@ -19,7 +20,8 @@ import { Money, fmt } from "@/components/vx/Primitives";
 import { withSuccessToast } from "@/components/withSuccessToast";
 import type { WaitingPayable } from "@/lib/agent/approvals";
 import { addedDetailsSentence } from "@/lib/added-details";
-import { approvalAnchor } from "@/lib/auth/org-paths";
+import { approvalAnchor, orgHref } from "@/lib/auth/org-paths";
+import { agentResumes, counterpartyPath, ruleNextStep } from "@/lib/next-step";
 import { amountToPay } from "@/lib/agent/payment-timing";
 import { utcDay, utcMinute } from "@/lib/copy";
 import { paidAcrossChains, payeeChain } from "@/lib/payee-chains";
@@ -181,6 +183,9 @@ export default function ApprovalCard({
             <p className="mt-2 text-sm text-ink-2">A payment was already sent; Approve and pay records it.</p>
           )}
           {canDecide && !processing && ownEntry && payable.riskLevel !== "high" && <p className="mt-2 text-sm text-ink-2">{OWN_INVOICE_NOTE}</p>}
+          {canDecide && !processing && (
+            <ApprovalGuidance orgSlug={orgSlug} payable={payable} selfEntered={payable.createdBy === viewerId && !ownEntry} canEdit={canEdit} />
+          )}
           {payable.lastAttempt?.state === "failed" && (
             <Callout tone="refused" className="mt-2">
               The last payment attempt failed: {payable.lastAttempt.reason}.{" "}
@@ -206,6 +211,14 @@ export default function ApprovalCard({
     </Card>
   );
 }
+
+/** Why the person who entered an invoice may not approve it, and what they can do instead (approval guidance). */
+export const SELF_APPROVAL_EXPLAINED =
+  "Someone else must approve paying it: another owner, admin or approver of this workspace. The person who enters a bill never also approves it, so a payment made by hand always has two people behind it. You can still reject it or return it to the agent.";
+
+/** Why a counterparty screened high risk cannot be paid, and the way through when the match is wrong. */
+export const HIGH_RISK_EXPLAINED =
+  "A counterparty screened high risk is never paid, not even by approval. If the screening matched someone else, review the match on its row in Counterparties and mark it Not this person: the agent then decides the invoice again. Otherwise, reject it.";
 
 /** What the card says to a sole approver about an invoice they entered (sole approver R5). */
 export const OWN_INVOICE_NOTE =
@@ -297,6 +310,56 @@ function Decisions({
         )}
       </div>
     </CardFooter>
+  );
+}
+
+/**
+ * Why Approve and pay is off, said in full, with what the person can do instead (approval guidance): the person who
+ * entered the invoice learns who may approve it and what happens without them — the agent pays a payable stopped by
+ * its spending limit on its own once there is room — and, as an owner or admin, gets the page that removes the cause;
+ * a counterparty screened high risk points to its screening match.
+ */
+function ApprovalGuidance({
+  orgSlug,
+  payable,
+  selfEntered,
+  canEdit,
+}: {
+  orgSlug: string;
+  payable: WaitingPayable;
+  selfEntered: boolean;
+  canEdit: boolean;
+}) {
+  if (payable.riskLevel === "high") {
+    return (
+      <Callout tone="refused" title="Screened high risk" className="mt-3">
+        <p>{HIGH_RISK_EXPLAINED}</p>
+        {canEdit && (
+          <Button asChild size="sm" variant="secondary" className="mt-2">
+            <Link href={orgHref(orgSlug, counterpartyPath(payable.counterpartyId))}>Review screening</Link>
+          </Button>
+        )}
+      </Callout>
+    );
+  }
+  if (!selfEntered) return null;
+  const resumes = agentResumes(payable.guardrailRule);
+  const fix = ruleNextStep(payable.guardrailRule, { id: payable.counterpartyId, name: payable.counterpartyName })?.fix ?? null;
+  return (
+    <Callout tone="held" title="You entered this invoice" className="mt-3">
+      <p>{SELF_APPROVAL_EXPLAINED}</p>
+      {resumes && <p className="mt-1.5">{resumes}</p>}
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        {fix && canEdit && (
+          <Button asChild size="sm" variant="secondary">
+            <Link href={orgHref(orgSlug, fix.path)}>{fix.label}</Link>
+          </Button>
+        )}
+        <Button asChild size="sm" variant="ghost">
+          <Link href={orgHref(orgSlug, "/members")}>See who can approve</Link>
+        </Button>
+      </div>
+    </Callout>
   );
 }
 

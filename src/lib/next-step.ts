@@ -32,14 +32,18 @@ export function ruleNextStep(rule: string | null | undefined, counterparty: { id
         fix: { label: "Open counterparty", path: row },
       };
     case "counterparty.high_risk":
+      // "Not this person" is on the counterparty's row: a dismissed match lowers its risk, and the agent decides again.
       return {
         sentence: `${counterparty.name} is screened high risk, so it is never paid. Review the screening match, or reject the invoice in Approvals.`,
-        fix: { label: "Review screening", path: "/compliance" },
+        fix: { label: "Review screening", path: row },
       };
     case "invoice.duplicate_of_settled":
       return { sentence: "It repeats an invoice already paid, being paid or scheduled. Reject it in Approvals if it is a duplicate.", fix: null };
     case "workspace.outflow_budget":
-      return { sentence: "The agent's spending limit has no room for it. Raise the limit, or pay it in Approvals.", fix: { label: "Spending limit", path: "/console#agent-budget" } };
+      return {
+        sentence: "The agent's spending limit has no room for it. The agent pays it on its own once there is room, the next UTC day or once the limit is raised; or pay it in Approvals.",
+        fix: { label: "Spending limit", path: "/console#agent-budget" },
+      };
     case "workspace.onchain_limit":
       return {
         sentence: "The spending-limit contract on Arc would refuse it. Raise the limit, or pay it in Approvals.",
@@ -61,6 +65,23 @@ export function ruleNextStep(rule: string | null | undefined, counterparty: { id
     case "fx.swap_usdc_short":
     case "treasury.insufficient_eurc":
       return { sentence: "The operating wallet is short of EURC for it. Add EURC to the wallet, or pay it in Approvals.", fix: { label: "Treasury", path: "/console" } };
+    default:
+      return null;
+  }
+}
+
+/**
+ * What happens with no one approving, for a payable a rule stopped: the agent decides it again on its own once the
+ * cause is gone (follow-up stage). Said on the Approvals card to a person who may not approve it (approval guidance).
+ */
+export function agentResumes(rule: string | null | undefined): string | null {
+  switch (rule) {
+    case "workspace.outflow_budget":
+      return "The agent pays it on its own once its spending limit has room: the next UTC day, or sooner if an owner or admin raises the limit.";
+    case "counterparty.payment_limit":
+      return "The agent decides it again on its own once an owner or admin raises the counterparty's payment limit.";
+    case "counterparty.unscreened":
+      return "The agent decides it again on its own once screening gives a verdict.";
     default:
       return null;
   }
