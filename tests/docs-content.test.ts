@@ -5,7 +5,7 @@ import { STATUS_FOR, type ApiErrorCode } from "@/lib/api/contract";
 import { DOCS_TARGET } from "@/components/vx/command-items";
 import { DOCS_LINK } from "@/components/vx/nav";
 import { COMPACT_FOOTER_LINKS, FOOTER_COLUMNS } from "@/components/vx/SiteChrome";
-import { OPERATIONS } from "@/lib/api/openapi";
+import { OPERATIONS, operationById } from "@/lib/api/openapi";
 import sitemap from "@/app/sitemap";
 import { CONTENT_DIR, hasSource, NOTES_LOADERS, PAGE_LOADERS, publishedPages, readSource } from "@/lib/docs/content";
 import { slugifyHeadings, splitCodeSpans, stripFences } from "@/lib/docs/headings";
@@ -114,7 +114,8 @@ function linkProblems(slug: string, source: string, sourceOf: (slug: string) => 
     const targetSource = sourceOf(targetSlug);
     if (GENERATED_SLUGS.has(targetSlug)) {
       // A reference page's headings are its fixed sections, then its notes' headings.
-      if (!referenceSectionIds(targetSource).includes(anchor)) problems.push(`${link}: no section #${anchor} on "${targetSlug}"`);
+      const body = operationById(targetSlug.slice("api/".length))?.requestBody !== undefined;
+      if (!referenceSectionIds(targetSource, { body }).includes(anchor)) problems.push(`${link}: no section #${anchor} on "${targetSlug}"`);
       continue;
     }
     if (targetSource === null) {

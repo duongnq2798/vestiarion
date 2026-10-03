@@ -486,17 +486,29 @@ function fieldList(nodes: SchemaNode[], depth = 0): string {
 /** A generated reference page as Markdown, in the page's order; "Try it" is the page's own form, so it has no Markdown. */
 function referenceMarkdown(op: DocOperation, origin: string): string {
   const notes = notesSource(op.id);
+  const key = `[workspace API key](${origin}${docsHref("get-started/authentication")})`;
   const sections = [
     `# ${op.summary}`,
     code(`${op.method.toUpperCase()} ${op.path}`),
     op.description,
-    `Send a [workspace API key](${origin}${docsHref("get-started/authentication")}) as \`Authorization: Bearer <key>\`.`,
+    op.scope === "write"
+      ? `Send a ${key} with read and write access as \`Authorization: Bearer <key>\`. A read-only key gets \`403\`.`
+      : `Send a ${key} as \`Authorization: Bearer <key>\`.`,
     `## ${REFERENCE_SECTIONS.parameters}`,
     parameters(op),
+    ...(op.requestBody
+      ? [
+          `## ${REFERENCE_SECTIONS.body}`,
+          "Example, `application/json`:",
+          fenced("json", JSON.stringify(op.requestExample ?? {}, null, 2)),
+          "**Fields**",
+          fieldList(schemaTree(jsonSchema(op.requestBody))),
+        ]
+      : []),
     `## ${REFERENCE_SECTIONS.samples}`,
     fenced("bash", sampleRequest(op, origin).curl),
     `## ${REFERENCE_SECTIONS.response}`,
-    "Example, `200` `application/json`:",
+    `Example, \`${op.status}\` \`application/json\`:`,
     fenced("json", JSON.stringify(op.example, null, 2)),
     "**Fields**",
     fieldList(schemaTree(jsonSchema(op.response))),

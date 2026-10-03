@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "@/app/api/v1/invoices/route";
+import { operationById } from "@/lib/api/openapi";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { authenticateApiKey, type AuthenticatedKey } from "@/lib/platform/api-keys";
@@ -102,7 +103,10 @@ describe("POST /api/v1/invoices", () => {
     const response = await send(valid);
 
     expect(response.status).toBe(201);
-    expect(await response.json()).toEqual({
+    const body = await response.json();
+    // Exactly what the reference page documents for this operation.
+    expect(operationById("create-invoice")!.response.parse(body)).toEqual(body);
+    expect(body).toEqual({
       data: {
         id: INVOICE, direction: "payable", status: "pending", amount: 10.5, currency: "USDC", memo: "Landing page design", poReference: "PO-7",
         goodsReceived: true, dueDate: "2026-10-31T12:00:00+00:00", scheduledFor: null,

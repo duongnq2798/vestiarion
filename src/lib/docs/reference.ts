@@ -11,6 +11,7 @@ import { slugify, slugifyHeadings, type Heading } from "./headings";
 
 export const REFERENCE_SECTIONS = {
   parameters: "Parameters",
+  body: "Request body",
   tryIt: "Try it",
   samples: "Code samples",
   response: "Response",
@@ -20,11 +21,19 @@ export const REFERENCE_SECTIONS = {
 
 export type ReferenceSection = keyof typeof REFERENCE_SECTIONS;
 
+/** What a reference page's fixed sections depend on: whether its operation takes a request body. */
+export interface ReferenceShape {
+  body?: boolean;
+}
+
 /**
- * The sections every reference page has, in page order; "Notes" follows only
- * when there are notes. A section joins this list when the page renders it.
+ * The sections a reference page has, in page order: a write's request body
+ * follows its parameters (write API R8), and "Notes" follows only when there
+ * are notes. A section joins this list when the page renders it.
  */
-const ALWAYS: ReferenceSection[] = ["parameters", "tryIt", "samples", "response", "errors"];
+function fixedSections(body: boolean): ReferenceSection[] {
+  return body ? ["parameters", "body", "tryIt", "samples", "response", "errors"] : ["parameters", "tryIt", "samples", "response", "errors"];
+}
 
 /** A section's anchor. The fixed sections come first and are distinct, so each keeps its plain slug. */
 export function sectionId(section: ReferenceSection): string {
@@ -37,20 +46,26 @@ export function sectionId(section: ReferenceSection): string {
  * are numbered as one page, so a notes heading that repeats a section title
  * gets `-2` rather than a second id the page already uses.
  */
-export function referenceHeadings(notes: string | null): Heading[] {
-  const sections = notes === null ? ALWAYS : [...ALWAYS, "notes" as const];
+export function referenceHeadings(notes: string | null, { body = false }: ReferenceShape = {}): Heading[] {
+  const sections = notes === null ? fixedSections(body) : [...fixedSections(body), "notes" as const];
   const outline = sections.map((section) => `## ${REFERENCE_SECTIONS[section]}`).join("\n\n");
   return slugifyHeadings(notes === null ? outline : `${outline}\n\n${notes}`);
 }
 
-/** The headings that come from the notes file: everything after "Notes". */
+/**
+ * The headings that come from the notes file: everything after "Notes". The
+ * fixed sections come first and "Notes" is the last of them, so the first
+ * heading with its id is that section: a notes heading named the same is
+ * numbered `notes-2`.
+ */
 export function notesHeadings(headings: Heading[]): Heading[] {
-  return headings.slice(ALWAYS.length + 1);
+  const notes = headings.findIndex((heading) => heading.id === sectionId("notes"));
+  return notes < 0 ? [] : headings.slice(notes + 1);
 }
 
 /** Every anchor on the page, for the link checker. */
-export function referenceSectionIds(notes: string | null): string[] {
-  return referenceHeadings(notes).map((heading) => heading.id);
+export function referenceSectionIds(notes: string | null, shape: ReferenceShape = {}): string[] {
+  return referenceHeadings(notes, shape).map((heading) => heading.id);
 }
 
 /**

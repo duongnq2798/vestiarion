@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "@/app/api/v1/counterparties/route";
+import { operationById } from "@/lib/api/openapi";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { authenticateApiKey, type AuthenticatedKey } from "@/lib/platform/api-keys";
@@ -78,7 +79,10 @@ describe("POST /api/v1/counterparties", () => {
     const response = await send(JSON.stringify(valid));
 
     expect(response.status).toBe(201);
-    expect(await response.json()).toEqual({
+    const body = await response.json();
+    // Exactly what the reference page documents for this operation.
+    expect(operationById("create-counterparty")!.response.parse(body)).toEqual(body);
+    expect(body).toEqual({
       data: {
         id: CREATED, name: "Quill Studio", role: "vendor", address: ADDRESS, chain: "ARC-TESTNET", jurisdiction: "VN", riskLevel: "clear", riskNotes: null,
         baselinePaymentLimit: 25, paymentLimit: 25, lastScreenedAt: "2026-10-03T10:00:01Z", performanceScore: null, performanceInputs: null,
