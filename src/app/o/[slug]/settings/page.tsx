@@ -5,6 +5,7 @@ import EmailInboxPanel from "@/components/EmailInboxPanel";
 import GoLivePanel from "@/components/GoLivePanel";
 import LedgerKeyPanel from "@/components/LedgerKeyPanel";
 import NotificationsPanel from "@/components/NotificationsPanel";
+import GitHubPanel from "@/components/GitHubPanel";
 import SlackPanel from "@/components/SlackPanel";
 import { UsycReservePanel } from "@/components/UsycReservePanel";
 import WebhooksPanel from "@/components/WebhooksPanel";
@@ -24,6 +25,8 @@ import { ledgerKeyStatus } from "@/lib/platform/ledger-key";
 import { usycReserveStatus } from "@/lib/platform/usyc-reserve";
 import { listWebhookEndpoints, toWebhookEndpointViews } from "@/lib/platform/webhooks";
 import { stats } from "@/lib/queries";
+import { githubInstallations } from "@/lib/github/installs";
+import { githubAppSettingsFromEnv } from "@/lib/github/settings";
 import { slackPanelView } from "@/lib/slack/panel";
 import { slackSettingsFromEnv } from "@/lib/slack/settings";
 import { linkFor as telegramLinkFor } from "@/lib/telegram/links";
@@ -38,7 +41,7 @@ export default async function SettingsPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ slack?: string | string[] }>;
+  searchParams: Promise<{ slack?: string | string[]; github?: string | string[] }>;
 }) {
   const { slug } = await params;
   const access = await requireMembership(slug);
@@ -51,9 +54,10 @@ export default async function SettingsPage({
     // Every member may connect their own Telegram chat, when this deployment has a bot (Telegram bot design R1, R4).
     const telegramOn = telegramSettingsFromEnv() !== null;
     // How connecting Slack went, from its way back (Slack design S3); only the codes the panel knows are shown.
-    const { slack: slackOutcome } = await searchParams;
+    // And how connecting GitHub went (GitHub App design G2).
+    const { slack: slackOutcome, github: githubOutcome } = await searchParams;
     const inboxSettings = inboxSettingsFromEnv();
-    const [goLive, apiKeys, webhookEndpoints, ledgerKey, dashboardStats, deletion, usyc, slack, notifySwitch, telegramLink, inbox] = await Promise.all([
+    const [goLive, apiKeys, webhookEndpoints, ledgerKey, dashboardStats, deletion, usyc, slack, notifySwitch, telegramLink, inbox, github] = await Promise.all([
       goLiveStatus(membership.orgId),
       listApiKeys(membership.orgId),
       listWebhookEndpoints(membership.orgId),
@@ -85,6 +89,13 @@ export default async function SettingsPage({
             return undefined;
           })
         : undefined,
+      // Only on a deployment where the GitHub App is configured (GitHub App design G9); best effort, like Slack's.
+      githubAppSettingsFromEnv()
+        ? githubInstallations(membership.orgId).catch((error: unknown) => {
+            console.error("settings: GitHub connections not loaded", error instanceof Error ? error.message : error);
+            return null;
+          })
+        : null,
     ]);
     const notifyEmail = notifySwitch ? (unwrap(notifySwitch) as { notify_email: boolean }).notify_email : false;
 
@@ -92,7 +103,7 @@ export default async function SettingsPage({
       <ProductShell day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()}>
         <PageHead
           title={sectionTitle("settings")}
-          sub="Your own notifications, taking this workspace live, the USYC reserve, API keys, outgoing webhooks, Slack, invoices by email, the ledger signing key, and deleting the workspace. An owner takes it live, rotates the signing key, or deletes it; an owner or admin manages API keys, webhooks, Slack and invoices by email, and a secret is shown once, right after it is created."
+          sub="Your own notifications, taking this workspace live, the USYC reserve, API keys, outgoing webhooks, Slack, GitHub, invoices by email, the ledger signing key, and deleting the workspace. An owner takes it live, rotates the signing key, or deletes it; an owner or admin manages API keys, webhooks, Slack, GitHub and invoices by email, and a secret is shown once, right after it is created."
         />
         <div className="space-y-12">
           <NotificationsPanel
@@ -114,6 +125,14 @@ export default async function SettingsPage({
               canManage={can(membership.role, "integrations.manage")}
               canAdminister={canAdminister}
               notice={typeof slackOutcome === "string" ? slackOutcome : null}
+            />
+          )}
+          {github && (
+            <GitHubPanel
+              orgSlug={slug}
+              installations={github}
+              canManage={can(membership.role, "integrations.manage")}
+              notice={typeof githubOutcome === "string" ? githubOutcome : null}
             />
           )}
           {inboxSettings && inbox !== undefined && (

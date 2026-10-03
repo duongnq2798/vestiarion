@@ -5,6 +5,7 @@ import { getChainProvider, type ChainProvider, type Stablecoin } from "../circle
 import { cycleClockMode, type CycleClockMode } from "../clock";
 import { runComplianceSweep, screeningMode as complianceScreeningMode } from "../compliance";
 import { refreshGitHubMilestones } from "../milestone-verification";
+import { sendPullRequestComments } from "../github/payment-comments";
 import { seedScale } from "../seed";
 import { executePayment, executePaymentBatch, type PaymentExecution, type PaymentSourceType } from "../payments";
 import { payInvoice, syncOperatingBalance, payoutAddress } from "./pay";
@@ -3665,6 +3666,8 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
   // Each payee whose payment is confirmed is emailed what was paid and the
   // transaction (payment notices R2–R6): a live workspace's, on Arc testnet, once.
   lines.push(...(await sendPaymentNotices()));
+  // And the pull request a milestone was paid for, where the workspace connected GitHub (GitHub App design G4).
+  lines.push(...(await sendPullRequestComments()));
   });
 
   await stage("telegram", async () => {

@@ -602,6 +602,13 @@ milestone; an unmerged response does not. Missing credentials and API failures a
 unavailable or failed while retaining the prior verdict. An owner can instead add a manual
 verification note, which is written to the signed ledger with `actor: human`.
 
+With the five `GITHUB_APP_*` variables set (see `.env.example`), a workspace can also connect
+GitHub from Settings by installing the platform's GitHub App on the repositories it chooses.
+A milestone paid for a pull request there then gets a comment on that pull request once the
+payment is confirmed: the amount, the network, the paying workspace and the transaction, never the
+payee. The installation's own token reads its private pull requests, so they verify too. See
+[Show payments on GitHub](https://www.vestiarion.xyz/docs/guides/github).
+
 ### Measurement provenance
 
 Every newly executed payment intent records its target, transaction reference, chain, provider

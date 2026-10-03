@@ -201,7 +201,12 @@ export default function PrivacyPage() {
             them nowhere.
           </li>
           <li>
-            <strong>GitHub</strong> is asked for a pull request&apos;s status when a milestone is verified by its link.
+            <strong>GitHub</strong> is asked for a pull request&apos;s status when a milestone is verified by its link. For a workspace an owner or
+            admin connects to GitHub, it also receives a comment on the pull request a milestone was paid for: the amount, the network, the
+            workspace&apos;s name and the transaction&apos;s link, never the payee&apos;s name. The app keeps the installation&apos;s id, its
+            account&apos;s login and type, and whether it covers all repositories or selected ones; disconnecting GitHub deletes them, and the
+            signed ledger keeps only the ids and the login. The token of the person connecting, used once to check they can reach the installation,
+            is not kept.
           </li>
           <li>
             <strong>Google Analytics</strong> receives page views, as described below.

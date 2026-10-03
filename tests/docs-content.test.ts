@@ -162,6 +162,7 @@ describe("the docs navigation", () => {
       ["guides/slack", "Get the agent's decisions in Slack"],
       ["guides/api-invoices", "Add invoices from your own system"],
       ["guides/api-milestones", "Pay for merged pull requests"],
+      ["guides/github", "Show payments on GitHub"],
       ["guides/audit-export", "Verify an audit export"],
     ]);
   });
@@ -195,7 +196,8 @@ describe("the docs navigation", () => {
     expect(neighbours("guides/email-invoices").next?.slug).toBe("guides/slack");
     expect(neighbours("guides/slack").next?.slug).toBe("guides/api-invoices");
     expect(neighbours("guides/api-invoices").next?.slug).toBe("guides/api-milestones");
-    expect(neighbours("guides/api-milestones").next?.slug).toBe("guides/audit-export");
+    expect(neighbours("guides/api-milestones").next?.slug).toBe("guides/github");
+    expect(neighbours("guides/github").next?.slug).toBe("guides/audit-export");
     expect(neighbours("guides/audit-export").next?.slug).toBe("research/model-vs-policy");
     expect(neighbours("research/model-vs-policy").next?.slug).toBe("get-started/quickstart");
     expect(neighbours(pages[pages.length - 1].slug).next).toBeUndefined();
