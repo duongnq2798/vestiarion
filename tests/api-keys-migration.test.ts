@@ -50,11 +50,15 @@ async function insertKey(values: { org?: string; name?: string; prefix?: string;
   );
 }
 
-const create = (org: string, name: string, scopes: string[] = ["read"], prefix = nextPrefix()) =>
-  asServiceRole(db, async (tx) =>
+/** A key `owner` creates, as an owner of `org`: only a member of a workspace creates its keys (0069). */
+const create = async (org: string, name: string, scopes: string[] = ["read"], prefix = nextPrefix()) => {
+  await db.query(
+    "insert into public.memberships (org_id, user_id, role) values ($1, $2, 'owner') on conflict (org_id, user_id) do nothing", [org, owner]);
+  return asServiceRole(db, async (tx) =>
     (await tx.query<Record<string, unknown>>(
       "select * from public.create_api_key($1, $2, $3, $4, $5, $6)", [org, name, prefix, HASH, scopes, owner]
     )).rows[0]);
+};
 
 describe("the api_keys table", () => {
   it("accepts a well-formed key with the default scope", async () => {
@@ -126,9 +130,11 @@ describe("the api_keys table", () => {
     expect(rows).toEqual([]);
   });
 
-  it("keeps the key when its creator's account is deleted", async () => {
+  // 0069 revokes it in the same update: tests/member-api-keys-migration.test.ts.
+  it("keeps the key's row when its creator's account is deleted", async () => {
     const creator = await createUser(db, "creator@example.com");
     const org = await createOrg(db, "creator-co");
+    await db.query("insert into public.memberships (org_id, user_id, role) values ($1, $2, 'admin')", [org, creator]);
     const row = await asServiceRole(db, async (tx) =>
       (await tx.query<{ id: string }>(
         "select * from public.create_api_key($1, $2, $3, $4, $5, $6)", [org, "ci", nextPrefix(), HASH, ["read"], creator]
