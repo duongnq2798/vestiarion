@@ -2,6 +2,7 @@ import type { ActivityItem } from "../agent-activity";
 import { orgHref } from "../auth/org-paths";
 import type { InvoiceDraftRead } from "../invoice-document/draft";
 import type { VerificationResult } from "../ledger";
+import type { TodayFacts, WaitingFact } from "./today";
 
 /**
  * What the bot says (Telegram bot design R8–R12), as Telegram's HTML: every value escaped, every link absolute, and no
@@ -85,6 +86,54 @@ export function decisionsMessage(workspace: { name: string; slug: string }, item
     shown += 1;
   }
   return shown < items.length ? `${message}\n\n${more(items.length - shown)}` : message;
+}
+
+/** A UTC day as "Oct 5". */
+function shortDay(day: string): string {
+  return new Date(`${day.slice(0, 10)}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+}
+
+/** "2026-10-03 07:55 UTC". */
+function utcMinute(iso: string): string {
+  return `${iso.slice(0, 10)} ${iso.slice(11, 16)} UTC`;
+}
+
+/** /today (R9): safe to spend today, what waits for a person, and what the agent pays next. */
+export function todayMessage(workspaceName: string, facts: TodayFacts, consoleUrl: string): string {
+  const lines = [
+    `${bold(workspaceName)} · today`,
+    "",
+    `${bold(`Safe to spend today: ${amountText(facts.safeToSpend, "USDC")}`)}`,
+    `The operating wallet holds ${escapeHtml(amountText(facts.cash, "USDC"))}; ${escapeHtml(amountText(facts.dueIn30d, "USDC"))} is due in the next 30 days.`,
+  ];
+  if (facts.eurcLeftOut > 0) lines.push(`EURC payables due: ${escapeHtml(amountText(facts.eurcLeftOut, "EURC"))}, paid from EURC.`);
+  if (facts.shortOn) lines.push(`⚠️ Before any receivable arrives, the wallet runs short on ${shortDay(facts.shortOn)}.`);
+  lines.push(
+    "",
+    facts.waiting === 0
+      ? "Nothing waits for a person."
+      : `${facts.waiting} ${facts.waiting === 1 ? "payment waits" : "payments wait"} for a person: send /waiting to see why.`
+  );
+  if (facts.scheduled.length > 0) {
+    lines.push("", "The agent pays next:");
+    for (const payment of facts.scheduled) lines.push(`• ${shortDay(payment.on)}: ${escapeHtml(payment.name)} ${escapeHtml(amountText(payment.amount, payment.currency))}`);
+  }
+  lines.push("", `${facts.lastCycleAt ? `Last cycle ${utcMinute(facts.lastCycleAt)}. ` : ""}${link(consoleUrl, "Open the console")}`);
+  return clip(lines.join("\n"), MESSAGE_MAX);
+}
+
+const WAITING_STATUS: Record<string, string> = { held: "held", flagged: "flagged", awaiting_info: "waiting for information" };
+
+/** /waiting (R9, R11): each payment a person must decide, why the agent stopped it, and where to decide it. */
+export function waitingMessage(workspaceName: string, facts: WaitingFact[], origin: string, slug: string): string {
+  if (facts.length === 0) return `${bold(workspaceName)} · Nothing waits for a person.`;
+  const lines = [`${bold(workspaceName)} · ${facts.length === 1 ? "1 payment waits" : `${facts.length} payments wait`} for a person`];
+  for (const fact of facts) {
+    const where = fact.kind === "payable" ? link(orgUrl(origin, slug, `/approvals#payable-${fact.id}`), "Decide in Approvals") : link(orgUrl(origin, slug, "/contractors"), "Contractors");
+    const why = fact.reason ? `: ${escapeHtml(clip(fact.reason, ITEM_DETAIL_MAX))}` : "";
+    lines.push("", `⏸ ${escapeHtml(fact.name)} ${escapeHtml(amountText(fact.amount, fact.currency))} · ${WAITING_STATUS[fact.status] ?? escapeHtml(fact.status)}${why}`, where);
+  }
+  return clip(lines.join("\n"), MESSAGE_MAX);
 }
 
 /** The ledger's verification, as the console's Verify hash chain says it (R9). */
