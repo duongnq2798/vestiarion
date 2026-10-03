@@ -20,7 +20,7 @@ vi.mock("@/components/ui/useActionForm", async (importOriginal) => {
 
 import { TelegramCard } from "@/components/TelegramCard";
 
-/** The Members page's Telegram card (Telegram bot design R4, R6), as the server renders it. */
+/** The Telegram card in Settings' Notifications section (Telegram bot design R4, R6), as the server renders it. */
 describe("TelegramCard", () => {
   afterEach(() => {
     result.state = null;

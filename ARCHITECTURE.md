@@ -386,10 +386,12 @@ with `detail: { invoiceIds, escalatedIds, recipients: <count>, failed:
 is logged with the workspace id and never fails the cycle or the tick.
 
 **The switch** is the member's own: `memberships.notify_email` (migration
-`0026`), on by default. It changes only from the Members page
-(`/o/[slug]/members`), which shows it — "Email me when payments need a
-decision" — only to a member who holds `approval.decide`; a viewer sees
-nothing, because a viewer cannot decide and so receives nothing.
+`0026`), on by default. It changes only from the Notifications section at
+the top of Settings (`/o/[slug]/settings`, `NotificationsPanel`), which shows
+it — "Email me when payments need a decision" — only to a member who holds
+`approval.decide`; a viewer sees nothing, because a viewer cannot decide and
+so receives nothing. The same section holds the member's own Telegram card;
+Members keeps a link to it.
 
 **Emails to counterparties** go to one address per counterparty, its billing
 email (`counterparties.notice_email`, migration `0063`), and only from `live`
@@ -420,7 +422,7 @@ workspaces; the ledger keeps the address with most of its name hidden.
 whole deployment; it is on only when `TELEGRAM_BOT_TOKEN`,
 `TELEGRAM_WEBHOOK_SECRET` and `TELEGRAM_BOT_USERNAME` are all set
 (`src/lib/telegram/settings.ts`), and `npm run telegram:setup` registers its
-webhook and command menu. The Members page's Telegram card
+webhook and command menu. The Telegram card in Settings' Notifications section
 (`connectTelegramAction`, gated on `workspace.read`) makes a one-time code,
 stores only its SHA-256 (`telegram_link_codes`, migration `0064`, ten
 minutes), and links `https://t.me/<bot>?start=<code>`. Telegram then posts
