@@ -651,6 +651,17 @@ describe("approveAndPay", () => {
     expect(order).toEqual(["/rest/v1/rpc/claim_invoice_decision", "/rest/v1/invoices", "/rest/v1/rpc/append_ledger_entry"]);
   });
 
+  it("names the surface and its link in approval_paid when the approval did not come from the console", async () => {
+    payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", operatingBalance: 350 });
+    const { fake, run } = approvalsFake();
+
+    await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID, provenance: { via: "slack", linkId: "link-1" } }));
+
+    const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(append.p_action).toBe("approval_paid");
+    expect(append.p_detail).toMatchObject({ by: ACTOR, invoiceId: INVOICE_ID, status: "paid", via: "slack", linkId: "link-1" });
+  });
+
   it("holds on a failed transfer, and the ledger entry records status: held", async () => {
     payInvoiceMock.mockResolvedValue({
       status: "held", txRef: "circle-tx-1", execution: null, note: " [transfer failed: provider reported failure]", operatingBalance: null,
@@ -1124,6 +1135,15 @@ describe("rejectInvoice", () => {
     expect(append.p_detail).toEqual({ by: ACTOR, invoiceId: INVOICE_ID });
   });
 
+  it("names the surface and its link when the decision did not come from the console", async () => {
+    const { fake, run } = approvalsFake();
+
+    await run(() => rejectInvoice({ actorId: ACTOR, invoiceId: INVOICE_ID, provenance: { via: "slack", linkId: "link-1" } }));
+
+    const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(append.p_detail).toEqual({ by: ACTOR, invoiceId: INVOICE_ID, via: "slack", linkId: "link-1" });
+  });
+
   it("maps a claim race to already_decided and writes nothing", async () => {
     const { fake, run } = approvalsFake({
       claim: () => ({ status: 400, body: { code: "P0001", message: "already_decided: the invoice is paid now", details: null, hint: null } }),
@@ -1247,6 +1267,15 @@ describe("returnInvoice", () => {
 
     const [update] = patchBodies(fake.requests, "/rest/v1/invoices");
     expect(update).toMatchObject({ notified_at: null });
+  });
+
+  it("names the surface and its link when the return did not come from the console", async () => {
+    const { fake, run } = approvalsFake();
+
+    await run(() => returnInvoice({ actorId: ACTOR, invoiceId: INVOICE_ID, provenance: { via: "slack", linkId: "link-1" } }));
+
+    const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(append.p_detail).toEqual({ by: ACTOR, invoiceId: INVOICE_ID, via: "slack", linkId: "link-1" });
   });
 
   it("maps self-approval from the claim to self_approval", async () => {

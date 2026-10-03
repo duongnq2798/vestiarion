@@ -4,6 +4,7 @@ import { getChainProvider } from "../circle";
 import { payeeNotReady } from "../counterparty-address";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { listLedgerEntriesForTargets } from "../ledger";
+import type { Provenance } from "../provenance";
 import { lastAttemptOf, paymentWasSent, SOLE_APPROVER_NOTE, transferExists, type IntentState } from "./approvals";
 import { releaseHeldMilestone } from "./orchestrator";
 import { HELD_FOR_BUDGET } from "./outflow-budget";
@@ -340,9 +341,14 @@ const RELEASED = { decision_claimed_by: null, decision_claimed_at: null };
  * Pays a held milestone now, as a person's decision: refused before any claim when the contractor is screened
  * high risk, above its limit, or has no confirmed address, or when the operating account holds too little for a
  * new transfer; then released as the agent releases it (from escrow when it is locked there). A transfer that
- * already exists is only reconciled.
+ * already exists is only reconciled. `provenance`, when given, names the surface the person acted from
+ * (integrations design R3); the console gives none.
  */
-export async function payHeldMilestone(input: { actorId: string; milestoneId: string }): Promise<{ status: string; txRef: string | null; note: string }> {
+export async function payHeldMilestone(input: {
+  actorId: string;
+  milestoneId: string;
+  provenance?: Provenance;
+}): Promise<{ status: string; txRef: string | null; note: string }> {
   const orgId = currentOrgId();
   const provider = getChainProvider();
   const milestone = await loadMilestone(input.milestoneId, provider.mode === "live");
@@ -436,6 +442,7 @@ export async function payHeldMilestone(input: { actorId: string; milestoneId: st
       ...(execution?.retriedAfter ? { retriedAfter: execution.retriedAfter } : {}),
       // The person who added it overrode the hold, as the workspace's only approver.
       ...(soleApprover ? { soleApprover: true } : {}),
+      ...input.provenance,
     },
   });
 
@@ -445,8 +452,9 @@ export async function payHeldMilestone(input: { actorId: string; milestoneId: st
 /**
  * Closes a held milestone without paying it, with the reason a person gives: refused while a transfer for it
  * may still settle, and while its USDC is locked in escrow. It is never paid after, and the agent never sees it.
+ * `provenance`, when given, names the surface the person acted from (integrations design R3); the console gives none.
  */
-export async function closeMilestone(input: { actorId: string; milestoneId: string; reason: string }): Promise<void> {
+export async function closeMilestone(input: { actorId: string; milestoneId: string; reason: string; provenance?: Provenance }): Promise<void> {
   const orgId = currentOrgId();
   const reason = input.reason.trim();
   if (reason.length === 0 || reason.length > 500) raise("reason_required");
@@ -487,6 +495,7 @@ export async function closeMilestone(input: { actorId: string; milestoneId: stri
       currency: "USDC",
       heldFor,
       reason,
+      ...input.provenance,
     },
   });
 }

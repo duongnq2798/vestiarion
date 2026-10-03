@@ -109,6 +109,15 @@ describe("pauseAgent", () => {
     });
   });
 
+  it("names the surface and its link when the pause did not come from the console", async () => {
+    const { fake, run } = pauseFake();
+
+    await run(() => pauseAgent({ orgId: ORG, actorId: ACTOR, reason: "stop", provenance: { via: "slack", linkId: "link-1" } }));
+
+    const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(append.p_detail).toEqual({ by: ACTOR, reason: "stop", via: "slack", linkId: "link-1" });
+  });
+
   it("caps the reason at 280 characters, and sends null when it is empty", async () => {
     const long = "x".repeat(300);
     const { fake, run } = pauseFake();
