@@ -53,6 +53,41 @@ export type ChatCheck = { ok: true; address: string | null } | { ok: false; refu
 
 const no = (refusal: Refused): ChatCheck => ({ ok: false, refusal });
 
+/** What Approve and pay from a chat needs to know of a payable and its payee. */
+export interface ApprovalFacts {
+  amount: number | string;
+  currency: string | null;
+  chain: string | null;
+  address: string | null;
+  addressChangedAt: string | null;
+  addressConfirmedAt: string | null;
+}
+
+/**
+ * Why Approve and pay may not be pressed from a chat, or null when it may: the one rule a card's buttons are drawn by
+ * and a click is checked against (S8, S10, S11). `limit` is the surface's own; null means none is allowed. The message
+ * is the reason alone, as a card says it after "Approve it in Vestiarion:"; a click adds what to do (`ADVICE`).
+ */
+export function approveRefusal(facts: ApprovalFacts, limit: number | null, where: string): Refused | null {
+  if (facts.currency === "EURC") return refused("open_in_console", "This payable is in EURC.");
+  if (paidAcrossChains(facts.chain)) return refused("open_in_console", "Its payee is paid on another chain, and Vestiarion shows the fee.");
+  if (limit === null || Number(facts.amount) > limit) {
+    return refused("over_chat_limit", `It is above the ${limit ?? 0} USDC this workspace allows from ${where}.`);
+  }
+  if (!facts.address) return refused("no_address", "Its payee has no address yet.");
+  if (addressUnconfirmed(facts.addressChangedAt, facts.addressConfirmedAt)) {
+    return refused("address_unconfirmed", "Its payee's address changed and nobody has confirmed it.");
+  }
+  return null;
+}
+
+const ADVICE: Record<string, string> = {
+  open_in_console: "Approve it in Vestiarion.",
+  over_chat_limit: "Approve it in Vestiarion.",
+  no_address: "Add one on Counterparties first.",
+  address_unconfirmed: "Confirm it on Counterparties first.",
+};
+
 export async function checkChatDecision(
   actor: Actor,
   decision: "approve" | "reject" | "return",
@@ -77,17 +112,19 @@ export async function checkChatDecision(
   if (decision !== "approve") return { ok: true, address };
 
   const limit = "decisionsLimitUsdc" in actor.surface ? actor.surface.decisionsLimitUsdc : null;
-  if (row.currency === "EURC") return no(refused("open_in_console", "This payable is in EURC. Approve it in Vestiarion."));
-  if (paidAcrossChains(payee?.chain)) {
-    return no(refused("open_in_console", "Its payee is paid on another chain. Approve it in Vestiarion, which shows the fee."));
-  }
-  if (limit === null || Number(row.amount) > limit) {
-    return no(refused("over_chat_limit", `It is above the ${limit ?? 0} USDC this workspace allows from ${where}. Approve it in Vestiarion.`));
-  }
-  if (!address) return no(refused("no_address", "Its payee has no address yet. Add one on Counterparties first."));
-  if (addressUnconfirmed(payee?.address_changed_at ?? null, payee?.address_confirmed_at ?? null)) {
-    return no(refused("address_unconfirmed", "Its payee's address changed and nobody has confirmed it. Confirm it on Counterparties first."));
-  }
+  const refusal = approveRefusal(
+    {
+      amount: row.amount,
+      currency: row.currency,
+      chain: payee?.chain ?? null,
+      address,
+      addressChangedAt: payee?.address_changed_at ?? null,
+      addressConfirmedAt: payee?.address_confirmed_at ?? null,
+    },
+    limit,
+    where
+  );
+  if (refusal) return no({ ...refusal, message: `${refusal.message} ${ADVICE[refusal.code] ?? ""}`.trim() });
   if (addressHash(address) !== card.addressHash) return no(refused("card_stale", STALE));
   return { ok: true, address };
 }

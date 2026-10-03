@@ -23,6 +23,7 @@ import { arcRpcUrl } from "../circle/arcFees";
 import { budgetGate, countedUsdc, exceedsBudget, HELD_FOR_BUDGET, type BudgetGate, type BudgetRoom } from "./outflow-budget";
 import { sendPaymentNotices } from "../payment-notices";
 import { sendAgentDecisions } from "../telegram/notify";
+import { sendSlackDecisions } from "../slack/notify";
 import { onChainLimitGate, onChainLimitRecord, type OnChainLimitDecisionCheck, type OnChainLimitGate } from "./onchain-limit";
 import { addressUnconfirmed, payeeNotReady } from "../counterparty-address";
 import { SandboxCapReachedError } from "./sandbox-cap";
@@ -3667,6 +3668,13 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
   // ------------------------------------------------------------ 8. telegram
   // Each member's connected Telegram chat is told what the agent decided since it was last told (Telegram bot R8).
   lines.push(...(await sendAgentDecisions()));
+  });
+
+  await stage("slack", async () => {
+  // ------------------------------------------------------------ 9. slack
+  // The workspace's Slack channel is told what the agent decided since it was last told, with a stopped payable's card
+  // when deciding from Slack is on (Slack design S7, S8).
+  lines.push(...(await sendSlackDecisions()));
   });
 
   const finishedAt = new Date().toISOString();

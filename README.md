@@ -199,7 +199,7 @@ src/lib/agent/
                              compliance -> follow-up -> recurring -> services
                              -> liquidity -> AP -> contractors -> treasury ->
                              forecast -> proposals -> collections -> notices
-                             -> telegram, all logged to the ledger
+                             -> telegram -> slack, all logged to the ledger
   liquidity.ts               Redeems from USYC what today's payments need
                              before AP decides them; a person's Bring cash back
   cycle-metrics.ts           Counts outcomes, decision sources, and code-level

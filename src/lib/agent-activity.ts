@@ -166,6 +166,19 @@ export function activityItem(entry: ActivityEntry, refs: ActivityRefs): Activity
   const id = text(entry.detail.invoiceId);
   const invoice = id ? refs.invoices.get(id) : undefined;
   if (!id || !invoice) return null;
+  const item = invoiceItem(entry, refs, id, invoice);
+  // A stopped payable is what a person decides: a chat's card names it (Slack design S8).
+  return item.tone === "stopped" ? { ...item, invoiceId: id } : item;
+}
+
+/** An invoice's decision, in words. */
+function invoiceItem(
+  entry: ActivityEntry,
+  refs: ActivityRefs,
+  id: string,
+  invoice: ActivityRefs["invoices"] extends ReadonlyMap<string, infer V> ? V : never
+): ActivityItem {
+  const blocked = entry.detail.guardrailBlocked === true;
   const amount = activityAmount(invoice.amount, invoice.currency);
   const after = afterTrigger(entry, refs.triggers?.get(id));
   const how = { path: `/invoices#trail-${id}`, pathLabel: "How it decided" };
