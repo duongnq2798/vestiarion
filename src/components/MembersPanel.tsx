@@ -31,6 +31,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { toast } from "@/components/ui/Toaster";
 import { MOTION } from "@/components/ui/tokens";
 import { useActionForm } from "@/components/ui/useActionForm";
+import { TelegramCard } from "@/components/TelegramCard";
 import { canAssignRole, type OrgRole } from "@/lib/auth/roles";
 import type { Member, OpenInvitation } from "@/lib/platform/members";
 
@@ -300,6 +301,7 @@ export default function MembersPanel({
   assignable,
   canDecide,
   notifyEmail,
+  telegram = null,
 }: {
   orgSlug: string;
   members: Member[];
@@ -310,6 +312,8 @@ export default function MembersPanel({
   /** Whether the viewer can decide payments — a viewer sees no switch, because they receive nothing. */
   canDecide: boolean;
   notifyEmail: boolean;
+  /** The viewer's own Telegram chat for this workspace; null when this deployment has no bot (Telegram bot design R1). */
+  telegram?: { link: { username: string | null; linkedAt: string } | null } | null;
 }) {
   const isManager = assignable.length > 0;
   const router = useRouter();
@@ -322,6 +326,7 @@ export default function MembersPanel({
   return (
     <div className="space-y-8">
       {canDecide && <NotifyEmailSwitch orgSlug={orgSlug} initial={notifyEmail} />}
+      {telegram && <TelegramCard orgSlug={orgSlug} link={telegram.link} />}
       <section aria-labelledby="members-title">
         <SectionHeader id="members-title" title="Members" meta={`${members.length} in this workspace`} />
         <Card className="overflow-hidden">

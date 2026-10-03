@@ -12,6 +12,11 @@ export interface AgentActivity {
   lastCycleAt: string | null;
   /** The agent's decisions after `since`, oldest first, in words; none when `since` is not given. */
   items: ActivityItem[];
+  /**
+   * The last ledger entry this read has covered: the head, or the last entry read when a full page came back and more
+   * may follow. A reader that keeps a cursor (the Telegram stage) moves it here, past entries that say nothing.
+   */
+  through: number;
 }
 
 /** At most this many entries are read per call: more than a page tells one by one. */
@@ -41,7 +46,7 @@ export async function readAgentActivity(since: number | null, now: number = Date
   const head = (unwrap(heads) as Array<{ seq: number }>)[0]?.seq ?? 0;
   const lastCycleAt = (unwrap(lastCycle) as Array<{ ts: string }>)[0]?.ts ?? null;
   const base = { running: started ? { startedAt: started } : null, head, lastCycleAt };
-  if (since === null || since >= head) return { ...base, items: [] };
+  if (since === null || since >= head) return { ...base, items: [], through: Math.max(head, since ?? 0) };
 
   const entries = unwrap(
     await client
@@ -53,7 +58,9 @@ export async function readAgentActivity(since: number | null, now: number = Date
       .order("seq", { ascending: true })
       .limit(READ_AT_MOST)
   ) as ActivityEntry[];
-  if (entries.length === 0) return { ...base, items: [] };
+  // Fewer than a page came back: every entry up to the head was read. A full page may have more after its last entry.
+  const through = entries.length < READ_AT_MOST ? Math.max(head, entries.at(-1)?.seq ?? head) : (entries.at(-1)?.seq ?? head);
+  if (entries.length === 0) return { ...base, items: [], through };
 
   const invoiceIds = strings(entries.map((entry) => entry.detail.invoiceId));
   const milestoneIds = strings(entries.map((entry) => entry.detail.milestoneId));
@@ -110,5 +117,5 @@ export async function readAgentActivity(since: number | null, now: number = Date
     ),
     triggers,
   };
-  return { ...base, items: activityItems(entries, refs) };
+  return { ...base, items: activityItems(entries, refs), through };
 }

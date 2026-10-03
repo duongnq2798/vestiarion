@@ -22,6 +22,7 @@ import { usycSubscriptionsOpen } from "../circle/usyc";
 import { arcRpcUrl } from "../circle/arcFees";
 import { budgetGate, countedUsdc, exceedsBudget, HELD_FOR_BUDGET, type BudgetGate, type BudgetRoom } from "./outflow-budget";
 import { sendPaymentNotices } from "../payment-notices";
+import { sendAgentDecisions } from "../telegram/notify";
 import { onChainLimitGate, onChainLimitRecord, type OnChainLimitDecisionCheck, type OnChainLimitGate } from "./onchain-limit";
 import { addressUnconfirmed, payeeNotReady } from "../counterparty-address";
 import { SandboxCapReachedError } from "./sandbox-cap";
@@ -3631,6 +3632,12 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
   // Each payee whose payment is confirmed is emailed what was paid and the
   // transaction (payment notices R2–R6): a live workspace's, on Arc testnet, once.
   lines.push(...(await sendPaymentNotices()));
+  });
+
+  await stage("telegram", async () => {
+  // ------------------------------------------------------------ 8. telegram
+  // Each member's connected Telegram chat is told what the agent decided since it was last told (Telegram bot R8).
+  lines.push(...(await sendAgentDecisions()));
   });
 
   const finishedAt = new Date().toISOString();

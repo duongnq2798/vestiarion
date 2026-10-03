@@ -91,6 +91,13 @@ is hard-coded into the interface:
    only an owner or admin may resume it. Pausing stops the agent's own cycles and the money it would
    move mid-cycle, including reserve sweeps and redemptions; it never stops a person's own decision
    in the approvals inbox.
+7. **Telegram** — each member can connect their own Telegram chat from **Members**. The chat gets
+   the agent's decisions within the cycle that makes them, each with its reasons, its Arc testnet
+   transaction and a link to where a person handles it; answers `/today` (safe to spend today),
+   `/waiting` and `/ledger`, or the same questions in plain words, with figures written by code,
+   never by the model; and reads an invoice sent to it, as a PDF or its text, into a payable an
+   owner or admin adds with one tap. The bot never approves or pays: a stopped payment links to
+   Approvals (`src/lib/telegram/`, [guide](https://www.vestiarion.xyz/docs/guides/telegram)).
 
 Every decision is made by asking an LLM for a structured `{action, reasoning, confidence}` verdict
 under an explicit guardrail policy (never pay a high-risk counterparty, never exceed a payment
@@ -182,8 +189,8 @@ src/lib/agent/
   orchestrator.ts            The agent cycle: reconcile -> receipts ->
                              compliance -> follow-up -> recurring -> services
                              -> liquidity -> AP -> contractors -> treasury ->
-                             forecast -> proposals -> notices, all logged to
-                             the ledger
+                             forecast -> proposals -> notices -> telegram, all
+                             logged to the ledger
   liquidity.ts               Redeems from USYC what today's payments need
                              before AP decides them; a person's Bring cash back
   cycle-metrics.ts           Counts outcomes, decision sources, and code-level
@@ -210,6 +217,10 @@ src/app/api/v1/           Read API for bots, MCP servers and anything else
                            workspace API key
 src/lib/platform/api-keys.ts  Key generation and hashing, listing and
                                revocation; only sha256(secret) is ever stored
+src/lib/telegram/         The Telegram bot: one-time connect codes, the webhook's
+                           update handler, /today /waiting /ledger, invoices
+                           read into payables, and the cycle's last stage,
+                           which tells each connected chat what the agent did
 src/lib/webhooks/         Signing, SSRF-safe sending, and the retry/disable
                            policy for a workspace's own HTTPS endpoints; a
                            new ledger entry queues a signed delivery to each
@@ -360,6 +371,7 @@ Two independent upgrades from there, in either order:
 | `npm run status -- <org-slug>` | Balances, wallets, open invoices, ledger height |
 | `npm run circle:doctor -- <org-slug>` / `agent:doctor` | Reports exactly which parts are live |
 | `npm run arc:proof` | Standalone: two wallets, a faucet check, one real transfer |
+| `npm run telegram:setup -- <https origin>` | Registers the Telegram bot's webhook and command menu, once the three `TELEGRAM_*` variables are set (see `.env.example`) |
 | `npm run docs:screenshots` | Rebuilds the user guides’ step screenshots in `public/docs/guides/` with local headless Edge. Run it after changing a screen a guide shows (Go live, the counterparty or invoice form, a decision or approval card, the audit log), then look at each PNG before committing |
 
 Seeded amounts scale down automatically when Circle credentials are present (`SEED_SCALE`),

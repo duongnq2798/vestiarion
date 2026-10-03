@@ -12,7 +12,14 @@ import { GoLiveError, type GoLiveErrorCode } from "@/lib/platform/go-live";
  * button in the app fails this test until the guide says the new name.
  */
 
-type GuideSlug = "guides/try-it" | "guides/go-live" | "guides/first-payment" | "guides/pay-a-contractor" | "guides/get-paid" | "guides/audit-export";
+type GuideSlug =
+  | "guides/try-it"
+  | "guides/go-live"
+  | "guides/first-payment"
+  | "guides/pay-a-contractor"
+  | "guides/get-paid"
+  | "guides/telegram"
+  | "guides/audit-export";
 
 const PANEL = "src/components/GoLivePanel.tsx";
 const GO_LIVE_ACTIONS = "src/app/actions/go-live.ts";
@@ -58,6 +65,12 @@ const PAYEE_LINK = "src/components/intake/PayeeLinkControl.tsx";
 const CONTRACTORS_PAGE = "src/app/o/[slug]/contractors/page.tsx";
 const MILESTONE_FORM = "src/components/intake/MilestoneIntake.tsx";
 const MILESTONE_ACTIONS = "src/app/actions/milestones.ts";
+const TELEGRAM_CARD = "src/components/TelegramCard.tsx";
+const TELEGRAM_MESSAGES = "src/lib/telegram/messages.ts";
+const TELEGRAM_UPDATES = "src/lib/telegram/updates.ts";
+const TELEGRAM_INTAKE = "src/lib/telegram/intake.ts";
+const TELEGRAM_LINKS = "src/lib/telegram/links.ts";
+const AGENT_ACTIVITY = "src/lib/agent-activity.ts";
 const MILESTONE_CHECK = "src/components/MilestoneVerification.tsx";
 const GITHUB_CHECK = "src/lib/milestone-verification.ts";
 const LOGIN_PAGE = "src/app/login/page.tsx";
@@ -461,6 +474,41 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["Closed without paying", MAP],
     ["Audit log", APP_NAV],
   ],
+  "guides/telegram": [
+    ["Members", APP_NAV],
+    ["Telegram", TELEGRAM_CARD],
+    ["Connect Telegram", TELEGRAM_CARD],
+    ["Open Telegram", TELEGRAM_CARD],
+    ["The link works once, for 10 minutes.", TELEGRAM_CARD],
+    ["Disconnect", TELEGRAM_CARD],
+    ["This link was already used or has expired.", TELEGRAM_UPDATES],
+    ["telegram_connected", TELEGRAM_LINKS],
+    ["telegram_disconnected", TELEGRAM_LINKS],
+    ["I only work in a private chat", TELEGRAM_MESSAGES],
+    ["Arc testnet transaction", TELEGRAM_MESSAGES],
+    ["How it decided", AGENT_ACTIVITY],
+    ["Decide in Approvals", AGENT_ACTIVITY],
+    ["Safe to spend today", TELEGRAM_MESSAGES],
+    ["/today", TELEGRAM_MESSAGES],
+    ["/waiting", TELEGRAM_MESSAGES],
+    ["/ledger", TELEGRAM_MESSAGES],
+    ["/workspaces", TELEGRAM_MESSAGES],
+    ["/disconnect", TELEGRAM_MESSAGES],
+    ["Verify hash chain", VERIFY_BADGE],
+    ["From a document", INVOICES_PAGE],
+    ["AP / AR", APP_NAV],
+    ["The model's note:", TELEGRAM_MESSAGES],
+    ["Add, goods received", TELEGRAM_INTAKE],
+    ["Add, not received yet", TELEGRAM_INTAKE],
+    ["Cancel", TELEGRAM_INTAKE],
+    ["Not added.", TELEGRAM_INTAKE],
+    ["The agent usually decides within a minute, and its decision will be sent here", TELEGRAM_INTAKE],
+    ["This draft was already used or has expired.", TELEGRAM_INTAKE],
+    ["Send the invoice as a PDF, or paste its text.", TELEGRAM_UPDATES],
+    ["Only an owner or admin can add invoices.", TELEGRAM_INTAKE],
+    ['via: "telegram"', TELEGRAM_INTAKE],
+    ["Commands and invoices now go to", TELEGRAM_UPDATES],
+  ],
   "guides/audit-export": [
     ["Audit log", APP_NAV],
     ["Download", EXPORT_MENU],
@@ -520,6 +568,7 @@ const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/first-payment": 20,
   "guides/pay-a-contractor": 20,
   "guides/get-paid": 20,
+  "guides/telegram": 20,
   "guides/audit-export": 5,
 };
 

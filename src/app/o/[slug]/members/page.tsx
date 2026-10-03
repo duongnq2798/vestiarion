@@ -10,6 +10,8 @@ import { platformDb, unwrap } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
 import { listMembers, listOpenInvitations } from "@/lib/platform/members";
 import { stats } from "@/lib/queries";
+import { linkFor } from "@/lib/telegram/links";
+import { telegramSettingsFromEnv } from "@/lib/telegram/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +24,9 @@ export default async function MembersPage({ params }: { params: Promise<{ slug: 
     const { user, membership } = access;
     const canManage = can(membership.role, "members.manage");
     const canDecide = can(membership.role, "approval.decide");
-    const [members, invitations, dashboardStats, notifySwitch] = await Promise.all([
+    // Every member may connect their own Telegram chat, when this deployment has a bot (Telegram bot design R1, R4).
+    const telegramOn = telegramSettingsFromEnv() !== null;
+    const [members, invitations, dashboardStats, notifySwitch, telegramLink] = await Promise.all([
       listMembers(membership.orgId),
       canManage ? listOpenInvitations(membership.orgId) : Promise.resolve([]),
       stats(),
@@ -31,6 +35,7 @@ export default async function MembersPage({ params }: { params: Promise<{ slug: 
       canDecide
         ? platformDb().from("memberships").select("notify_email").eq("org_id", membership.orgId).eq("user_id", user.id).single()
         : Promise.resolve(null),
+      telegramOn ? linkFor(membership.orgId, user.id) : Promise.resolve(null),
     ]);
     const assignable = ORG_ROLES.filter((role) => canAssignRole(membership.role, role));
     const notifyEmail = notifySwitch ? (unwrap(notifySwitch) as { notify_email: boolean }).notify_email : false;
@@ -53,6 +58,7 @@ export default async function MembersPage({ params }: { params: Promise<{ slug: 
           assignable={assignable}
           canDecide={canDecide}
           notifyEmail={notifyEmail}
+          telegram={telegramOn ? { link: telegramLink ? { username: telegramLink.username, linkedAt: telegramLink.linkedAt } : null } : null}
         />
       </ProductShell>
     );

@@ -251,7 +251,7 @@ describe("reading the agent's activity", () => {
   it("says a cycle is running, where the ledger is, and when the last cycle completed, telling nothing to a page that has just opened", async () => {
     const client = fake();
     const activity = await read(client, null);
-    expect(activity).toEqual({ running: { startedAt: "2026-10-03T02:20:30Z" }, head: 974, lastCycleAt: "2026-10-03T02:00:08Z", items: [] });
+    expect(activity).toEqual({ running: { startedAt: "2026-10-03T02:20:30Z" }, head: 974, lastCycleAt: "2026-10-03T02:00:08Z", items: [], through: 974 });
     const run = client.requests.find((r) => r.path === "/rest/v1/cycle_runs")!;
     expect(run.params.get("status")).toBe("eq.running");
     expect(run.params.get("started_at")).toMatch(/^gt\./);
@@ -275,8 +275,19 @@ describe("reading the agent's activity", () => {
     expect(asked.params.get("action")).not.toContain("cycle_complete");
   });
 
+  it("has read through the head when fewer entries than a page came back, so entries that say nothing are passed over", async () => {
+    const client = fake([{ seq: 972, ts: "2026-10-03T02:20:53Z", action: "ap_pay", detail: { invoiceId: INVOICE, execution: { txRef: TX, resultingStatus: "paid" } } }]);
+    expect((await read(client, 967)).through).toBe(974);
+  });
+
+  it("has read only through the last entry when a full page came back, as more may follow it", async () => {
+    const page = Array.from({ length: 20 }, (_, index) => ({ seq: 950 + index, ts: "2026-10-03T02:20:53Z", action: "ap_pay", detail: { invoiceId: "gone" } }));
+    expect((await read(fake(page), 949)).through).toBe(969);
+  });
+
   it("reads nothing more when the page has seen the head", async () => {
     const client = fake();
+    expect((await read(client, 974)).through).toBe(974);
     expect((await read(client, 974)).items).toEqual([]);
     expect(client.requests.some((r) => r.path === "/rest/v1/invoices")).toBe(false);
   });
