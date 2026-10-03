@@ -31,7 +31,7 @@ export const ApiErrorSchema = z
   .object({
     error: z.object({
       code: z
-        .enum(["unauthorized", "forbidden", "not_found", "invalid_request", "rate_limited", "unavailable", "internal"] satisfies ApiErrorCode[])
+        .enum(["unauthorized", "forbidden", "not_found", "invalid_request", "conflict", "rate_limited", "unavailable", "internal"] satisfies ApiErrorCode[])
         .describe("One of a closed set, so a client can branch on it without parsing the message."),
       message: z.string().describe("A human-readable explanation. Never carries internal detail."),
     }),

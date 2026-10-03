@@ -39,6 +39,17 @@ export function takeDocumentReadToken(key: string, now = Date.now()): boolean {
   return take(documentBuckets, key, 5, 12_000, now);
 }
 
+const apiWriteBuckets = new Map<string, Bucket>();
+
+/**
+ * Thirty writes a minute per API key (write API R6): a key that adds records in a loop is slowed down before it fills
+ * the workspace. Keyed by the key's id, never by IP, so one caller's writes never spend another's. Single-instance,
+ * like the others.
+ */
+export function takeApiWriteToken(keyId: string, now = Date.now()): boolean {
+  return take(apiWriteBuckets, keyId, 30, 2_000, now);
+}
+
 const telegramChatBuckets = new Map<string, Bucket>();
 
 /**

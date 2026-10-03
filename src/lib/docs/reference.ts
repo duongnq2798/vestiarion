@@ -60,10 +60,11 @@ export function referenceSectionIds(notes: string | null): string[] {
  * in `@/lib/api/contract`.
  */
 export const ERROR_MEANINGS: Record<ApiErrorCode, string> = {
-  invalid_request: "An invalid `limit` or `cursor`, or a filter value outside its allowed values. The message lists the accepted values.",
+  invalid_request: "An invalid `limit` or `cursor`, a filter value outside its allowed values, or a request body that does not validate. The message names the parameter or the field, and lists the accepted values.",
   unauthorized: "No key, or a malformed, unknown or revoked one: \"A valid API key is required.\"",
   forbidden: "The key's scopes do not cover this route: \"This key cannot do that.\"",
   not_found: "The requested resource does not exist in the key's workspace.",
+  conflict: "The `Idempotency-Key` was already used for a different request, or the first request with it is still being handled.",
   rate_limited: "Too many requests; wait as long as `Retry-After` says before trying again.",
   unavailable: "A service the request depends on is unavailable.",
   internal: "An unexpected server error. Implementation details are not exposed.",
