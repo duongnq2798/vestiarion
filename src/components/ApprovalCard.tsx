@@ -1,23 +1,25 @@
 "use client";
 
-import { Banknote, ClipboardCheck, Undo2, X } from "lucide-react";
+import { Banknote, Undo2, X } from "lucide-react";
 import { useCallback, useState, type FormEvent } from "react";
-import { addInvoiceDetailsAction, approveInvoiceAction, rejectInvoiceAction, returnInvoiceAction } from "@/app/actions/approvals";
+import { approveInvoiceAction, rejectInvoiceAction, returnInvoiceAction } from "@/app/actions/approvals";
+import { AddDetailsDialog } from "@/components/AddDetailsDialog";
 import { Badge, type BadgeProps } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/Card";
-import { Checkbox } from "@/components/ui/Checkbox";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogTrigger } from "@/components/ui/Dialog";
 import { Field } from "@/components/ui/Field";
 import { FormMessage } from "@/components/ui/FormMessage";
-import { Input, Textarea } from "@/components/ui/Input";
+import { Textarea } from "@/components/ui/Input";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm, type ActionResult } from "@/components/ui/useActionForm";
 import { Money, fmt } from "@/components/vx/Primitives";
 import { withSuccessToast } from "@/components/withSuccessToast";
-import type { AddedDetails, WaitingPayable } from "@/lib/agent/approvals";
+import type { WaitingPayable } from "@/lib/agent/approvals";
+import { addedDetailsSentence } from "@/lib/added-details";
+import { approvalAnchor } from "@/lib/auth/org-paths";
 import { amountToPay } from "@/lib/agent/payment-timing";
 import { utcDay, utcMinute } from "@/lib/copy";
 import { paidAcrossChains, payeeChain } from "@/lib/payee-chains";
@@ -26,7 +28,6 @@ const INITIAL: ActionResult = { ok: false, message: "" };
 const approve = withSuccessToast(approveInvoiceAction);
 const reject = withSuccessToast(rejectInvoiceAction);
 const giveBack = withSuccessToast(returnInvoiceAction);
-const addDetails = withSuccessToast(addInvoiceDetailsAction);
 
 /**
  * What Approve and pay asks before it pays: the amount that will leave, which
@@ -72,20 +73,6 @@ export function payConfirmDescription(payable: Pick<WaitingPayable, "paymentSent
 
 /** The confirm dialog's added sentence when a sole approver approves what they entered themselves. */
 export const OWN_ENTRY_RECORDED = "It also records that you entered it yourself, as the workspace's only approver.";
-
-/**
- * What the card says once a person added what the agent was missing, until the agent decides the payable again
- * (complete held invoice R6): its follow-up reopens it on exactly these changes.
- */
-export function addedDetailsSentence(added: AddedDetails): string {
-  const what = [
-    added.poReference !== undefined ? `the purchase order ${added.poReference} was added` : null,
-    added.goodsReceived ? "the goods were marked received" : null,
-  ]
-    .filter((part): part is string => part !== null)
-    .join(" and ");
-  return `Since the agent stopped it, ${what}. The agent decides it again at its next cycle, usually within a minute.`;
-}
 
 const STATUS: Record<WaitingPayable["status"], { label: string; tone: BadgeProps["tone"] }> = {
   held: { label: "Held", tone: "held" },
@@ -156,7 +143,7 @@ export default function ApprovalCard({
 
   return (
     <Card asChild tone={payable.status === "flagged" ? "refused" : processing ? "agent" : "held"}>
-      <article>
+      <article id={approvalAnchor(payable.id)} className="scroll-mt-24">
         <CardHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0 space-y-1">
             <CardTitle className="truncate">{payable.counterpartyName}</CardTitle>
@@ -341,58 +328,6 @@ function RejectDialog({ orgSlug, payable }: { orgSlug: string; payable: WaitingP
             <SubmitButton variant="danger-solid" pendingLabel="Rejecting…">
               Reject
             </SubmitButton>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-/**
- * Adds what the payable is missing: its purchase order, when it has none, and its goods or services marked received,
- * when they are not. Only the missing fields are offered; what is on file is shown, never edited (complete held
- * invoice R2).
- */
-function AddDetailsDialog({ orgSlug, payable }: { orgSlug: string; payable: WaitingPayable }) {
-  const [open, setOpen] = useState(false);
-  const close = useCallback(() => setOpen(false), []);
-  const { state, formProps } = useActionForm(addDetails, INITIAL, { resetOnSuccess: true, onSuccess: close });
-  const poId = `details-po-${payable.id}`;
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button size="sm" variant="secondary" icon={<ClipboardCheck />}>
-          Add details
-        </Button>
-      </DialogTrigger>
-      <DialogContent
-        title={`Add details to ${payable.counterpartyName}'s invoice`}
-        description="The agent pays an invoice on its own only with a purchase order on file and the goods or services received. Add what is missing: the agent decides it again at its next cycle, and the ledger records what you added."
-      >
-        <form {...formProps} className="grid gap-5">
-          <input type="hidden" name="orgSlug" value={orgSlug} />
-          <input type="hidden" name="invoiceId" value={payable.id} />
-          {payable.poReference === null ? (
-            <Field id={poId} label="PO reference" optional={!payable.goodsReceived}>
-              <Input name="poReference" maxLength={100} placeholder="PO-100" />
-            </Field>
-          ) : (
-            <p className="text-sm text-ink-2">
-              PO reference <span className="font-mono text-ink">{payable.poReference}</span> is on file.
-            </p>
-          )}
-          {payable.goodsReceived ? (
-            <p className="text-sm text-ink-2">The goods or services are marked received.</p>
-          ) : (
-            <Checkbox name="goodsReceived" label="Goods or services received" description="Tick it only if you received them." />
-          )}
-          <FormMessage tone={state.message && !state.ok ? "error" : "neutral"}>{state.ok ? null : state.message}</FormMessage>
-          <DialogFooter>
-            <DialogClose asChild>
-              <Button variant="secondary">Cancel</Button>
-            </DialogClose>
-            <SubmitButton pendingLabel="Adding…">Add details</SubmitButton>
           </DialogFooter>
         </form>
       </DialogContent>

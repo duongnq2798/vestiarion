@@ -2,6 +2,7 @@ import { committedState } from "@/lib/agent/duplicates";
 import { invoiceDiscount } from "@/lib/agent/payment-timing";
 import { utcDay } from "@/lib/copy";
 import { explainMilestone, explainPayable, explainTreasury, presentReasoning } from "@/lib/reasoning-copy";
+import { recordedFacts } from "@/lib/added-details";
 import type { LedgerEntry } from "@/lib/ledger";
 import type { CounterpartyRow, InvoiceRow, MilestoneRow, TreasuryActionRow } from "@/lib/queries";
 import type { Decision, Evidence, Guardrail, Outcome } from "./types";
@@ -218,6 +219,8 @@ export function invoiceDecision(invoice: InvoiceRow, counterparty: CounterpartyR
   const observed = record(entry?.detail.observed);
   // The agent's own decision, with the facts it was made on: what its reasoning is explained from.
   const decided = entries.find((candidate) => candidate.detail.invoiceId === invoice.id && record(candidate.detail.observed) !== undefined);
+  // Explained from the facts the decision recorded, not from details a person added since (complete held invoice R6).
+  const recorded = recordedFacts(decided ?? null);
   const guardrailBlocked = entry?.detail.guardrailBlocked === true;
   const limit = numberValue(observed?.paymentLimit) ?? counterparty?.payment_limit ?? 0;
   const risk = stringValue(observed?.riskLevel) ?? counterparty?.risk_level ?? "unscreened";
@@ -254,8 +257,8 @@ export function invoiceDecision(invoice: InvoiceRow, counterparty: CounterpartyR
           amount: invoice.amount,
           currency,
           dueDate: invoice.due_date,
-          poReference: invoice.po_reference ?? null,
-          goodsReceived: invoice.goods_received === true,
+          poReference: recorded.poReference !== undefined ? recorded.poReference : (invoice.po_reference ?? null),
+          goodsReceived: recorded.goodsReceived ?? invoice.goods_received === true,
           entry: decided ? { ts: decided.ts, detail: decided.detail } : null,
         })
       ) || "The agent has not evaluated this invoice yet.",

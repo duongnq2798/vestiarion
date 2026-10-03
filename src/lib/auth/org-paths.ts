@@ -18,6 +18,11 @@ export function orgHref(slug: string, path: string): string {
   return `/o/${slug}${path}`;
 }
 
+/** The id of a payable's card on Approvals, so a link from another page opens the page at that card. */
+export function approvalAnchor(invoiceId: string): string {
+  return `payable-${invoiceId}`;
+}
+
 export const LEGACY_PRODUCT_PATHS = [
   "/console", "/audit", "/compliance", "/contractors", "/counterparties", "/insights", "/invoices",
 ] as const;

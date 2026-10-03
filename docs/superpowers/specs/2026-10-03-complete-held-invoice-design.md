@@ -40,6 +40,13 @@ were received" (`factChanges`), but nothing in the product can change those fact
   so it does not read as though the agent held a payable whose match was complete.
 - **R7 — said where it shows.** The first-payment guide's Approvals step; the changelog (a new ledger action and a new
   event kind reach webhooks).
+- **R8 — where the payable is seen first.** Testing showed a person opening the payable on **AP / AR**, where its
+  card offered nothing to do. A waiting payable's row there now says what it needs ("Needs a purchase order and goods
+  received"), or that details were added; its card asks for what is missing, offers **Add details** to an owner or
+  admin, and **Decide in Approvals** to anyone who decides payments, which opens Approvals at that payable's card. A
+  payable with a transfer recorded against it (`tx_ref`) is not offered **Add details** there; the server refuses it
+  anyway (R3). No popup: the row and the card say it where the person already looks, on every visit, without
+  interrupting one.
 
 ## 3. Rollout
 
