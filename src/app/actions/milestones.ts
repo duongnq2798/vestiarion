@@ -12,8 +12,9 @@ import { inOrg } from "@/lib/dal/scope";
 import { parseGitHubPullRequestUrl } from "@/lib/github-verification";
 import { isHttpsLink, usdcAmountSchema } from "@/lib/intake-validation";
 import { appendLedgerEntry } from "@/lib/ledger";
-import { closeMilestone, MilestoneDecisionError, payHeldMilestone } from "@/lib/agent/milestone-decisions";
-import { sendNoticesSoon } from "@/lib/payment-notices-soon";
+import { consoleActor } from "@/lib/commands/actor";
+import { closeMilestoneUnpaid, payMilestoneNow } from "@/lib/commands/milestones";
+import { consoleAnswer } from "./command-result";
 
 export interface MilestoneActionResult {
   ok: boolean;
@@ -197,16 +198,10 @@ export async function manualMilestoneVerificationAction(
 
 const milestoneIdSchema = z.string().uuid();
 
-/** A `MilestoneDecisionError` carries a message safe to show; anything else stays in the server log. */
-function decisionFailed(error: unknown): MilestoneActionResult {
-  if (error instanceof MilestoneDecisionError) return { ok: false, message: error.message };
-  console.error("milestone decision failed", error instanceof Error ? error.message : error);
-  return { ok: false, message: "That did not work. Try again in a moment: nothing is sent twice." };
-}
-
 /**
  * Pays a held milestone now (held milestone actions R2): a person's decision, by anyone who may approve a
- * held payable. The release still passes the contractor's risk, limit and address checks.
+ * held payable. The release still passes the contractor's risk, limit and address checks, inside the command
+ * every surface shares (src/lib/commands/milestones.ts).
  */
 export async function payHeldMilestoneAction(_previous: MilestoneActionResult, formData: FormData): Promise<MilestoneActionResult> {
   const auth = await authorize(formData.get("orgSlug"), "approval.decide");
@@ -214,19 +209,7 @@ export async function payHeldMilestoneAction(_previous: MilestoneActionResult, f
   return inOrg(auth, async () => {
     const parsed = milestoneIdSchema.safeParse(formString(formData, "milestoneId"));
     if (!parsed.success) return { ok: false, message: "Milestone not found." };
-    try {
-      const result = await payHeldMilestone({ actorId: auth.user.id, milestoneId: parsed.data });
-      revalidateOrgPages();
-      if (result.status === "paid") {
-        sendNoticesSoon(auth);
-        return { ok: true, message: "Paid." };
-      }
-      if (result.status === "verified") return { ok: true, message: "Payment submitted; waiting for Circle to confirm it." };
-      const reason = /\[(?:transfer|execution) failed:\s*(.+?)\]\s*$/.exec(result.note)?.[1] ?? /\[not paid:\s*(.+?)\]\s*$/.exec(result.note)?.[1];
-      return { ok: false, message: reason ? `Not paid: ${reason}. The milestone is still held.` : "Not paid. The milestone is still held." };
-    } catch (error) {
-      return decisionFailed(error);
-    }
+    return consoleAnswer(await payMilestoneNow(consoleActor(auth), { milestoneId: parsed.data }));
   });
 }
 
@@ -237,12 +220,6 @@ export async function closeMilestoneAction(_previous: MilestoneActionResult, for
   return inOrg(auth, async () => {
     const parsed = milestoneIdSchema.safeParse(formString(formData, "milestoneId"));
     if (!parsed.success) return { ok: false, message: "Milestone not found." };
-    try {
-      await closeMilestone({ actorId: auth.user.id, milestoneId: parsed.data, reason: formString(formData, "reason") });
-      revalidateOrgPages();
-      return { ok: true, message: "Closed without paying." };
-    } catch (error) {
-      return decisionFailed(error);
-    }
+    return consoleAnswer(await closeMilestoneUnpaid(consoleActor(auth), { milestoneId: parsed.data, reason: formString(formData, "reason") }));
   });
 }
