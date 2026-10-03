@@ -12,6 +12,11 @@ Changes to the API and webhooks that affect an integration, newest first. Change
 - A cycle's journal has a new stage, `slack`, after `telegram`, the last. It needs no other stage to have succeeded.
 - Nothing changes in `/api/v1`.
 
+## 2026-10-03: A payable held for an unconfirmed address goes back to the agent once it is confirmed
+
+- A payable the agent held because its counterparty's address changed and no one had confirmed it (`guardrailRule: "counterparty.address_unconfirmed"`, `observed.addressUnconfirmed: true`) now goes back to the agent when a person confirms the address: an `invoice_reopened` entry whose `followUp.changes` reads "the counterparty's new address has since been confirmed", then a new decision in the same cycle. Until now it stayed held until a person approved it. Approving it still pays it, and confirms the address.
+- The API's two write examples are now responses captured in testnet-2.
+
 ## 2026-10-03: Add counterparties and invoices through the API
 
 - **New operations:** [`POST /api/v1/counterparties`](/docs/api/create-counterparty) and [`POST /api/v1/invoices`](/docs/api/create-invoice). Each takes a JSON body of at most 64 KB, checked by the console form's rules, and answers `201` with the record, shaped as its list returns it. A body that does not validate, including one with a field the operation does not take, answers `400 invalid_request`, naming the field. A `counterpartyId` the workspace does not hold answers `400` too.

@@ -26,6 +26,15 @@ describe("the cycle and an unconfirmed address", () => {
     expect(call).toContain("addressConfirmedAt: counterparty.address_confirmed_at");
   });
 
+  it("brings a payable held for an unconfirmed address back to the agent once someone confirms it", () => {
+    // The rule is planFollowUp's (tests/follow-up.test.ts). Its wiring: the frozen payables read the address
+    // timestamps, and each decision's facts carry whether the address waited for a person when it was taken.
+    const followUp = source.slice(source.indexOf("const frozenRows = unwrap("), source.indexOf("followUpHeldMilestones(db, budget)"));
+    expect(followUp).toContain("counterparties(risk_level, payment_limit, address_changed_at, address_confirmed_at)");
+    expect(followUp).toContain("addressUnconfirmed: observed.addressUnconfirmed === true,");
+    expect(followUp).toContain("addressUnconfirmed: addressUnconfirmed(row.counterparties.address_changed_at, row.counterparties.address_confirmed_at),");
+  });
+
   it("skips a milestone before its decision, without writing it, while the contractor's address is unconfirmed", () => {
     // payeeNotReady answers "unconfirmed" for an unconfirmed address (tests/payee-not-ready.test.ts), and in a live
     // workspace "no_address" for a contractor with none yet (pay a freelancer R5).
