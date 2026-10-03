@@ -1,6 +1,6 @@
 # Slack: the agent's decisions in a team channel, and a held payable decided there
 
-Date: 2026-10-03. Status: designed on `feat/slack`, stacked on the command layer (`feat/integrations`, PR #172).
+Date: 2026-10-03. Status: implemented on `feat/slack`, stacked on the command layer (`feat/integrations`, PR #172).
 Phase 1 of docs/superpowers/specs/2026-10-03-integrations-design.md. Decided under the standing autonomy grant.
 
 ## 1. The problem
@@ -69,8 +69,8 @@ A Slack app any workspace's owner or admin connects from Settings. Then:
   webhook. The cursor moves only when Slack answers `ok`; a failed post is posted again by the next cycle. Each
   decision says what the agent did, why, and links its transaction or its page; a stopped payable also carries its
   buttons (S8).
-- **S8. Deciding from Slack is off until an owner sets a limit.** Settings has "Allow deciding payments from Slack, up
-  to [ ] USDC" (`org.administer`), recorded as `slack_decisions_limit_changed`. When off, a stopped payable links to
+- **S8. Deciding from Slack is off until an owner sets a limit.** Settings has a limit, "Limit (USDC)" under "Deciding
+  payments from Slack" (`org.administer`), recorded as `slack_decisions_limit_changed`. When off, a stopped payable links to
   Approvals and nothing else. When on, it gets **Approve and pay** (only when it is in USDC, paid on Arc, within the
   limit, and its counterparty's address is confirmed), **Reject**, **Return to the agent**, and the link. Approve and
   Reject ask Slack to confirm first; the confirmation names the amount, the payee and the address shortened.

@@ -7,6 +7,7 @@ import { CounterpartyRow as CounterpartyRowView } from "@/components/Counterpart
 import GoLivePanel from "@/components/GoLivePanel";
 import { HeldMilestoneActions } from "@/components/HeldMilestoneActions";
 import { PayLinkControl } from "@/components/PayLinkControl";
+import SlackPanel from "@/components/SlackPanel";
 import { TelegramCard } from "@/components/TelegramCard";
 import { UsycReservePanel } from "@/components/UsycReservePanel";
 import VerifyLedgerBadge from "@/components/VerifyLedgerBadge";
@@ -58,7 +59,7 @@ import { DESIGN_SLUG, LEDGER } from "../design/fixtures";
 
 export interface DocsShot {
   /** The guide the picture belongs to. */
-  guide: "go-live" | "first-payment" | "pay-a-contractor" | "get-paid" | "telegram";
+  guide: "go-live" | "first-payment" | "pay-a-contractor" | "get-paid" | "telegram" | "slack";
   /** The workspace page it is on: its title heads the frame. None for a public page, such as a payee's link. */
   page?: NavKey;
   /** The page's line under its title, where the real page has one. */
@@ -916,6 +917,20 @@ export const DOCS_SHOTS = {
     page: "members",
     sub: "Everyone in this workspace, and the invitations still open. Anyone may leave on their own; an owner or admin invites, changes roles and removes.",
     render: () => <TelegramCard orgSlug={SLUG} link={null} />,
+  },
+  "slack-settings": {
+    guide: "slack",
+    page: "settings",
+    sub: "Taking this workspace live, the USYC reserve, API keys, outgoing webhooks, Slack, the ledger signing key, and deleting the workspace. An owner takes it live, rotates the signing key, or deletes it; an owner or admin manages API keys, webhooks and Slack, and a secret is shown once, right after it is created.",
+    render: () => (
+      <SlackPanel
+        orgSlug={SLUG}
+        view={{ installed: true, teamName: "Acme HQ", channelName: "#finance", installedAt: "2026-10-03T09:00:00Z", decisionsLimitUsdc: 5, youConnected: true }}
+        canManage
+        canAdminister
+        notice={null}
+      />
+    ),
   },
 } satisfies Record<string, DocsShot>;
 

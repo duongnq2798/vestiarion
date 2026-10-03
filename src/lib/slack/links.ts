@@ -58,6 +58,13 @@ export async function createLinkRequest(
 ): Promise<{ code: string; expiresAt: string }> {
   const code = crypto.randomBytes(32).toString("base64url");
   const expiresAt = new Date(now.getTime() + LINK_REQUEST_TTL_MS).toISOString();
+  // A used or expired request does nothing more, so each new one clears them, and no Slack name is kept past its use for
+  // long. Best effort: a request that could not be cleared waits for the next.
+  const cleared = await platformDb()
+    .from("slack_link_requests")
+    .delete()
+    .or(`used_at.not.is.null,expires_at.lt.${now.toISOString()}`);
+  if (cleared.error) console.error("slack: old connect requests not cleared", cleared.error.message);
   unwrap(
     await platformDb()
       .from("slack_link_requests")

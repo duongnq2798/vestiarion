@@ -61,6 +61,26 @@ describe("link requests", () => {
     expect(JSON.stringify(insert?.body)).not.toContain(code);
   });
 
+  it("clears the requests nobody can use any more, used or expired, before it stores a new one", async () => {
+    const { fake, platform } = world();
+    await platform(() => createLinkRequest("T0TEAM", "U0LINH", "linh", new Date("2026-10-03T09:00:00Z")));
+    const methods = fake.requests.filter((sent) => sent.path === "/rest/v1/slack_link_requests").map((sent) => sent.method);
+    expect(methods).toEqual(["DELETE", "POST"]);
+    const cleared = fake.requests.find((sent) => sent.path === "/rest/v1/slack_link_requests" && sent.method === "DELETE");
+    expect(cleared?.params.get("or")).toBe("(used_at.not.is.null,expires_at.lt.2026-10-03T09:00:00.000Z)");
+  });
+
+  it("still makes the code when the old requests could not be cleared", async () => {
+    const { platform } = world((sent) =>
+      sent.path === "/rest/v1/slack_link_requests" && sent.method === "DELETE" ? { status: 500, body: { message: "boom" } } : undefined
+    );
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { code } = await platform(() => createLinkRequest("T0TEAM", "U0LINH", "linh", new Date("2026-10-03T09:00:00Z")));
+    expect(code).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(errors).toHaveBeenCalledWith("slack: old connect requests not cleared", "boom");
+    errors.mockRestore();
+  });
+
   it("reads an unused, unexpired request by its code, and asks nothing for a string that is not a code", async () => {
     const { fake, platform } = world((sent) =>
       sent.path === "/rest/v1/slack_link_requests" ? { body: [{ team_id: "T0TEAM", slack_user_id: "U0LINH", slack_user_name: "linh" }] } : undefined

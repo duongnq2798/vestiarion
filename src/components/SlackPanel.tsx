@@ -41,15 +41,20 @@ function Refusal({ state }: { state: SlackActionResult }) {
 function LimitForm({ orgSlug, limit }: { orgSlug: string; limit: number | null }) {
   const { state, formProps } = useActionForm(setSlackDecisionsLimitAction, INITIAL, { toastOnSuccess: true });
   return (
-    <form {...formProps} className="flex flex-wrap items-end gap-3">
+    <form {...formProps} className="space-y-3">
       <input type="hidden" name="orgSlug" value={orgSlug} />
-      <Field id="slack-decisions-limit" label="Allow deciding payments from Slack, up to (USDC)" optional description="Leave it empty to turn deciding from Slack off.">
-        <Input name="limit" inputMode="decimal" defaultValue={limit ?? ""} className="w-40" />
-      </Field>
-      <SubmitButton variant="secondary" size="sm" pendingLabel="Saving…">
-        Save
-      </SubmitButton>
-      <Refusal state={state} />
+      <p className="text-xs leading-5 text-ink-3">Leave the amount empty to turn deciding from Slack off.</p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+        <Field id="slack-decisions-limit" label="Limit (USDC)" optional>
+          <Input name="limit" inputMode="decimal" autoComplete="off" defaultValue={limit ?? ""} className="sm:w-40" />
+        </Field>
+        <SubmitButton variant="secondary" pendingLabel="Saving…">
+          Save
+        </SubmitButton>
+        <FormMessage className="sm:self-center" tone={state.message && !state.ok ? "error" : "neutral"}>
+          {state.ok ? null : state.message}
+        </FormMessage>
+      </div>
     </form>
   );
 }

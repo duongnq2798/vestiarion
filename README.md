@@ -107,6 +107,15 @@ is hard-coded into the interface:
    never by the model; and reads an invoice sent to it, as a PDF or its text, into a payable an
    owner or admin adds with one tap. The bot never approves or pays: a stopped payment links to
    Approvals (`src/lib/telegram/`, [guide](https://www.vestiarion.xyz/docs/guides/telegram)).
+8. **Slack** — an owner or admin connects the workspace to a Slack channel from **Settings**. The
+   channel gets the agent's decisions within the cycle that makes them; each member who connects
+   their own Slack account asks `/vestiarion today`, `waiting` or `ledger`, and can pause the agent.
+   When an owner sets a limit, a payment the agent stopped carries **Approve and pay**, **Reject**
+   and **Return to the agent** in its message: a click acts as that member, with their role read
+   again, through the same command and every check as Approvals; Approve and pay only for USDC
+   on Arc within the limit, to the address the message showed, and a payee's changed address is
+   still confirmed in Vestiarion. Each decision's ledger entry says it came from Slack
+   (`src/lib/slack/`, [guide](https://www.vestiarion.xyz/docs/guides/slack)).
 
 Every decision is made by asking an LLM for a structured `{action, reasoning, confidence}` verdict
 under an explicit guardrail policy (never pay a high-risk counterparty, never exceed a payment
@@ -228,8 +237,15 @@ src/lib/platform/api-keys.ts  Key generation and hashing, listing and
                                revocation; only sha256(secret) is ever stored
 src/lib/telegram/         The Telegram bot: one-time connect codes, the webhook's
                            update handler, /today /waiting /ledger, invoices
-                           read into payables, and the cycle's last stage,
-                           which tells each connected chat what the agent did
+                           read into payables, and the cycle's stage that
+                           tells each connected chat what the agent did
+src/lib/slack/            The Slack app: request signatures, installing over
+                           OAuth, member links, /vestiarion, the decision
+                           buttons, and the cycle's last stage, which posts
+                           what the agent did to the workspace's channel
+src/lib/commands/         One function per action a person takes, gated the
+                           same way from the console, Telegram, Slack and the
+                           API
 src/lib/webhooks/         Signing, SSRF-safe sending, and the retry/disable
                            policy for a workspace's own HTTPS endpoints; a
                            new ledger entry queues a signed delivery to each
