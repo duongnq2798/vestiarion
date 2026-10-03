@@ -34,7 +34,9 @@ export async function createApiKeyAction(_previous: ApiKeyActionResult, formData
   if (!auth.ok) return { ok: false, message: auth.message };
   return inOrg(auth, async () => {
     try {
-      const { key, token } = await createApiKey({ orgId: auth.membership.orgId, actorId: auth.user.id, name: formString(formData, "name") });
+      // A key writes only when the person ticked it (write API R1); anything else is read-only.
+      const write = formData.get("write") === "on";
+      const { key, token } = await createApiKey({ orgId: auth.membership.orgId, actorId: auth.user.id, name: formString(formData, "name"), write });
       revalidateOrgPages();
       return { ok: true, message: `"${key.name}" was created. Copy this key now — it will not be shown again.`, token };
     } catch (error) {

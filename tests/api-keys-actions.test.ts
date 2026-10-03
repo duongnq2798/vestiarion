@@ -120,10 +120,21 @@ describe("createApiKeyAction", () => {
 
     const result = await run(() => createApiKeyAction(INITIAL, createForm("Reporting")));
 
-    expect(createApiKeyMock).toHaveBeenCalledWith({ orgId: ORG, actorId: USER, name: "Reporting" });
+    expect(createApiKeyMock).toHaveBeenCalledWith({ orgId: ORG, actorId: USER, name: "Reporting", write: false });
     expect(result.ok).toBe(true);
     expect(result.token).toBe(SECRET_TOKEN);
     expect(revalidatePathMock).toHaveBeenCalled();
+  });
+
+  it("creates a read-and-write key only when the box is ticked (write API R1)", async () => {
+    authorizeMock.mockResolvedValueOnce({ ok: true, user: { id: USER, email: null }, membership: membership("owner") });
+    createApiKeyMock.mockResolvedValueOnce({ key: keyRow(), token: SECRET_TOKEN });
+    const form = createForm("Billing sync");
+    form.set("write", "on");
+
+    await run(() => createApiKeyAction(INITIAL, form));
+
+    expect(createApiKeyMock).toHaveBeenCalledWith({ orgId: ORG, actorId: USER, name: "Billing sync", write: true });
   });
 
   it("maps an invalid_name ApiKeyError to its message, and returns no token", async () => {

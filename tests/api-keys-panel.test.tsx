@@ -31,6 +31,13 @@ const KEY: ApiKeyRow = {
 };
 
 describe("ApiKeysPanel", () => {
+  it("shows each key's access: read, or read and write (write API R1)", () => {
+    const shown = text(html(<ApiKeysPanel orgSlug="acme" apiKeys={[KEY, { ...KEY, id: "key-2", name: "billing-sync", scopes: ["read", "write"] }]} canManage />));
+    expect(shown).toContain("Access");
+    expect(shown).toContain("test-api-key vxk_c5cka5sg_… Read only");
+    expect(shown).toContain("billing-sync vxk_c5cka5sg_… Read and write");
+  });
+
   it("tells a manager the full key is shown once and how to replace a lost one", () => {
     const shown = text(html(<ApiKeysPanel orgSlug="acme" apiKeys={[KEY]} canManage />));
     expect(shown).toContain("vxk_c5cka5sg_…");

@@ -8,6 +8,7 @@ import { createApiKeyAction, revokeApiKeyAction, type ApiKeyActionResult } from 
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { Checkbox } from "@/components/ui/Checkbox";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogTrigger } from "@/components/ui/Dialog";
@@ -75,12 +76,17 @@ function CreateKeyForm({ orgSlug, onDone }: { orgSlug: string; onDone: () => voi
   }
 
   return (
-    <DialogContent title="Create an API key" description="A read-only key for this workspace's data. It is shown once, right after you create it.">
+    <DialogContent title="Create an API key" description="A key reads this workspace's data, and can also add records if you allow it. It is shown once, right after you create it.">
       <form {...formProps} className="grid gap-5">
         <input type="hidden" name="orgSlug" value={orgSlug} />
         <Field id="new-api-key-name" label="Name" description="1 to 60 characters.">
           <Input id="new-api-key-name" name="name" required maxLength={60} autoFocus autoComplete="off" placeholder="e.g. Reporting integration" />
         </Field>
+        <Checkbox
+          name="write"
+          label="Can also add counterparties and invoices"
+          description="The agent still decides every invoice, and an address added this way waits for a person to confirm it. A key never approves or pays."
+        />
         <FormMessage tone={state.message && !state.ok ? "error" : "neutral"}>{state.ok ? null : state.message}</FormMessage>
         <DialogFooter>
           <DialogClose asChild>
@@ -162,7 +168,11 @@ export default function ApiKeysPanel({ orgSlug, apiKeys, canManage }: { orgSlug:
           <EmptyState
             icon={<KeyRound />}
             title="No API keys yet"
-            body={canManage ? "Create one for read-only access to this workspace's data." : "An owner or admin can create one for read-only access to this workspace's data."}
+            body={
+              canManage
+                ? "Create one to read this workspace's data, or to add counterparties and invoices from your own system."
+                : "An owner or admin can create one to read this workspace's data, or to add counterparties and invoices."
+            }
           />
         ) : (
           <Card className="overflow-hidden">
@@ -171,6 +181,7 @@ export default function ApiKeysPanel({ orgSlug, apiKeys, canManage }: { orgSlug:
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Key</TableHead>
+                  <TableHead>Access</TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead>Last used</TableHead>
                   <TableHead>Status</TableHead>
@@ -189,6 +200,7 @@ export default function ApiKeysPanel({ orgSlug, apiKeys, canManage }: { orgSlug:
                       <m.tr key={apiKey.id} exit={{ opacity: 0 }} transition={EXIT}>
                         <TableCell className="max-w-[16rem] truncate">{apiKey.name}</TableCell>
                         <TableCell className="whitespace-nowrap font-mono text-xs text-ink-2">{`vxk_${apiKey.prefix}_…`}</TableCell>
+                        <TableCell className="whitespace-nowrap text-ink-2">{apiKey.scopes.includes("write") ? "Read and write" : "Read only"}</TableCell>
                         <TableCell className="whitespace-nowrap text-ink-2">{formatted(apiKey.createdAt)}</TableCell>
                         <TableCell className="whitespace-nowrap text-ink-2">{formatted(apiKey.lastUsedAt)}</TableCell>
                         <TableCell>
