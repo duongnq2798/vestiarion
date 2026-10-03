@@ -1,4 +1,5 @@
 import { FileSpreadsheet, FileText, ListChecks, PenLine, Repeat, UserPlus } from "lucide-react";
+import Link from "next/link";
 import type { ReactNode } from "react";
 import { AgentBudgetPanel } from "@/components/AgentBudgetPanel";
 import ApprovalCard from "@/components/ApprovalCard";
@@ -6,6 +7,7 @@ import { CounterpartyRow as CounterpartyRowView } from "@/components/Counterpart
 import GoLivePanel from "@/components/GoLivePanel";
 import { HeldMilestoneActions } from "@/components/HeldMilestoneActions";
 import VerifyLedgerBadge from "@/components/VerifyLedgerBadge";
+import { WaitingPayableAction } from "@/components/WaitingPayableAction";
 import CounterpartyAddress from "@/components/intake/CounterpartyAddressEdit";
 import CounterpartyIntake from "@/components/intake/CounterpartyIntake";
 import InvoiceCsvImport from "@/components/intake/InvoiceCsvImport";
@@ -13,6 +15,7 @@ import InvoiceDocumentIntake, { DocumentDraft } from "@/components/intake/Invoic
 import InvoiceIntake from "@/components/intake/InvoiceIntake";
 import PayFreelancerForm, { PaymentLinkReady } from "@/components/intake/PayFreelancerForm";
 import { PayeeJourney } from "@/components/payee/PayeeJourney";
+import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Eyebrow } from "@/components/ui/Eyebrow";
@@ -26,6 +29,7 @@ import { invoiceDecision, milestoneDecision } from "@/components/vx/map";
 import type { NavKey } from "@/components/vx/nav";
 import { Hash } from "@/components/vx/Primitives";
 import type { WaitingPayable } from "@/lib/agent/approvals";
+import { waitingHint } from "@/lib/added-details";
 import { heldReason } from "@/lib/agent/milestone-decisions";
 import type { LedgerEntry } from "@/lib/ledger";
 import type { PayeeLinkStatus } from "@/lib/payee-journey";
@@ -162,6 +166,35 @@ const PAYMENT_ENTRY: LedgerEntry = {
 };
 
 const ENTRIES: LedgerEntry[] = [...EARLIER, PAYMENT_ENTRY];
+
+/** A payable the agent asked about, waiting on Invoices: nothing of its three-way match is on file (complete held invoice). */
+const ASKED_INVOICE: InvoiceRow = {
+  ...INVOICE,
+  id: "00000000-0000-4000-8000-0000000000e4",
+  memo: "November design retainer",
+  po_reference: null,
+  goods_received: false,
+  status: "awaiting_info",
+  agent_reasoning:
+    "Northstar Studio is screened clear and 12.50 USDC is within its 50.00 USDC limit, but no purchase order is on file and the work is not marked received, so the three-way match is incomplete. Please add the purchase order and confirm the work was received before I pay.",
+  tx_ref: null,
+  paid_amount: null,
+};
+
+const ASK_ENTRY: LedgerEntry = {
+  ...PAYMENT_ENTRY,
+  seq: PAYMENT_ENTRY.seq + 1,
+  id: "docs-ask",
+  ts: "2026-10-03T09:12:00Z",
+  action: "ap_request_info",
+  summary: "Asked for information before paying 12.50 USDC to Northstar Studio",
+  detail: {
+    invoiceId: ASKED_INVOICE.id,
+    decisionMode: "llm",
+    decision: { action: "request_info" },
+    observed: { riskLevel: "clear", paymentLimit: 50, poReference: null, goodsReceived: false },
+  },
+};
 
 // A milestone whose batch Circle failed, held, as Contractors shows it (held milestone actions R1).
 const HELD_MILESTONE: MilestoneRow = {
@@ -475,6 +508,47 @@ export const DOCS_SHOTS = {
           <SectionHeader title="Payables" meta="1 invoice · open one for the agent's reasoning" />
           <RowGroupHeading title="Paid and closed" count={1} />
           <DecisionRows orgSlug={SLUG} items={[{ decision: invoiceDecision(INVOICE, COUNTERPARTY, ENTRIES), date: { label: "Due Oct 15, 2026" }, open: true }]} />
+        </section>
+      );
+    },
+  },
+  "first-payment-needs-you": {
+    guide: "first-payment",
+    page: "invoices",
+    render: function NeedsYouShot() {
+      const onFile = { poReference: null, goodsReceived: false };
+      return (
+        <section>
+          <SectionHeader title="Payables" meta="1 invoice · open one for the agent's reasoning" />
+          <RowGroupHeading
+            title="Needs you"
+            count={1}
+            action={
+              <Button asChild variant="link" className="text-[0.8125rem]">
+                <Link href={`/o/${SLUG}/approvals`}>Decide in Approvals</Link>
+              </Button>
+            }
+          />
+          <DecisionRows
+            orgSlug={SLUG}
+            items={[
+              {
+                decision: invoiceDecision(ASKED_INVOICE, COUNTERPARTY, [ASK_ENTRY]),
+                date: { label: "Due Oct 15, 2026" },
+                hint: waitingHint(onFile, null),
+                footerAction: (
+                  <WaitingPayableAction
+                    orgSlug={SLUG}
+                    invoice={{ id: ASKED_INVOICE.id, counterpartyName: ASKED_INVOICE.counterparty_name, ...onFile }}
+                    added={null}
+                    canAddDetails
+                    canDecide
+                  />
+                ),
+                open: true,
+              },
+            ]}
+          />
         </section>
       );
     },

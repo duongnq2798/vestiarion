@@ -292,6 +292,14 @@ Owners and admins choose **Add details** on the card. The dialog offers only wha
   caption="Adding the purchase order and the goods receipt the agent asked for."
 />
 
+On **AP / AR**, the payable waits under **Needs you**, and its row says what it needs: "Needs a purchase order and goods received", "Needs a purchase order" or "Needs goods received". Open the row: under the agent's reasoning, its card asks for what is missing and offers **Add details** there too, beside **Decide in Approvals**, which opens Approvals at that payable's card. Once you have added details, the row reads "Details added · the agent decides it again" until it does.
+
+<Screenshot
+  src="/docs/guides/first-payment-needs-you.png"
+  alt="AP / AR, under Payables, Needs you: one row for Northstar Studio, November design retainer, Needs a purchase order and goods received, due Oct 15, 2026, 12.50 USDC, marked Awaiting info. Opened, its card shows the agent's reasoning and the evidence PO none and Goods received no, and at the bottom: Add the purchase order and confirm the goods or services were received, and the agent decides it again, with the buttons Add details and Decide in Approvals."
+  caption="A payable waiting for its purchase order, on AP / AR."
+/>
+
 - **The agent decides it again.** Until it does, the card says what you added, beginning "Since the agent stopped it", and ends "The agent decides it again at its next cycle, usually within a minute." That cycle starts within seconds. The agent sees that the facts changed since its decision, records `invoice_reopened` with what changed, and decides the invoice again with every check, as it would a new one. It may pay it, schedule it, or hold it again for another reason, such as the payment limit.
 - **Only what is missing.** A PO reference already on file, or goods already marked received, cannot be changed here.
 - **Recorded.** The ledger records what you added, and who added it, as `invoice_details_added`. A payment made after it is not counted as "Paid on time with no person involved" on [www.vestiarion.xyz/open](https://www.vestiarion.xyz/open).
