@@ -1,5 +1,6 @@
 import type { ActivityItem } from "../agent-activity";
 import { orgHref } from "../auth/org-paths";
+import { READER_NAMES } from "../invoice-document/chat-draft";
 import type { InvoiceDraftRead } from "../invoice-document/draft";
 import type { VerificationResult } from "../ledger";
 import type { TodayFacts, WaitingFact } from "./today";
@@ -158,12 +159,6 @@ export function ledgerMessage(workspaceName: string, result: VerificationResult)
   return `${head} · the ledger was not checked: ${escapeHtml(result.reason ?? "this deployment has no key to check it with")}.`;
 }
 
-const READER: Record<InvoiceDraftRead["reader"], string> = {
-  anthropic: "Claude",
-  openai: "OpenAI",
-  deepseek: "DeepSeek",
-  heuristic: "the written rules (no model answered)",
-};
 
 /** An invoice read from what the member sent, every field shown for them to check before they add it (R10). */
 export function draftMessage(read: InvoiceDraftRead): string {
@@ -182,7 +177,7 @@ export function draftMessage(read: InvoiceDraftRead): string {
   if (draft.memo) lines.push(`Memo: ${escapeHtml(draft.memo)}`);
   for (const warning of read.warnings) lines.push(`⚠️ ${escapeHtml(clip(warning, ITEM_DETAIL_MAX))}`);
   if (read.modelNote) lines.push(`<i>${escapeHtml(clip(`The model's note: ${read.modelNote}`, ITEM_DETAIL_MAX))}</i>`);
-  lines.push("", `Read by ${READER[read.reader]}. The agent decides once it is added; nothing is paid from this chat.`);
+  lines.push("", `Read by ${READER_NAMES[read.reader]}. The agent decides once it is added; nothing is paid from this chat.`);
   return clip(lines.join("\n"), MESSAGE_MAX);
 }
 

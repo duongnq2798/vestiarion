@@ -43,8 +43,10 @@ interface SlashCommand {
   text: string;
 }
 
-async function workspaceOf(orgId: string): Promise<{ slug: string; name: string }> {
-  return unwrap(await platformDb().from("orgs").select("slug, name").eq("id", orgId).single<{ slug: string; name: string }>());
+/** The workspace an install serves, by name and slug, for an answer's words and links. */
+export async function workspaceOf(orgId: string): Promise<{ slug: string; name: string }> {
+  const row = unwrap(await platformDb().from("orgs").select("slug, name").eq("id", orgId).single<{ slug: string; name: string }>());
+  return { slug: row.slug, name: row.name };
 }
 
 /** The answer to one command, as the person who typed it may see it. */

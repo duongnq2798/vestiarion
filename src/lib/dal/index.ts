@@ -51,7 +51,7 @@ export type TenantRpc = (typeof TENANT_RPCS)[number];
 export const PLATFORM_TABLES = [
   "orgs", "memberships", "invitations", "api_keys", "webhook_endpoints", "webhook_deliveries", "payee_links", "x402_sales",
   "telegram_link_codes", "telegram_links", "telegram_drafts", "api_idempotency",
-  "slack_installs", "slack_links", "slack_link_requests",
+  "slack_installs", "slack_links", "slack_link_requests", "slack_drafts",
 ] as const;
 export type PlatformTable = (typeof PLATFORM_TABLES)[number];
 

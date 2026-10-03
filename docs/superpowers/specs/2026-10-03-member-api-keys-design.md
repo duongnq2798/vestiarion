@@ -1,7 +1,7 @@
 # A key ends with its creator's membership
 
-Date: 2026-10-03. Status: implemented on `claude/unruffled-khorana-dfec27`; migration 0069 is not yet applied in
-production. Decided under the standing autonomy grant;
+Date: 2026-10-03. Status: shipped (PR #174, merge `730889e`) and proven in testnet-2; see the rollout record in §7.
+Decided under the standing autonomy grant;
 each ruling says what it costs if it is wrong. This replaces the first bullet of the API keys design's K4
 (`2026-09-29-api-keys-design.md`): a key no longer survives its creator leaving the workspace.
 
@@ -203,3 +203,23 @@ for email intake.
    4. Settings shows the key as revoked, and `GET /api/v1/status` with it answers 401.
    5. The ledger shows `member_removed`, then `api_key_revoked` with `reason: "member_removed"`.
 4. Record the result here.
+
+### Rollout record (2026-10-03, UTC)
+
+- PR #174 merged as `730889e` at 14:04. Before the merge, the partner applied 0069 from a checkout of the branch with
+  `main` merged in. A read-only catalog probe at 14:05:15 found:
+  - the three triggers, all enabled;
+  - `remove_member_revoking_keys(uuid, uuid, uuid)`, security definer with `search_path=""`, executable by
+    `service_role` and not by `anon` or `authenticated`;
+  - 2 active keys in production, none whose creator is not a member of its workspace.
+- The proof is in `testnet-2`. Every entry is signed by key `5e69c0196d40a5ec`:
+  - #1186, 14:12:38: the owner raised a second account from approver to admin.
+  - #1187, 14:13:18: that admin created a read-and-write key (`6718e586…`).
+  - #1188, 14:14:00.052: the owner removed the admin. The entry is `member_removed`, with `role: "admin"`.
+  - #1189, 14:14:00.302: the entry is `api_key_revoked` for the same key, with `reason: "member_removed"`, `member` the
+    admin and `by` the owner. Its summary reads "An API key was revoked when the member who created it was removed".
+  - The key's row has `revoked_at` 14:13:59.596. That is the removal's own transaction; the entries were appended after
+    it committed. `created_by` still names the admin, who is no longer a member.
+  - The partner reported that the confirmation and the message after the removal read as described.
+- Not observed live: the key's `last_used_at` is null, so no API request was made with it, before or after the
+  removal. That a revoked key answers `401` is covered by `tests/api-keys.test.ts` ("returns null for a revoked key").

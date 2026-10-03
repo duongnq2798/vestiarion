@@ -48,11 +48,18 @@ describe("what each surface may run (R4)", () => {
     expect([...SURFACE_COMMANDS.console].sort()).toEqual(Object.keys(COMMAND_PERMISSIONS).sort());
   });
 
-  it("lets Telegram add invoices only, the API add records only, and Slack decide a held payable and pause the agent", () => {
+  it("lets Telegram add invoices only, the API add records only, and Slack decide a held payable, pause the agent and add invoices", () => {
     expect(SURFACE_COMMANDS.telegram).toEqual(["invoice.add"]);
     // The API adds records and never decides (write API R3; part 2, W4).
     expect(SURFACE_COMMANDS.api).toEqual(["invoice.add", "milestone.add", "payee_link.create"]);
-    expect(SURFACE_COMMANDS.slack).toEqual(["payable.approve", "payable.reject", "payable.return", "agent.pause"]);
+    expect(SURFACE_COMMANDS.slack).toEqual(["payable.approve", "payable.reject", "payable.return", "agent.pause", "invoice.add"]);
+  });
+
+  it("lets an owner add an invoice from Slack whether or not deciding there is on, and refuses an approver", () => {
+    const off = actor({ role: "owner", surface: { kind: "slack", linkId: "l-2", decisionsLimitUsdc: null } });
+    expect(inScope(ORG, () => gate(off, "invoice.add"))).toBeNull();
+    const approver = actor({ role: "approver", surface: { kind: "slack", linkId: "l-2", decisionsLimitUsdc: 5 } });
+    expect(inScope(ORG, () => gate(approver, "invoice.add"))).toMatchObject({ code: "forbidden" });
   });
 
   it("refuses a decision from Slack while its workspace allows none there, and lets it pause", () => {

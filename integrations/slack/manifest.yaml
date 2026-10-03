@@ -12,6 +12,11 @@ features:
       description: What is safe to spend, what waits for you, the ledger, pause the agent
       usage_hint: "today | waiting | ledger | pause | connect | help"
       should_escape: false
+  shortcuts:
+    - name: Add invoice
+      type: message
+      callback_id: vx_add_invoice
+      description: Read the invoice in this message into a payable you can add
 oauth_config:
   redirect_urls:
     - https://www.vestiarion.xyz/api/slack/oauth
@@ -19,6 +24,7 @@ oauth_config:
     bot:
       - commands
       - incoming-webhook
+      - files:read
 settings:
   event_subscriptions:
     request_url: https://www.vestiarion.xyz/api/slack/events
