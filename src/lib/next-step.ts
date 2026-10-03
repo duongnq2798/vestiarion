@@ -86,3 +86,41 @@ export function agentResumes(rule: string | null | undefined): string | null {
       return null;
   }
 }
+
+/** Why code stopped a payment, in a few words, for a toast; the card says the rest (`ruleNextStep`). */
+export function ruleInBrief(rule: string | null | undefined): string | null {
+  switch (rule) {
+    case "counterparty.payment_limit":
+      return "it is above the counterparty's payment limit";
+    case "counterparty.address_unconfirmed":
+      return "the payment address changed and is not confirmed";
+    case "counterparty.unscreened":
+      return "the counterparty is not screened yet";
+    case "counterparty.high_risk":
+      return "the counterparty is screened high risk";
+    case "invoice.duplicate_of_settled":
+      return "it repeats an invoice already paid";
+    case "workspace.outflow_budget":
+      return "the agent's spending limit has no room today, and the agent pays it once there is";
+    case "workspace.onchain_limit":
+      return "the spending-limit contract on Arc would refuse it";
+    case "workspace.onchain_limit_route":
+      return "the spending-limit contract carries only USDC on Arc";
+    case "bridge.fee_above_cap":
+      return "the payout fee is above 10% of the invoice";
+    case "bridge.fee_unavailable":
+      return "Circle gave no fee for the payout";
+    case "bridge.gateway_balance_short":
+      return "the Gateway balance does not cover it";
+    case "bridge.unsupported_token":
+      return "only USDC crosses chains";
+    case "fx.rate_unavailable":
+      return "no EURC rate was available";
+    case "fx.swap_cost_above_cap":
+    case "fx.swap_usdc_short":
+    case "treasury.insufficient_eurc":
+      return "the wallet is short of EURC";
+    default:
+      return rule ? `rule ${rule}` : null;
+  }
+}

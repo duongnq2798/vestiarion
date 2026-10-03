@@ -13,6 +13,7 @@ import ApprovalCard, {
 } from "@/components/ApprovalCard";
 import { agentResumes } from "@/lib/next-step";
 import { WAITING_FOR_A_DECISION, WaitingPayableAction } from "@/components/WaitingPayableAction";
+import { ActivityToastBody } from "@/components/AgentActivity";
 import { addDetailsPrompt, addedDetailsSentence } from "@/lib/added-details";
 import AgentPauseControl, { PAUSE_DIALOG_DESCRIPTION } from "@/components/AgentPauseControl";
 import { AgentPausedBanner, pausedBanner } from "@/components/AgentPausedBanner";
@@ -730,6 +731,25 @@ describe("why Approve and pay is off, and what to do instead (approval guidance)
     const markup = card({ createdBy: VIEWER }, { soleApprover: true, canEdit: true });
     expect(markup).toContain(OWN_INVOICE_NOTE);
     expect(markup).not.toContain(SELF_APPROVAL_EXPLAINED);
+  });
+});
+
+describe("a toast for what the agent decided", () => {
+  it("puts its button and transaction under its words, so the words take the toast's width", () => {
+    const markup = html(
+      <ActivityToastBody detail="DeepSeek decided to pay it; code stopped it: the payout fee is above 10% of the invoice." action="Decide in Approvals" txHash={null} primary onAction={() => {}} />
+    );
+    // One column: the reason, then a row of what to do. No button beside the words.
+    expect(markup).toMatch(/^<span class="mt-1 grid gap-2.5"><span>DeepSeek decided to pay it; code stopped it: the payout fee is above 10% of the invoice\.<\/span><span class="flex flex-wrap/);
+    expect(markup).toContain("Decide in Approvals");
+    expect(markup).not.toContain("View on Arcscan");
+  });
+
+  it("links a payment's transaction beside its quiet button", () => {
+    const markup = html(<ActivityToastBody detail={null} action="How it decided" txHash={`0x${"ab".repeat(32)}`} primary={false} onAction={() => {}} />);
+    expect(markup).toContain("How it decided");
+    expect(markup).toContain(`href="https://testnet.arcscan.app/tx/0x${"ab".repeat(32)}"`);
+    expect(markup).toContain("View on Arcscan");
   });
 });
 

@@ -168,8 +168,8 @@ The line at the top of every workspace page says when the last cycle ran. While 
 
 When the agent has decided, a message says what it did, one per decision, how long after your action, who decided and what was checked. For example:
 
-- "Paid Jiren 0.30 USDC · 28 s after details were added.", then "DeepSeek decided, as the written policy would. Checked: purchase order and goods received, within the 30.00 USDC limit, screened clear, the spending-limit contract allowed it." It comes with **View on Arcscan**, for its transaction, and **How it decided**, which opens the payable's steps on **AP / AR**.
-- "Held CME 0.33 USDC for you.", with why it stopped and **Decide in Approvals**.
+- "Paid Jiren 0.30 USDC · 28 s after details were added.", then "DeepSeek decided, as the written policy would. Checks passed: purchase order and goods, the 30.00 USDC limit, screening, the spending-limit contract." Under it, **How it decided** opens the payable's steps on **AP / AR**, and **View on Arcscan** its transaction.
+- "Code stopped paying Centronex 0.35 USDC · 19 s after it was added.", then "DeepSeek decided to pay it; code stopped it: the agent's spending limit has no room today, and the agent pays it once there is." Under it, **Decide in Approvals**.
 
 When a cycle decides more than two things, one message says "The agent made *n* decisions." and **See them** opens the console's report of that cycle. Either way the page shows what changed at once, without a reload.
 

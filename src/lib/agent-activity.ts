@@ -5,7 +5,7 @@
  * the rows, this says them, and the page decides how to show them.
  */
 import { deciderName } from "./decision-trail";
-import { ruleNextStep } from "./next-step";
+import { ruleInBrief } from "./next-step";
 
 /** The agent's ledger actions a person is told about as they happen. A treasury hold, every cycle, is not news. */
 export const ACTIVITY_ACTIONS = [
@@ -105,16 +105,24 @@ function deciderLine(detail: Record<string, unknown>): string | null {
   return agreed === true ? `${decider} decided, as the written policy would.` : agreed === false ? `${decider} decided; the written policy would have decided otherwise.` : `${decider} decided.`;
 }
 
-/** What a payment's decision checked, in one line, from the facts it recorded. */
+/** What a payment's decision checked and passed, in one short line, from the facts it recorded. */
 function checksLine(detail: Record<string, unknown>): string | null {
   const observed = record(detail.observed) ?? {};
   const checks: string[] = [];
-  if (text(observed.poReference) && observed.goodsReceived === true) checks.push("purchase order and goods received");
+  if (text(observed.poReference) && observed.goodsReceived === true) checks.push("purchase order and goods");
   const limit = number(observed.paymentLimit);
-  if (limit !== null) checks.push(`within the ${AMOUNT.format(limit)} USDC limit`);
-  if (observed.riskLevel === "clear") checks.push("screened clear");
-  if (text(record(record(detail.onChainLimit)?.verdict)?.state) === "allowed") checks.push("the spending-limit contract allowed it");
-  return checks.length > 0 ? `Checked: ${checks.join(", ")}.` : null;
+  if (limit !== null) checks.push(`the ${AMOUNT.format(limit)} USDC limit`);
+  if (observed.riskLevel === "clear") checks.push("screening");
+  if (text(record(record(detail.onChainLimit)?.verdict)?.state) === "allowed") checks.push("the spending-limit contract");
+  return checks.length > 0 ? `Checks passed: ${checks.join(", ")}.` : null;
+}
+
+/** What code did to the model's payment, in one sentence: "DeepSeek decided to pay it; code stopped it: …". */
+function stoppedByCode(detail: Record<string, unknown>, rule: string | null): string | null {
+  const brief = ruleInBrief(rule);
+  if (!brief) return null;
+  const decider = "decisionMode" in detail ? deciderName(detail.decisionMode) : "The agent";
+  return `${decider} decided to pay it; code stopped it: ${brief}.`;
 }
 
 /** The first sentence of the model's reasoning, for why it stopped, cut to a toast's length. */
@@ -164,12 +172,10 @@ export function activityItem(entry: ActivityEntry, refs: ActivityRefs): Activity
   }
   const decide = { path: `/approvals#payable-${id}`, pathLabel: "Decide in Approvals" };
   if (blocked) {
-    const rule = text(entry.detail.guardrailRule);
-    const step = ruleNextStep(rule, { id: "", name: invoice.name });
     return {
       seq: entry.seq,
       text: `Code stopped paying ${invoice.name} ${amount}${after}.`,
-      detail: joined(deciderLine(entry.detail), step?.sentence ?? (rule ? `Rule: ${rule}.` : null)),
+      detail: stoppedByCode(entry.detail, text(entry.detail.guardrailRule)),
       tone: "stopped",
       ...decide,
       txHash: null,
