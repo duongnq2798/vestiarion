@@ -84,6 +84,7 @@ const INVOICES_ROUTE = "src/app/api/v1/invoices/route.ts";
 const INVOICE_CREATE = "src/lib/invoices/create.ts";
 const IDEMPOTENCY = "src/lib/api/idempotency.ts";
 const GUARDRAILS = "src/lib/agent/guardrails.ts";
+const FOLLOW_UP = "src/lib/agent/follow-up.ts";
 const PAYEE_FORM = "src/components/PayeeAddressForm.tsx";
 const PAYEE_STEPS = "src/components/payee/PayeeSteps.tsx";
 const PAYEE_JOURNEY = "src/components/payee/PayeeJourney.tsx";
@@ -540,6 +541,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["create_invoice", INVOICE_CREATE],
     ['via: "api"', INVOICES_ROUTE],
     ["Idempotent-Replayed", IDEMPOTENCY],
+    ["the counterparty's new address has since been confirmed", FOLLOW_UP],
   ],
   "guides/audit-export": [
     ["Audit log", APP_NAV],

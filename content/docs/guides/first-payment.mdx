@@ -69,7 +69,7 @@ Owners and admins change a counterparty's address with **Edit address** in its r
 Changing where a counterparty is paid is how payments get redirected to the wrong wallet. So after a change, the row reads **Confirm address** and says "not yet confirmed", and the agent holds every payment to that counterparty, whatever the amount, until a person confirms the new address. There are two ways to confirm it:
 
 - **Approve and pay** on a held payment to it. The approval card shows where the money goes, after "Pays to". If the address changed after the page loaded, the approval is refused with "This counterparty's address changed after this page loaded. Check the new address and try again."
-- **Confirm address** in the counterparty's row, without a payment. Owners, admins and approvers see it.
+- **Confirm address** in the counterparty's row. Owners, admins and approvers see it. A payment the agent held for the change goes back to it, and it decides that payment again, with every check, in the cycle the confirmation starts.
 
 <Screenshot
   src="/docs/guides/first-payment-address.png"
