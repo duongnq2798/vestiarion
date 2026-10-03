@@ -1,6 +1,10 @@
+import { runCycleSoon } from "../agent/cycle-soon";
 import { closeMilestone, MilestoneDecisionError, payHeldMilestone } from "../agent/milestone-decisions";
+import { currentConfig } from "../context";
+import type { MilestoneInput } from "../intake-validation";
+import { createMilestone, type CreatedMilestone } from "../milestones/create";
 import { sendNoticesSoon } from "../payment-notices-soon";
-import { accessOf, provenanceOf, type Actor } from "./actor";
+import { accessOf, cycleEventOf, provenanceOf, type Actor } from "./actor";
 import { done, refused, type CommandOutcome, type Refused } from "./outcome";
 import { gate } from "./policy";
 
@@ -46,4 +50,36 @@ export async function closeMilestoneUnpaid(actor: Actor, input: { milestoneId: s
     return decisionRefusal(error);
   }
   return done("Closed without paying.");
+}
+
+/**
+ * Adds work a contractor is to be paid for, as the actor's pending milestone (write API part 2, W2, W4): the console's
+ * Add milestone form and `POST /api/v1/milestones`. A GitHub pull request is checked by the cycle's GitHub check, which
+ * needs a token: without one it only reports itself unavailable, so a cycle starts, and the check is promised, only
+ * with one. Anything else waits for a person to verify the work on Contractors.
+ */
+export async function addMilestone(
+  actor: Actor,
+  input: { milestone: MilestoneInput }
+): Promise<CommandOutcome<{ milestoneId: string; contractorName: string }>> {
+  const refusal = gate(actor, "milestone.add");
+  if (refusal) return refusal;
+  let created: CreatedMilestone;
+  try {
+    created = await createMilestone({ actorId: actor.userId, milestone: input.milestone, ...provenanceOf(actor) });
+  } catch (error) {
+    console.error("adding a milestone failed", actor.orgId, error instanceof Error ? error.message : "unknown error");
+    return refused("failed", "The milestone could not be added. Try again in a moment.");
+  }
+  if (!created.ok) {
+    return created.reason === "client"
+      ? refused("client", "A client is not paid for milestones. Choose a contractor or vendor.")
+      : refused("contractor_not_found", "Contractor not found.");
+  }
+  const added = { milestoneId: created.id, contractorName: created.contractorName };
+  if (created.pullRequest && currentConfig().githubToken) {
+    runCycleSoon(cycleEventOf(actor, "milestone_added"));
+    return done(`Milestone added for ${created.contractorName}. The agent checks the pull request within a minute, and decides on pay once it is merged.`, added);
+  }
+  return done(`Milestone added for ${created.contractorName}. Verify it once the work is delivered, and the agent decides on pay within a minute.`, added);
 }

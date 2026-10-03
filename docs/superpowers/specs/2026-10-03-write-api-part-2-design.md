@@ -52,6 +52,13 @@ without a person copying it out of the console.
     for milestones. Both are found after the write has started, so they are remembered for an `Idempotency-Key`, as an
     unknown `counterpartyId` is for invoices.
   - It is recorded as `create_milestone` with `via: "api"` and `apiKeyId`.
+  - **A milestone carries who added it.**
+    - The milestone's `created_by` is the person who added it: the key's issuer for the API.
+    - So the self-approval rule applies to it as it does to an invoice: the person who added a held milestone cannot
+      pay it with Pay now, unless they are the workspace's only approver.
+    - Neither the console's Add milestone nor Pay a freelancer ever set `created_by`, so that rule never applied to a
+      milestone: on 2026-10-03, 15 of 15 milestones in production had none.
+    - Both now set it. Milestones that already exist keep `null`.
 - **W3. A payee link's address is shown once, and only its hash is stored.**
   - A link is made for a vendor or a contractor of the workspace. A client, or a `counterpartyId` the workspace does not
     hold, answers `400 invalid_request`. The link works once and expires after 7 days. Making one revokes the

@@ -128,6 +128,8 @@ export async function setUpFreelancerPayment(
         verification_checked_at: now,
         verified_at: now,
         verification_detail: { note: FREELANCER_VERIFICATION_NOTE },
+        // Whose it is, so the self-approval rule applies to it as to any milestone (write API part 2, W2).
+        created_by: input.actorId,
       })
       .select("id")
       .single<{ id: string }>()

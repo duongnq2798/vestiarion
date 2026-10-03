@@ -11,10 +11,10 @@ import { carriesOrg, fakeSupabase, orgTestContext, type RecordedRequest } from "
  * PostgREST answers.
  */
 
-const { ORG, USER, raiseMock, authorizeMock, appendLedgerEntryMock } = vi.hoisted(() => ({
+const { ORG, USER, cycleMock, authorizeMock, appendLedgerEntryMock } = vi.hoisted(() => ({
   ORG: "0b6c1c9e-4a4f-4a7e-9b1e-000000000a0a",
   USER: "0b6c1c9e-4a4f-4a7e-9b1e-0000000000e1",
-  raiseMock: vi.fn(),
+  cycleMock: vi.fn(),
   authorizeMock: vi.fn(),
   appendLedgerEntryMock: vi.fn(),
 }));
@@ -23,7 +23,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/auth/revalidate", () => ({ revalidateOrgPages: vi.fn() }));
 vi.mock("@/lib/auth/authorize", () => ({ authorize: authorizeMock }));
-vi.mock("@/lib/agent/cycle-soon", () => ({ raiseCycleEvent: raiseMock }));
+vi.mock("@/lib/agent/cycle-soon", () => ({ runCycleSoon: cycleMock }));
 vi.mock("@/lib/ledger", () => ({ appendLedgerEntry: appendLedgerEntryMock }));
 
 const ENV = { NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k" };
@@ -83,13 +83,13 @@ const inserts = () => fake.requests.filter((sent) => sent.path === "/rest/v1/mil
 beforeEach(() => {
   config = configFromEnv(ENV);
   fake = fakeSupabase(workspace);
-  raiseMock.mockReset();
+  cycleMock.mockReset();
   appendLedgerEntryMock.mockReset();
   authorizeMock.mockReset().mockResolvedValue(ACCESS);
 });
 
 describe("adding a milestone", () => {
-  it("records it pending, for this organization, with the link kept as its evidence", async () => {
+  it("records it pending, for this organization, as the person's, with the link kept as its evidence", async () => {
     const result = await createMilestoneAction(empty, form({ evidence: "https://www.canva.com/design/DAG123/view" }));
 
     expect(result).toEqual({
@@ -103,6 +103,8 @@ describe("adding a milestone", () => {
       title: "Five October posts",
       amount: "12.50",
       verification_source: "https://www.canva.com/design/DAG123/view",
+      // Whose it is, so the person who added it cannot pay it with Pay now while it is held (part 2, W2).
+      created_by: USER,
     });
     expect(insert.body).not.toHaveProperty("verified");
     expect(insert.body).not.toHaveProperty("status");
@@ -131,7 +133,7 @@ describe("adding a milestone", () => {
 
   it("raises nothing without a pull request: a person verifies the work first", async () => {
     await createMilestoneAction(empty, form({ evidence: "" }));
-    expect(raiseMock).not.toHaveBeenCalled();
+    expect(cycleMock).not.toHaveBeenCalled();
   });
 
   it("keeps a pull request in its canonical form, and has the agent check it within a minute", async () => {
@@ -144,7 +146,7 @@ describe("adding a milestone", () => {
       message: "Milestone added for Linh Design. The agent checks the pull request within a minute, and decides on pay once it is merged.",
     });
     expect(inserts()[0].body).toMatchObject({ verification_source: "https://github.com/acme/widgets/pull/42" });
-    expect(raiseMock).toHaveBeenCalledWith(ACCESS, "milestone_added");
+    expect(cycleMock).toHaveBeenCalledWith({ orgId: ORG, userId: USER, sandbox: false, kind: "milestone_added" });
   });
 
   it("promises no pull request check without a GitHub token, which would only report itself unavailable", async () => {
@@ -155,7 +157,7 @@ describe("adding a milestone", () => {
       message: "Milestone added for Linh Design. Verify it once the work is delivered, and the agent decides on pay within a minute.",
     });
     expect(inserts()[0].body).toMatchObject({ verification_source: "https://github.com/acme/widgets/pull/42" });
-    expect(raiseMock).not.toHaveBeenCalled();
+    expect(cycleMock).not.toHaveBeenCalled();
   });
 
   it("answers a counterparty this organization does not hold as not found, and adds nothing", async () => {
@@ -166,7 +168,7 @@ describe("adding a milestone", () => {
     expect(lookup?.params.get("org_id")).toBe(`eq.${ORG}`);
     expect(inserts()).toHaveLength(0);
     expect(appendLedgerEntryMock).not.toHaveBeenCalled();
-    expect(raiseMock).not.toHaveBeenCalled();
+    expect(cycleMock).not.toHaveBeenCalled();
   });
 
   it("refuses a client, who pays the business rather than being paid by it", async () => {
@@ -200,6 +202,6 @@ describe("adding a milestone", () => {
 
     expect(result).toEqual({ ok: false, message: "Only an owner or admin can do that." });
     expect(fake.requests).toHaveLength(0);
-    expect(raiseMock).not.toHaveBeenCalled();
+    expect(cycleMock).not.toHaveBeenCalled();
   });
 });

@@ -101,6 +101,11 @@ describe("setUpFreelancerPayment", () => {
     });
   });
 
+  it("adds the milestone as the person's, so they cannot pay it with Pay now while it is held (write API part 2, W2)", async () => {
+    await setUp();
+    expect(posted("/rest/v1/milestones")).toMatchObject({ created_by: USER });
+  });
+
   it("records what the person did, in the ledger's existing actions and in order", async () => {
     await setUp();
     expect(ledgerMock.mock.calls.map(([entry]) => entry.action)).toEqual(["create_counterparty", "create_milestone", "verify_milestone_manual"]);
