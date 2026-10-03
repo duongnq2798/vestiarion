@@ -439,3 +439,42 @@ export const CreateInvoiceBodySchema = z
   })
   .strict()
   .describe("An invoice to add. The agent decides a payable as one typed in, with every guardrail, usually within a minute.");
+
+export const CreateMilestoneBodySchema = z
+  .object({
+    contractorId: z
+      .string()
+      .describe("The `id` of the contractor or vendor to pay, from `GET /api/v1/counterparties` or from the answer that added it. A client is not paid for milestones."),
+    title: z.string().describe("What was delivered, 3 to 160 characters."),
+    amount: z
+      .union([z.string(), z.number()])
+      .describe("What the work is paid, in USDC, with at most 6 decimal places. A decimal string such as `\"250.00\"` keeps it exact; a number is read the same way."),
+    verificationSource: z
+      .string()
+      .optional()
+      .describe(
+        "A link to the delivered work: https, up to 500 characters. A GitHub pull request (`https://github.com/<owner>/<repo>/pull/<number>`) is checked by the agent, which verifies the milestone once it is merged. Any other link is evidence for the person who verifies the milestone on Contractors."
+      ),
+  })
+  .strict()
+  .describe("A milestone to add. It starts pending: the agent pays it only once it is verified, by GitHub or by a person, and only after its own checks.");
+
+export const CreatePayeeLinkBodySchema = z
+  .object({
+    counterpartyId: z
+      .string()
+      .describe("The `id` of the vendor or contractor who is to enter the address they are paid at. A client gets no link: the agent never pays one."),
+  })
+  .strict()
+  .describe("Who the link is for.");
+
+export const PayeeLinkSchema = z
+  .object({
+    id: z.string().describe("The link's own id. It is not the link: that is `url`."),
+    counterpartyId: z.string(),
+    url: z
+      .string()
+      .describe("The one-time page where the payee enters their address. It is in this answer only: Vestiarion keeps just its hash. Send it to the payee yourself."),
+    expiresAt: z.string().describe("When the link stops working, 7 days after it was made. It also stops once the payee has used it, or a newer link replaces it."),
+  })
+  .describe("A one-time link for a payee to enter the address they are paid at. That address waits for a person in the workspace to confirm it before the agent pays to it.");

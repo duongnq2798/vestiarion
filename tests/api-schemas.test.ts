@@ -71,7 +71,7 @@ describe("every documented example is a real response of the current shape", () 
 describe("each write operation's request example", () => {
   it("is a body its route accepts, field for field (write API R2)", () => {
     const writes = OPERATIONS.filter((op) => op.method === "post");
-    expect(writes.map((op) => op.id).sort()).toEqual(["create-counterparty", "create-invoice"]);
+    expect(writes.map((op) => op.id).sort()).toEqual(["create-counterparty", "create-invoice", "create-milestone", "create-payee-link"]);
     for (const op of writes) {
       expect(op.requestBody, op.id).toBeDefined();
       expect(op.requestBody!.parse(op.requestExample), op.id).toEqual(op.requestExample);

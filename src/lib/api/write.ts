@@ -1,6 +1,7 @@
 import type { NextResponse } from "next/server";
 import type { z } from "zod";
-import { apiError } from "./guard";
+import type { Refused } from "../commands/outcome";
+import { apiError, INTERNAL_MESSAGE } from "./guard";
 
 /**
  * What every write operation does with a request's body before anything is written (write API R2, R7): read it once,
@@ -44,4 +45,19 @@ export function invalidBody(error: z.ZodError, fields: Record<string, string> = 
   }
   const path = issue.path.join(".");
   return apiError("invalid_request", `${fields[path] ?? (path || "body")}: ${issue.message}`);
+}
+
+/**
+ * A command's refusal, as a write answers it (write API part 2, W4). A refusal the operation names in `invalid` is the
+ * body's, `400` with the field it is about. One the gate made is the key's, `403`: the guard has already checked the
+ * issuer, so only a role changed since then gets here. Anything else failed, and answers the API's own `500`, which
+ * an `Idempotency-Key` does not keep.
+ */
+export function refusalResponse(refusal: Refused, invalid: Record<string, string>): NextResponse {
+  const message = invalid[refusal.code];
+  if (message) return apiError("invalid_request", message);
+  if (refusal.code === "forbidden" || refusal.code === "surface") {
+    return apiError("forbidden", "This key's issuer can no longer add records in this workspace.");
+  }
+  return apiError("internal", INTERNAL_MESSAGE);
 }

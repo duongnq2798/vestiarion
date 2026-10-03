@@ -9,11 +9,14 @@ import {
   CounterpartyDetailSchema,
   CreateCounterpartyBodySchema,
   CreateInvoiceBodySchema,
+  CreateMilestoneBodySchema,
+  CreatePayeeLinkBodySchema,
   CounterpartySchema,
   InsightsSchema,
   InvoiceSchema,
   LedgerEntrySchema,
   MilestoneSchema,
+  PayeeLinkSchema,
   resourceOf,
   StatusSchema,
   TreasurySchema,
@@ -21,6 +24,8 @@ import {
 } from "@/lib/api/schemas";
 import createCounterpartyExample from "../../../content/docs/examples/create-counterparty.json";
 import createInvoiceExample from "../../../content/docs/examples/create-invoice.json";
+import createMilestoneExample from "../../../content/docs/examples/create-milestone.json";
+import createPayeeLinkExample from "../../../content/docs/examples/create-payee-link.json";
 import getCounterpartyExample from "../../../content/docs/examples/get-counterparty.json";
 import getInsightsExample from "../../../content/docs/examples/get-insights.json";
 import getStatusExample from "../../../content/docs/examples/get-status.json";
@@ -73,6 +78,11 @@ export interface DocOperation {
   requestExample?: Record<string, unknown>;
   /** What a success answers: 200, or 201 when the operation added a record. */
   status: 200 | 201;
+  /**
+   * A write that can undo something already there, as making a payee link revokes the payee's unused one (write API
+   * part 2, W3). Its MCP tool says so.
+   */
+  destructive?: true;
   response: z.ZodType;
   collection: boolean;
   errors: ApiErrorCode[];
@@ -106,6 +116,11 @@ const ALWAYS: ApiErrorCode[] = ["unauthorized", "forbidden", "internal"];
 const COLLECTION_ERRORS: ApiErrorCode[] = ["invalid_request", ...ALWAYS];
 /** A write also refuses a body that does not validate, a reused `Idempotency-Key`, and too many writes (write API R5–R7). */
 const WRITE_ERRORS: ApiErrorCode[] = ["invalid_request", "unauthorized", "forbidden", "conflict", "rate_limited", "internal"];
+/** A write that keeps no outcome for an `Idempotency-Key` cannot conflict over one (write API part 2, W3). */
+const WRITE_ERRORS_WITHOUT_KEY: ApiErrorCode[] = WRITE_ERRORS.filter((code) => code !== "conflict");
+
+/** The contractor the write examples pay. */
+const EXAMPLE_CONTRACTOR = "3d6f8a21-9c4b-4f0e-8b7a-5e2c1d9f6a48";
 
 /** The header that makes a write safe to retry (write API R5), with an example of the kind of value to send. */
 function idempotencyKey(example: string): DocParam {
@@ -302,6 +317,25 @@ export const OPERATIONS: readonly DocOperation[] = [
     example: createCounterpartyExample,
   },
   {
+    id: "create-payee-link",
+    method: "post",
+    path: "/api/v1/payee-links",
+    summary: "Create a payee link",
+    description:
+      "Makes a one-time link where a vendor or contractor enters the address they are paid at, recorded in the ledger as `payee_link_created` with `via: \"api\"` and the key's id. Send `url` to the payee yourself. It is in this answer only, since Vestiarion keeps just its hash, and the answer is sent with `Cache-Control: no-store`. The link works once and expires after 7 days.\n\nThe address the payee enters waits for a person in the workspace to confirm it on Counterparties; until then the agent pays nothing to it. Making a link revokes the payee's unused one, so only the newest works. For the same reason this operation keeps no outcome for an `Idempotency-Key`, which would store the link: a repeat makes a new link. A `counterpartyId` the workspace does not hold, or a client's, answers `400`.",
+    tag: "Counterparties",
+    scope: "write",
+    params: [],
+    requestBody: CreatePayeeLinkBodySchema,
+    requestExample: { counterpartyId: EXAMPLE_CONTRACTOR },
+    status: 201,
+    destructive: true,
+    response: resourceOf(PayeeLinkSchema),
+    collection: false,
+    errors: WRITE_ERRORS_WITHOUT_KEY,
+    example: createPayeeLinkExample,
+  },
+  {
     id: "list-milestones",
     method: "get",
     path: "/api/v1/milestones",
@@ -327,6 +361,29 @@ export const OPERATIONS: readonly DocOperation[] = [
     collection: true,
     errors: COLLECTION_ERRORS,
     example: listMilestonesExample,
+  },
+  {
+    id: "create-milestone",
+    method: "post",
+    path: "/api/v1/milestones",
+    summary: "Add a milestone",
+    description:
+      "Adds work a contractor is to be paid for, checked by the rules of the console's Add milestone form, and recorded in the ledger as `create_milestone` with `via: \"api\"` and the key's id. It is added as the key's issuer's: if the agent holds it, the issuer cannot pay it with Pay now, unless they are the workspace's only approver.\n\nIt starts `pending`, and the API cannot verify it. A GitHub pull request in `verificationSource` is checked by the agent, which verifies the milestone once the pull request is merged; any other link is evidence for the person who verifies it on Contractors. Once it is verified, the agent decides the payment with every guardrail, and pays only to the contractor's confirmed address. A `contractorId` the workspace does not hold, or a client's, answers `400`.",
+    tag: "Milestones",
+    scope: "write",
+    params: [idempotencyKey("ci-bounty-pr-176")],
+    requestBody: CreateMilestoneBodySchema,
+    requestExample: {
+      contractorId: EXAMPLE_CONTRACTOR,
+      title: "TypeScript SDK for the API",
+      amount: "0.10",
+      verificationSource: "https://github.com/duongnq2798/vestiarion/pull/176",
+    },
+    status: 201,
+    response: resourceOf(MilestoneSchema),
+    collection: false,
+    errors: WRITE_ERRORS,
+    example: createMilestoneExample,
   },
   {
     id: "get-treasury",
@@ -440,7 +497,7 @@ export function buildOpenApiDocument(origin: string): Record<string, unknown> {
   }
   return {
     openapi: "3.1.0",
-    info: { title: "Vestiarion API", version: "v1", description: "Read a workspace's ledger, books, counterparties, milestones, treasury and insights, and add counterparties and invoices, with a workspace API key." },
+    info: { title: "Vestiarion API", version: "v1", description: "Read a workspace's ledger, books, counterparties, milestones, treasury and insights, and add counterparties, invoices, milestones and payee links, with a workspace API key." },
     servers: [{ url: origin }],
     components: { schemas: components, securitySchemes: { bearerAuth: { type: "http", scheme: "bearer", description: "A workspace API key: vxk_<prefix>_<secret>." } } },
     paths,

@@ -6,7 +6,8 @@ import { GET as getInsights } from "@/app/api/v1/insights/route";
 import { GET as listInvoices, POST as createInvoice } from "@/app/api/v1/invoices/route";
 import { GET as verifyLedger } from "@/app/api/v1/ledger/verify/route";
 import { GET as listLedgerEntries } from "@/app/api/v1/ledger/route";
-import { GET as listMilestones } from "@/app/api/v1/milestones/route";
+import { GET as listMilestones, POST as createMilestone } from "@/app/api/v1/milestones/route";
+import { POST as createPayeeLink } from "@/app/api/v1/payee-links/route";
 import { GET as getStatus } from "@/app/api/v1/status/route";
 import { GET as getTreasury } from "@/app/api/v1/treasury/route";
 import { argumentName } from "./tools";
@@ -49,8 +50,10 @@ const ROUTES: Record<string, Route> = {
   "list-counterparties": listCounterparties,
   "get-counterparty": (request, params) => getCounterparty(request, { params: Promise.resolve({ id: params.id ?? "" }) }),
   "create-counterparty": createCounterparty,
+  "create-payee-link": createPayeeLink,
   "create-invoice": createInvoice,
   "list-milestones": listMilestones,
+  "create-milestone": createMilestone,
   "get-treasury": getTreasury,
   "get-insights": getInsights,
 };
