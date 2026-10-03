@@ -50,6 +50,22 @@ were received" (`factChanges`), but nothing in the product can change those fact
 
 ## 3. Rollout
 
+Proven on 2026-10-03 in testnet-2 (live, Arc testnet), merged as #153 and #154:
+
+- 01:59:42 UTC, #963: a payable of 0.30 USDC to Jiren (screened clear, 30 USDC limit), due that day, with no PO
+  reference and nothing received. #965 (02:00:04): the model asked for information, citing the incomplete three-way
+  match and two earlier 0.30 USDC payments to Jiren (a daily retainer) as a duplicate signal.
+- 02:20:25, #968 `invoice_details_added` from **AP / AR**: PO-131 and goods received.
+- The event cycle (#974, `events: ["details_added"]`): #971 (02:20:43) `invoice_reopened` with the changes "purchase
+  order PO-131 has since been supplied" and "goods have since been confirmed received"; #972 (02:20:53) `ap_pay` by
+  the model, which judged the earlier payments a separate retainer; paid through the workspace's spending-limit
+  contract (`onChainLimit.verdict` allowed), transaction
+  `0x79445473359bc94cad18bf896a735fec6c44d561b29bcdd409b797dd74dd1eab`, 28 seconds after the details were added.
+- Jiren's performance score moved from 0.857 to 0.750 in that cycle: the earlier `ap_request_info` counts as an
+  information request, as it did before this change. `invoice_details_added` is not part of that history.
+
+Steps, for the record:
+
 1. Merge. No migration.
 2. In a live workspace, add a payable within the counterparty's limit with no PO reference and nothing received: the
    agent asks for information. On **Approvals**, **Add details**: a PO reference and goods received. Within a minute:
