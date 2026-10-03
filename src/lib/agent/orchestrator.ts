@@ -2899,7 +2899,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     await db
       .from("invoices")
       .select(
-        "id, status, amount, currency, due_date, decided_at, escalated_at, po_reference, goods_received, counterparties(risk_level, payment_limit)"
+        "id, status, amount, currency, due_date, decided_at, escalated_at, po_reference, goods_received, counterparties(risk_level, payment_limit, address_changed_at, address_confirmed_at)"
       )
       .eq("direction", "payable")
       .in("status", ["held", "awaiting_info", "flagged"])
@@ -2914,7 +2914,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     escalated_at: string | null;
     po_reference: string | null;
     goods_received: boolean;
-    counterparties: { risk_level: string; payment_limit: string | null };
+    counterparties: { risk_level: string; payment_limit: string | null; address_changed_at: string | null; address_confirmed_at: string | null };
   }>;
 
   if (frozenRows.length > 0) {
@@ -2945,6 +2945,8 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           execution?.heldBecause === HELD_FOR_BUDGET ? num(entry.detail.usdcValue ?? observed.amount) : null,
         // Held for want of cash: what it needed, and the balances it saw (reserve cash back R4).
         heldForCash: execution?.heldBecause === HELD_FOR_CASH ? heldForCashFacts(execution) : null,
+        // Decided while the counterparty's new address waited for a person: once confirmed, it is decided again.
+        addressUnconfirmed: observed.addressUnconfirmed === true,
       });
     }
     // The cash the operating wallet and the reserve hold now, read only when something waits on it (R4).
@@ -2972,6 +2974,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
             row.counterparties.payment_limit == null ? null : num(row.counterparties.payment_limit),
           ...(room !== undefined ? { budgetRoom: room === null ? null : room.remaining } : {}),
           ...(cash !== undefined ? { cash } : {}),
+          addressUnconfirmed: addressUnconfirmed(row.counterparties.address_changed_at, row.counterparties.address_confirmed_at),
         },
         factsByInvoice.get(row.id) ?? null,
         now,

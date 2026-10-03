@@ -338,6 +338,31 @@ describe("follow-up — held for want of cash (reserve cash back R4)", () => {
   });
 });
 
+describe("follow-up — held while the counterparty's new address waited for a person", () => {
+  // The decision saw the address unconfirmed (`observed.addressUnconfirmed`), so the AP guardrail held it for a person.
+  const waitedOnAddress: DecisionFacts = { ...facts, addressUnconfirmed: true };
+  const held = (over: Partial<FrozenInvoice> = {}) => frozen({ status: "held", ...over });
+
+  it("reopens a payable once someone confirms the address, so the agent decides it again", () => {
+    const plan = planFollowUp(held({ addressUnconfirmed: false }), waitedOnAddress, NOW, config);
+    expect(plan.action).toBe("reopen");
+    expect(plan.changes).toEqual(["the counterparty's new address has since been confirmed"]);
+  });
+
+  it("waits while the address is still unconfirmed, or was not read", () => {
+    expect(planFollowUp(held({ addressUnconfirmed: true }), waitedOnAddress, NOW, config).action).toBe("wait");
+    expect(planFollowUp(held(), waitedOnAddress, NOW, config).action).toBe("wait");
+  });
+
+  it("does not reopen a payable decided with a confirmed address because the address changed since: the guardrail holds it anyway", () => {
+    expect(planFollowUp(held({ addressUnconfirmed: true }), { ...facts, addressUnconfirmed: false }, NOW, config).action).toBe("wait");
+  });
+
+  it("reads a decision recorded before the address was observed as one that did not wait on it", () => {
+    expect(planFollowUp(held({ addressUnconfirmed: false }), facts, NOW, config).action).toBe("wait");
+  });
+});
+
 describe("follow-up — held only for the agent's spending limit (outflow budget R6)", () => {
   const heldForBudget: DecisionFacts = { ...facts, heldForBudgetUsdc: 1.5 };
   const budgetHeld = (over: Partial<FrozenInvoice> = {}) => frozen({ status: "held", amount: 1.5, ...over });

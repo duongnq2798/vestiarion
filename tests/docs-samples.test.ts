@@ -41,9 +41,13 @@ describe("code samples are generated from the operation", () => {
   );
 
   it("writes a body for Python with Python's literals", () => {
-    const op = operationById("create-invoice")!;
+    const op = {
+      ...operationById("create-invoice")!,
+      requestExample: { counterpartyId: "6b361405-cfda-4400-a286-364b561911ce", memo: null, goodsReceived: true, earlyPayDiscount: { percent: 2, deadline: "2026-10-20" } },
+    };
     const python = sampleRequest(op, "https://x.test").python;
     expect(python).toContain('        "goodsReceived": True,\n');
+    expect(python).toContain('        "memo": None,\n');
     expect(python).toContain('        "earlyPayDiscount": {\n            "percent": 2,\n            "deadline": "2026-10-20",\n        },\n');
     expect(python).not.toMatch(/\btrue\b|\bfalse\b|\bnull\b/);
   });

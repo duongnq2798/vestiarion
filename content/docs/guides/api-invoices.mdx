@@ -33,6 +33,8 @@ The address you sent waits for a person. On **Counterparties**, the counterparty
 
 Check the address with the counterparty through a channel you already trust, then choose **Confirm address**. An owner, an admin or an approver can confirm it. A system that sends addresses is the easiest place to change one, and this step is what keeps a changed address from receiving a payment unseen.
 
+An invoice your system adds before then is not lost: the agent holds it, and once the address is confirmed it goes back to the agent, which decides it again with every check, in the cycle the confirmation starts. Its `invoice_reopened` entry says why: "the counterparty's new address has since been confirmed".
+
 ## 4. Add the invoice
 
 [Add an invoice](/docs/api/create-invoice) with `POST /api/v1/invoices`, naming the counterparty by its `id`:
