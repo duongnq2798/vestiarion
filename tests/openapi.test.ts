@@ -1,4 +1,4 @@
-import { readdirSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
@@ -18,24 +18,39 @@ import { GET as getStatus } from "@/app/api/v1/status/route";
 import { GET as getTreasury } from "@/app/api/v1/treasury/route";
 import { fakeSupabase, type RecordedRequest } from "./support/fake-supabase";
 
+/** Every v1 handler, as `GET /api/v1/invoices`: each method a route file exports, on its path. */
 function v1Routes(dir = path.join(process.cwd(), "src/app/api/v1"), prefix = "/api/v1"): string[] {
   const out: string[] = [];
   for (const name of readdirSync(dir)) {
     const full = path.join(dir, name);
     if (statSync(full).isDirectory()) out.push(...v1Routes(full, `${prefix}/${name.replace(/^\[(.+)\]$/, "{$1}")}`));
-    else if (name === "route.ts") out.push(prefix);
+    else if (name === "route.ts") {
+      for (const [, method] of readFileSync(full, "utf8").matchAll(/^export (?:async )?function (GET|POST|PUT|PATCH|DELETE)\b/gm)) out.push(`${method} ${prefix}`);
+    }
   }
   return out;
 }
 
 describe("the OpenAPI document", () => {
-  it("documents every v1 route exactly once, and nothing else", () => {
-    const documented = OPERATIONS.map((op) => op.path).sort();
-    expect(documented).toEqual(v1Routes().filter((p) => p !== "/api/v1/openapi.json").sort());
+  it("documents every v1 handler exactly once, by method and path, and nothing else", () => {
+    const documented = OPERATIONS.map((op) => `${op.method.toUpperCase()} ${op.path}`).sort();
+    expect(documented).toEqual(v1Routes().filter((route) => route !== "GET /api/v1/openapi.json").sort());
   });
 
-  it("never closes an object to new fields, so adding one to v1 breaks no validating client", () => {
-    expect(JSON.stringify(buildOpenApiDocument("https://example.test"))).not.toContain('"additionalProperties":false');
+  it("never closes a response to new fields, so adding one to v1 breaks no validating client", () => {
+    const doc = buildOpenApiDocument("https://example.test") as { components: { schemas: Record<string, unknown> } };
+    for (const [name, schema] of Object.entries(doc.components.schemas)) {
+      if (name.endsWith("Request")) continue;
+      expect(JSON.stringify(schema), name).not.toContain('"additionalProperties":false');
+    }
+  });
+
+  it("closes a request body, as its route refuses a field it does not take (write API R2)", () => {
+    const doc = buildOpenApiDocument("https://example.test") as { components: { schemas: Record<string, Record<string, unknown>> } };
+    for (const op of OPERATIONS.filter((candidate) => candidate.requestBody)) {
+      const name = `${op.id.split("-").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join("")}Request`;
+      expect(doc.components.schemas[name], name).toMatchObject({ type: "object", additionalProperties: false });
+    }
   });
 
   it("is a structurally valid 3.1 document whose refs all resolve", () => {
@@ -58,15 +73,43 @@ describe("the OpenAPI document", () => {
     expect(JSON.stringify(doc)).not.toContain("#/$defs/");
   });
 
-  it("gives every operation the key requirement, a 200, and its 401 and 500", () => {
+  it("gives every operation the key requirement, its success status, and its 401 and 500", () => {
     const doc = buildOpenApiDocument("https://example.test") as {
       paths: Record<string, Record<string, { operationId: string; security: unknown; responses: Record<string, unknown> }>>;
     };
     const operations = Object.values(doc.paths).flatMap((methods) => Object.values(methods));
     expect(operations.map((op) => op.operationId).sort()).toEqual(OPERATIONS.map((op) => op.id).sort());
     for (const op of operations) {
+      const documented = operationById(op.operationId)!;
       expect(op.security, op.operationId).toEqual([{ bearerAuth: [] }]);
-      expect(Object.keys(op.responses), op.operationId).toEqual(expect.arrayContaining(["200", "401", "500"]));
+      expect(Object.keys(op.responses), op.operationId).toEqual(expect.arrayContaining([String(documented.status), "401", "500"]));
+      expect(documented.status, op.operationId).toBe(documented.method === "post" ? 201 : 200);
+    }
+  });
+
+  it("describes a write's JSON body, its Idempotency-Key header, its 201 and its write errors (write API R8)", () => {
+    const doc = buildOpenApiDocument("https://example.test") as {
+      paths: Record<string, Record<string, { parameters: Array<Record<string, unknown>>; requestBody?: Record<string, unknown>; responses: Record<string, unknown> }>>;
+      components: { schemas: Record<string, unknown> };
+    };
+    for (const [id, name] of [["create-invoice", "CreateInvoiceRequest"], ["create-counterparty", "CreateCounterpartyRequest"]] as const) {
+      const op = operationById(id)!;
+      expect(op).toMatchObject({ method: "post", scope: "write", status: 201 });
+      const described = doc.paths[op.path].post;
+      expect(described.requestBody).toEqual({
+        required: true,
+        content: { "application/json": { schema: { $ref: `#/components/schemas/${name}` }, example: op.requestExample } },
+      });
+      expect(doc.components.schemas).toHaveProperty(name);
+      expect(described.parameters).toEqual([expect.objectContaining({ name: "Idempotency-Key", in: "header", required: false, schema: { type: "string" } })]);
+      expect(Object.keys(described.responses)).toEqual(expect.arrayContaining(["201", "400", "403", "409", "429"]));
+      expect(described.responses).not.toHaveProperty("200");
+    }
+    // Every read stays a read: no body, and the scope it needs is read.
+    for (const op of OPERATIONS.filter((candidate) => candidate.method === "get")) {
+      expect(op.scope, op.id).toBe("read");
+      expect(op.requestBody, op.id).toBeUndefined();
+      expect(doc.paths[op.path].get.requestBody, op.id).toBeUndefined();
     }
   });
 
@@ -87,8 +130,10 @@ describe("the OpenAPI document", () => {
         "list-ledger-entries",
         "verify-ledger",
         "list-invoices",
+        "create-invoice",
         "list-counterparties",
         "get-counterparty",
+        "create-counterparty",
         "list-milestones",
         "get-treasury",
         "get-insights",
@@ -109,7 +154,8 @@ describe("GET /api/v1/openapi.json", () => {
     expect(response.headers.get("cache-control")).toBe("public, max-age=300");
     const body = (await response.json()) as { openapi: string; paths: Record<string, unknown> };
     expect(body.openapi).toBe("3.1.0");
-    expect(Object.keys(body.paths)).toHaveLength(OPERATIONS.length);
+    // A path whose list and write share it is one entry, with a method each.
+    expect(Object.keys(body.paths)).toHaveLength(new Set(OPERATIONS.map((op) => op.path)).size);
   });
 });
 
@@ -137,7 +183,7 @@ vi.mock("@/lib/platform/api-keys", async (importOriginal) => {
 const config = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k", NEXT_PUBLIC_SUPABASE_ANON_KEY: "test-anon-key", SUPABASE_JWT_SECRET: "test-request-token-secret-at-least-32-characters" });
 
 const ORG = "0a0a0a0a-0000-4000-8000-00000000000a";
-const KEY: AuthenticatedKey = { keyId: "1a1a1a1a-0000-4000-8000-00000000001a", orgId: ORG, scopes: ["read"] };
+const KEY: AuthenticatedKey = { keyId: "1a1a1a1a-0000-4000-8000-00000000001a", orgId: ORG, scopes: ["read"], createdBy: null };
 const COUNTERPARTY_ID = "0b6c1c9e-4a4f-4a7e-9b1e-00000000c0de";
 const AT = "2026-09-29T00:00:00+00:00";
 
@@ -209,8 +255,8 @@ const ROUTES: Array<[id: string, url: string, handler: (request: Request) => Pro
 ];
 
 describe("each route's real 200 parses", () => {
-  it("drives every documented operation", () => {
-    expect(ROUTES.map(([id]) => id).sort()).toEqual(OPERATIONS.map((op) => op.id).sort());
+  it("drives every documented read; each write's 201 is parsed in its own route's tests", () => {
+    expect(ROUTES.map(([id]) => id).sort()).toEqual(OPERATIONS.filter((op) => op.method === "get").map((op) => op.id).sort());
   });
 
   it.each(ROUTES)("%s, with every nullable column null", async (id, url, handler) => {

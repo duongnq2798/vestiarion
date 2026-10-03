@@ -33,7 +33,7 @@ function Detail({ label, children }: { label: string; children: ReactNode }) {
 /**
  * An operation's path and query parameters, one stacked item each, so a long
  * description wraps at any width instead of squeezing a column: the name,
- * its type, whether it is required and, for a path parameter, where it goes;
+ * its type, whether it is required and, for a path or header parameter, where it goes;
  * then what it does; then its default and allowed values, when it has them.
  */
 export function ParamTable({ params }: { params: DocParam[] }) {
@@ -48,7 +48,7 @@ export function ParamTable({ params }: { params: DocParam[] }) {
               <code className="font-mono text-[0.8125rem] font-semibold text-ink [overflow-wrap:anywhere]">{param.name}</code>
               <span className="rounded-md border border-line bg-raised/60 px-1.5 py-0.5 font-mono text-[0.6875rem] text-ink-2">{param.type}</span>
               <span className={cn("text-xs", param.required ? "font-semibold text-ink" : "text-ink-3")}>{param.required ? "required" : "optional"}</span>
-              {param.in === "path" && <span className="text-xs text-ink-3">in: path</span>}
+              {param.in !== "query" && <span className="text-xs text-ink-3">{`in: ${param.in}`}</span>}
             </div>
             <p className="mt-1 text-sm leading-6 text-ink-2 [overflow-wrap:anywhere]">
               <InlineText text={param.description} />

@@ -51,6 +51,7 @@ export const DOCS_NAV: NavSection[] = [
       { slug: "guides/pay-a-contractor", title: "Pay a contractor for delivered work", description: "Add a milestone, verify the work by hand or by a merged pull request, and let the agent release the pay." },
       { slug: "guides/get-paid", title: "Get paid as a freelancer", description: "For the person being paid: add your wallet address through the link a business sent, follow each step, and check the payment on Arc testnet." },
       { slug: "guides/telegram", title: "Get the agent's decisions in Telegram", description: "Connect your own Telegram chat to a workspace: the agent's decisions as it makes them, what is safe to spend and waiting, and invoices sent to the bot." },
+      { slug: "guides/api-invoices", title: "Add invoices from your own system", description: "Create a read-and-write API key, add a counterparty and an invoice through the API, confirm the address, and follow the agent's decision." },
       { slug: "guides/audit-export", title: "Verify an audit export", description: "Download a workspace's signed ledger and check it with a standalone verifier." },
     ],
   },
@@ -92,7 +93,7 @@ export const DOCS_NAV: NavSection[] = [
     title: "AI integration",
     pages: [
       { slug: "ai-integration", title: "AI integration", description: "Markdown views, llms.txt and the OpenAPI document, for coding agents." },
-      { slug: "ai-integration/mcp", title: "MCP server", description: "Connect an AI agent to your workspace's records through read-only MCP tools." },
+      { slug: "ai-integration/mcp", title: "MCP server", description: "Connect an AI agent to your workspace's records through MCP tools: every API read, and with a read-and-write key, adding counterparties and invoices." },
     ],
   },
   {

@@ -24,15 +24,24 @@ Vestiarion stores the prefix and a SHA-256 hash of the secret, never the key its
 
 ## One key, one workspace
 
-A key belongs to the workspace it was created in, and reads that workspace's data and no other. To read two workspaces, use two keys. Asking for another workspace's counterparty by its id answers `404`, as if it did not exist.
+A key belongs to the workspace it was created in, and reaches that workspace's data and no other: it reads it and, with write access, adds to it. To read two workspaces, use two keys. Asking for another workspace's counterparty by its id answers `404`, as if it did not exist.
 
 ## Creating a key
 
 An owner or an admin creates keys on the workspace's Settings page, `/o/<slug>/settings`, under **API keys**. A key's name is 1 to 60 characters. A workspace holds at most 20 active keys; revoke one to make room for another. A key works for as long as the person who created it is a member of the workspace (see [Revoking a key](#revoking-a-key)). Every other member of the workspace sees the list of keys, without the controls to create or revoke one. The [Quickstart](/docs/get-started/quickstart#1-create-an-api-key) walks through it.
 
-## Scope
+Tick **Can also add counterparties and invoices** to give the key write access, and leave it clear for a key that only reads. A key's access is set when it is created: to change it, create a new key and revoke the old one.
 
-Every key has one scope, `read`, which covers every `/api/v1` endpoint. A key whose scopes do not cover a route answers `403 forbidden`. No key issued today gets that answer, but handle it anyway: it is part of the error contract.
+## Scopes
+
+A key is read-only, or it reads and writes:
+
+- **Read only**, the scope `read`: every `GET` endpoint. Every key has it.
+- **Read and write**, the scopes `read` and `write`: also [Add a counterparty](/docs/api/create-counterparty) and [Add an invoice](/docs/api/create-invoice). The list of keys shows **Read and write** beside such a key.
+
+A key whose scopes do not cover a route answers `403 forbidden`, as a read-only key does on a write.
+
+Write access adds records, and nothing more. A key never approves, rejects or pays: the agent decides an invoice added with one as it decides one typed into the console, with every guardrail. An address added with one waits for a person in the workspace to confirm it, and the agent pays nothing to it until then. [Add invoices from your own system](/docs/guides/api-invoices) walks through it.
 
 ## Last used
 
@@ -42,9 +51,9 @@ Settings shows when each key was last used. The time is recorded after the respo
 
 An owner or an admin revokes a key from the same list. Revoking takes effect at once and cannot be undone: from then on the key answers exactly like a key that never existed. The list keeps it, marked **Revoked**.
 
-A key is also revoked when the person who created it stops being a member of the workspace: when they leave it, when an owner or an admin removes them, or when they delete their account. Every active key they created in that workspace is revoked in the same step that ends their membership. Keys that other members created keep working, and so do the person's keys in workspaces they still belong to. Before anyone is removed, or leaves, the confirmation names the keys that will stop working. A workspace's last owner cannot leave it, so their keys stay.
+A key is also revoked when the person who created it stops being a member of the workspace: when they leave it, when an owner or an admin removes them, or when they delete their account. Every active key they created in that workspace, read-only or read-and-write, is revoked in the same step that ends their membership, so no key reads or adds records for someone who has left. Keys that other members created keep working, and so do the person's keys in workspaces they still belong to. Before anyone is removed, or leaves, the confirmation names the keys that will stop working. A workspace's last owner cannot leave it, so their keys stay.
 
-Creating and revoking a key each add an entry to the workspace's ledger, `api_key_created` or `api_key_revoked`. The entry names the key by its id; the key itself is never written to the ledger. `api_key_revoked` also says why, in `reason`:
+Creating and revoking a key each add an entry to the workspace's ledger, `api_key_created` or `api_key_revoked`. The entry names the key by its id, and `api_key_created` lists its `scopes`; the key itself is never written to the ledger. `api_key_revoked` also says why, in `reason`:
 
 - `person`: an owner or an admin revoked it in Settings. `by` is who revoked it.
 - `member_left`: the person who created it left the workspace. `by` is that person.
@@ -72,7 +81,7 @@ If Vestiarion cannot look the key up at all, because of a database error, it ans
 
 ## Keeping a key safe
 
-A key reads the whole workspace: its invoices, counterparties, treasury and ledger.
+A key reads the whole workspace: its invoices, counterparties, treasury and ledger. A read-and-write key can also add counterparties and invoices, so give write access only to a system that adds records.
 
 - **Never put a key in a URL.** URLs end up in server logs, browser history and proxies. The API does not read a key from a query string anyway.
 - **Never put a key in client-side code**, such as a web page, a browser extension or a mobile app. Anyone who has the code can read the key. Call the API from your server, and pass on only what the client needs.
@@ -80,4 +89,4 @@ A key reads the whole workspace: its invoices, counterparties, treasury and ledg
 - **Use one key per integration**, named after it, so you can revoke one without stopping the others.
 - **Create a long-lived integration's key as someone who will stay.** A key stops working when the person who created it leaves the workspace. Before someone who created keys leaves, have a member who stays create replacements, and switch your integrations to them.
 
-The **Try it** panel on each [reference page](/docs/api) keeps the key you paste in the page's memory only. It is not stored in the browser, and it is sent only in the `Authorization` header of the request you make, to this site's `/api/v1`.
+The **Try it** panel on each read operation's [reference page](/docs/api) keeps the key you paste in the page's memory only. An operation that adds records has no panel. It is not stored in the browser, and it is sent only in the `Authorization` header of the request you make, to this site's `/api/v1`.

@@ -28,6 +28,8 @@ export type ApiErrorCode =
   | "forbidden"
   | "not_found"
   | "invalid_request"
+  /** An `Idempotency-Key` already used for another request, or still in flight (write API R5). */
+  | "conflict"
   | "rate_limited"
   | "unavailable"
   | "internal";
@@ -61,6 +63,7 @@ export const STATUS_FOR: Record<ApiErrorCode, number> = {
   forbidden: 403,
   not_found: 404,
   invalid_request: 400,
+  conflict: 409,
   rate_limited: 429,
   unavailable: 503,
   internal: 500,

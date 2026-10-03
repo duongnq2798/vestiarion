@@ -487,8 +487,8 @@ export function TabsDemo() {
         <Callout title="Nothing is imported until you confirm the preview">Up to 200 rows from a CSV, checked row by row first.</Callout>
       </TabsContent>
       <TabsContent value="api">
-        <Callout tone="proof" title="Read-only for now">
-          The v1 API reads invoices; writing them stays in the console.
+        <Callout tone="proof" title="Added, never approved">
+          A read-and-write key adds invoices; the agent decides them, and a person approves what it holds.
         </Callout>
       </TabsContent>
     </Tabs>

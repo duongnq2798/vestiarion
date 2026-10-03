@@ -2,10 +2,22 @@ Changes to the API and webhooks that affect an integration, newest first. Change
 
 ## 2026-10-03: A member's API keys end with their membership
 
-- A workspace API key now works only while the person who created it is a member of the workspace. When they leave, are removed by an owner or an admin, or delete their account, every active key they created in that workspace is revoked in the same step, and from then on answers `401 unauthorized`, like any revoked key. Keys that other members created, and the person's keys in workspaces they still belong to, keep working.
+- A workspace API key now works only while the person who created it is a member of the workspace. When they leave, are removed by an owner or an admin, or delete their account, every active key they created in that workspace, read-only or read-and-write, is revoked in the same step, and from then on answers `401 unauthorized` on `/api/v1` and on MCP, like any revoked key. Keys that other members created, and the person's keys in workspaces they still belong to, keep working.
 - Each such key gets its own `api_key_revoked` entry, delivered to webhooks like every entry, right after the member's `member_left` or `member_removed`. Its `detail` gains `reason`: `member_left`, `member_removed` (with `member`, the person removed, while `by` is who removed them) or `account_deleted`. A key revoked in Settings now carries `reason: "person"`.
 - A key can no longer be created for someone who is not a member of the workspace.
+- A read-and-write key whose issuer has left can no longer add records, so a `create_counterparty` or `create_invoice` entry with `via: "api"` always names its issuer in `by`.
 - Nothing was revoked when this shipped: no active key had outlived its creator's membership.
+
+## 2026-10-03: Add counterparties and invoices through the API
+
+- **New operations:** [`POST /api/v1/counterparties`](/docs/api/create-counterparty) and [`POST /api/v1/invoices`](/docs/api/create-invoice). Each takes a JSON body of at most 64 KB, checked by the console form's rules, and answers `201` with the record, shaped as its list returns it. A body that does not validate, including one with a field the operation does not take, answers `400 invalid_request`, naming the field. A `counterpartyId` the workspace does not hold answers `400` too.
+- **A new scope, `write`.** A key is read-only, as every existing key stays, or reads and writes; an owner or admin chooses when creating it. A read-only key on a write answers `403 forbidden`. `api_key_created` lists `scopes: ["read", "write"]` for such a key.
+- **`Idempotency-Key`** on both writes. A repeat with the same key and body within 24 hours gets the first answer back, with `Idempotent-Replayed: true`. The same key with a different body, or while the first request is still being handled, answers the new error code **`conflict` (`409`)**. A `5xx` answer, and a body that fails validation, are not kept, and a key whose first request never finished is free again after 10 minutes.
+- Writes are limited to 30 a minute per key; over that, `429 rate_limited` with `Retry-After: 60`. Reads stay unlimited.
+- `create_counterparty` and `create_invoice` entries for records added through the API carry `via: "api"` and `apiKeyId`, with `by` the key's issuer, or `null` once their account is gone. Such a `create_counterparty` also carries `addressNeedsConfirmation`: an address added through the API waits for a person to confirm it, and the agent holds payments to it (`counterparty.address_unconfirmed`) until then.
+- A payable added through the API starts a cycle, whose `cycle_complete` entry lists `invoice_added` in `events`, as one added in the console does.
+- **MCP:** two new tools, `create_counterparty` and `create_invoice`, annotated `readOnlyHint: false`, `destructiveHint: false`, `idempotentHint: false`, with an optional `idempotencyKey`. A read-only key gets the `403` as a tool error.
+- The OpenAPI document describes each write's request body, its `Idempotency-Key` header and its `201`.
 
 ## 2026-10-03: A sweep's yield is counted over how long the cash would stay
 

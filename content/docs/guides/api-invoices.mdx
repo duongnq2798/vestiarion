@@ -1,0 +1,78 @@
+Your invoices may already live in another system: an accounting tool, a billing script, a job that pays for merged work. With a read-and-write API key, that system adds counterparties and invoices to your workspace itself. The agent then decides each payable as it decides one typed into the console, with every guardrail, and pays on Arc testnet.
+
+A key adds records. It never approves or pays, and an address it adds waits for a person in the workspace to confirm it, so a key that leaks cannot point the agent's payments at a new address.
+
+## 1. Create a read-and-write key
+
+An owner or an admin opens **Settings** and, under **API keys**, chooses **Create key**. Name the key after the system that will use it, tick **Can also add counterparties and invoices**, and create it. The dialog shows the key once: "Copy this key now. It will not be shown again."
+
+In the list of keys, this one shows **Read and write**, and every other key **Read only**. Keep the key in an environment variable, `VESTIARION_API_KEY` below, as [Authentication](/docs/get-started/authentication) explains.
+
+The key works for as long as the person who created it is a member of the workspace. Create it as someone who will stay: if they leave, or are removed, the key stops working, and the system stops adding records.
+
+## 2. Add the counterparty
+
+[Add a counterparty](/docs/api/create-counterparty) with `POST /api/v1/counterparties`:
+
+```bash
+curl https://www.vestiarion.xyz/api/v1/counterparties \
+  -X POST \
+  -H "Authorization: Bearer $VESTIARION_API_KEY" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: crm-vendor-1042" \
+  -d '{"name":"Quill Studio","role":"vendor","address":"0x5b2d8c1f0e7a4936b8d1c0e2f3a4b5c6d7e8f901","jurisdiction":"SG","paymentLimit":"500"}'
+```
+
+The answer is `201`, with the counterparty shaped as [List counterparties](/docs/api/list-counterparties) returns it. It is screened as it is added, so `riskLevel` already holds the screening's verdict. Keep its `id`: the invoice names it.
+
+A vendor or a contractor needs a `paymentLimit`, the most the agent pays it in one payment. A client, who pays you, does not. A body that does not validate answers `400 invalid_request`, naming the field, and adds nothing: fix it and send it again.
+
+## 3. Confirm the address in the console
+
+The address you sent waits for a person. On **Counterparties**, the counterparty's card shows the day it changed and "not yet confirmed". Until someone confirms it, the agent holds every payment to it: "held for a person to approve".
+
+Check the address with the counterparty through a channel you already trust, then choose **Confirm address**. An owner, an admin or an approver can confirm it. A system that sends addresses is the easiest place to change one, and this step is what keeps a changed address from receiving a payment unseen.
+
+## 4. Add the invoice
+
+[Add an invoice](/docs/api/create-invoice) with `POST /api/v1/invoices`, naming the counterparty by its `id`:
+
+```bash
+curl https://www.vestiarion.xyz/api/v1/invoices \
+  -X POST \
+  -H "Authorization: Bearer $VESTIARION_API_KEY" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: billing-inv-2026-0042" \
+  -d '{"counterpartyId":"7c9e6679-7425-40de-944b-e07fc1f90ae7","amount":"420.00","dueDate":"2026-10-31","poReference":"PO-4012","goodsReceived":true}'
+```
+
+The answer is `201`, with the invoice in `status: "pending"`. A payable is now the agent's to decide, usually within a minute, as one typed in:
+
+- With a `poReference` and `goodsReceived: true`, the three-way match can complete. Without either, the agent asks for the missing detail instead of paying.
+- A payment over the counterparty's limit, or to an address no one has confirmed, is held for a person. One to a high-risk counterparty, or one that repeats an invoice already paid, is flagged.
+- The workspace's spending limits, and its contract on Arc testnet, still bound every payment.
+
+The ledger records the invoice as `create_invoice`, with `via: "api"` and the key's id. It is the key's issuer's invoice: if the agent holds it, the issuer cannot approve it, unless they are the workspace's only approver.
+
+## 5. Follow the decision
+
+Read the invoice back with [List invoices](/docs/api/list-invoices), filtered by `counterpartyId`. Once the agent has decided, `status` says what it did and `agentReasoning` says why. A payment that settled on Arc testnet carries its `txHash`. To be told rather than to ask, [webhooks](/docs/webhooks) push every ledger entry, the agent's decision included, as `ledger.appended`.
+
+## Retrying safely
+
+A network can fail between a request and its answer. Send an `Idempotency-Key` with every write, unique to the record, such as its id in your own system, and when no answer comes, send the same request with the same key:
+
+- A repeat with the same body within 24 hours gets the first answer back, with `Idempotent-Replayed: true`, and adds nothing.
+- The same key with a different body answers `409 conflict`. So does a repeat while the first request is still being handled: wait a moment and send it again.
+- A `5xx` answer is not kept, so a repeat runs the request again. Neither is a request that never finished, because it timed out or its connection dropped: after 10 minutes its key is free again.
+- A body that fails validation is not kept either: fix it, and send it again with the same key.
+
+Writes are limited to 30 a minute per key. Over that, the answer is `429 rate_limited`, with `Retry-After`.
+
+## What a key cannot do
+
+- Approve, reject or pay a payment. That is the agent's decision, and a person's when the agent holds one.
+- Confirm an address.
+- Change or remove a record. The API adds counterparties and invoices, and nothing else.
+
+The same two operations are [MCP tools](/docs/ai-integration/mcp), `create_counterparty` and `create_invoice`, so an AI agent connected with a read-and-write key can add records under the same rules.

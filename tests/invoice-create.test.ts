@@ -19,6 +19,7 @@ const ORG = "0b6c1c9e-4a4f-4a7e-9b1e-000000000a0a";
 const USER = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000e1";
 const COUNTERPARTY = "0b6c1c9e-4a4f-4a7e-9b1e-00000000c0de";
 const INVOICE = "0b6c1c9e-4a4f-4a7e-9b1e-0000000001a1";
+const API_KEY = "1a1a1a1a-0000-4000-8000-000000000001";
 const config = configFromEnv({
   NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid",
   SUPABASE_SERVICE_ROLE_KEY: "k",
@@ -110,6 +111,17 @@ describe("createInvoice", () => {
 
     const [entry] = ledgerDetails(requests);
     expect(entry.p_detail).toMatchObject({ via: "telegram", document });
+  });
+
+  it("records that it came through the API and with which key, and adds it as nobody's once the key's issuer is gone (write API R4)", async () => {
+    const { requests } = await run([{ id: COUNTERPARTY, name: "Acme Supplies" }], () =>
+      createInvoice({ actorId: null, invoice, document: null, via: "api", apiKeyId: API_KEY })
+    );
+
+    const insert = requests.find((sent) => sent.path === "/rest/v1/invoices" && sent.method === "POST");
+    expect(insert?.body).toMatchObject({ created_by: null });
+    const [entry] = ledgerDetails(requests);
+    expect(entry.p_detail).toMatchObject({ by: null, via: "api", apiKeyId: API_KEY });
   });
 
   it("adds nothing for a counterparty the workspace does not hold", async () => {

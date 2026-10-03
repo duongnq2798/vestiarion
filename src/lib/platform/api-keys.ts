@@ -24,7 +24,8 @@ import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
  * (migration 0069), and `removeMember` and `deleteAccount` record why.
  */
 
-export const API_KEY_SCOPES = ["read"] as const;
+/** A key reads, or reads and writes (write API R1): `write` is never issued without `read`. */
+export const API_KEY_SCOPES = ["read", "write"] as const;
 export type ApiKeyScope = (typeof API_KEY_SCOPES)[number];
 
 export interface ApiKeyRow {
@@ -41,6 +42,11 @@ export interface AuthenticatedKey {
   keyId: string;
   orgId: string;
   scopes: ApiKeyScope[];
+  /**
+   * Who issued the key; a key acts for them (write API R4). Null only for a key the operator inserted without one:
+   * a key whose issuer leaves, or whose account is deleted, is revoked with the membership (migration 0069).
+   */
+  createdBy: string | null;
 }
 
 export type ApiKeyErrorCode = "api_key_limit_reached" | "invalid_name" | "not_found";
@@ -171,13 +177,13 @@ function insertApiKey(input: { orgId: string; name: string; actorId: string; sco
   };
 }
 
-export async function createApiKey(input: { orgId: string; actorId: string; name: string }): Promise<{ key: ApiKeyRow; token: string }> {
+export async function createApiKey(input: { orgId: string; actorId: string; name: string; write?: boolean }): Promise<{ key: ApiKeyRow; token: string }> {
   const name = input.name.trim();
   // Code points, as Postgres's char_length counts them.
   const length = [...name].length;
   if (length < 1 || length > NAME_MAX) throw new ApiKeyError("invalid_name");
 
-  const scopes: ApiKeyScope[] = ["read"];
+  const scopes: ApiKeyScope[] = input.write ? ["read", "write"] : ["read"];
   let attempt = insertApiKey({ orgId: input.orgId, name, actorId: input.actorId, scopes });
   let { generated } = attempt;
   let result = await attempt.result;
@@ -301,17 +307,17 @@ export async function authenticateApiKey(authorization: string | null): Promise<
 
   const result = await platformDb()
     .from("api_keys")
-    .select("id, org_id, secret_hash, scopes, revoked_at")
+    .select("id, org_id, secret_hash, scopes, created_by, revoked_at")
     .eq("prefix", parsed.prefix)
     .maybeSingle();
   if (result.error) throw new Error(result.error.message);
-  const row = result.data as { id: string; org_id: string; secret_hash: string; scopes: string[]; revoked_at: string | null } | null;
+  const row = result.data as { id: string; org_id: string; secret_hash: string; scopes: string[]; created_by: string | null; revoked_at: string | null } | null;
 
   const stored = row && HASH_HEX.test(row.secret_hash) ? Buffer.from(row.secret_hash, "hex") : DUMMY_HASH;
   const matches = crypto.timingSafeEqual(sha256(parsed.secret), stored);
   if (!row || stored === DUMMY_HASH || !matches || row.revoked_at !== null) return null;
 
-  return { keyId: row.id, orgId: row.org_id, scopes: row.scopes.filter(isApiKeyScope) };
+  return { keyId: row.id, orgId: row.org_id, scopes: row.scopes.filter(isApiKeyScope), createdBy: row.created_by ?? null };
 }
 
 /**

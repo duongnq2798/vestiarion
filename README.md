@@ -146,7 +146,7 @@ chains payees are paid on: [Contracts on Arc testnet](https://www.vestiarion.xyz
 ## Architecture
 
 The layout below is the short version. [ARCHITECTURE.md](ARCHITECTURE.md) goes further, and
-the [developer docs](https://www.vestiarion.xyz/docs) document the read API and webhooks.
+the [developer docs](https://www.vestiarion.xyz/docs) document the API and webhooks.
 
 ```
 supabase/migrations/      Postgres schema. Money is numeric(20,6), never a
@@ -221,7 +221,7 @@ scripts/                  Tenant scripts require an organization slug
 src/app/                  Evidence-first landing page at `/`; working treasury
                            console at `/console`, plus AP/AR, Contractors,
                            Compliance, Audit Log, and database-backed Insights
-src/app/api/v1/           Read API for bots, MCP servers and anything else
+src/app/api/v1/           API for bots, MCP servers and anything else
                            consuming Vestiarion, authenticated with a
                            workspace API key
 src/lib/platform/api-keys.ts  Key generation and hashing, listing and
@@ -236,14 +236,17 @@ src/lib/webhooks/         Signing, SSRF-safe sending, and the retry/disable
                            active one
 ```
 
-Each workspace creates and revokes its own read-only API keys on
+Each workspace creates and revokes its own API keys on
 `/o/<slug>/settings` (owner or admin only; see
 [Authentication](https://www.vestiarion.xyz/docs/get-started/authentication)). A
-key is shown once, in full, right after it is created, and authenticates
-`/api/v1` requests for that workspace alone — there is no shared or
-platform-wide credential on that surface. It stops working when the member who
-created it leaves the workspace, is removed, or deletes their account. The same key connects an AI agent to the
-[MCP server](https://www.vestiarion.xyz/docs/ai-integration/mcp) at `/api/mcp`, whose read-only tools are the `/api/v1` operations.
+key reads; one given write access can also add counterparties and invoices,
+which the agent decides like any other, and an address it adds waits for a
+person to confirm it. A key never approves or pays. It is shown once, in full,
+right after it is created, and authenticates `/api/v1` requests for that
+workspace alone — there is no shared or platform-wide credential on that
+surface. It stops working when the member who created it leaves the workspace,
+is removed, or deletes their account. The same key connects an AI agent to the
+[MCP server](https://www.vestiarion.xyz/docs/ai-integration/mcp) at `/api/mcp`, whose tools are the `/api/v1` operations.
 
 The same page lets an owner or admin (`webhooks.manage`) register up to 5
 HTTPS endpoints that receive the workspace's ledger, signed, as it happens —
