@@ -147,6 +147,7 @@ function heldByOurConfiguration(entry: CounterpartyHistoryLedgerEntry): boolean 
   if (
     rule === "counterparty.payment_limit" ||
     rule === "counterparty.high_risk" ||
+    rule === "counterparty.unscreened" ||
     rule === "fx.rate_unavailable" ||
     rule === "treasury.insufficient_eurc" ||
     rule === "workspace.outflow_budget" ||

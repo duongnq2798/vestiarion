@@ -29,6 +29,8 @@ export function readiness(counterparty: Fields): Readiness {
   if ((counterparty.risk_level === "medium" || counterparty.risk_level === "high") && counterparty.risk_notes) return { label: "Review match", tone: "held", rank: 0 };
   if (addressUnconfirmed(counterparty.address_changed_at, counterparty.address_confirmed_at)) return { label: "Confirm address", tone: "held", rank: 1 };
   if (counterparty.role !== "client" && !counterparty.address) return { label: "Address needed", tone: "held", rank: 2 };
+  // Screening could not run yet: the agent pays it nothing until it has a verdict (unscreened hold R8).
+  if (counterparty.role !== "client" && counterparty.risk_level === "unscreened") return { label: "Not screened yet", tone: "held", rank: 2 };
   if (counterparty.role === "client") return { label: "Client", tone: "neutral", rank: 4 };
   return { label: "Ready to pay", tone: "proof", rank: 3 };
 }
