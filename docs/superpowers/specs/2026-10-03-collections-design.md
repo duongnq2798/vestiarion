@@ -62,7 +62,7 @@ is the kind of decision this agent exists to take, explain and keep inside bound
 
 ## 4. Pieces
 
-- Migration `0064_collections.sql`: `receivable_links.token_enc`, `reminders_on_at`, `reminders_on_by`,
+- Migration `0065_collections.sql`: `receivable_links.token_enc`, `reminders_on_at`, `reminders_on_by`,
   `reminder_deferred_until`; table `ar_reminders` (number 1–4, tone, sent_at; unique per receivable and number;
   tenant RLS as 0062).
 - `src/lib/collections.ts`: the pure rules (R3–R5): what is allowed, the reference, the tone bounds.
@@ -79,7 +79,7 @@ is the kind of decision this agent exists to take, explain and keep inside bound
 
 ## 5. Rollout
 
-1. The partner applies 0064 before the merge (the code reads its columns).
+1. The partner applies 0065 before the merge (the code reads its columns).
 2. In testnet-2: a client with the partner's own billing email, a receivable of 0.5 USDC due today, a pay link,
    **Remind the client by email**.
 3. Within a minute: `ar_reminder_sent` (friendly, due today) and the email arrives with the link.

@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { applyMigrations, asTenant, createDatabase, createOrg } from "./support/pglite";
 
 /**
- * Migration 0064 (docs/superpowers/specs/2026-10-03-collections-design.md §4): a pay link's kept token and its
+ * Migration 0065 (docs/superpowers/specs/2026-10-03-collections-design.md §4): a pay link's kept token and its
  * reminders, and each reminder sent, once per receivable and number (R7), seen only by its own workspace; and a
  * migration that runs again without harm, as db:migrate runs every file.
  */
@@ -29,7 +29,7 @@ async function receivable(orgId: string): Promise<string> {
   ).rows[0].id;
 }
 
-describe("collections (0064)", () => {
+describe("collections (0065)", () => {
   it("keeps a link's token and its reminders on the link", async () => {
     const columns = (
       await db.query<{ column_name: string }>(
@@ -75,6 +75,6 @@ describe("collections (0064)", () => {
   });
 
   it("runs again without harm", async () => {
-    await expect(applyMigrations(db, (file) => file.startsWith("0064_"))).resolves.toBeUndefined();
+    await expect(applyMigrations(db, (file) => file.startsWith("0065_"))).resolves.toBeUndefined();
   });
 });

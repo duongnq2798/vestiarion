@@ -356,7 +356,7 @@ workspaces; the ledger keeps the address with most of its name hidden.
 - **Reminders** (`src/lib/agent/collections.ts`: the `collections` stage,
   which needs `receipts`, so no one who may just have paid is reminded): only
   for a receivable whose reminders an owner or admin turned on
-  (`receivable_links.reminders_on_at`, migration `0064`). Code decides whether a
+  (`receivable_links.reminders_on_at`, migration `0065`). Code decides whether a
   reminder is allowed now and which tones are (`src/lib/collections.ts`); the
   model decides between sending and waiting, beside the written policy's
   answer. A reminder is claimed as an `ar_reminders` row, unique per receivable
