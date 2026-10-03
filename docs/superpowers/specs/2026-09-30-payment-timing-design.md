@@ -121,6 +121,18 @@ content/docs/guides/first-payment.mdx           When the agent pays
 4. Load sample data in a sandbox and run a cycle: the new support invoice is scheduled.
 5. Record the result in this spec, and post an arc-canteen product update.
 
+### Rollout record (UTC)
+
+- 2026-10-01: in `testnet-2`, the agent scheduled Centronex's 2 USDC invoice (PO-106, 3% off through Oct 3, due
+  Oct 5) for Oct 3: ledger #480, `ap_schedule`, DeepSeek, agreeing with the written policy, signed by key
+  `5e69c0196d40a5ec`. Its reasoning weighed the 0.06 USDC discount against the float of keeping the cash to the
+  due date.
+- 2026-10-03 00:15:00: on that day, a cycle decided it again with every check and paid it: ledger #940, `ap_pay`,
+  DeepSeek, agreeing with the policy, `amountPaid` 1.94, `discountTaken` 0.06. The transfer is tx
+  `0xa79cb982c488d5c8d40cfc6b6141bf30d95f5615e580d3c3d6b55b779fe6e71e`, status success, block 65198976 on Arc testnet:
+  1.94 USDC from the operating wallet to Centronex. The workspace enforced its spending limit on Arc by then, so the
+  payment went through the spending limit contract (`2026-10-03-onchain-spending-limit-design.md` §6).
+
 ## 6. Out of scope
 
 - Collecting receivables.

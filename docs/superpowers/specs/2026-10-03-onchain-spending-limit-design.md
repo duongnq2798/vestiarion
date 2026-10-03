@@ -1,6 +1,7 @@
 # The spending limit, enforced on Arc
 
-Date: 2026-10-03. Status: design (roadmap A6b, the second half of `2026-10-02-outflow-budget-design.md`).
+Date: 2026-10-03. Status: shipped (PR #149) and proven in production; see §6 (roadmap A6b, the second half of
+`2026-10-02-outflow-budget-design.md`).
 Decided under the standing autonomy grant; each ruling carries its cost if wrong. Rulings R1–R15.
 
 ## 1. Why
@@ -140,3 +141,37 @@ code decided. The check in code stays, in front of it. A payment needs both to a
    moved to the payee, `onChainLimit` on the decision).
 4. A payable past the limit: held by the code check, with the contract's verdict recorded beside it.
 5. Record the transactions here.
+
+### Rollout record (2026-10-03, UTC)
+
+- PR #149 merged as `190fedc` at 00:06:48. 0062 was applied by the partner; a read-only probe found the table with
+  RLS on, its two policies (permissive and restrictive), no access for `anon` or `authenticated`, CRUD for the
+  tenant role, and its four constraints. 0061's `claim_invoice_decision` was intact after the replay.
+- In `testnet-2` (live, hosted), with a 2 USDC daily figure and no 7-day figure:
+  - #937, 00:10:31, `spending_limit_enforced`: contract `0x9da3c47f73ea9399ac566806a189b0bf47b7d4ba`, agent wallet
+    `0xa79bd77b00143ced32a81d1fb8215d7dca21526a`, treasury and owner the operating wallet
+    `0x97f85033bbd83870a841cf7153f35b387746b6b6`. Deployment tx `0xf48ee082d2120142e4a6fa3727b64690f255cbc8d91d801403486b3b79b5e4ff`,
+    approval tx `0xbc838a0cc3775d12c68740bf25acc6a72d944ba136cc494a9ade20ff41e032ea`. Read from the chain: daily
+    limit 2, weekly 0, nothing paid, the approval at its maximum, and the agent's wallet holding 0 USDC, not yet deployed.
+  - A cycle run by a person (#943) then decided two payables:
+    - #940, 00:15:00: Centronex's scheduled invoice paid at 1.94 USDC (the 3% early-payment discount), through the
+      contract, `onChainLimit.verdict` `allowed`. Tx `0xa79cb982c488d5c8d40cfc6b6141bf30d95f5615e580d3c3d6b55b779fe6e71e`,
+      block 65198976: a user operation from the agent's wallet (nonce 0, which deployed it), gas paid by Circle's
+      paymaster `0x03dF76C8c30A88f424CF3CBBC36A1Ca02763103b`; the USDC transfer of 1.94 from the operating wallet to
+      Centronex; and the contract's `Paid` event with ref `0xc2a1ac91f58d5aaada874f162cf148ef0130aeaa95547fdbd74ef9bd57f53cec`.
+    - #941, 00:15:02: the day's 0.3 USDC Jiren retainer, held by the code check (`workspace.outflow_budget`: 1.94
+      paid, 0.06 left), with the contract's own verdict recorded beside it: `refused`, `OverDailyLimit`, spent 1.94,
+      amount 0.3, limit 2. Code and contract agreed, so the `workspace.onchain_limit` path did not occur.
+  - #944, 00:16:46: the partner raised the daily figure to 3. The contract was changed first: `setLimits` tx
+    `0x50f2cb77c85b76f6795f752fd012f0e1cd893911135a130cde3a255df1d25c7d` (`LimitsSet(3, 0)`), recorded as
+    `onChain.txHash`.
+  - #947, 00:17:03: the held retainer reopened; #948, 00:17:14: paid through the contract, tx
+    `0x450177c644314b8abca2dee50683a54d139c280b1b803428b3891eb2a1a50e8e`, block 65199239, `Paid` event, the agent's
+    nonce 1.
+  - #951, 00:17:51, `spending_limit_unenforced`: approval set to 0, tx
+    `0x33d0f2724ec6a1df6b477ab6d91e80132a8eee52301d6c8b4e4a109823b6665d` (`Approval` to 0).
+  - #952, 00:18:05, `spending_limit_enforced` again on the same contract: `setLimits` tx
+    `0x6a72b4f936034140c67112b55b31b94b72eab25f8909e33f96678a67b3a36590`, approval tx
+    `0x3444d38f0bfa9bca7e30f0ed7670043f8f15da33201a58334fdc556f46f6f49f`, no new deployment.
+  - Read from the chain afterwards: daily limit 3, 2.24 USDC paid through the contract today, the approval at its
+    maximum, the agent's wallet deployed and holding 0 USDC.
