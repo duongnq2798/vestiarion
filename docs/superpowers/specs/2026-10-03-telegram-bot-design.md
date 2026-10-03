@@ -1,6 +1,6 @@
 # Telegram bot: the agent's decisions in a chat, and invoices sent to it
 
-Date: 2026-10-03. Status: designed on `feat/telegram-bot`. Decided under the standing autonomy grant.
+Date: 2026-10-03. Status: implemented on `feat/telegram-bot` (PR #166); rollout pending. Decided under the standing autonomy grant.
 
 ## 1. The problem
 
