@@ -105,9 +105,8 @@ describe("the SDK against the API's routes", () => {
     expect(await run((sdk) => sdk.milestones.list())).toEqual(empty);
     expect(await run((sdk) => sdk.ledger.list())).toEqual(empty);
     expect(await run((sdk) => sdk.status.get())).toMatchObject({ apiVersion: "v1" });
-    for (const read of [(sdk: Vestiarion) => sdk.ledger.verify(), (sdk: Vestiarion) => sdk.treasury.get(), (sdk: Vestiarion) => sdk.insights.get()]) {
-      await expect(run(read)).resolves.toBeTypeOf("object");
-    }
+    const reads: Array<(sdk: Vestiarion) => Promise<unknown>> = [(sdk) => sdk.ledger.verify(), (sdk) => sdk.treasury.get(), (sdk) => sdk.insights.get()];
+    for (const read of reads) await expect(run(read)).resolves.toBeTypeOf("object");
   });
 
   it("sends a list's filters as the route reads them", async () => {
