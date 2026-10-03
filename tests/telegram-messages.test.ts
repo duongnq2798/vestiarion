@@ -160,3 +160,24 @@ describe("helpMessage", () => {
     }
   });
 });
+
+describe("wallet addresses", () => {
+  const ADDRESS = `0x${"c0ffee00".repeat(5)}`;
+  const ON_FILE = `0x${"Ab".repeat(20)}`;
+
+  it("are never sent in full, in a reason, a warning or the model's note, while a transaction's link stays whole", () => {
+    const decision = decisionsMessage(WORKSPACE, [item({ detail: `The model noted the payee ${ADDRESS} changed.` })], ORIGIN);
+    expect(decision).not.toContain(ADDRESS);
+    expect(decision).toContain("0xc0ff…ee00");
+    expect(decision).toContain(`https://testnet.arcscan.app/tx/${TX}`);
+
+    const draft = draftMessage({
+      ...READ,
+      warnings: [`This invoice asks to be paid to ${ADDRESS}. The address on file for Northwind Hosting is ${ON_FILE}.`],
+      modelNote: `Pay ${ADDRESS}.`,
+    });
+    expect(draft).not.toContain(ADDRESS);
+    expect(draft).not.toContain(ON_FILE);
+    expect(draft).toContain("0xAbAb…AbAb");
+  });
+});

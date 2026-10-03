@@ -100,7 +100,7 @@ The bot never moves money and never approves anything. A held payment links to A
   sign-in, for the reason one-click email approval was dropped. A Telegram account can be lost or shared, and a button
   in a chat should not move money. A stopped decision's message links to the page that handles it (`ActivityItem.path`).
 - **R12. What leaves for Telegram.** Messages carry workspace names, counterparty names, amounts, the agent's reasons
-  and links. They never carry wallet addresses, emails, API keys or the file sent. The privacy page names Telegram as a
+  and links. They never carry a wallet address in full (one named in a reason or a warning is shortened to its first and last four characters), an email, an API key or the file sent. The privacy page names Telegram as a
   recipient for members who connect it.
 
 ## 5. Data (migration 0064)

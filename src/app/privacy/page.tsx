@@ -167,7 +167,7 @@ export default function PrivacyPage() {
           <li>
             <strong>Telegram</strong>, for a member who connects their own Telegram chat to a workspace, receives what the bot sends that chat: the
             workspace&apos;s name, the agent&apos;s decisions with the counterparties&apos; names, the amounts, the reasons and links to the transactions and to
-            the app, and the answers to the member&apos;s questions. It receives no wallet address, email address or key. An invoice the member sends the bot
+            the app, and the answers to the member&apos;s questions. It receives no email address or key, and no wallet address in full: one named in a reason or a warning is shortened to its first and last four characters. An invoice the member sends the bot
             reaches Telegram from the member, and the app reads it the way it reads one uploaded to the invoice form, without keeping it.
           </li>
           <li>

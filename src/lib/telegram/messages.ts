@@ -19,11 +19,21 @@ const AMOUNT = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximu
 const COUNT = new Intl.NumberFormat("en-US");
 
 /**
+ * A wallet address shortened to its first and last four characters (`0xc0ff…ee00`): Telegram never receives one in
+ * full (R12), though the model's reasons and the reader's warnings can name one. A transaction's 64-character hash,
+ * in an explorer link, is not an address and is left whole.
+ */
+export function shortenAddresses(value: string): string {
+  return value.replace(/\b0x([0-9a-fA-F]{4})[0-9a-fA-F]{32}([0-9a-fA-F]{4})\b/g, "0x$1…$2");
+}
+
+/**
  * Escapes a value for Telegram's HTML: the three characters it requires escaped outside a tag, and the double quote,
- * so a value can sit inside a link's href (`&quot;` is one of the named entities Telegram reads).
+ * so a value can sit inside a link's href (`&quot;` is one of the named entities Telegram reads). Every value the bot
+ * sends passes through here, so this is also where wallet addresses are shortened.
  */
 export function escapeHtml(value: string): string {
-  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  return shortenAddresses(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 export function clip(text: string, max: number): string {
