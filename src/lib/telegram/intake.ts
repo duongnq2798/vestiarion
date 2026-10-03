@@ -43,7 +43,8 @@ interface StoredDraft {
   document: { kind: "pdf" | "email" | "text"; sha256: string; reader: InvoiceDraftRead["reader"] };
 }
 
-function roleRefusal(role: OrgRole | null, workspaceName: string): string {
+/** Why a member cannot add invoices from the chat: no longer a member, or a role without records.write (R7). */
+export function roleRefusal(role: OrgRole | null, workspaceName: string): string {
   return role === null
     ? `You are no longer a member of ${escapeHtml(workspaceName)}.`
     : `Only an owner or admin can add invoices. Your role in ${escapeHtml(workspaceName)} is ${role}.`;
