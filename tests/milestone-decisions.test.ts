@@ -318,6 +318,13 @@ describe("Close without paying", () => {
     expect(releaseHeldMilestoneMock).not.toHaveBeenCalled();
   });
 
+  it("names the surface and its link when the close did not come from the console", async () => {
+    const { run, ledger } = world();
+    await run(() => closeMilestone({ actorId: ACTOR, milestoneId: MILESTONE, reason: "Paid in cash", provenance: { via: "slack", linkId: "link-1" } }));
+    const [entry] = ledger();
+    expect(entry.p_detail).toMatchObject({ by: ACTOR, reason: "Paid in cash", via: "slack", linkId: "link-1" });
+  });
+
   it("needs a reason, and refuses while a transfer may still settle or the USDC is locked in escrow", async () => {
     expect(await refusal(world().run(() => closeMilestone({ actorId: ACTOR, milestoneId: MILESTONE, reason: "   " })))).toBe("reason_required");
     const sending = world({ intent: { ...FAILED_INTENT, status: "pending", provider_state: "SENT", failure_reason: null } });

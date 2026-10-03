@@ -3,16 +3,14 @@
 import "server-only";
 
 import { AgentBudgetError, changeAgentBudget } from "@/lib/agent-budget";
-import { agentCycleSuccessMessage, runAgentCycle } from "@/lib/agent/orchestrator";
-import { CycleRunningError } from "@/lib/agent/cycle-running";
-import { AgentPausedError } from "@/lib/agent/pause";
-import { SANDBOX_DAILY_CYCLES, SandboxCapReachedError } from "@/lib/agent/sandbox-cap";
 import { raiseCycleEvent } from "@/lib/agent/cycle-soon";
 import { authorize } from "@/lib/auth/authorize";
 import { enforceSpendingLimit, SpendingLimitSetupError, turnOffSpendingLimit } from "@/lib/circle/spending-limit-setup";
 import { revalidateOrgPages } from "@/lib/auth/revalidate";
+import { consoleActor } from "@/lib/commands/actor";
+import { pauseWorkspaceAgent, resumeWorkspaceAgent, runWorkspaceCycle } from "@/lib/commands/agent";
 import { inOrg } from "@/lib/dal/scope";
-import { pauseAgent, PauseError, resumeAgent } from "@/lib/platform/pause";
+import { consoleAnswer } from "./command-result";
 
 export interface AgentActionResult {
   ok: boolean;
@@ -26,66 +24,31 @@ function formString(formData: FormData, key: string): string {
   return typeof value === "string" ? value : "";
 }
 
+/**
+ * Run cycle, Pause and Resume. Each authorizes the session first, then runs the command every surface shares
+ * (src/lib/commands/agent.ts); the cycle's sandbox cap is enforced inside begin_cycle_run (migration 0022).
+ */
 export async function runAgentCycleAction(orgSlug: string): Promise<AgentActionResult> {
   const auth = await authorize(orgSlug, "agent.run_cycle");
   if (!auth.ok) return { ok: false, message: auth.message };
   return inOrg(auth, async () => {
-    try {
-      // The cap itself is enforced inside begin_cycle_run (migration 0022);
-      // this only tells it which organizations are capped at all.
-      const result = await runAgentCycle({
-        triggeredBy: auth.user.id,
-        dailyCap: auth.membership.mode === "sandbox" ? SANDBOX_DAILY_CYCLES : undefined,
-        trigger: { kind: "manual" },
-      });
-      revalidateOrgPages();
-      return {
-        ok: true,
-        message: agentCycleSuccessMessage(result),
-        day: result.day,
-        lines: result.lines.length,
-      };
-    } catch (error) {
-      if (error instanceof SandboxCapReachedError || error instanceof AgentPausedError || error instanceof CycleRunningError) {
-        return { ok: false, message: error.message };
-      }
-      console.error("agent cycle failed", error);
-      return { ok: false, message: error instanceof Error ? error.message : "The agent cycle did not complete." };
-    }
+    const outcome = await runWorkspaceCycle(consoleActor(auth));
+    if (!outcome.ok) return { ok: false, message: outcome.message };
+    revalidateOrgPages();
+    return { ok: true, message: outcome.message, day: outcome.day, lines: outcome.lines };
   });
 }
 
 export async function pauseAgentAction(_previous: AgentActionResult, formData: FormData): Promise<AgentActionResult> {
   const auth = await authorize(formData.get("orgSlug"), "agent.pause");
   if (!auth.ok) return { ok: false, message: auth.message };
-  return inOrg(auth, async () => {
-    try {
-      await pauseAgent({ orgId: auth.membership.orgId, actorId: auth.user.id, reason: formString(formData, "reason") });
-      revalidateOrgPages();
-      return { ok: true, message: "Agent paused." };
-    } catch (error) {
-      if (error instanceof PauseError) return { ok: false, message: error.message };
-      console.error("pause agent failed", error);
-      return { ok: false, message: "That did not work. Try again in a moment." };
-    }
-  });
+  return inOrg(auth, async () => consoleAnswer(await pauseWorkspaceAgent(consoleActor(auth), { reason: formString(formData, "reason") })));
 }
 
 export async function resumeAgentAction(_previous: AgentActionResult, formData: FormData): Promise<AgentActionResult> {
   const auth = await authorize(formData.get("orgSlug"), "agent.resume");
   if (!auth.ok) return { ok: false, message: auth.message };
-  return inOrg(auth, async () => {
-    try {
-      await resumeAgent({ orgId: auth.membership.orgId, actorId: auth.user.id });
-      revalidateOrgPages();
-      raiseCycleEvent(auth, "agent_resumed");
-      return { ok: true, message: "Agent resumed." };
-    } catch (error) {
-      if (error instanceof PauseError) return { ok: false, message: error.message };
-      console.error("resume agent failed", error);
-      return { ok: false, message: "That did not work. Try again in a moment." };
-    }
-  });
+  return inOrg(auth, async () => consoleAnswer(await resumeWorkspaceAgent(consoleActor(auth))));
 }
 
 /** What the agent may now pay on its own, as the form's answer says it. */

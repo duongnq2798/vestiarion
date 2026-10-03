@@ -14,6 +14,7 @@ import { gatewayQuoter, type GatewayQuote } from "../circle/gateway-quote";
 import { isSoleApprover } from "./sole-approver";
 import { addedSince, latestDecision, recordedFacts, type AddedDetails } from "../added-details";
 import { heldForCash } from "../next-step";
+import type { Provenance } from "../provenance";
 
 export type { AddedDetails };
 
@@ -547,9 +548,11 @@ export const SOLE_APPROVER_NOTE = "(entered and approved by the workspace's only
  * counterparty's, and a changed address no one had confirmed is confirmed by
  * this approval (spec 2026-09-30-counterparty-address-edit E4): the person
  * approved a payment to it, having seen it.
+ *
+ * `provenance`, when given, names the surface the person acted from (integrations design R3); the console gives none.
  */
 export async function approveAndPay(
-  input: { actorId: string; invoiceId: string; shownAddress?: string },
+  input: { actorId: string; invoiceId: string; shownAddress?: string; provenance?: Provenance },
   options: {
     bridgeFee?: (chain: string, amount: number) => Promise<BridgeFee>;
     gatewayQuote?: (chain: string, amount: number) => Promise<GatewayQuote | null>;
@@ -723,6 +726,7 @@ export async function approveAndPay(
       ...(payout ? { payout } : {}),
       // The person who entered it approved it, as the workspace's only approver.
       ...(soleApprover ? { soleApprover: true } : {}),
+      ...input.provenance,
     },
   });
 
@@ -762,7 +766,8 @@ async function payoutEvidence(
   };
 }
 
-export async function rejectInvoice(input: { actorId: string; invoiceId: string; reason?: string }): Promise<void> {
+/** `provenance`, when given, names the surface the person acted from (integrations design R3); the console gives none. */
+export async function rejectInvoice(input: { actorId: string; invoiceId: string; reason?: string; provenance?: Provenance }): Promise<void> {
   const orgId = currentOrgId();
   await refuseIfPaymentSent(input.invoiceId);
   const claim = await db()
@@ -785,11 +790,12 @@ export async function rejectInvoice(input: { actorId: string; invoiceId: string;
     domain: "ap",
     action: "approval_rejected",
     summary: "An invoice was rejected",
-    detail: reason === undefined ? { by: input.actorId, invoiceId: input.invoiceId } : { by: input.actorId, invoiceId: input.invoiceId, reason },
+    detail: { by: input.actorId, invoiceId: input.invoiceId, ...(reason === undefined ? {} : { reason }), ...input.provenance },
   });
 }
 
-export async function returnInvoice(input: { actorId: string; invoiceId: string }): Promise<void> {
+/** `provenance`, when given, names the surface the person acted from (integrations design R3); the console gives none. */
+export async function returnInvoice(input: { actorId: string; invoiceId: string; provenance?: Provenance }): Promise<void> {
   const orgId = currentOrgId();
   await refuseIfPaymentSent(input.invoiceId);
   const claim = await db()
@@ -813,7 +819,7 @@ export async function returnInvoice(input: { actorId: string; invoiceId: string 
     domain: "ap",
     action: "approval_returned",
     summary: "An invoice was returned, undecided",
-    detail: { by: input.actorId, invoiceId: input.invoiceId },
+    detail: { by: input.actorId, invoiceId: input.invoiceId, ...input.provenance },
   });
 }
 
@@ -829,13 +835,15 @@ const COMPLETABLE_STATUSES = ["held", "flagged", "awaiting_info"] as const;
  * decision recorded, reopens it on what changed with a signed `invoice_reopened`, and the AP stage decides it again,
  * every check included (R4). A payment already sent is refused before any write, as Reject and Return refuse it; the
  * write is a compare-and-set on a waiting status, and on the purchase order still being empty, so a decision or
- * another person's addition in between wins (R3). `reviewed_by` records a person's hand on it (R5).
+ * another person's addition in between wins (R3). `reviewed_by` records a person's hand on it (R5). `provenance`, when
+ * given, names the surface the person acted from (integrations design R3); the console gives none.
  */
 export async function addInvoiceDetails(input: {
   actorId: string;
   invoiceId: string;
   poReference: string | null;
   goodsReceived: boolean;
+  provenance?: Provenance;
 }): Promise<AddedDetails> {
   const orgId = currentOrgId();
   const invoice = await loadWaitingPayable(input.invoiceId);
@@ -870,7 +878,7 @@ export async function addInvoiceDetails(input: {
     action: "invoice_details_added",
     summary: `Added ${addedWords(added)} to an invoice from ${invoice.counterpartyName} for ${invoice.amount} ${invoice.currency}`,
     // No `observed`: the follow-up and the card read the decision's facts from the decision's own entry.
-    detail: { by: input.actorId, invoiceId: invoice.id, counterpartyId: invoice.counterpartyId, added },
+    detail: { by: input.actorId, invoiceId: invoice.id, counterpartyId: invoice.counterpartyId, added, ...input.provenance },
   });
   return added;
 }

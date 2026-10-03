@@ -1,5 +1,6 @@
 import { platformDb } from "../dal";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
+import type { Provenance } from "../provenance";
 
 /**
  * The pause switch (spec §D7): lets a member stop the workspace's agent, and
@@ -44,7 +45,8 @@ function trimReason(reason: string | undefined): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-export async function pauseAgent(input: { orgId: string; actorId: string; reason?: string }): Promise<void> {
+/** `provenance`, when given, names the surface the person acted from (integrations design R3); the console gives none. */
+export async function pauseAgent(input: { orgId: string; actorId: string; reason?: string; provenance?: Provenance }): Promise<void> {
   const reason = trimReason(input.reason);
   const result = await platformDb()
     .rpc("pause_agent", { p_org_id: input.orgId, p_actor: input.actorId, p_reason: reason })
@@ -58,13 +60,14 @@ export async function pauseAgent(input: { orgId: string; actorId: string; reason
       domain: "system",
       action: "agent_paused",
       summary: "The agent was paused",
-      detail: { by: input.actorId, reason },
+      detail: { by: input.actorId, reason, ...input.provenance },
     },
     { enterScope: { userId: input.actorId } }
   );
 }
 
-export async function resumeAgent(input: { orgId: string; actorId: string }): Promise<void> {
+/** `provenance`, when given, names the surface the person acted from (integrations design R3); the console gives none. */
+export async function resumeAgent(input: { orgId: string; actorId: string; provenance?: Provenance }): Promise<void> {
   const result = await platformDb()
     .rpc("resume_agent", { p_org_id: input.orgId, p_actor: input.actorId })
     .single<string>();
@@ -79,7 +82,7 @@ export async function resumeAgent(input: { orgId: string; actorId: string }): Pr
       domain: "system",
       action: "agent_resumed",
       summary: "The agent was resumed",
-      detail: { by: input.actorId, pausedFor },
+      detail: { by: input.actorId, pausedFor, ...input.provenance },
     },
     { enterScope: { userId: input.actorId } }
   );

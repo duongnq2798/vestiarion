@@ -17,10 +17,12 @@ import { fakeSupabase, orgTestContext, type RecordedRequest } from "./support/fa
  * that write rows directly write them to a recorded supabase-js client.
  */
 
-const { ORG, USER, raiseMock, authorizeMock, mocks } = vi.hoisted(() => ({
+const { ORG, USER, raiseMock, runSoonMock, authorizeMock, mocks } = vi.hoisted(() => ({
   ORG: "0b6c1c9e-4a4f-4a7e-9b1e-000000000a0a",
   USER: "0b6c1c9e-4a4f-4a7e-9b1e-0000000000e1",
   raiseMock: vi.fn(),
+  // The commands every surface shares raise their events as the actor's (src/lib/commands), not as the console's.
+  runSoonMock: vi.fn(),
   authorizeMock: vi.fn(),
   mocks: {
     returnInvoice: vi.fn(),
@@ -39,7 +41,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/auth/revalidate", () => ({ revalidateOrgPages: vi.fn() }));
 vi.mock("@/lib/auth/authorize", () => ({ authorize: authorizeMock }));
-vi.mock("@/lib/agent/cycle-soon", () => ({ raiseCycleEvent: raiseMock }));
+vi.mock("@/lib/agent/cycle-soon", () => ({ raiseCycleEvent: raiseMock, runCycleSoon: runSoonMock }));
 vi.mock("@/lib/ledger", () => ({ appendLedgerEntry: mocks.appendLedgerEntry }));
 vi.mock("@/lib/agent/approvals", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/agent/approvals")>()),
@@ -122,6 +124,7 @@ const empty = { ok: false, message: "" };
 beforeEach(() => {
   fake = fakeSupabase(workspace);
   raiseMock.mockReset();
+  runSoonMock.mockReset();
   authorizeMock.mockReset().mockResolvedValue(ACCESS);
   for (const mock of Object.values(mocks)) mock.mockReset();
 });
@@ -179,7 +182,7 @@ describe("returning a payable to the agent", () => {
     mocks.returnInvoice.mockResolvedValue(undefined);
     const result = await returnInvoiceAction(empty, form({ invoiceId: INVOICE }));
     expect(result).toEqual({ ok: true, message: "Returned to the agent. It usually decides it again within a minute." });
-    expect(raiseMock).toHaveBeenCalledWith(ACCESS, "payable_returned");
+    expect(runSoonMock).toHaveBeenCalledWith({ orgId: ORG, userId: USER, sandbox: false, kind: "payable_returned" });
   });
 
   it("raises nothing when the return is refused", async () => {
@@ -187,6 +190,7 @@ describe("returning a payable to the agent", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     await returnInvoiceAction(empty, form({ invoiceId: INVOICE }));
     expect(raiseMock).not.toHaveBeenCalled();
+    expect(runSoonMock).not.toHaveBeenCalled();
   });
 });
 
@@ -195,7 +199,7 @@ describe("adding what a held payable was missing", () => {
     mocks.addInvoiceDetails.mockResolvedValue({ poReference: "PO-42", goodsReceived: true });
     const result = await addInvoiceDetailsAction(empty, form({ invoiceId: INVOICE, poReference: "PO-42", goodsReceived: "on" }));
     expect(result).toEqual({ ok: true, message: "Details added. The agent usually decides it again within a minute." });
-    expect(raiseMock).toHaveBeenCalledWith(ACCESS, "details_added");
+    expect(runSoonMock).toHaveBeenCalledWith({ orgId: ORG, userId: USER, sandbox: false, kind: "details_added" });
   });
 
   it("raises nothing when adding them is refused", async () => {
@@ -203,6 +207,7 @@ describe("adding what a held payable was missing", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     await addInvoiceDetailsAction(empty, form({ invoiceId: INVOICE, goodsReceived: "on" }));
     expect(raiseMock).not.toHaveBeenCalled();
+    expect(runSoonMock).not.toHaveBeenCalled();
   });
 });
 
@@ -281,7 +286,7 @@ describe("resuming the agent", () => {
     mocks.resumeAgent.mockResolvedValue(undefined);
     const result = await resumeAgentAction({ ok: false, message: "" }, form({}));
     expect(result).toEqual({ ok: true, message: "Agent resumed." });
-    expect(raiseMock).toHaveBeenCalledWith(ACCESS, "agent_resumed");
+    expect(runSoonMock).toHaveBeenCalledWith({ orgId: ORG, userId: USER, sandbox: false, kind: "agent_resumed" });
   });
 });
 
