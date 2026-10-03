@@ -148,7 +148,7 @@ describe("recordConnected and disconnect", () => {
 
   it("records nothing when the link was already gone", async () => {
     const { fake, run } = platform();
-    expect(await run(() => withOrg(ORG, () => disconnect(LINK, "members_page", USER), { userId: USER }))).toBe(false);
+    expect(await run(() => withOrg(ORG, () => disconnect(LINK, "settings", USER), { userId: USER }))).toBe(false);
     expect(ledger(fake.requests)).toEqual([]);
   });
 

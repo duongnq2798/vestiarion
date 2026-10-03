@@ -100,7 +100,7 @@ is hard-coded into the interface:
    only an owner or admin may resume it. Pausing stops the agent's own cycles and the money it would
    move mid-cycle, including reserve sweeps and redemptions; it never stops a person's own decision
    in the approvals inbox.
-7. **Telegram** — each member can connect their own Telegram chat from **Members**. The chat gets
+7. **Telegram** — each member can connect their own Telegram chat from **Settings**. The chat gets
    the agent's decisions within the cycle that makes them, each with its reasons, its Arc testnet
    transaction and a link to where a person handles it; answers `/today` (safe to spend today),
    `/waiting` and `/ledger`, or the same questions in plain words, with figures written by code,
@@ -332,8 +332,8 @@ status and the first sentence of why the agent held it, and a link to the approv
 run by hand from the console never sends one, since the person running it is already watching it;
 in practice this means only a `live` workspace's unattended cron cycles notify. An invoice already
 told about is not told again unless it was escalated since. Each member has their own switch — "Email
-me when payments need a decision" — on the Members page, on by default; this needs `RESEND_API_KEY`
-too.
+me when payments need a decision" — in the Notifications section of Settings, on by default; this
+needs `RESEND_API_KEY` too.
 
 Only the **founding organization** — seeded ahead of any sign-in, in `live` mode — skips self-serve
 creation: it exists before anyone signs in, so no self-serve step ever generates it a ledger key.

@@ -10,7 +10,7 @@ import { appendLedgerEntry } from "../ledger";
  * database's own functions that claim a code and switch a chat's workspace atomically.
  */
 
-/** How long a code from the Members page works (R4). */
+/** How long a code from Settings' Telegram card works (R4). */
 export const LINK_CODE_TTL_MS = 10 * 60_000;
 /** The most links one cycle's stage tells (R8). */
 export const LINKS_PER_STAGE = 25;
@@ -61,7 +61,7 @@ export function maskUsername(username: string | null): string | null {
   return username ? `@${username.slice(0, 2)}***` : null;
 }
 
-/** A code for the Members page's Connect button: random, used once, for ten minutes; only its hash is stored (R4). */
+/** A code for the Telegram card's Connect button, in Settings: random, used once, for ten minutes; only its hash is stored (R4). */
 export async function createLinkCode(orgId: string, userId: string, now: Date = new Date()): Promise<{ code: string; expiresAt: string }> {
   const code = crypto.randomBytes(32).toString("base64url");
   const expiresAt = new Date(now.getTime() + LINK_CODE_TTL_MS).toISOString();
@@ -169,10 +169,10 @@ export async function recordConnected(link: TelegramLink): Promise<void> {
 }
 
 /**
- * Removes a link (R6): by its member from the Members page or the chat, or because Telegram answered 403 when the
+ * Removes a link (R6): by its member from Settings or the chat, or because Telegram answered 403 when the
  * member blocked the bot. Records it when a row went; answers whether one did. Runs inside the link's workspace's scope.
  */
-export async function disconnect(link: TelegramLink, via: "members_page" | "telegram" | "blocked", by: string | null): Promise<boolean> {
+export async function disconnect(link: TelegramLink, via: "settings" | "telegram" | "blocked", by: string | null): Promise<boolean> {
   requireLinkScope(link);
   const deleted = unwrap(await platformDb().from("telegram_links").delete().eq("id", link.id).select("id")) as Array<{ id: string }>;
   if (deleted.length === 0) return false;

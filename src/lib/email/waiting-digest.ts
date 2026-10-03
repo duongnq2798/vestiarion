@@ -82,8 +82,8 @@ export function waitingDigestEmail(input: {
   const originSafe = escapeHtml(origin);
   const lines = renderLines(items);
   const more = n - lines.length;
-  const footer = `You get this because you can approve payments in ${orgName}. You can turn these emails off on the Members page.`;
-  const footerSafe = `You get this because you can approve payments in ${orgNameSafe}. You can turn these emails off on the Members page.`;
+  const footer = `You get this because you can approve payments in ${orgName}. You can turn these emails off in Settings, under Notifications.`;
+  const footerSafe = `You get this because you can approve payments in ${orgNameSafe}. You can turn these emails off in Settings, under Notifications.`;
 
   const htmlItems = lines
     .map((line) => {

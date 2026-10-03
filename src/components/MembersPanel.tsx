@@ -2,6 +2,7 @@
 
 import { AnimatePresence, m } from "motion/react";
 import { LogOut, MailCheck, Send, UserMinus, X } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { flushSync } from "react-dom";
@@ -12,12 +13,10 @@ import {
   revokeInvitationAction,
   type MemberActionResult,
 } from "@/app/actions/members";
-import { setNotifyEmailAction, type NotifyEmailActionResult } from "@/app/actions/notifications";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { Checkbox } from "@/components/ui/Checkbox";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -31,12 +30,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { toast } from "@/components/ui/Toaster";
 import { MOTION } from "@/components/ui/tokens";
 import { useActionForm } from "@/components/ui/useActionForm";
-import { TelegramCard } from "@/components/TelegramCard";
+import { orgHref } from "@/lib/auth/org-paths";
 import { canAssignRole, type OrgRole } from "@/lib/auth/roles";
 import type { Member, OpenInvitation } from "@/lib/platform/members";
 
 const INITIAL: MemberActionResult = { ok: false, message: "" };
-const NOTIFY_INITIAL: NotifyEmailActionResult = { ok: false, message: "" };
 const EXIT = { duration: MOTION.duration.exit, ease: MOTION.ease.exit };
 
 const dateFormat = new Intl.DateTimeFormat("en-US", { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" });
@@ -51,37 +49,6 @@ function RowError({ state }: { state: MemberActionResult }) {
     <p role="alert" className="text-xs text-refused">
       {state.message}
     </p>
-  );
-}
-
-/**
- * The viewer's own switch for the waiting-decision digest, above the table
- * (spec N6). It saves itself when changed, the same way `RoleCell` does:
- * the checkbox shows the requested state while the change is on its way,
- * and the server's answer afterwards — reverted to `initial` on a refusal.
- */
-function NotifyEmailSwitch({ orgSlug, initial }: { orgSlug: string; initial: boolean }) {
-  const [requested, setRequested] = useState(initial);
-  const { state, pending, formProps } = useActionForm(setNotifyEmailAction, NOTIFY_INITIAL, { toastOnSuccess: true });
-
-  return (
-    <Card className="p-4 sm:p-5">
-      <form {...formProps} className="flex flex-col gap-1">
-        <input type="hidden" name="orgSlug" value={orgSlug} />
-        <input type="hidden" name="on" value={requested ? "true" : "false"} />
-        <Checkbox
-          checked={pending ? requested : initial}
-          disabled={pending}
-          onCheckedChange={(checked) => {
-            // The hidden input must hold the requested value before the form reads it.
-            flushSync(() => setRequested(checked === true));
-            formProps.ref.current?.requestSubmit();
-          }}
-          label="Email me when payments need a decision"
-        />
-        <RowError state={state} />
-      </form>
-    </Card>
   );
 }
 
@@ -299,9 +266,6 @@ export default function MembersPanel({
   viewerId,
   viewerRole,
   assignable,
-  canDecide,
-  notifyEmail,
-  telegram = null,
 }: {
   orgSlug: string;
   members: Member[];
@@ -309,11 +273,6 @@ export default function MembersPanel({
   viewerId: string;
   viewerRole: OrgRole;
   assignable: readonly OrgRole[];
-  /** Whether the viewer can decide payments — a viewer sees no switch, because they receive nothing. */
-  canDecide: boolean;
-  notifyEmail: boolean;
-  /** The viewer's own Telegram chat for this workspace; null when this deployment has no bot (Telegram bot design R1). */
-  telegram?: { link: { username: string | null; linkedAt: string } | null } | null;
 }) {
   const isManager = assignable.length > 0;
   const router = useRouter();
@@ -325,8 +284,13 @@ export default function MembersPanel({
 
   return (
     <div className="space-y-8">
-      {canDecide && <NotifyEmailSwitch orgSlug={orgSlug} initial={notifyEmail} />}
-      {telegram && <TelegramCard orgSlug={orgSlug} link={telegram.link} />}
+      <p className="text-sm text-ink-2">
+        Your own notifications, by email and Telegram, are in{" "}
+        <Link href={orgHref(orgSlug, "/settings#notifications")} className="font-medium text-agent underline-offset-4 hover:underline">
+          Settings
+        </Link>
+        .
+      </p>
       <section aria-labelledby="members-title">
         <SectionHeader id="members-title" title="Members" meta={`${members.length} in this workspace`} />
         <Card className="overflow-hidden">

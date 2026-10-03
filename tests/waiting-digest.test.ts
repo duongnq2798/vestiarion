@@ -153,7 +153,7 @@ describe("waitingDigestEmail", () => {
 
   it("says why the recipient gets it and how to turn it off", () => {
     const email = waitingDigestEmail({ orgName: "Acme", items: [item()], link, origin });
-    const footer = "You get this because you can approve payments in Acme. You can turn these emails off on the Members page.";
+    const footer = "You get this because you can approve payments in Acme. You can turn these emails off in Settings, under Notifications.";
     expect(email.html).toContain(footer);
     expect(email.text).toContain(footer);
   });

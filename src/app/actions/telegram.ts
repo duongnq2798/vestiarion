@@ -45,7 +45,7 @@ export async function disconnectTelegramAction(_previous: TelegramActionResult, 
     try {
       const link = await linkFor(auth.membership.orgId, auth.user.id);
       if (!link) return { ok: true, message: "Telegram is not connected." };
-      await disconnect(link, "members_page", auth.user.id);
+      await disconnect(link, "settings", auth.user.id);
       revalidateOrgPages();
       return { ok: true, message: "Telegram disconnected." };
     } catch (error) {

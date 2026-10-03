@@ -141,6 +141,7 @@ describe("ledgerMessage", () => {
 describe("helpMessage", () => {
   it("tells a chat with no workspace how to connect one", () => {
     expect(helpMessage(false)).toContain("Connect Telegram");
+    expect(helpMessage(false)).toContain("open <b>Settings</b>");
   });
 
   it("names the workspace and the commands, and says the bot never approves or pays", () => {
