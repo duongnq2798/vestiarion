@@ -6,6 +6,7 @@ import { McpToolTable } from "@/components/docs/McpToolTable";
 import { ErrorTable } from "@/components/docs/ErrorTable";
 import { ParamTable } from "@/components/docs/ParamTable";
 import { SchemaTree } from "@/components/docs/SchemaTree";
+import { TRY_IT_OFF, TryItSection } from "@/components/docs/TryItSection";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { STATUS_FOR } from "@/lib/api/contract";
 import { jsonSchema, OPERATIONS, operationById } from "@/lib/api/openapi";
@@ -27,6 +28,21 @@ describe("a reference page's sections", () => {
     ]);
     expect(sectionId("samples")).toBe("code-samples");
     expect(referenceSectionIds(null)).not.toContain("notes");
+  });
+
+  it("put a write's request body after its parameters (write API R8)", () => {
+    expect(referenceHeadings(null, { body: true }).map((heading) => [heading.text, heading.id])).toEqual([
+      ["Parameters", "parameters"],
+      ["Request body", "request-body"],
+      ["Try it", "try-it"],
+      ["Code samples", "code-samples"],
+      ["Response", "response"],
+      ["Errors", "errors"],
+    ]);
+    expect(referenceSectionIds(null, { body: true })).toContain("request-body");
+    expect(referenceSectionIds(null)).not.toContain("request-body");
+    const headings = referenceHeadings("## The body\n", { body: true });
+    expect(notesHeadings(headings).map((heading) => heading.id)).toEqual(["the-body"]);
   });
 
   it("add Notes and the notes' headings, numbered as one page so no id repeats", () => {
@@ -70,11 +86,33 @@ describe("ParamTable", () => {
     expect(allowed.length).toBeLessThan(params.length);
   });
 
+  it("says a header parameter goes in a header", () => {
+    const markup = html(<ParamTable params={operationById("create-invoice")!.params} />);
+    expect(markup).toContain(">Idempotency-Key</code>");
+    expect(markup).toContain(">in: header</span>");
+    expect(markup).toContain(">optional</span>");
+  });
+
   it("marks a path parameter required and in the path", () => {
     const markup = html(<ParamTable params={operationById("get-counterparty")!.params} />);
     expect(markup).toContain(">required</span>");
     expect(markup).toContain(">in: path</span>");
     expect(markup).not.toContain(">Default:");
+  });
+});
+
+describe("TryItSection", () => {
+  it("offers the form for a read", () => {
+    const markup = html(<TryItSection op={operationById("list-invoices")!} />);
+    expect(markup).not.toContain(TRY_IT_OFF);
+    expect(markup).toContain('aria-label="Try it"');
+  });
+
+  it("offers no form for a write, which would add real records, and says so (write API R8)", () => {
+    const markup = html(<TryItSection op={operationById("create-invoice")!} />);
+    expect(TRY_IT_OFF).toBe("Try it is off for operations that add records: run the sample with your own key.");
+    expect(markup).toContain(TRY_IT_OFF);
+    expect(markup).not.toContain('aria-label="Try it"');
   });
 });
 
@@ -86,6 +124,14 @@ describe("SchemaTree", () => {
     expect(markup).toMatch(/<details open="" class="disclosure/);
     expect(markup).toContain("Why the agent ruled as it did");
     expect(markup).toContain(">payable</code>");
+  });
+
+  it("shows a write's body, its nested discount open to its own fields", () => {
+    const markup = html(<SchemaTree nodes={schemaTree(jsonSchema(operationById("create-invoice")!.requestBody!))} />);
+    expect(markup).toContain(">counterpartyId</code>");
+    expect(markup).toContain(">earlyPayDiscount</code>");
+    expect(markup).toContain(">deadline</code>");
+    expect(markup).toContain(">EURC</code>");
   });
 });
 
@@ -124,7 +170,7 @@ describe("McpToolTable", () => {
       expect(markup).toContain(`>${tool.name}</code>`);
       expect(markup).toContain(`>${tool.title}<`);
       expect(markup).toContain(`href="/docs/api/${tool.operationId}"`);
-      expect(markup).toContain(`>GET ${op.path}</code>`);
+      expect(markup).toContain(`>${op.method.toUpperCase()} ${op.path}</code>`);
       for (const argument of Object.keys(tool.inputSchema.shape)) expect(markup, `${tool.name} ${argument}`).toContain(`>${argument}</code>`);
     }
     expect(markup.match(/<tr>/g)).toHaveLength(MCP_TOOLS.length + 1);

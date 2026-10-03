@@ -11,7 +11,41 @@ describe("code samples are generated from the operation", () => {
     }
     expect(s.curl).toMatch(/^curl /);
     expect(s.javascript).toContain("await fetch(");
-    expect(s.python).toContain("requests.get(");
+    expect(s.python).toContain(`requests.${op.method}(`);
+  });
+
+  it.each(OPERATIONS.filter((op) => op.method === "post").map((op) => [op.id, op] as const))(
+    "%s sends its example body as JSON, with an Idempotency-Key, in every sample (write API R8)",
+    (_id, op) => {
+      const key = op.params.find((param) => param.in === "header" && param.name === "Idempotency-Key")!;
+      const s = sampleRequest(op, "https://x.test");
+
+      expect(s.curl.split("\n")).toEqual([
+        `curl "https://x.test${op.path}" \\`,
+        "  -X POST \\",
+        '  -H "Authorization: Bearer $VESTIARION_API_KEY" \\',
+        '  -H "Content-Type: application/json" \\',
+        `  -H "Idempotency-Key: ${key.example}" \\`,
+        `  -d '${JSON.stringify(op.requestExample)}'`,
+      ]);
+      expect(s.javascript).toContain('method: "POST"');
+      expect(s.javascript).toContain(`"Idempotency-Key": "${key.example}"`);
+      expect(s.javascript).toContain('"Content-Type": "application/json"');
+      const sent = s.javascript.match(/body: JSON\.stringify\((\{[\s\S]*?\n {2}\})\),/);
+      expect(sent, s.javascript).not.toBeNull();
+      expect(JSON.parse(sent![1])).toEqual(op.requestExample);
+      expect(s.python).toContain(`requests.post(`);
+      expect(s.python).toContain(`"Idempotency-Key": "${key.example}",`);
+      expect(s.python).toContain("    json={\n");
+    }
+  );
+
+  it("writes a body for Python with Python's literals", () => {
+    const op = operationById("create-invoice")!;
+    const python = sampleRequest(op, "https://x.test").python;
+    expect(python).toContain('        "goodsReceived": True,\n');
+    expect(python).toContain('        "earlyPayDiscount": {\n            "percent": 2,\n            "deadline": "2026-10-20",\n        },\n');
+    expect(python).not.toMatch(/\btrue\b|\bfalse\b|\bnull\b/);
   });
 
   it("fills path params encoded and drops empty query values", () => {

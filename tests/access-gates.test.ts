@@ -357,7 +357,9 @@ describe("every /api/v1 route", () => {
     expect(handlers.length).toBeGreaterThan(0);
     for (const handler of handlers) {
       expect(awaitedNames(handler)[0]).toBe("guardApiRequest");
-      const guard = handler.indexOf('const guard = await guardApiRequest(request, { scope: "read" });\n  if ("denied" in guard) return guard.denied;');
+      // A write asks for the write scope; every read, for read (write API R1).
+      const scope = /^export async function POST\b/.test(handler.trimStart()) ? "write" : "read";
+      const guard = handler.indexOf(`const guard = await guardApiRequest(request, { scope: "${scope}" });\n  if ("denied" in guard) return guard.denied;`);
       expect(guard).toBeGreaterThan(-1);
       const handle = handler.indexOf("handleApiRequest(");
       expect(handle).toBeGreaterThan(guard);

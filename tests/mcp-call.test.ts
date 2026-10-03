@@ -6,6 +6,7 @@ import { authenticateApiKey, type AuthenticatedKey } from "@/lib/platform/api-ke
 import { GET as getInvoices } from "@/app/api/v1/invoices/route";
 import { callOperation } from "@/lib/mcp/call";
 import { carriesOrg, fakeSupabase, type RecordedRequest } from "./support/fake-supabase";
+import { APPENDED_LEDGER_ROW, signedOrgs } from "./support/signed-org";
 
 /**
  * A tool call runs the operation's own route handler in-process, with the
@@ -21,6 +22,9 @@ vi.mock("next/server", async (importOriginal) => {
   return { ...actual, after: () => {} };
 });
 
+const { cycleMock } = vi.hoisted(() => ({ cycleMock: vi.fn() }));
+vi.mock("@/lib/agent/cycle-soon", () => ({ runCycleSoon: cycleMock, raiseCycleEvent: vi.fn() }));
+
 vi.mock("@/lib/platform/api-keys", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/platform/api-keys")>();
   return {
@@ -34,7 +38,7 @@ const config = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase
 
 const ORG_A = "0a0a0a0a-0000-4000-8000-00000000000a";
 const ORG_B = "0b0b0b0b-0000-4000-8000-00000000000b";
-const KEY_A: AuthenticatedKey = { keyId: "1a1a1a1a-0000-4000-8000-00000000001a", orgId: ORG_A, scopes: ["read"] };
+const KEY_A: AuthenticatedKey = { keyId: "1a1a1a1a-0000-4000-8000-00000000001a", orgId: ORG_A, scopes: ["read"], createdBy: null };
 const PRESENTED = `vxk_abcdefgh_${"A".repeat(43)}`;
 const AUTHORIZATION = `Bearer ${PRESENTED}`;
 const ORIGIN = "https://vestiarion.invalid";
@@ -164,7 +168,7 @@ describe("callOperation", () => {
     expect(JSON.parse(result.content[0].text)).toEqual({ error: { code: "not_found", message: `Counterparty "${id}" was not found.` } });
   });
 
-  it.each(OPERATIONS.map((op) => [op.id]))("%s runs its route in the key's workspace, and names only that one", async (operationId) => {
+  it.each(OPERATIONS.filter((op) => op.method === "get").map((op) => [op.id]))("%s runs its route in the key's workspace, and names only that one", async (operationId) => {
     vi.mocked(authenticateApiKey).mockResolvedValue(KEY_A);
     const fake = fakeSupabase(database());
     const args = operationId === "get-counterparty" ? { id: "0b6c1c9e-4a4f-4a7e-9b1e-00000000c0de" } : {};
@@ -213,5 +217,79 @@ describe("callOperation", () => {
     const logged = lines.map((args) => args.map((arg) => (arg instanceof Error ? `${arg.message} ${arg.stack}` : String(arg))).join(" ")).join("\n");
     expect(logged).not.toContain(PRESENTED);
     expect(logged).not.toContain(secretArgument);
+  });
+});
+
+/**
+ * A write tool posts its arguments as the operation's JSON body, with the `Idempotency-Key` header when one is given,
+ * to the operation's own `POST` handler (docs/superpowers/specs/2026-10-03-write-api-design.md R9).
+ */
+describe("callOperation for a write", () => {
+  const orgs = signedOrgs();
+  const ISSUER = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000e1";
+  const COUNTERPARTY = "0b6c1c9e-4a4f-4a7e-9b1e-00000000c0de";
+  const KEY_W: AuthenticatedKey = { keyId: "1a1a1a1a-0000-4000-8000-00000000002b", orgId: ORG_A, scopes: ["read", "write"], createdBy: ISSUER };
+  const STORED = {
+    id: INVOICE_ID, direction: "payable", status: "pending", amount: "42", currency: "USDC", memo: null, po_reference: "PO-7", goods_received: true,
+    due_date: "2026-10-31T12:00:00+00:00", scheduled_for: null, early_pay_discount_pct: null, discount_due_date: null, decided_at: null, settled_at: null,
+    escalated_at: null, agent_reasoning: null, tx_ref: null, paid_amount: null, created_at: "2026-10-03T10:00:00Z",
+    counterparties: { id: COUNTERPARTY, name: "Acme Supplies", risk_level: "clear" },
+  };
+  const ARGS = { counterpartyId: COUNTERPARTY, amount: "42", dueDate: "2026-10-31", poReference: "PO-7", goodsReceived: true };
+
+  function writable() {
+    return fakeSupabase((request: RecordedRequest) => {
+      if (request.path === "/rest/v1/orgs") return { body: orgs.orgRow(ORG_A) };
+      if (request.path === "/rest/v1/counterparties") return { body: [{ id: COUNTERPARTY, name: "Acme Supplies" }] };
+      if (request.path === "/rest/v1/invoices" && request.method === "POST") return { body: { id: INVOICE_ID } };
+      if (request.path === "/rest/v1/invoices") return { body: STORED };
+      if (request.path === "/rest/v1/rpc/append_ledger_entry") return { body: APPENDED_LEDGER_ROW };
+      if (request.path === "/rest/v1/api_idempotency" && request.method === "POST") return { status: 201, body: [{ org_id: ORG_A }] };
+      return { body: [] };
+    });
+  }
+
+  it("posts its arguments as the body, with the Idempotency-Key, and returns the 201 as structuredContent", async () => {
+    vi.mocked(authenticateApiKey).mockResolvedValue(KEY_W);
+    const fake = writable();
+    const result = await inScope(fake, () => callOperation("create-invoice", { ...ARGS, idempotencyKey: "billing-inv-7" }, AUTHORIZATION, ORIGIN));
+
+    expect(result.isError, result.content[0].text).toBeUndefined();
+    expect((result.structuredContent as { data: { id: string; status: string } }).data).toMatchObject({ id: INVOICE_ID, status: "pending" });
+    const insert = fake.requests.find((request) => request.path === "/rest/v1/invoices" && request.method === "POST");
+    expect(insert?.body).toMatchObject({ org_id: ORG_A, counterparty_id: COUNTERPARTY, amount: "42", po_reference: "PO-7", goods_received: true, created_by: ISSUER });
+    const claim = fake.requests.find((request) => request.path === "/rest/v1/api_idempotency" && request.method === "POST");
+    expect(claim?.body).toMatchObject({ org_id: ORG_A, idempotency_key: "billing-inv-7" });
+    const entry = fake.requests.find((request) => request.path === "/rest/v1/rpc/append_ledger_entry")?.body as { p_detail: Record<string, unknown> };
+    expect(entry.p_detail).toMatchObject({ by: ISSUER, via: "api", apiKeyId: KEY_W.keyId });
+    expect(entry.p_detail).not.toHaveProperty("idempotencyKey");
+  });
+
+  it("claims no Idempotency-Key when the call gives none", async () => {
+    vi.mocked(authenticateApiKey).mockResolvedValue(KEY_W);
+    const fake = writable();
+    const result = await inScope(fake, () => callOperation("create-invoice", ARGS, AUTHORIZATION, ORIGIN));
+    expect(result.isError, result.content[0].text).toBeUndefined();
+    expect(fake.requests.some((request) => request.path === "/rest/v1/api_idempotency")).toBe(false);
+  });
+
+  it("returns the route's 400 for a body it refuses as a tool error the agent can correct", async () => {
+    vi.mocked(authenticateApiKey).mockResolvedValue(KEY_W);
+    const fake = writable();
+    const result = await inScope(fake, () => callOperation("create-invoice", { ...ARGS, amount: "1.0000001" }, AUTHORIZATION, ORIGIN));
+    expect(result.isError).toBe(true);
+    expect(JSON.parse(result.content[0].text)).toEqual({ error: { code: "invalid_request", message: "amount: Use a positive amount with at most 6 decimal places" } });
+    expect(fake.requests.some((request) => request.path === "/rest/v1/invoices")).toBe(false);
+  });
+
+  it("returns a read-only key's 403 as a tool error, and writes nothing (Review focus 5)", async () => {
+    vi.mocked(authenticateApiKey).mockResolvedValue(KEY_A);
+    const fake = writable();
+    const result = await inScope(fake, () => callOperation("create-counterparty", { name: "Quill Studio", role: "client" }, AUTHORIZATION, ORIGIN));
+
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toBeUndefined();
+    expect(JSON.parse(result.content[0].text)).toEqual({ error: { code: "forbidden", message: "This key cannot do that." } });
+    expect(tenantRequests(fake)).toEqual([]);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { OPERATIONS } from "@/lib/api/openapi";
+import { OPERATIONS, operationById } from "@/lib/api/openapi";
 import { hasSource, publishedPages, readSource } from "@/lib/docs/content";
 import { slugifyHeadings } from "@/lib/docs/headings";
 import { referenceHeadings } from "@/lib/docs/reference";
@@ -23,7 +23,8 @@ describe("buildSearchIndex", () => {
       expect(top.map((entry) => entry.title), page.slug).toEqual([page.title]);
 
       const id = page.slug.startsWith("api/") ? page.slug.slice("api/".length) : null;
-      const headings = id === null ? slugifyHeadings(readSource(page.slug)) : referenceHeadings(hasSource(page.slug) ? readSource(page.slug) : null);
+      const body = id !== null && operationById(id)?.requestBody !== undefined;
+      const headings = id === null ? slugifyHeadings(readSource(page.slug)) : referenceHeadings(hasSource(page.slug) ? readSource(page.slug) : null, { body });
       const indexed = entries.filter((entry) => entry.heading !== undefined).map((entry) => [entry.heading, entry.anchor]);
       expect(indexed, page.slug).toEqual(headings.map((heading) => [heading.text, heading.id]));
     }

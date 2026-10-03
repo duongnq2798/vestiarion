@@ -62,8 +62,8 @@ const config = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase
 
 const ORG_A = "0a0a0a0a-0000-4000-8000-00000000000a";
 const ORG_B = "0b0b0b0b-0000-4000-8000-00000000000b";
-const KEY_A: AuthenticatedKey = { keyId: "1a1a1a1a-0000-4000-8000-00000000001a", orgId: ORG_A, scopes: ["read"] };
-const KEY_B: AuthenticatedKey = { keyId: "1b1b1b1b-0000-4000-8000-00000000001b", orgId: ORG_B, scopes: ["read"] };
+const KEY_A: AuthenticatedKey = { keyId: "1a1a1a1a-0000-4000-8000-00000000001a", orgId: ORG_A, scopes: ["read"], createdBy: null };
+const KEY_B: AuthenticatedKey = { keyId: "1b1b1b1b-0000-4000-8000-00000000001b", orgId: ORG_B, scopes: ["read"], createdBy: null };
 const PLATFORM_TOKEN = "api-key-scope-platform-token";
 const COUNTERPARTY_ID = "0b6c1c9e-4a4f-4a7e-9b1e-00000000c0de";
 /** Well formed; `authenticateApiKey` is told which key it is in each test that uses it. */
@@ -311,6 +311,35 @@ describe("guardApiRequest", () => {
     const request = new Request("https://vestiarion.invalid/api/v1/status", { headers: { authorization: `Bearer ${PRESENTED}` } });
     const guard = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => guardApiRequest(request, { scope: "read" }));
     expect(guard).toEqual({ key: KEY_A });
+  });
+
+  const writeRequest = () =>
+    new Request("https://vestiarion.invalid/api/v1/invoices", { method: "POST", headers: { authorization: `Bearer ${PRESENTED}` } });
+  const guardWrite = (fake: ReturnType<typeof fakeSupabase>) =>
+    runWith({ config, db: fake.client, fetch: fake.fetch }, () => guardApiRequest(writeRequest(), { scope: "write" }));
+
+  it("answers 403 to a read-only key on a write (write API R7)", async () => {
+    vi.mocked(authenticateApiKey).mockResolvedValueOnce(KEY_A);
+    const guard = await guardWrite(fakeSupabase(database()));
+    expect("denied" in guard && guard.denied.status).toBe(403);
+  });
+
+  it("lets one key write 30 times a minute, then answers 429 with Retry-After, while another key still writes (write API R6)", async () => {
+    const busy: AuthenticatedKey = { ...KEY_A, keyId: "3c3c3c3c-0000-4000-8000-00000000003c", scopes: ["read", "write"] };
+    const other: AuthenticatedKey = { ...KEY_B, keyId: "4d4d4d4d-0000-4000-8000-00000000004d", scopes: ["read", "write"] };
+    const fake = fakeSupabase(database());
+    vi.mocked(authenticateApiKey).mockResolvedValue(busy);
+    for (let i = 0; i < 30; i++) expect(await guardWrite(fake)).toEqual({ key: busy });
+    const refused = await guardWrite(fake);
+    expect("denied" in refused && refused.denied.status).toBe(429);
+    expect("denied" in refused && refused.denied.headers.get("Retry-After")).toBe("60");
+    vi.mocked(authenticateApiKey).mockResolvedValue(other);
+    expect(await guardWrite(fake)).toEqual({ key: other });
+    vi.mocked(authenticateApiKey).mockReset();
+  });
+
+  it("answers a conflict with 409 (write API R5, R7)", () => {
+    expect(apiError("conflict", "That Idempotency-Key was used for another request.").status).toBe(409);
   });
 });
 

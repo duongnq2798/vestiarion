@@ -5,7 +5,7 @@ import { STATUS_FOR, type ApiErrorCode } from "@/lib/api/contract";
 import { DOCS_TARGET } from "@/components/vx/command-items";
 import { DOCS_LINK } from "@/components/vx/nav";
 import { COMPACT_FOOTER_LINKS, FOOTER_COLUMNS } from "@/components/vx/SiteChrome";
-import { OPERATIONS } from "@/lib/api/openapi";
+import { OPERATIONS, operationById } from "@/lib/api/openapi";
 import sitemap from "@/app/sitemap";
 import { CONTENT_DIR, hasSource, NOTES_LOADERS, PAGE_LOADERS, publishedPages, readSource } from "@/lib/docs/content";
 import { slugifyHeadings, splitCodeSpans, stripFences } from "@/lib/docs/headings";
@@ -114,7 +114,8 @@ function linkProblems(slug: string, source: string, sourceOf: (slug: string) => 
     const targetSource = sourceOf(targetSlug);
     if (GENERATED_SLUGS.has(targetSlug)) {
       // A reference page's headings are its fixed sections, then its notes' headings.
-      if (!referenceSectionIds(targetSource).includes(anchor)) problems.push(`${link}: no section #${anchor} on "${targetSlug}"`);
+      const body = operationById(targetSlug.slice("api/".length))?.requestBody !== undefined;
+      if (!referenceSectionIds(targetSource, { body }).includes(anchor)) problems.push(`${link}: no section #${anchor} on "${targetSlug}"`);
       continue;
     }
     if (targetSource === null) {
@@ -148,7 +149,7 @@ describe("the docs navigation", () => {
     );
   });
 
-  it("lists the user guides right after Overview: trying it, going live, the first payment, paying a contractor, getting paid, Telegram, then verifying an export", () => {
+  it("lists the user guides right after Overview: trying it, going live, the first payment, paying a contractor, getting paid, Telegram, adding invoices through the API, then verifying an export", () => {
     const section = DOCS_NAV.find((candidate) => candidate.title === "Guides")!;
     expect(section.pages.map((page) => [page.slug, page.title])).toEqual([
       ["guides/try-it", "Try it in 5 minutes"],
@@ -157,6 +158,7 @@ describe("the docs navigation", () => {
       ["guides/pay-a-contractor", "Pay a contractor for delivered work"],
       ["guides/get-paid", "Get paid as a freelancer"],
       ["guides/telegram", "Get the agent's decisions in Telegram"],
+      ["guides/api-invoices", "Add invoices from your own system"],
       ["guides/audit-export", "Verify an audit export"],
     ]);
   });
@@ -186,7 +188,8 @@ describe("the docs navigation", () => {
     expect(neighbours("guides/first-payment").next?.slug).toBe("guides/pay-a-contractor");
     expect(neighbours("guides/pay-a-contractor").next?.slug).toBe("guides/get-paid");
     expect(neighbours("guides/get-paid").next?.slug).toBe("guides/telegram");
-    expect(neighbours("guides/telegram").next?.slug).toBe("guides/audit-export");
+    expect(neighbours("guides/telegram").next?.slug).toBe("guides/api-invoices");
+    expect(neighbours("guides/api-invoices").next?.slug).toBe("guides/audit-export");
     expect(neighbours("guides/audit-export").next?.slug).toBe("research/model-vs-policy");
     expect(neighbours("research/model-vs-policy").next?.slug).toBe("get-started/quickstart");
     expect(neighbours(pages[pages.length - 1].slug).next).toBeUndefined();

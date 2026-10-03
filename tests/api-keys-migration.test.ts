@@ -93,9 +93,10 @@ describe("the api_keys table", () => {
     await expect(insertKey({ name: "x".repeat(60) })).resolves.toBeTruthy();
   });
 
+  // Since 0066 (write API R1) a key may also write, but never without read.
   it.each([
-    ["{read,write}", ["read", "write"]],
     ["{write}", ["write"]],
+    ["{read,admin}", ["read", "admin"]],
     ["{}", []],
   ])("refuses scopes %s", async (_label, scopes) => {
     await expect(insertKey({ scopes })).rejects.toThrow(/api_keys_scopes_check/);
@@ -103,6 +104,10 @@ describe("the api_keys table", () => {
 
   it("accepts scopes {read}", async () => {
     await expect(insertKey({ scopes: ["read"] })).resolves.toBeTruthy();
+  });
+
+  it("accepts scopes {read,write} (0066)", async () => {
+    await expect(insertKey({ scopes: ["read", "write"] })).resolves.toBeTruthy();
   });
 
   it("refuses a second key with the same prefix, even in another organization", async () => {
@@ -150,9 +155,15 @@ describe("create_api_key", () => {
     expect(row.revoked_at).toBeNull();
   });
 
-  it("refuses scopes beyond read through the table check", async () => {
+  it("refuses scopes beyond read and write through the table check", async () => {
     const org = await createOrg(db, "scope-co");
-    await expect(create(org, "ci", ["read", "write"])).rejects.toThrow(/api_keys_scopes_check/);
+    await expect(create(org, "ci", ["read", "admin"])).rejects.toThrow(/api_keys_scopes_check/);
+    await expect(create(org, "ci", ["write"])).rejects.toThrow(/api_keys_scopes_check/);
+  });
+
+  it("creates a read-and-write key (0066)", async () => {
+    const org = await createOrg(db, "write-co");
+    expect(await create(org, "ci", ["read", "write"])).toMatchObject({ scopes: ["read", "write"] });
   });
 
   it("refuses the 21st active key, and a revoked key frees a slot", async () => {

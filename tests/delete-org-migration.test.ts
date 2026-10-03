@@ -37,6 +37,7 @@ afterAll(async () => {
 const ENVELOPE = { v: 1, iv: "x", tag: "y", data: "z" };
 const PLATFORM_TABLES = [
   "memberships", "invitations", "api_keys", "webhook_endpoints", "webhook_deliveries", "payee_links", "telegram_link_codes", "telegram_links",
+  "api_idempotency",
 ] as const;
 
 const deleteOrg = (orgId: string, by: string | null = owner) =>
@@ -144,6 +145,8 @@ async function populated(slug: string): Promise<string> {
     [orgId, member, crypto.randomBytes(32).toString("hex")]
   );
   await db.query("insert into public.telegram_links (org_id, user_id, chat_id) values ($1, $2, $3)", [orgId, member, crypto.randomInt(1, 2 ** 31)]);
+  // A write's remembered outcome goes with the workspace (0066).
+  await db.query("insert into public.api_idempotency (org_id, idempotency_key, request_hash, status) values ($1, $2, $3, 201)", [orgId, `order-${slug}`, "c".repeat(64)]);
   await closeCycles(orgId);
   return orgId;
 }

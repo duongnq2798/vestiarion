@@ -1,4 +1,5 @@
-import { db, unwrap } from "@/lib/dal";
+import { NextResponse } from "next/server";
+import { db, platformDb, unwrap } from "@/lib/dal";
 import { guardApiRequest, apiError, handleApiRequest } from "@/lib/api/guard";
 import {
   decodeCursor,
@@ -7,9 +8,18 @@ import {
   parseLimit,
   type ApiCollection,
 } from "@/lib/api/contract";
-import { INVOICE_DIRECTIONS, INVOICE_STATUSES } from "@/lib/api/invoices";
+import { withIdempotency } from "@/lib/api/idempotency";
+import { INVOICE_DIRECTIONS, INVOICE_SELECT, INVOICE_STATUSES, mapInvoice, type InvoicePayload } from "@/lib/api/invoices";
+import { CreateInvoiceBodySchema } from "@/lib/api/schemas";
+import { invalidBody, readJsonBody } from "@/lib/api/write";
+import { runCycleSoon } from "@/lib/agent/cycle-soon";
+import { invoiceInputSchema } from "@/lib/intake-validation";
+import { createInvoice } from "@/lib/invoices/create";
 
 export const dynamic = "force-dynamic";
+
+const DIRECTIONS = new Set<string>(INVOICE_DIRECTIONS);
+const STATUSES = new Set<string>(INVOICE_STATUSES);
 
 /**
  * The payable and receivable book.
@@ -23,53 +33,6 @@ export const dynamic = "force-dynamic";
  * look at. The ledger is the endpoint to resume from — see its note on why
  * ascending order is what makes a cursor a watermark.
  */
-export interface InvoicePayload {
-  id: string;
-  direction: (typeof INVOICE_DIRECTIONS)[number];
-  status: string;
-  amount: number;
-  currency: string;
-  memo: string | null;
-  poReference: string | null;
-  goodsReceived: boolean;
-  dueDate: string;
-  /** ISO timestamp the agent has committed to pay this on, once scheduled; else null. */
-  scheduledFor: string | null;
-  /** The early-payment discount this invoice carries, if any: the percent off and the deadline's ISO timestamp. */
-  earlyPayDiscount: { percent: number; deadline: string } | null;
-  decidedAt: string | null;
-  settledAt: string | null;
-  escalatedAt: string | null;
-  /** Why the agent ruled as it did, verbatim from the decision. */
-  agentReasoning: string | null;
-  /** An on-chain hash when the payment settled on Arc, else null. */
-  txHash: string | null;
-  /** What actually left once this invoice was paid; null otherwise, even while a submitted transfer already carries an amount. */
-  paidAmount: number | null;
-  counterparty: { id: string; name: string; riskLevel: string } | null;
-  createdAt: string;
-}
-
-const DIRECTIONS = new Set<string>(INVOICE_DIRECTIONS);
-const STATUSES = new Set<string>(INVOICE_STATUSES);
-
-/**
- * `early_pay_discount_pct` and `discount_due_date` (migration 0038), read the
- * way `invoiceDiscount` in `src/lib/agent/payment-timing.ts` reads them for
- * the AP stage: a percent outside (0, 100), or a deadline that is not a real
- * date, is reported as no discount at all, never a malformed one. A change to
- * one belongs in the other, so the API never reports terms the agent would
- * not pay by, or the reverse.
- */
-function invoiceDiscountOf(rawPct: unknown, rawDeadline: unknown): { percent: number; deadline: string } | null {
-  if (rawPct == null || rawDeadline == null) return null;
-  const percent = Number(rawPct);
-  if (!Number.isFinite(percent) || percent <= 0 || percent >= 100) return null;
-  const deadline = String(rawDeadline);
-  if (Number.isNaN(Date.parse(deadline))) return null;
-  return { percent, deadline };
-}
-
 export async function GET(request: Request) {
   const guard = await guardApiRequest(request, { scope: "read" });
   if ("denied" in guard) return guard.denied;
@@ -105,9 +68,7 @@ export async function GET(request: Request) {
     async (): Promise<ApiCollection<InvoicePayload>> => {
       let query = db()
         .from("invoices")
-        .select(
-          "id, direction, status, amount, currency, memo, po_reference, goods_received, due_date, scheduled_for, early_pay_discount_pct, discount_due_date, decided_at, settled_at, escalated_at, agent_reasoning, tx_ref, paid_amount, created_at, counterparties(id, name, risk_level)"
-        )
+        .select(INVOICE_SELECT)
         .order("created_at", { ascending: false })
         .order("id", { ascending: false })
         .limit(limitResult.limit + 1);
@@ -122,46 +83,68 @@ export async function GET(request: Request) {
       if (counterpartyId) query = query.eq("counterparty_id", counterpartyId);
 
       const rows = unwrap(await query) as unknown as Array<Record<string, unknown>>;
-
-      const invoices: InvoicePayload[] = rows.map((row) => {
-        const embedded = row.counterparties as
-          | { id: string; name: string; risk_level: string }
-          | null;
-        const txRef = row.tx_ref == null ? null : String(row.tx_ref);
-        const status = String(row.status);
-        return {
-          id: String(row.id),
-          direction: row.direction as InvoicePayload["direction"],
-          status,
-          amount: Number(row.amount),
-          currency: String(row.currency ?? "USDC"),
-          memo: row.memo == null ? null : String(row.memo),
-          poReference: row.po_reference == null ? null : String(row.po_reference),
-          goodsReceived: row.goods_received === true,
-          dueDate: String(row.due_date),
-          scheduledFor: row.scheduled_for == null ? null : String(row.scheduled_for),
-          earlyPayDiscount: invoiceDiscountOf(row.early_pay_discount_pct, row.discount_due_date),
-          decidedAt: row.decided_at == null ? null : String(row.decided_at),
-          settledAt: row.settled_at == null ? null : String(row.settled_at),
-          escalatedAt: row.escalated_at == null ? null : String(row.escalated_at),
-          agentReasoning: row.agent_reasoning == null ? null : String(row.agent_reasoning),
-          // Only a real chain hash is reported as one. A simulated reference
-          // is not a transaction anybody can look up.
-          txHash: txRef?.startsWith("0x") ? txRef : null,
-          // paid_amount can already be set while a discounted transfer is
-          // merely submitted (status "matched"); only "paid" means it landed.
-          paidAmount: status === "paid" && row.paid_amount != null ? Number(row.paid_amount) : null,
-          counterparty: embedded
-            ? { id: embedded.id, name: embedded.name, riskLevel: embedded.risk_level }
-            : null,
-          createdAt: String(row.created_at),
-        };
-      });
+      const invoices = rows.map(mapInvoice);
 
       return paginate(invoices, limitResult.limit, (invoice) => ({
         k: invoice.createdAt,
         id: invoice.id,
       }));
     }
+  );
+}
+
+/** The invoice form's fields as the API names them, where the two differ. */
+const FORM_FIELDS = { earlyPayDiscountPct: "earlyPayDiscount.percent", discountDeadline: "earlyPayDiscount.deadline" };
+
+/**
+ * Adds an invoice (docs/superpowers/specs/2026-10-03-write-api-design.md R2, R4, R5): a read-and-write key's request,
+ * checked against the invoice form's own rules and added through the same `createInvoice`, as the key's issuer's. The
+ * agent decides it as one typed in, and a payable starts its cycle. The body is checked before an `Idempotency-Key` is
+ * claimed, so a body that fails is never remembered. A counterparty the workspace does not hold is found only once the
+ * write has started, so that answer is remembered (R5).
+ */
+export async function POST(request: Request) {
+  const guard = await guardApiRequest(request, { scope: "write" });
+  if ("denied" in guard) return guard.denied;
+  const body = await readJsonBody(request);
+  if ("denied" in body) return body.denied;
+
+  const shape = CreateInvoiceBodySchema.safeParse(body.value);
+  if (!shape.success) return invalidBody(shape.error);
+  const { earlyPayDiscount } = shape.data;
+  const parsed = invoiceInputSchema.safeParse({
+    direction: shape.data.direction ?? "payable",
+    counterpartyId: shape.data.counterpartyId,
+    amount: String(shape.data.amount),
+    currency: shape.data.currency,
+    memo: shape.data.memo ?? "",
+    poReference: shape.data.poReference ?? "",
+    goodsReceived: shape.data.goodsReceived ?? false,
+    dueDate: shape.data.dueDate,
+    earlyPayDiscountPct: earlyPayDiscount ? String(earlyPayDiscount.percent) : "",
+    discountDeadline: earlyPayDiscount?.deadline ?? "",
+  });
+  if (!parsed.success) return invalidBody(parsed.error, FORM_FIELDS);
+  const invoice = parsed.data;
+
+  return withIdempotency(request, guard.key, body.raw, () =>
+    handleApiRequest("POST /api/v1/invoices", guard.key, async () => {
+      const issuer = guard.key.createdBy;
+      // Read before anything is written, so a failure here answers 500 with nothing added, and a retry is safe (R5).
+      const workspace =
+        invoice.direction === "payable" && issuer
+          ? (unwrap(await platformDb().from("orgs").select("mode").eq("id", guard.key.orgId).single()) as { mode: string })
+          : null;
+
+      const created = await createInvoice({ actorId: issuer, invoice, document: null, via: "api", apiKeyId: guard.key.keyId });
+      if (!created) return apiError("invalid_request", "counterpartyId: No counterparty with this id in this workspace.");
+      // A payable starts the agent's cycle, as one typed in does. With its issuer's account gone, the schedule takes it.
+      if (workspace && issuer) {
+        runCycleSoon({ orgId: guard.key.orgId, userId: issuer, sandbox: workspace.mode === "sandbox", kind: "invoice_added" });
+      }
+
+      const row = unwrap(await db().from("invoices").select(INVOICE_SELECT).eq("id", created.id).single()) as Record<string, unknown>;
+      return NextResponse.json({ data: mapInvoice(row) }, { status: 201 });
+    })
   );
 }

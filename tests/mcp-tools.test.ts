@@ -1,8 +1,8 @@
 import type { CallToolResult, StandardSchemaWithJSON } from "@modelcontextprotocol/server";
 import { describe, expect, expectTypeOf, it } from "vitest";
-import { OPERATIONS } from "@/lib/api/openapi";
+import { OPERATIONS, type DocParam } from "@/lib/api/openapi";
 import type { ToolResult } from "@/lib/mcp/call";
-import { MCP_TOOLS, toolName, type McpTool } from "@/lib/mcp/tools";
+import { argumentName, MCP_TOOLS, toolName, type McpTool } from "@/lib/mcp/tools";
 
 /**
  * The MCP tools are the `/api/v1` operations, generated
@@ -30,10 +30,15 @@ describe("MCP_TOOLS", () => {
     expect(new Set(MCP_TOOLS.map((t) => t.name)).size).toBe(MCP_TOOLS.length);
   });
 
-  it("marks every tool read-only, closed-world and idempotent", () => {
-    for (const t of MCP_TOOLS) {
-      expect(t.annotations).toEqual({ readOnlyHint: true, openWorldHint: false, idempotentHint: true });
+  it("marks a read's tool read-only and idempotent, and a write's as adding records: not destructive, not idempotent (write API R9)", () => {
+    for (const op of OPERATIONS) {
+      expect(tool(toolName(op.id)).annotations, op.id).toEqual(
+        op.scope === "write"
+          ? { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }
+          : { readOnlyHint: true, openWorldHint: false, idempotentHint: true }
+      );
     }
+    expect(MCP_TOOLS.filter((t) => !t.annotations.readOnlyHint).map((t) => t.name).sort()).toEqual(["create_counterparty", "create_invoice"]);
   });
 
   it("titles and describes each tool from its operation, and tells a collection how to page", () => {
@@ -42,25 +47,41 @@ describe("MCP_TOOLS", () => {
       expect(t.title).toBe(op.summary);
       expect(t.description.startsWith(`${op.summary}. ${op.description}`)).toBe(true);
       expect(t.description.includes("pass page.nextCursor back as cursor")).toBe(op.collection);
+      expect(t.description.includes("Needs a read-and-write key.")).toBe(op.scope === "write");
     }
   });
 
-  it("takes exactly the operation's parameters, requiring only the required ones", () => {
+  it("names a header parameter's argument in camelCase", () => {
+    expect(argumentName({ name: "Idempotency-Key", in: "header" } as DocParam)).toBe("idempotencyKey");
+    expect(argumentName({ name: "counterpartyId", in: "query" } as DocParam)).toBe("counterpartyId");
+  });
+
+  it("takes exactly the operation's body fields and parameters, requiring only the required ones", () => {
     for (const op of OPERATIONS) {
       const shape = tool(toolName(op.id)).inputSchema.shape;
-      expect(Object.keys(shape)).toEqual(op.params.map((p) => p.name));
+      const fields = op.requestBody ? Object.keys(op.requestBody.shape) : [];
+      expect(Object.keys(shape), op.id).toEqual([...fields, ...op.params.map(argumentName)]);
+      for (const field of fields) expect(shape[field], `${op.id}.${field}`).toBe(op.requestBody!.shape[field]);
       for (const p of op.params) {
-        expect(shape[p.name].safeParse(undefined).success, `${op.id}.${p.name}`).toBe(!p.required);
-        expect(shape[p.name].description).toBe(p.description);
+        expect(shape[argumentName(p)].safeParse(undefined).success, `${op.id}.${p.name}`).toBe(!p.required);
+        expect(shape[argumentName(p)].description).toBe(p.description);
       }
     }
   });
 
-  it("accepts each operation's example parameters", () => {
+  it("accepts each operation's example parameters, and a write's example body", () => {
     for (const op of OPERATIONS) {
-      const example = Object.fromEntries(op.params.filter((p) => p.example !== undefined).map((p) => [p.name, p.example]));
+      const example = {
+        ...(op.requestExample ?? {}),
+        ...Object.fromEntries(op.params.filter((p) => p.example !== undefined).map((p) => [argumentName(p), p.example])),
+      };
       expect(tool(toolName(op.id)).inputSchema.safeParse(example).success, op.id).toBe(true);
     }
+  });
+
+  it("refuses a field a write does not take, as its route would, rather than dropping it", () => {
+    const op = OPERATIONS.find((candidate) => candidate.id === "create-invoice")!;
+    expect(tool("create_invoice").inputSchema.safeParse({ ...op.requestExample, vendor: "Acme" }).success).toBe(false);
   });
 });
 
