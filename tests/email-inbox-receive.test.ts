@@ -23,6 +23,8 @@ const ORG = "0b6c1c9e-4a4f-4a7e-9b1e-000000000e21";
 const ROW_ID = "0b6c1c9e-4a4f-4a7e-9b1e-000000000e22";
 const EMAIL_ID = "4ef9a417-02e9-4d39-ad75-9611e0fcc33c";
 const ATTACHMENT_ID = "3b1d0df1-4223-5839-087f-54eedd27b419";
+/** The attachment's link as Resend gives it: signed, expiring, on cdn.resend.app. */
+const DOWNLOAD = `https://cdn.resend.app/receiving/${EMAIL_ID}/attachments/${ATTACHMENT_ID}?Expires=1791055056&Key-Pair-Id=K1EXAMPLE&Signature=sig`;
 const DOMAIN = "abc123.resend.app";
 const ADDRESS = `invoices-abcdefghij23@${DOMAIN}`;
 const KEY = crypto.randomBytes(24);
@@ -76,11 +78,13 @@ const received = (to: string[] = [ADDRESS]) => ({
 let stored: boolean;
 let resendEmail: unknown;
 let slackInstalled: boolean;
+let downloadUrl: string;
 
 beforeEach(() => {
   stored = false;
   resendEmail = email();
   slackInstalled = false;
+  downloadUrl = DOWNLOAD;
 });
 
 function world() {
@@ -117,9 +121,9 @@ function world() {
       return resendEmail ? Response.json(resendEmail) : new Response("not found", { status: 404 });
     }
     if (url === `https://api.resend.com/emails/receiving/${EMAIL_ID}/attachments/${ATTACHMENT_ID}`) {
-      return Response.json({ id: ATTACHMENT_ID, filename: "northwind-inv-2207.pdf", size: PDF.length, content_type: "application/pdf", download_url: "https://inbound-cdn.resend.com/x/inv.pdf?sig=1" });
+      return Response.json({ id: ATTACHMENT_ID, filename: "northwind-inv-2207.pdf", size: PDF.length, content_type: "application/pdf", download_url: downloadUrl });
     }
-    if (url.startsWith("https://inbound-cdn.resend.com/")) return new Response(new Blob([new Uint8Array(PDF)]), { headers: { "content-type": "application/pdf" } });
+    if (url === DOWNLOAD) return new Response(new Blob([new Uint8Array(PDF)]), { headers: { "content-type": "application/pdf" } });
     if (url.startsWith("https://hooks.slack.com/")) return new Response("ok");
     return new Response("unexpected", { status: 500 });
   }) as typeof fetch;
@@ -176,7 +180,7 @@ describe("handleInbound", () => {
     expect(calls.map((call) => call.url)).toEqual([
       `https://api.resend.com/emails/receiving/${EMAIL_ID}`,
       `https://api.resend.com/emails/receiving/${EMAIL_ID}/attachments/${ATTACHMENT_ID}`,
-      "https://inbound-cdn.resend.com/x/inv.pdf?sig=1",
+      DOWNLOAD,
     ]);
     const [patch] = patches(fake.requests);
     expect(patch).toMatchObject({
@@ -217,6 +221,17 @@ describe("handleInbound", () => {
     expect(patch).toMatchObject({ status: "unreadable" });
     expect((patch.reasons as string[])[0]).toContain("Forward it again");
     expect(ledger(fake.requests)[0].p_detail).toMatchObject({ read: "unreadable", document: null });
+  });
+
+  it("says why an attachment could not be fetched: to the person in words, and to the log as the reason", async () => {
+    downloadUrl = "https://example.com/inv.pdf";
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { fake, handle } = world();
+    await handle(signedEvent(received()));
+    const [patch] = patches(fake.requests);
+    expect(patch).toMatchObject({ status: "unreadable", reasons: ["Its attachment could not be fetched from Resend. Forward it again in a moment."] });
+    expect(errors).toHaveBeenCalledWith("email inbox: attachment not fetched", ORG, "not_resend");
+    errors.mockRestore();
   });
 
   it("tells the workspace's Slack channel that an invoice arrived, with a link to it", async () => {
