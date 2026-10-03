@@ -86,6 +86,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Git worktrees other sessions keep inside the checkout.
     ".worktrees/**",
+    // The TypeScript SDK's build output, packed into public/sdk/.
+    "sdk/dist/**",
   ]),
 ]);
 

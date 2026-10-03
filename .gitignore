@@ -44,3 +44,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 /.worktrees/
+
+# The TypeScript SDK's build output: npm run sdk:pack compiles into it, and packs it into public/sdk/.
+sdk/dist/

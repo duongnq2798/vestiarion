@@ -1,0 +1,18 @@
+{
+  "name": "@vestiarion/sdk",
+  "version": "0.1.0",
+  "description": "A typed client for the Vestiarion API and its signed webhooks.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "engines": { "node": ">=20" },
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
+    "./webhooks": { "types": "./dist/webhooks.d.ts", "import": "./dist/webhooks.js" }
+  },
+  "types": "./dist/index.d.ts",
+  "files": ["dist", "README.md", "LICENSE"],
+  "homepage": "https://www.vestiarion.xyz/docs/get-started/sdk",
+  "repository": { "type": "git", "url": "git+https://github.com/duongnq2798/vestiarion.git", "directory": "sdk" },
+  "keywords": ["vestiarion", "stablecoin", "treasury", "arc", "usdc", "webhooks"]
+}
