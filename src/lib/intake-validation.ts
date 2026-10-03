@@ -57,8 +57,17 @@ const payeeChainSchema = z
   .transform((value) => value.trim().toUpperCase())
   .pipe(z.enum(PAYEE_CHAIN_IDS, { message: "Choose a chain Vestiarion can pay on: Arc testnet, Base Sepolia, Arbitrum Sepolia or Ethereum Sepolia." }));
 
+/** An address for payment notices as a form gives it: trimmed, empty for none, shaped like an email address (payment notices R1). */
+export const noticeEmailSchema = z
+  .string()
+  .trim()
+  .max(254, "That email address is too long")
+  .refine((value) => value === "" || z.email().safeParse(value).success, "That email address does not look right")
+  .transform((value) => value || null);
+
 export const counterpartyInputSchema = z.object({
   name: z.string().trim().min(2).max(160),
+  noticeEmail: noticeEmailSchema.optional().transform((value) => value ?? null),
   role: z.enum(["vendor", "client", "contractor"]),
   address: optionalText(200),
   chain: payeeChainSchema,

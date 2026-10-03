@@ -62,6 +62,8 @@ export interface CounterpartyRow {
   address_confirmed_at: string | null;
   /** Loaded as sample data (0034): an example, removed with the rest of the sample. */
   sample: boolean;
+  /** Where the counterparty is emailed when it is paid (payment notices R1, 0063); null for none, or before 0063. */
+  notice_email?: string | null;
 }
 
 export async function listCounterparties(): Promise<CounterpartyRow[]> {

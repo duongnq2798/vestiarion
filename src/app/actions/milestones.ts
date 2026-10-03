@@ -13,6 +13,7 @@ import { parseGitHubPullRequestUrl } from "@/lib/github-verification";
 import { isHttpsLink, usdcAmountSchema } from "@/lib/intake-validation";
 import { appendLedgerEntry } from "@/lib/ledger";
 import { closeMilestone, MilestoneDecisionError, payHeldMilestone } from "@/lib/agent/milestone-decisions";
+import { sendNoticesSoon } from "@/lib/payment-notices-soon";
 
 export interface MilestoneActionResult {
   ok: boolean;
@@ -216,7 +217,10 @@ export async function payHeldMilestoneAction(_previous: MilestoneActionResult, f
     try {
       const result = await payHeldMilestone({ actorId: auth.user.id, milestoneId: parsed.data });
       revalidateOrgPages();
-      if (result.status === "paid") return { ok: true, message: "Paid." };
+      if (result.status === "paid") {
+        sendNoticesSoon(auth);
+        return { ok: true, message: "Paid." };
+      }
       if (result.status === "verified") return { ok: true, message: "Payment submitted; waiting for Circle to confirm it." };
       const reason = /\[(?:transfer|execution) failed:\s*(.+?)\]\s*$/.exec(result.note)?.[1] ?? /\[not paid:\s*(.+?)\]\s*$/.exec(result.note)?.[1];
       return { ok: false, message: reason ? `Not paid: ${reason}. The milestone is still held.` : "Not paid. The milestone is still held." };

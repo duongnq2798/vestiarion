@@ -22,6 +22,7 @@ import { usycSubscriptionsOpen, UsycSubscriptionsClosedError } from "../circle/u
 import { arcRpcUrl } from "../circle/arcFees";
 import type { UsycExecution } from "../circle/types";
 import { budgetGate, countedUsdc, exceedsBudget, HELD_FOR_BUDGET, type BudgetGate, type BudgetRoom } from "./outflow-budget";
+import { sendPaymentNotices } from "../payment-notices";
 import { onChainLimitGate, onChainLimitRecord, type OnChainLimitDecisionCheck, type OnChainLimitGate } from "./onchain-limit";
 import { addressUnconfirmed, payeeNotReady } from "../counterparty-address";
 import { SandboxCapReachedError } from "./sandbox-cap";
@@ -3658,6 +3659,13 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
   // When people keep approving one counterparty's payments above its limit,
   // the agent proposes a higher one for a person to accept (limit proposals).
   lines.push(...(await proposeLimitChanges(db)));
+  });
+
+  await stage("notices", async () => {
+  // ------------------------------------------------------------- 7. notices
+  // Each payee whose payment is confirmed is emailed what was paid and the
+  // transaction (payment notices R2–R6): a live workspace's, on Arc testnet, once.
+  lines.push(...(await sendPaymentNotices()));
   });
 
   const finishedAt = new Date().toISOString();

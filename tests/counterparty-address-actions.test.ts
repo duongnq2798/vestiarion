@@ -5,6 +5,7 @@ import {
   confirmCounterpartyAddressAction,
   updateCounterpartyAddressAction,
   updateCounterpartyLimitAction,
+  updateCounterpartyNoticeEmailAction,
   type IntakeActionResult,
 } from "@/app/actions/intake";
 import { CounterpartyLimitError } from "@/lib/counterparty-limit";
@@ -42,7 +43,11 @@ vi.mock("@/lib/counterparty-address", async (importOriginal) => ({
   confirmCounterpartyAddress: confirmMock,
 }));
 
-const { changeLimitMock } = vi.hoisted(() => ({ changeLimitMock: vi.fn() }));
+const { changeLimitMock, changeNoticeMock } = vi.hoisted(() => ({ changeLimitMock: vi.fn(), changeNoticeMock: vi.fn() }));
+vi.mock("@/lib/payment-notices", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/payment-notices")>()),
+  changeCounterpartyNoticeEmail: changeNoticeMock,
+}));
 vi.mock("@/lib/counterparty-limit", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/counterparty-limit")>()),
   changeCounterpartyLimit: changeLimitMock,
@@ -228,5 +233,47 @@ describe("updateCounterpartyLimitAction", () => {
     const result = await run(() => updateCounterpartyLimitAction(INITIAL, form({ counterpartyId: COUNTERPARTY_ID, paymentLimit: "" })));
 
     expect(result).toEqual({ ok: false, message: "A vendor or contractor needs a payment limit: without one, the agent could pay any amount." });
+  });
+});
+
+describe("updateCounterpartyNoticeEmailAction", () => {
+  it("asks for records.write, and changes nothing when refused", async () => {
+    authorizeMock.mockResolvedValueOnce({ ok: false, message: "Only an owner or admin can do that." });
+
+    const result = await run(() => updateCounterpartyNoticeEmailAction(INITIAL, form({ counterpartyId: COUNTERPARTY_ID, noticeEmail: "linh@example.com" })));
+
+    expect(authorizeMock).toHaveBeenCalledWith("northstar", "records.write");
+    expect(result.ok).toBe(false);
+    expect(changeNoticeMock).not.toHaveBeenCalled();
+  });
+
+  it("sets the address, trimmed, and says where notices go", async () => {
+    allow("admin");
+    changeNoticeMock.mockResolvedValueOnce({ name: "Centronex", email: "ap@centronex.example" });
+
+    const result = await run(() => updateCounterpartyNoticeEmailAction(INITIAL, form({ counterpartyId: COUNTERPARTY_ID, noticeEmail: "  ap@centronex.example " })));
+
+    expect(changeNoticeMock).toHaveBeenCalledWith({ actorId: USER, counterpartyId: COUNTERPARTY_ID, email: "ap@centronex.example" });
+    expect(result).toEqual({ ok: true, message: "Centronex is emailed at ap@centronex.example when it is paid." });
+    expect(revalidatePathMock).toHaveBeenCalled();
+  });
+
+  it("turns notices off when the field is empty", async () => {
+    allow("owner");
+    changeNoticeMock.mockResolvedValueOnce({ name: "Centronex", email: null });
+
+    const result = await run(() => updateCounterpartyNoticeEmailAction(INITIAL, form({ counterpartyId: COUNTERPARTY_ID, noticeEmail: "" })));
+
+    expect(changeNoticeMock).toHaveBeenCalledWith({ actorId: USER, counterpartyId: COUNTERPARTY_ID, email: null });
+    expect(result).toEqual({ ok: true, message: "Centronex is no longer emailed when it is paid." });
+  });
+
+  it("refuses an address that does not look right, changing nothing", async () => {
+    allow("owner");
+
+    const result = await run(() => updateCounterpartyNoticeEmailAction(INITIAL, form({ counterpartyId: COUNTERPARTY_ID, noticeEmail: "not-an-email" })));
+
+    expect(result).toEqual({ ok: false, message: "That email address does not look right" });
+    expect(changeNoticeMock).not.toHaveBeenCalled();
   });
 });

@@ -83,6 +83,8 @@ export async function setUpFreelancerPayment(
         chain: "ARC-TESTNET",
         baseline_payment_limit: input.amount,
         payment_limit: null,
+        // The email the link goes to is where they hear they were paid (payment notices R1).
+        notice_email: input.email || null,
       })
       .select("id, name")
       .single<{ id: string; name: string }>()

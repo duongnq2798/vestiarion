@@ -37,7 +37,7 @@ export default function PrivacyPage() {
         <p>A workspace holds what its members and its agent put into it:</p>
         <ul>
           <li>invoices, with their amounts, memos, purchase order references and due dates;</li>
-          <li>counterparties: their names, wallet addresses, screening results and payment limits;</li>
+          <li>counterparties: their names, wallet addresses, screening results and payment limits, and the email address for payment notices when a member gives one;</li>
           <li>contractor milestones, with any GitHub pull request link used to verify one;</li>
           <li>the agent&apos;s settings and its treasury records;</li>
           <li>its members and their roles, and open invitations with the invited email addresses;</li>
@@ -115,7 +115,8 @@ export default function PrivacyPage() {
             <strong>Circle</strong> creates the wallets and moves the payments, through Developer-Controlled Wallets, CCTP, Gateway and its Smart Contract Platform, so it receives wallet addresses and payment amounts. Its Stablecoin Service quotes EURC in USDC and builds the swaps of USDC for EURC, so it receives the operating wallet&apos;s address and the amounts. Gateway also verifies and settles the x402 payments for payee history, so it receives each signed payment: the paying wallet, the payee and the amount.
           </li>
           <li>
-            <strong>Resend</strong> sends transactional email: invitations to a workspace, and digests of the payments waiting for a decision. It receives each
+            <strong>Resend</strong> sends transactional email: invitations to a workspace, digests of the payments waiting for a decision, the link a payee
+            adds their address through, and payment notices to a payee once a live workspace&apos;s payment to them is confirmed. It receives each
             recipient&apos;s email address and the message.
           </li>
           <li>

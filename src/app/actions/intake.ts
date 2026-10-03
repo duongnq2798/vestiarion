@@ -18,8 +18,10 @@ import {
   firstZodMessage,
   invoiceFormRefusal,
   invoiceInputSchema,
+  noticeEmailSchema,
   type InvoiceField,
 } from "@/lib/intake-validation";
+import { changeCounterpartyNoticeEmail, maskEmail } from "@/lib/payment-notices";
 import {
   changeCounterpartyAddress,
   confirmCounterpartyAddress,
@@ -52,6 +54,7 @@ export async function createCounterpartyAction(
   return inOrg(auth, async () => {
     const parsed = counterpartyInputSchema.safeParse({
       name: formString(formData, "name"),
+      noticeEmail: formString(formData, "noticeEmail"),
       role: formString(formData, "role"),
       address: formString(formData, "address"),
       chain: formString(formData, "chain"),
@@ -73,6 +76,7 @@ export async function createCounterpartyAction(
             jurisdiction: input.jurisdiction,
             baseline_payment_limit: input.paymentLimit || null,
             payment_limit: null,
+            notice_email: input.noticeEmail,
           })
           .select("id, name")
           .single<{ id: string; name: string }>()
@@ -91,6 +95,8 @@ export async function createCounterpartyAction(
           address: input.address,
           jurisdiction: input.jurisdiction,
           baselinePaymentLimit: input.paymentLimit || null,
+          // Masked: who is told of a payment, not their whole address (payment notices R1).
+          noticeEmail: input.noticeEmail ? maskEmail(input.noticeEmail) : null,
         },
       });
 
@@ -182,6 +188,32 @@ export async function updateCounterpartyLimitAction(
       };
     } catch (error) {
       return addressFailure(error, "counterparty limit change failed");
+    }
+  });
+}
+
+/** Sets, changes or clears where a counterparty is told it was paid (payment notices R1). */
+export async function updateCounterpartyNoticeEmailAction(
+  _previous: IntakeActionResult,
+  formData: FormData
+): Promise<IntakeActionResult> {
+  const auth = await authorize(formData.get("orgSlug"), "records.write");
+  if (!auth.ok) return { ok: false, message: auth.message };
+  return inOrg(auth, async () => {
+    const id = counterpartyIdSchema.safeParse(formString(formData, "counterpartyId"));
+    if (!id.success) return { ok: false, message: "Counterparty not found." };
+    const email = noticeEmailSchema.safeParse(formString(formData, "noticeEmail"));
+    if (!email.success) return { ok: false, message: email.error.issues[0]?.message ?? "That email address does not look right" };
+    try {
+      const result = await changeCounterpartyNoticeEmail({ actorId: auth.user.id, counterpartyId: id.data, email: email.data });
+      revalidateOrgPages();
+      return {
+        ok: true,
+        message: result.email ? `${result.name} is emailed at ${result.email} when it is paid.` : `${result.name} is no longer emailed when it is paid.`,
+      };
+    } catch (error) {
+      console.error("notice email change failed", error instanceof Error ? error.message : error);
+      return { ok: false, message: error instanceof Error && error.message === "Counterparty not found." ? error.message : "That did not work. Try again in a moment." };
     }
   });
 }

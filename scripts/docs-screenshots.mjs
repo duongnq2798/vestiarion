@@ -67,7 +67,13 @@ const SHOTS = {
   },
   "go-live-live": async () => {},
   "first-payment-counterparty": async (page) => {
-    await page.fill({ "cp-name": "Northstar Studio", "cp-limit": "50.00", "cp-address": `0x${"c0ffee00".repeat(5)}`, "cp-jurisdiction": "US" });
+    await page.fill({
+      "cp-name": "Northstar Studio",
+      "cp-limit": "50.00",
+      "cp-address": `0x${"c0ffee00".repeat(5)}`,
+      "cp-jurisdiction": "US",
+      "cp-notice-email": "accounts@northstar.example",
+    });
   },
   "first-payment-address": async () => {},
   "first-payment-invoice": async (page) => {

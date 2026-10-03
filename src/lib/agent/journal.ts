@@ -33,6 +33,7 @@ export const CYCLE_STAGES = [
   "treasury",
   "forecast",
   "proposals",
+  "notices",
 ] as const;
 
 export type CycleStage = (typeof CYCLE_STAGES)[number];
@@ -79,6 +80,7 @@ export const STAGE_REQUIRES: Record<CycleStage, readonly CycleStage[]> = {
   treasury: ["reconcile"],
   forecast: [],
   proposals: [],
+  notices: [],
 };
 
 export interface StageRecord {
