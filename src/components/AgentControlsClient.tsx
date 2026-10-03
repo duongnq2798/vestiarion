@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { cn } from "@/components/ui/cn";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { toast } from "@/components/ui/Toaster";
+import { AGENT_EXPECTED_EVENT } from "@/lib/agent-activity";
 import { orgHref } from "@/lib/auth/org-paths";
 import type { CycleClockMode } from "@/lib/clock";
 
@@ -49,6 +50,7 @@ export default function AgentControlsClient({
   async function runCycle() {
     setBusy(true);
     setError(null);
+    window.dispatchEvent(new Event(AGENT_EXPECTED_EVENT));
     try {
       const result = await runAgentCycleAction(orgSlug);
       if (result.ok) {

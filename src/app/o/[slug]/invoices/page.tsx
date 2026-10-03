@@ -122,11 +122,13 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
       return (
         <WaitingPayableAction
           orgSlug={slug}
-          invoice={{ id: invoice.id, counterpartyName: invoice.counterparty_name, ...facts.onFile }}
+          invoice={{ id: invoice.id, counterpartyName: invoice.counterparty_name, counterpartyId: invoice.counterparty_id, ...facts.onFile }}
           added={facts.added}
           // A transfer recorded against it is approved in Approvals, never completed here (R3).
           canAddDetails={canWrite && invoice.tx_ref === null}
           canDecide={canDecide}
+          rule={decision.guardrail?.rule ?? null}
+          canFix={canWrite}
         />
       );
     };

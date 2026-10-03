@@ -58,6 +58,8 @@ export function CounterpartyRow({
   return (
     <Disclosure
       variant="bare"
+      // A link to this row (a stopped payable's "Edit limit", "Confirm address") opens it: see ScrollToHash.
+      id={`counterparty-${counterparty.id}`}
       defaultOpen={defaultOpen}
       summaryClassName="grid grid-cols-[minmax(0,1fr)_auto_1rem] items-center gap-x-4 gap-y-1 px-4 py-3 transition-colors duration-150 ease-standard hover:bg-ground/50 md:grid-cols-[minmax(0,1fr)_5.5rem_6.5rem_8.5rem_1rem] sm:px-5 xl:grid-cols-[minmax(0,1fr)_5.5rem_6.5rem_8.5rem_8.5rem_1rem]"
       summary={

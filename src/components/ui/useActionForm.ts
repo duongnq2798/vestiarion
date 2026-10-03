@@ -1,6 +1,7 @@
 "use client";
 
 import { startTransition, useActionState, useEffect, useRef, type FormEvent } from "react";
+import { AGENT_EXPECTED_EVENT } from "@/lib/agent-activity";
 import { toast } from "./Toaster";
 
 export interface ActionResult {
@@ -78,6 +79,8 @@ export function useActionForm<State extends ActionResult>(
     if (state === handled.current) return;
     handled.current = state;
     if (state.ok) {
+      // Most actions give the agent something to decide within seconds: the page watches it closely for a while.
+      window.dispatchEvent(new Event(AGENT_EXPECTED_EVENT));
       if (resetOnSuccess) formRef.current?.reset();
       if (toastOnSuccess && state.message) toast.success(state.message);
       onSuccess?.(state);

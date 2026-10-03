@@ -7,6 +7,7 @@ import { CounterpartyRow as CounterpartyRowView } from "@/components/Counterpart
 import GoLivePanel from "@/components/GoLivePanel";
 import { HeldMilestoneActions } from "@/components/HeldMilestoneActions";
 import VerifyLedgerBadge from "@/components/VerifyLedgerBadge";
+import { DecisionCard } from "@/components/vx/DecisionCard";
 import { WaitingPayableAction } from "@/components/WaitingPayableAction";
 import CounterpartyAddress from "@/components/intake/CounterpartyAddressEdit";
 import CounterpartyIntake from "@/components/intake/CounterpartyIntake";
@@ -166,6 +167,38 @@ const PAYMENT_ENTRY: LedgerEntry = {
 };
 
 const ENTRIES: LedgerEntry[] = [...EARLIER, PAYMENT_ENTRY];
+
+/** A payment code refused over its counterparty's limit, as the console's Stopped section shows it (agent activity R5). */
+const STOPPED_INVOICE: InvoiceRow = {
+  ...INVOICE,
+  id: "00000000-0000-4000-8000-0000000000e5",
+  amount: 75,
+  memo: "Q4 brand refresh",
+  po_reference: "PO-2214",
+  goods_received: true,
+  status: "held",
+  agent_reasoning:
+    "Northstar Studio is screened clear, PO-2214 matches and the work was received, and the operating wallet holds 120.00 USDC, so I would pay the 75.00 USDC invoice now.",
+  tx_ref: null,
+  paid_amount: null,
+};
+
+const STOP_ENTRY: LedgerEntry = {
+  ...PAYMENT_ENTRY,
+  seq: PAYMENT_ENTRY.seq + 2,
+  id: "docs-stop",
+  ts: "2026-10-03T09:30:00Z",
+  action: "ap_pay",
+  summary: "PAY invoice from Northstar Studio for 75 USDC",
+  detail: {
+    invoiceId: STOPPED_INVOICE.id,
+    decisionMode: "llm",
+    decision: { action: "pay" },
+    guardrailBlocked: true,
+    guardrailRule: "counterparty.payment_limit",
+    observed: { riskLevel: "clear", paymentLimit: 50, poReference: "PO-2214", goodsReceived: true },
+  },
+};
 
 /** A payable the agent asked about, waiting on Invoices: nothing of its three-way match is on file (complete held invoice). */
 const ASKED_INVOICE: InvoiceRow = {
@@ -548,6 +581,32 @@ export const DOCS_SHOTS = {
                 open: true,
               },
             ]}
+          />
+        </section>
+      );
+    },
+  },
+  "first-payment-stopped": {
+    guide: "first-payment",
+    page: "treasury",
+    render: function StoppedShot() {
+      return (
+        <section>
+          <SectionHeader title="Stopped" meta="refused by code, or waiting for you" />
+          <DecisionCard
+            decision={invoiceDecision(STOPPED_INVOICE, COUNTERPARTY, [STOP_ENTRY])}
+            orgSlug={SLUG}
+            footerAction={
+              <WaitingPayableAction
+                orgSlug={SLUG}
+                invoice={{ id: STOPPED_INVOICE.id, counterpartyName: STOPPED_INVOICE.counterparty_name, counterpartyId: COUNTERPARTY.id, poReference: "PO-2214", goodsReceived: true }}
+                added={null}
+                canAddDetails
+                canDecide
+                rule="counterparty.payment_limit"
+                canFix
+              />
+            }
           />
         </section>
       );

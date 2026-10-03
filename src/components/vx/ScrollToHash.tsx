@@ -12,7 +12,11 @@ import { useEffect } from "react";
 export function ScrollToHash() {
   useEffect(() => {
     const id = decodeURIComponent(window.location.hash.slice(1));
-    if (id) document.getElementById(id)?.scrollIntoView({ block: "start", behavior: "instant" });
+    const target = id ? document.getElementById(id) : null;
+    if (!target) return;
+    // A row folded away (a counterparty's, which "Edit limit" links to) opens, and so does any fold around it.
+    for (let fold = target.closest("details"); fold; fold = fold.parentElement?.closest("details") ?? null) fold.open = true;
+    target.scrollIntoView({ block: "start", behavior: "instant" });
   }, []);
   return null;
 }
