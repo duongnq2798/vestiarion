@@ -4,7 +4,7 @@ import type { UsycExecution } from "../circle/types";
 import { UsycSubscriptionsClosedError } from "../circle/usyc";
 import type { OrgDb } from "../dal";
 import { pausedTreasuryNote } from "./pause";
-import type { TreasuryDecision } from "./treasury";
+import { boundTreasuryMove, type TreasuryBound, type TreasuryDecision, type TreasuryPlan } from "./treasury";
 
 /**
  * Moving cash between the operating wallet and the reserve: the treasury stage's sweep or redemption, the cycle's
@@ -94,6 +94,21 @@ export async function moveTreasuryIfNotPaused(
     if (err instanceof UsycSubscriptionsClosedError) return { executed: false, executionNote: err.message, heldBecausePaused: false };
     return { executed: false, executionNote: `execution failed: ${(err as Error).message}`, heldBecausePaused: false };
   }
+}
+
+/**
+ * The agent's own treasury move (treasury move bounds R1–R3): the model's decision bounded by the buffer the policy works
+ * out, then moved as any move is. Returns what moved and, when code changed the model's move, the rule, so the stage
+ * records the bounded move and counts the override. A person's own move is never bounded (R2): it goes straight to
+ * `moveTreasuryIfNotPaused`.
+ */
+export async function moveAgentTreasury(
+  decision: TreasuryDecision,
+  plan: TreasuryPlan,
+  ctx: Parameters<typeof moveTreasuryIfNotPaused>[1]
+): Promise<TreasuryMoveOutcome & TreasuryBound> {
+  const bounded = boundTreasuryMove(decision, plan, ctx.reserveBalance);
+  return { ...(await moveTreasuryIfNotPaused(bounded.decision, ctx)), ...bounded };
 }
 
 /** The operating wallet's USDC and the reserve's USYC value, read from the chain after a real move (USYC live R3). */

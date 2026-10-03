@@ -63,6 +63,11 @@ export class CycleMetricsCollector {
     if (guardrailBlocked) this.metrics.guardrailOverrideCount += 1;
   }
 
+  /** A treasury move code bounded after the model sized it (treasury move bounds R3) is code overriding the model. */
+  recordTreasuryMove(guardrailBlocked: boolean): void {
+    if (guardrailBlocked) this.metrics.guardrailOverrideCount += 1;
+  }
+
   snapshot(): CycleMetrics {
     return { ...this.metrics };
   }

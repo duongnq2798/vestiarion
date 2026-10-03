@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  boundTreasuryMove,
   expectedHoldDays,
   planTreasury,
   toUsdc,
@@ -180,5 +181,59 @@ describe("planTreasury — edges", () => {
   it("returns an amount that is always a valid USDC quantity", () => {
     const plan = planTreasury({ ...base, operatingBalance: 18500.123456789 });
     expect(plan.decision.amount).toBe(toUsdc(plan.decision.amount));
+  });
+});
+
+/**
+ * Code bounds the agent's treasury move after the model answers (treasury move bounds R1, R3): a redeem never brings back
+ * more than the shortfall below the 7-day buffer, a sweep never takes cash the buffer needs, and either becomes a hold
+ * when there is nothing to cover.
+ */
+describe("boundTreasuryMove", () => {
+  // testnet-2 at 07:43 UTC on 2026-10-03: the operating wallet empty, 58.210738 USDC in the reserve, 0.10 USDC due.
+  const empty = planTreasury({ operatingBalance: 0, reserveBalance: 58.210738, apy: 0.0345, obligationsDue7d: 0.1, daysUntilNextObligation: 1.68, roundTripCostUsd: 0.00638 });
+
+  it("brings back only the shortfall below the buffer when the model asks for the whole reserve", () => {
+    const bounded = boundTreasuryMove({ action: "redeem_from_usyc", amount: 58.1, reasoning: "restore liquid cash" }, empty, 58.210738);
+    expect(bounded.decision).toMatchObject({ action: "redeem_from_usyc", amount: 0.114999 });
+    expect(bounded.guardrail).toEqual({ rule: "treasury.redeem_above_need", modelAmount: 58.1, limit: 0.114999 });
+  });
+
+  it("leaves a redeem within the shortfall as the model sized it", () => {
+    const bounded = boundTreasuryMove({ action: "redeem_from_usyc", amount: 0.11, reasoning: "cover the bill" }, empty, 58.210738);
+    expect(bounded).toEqual({ decision: { action: "redeem_from_usyc", amount: 0.11, reasoning: "cover the bill" }, guardrail: null });
+  });
+
+  it("never brings back more than the reserve holds", () => {
+    const bounded = boundTreasuryMove({ action: "redeem_from_usyc", amount: 5, reasoning: "x" }, empty, 0.05);
+    expect(bounded.decision.amount).toBe(0.05);
+    expect(bounded.guardrail).toEqual({ rule: "treasury.redeem_above_need", modelAmount: 5, limit: 0.05 });
+  });
+
+  it("holds a redeem when the operating wallet already covers the buffer", () => {
+    // 100 USDC in the operating wallet against a 11.5 USDC buffer: nothing is short.
+    const covered = planTreasury({ ...base, operatingBalance: 100, reserveBalance: 500, obligationsDue7d: 10 });
+    const bounded = boundTreasuryMove({ action: "redeem_from_usyc", amount: 50, reasoning: "x" }, covered, 500);
+    expect(bounded.decision).toMatchObject({ action: "hold", amount: 0 });
+    expect(bounded.guardrail).toEqual({ rule: "treasury.redeem_above_need", modelAmount: 50, limit: 0 });
+  });
+
+  it("keeps a sweep to the cash above the buffer", () => {
+    // 100 USDC against a 11.5 USDC buffer: 88.5 USDC may go into the reserve, not 100.
+    const idle = planTreasury({ ...base, operatingBalance: 100, reserveBalance: 0, obligationsDue7d: 10 });
+    const bounded = boundTreasuryMove({ action: "sweep_to_usyc", amount: 100, reasoning: "earn on it" }, idle, 0);
+    expect(bounded.decision).toMatchObject({ action: "sweep_to_usyc", amount: 88.5 });
+    expect(bounded.guardrail).toEqual({ rule: "treasury.sweep_below_buffer", modelAmount: 100, limit: 88.5 });
+  });
+
+  it("holds a sweep when nothing sits above the buffer", () => {
+    const bounded = boundTreasuryMove({ action: "sweep_to_usyc", amount: 1, reasoning: "x" }, empty, 58.210738);
+    expect(bounded.decision).toMatchObject({ action: "hold", amount: 0 });
+    expect(bounded.guardrail).toEqual({ rule: "treasury.sweep_below_buffer", modelAmount: 1, limit: 0 });
+  });
+
+  it("leaves a hold alone", () => {
+    const hold = { action: "hold" as const, amount: 0, reasoning: "fees exceed yield" };
+    expect(boundTreasuryMove(hold, empty, 58.210738)).toEqual({ decision: hold, guardrail: null });
   });
 });

@@ -152,3 +152,38 @@ export function planTreasury(input: TreasuryInputs): TreasuryPlan {
     },
   };
 }
+
+export type TreasuryGuardrailRule = "treasury.redeem_above_need" | "treasury.sweep_below_buffer";
+
+export interface TreasuryBound {
+  /** The move code allows: the model's own when it fits, otherwise the most the buffer allows, or a hold. */
+  decision: TreasuryDecision;
+  /** Set when code changed the model's move: the rule, what the model asked for, and the most the rule allows. */
+  guardrail: { rule: TreasuryGuardrailRule; modelAmount: number; limit: number } | null;
+}
+
+/**
+ * Bounds the agent's treasury move by the buffer the policy works out (treasury move bounds R1), after the model
+ * answers, the way the payment stages re-check a payment: a redeem brings back at most the shortfall below the buffer
+ * (and never more than the reserve holds), a sweep takes at most the cash above it, and either becomes a hold when there
+ * is nothing to cover. Redemptions are always possible, so cash comes back when obligations need it, not before.
+ * Whether a sweep pays for itself stays the model's judgement; this decides only how much may move.
+ */
+export function boundTreasuryMove(decision: TreasuryDecision, plan: TreasuryPlan, reserveBalance: number): TreasuryBound {
+  if (decision.action === "hold") return { decision, guardrail: null };
+  const redeem = decision.action === "redeem_from_usyc";
+  const limit = redeem ? toUsdc(Math.max(0, Math.min(-plan.idle, reserveBalance))) : toUsdc(Math.max(0, plan.idle));
+  if (decision.amount <= limit) return { decision, guardrail: null };
+
+  const guardrail = { rule: redeem ? ("treasury.redeem_above_need" as const) : ("treasury.sweep_below_buffer" as const), modelAmount: decision.amount, limit };
+  if (limit <= 0) {
+    const why = redeem
+      ? `the operating wallet already covers its ${plan.buffer} USDC buffer, so there is nothing to bring back`
+      : `no cash sits above the ${plan.buffer} USDC buffer for what falls due within 7 days`;
+    return { decision: { action: "hold", amount: 0, reasoning: `${decision.reasoning} [Code held it: ${why}.]` }, guardrail };
+  }
+  const why = redeem
+    ? `what brings the operating wallet up to its ${plan.buffer} USDC buffer`
+    : `the cash above the ${plan.buffer} USDC buffer for what falls due within 7 days`;
+  return { decision: { action: decision.action, amount: limit, reasoning: `${decision.reasoning} [Code limited it to ${limit} USDC: ${why}.]` }, guardrail };
+}

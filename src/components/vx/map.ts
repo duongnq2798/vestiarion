@@ -575,8 +575,10 @@ export function treasuryDecisionEntries(entries: LedgerEntry[], count: number): 
 export function treasuryLedgerDecision(entry: LedgerEntry): Decision {
   const decision = record(entry.detail.decision);
   const economics = record(entry.detail.economics);
-  const action = stringValue(decision?.action) ?? entry.action;
-  const amount = numberValue(decision?.amount) ?? 0;
+  // A move code bounded (treasury move bounds R3) shows what moved; the model's own ask is in `decision`.
+  const boundedTo = record(entry.detail.boundedTo);
+  const action = stringValue(boundedTo?.action) ?? stringValue(decision?.action) ?? entry.action;
+  const amount = numberValue(boundedTo?.amount) ?? numberValue(decision?.amount) ?? 0;
   const earnMode = stringValue(entry.detail.earnMode);
   const executed = entry.detail.executed === true;
   // A real USYC move's transaction (USYC live design R7): the deposit or the redemption.
@@ -590,6 +592,7 @@ export function treasuryLedgerDecision(entry: LedgerEntry): Decision {
     { label: "Hold horizon", value: `${numberValue(economics?.expectedHoldDays) ?? 0} day(s)`, state: "neutral" as const },
     { label: "Projected yield", value: `$${fmt(numberValue(economics?.projectedYieldUsd) ?? 0)}`, state: "neutral" as const },
     { label: "Round-trip cost", value: `$${fmt(numberValue(economics?.roundTripCostUsd) ?? 0)}`, state: "neutral" as const },
+    ...(boundedTo ? [{ label: "Code limited it", value: `the model asked for ${fmt(numberValue(decision?.amount) ?? 0)} USDC`, state: "missing" as const }] : []),
   ];
 
   return {

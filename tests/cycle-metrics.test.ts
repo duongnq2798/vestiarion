@@ -32,6 +32,13 @@ describe("cycle metrics", () => {
     });
   });
 
+  it("counts a treasury move code bounded as a guardrail override, and one it left alone as none (treasury move bounds R3)", () => {
+    const metrics = new CycleMetricsCollector();
+    metrics.recordTreasuryMove(true);
+    metrics.recordTreasuryMove(false);
+    expect(metrics.snapshot().guardrailOverrideCount).toBe(1);
+  });
+
   it("returns snapshots by value so historical metrics cannot be mutated accidentally", () => {
     const metrics = new CycleMetricsCollector();
     metrics.recordDecisionMode("heuristic");
