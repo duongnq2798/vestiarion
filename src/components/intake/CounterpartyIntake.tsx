@@ -61,6 +61,9 @@ export default function CounterpartyIntake({ orgSlug, framed = true }: { orgSlug
           <Field id="cp-jurisdiction" label="Jurisdiction" description="ISO code or country name">
             <Input name="jurisdiction" maxLength={80} placeholder="US" />
           </Field>
+          <Field id="cp-notice-email" label="Email for payment notices" optional description="Told the amount and the transaction each time it is paid" className="sm:col-span-2">
+            <Input name="noticeEmail" type="email" maxLength={254} autoComplete="off" placeholder="accounts@example.com" />
+          </Field>
         </div>
         <p className="mt-4 text-xs leading-relaxed text-ink-3">The configured limit is preserved as the baseline; screening derives current payment authority.</p>
         <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

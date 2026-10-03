@@ -481,6 +481,18 @@ describe("the new control screens, as source", () => {
     expect(read("src/components/AgentControlsClient.tsx")).toContain("window.dispatchEvent(new Event(AGENT_EXPECTED_EVENT));");
   });
 
+  it("a counterparty takes an address for payment notices when added, and on its row", () => {
+    expect(read("src/components/intake/CounterpartyIntake.tsx")).toContain('label="Email for payment notices"');
+    expect(read("src/components/intake/CounterpartyIntake.tsx")).toContain('name="noticeEmail"');
+    const page = read("src/app/o/[slug]/counterparties/page.tsx");
+    expect(page).toContain("Payment notices");
+    expect(page).toContain("<CounterpartyNoticeEmailEdit");
+  });
+
+  it("a cycle ends by sending the payment notices it owes", () => {
+    expect(read("src/lib/agent/orchestrator.ts")).toContain('await stage("notices", async () => {');
+  });
+
   it("a link to a counterparty's row opens the row", () => {
     expect(read("src/components/CounterpartyRow.tsx")).toContain("id={`counterparty-${counterparty.id}`}");
     expect(read("src/components/vx/ScrollToHash.tsx")).toContain("fold.open = true");

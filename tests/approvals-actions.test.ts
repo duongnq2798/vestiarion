@@ -35,6 +35,9 @@ vi.mock("next/cache", () => ({ revalidatePath: revalidatePathMock }));
 const { authorizeMock } = vi.hoisted(() => ({ authorizeMock: vi.fn() }));
 vi.mock("@/lib/auth/authorize", () => ({ authorize: authorizeMock }));
 
+const { noticesSoonMock } = vi.hoisted(() => ({ noticesSoonMock: vi.fn() }));
+vi.mock("@/lib/payment-notices-soon", () => ({ sendNoticesSoon: noticesSoonMock }));
+
 const { approveAndPayMock, rejectInvoiceMock, returnInvoiceMock, addInvoiceDetailsMock } = vi.hoisted(() => ({
   approveAndPayMock: vi.fn(),
   rejectInvoiceMock: vi.fn(),
@@ -115,6 +118,8 @@ describe("approveInvoiceAction", () => {
     expect(approveAndPayMock).toHaveBeenCalledWith({ actorId: USER, invoiceId: VALID_ID, shownAddress: "0xdead" });
     expect(result).toEqual({ ok: true, message: "Paid." });
     expect(revalidatePathMock).toHaveBeenCalled();
+    // The payee's notice goes out after the response, not at the next cycle (payment notices R5).
+    expect(noticesSoonMock).toHaveBeenCalledTimes(1);
   });
 
   it("returns the waiting-for-confirmation message when approveAndPay resolves matched", async () => {
@@ -124,6 +129,8 @@ describe("approveInvoiceAction", () => {
     const result = await run(() => approveInvoiceAction(INITIAL, form(VALID_ID)));
 
     expect(result).toEqual({ ok: true, message: "Payment submitted; waiting for confirmation." });
+    // Not confirmed yet: the cycle that confirms it sends the notice.
+    expect(noticesSoonMock).not.toHaveBeenCalled();
   });
 
   it("reports a failed transfer as a failure, from a ' [transfer failed: …]' note", async () => {

@@ -75,6 +75,16 @@ describe("setUpFreelancerPayment", () => {
     expect(screenMock).toHaveBeenCalledWith(COUNTERPARTY);
   });
 
+  it("keeps the email the link goes to as where the freelancer hears they were paid (payment notices R1)", async () => {
+    await setUp();
+    expect(posted("/rest/v1/counterparties").notice_email).toBe(valid().email);
+  });
+
+  it("keeps no address for notices when no email was given", async () => {
+    await setUp({ email: "" });
+    expect(posted("/rest/v1/counterparties").notice_email).toBeNull();
+  });
+
   it("adds the work as a milestone already verified by the person setting up the payment", async () => {
     await setUp({ evidence: "https://www.canva.com/design/abc/view" });
     expect(posted("/rest/v1/milestones")).toMatchObject({

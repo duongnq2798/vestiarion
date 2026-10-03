@@ -9,6 +9,7 @@ import { authorize } from "@/lib/auth/authorize";
 import { revalidateOrgPages } from "@/lib/auth/revalidate";
 import { inOrg } from "@/lib/dal/scope";
 import { invoiceDetailsInputSchema, invoiceFormRefusal } from "@/lib/intake-validation";
+import { sendNoticesSoon } from "@/lib/payment-notices-soon";
 
 export interface ApprovalActionResult {
   ok: boolean;
@@ -54,6 +55,8 @@ export async function approveInvoiceAction(_previous: ApprovalActionResult, form
       // to the person who pressed Approve and pay.
       revalidateOrgPages();
       if (result.status === "held") return { ok: false, message: heldMessage(result.note) };
+      // A confirmed payment's payee hears of it now, not at the next cycle (payment notices R5).
+      if (result.status === "paid") sendNoticesSoon(auth);
       return { ok: true, message: result.status === "paid" ? "Paid." : "Payment submitted; waiting for confirmation." };
     } catch (error) {
       return fail(error);
