@@ -1,3 +1,5 @@
+import type { ObligationAt } from "./treasury";
+
 export const OPEN_PAYABLE_STATUSES = ["pending", "matched", "held", "awaiting_info", "scheduled"] as const;
 
 /**
@@ -26,6 +28,8 @@ export interface PayableObligationSummary {
   due14d: number;
   openTotal: number;
   daysUntilNext: number;
+  /** Each open USDC payable due within 30 days, on its day, overdue ones at 0 (treasury hold horizon R1). */
+  schedule: ObligationAt[];
 }
 
 /**
@@ -50,10 +54,15 @@ export function summarizePayableObligations(rows: PayableObligation[], now = Dat
     return Number.isFinite(days) ? Math.min(soonest, Math.max(0, days)) : soonest;
   }, Number.POSITIVE_INFINITY);
 
+  const schedule = open
+    .map((row) => ({ days: Math.max(0, (Date.parse(effectiveDate(row)) - now) / 86_400_000), amount: amount(row) }))
+    .filter((due) => Number.isFinite(due.days) && due.days < 30);
+
   return {
     due7d: dueWithin(7),
     due14d: dueWithin(14),
     openTotal: open.reduce((sum, row) => sum + amount(row), 0),
     daysUntilNext,
+    schedule,
   };
 }
