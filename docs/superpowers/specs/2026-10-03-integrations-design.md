@@ -1,7 +1,7 @@
 # Integrations: where Vestiarion meets the tools a business already uses
 
-Date: 2026-10-03. Status: review done; Phase 0 implemented on `feat/integrations`; Phase 1 designed, not started.
-Decided under the standing autonomy grant.
+Date: 2026-10-03. Status: review done; Phase 0 implemented on `feat/integrations` (PR #172); Phase 1 designed, not
+started. Decided under the standing autonomy grant.
 
 ## 1. The question
 
@@ -217,7 +217,8 @@ the ledger key, managing members. Each of these changes who can be paid, or how 
   - An optional `provenance` argument on `approveAndPay`, `rejectInvoice`, `returnInvoice`, `addInvoiceDetails`,
     `payHeldMilestone`, `closeMilestone`, `pauseAgent` and `resumeAgent`, spread into their entry's `detail`.
   - The console's actions for approvals (`approvals.ts`), Pay now and Close (`milestones.ts`), and Run, Pause and
-    Resume (`agent.ts`) call commands. The bot's **Add** calls `addInvoice`, and its role checks use `memberActor`.
+    Resume (`agent.ts`) call commands. The bot's **Add** builds its actor with `memberActor` and calls `addInvoice`;
+    reading a document into a draft still asks the member's role directly, since it writes nothing.
 - **Schema, API, webhooks**: none. The events (`invoice_added`, `payable_returned`, `details_added`, `agent_resumed`)
   and the payee notices are raised by the commands now, not by the actions.
 - **Authentication**: the console is unchanged (`authorize` first, then the command's own gate, as defence in depth).
@@ -397,6 +398,8 @@ then QuickBooks. Teams or Lark only when a customer asks. ERP only behind a cont
   for each action, never carried in a token, a link or a button.
 
 ## 12. Phase 0 rollout
+
+Phase 0 is PR #172: `npm run verify` green with 363 test files and 6481 tests (6413 before it).
 
 1. Merge on green with the partner's word. No migration, no variable.
 2. In testnet-2: Approve and pay a held payable, Reject one, Return one, Add details to one; Pay now and Close on
