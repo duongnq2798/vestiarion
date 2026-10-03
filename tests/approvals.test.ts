@@ -4,6 +4,7 @@ import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { withOrg } from "@/lib/dal/scope";
 import {
+  addInvoiceDetails,
   ApprovalError,
   approveAndPay,
   listWaitingPayables,
@@ -1258,6 +1259,150 @@ describe("returnInvoice", () => {
   });
 });
 
+describe("addInvoiceDetails", () => {
+  /** The compare-and-set matched the payable. */
+  const WRITTEN = { invoicePatch: () => ({ body: [{ id: INVOICE_ID }] }) };
+  const loaded = (row: Record<string, unknown>) => (request: RecordedRequest) =>
+    request.params.get("id") ? { body: invoiceRow(row) } : undefined;
+  const invoicePatch = (requests: RecordedRequest[]) => requests.find((r) => r.path === "/rest/v1/invoices" && r.method === "PATCH");
+
+  it("adds the missing purchase order and goods receipt while the payable still waits, and records what it added", async () => {
+    const { fake, run } = approvalsFake(WRITTEN);
+
+    const added = await run(() => addInvoiceDetails({ actorId: ACTOR, invoiceId: INVOICE_ID, poReference: "PO-100", goodsReceived: true }));
+
+    expect(added).toEqual({ poReference: "PO-100", goodsReceived: true });
+    const patch = invoicePatch(fake.requests)!;
+    // reviewed_by marks a person's hand on it, so /open never counts its payment as untouched (R5).
+    expect(patch.body).toEqual({ po_reference: "PO-100", goods_received: true, reviewed_by: ACTOR, reviewed_at: expect.any(String) });
+    expect(patch.params.get("id")).toBe(`eq.${INVOICE_ID}`);
+    expect(patch.params.get("status")).toBe("in.(held,flagged,awaiting_info)");
+    // Only an empty purchase order is filled, and only goods not received are marked received (R2, R3).
+    expect(patch.params.get("po_reference")).toBe("is.null");
+    expect(patch.params.get("goods_received")).toBe("eq.false");
+    // Adding details decides nothing: no claim, no status. The agent's follow-up reopens it on the changed facts (R4).
+    expect(patch.body).not.toHaveProperty("status");
+    expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
+
+    const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(append).toMatchObject({ p_actor: "human", p_domain: "ap", p_action: "invoice_details_added" });
+    expect(append.p_summary).toBe("Added purchase order PO-100 and goods received to an invoice from Acme Supplies for 150 USDC");
+    // No `observed`: the follow-up and the card read the decision's facts from the decision's own entry (R5).
+    expect(append.p_detail).toEqual({
+      by: ACTOR,
+      invoiceId: INVOICE_ID,
+      counterpartyId: COUNTERPARTY_ID,
+      added: { poReference: "PO-100", goodsReceived: true },
+    });
+  });
+
+  it("adds only what is missing: a purchase order on file stays as it is", async () => {
+    const { fake, run } = approvalsFake({ ...WRITTEN, invoice: loaded({ po_reference: "PO-7", goods_received: false }) });
+
+    const added = await run(() => addInvoiceDetails({ actorId: ACTOR, invoiceId: INVOICE_ID, poReference: "PO-9", goodsReceived: true }));
+
+    expect(added).toEqual({ goodsReceived: true });
+    const patch = invoicePatch(fake.requests)!;
+    expect(patch.body).toEqual({ goods_received: true, reviewed_by: ACTOR, reviewed_at: expect.any(String) });
+    expect(patch.params.get("po_reference")).toBeNull();
+    const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(append.p_summary).toBe("Added goods received to an invoice from Acme Supplies for 150 USDC");
+    expect(append.p_detail).toMatchObject({ added: { goodsReceived: true } });
+  });
+
+  it("adds a purchase order alone, trimmed, and leaves goods not received", async () => {
+    const { fake, run } = approvalsFake(WRITTEN);
+
+    const added = await run(() => addInvoiceDetails({ actorId: ACTOR, invoiceId: INVOICE_ID, poReference: "  PO-100 ", goodsReceived: false }));
+
+    expect(added).toEqual({ poReference: "PO-100" });
+    const patch = invoicePatch(fake.requests)!;
+    expect(patch.body).toEqual({ po_reference: "PO-100", reviewed_by: ACTOR, reviewed_at: expect.any(String) });
+    expect(patch.params.get("goods_received")).toBeNull();
+    expect(rpcBodies(fake.requests, "append_ledger_entry")[0].p_summary).toBe("Added purchase order PO-100 to an invoice from Acme Supplies for 150 USDC");
+  });
+
+  it("names the invoice's own currency", async () => {
+    const { fake, run } = approvalsFake({ ...WRITTEN, invoice: loaded({ currency: "EURC" }) });
+
+    await run(() => addInvoiceDetails({ actorId: ACTOR, invoiceId: INVOICE_ID, poReference: null, goodsReceived: true }));
+
+    expect(rpcBodies(fake.requests, "append_ledger_entry")[0].p_summary).toBe("Added goods received to an invoice from Acme Supplies for 150 EURC");
+  });
+
+  it.each([
+    ["nothing was given", {}, { poReference: null, goodsReceived: false }],
+    ["only a blank purchase order was given", {}, { poReference: "   ", goodsReceived: false }],
+    ["both are already on file", { po_reference: "PO-7", goods_received: true }, { poReference: "PO-9", goodsReceived: true }],
+  ] as const)("refuses with nothing_to_add, writing nothing, when %s", async (_label, row, input) => {
+    const { fake, run } = approvalsFake({ ...WRITTEN, invoice: loaded(row) });
+
+    await expect(run(() => addInvoiceDetails({ actorId: ACTOR, invoiceId: INVOICE_ID, ...input }))).rejects.toMatchObject({
+      code: "nothing_to_add",
+      message: "Enter a PO reference or tick Goods or services received.",
+    });
+    expect(patchBodies(fake.requests, "/rest/v1/invoices")).toHaveLength(0);
+    expect(rpcBodies(fake.requests, "append_ledger_entry")).toHaveLength(0);
+  });
+
+  it("refuses with payment_in_flight, writing nothing, when a payment was sent", async () => {
+    const { fake, run } = approvalsFake({ ...WRITTEN, intents: [{ source_id: INVOICE_ID, status: "confirmed", provider_tx_id: "circle-tx-1", last_error: null }] });
+
+    await expect(run(() => addInvoiceDetails({ actorId: ACTOR, invoiceId: INVOICE_ID, poReference: "PO-100", goodsReceived: true }))).rejects.toMatchObject({
+      code: "payment_in_flight",
+    });
+    expect(patchBodies(fake.requests, "/rest/v1/invoices")).toHaveLength(0);
+  });
+
+  it("refuses with invoice_changed while someone is deciding it", async () => {
+    const { fake, run } = approvalsFake({ ...WRITTEN, invoice: loaded({ status: "processing", reviewed_at: new Date().toISOString() }) });
+
+    await expect(run(() => addInvoiceDetails({ actorId: ACTOR, invoiceId: INVOICE_ID, poReference: "PO-100", goodsReceived: true }))).rejects.toMatchObject({
+      code: "invoice_changed",
+    });
+    expect(patchBodies(fake.requests, "/rest/v1/invoices")).toHaveLength(0);
+  });
+
+  it("refuses with invoice_not_found for a payable that no longer waits", async () => {
+    const { fake, run } = approvalsFake({ ...WRITTEN, invoice: loaded({ status: "paid" }) });
+
+    await expect(run(() => addInvoiceDetails({ actorId: ACTOR, invoiceId: INVOICE_ID, poReference: "PO-100", goodsReceived: true }))).rejects.toMatchObject({
+      code: "invoice_not_found",
+    });
+    expect(patchBodies(fake.requests, "/rest/v1/invoices")).toHaveLength(0);
+  });
+
+  it("refuses with invoice_changed, recording nothing, when the payable changed before the write", async () => {
+    // The default PATCH reply is no row: someone decided it, or added the same detail, in between.
+    const { fake, run } = approvalsFake();
+
+    await expect(run(() => addInvoiceDetails({ actorId: ACTOR, invoiceId: INVOICE_ID, poReference: "PO-100", goodsReceived: true }))).rejects.toMatchObject({
+      code: "invoice_changed",
+      message: "This invoice changed a moment ago. Reload the page to see it.",
+    });
+    expect(rpcBodies(fake.requests, "append_ledger_entry")).toHaveLength(0);
+  });
+
+  it("rethrows a failed write, recording nothing", async () => {
+    const { fake, run } = approvalsFake({ invoicePatch: () => ({ status: 500, body: { message: "invoices update failed: connection reset" } }) });
+
+    await expect(run(() => addInvoiceDetails({ actorId: ACTOR, invoiceId: INVOICE_ID, poReference: "PO-100", goodsReceived: true }))).rejects.toThrow(
+      "invoices update failed: connection reset"
+    );
+    expect(rpcBodies(fake.requests, "append_ledger_entry")).toHaveLength(0);
+  });
+
+  it("still reports what it added when the ledger append fails afterwards", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { run } = approvalsFake({ ...WRITTEN, ledgerFails: true });
+
+    await expect(run(() => addInvoiceDetails({ actorId: ACTOR, invoiceId: INVOICE_ID, poReference: "PO-100", goodsReceived: false }))).resolves.toEqual({
+      poReference: "PO-100",
+    });
+    error.mockRestore();
+  });
+});
+
 describe("listWaitingPayables", () => {
   it("lists payables in a waiting status, ordered by due date, with the counterparty joined in", async () => {
     const { fake, run } = approvalsFake();
@@ -1286,6 +1431,9 @@ describe("listWaitingPayables", () => {
         currency: "USDC",
         payeeChain: "ARC-TESTNET",
         bridgeFeeUsdc: null,
+        poReference: null,
+        goodsReceived: false,
+        addedSinceDecision: null,
       },
     ]);
     const listing = fake.requests.find((r) => r.path === "/rest/v1/invoices" && r.method === "GET" && !r.params.get("id"));
@@ -1314,6 +1462,60 @@ describe("listWaitingPayables", () => {
         "The purchase order PO-7 is on file and the goods were received. The operating wallet holds enough USDC to pay it. " +
         "No duplicate or high-risk signals were found. The agent decided to pay it. Not paid: the counterparty is high risk."
     );
+  });
+
+  it("carries the facts on file, and what a person added since the agent stopped it (complete held invoice R6)", async () => {
+    const decision = {
+      seq: 9, id: "e9", ts: "2026-10-03T08:00:00Z", actor: "agent", domain: "ap", action: "ap_request_info", summary: "",
+      detail: {
+        invoiceId: INVOICE_ID,
+        decision: { action: "request_info" },
+        observed: { riskLevel: "clear", paymentLimit: 200, poReference: null, goodsReceived: false },
+      },
+      body_hash: "00", signature: "00", prev_hash: null, hash: "00", signing_key_id: null,
+    };
+    const added = {
+      ...decision,
+      seq: 10, id: "e10", actor: "human", action: "invoice_details_added",
+      detail: { by: ACTOR, invoiceId: INVOICE_ID, counterpartyId: COUNTERPARTY_ID, added: { poReference: "PO-100", goodsReceived: true } },
+    };
+    const technical = "Cannot complete a three-way match: purchase order missing, goods received false. poReference is null.";
+    const { run } = approvalsFake({
+      invoice: (r) =>
+        r.params.get("id") ? undefined : { body: [invoiceRow({ status: "awaiting_info", agent_reasoning: technical, po_reference: "PO-100", goods_received: true })] },
+      // Newest first, as ledger_entries_for_targets returns them.
+      ledgerTargets: [added, decision],
+    });
+
+    const [row] = await run(() => listWaitingPayables());
+
+    expect(row.poReference).toBe("PO-100");
+    expect(row.goodsReceived).toBe(true);
+    expect(row.addedSinceDecision).toEqual({ poReference: "PO-100", goodsReceived: true });
+    // The explanation describes the decision, from the facts it recorded: not a held payable whose match was complete.
+    expect(row.explanation).toContain("No purchase order is on file.");
+    expect(row.explanation).not.toContain("PO-100");
+  });
+
+  it("says nothing was added when the facts are those the decision recorded, or it recorded none", async () => {
+    const entry = (invoiceId: string, observed: Record<string, unknown>) => ({
+      seq: 9, id: `e-${invoiceId}`, ts: "2026-10-03T08:00:00Z", actor: "agent", domain: "ap", action: "ap_hold", summary: "",
+      detail: { invoiceId, decision: { action: "hold" }, observed },
+      body_hash: "00", signature: "00", prev_hash: null, hash: "00", signing_key_id: null,
+    });
+    const rows = [
+      invoiceRow({ id: "same", po_reference: "PO-7", goods_received: true }),
+      invoiceRow({ id: "unrecorded", po_reference: "PO-7", goods_received: true }),
+      invoiceRow({ id: "no-entry", po_reference: "PO-7", goods_received: true }),
+    ];
+    const { run } = approvalsFake({
+      invoice: (r) => (r.params.get("id") ? undefined : { body: rows }),
+      ledgerTargets: [entry("same", { riskLevel: "clear", poReference: "PO-7", goodsReceived: true }), entry("unrecorded", { riskLevel: "clear" })],
+    });
+
+    const listed = await run(() => listWaitingPayables());
+
+    expect(Object.fromEntries(listed.map((row) => [row.id, row.addedSinceDecision]))).toEqual({ same: null, unrecorded: null, "no-entry": null });
   });
 
   it("reads each row's early-payment discount the way payInvoice applies it, so the approval dialog can say what will leave", async () => {

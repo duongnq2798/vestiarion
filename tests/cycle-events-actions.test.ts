@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
-import { returnInvoiceAction } from "@/app/actions/approvals";
+import { addInvoiceDetailsAction, returnInvoiceAction } from "@/app/actions/approvals";
 import { resumeAgentAction, setAgentBudgetAction } from "@/app/actions/agent";
 import { confirmCounterpartyAddressAction, createInvoiceAction, importInvoicesAction, updateCounterpartyLimitAction } from "@/app/actions/intake";
 import { manualMilestoneVerificationAction } from "@/app/actions/milestones";
@@ -24,6 +24,7 @@ const { ORG, USER, raiseMock, authorizeMock, mocks } = vi.hoisted(() => ({
   authorizeMock: vi.fn(),
   mocks: {
     returnInvoice: vi.fn(),
+    addInvoiceDetails: vi.fn(),
     resumeAgent: vi.fn(),
     confirmCounterpartyAddress: vi.fn(),
     changeCounterpartyLimit: vi.fn(),
@@ -43,6 +44,7 @@ vi.mock("@/lib/ledger", () => ({ appendLedgerEntry: mocks.appendLedgerEntry }));
 vi.mock("@/lib/agent/approvals", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/agent/approvals")>()),
   returnInvoice: mocks.returnInvoice,
+  addInvoiceDetails: mocks.addInvoiceDetails,
 }));
 vi.mock("@/lib/platform/pause", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/platform/pause")>()),
@@ -184,6 +186,22 @@ describe("returning a payable to the agent", () => {
     mocks.returnInvoice.mockRejectedValue(new Error("boom"));
     vi.spyOn(console, "error").mockImplementation(() => {});
     await returnInvoiceAction(empty, form({ invoiceId: INVOICE }));
+    expect(raiseMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("adding what a held payable was missing", () => {
+  it("raises details_added, and says the agent decides it again within a minute", async () => {
+    mocks.addInvoiceDetails.mockResolvedValue({ poReference: "PO-42", goodsReceived: true });
+    const result = await addInvoiceDetailsAction(empty, form({ invoiceId: INVOICE, poReference: "PO-42", goodsReceived: "on" }));
+    expect(result).toEqual({ ok: true, message: "Details added. The agent usually decides it again within a minute." });
+    expect(raiseMock).toHaveBeenCalledWith(ACCESS, "details_added");
+  });
+
+  it("raises nothing when adding them is refused", async () => {
+    mocks.addInvoiceDetails.mockRejectedValue(new Error("boom"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    await addInvoiceDetailsAction(empty, form({ invoiceId: INVOICE, goodsReceived: "on" }));
     expect(raiseMock).not.toHaveBeenCalled();
   });
 });

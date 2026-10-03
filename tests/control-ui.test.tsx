@@ -3,7 +3,7 @@ import path from "node:path";
 import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import ApprovalCard, { OWN_ENTRY_RECORDED, OWN_INVOICE_NOTE, payConfirmDescription, payConfirmTitle } from "@/components/ApprovalCard";
+import ApprovalCard, { addedDetailsSentence, OWN_ENTRY_RECORDED, OWN_INVOICE_NOTE, payConfirmDescription, payConfirmTitle } from "@/components/ApprovalCard";
 import AgentPauseControl, { PAUSE_DIALOG_DESCRIPTION } from "@/components/AgentPauseControl";
 import { AgentPausedBanner, pausedBanner } from "@/components/AgentPausedBanner";
 import type { WaitingPayable } from "@/lib/agent/approvals";
@@ -19,6 +19,7 @@ vi.mock("@/app/actions/approvals", () => ({
   approveInvoiceAction: vi.fn(),
   rejectInvoiceAction: vi.fn(),
   returnInvoiceAction: vi.fn(),
+  addInvoiceDetailsAction: vi.fn(),
 }));
 vi.mock("@/app/actions/agent", () => ({
   pauseAgentAction: vi.fn(),
@@ -59,16 +60,23 @@ function payable(overrides: Partial<WaitingPayable> = {}): WaitingPayable {
     currency: "USDC",
     payeeChain: "ARC-TESTNET",
     bridgeFeeUsdc: null,
+    poReference: null,
+    goodsReceived: false,
+    addedSinceDecision: null,
     ...overrides,
   };
 }
 
-function card(overrides: Partial<WaitingPayable> = {}, props: Partial<{ canDecide: boolean; viewerId: string; sandbox: boolean; soleApprover: boolean }> = {}) {
+function card(
+  overrides: Partial<WaitingPayable> = {},
+  props: Partial<{ canDecide: boolean; canEdit: boolean; viewerId: string; sandbox: boolean; soleApprover: boolean }> = {}
+) {
   return html(
     <ApprovalCard
       orgSlug="acme"
       payable={payable(overrides)}
       canDecide={props.canDecide ?? true}
+      canEdit={props.canEdit ?? false}
       viewerId={props.viewerId ?? VIEWER}
       sandbox={props.sandbox ?? false}
       soleApprover={props.soleApprover ?? false}
@@ -468,6 +476,54 @@ describe("the new control screens, as source", () => {
     expect(read("src/components/ApprovalCard.tsx")).toContain(
       "Nothing new is sent: Vestiarion checks the transfer already made with Circle, and the ledger records who approved it."
     );
+  });
+});
+
+describe("adding what a held payable was missing, on its card (complete held invoice R1–R3, R6)", () => {
+  it("offers Add details to an owner or admin while the payable lacks a purchase order or goods received", () => {
+    expect(card({ poReference: null, goodsReceived: false }, { canEdit: true })).toContain("Add details");
+    expect(card({ poReference: "PO-7", goodsReceived: false }, { canEdit: true })).toContain("Add details");
+    expect(card({ poReference: null, goodsReceived: true }, { canEdit: true })).toContain("Add details");
+  });
+
+  it("does not offer it to an approver, who decides payments but does not enter invoices", () => {
+    const markup = card({}, { canEdit: false });
+    expect(markup).toContain("Approve and pay");
+    expect(markup).not.toContain("Add details");
+  });
+
+  it("does not offer it once both are on file", () => {
+    expect(card({ poReference: "PO-7", goodsReceived: true }, { canEdit: true })).not.toContain("Add details");
+  });
+
+  it.each([
+    ["a payment was already sent", { paymentSent: true }],
+    ["a payment is in flight", { lastAttempt: { state: "in_flight" } as const }],
+    ["an earlier decision did not finish", { status: "processing" as const, reviewedAt: "2026-09-29T13:00:00Z", reclaimable: true }],
+  ])("does not offer it when %s", (_label, overrides: Partial<WaitingPayable>) => {
+    expect(card(overrides, { canEdit: true })).not.toContain("Add details");
+  });
+
+  it("says what was added since the agent stopped it, and that the agent decides it again", () => {
+    const added = { poReference: "PO-100", goodsReceived: true as const };
+    const markup = card({ poReference: "PO-100", goodsReceived: true, addedSinceDecision: added }, { canEdit: true });
+    expect(markup).toContain(addedDetailsSentence(added));
+    expect(markup).not.toContain("Add details");
+  });
+
+  it("says nothing of the kind when nothing was added", () => {
+    expect(card({}, { canEdit: true })).not.toContain("Since the agent stopped it");
+  });
+});
+
+describe("addedDetailsSentence", () => {
+  it("names what was added, and says the agent decides it again", () => {
+    const next = "The agent decides it again at its next cycle, usually within a minute.";
+    expect(addedDetailsSentence({ poReference: "PO-100", goodsReceived: true })).toBe(
+      `Since the agent stopped it, the purchase order PO-100 was added and the goods were marked received. ${next}`
+    );
+    expect(addedDetailsSentence({ poReference: "PO-100" })).toBe(`Since the agent stopped it, the purchase order PO-100 was added. ${next}`);
+    expect(addedDetailsSentence({ goodsReceived: true })).toBe(`Since the agent stopped it, the goods were marked received. ${next}`);
   });
 });
 

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import {
+  addInvoiceDetailsAction,
   approveInvoiceAction,
   rejectInvoiceAction,
   returnInvoiceAction,
@@ -34,10 +35,11 @@ vi.mock("next/cache", () => ({ revalidatePath: revalidatePathMock }));
 const { authorizeMock } = vi.hoisted(() => ({ authorizeMock: vi.fn() }));
 vi.mock("@/lib/auth/authorize", () => ({ authorize: authorizeMock }));
 
-const { approveAndPayMock, rejectInvoiceMock, returnInvoiceMock } = vi.hoisted(() => ({
+const { approveAndPayMock, rejectInvoiceMock, returnInvoiceMock, addInvoiceDetailsMock } = vi.hoisted(() => ({
   approveAndPayMock: vi.fn(),
   rejectInvoiceMock: vi.fn(),
   returnInvoiceMock: vi.fn(),
+  addInvoiceDetailsMock: vi.fn(),
 }));
 vi.mock("@/lib/agent/approvals", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/agent/approvals")>();
@@ -46,6 +48,7 @@ vi.mock("@/lib/agent/approvals", async (importOriginal) => {
     approveAndPay: approveAndPayMock,
     rejectInvoice: rejectInvoiceMock,
     returnInvoice: returnInvoiceMock,
+    addInvoiceDetails: addInvoiceDetailsMock,
   };
 });
 
@@ -227,5 +230,59 @@ describe("returnInvoiceAction", () => {
 
     expect(result).toEqual({ ok: false, message: "Someone else decided this invoice a moment ago." });
     expect(revalidatePathMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("addInvoiceDetailsAction", () => {
+  it("lets owners and admins add details, reads the form as the invoice form does, and says the agent decides it again", async () => {
+    authorizeMock.mockResolvedValueOnce({ ok: true, user: { id: USER, email: null }, membership: membership("admin") });
+    addInvoiceDetailsMock.mockResolvedValueOnce({ poReference: "PO-100", goodsReceived: true });
+
+    const result = await run(() => addInvoiceDetailsAction(INITIAL, form(VALID_ID, { poReference: "  PO-100 ", goodsReceived: "on" })));
+
+    // Entering facts is a records write (complete held invoice R1): approvers decide, they do not enter.
+    expect(authorizeMock).toHaveBeenCalledWith("northstar", "records.write");
+    expect(addInvoiceDetailsMock).toHaveBeenCalledWith({ actorId: USER, invoiceId: VALID_ID, poReference: "PO-100", goodsReceived: true });
+    expect(result).toEqual({ ok: true, message: "Details added. The agent usually decides it again within a minute." });
+    expect(revalidatePathMock).toHaveBeenCalled();
+  });
+
+  it("reads a blank purchase order as none, and an unticked box as not received", async () => {
+    authorizeMock.mockResolvedValueOnce({ ok: true, user: { id: USER, email: null }, membership: membership("owner") });
+    addInvoiceDetailsMock.mockRejectedValueOnce(new ApprovalError("nothing_to_add", "Enter a PO reference or tick Goods or services received."));
+
+    const result = await run(() => addInvoiceDetailsAction(INITIAL, form(VALID_ID, { poReference: "   " })));
+
+    expect(addInvoiceDetailsMock).toHaveBeenCalledWith({ actorId: USER, invoiceId: VALID_ID, poReference: null, goodsReceived: false });
+    expect(result).toEqual({ ok: false, message: "Enter a PO reference or tick Goods or services received." });
+    expect(revalidatePathMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses a purchase order longer than the invoice form takes, without calling addInvoiceDetails", async () => {
+    authorizeMock.mockResolvedValueOnce({ ok: true, user: { id: USER, email: null }, membership: membership("owner") });
+
+    const result = await run(() => addInvoiceDetailsAction(INITIAL, form(VALID_ID, { poReference: "P".repeat(101) })));
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toMatch(/^PO reference: /);
+    expect(addInvoiceDetailsMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects an invoiceId that is not a uuid, without calling addInvoiceDetails", async () => {
+    authorizeMock.mockResolvedValueOnce({ ok: true, user: { id: USER, email: null }, membership: membership("owner") });
+
+    const result = await run(() => addInvoiceDetailsAction(INITIAL, form("nope", { goodsReceived: "on" })));
+
+    expect(result).toEqual({ ok: false, message: "That invoice is not waiting for a decision." });
+    expect(addInvoiceDetailsMock).not.toHaveBeenCalled();
+  });
+
+  it("returns the refusal when authorize refuses, and never calls addInvoiceDetails", async () => {
+    authorizeMock.mockResolvedValueOnce({ ok: false, message: "You do not have permission to do that." });
+
+    const result = await addInvoiceDetailsAction(INITIAL, form(VALID_ID, { goodsReceived: "on" }));
+
+    expect(result).toEqual({ ok: false, message: "You do not have permission to do that." });
+    expect(addInvoiceDetailsMock).not.toHaveBeenCalled();
   });
 });

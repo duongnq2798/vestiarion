@@ -31,6 +31,7 @@ export type CycleEventKind =
   | "milestone_verified"
   | "milestone_added"
   | "payable_returned"
+  | "details_added"
   | "address_confirmed"
   | "match_dismissed"
   | "payment_received"
