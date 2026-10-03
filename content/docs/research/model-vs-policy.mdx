@@ -26,7 +26,7 @@ The first week's figures are as of 1 October 2026, 05:48 UTC; the second week's,
   - `agreedWithReference`;
   - when code refused the model, `guardrailRule` for a payable, or `guardrailBlocked` for a milestone.
 
-  Two answers agree when they choose the same action, and, for two schedules, the same day. A payable is compared after code has bounded the model's date.
+  Two answers agree when they choose the same action, and, for two schedules, the same day. A payable is compared after code has bounded the model's date. Since October 3, 2026, two treasury answers agree only when their amounts are also within 5% of the policy's, or 0.01 USDC. The script judges every entry this way. Every treasury decision in the windows below was a hold, so their figures are unchanged.
 - **Guardrails** run after the model, whatever it says. For a payable, code refuses any payment, now or scheduled, that:
   - is over the counterparty's limit;
   - goes to a counterparty screened as high risk;

@@ -151,7 +151,7 @@ describe("a code stop, in a few words", () => {
     expect(budget?.detail).toBe("DeepSeek decided to pay it; code stopped it: the agent's spending limit has no room today, and the agent pays it once there is.");
     const rules = [
       "bridge.fee_above_cap", "bridge.fee_unavailable", "bridge.gateway_balance_short", "bridge.unsupported_token",
-      "counterparty.address_unconfirmed", "counterparty.high_risk", "counterparty.payment_limit", "counterparty.unscreened",
+      "counterparty.address_unconfirmed", "counterparty.client_payable", "counterparty.high_risk", "counterparty.payment_limit", "counterparty.unscreened",
       "fx.rate_unavailable", "fx.swap_cost_above_cap", "fx.swap_usdc_short", "invoice.duplicate_of_settled",
       "treasury.insufficient_eurc", "workspace.onchain_limit", "workspace.onchain_limit_route", "workspace.outflow_budget",
     ];
@@ -221,7 +221,7 @@ describe("what to do about a payable code stopped", () => {
   it("has a next step for every rule code holds by", () => {
     const rules = [
       "bridge.fee_above_cap", "bridge.fee_unavailable", "bridge.gateway_balance_short", "bridge.unsupported_token",
-      "counterparty.address_unconfirmed", "counterparty.high_risk", "counterparty.payment_limit", "counterparty.unscreened",
+      "counterparty.address_unconfirmed", "counterparty.client_payable", "counterparty.high_risk", "counterparty.payment_limit", "counterparty.unscreened",
       "fx.rate_unavailable", "fx.swap_cost_above_cap", "fx.swap_usdc_short", "invoice.duplicate_of_settled",
       "treasury.insufficient_eurc", "workspace.onchain_limit", "workspace.onchain_limit_route", "workspace.outflow_budget",
     ];

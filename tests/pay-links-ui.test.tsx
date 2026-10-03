@@ -79,7 +79,7 @@ describe("createPayLinkAction", () => {
 
 describe("setRemindersAction (collections R1)", () => {
   beforeEach(() => {
-    remindersMock.mockReset().mockResolvedValue({ madeNewLink: false, counterpartyName: "Acme" });
+    remindersMock.mockReset().mockResolvedValue({ madeNewLink: false, replacedLink: false, counterpartyName: "Acme" });
     raiseMock.mockReset();
   });
 
@@ -91,10 +91,14 @@ describe("setRemindersAction (collections R1)", () => {
     expect(raiseMock).toHaveBeenCalledWith(expect.objectContaining({ user: { id: "u1", email: null } }), "reminders_on");
   });
 
-  it("says when it made a new link, which stops the old one", async () => {
-    remindersMock.mockResolvedValueOnce({ madeNewLink: true, counterpartyName: "Acme" });
+  it("says the link sent before stops working only when one was replaced", async () => {
+    remindersMock.mockResolvedValueOnce({ madeNewLink: true, replacedLink: true, counterpartyName: "Acme" });
     expect((await setRemindersAction({ ok: false, message: "" }, form({ orgSlug: "mai", invoiceId: INVOICE, on: "true" }))).message).toBe(
-      "Reminders on. The agent decides when to remind Acme, with a new pay link: a link sent before no longer works."
+      "Reminders on. The agent decides when to remind Acme, with a new pay link: the one sent before no longer works."
+    );
+    remindersMock.mockResolvedValueOnce({ madeNewLink: true, replacedLink: false, counterpartyName: "Acme" });
+    expect((await setRemindersAction({ ok: false, message: "" }, form({ orgSlug: "mai", invoiceId: INVOICE, on: "true" }))).message).toBe(
+      "Reminders on. The agent decides when to remind Acme, with the pay link it just made."
     );
   });
 

@@ -502,6 +502,16 @@ describe("the new control screens, as source", () => {
     expect(panel).toContain("status.liveAt && canManage && status.reserveBalance > 0 && <CashBackForm");
   });
 
+  it("the treasury stage holds the model's move to code's bounds, tells the model them, and records what it changed (treasury bounds)", () => {
+    const orchestrator = read("src/lib/agent/orchestrator.ts");
+    expect(orchestrator).toContain("const bounded = boundTreasuryDecision(modelDecision, boundFacts);");
+    expect(orchestrator).toContain('const agreedWithReference = mode === "heuristic" ? null : sameTreasuryDecision(modelDecision, referencePlan);');
+    expect(orchestrator).toContain("redeemAtMostUsdc: bounds.redeemAtMost,");
+    expect(orchestrator).toContain("...(bounded.limited ? { boundedByCode: { chosen: { action: modelDecision.action, amount: modelDecision.amount }, reason: bounded.limited } } : {}),");
+    // What moves is the bounded decision, never the model's raw one.
+    expect(orchestrator).toContain("const moveOutcome = await moveTreasuryIfNotPaused(decision, {");
+  });
+
   it("a cycle ends by sending the payment notices it owes", () => {
     expect(read("src/lib/agent/orchestrator.ts")).toContain('await stage("notices", async () => {');
   });

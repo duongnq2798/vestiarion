@@ -152,3 +152,89 @@ export function planTreasury(input: TreasuryInputs): TreasuryPlan {
     },
   };
 }
+
+const AGREE_TOLERANCE_USDC = 0.01;
+const AGREE_TOLERANCE_SHARE = 0.05;
+const EPSILON = 0.0000005;
+
+/**
+ * Two treasury decisions agree when they make the same move for about the same amount: within 5% of the written
+ * policy's, or 0.01 USDC (treasury bounds R4). A redemption of the whole reserve where the policy redeems a buffer's
+ * worth is a different decision, however alike the action's name.
+ */
+export function sameTreasuryDecision(model: TreasuryDecision, reference: TreasuryDecision): boolean {
+  if (model.action !== reference.action) return false;
+  if (model.action === "hold") return true;
+  return Math.abs(model.amount - reference.amount) <= Math.max(AGREE_TOLERANCE_USDC, AGREE_TOLERANCE_SHARE * Math.abs(reference.amount));
+}
+
+export interface TreasuryBoundFacts {
+  operatingBalance: number;
+  reserveBalance: number;
+  obligationsDue14d: number;
+  plan: TreasuryPlan;
+  /** The written policy's decision, which a redemption never falls short of. */
+  reference: TreasuryDecision;
+  bufferRatio?: number;
+}
+
+/** The most a sweep may take, and the most and least a redemption may bring back (treasury bounds R1–R3). */
+export function treasuryBounds(facts: TreasuryBoundFacts): { sweepAtMost: number; redeemAtMost: number; redeemAtLeast: number } {
+  const ratio = facts.bufferRatio ?? 1.15;
+  const sweepAtMost = toUsdc(Math.min(Math.max(0, facts.plan.idle), facts.operatingBalance));
+  const need = toUsdc(Math.max(0, facts.obligationsDue14d * ratio - facts.operatingBalance));
+  const redeemAtLeast = facts.reference.action === "redeem_from_usyc" ? facts.reference.amount : 0;
+  const redeemAtMost = toUsdc(Math.min(facts.reserveBalance, Math.max(need, redeemAtLeast)));
+  return { sweepAtMost, redeemAtMost, redeemAtLeast };
+}
+
+/**
+ * What code lets the model's move be (treasury bounds R1–R3), and why, when it changed it:
+ * - a sweep takes only the cash above the 7-day buffer, so it never leaves the operating wallet short of what falls
+ *   due within 7 days;
+ * - a redemption brings back at most what falls due within 14 days needs, with the same cushion, less what the
+ *   operating wallet holds, and at least what the written policy redeems to restore the buffer.
+ * A hold is the model's to make. Money moves only between the workspace's own wallets either way; the bounds keep the
+ * reserve doing its job.
+ */
+export function boundTreasuryDecision(model: TreasuryDecision, facts: TreasuryBoundFacts): { decision: TreasuryDecision; limited: string | null } {
+  const limitedTo = (decision: TreasuryDecision, why: string) => ({
+    decision: { ...decision, reasoning: `${model.reasoning} [Code limited this: ${why}.]` },
+    limited: why,
+  });
+  const bounds = treasuryBounds(facts);
+  if (model.action === "sweep_to_usyc") {
+    const allowed = bounds.sweepAtMost;
+    if (allowed <= 0) {
+      return limitedTo({ action: "hold", amount: 0, reasoning: "" }, `a sweep of ${model.amount} USDC would take the operating wallet below its ${facts.plan.buffer} USDC buffer, so nothing was swept`);
+    }
+    if (model.amount > allowed + EPSILON) {
+      return limitedTo(
+        { action: "sweep_to_usyc", amount: allowed, reasoning: "" },
+        `a sweep of ${model.amount} USDC would take the operating wallet below its ${facts.plan.buffer} USDC buffer, so only the ${allowed} USDC above it was swept`
+      );
+    }
+    return { decision: model, limited: null };
+  }
+  if (model.action === "redeem_from_usyc") {
+    const floor = bounds.redeemAtLeast;
+    const ceiling = bounds.redeemAtMost;
+    if (ceiling <= 0) {
+      return limitedTo({ action: "hold", amount: 0, reasoning: "" }, `nothing falling due within 14 days needs cash from the reserve, so nothing was redeemed`);
+    }
+    if (model.amount > ceiling + EPSILON) {
+      return limitedTo(
+        { action: "redeem_from_usyc", amount: ceiling, reasoning: "" },
+        `${model.amount} USDC is more than the ${ceiling} USDC what falls due within 14 days needs, with its cushion, so ${ceiling} USDC was redeemed`
+      );
+    }
+    if (model.amount + EPSILON < floor) {
+      return limitedTo(
+        { action: "redeem_from_usyc", amount: floor, reasoning: "" },
+        `${model.amount} USDC would leave the operating wallet below its ${facts.plan.buffer} USDC buffer, so the ${floor} USDC the written policy redeems was redeemed`
+      );
+    }
+    return { decision: model, limited: null };
+  }
+  return { decision: model, limited: null };
+}

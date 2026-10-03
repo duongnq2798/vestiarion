@@ -85,3 +85,30 @@ is the kind of decision this agent exists to take, explain and keep inside bound
 3. Within a minute: `ar_reminder_sent` (friendly, due today) and the email arrives with the link.
 4. The partner pays it from another wallet through the link; the agent matches it (`ar_received`), and no further
    reminder is sent.
+
+### Done, 2026-10-03 (PR #165, merged as 683829b)
+
+**Migration.** Applied by the partner before the merge, as 0064, then renumbered `0065_collections.sql` (same content)
+because the Telegram bot's branch had taken 0064. A read-only check after the run confirmed:
+- the four `receivable_links` columns, with `reminders_on_by` set to null when its user is deleted;
+- `ar_reminders`: its checks, the unique key per receivable and number, and the composite foreign key to invoices;
+- RLS on, with the permissive and restrictive tenant policies, and no grants to anon or authenticated;
+- 0038, 0061, 0062 and 0063 intact after the replay.
+
+**Testnet-2.**
+
+| Time (UTC) | Entry | Step |
+|---|---|---|
+| 07:49:17 | #1082 `create_invoice` | A receivable of 0.50 USDC from Ho Client, due Oct 3, with the partner's own address as its billing email. |
+| 07:50:10 | #1083 `pay_link_created` | Made by **Remind the client by email**, since the receivable had no link. |
+| 07:50:11 | #1084 `ar_reminders_on` | `madeNewLink: true`. |
+| 07:50:39 | #1087 `ar_reminder_sent` | DeepSeek, as the written policy would: reminder 1, friendly, on the due date. Resend: delivered, subject "testnet-2: 0.50 USDC due today". |
+| 07:51:46 | — | The client paid 0.50 USDC through the link: tx `0xd97387354b0f88f9fe9b4baef4b20f534cbeaa61351c29d10721f7970f403ab8`. |
+| 07:52:01 | #1089 `ar_received` | Matched by the sender, the client's address on file. No further reminder. |
+
+**Found while testing, fixed in the PR that records this:**
+- The toast said "a link sent before no longer works" when the receivable had no link at all.
+  `ar_reminders_on` now records `replacedLink`, and the toast mentions an old link only when one was replaced.
+- A first try entered the receivable as a payable: see 2026-10-03-client-payables-design.md.
+- The same test window showed a treasury redemption of nearly the whole reserve: see
+  2026-10-03-treasury-bounds-design.md.

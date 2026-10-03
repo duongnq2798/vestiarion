@@ -1,5 +1,14 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-03: Code bounds the treasury's moves, and a payable to a client waits for a person
+
+- A new value of `guardrailRule`: `counterparty.client_payable`. The agent holds a payment, or a schedule, to a counterparty whose role is `client`, for a person: a client pays the business, so a payable to one is a refund, or an invoice entered in the wrong direction. A person may still approve it.
+- Treasury entries (`sweep_to_usyc`, `redeem_from_usyc`, `hold`, actor `agent`, domain `treasury`):
+  - `decision` is now the move code allowed. A sweep takes at most the cash above the 7-day buffer. A redemption brings back at most 115% of what falls due within 14 days, less the operating balance, and at least the written policy's.
+  - When code changed the model's move, `boundedByCode: { chosen: { action, amount }, reason }` keeps what the model chose and why, and `decision.reasoning` ends with "[Code limited this: …]".
+  - `agreedWithReference` now also needs the amount within 5% of `referenceDecision.amount`, or 0.01 USDC.
+- `ar_reminders_on` gains `replacedLink`: true only when turning reminders on replaced a link made before October 3, which stops working. `madeNewLink` is also true when the receivable had no link.
+
 ## 2026-10-03: The agent reminds clients of what they owe
 
 - **New ledger actions**, domain `ar`, delivered to webhooks like every entry:

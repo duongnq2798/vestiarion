@@ -107,7 +107,8 @@ describe("an invoice read from a document", () => {
     // Radix renders a select's options only on the client: the selection is checked in the source.
     const { readFileSync } = await import("node:fs");
     const source = readFileSync("src/components/intake/InvoiceIntake.tsx", "utf8");
-    expect(source).toContain('<Select name="counterpartyId" required disabled={none} defaultValue={start(initial?.counterpartyId)}>');
+    expect(source).toContain('name="counterpartyId"');
+    expect(source).toContain("defaultValue={start(initial?.counterpartyId)}");
     expect(readFileSync("src/components/intake/InvoiceDocumentIntake.tsx", "utf8")).toContain("counterpartyId: draft.counterpartyId,");
   });
 

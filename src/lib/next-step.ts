@@ -47,6 +47,11 @@ export function ruleNextStep(rule: string | null | undefined, counterparty: { id
         sentence: `${counterparty.name} has not been screened yet. Screening runs again at every cycle, and the agent decides it again once there is a verdict; you can also pay it in Approvals.`,
         fix: { label: "Open counterparty", path: row },
       };
+    case "counterparty.client_payable":
+      return {
+        sentence: `${counterparty.name} is a client: it pays you. If this is a refund, pay it in Approvals; if it is money ${counterparty.name} owes you, reject it and add it as a receivable.`,
+        fix: null,
+      };
     case "counterparty.high_risk":
       // "Not this person" is on the counterparty's row: a dismissed match lowers its risk, and the agent decides again.
       return {
@@ -122,6 +127,8 @@ export function ruleInBrief(rule: string | null | undefined): string | null {
       return "the counterparty is not screened yet";
     case "counterparty.high_risk":
       return "the counterparty is screened high risk";
+    case "counterparty.client_payable":
+      return "the counterparty is a client, which pays you";
     case "invoice.duplicate_of_settled":
       return "it repeats an invoice already paid";
     case "workspace.outflow_budget":

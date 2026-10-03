@@ -14,6 +14,7 @@
 import { config } from "dotenv";
 import { Client } from "pg";
 import {
+  agreementOf,
   peopleMarkdown,
   summarizeDecisions,
   summarizePeople,
@@ -43,8 +44,11 @@ const DECISIONS = `
               then 'customers' else 'ours' end as side,
          o.slug,
          e.detail->>'decisionMode' as mode,
-         e.detail->'decision'->>'action' as model_action,
+         -- The model's own choice: where code limited a treasury move, the entry keeps it apart (treasury bounds R1–R3).
+         coalesce(e.detail->'boundedByCode'->'chosen'->>'action', e.detail->'decision'->>'action') as model_action,
          e.detail->'referenceDecision'->>'action' as policy_action,
+         coalesce(e.detail->'boundedByCode'->'chosen'->>'amount', e.detail->'decision'->>'amount') as model_amount,
+         e.detail->'referenceDecision'->>'amount' as policy_amount,
          e.detail->'agreedWithReference' as agreed,
          e.detail->>'guardrailRule' as guardrail_rule,
          coalesce((e.detail->>'guardrailBlocked')::boolean, false) as guardrail_blocked,
@@ -124,6 +128,8 @@ interface Row {
   mode: string;
   model_action: string | null;
   policy_action: string | null;
+  model_amount: string | null;
+  policy_amount: string | null;
   agreed: boolean | null;
   guardrail_rule: string | null;
   guardrail_blocked: boolean;
@@ -149,7 +155,15 @@ async function main() {
       mode: row.mode,
       modelAction: row.model_action,
       policyAction: row.policy_action,
-      agreed: typeof row.agreed === "boolean" ? row.agreed : null,
+      agreed: agreementOf({
+        domain: row.domain,
+        mode: row.mode,
+        modelAction: row.model_action,
+        policyAction: row.policy_action,
+        modelAmount: row.model_amount === null ? null : Number(row.model_amount),
+        policyAmount: row.policy_amount === null ? null : Number(row.policy_amount),
+        recorded: typeof row.agreed === "boolean" ? row.agreed : null,
+      }),
       guardrailRule: row.guardrail_rule,
       guardrailBlocked: row.guardrail_blocked,
       confidence: row.confidence === null ? null : Number(row.confidence),

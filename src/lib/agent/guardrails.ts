@@ -54,6 +54,8 @@ export interface ApGuardrailInput {
    * workspace set none. `amount` is weighed against `remaining`.
    */
   outflowBudget?: BudgetRoom | null;
+  /** The counterparty's role (`vendor`, `contractor`, `client`): a client pays the business, so a payable to one waits for a person. */
+  counterpartyRole?: string | null;
   /**
    * The spending limit enforced on Arc (onchain spending limit R4, R7), null when the workspace does not enforce it:
    * whether this payment can go through the contract (and why not), and the contract's verdict on it, null when it
@@ -72,6 +74,7 @@ export interface OnChainLimitCheck {
 export type ApGuardrailRule =
   | "counterparty.high_risk"
   | "counterparty.unscreened"
+  | "counterparty.client_payable"
   | "counterparty.payment_limit"
   | "counterparty.address_unconfirmed"
   | "invoice.duplicate_of_settled"
@@ -179,6 +182,16 @@ export function enforceApGuardrails(input: ApGuardrailInput): ApGuardrailResult 
       status: "held",
       rule: "counterparty.unscreened",
       reasoning: `${input.reasoning} [guardrail override: counterparty has not been screened yet — ${verb} refused before execution; decided again once screening gives a verdict]`,
+    };
+  }
+  // A client pays the business: a payable to one is nearly always an invoice entered in the wrong direction. The agent
+  // never pays it on its own; a refund is a person's decision, in Approvals (client payables R1).
+  if (input.counterpartyRole === "client") {
+    return {
+      blocked: true,
+      status: "held",
+      rule: "counterparty.client_payable",
+      reasoning: `${input.reasoning} [guardrail override: the counterparty is a client, which pays this business — ${verb} refused before execution; a person pays it in Approvals if it is a refund]`,
     };
   }
   // Ahead of the limit so the reason names the change: an edited address is

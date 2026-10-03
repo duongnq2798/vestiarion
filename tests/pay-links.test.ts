@@ -143,16 +143,23 @@ describe("a kept link (collections R2)", () => {
 
     it("turns them on with the kept link, and signs it", async () => {
       fake = world();
-      expect(await inOrg(() => setReminders({ actorId: USER, invoiceId: INVOICE, on: true, keys: KEYS }))).toEqual({ madeNewLink: false, counterpartyName: "Acme" });
+      expect(await inOrg(() => setReminders({ actorId: USER, invoiceId: INVOICE, on: true, keys: KEYS }))).toEqual({ madeNewLink: false, replacedLink: false, counterpartyName: "Acme" });
       const patch = fake.requests.find((r) => r.path === "/rest/v1/receivable_links" && r.method === "PATCH")!;
       expect(patch.body).toMatchObject({ reminders_on_by: USER, reminder_deferred_until: null });
-      expect(ledgerMock).toHaveBeenCalledWith(expect.objectContaining({ action: "ar_reminders_on", detail: { by: USER, invoiceId: INVOICE, counterpartyId: "cp-acme", linkId: "link-1", madeNewLink: false } }));
+      expect(ledgerMock).toHaveBeenCalledWith(
+        expect.objectContaining({ action: "ar_reminders_on", detail: { by: USER, invoiceId: INVOICE, counterpartyId: "cp-acme", linkId: "link-1", madeNewLink: false, replacedLink: false } })
+      );
     });
 
-    it("makes a new link when the old one was not kept, and says so", async () => {
+    it("makes a new link when the old one was not kept, and says it replaced one", async () => {
       fake = world({ link: { id: "link-1", token_enc: null, revoked_at: null } });
-      expect(await inOrg(() => setReminders({ actorId: USER, invoiceId: INVOICE, on: true, keys: KEYS }))).toEqual({ madeNewLink: true, counterpartyName: "Acme" });
+      expect(await inOrg(() => setReminders({ actorId: USER, invoiceId: INVOICE, on: true, keys: KEYS }))).toEqual({ madeNewLink: true, replacedLink: true, counterpartyName: "Acme" });
       expect(fake.requests.some((r) => r.path === "/rest/v1/receivable_links" && r.method === "POST")).toBe(true);
+    });
+
+    it("makes the link when there was none, replacing nothing", async () => {
+      fake = world({ link: null });
+      expect(await inOrg(() => setReminders({ actorId: USER, invoiceId: INVOICE, on: true, keys: KEYS }))).toEqual({ madeNewLink: true, replacedLink: false, counterpartyName: "Acme" });
     });
 
     it("refuses without the client's billing email, or once the receivable is settled", async () => {

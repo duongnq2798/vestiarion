@@ -8,6 +8,8 @@
  * database, read-only, so anyone with access can reproduce the note.
  */
 
+import { sameTreasuryDecision, type TreasuryDecision } from "../agent/treasury";
+
 export interface RecordedDecision {
   /** The ledger entry's sequence number. */
   seq: number;
@@ -29,6 +31,25 @@ export interface RecordedDecision {
   summary: string;
   /** The invoice's status now, when the decision was about one. */
   outcome: string | null;
+}
+
+/**
+ * Whether the model agreed with the written policy, as the note counts it: the ledger's own verdict, except for a
+ * treasury decision, which agrees only when the amount is about the policy's too (treasury bounds R4). Entries
+ * written before that rule are judged by it as well, so every window is measured the same way.
+ */
+export function agreementOf(entry: {
+  domain: string;
+  mode: string;
+  modelAction: string | null;
+  policyAction: string | null;
+  modelAmount: number | null;
+  policyAmount: number | null;
+  recorded: boolean | null;
+}): boolean | null {
+  if (entry.domain !== "treasury" || entry.mode === "heuristic" || !entry.modelAction || !entry.policyAction) return entry.recorded;
+  const decision = (action: string, amount: number | null) => ({ action: action as TreasuryDecision["action"], amount: amount ?? 0, reasoning: "" });
+  return sameTreasuryDecision(decision(entry.modelAction, entry.modelAmount), decision(entry.policyAction, entry.policyAmount));
 }
 
 /** Actions that move money, now or on a later day. Every other action stops it. */
