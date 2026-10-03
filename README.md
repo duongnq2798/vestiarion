@@ -260,7 +260,8 @@ which the agent decides like any other, and an address it adds waits for a
 person to confirm it. A key never approves or pays. It is shown once, in full,
 right after it is created, and authenticates `/api/v1` requests for that
 workspace alone — there is no shared or platform-wide credential on that
-surface. The same key connects an AI agent to the
+surface. It stops working when the member who created it leaves the workspace,
+is removed, or deletes their account. The same key connects an AI agent to the
 [MCP server](https://www.vestiarion.xyz/docs/ai-integration/mcp) at `/api/mcp`, whose tools are the `/api/v1` operations.
 
 A typed TypeScript client, `@vestiarion/sdk` (`sdk/`), wraps every `/api/v1` operation and checks webhook signatures and

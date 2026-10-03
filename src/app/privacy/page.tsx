@@ -262,9 +262,9 @@ export default function PrivacyPage() {
         </ul>
         <p>
           If a workspace cannot be deleted, your account is not deleted. Otherwise your sign-in account is deleted, you are signed out, and your memberships and
-          the invitations you sent go with it. Records you added in workspaces you share stay, without your name on them. A workspace&apos;s signed ledger is
-          append-only, so entries you caused keep your account&apos;s id (never your email). A workspace deleted with your account leaves its tombstone, and a
-          tombstone keeps who deleted it, as your account&apos;s id.
+          the invitations you sent go with it. API keys you created stop working. Records you added in workspaces you share stay, without your name on them.
+          A workspace&apos;s signed ledger is append-only, so entries you caused keep your account&apos;s id (never your email). A workspace deleted with your
+          account leaves its tombstone, and a tombstone keeps who deleted it, as your account&apos;s id.
         </p>
       </LegalSection>
 

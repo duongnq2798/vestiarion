@@ -6,12 +6,15 @@ import { platformDb, unwrap } from "../dal";
 import { invitationEmail } from "../email/invitation";
 import { sendEmail } from "../email/send";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
+import { apiKeyRevokedEntry } from "./api-keys";
 
 /**
  * Members and invitations (spec §7, §10 step 5b). Every change goes through a
  * service-role function (migration 0021) that is told who is acting and
  * checks that person's role itself; this module adds the signed ledger entry
  * and the email. The ledger records user ids, never an email address.
+ * Removing a member, or leaving, also ends the API keys the person created in
+ * the workspace (migration 0069), each with its own entry.
  *
  * The ledger entry is appended after the function has committed, in its own
  * transaction, so it is best effort: if it fails, the change it describes has
@@ -253,16 +256,28 @@ export async function changeMemberRole(input: { actorId: string; userId: string;
   });
 }
 
-/** Runs in scope: `p_org_id` comes from `currentOrgId()`. */
-export async function removeMember(input: { actorId: string; userId: string }): Promise<void> {
+/** The row `remove_member_revoking_keys` returns (migration 0069). */
+interface RemovedMemberRow {
+  removed_role: OrgRole;
+  revoked_key_ids: string[];
+}
+
+/**
+ * Runs in scope: `p_org_id` comes from `currentOrgId()`. Ending a membership
+ * also revokes the active API keys the person created in this workspace, in
+ * the same transaction (migration 0069). The member's entry comes first, then
+ * one `api_key_revoked` per key, each best effort.
+ */
+export async function removeMember(input: { actorId: string; userId: string }): Promise<{ revokedKeys: number }> {
   const orgId = currentOrgId();
   const result = await platformDb()
-    .rpc("remove_member", { p_org_id: orgId, p_actor: input.actorId, p_user_id: input.userId })
-    .single<OrgRole>();
+    .rpc("remove_member_revoking_keys", { p_org_id: orgId, p_actor: input.actorId, p_user_id: input.userId })
+    .single<RemovedMemberRow>();
   if (result.error) raise(result.error);
-  const role = result.data as OrgRole;
+  const { removed_role: role, revoked_key_ids: keyIds } = result.data as RemovedMemberRow;
+  const left = input.actorId === input.userId;
 
-  if (input.actorId === input.userId) {
+  if (left) {
     await appendLedgerEntryBestEffort(orgId, {
       actor: "human",
       domain: "system",
@@ -279,6 +294,16 @@ export async function removeMember(input: { actorId: string; userId: string }): 
       detail: { by: input.actorId, member: input.userId, role },
     });
   }
+
+  for (const keyId of keyIds) {
+    await appendLedgerEntryBestEffort(
+      orgId,
+      left
+        ? apiKeyRevokedEntry({ reason: "member_left", by: input.actorId, keyId })
+        : apiKeyRevokedEntry({ reason: "member_removed", by: input.actorId, keyId, member: input.userId })
+    );
+  }
+  return { revokedKeys: keyIds.length };
 }
 
 /** Runs in scope: `p_org_id` comes from `currentOrgId()`. */

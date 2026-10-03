@@ -8,6 +8,8 @@ An owner or an admin opens **Settings** and, under **API keys**, chooses **Creat
 
 In the list of keys, this one shows **Read and write**, and every other key **Read only**. Keep the key in an environment variable, `VESTIARION_API_KEY` below, as [Authentication](/docs/get-started/authentication) explains.
 
+The key works for as long as the person who created it is a member of the workspace. Create it as someone who will stay: if they leave, or are removed, the key stops working, and the system stops adding records.
+
 ## 2. Add the counterparty
 
 [Add a counterparty](/docs/api/create-counterparty) with `POST /api/v1/counterparties`:

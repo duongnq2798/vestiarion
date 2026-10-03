@@ -7,6 +7,8 @@ import { requireMembership } from "@/lib/auth/membership";
 import { can, canAssignRole, ORG_ROLES } from "@/lib/auth/roles";
 import { chainModes } from "@/lib/circle";
 import { inOrg } from "@/lib/dal/scope";
+import { keyNamesForViewer } from "@/lib/member-keys";
+import { activeKeyNamesByCreator } from "@/lib/platform/api-keys";
 import { listMembers, listOpenInvitations } from "@/lib/platform/members";
 import { stats } from "@/lib/queries";
 
@@ -20,10 +22,12 @@ export default async function MembersPage({ params }: { params: Promise<{ slug: 
   return inOrg(access, async () => {
     const { user, membership } = access;
     const canManage = can(membership.role, "members.manage");
-    const [members, invitations, dashboardStats] = await Promise.all([
+    const [members, invitations, dashboardStats, keysByCreator] = await Promise.all([
       listMembers(membership.orgId),
       canManage ? listOpenInvitations(membership.orgId) : Promise.resolve([]),
       stats(),
+      // Leaving or removing someone revokes the API keys they created here (migration 0069), so the confirmations name them.
+      activeKeyNamesByCreator(membership.orgId),
     ]);
     const assignable = ORG_ROLES.filter((role) => canAssignRole(membership.role, role));
 
@@ -43,6 +47,7 @@ export default async function MembersPage({ params }: { params: Promise<{ slug: 
           viewerId={user.id}
           viewerRole={membership.role}
           assignable={assignable}
+          keyNames={keyNamesForViewer({ members, viewerId: user.id, viewerRole: membership.role, byCreator: keysByCreator })}
         />
       </ProductShell>
     );

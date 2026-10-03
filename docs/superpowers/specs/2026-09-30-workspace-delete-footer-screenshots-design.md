@@ -89,7 +89,7 @@ Until now the privacy page asked people to open a GitHub issue to have their acc
   2. the Supabase auth user is deleted with the service role (`auth.admin.deleteUser`);
   3. the person is signed out and sent to `/`.
 
-  Migration 0023's foreign keys take care of the rest: memberships and sent invitations go, and `created_by` becomes null on records in workspaces that survive.
+  Migration 0023's foreign keys take care of the rest: memberships and sent invitations go, and `created_by` becomes null on records in workspaces that survive. Since migration 0069, the person's API keys in those workspaces are revoked too, each with an `api_key_revoked` entry (`2026-10-03-member-api-keys-design.md` R2, R6).
 - **A4. No new table.** The auth user row is Supabase's. The tombstones of the deleted workspaces are the platform's only record. The privacy page describes the button, and no longer asks for an issue.
 - **Testing:**
   - each A2 case;

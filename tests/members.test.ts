@@ -33,6 +33,8 @@ vi.mock("@/lib/email/send", () => ({ sendEmail: sendEmailMock }));
 const ORG = "5d0f3a2e-8c1b-4f7a-9e6d-00000000c0de";
 const ACTOR = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000a1";
 const TARGET = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000b2";
+const KEY_1 = "7c3e9f1a-2b4d-4e6f-8a0b-0000000000e1";
+const KEY_2 = "7c3e9f1a-2b4d-4e6f-8a0b-0000000000e2";
 
 const config = configFromEnv({
   NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid",
@@ -70,12 +72,14 @@ function orgRow() {
   };
 }
 
-/** PostgREST as `members.ts` meets it: the 0021 RPCs and `append_ledger_entry`. */
+/** PostgREST as `members.ts` meets it: the 0021 RPCs, 0069's `remove_member_revoking_keys` and `append_ledger_entry`. */
 function membersFake(options: {
   inviteMember?: (request: RecordedRequest) => FakeReply | undefined;
   acceptInvitation?: (request: RecordedRequest) => FakeReply | undefined;
   changeMemberRole?: (request: RecordedRequest) => FakeReply | undefined;
   removeMember?: (request: RecordedRequest) => FakeReply | undefined;
+  /** The ids `remove_member_revoking_keys` answers with: the keys the departing member created (migration 0069). */
+  revokedKeyIds?: string[];
   invitations?: (request: RecordedRequest) => FakeReply;
   /** The ledger append fails, as it would with an unreadable signing key. */
   ledgerFails?: boolean;
@@ -111,11 +115,13 @@ function membersFake(options: {
       if (failure) return failure;
       return { body: "viewer" };
     }
-    if (request.path === "/rest/v1/rpc/remove_member") {
+    if (request.path === "/rest/v1/rpc/remove_member_revoking_keys") {
       const failure = options.removeMember?.(request);
       if (failure) return failure;
       const body = request.body as Record<string, unknown>;
-      return { body: body.p_actor === body.p_user_id ? "owner" : "approver" };
+      return {
+        body: { removed_role: body.p_actor === body.p_user_id ? "owner" : "approver", revoked_key_ids: options.revokedKeyIds ?? [] },
+      };
     }
     if (request.path === "/rest/v1/invitations" && options.invitations) return options.invitations(request);
     if (request.path === "/rest/v1/rpc/revoke_invitation") return { body: null };
@@ -282,16 +288,16 @@ describe("acceptInvitation", () => {
 });
 
 describe("the ledger entry after a committed change is best effort", () => {
-  it.each([
+  it.each<[string, () => Promise<unknown>]>([
     ["member_role_changed", () => changeMemberRole({ actorId: ACTOR, userId: TARGET, role: "approver" })],
     ["member_removed", () => removeMember({ actorId: ACTOR, userId: TARGET })],
     ["member_left", () => removeMember({ actorId: ACTOR, userId: ACTOR })],
     ["invitation_revoked", () => revokeInvitation({ actorId: ACTOR, invitationId: "inv-1" })],
-  ] as const)("%s resolves and logs when the append fails", async (action, change) => {
+  ])("%s resolves and logs when the append fails", async (action, change) => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     const { run } = membersFake({ ledgerFails: true });
 
-    await expect(run(() => withOrg(ORG, change))).resolves.toBeUndefined();
+    await run(() => withOrg(ORG, change));
     expect(error).toHaveBeenCalledWith("ledger entry not recorded", action, ORG);
     error.mockRestore();
   });
@@ -354,6 +360,74 @@ describe("removeMember", () => {
       p_summary: "A member with the approver role was removed",
       p_detail: { by: ACTOR, member: TARGET, role: "approver" },
     });
+  });
+
+  it("ends the membership through remove_member_revoking_keys, naming the organization, the actor and the member", async () => {
+    const { fake, run } = membersFake();
+
+    await run(() => withOrg(ORG, () => removeMember({ actorId: ACTOR, userId: TARGET })));
+
+    expect(rpcBodies(fake.requests, "remove_member_revoking_keys")).toEqual([{ p_org_id: ORG, p_actor: ACTOR, p_user_id: TARGET }]);
+  });
+
+  it("appends member_left, then api_key_revoked for each key the leaver created, and returns how many", async () => {
+    const { fake, run } = membersFake({ revokedKeyIds: [KEY_1, KEY_2] });
+
+    const result = await run(() => withOrg(ORG, () => removeMember({ actorId: ACTOR, userId: ACTOR })));
+
+    expect(result).toEqual({ revokedKeys: 2 });
+    const appends = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(appends.map((append) => append.p_action)).toEqual(["member_left", "api_key_revoked", "api_key_revoked"]);
+    expect(appends[1].p_summary).toBe("An API key was revoked when the member who created it left");
+    expect(appends[1].p_detail).toEqual({ by: ACTOR, keyId: KEY_1, reason: "member_left" });
+    expect(appends[2].p_detail).toEqual({ by: ACTOR, keyId: KEY_2, reason: "member_left" });
+  });
+
+  it("appends member_removed, then api_key_revoked naming the member removed", async () => {
+    const { fake, run } = membersFake({ revokedKeyIds: [KEY_1] });
+
+    const result = await run(() => withOrg(ORG, () => removeMember({ actorId: ACTOR, userId: TARGET })));
+
+    expect(result).toEqual({ revokedKeys: 1 });
+    const appends = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(appends.map((append) => append.p_action)).toEqual(["member_removed", "api_key_revoked"]);
+    expect(appends[1].p_summary).toBe("An API key was revoked when the member who created it was removed");
+    expect(appends[1].p_detail).toEqual({ by: ACTOR, keyId: KEY_1, reason: "member_removed", member: TARGET });
+  });
+
+  it("appends only the member's entry when they created no key", async () => {
+    const { fake, run } = membersFake();
+
+    const result = await run(() => withOrg(ORG, () => removeMember({ actorId: ACTOR, userId: TARGET })));
+
+    expect(result).toEqual({ revokedKeys: 0 });
+    expect(rpcBodies(fake.requests, "append_ledger_entry").map((append) => append.p_action)).toEqual(["member_removed"]);
+  });
+
+  it("maps the last-owner refusal to last_owner, and appends nothing", async () => {
+    const { fake, run } = membersFake({
+      removeMember: () => ({
+        status: 400,
+        body: { code: "P0001", message: "the last owner of an organization cannot be removed or demoted", details: null, hint: null },
+      }),
+    });
+
+    const attempt = run(() => withOrg(ORG, () => removeMember({ actorId: ACTOR, userId: ACTOR })));
+    await expect(attempt).rejects.toBeInstanceOf(MemberError);
+    await expect(attempt).rejects.toMatchObject({ code: "last_owner" });
+    expect(rpcBodies(fake.requests, "append_ledger_entry")).toHaveLength(0);
+  });
+
+  it("still returns how many keys went, and logs each key's entry by action, when the ledger is down", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { run } = membersFake({ revokedKeyIds: [KEY_1, KEY_2], ledgerFails: true });
+
+    await expect(run(() => withOrg(ORG, () => removeMember({ actorId: ACTOR, userId: TARGET })))).resolves.toEqual({ revokedKeys: 2 });
+    expect(error.mock.calls.filter((call) => call[1] === "api_key_revoked")).toEqual([
+      ["ledger entry not recorded", "api_key_revoked", ORG],
+      ["ledger entry not recorded", "api_key_revoked", ORG],
+    ]);
+    error.mockRestore();
   });
 });
 
