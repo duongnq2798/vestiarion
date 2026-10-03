@@ -43,7 +43,7 @@ describe("the webhook verification snippets", () => {
     const verify = load<(entry: { bodyHash: string; signature: string }, publicKeyPem: string) => boolean>(SNIPPETS[1], "verifyLedgerEntrySignature");
     const { privateKey, publicKey } = crypto.generateKeyPairSync("ed25519");
     const other = crypto.generateKeyPairSync("ed25519").publicKey;
-    const input = { actor: "agent", domain: "treasury", action: "sweep_to_reserve", summary: "Swept idle cash to the yield reserve", detail: { amount: 1000.5 } } as Parameters<typeof bodyHashOf>[0];
+    const input = { actor: "agent", domain: "treasury", action: "sweep_to_usyc", summary: "Treasury: sweep_to_usyc 60.71 USDC", detail: { decision: { action: "sweep_to_usyc", amount: 60.71 }, executed: true } } as Parameters<typeof bodyHashOf>[0];
     const bodyHash = bodyHashOf(input);
     const entry = {
       ...input,

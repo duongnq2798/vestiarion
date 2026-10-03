@@ -292,14 +292,17 @@ workspace is paused:
   `skipped: "paused"` too, not as a failure;
 - a cycle already running stops moving money mid-cycle: the AP and
   contractor stages (`src/lib/agent/orchestrator.ts`) re-read the flag
-  before each payment, and the treasury stage re-reads it before each
-  reserve deposit or withdrawal, holding instead of calling the payment
-  provider and marking the ledger entry's detail with
-  `heldBecause: "agent_paused"` (`src/lib/agent/pause.ts`).
+  before each payment, and the treasury stage and the liquidity stage
+  before AP (`src/lib/agent/liquidity.ts`) re-read it before each reserve
+  deposit or withdrawal, holding instead of calling the payment provider
+  and marking the ledger entry's detail with `heldBecause: "agent_paused"`
+  (`src/lib/agent/pause.ts`). All three reserve moves share one call,
+  `moveTreasuryIfNotPaused` (`src/lib/agent/treasury-moves.ts`).
 
 A person's own decisions in Approvals continue while the agent is paused —
 pausing is how the automation is stopped, and an approval is a deliberate
-human act, not the agent's own move.
+human act, not the agent's own move. So does a person's **Bring cash back**
+from the reserve, which passes `byPerson` to that call.
 
 **Ledger actions** `approval_paid`, `approval_rejected`, `approval_returned`,
 `agent_paused`, and `agent_resumed` record every decision, pause, and resume,

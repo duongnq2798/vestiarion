@@ -16,7 +16,7 @@ An autonomous treasury agent for a small business, settled in USDC on Arc.
   - 1 would have paid over a limit, and code refused it.
 - **Live numbers:** [www.vestiarion.xyz/open](https://www.vestiarion.xyz/open) shows the payments, payees and decisions, read from the production database, with our own workspaces counted apart from customers'.
 - **Updates:** [@vestiarionhq](https://x.com/vestiarionhq) on X, where what ships is posted with its receipts.
-- **Real payments on Arc testnet**, made by the agent in production:
+- **Real transactions on Arc testnet**, made by the agent in production:
   - a USDC payable paid 53 seconds after it was added, with no one pressing Run:
     [`0x81381c50…4e68`](https://testnet.arcscan.app/tx/0x81381c50f5d0cadb49d1af77f1abb06c1727c8377aa88cbe1cfbf327f09c4e68);
   - a EURC invoice, weighed against a USDC limit at a rate quoted by Circle's Stablecoin Service:
@@ -26,7 +26,13 @@ An autonomous treasury agent for a small business, settled in USDC on Arc.
     and Circle forwarded the mint of exactly 1 USDC on Base Sepolia,
     [`0x6c749323…ef9a`](https://sepolia.basescan.org/tx/0x6c749323f9e36efe21fcd5c33df2e55ba5db82040dbd06ff2a8872045c6fef9a);
   - an invoice read from a PDF by the model, checked by a person, and paid 16 seconds after it was added:
-    [`0x197e979f…64b3`](https://testnet.arcscan.app/tx/0x197e979f3b108d759f5e5e5ee0d7bc67e67acb1c520de1b3c7e969ae689c64b3).
+    [`0x197e979f…64b3`](https://testnet.arcscan.app/tx/0x197e979f3b108d759f5e5e5ee0d7bc67e67acb1c520de1b3c7e969ae689c64b3);
+  - idle cash put to work: 60.71 USDC deposited into Circle's USYC through its Teller contract, and 53.28 USYC sent to the reserve wallet:
+    [`0x1cf65900…f42e`](https://testnet.arcscan.app/tx/0x1cf659007ce734a73908a705e2537a56065d87fd0f52571d7e67d0654b94f42e);
+  - a payable due today, with too little cash in the operating wallet: the agent redeemed the missing 0.88 USDC from USYC,
+    [`0x4b5186db…c7f2`](https://testnet.arcscan.app/tx/0x4b5186db4820df87532869e0a9797df5a79a7e9e3a5feb1e3edb09500160c7f2),
+    then paid the 2 USDC 34 seconds after the invoice was added,
+    [`0x365da374…9d8b`](https://testnet.arcscan.app/tx/0x365da374f902fcb995643713962554b41e6114b62bb40695874aa519dd829d8b).
 
   Each feature's design under `docs/superpowers/specs/` ends with its rollout record: what was run in production, with its ledger entries and transactions.
 
@@ -56,12 +62,17 @@ is hard-coded into the interface:
 3. **Contractor payments** — a GitHub PR URL can be checked for an actual merge before a
    milestone is released. Human verification remains available and is recorded as a human ledger
    action. Verified milestones are released the same day instead of waiting for Net-30.
-4. **Treasury** — idle operating cash above a 7-day obligation buffer is swept into a
-   USYC-yielding reserve; the agent redeems back out ahead of due dates rather than after. The
-   sweep only happens when it pays for itself: a sweep and the redemption that must follow it are
-   two transactions, so the policy computes the yield earned over the days until the next
-   obligation and compares it to the round-trip fee. Idle cash that would earn less than it costs
-   to move stays liquid (`src/lib/agent/treasury.ts`).
+4. **Treasury** — idle operating cash above a 7-day obligation buffer is swept into Circle's USYC,
+   a tokenized money market fund, on Arc testnet; the agent redeems back out ahead of due dates
+   rather than after. The sweep only happens when it pays for itself: a sweep and the redemption
+   that must follow it are two transactions, so the policy computes the yield earned over the days
+   until the next obligation and compares it to the round-trip fee. Idle cash that would earn less
+   than it costs to move stays liquid (`src/lib/agent/treasury.ts`). Payments come first: before
+   it decides any payment, each cycle redeems what the payables due today need beyond the
+   operating balance, so no payment waits for cash sitting in the reserve, and an owner or admin
+   can bring cash back at any hour with **Bring cash back** (`src/lib/agent/liquidity.ts`). USYC is
+   permissioned: Circle allowlists the two wallets, and an owner turns the reserve on in Settings;
+   until then the reserve is simulated, and labelled so.
 5. **Continuous audit trail** — every decision above is appended to a hash-chained, Ed25519-signed
    ledger (`/audit`). A reviewer can verify the whole chain in one click and read *why* the agent
    acted, not just that a balance moved.
@@ -87,6 +98,34 @@ limit, keep a liquidity buffer before sweeping to yield). Anthropic, OpenAI, and
 supported, and with no key at all the same decision points fall back to a transparent rule-based
 heuristic — so the app runs end-to-end with zero credentials, and every ledger entry records which
 path produced it.
+
+## Contracts on Arc testnet
+
+Vestiarion deploys two contracts of its own, one copy per workspace that uses it, through Circle's
+Smart Contract Platform. Their source is in [`contracts/`](contracts); both were written for
+Vestiarion and are not audited. The copies running in production, in testnet-2, our own test
+workspace:
+
+| Contract | What it does | Address |
+| --- | --- | --- |
+| `VestiarionEscrow` | Locks a milestone's USDC for a contractor; only the operating wallet can release it to the contractor, or take it back from a refund date | [`0x74af203fec3f121ff1cd3a763092d1211487702b`](https://testnet.arcscan.app/address/0x74af203fec3f121ff1cd3a763092d1211487702b) |
+| `VestiarionSpendingLimit` | The agent's payments leave through `pay`, which refuses anything past the daily or 7-day limit | [`0x9da3c47f73ea9399ac566806a189b0bf47b7d4ba`](https://testnet.arcscan.app/address/0x9da3c47f73ea9399ac566806a189b0bf47b7d4ba) |
+
+The Circle contracts it calls on Arc testnet:
+
+| Contract | Address |
+| --- | --- |
+| USDC | [`0x3600000000000000000000000000000000000000`](https://testnet.arcscan.app/address/0x3600000000000000000000000000000000000000) |
+| EURC | [`0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a`](https://testnet.arcscan.app/address/0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a) |
+| USYC | [`0xe9185F0c5F296Ed1797AaE4238D26CCaBEadb86C`](https://testnet.arcscan.app/address/0xe9185F0c5F296Ed1797AaE4238D26CCaBEadb86C) |
+| USYC Teller | [`0x9fdF14c5B14173D74C08Af27AebFf39240dC105A`](https://testnet.arcscan.app/address/0x9fdF14c5B14173D74C08Af27AebFf39240dC105A) |
+| USYC Entitlements | [`0xCC205224862C7641930c87679E98999d23C26113`](https://testnet.arcscan.app/address/0xCC205224862C7641930c87679E98999d23C26113) |
+| Gateway Wallet | [`0x0077777d7EBA4688BDeF3E311b846F25870A19B9`](https://testnet.arcscan.app/address/0x0077777d7EBA4688BDeF3E311b846F25870A19B9) |
+| Gateway Minter | [`0x0022222ABE238Cc2C7Bb1f21003F0a260052475B`](https://testnet.arcscan.app/address/0x0022222ABE238Cc2C7Bb1f21003F0a260052475B) |
+| CCTP TokenMessengerV2 | [`0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA`](https://testnet.arcscan.app/address/0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA) |
+
+What each one is used for, the workspace's wallets around the two contracts, and the USDC of the
+chains payees are paid on: [Contracts on Arc testnet](https://www.vestiarion.xyz/docs/contracts).
 
 ## Architecture
 
@@ -131,15 +170,22 @@ src/lib/circle/           ChainProvider interface, three implementations:
   liveProvider.ts             fee/latency profile
   index.ts                  - live: Circle Developer-Controlled Wallets
                             - hybrid (default with credentials): real Arc
-                              payments, simulated USYC leg, both labelled
+                              payments; the USYC leg is real once the
+                              workspace's USYC reserve is on, simulated and
+                              labelled before
 src/lib/agent/
   decide.ts                 Provider-agnostic decision helper: Anthropic ->
                              OpenAI -> DeepSeek -> rule-based heuristic
   treasury.ts               The sweep/redeem policy as a pure function, so the
                              LLM and the heuristic reason from one set of
                              numbers and the whole policy is testable
-  orchestrator.ts            The agent cycle: compliance -> AP -> contractors
-                             -> treasury -> forecast, all logged to the ledger
+  orchestrator.ts            The agent cycle: reconcile -> receipts ->
+                             compliance -> follow-up -> recurring -> services
+                             -> liquidity -> AP -> contractors -> treasury ->
+                             forecast -> proposals -> notices, all logged to
+                             the ledger
+  liquidity.ts               Redeems from USYC what today's payments need
+                             before AP decides them; a person's Bring cash back
   cycle-metrics.ts           Counts outcomes, decision sources, and code-level
                              guardrail overrides at the point they occur
   pay.ts                    payInvoice: the one payment step a cycle's AP
@@ -320,8 +366,8 @@ Seeded amounts scale down automatically when Circle credentials are present (`SE
 because the public faucet grants 20 testnet USDC every two hours and a demo denominated in
 thousands would never settle. The business narrative is the same; the decimal point moves.
 
-One consequence is worth knowing before you demo: **in live mode the agent declines to sweep into
-USYC**, and it is right to. Here is a decision it actually recorded, at testnet scale:
+One consequence is worth knowing before you demo: **with a few USDC idle, the agent declines to
+sweep into USYC**, and it is right to. Here is a decision it actually recorded, at testnet scale:
 
 ```
 operating balance    23.44    USDC
@@ -336,7 +382,9 @@ It holds, because sweeping would destroy about half a cent. That is not a thresh
 tuned — it is the arithmetic in `planTreasury`, which is why the same policy flips to sweeping
 the moment the numbers justify it. Run in simulate mode (`SEED_SCALE=1`, no Circle keys) to see
 exactly that: the identical book scaled up 1000x sweeps 13,900 USDC. An agent that sweeps
-regardless of whether sweeping pays is the cron job this project exists to not be.
+regardless of whether sweeping pays is the cron job this project exists to not be. On Arc testnet,
+with 60.71 USDC idle above its buffer, the same arithmetic swept for real on Oct 3, 2026:
+the first transaction under **Real transactions** above.
 
 The round-trip cost in that table used to read `0.02`, because the fee was a hardcoded `$0.01`
 nobody had checked. Measuring it lowered the bar for sweeping by a factor of three — the agent
@@ -450,9 +498,11 @@ which produced each entry:
 
 - **Live** — wallet creation, USDC transfers, balances, transaction confirmation, all through
   Circle Developer-Controlled Wallets on Arc testnet.
-- **Simulated** — the USYC leg. EarnKit needs a `KIT_KEY` and a chosen vault id, and Arc testnet
-  has no live vault to choose; Circle's own `arc-fintech` sample mocks reward accrual for the same
-  reason. The integration point is marked in `src/lib/circle/liveProvider.ts`.
+- **Live once turned on** — the USYC reserve. The operating wallet deposits USDC through USYC's
+  Teller contract on Arc testnet, the reserve wallet holds the USYC and redeems it, and the reserve
+  is valued at USYC's latest price every cycle. USYC is permissioned, so Circle allowlists both
+  wallets first, and an owner turns it on in **Settings → USYC reserve**. Until then the reserve is
+  simulated, and labelled so.
 - **Live when configured** — sanctions screening calls an OpenSanctions/yente match endpoint when
   `OPENSANCTIONS_API_URL` is set. Without it, the product explicitly labels the small bundled
   watchlist as simulated. Provider errors create an incomplete check and retain the previous
