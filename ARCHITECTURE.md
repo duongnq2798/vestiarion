@@ -111,8 +111,15 @@ side effect — it only previews the invitation; accepting is a separate submit 
 that requires signing in with the invited address first, and fails with `invitation_email_mismatch`
 otherwise. The members page (`/o/[slug]/members`) lists members and open invitations through
 `org_members`, and lets `owner`/`admin` change a role, revoke an invitation, or remove a member; any
-member can leave (`remove_member` with `p_actor = p_user_id`), and the `memberships_keep_an_owner`
-trigger (`0020`) still refuses to remove or demote a workspace's last owner.
+member can leave. Both go through `remove_member_revoking_keys` (migration `0069`), which calls
+`remove_member` (`p_actor = p_user_id` to leave) and, in the same transaction, revokes the API keys
+the person created in the workspace, returning their ids so `removeMember` appends one
+`api_key_revoked` per key after the member's own entry. Triggers from the same migration hold that
+rule whatever ends a membership: deleting a membership row revokes its person's keys there, a key
+whose `created_by` is cleared (its creator's account was deleted) is revoked in the same update, and
+a key cannot be inserted for someone who is not a member of its workspace. The
+`memberships_keep_an_owner` trigger (`0020`) still refuses to remove or demote a workspace's last
+owner, so the last owner's keys stay with them.
 
 **Abandoned sandboxes** are cleaned up daily. A sandbox organization's `last_active_at` is touched
 (at most once an hour) on membership-gated page views; one whose `last_active_at` is more than 60
@@ -420,7 +427,9 @@ passes through `guardApiRequest` (`src/lib/api/guard.ts`) with the `read`
 scope: it authenticates the bearer token as a workspace API key
 (`src/lib/platform/api-keys.ts`, migration `0027_api_keys.sql`) and, on
 success, `handleApiRequest` runs the route inside `withOrg(key.orgId)`, so a
-key serves exactly one workspace's data. A missing, malformed, unknown, or
+key serves exactly one workspace's data. A key works only while the person who
+created it is a member of that workspace: whatever ends the membership revokes
+it (migration `0069`). A missing, malformed, unknown, or
 revoked key answers `401 unauthorized`; a key without the route's scope
 answers `403 forbidden`. `AGENT_API_TOKEN` does not authenticate this surface
 — it remains only the cron secret for `/api/agent/tick`,

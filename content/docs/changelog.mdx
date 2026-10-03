@@ -1,5 +1,12 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-03: A member's API keys end with their membership
+
+- A workspace API key now works only while the person who created it is a member of the workspace. When they leave, are removed by an owner or an admin, or delete their account, every active key they created in that workspace is revoked in the same step, and from then on answers `401 unauthorized`, like any revoked key. Keys that other members created, and the person's keys in workspaces they still belong to, keep working.
+- Each such key gets its own `api_key_revoked` entry, delivered to webhooks like every entry, right after the member's `member_left` or `member_removed`. Its `detail` gains `reason`: `member_left`, `member_removed` (with `member`, the person removed, while `by` is who removed them) or `account_deleted`. A key revoked in Settings now carries `reason: "person"`.
+- A key can no longer be created for someone who is not a member of the workspace.
+- Nothing was revoked when this shipped: no active key had outlived its creator's membership.
+
 ## 2026-10-03: A sweep's yield is counted over how long the cash would stay
 
 - In treasury entries (`sweep_to_usyc`, `redeem_from_usyc`, `hold`, actor `agent`), `economics.expectedHoldDays` is now how long the swept cash would stay in the reserve, on average over the next 30 days. What falls due is paid from the operating wallet first, and only what it cannot cover comes back, on its day. Before, it was the days until the next obligation. `economics.projectedYieldUsd` follows, and the written policy's `referenceDecision` with it.

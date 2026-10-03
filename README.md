@@ -241,7 +241,8 @@ Each workspace creates and revokes its own read-only API keys on
 [Authentication](https://www.vestiarion.xyz/docs/get-started/authentication)). A
 key is shown once, in full, right after it is created, and authenticates
 `/api/v1` requests for that workspace alone — there is no shared or
-platform-wide credential on that surface. The same key connects an AI agent to the
+platform-wide credential on that surface. It stops working when the member who
+created it leaves the workspace, is removed, or deletes their account. The same key connects an AI agent to the
 [MCP server](https://www.vestiarion.xyz/docs/ai-integration/mcp) at `/api/mcp`, whose read-only tools are the `/api/v1` operations.
 
 The same page lets an owner or admin (`webhooks.manage`) register up to 5

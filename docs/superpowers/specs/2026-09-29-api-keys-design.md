@@ -36,8 +36,10 @@ Decided on 2026-09-29 by the implementer under the partner's standing instructio
   - A new permission `api_keys.manage` covers owner and admin.
   - A key reads everything a member can read, which is an admin-level grant.
 - **K4. A key belongs to its workspace, not to the person who created it.**
-  - The key survives its creator leaving the workspace.
-  - `created_by` becomes null if the account is deleted.
+  - ~~The key survives its creator leaving the workspace.~~ Replaced on 2026-10-03 by
+    `2026-10-03-member-api-keys-design.md`: a key works only while its creator is a member, and leaving, being
+    removed or deleting the account revokes it (migration 0069).
+  - `created_by` becomes null if the account is deleted. Since 0069 the key is revoked in the same update.
   - Revoking is the way to end a key. A revoked key fails exactly like an unknown one.
 - **K5. `last_used_at` is refreshed at most once a minute.** It uses a conditional update, is best-effort, and is shown in the list so an unused key can be found and revoked.
 - **K6. The v1 surface is a clean cut from the platform token.**
@@ -48,7 +50,8 @@ Decided on 2026-09-29 by the implementer under the partner's standing instructio
   - A name is 1–60 characters.
 - **K8. The ledger records key events with ids only:**
   - `api_key_created`: `{ by, keyId, scopes }`;
-  - `api_key_revoked`: `{ by, keyId }`.
+  - `api_key_revoked`: `{ by, keyId }`. Since 2026-10-03 it also carries `reason`, and `member` for a removal
+    (`2026-10-03-member-api-keys-design.md` R5).
 
   Neither the name nor the prefix is recorded.
 

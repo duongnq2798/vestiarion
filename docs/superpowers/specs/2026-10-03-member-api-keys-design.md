@@ -1,6 +1,7 @@
 # A key ends with its creator's membership
 
-Date: 2026-10-03. Status: designed on `claude/unruffled-khorana-dfec27`. Decided under the standing autonomy grant;
+Date: 2026-10-03. Status: implemented on `claude/unruffled-khorana-dfec27`; migration 0069 is not yet applied in
+production. Decided under the standing autonomy grant;
 each ruling says what it costs if it is wrong. This replaces the first bullet of the API keys design's K4
 (`2026-09-29-api-keys-design.md`): a key no longer survives its creator leaving the workspace.
 

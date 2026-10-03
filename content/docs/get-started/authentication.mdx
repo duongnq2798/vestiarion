@@ -28,7 +28,7 @@ A key belongs to the workspace it was created in, and reads that workspace's dat
 
 ## Creating a key
 
-An owner or an admin creates keys on the workspace's Settings page, `/o/<slug>/settings`, under **API keys**. A key's name is 1 to 60 characters. A workspace holds at most 20 active keys; revoke one to make room for another. Every other member of the workspace sees the list of keys, without the controls to create or revoke one. The [Quickstart](/docs/get-started/quickstart#1-create-an-api-key) walks through it.
+An owner or an admin creates keys on the workspace's Settings page, `/o/<slug>/settings`, under **API keys**. A key's name is 1 to 60 characters. A workspace holds at most 20 active keys; revoke one to make room for another. A key works for as long as the person who created it is a member of the workspace (see [Revoking a key](#revoking-a-key)). Every other member of the workspace sees the list of keys, without the controls to create or revoke one. The [Quickstart](/docs/get-started/quickstart#1-create-an-api-key) walks through it.
 
 ## Scope
 
@@ -42,7 +42,16 @@ Settings shows when each key was last used. The time is recorded after the respo
 
 An owner or an admin revokes a key from the same list. Revoking takes effect at once and cannot be undone: from then on the key answers exactly like a key that never existed. The list keeps it, marked **Revoked**.
 
-Creating and revoking a key each add an entry to the workspace's ledger, `api_key_created` or `api_key_revoked`. The entry names the key by its id; the key itself is never written to the ledger.
+A key is also revoked when the person who created it stops being a member of the workspace: when they leave it, when an owner or an admin removes them, or when they delete their account. Every active key they created in that workspace is revoked in the same step that ends their membership. Keys that other members created keep working, and so do the person's keys in workspaces they still belong to. Before anyone is removed, or leaves, the confirmation names the keys that will stop working. A workspace's last owner cannot leave it, so their keys stay.
+
+Creating and revoking a key each add an entry to the workspace's ledger, `api_key_created` or `api_key_revoked`. The entry names the key by its id; the key itself is never written to the ledger. `api_key_revoked` also says why, in `reason`:
+
+- `person`: an owner or an admin revoked it in Settings. `by` is who revoked it.
+- `member_left`: the person who created it left the workspace. `by` is that person.
+- `member_removed`: an owner or an admin removed the person who created it. `by` is who removed them, and `member` is the person removed.
+- `account_deleted`: the person who created it deleted their account. `by` is that person.
+
+A key revoked because its creator left, or was removed, gets its own entry right after the member's `member_left` or `member_removed`.
 
 To rotate a key without downtime, create the new key, deploy it, check that its **Last used** time moves, and then revoke the old one.
 
@@ -69,5 +78,6 @@ A key reads the whole workspace: its invoices, counterparties, treasury and ledg
 - **Never put a key in client-side code**, such as a web page, a browser extension or a mobile app. Anyone who has the code can read the key. Call the API from your server, and pass on only what the client needs.
 - **Keep it in a secret store** or an environment variable, such as `VESTIARION_API_KEY`, not in source control.
 - **Use one key per integration**, named after it, so you can revoke one without stopping the others.
+- **Create a long-lived integration's key as someone who will stay.** A key stops working when the person who created it leaves the workspace. Before someone who created keys leaves, have a member who stays create replacements, and switch your integrations to them.
 
 The **Try it** panel on each [reference page](/docs/api) keeps the key you paste in the page's memory only. It is not stored in the browser, and it is sent only in the `Authorization` header of the request you make, to this site's `/api/v1`.
