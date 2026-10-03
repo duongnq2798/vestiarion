@@ -83,7 +83,7 @@ describe("DeleteAccountBody", () => {
     for (const plan of [EMPTY, { blocked: [], soleWorkspaces: [{ slug: "s", name: "S", live: false, paused: false, walletCount: 0, hosted: false }] }]) {
       const words = text(body(plan));
       expect(words).toContain("Records you added in workspaces you share stay, without your name attached.");
-      expect(words).toContain("Your memberships and the invitations you sent are removed.");
+      expect(words).toContain("Your memberships and the invitations you sent are removed. API keys you created stop working.");
       expect(words).toContain("A workspace's signed ledger is append-only, so entries you caused keep your account's id (never your email).");
     }
   });

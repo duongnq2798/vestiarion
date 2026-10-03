@@ -1,5 +1,7 @@
 import { platformAuth, platformDb, unwrap } from "../dal";
 import { FOUNDING_ORG_ID } from "../dal/org-config";
+import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
+import { apiKeyRevokedEntry } from "./api-keys";
 import { DELETE_ACCOUNT_CONFIRMATION } from "./delete-account-phrase";
 import { deleteOrgRefusal, deletionContext } from "./delete-workspace";
 
@@ -17,7 +19,9 @@ import { deleteOrgRefusal, deletionContext } from "./delete-workspace";
  *     workspace: the account cannot be deleted until that changes.
  * Then the Supabase auth user is deleted with the service role (A3), and
  * 0023's foreign keys remove the memberships and sent invitations and clear
- * `created_by` on the records that stay.
+ * `created_by` on the records that stay. Migration 0069 revokes the API keys
+ * the person created in the workspaces that stay, and each gets its
+ * `api_key_revoked` entry there (member API keys design R6).
  */
 
 export { DELETE_ACCOUNT_CONFIRMATION };
@@ -109,6 +113,18 @@ async function planWithIds(userId: string): Promise<{ plan: AccountDeletionPlan;
   return { plan: { blocked: blocked.sort(byName), soleWorkspaces }, soleIds };
 }
 
+/**
+ * The person's active API keys in the workspaces that stay (member API keys
+ * design R6). Deleting the account revokes them in the database (migration
+ * 0069); each gets its `api_key_revoked` entry once the account is gone.
+ */
+async function keysLeftBehind(userId: string, deletedWithAccount: ReadonlySet<string>): Promise<Array<{ id: string; orgId: string }>> {
+  const rows = unwrap(
+    await platformDb().from("api_keys").select("id, org_id").eq("created_by", userId).is("revoked_at", null).order("created_at")
+  ) as Array<{ id: string; org_id: string }>;
+  return rows.filter((row) => !deletedWithAccount.has(row.org_id)).map((row) => ({ id: row.id, orgId: row.org_id }));
+}
+
 /** What deleting this person's account would do (A2). Slugs, names, counts and booleans only. */
 export async function accountDeletionPlan(userId: string): Promise<AccountDeletionPlan> {
   return (await planWithIds(userId)).plan;
@@ -124,6 +140,9 @@ export async function deleteAccount(input: { userId: string; confirmText: string
   // deleted, so the most likely refusal never leaves the account half done.
   const running = plan.soleWorkspaces.find((workspace) => workspace.live && !workspace.paused);
   if (running) throw workspaceRefused(running.slug, "Pause the agent first, so no cycle runs while the workspace is deleted.");
+
+  // Read before anything is deleted, so a failure here leaves everything as it was.
+  const keys = await keysLeftBehind(input.userId, new Set(soleIds.values()));
 
   // One at a time, stopping at the first refusal: the account stays, and so
   // does every workspace not yet reached.
@@ -144,5 +163,15 @@ export async function deleteAccount(input: { userId: string; confirmText: string
     // bring it back; before, the failure is the action's generic one.
     if (deleted.length > 0) throw new AccountDeletionError("auth_failed");
     throw new Error(error.message);
+  }
+
+  // The account is gone, and with it every key it created where it was a member (0069). Each workspace's ledger says
+  // so, as the person who deleted it.
+  for (const key of keys) {
+    await appendLedgerEntryBestEffort(
+      key.orgId,
+      apiKeyRevokedEntry({ reason: "account_deleted", by: input.userId, keyId: key.id }),
+      { enterScope: { userId: input.userId } }
+    );
   }
 }

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { accountDeletionPlan, AccountDeletionError, deleteAccount } from "@/lib/platform/delete-account";
@@ -10,8 +10,18 @@ import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fa
  * org rows, their accounts, `delete_org` (proven against Postgres in
  * `tests/delete-org-migration.test.ts`), and the auth admin API that deletes
  * the user. The cascades that follow the user's deletion are proven against
- * Postgres in `tests/delete-account-migration.test.ts`.
+ * Postgres in `tests/delete-account-migration.test.ts`, and the revocation of
+ * the person's API keys in `tests/member-api-keys-migration.test.ts`. The
+ * ledger append is stubbed: what is asserted is which entry is appended, in
+ * which workspace, as whom, and when.
  */
+
+const { appendMock } = vi.hoisted(() => ({ appendMock: vi.fn() }));
+vi.mock("@/lib/ledger-best-effort", () => ({ appendLedgerEntryBestEffort: appendMock }));
+
+afterEach(() => {
+  appendMock.mockReset();
+});
 
 const ME = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000a1";
 const OTHER = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000b2";
@@ -48,6 +58,10 @@ interface World {
   refuse?: Record<string, string>;
   /** The auth admin API answers with this error. */
   authError?: { status: number; message: string };
+  /** Rows of `api_keys`, for the read of the person's active keys. */
+  apiKeys?: Array<{ id: string; org_id: string; created_by: string; revoked_at: string | null }>;
+  /** Reading `api_keys` fails, as a database error would. */
+  keysFail?: boolean;
 }
 
 let counter = 0;
@@ -108,6 +122,16 @@ function world(state: World) {
     if (request.path.startsWith("/auth/v1/admin/users/") && request.method === "DELETE") {
       if (state.authError) return { status: state.authError.status, body: { code: state.authError.status, msg: state.authError.message } };
       return { body: { id: request.path.split("/").pop() } };
+    }
+    if (request.path === "/rest/v1/api_keys" && request.method === "GET") {
+      if (state.keysFail) return { status: 500, body: { code: "XX000", message: "keys unavailable", details: null, hint: null } };
+      const creator = eqOf(request, "created_by");
+      const activeOnly = request.params.get("revoked_at") === "is.null";
+      return {
+        body: (state.apiKeys ?? [])
+          .filter((row) => row.created_by === creator && (!activeOnly || row.revoked_at === null))
+          .map(({ id, org_id }) => ({ id, org_id })),
+      };
     }
     return { body: [] };
   });
@@ -401,5 +425,82 @@ describe("deleteAccount (A3)", () => {
 
     expect(error).toBeInstanceOf(Error);
     expect(error).not.toBeInstanceOf(AccountDeletionError);
+  });
+});
+
+describe("deleteAccount records the API keys it ends (member API keys design R6)", () => {
+  const KEY_A = "7c3e9f1a-2b4d-4e6f-8a0b-0000000000a1";
+  const KEY_B = "7c3e9f1a-2b4d-4e6f-8a0b-0000000000b2";
+  const KEY_SOLO = "7c3e9f1a-2b4d-4e6f-8a0b-0000000000c3";
+  const KEY_OLD = "7c3e9f1a-2b4d-4e6f-8a0b-0000000000d4";
+  const KEY_THEIRS = "7c3e9f1a-2b4d-4e6f-8a0b-0000000000e5";
+  const revokedEntry = (keyId: string) => ({
+    actor: "human",
+    domain: "system",
+    action: "api_key_revoked",
+    summary: "An API key was revoked when the member who created it deleted their account",
+    detail: { by: ME, keyId, reason: "account_deleted" },
+  });
+
+  it("appends account_deleted for each of my active keys in the workspaces that stay, as me, once the account is gone", async () => {
+    const solo = org("keys-solo-co");
+    const shared = org("keys-shared-co");
+    const { run, authDeletes } = world({
+      orgs: [solo, shared],
+      memberships: [
+        { org_id: solo.id, user_id: ME, role: "owner" },
+        { org_id: shared.id, user_id: ME, role: "admin" },
+        { org_id: shared.id, user_id: OTHER, role: "owner" },
+      ],
+      apiKeys: [
+        { id: KEY_A, org_id: shared.id, created_by: ME, revoked_at: null },
+        { id: KEY_SOLO, org_id: solo.id, created_by: ME, revoked_at: null },
+        { id: KEY_OLD, org_id: shared.id, created_by: ME, revoked_at: "2026-10-01T00:00:00Z" },
+        { id: KEY_B, org_id: shared.id, created_by: ME, revoked_at: null },
+        { id: KEY_THEIRS, org_id: shared.id, created_by: OTHER, revoked_at: null },
+      ],
+    });
+    const authDeletesWhenAppended: number[] = [];
+    appendMock.mockImplementation(async () => {
+      authDeletesWhenAppended.push(authDeletes().length);
+    });
+
+    await run(() => deleteAccount({ userId: ME, confirmText: "delete my account" }));
+
+    expect(appendMock.mock.calls).toEqual([
+      [shared.id, revokedEntry(KEY_A), { enterScope: { userId: ME } }],
+      [shared.id, revokedEntry(KEY_B), { enterScope: { userId: ME } }],
+    ]);
+    expect(authDeletesWhenAppended).toEqual([1, 1]);
+  });
+
+  it("appends nothing when the auth admin API refuses to delete the account", async () => {
+    const shared = org("keys-refused-co");
+    const { run } = world({
+      orgs: [shared],
+      memberships: [
+        { org_id: shared.id, user_id: ME, role: "admin" },
+        { org_id: shared.id, user_id: OTHER, role: "owner" },
+      ],
+      apiKeys: [{ id: KEY_A, org_id: shared.id, created_by: ME, revoked_at: null }],
+      authError: { status: 500, message: "Database error deleting user" },
+    });
+
+    await expect(run(() => deleteAccount({ userId: ME, confirmText: "delete my account" }))).rejects.toThrow();
+    expect(appendMock).not.toHaveBeenCalled();
+  });
+
+  it("deletes no workspace and keeps the account when my keys cannot be read", async () => {
+    const solo = org("keys-unread-co");
+    const { run, authDeletes, deleteOrgCalls } = world({
+      orgs: [solo],
+      memberships: [{ org_id: solo.id, user_id: ME, role: "owner" }],
+      keysFail: true,
+    });
+
+    await expect(run(() => deleteAccount({ userId: ME, confirmText: "delete my account" }))).rejects.toThrow("keys unavailable");
+    expect(deleteOrgCalls()).toEqual([]);
+    expect(authDeletes()).toEqual([]);
+    expect(appendMock).not.toHaveBeenCalled();
   });
 });
