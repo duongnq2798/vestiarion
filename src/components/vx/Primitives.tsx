@@ -44,6 +44,7 @@ const OUTCOMES: Record<Outcome, { word: string; tone: NonNullable<BadgeProps["to
   held: { word: "Held for you", tone: "held" },
   refused: { word: "Refused by guardrail", tone: "refused" },
   simulated: { word: "Simulated", tone: "simulated" },
+  deciding: { word: "Deciding now", tone: "agent" },
 };
 
 /** What happened to a decision, in words and in its tone, with the outcome's own glyph. */

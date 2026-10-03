@@ -8,6 +8,7 @@ import { cn } from "@/components/ui/cn";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { orgHref } from "@/lib/auth/org-paths";
 import { CollapsibleReasoning } from "./CollapsibleReasoning";
+import { DecisionTrail } from "./DecisionTrail";
 import { DOMAIN_NAME, DomainGlyph } from "./Glyphs";
 import { explorerTx, fmt, Hash, Money, OutcomeBadge, Reasoning } from "./Primitives";
 import type { Decision, Evidence, Guardrail, Outcome } from "./types";
@@ -106,6 +107,9 @@ export function DecisionCard({
             </aside>
           )}
         </div>
+
+        {/* How it was decided, step by step from the signed entries: folded until opened (decision trail R2). */}
+        {decision.trail && decision.trail.length > 0 && <DecisionTrail id={decision.id} steps={decision.trail} orgSlug={orgSlug} />}
 
         {hasFooter && (
           <footer className="border-t border-line bg-ground/40">

@@ -468,6 +468,12 @@ describe("the new control screens, as source", () => {
     expect(read("src/app/o/[slug]/invoices/page.tsx")).toContain("rule={decision.guardrail?.rule ?? null}");
   });
 
+  it("AP / AR says which payables a running cycle is deciding", () => {
+    const invoices = read("src/app/o/[slug]/invoices/page.tsx");
+    expect(invoices).toContain("hasRunningCycle().catch(() => false)");
+    expect(invoices).toContain("entries, { deciding })");
+  });
+
   it("every page's frame shows the agent's live state, and a successful form tells it to watch closely", () => {
     expect(read("src/components/vx/Shell.tsx")).toContain("<AgentActivity lastCycleAt={lastCycleAt} />");
     expect(read("src/components/ui/useActionForm.ts")).toContain("window.dispatchEvent(new Event(AGENT_EXPECTED_EVENT));");

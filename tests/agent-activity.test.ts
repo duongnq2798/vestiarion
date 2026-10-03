@@ -5,6 +5,7 @@ import {
   activityAmount,
   activityItem,
   activityItems,
+  afterTrigger,
   nextPollMs,
   workingLabel,
   type ActivityEntry,
@@ -30,15 +31,34 @@ const refs = (invoice: Partial<{ status: string; txRef: string | null; scheduled
 const entry = (action: string, detail: Record<string, unknown>, seq = 972): ActivityEntry => ({ seq, action, detail: { invoiceId: INVOICE, ...detail } });
 
 describe("what the agent did, in words", () => {
-  it("says a payment, with its transaction and where to see it", () => {
-    expect(activityItem(entry("ap_pay", { execution: { txRef: TX, resultingStatus: "paid" } }), refs())).toEqual({
+  it("says a payment, who decided it and what was checked, with its transaction and how it was decided", () => {
+    const paid = entry("ap_pay", {
+      decisionMode: "deepseek",
+      agreedWithReference: true,
+      observed: { riskLevel: "clear", paymentLimit: 30, poReference: "PO-131", goodsReceived: true },
+      onChainLimit: { verdict: { state: "allowed" } },
+      execution: { txRef: TX, resultingStatus: "paid" },
+    });
+    expect(activityItem(paid, refs())).toEqual({
       seq: 972,
       text: "Paid Jiren 0.30 USDC.",
+      detail:
+        "DeepSeek decided, as the written policy would. Checked: purchase order and goods received, within the 30.00 USDC limit, screened clear, the spending-limit contract allowed it.",
       tone: "done",
-      path: "/invoices",
-      pathLabel: "AP / AR",
+      path: `/invoices#trail-${INVOICE}`,
+      pathLabel: "How it decided",
       txHash: TX,
     });
+  });
+
+  it("says how long after the person's action the agent decided", () => {
+    const paid = { ...entry("ap_pay", { execution: { txRef: TX, resultingStatus: "paid" } }), ts: "2026-10-03T02:20:53Z" };
+    const withTriggers = (action: string, ts: string) => ({ ...refs(), triggers: new Map([[INVOICE, [{ seq: 968, ts, action }]]]) });
+    expect(activityItem(paid, withTriggers("invoice_details_added", "2026-10-03T02:20:25Z"))?.text).toBe("Paid Jiren 0.30 USDC · 28 s after details were added.");
+    expect(activityItem(paid, withTriggers("create_invoice", "2026-10-03T02:15:53Z"))?.text).toBe("Paid Jiren 0.30 USDC · 5 min after it was added.");
+    // More than an hour later is not news of speed; neither is an action after the decision.
+    expect(activityItem(paid, withTriggers("create_invoice", "2026-10-03T00:00:00Z"))?.text).toBe("Paid Jiren 0.30 USDC.");
+    expect(afterTrigger(paid, [{ seq: 990, ts: "2026-10-03T02:30:00Z", action: "approval_returned" }])).toBe("");
   });
 
   it("says a payment still confirming, and one that did not go out", () => {
@@ -49,14 +69,26 @@ describe("what the agent did, in words", () => {
     expect(held).toMatchObject({ text: "Tried to pay Jiren 0.30 USDC; it is held for you.", tone: "stopped", path: `/approvals#payable-${INVOICE}`, txHash: null });
   });
 
-  it("names a refusal by code and its rule, and sends the person to Approvals", () => {
-    const refused = activityItem(entry("ap_pay", { guardrailBlocked: true, guardrailRule: "bridge.fee_above_cap" }), refs({ status: "held" }));
+  it("says a refusal by code, why and the way through, and sends the person to Approvals", () => {
+    const refused = activityItem(
+      entry("ap_pay", { decisionMode: "deepseek", agreedWithReference: false, guardrailBlocked: true, guardrailRule: "bridge.fee_above_cap" }),
+      refs({ status: "held" })
+    );
     expect(refused).toMatchObject({
-      text: "Code stopped paying Jiren 0.30 USDC (bridge.fee_above_cap).",
+      text: "Code stopped paying Jiren 0.30 USDC.",
+      detail:
+        "DeepSeek decided; the written policy would have decided otherwise. The payout fee is above 10% of the invoice, more than the agent pays. Pay it with the fee in Approvals, or reject it.",
       tone: "stopped",
       path: `/approvals#payable-${INVOICE}`,
       pathLabel: "Decide in Approvals",
     });
+  });
+
+  it("says why it stopped, from the first sentence of the model's reasoning", () => {
+    const asked = entry("ap_request_info", {
+      decision: { action: "request_info", reasoning: "There is no purchase order on file, so the three-way match is incomplete. Please provide it before I pay." },
+    });
+    expect(activityItem(asked, refs({ status: "awaiting_info" }))?.detail).toBe("There is no purchase order on file, so the three-way match is incomplete.");
   });
 
   it("says a schedule with its day, and each kind of stop", () => {
@@ -166,6 +198,9 @@ describe("reading the agent's activity", () => {
       if (request.path === "/rest/v1/cycle_runs") return { body: [{ started_at: "2026-10-03T02:20:30Z" }] };
       if (request.path === "/rest/v1/ledger_entries" && select === "seq") return { body: [{ seq: 974 }] };
       if (request.path === "/rest/v1/ledger_entries" && select === "ts") return { body: [{ ts: "2026-10-03T02:00:08Z" }] };
+      if (request.path === "/rest/v1/ledger_entries" && select.includes("invoiceId")) {
+        return { body: [{ seq: 968, ts: "2026-10-03T02:20:25Z", action: "invoice_details_added", invoiceId: INVOICE }] };
+      }
       if (request.path === "/rest/v1/ledger_entries") return { body: newEntries };
       if (request.path === "/rest/v1/invoices") {
         return { body: [{ id: INVOICE, amount: "0.300000", currency: "USDC", status: "paid", tx_ref: TX, scheduled_for: null, counterparties: { name: "Jiren" } }] };
@@ -184,14 +219,19 @@ describe("reading the agent's activity", () => {
     expect(run.params.get("status")).toBe("eq.running");
     expect(run.params.get("started_at")).toMatch(/^gt\./);
     // Nothing new to read: no entries asked for.
-    expect(client.requests.filter((r) => r.path === "/rest/v1/ledger_entries" && r.params.get("select") === "seq,action,detail")).toHaveLength(0);
+    expect(client.requests.filter((r) => r.path === "/rest/v1/ledger_entries" && r.params.get("select") === "seq,ts,action,detail")).toHaveLength(0);
   });
 
   it("reads the agent's decisions after what the page has seen, and says them", async () => {
-    const client = fake([{ seq: 972, action: "ap_pay", detail: { invoiceId: INVOICE, execution: { txRef: TX, resultingStatus: "paid" } } }]);
+    const client = fake([{ seq: 972, ts: "2026-10-03T02:20:53Z", action: "ap_pay", detail: { invoiceId: INVOICE, execution: { txRef: TX, resultingStatus: "paid" } } }]);
     const activity = await read(client, 967);
-    expect(activity.items).toEqual([{ seq: 972, text: "Paid Jiren 0.30 USDC.", tone: "done", path: "/invoices", pathLabel: "AP / AR", txHash: TX }]);
-    const asked = client.requests.find((r) => r.path === "/rest/v1/ledger_entries" && r.params.get("select") === "seq,action,detail")!;
+    expect(activity.items).toEqual([
+      { seq: 972, text: "Paid Jiren 0.30 USDC · 28 s after details were added.", detail: null, tone: "done", path: `/invoices#trail-${INVOICE}`, pathLabel: "How it decided", txHash: TX },
+    ]);
+    const triggers = client.requests.find((r) => r.path === "/rest/v1/ledger_entries" && (r.params.get("select") ?? "").includes("invoiceId"))!;
+    expect(triggers.params.get("actor")).toBe("eq.human");
+    expect(triggers.params.get("action")).toBe("in.(create_invoice,invoice_details_added,approval_returned)");
+    const asked = client.requests.find((r) => r.path === "/rest/v1/ledger_entries" && r.params.get("select") === "seq,ts,action,detail")!;
     expect(asked.params.get("actor")).toBe("eq.agent");
     expect(asked.params.get("seq")).toBe("gt.967");
     expect(asked.params.get("action")).toContain("ap_pay");

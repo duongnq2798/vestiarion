@@ -23,6 +23,7 @@ import { SectionHeader } from "@/components/ui/SectionHeader";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { sectionTitle } from "@/components/vx/nav";
 import { addedSince, latestDecision, recordedFacts, waitingHint } from "@/lib/added-details";
+import { hasRunningCycle } from "@/lib/agent/cycle-running";
 import { viewerCan } from "@/lib/auth/authorize";
 import { requireMembership } from "@/lib/auth/membership";
 import { orgHref } from "@/lib/auth/org-paths";
@@ -62,7 +63,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
   const access = await requireMembership(slug);
   return inOrg(access, async () => {
     const query = await searchParams;
-    const [invoices, counterparties, headEntries, dashboardStats, canWrite, canDecide, schedules] = await Promise.all([
+    const [invoices, counterparties, headEntries, dashboardStats, canWrite, canDecide, schedules, deciding] = await Promise.all([
       listInvoices(),
       listCounterparties(),
       listLedgerEntries(1),
@@ -74,12 +75,14 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
         console.error("invoices: recurring payments not loaded", error instanceof Error ? error.message : error);
         return [];
       }),
+      // A cycle running now is deciding the payables not yet decided: they say so (decision trail R1). Best effort.
+      hasRunningCycle().catch(() => false),
     ]);
     const entries = await listLedgerEntriesForTargets({ invoiceIds: invoices.map((invoice) => invoice.id) });
     const filter = typeof query.status === "string" ? query.status : undefined;
     const shown = filter ? invoices.filter((invoice) => invoice.status === filter) : invoices;
     const counterpartiesById = new Map(counterparties.map((counterparty) => [counterparty.id, counterparty]));
-    const decisions = shown.map((invoice) => invoiceDecision(invoice, counterpartiesById.get(invoice.counterparty_id), entries));
+    const decisions = shown.map((invoice) => invoiceDecision(invoice, counterpartiesById.get(invoice.counterparty_id), entries, { deciding }));
     const payables = decisions.filter((decision) => decision.domain === "ap");
     const receivables = decisions.filter((decision) => decision.domain === "ar");
     const ordinaryPayables = payables.filter((decision) => decision.outcome !== "refused");

@@ -73,6 +73,12 @@ export function OutcomeGlyph({ outcome, className = "size-3.5" }: GlyphProps & {
           <path d="M4.3 7h5.4" stroke="var(--color-ground)" strokeWidth={1.8} strokeLinecap="round" />
         </>
       )}
+      {outcome === "deciding" && (
+        <g className="motion-safe:animate-spin" style={{ transformBox: "fill-box", transformOrigin: "center" }}>
+          <circle cx="7" cy="7" r="5.25" fill="none" stroke="currentColor" strokeOpacity={0.25} strokeWidth={1.6} />
+          <path d="M7 1.75a5.25 5.25 0 0 1 5.25 5.25" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" />
+        </g>
+      )}
       {outcome === "simulated" && (
         <circle cx="7" cy="7" r="5.25" fill="none" stroke="currentColor" strokeWidth={1.5} strokeDasharray="2.2 2" />
       )}
