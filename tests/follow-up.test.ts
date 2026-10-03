@@ -307,6 +307,37 @@ describe("planMilestoneFollowUp — a held milestone goes back to the agent when
   });
 });
 
+describe("follow-up — held for want of cash (reserve cash back R4)", () => {
+  const cashHeld = (over: Partial<FrozenInvoice> = {}) => frozen({ status: "held", amount: 0.35, ...over });
+  const heldWith = (seen: { operating: number; reserve: number }): DecisionFacts => ({ ...facts, heldForCash: { needed: 0.35, ...seen } });
+  const emptyReserve = heldWith({ operating: 0.119389, reserve: 0 });
+
+  it("reopens a payable once cash came in and covers what it needed", () => {
+    const plan = planFollowUp(cashHeld({ cash: { operating: 20.119389, reserve: 0 } }), emptyReserve, NOW, config);
+    expect(plan.action).toBe("reopen");
+    expect(plan.changes).toEqual(["the cash it needs is there now (20.119389 USDC in the operating wallet and the reserve)"]);
+  });
+
+  it("reopens it once a person brought the reserve back to the operating wallet, the total unchanged", () => {
+    const plan = planFollowUp(cashHeld({ cash: { operating: 60.81074, reserve: 0 } }), heldWith({ operating: 0.119389, reserve: 60.691351 }), NOW, config);
+    expect(plan.action).toBe("reopen");
+  });
+
+  it("waits while the cash has not moved since the decision, so a failing or paused redemption never loops", () => {
+    const stood = { operating: 0.119389, reserve: 60.691351 };
+    expect(planFollowUp(cashHeld({ cash: stood }), heldWith(stood), NOW, config).action).toBe("wait");
+  });
+
+  it("waits while they still hold less than it needs, or the cash was not read", () => {
+    expect(planFollowUp(cashHeld({ cash: { operating: 0.2, reserve: 0 } }), emptyReserve, NOW, config).action).toBe("wait");
+    expect(planFollowUp(cashHeld(), emptyReserve, NOW, config).action).toBe("wait");
+  });
+
+  it("never reopens a payable held for another reason because cash came in", () => {
+    expect(planFollowUp(cashHeld({ cash: { operating: 1000, reserve: 0 } }), facts, NOW, config).action).toBe("wait");
+  });
+});
+
 describe("follow-up — held only for the agent's spending limit (outflow budget R6)", () => {
   const heldForBudget: DecisionFacts = { ...facts, heldForBudgetUsdc: 1.5 };
   const budgetHeld = (over: Partial<FrozenInvoice> = {}) => frozen({ status: "held", amount: 1.5, ...over });

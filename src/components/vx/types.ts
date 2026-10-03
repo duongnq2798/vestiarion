@@ -43,6 +43,8 @@ export interface Decision {
   at: string;
   /** How the agent decided it, step by step, from the signed entries about it (decision trail R2). */
   trail?: TrailStep[];
+  /** A payable held because the cash it needs was not there, no guardrail refusing it (reserve cash back R4). */
+  heldForCash?: boolean;
 }
 
 export interface Account {

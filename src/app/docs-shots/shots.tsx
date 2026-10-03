@@ -6,6 +6,7 @@ import ApprovalCard from "@/components/ApprovalCard";
 import { CounterpartyRow as CounterpartyRowView } from "@/components/CounterpartyRow";
 import GoLivePanel from "@/components/GoLivePanel";
 import { HeldMilestoneActions } from "@/components/HeldMilestoneActions";
+import { UsycReservePanel } from "@/components/UsycReservePanel";
 import VerifyLedgerBadge from "@/components/VerifyLedgerBadge";
 import { DecisionCard } from "@/components/vx/DecisionCard";
 import { DecisionTrail } from "@/components/vx/DecisionTrail";
@@ -455,6 +456,17 @@ export const DOCS_SHOTS = {
     guide: "go-live",
     page: "settings",
     render: goLive({ ...CHOOSING, step: "live", host: "hosted", wallets: WALLETS, liveSince: "2026-09-30T09:12:00Z" }),
+  },
+  "go-live-usyc": {
+    guide: "go-live",
+    page: "settings",
+    render: () => (
+      <UsycReservePanel
+        orgSlug={SLUG}
+        status={{ liveAt: "2026-10-02T14:05:00Z", mode: "live", operatingAddress: OPERATING_ADDRESS, reserveAddress: RESERVE_ADDRESS, reserveBalance: 60.69 }}
+        canManage
+      />
+    ),
   },
   "first-payment-counterparty": {
     guide: "first-payment",

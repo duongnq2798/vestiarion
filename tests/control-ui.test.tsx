@@ -11,7 +11,7 @@ import ApprovalCard, {
   payConfirmTitle,
   SELF_APPROVAL_EXPLAINED,
 } from "@/components/ApprovalCard";
-import { agentResumes } from "@/lib/next-step";
+import { agentResumes, CASH_SHORTFALL } from "@/lib/next-step";
 import { WAITING_FOR_A_DECISION, WaitingPayableAction } from "@/components/WaitingPayableAction";
 import { ActivityToastBody } from "@/components/AgentActivity";
 import { addDetailsPrompt, addedDetailsSentence } from "@/lib/added-details";
@@ -465,8 +465,9 @@ describe("the new control screens, as source", () => {
   it("the console's Stopped cards say what stopped each payable and where to handle it", () => {
     const console_ = read("src/app/o/[slug]/console/page.tsx");
     expect(console_).toContain("footerAction={nextStepFor(decision)}");
-    expect(console_).toContain("rule={decision.guardrail?.rule ?? null}");
-    expect(read("src/app/o/[slug]/invoices/page.tsx")).toContain("rule={decision.guardrail?.rule ?? null}");
+    // A hold for want of cash is no guardrail rule, but is explained like one (reserve cash back R4).
+    expect(console_).toContain("rule={decision.guardrail?.rule ?? (decision.heldForCash ? CASH_SHORTFALL : null)}");
+    expect(read("src/app/o/[slug]/invoices/page.tsx")).toContain("rule={decision.guardrail?.rule ?? (decision.heldForCash ? CASH_SHORTFALL : null)}");
   });
 
   it("AP / AR says which payables a running cycle is deciding", () => {
@@ -487,6 +488,15 @@ describe("the new control screens, as source", () => {
     const page = read("src/app/o/[slug]/counterparties/page.tsx");
     expect(page).toContain("Payment notices");
     expect(page).toContain("<CounterpartyNoticeEmailEdit");
+  });
+
+  it("a cycle brings cash back from the reserve before it decides today's payments, and a person can too", () => {
+    const orchestrator = read("src/lib/agent/orchestrator.ts");
+    expect(orchestrator.indexOf('await stage("liquidity", async () => {')).toBeGreaterThan(0);
+    expect(orchestrator.indexOf('await stage("liquidity", async () => {')).toBeLessThan(orchestrator.indexOf('await stage("ap", async () => {'));
+    const panel = read("src/components/UsycReservePanel.tsx");
+    expect(panel).toContain("Bring cash back");
+    expect(panel).toContain("status.liveAt && canManage && status.reserveBalance > 0 && <CashBackForm");
   });
 
   it("a cycle ends by sending the payment notices it owes", () => {
@@ -672,6 +682,25 @@ describe("a payable waiting for a person, on its card on Invoices (complete held
     expect(markup).not.toContain("Spending limit</a>");
     expect(markup).not.toContain("Add details");
     expect(markup).toContain(DECIDE_LINK);
+  });
+
+  it("says a payable held for want of cash waits for cash, and links the USYC reserve, for an owner or admin (reserve cash back R4)", () => {
+    const markup = html(
+      <WaitingPayableAction
+        orgSlug="acme"
+        invoice={{ id: ID, counterpartyName: "CME", counterpartyId: "cp-1", poReference: "PO-1", goodsReceived: true }}
+        added={null}
+        canAddDetails
+        canDecide
+        rule={CASH_SHORTFALL}
+        canFix
+      />
+    );
+    expect(markup).toContain("The operating wallet did not hold the cash it needs, and the reserve could not cover it.");
+    expect(markup).toContain('href="/o/acme/settings#usyc-reserve-title"');
+    expect(markup).toContain("USYC reserve");
+    expect(markup).toContain(DECIDE_LINK);
+    expect(markup).not.toContain("Add details");
   });
 
   it("explains a rule with no page to fix it, and sends the person to Approvals", () => {

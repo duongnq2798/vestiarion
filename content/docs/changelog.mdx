@@ -1,5 +1,14 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-03: Cash comes back from the reserve for payments
+
+- **New ledger action** `cash_brought_back`, domain `treasury`, delivered to webhooks like every entry: USDC came back from the reserve to the operating wallet.
+  - Actor `agent`: each cycle, before it decides payments, the agent brings back what the USDC payables due today need beyond the operating balance. Its `detail` is `{ reason: "payments_due_today", amount, neededUsdc, payments, operatingBalance, reserveBalance, executed, executionNote, earnMode, execution? }`. `execution` holds the transactions of a real USYC redemption. When nothing could move, `executed` is `false`, `executionNote` says why, and the entry's `summary` begins "Could not bring"; while the agent is paused, `heldBecause` is `agent_paused`.
+  - Actor `human`: an owner or admin chose **Bring cash back**. Its `detail` is `{ by, reason: "person", amount, all, reserveBalance, earnMode, execution? }`, where `all` says they brought back everything. It moves cash even while the agent is paused, and starts a cycle, whose `cycle_complete` entry lists the new event kind `cash_returned` in `events`.
+- The redemption itself is also a `treasury_actions` row with `action: "redeem_from_usyc"`, as the treasury stage's are.
+- An AP decision held because the cash was not there carries `execution.heldBecause: "cash_shortfall"`, with `execution.cashNeededUsdc` (what it needed, with the payables due before it) and `execution.cashSeen: { operating, reserve }` (the balances it saw). Once cash has come in since and covers it, the next cycle reopens the payable with an `invoice_reopened` entry whose `followUp.changes` reads "the cash it needs is there now (… USDC in the operating wallet and the reserve)", and decides it again.
+- A cycle's journal has a new stage, `liquidity`, between `services` and `ap`.
+
 ## 2026-10-03: Payment notices
 
 - **New ledger actions**, delivered to webhooks like every entry:

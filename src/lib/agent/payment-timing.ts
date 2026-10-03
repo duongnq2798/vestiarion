@@ -223,10 +223,11 @@ function buildReason(args: {
 
 /**
  * What counts toward the shortfall check for a payment targeted at `targetOn`:
- * the operating balance alone when that target is today (the treasury stage
- * that would redeem the reserve runs after AP, in the same cycle, so that
- * cash is not liquid yet), plus the reserve balance when the target is a
- * later day — the treasury has time to redeem it back before then.
+ * the operating balance alone when that target is today (the cycle's
+ * liquidity step, before AP, has already brought back from the reserve what
+ * today's payments need, so what is still there was not liquid this cycle),
+ * plus the reserve balance when the target is a later day — the treasury has
+ * time to redeem it back before then.
  */
 function availableBy(input: PaymentTimingInput, targetOn: string, today: string): number {
   return targetOn > today ? input.operatingBalance + input.reserveBalance : input.operatingBalance;

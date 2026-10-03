@@ -135,6 +135,16 @@ Every cycle, the agent decides whether idle USDC should earn in a reserve or com
 
    Each move is a real transaction, linked from its decision card on the console.
 
+**Payments come first.** Each cycle, before it decides any payment, the agent adds up the USDC payables due today. When the operating wallet holds less, it sells the USYC the difference needs first, so those payments are made in that cycle rather than held. The audit log records the move as `cash_brought_back`. A payment still held because the cash was not there is decided again at the first cycle after cash comes in: from the faucet, from a redemption, or from **Bring cash back**.
+
+**To bring cash back yourself**, an owner or admin opens **Settings** → **USYC reserve**, enters an amount in **Amount (USDC)**, or leaves it empty for everything, and chooses **Bring cash back**. The reserve wallet sells that much USYC at its latest price, at any hour, and the USDC comes back to the operating wallet. The audit log records it as `cash_brought_back`, by you. Vestiarion then runs a cycle, so payments waiting for cash are made within a minute, unless the agent is paused.
+
+<Screenshot
+  src="/docs/guides/go-live-usyc.png"
+  alt="The USYC reserve section of Settings, turned on. The badge reads Live. The text reads On since Oct 2, 2026, 14:05 UTC, then The reserve is worth 60.69 USDC at USYC's latest price. Below, the line Leave the amount empty to bring everything back, an Amount (USDC) field, optional, with the placeholder All, and a Bring cash back button beside it."
+  caption="With the reserve on, an owner or admin can bring cash back to the operating wallet at any hour."
+/>
+
 What to expect:
 
 - **When USYC can be bought.** Only between its daily price update, around 08:30 New York time, and 14:00 New York time, on business days. Outside that window the agent is told it cannot sweep. A sweep it decides anyway is not made, and the decision says why. Redemptions are possible at any time.

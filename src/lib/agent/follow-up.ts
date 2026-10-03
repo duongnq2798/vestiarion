@@ -54,6 +54,11 @@ export interface FrozenInvoice {
    * not read, because nothing waited on it (outflow budget spec R6).
    */
   budgetRoom?: number | null;
+  /**
+   * The USDC the operating wallet and the reserve hold now. Absent when it was not read, because nothing waited on it
+   * (reserve cash back R4).
+   */
+  cash?: { operating: number; reserve: number };
 }
 
 /** The facts as they stood when the decision was taken, from the ledger. */
@@ -64,6 +69,11 @@ export interface DecisionFacts {
   paymentLimit: number | null;
   /** Held only for the spending limit (`execution.heldBecause`): the USDC it was weighed at. Null otherwise. */
   heldForBudgetUsdc?: number | null;
+  /**
+   * Held for want of cash (`execution.heldBecause`): the USDC it needed, and the operating and reserve balances it saw.
+   * Null otherwise (reserve cash back R4).
+   */
+  heldForCash?: { needed: number; operating: number; reserve: number } | null;
 }
 
 export type FollowUpAction = "reopen" | "escalate" | "wait";
@@ -103,6 +113,23 @@ function budgetRoomChange(room: number | null | undefined, needed: number): stri
   if (room === undefined) return null;
   if (room === null) return "the agent's spending limit was removed";
   return room + 0.0000005 >= needed ? `the agent's spending limit has room for it again (${room} USDC left)` : null;
+}
+
+const CASH_EPSILON = 0.0000005;
+
+/**
+ * A hold for want of cash ends when the operating wallet and the reserve, which the liquidity step brings back from
+ * before payments, cover what it needed (reserve cash back R4), and cash has moved since: more came in, or a person
+ * brought it back to the operating wallet. Cash that stood still means the redemption that failed, or waited on a
+ * pause, would only fail again: it waits, and the treasury stage's own redemption for what is due is what moves it.
+ * Null while nothing changed, or while not read.
+ */
+function cashChangeSince(now: { operating: number; reserve: number } | undefined, held: { needed: number; operating: number; reserve: number }): string | null {
+  if (now === undefined) return null;
+  const total = now.operating + now.reserve;
+  if (total + CASH_EPSILON < held.needed) return null;
+  const moved = now.operating > held.operating + CASH_EPSILON || total > held.operating + held.reserve + CASH_EPSILON;
+  return moved ? `the cash it needs is there now (${Number(total.toFixed(6))} USDC in the operating wallet and the reserve)` : null;
 }
 
 /**
@@ -172,6 +199,8 @@ export function planFollowUp(
   );
   const budgetChange = atDecision.heldForBudgetUsdc != null ? budgetRoomChange(invoice.budgetRoom, atDecision.heldForBudgetUsdc) : null;
   if (budgetChange) changes.push(budgetChange);
+  const cashChange = atDecision.heldForCash ? cashChangeSince(invoice.cash, atDecision.heldForCash) : null;
+  if (cashChange) changes.push(cashChange);
 
   if (changes.length > 0) {
     return {

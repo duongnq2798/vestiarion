@@ -23,6 +23,7 @@ import { SectionHeader } from "@/components/ui/SectionHeader";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { sectionTitle } from "@/components/vx/nav";
 import { addedSince, latestDecision, recordedFacts, waitingHint } from "@/lib/added-details";
+import { CASH_SHORTFALL } from "@/lib/next-step";
 import { hasRunningCycle } from "@/lib/agent/cycle-running";
 import { viewerCan } from "@/lib/auth/authorize";
 import { requireMembership } from "@/lib/auth/membership";
@@ -130,7 +131,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
           // A transfer recorded against it is approved in Approvals, never completed here (R3).
           canAddDetails={canWrite && invoice.tx_ref === null}
           canDecide={canDecide}
-          rule={decision.guardrail?.rule ?? null}
+          rule={decision.guardrail?.rule ?? (decision.heldForCash ? CASH_SHORTFALL : null)}
           canFix={canWrite}
         />
       );

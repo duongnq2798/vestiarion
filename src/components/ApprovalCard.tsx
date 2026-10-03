@@ -21,7 +21,7 @@ import { withSuccessToast } from "@/components/withSuccessToast";
 import type { WaitingPayable } from "@/lib/agent/approvals";
 import { addedDetailsSentence } from "@/lib/added-details";
 import { approvalAnchor, orgHref } from "@/lib/auth/org-paths";
-import { agentResumes, counterpartyPath, ruleNextStep } from "@/lib/next-step";
+import { agentResumes, CASH_SHORTFALL, counterpartyPath, ruleNextStep } from "@/lib/next-step";
 import { amountToPay } from "@/lib/agent/payment-timing";
 import { utcDay, utcMinute } from "@/lib/copy";
 import { paidAcrossChains, payeeChain } from "@/lib/payee-chains";
@@ -343,8 +343,9 @@ function ApprovalGuidance({
     );
   }
   if (!selfEntered) return null;
-  const resumes = agentResumes(payable.guardrailRule);
-  const fix = ruleNextStep(payable.guardrailRule, { id: payable.counterpartyId, name: payable.counterpartyName })?.fix ?? null;
+  const rule = payable.guardrailRule ?? (payable.heldForCash ? CASH_SHORTFALL : null);
+  const resumes = agentResumes(rule);
+  const fix = ruleNextStep(rule, { id: payable.counterpartyId, name: payable.counterpartyName })?.fix ?? null;
   return (
     <Callout tone="held" title="You entered this invoice" className="mt-3">
       <p>{SELF_APPROVAL_EXPLAINED}</p>

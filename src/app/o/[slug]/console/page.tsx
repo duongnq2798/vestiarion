@@ -24,6 +24,7 @@ import type { Account, Forecast } from "@/components/vx/types";
 import { agentBudgetStatus } from "@/lib/agent-budget";
 import { listWaitingPayables } from "@/lib/agent/approvals";
 import { addedSince, latestDecision, recordedFacts } from "@/lib/added-details";
+import { CASH_SHORTFALL } from "@/lib/next-step";
 import { requireMembership } from "@/lib/auth/membership";
 import { orgHref } from "@/lib/auth/org-paths";
 import { can } from "@/lib/auth/roles";
@@ -142,7 +143,7 @@ export default async function DashboardPage({
           added={addedSince(recordedFacts(latestDecision(invoiceEntries, invoice.id)), onFile)}
           canAddDetails={canWrite && invoice.tx_ref === null}
           canDecide={canDecide}
-          rule={decision.guardrail?.rule ?? null}
+          rule={decision.guardrail?.rule ?? (decision.heldForCash ? CASH_SHORTFALL : null)}
           canFix={canWrite}
         />
       );
