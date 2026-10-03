@@ -162,6 +162,12 @@ Adding a payable starts a cycle, usually within a minute, so the invoice is deci
 
 To run one yourself, open **Treasury**, the console, and choose **Run cycle now**. Only owners and admins have this button. When the cycle ends, a message says "Cycle complete at *time* · *n* decisions logged." and the console shows a report of what the cycle did.
 
+### Watch the agent work
+
+The line at the top of every workspace page says when the last cycle ran. While a cycle runs, it reads "The agent is working · *n* s" instead, counting the seconds. When the agent has decided, a message says what it did, one per decision. For example, "Paid Jiren 0.30 USDC." comes with **View on Arcscan**, for its transaction, and a button to the page that shows it. "Held CME 0.33 USDC for you." comes with **Decide in Approvals**. When a cycle decides more than two things, one message says "The agent made *n* decisions." and **See them** opens the console's report of that cycle. Either way the page shows what changed at once, without a reload.
+
+A page tells what happens while it is open: a cycle started by your own action, by another member's, or by the 6-hourly schedule. It watches closely for a minute and a half after you add or change something, and less often otherwise.
+
 ## 4. Read the decision and its reasoning
 
 On **AP / AR**, the tiles at the top count what needs you, what is due within 7 days, what is overdue, and what is still to pay. Under **Payables**, each invoice is one row, in three groups: **Needs you** (held, or refused by code), **Upcoming** (not yet paid, with the day it pays or falls due) and **Paid and closed** (the latest ten; **Show all** lists every one). Open a row to see its decision as a card. The console's **Stopped** section also shows the latest decisions the agent stopped. A card shows:
@@ -178,6 +184,21 @@ On **AP / AR**, the tiles at the top count what needs you, what is due within 7 
 />
 
 When the model decided to pay but a guardrail stopped it, the card also has a "Blocked by code, not by the model" band. The band names the rule, the amount attempted and the amount allowed.
+
+A payable the agent stopped also says what you can do about it, on the console's **Stopped** section as on **AP / AR**. Under the card, a line names the cause and the way through, for example "It is above CME's payment limit. Pay it in Approvals, or raise the limit." **Decide in Approvals** opens Approvals at that payable's card. Owners and admins also get the page that removes the cause:
+
+- **Edit limit** or **Confirm address** opens the counterparty's row on **Counterparties**, already open;
+- **Review screening** opens **Compliance**, for a counterparty screened high risk;
+- **Spending limit** opens the agent's spending limit on **Treasury**, when it had no room for the payment;
+- **Treasury**, when the operating wallet is short of EURC or the Gateway balance of a payout.
+
+A stop only a decision resolves, such as a payout fee above 10% of the invoice or a possible duplicate, says so and offers **Decide in Approvals**. A payable missing its purchase order or goods receipt offers **Add details** (see "Add what the agent was missing" below).
+
+<Screenshot
+  src="/docs/guides/first-payment-stopped.png"
+  alt="The console's Stopped section with one card: Tried to pay Northstar Studio, 75.00 USDC struck through, Refused by guardrail. The band Blocked by code, not by the model names the rule counterparty.payment_limit, 75.00 USDC attempted against 50.00 USDC allowed. Under the agent's reasoning and its evidence, the card's last line reads: It is above Northstar Studio's payment limit. Pay it in Approvals, or raise the limit. The buttons are Edit limit and Decide in Approvals."
+  caption="A payment code refused, with the way through: raise the limit, or decide it in Approvals."
+/>
 
 ## 5. When the agent pays
 
