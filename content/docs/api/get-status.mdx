@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | `payments` | `live`, `simulate`, `unavailable` | Whether invoice and milestone payments settle on chain through Circle, or are simulated. |
 | `yield` | `live`, `simulate`, `unavailable` | The same, for moves to and from the yield reserve. |
-| `screening` | `live`, `simulate` | Whether counterparties are screened against a live sanctions source (OpenSanctions) or the bundled, simulated watchlist. |
+| `screening` | `live`, `simulate` | Whether this workspace's counterparties are screened against a live sanctions source (OpenSanctions) or the bundled, simulated watchlist. A sandbox always uses the bundled watchlist. |
 
 `unavailable` means the workspace's Circle credentials are stored but cannot be read, for example because they are sealed under a master key this deployment does not hold. A cycle refuses to pay in that state rather than fall back to simulation, so status does not report it as `simulate`. Check `provenance.payments` before you treat a `paid` invoice as money that moved.
 

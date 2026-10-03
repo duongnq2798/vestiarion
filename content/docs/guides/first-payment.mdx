@@ -36,7 +36,7 @@ A counterparty is a business or person the workspace pays or invoices. Open **Co
   caption="A vendor with a payment limit and an Arc testnet address, ready to add and screen."
 />
 
-Then choose **Add and screen**. The counterparty is screened as soon as it is saved, and a message gives the result: "*Name* added and screened: *level* risk." The agent never pays a counterparty screened high risk.
+Then choose **Add and screen**. The counterparty is screened as soon as it is saved, and a message gives the result: "*Name* added and screened: *level* risk." The agent never pays a counterparty screened high risk. A live workspace screens against OpenSanctions; a sandbox, whose payments are simulated, screens against a short list built into the app.
 
 If screening cannot run, for example because the screening service does not answer, the counterparty is still saved, and the message says it "was added, but screening is incomplete". Its row then reads **Not screened yet**, and the agent pays it nothing: a payable to it is held with the rule `counterparty.unscreened`, and so is a contractor's milestone. Screening runs again at every cycle. Once it gives a verdict, the agent decides what it held again, within a minute. A person can still pay it from **Approvals**.
 
