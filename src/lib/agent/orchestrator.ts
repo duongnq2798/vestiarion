@@ -18,15 +18,14 @@ import { syncOnChainBalances, type BalanceSync } from "./balances";
 import { CycleRunningError, hasRunningCycle } from "./cycle-running";
 import { decide, type DecideResult } from "./decide";
 import { budgetClause, enforceApGuardrails, onChainLimitHold } from "./guardrails";
-import { usycSubscriptionsOpen, UsycSubscriptionsClosedError } from "../circle/usyc";
+import { usycSubscriptionsOpen } from "../circle/usyc";
 import { arcRpcUrl } from "../circle/arcFees";
-import type { UsycExecution } from "../circle/types";
 import { budgetGate, countedUsdc, exceedsBudget, HELD_FOR_BUDGET, type BudgetGate, type BudgetRoom } from "./outflow-budget";
 import { sendPaymentNotices } from "../payment-notices";
 import { onChainLimitGate, onChainLimitRecord, type OnChainLimitDecisionCheck, type OnChainLimitGate } from "./onchain-limit";
 import { addressUnconfirmed, payeeNotReady } from "../counterparty-address";
 import { SandboxCapReachedError } from "./sandbox-cap";
-import { AgentPausedError, HELD_BECAUSE_PAUSED, heldBecausePausedDetail, pausedPaymentNote, pausedTreasuryNote } from "./pause";
+import { AgentPausedError, HELD_BECAUSE_PAUSED, heldBecausePausedDetail, pausedPaymentNote } from "./pause";
 import {
   blockingDuplicate,
   duplicateMatchContext,
@@ -73,8 +72,13 @@ import {
   type PaymentTimingInput,
 } from "./payment-timing";
 import { planTreasury, type TreasuryDecision } from "./treasury";
+import { moveTreasuryIfNotPaused } from "./treasury-moves";
+import { bringCashForTodaysPayments, HELD_FOR_CASH } from "./liquidity";
 import { plural, utcDay } from "../copy";
 import { REASONING_RULE, REASONING_SHAPE } from "../reasoning-copy";
+
+// Moved to ./treasury-moves.ts, shared with the liquidity step and a person's cash back; still exported from here for existing callers.
+export { moveTreasuryIfNotPaused } from "./treasury-moves";
 
 // Moved to ./balances.ts with the read it belongs to; still exported from here for existing callers.
 export { liveOperatingBalance } from "./balances";
@@ -1588,6 +1592,10 @@ async function decideApPayable(
     onChainLimit,
   });
   const heldForBudget = guardrail.rule === "workspace.outflow_budget";
+  // Held because the cash it needs is not there (`timing.shortfall`), and nothing else stopped it: decided again once
+  // the operating wallet and the reserve cover it (reserve cash back R4). USDC from the operating wallet only: the
+  // reserve holds no EURC, and a Gateway payout is paid from the Gateway balance.
+  const shortOfCash = !heldForBudget && !guardrail.blocked && timing.shortfall === true && currency === "USDC" && !viaGateway;
   metrics.recordDecisionMode(mode, agreedWithReference);
   let status = guardrail.status ?? STATUS_FOR_AP_ACTION[decision.action];
   let txRef: string | null = null;
@@ -1794,6 +1802,15 @@ async function decideApPayable(
         ...heldBecausePausedDetail(heldBecausePaused),
         // The spending limit is why this held, which the follow-up stage reopens once it has room (R6).
         ...(heldForBudget ? { heldBecause: HELD_FOR_BUDGET } : {}),
+        // Want of cash is why this held, which the follow-up reopens once it is there (reserve cash back R4): what it
+        // needed, and the balances it saw, so only cash that moved since reopens it, never a redemption still failing.
+        ...(shortOfCash && status === "held" && !heldBecausePaused
+          ? {
+              heldBecause: HELD_FOR_CASH,
+              cashNeededUsdc: Number((timing.amountDueAtTarget + timing.earlierObligations.total).toFixed(6)),
+              cashSeen: { operating: operatingBalance, reserve: ctx.reserveBalance },
+            }
+          : {}),
       },
     },
   });
@@ -2561,101 +2578,17 @@ export async function reconcileMilestone(
   return { status, operatingBalance: outcome.operatingBalance, line: { domain: "contractor", message } };
 }
 
-/** What the treasury stage's attempted move decided — mirrors `PayStepOutcome`
- * but in the treasury stage's own vocabulary (`executed`/`executionNote`,
- * already what it recorded before this existed). */
-interface TreasuryMoveOutcome {
-  executed: boolean;
-  executionNote: string | null;
-  heldBecausePaused: boolean;
-  /** A real USYC move's transactions (USYC live design R7); absent for a simulated one. */
-  execution?: UsycExecution;
+/** A hold for want of cash, from its ledger entry's `execution` (reserve cash back R4). */
+function heldForCashFacts(execution: Record<string, unknown>): { needed: number; operating: number; reserve: number } {
+  const seen = (execution.cashSeen ?? {}) as Record<string, unknown>;
+  return { needed: num(execution.cashNeededUsdc), operating: num(seen.operating), reserve: num(seen.reserve) };
 }
 
-/**
- * The treasury stage's move, once a sweep or redemption has actually been
- * decided (a `"hold"` decision, or one with a non-positive amount, never
- * reaches here and is reported as not executed with no note, exactly as
- * before): hold — nothing moves — if the agent is paused since the decision
- * was made, `provider.depositToEarn`/`withdrawFromEarn` never called;
- * otherwise move and update the reserve balance exactly as before.
- *
- * Mirrors `payApInvoiceIfNotPaused`/`releaseMilestoneIfNotPaused` above for
- * the same reason (ruling R5): this exact call site is unit-testable without
- * a full cycle.
- */
-export async function moveTreasuryIfNotPaused(
-  decision: TreasuryDecision,
-  ctx: {
-    db: OrgDb;
-    provider: ChainProvider;
-    operatingAccountId: string;
-    reserveAccountId: string;
-    operatingBalance: number;
-    reserveBalance: number;
-    /** The seed of a real move's idempotency keys: the cycle, so a retried cycle never moves twice (USYC live R6). */
-    moveKey?: string;
-  }
-): Promise<TreasuryMoveOutcome> {
-  const wouldMove =
-    (decision.action === "sweep_to_usyc" || decision.action === "redeem_from_usyc") && decision.amount > 0;
-  if (!wouldMove) {
-    return { executed: false, executionNote: null, heldBecausePaused: false };
-  }
-
-  const pauseNote = await pausedTreasuryNote();
-  if (pauseNote) {
-    return { executed: false, executionNote: pauseNote, heldBecausePaused: true };
-  }
-
-  const live = ctx.provider.earnMode === "live";
-  const move = {
-    accountId: ctx.operatingAccountId,
-    reserveAccountId: ctx.reserveAccountId,
-    key: `${ctx.moveKey ?? crypto.randomUUID()}/${decision.action}`,
-  };
-  try {
-    let execution: UsycExecution | undefined;
-    if (decision.action === "sweep_to_usyc") {
-      const amount = Math.min(decision.amount, ctx.operatingBalance);
-      execution = (await ctx.provider.depositToEarn({ ...move, amount })).execution;
-      const res = await ctx.db
-        .from("accounts")
-        .update({ balance: Number((ctx.reserveBalance + amount).toFixed(6)) })
-        .eq("id", ctx.reserveAccountId);
-      if (res.error) throw new Error(res.error.message);
-    } else {
-      const amount = Math.min(decision.amount, ctx.reserveBalance);
-      execution = (await ctx.provider.withdrawFromEarn({ ...move, amount })).execution;
-      const res = await ctx.db
-        .from("accounts")
-        .update({ balance: Number((ctx.reserveBalance - amount).toFixed(6)) })
-        .eq("id", ctx.reserveAccountId);
-      if (res.error) throw new Error(res.error.message);
-    }
-    // A real move changed both wallets on chain: the stored figures follow from the chain at once
-    // (R3), best effort, since the next reconcile reads them again either way.
-    if (live) await refreshTreasuryBalances(ctx);
-    return { executed: true, executionNote: null, heldBecausePaused: false, ...(execution ? { execution } : {}) };
-  } catch (err) {
-    if (err instanceof UsycSubscriptionsClosedError) return { executed: false, executionNote: err.message, heldBecausePaused: false };
-    return { executed: false, executionNote: `execution failed: ${(err as Error).message}`, heldBecausePaused: false };
-  }
-}
-
-/** The operating wallet's USDC and the reserve's USYC value, read from the chain after a real move (USYC live R3). */
-async function refreshTreasuryBalances(ctx: { db: OrgDb; provider: ChainProvider; operatingAccountId: string; reserveAccountId: string }): Promise<void> {
-  try {
-    const [operating, reserve] = await Promise.all([
-      ctx.provider.getBalance(ctx.operatingAccountId),
-      ctx.provider.getEarnPosition ? ctx.provider.getEarnPosition(ctx.reserveAccountId) : Promise.resolve(null),
-    ]);
-    const writes = [ctx.db.from("accounts").update({ balance: operating.balance }).eq("id", ctx.operatingAccountId)];
-    if (reserve) writes.push(ctx.db.from("accounts").update({ balance: reserve.valueUsdc }).eq("id", ctx.reserveAccountId));
-    for (const res of await Promise.all(writes)) if (res.error) throw new Error(res.error.message);
-  } catch (error) {
-    console.error("treasury: balances not read again after a USYC move", error instanceof Error ? error.message : error);
-  }
+/** What the operating wallet and the reserve hold now, as the cycle's reconcile left them. */
+async function cashNow(db: OrgDb): Promise<{ operating: number; reserve: number }> {
+  const rows = unwrap(await db.from("accounts").select("kind, balance").in("kind", ["operating", "reserve"])) as Array<{ kind: string; balance: string }>;
+  const balance = (kind: string) => num(rows.find((row) => row.kind === kind)?.balance);
+  return { operating: balance("operating"), reserve: balance("reserve") };
 }
 
 /**
@@ -3005,8 +2938,13 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
         // Held only for the spending limit: the USDC it was weighed at (R6).
         heldForBudgetUsdc:
           execution?.heldBecause === HELD_FOR_BUDGET ? num(entry.detail.usdcValue ?? observed.amount) : null,
+        // Held for want of cash: what it needed, and the balances it saw (reserve cash back R4).
+        heldForCash: execution?.heldBecause === HELD_FOR_CASH ? heldForCashFacts(execution) : null,
       });
     }
+    // The cash the operating wallet and the reserve hold now, read only when something waits on it (R4).
+    const cashHeld = [...factsByInvoice.values()].some((facts) => facts.heldForCash != null);
+    const cash = cashHeld ? await cashNow(db) : undefined;
     // What the limit leaves now, read only when something waits on it.
     const budgetHeld = [...factsByInvoice.values()].some((facts) => facts.heldForBudgetUsdc != null);
     const room = budgetHeld ? await budget.room() : undefined;
@@ -3028,6 +2966,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           paymentLimit:
             row.counterparties.payment_limit == null ? null : num(row.counterparties.payment_limit),
           ...(room !== undefined ? { budgetRoom: room === null ? null : room.remaining } : {}),
+          ...(cash !== undefined ? { cash } : {}),
         },
         factsByInvoice.get(row.id) ?? null,
         now,
@@ -3073,6 +3012,32 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     addressHistory = await buyPayeeHistories({ db, live: provider.mode === "live", lines });
   });
 
+  // The reserve as the cycle has it, lowered by what the liquidity step brings back.
+  let reserveBalance = num(accounts.find((a) => a.kind === "reserve")?.balance);
+  await stage("liquidity", async () => {
+  // ---------------------------------------------------------------- 1e. liquidity
+  // Today's payments need their cash in the operating wallet: what is short is
+  // brought back from the reserve first (reserve cash back R3), so the AP stage
+  // pays them rather than holding them for want of cash it can have in seconds.
+  const reserve = accounts.find((a) => a.kind === "reserve");
+  if (!operating || !reserve) return;
+  const moved = await bringCashForTodaysPayments({
+    db,
+    provider,
+    operatingAccountId: operating.id,
+    reserveAccountId: reserve.id,
+    operatingBalance,
+    reserveBalance,
+    moveKey: `${cycleRunId}/liquidity`,
+    today: new Date().toISOString().slice(0, 10),
+  });
+  if (moved) {
+    lines.push(moved.line);
+    reserveBalance = Number((reserveBalance - (moved.operatingBalance - operatingBalance)).toFixed(6));
+    operatingBalance = moved.operatingBalance;
+  }
+  });
+
   await stage("ap", async () => {
   // ----------------------------------------------------------------------- 2. AP
   // Whether, and when, to pay each payable: see runApStage.
@@ -3083,7 +3048,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     operatingAddress: (operating as { address?: string | null } | undefined)?.address ?? null,
     operatingBalance,
     reserveApy: num(accounts.find((a) => a.kind === "reserve")?.apy),
-    reserveBalance: num(accounts.find((a) => a.kind === "reserve")?.balance),
+    reserveBalance,
     metrics,
     lines,
     budget,

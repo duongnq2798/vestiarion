@@ -66,6 +66,7 @@ const SHOTS = {
     await page.waitFor(`document.querySelector("[role=alertdialog]")?.textContent.includes("Take this workspace live?")`);
   },
   "go-live-live": async () => {},
+  "go-live-usyc": async () => {},
   "first-payment-counterparty": async (page) => {
     await page.fill({
       "cp-name": "Northstar Studio",

@@ -13,6 +13,7 @@ import { bridgeFee, type BridgeFee } from "../circle/cctp";
 import { gatewayQuoter, type GatewayQuote } from "../circle/gateway-quote";
 import { isSoleApprover } from "./sole-approver";
 import { addedSince, latestDecision, recordedFacts, type AddedDetails } from "../added-details";
+import { heldForCash } from "../next-step";
 
 export type { AddedDetails };
 
@@ -320,6 +321,8 @@ export interface WaitingPayable {
   addedSinceDecision: AddedDetails | null;
   /** The guardrail rule that refused the agent's payment, when code stopped it; null for a stop the model chose. */
   guardrailRule: string | null;
+  /** Held because the cash it needs was not there, which the agent decides again once cash comes in (reserve cash back R4). */
+  heldForCash?: boolean;
 }
 
 
@@ -428,6 +431,7 @@ export async function listWaitingPayables(
       goodsReceived: onFile.goodsReceived,
       addedSinceDecision: addedSince(recorded, onFile),
       guardrailRule: decision?.detail.guardrailBlocked === true && typeof decision.detail.guardrailRule === "string" ? decision.detail.guardrailRule : null,
+      ...(row.status === "held" && heldForCash(decision?.detail) ? { heldForCash: true } : {}),
     };
   });
 }

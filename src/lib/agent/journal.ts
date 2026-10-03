@@ -28,6 +28,7 @@ export const CYCLE_STAGES = [
   "follow_up",
   "recurring",
   "services",
+  "liquidity",
   "ap",
   "contractors",
   "treasury",
@@ -75,6 +76,8 @@ export const STAGE_REQUIRES: Record<CycleStage, readonly CycleStage[]> = {
   follow_up: ["compliance"],
   recurring: [],
   services: [],
+  // Brings cash back from the reserve for today's payments: it needs the balances reconcile read (reserve cash back R3).
+  liquidity: ["reconcile"],
   ap: ["reconcile", "compliance"],
   contractors: ["reconcile", "compliance"],
   treasury: ["reconcile"],

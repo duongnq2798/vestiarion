@@ -3,6 +3,7 @@ import { invoiceDiscount } from "@/lib/agent/payment-timing";
 import { utcDay } from "@/lib/copy";
 import { explainMilestone, explainPayable, explainTreasury, presentReasoning } from "@/lib/reasoning-copy";
 import { recordedFacts } from "@/lib/added-details";
+import { heldForCash } from "@/lib/next-step";
 import { invoiceTrail } from "@/lib/decision-trail";
 import type { LedgerEntry } from "@/lib/ledger";
 import type { CounterpartyRow, InvoiceRow, MilestoneRow, TreasuryActionRow } from "@/lib/queries";
@@ -293,6 +294,7 @@ export function invoiceDecision(
       duplicateEvidence(observed),
     ].filter((item): item is Evidence => item !== null),
     guardrail: guardrailBlocked ? invoiceGuardrail(invoice.amount, currency, usdcValue, limit, risk, rule, entry?.detail) : null,
+    ...(invoice.status === "held" && heldForCash(entry?.detail) ? { heldForCash: true } : {}),
     decisionMode: stringValue(entry?.detail.decisionMode),
     // A Gateway payout has no Arc transaction of its own: its hash is the mint, linked below on the payee's
     // chain. No mint is ever linked to Arc's explorer (Gateway review I4).

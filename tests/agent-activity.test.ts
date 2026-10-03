@@ -12,7 +12,7 @@ import {
   type ActivityRefs,
 } from "@/lib/agent-activity";
 import { readAgentActivity } from "@/lib/agent-activity-read";
-import { counterpartyPath, ruleInBrief, ruleNextStep } from "@/lib/next-step";
+import { agentResumes, CASH_SHORTFALL, counterpartyPath, heldForCash, ruleInBrief, ruleNextStep } from "@/lib/next-step";
 import { fakeSupabase, orgTestContext, type RecordedRequest } from "./support/fake-supabase";
 
 /**
@@ -189,6 +189,23 @@ describe("what to do about a payable code stopped", () => {
     for (const rule of ["invoice.duplicate_of_settled", "workspace.onchain_limit_route", "bridge.fee_unavailable", "bridge.unsupported_token", "fx.rate_unavailable"]) {
       expect(ruleNextStep(rule, counterparty)?.fix, rule).toBeNull();
     }
+  });
+
+  it("explains a hold for want of cash, says the agent resumes once cash comes in, and links the reserve (reserve cash back R4)", () => {
+    expect(ruleNextStep(CASH_SHORTFALL, counterparty)).toEqual({
+      sentence:
+        "The operating wallet did not hold the cash it needs, and the reserve could not cover it. The agent decides it again on its own once cash comes in: add USDC to the operating wallet, or bring cash back from the USYC reserve; or pay it in Approvals.",
+      fix: { label: "USYC reserve", path: "/settings#usyc-reserve-title" },
+    });
+    expect(agentResumes(CASH_SHORTFALL)).toBe("The agent decides it again on its own once cash comes in: USDC added to the operating wallet, or brought back from the reserve.");
+  });
+
+  it("tells a hold for want of cash from a decision's ledger detail, never one a guardrail refused", () => {
+    expect(heldForCash({ execution: { resultingStatus: "held", heldBecause: "cash_shortfall", cashNeededUsdc: 0.35 } })).toBe(true);
+    expect(heldForCash({ guardrailBlocked: true, execution: { heldBecause: "cash_shortfall" } })).toBe(false);
+    expect(heldForCash({ execution: { heldBecause: "outflow_budget" } })).toBe(false);
+    expect(heldForCash({ execution: null })).toBe(false);
+    expect(heldForCash(undefined)).toBe(false);
   });
 
   it("has a next step for every rule code holds by", () => {

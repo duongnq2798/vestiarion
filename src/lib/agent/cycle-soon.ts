@@ -38,6 +38,7 @@ export type CycleEventKind =
   | "limit_raised"
   | "recurring_added"
   | "budget_raised"
+  | "cash_returned"
   | "agent_resumed"
   | "sample_loaded";
 

@@ -808,6 +808,20 @@ describe("the AP stage counts the reserve balance for a payment scheduled later"
     expect(patch.body).toMatchObject({ status: "held", scheduled_for: null, paid_amount: null });
   });
 
+  it("marks a hold for want of cash, with what it needed and the cash it saw, so the follow-up decides it again once cash moves (reserve cash back R4)", async () => {
+    today("2026-10-01T09:00:00.000Z");
+    const dueToday = payable({
+      amount: "400", due_date: "2026-10-01T12:00:00+00:00", early_pay_discount_pct: null, discount_due_date: null,
+    });
+    const { fake, stage } = apFake({ book: [dueToday] });
+
+    await stage(0, 10_000);
+
+    expect(ledger(fake.requests)[0].p_detail).toMatchObject({
+      execution: { resultingStatus: "held", heldBecause: "cash_shortfall", cashNeededUsdc: 400, cashSeen: { operating: 0, reserve: 10_000 } },
+    });
+  });
+
   it("holds it when the operating balance and the (empty) reserve together still fall short of a later target", async () => {
     today("2026-10-01T09:00:00.000Z");
     const dueIn20Days = payable({

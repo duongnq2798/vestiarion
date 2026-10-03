@@ -107,7 +107,7 @@ describe("refreshOnChainBalanceAction", () => {
 
   it("does not share its name with the Go live step's refreshBalanceAction", async () => {
     const actions = await import("@/app/actions/treasury");
-    expect(Object.keys(actions).sort()).toEqual(["enableUsycReserveAction", "fundGatewayAction", "fundServiceBudgetAction", "refreshOnChainBalanceAction"]);
+    expect(Object.keys(actions).sort()).toEqual(["bringCashBackAction", "enableUsycReserveAction", "fundGatewayAction", "fundServiceBudgetAction", "refreshOnChainBalanceAction"]);
   });
 
   it("answers a Circle failure with the fixed sentence", async () => {

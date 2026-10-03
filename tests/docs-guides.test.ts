@@ -107,6 +107,9 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
   "guides/go-live": [
     ["USYC reserve", "src/components/UsycReservePanel.tsx"],
     ["Turn on", "src/components/UsycReservePanel.tsx"],
+    ["Bring cash back", "src/components/UsycReservePanel.tsx"],
+    ["Amount (USDC)", "src/components/UsycReservePanel.tsx"],
+    ["cash_brought_back", "src/lib/agent/liquidity.ts"],
     ["usyc_reserve_enabled", "src/lib/platform/usyc-reserve.ts"],
     ["Settings", APP_NAV],
     ["Get started", CHECKLIST],

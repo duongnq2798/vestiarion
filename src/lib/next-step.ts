@@ -10,6 +10,22 @@ export interface NextStep {
   fix: { label: string; path: string } | null;
 }
 
+/**
+ * The next step's key for a payable held because the cash it needs was not there (reserve cash back R4). No guardrail
+ * refused it, but a person is told what it waits for, and what brings the cash, as for a rule.
+ */
+export const CASH_SHORTFALL = "treasury.cash_shortfall";
+
+/**
+ * Whether an AP decision held the payable for want of cash: its `execution.heldBecause`, as the AP stage records it
+ * (`HELD_FOR_CASH` in ./agent/liquidity, which this module, read by the browser too, does not import).
+ */
+export function heldForCash(detail: Record<string, unknown> | null | undefined): boolean {
+  if (!detail || detail.guardrailBlocked === true) return false;
+  const execution = detail.execution;
+  return typeof execution === "object" && execution !== null && (execution as Record<string, unknown>).heldBecause === "cash_shortfall";
+}
+
 /** A counterparty's row on Counterparties, which a link opens at (`ScrollToHash` opens a closed row). */
 export function counterpartyPath(counterpartyId: string): string {
   return `/counterparties#counterparty-${counterpartyId}`;
@@ -49,6 +65,12 @@ export function ruleNextStep(rule: string | null | undefined, counterparty: { id
         sentence: "The spending-limit contract on Arc would refuse it. Raise the limit, or pay it in Approvals.",
         fix: { label: "Spending limit", path: "/console#agent-budget" },
       };
+    case CASH_SHORTFALL:
+      return {
+        sentence:
+          "The operating wallet did not hold the cash it needs, and the reserve could not cover it. The agent decides it again on its own once cash comes in: add USDC to the operating wallet, or bring cash back from the USYC reserve; or pay it in Approvals.",
+        fix: { label: "USYC reserve", path: "/settings#usyc-reserve-title" },
+      };
     case "workspace.onchain_limit_route":
       return { sentence: "The spending-limit contract carries only USDC paid on Arc. Pay it in Approvals.", fix: null };
     case "bridge.fee_above_cap":
@@ -82,6 +104,8 @@ export function agentResumes(rule: string | null | undefined): string | null {
       return "The agent decides it again on its own once an owner or admin raises the counterparty's payment limit.";
     case "counterparty.unscreened":
       return "The agent decides it again on its own once screening gives a verdict.";
+    case CASH_SHORTFALL:
+      return "The agent decides it again on its own once cash comes in: USDC added to the operating wallet, or brought back from the reserve.";
     default:
       return null;
   }

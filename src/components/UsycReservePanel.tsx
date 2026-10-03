@@ -1,7 +1,9 @@
 "use client";
 
-import { Landmark } from "lucide-react";
-import { enableUsycReserveAction, type UsycReserveActionResult } from "@/app/actions/treasury";
+import { ArrowDownToLine, Landmark } from "lucide-react";
+import { bringCashBackAction, enableUsycReserveAction, type UsycReserveActionResult } from "@/app/actions/treasury";
+import { Field } from "@/components/ui/Field";
+import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { CopyButton } from "@/components/ui/CopyButton";
@@ -18,7 +20,8 @@ const INITIAL: UsycReserveActionResult = { ok: false, message: "" };
 /**
  * The "USYC reserve" section of Settings (docs/superpowers/specs/2026-10-02-usyc-live-design.md §4).
  * Off: what the reserve is, the two addresses Circle allowlists, and, for an owner or admin, Turn on,
- * which checks the allowlist on chain first. On: since when, and what the reserve holds.
+ * which checks the allowlist on chain first. On: since when, what the reserve holds, and, for an owner or admin,
+ * Bring cash back, to the operating wallet now (reserve cash back R2).
  */
 export function UsycReservePanel({ orgSlug, status, canManage }: { orgSlug: string; status: UsycReserveStatus; canManage: boolean }) {
   return (
@@ -57,6 +60,7 @@ export function UsycReservePanel({ orgSlug, status, canManage }: { orgSlug: stri
           )}
         </div>
         {!status.liveAt && canManage && status.mode === "live" && <EnableForm orgSlug={orgSlug} />}
+        {status.liveAt && canManage && status.reserveBalance > 0 && <CashBackForm orgSlug={orgSlug} />}
         {!status.liveAt && status.mode !== "live" && (
           <p className="border-t border-line px-4 py-3 text-xs text-ink-3 sm:px-5">Available once the workspace is live on Arc testnet.</p>
         )}
@@ -92,6 +96,31 @@ function EnableForm({ orgSlug }: { orgSlug: string }) {
         <SubmitButton icon={<Landmark />} pendingLabel="Checking…">
           Turn on
         </SubmitButton>
+      </div>
+    </form>
+  );
+}
+
+/** USDC back from the reserve to the operating wallet now: the amount asked, or everything when left empty (R2). */
+function CashBackForm({ orgSlug }: { orgSlug: string }) {
+  const { state, formProps } = useActionForm(bringCashBackAction, INITIAL, { toastOnSuccess: true, resetOnSuccess: true });
+  return (
+    <form {...formProps} className="space-y-3 border-t border-line px-4 py-4 sm:px-5">
+      <input type="hidden" name="orgSlug" value={orgSlug} />
+      <p className="text-xs leading-5 text-ink-3">
+        The agent brings back what payments need before it makes them. To have cash in the operating wallet now, bring it back here: USYC can be sold at any
+        hour, at its latest price. Leave the amount empty to bring everything back.
+      </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+        <Field id={`cash-back-${orgSlug}`} label="Amount (USDC)" optional className="sm:w-56">
+          <Input name="amount" inputMode="decimal" autoComplete="off" placeholder="All" />
+        </Field>
+        <SubmitButton icon={<ArrowDownToLine />} pendingLabel="Bringing back…" variant="secondary">
+          Bring cash back
+        </SubmitButton>
+        <FormMessage className="sm:self-center" tone={state.message && !state.ok ? "error" : "neutral"}>
+          {state.ok ? null : state.message}
+        </FormMessage>
       </div>
     </form>
   );

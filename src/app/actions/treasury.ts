@@ -12,6 +12,10 @@ import { operatingEurcBalance } from "@/lib/fx/eurc-balance";
 import { inOrg } from "@/lib/dal/scope";
 import { firstZodMessage, usdcAmountSchema } from "@/lib/intake-validation";
 import { enableUsycReserve, UsycReserveError } from "@/lib/platform/usyc-reserve";
+import { bringCashBackByPerson, CashBackError } from "@/lib/agent/liquidity";
+import { raiseCycleEvent } from "@/lib/agent/cycle-soon";
+import { agentPaused } from "@/lib/agent/pause";
+import { getChainProvider } from "@/lib/circle";
 
 export interface RefreshBalanceResult {
   ok: boolean;
@@ -168,6 +172,43 @@ export async function enableUsycReserveAction(_previous: UsycReserveActionResult
     } catch (error) {
       if (error instanceof UsycReserveError) return { ok: false, message: error.message };
       console.error("enableUsycReserveAction failed", error instanceof Error ? error.name : "unknown");
+      return { ok: false, message: "That did not work. Try again in a moment." };
+    }
+  });
+}
+
+/**
+ * Brings cash back from the reserve to the operating wallet now (reserve cash back R2): an owner's or admin's choice
+ * (`treasury.manage`), the amount they ask or, left empty, everything. Redemptions are open at any hour. The cycle it
+ * starts decides again the payments held for want of cash (R4).
+ */
+export async function bringCashBackAction(_previous: UsycReserveActionResult, formData: FormData): Promise<UsycReserveActionResult> {
+  const auth = await authorize(formData.get("orgSlug"), "treasury.manage");
+  if (!auth.ok) return { ok: false, message: auth.message };
+  const raw = typeof formData.get("amount") === "string" ? (formData.get("amount") as string).trim() : "";
+  let amount: number | null = null;
+  if (raw !== "") {
+    const parsed = usdcAmountSchema.safeParse(raw);
+    if (!parsed.success) return { ok: false, message: firstZodMessage(parsed.error).replace(/^input: /, "") };
+    amount = Number(parsed.data);
+  }
+  return inOrg(auth, async () => {
+    try {
+      const result = await bringCashBackByPerson({ actorId: auth.user.id, amount, provider: getChainProvider() });
+      revalidateOrgPages();
+      // A paused agent runs no cycle: what waited for cash is paid once it is resumed.
+      const paused = await agentPaused().catch(() => false);
+      raiseCycleEvent(auth, "cash_returned");
+      const brought = `Brought ${result.amount} USDC back to the operating wallet.`;
+      return {
+        ok: true,
+        message: paused
+          ? `${brought} The agent is paused; it pays what was waiting for cash once it is resumed.`
+          : `${brought} The agent pays what was waiting for cash within a minute.`,
+      };
+    } catch (error) {
+      if (error instanceof CashBackError) return { ok: false, message: error.message };
+      console.error("bringCashBackAction failed", error instanceof Error ? error.name : "unknown");
       return { ok: false, message: "That did not work. Try again in a moment." };
     }
   });
