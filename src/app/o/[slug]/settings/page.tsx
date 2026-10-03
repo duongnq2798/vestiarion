@@ -50,7 +50,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ slug:
       <ProductShell day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()}>
         <PageHead
           title={sectionTitle("settings")}
-          sub="Taking this workspace live, the USYC reserve, read-only API keys, outgoing webhooks, the ledger signing key, and deleting the workspace. An owner takes it live, rotates the signing key, or deletes it; an owner or admin manages API keys and webhooks, and a secret is shown once, right after it is created."
+          sub="Taking this workspace live, the USYC reserve, API keys, outgoing webhooks, the ledger signing key, and deleting the workspace. An owner takes it live, rotates the signing key, or deletes it; an owner or admin manages API keys and webhooks, and a secret is shown once, right after it is created."
         />
         <div className="space-y-12">
           {/* goLiveStatus carries no credential and no wallet id, so the whole status can cross into the client component. */}

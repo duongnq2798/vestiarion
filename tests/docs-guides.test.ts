@@ -19,6 +19,7 @@ type GuideSlug =
   | "guides/pay-a-contractor"
   | "guides/get-paid"
   | "guides/telegram"
+  | "guides/api-invoices"
   | "guides/audit-export";
 
 const PANEL = "src/components/GoLivePanel.tsx";
@@ -78,6 +79,11 @@ const LOGIN_FORM = "src/components/auth/LoginForm.tsx";
 const WORKSPACE_FORM = "src/components/CreateWorkspaceForm.tsx";
 const OPEN_TABLE = "src/components/open/OpenNumbersTable.tsx";
 const APPROVALS_LIST = "src/app/o/[slug]/approvals/page.tsx";
+const API_KEYS_PANEL = "src/components/ApiKeysPanel.tsx";
+const INVOICES_ROUTE = "src/app/api/v1/invoices/route.ts";
+const INVOICE_CREATE = "src/lib/invoices/create.ts";
+const IDEMPOTENCY = "src/lib/api/idempotency.ts";
+const GUARDRAILS = "src/lib/agent/guardrails.ts";
 const PAYEE_FORM = "src/components/PayeeAddressForm.tsx";
 const PAYEE_STEPS = "src/components/payee/PayeeSteps.tsx";
 const PAYEE_JOURNEY = "src/components/payee/PayeeJourney.tsx";
@@ -519,6 +525,22 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ['via: "telegram"', TELEGRAM_INTAKE],
     ["Commands and invoices now go to", TELEGRAM_UPDATES],
   ],
+  "guides/api-invoices": [
+    ["Settings", APP_NAV],
+    ["API keys", API_KEYS_PANEL],
+    ["Create key", API_KEYS_PANEL],
+    ["Can also add counterparties and invoices", API_KEYS_PANEL],
+    ["Copy this key now. It will not be shown again.", API_KEYS_PANEL],
+    ["Read and write", API_KEYS_PANEL],
+    ["Read only", API_KEYS_PANEL],
+    ["Counterparties", APP_NAV],
+    ["not yet confirmed", ADDRESS_CONTROLS],
+    ["Confirm address", ADDRESS_CONTROLS],
+    ["held for a person to approve", GUARDRAILS],
+    ["create_invoice", INVOICE_CREATE],
+    ['via: "api"', INVOICES_ROUTE],
+    ["Idempotent-Replayed", IDEMPOTENCY],
+  ],
   "guides/audit-export": [
     ["Audit log", APP_NAV],
     ["Download", EXPORT_MENU],
@@ -579,6 +601,7 @@ const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/pay-a-contractor": 20,
   "guides/get-paid": 20,
   "guides/telegram": 20,
+  "guides/api-invoices": 10,
   "guides/audit-export": 5,
 };
 
