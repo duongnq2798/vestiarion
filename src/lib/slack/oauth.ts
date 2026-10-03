@@ -20,7 +20,7 @@ import { newNonce, oauthState, readOAuthState } from "./state";
  */
 
 export const OAUTH_COOKIE = "vx_slack_oauth";
-/** Answering /vestiarion, posting to the channel picked, and reading a file someone chooses with Add invoice to Vestiarion (S15). */
+/** Answering /vestiarion, posting to the channel picked, and reading a file someone chooses with Add invoice (S15). */
 export const SLACK_SCOPES = "commands,incoming-webhook,files:read";
 
 export interface OAuthDeps {

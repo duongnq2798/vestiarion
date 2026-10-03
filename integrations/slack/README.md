@@ -3,7 +3,7 @@
 `manifest.yaml` is the app, as created at https://api.slack.com/apps with **Create New App**, **From a manifest**
 (docs/superpowers/specs/2026-10-03-slack-design.md). It asks for three scopes: `commands` and `incoming-webhook`, so
 the app answers `/vestiarion` and posts to the one channel picked when a workspace connects it, and `files:read`, so it
-can read the file someone chooses with the message shortcut **Add invoice to Vestiarion**. It reads no other message
+can read the file someone chooses with the message shortcut **Add invoice**. It reads no other message
 or file.
 
 1. Create the app from the manifest. Slack checks the events URL as it saves, so on a deployment that does not serve
@@ -18,4 +18,4 @@ A deployment on another host changes the four `https://www.vestiarion.xyz/...` U
 
 **An app created from an earlier manifest** (before the shortcut and `files:read`): on the **App Manifest** page, paste
 this manifest and save. Then, in each workspace that connected Slack, an owner or admin chooses **Reconnect Slack** in
-Settings once, to grant `files:read`. Until then, Add invoice to Vestiarion answers that Slack must be connected again.
+Settings once, to grant `files:read`. Until then, Add invoice answers that Slack must be connected again.

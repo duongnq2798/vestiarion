@@ -100,14 +100,16 @@ A Slack app any workspace's owner or admin connects from Settings. Then:
   transaction hash. A wallet address only shortened to its first and last four characters; no email, no full address,
   no key. The privacy page names Slack as a recipient once a workspace connects it.
 - **S15. An invoice from Slack** (added 2026-10-03, on the partner's request to upload invoices through Slack). A
-  message shortcut, **Add invoice to Vestiarion**, not a listener: the app reads only the message a person points at,
+  message shortcut, **Add invoice**, not a listener: the app reads only the message a person points at,
   never every file posted. It needs `files:read`, kept per install in `slack_installs.scopes` (migration 0070); an
   install made before answers that Slack must be connected again, and Settings offers **Reconnect Slack**, which keeps
   the links and the limit. The file comes only from `https://files.slack.com/`, at most 4 MB, with the bot token; a
   message with no file is read by its text. The read, the draft rule and the Add are the Telegram bot's, shared
   (`src/lib/invoice-document/chat-draft.ts`): an owner or admin, role read again at the press; a draft held an hour
   (`slack_drafts`), used once, through the chooser's own link; the answer is ephemeral; `create_invoice` names
-  `via: "slack"` and `linkId`. The agent's decision on the payable reaches the channel like any other.
+  `via: "slack"` and `linkId`. The agent's decision on the payable reaches the channel like any other. Slack takes a
+  shortcut name under 25 characters, so it is "Add invoice" (Slack shows the app's name beside it); an install made
+  before its permissions were kept tries the file, and is asked to reconnect only if Slack refuses it.
 
 ## 5. Data (migration 0067)
 

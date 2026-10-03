@@ -14,7 +14,7 @@ import { botTokenOf, type SlackInstall } from "./installs";
 import type { SlackLink } from "./links";
 
 /**
- * An invoice someone chose in Slack with "Add invoice to Vestiarion" on a message (Slack design S15): read the way
+ * An invoice someone chose in Slack with "Add invoice" on a message (Slack design S15): read the way
  * **From a document** reads one, held as a draft for an hour, and added as a payable only when the same member presses
  * Add on the answer only they see. Only an owner or admin, whose role is read again at the press. The file is fetched
  * from Slack's own file host with the install's token, which needs `files:read`: an install made before it asks for
@@ -45,7 +45,7 @@ const RECONNECT =
 const NOT_OPENED = "The file could not be opened from Slack. Add it in Vestiarion instead: From a document, on AP / AR.";
 // Slack lets the app read a file only in a conversation it is in, so a refusal after the permission is granted means that.
 const NOT_IN_CHANNEL =
-  "Vestiarion cannot open this file: Slack lets it read files only in channels it is in. Type `/invite @Vestiarion` in this channel and choose *Add invoice to Vestiarion* again, or add the invoice in Vestiarion: From a document, on AP / AR.";
+  "Vestiarion cannot open this file: Slack lets it read files only in channels it is in. Type `/invite @Vestiarion` in this channel and choose *Add invoice* again, or add the invoice in Vestiarion: From a document, on AP / AR.";
 const UNREACHABLE = "Slack could not be reached. Try again in a moment.";
 const SLOW_DOWN = "That is five invoices read this minute. Try again in a few seconds.";
 const UNREADABLE = "The invoice could not be read. Try again in a moment.";
@@ -71,10 +71,11 @@ async function chosenInput(install: SlackInstall, chosen: ChosenMessage, deps: S
     return nothing(new DocumentReadError("unsupported").message);
   }
   if (file.size > MAX_DOCUMENT_BYTES) return nothing(new DocumentReadError("too_large").message);
-  if (!install.scopes.includes("files:read")) return nothing(RECONNECT);
+  // An install made before its permissions were kept has none recorded: it may well read files, so it tries.
+  if (install.scopes.length > 0 && !install.scopes.includes("files:read")) return nothing(RECONNECT);
   const fetched = await downloadSlackFile(file.url, botTokenOf(install, deps.keys ?? masterKeysFromEnv()), MAX_DOCUMENT_BYTES, deps.fetchImpl);
   if (!fetched.ok) {
-    if (fetched.reason === "no_access") return nothing(NOT_IN_CHANNEL);
+    if (fetched.reason === "no_access") return nothing(install.scopes.length === 0 ? RECONNECT : NOT_IN_CHANNEL);
     if (fetched.reason === "too_large") return nothing(new DocumentReadError("too_large").message);
     return nothing(fetched.reason === "unreachable" ? UNREACHABLE : NOT_OPENED);
   }

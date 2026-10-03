@@ -588,7 +588,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["SLACK_CLIENT_SECRET", SLACK_SETTINGS],
     ["SLACK_SIGNING_SECRET", SLACK_SETTINGS],
     ["Reconnect Slack", SLACK_PANEL],
-    ["Add invoice to Vestiarion", "integrations/slack/manifest.yaml"],
+    ["Add invoice", "integrations/slack/manifest.yaml"],
     ["From a document", INVOICES_PAGE],
     ["The model's note:", SLACK_BLOCKS],
     ["Add, goods received", SLACK_BLOCKS],

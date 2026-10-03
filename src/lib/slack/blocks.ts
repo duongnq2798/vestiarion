@@ -233,6 +233,7 @@ export function helpAnswer(connected: boolean, workspaceName?: string): SlackMes
       "`/vestiarion ledger`: check that the signed ledger is intact",
       "`/vestiarion pause [reason]`: stop the agent; it is resumed in Vestiarion",
       "`/vestiarion disconnect`: disconnect your Slack account",
+      "*More actions* › *Add invoice* on a message holding an invoice: add it as a payable, for an owner or admin",
       "When an owner allows it, a payment the agent stopped can be decided from its message in the channel.",
     ].join("\n")
   );
@@ -249,7 +250,7 @@ export function connectAnswer(url: string): SlackMessage {
 }
 
 /**
- * An invoice read from what someone chose with "Add invoice to Vestiarion" (S15), for them alone: every field to check
+ * An invoice read from what someone chose with "Add invoice" (S15), for them alone: every field to check
  * before they add it, and the buttons that add it, with the goods received or not, or drop it. Each carries the draft.
  */
 export function draftAnswer(read: InvoiceDraftRead, draftId: string): SlackMessage {
@@ -303,7 +304,7 @@ export function missingAnswer(read: InvoiceDraftRead, reasons: string[], invoice
 }
 
 /** A draft's button after its hour, or after the draft was added or dropped (S15). */
-export const DRAFT_USED = "This draft was already used or has expired. Choose *Add invoice to Vestiarion* on the message again to read it anew.";
+export const DRAFT_USED = "This draft was already used or has expired. Choose *Add invoice* on the message again to read it anew.";
 
 /** What replaces a draft's answer once its button was pressed: the outcome, for the person who pressed it. */
 export function draftOutcome(text: string): SlackMessage {

@@ -140,8 +140,8 @@ export default function SlackPanel({
             </p>
             {!view.canReadFiles && (
               <p className="max-w-prose text-sm text-ink-2">
-                To add invoices from Slack, connect Slack again: Vestiarion now also asks to read the file someone chooses with Add invoice
-                to Vestiarion, and nothing else.
+                To add invoices from Slack, connect Slack again: Vestiarion now also asks to read the file someone chooses with Add invoice,
+                and nothing else.
               </p>
             )}
             <div className="max-w-prose space-y-2">

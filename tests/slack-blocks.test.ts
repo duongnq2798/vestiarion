@@ -143,6 +143,7 @@ describe("answers to /vestiarion", () => {
     expect(answer.response_type).toBe("ephemeral");
     expect(allText(answer)).toContain("works once, for 10 minutes");
     expect(allText(helpAnswer(true, "Northstar"))).toContain("/vestiarion pause");
+    expect(allText(helpAnswer(true, "Northstar"))).toContain("*Add invoice*");
     expect(allText(helpAnswer(false))).toContain("/vestiarion connect");
   });
 });

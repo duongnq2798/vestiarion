@@ -13,7 +13,7 @@ features:
       usage_hint: "today | waiting | ledger | pause | connect | help"
       should_escape: false
   shortcuts:
-    - name: Add invoice to Vestiarion
+    - name: Add invoice
       type: message
       callback_id: vx_add_invoice
       description: Read the invoice in this message into a payable you can add

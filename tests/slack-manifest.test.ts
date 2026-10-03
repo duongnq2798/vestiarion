@@ -20,9 +20,17 @@ describe("the Slack app's manifest", () => {
     expect(scopes).toEqual(SLACK_SCOPES.split(","));
   });
 
-  it("offers Add invoice to Vestiarion as a message shortcut with the callback id the route answers", () => {
-    expect(MANIFEST).toMatch(/- name: Add invoice to Vestiarion\s+type: message\s+callback_id: (\S+)/);
-    expect(MANIFEST.match(/- name: Add invoice to Vestiarion\s+type: message\s+callback_id: (\S+)/)?.[1]).toBe(ADD_INVOICE_SHORTCUT);
+  it("offers Add invoice as a message shortcut with the callback id the route answers", () => {
+    expect(MANIFEST.match(/- name: Add invoice\s+type: message\s+callback_id: (\S+)/)?.[1]).toBe(ADD_INVOICE_SHORTCUT);
+  });
+
+  it("keeps each shortcut within Slack's limits: a name under 25 characters, a description under 80", () => {
+    const shortcuts = [...MANIFEST.matchAll(/- name: (.+)\s+type: (?:message|global)\s+callback_id: \S+\s+description: (.+)/g)];
+    expect(shortcuts.length).toBeGreaterThan(0);
+    for (const [, name, description] of shortcuts) {
+      expect(name.trim().length, name).toBeLessThan(25);
+      expect(description.trim().length, description).toBeLessThan(80);
+    }
   });
 
   it("points at the routes Vestiarion serves", () => {
