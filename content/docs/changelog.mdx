@@ -1,5 +1,9 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-03: Nothing is paid to a counterparty never screened
+
+- A new value of `guardrailRule`: `counterparty.unscreened`. The agent holds a payment, a schedule or a milestone release to a counterparty whose `riskLevel` is still `unscreened`, because screening could not run when it was added. The decision is made again once screening gives a verdict. A counterparty whose later screening fails keeps its earlier verdict, as before.
+
 ## 2026-10-03: The spending limit, enforced on Arc
 
 - **New ledger actions**, actor `human`, domain `system`, delivered to webhooks like every entry:
