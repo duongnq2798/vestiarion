@@ -4,12 +4,10 @@ import "server-only";
 
 import type { DecisionMode } from "@/lib/agent/decide";
 import { authorize } from "@/lib/auth/authorize";
-import { db, unwrap } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
-import { extractInvoice } from "@/lib/invoice-document/extract";
-import { matchCounterparty, type MatchableCounterparty } from "@/lib/invoice-document/match";
-import { normalizeExtraction, type InvoiceDraft, type NotFoundField } from "@/lib/invoice-document/normalize";
-import { DocumentReadError, MAX_DOCUMENT_BYTES, readDocument, type DocumentInput } from "@/lib/invoice-document/read";
+import { readInvoiceDraft } from "@/lib/invoice-document/draft";
+import type { InvoiceDraft, NotFoundField } from "@/lib/invoice-document/normalize";
+import { DocumentReadError, MAX_DOCUMENT_BYTES, type DocumentInput } from "@/lib/invoice-document/read";
 import { takeDocumentReadToken } from "@/lib/rate-limit";
 
 /**
@@ -62,30 +60,17 @@ export async function readInvoiceDocumentAction(_previous: DocumentReadResult, f
       if (!takeDocumentReadToken(auth.membership.orgId)) {
         return { ok: false, message: "That is five invoices read this minute. Try again in a few seconds." };
       }
-      const document = await readDocument(await documentInput(source));
-      const counterparties = unwrap(await db().from("counterparties").select("id, name, role, address").order("name")) as MatchableCounterparty[];
-
-      const { raw, reader, reference } = await extractInvoice(document.text, new Date().toISOString().slice(0, 10));
-      const { fields, notFound, notes, modelNote } = normalizeExtraction(raw, document.text);
-      // The total line, read by rule, against the model's total: both are in the document, so neither is blanked,
-      // but a member should know when they differ (review I1).
-      const ruled = reader === "heuristic" ? null : normalizeExtraction(reference, document.text).fields.amount;
-      const totals =
-        ruled !== null && fields.amount !== null && Number(ruled) !== Number(fields.amount)
-          ? [`The total line reads ${ruled}, but the model read ${fields.amount}. Check the amount against the invoice.`]
-          : [];
-      const match = matchCounterparty(fields, counterparties);
-      const matched = counterparties.find((counterparty) => counterparty.id === match.counterpartyId);
+      const read = await readInvoiceDraft(await documentInput(source), new Date().toISOString().slice(0, 10));
 
       return {
         ok: true,
-        message: `Read the invoice${matched ? ` from ${matched.name}` : ""}. Check every field before adding it.`,
-        draft: { ...fields, counterpartyId: match.counterpartyId },
-        warnings: [...totals, ...match.warnings, ...notes, ...(document.truncated ? ["Only the first 20,000 characters were read."] : [])],
-        notFound,
-        modelNote,
-        reader,
-        document: { kind: document.kind, sha256: document.sha256, truncated: document.truncated },
+        message: `Read the invoice${read.counterpartyName ? ` from ${read.counterpartyName}` : ""}. Check every field before adding it.`,
+        draft: read.draft,
+        warnings: read.warnings,
+        notFound: read.notFound,
+        modelNote: read.modelNote,
+        reader: read.reader,
+        document: read.document,
         nonce: Date.now(),
       };
     } catch (error) {

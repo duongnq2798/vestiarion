@@ -663,6 +663,7 @@ export default function DesignPage() {
               assignable={["owner", "admin", "approver", "viewer"]}
               canDecide
               notifyEmail
+              telegram={{ link: null }}
             />
           </Section>
         </main>

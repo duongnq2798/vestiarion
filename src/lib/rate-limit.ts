@@ -39,6 +39,16 @@ export function takeDocumentReadToken(key: string, now = Date.now()): boolean {
   return take(documentBuckets, key, 5, 12_000, now);
 }
 
+const telegramChatBuckets = new Map<string, Bucket>();
+
+/**
+ * Twenty messages a minute per Telegram chat (Telegram bot design §6): a chat's plain text can ask the model what it
+ * means, so one chat must not run the model without end. Single-instance, like the others.
+ */
+export function takeTelegramChatToken(chatId: string, now = Date.now()): boolean {
+  return take(telegramChatBuckets, chatId, 20, 3_000, now);
+}
+
 const payCheckBuckets = new Map<string, Bucket>();
 
 /**

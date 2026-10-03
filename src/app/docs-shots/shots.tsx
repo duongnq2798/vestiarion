@@ -7,6 +7,7 @@ import { CounterpartyRow as CounterpartyRowView } from "@/components/Counterpart
 import GoLivePanel from "@/components/GoLivePanel";
 import { HeldMilestoneActions } from "@/components/HeldMilestoneActions";
 import { PayLinkControl } from "@/components/PayLinkControl";
+import { TelegramCard } from "@/components/TelegramCard";
 import { UsycReservePanel } from "@/components/UsycReservePanel";
 import VerifyLedgerBadge from "@/components/VerifyLedgerBadge";
 import { DecisionCard } from "@/components/vx/DecisionCard";
@@ -57,7 +58,7 @@ import { DESIGN_SLUG, LEDGER } from "../design/fixtures";
 
 export interface DocsShot {
   /** The guide the picture belongs to. */
-  guide: "go-live" | "first-payment" | "pay-a-contractor" | "get-paid";
+  guide: "go-live" | "first-payment" | "pay-a-contractor" | "get-paid" | "telegram";
   /** The workspace page it is on: its title heads the frame. None for a public page, such as a payee's link. */
   page?: NavKey;
   /** The page's line under its title, where the real page has one. */
@@ -910,6 +911,12 @@ export const DOCS_SHOTS = {
   "get-paid-check": { guide: "get-paid", render: () => <PayeeShot status={PAYEE_OPEN} /> },
   "get-paid-confirming": { guide: "get-paid", render: () => <PayeeShot status={PAYEE_CONFIRMING} /> },
   "get-paid-paid": { guide: "get-paid", render: () => <PayeeShot status={PAYEE_PAID} /> },
+  "telegram-connect": {
+    guide: "telegram",
+    page: "members",
+    sub: "Everyone in this workspace, and the invitations still open. Anyone may leave on their own; an owner or admin invites, changes roles and removes.",
+    render: () => <TelegramCard orgSlug={SLUG} link={null} />,
+  },
 } satisfies Record<string, DocsShot>;
 
 export type DocsShotName = keyof typeof DOCS_SHOTS;

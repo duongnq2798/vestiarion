@@ -368,6 +368,36 @@ workspaces; the ledger keeps the address with most of its name hidden.
 `workspace.read`, and writes only the row named by the session's own user id
 — a `userId` field in the form is never read.
 
+**A member can also connect their own Telegram chat**
+(docs/superpowers/specs/2026-10-03-telegram-bot-design.md). One bot serves the
+whole deployment; it is on only when `TELEGRAM_BOT_TOKEN`,
+`TELEGRAM_WEBHOOK_SECRET` and `TELEGRAM_BOT_USERNAME` are all set
+(`src/lib/telegram/settings.ts`), and `npm run telegram:setup` registers its
+webhook and command menu. The Members page's Telegram card
+(`connectTelegramAction`, gated on `workspace.read`) makes a one-time code,
+stores only its SHA-256 (`telegram_link_codes`, migration `0064`, ten
+minutes), and links `https://t.me/<bot>?start=<code>`. Telegram then posts
+`/start <code>` to `POST /api/telegram`, which answers 401 unless the request
+carries `X-Telegram-Bot-Api-Secret-Token`, and 200 to everything it
+accepted, so Telegram never redelivers in a loop. `telegram_claim_code` claims
+the code and links the chat to the membership in one transaction
+(`telegram_links`: one chat per membership, one active workspace per chat,
+both tables cascading with the membership; service role only). Each update
+reads the member's role again (`src/lib/telegram/updates.ts`); only private
+chats are served. `/today`, `/waiting` and `/ledger`, or the same questions
+in plain words, are answered by code from the workspace's rows: the model
+only picks which question was asked (`src/lib/telegram/route-text.ts`). An
+invoice sent to the bot is read by the same `readInvoiceDraft` as **From a
+document**, held for an hour (`telegram_drafts`), and added only when an owner
+or admin taps **Add** in their own chat, through the same `createInvoice` the
+invoice form uses, with `via: "telegram"`. The bot never approves or pays.
+The cycle's last stage, `telegram` (`src/lib/telegram/notify.ts`), tells each
+linked chat the agent's decisions after its cursor (`telegram_links.notified_seq`),
+read by the same `readAgentActivity` as the console's toasts, and then moves
+the cursor past everything read: a failed send keeps it for the next cycle,
+a 403 disconnects the chat, and a message Telegram refuses to parse is sent
+once as plain text and then passed.
+
 ## Read API
 
 The versioned read boundary lives under `src/app/api/v1/`:

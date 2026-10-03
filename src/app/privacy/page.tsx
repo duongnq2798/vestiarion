@@ -146,6 +146,10 @@ export default function PrivacyPage() {
                 its vendor, amounts, dates, terms and payment address into the invoice form. The document itself is not kept;
               </li>
               <li>
+                for a message a member sends the Telegram bot in plain words: the message, up to 4,000 characters, to tell which of the bot&apos;s questions it
+                asks. The answer is read from the workspace and written by the app, not by the model;
+              </li>
+              <li>
                 for a proposed payment limit: the counterparty&apos;s name, limit, risk level and performance score, and each payment people approved above
                 that limit in the last 30 days (its amount, when, and what the agent had done with it), with how many were rejected;
               </li>
@@ -159,6 +163,12 @@ export default function PrivacyPage() {
             A performance score comes with the counts it is computed from: payments paid without intervention, information requests, holds and flags,
             duplicate submissions, risk tier changes, and the holds the workspace&apos;s own limits caused. Without a model provider, a written rule-based policy
             decides, and nothing is sent.
+          </li>
+          <li>
+            <strong>Telegram</strong>, for a member who connects their own Telegram chat to a workspace, receives what the bot sends that chat: the
+            workspace&apos;s name, the agent&apos;s decisions with the counterparties&apos; names, the amounts, the reasons and links to the transactions and to
+            the app, and the answers to the member&apos;s questions. It receives no email address or key, and no wallet address in full: one named in a reason or a warning is shortened to its first and last four characters. An invoice the member sends the bot
+            reaches Telegram from the member, and the app reads it the way it reads one uploaded to the invoice form, without keeping it.
           </li>
           <li>
             <strong>OpenSanctions</strong>, when this deployment has it configured, receives the names and jurisdictions of a live workspace&apos;s

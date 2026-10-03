@@ -50,6 +50,7 @@ export type TenantRpc = (typeof TENANT_RPCS)[number];
 
 export const PLATFORM_TABLES = [
   "orgs", "memberships", "invitations", "api_keys", "webhook_endpoints", "webhook_deliveries", "payee_links", "x402_sales",
+  "telegram_link_codes", "telegram_links", "telegram_drafts",
 ] as const;
 export type PlatformTable = (typeof PLATFORM_TABLES)[number];
 
@@ -61,6 +62,7 @@ export const PLATFORM_RPCS = [
   "open_numbers", "open_first_payments", "open_outcomes", "set_platform_team_member", "platform_team_members",
   "create_payee_link", "payee_link_preview", "payee_link_chain", "claim_payee_link", "release_payee_link", "revoke_payee_link", "payee_link_status",
   "payment_receipt_by_token", "pay_link_preview", "enable_usyc_reserve", "payee_history",
+  "telegram_claim_code", "telegram_activate",
 ] as const;
 export type PlatformRpc = (typeof PLATFORM_RPCS)[number];
 

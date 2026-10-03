@@ -10,6 +10,15 @@ Changes to the API and webhooks that affect an integration, newest first. Change
 - A cycle's journal has a new stage, `collections`, between `proposals` and `notices`. It runs only when `receipts` completed.
 - `counterparty_notice_email_changed` now covers a counterparty's billing email, which also receives a client's reminders; its `summary` reads "Billing email for *name*: *address*", or "... removed".
 
+## 2026-10-03: The agent's decisions in Telegram
+
+- **New ledger actions**, domain `system`, delivered to webhooks like every entry:
+  - `telegram_connected`, actor `human`: a member connected their own Telegram chat to the workspace, from **Members**. Its `detail` is `{ by, username }`, where `username` is the Telegram username with most of it hidden (`@li***`), or `null`.
+  - `telegram_disconnected`: a chat no longer gets the workspace's decisions. Actor `human` when the member disconnected it, from **Members** (`via: "members_page"`) or with `/disconnect` in the chat (`via: "telegram"`); actor `system` when Telegram answered that the member had blocked the bot (`via: "blocked"`). Its `detail` is `{ by, userId, via, username }`, with `by` `null` for `blocked`. A member removed from the workspace loses the connection with the membership, and that is recorded as the removal.
+- `create_invoice` entries gain `via: "telegram"` when a member added the payable by tapping **Add** on an invoice the bot read. Such an entry carries `document` as one added from a document on AP / AR does, with `changed: []`.
+- A cycle's journal has a new stage, `telegram`, after `notices`, the last. It needs no other stage to have succeeded.
+- Nothing changes in `/api/v1`.
+
 ## 2026-10-03: Cash comes back from the reserve for payments
 
 - **New ledger action** `cash_brought_back`, domain `treasury`, delivered to webhooks like every entry: USDC came back from the reserve to the operating wallet.
