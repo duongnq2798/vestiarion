@@ -132,6 +132,18 @@ export async function moveCursor(linkId: string, seq: number): Promise<void> {
   if (result.error) throw new Error(result.error.message);
 }
 
+/** What the bot says about a workspace: its name, where its pages are, and whether its money is real. */
+export interface Workspace {
+  slug: string;
+  name: string;
+  mode: "sandbox" | "live";
+}
+
+export async function workspaceOf(orgId: string): Promise<Workspace> {
+  const row = unwrap(await platformDb().from("orgs").select("slug, name, mode").eq("id", orgId).single<Workspace>());
+  return { slug: row.slug, name: row.name, mode: row.mode === "live" ? "live" : "sandbox" };
+}
+
 /** A member's role in a workspace, read afresh for every update (R7); null when they are no longer a member. */
 export async function memberRole(orgId: string, userId: string): Promise<OrgRole | null> {
   const rows = unwrap(await platformDb().from("memberships").select("role").eq("org_id", orgId).eq("user_id", userId).limit(1)) as Array<{ role: unknown }>;

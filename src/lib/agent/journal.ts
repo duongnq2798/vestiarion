@@ -35,6 +35,7 @@ export const CYCLE_STAGES = [
   "forecast",
   "proposals",
   "notices",
+  "telegram",
 ] as const;
 
 export type CycleStage = (typeof CYCLE_STAGES)[number];
@@ -68,6 +69,9 @@ export type CycleStage = (typeof CYCLE_STAGES)[number];
  *   forecast    Nothing. It reads and records; it authorises nothing. It is the
  *               stage most worth keeping alive after a failure, because it is
  *               what tells a human where the cycle left the book.
+ *   telegram    Nothing. It tells each member's connected Telegram chat what the agent decided;
+ *               it authorises nothing, and a chat not told now is told by the next cycle. Last,
+ *               so it never delays a payment (Telegram bot design R8).
  */
 export const STAGE_REQUIRES: Record<CycleStage, readonly CycleStage[]> = {
   reconcile: [],
@@ -84,6 +88,7 @@ export const STAGE_REQUIRES: Record<CycleStage, readonly CycleStage[]> = {
   forecast: [],
   proposals: [],
   notices: [],
+  telegram: [],
 };
 
 export interface StageRecord {

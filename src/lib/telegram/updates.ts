@@ -7,7 +7,9 @@ import { verifyLedger } from "../ledger";
 import { takeTelegramChatToken } from "../rate-limit";
 import type { InlineButton, TelegramClient } from "./client";
 import { addDraft, cancelDraft, readDraftForChat, roleRefusal, type IntakeDeps } from "./intake";
-import { activateLink, activeLink, claimLinkCode, disconnect, linksForChat, memberRole, recordConnected, type TelegramLink } from "./links";
+import {
+  activateLink, activeLink, claimLinkCode, disconnect, linksForChat, memberRole, recordConnected, workspaceOf, type TelegramLink, type Workspace,
+} from "./links";
 import { escapeHtml, helpMessage, ledgerMessage, orgUrl, PRIVATE_ONLY, todayMessage, waitingMessage } from "./messages";
 import { routeText } from "./route-text";
 import { todayFacts, waitingFacts } from "./today";
@@ -23,12 +25,6 @@ export interface UpdateDeps {
   client: TelegramClient;
   origin: string;
   now?: () => Date;
-}
-
-interface Workspace {
-  slug: string;
-  name: string;
-  mode: "sandbox" | "live";
 }
 
 const chatSchema = z.object({ id: z.number(), type: z.string() });
@@ -59,11 +55,6 @@ const NOT_FETCHED = "That file could not be fetched from Telegram. Send it again
 const PHOTO = "Send the invoice as a PDF, or paste its text. Photos are not read.";
 const FAILED = "That did not work. Try again in a moment.";
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
-
-async function workspaceOf(orgId: string): Promise<Workspace> {
-  const row = unwrap(await platformDb().from("orgs").select("slug, name, mode").eq("id", orgId).single<Workspace>());
-  return { slug: row.slug, name: row.name, mode: row.mode === "live" ? "live" : "sandbox" };
-}
 
 export async function handleUpdate(update: unknown, deps: UpdateDeps): Promise<void> {
   const parsed = updateSchema.safeParse(update);
