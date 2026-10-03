@@ -44,7 +44,7 @@ function installRow(fields: Record<string, unknown> = {}) {
 }
 
 const INSTALL: SlackInstall = {
-  id: INSTALL_ID, orgId: ORG, teamId: "T0TEAM", teamName: "Northstar", appId: "A0APP", channelId: "C0FINANCE", channelName: "#finance",
+  id: INSTALL_ID, orgId: ORG, teamId: "T0TEAM", teamName: "Northstar", appId: "A0APP", botUserId: "U0BOT", channelId: "C0FINANCE", channelName: "#finance",
   installedBy: USER, installedAt: "2026-10-03T08:00:00Z", notifiedSeq: 40, decisionsLimitUsdc: null,
   botTokenEnc: { k: "t1", iv: "", tag: "", ct: "" }, webhookUrlEnc: { k: "t1", iv: "", tag: "", ct: "" },
 };

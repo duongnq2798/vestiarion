@@ -17,6 +17,7 @@ export interface SlackInstall {
   teamId: string;
   teamName: string | null;
   appId: string;
+  botUserId: string | null;
   channelId: string;
   channelName: string | null;
   installedBy: string | null;
@@ -35,6 +36,7 @@ interface InstallRow {
   team_id: string;
   team_name: string | null;
   app_id: string;
+  bot_user_id: string | null;
   channel_id: string;
   channel_name: string | null;
   installed_by: string | null;
@@ -46,7 +48,7 @@ interface InstallRow {
 }
 
 const COLUMNS =
-  "id, org_id, team_id, team_name, app_id, channel_id, channel_name, installed_by, installed_at, notified_seq, decisions_limit_usdc, bot_token_enc, webhook_url_enc";
+  "id, org_id, team_id, team_name, app_id, bot_user_id, channel_id, channel_name, installed_by, installed_at, notified_seq, decisions_limit_usdc, bot_token_enc, webhook_url_enc";
 const TOKEN_COLUMN = "slack_installs.bot_token_enc";
 const WEBHOOK_COLUMN = "slack_installs.webhook_url_enc";
 
@@ -56,6 +58,7 @@ const toInstall = (row: InstallRow): SlackInstall => ({
   teamId: row.team_id,
   teamName: row.team_name,
   appId: row.app_id,
+  botUserId: row.bot_user_id ?? null,
   channelId: row.channel_id,
   channelName: row.channel_name,
   installedBy: row.installed_by,

@@ -24,6 +24,8 @@ export const PERMISSIONS = {
   "webhooks.manage": ["owner", "admin"],
   // Moving treasury cash between the workspace's own wallets, such as into its Gateway balance.
   "treasury.manage": ["owner", "admin"],
+  // Connecting the workspace to Slack, which sends the agent's decisions to a channel, or removing it (Slack design S3).
+  "integrations.manage": ["owner", "admin"],
   "org.administer": ["owner"],
 } as const satisfies Record<string, readonly OrgRole[]>;
 
