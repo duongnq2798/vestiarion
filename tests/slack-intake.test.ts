@@ -13,7 +13,7 @@ import { fakeSupabase, type RecordedRequest } from "./support/fake-supabase";
 import { APPENDED_LEDGER_ROW, signedOrgs } from "./support/signed-org";
 
 /**
- * An invoice chosen in Slack with "Add invoice to Vestiarion" (Slack design S15): read only for an owner or admin, from
+ * An invoice chosen in Slack with "Add invoice" (Slack design S15): read only for an owner or admin, from
  * Slack's own file host with the install's token once the install may read files, held as a draft for an hour, and
  * added once, by the member's own press, as the invoice form adds one, with the entry naming Slack and the link.
  */
@@ -132,6 +132,18 @@ describe("readChosenInvoice", () => {
 
     expect(answer.text).toContain("Reconnect Slack");
     expect(downloads).toEqual([]);
+  });
+
+  it("tries to open the file for an install made before its permissions were kept, and asks to reconnect only if Slack refuses", async () => {
+    const opened = workspace();
+    const answer = await opened.run(() => readChosenInvoice(install([]), LINK, actor(), pdfMessage(), opened.deps));
+    expect(opened.downloads).toHaveLength(1);
+    expect(textOf(answer)).toContain("Read the invoice from Northwind Hosting");
+
+    const refused = workspace();
+    const withheld = { ...refused.deps, fetchImpl: (async () => new Response("forbidden", { status: 403 })) as typeof fetch };
+    const reconnect = await refused.run(() => readChosenInvoice(install([]), LINK, actor(), pdfMessage(), withheld));
+    expect(reconnect.text).toContain("Reconnect Slack");
   });
 
   it("reads the chosen PDF from Slack's file host and holds it as a draft for an hour, offering to add it", async () => {

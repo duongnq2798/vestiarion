@@ -21,7 +21,7 @@ import { slackRequestOf, verifySlackRequest } from "./verify";
  * - a card's button decides its payable through the command every surface shares, with the card it answers, so the
  *   chat's rules and every check the console makes run. A decision that changed the payable rewrites the message to
  *   say who did what; a refusal is said to the person who clicked, and to nobody else;
- * - "Add invoice to Vestiarion" on a message reads the invoice it holds into a draft only that member sees, and the
+ * - "Add invoice" on a message reads the invoice it holds into a draft only that member sees, and the
  *   draft's buttons add it, or drop it (src/lib/slack/intake.ts).
  *
  * A link button needs nothing.
@@ -116,7 +116,7 @@ async function decide(click: Click, deps: InteractionDeps): Promise<SlackMessage
   );
 }
 
-/** "Add invoice to Vestiarion" on a message: its invoice read into a draft, for the member who chose it (S15). */
+/** "Add invoice" on a message: its invoice read into a draft, for the member who chose it (S15). */
 async function readChosen(teamId: string, slackUserId: string, message: ChosenMessage, deps: InteractionDeps): Promise<SlackMessage> {
   const member = await memberOf(teamId, slackUserId, NOTHING_ADDED);
   if (!isMember(member)) return member;

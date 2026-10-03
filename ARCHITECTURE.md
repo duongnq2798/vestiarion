@@ -490,7 +490,7 @@ deletes the install with its links; Slack's `app_uninstalled` and
 `tokens_revoked` events do the same.
 
 **An invoice can be added from Slack** (Slack design S15): the message shortcut
-**Add invoice to Vestiarion** sends the chosen message to the interactions
+**Add invoice** sends the chosen message to the interactions
 route, and `src/lib/slack/intake.ts` reads its file, fetched only from
 `https://files.slack.com/` with the install's token under `files:read`
 (`slack_installs.scopes`, migration `0070`; an install made before asks for

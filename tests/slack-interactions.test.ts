@@ -187,7 +187,7 @@ describe("handleInteraction", () => {
   });
 });
 
-describe("Add invoice to Vestiarion (S15)", () => {
+describe("Add invoice (S15)", () => {
   const DRAFT = "0b6c1c9e-4a4f-4a7e-9b1e-000000000d7a";
   const FILE = { id: "F0FILE", name: "invoice.pdf", mimetype: "application/pdf", size: 61_000, url_private_download: "https://files.slack.com/files-pri/T0TEAM-F0FILE/download/invoice.pdf" };
   const shortcut = (callbackId = "vx_add_invoice") =>

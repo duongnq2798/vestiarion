@@ -87,7 +87,7 @@ What you decide is rewritten into the message for the channel: "Approved and pai
 
 An owner or admin can add a payable from an invoice in Slack: a PDF, an `.eml` or `.txt` file of at most 4 MB attached to a message, or the invoice's text in the message itself.
 
-1. On the message, open **More actions** and choose **Add invoice to Vestiarion**.
+1. On the message, open **More actions** and choose **Add invoice**.
 2. Vestiarion reads it the way **From a document** on AP / AR reads one, and answers you alone with every field it read, what to check, and The model's note: when there is one.
 3. Choose **Add, goods received** or **Add, not received yet** to add it, or **Cancel**, which answers "Not added."
 
@@ -105,8 +105,8 @@ Vestiarion reads only the message you chose it on, and Slack lets it open a file
 
 ## What Slack receives
 
-Workspace and counterparty names, amounts, the agent's reasons, links to Vestiarion and to the Arc testnet explorer. A wallet address only shortened to its first and last four characters; never an email, a key or a full address. The app reads no message in your Slack but the one someone chooses **Add invoice to Vestiarion** on: it asks for three permissions, to answer `/vestiarion`, to post to the channel you picked, and to read a file someone chooses.
+Workspace and counterparty names, amounts, the agent's reasons, links to Vestiarion and to the Arc testnet explorer. A wallet address only shortened to its first and last four characters; never an email, a key or a full address. The app reads no message in your Slack but the one someone chooses **Add invoice** on: it asks for three permissions, to answer `/vestiarion`, to post to the channel you picked, and to read a file someone chooses.
 
 ## For the person who runs the deployment
 
-Create the Slack app from `integrations/slack/manifest.yaml` (api.slack.com, **Create New App**, **From a manifest**), and set `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET` and `SLACK_SIGNING_SECRET`. Without all three, the **Slack** section does not show and the Slack routes answer 404; every request from Slack is checked against the signing secret. Slack checks the events URL when it is saved, so add **Event Subscriptions** once the deployment serves it. To let other Slack workspaces connect, turn on public distribution under **Manage Distribution**. An app created before **Add invoice to Vestiarion** existed needs the manifest saved again on its **App Manifest** page, and each workspace connected again with **Reconnect Slack**.
+Create the Slack app from `integrations/slack/manifest.yaml` (api.slack.com, **Create New App**, **From a manifest**), and set `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET` and `SLACK_SIGNING_SECRET`. Without all three, the **Slack** section does not show and the Slack routes answer 404; every request from Slack is checked against the signing secret. Slack checks the events URL when it is saved, so add **Event Subscriptions** once the deployment serves it. To let other Slack workspaces connect, turn on public distribution under **Manage Distribution**. An app created before **Add invoice** existed needs the manifest saved again on its **App Manifest** page, and each workspace connected again with **Reconnect Slack**.

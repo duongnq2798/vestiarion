@@ -115,7 +115,7 @@ is hard-coded into the interface:
    again, through the same command and every check as Approvals; Approve and pay only for USDC
    on Arc within the limit, to the address the message showed, and a payee's changed address is
    still confirmed in Vestiarion. Each decision's ledger entry says it came from Slack. An owner or
-   admin also adds an invoice from a message, with **Add invoice to Vestiarion**: read as **From a
+   admin also adds an invoice from a message, with **Add invoice**: read as **From a
    document** reads one, and added with one press (`src/lib/slack/`,
    [guide](https://www.vestiarion.xyz/docs/guides/slack)).
 
