@@ -54,9 +54,11 @@ export async function setRemindersAction(_previous: PayLinkActionResult, formDat
       raiseCycleEvent(auth, "reminders_on");
       return {
         ok: true,
-        message: result.madeNewLink
-          ? `Reminders on. The agent decides when to remind ${result.counterpartyName}, with a new pay link: a link sent before no longer works.`
-          : `Reminders on. The agent decides when to remind ${result.counterpartyName}.`,
+        message: result.replacedLink
+          ? `Reminders on. The agent decides when to remind ${result.counterpartyName}, with a new pay link: the one sent before no longer works.`
+          : result.madeNewLink
+            ? `Reminders on. The agent decides when to remind ${result.counterpartyName}, with the pay link it just made.`
+            : `Reminders on. The agent decides when to remind ${result.counterpartyName}.`,
       };
     } catch (error) {
       if (error instanceof PayLinkError) return { ok: false, message: error.message };

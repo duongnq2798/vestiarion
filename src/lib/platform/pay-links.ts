@@ -168,7 +168,12 @@ export async function payLinkStates(invoiceIds: string[], keys?: MasterKey[]): P
  * and a link the reminders can carry: one made before links were kept is replaced by a new one (R2). Signed as
  * `ar_reminders_on` or `ar_reminders_off`.
  */
-export async function setReminders(input: { actorId: string; invoiceId: string; on: boolean; keys?: MasterKey[] }): Promise<{ madeNewLink: boolean; counterpartyName: string }> {
+export async function setReminders(input: {
+  actorId: string;
+  invoiceId: string;
+  on: boolean;
+  keys?: MasterKey[];
+}): Promise<{ madeNewLink: boolean; replacedLink: boolean; counterpartyName: string }> {
   const found = await db()
     .from("invoices")
     .select("id, direction, status, counterparty_id, counterparties(name, notice_email)")
@@ -189,7 +194,7 @@ export async function setReminders(input: { actorId: string; invoiceId: string; 
       summary: `Turned off the agent's reminders to ${client.name}`,
       detail: { by: input.actorId, invoiceId: invoice.id, counterpartyId: invoice.counterparty_id },
     });
-    return { madeNewLink: false, counterpartyName: client.name };
+    return { madeNewLink: false, replacedLink: false, counterpartyName: client.name };
   }
 
   if (invoice.status !== "pending" && invoice.status !== "matched") throw new PayLinkError("closed");
@@ -199,7 +204,9 @@ export async function setReminders(input: { actorId: string; invoiceId: string; 
   ).data;
   let linkId = existing?.id ?? null;
   let madeNewLink = false;
-  if (!existing || existing.revoked_at || !payLinkToken(currentOrgId(), existing.token_enc, input.keys)) {
+  // A live link the reminders cannot carry is replaced, and stops working: the person is told (R2). None is made.
+  const replacedLink = Boolean(existing && !existing.revoked_at && !payLinkToken(currentOrgId(), existing.token_enc, input.keys));
+  if (!existing || existing.revoked_at || replacedLink) {
     const made = await createPayLink({ actorId: input.actorId, invoiceId: invoice.id, keys: input.keys });
     if (!made.kept) throw new PayLinkError("not_kept");
     linkId = made.linkId;
@@ -213,9 +220,9 @@ export async function setReminders(input: { actorId: string; invoiceId: string; 
     domain: "ar",
     action: "ar_reminders_on",
     summary: `Turned on the agent's reminders to ${client.name}`,
-    detail: { by: input.actorId, invoiceId: invoice.id, counterpartyId: invoice.counterparty_id, linkId, madeNewLink },
+    detail: { by: input.actorId, invoiceId: invoice.id, counterpartyId: invoice.counterparty_id, linkId, madeNewLink, replacedLink },
   });
-  return { madeNewLink, counterpartyName: client.name };
+  return { madeNewLink, replacedLink, counterpartyName: client.name };
 }
 
 const previewSchema = z.object({

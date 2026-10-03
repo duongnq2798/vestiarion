@@ -13,6 +13,17 @@ import { useActionForm } from "@/components/ui/useActionForm";
 
 const INITIAL: IntakeActionResult = { ok: false, message: "" };
 
+type Direction = "payable" | "receivable";
+
+/** What the direction means for the counterparty chosen, and a warning for a payable to a client (client payables R2). */
+export function directionNote(direction: Direction, counterparty: { name: string; role: string } | undefined): string | undefined {
+  if (!counterparty) return undefined;
+  if (direction === "receivable") return `Money ${counterparty.name} owes you.`;
+  return counterparty.role === "client"
+    ? `${counterparty.name} is a client: it pays you. The agent never pays a client on its own; a payable to one waits for a person.`
+    : `Money you owe ${counterparty.name}.`;
+}
+
 export interface IntakeCounterparty {
   id: string;
   name: string;
@@ -72,10 +83,21 @@ export default function InvoiceIntake({
   const [dueDate, setDueDate] = useState(initial?.dueDate ?? "");
   const pctEntered = discountPct.trim() !== "";
   const deadlineEntered = discountDeadline !== "";
+
+  // The direction follows the counterparty chosen: a client pays you, so its invoice is a receivable; anyone else is
+  // paid (client payables R2). A person can still choose otherwise, and the form says what that means.
+  const roleOf = (counterpartyId: string | null | undefined) => counterparties.find((counterparty) => counterparty.id === counterpartyId);
+  const directionFor = (counterpartyId: string | null | undefined): Direction => (roleOf(counterpartyId)?.role === "client" ? "receivable" : "payable");
+  const [chosen, setChosen] = useState<string | null>(initial?.counterpartyId ?? null);
+  const [direction, setDirection] = useState<Direction>(directionFor(initial?.counterpartyId));
+  const chosenParty = roleOf(chosen);
+
   function resetDiscount() {
     setDiscountPct(initial?.earlyPayDiscountPct ?? "");
     setDiscountDeadline(initial?.discountDeadline ?? "");
     setDueDate(initial?.dueDate ?? "");
+    setChosen(initial?.counterpartyId ?? null);
+    setDirection(directionFor(initial?.counterpartyId));
   }
 
   return (
@@ -90,8 +112,8 @@ export default function InvoiceIntake({
         </>
       )}
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field id={id("direction")} label="Direction" error={fieldError("direction")}>
-          <Select name="direction" defaultValue="payable">
+        <Field id={id("direction")} label="Direction" description={directionNote(direction, chosenParty)} error={fieldError("direction")}>
+          <Select name="direction" value={direction} onValueChange={(value) => setDirection(value === "receivable" ? "receivable" : "payable")}>
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
@@ -107,7 +129,16 @@ export default function InvoiceIntake({
           description={none ? "Add a counterparty first — every invoice is against one." : undefined}
           error={fieldError("counterpartyId")}
         >
-          <Select name="counterpartyId" required disabled={none} defaultValue={start(initial?.counterpartyId)}>
+          <Select
+            name="counterpartyId"
+            required
+            disabled={none}
+            defaultValue={start(initial?.counterpartyId)}
+            onValueChange={(value) => {
+              setChosen(value);
+              setDirection(directionFor(value));
+            }}
+          >
             <SelectTrigger>
               <SelectValue placeholder="Select a counterparty" />
             </SelectTrigger>

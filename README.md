@@ -58,7 +58,8 @@ is hard-coded into the interface:
 2. **AP automation** — each payable invoice gets a three-way match (PO ↔ goods received ↔
    invoice) plus a risk check, and the agent decides to **pay**, **hold** (over limit), **request
    info** (no PO match), or **flag as fraud** (high-risk counterparty) — with its reasoning
-   attached to the line item.
+   attached to the line item. A payable to a client, which pays the business, is never paid by the
+   agent: it waits for a person.
 3. **Contractor payments** — a GitHub PR URL can be checked for an actual merge before a
    milestone is released. Human verification remains available and is recorded as a human ledger
    action. Verified milestones are released the same day instead of waiting for Net-30.
@@ -67,7 +68,9 @@ is hard-coded into the interface:
    rather than after. The sweep only happens when it pays for itself: a sweep and the redemption
    that must follow it are two transactions, so the policy computes the yield earned over the days
    until the next obligation and compares it to the round-trip fee. Idle cash that would earn less
-   than it costs to move stays liquid (`src/lib/agent/treasury.ts`). Payments come first: before
+   than it costs to move stays liquid (`src/lib/agent/treasury.ts`). Code bounds the model's moves:
+   a sweep never takes the operating wallet below its buffer, and a redemption brings back at most
+   what the next 14 days need. Payments come first: before
    it decides any payment, each cycle redeems what the payables due today need beyond the
    operating balance, so no payment waits for cash sitting in the reserve, and an owner or admin
    can bring cash back at any hour with **Bring cash back** (`src/lib/agent/liquidity.ts`). USYC is

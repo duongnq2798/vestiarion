@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { peopleMarkdown, stopKind, summarizeDecisions, summarizePeople, summaryMarkdown, within, type PersonDecision, type RecordedDecision } from "@/lib/research/model-vs-policy";
+import { agreementOf, peopleMarkdown, stopKind, summarizeDecisions, summarizePeople, summaryMarkdown, within, type PersonDecision, type RecordedDecision } from "@/lib/research/model-vs-policy";
 
 /**
  * The research note's numbers (I1): every decision the agent's model made,
@@ -174,5 +174,21 @@ describe("what people did with what the agent left them (I2)", () => {
     expect(within(rows, "2026-10-01T05:48:00.000Z")).toHaveLength(2);
     expect(within(rows, undefined, "2026-10-01T05:48:00.000Z")).toHaveLength(1);
     expect(within(rows)).toHaveLength(3);
+  });
+});
+
+describe("agreement with the written policy, as the note counts it (treasury bounds R4)", () => {
+  const treasury = { domain: "treasury", mode: "deepseek", modelAction: "redeem_from_usyc", policyAction: "redeem_from_usyc", recorded: true };
+
+  it("counts a treasury move as the policy's only when the amount is about the policy's too, whatever the entry said", () => {
+    // #1063 in testnet-2: the model redeemed 58.1 USDC where the policy redeemed 0.114999, and the entry said it agreed.
+    expect(agreementOf({ ...treasury, modelAmount: 58.1, policyAmount: 0.114999 })).toBe(false);
+    expect(agreementOf({ ...treasury, modelAmount: 0.115, policyAmount: 0.114999 })).toBe(true);
+    expect(agreementOf({ ...treasury, modelAction: "hold", policyAction: "hold", modelAmount: 0, policyAmount: 0 })).toBe(true);
+  });
+
+  it("keeps the entry's own verdict for payables and milestones, and none for the written policy itself", () => {
+    expect(agreementOf({ ...treasury, domain: "ap", modelAction: "pay", policyAction: "pay", modelAmount: null, policyAmount: null, recorded: false })).toBe(false);
+    expect(agreementOf({ ...treasury, mode: "heuristic", modelAmount: 58.1, policyAmount: 0.1, recorded: null })).toBeNull();
   });
 });

@@ -118,6 +118,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["Get started", CHECKLIST],
   ],
   "guides/go-live": [
+    ["boundedByCode", "src/lib/agent/orchestrator.ts"],
     ["USYC reserve", "src/components/UsycReservePanel.tsx"],
     ["Turn on", "src/components/UsycReservePanel.tsx"],
     ["Bring cash back", "src/components/UsycReservePanel.tsx"],
@@ -171,6 +172,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["Something went wrong; try again.", GO_LIVE_ACTIONS],
   ],
   "guides/first-payment": [
+    ["Money you owe", "src/components/intake/InvoiceIntake.tsx"],
     ["USYC reserve", "src/lib/next-step.ts"],
     ["The agent decides it again on its own once cash comes in: USDC added to the operating wallet, or brought back from the reserve.", "src/lib/next-step.ts"],
     ["Service budget", "src/components/ServiceBudgetPanel.tsx"],

@@ -73,7 +73,7 @@ import {
   type PaymentTiming,
   type PaymentTimingInput,
 } from "./payment-timing";
-import { planTreasury, type TreasuryDecision } from "./treasury";
+import { boundTreasuryDecision, planTreasury, sameTreasuryDecision, treasuryBounds, type TreasuryDecision } from "./treasury";
 import { moveTreasuryIfNotPaused } from "./treasury-moves";
 import { bringCashForTodaysPayments, HELD_FOR_CASH } from "./liquidity";
 import { plural, utcDay } from "../copy";
@@ -924,6 +924,8 @@ interface ApPayableRow {
   counterparties: {
     id: string;
     name: string;
+    /** `vendor`, `contractor` or `client`: a payable to a client waits for a person (client payables R1). */
+    role?: string | null;
     risk_level: string;
     payment_limit: string | null;
     performance_score: string | null;
@@ -1574,6 +1576,7 @@ async function decideApPayable(
     reasoning: decision.reasoning + timingNote,
     amount: usdcValue ?? amount,
     riskLevel: counterparty.risk_level,
+    counterpartyRole: counterparty.role ?? null,
     paymentLimit: limit,
     duplicates,
     addressChangedAt: counterparty.address_changed_at,
@@ -1969,7 +1972,7 @@ export async function runApStage(input: ApStageInput): Promise<number> {
   const loaded = unwrap(
     await db
       .from("invoices")
-      .select("*, counterparties(id, name, risk_level, payment_limit, performance_score, performance_inputs, address, address_changed_at, address_confirmed_at, chain), recurring_payables(every_count, every_unit)")
+      .select("*, counterparties(id, name, role, risk_level, payment_limit, performance_score, performance_inputs, address, address_changed_at, address_confirmed_at, chain), recurring_payables(every_count, every_unit)")
       .eq("direction", "payable")
       .in("status", ["pending", "matched", "scheduled"])
       .order("created_at", { ascending: true })
@@ -3469,7 +3472,9 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
         ? { action: "hold", amount: 0, reasoning: `${plan.decision.reasoning} USYC cannot be bought until its next daily price update, so the cash stays liquid until then.` }
         : plan.decision;
 
-    const { value: decision, mode, reference, agreedWithReference } = await decide<TreasuryDecision>({
+    const boundFacts = { operatingBalance, reserveBalance, obligationsDue14d, plan, reference: referencePlan };
+    const bounds = treasuryBounds(boundFacts);
+    const { value: modelDecision, mode, reference } = await decide<TreasuryDecision>({
       systemPrompt: SYSTEM_PROMPT,
       userPrompt: JSON.stringify({
         task: "Decide whether to sweep idle operating cash into the USYC-yielding reserve, redeem from the reserve back into operating, or hold.",
@@ -3499,6 +3504,13 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
               },
             }
           : {}),
+        // What code lets a move be, whatever the answer (treasury bounds R1–R3).
+        bounds: {
+          sweepAtMostUsdc: bounds.sweepAtMost,
+          redeemAtMostUsdc: bounds.redeemAtMost,
+          redeemAtLeastUsdc: bounds.redeemAtLeast,
+          note: "Code moves no more than these: a sweep never takes the operating wallet below its 7-day buffer, and a redemption brings back at most what falls due within 14 days needs, with its 15% cushion.",
+        },
         responseShape: {
           action: "sweep_to_usyc | redeem_from_usyc | hold",
           amount: "number",
@@ -3508,6 +3520,10 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
       schema: treasuryDecisionSchema,
       fallback: (): TreasuryDecision => referencePlan,
     });
+    // Code's bounds on the model's move (treasury bounds R1–R3), and agreement that weighs the amount (R4).
+    const bounded = boundTreasuryDecision(modelDecision, boundFacts);
+    const decision = bounded.decision;
+    const agreedWithReference = mode === "heuristic" ? null : sameTreasuryDecision(modelDecision, referencePlan);
     metrics.recordDecisionMode(mode, agreedWithReference);
 
     const moveOutcome = await moveTreasuryIfNotPaused(decision, {
@@ -3544,6 +3560,8 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
         decisionMode: mode,
         referenceDecision: reference,
         agreedWithReference,
+        // What the model chose, when code changed it, and why (treasury bounds R1–R3).
+        ...(bounded.limited ? { boundedByCode: { chosen: { action: modelDecision.action, amount: modelDecision.amount }, reason: bounded.limited } } : {}),
         executed,
         executionNote,
         // D6: same marker as the AP and contractor stages (see the comment

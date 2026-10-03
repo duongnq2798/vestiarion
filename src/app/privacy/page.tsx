@@ -18,7 +18,7 @@ export default function PrivacyPage() {
   return (
     <LegalPage
       title="Privacy"
-      updated="2026-09-30"
+      updated="2026-10-03"
       intro="Vestiarion is an autonomous treasury agent on Arc testnet. This page describes what the service stores and sends, as its code does it today. The code is public, so every statement here can be checked against it."
     >
       <LegalSection id="signing-in" title="Signing in">
@@ -37,7 +37,10 @@ export default function PrivacyPage() {
         <p>A workspace holds what its members and its agent put into it:</p>
         <ul>
           <li>invoices, with their amounts, memos, purchase order references and due dates;</li>
-          <li>counterparties: their names, wallet addresses, screening results and payment limits, and the email address for payment notices when a member gives one;</li>
+          <li>
+            counterparties: their names, wallet addresses, screening results and payment limits, and their billing email when a member gives one, where
+            payment notices and reminders go;
+          </li>
           <li>contractor milestones, with any GitHub pull request link used to verify one;</li>
           <li>the agent&apos;s settings and its treasury records;</li>
           <li>its members and their roles, and open invitations with the invited email addresses;</li>
@@ -116,8 +119,8 @@ export default function PrivacyPage() {
           </li>
           <li>
             <strong>Resend</strong> sends transactional email: invitations to a workspace, digests of the payments waiting for a decision, the link a payee
-            adds their address through, and payment notices to a payee once a live workspace&apos;s payment to them is confirmed. It receives each
-            recipient&apos;s email address and the message.
+            adds their address through, payment notices to a payee once a live workspace&apos;s payment to them is confirmed, and the reminders an owner
+            or admin turns on for a client&apos;s invoice, with its pay link. It receives each recipient&apos;s email address and the message.
           </li>
           <li>
             <strong>A model provider</strong>, when this deployment has one configured (Anthropic, OpenAI or DeepSeek), receives the context of each decision
@@ -150,14 +153,20 @@ export default function PrivacyPage() {
                 asks. The answer is read from the workspace and written by the app, not by the model;
               </li>
               <li>
+                for a reminder to a client: the receivable&apos;s amount and currency, its due date and how far today is from it, what it is for (its memo
+                and purchase order), the client&apos;s name and how it paid its earlier receivables (on time, late, and how late on average), the
+                reminders already sent (when, and how firmly), the tones allowed, and the written policy&apos;s answer. The email itself is a fixed
+                text; nothing the model writes is sent to the client;
+              </li>
+              <li>
                 for a proposed payment limit: the counterparty&apos;s name, limit, risk level and performance score, and each payment people approved above
                 that limit in the last 30 days (its amount, when, and what the agent had done with it), with how many were rejected;
               </li>
               <li>
                 for a treasury move: the operating and reserve balances, the reserve&apos;s yield, the obligations due in the next 7 and 14 days, the total open
                 obligations and the days until the next one is due, and the sweep&apos;s economics worked out from those: the cash above the required buffer, how
-                long it could stay swept, the projected yield and the cost of the transfers; and, for a real USYC reserve, that it is real and whether USYC
-                can be bought now.
+                long it could stay swept, the projected yield and the cost of the transfers; the most a sweep may take, and the most and least a redemption
+                may bring back; and, for a real USYC reserve, that it is real and whether USYC can be bought now.
               </li>
             </ul>
             A performance score comes with the counts it is computed from: payments paid without intervention, information requests, holds and flags,

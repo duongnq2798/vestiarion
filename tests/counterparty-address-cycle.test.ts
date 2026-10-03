@@ -15,7 +15,7 @@ const source = readFileSync(path.join(process.cwd(), "src", "lib", "agent", "orc
 
 describe("the cycle and an unconfirmed address", () => {
   it("reads both address timestamps with every counterparty it pays", () => {
-    const selects = [...source.matchAll(/counterparties\(id, name, risk_level, payment_limit, performance_score, performance_inputs, address[^)]*\)/g)];
+    const selects = [...source.matchAll(/counterparties\(id, name, (?:role, )?risk_level, payment_limit, performance_score, performance_inputs, address[^)]*\)/g)];
     expect(selects).toHaveLength(2);
     for (const [select] of selects) expect(select).toContain("address, address_changed_at, address_confirmed_at");
   });

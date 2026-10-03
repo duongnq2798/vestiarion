@@ -1279,3 +1279,19 @@ describe("the AP stage and the spending limit enforced on Arc (onchain spending 
     expect(ledger(fake.requests)[0].p_detail).not.toHaveProperty("onChainLimit");
   });
 });
+
+describe("the AP stage and a payable to a client (client payables R1)", () => {
+  it("holds it for a person, whatever the model decided, and sends nothing", async () => {
+    today("2026-10-01T09:00:00.000Z");
+    model(() => ({ action: "pay", reasoning: "The purchase order matches and the goods were received; paying it.", confidence: 0.9 }));
+    const toClient = payable({ due_date: "2026-10-01T12:00:00+00:00", early_pay_discount_pct: null, discount_due_date: null, counterparties: counterparty({ role: "client" }) });
+    const { fake, chain, stage } = apFake({ book: [toClient] });
+
+    await stage();
+
+    const [patch] = invoicePatches(fake.requests);
+    expect(patch.body).toMatchObject({ status: "held" });
+    expect(ledger(fake.requests)[0].p_detail).toMatchObject({ guardrailBlocked: true, guardrailRule: "counterparty.client_payable" });
+    expect(chain.transfers).toEqual([]);
+  });
+});

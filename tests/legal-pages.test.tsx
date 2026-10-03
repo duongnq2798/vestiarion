@@ -29,11 +29,11 @@ const text = (markup: string) =>
 const source = (file: string) => readFileSync(path.join(process.cwd(), file), "utf8");
 
 const PAGES = [
-  { path: "/terms", file: "src/app/terms/page.tsx", Page: TermsPage, metadata: termsMetadata, heading: "Terms of use" },
-  { path: "/privacy", file: "src/app/privacy/page.tsx", Page: PrivacyPage, metadata: privacyMetadata, heading: "Privacy" },
+  { path: "/terms", file: "src/app/terms/page.tsx", Page: TermsPage, metadata: termsMetadata, heading: "Terms of use", updated: "2026-09-30" },
+  { path: "/privacy", file: "src/app/privacy/page.tsx", Page: PrivacyPage, metadata: privacyMetadata, heading: "Privacy", updated: "2026-10-03" },
 ] as const;
 
-describe.each(PAGES)("$path", ({ path: route, file, Page, metadata, heading }) => {
+describe.each(PAGES)("$path", ({ path: route, file, Page, metadata, heading, updated }) => {
   const markup = renderToStaticMarkup(<Page />);
 
   it("has a title and a description", () => {
@@ -44,8 +44,8 @@ describe.each(PAGES)("$path", ({ path: route, file, Page, metadata, heading }) =
 
   it("renders its heading, the date it was last updated, the site header and the compact footer", () => {
     expect(markup).toMatch(new RegExp(`<h1[^>]*>${heading}</h1>`));
-    expect(text(markup)).toContain("Last updated 2026-09-30");
-    expect(markup).toMatch(/<time datetime="2026-09-30">2026-09-30<\/time>/i);
+    expect(text(markup)).toContain(`Last updated ${updated}`);
+    expect(markup).toMatch(new RegExp(`<time datetime="${updated}">${updated}</time>`, "i"));
     expect(markup).toMatch(/<header[^>]*class="sticky top-0/);
     expect(markup).toContain('href="/privacy"');
     expect(markup).toContain('href="/terms"');
@@ -222,6 +222,10 @@ describe("the privacy page", () => {
       expectedHoldDays: "how long it could stay swept",
       projectedYieldUsd: "the projected yield",
       roundTripCostUsd: "the cost of the transfers",
+      bounds: "the most a sweep may take",
+      sweepAtMostUsdc: "the most a sweep may take",
+      redeemAtMostUsdc: "the most and least a redemption",
+      redeemAtLeastUsdc: "the most and least a redemption",
     };
 
     it("finds the three prompts: an invoice, a milestone and a treasury move", () => {
