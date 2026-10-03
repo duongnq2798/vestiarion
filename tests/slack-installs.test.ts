@@ -33,6 +33,7 @@ const orgs = signedOrgs();
 const GRANT = {
   teamId: "T0TEAM", teamName: "Northstar", appId: "A0APP", botUserId: "U0BOT", botToken: "xoxb-1-2-abc",
   installerSlackUserId: "U0LINH", webhookUrl: WEBHOOK, channelId: "C0FINANCE", channelName: "#finance",
+  scopes: ["commands", "incoming-webhook", "files:read"],
 };
 
 function installRow(fields: Record<string, unknown> = {}) {
@@ -45,7 +46,7 @@ function installRow(fields: Record<string, unknown> = {}) {
 
 const INSTALL: SlackInstall = {
   id: INSTALL_ID, orgId: ORG, teamId: "T0TEAM", teamName: "Northstar", appId: "A0APP", botUserId: "U0BOT", channelId: "C0FINANCE", channelName: "#finance",
-  installedBy: USER, installedAt: "2026-10-03T08:00:00Z", notifiedSeq: 40, decisionsLimitUsdc: null,
+  installedBy: USER, installedAt: "2026-10-03T08:00:00Z", notifiedSeq: 40, decisionsLimitUsdc: null, scopes: [],
   botTokenEnc: { k: "t1", iv: "", tag: "", ct: "" }, webhookUrlEnc: { k: "t1", iv: "", tag: "", ct: "" },
 };
 
@@ -87,7 +88,10 @@ describe("saveInstall", () => {
     const result = await run(() => saveInstall({ orgId: ORG, installedBy: USER, grant: GRANT }));
     expect(result.ok).toBe(true);
 
-    expect(saved).toMatchObject({ org_id: ORG, team_id: "T0TEAM", app_id: "A0APP", channel_id: "C0FINANCE", installed_by: USER, notified_seq: 77 });
+    expect(saved).toMatchObject({
+      org_id: ORG, team_id: "T0TEAM", app_id: "A0APP", channel_id: "C0FINANCE", installed_by: USER, notified_seq: 77,
+      scopes: ["commands", "incoming-webhook", "files:read"],
+    });
     expect(JSON.stringify(saved)).not.toContain("xoxb-1-2-abc");
     expect(JSON.stringify(saved)).not.toContain("hooks.slack.com");
     const keys = parseMasterKeys(process.env.VESTIARION_MASTER_KEYS);
@@ -116,6 +120,13 @@ describe("saveInstall", () => {
 });
 
 describe("the install afterwards", () => {
+  it("knows the permissions it granted, and none for an install made before they were kept", async () => {
+    const granted = world((sent) => (sent.path === "/rest/v1/slack_installs" ? { body: [installRow({ scopes: ["commands", "files:read"] })] } : undefined));
+    expect((await granted.run(() => installFor(ORG)))?.scopes).toEqual(["commands", "files:read"]);
+    const older = world((sent) => (sent.path === "/rest/v1/slack_installs" ? { body: [installRow()] } : undefined));
+    expect((await older.run(() => installFor(ORG)))?.scopes).toEqual([]);
+  });
+
   it("reads its webhook and token back from their envelopes", async () => {
     let saved: Record<string, unknown> = {};
     const { run } = world((sent) => {

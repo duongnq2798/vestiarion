@@ -1,14 +1,15 @@
 import type { SlackSettings } from "./settings";
 
 /**
- * The few calls Vestiarion makes to Slack (Slack design S3, S7, S10, S13): exchanging an install's code, uninstalling
- * the app, and posting to an incoming webhook or to the `response_url` a command or a click carries. Each has a
- * deadline, and a post goes only to Slack's own hooks host. A failure is reported, never thrown; a URL or a token is
- * never logged, since either is a credential.
+ * The few calls Vestiarion makes to Slack (Slack design S3, S7, S10, S13, S15): exchanging an install's code,
+ * uninstalling the app, posting to an incoming webhook or to the `response_url` a command or a click carries, and
+ * fetching a file someone chose. Each has a deadline; a post goes only to Slack's own hooks host, and a fetch only to
+ * its file host. A failure is reported, never thrown; a URL or a token is never logged, since either is a credential.
  */
 
 export const SLACK_DEADLINE_MS = 10_000;
 const HOOKS = "https://hooks.slack.com/";
+const FILES = "https://files.slack.com/";
 
 /** What an install grants, as Vestiarion keeps it. */
 export interface InstallGrant {
@@ -22,6 +23,8 @@ export interface InstallGrant {
   webhookUrl: string;
   channelId: string;
   channelName: string | null;
+  /** The bot permissions Slack granted, as it lists them: `files:read` lets the app read a file someone chose (S15). */
+  scopes: string[];
 }
 
 export type ExchangeResult =
@@ -85,6 +88,10 @@ export async function exchangeCode(settings: SlackSettings, code: string, redire
       webhookUrl,
       channelId,
       channelName: text(hook?.channel)?.slice(0, 200) ?? null,
+      scopes: (text(body.scope) ?? "")
+        .split(",")
+        .map((scope) => scope.trim())
+        .filter((scope) => /^[a-z][a-z0-9:._-]{0,63}$/.test(scope)),
     },
   };
 }
@@ -134,4 +141,32 @@ export function postToWebhook(url: string, message: SlackMessage, fetchImpl: typ
 /** Answers a command or a click, or rewrites the message a click came from (`replace_original`). */
 export function postToResponseUrl(url: string, message: SlackMessage, fetchImpl: typeof fetch = fetch): Promise<PostResult> {
   return post(url, message, fetchImpl);
+}
+
+export type DownloadResult =
+  | { ok: true; bytes: Uint8Array; contentType: string }
+  | { ok: false; reason: "not_slack" | "no_access" | "too_large" | "unreachable" };
+
+/**
+ * A file someone chose in Slack (S15), from Slack's own file host with the bot token, which `files:read` lets read
+ * it: at most `maxBytes`. Without that permission Slack answers with its sign-in page rather than an error, so a page
+ * is no access, as a refusal is.
+ */
+export async function downloadSlackFile(url: string, botToken: string, maxBytes: number, fetchImpl: typeof fetch = fetch): Promise<DownloadResult> {
+  if (!url.startsWith(FILES)) return { ok: false, reason: "not_slack" };
+  let response: Response;
+  try {
+    response = await fetchImpl(url, { headers: { authorization: `Bearer ${botToken}` }, signal: AbortSignal.timeout(SLACK_DEADLINE_MS) });
+  } catch {
+    return { ok: false, reason: "unreachable" };
+  }
+  const contentType = (response.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
+  if (!response.ok || contentType === "text/html") return { ok: false, reason: "no_access" };
+  if (Number(response.headers.get("content-length") ?? "0") > maxBytes) return { ok: false, reason: "too_large" };
+  try {
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    return bytes.byteLength > maxBytes ? { ok: false, reason: "too_large" } : { ok: true, bytes, contentType };
+  } catch {
+    return { ok: false, reason: "unreachable" };
+  }
 }

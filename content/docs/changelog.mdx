@@ -1,5 +1,11 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-03: Add an invoice from Slack
+
+- `create_invoice` entries gain `via: "slack"` and `linkId` when an owner or admin added the payable from a message in Slack with **Add invoice to Vestiarion**. Such an entry carries `document` as one added from a document on AP / AR does, with `changed: []`.
+- The Slack app asks for one more permission, `files:read`, to read the file someone chooses. A Slack connected before this is connected again from **Settings** with **Reconnect Slack**; its members stay connected.
+- Nothing changes in `/api/v1`.
+
 ## 2026-10-03: A member's notifications move to Settings
 
 - `telegram_disconnected` entries for a chat its member disconnected from Vestiarion now carry `via: "settings"`: the **Telegram** card moved from **Members** to the **Notifications** section at the top of **Settings**, with the switch for the email about payments that need a decision. Entries made before keep `via: "members_page"`; `via: "telegram"` and `via: "blocked"` are unchanged.

@@ -23,8 +23,9 @@ export async function addInvoice(
       actorId: actor.userId,
       invoice: input.invoice,
       document: input.document,
-      // The entry names the bot exactly as it always has (Telegram bot design R10).
+      // The entry names the bot exactly as it always has (Telegram bot design R10); Slack's names its link too (S15).
       ...(actor.surface.kind === "telegram" ? { via: "telegram" as const } : {}),
+      ...(actor.surface.kind === "slack" ? { via: "slack" as const, linkId: actor.surface.linkId } : {}),
     });
   } catch (error) {
     console.error("adding an invoice failed", actor.orgId, error instanceof Error ? error.message : "unknown error");

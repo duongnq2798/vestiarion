@@ -183,7 +183,8 @@ export default function PrivacyPage() {
             <strong>Slack</strong>, for a workspace an owner or admin connects to a Slack channel, receives what the app posts to that channel and its
             answers to members: the workspace&apos;s name, the agent&apos;s decisions with the counterparties&apos; names, the amounts, the reasons and links
             to the transactions and to the app, who decided a payment from Slack, and the answers to a member&apos;s questions. It receives no email
-            address or key, and no wallet address in full: one is shortened to its first and last four characters. The app reads no message in Slack.
+            address or key, and no wallet address in full: one is shortened to its first and last four characters. The app reads no message in Slack
+            but one an owner or admin chooses to add as an invoice, read the way one uploaded to the invoice form is, without keeping it.
             It keeps the Slack workspace&apos;s and the channel&apos;s ids and names, the app&apos;s token and the channel&apos;s posting address,
             encrypted, and the Slack user id of each member who connects their own account; disconnecting Slack deletes them, and the signed ledger
             keeps only the ids. A Slack username given to connect an account is kept until that request is used or expires, and cleared when the next one is made.

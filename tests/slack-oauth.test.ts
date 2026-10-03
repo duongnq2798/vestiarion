@@ -66,14 +66,14 @@ const keys = () => parseMasterKeys(process.env.VESTIARION_MASTER_KEYS);
 const location = (response: Response) => new URL(response.headers.get("location") ?? "", ORIGIN);
 
 describe("startInstall", () => {
-  it("sends an owner or admin to Slack with the two scopes, the callback, and a signed state whose nonce is in their cookie", async () => {
+  it("sends an owner or admin to Slack with the app's scopes, the callback, and a signed state whose nonce is in their cookie", async () => {
     const { run } = world();
     const response = await run(() => startInstall(new Request(`${ORIGIN}/api/slack/install?org=acme`), { settings: SETTINGS, origin: ORIGIN }));
     expect(response.status).toBe(302);
     const to = location(response);
     expect(`${to.origin}${to.pathname}`).toBe("https://slack.com/oauth/v2/authorize");
     expect(to.searchParams.get("client_id")).toBe("1234.5678");
-    expect(to.searchParams.get("scope")).toBe("commands,incoming-webhook");
+    expect(to.searchParams.get("scope")).toBe("commands,incoming-webhook,files:read");
     expect(to.searchParams.get("redirect_uri")).toBe(`${ORIGIN}/api/slack/oauth`);
     const state = readOAuthState(to.searchParams.get("state") ?? "", keys());
     expect(state).toMatchObject({ org: ORG, user: USER });

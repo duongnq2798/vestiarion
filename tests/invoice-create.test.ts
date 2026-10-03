@@ -113,6 +113,16 @@ describe("createInvoice", () => {
     expect(entry.p_detail).toMatchObject({ via: "telegram", document });
   });
 
+  it("records that it came from Slack, and the member's link it came through (Slack design S15)", async () => {
+    const document = { kind: "pdf" as const, sha256: "b".repeat(64), reader: "heuristic" as const, changed: [] };
+    const { requests } = await run([{ id: COUNTERPARTY, name: "Acme Supplies" }], () =>
+      createInvoice({ actorId: USER, invoice, document, via: "slack", linkId: "0b6c1c9e-4a4f-4a7e-9b1e-0000000000d2" })
+    );
+
+    const [entry] = ledgerDetails(requests);
+    expect(entry.p_detail).toMatchObject({ by: USER, via: "slack", linkId: "0b6c1c9e-4a4f-4a7e-9b1e-0000000000d2", document });
+  });
+
   it("records that it came through the API and with which key, and adds it as nobody's once the key's issuer is gone (write API R4)", async () => {
     const { requests } = await run([{ id: COUNTERPARTY, name: "Acme Supplies" }], () =>
       createInvoice({ actorId: null, invoice, document: null, via: "api", apiKeyId: API_KEY })

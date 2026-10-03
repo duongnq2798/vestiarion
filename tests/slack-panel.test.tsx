@@ -12,6 +12,7 @@ import SlackPanel from "@/components/SlackPanel";
 describe("SlackPanel", () => {
   const installed = {
     installed: true as const, teamName: "Acme HQ", channelName: "#finance", installedAt: "2026-10-03T08:00:00Z", decisionsLimitUsdc: null, youConnected: false,
+    canReadFiles: true,
   };
 
   it("offers Add to Slack to an owner or admin, through the install route", () => {
@@ -42,6 +43,22 @@ describe("SlackPanel", () => {
     expect(markup).toContain("up to 5 USDC");
     expect(markup).toContain("Your Slack account is connected");
     expect(markup).toContain("Disconnect my account");
+  });
+
+  it("offers an owner or admin to connect Slack again, through the install route, and nobody else", () => {
+    const manager = renderToStaticMarkup(<SlackPanel orgSlug="acme" view={installed} canManage canAdminister={false} notice={null} />);
+    expect(manager).toContain("Reconnect Slack");
+    expect(manager).toContain('href="/api/slack/install?org=acme"');
+    const member = renderToStaticMarkup(<SlackPanel orgSlug="acme" view={installed} canManage={false} canAdminister={false} notice={null} />);
+    expect(member).not.toContain("Reconnect Slack");
+  });
+
+  it("says Slack must be connected again before an invoice can be added from it, until it may read files", () => {
+    const older = renderToStaticMarkup(<SlackPanel orgSlug="acme" view={{ ...installed, canReadFiles: false }} canManage canAdminister={false} notice={null} />);
+    expect(older).toContain("To add invoices from Slack, connect Slack again");
+    expect(renderToStaticMarkup(<SlackPanel orgSlug="acme" view={installed} canManage canAdminister={false} notice={null} />)).not.toContain(
+      "To add invoices from Slack, connect Slack again"
+    );
   });
 
   it("says how connecting went, from Slack's way back", () => {

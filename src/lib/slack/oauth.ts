@@ -13,14 +13,15 @@ import { newNonce, oauthState, readOAuthState } from "./state";
 
 /**
  * Connecting a workspace to Slack (Slack design S3). Starting: an owner or admin, signed in, is sent to Slack with the
- * app's two scopes and a signed state naming the workspace, the person, and a nonce also kept in an HttpOnly cookie in
+ * app's scopes and a signed state naming the workspace, the person, and a nonce also kept in an HttpOnly cookie in
  * their browser. Finishing: the state must be Vestiarion's, at most ten minutes old, carry the browser's own nonce, and
  * name the person signed in now, whose role is read again; only then is the code exchanged and the install saved, in
  * the workspace's scope. Every way back lands on Settings with the outcome in `?slack=`.
  */
 
 export const OAUTH_COOKIE = "vx_slack_oauth";
-const SCOPES = "commands,incoming-webhook";
+/** Answering /vestiarion, posting to the channel picked, and reading a file someone chooses with Add invoice to Vestiarion (S15). */
+export const SLACK_SCOPES = "commands,incoming-webhook,files:read";
 
 export interface OAuthDeps {
   settings: SlackSettings;
@@ -70,7 +71,7 @@ export async function startInstall(request: Request, deps: OAuthDeps): Promise<R
   const state = oauthState({ org: membership.orgId, user: user.id, nonce }, deps.keys ?? masterKeysFromEnv(), deps.now?.());
   const url = new URL("https://slack.com/oauth/v2/authorize");
   url.searchParams.set("client_id", deps.settings.clientId);
-  url.searchParams.set("scope", SCOPES);
+  url.searchParams.set("scope", SLACK_SCOPES);
   url.searchParams.set("redirect_uri", slackRedirectUri(deps.origin));
   url.searchParams.set("state", state);
   return redirect(url.toString(), cookie(nonce, 600));

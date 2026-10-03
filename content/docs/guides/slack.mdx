@@ -1,4 +1,4 @@
-Connect your workspace to Slack, and a channel your team picks gets what the agent decided, a minute after it decides. Each member connects their own Slack account to ask what is safe to spend or what waits, and to pause the agent. When an owner allows it, a payment the agent stopped can be approved and paid, rejected, or returned to the agent from its message in Slack, under every check Vestiarion makes in the console.
+Connect your workspace to Slack, and a channel your team picks gets what the agent decided, a minute after it decides. Each member connects their own Slack account to ask what is safe to spend or what waits, and to pause the agent. An owner or admin can add an invoice from a message in Slack. When an owner allows it, a payment the agent stopped can be approved and paid, rejected, or returned to the agent from its message in Slack, under every check Vestiarion makes in the console.
 
 ## 1. Connect Slack
 
@@ -6,7 +6,7 @@ An owner or admin connects Slack, once per workspace. Open **Settings** and find
 
 <Screenshot
   src="/docs/guides/slack-settings.png"
-  alt="The Slack section of Settings, connected to Acme HQ, with the agent's decisions going to #finance; under Your Slack account, the account is connected and a Disconnect my account button; under Deciding payments from Slack, payments up to 5 USDC may be decided from Slack, with the Limit (USDC) field and a Save button; at the bottom, Remove Slack."
+  alt="The Slack section of Settings, connected to Acme HQ, with the agent's decisions going to #finance; under Your Slack account, the account is connected and a Disconnect my account button; under Deciding payments from Slack, payments up to 5 USDC may be decided from Slack, with the Limit (USDC) field and a Save button; at the bottom, Reconnect Slack and Remove Slack."
   caption="The Slack section of Settings, as an owner sees it once Slack is connected and deciding from Slack is allowed up to 5 USDC."
 />
 
@@ -14,7 +14,7 @@ An owner or admin connects Slack, once per workspace. Open **Settings** and find
 2. Choose **Allow**. Slack sends you back to Settings, which says "Slack is connected. The agent's decisions now go to the channel you picked."
 3. The section now names the Slack workspace and the channel. The ledger records `slack_installed`, and your own Slack account is connected already.
 
-One Slack workspace serves one Vestiarion workspace. If Settings says "That Slack workspace is already connected to another Vestiarion workspace.", remove it from that one first. Anyone else sees "An owner or admin connects Slack." instead of the button.
+To pick another channel later, an owner or admin chooses **Reconnect Slack** in the same section; members stay connected, and the limit stays. One Slack workspace serves one Vestiarion workspace. If Settings says "That Slack workspace is already connected to another Vestiarion workspace.", remove it from that one first. Anyone else sees "An owner or admin connects Slack." instead of the button.
 
 ## 2. Connect your own Slack account
 
@@ -83,7 +83,21 @@ A button acts as you, with your role in the workspace as it is when you press it
 
 What you decide is rewritten into the message for the channel: "Approved and paid by" you, with the Arc testnet transaction, or "Rejected by", or "Returned to the agent by". A refusal is shown to you alone. In the ledger, the decision is the same `approval_paid`, `approval_rejected` or `approval_returned` entry the console writes, with `via: "slack"` and the id of your Slack link.
 
-## 6. Disconnect
+## 6. Add an invoice from Slack
+
+An owner or admin can add a payable from an invoice in Slack: a PDF, an `.eml` or `.txt` file of at most 4 MB attached to a message, or the invoice's text in the message itself.
+
+1. On the message, open **More actions** and choose **Add invoice to Vestiarion**.
+2. Vestiarion reads it the way **From a document** on AP / AR reads one, and answers you alone with every field it read, what to check, and The model's note: when there is one.
+3. Choose **Add, goods received** or **Add, not received yet** to add it, or **Cancel**, which answers "Not added."
+
+The payable is added exactly as one added on AP / AR: the ledger's `create_invoice` entry names you, and adds `via: "slack"`, the id of your Slack link and the hash of the document. The document itself is not kept. The agent usually decides within a minute, and its decision is posted to the channel like any other. A draft can be added once, within an hour; after that you are told "This draft was already used or has expired."
+
+When the invoice's vendor matches no counterparty in the workspace, or it has no amount or due date, Vestiarion says what is missing and links to AP / AR, where you can add it by hand. An approver or a viewer is told "Only an owner or admin can add invoices."
+
+Vestiarion reads only the message you chose it on, and Slack lets it open a file only in a channel it is in: for a file shared anywhere else, type `/invite @Vestiarion` in that channel first. If Slack was connected before this was possible, Vestiarion answers that it cannot open files in this Slack yet: an owner or admin chooses **Reconnect Slack** once, and Slack asks them to allow it.
+
+## 7. Disconnect
 
 - Your own account: type `/vestiarion disconnect` in Slack, or choose **Disconnect my account** in the **Slack** section. The ledger records `slack_member_disconnected`.
 - The whole workspace: an owner or admin chooses **Remove Slack**. Vestiarion removes the app from the Slack workspace, and every member's Slack link goes with it. Removing the app in Slack does the same. The ledger records `slack_uninstalled`.
@@ -91,8 +105,8 @@ What you decide is rewritten into the message for the channel: "Approved and pai
 
 ## What Slack receives
 
-Workspace and counterparty names, amounts, the agent's reasons, links to Vestiarion and to the Arc testnet explorer. A wallet address only shortened to its first and last four characters; never an email, a key or a full address. The app reads no message in your Slack: it asks for two permissions only, to answer `/vestiarion` and to post to the channel you picked.
+Workspace and counterparty names, amounts, the agent's reasons, links to Vestiarion and to the Arc testnet explorer. A wallet address only shortened to its first and last four characters; never an email, a key or a full address. The app reads no message in your Slack but the one someone chooses **Add invoice to Vestiarion** on: it asks for three permissions, to answer `/vestiarion`, to post to the channel you picked, and to read a file someone chooses.
 
 ## For the person who runs the deployment
 
-Create the Slack app from `integrations/slack/manifest.yaml` (api.slack.com, **Create New App**, **From a manifest**), and set `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET` and `SLACK_SIGNING_SECRET`. Without all three, the **Slack** section does not show and the Slack routes answer 404; every request from Slack is checked against the signing secret. Slack checks the events URL when it is saved, so add **Event Subscriptions** once the deployment serves it. To let other Slack workspaces connect, turn on public distribution under **Manage Distribution**.
+Create the Slack app from `integrations/slack/manifest.yaml` (api.slack.com, **Create New App**, **From a manifest**), and set `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET` and `SLACK_SIGNING_SECRET`. Without all three, the **Slack** section does not show and the Slack routes answer 404; every request from Slack is checked against the signing secret. Slack checks the events URL when it is saved, so add **Event Subscriptions** once the deployment serves it. To let other Slack workspaces connect, turn on public distribution under **Manage Distribution**. An app created before **Add invoice to Vestiarion** existed needs the manifest saved again on its **App Manifest** page, and each workspace connected again with **Reconnect Slack**.
