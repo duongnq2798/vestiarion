@@ -10,7 +10,7 @@ import { ErrorTable } from "@/components/docs/ErrorTable";
 import { CODE_CLASS, LINK_CLASS, Paragraphs } from "@/components/docs/InlineText";
 import { ParamTable } from "@/components/docs/ParamTable";
 import { SchemaTree } from "@/components/docs/SchemaTree";
-import TryIt from "@/components/docs/TryIt";
+import { TryItSection } from "@/components/docs/TryItSection";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { jsonSchema, OPERATIONS, operationById } from "@/lib/api/openapi";
 import { loadNotes } from "@/lib/docs/content";
@@ -56,9 +56,10 @@ function Section({ section }: { section: ReferenceSection }) {
 
 /**
  * The reference for one `/api/v1` operation: the request line and what it
- * does, its parameters, request samples, the response (a real captured
- * example and the schema's fields), its errors, and notes where
- * `content/docs/api/<id>.mdx` adds something beyond the schema.
+ * does, its parameters, a write's request body (an example and the schema's
+ * fields), request samples, the response (an example and the schema's
+ * fields), its errors, and notes where `content/docs/api/<id>.mdx` adds
+ * something beyond the schema.
  */
 export default async function ApiReferencePage({ params }: Props) {
   const op = operationById((await params).operation);
@@ -68,7 +69,7 @@ export default async function ApiReferencePage({ params }: Props) {
 
   const notes = await loadNotes(op.id);
   // The fixed sections, then the notes' own headings: the table of contents, the anchors and the link checker agree on them.
-  const headings = referenceHeadings(notes?.source ?? null);
+  const headings = referenceHeadings(notes?.source ?? null, { body: op.requestBody !== undefined });
 
   return (
     <DocsPage slug={slug} section={found.section} title={op.summary} headings={headings}>
@@ -79,21 +80,36 @@ export default async function ApiReferencePage({ params }: Props) {
         <Link href="/docs/get-started/authentication" className={LINK_CLASS}>
           workspace API key
         </Link>{" "}
-        as <code className={CODE_CLASS}>Authorization: Bearer …</code>.
+        {op.scope === "write" ? "with read and write access " : ""}as <code className={CODE_CLASS}>Authorization: Bearer …</code>.
+        {op.scope === "write" && (
+          <>
+            {" "}A read-only key gets <code className={CODE_CLASS}>403</code>.
+          </>
+        )}
       </p>
 
       <Section section="parameters" />
       <ParamTable params={op.params} />
 
+      {op.requestBody && (
+        <>
+          <Section section="body" />
+          <Eyebrow className="block">Example</Eyebrow>
+          <CodeBlock code={JSON.stringify(op.requestExample ?? {}, null, 2)} lang="json" label="application/json" className="mt-2" />
+          <Eyebrow className="mt-8 block">Fields</Eyebrow>
+          <SchemaTree nodes={schemaTree(jsonSchema(op.requestBody))} className="mt-2" />
+        </>
+      )}
+
       <Section section="tryIt" />
-      <TryIt op={{ id: op.id, path: op.path, params: op.params }} />
+      <TryItSection op={op} />
 
       <Section section="samples" />
       <CodeSamples samples={sampleRequest(op, publicOrigin())} />
 
       <Section section="response" />
       <Eyebrow className="block">Example</Eyebrow>
-      <CodeBlock code={JSON.stringify(op.example, null, 2)} lang="json" label="200 · application/json" className="mt-2" />
+      <CodeBlock code={JSON.stringify(op.example, null, 2)} lang="json" label={`${op.status} · application/json`} className="mt-2" />
       <Eyebrow className="mt-8 block">Fields</Eyebrow>
       <SchemaTree nodes={schemaTree(jsonSchema(op.response))} className="mt-2" />
 

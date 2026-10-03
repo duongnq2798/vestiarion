@@ -6,8 +6,10 @@ import { callOperation } from "@/lib/mcp/call";
 import { MCP_TOOLS } from "@/lib/mcp/tools";
 
 /**
- * The remote MCP server: the `/api/v1` read operations as tools an AI agent
- * can call (docs/superpowers/specs/2026-09-30-mcp-server-design.md, M1–M4).
+ * The remote MCP server: the `/api/v1` operations as tools an AI agent can
+ * call (docs/superpowers/specs/2026-09-30-mcp-server-design.md, M1–M4). Any
+ * key may connect; a write tool's route answers a read-only key with `403`,
+ * which the agent receives as a tool error (write API R9).
  *
  * A request authenticates exactly as a `/api/v1` request does, with a
  * workspace API key in the `Authorization` header, and nowhere else: not the

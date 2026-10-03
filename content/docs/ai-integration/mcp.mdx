@@ -1,6 +1,6 @@
 Vestiarion runs a remote [MCP](https://modelcontextprotocol.io) server. Connect an AI agent to it with a workspace API key, and the agent can answer questions from your workspace's own records: which payments are held and why, whether the ledger is intact, what is due to contractors.
 
-Each tool is one of the API's read operations. A tool call runs that operation with your key and returns its JSON exactly as the API does. There are no write tools: an agent connected here can read and explain, and nothing more.
+Each tool is one of the API's operations. A tool call runs that operation with your key and returns its JSON exactly as the API does. With a read-only key, an agent connected here can read and explain, and nothing more. With a [read-and-write key](/docs/get-started/authentication#scopes), it can also add counterparties and invoices, which the agent in Vestiarion then decides as it decides any other. No tool approves or pays.
 
 ## The server
 
@@ -31,14 +31,14 @@ Every tool call reads the key's own workspace and no other. Asking `get_counterp
 
 ## Tools
 
-One tool per [API operation](/docs/api). Its name is the operation's id in snake case, its arguments are the operation's parameters, with their types, allowed values and bounds, and its description, which is what the agent reads, is the operation's summary and description from its reference page. Every tool is marked read-only and idempotent.
+One tool per [API operation](/docs/api). Its name is the operation's id in snake case, its arguments are the operation's parameters, or for a write the fields of its request body and an optional `idempotencyKey`, with their types, allowed values and bounds, and its description, which is what the agent reads, is the operation's summary and description from its reference page. A read's tool is marked read-only and idempotent. The two write tools, `create_counterparty` and `create_invoice`, are marked as adding records: not read-only, not destructive, and not idempotent, since a repeat adds another record unless it passes the same `idempotencyKey`.
 
 <McpToolTable />
 
 What a call returns:
 
 - **A success** is the API's JSON, as text and as structured content.
-- **An API error** is a tool error (`isError`) whose text is the API's error body, such as a `400 invalid_request` for a cursor from another endpoint, or a `404 not_found` for an unknown id. The agent reads the message and corrects its call. The error codes are on [Errors](/docs/get-started/errors).
+- **An API error** is a tool error (`isError`) whose text is the API's error body, such as a `400 invalid_request` for a cursor from another endpoint, or a `404 not_found` for an unknown id. The agent reads the message and corrects its call. A read-only key calling a write tool gets the API's `403 forbidden` the same way. The error codes are on [Errors](/docs/get-started/errors).
 - **A collection** is one page, 50 items unless the agent passes `limit`, up to 200. The agent passes `page.nextCursor` back as `cursor` for the next page, as described in [Pagination](/docs/get-started/pagination).
 - **Nothing is cut.** A tool returns the whole response, `get_insights` included, as the API documents it.
 
@@ -130,8 +130,9 @@ Once the server is connected, ask in plain language. The agent picks the tools:
 - "Which counterparties are high risk, and what did their latest screening find?" uses `list_counterparties` with `riskLevel: "high"`, then `get_counterparty`.
 - "How much do we hold in reserve, and what does the latest liquidity forecast say?" uses `get_treasury`.
 - "Are payments on this workspace live or simulated?" uses `get_status`.
+- With a read-and-write key, "Add Quill Studio's invoice for 420 USDC against PO-4012, due October 31; the work was delivered" uses `list_counterparties` to find Quill Studio, then `create_invoice`.
 
 ## What it does not do
 
-- **It does not write.** Approving or rejecting a payment, pausing the agent, and managing members, API keys or webhooks are a person's decisions, made in the console. No tool can make them.
+- **It does not decide.** Approving or rejecting a payment, confirming an address, pausing the agent, and managing members, API keys or webhooks are a person's decisions, made in the console. No tool can make them, and the two write tools only add records.
 - **It has no OAuth.** The server authenticates with a key in a header and has no authorization server, so it cannot be added as a claude.ai web connector, which needs OAuth. Use a client that sends a header, like the ones above.

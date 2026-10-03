@@ -1,11 +1,11 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import type { z } from "zod";
 import type { CounterpartyDetailPayload } from "@/app/api/v1/counterparties/[id]/route";
-import type { InvoicePayload } from "@/app/api/v1/invoices/route";
 import type { LedgerEntryPayload } from "@/app/api/v1/ledger/route";
 import type { StatusPayload } from "@/app/api/v1/status/route";
 import type { ApiError, ApiPage } from "@/lib/api/contract";
 import type { CounterpartyPayload, ScreeningHistoryPayload } from "@/lib/api/counterparties";
+import type { InvoicePayload } from "@/lib/api/invoices";
 import type { MilestonePayload } from "@/lib/api/milestones";
 import type { TreasuryPayload } from "@/lib/api/treasury";
 import type {
@@ -65,5 +65,16 @@ describe("every documented example is a real response of the current shape", () 
     // carries a field the payload has since dropped would parse, and then
     // document something the API no longer returns.
     expect(op.response.parse(op.example)).toEqual(op.example);
+  });
+});
+
+describe("each write operation's request example", () => {
+  it("is a body its route accepts, field for field (write API R2)", () => {
+    const writes = OPERATIONS.filter((op) => op.method === "post");
+    expect(writes.map((op) => op.id).sort()).toEqual(["create-counterparty", "create-invoice"]);
+    for (const op of writes) {
+      expect(op.requestBody, op.id).toBeDefined();
+      expect(op.requestBody!.parse(op.requestExample), op.id).toEqual(op.requestExample);
+    }
   });
 });

@@ -6,12 +6,16 @@ A collection returns 1 to 200 items per page. `limit` defaults to 50, and a larg
 
 ## Rate limits
 
-There is no rate limit per key today, and no `/api/v1` endpoint returns `429` or `503`. Still, write your client to back off on a `429` or a `503`: `rate_limited` and `unavailable` are defined [error codes](/docs/get-started/errors), and a client that handles them keeps working if a limit is introduced.
+Reads have no rate limit. Writes are limited to 30 a minute for each key, counted on each server instance, so a burst can now and then get a little past it. Over the limit, a write answers `429 rate_limited` with `Retry-After: 60`. No endpoint returns `503` today, but `unavailable` is a defined [error code](/docs/get-started/errors): write your client to back off on both, and it keeps working if a limit is added to reads.
 
 - On a `429`, wait at least as long as the `Retry-After` header says, in seconds, before you try again.
 - On a `503`, retry with exponential backoff.
 
 Poll no more often than you need to. To react to each new ledger entry, [webhooks](/docs/webhooks) push it to you, so you do not need to poll the ledger quickly.
+
+## Request bodies
+
+A write's body is one JSON object of at most 64 KB. A body that is larger, is not JSON, or has a field the operation does not take answers `400 invalid_request`, and nothing is written. To make a retry safe, send an `Idempotency-Key`: [Retrying safely](/docs/guides/api-invoices#retrying-safely) explains it.
 
 ## Keys and endpoints per workspace
 

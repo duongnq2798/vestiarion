@@ -3,6 +3,8 @@ import type { ApiErrorCode } from "@/lib/api/contract";
 import { COUNTERPARTY_RISK_LEVELS, COUNTERPARTY_ROLES } from "@/lib/api/counterparties";
 import { INVOICE_DIRECTIONS } from "@/lib/api/invoices";
 import { MILESTONE_STATUSES } from "@/lib/api/milestones";
+import { INVOICE_CURRENCIES } from "@/lib/intake-validation";
+import { PAYEE_CHAIN_IDS } from "@/lib/payee-chains";
 
 /**
  * A Zod schema for every payload `/api/v1` returns.
@@ -31,7 +33,7 @@ export const ApiErrorSchema = z
   .object({
     error: z.object({
       code: z
-        .enum(["unauthorized", "forbidden", "not_found", "invalid_request", "rate_limited", "unavailable", "internal"] satisfies ApiErrorCode[])
+        .enum(["unauthorized", "forbidden", "not_found", "invalid_request", "conflict", "rate_limited", "unavailable", "internal"] satisfies ApiErrorCode[])
         .describe("One of a closed set, so a client can branch on it without parsing the message."),
       message: z.string().describe("A human-readable explanation. Never carries internal detail."),
     }),
@@ -371,3 +373,69 @@ export const InsightsSchema = z
   .describe(
     "The telemetry behind the Insights charts: the most recent transfers, cycle runs, snapshots, treasury moves and screenings, each oldest first."
   );
+
+// ---------------------------------------------------------------------------
+// Request bodies (write API R2). Unknown fields are refused rather than ignored, as unknown filter values are: a typo
+// must not quietly drop a field. The console form's own schema then applies its rules on top.
+
+/** A 0x address of 40 hex characters. */
+export const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
+
+export const CreateCounterpartyBodySchema = z
+  .object({
+    name: z.string().describe("2 to 160 characters."),
+    role: z.enum(COUNTERPARTY_ROLES).describe("`vendor` or `contractor`, whom the business pays, or `client`, who pays the business."),
+    address: z
+      .string()
+      .regex(EVM_ADDRESS, "Use a 0x address of 40 hex characters")
+      .optional()
+      .describe(
+        "Where the agent pays it. An address added through the API waits for a person in the workspace to confirm it on Counterparties; until then the agent pays nothing to it."
+      ),
+    chain: z
+      .enum(PAYEE_CHAIN_IDS)
+      .optional()
+      .describe("The chain the address receives on. Defaults to `ARC-TESTNET`; only a vendor can be paid on another chain."),
+    jurisdiction: z.string().optional().describe("Where it is based, up to 80 characters; screening uses it."),
+    paymentLimit: z
+      .union([z.string(), z.number()])
+      .optional()
+      .describe("The most the agent pays it in one payment, in USDC, with up to 6 decimal places. Required for a vendor or a contractor."),
+    noticeEmail: z.string().optional().describe("Where it is emailed once a payment to it is confirmed."),
+  })
+  .strict()
+  .describe("A counterparty to add. It is screened as one added in the console.");
+
+export const CreateInvoiceBodySchema = z
+  .object({
+    direction: z
+      .enum(INVOICE_DIRECTIONS)
+      .optional()
+      .describe("`payable`, a bill the business pays, which is the default, or `receivable`, one it is owed."),
+    counterpartyId: z
+      .string()
+      .describe("The counterparty's `id`, from `GET /api/v1/counterparties` or from the answer that added it."),
+    amount: z
+      .union([z.string(), z.number()])
+      .describe("What it bills, in `currency`, with at most 6 decimal places. A decimal string such as `\"1250.50\"` keeps it exact; a number is read the same way."),
+    currency: z.enum(INVOICE_CURRENCIES).optional().describe("`USDC`, the default, or `EURC`."),
+    dueDate: z.string().describe("The day it is due, as `YYYY-MM-DD`."),
+    memo: z.string().optional().describe("What it is for, up to 280 characters."),
+    poReference: z.string().optional().describe("The purchase order it bills against, up to 100 characters."),
+    goodsReceived: z
+      .boolean()
+      .optional()
+      .describe("Whether what it bills for has arrived. Defaults to `false`. Without it, or without `poReference`, the agent asks for the missing detail instead of paying."),
+    earlyPayDiscount: z
+      .object({
+        percent: z
+          .union([z.string(), z.number()])
+          .describe("The percent off, greater than 0 and less than 100, with at most 2 decimal places."),
+        deadline: z.string().describe("The last day it applies, as `YYYY-MM-DD`, on or before `dueDate`."),
+      })
+      .strict()
+      .optional()
+      .describe("A discount for paying by `deadline`. The agent weighs it against what the cash would earn in the reserve until `dueDate`."),
+  })
+  .strict()
+  .describe("An invoice to add. The agent decides a payable as one typed in, with every guardrail, usually within a minute.");

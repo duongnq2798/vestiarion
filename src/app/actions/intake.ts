@@ -7,7 +7,6 @@ import { z } from "zod";
 import { raiseCycleEvent } from "@/lib/agent/cycle-soon";
 import { authorize } from "@/lib/auth/authorize";
 import { revalidateOrgPages } from "@/lib/auth/revalidate";
-import { screenCounterparty } from "@/lib/compliance";
 import { db, unwrap } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
 import {
@@ -21,7 +20,7 @@ import {
   noticeEmailSchema,
   type InvoiceField,
 } from "@/lib/intake-validation";
-import { changeCounterpartyNoticeEmail, maskEmail } from "@/lib/payment-notices";
+import { changeCounterpartyNoticeEmail } from "@/lib/payment-notices";
 import {
   changeCounterpartyAddress,
   confirmCounterpartyAddress,
@@ -29,6 +28,7 @@ import {
 } from "@/lib/counterparty-address";
 import { changeCounterpartyLimit, CounterpartyLimitError } from "@/lib/counterparty-limit";
 import { documentProvenance } from "@/lib/invoice-document/provenance";
+import { createCounterparty } from "@/lib/counterparties/create";
 import { createInvoice } from "@/lib/invoices/create";
 import { appendLedgerEntry } from "@/lib/ledger";
 
@@ -64,61 +64,24 @@ export async function createCounterpartyAction(
     });
     if (!parsed.success) return { ok: false, message: firstZodMessage(parsed.error) };
 
-    const input = parsed.data;
     try {
-      const counterparty = unwrap(
-        await db()
-          .from("counterparties")
-          .insert({
-            name: input.name,
-            role: input.role,
-            address: input.address,
-            chain: input.chain,
-            jurisdiction: input.jurisdiction,
-            baseline_payment_limit: input.paymentLimit || null,
-            payment_limit: null,
-            notice_email: input.noticeEmail,
-          })
-          .select("id, name")
-          .single<{ id: string; name: string }>()
-      );
-
-      await appendLedgerEntry({
-        actor: "human",
-        domain: "compliance",
-        action: "create_counterparty",
-        summary: `Added ${counterparty.name} as a ${input.role}`,
-        detail: {
-          by: auth.user.id,
-          counterpartyId: counterparty.id,
-          role: input.role,
-          chain: input.chain,
-          address: input.address,
-          jurisdiction: input.jurisdiction,
-          baselinePaymentLimit: input.paymentLimit || null,
-          // Masked: who is told of a payment, not their whole address (payment notices R1).
-          noticeEmail: input.noticeEmail ? maskEmail(input.noticeEmail) : null,
-        },
-      });
-
-      try {
-        const screening = await screenCounterparty(counterparty.id);
-        revalidateOrgPages();
+      // The one way a counterparty is added, shared with the write API (write API R2).
+      const counterparty = await createCounterparty({ actorId: auth.user.id, counterparty: parsed.data });
+      revalidateOrgPages();
+      if ("riskLevel" in counterparty.screening) {
         return {
           ok: true,
           created: 1,
-          verdict: screening.riskLevel,
-          message: `${counterparty.name} added and screened: ${screening.riskLevel} risk.`,
-        };
-      } catch (error) {
-        revalidateOrgPages();
-        return {
-          ok: true,
-          created: 1,
-          verdict: "incomplete",
-          message: `${counterparty.name} was added, but screening is incomplete: ${error instanceof Error ? error.message : "provider unavailable"}`,
+          verdict: counterparty.screening.riskLevel,
+          message: `${counterparty.name} added and screened: ${counterparty.screening.riskLevel} risk.`,
         };
       }
+      return {
+        ok: true,
+        created: 1,
+        verdict: "incomplete",
+        message: `${counterparty.name} was added, but screening is incomplete: ${counterparty.screening.error}`,
+      };
     } catch (error) {
       console.error("counterparty intake failed", error);
       return { ok: false, message: error instanceof Error ? error.message : "Counterparty could not be added." };

@@ -51,7 +51,7 @@ const config = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase
 
 const ORG_A = "0a0a0a0a-0000-4000-8000-00000000000a";
 const ORG_B = "0b0b0b0b-0000-4000-8000-00000000000b";
-const KEY_A: AuthenticatedKey = { keyId: "1a1a1a1a-0000-4000-8000-00000000001a", orgId: ORG_A, scopes: ["read"] };
+const KEY_A: AuthenticatedKey = { keyId: "1a1a1a1a-0000-4000-8000-00000000001a", orgId: ORG_A, scopes: ["read"], createdBy: null };
 /** Well formed; `authenticateApiKey` is told which key it is in each test that uses it. */
 const PRESENTED = `vxk_abcdefgh_${"A".repeat(43)}`;
 const AUTHORIZATION = `Bearer ${PRESENTED}`;
@@ -378,15 +378,20 @@ describe("the MCP protocol, with a valid key", () => {
   });
 
   describe.each(ERAS)("a %s client", (_version, request) => {
-    it("lists the nine tools, every one read-only", async () => {
+    it("lists the eleven tools: the nine reads read-only, the two writes as adding records (write API R9)", async () => {
       const fake = fakeSupabase(database());
       const response = await post(fake, request(2, "tools/list"));
       expect(response.status).toBe(200);
       const tools = (await reply(response)).result?.tools as Array<{ name: string; title: string; inputSchema: { type: string }; annotations: Record<string, unknown> }>;
-      expect(tools).toHaveLength(9);
+      expect(tools).toHaveLength(11);
       expect(tools.map((tool) => tool.name).sort()).toEqual(MCP_TOOLS.map((tool) => tool.name).sort());
       for (const tool of tools) {
-        expect(tool.annotations).toEqual({ readOnlyHint: true, openWorldHint: false, idempotentHint: true });
+        const write = tool.name === "create_counterparty" || tool.name === "create_invoice";
+        expect(tool.annotations, tool.name).toEqual(
+          write
+            ? { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }
+            : { readOnlyHint: true, openWorldHint: false, idempotentHint: true }
+        );
         expect(tool.inputSchema.type).toBe("object");
         expect(tool.title).toBe(MCP_TOOLS.find((known) => known.name === tool.name)?.title);
       }

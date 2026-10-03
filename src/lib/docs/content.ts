@@ -60,6 +60,7 @@ export const PAGE_LOADERS: Record<string, () => Promise<MdxModule>> = {
   "guides/pay-a-contractor": () => import("../../../content/docs/guides/pay-a-contractor.mdx"),
   "guides/get-paid": () => import("../../../content/docs/guides/get-paid.mdx"),
   "guides/telegram": () => import("../../../content/docs/guides/telegram.mdx"),
+  "guides/api-invoices": () => import("../../../content/docs/guides/api-invoices.mdx"),
   "guides/audit-export": () => import("../../../content/docs/guides/audit-export.mdx"),
   "research/model-vs-policy": () => import("../../../content/docs/research/model-vs-policy.mdx"),
   "get-started/quickstart": () => import("../../../content/docs/get-started/quickstart.mdx"),
@@ -106,7 +107,9 @@ export function notesSource(id: string): string | null {
 
 /** The `##` and `###` headings a published page renders, with their anchors: its MDX's, or a reference page's sections and notes. */
 export function pageHeadings(slug: string): Heading[] {
-  return isReferenceSlug(slug) ? referenceHeadings(notesSource(slug.slice("api/".length))) : slugifyHeadings(readSource(slug));
+  if (!isReferenceSlug(slug)) return slugifyHeadings(readSource(slug));
+  const id = slug.slice("api/".length);
+  return referenceHeadings(notesSource(id), { body: operationById(id)?.requestBody !== undefined });
 }
 
 /** The compiled notes for an operation's reference page, and their source; null when it has none. */

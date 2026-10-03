@@ -1,7 +1,7 @@
 import { after, NextResponse } from "next/server";
 import { withOrg } from "../dal/scope";
 import { authenticateApiKey, touchApiKeyUsed, type ApiKeyScope, type AuthenticatedKey } from "../platform/api-keys";
-import { takeAgentCycleToken } from "../rate-limit";
+import { takeAgentCycleToken, takeApiWriteToken } from "../rate-limit";
 import { STATUS_FOR, type ApiError, type ApiErrorCode } from "./contract";
 
 /**
@@ -26,7 +26,7 @@ export function apiError(code: ApiErrorCode, message: string, headers?: HeadersI
   return NextResponse.json(body, { status: STATUS_FOR[code], headers });
 }
 
-const INTERNAL_MESSAGE = "The request could not be completed.";
+export const INTERNAL_MESSAGE = "The request could not be completed.";
 
 function clientIp(request: Request): string {
   return (
@@ -78,6 +78,11 @@ export async function guardApiRequest(
 
   if (!key.scopes.includes(scope)) {
     return { denied: apiError("forbidden", "This key cannot do that.") };
+  }
+
+  // Writes are counted per key (write API R6): reads are not limited, as the docs say.
+  if (scope === "write" && !takeApiWriteToken(key.keyId)) {
+    return { denied: apiError("rate_limited", "Too many writes from this key. Try again in a minute.", { "Retry-After": "60" }) };
   }
 
   if (rateLimited && !takeAgentCycleToken(clientIp(request))) {

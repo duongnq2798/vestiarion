@@ -432,16 +432,16 @@ the cursor past everything read: a failed send keeps it for the next cycle,
 a 403 disconnects the chat, and a message Telegram refuses to parse is sent
 once as plain text and then passed.
 
-## Read API
+## API
 
-The versioned read boundary lives under `src/app/api/v1/`:
+The versioned API boundary lives under `src/app/api/v1/`:
 
 ```text
 status/route.ts                  safe capability and configuration summary
 ledger/route.ts                  append-only, ascending audit stream
 ledger/verify/route.ts           guarded hash-chain verification
-invoices/route.ts                newest-first invoice collection
-counterparties/route.ts          newest-first counterparty collection
+invoices/route.ts                newest-first invoice collection; POST adds one
+counterparties/route.ts          newest-first counterparty collection; POST adds one
 counterparties/[id]/route.ts     counterparty plus screening history
 milestones/route.ts              newest-first milestone collection
 treasury/route.ts                balances, obligations, forecast, actions
@@ -449,9 +449,10 @@ insights/route.ts                unchanged insights telemetry read model
 ```
 
 `src/lib/api/contract.ts` owns the success/error envelopes, error codes,
-opaque cursors, page-size policy, and `limit + 1` pagination. Every v1 route
-passes through `guardApiRequest` (`src/lib/api/guard.ts`) with the `read`
-scope: it authenticates the bearer token as a workspace API key
+opaque cursors, page-size policy, and `limit + 1` pagination. Every v1 handler
+passes through `guardApiRequest` (`src/lib/api/guard.ts`) with its scope,
+`read` for a `GET` and `write` for a `POST` (`tests/access-gates.test.ts`
+holds each handler to it): it authenticates the bearer token as a workspace API key
 (`src/lib/platform/api-keys.ts`, migration `0027_api_keys.sql`) and, on
 success, `handleApiRequest` runs the route inside `withOrg(key.orgId)`, so a
 key serves exactly one workspace's data. A missing, malformed, unknown, or
@@ -460,8 +461,29 @@ answers `403 forbidden`. `AGENT_API_TOKEN` does not authenticate this surface
 — it remains only the cron secret for `/api/agent/tick`,
 `/api/platform/cleanup`, and `/api/agent/reset`. Resource-specific pure
 mapping and validation live in `src/lib/api/counterparties.ts`,
-`src/lib/api/milestones.ts`, and `src/lib/api/treasury.ts` so null preservation
-and chain-hash rules can be tested without a database.
+`src/lib/api/invoices.ts`, `src/lib/api/milestones.ts`, and
+`src/lib/api/treasury.ts` so null preservation and chain-hash rules can be
+tested without a database.
+
+The two writes add records and nothing more. A key with the `write` scope
+(migration `0066_api_write.sql`) posts a JSON body that `src/lib/api/write.ts`
+reads (one object, at most 64 KB) and two schemas check: the strict body
+schema in `src/lib/api/schemas.ts`, which refuses a field it does not take, then
+the console form's own schema. The record is added through the same
+`createCounterparty` (`src/lib/counterparties/create.ts`) and `createInvoice`
+(`src/lib/invoices/create.ts`) the console uses, as the key's issuer's, with
+`via: "api"` and `apiKeyId` in the ledger entry. An address added this way is
+stored as an unconfirmed change, so the agent holds payments to it until a
+person confirms it. A payable starts a cycle with `runCycleSoon`. Writes are
+counted per key (`takeApiWriteToken`, 30 a minute) after the scope check.
+`withIdempotency` (`src/lib/api/idempotency.ts`) claims an
+`Idempotency-Key` in `api_idempotency`, a platform table only the service role
+reaches, after the body validates: the first outcome is kept for 24 hours
+and replayed with `Idempotent-Replayed: true`, a different body or a request
+still in flight answers `409 conflict`, and a `5xx` releases the claim so a
+retry runs again. A claim left without an outcome for 10 minutes
+(`IN_FLIGHT_TIMEOUT_MS`, longer than any function runs) is taken over by the
+next request with that key.
 
 Collections intended for human browsing are newest first and use
 `created_at + id` as a stable cursor. The ledger is the exception: its `seq`
@@ -473,7 +495,7 @@ page; it is member-only and takes `?org=<slug>` (see the
 
 ## Webhooks
 
-Where the read API is pulled, webhooks push: a workspace registers its own
+Where the API is pulled, webhooks push: a workspace registers its own
 HTTPS endpoints (`webhooks.manage`, above) and each new `ledger_entries` row
 reaches them without polling. An `after insert` trigger on `ledger_entries`
 (migration `0028`) enqueues one `webhook_deliveries` row per active endpoint,

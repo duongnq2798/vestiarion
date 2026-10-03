@@ -113,7 +113,7 @@ export interface InvoiceDiscount {
  *
  * `/api/v1/invoices` reads the same two columns the same way, for
  * `earlyPayDiscount` (`invoiceDiscountOf` in
- * src/app/api/v1/invoices/route.ts); a change to one belongs in the other.
+ * src/lib/api/invoices.ts); a change to one belongs in the other.
  */
 export function invoiceDiscount(row: {
   early_pay_discount_pct?: string | number | null;

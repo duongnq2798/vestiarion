@@ -71,13 +71,28 @@ describe("pageMarkdown", () => {
     expect(md).not.toContain("## Try it");
   });
 
+  it("writes a write's request body, its sample with the body, and its 201 (write API R8)", () => {
+    const md = pageMarkdown("api/create-invoice", ORIGIN)!;
+    expect(md).toMatch(/^# Add an invoice\n\n`POST \/api\/v1\/invoices`\n/);
+    expect(md).toContain("A read-only key gets `403`.");
+    expect(md).toMatch(/\| `Idempotency-Key` \| header \| string \| Optional \|/);
+    expect(md).toContain("## Request body\n\nExample, `application/json`:\n\n```json\n{\n  \"counterpartyId\"");
+    expect(md).toContain("- `earlyPayDiscount` (object, optional)");
+    expect(md).toContain("  - `deadline` (string, required)");
+    expect(md).toContain("## Code samples\n\n```bash\ncurl \"https://x.test/api/v1/invoices\" \\\n  -X POST \\\n");
+    expect(md).toContain("Example, `201` `application/json`:");
+    expect(md).toContain("| 409 | `conflict` |");
+    expect(md.indexOf("## Request body")).toBeLessThan(md.indexOf("## Code samples"));
+    expect(md).not.toContain("## Try it");
+  });
+
   it("says so when an operation takes no parameters", () => {
     expect(pageMarkdown("api/get-status", ORIGIN)).toContain("## Parameters\n\nNo parameters.\n");
   });
 
   it("writes the endpoint table as Markdown tables linking each reference page", () => {
     const md = pageMarkdown("api", ORIGIN)!;
-    for (const op of OPERATIONS) expect(md).toContain(`| [\`GET ${op.path}\`](${ORIGIN}/docs/api/${op.id}) | ${op.summary} |`);
+    for (const op of OPERATIONS) expect(md).toContain(`| [\`${op.method.toUpperCase()} ${op.path}\`](${ORIGIN}/docs/api/${op.id}) | ${op.summary} |`);
   });
 });
 
@@ -89,7 +104,7 @@ describe("the MCP page's Markdown", () => {
       const op = OPERATIONS.find((candidate) => candidate.id === tool.operationId)!;
       expect(md).toContain(`| \`${tool.name}\``);
       // What it answers is the summary; the full description stays on the reference page.
-      expect(md).toContain(` | ${op.summary} | [\`GET ${op.path}\`](${ORIGIN}/docs/api/${op.id}) |`);
+      expect(md).toContain(` | ${op.summary} | [\`${op.method.toUpperCase()} ${op.path}\`](${ORIGIN}/docs/api/${op.id}) |`);
     }
     expect(md).not.toContain("Replays signatures, body hashes and hash-chain continuity");
     expect(md).toContain("https://www.vestiarion.xyz/api/mcp");
