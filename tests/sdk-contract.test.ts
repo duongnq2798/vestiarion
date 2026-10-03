@@ -78,6 +78,7 @@ const STORED = {
 
 function workspace() {
   const fake = fakeSupabase((sent: RecordedRequest) => {
+    if (sent.path === "/rest/v1/memberships") return { body: [{ role: "admin" }] };
     if (sent.path === "/rest/v1/orgs") return { body: orgs.orgRow(ORG) };
     if (sent.path === "/rest/v1/counterparties" && sent.params.get("id") === `eq.${COUNTERPARTY}`) return { body: [{ id: COUNTERPARTY, name: "API Test Vendor" }] };
     if (sent.path === "/rest/v1/invoices" && sent.method === "POST") return { body: { id: INVOICE } };

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db, unwrap } from "@/lib/dal";
-import { apiError, guardApiRequest, handleApiRequest } from "@/lib/api/guard";
+import { apiError, guardApiRequest, guardApiWrite, handleApiRequest } from "@/lib/api/guard";
 import {
   decodeCursor,
   isTimestampCursor,
@@ -83,10 +83,11 @@ export async function GET(request: Request) {
  * Adds a counterparty (docs/superpowers/specs/2026-10-03-write-api-design.md R2, R3): a read-and-write key's request,
  * checked against the console form's own rules, added through the same `createCounterparty` and screened. An address it
  * sets waits for a person to confirm it before the agent pays to it. The body is checked before an `Idempotency-Key` is
- * claimed, so a body that fails is never remembered (R5).
+ * claimed, so a body that fails is never remembered (R5). The guard has read the issuer, who must still add records
+ * (part 2, W5).
  */
 export async function POST(request: Request) {
-  const guard = await guardApiRequest(request, { scope: "write" });
+  const guard = await guardApiWrite(request);
   if ("denied" in guard) return guard.denied;
   const body = await readJsonBody(request);
   if ("denied" in body) return body.denied;
@@ -106,7 +107,7 @@ export async function POST(request: Request) {
 
   return withIdempotency(request, guard.key, body.raw, () =>
     handleApiRequest("POST /api/v1/counterparties", guard.key, async () => {
-      const created = await createCounterparty({ actorId: guard.key.createdBy, counterparty: parsed.data, via: "api", apiKeyId: guard.key.keyId });
+      const created = await createCounterparty({ actorId: guard.actor.userId, counterparty: parsed.data, via: "api", apiKeyId: guard.key.keyId });
       const row = unwrap(await db().from("counterparties").select(SELECT).eq("id", created.id).single()) as Record<string, unknown>;
       return NextResponse.json({ data: mapCounterparty(row) }, { status: 201 });
     })
