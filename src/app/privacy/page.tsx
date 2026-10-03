@@ -190,6 +190,12 @@ export default function PrivacyPage() {
             keeps only the ids. A Slack username given to connect an account is kept until that request is used or expires, and cleared when the next one is made.
           </li>
           <li>
+            <strong>Resend</strong>, for a workspace that turns on invoices by email, receives the emails sent to its invoice address, as it
+            receives every email at that domain. The app reads each one the way it reads an invoice uploaded to the invoice form and keeps the
+            sender, the subject and what was read, with SPF, DKIM and DMARC as Resend reported them, until a person adds or dismisses it. The
+            document itself is not kept, only its hash; the ledger keeps the sender&apos;s address with most of its name hidden.
+          </li>
+          <li>
             <strong>OpenSanctions</strong>, when this deployment has it configured, receives the names and jurisdictions of a live workspace&apos;s
             counterparties to screen them. A sandbox, and any workspace on a deployment without it, checks names against a list built into the app and sends
             them nowhere.

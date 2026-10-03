@@ -142,6 +142,8 @@ const SHOTS = {
   "get-paid-paid": async () => {},
   "telegram-connect": async () => {},
   "slack-settings": async () => {},
+  "email-inbox-settings": async () => {},
+  "email-inbox-ap": async () => {},
 };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

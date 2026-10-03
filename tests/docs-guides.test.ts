@@ -20,6 +20,7 @@ type GuideSlug =
   | "guides/get-paid"
   | "guides/telegram"
   | "guides/slack"
+  | "guides/email-invoices"
   | "guides/api-invoices"
   | "guides/api-milestones"
   | "guides/audit-export";
@@ -111,6 +112,12 @@ const SLACK_INSTALLS = "src/lib/slack/installs.ts";
 const SLACK_LINKS = "src/lib/slack/links.ts";
 const SLACK_SETTINGS = "src/lib/slack/settings.ts";
 const CHAT_DECISIONS = "src/lib/commands/chat-decisions.ts";
+const INBOX_PANEL = "src/components/EmailInboxPanel.tsx";
+const INBOX_EMAILS = "src/components/InboxEmails.tsx";
+const INBOX_LIBRARY = "src/lib/email-inbox/inboxes.ts";
+const INBOX_RECEIVE = "src/lib/email-inbox/receive.ts";
+const INBOX_COMMANDS = "src/lib/commands/inbox.ts";
+const INBOX_SETTINGS = "src/lib/email-inbox/settings.ts";
 
 /** Each guide's quoted UI strings, as `[text, the file it must appear in]`. */
 const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
@@ -545,6 +552,33 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ['via: "telegram"', "src/lib/commands/invoices.ts"],
     ["Commands and invoices now go to", TELEGRAM_UPDATES],
   ],
+  "guides/email-invoices": [
+    ["Settings", APP_NAV],
+    ["AP / AR", APP_NAV],
+    ["From a document", INVOICES_PAGE],
+    ["Invoices by email", INBOX_PANEL],
+    ["Turn on", INBOX_PANEL],
+    ["Copy the address", INBOX_PANEL],
+    ["New address", INBOX_PANEL],
+    ["Turn off", INBOX_PANEL],
+    ["An owner or admin has the address", INBOX_PANEL],
+    ["invoice_inbox_on", INBOX_LIBRARY],
+    ["invoice_inbox_changed", INBOX_LIBRARY],
+    ["invoice_inbox_off", INBOX_LIBRARY],
+    ["From email", INBOX_EMAILS],
+    ["Cannot be added as it was read", INBOX_EMAILS],
+    ["Could not be read", INBOX_EMAILS],
+    ["Add, goods received", INBOX_EMAILS],
+    ["Add, not received yet", INBOX_EMAILS],
+    ["Dismiss", INBOX_EMAILS],
+    ["Review in AP / AR", INBOX_RECEIVE],
+    ["invoice_email_received", INBOX_RECEIVE],
+    ["invoice_email_dismissed", INBOX_COMMANDS],
+    ["This email was already decided, or cannot be added as it was read.", INBOX_COMMANDS],
+    ["INBOUND_EMAIL_DOMAIN", INBOX_SETTINGS],
+    ["RESEND_INBOUND_WEBHOOK_SECRET", INBOX_SETTINGS],
+    ["RESEND_RECEIVING_API_KEY", INBOX_SETTINGS],
+  ],
   "guides/slack": [
     ["Settings", APP_NAV],
     ["Slack", SLACK_PANEL],
@@ -706,6 +740,7 @@ const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/get-paid": 20,
   "guides/telegram": 20,
   "guides/slack": 20,
+  "guides/email-invoices": 20,
   "guides/api-invoices": 10,
   "guides/api-milestones": 10,
   "guides/audit-export": 5,

@@ -92,7 +92,7 @@ export default async function SettingsPage({
       <ProductShell day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()}>
         <PageHead
           title={sectionTitle("settings")}
-          sub="Your own notifications, taking this workspace live, the USYC reserve, API keys, outgoing webhooks, Slack, the ledger signing key, and deleting the workspace. An owner takes it live, rotates the signing key, or deletes it; an owner or admin manages API keys, webhooks and Slack, and a secret is shown once, right after it is created."
+          sub="Your own notifications, taking this workspace live, the USYC reserve, API keys, outgoing webhooks, Slack, invoices by email, the ledger signing key, and deleting the workspace. An owner takes it live, rotates the signing key, or deletes it; an owner or admin manages API keys, webhooks, Slack and invoices by email, and a secret is shown once, right after it is created."
         />
         <div className="space-y-12">
           <NotificationsPanel

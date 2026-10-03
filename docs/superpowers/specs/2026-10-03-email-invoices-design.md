@@ -1,6 +1,6 @@
 # Invoices by email: a workspace address that turns a forwarded invoice into a draft a person adds
 
-Date: 2026-10-03. Status: designed on `feat/email-invoices`. Roadmap row INT1b; integrations design §9 (email-in after
+Date: 2026-10-03. Status: implemented on `feat/email-invoices`. Roadmap row INT1b; integrations design §9 (email-in after
 Slack). Decided under the standing autonomy grant; the partner said "ok tiếp đi" to the proposal.
 
 ## 1. The problem

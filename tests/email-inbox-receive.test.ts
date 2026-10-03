@@ -39,6 +39,8 @@ const config = configFromEnv({
 const orgs = signedOrgs();
 const PDF = readFileSync(path.join(__dirname, "fixtures", "invoice-document", "northwind-inv-2207.pdf"));
 const HOOK = "https://hooks.slack.com/services/T0TEAM/B0HOOK/abcdefghijklmnopqrstuvwx";
+/** The handler's clock, which the signature's timestamp must be within five minutes of. */
+const NOW = new Date("2026-10-03T16:00:00Z");
 
 const email = (fields: Record<string, unknown> = {}) => ({
   object: "email",
@@ -56,7 +58,7 @@ const email = (fields: Record<string, unknown> = {}) => ({
 function signedEvent(payload: unknown, key: Buffer = KEY): Request {
   const body = JSON.stringify(payload);
   const id = `msg_${crypto.randomBytes(6).toString("hex")}`;
-  const at = String(Math.floor(Date.now() / 1000));
+  const at = String(Math.floor(NOW.getTime() / 1000));
   const signature = `v1,${crypto.createHmac("sha256", key).update(`${id}.${at}.${body}`).digest("base64")}`;
   return new Request("https://www.vestiarion.xyz/api/email/inbound", {
     method: "POST",
@@ -129,7 +131,7 @@ function world() {
         origin: "https://www.vestiarion.xyz",
         fetchImpl,
         defer: (work) => void deferred.push(runWith({ config, db: fake.client, fetch: fake.fetch }, work)),
-        now: () => new Date("2026-10-03T16:00:00Z"),
+        now: () => NOW,
       })
     );
     await Promise.all(deferred);

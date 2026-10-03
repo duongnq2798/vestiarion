@@ -1,0 +1,53 @@
+Forward an invoice to your workspace's address, and Vestiarion reads it the way **From a document** reads one. It waits on **AP / AR** under **From email** until an owner or admin adds it as a payable with one press, or dismisses it. Nothing that arrives by email is added, or paid, by itself: once it is added, the agent decides it as any payable, and pays on Arc testnet under every check it applies.
+
+## 1. Turn it on
+
+An owner or admin opens **Settings** and finds **Invoices by email**.
+
+<Screenshot
+  src="/docs/guides/email-inbox-settings.png"
+  alt="The Invoices by email section of Settings, turned on: the workspace's address, invoices- followed by a code at the inbound domain, with a Copy the address button; a note that anyone who knows the address can send to it and that a leaked address can be replaced; and the New address and Turn off buttons."
+  caption="Invoices by email in Settings, as an owner or admin sees it once it is on."
+/>
+
+1. Choose **Turn on**. The section shows the workspace's address, `invoices-…@…`, with **Copy the address**.
+2. Give the address to your suppliers, or forward their emails to it yourself.
+
+Anyone who knows the address can send to it. If it leaks, choose **New address**: the old one stops at once. **Turn off** stops it; the emails already in stay on AP / AR. The ledger records `invoice_inbox_on`, `invoice_inbox_changed` and `invoice_inbox_off`, never the address itself.
+
+Other members see that it is on, and that An owner or admin has the address.
+
+## 2. What happens to an email
+
+Vestiarion reads the first PDF, `.eml` or `.txt` file attached, of at most 4 MB, or the email's own text when nothing is attached. Within a minute it is on **AP / AR**, under **From email**:
+
+<Screenshot
+  src="/docs/guides/email-inbox-ap.png"
+  alt="AP / AR with a From email section: an email titled Invoice INV-2207 from Northwind Billing, read as Northwind Hosting, 200.00 USDC due Oct 31 with purchase order PO-1042; a line saying SPF, DKIM and DMARC pass for this sender and that it is the billing email Northwind Hosting has on file; and the Add, goods received, Add, not received yet and Dismiss buttons."
+  caption="An invoice that arrived by email, read and waiting for a person on AP / AR."
+/>
+
+- An email ready to add shows the counterparty it matched, the amount, the due date, the purchase order, and what to check.
+- **Cannot be added as it was read** says why: no counterparty in the workspace matches the vendor, or no amount or due date could be read. Add it with **From a document** under **New invoice**, where every field can be fixed.
+- **Could not be read** says why: a scan with no text, a file over 4 MB, or nothing to read.
+
+Each says whether the sender passed SPF, DKIM and DMARC, and whether it is the billing email the counterparty has on file. That is a check for you, never permission: Vestiarion adds nothing by itself.
+
+If the workspace has Slack, its channel is told a new invoice arrived by email, with a **Review in AP / AR** link. The ledger records `invoice_email_received`, with the sender's address mostly hidden.
+
+## 3. Add it, or dismiss it
+
+An owner or admin chooses:
+
+- **Add, goods received** or **Add, not received yet**: the payable is added as one added on AP / AR is, by you. The ledger's `create_invoice` entry names you, and adds `via: "email"`, the email's id in the inbox and the hash of the document. The agent usually decides within a minute.
+- **Dismiss**: the email leaves the list, and the ledger records `invoice_email_dismissed`.
+
+An email is added once. A second press is told "This email was already decided, or cannot be added as it was read."
+
+## What is kept
+
+The sender, the subject and what was read. The document itself is not kept, only its hash, as with From a document. Resend receives the email on Vestiarion's behalf.
+
+## For the person who runs the deployment
+
+In Resend, the **Receiving** tab of **Emails** gives a `<id>.resend.app` domain that receives at any address, with no DNS to set; or turn on receiving for a subdomain and add Resend's MX record. Under **Webhooks**, add `https://<your deployment>/api/email/inbound` for the `email.received` event and copy its signing secret. Then set `INBOUND_EMAIL_DOMAIN`, `RESEND_INBOUND_WEBHOOK_SECRET`, and `RESEND_RECEIVING_API_KEY` when the key that sends email cannot read received ones. Without them, the section does not show and the route answers 404; every request to it is checked against the signing secret.

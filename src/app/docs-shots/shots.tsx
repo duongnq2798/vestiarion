@@ -4,7 +4,9 @@ import type { ReactNode } from "react";
 import { AgentBudgetPanel } from "@/components/AgentBudgetPanel";
 import ApprovalCard from "@/components/ApprovalCard";
 import { CounterpartyRow as CounterpartyRowView } from "@/components/CounterpartyRow";
+import EmailInboxPanel from "@/components/EmailInboxPanel";
 import GoLivePanel from "@/components/GoLivePanel";
+import InboxEmails from "@/components/InboxEmails";
 import NotificationsPanel from "@/components/NotificationsPanel";
 import { HeldMilestoneActions } from "@/components/HeldMilestoneActions";
 import { PayLinkControl } from "@/components/PayLinkControl";
@@ -59,7 +61,7 @@ import { DESIGN_SLUG, LEDGER } from "../design/fixtures";
 
 export interface DocsShot {
   /** The guide the picture belongs to. */
-  guide: "go-live" | "first-payment" | "pay-a-contractor" | "get-paid" | "telegram" | "slack";
+  guide: "go-live" | "first-payment" | "pay-a-contractor" | "get-paid" | "telegram" | "slack" | "email-invoices";
   /** The workspace page it is on: its title heads the frame. None for a public page, such as a payee's link. */
   page?: NavKey;
   /** The page's line under its title, where the real page has one. */
@@ -73,7 +75,7 @@ const SLUG = DESIGN_SLUG;
 
 /** Settings' line under its title, as the page has it. */
 const SETTINGS_SUB =
-  "Your own notifications, taking this workspace live, the USYC reserve, API keys, outgoing webhooks, Slack, the ledger signing key, and deleting the workspace. An owner takes it live, rotates the signing key, or deletes it; an owner or admin manages API keys, webhooks and Slack, and a secret is shown once, right after it is created.";
+  "Your own notifications, taking this workspace live, the USYC reserve, API keys, outgoing webhooks, Slack, invoices by email, the ledger signing key, and deleting the workspace. An owner takes it live, rotates the signing key, or deletes it; an owner or admin manages API keys, webhooks, Slack and invoices by email, and a secret is shown once, right after it is created.";
 
 // ---------------------------------------------------------------------------
 // Go live
@@ -933,6 +935,38 @@ export const DOCS_SHOTS = {
         canManage
         canAdminister
         notice={null}
+      />
+    ),
+  },
+  "email-inbox-settings": {
+    guide: "email-invoices",
+    page: "settings",
+    sub: SETTINGS_SUB,
+    render: () => <EmailInboxPanel orgSlug={SLUG} view={{ on: true, address: "invoices-k3mq2x7abdef@inbound.vestiarion.xyz" }} canManage />,
+  },
+  "email-inbox-ap": {
+    guide: "email-invoices",
+    page: "invoices",
+    sub: "Three-way match, counterparty risk, and payment authority — with the agent’s complete reasoning on every line.",
+    render: () => (
+      <InboxEmails
+        orgSlug={SLUG}
+        canAdd
+        emails={[
+          {
+            id: "00000000-0000-4000-8000-0000000000e1",
+            from: "Northwind Billing <billing@northwind.example>",
+            subject: "Invoice INV-2207",
+            receivedAt: "2026-10-03T16:00:00Z",
+            status: "ready",
+            reasons: [],
+            authentication: { spf: "pass", dkim: "pass", dmarc: "pass" },
+            read: {
+              counterpartyName: "Northwind Hosting", vendorName: "Northwind Hosting", amount: "200.00", currency: "USDC", dueDate: "2026-10-31",
+              poReference: "PO-1042", invoiceNumber: "INV-2207", memo: null, warnings: [], modelNote: null, reader: "deepseek", knownSender: true,
+            },
+          },
+        ]}
       />
     ),
   },
