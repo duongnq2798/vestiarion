@@ -8,6 +8,11 @@ Changes to the API and webhooks that affect an integration, newest first. Change
 - A read-and-write key whose issuer has left can no longer add records, so a `create_counterparty` or `create_invoice` entry with `via: "api"` always names its issuer in `by`.
 - Nothing was revoked when this shipped: no active key had outlived its creator's membership.
 
+## 2026-10-03: The TypeScript SDK on npm
+
+- `npm install @vestiarion/sdk` installs it from the npm registry.
+- Version 0.1.0 there is the same tarball, byte for byte, as `https://www.vestiarion.xyz/sdk/vestiarion-sdk-0.1.0.tgz`, which keeps working.
+
 ## 2026-10-03: A member's notifications move to Settings
 
 - `telegram_disconnected` entries for a chat its member disconnected from Vestiarion now carry `via: "settings"`: the **Telegram** card moved from **Members** to the **Notifications** section at the top of **Settings**, with the switch for the email about payments that need a decision. Entries made before keep `via: "members_page"`; `via: "telegram"` and `via: "blocked"` are unchanged.

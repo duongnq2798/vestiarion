@@ -9,6 +9,14 @@ const pkg = JSON.parse(readFileSync("sdk/package.json", "utf8")) as { version: s
 const never: FetchLike = async () => { throw new Error("not called"); };
 const sdk = new Vestiarion({ apiKey: `vxk_abcdefgh_${"A".repeat(43)}`, fetch: never }) as unknown as Record<string, Record<string, unknown>>;
 
+describe("the docs page", () => {
+  it("installs from the npm registry first, and keeps the site's tarball as the other way", () => {
+    const page = readSource("get-started/sdk");
+    expect(page).toContain("npm install @vestiarion/sdk");
+    expect(page.indexOf("npm install @vestiarion/sdk")).toBeLessThan(page.indexOf(`npm install https://www.vestiarion.xyz/sdk/vestiarion-sdk-${pkg.version}.tgz`));
+  });
+});
+
 describe.each([
   ["the docs page", () => readSource("get-started/sdk")],
   ["the README", () => readFileSync("sdk/README.md", "utf8")],
