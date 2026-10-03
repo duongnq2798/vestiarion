@@ -72,7 +72,7 @@ and `milestones.created_by` become null, and the invitations the person sent are
 
 **The permission map** (spec §7) lives as data in `src/lib/auth/roles.ts` — `PERMISSIONS` maps each
 of `workspace.read`, `agent.pause`, `approval.decide`, `records.write`, `agent.run_cycle`,
-`agent.resume`, `members.manage`, `api_keys.manage`, `webhooks.manage`, and `org.administer` to the roles that hold it
+`agent.resume`, `members.manage`, `api_keys.manage`, `webhooks.manage`, `integrations.manage`, and `org.administer` to the roles that hold it
 — and is enforced at the boundary through `authorize(slug, permission)` (`src/lib/auth/authorize.ts`),
 which re-derives the caller's membership and role from the session rather than trusting anything the
 form claims; a page can call the read-only `viewerCan` to decide whether to render a control at all.
@@ -86,7 +86,9 @@ workspace's own API keys — `owner` and `admin` hold it; every other member see
 `/o/[slug]/settings` without the controls), and `webhooks.manage` (`src/app/actions/webhooks.ts`,
 for adding, testing and removing a workspace's own webhook endpoints — `owner` and `admin` hold it;
 every other member sees the endpoint list with each URL reduced to its host — see
-[Webhooks security](https://www.vestiarion.xyz/docs/webhooks/security#who-sees-what)). The remaining permissions — `workspace.read` (beyond
+[Webhooks security](https://www.vestiarion.xyz/docs/webhooks/security#who-sees-what)), and `integrations.manage` (`src/app/actions/slack.ts` and
+`/api/slack/install`, for connecting and removing the workspace's Slack — `owner` and `admin` hold it; the
+limit on deciding payments from Slack takes `org.administer`, an owner's). The remaining permissions — `workspace.read` (beyond
 the leaving case above) and `org.administer` — and `canAssignRole`'s rule that an admin may grant
 `approver` or `viewer` but nothing at its own rank or above while only an owner assigns `admin` or
 `owner`, are defined in `roles.ts` ahead of the feature that will call `org.administer`.
@@ -315,6 +317,51 @@ from the reserve, which passes `byPerson` to that call.
 `agent_paused`, and `agent_resumed` record every decision, pause, and resume,
 each carrying the acting person's user id, never an address.
 
+## Commands: one action from every surface
+
+A person's actions reach the domain through `src/lib/commands/`
+(docs/superpowers/specs/2026-10-03-integrations-design.md), so a new surface adds
+an adapter rather than a second gate. An **actor** is one member acting through
+one surface: `consoleActor(auth)` after the console's `authorize`, or
+`memberActor(orgId, userId, surface)`, which reads the member's role and the
+workspace's mode for that action, never from a link, a key or a button. A
+**command** is one function per action — `approvePayable`, `rejectPayable`,
+`returnPayable`, `addPayableDetails`, `payMilestoneNow`, `closeMilestoneUnpaid`,
+`pauseWorkspaceAgent`, `resumeWorkspaceAgent`, `runWorkspaceCycle`,
+`addInvoice` — whose first statement is `gate(actor, "<command>")`:
+
+- the scope in force must be the actor's workspace, or it throws
+  (`ActorScopeError`): a surface that entered one workspace cannot act for
+  another's member;
+- the role must hold the command's permission (`COMMAND_PERMISSIONS`, drawn from
+  the permission map);
+- the surface must be one that may run it (`SURFACE_COMMANDS`): the console runs
+  everything; Telegram adds invoices and decides nothing; Slack approves, rejects
+  or returns a payable and pauses the agent; the API adds records;
+- a chat's decisions are off until an owner sets that chat's limit
+  (`decisions_off`).
+
+A decision from a chat answers a card the chat showed: the payable commands run
+`checkChatDecision` (`src/lib/commands/chat-decisions.ts`) for every surface but
+the console, before the console's own approval. It refuses a card that is no
+longer true of the payable (still waiting, decided by the agent at the same
+moment), and lets Approve and pay through only for USDC paid on Arc, within the
+limit, to a confirmed address whose hash is the one the card was posted with: a
+chat never confirms a changed address.
+
+The command then calls the domain function as the console always has, raises
+what follows (the agent's next look through `runCycleSoon`, a paid payee's
+notice through `sendNoticesSoon`), and returns the console's own words as
+`{ ok, message, … }` or `{ ok: false, code, message, changed? }`. A decision
+made anywhere but the console names its surface in its signed entry
+(`provenance`: `via`, with `linkId` or `apiKeyId`); the console's entries carry
+no `via`, as before. The console's server actions keep `authorize` first and
+refresh their pages through `consoleAnswer`
+(`src/app/actions/command-result.ts`); the Telegram bot's **Add** and every
+Slack command and click build theirs with `memberActor`. `tests/commands-gates.test.ts` holds every command to
+its gate. The invoice form, the CSV import and the write API move onto
+`addInvoice` next.
+
 ## Notifications
 
 **A digest tells the members who can decide a payable that it is waiting for
@@ -346,10 +393,12 @@ with `detail: { invoiceIds, escalatedIds, recipients: <count>, failed:
 is logged with the workspace id and never fails the cycle or the tick.
 
 **The switch** is the member's own: `memberships.notify_email` (migration
-`0026`), on by default. It changes only from the Members page
-(`/o/[slug]/members`), which shows it — "Email me when payments need a
-decision" — only to a member who holds `approval.decide`; a viewer sees
-nothing, because a viewer cannot decide and so receives nothing.
+`0026`), on by default. It changes only from the Notifications section at
+the top of Settings (`/o/[slug]/settings`, `NotificationsPanel`), which shows
+it — "Email me when payments need a decision" — only to a member who holds
+`approval.decide`; a viewer sees nothing, because a viewer cannot decide and
+so receives nothing. The same section holds the member's own Telegram card;
+Members keeps a link to it.
 
 **Emails to counterparties** go to one address per counterparty, its billing
 email (`counterparties.notice_email`, migration `0063`), and only from `live`
@@ -380,7 +429,7 @@ workspaces; the ledger keeps the address with most of its name hidden.
 whole deployment; it is on only when `TELEGRAM_BOT_TOKEN`,
 `TELEGRAM_WEBHOOK_SECRET` and `TELEGRAM_BOT_USERNAME` are all set
 (`src/lib/telegram/settings.ts`), and `npm run telegram:setup` registers its
-webhook and command menu. The Members page's Telegram card
+webhook and command menu. The Telegram card in Settings' Notifications section
 (`connectTelegramAction`, gated on `workspace.read`) makes a one-time code,
 stores only its SHA-256 (`telegram_link_codes`, migration `0064`, ten
 minutes), and links `https://t.me/<bot>?start=<code>`. Telegram then posts
@@ -398,12 +447,47 @@ invoice sent to the bot is read by the same `readInvoiceDraft` as **From a
 document**, held for an hour (`telegram_drafts`), and added only when an owner
 or admin taps **Add** in their own chat, through the same `createInvoice` the
 invoice form uses, with `via: "telegram"`. The bot never approves or pays.
-The cycle's last stage, `telegram` (`src/lib/telegram/notify.ts`), tells each
+The cycle's `telegram` stage (`src/lib/telegram/notify.ts`) tells each
 linked chat the agent's decisions after its cursor (`telegram_links.notified_seq`),
 read by the same `readAgentActivity` as the console's toasts, and then moves
 the cursor past everything read: a failed send keeps it for the next cycle,
 a 403 disconnects the chat, and a message Telegram refuses to parse is sent
 once as plain text and then passed.
+
+**A workspace can also connect Slack**
+(docs/superpowers/specs/2026-10-03-slack-design.md). One Slack app serves the
+deployment (`integrations/slack/manifest.yaml`), asking only for `commands` and
+`incoming-webhook`; it is on only when `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`
+and `SLACK_SIGNING_SECRET` are all set (`src/lib/slack/settings.ts`), and every
+`/api/slack/*` route answers 404 otherwise. An owner's or admin's **Add to
+Slack** (`/api/slack/install`, `integrations.manage`) goes to Slack's OAuth with
+a state signed under a key derived from the master keys (ten minutes) and bound
+to an HttpOnly nonce cookie; `/api/slack/oauth` checks both, exchanges the code,
+and `saveInstall` keeps the bot token and the channel's webhook URL as envelopes
+(`slack_installs`, migration `0067`: one Slack team per workspace), starts the
+channel's cursor at the ledger's head, and links the installer's own Slack
+account. Every request from Slack (`/api/slack/commands`, `/interactions`,
+`/events`) is checked against the signing secret (v0 HMAC, five minutes) before
+anything is read, answered at once, and worked in `after()`; answers go to the
+request's `response_url`, only ever under `https://hooks.slack.com/`. A member
+links their own Slack account with `/vestiarion connect`: a one-time code
+(SHA-256 only, `slack_link_requests`, ten minutes) opens
+`/integrations/slack/connect`, where the signed-in member confirms it, and
+`slack_link_member` uses the code up and links it in one transaction
+(`slack_links`: one link per membership and per Slack user, cascading with the
+membership and with the install). Each command and click reads the member's
+role and the install's limit again (`slackActor`). The cycle's last stage,
+`slack` (`src/lib/slack/notify.ts`), posts the agent's decisions after the
+install's cursor (`slack_installs.notified_seq`) to the channel, read by the
+same `readAgentActivity`, and moves the cursor only once Slack took the message.
+While an owner has set a limit (`decisions_limit_usdc`), a stopped payable's
+message carries Approve and pay, Reject and Return, each holding a signed card
+(`vx1.…`, seven days) naming the payable, when the agent decided it, and its
+payee's address hash; a click runs the payable command with that card, so the
+chat's rules and every check of the console's approval run, and rewrites the
+message to say who decided. Removing Slack from Settings uninstalls the app and
+deletes the install with its links; Slack's `app_uninstalled` and
+`tokens_revoked` events do the same.
 
 ## API
 
@@ -505,6 +589,19 @@ it comes from, so renaming one in the app means updating the guide. Their step s
 changes `/api/v1` or webhooks adds a changelog entry** to
 `content/docs/changelog.mdx`: dated, newest first, saying what changed for an
 integrator.
+
+The TypeScript SDK lives in `sdk/` (`@vestiarion/sdk`). It has no dependencies, uses `fetch` and Web Crypto only, and
+is type-checked, linted and tested with the app. It is held to the code in three ways:
+
+- `sdk/src/types.ts` is rendered from the OpenAPI document by `npm run sdk:types` (`scripts/lib/sdk-types.ts`).
+  `tests/sdk-types.test.ts` fails when the file is stale.
+- `tests/sdk-contract.test.ts` runs the SDK against the v1 routes in-process.
+- `tests/sdk-webhooks.test.ts` holds its checks to `src/lib/webhooks/sign.ts`, `src/lib/ledger.ts` and the receipt
+  verifier.
+
+`npm run sdk:pack` compiles the package and packs it into `public/sdk/vestiarion-sdk-<version>.tgz`, the URL the docs
+install from. That file is committed, and a version already packed is never packed again, so a lockfile's integrity
+hash keeps matching. `tests/sdk-package.test.ts` holds the tarball to a fresh build.
 
 ## Data ownership
 

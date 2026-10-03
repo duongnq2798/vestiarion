@@ -7,7 +7,7 @@ import { fakeSupabase, type RecordedRequest } from "./support/fake-supabase";
 import { APPENDED_LEDGER_ROW, signedOrgs } from "./support/signed-org";
 
 /**
- * The Members page's Telegram card (Telegram bot design R4, R6): any member connects their own chat with a one-time
+ * The Telegram card in Settings' Notifications section (Telegram bot design R4, R6): any member connects their own chat with a one-time
  * link, and disconnects only their own, whatever the form says. Authorization is a stand-in; the scope, the code and
  * the ledger entry are real, against a recorded supabase-js client.
  */
@@ -106,7 +106,7 @@ describe("disconnectTelegramAction", () => {
     const read = fake.requests.find((sent) => sent.path === "/rest/v1/telegram_links" && sent.method === "GET");
     expect(read?.params.get("user_id")).toBe(`eq.${USER}`);
     const entry = fake.requests.find((sent) => sent.path === "/rest/v1/rpc/append_ledger_entry")?.body as { p_detail: Record<string, unknown> };
-    expect(entry.p_detail).toMatchObject({ by: USER, userId: USER, via: "members_page" });
+    expect(entry.p_detail).toMatchObject({ by: USER, userId: USER, via: "settings" });
   });
 
   it("removes nothing when the member has no chat connected", async () => {

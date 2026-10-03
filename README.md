@@ -100,13 +100,22 @@ is hard-coded into the interface:
    only an owner or admin may resume it. Pausing stops the agent's own cycles and the money it would
    move mid-cycle, including reserve sweeps and redemptions; it never stops a person's own decision
    in the approvals inbox.
-7. **Telegram** — each member can connect their own Telegram chat from **Members**. The chat gets
+7. **Telegram** — each member can connect their own Telegram chat from **Settings**. The chat gets
    the agent's decisions within the cycle that makes them, each with its reasons, its Arc testnet
    transaction and a link to where a person handles it; answers `/today` (safe to spend today),
    `/waiting` and `/ledger`, or the same questions in plain words, with figures written by code,
    never by the model; and reads an invoice sent to it, as a PDF or its text, into a payable an
    owner or admin adds with one tap. The bot never approves or pays: a stopped payment links to
    Approvals (`src/lib/telegram/`, [guide](https://www.vestiarion.xyz/docs/guides/telegram)).
+8. **Slack** — an owner or admin connects the workspace to a Slack channel from **Settings**. The
+   channel gets the agent's decisions within the cycle that makes them; each member who connects
+   their own Slack account asks `/vestiarion today`, `waiting` or `ledger`, and can pause the agent.
+   When an owner sets a limit, a payment the agent stopped carries **Approve and pay**, **Reject**
+   and **Return to the agent** in its message: a click acts as that member, with their role read
+   again, through the same command and every check as Approvals; Approve and pay only for USDC
+   on Arc within the limit, to the address the message showed, and a payee's changed address is
+   still confirmed in Vestiarion. Each decision's ledger entry says it came from Slack
+   (`src/lib/slack/`, [guide](https://www.vestiarion.xyz/docs/guides/slack)).
 
 Every decision is made by asking an LLM for a structured `{action, reasoning, confidence}` verdict
 under an explicit guardrail policy (never pay a high-risk counterparty, never exceed a payment
@@ -199,7 +208,7 @@ src/lib/agent/
                              compliance -> follow-up -> recurring -> services
                              -> liquidity -> AP -> contractors -> treasury ->
                              forecast -> proposals -> collections -> notices
-                             -> telegram, all logged to the ledger
+                             -> telegram -> slack, all logged to the ledger
   liquidity.ts               Redeems from USYC what today's payments need
                              before AP decides them; a person's Bring cash back
   cycle-metrics.ts           Counts outcomes, decision sources, and code-level
@@ -228,8 +237,15 @@ src/lib/platform/api-keys.ts  Key generation and hashing, listing and
                                revocation; only sha256(secret) is ever stored
 src/lib/telegram/         The Telegram bot: one-time connect codes, the webhook's
                            update handler, /today /waiting /ledger, invoices
-                           read into payables, and the cycle's last stage,
-                           which tells each connected chat what the agent did
+                           read into payables, and the cycle's stage that
+                           tells each connected chat what the agent did
+src/lib/slack/            The Slack app: request signatures, installing over
+                           OAuth, member links, /vestiarion, the decision
+                           buttons, and the cycle's last stage, which posts
+                           what the agent did to the workspace's channel
+src/lib/commands/         One function per action a person takes, gated the
+                           same way from the console, Telegram, Slack and the
+                           API
 src/lib/webhooks/         Signing, SSRF-safe sending, and the retry/disable
                            policy for a workspace's own HTTPS endpoints; a
                            new ledger entry queues a signed delivery to each
@@ -247,6 +263,10 @@ workspace alone — there is no shared or platform-wide credential on that
 surface. It stops working when the member who created it leaves the workspace,
 is removed, or deletes their account. The same key connects an AI agent to the
 [MCP server](https://www.vestiarion.xyz/docs/ai-integration/mcp) at `/api/mcp`, whose tools are the `/api/v1` operations.
+
+A typed TypeScript client, `@vestiarion/sdk` (`sdk/`), wraps every `/api/v1` operation and checks webhook signatures and
+ledger entries. Install it with `npm install https://www.vestiarion.xyz/sdk/vestiarion-sdk-0.1.0.tgz`; see
+[TypeScript SDK](https://www.vestiarion.xyz/docs/get-started/sdk).
 
 The same page lets an owner or admin (`webhooks.manage`) register up to 5
 HTTPS endpoints that receive the workspace's ledger, signed, as it happens —
@@ -317,8 +337,8 @@ status and the first sentence of why the agent held it, and a link to the approv
 run by hand from the console never sends one, since the person running it is already watching it;
 in practice this means only a `live` workspace's unattended cron cycles notify. An invoice already
 told about is not told again unless it was escalated since. Each member has their own switch — "Email
-me when payments need a decision" — on the Members page, on by default; this needs `RESEND_API_KEY`
-too.
+me when payments need a decision" — in the Notifications section of Settings, on by default; this
+needs `RESEND_API_KEY` too.
 
 Only the **founding organization** — seeded ahead of any sign-in, in `live` mode — skips self-serve
 creation: it exists before anyone signs in, so no self-serve step ever generates it a ledger key.

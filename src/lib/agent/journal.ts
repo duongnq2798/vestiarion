@@ -37,6 +37,7 @@ export const CYCLE_STAGES = [
   "collections",
   "notices",
   "telegram",
+  "slack",
 ] as const;
 
 export type CycleStage = (typeof CYCLE_STAGES)[number];
@@ -73,8 +74,12 @@ export type CycleStage = (typeof CYCLE_STAGES)[number];
  *               stage most worth keeping alive after a failure, because it is
  *               what tells a human where the cycle left the book.
  *   telegram    Nothing. It tells each member's connected Telegram chat what the agent decided;
- *               it authorises nothing, and a chat not told now is told by the next cycle. Last,
- *               so it never delays a payment (Telegram bot design R8).
+ *               it authorises nothing, and a chat not told now is told by the next cycle. Near
+ *               the end, so it never delays a payment (Telegram bot design R8).
+ *   slack       Nothing. It tells the workspace's Slack channel what the agent decided, with a
+ *               stopped payable's card when deciding from Slack is on; the card itself moves
+ *               nothing, and a channel not told now is told by the next cycle. Last, so it never
+ *               delays a payment (Slack design S7).
  */
 export const STAGE_REQUIRES: Record<CycleStage, readonly CycleStage[]> = {
   reconcile: [],
@@ -94,6 +99,7 @@ export const STAGE_REQUIRES: Record<CycleStage, readonly CycleStage[]> = {
   collections: ["receipts"],
   notices: [],
   telegram: [],
+  slack: [],
 };
 
 export interface StageRecord {

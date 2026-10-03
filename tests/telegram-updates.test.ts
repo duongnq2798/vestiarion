@@ -126,6 +126,7 @@ describe("handleUpdate: messages", () => {
 
     expect(ledger(fake.requests)).toEqual([]);
     expect(telegram.texts()[0]).toContain("already used or has expired");
+    expect(telegram.texts()[0]).toContain("open <b>Settings</b>");
   });
 
   it("tells a chat with no link how to connect one, whatever it asks", async () => {
@@ -231,6 +232,14 @@ describe("handleUpdate: messages", () => {
     expect(ledger(fake.requests)).toEqual(["telegram_disconnected"]);
     expect(fake.requests.find((sent) => sent.path === "/rest/v1/rpc/telegram_activate")?.body).toEqual({ p_chat_id: CHAT, p_link_id: LINK_B });
     expect(telegram.texts()[0]).toContain("Disconnected from <b>Northstar</b>");
+  });
+
+  it("says where to connect again once the chat's last workspace is disconnected", async () => {
+    links = [linkRow(LINK_A, ORG, true)];
+    const { telegram, handle } = bot();
+    await handle(message({ text: "/disconnect" }));
+
+    expect(telegram.texts()[0]).toContain("To connect it again, press <b>Connect Telegram</b> in its Settings, under Notifications.");
   });
 });
 

@@ -35,6 +35,14 @@ const nextConfig: NextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
         ],
       },
+      {
+        // The SDK's tarballs (TypeScript SDK design R2): fetched by npm, downloaded by a person, never run in a tab.
+        source: "/sdk/:path*",
+        headers: [
+          { key: "Content-Disposition", value: "attachment" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+        ],
+      },
     ];
   },
   async rewrites() {

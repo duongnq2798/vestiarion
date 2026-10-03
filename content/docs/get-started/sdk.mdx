@@ -1,0 +1,191 @@
+The TypeScript SDK is a typed client for this API and its webhooks. It gives you:
+
+- every endpoint, with its types;
+- pagination that reads every page;
+- retries that never add a record twice;
+- checks for webhook signatures and ledger entries.
+
+It has no dependencies. It runs on Node 20 or later, Deno, Bun and edge runtimes such as Cloudflare Workers.
+
+## Install
+
+```bash
+npm install https://www.vestiarion.xyz/sdk/vestiarion-sdk-0.1.0.tgz
+```
+
+pnpm, Yarn and Bun install from the same URL, with `pnpm add`, `yarn add` or `bun add`. The package is `@vestiarion/sdk`, and it is ESM only.
+
+Each version has its own URL, and the file behind it never changes, so the integrity hash in your lockfile keeps matching.
+
+## Create a client
+
+```ts
+import { Vestiarion } from "@vestiarion/sdk";
+
+const vestiarion = new Vestiarion({ apiKey: process.env.VESTIARION_API_KEY! });
+```
+
+The key is a [workspace API key](/docs/get-started/authentication). Keep it on a server: it reads the whole workspace. The client refuses a value that is not shaped like a key, without repeating the value in the error.
+
+| Option | Default |
+| --- | --- |
+| `baseUrl` | `https://www.vestiarion.xyz`. Plain `http` is refused, except to localhost, so the key never travels in the clear. |
+| `fetch` | The runtime's own `fetch`. Pass another to route, record or proxy requests. |
+| `maxRetries` | `2` |
+| `timeoutMs` | `30000`, per attempt. |
+
+## Read
+
+Each [API operation](/docs/api) is one method. A resource returns the API's `data`. A list returns `{ data, page }`, exactly as the API answers it.
+
+```ts
+const status = await vestiarion.status.get();
+const { data: held, page } = await vestiarion.invoices.list({ status: "held", limit: 20 });
+const counterparty = await vestiarion.counterparties.get("dc5e5751-3287-46c9-8bd1-83a42ab02699");
+const verification = await vestiarion.ledger.verify();
+```
+
+Each result is typed from the API's [OpenAPI document](/api/v1/openapi.json), as `Invoice`, `Counterparty`, `LedgerEntry` and so on. Your editor shows each field's description.
+
+| Method | Operation |
+| --- | --- |
+| `vestiarion.status.get()` | [Get workspace status](/docs/api/get-status) |
+| `vestiarion.ledger.list(params)`, `vestiarion.ledger.listAll(params)`, `vestiarion.ledger.pages(params)` | [List ledger entries](/docs/api/list-ledger-entries) |
+| `vestiarion.ledger.verify()` | [Verify the ledger](/docs/api/verify-ledger) |
+| `vestiarion.invoices.list(params)`, `vestiarion.invoices.listAll(params)`, `vestiarion.invoices.pages(params)` | [List invoices](/docs/api/list-invoices) |
+| `vestiarion.invoices.create(input, options)` | [Add an invoice](/docs/api/create-invoice) |
+| `vestiarion.counterparties.list(params)`, `vestiarion.counterparties.listAll(params)`, `vestiarion.counterparties.pages(params)` | [List counterparties](/docs/api/list-counterparties) |
+| `vestiarion.counterparties.get(id)` | [Get a counterparty](/docs/api/get-counterparty) |
+| `vestiarion.counterparties.create(input, options)` | [Add a counterparty](/docs/api/create-counterparty) |
+| `vestiarion.milestones.list(params)`, `vestiarion.milestones.listAll(params)`, `vestiarion.milestones.pages(params)` | [List milestones](/docs/api/list-milestones) |
+| `vestiarion.treasury.get()` | [Get the treasury](/docs/api/get-treasury) |
+| `vestiarion.insights.get()` | [Get insights](/docs/api/get-insights) |
+
+## Every page
+
+```ts
+for await (const invoice of vestiarion.invoices.listAll({ direction: "payable" })) {
+  console.log(invoice.id, invoice.status, invoice.agentReasoning);
+}
+```
+
+`listAll` follows each `page.nextCursor` until the collection ends, keeping the same filters.
+
+To keep a copy of the ledger current, page through it with `pages`. Store each page's `nextCursor` once you have processed that page, as [Pagination](/docs/get-started/pagination) advises:
+
+```ts
+const cursor = await loadStoredCursor(); // the last nextCursor you stored, or undefined
+for await (const { data, page } of vestiarion.ledger.pages({ cursor })) {
+  await saveEntries(data); // de-duplicate on seq: the last page comes back again on resume
+  if (page.nextCursor) await storeCursor(page.nextCursor);
+}
+```
+
+## Add records
+
+A key with [write access](/docs/get-started/authentication#scopes) adds counterparties and invoices:
+
+- The agent decides each invoice as it decides one typed into the console, with every guardrail.
+- An address added this way waits for a person in the workspace to confirm it.
+
+[Add invoices from your own system](/docs/guides/api-invoices) walks through the whole flow.
+
+```ts
+const counterparty = await vestiarion.counterparties.create(
+  { name: "Quill Studio", role: "vendor", address: "0x5b2d8c1f0e7a4936b8d1c0e2f3a4b5c6d7e8f901", paymentLimit: "500" },
+  { idempotencyKey: "crm-vendor-1042" }
+);
+const invoice = await vestiarion.invoices.create(
+  { counterpartyId: counterparty.id, amount: "420.00", dueDate: "2026-10-31", poReference: "PO-4012", goodsReceived: true },
+  { idempotencyKey: "billing-inv-2026-0042" }
+);
+```
+
+Every write carries an `Idempotency-Key`:
+
+- **Pass your own record's id.** Then a retry of your own job cannot add the record twice either.
+- **Pass nothing.** Then the SDK makes a fresh key for that call, so its own retries stay safe.
+
+## Errors and retries
+
+Every failed request throws a `VestiarionError`:
+
+```ts
+import { VestiarionError } from "@vestiarion/sdk";
+
+try {
+  await vestiarion.invoices.create(input, { idempotencyKey: input.reference });
+} catch (error) {
+  if (error instanceof VestiarionError && error.code === "invalid_request") console.error(error.message); // names the field
+  else throw error;
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `status` | The HTTP status, or `0` when no answer arrived. |
+| `code` | One of the API's [error codes](/docs/get-started/errors), or `network_error`, `timeout` or `invalid_response`. |
+| `message` | The API's own message. |
+| `retryAfter` | The seconds `Retry-After` asked for, or `null`. |
+
+By default a request is retried twice (`maxRetries`) after:
+
+- a `429`, waiting as long as `Retry-After` says. A wait longer than 60 seconds is not made: the `429` is thrown, so a call never blocks for minutes;
+- a `500`, `502`, `503` or `504`, backing off from half a second up to 8 seconds;
+- a timeout, or a network failure.
+
+A `400`, `401`, `403` or `404` is thrown at once.
+
+A write's retry repeats its key and its body, so it can never add the record twice. If the API is still handling the first attempt, it answers the retry with `409`, and the SDK waits that out too.
+
+## Webhooks
+
+```ts
+import { verifyLedgerEntry, verifyWebhook, WebhookVerificationError } from "@vestiarion/sdk/webhooks";
+
+// app/api/vestiarion/route.ts, a Next.js route handler
+export async function POST(request: Request) {
+  try {
+    const event = await verifyWebhook({
+      secret: process.env.VESTIARION_WEBHOOK_SECRET!,
+      payload: await request.text(),
+      signature: request.headers.get("vestiarion-signature"),
+    });
+    if (event.type === "ledger.appended" && event.entry) {
+      const check = await verifyLedgerEntry(event.entry, process.env.VESTIARION_LEDGER_PUBLIC_KEY!);
+      if (check.ok === false) return new Response(check.reason, { status: 400 });
+      // De-duplicate on event.id, then handle event.entry.
+    }
+    return new Response(null, { status: 204 });
+  } catch (error) {
+    if (error instanceof WebhookVerificationError) return new Response(error.reason, { status: 401 });
+    throw error;
+  }
+}
+```
+
+`verifyWebhook` checks the `Vestiarion-Signature` header against the raw body, as [Verifying signatures](/docs/webhooks/verify) describes, and refuses a signature more than 5 minutes from now.
+
+- If the check fails, it throws a `WebhookVerificationError` whose `reason` is `missing`, `malformed`, `expired` or `mismatch`.
+- Nothing is parsed before the signature checks out.
+- Pass the body as the text it arrived as: a copy that was parsed and serialized again differs byte for byte.
+
+`verifyLedgerEntry` checks the entry itself:
+
+- its content against `bodyHash`;
+- the workspace key's Ed25519 signature;
+- the chain hash.
+
+Pass it the public key from the workspace's Audit page, or, after a key rotation, a map of key id to public key.
+
+| Answer | Meaning |
+| --- | --- |
+| `{ ok: true }` | The entry is authentic. |
+| `{ ok: false, reason }` | A check failed; `reason` says which. |
+| `{ ok: null, reason }` | None of the keys you passed signed this entry, so there is no verdict. |
+
+## What it sends
+
+- **Every request** carries `Authorization: Bearer` with the key, and `User-Agent: vestiarion-sdk-js/` followed by the SDK's version.
+- **The key** never goes in a URL, and never appears in an error message.
+- **A write** also sends `Content-Type: application/json` and its `Idempotency-Key`.

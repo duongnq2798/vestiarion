@@ -32,6 +32,7 @@ import RecurringPayableIntake, { RecurringPayablesList } from "@/components/inta
 import { UsycReservePanel } from "@/components/UsycReservePanel";
 import AgentPauseControl from "@/components/AgentPauseControl";
 import MembersPanel from "@/components/MembersPanel";
+import NotificationsPanel from "@/components/NotificationsPanel";
 import { ReceiptControl, ReceiptLink } from "@/components/ReceiptControl";
 import { EscrowPanel } from "@/components/EscrowPanel";
 import { MilestoneEscrow } from "@/components/MilestoneEscrow";
@@ -661,10 +662,8 @@ export default function DesignPage() {
               viewerId="design-ada"
               viewerRole="owner"
               assignable={["owner", "admin", "approver", "viewer"]}
-              canDecide
-              notifyEmail
-              telegram={{ link: null }}
             />
+            <NotificationsPanel orgSlug={DESIGN_SLUG} canDecide notifyEmail telegram={{ link: null }} />
           </Section>
         </main>
       </div>

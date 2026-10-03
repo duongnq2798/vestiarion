@@ -25,10 +25,10 @@ function Refusal({ state }: { state: TelegramActionResult }) {
 }
 
 /**
- * The viewer's own Telegram chat for this workspace (Telegram bot design R4, R6), on the Members page beside the
- * email switch. Not connected: a button that makes a one-time link to the bot, and once it is made, the link, with the
- * page re-read every 5 s so the card turns to connected as soon as the chat claims it. Connected: which Telegram
- * account, since when, and a button to disconnect it.
+ * The viewer's own Telegram chat for this workspace (Telegram bot design R4, R6), in Settings' Notifications section
+ * beside the email switch. Not connected: a button that makes a one-time link to the bot, and once it is made, the
+ * link, with the page re-read every 5 s so the card turns to connected as soon as the chat claims it. Connected: which
+ * Telegram account, since when, and a button to disconnect it.
  */
 export function TelegramCard({ orgSlug, link }: { orgSlug: string; link: { username: string | null; linkedAt: string } | null }) {
   const connect = useActionForm(connectTelegramAction, INITIAL);

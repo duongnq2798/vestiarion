@@ -6,14 +6,11 @@ import { sectionTitle } from "@/components/vx/nav";
 import { requireMembership } from "@/lib/auth/membership";
 import { can, canAssignRole, ORG_ROLES } from "@/lib/auth/roles";
 import { chainModes } from "@/lib/circle";
-import { platformDb, unwrap } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
 import { keyNamesForViewer } from "@/lib/member-keys";
 import { activeKeyNamesByCreator } from "@/lib/platform/api-keys";
 import { listMembers, listOpenInvitations } from "@/lib/platform/members";
 import { stats } from "@/lib/queries";
-import { linkFor } from "@/lib/telegram/links";
-import { telegramSettingsFromEnv } from "@/lib/telegram/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -25,24 +22,14 @@ export default async function MembersPage({ params }: { params: Promise<{ slug: 
   return inOrg(access, async () => {
     const { user, membership } = access;
     const canManage = can(membership.role, "members.manage");
-    const canDecide = can(membership.role, "approval.decide");
-    // Every member may connect their own Telegram chat, when this deployment has a bot (Telegram bot design R1, R4).
-    const telegramOn = telegramSettingsFromEnv() !== null;
-    const [members, invitations, dashboardStats, notifySwitch, telegramLink, keysByCreator] = await Promise.all([
+    const [members, invitations, dashboardStats, keysByCreator] = await Promise.all([
       listMembers(membership.orgId),
       canManage ? listOpenInvitations(membership.orgId) : Promise.resolve([]),
       stats(),
-      // Only a member who can decide payments has anything to switch; a
-      // viewer receives nothing, so their own row is never read.
-      canDecide
-        ? platformDb().from("memberships").select("notify_email").eq("org_id", membership.orgId).eq("user_id", user.id).single()
-        : Promise.resolve(null),
-      telegramOn ? linkFor(membership.orgId, user.id) : Promise.resolve(null),
       // Leaving or removing someone revokes the API keys they created here (migration 0069), so the confirmations name them.
       activeKeyNamesByCreator(membership.orgId),
     ]);
     const assignable = ORG_ROLES.filter((role) => canAssignRole(membership.role, role));
-    const notifyEmail = notifySwitch ? (unwrap(notifySwitch) as { notify_email: boolean }).notify_email : false;
 
     return (
       <ProductShell day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()}>
@@ -60,9 +47,6 @@ export default async function MembersPage({ params }: { params: Promise<{ slug: 
           viewerId={user.id}
           viewerRole={membership.role}
           assignable={assignable}
-          canDecide={canDecide}
-          notifyEmail={notifyEmail}
-          telegram={telegramOn ? { link: telegramLink ? { username: telegramLink.username, linkedAt: telegramLink.linkedAt } : null } : null}
           keyNames={keyNamesForViewer({ members, viewerId: user.id, viewerRole: membership.role, byCreator: keysByCreator })}
         />
       </ProductShell>
