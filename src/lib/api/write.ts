@@ -32,13 +32,16 @@ export async function readJsonBody(request: Request): Promise<{ raw: string; val
   return { raw, value: value as Record<string, unknown> };
 }
 
-/** The first problem with a body, as `<field>: <what is wrong>`. A field the operation does not take is named too. */
-export function invalidBody(error: z.ZodError): NextResponse {
+/**
+ * The first problem with a body, as `<field>: <what is wrong>`. A field the operation does not take is named too.
+ * `fields` gives a console form's field the name the API uses for it, where the two differ.
+ */
+export function invalidBody(error: z.ZodError, fields: Record<string, string> = {}): NextResponse {
   const issue = error.issues[0];
   if (!issue) return apiError("invalid_request", "The body is not valid.");
   if (issue.code === "unrecognized_keys") {
-    return apiError("invalid_request", `${issue.keys[0]}: is not a field this operation takes.`);
+    return apiError("invalid_request", `${[...issue.path, issue.keys[0]].join(".")}: is not a field this operation takes.`);
   }
-  const field = issue.path.length > 0 ? issue.path.join(".") : "body";
-  return apiError("invalid_request", `${field}: ${issue.message}`);
+  const path = issue.path.join(".");
+  return apiError("invalid_request", `${fields[path] ?? (path || "body")}: ${issue.message}`);
 }

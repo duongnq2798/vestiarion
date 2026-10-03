@@ -1,11 +1,11 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import type { z } from "zod";
 import type { CounterpartyDetailPayload } from "@/app/api/v1/counterparties/[id]/route";
-import type { InvoicePayload } from "@/app/api/v1/invoices/route";
 import type { LedgerEntryPayload } from "@/app/api/v1/ledger/route";
 import type { StatusPayload } from "@/app/api/v1/status/route";
 import type { ApiError, ApiPage } from "@/lib/api/contract";
 import type { CounterpartyPayload, ScreeningHistoryPayload } from "@/lib/api/counterparties";
+import type { InvoicePayload } from "@/lib/api/invoices";
 import type { MilestonePayload } from "@/lib/api/milestones";
 import type { TreasuryPayload } from "@/lib/api/treasury";
 import type {

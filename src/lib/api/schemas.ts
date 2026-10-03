@@ -3,6 +3,7 @@ import type { ApiErrorCode } from "@/lib/api/contract";
 import { COUNTERPARTY_RISK_LEVELS, COUNTERPARTY_ROLES } from "@/lib/api/counterparties";
 import { INVOICE_DIRECTIONS } from "@/lib/api/invoices";
 import { MILESTONE_STATUSES } from "@/lib/api/milestones";
+import { INVOICE_CURRENCIES } from "@/lib/intake-validation";
 import { PAYEE_CHAIN_IDS } from "@/lib/payee-chains";
 
 /**
@@ -404,3 +405,37 @@ export const CreateCounterpartyBodySchema = z
   })
   .strict()
   .describe("A counterparty to add. It is screened as one added in the console.");
+
+export const CreateInvoiceBodySchema = z
+  .object({
+    direction: z
+      .enum(INVOICE_DIRECTIONS)
+      .optional()
+      .describe("`payable`, a bill the business pays, which is the default, or `receivable`, one it is owed."),
+    counterpartyId: z
+      .string()
+      .describe("The counterparty's `id`, from `GET /api/v1/counterparties` or from the answer that added it."),
+    amount: z
+      .union([z.string(), z.number()])
+      .describe("What it bills, in `currency`, with at most 6 decimal places. A decimal string such as `\"1250.50\"` keeps it exact; a number is read the same way."),
+    currency: z.enum(INVOICE_CURRENCIES).optional().describe("`USDC`, the default, or `EURC`."),
+    dueDate: z.string().describe("The day it is due, as `YYYY-MM-DD`."),
+    memo: z.string().optional().describe("What it is for, up to 280 characters."),
+    poReference: z.string().optional().describe("The purchase order it bills against, up to 100 characters."),
+    goodsReceived: z
+      .boolean()
+      .optional()
+      .describe("Whether what it bills for has arrived. Defaults to `false`. Without it, or without `poReference`, the agent asks for the missing detail instead of paying."),
+    earlyPayDiscount: z
+      .object({
+        percent: z
+          .union([z.string(), z.number()])
+          .describe("The percent off, greater than 0 and less than 100, with at most 2 decimal places."),
+        deadline: z.string().describe("The last day it applies, as `YYYY-MM-DD`, on or before `dueDate`."),
+      })
+      .strict()
+      .optional()
+      .describe("A discount for paying by `deadline`. The agent weighs it against what the cash would earn in the reserve until `dueDate`."),
+  })
+  .strict()
+  .describe("An invoice to add. The agent decides a payable as one typed in, with every guardrail, usually within a minute.");

@@ -9,18 +9,22 @@ export type InvoiceInput = z.output<typeof invoiceInputSchema>;
 
 /**
  * Adds one invoice: the row, and the `create_invoice` entry that says who added it, and where it came from when it
- * was read from a document (invoice from a document D8) or added from the Telegram bot (Telegram bot design R10). The
- * one way an invoice is added, whether a person typed it into the form or tapped Add on a draft the bot read. Runs
+ * was read from a document (invoice from a document D8), added from the Telegram bot (Telegram bot design R10), or
+ * added through the API with a key (write API R4). The one way an invoice is added, whether a person typed it into the
+ * form, tapped Add on a draft the bot read, or their key sent it. A key's invoice is its issuer's, and nobody's once
+ * the issuer's account is gone, as an invoice whose maker deleted their account is. Runs
  * inside the organization's scope; the counterparty is looked up there, so another organization's id is not found,
  * exactly like one that does not exist, and then nothing is written.
  */
 export async function createInvoice(input: {
-  actorId: string;
+  actorId: string | null;
   invoice: InvoiceInput;
   document: DocumentProvenance | null;
-  via?: "telegram";
+  via?: "telegram" | "api";
+  /** The key that sent it, when it came through the API. */
+  apiKeyId?: string;
 }): Promise<{ id: string; counterpartyName: string } | null> {
-  const { actorId, invoice, document, via } = input;
+  const { actorId, invoice, document, via, apiKeyId } = input;
   const lookup = await db()
     .from("counterparties")
     .select("id, name")
@@ -67,6 +71,7 @@ export async function createInvoice(input: {
       goodsReceived: invoice.goodsReceived,
       ...(document ? { document } : {}),
       ...(via ? { via } : {}),
+      ...(apiKeyId ? { apiKeyId } : {}),
     },
   });
   return { id: row.id, counterpartyName: counterparty.name };
