@@ -38,7 +38,7 @@ let keyCounter = 0;
 let key: AuthenticatedKey;
 
 /** A fresh key per test, so the per-key write limit never carries over. */
-function useKey() {
+function freshKey() {
   keyCounter += 1;
   key = { keyId: `5e5e5e5e-0000-4000-8000-${String(keyCounter).padStart(12, "0")}`, orgId: ORG, scopes: ["read", "write"], createdBy: ISSUER };
   vi.mocked(authenticateApiKey).mockResolvedValue(key);
@@ -46,7 +46,7 @@ function useKey() {
 
 beforeEach(() => {
   vi.mocked(authenticateApiKey).mockReset();
-  useKey();
+  freshKey();
 });
 
 function workspace(options: { role?: string; linkFails?: boolean } = {}) {

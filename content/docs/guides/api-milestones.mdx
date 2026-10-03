@@ -104,7 +104,7 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           body=$(jq -n --arg c "$CONTRACTOR_ID" --arg t "$PR_TITLE" --arg u "$PR_URL" \
-            '{contractorId: $c, title: $t[0:160], amount: "150.00", verificationSource: $u}')
+            '{contractorId: $c, title: ($t | .[0:160]), amount: "150.00", verificationSource: $u}')
           curl --fail-with-body https://www.vestiarion.xyz/api/v1/milestones \
             -X POST \
             -H "Authorization: Bearer $VESTIARION_API_KEY" \

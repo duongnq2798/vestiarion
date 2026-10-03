@@ -40,7 +40,7 @@ const orgs = signedOrgs();
 let keyCounter = 0;
 
 /** A fresh key per test, so the per-key write limit never carries over. */
-function useKey(overrides: Partial<AuthenticatedKey> = {}) {
+function freshKey(overrides: Partial<AuthenticatedKey> = {}) {
   keyCounter += 1;
   const key: AuthenticatedKey = {
     keyId: `3c3c3c3c-0000-4000-8000-${String(keyCounter).padStart(12, "0")}`,
@@ -56,7 +56,7 @@ function useKey(overrides: Partial<AuthenticatedKey> = {}) {
 beforeEach(() => {
   cycleMock.mockReset();
   vi.mocked(authenticateApiKey).mockReset();
-  useKey();
+  freshKey();
 });
 
 const STORED_INVOICE = {
@@ -124,7 +124,7 @@ describe("a write key acts for its issuer as they are now (W5)", () => {
       [addInvoice, "/api/v1/invoices", INVOICE_BODY],
       [addCounterparty, "/api/v1/counterparties", COUNTERPARTY_BODY],
     ] as const) {
-      useKey();
+      freshKey();
       const { fake, run } = workspace(issuer);
       const response = await run(handler, path, { method: "POST", body, headers: { "idempotency-key": "same-key" } });
 
@@ -136,7 +136,7 @@ describe("a write key acts for its issuer as they are now (W5)", () => {
   });
 
   it("refuses a key no person issued, without reading a membership", async () => {
-    useKey({ createdBy: null });
+    freshKey({ createdBy: null });
     const { fake, run } = workspace({ role: "admin" });
     const response = await run(addInvoice, "/api/v1/invoices", { method: "POST", body: INVOICE_BODY });
 

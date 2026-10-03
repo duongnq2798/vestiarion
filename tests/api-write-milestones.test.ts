@@ -41,7 +41,7 @@ let keyCounter = 0;
 let key: AuthenticatedKey;
 
 /** A fresh key per test, so the per-key write limit never carries over. */
-function useKey() {
+function freshKey() {
   keyCounter += 1;
   key = { keyId: `4d4d4d4d-0000-4000-8000-${String(keyCounter).padStart(12, "0")}`, orgId: ORG, scopes: ["read", "write"], createdBy: ISSUER };
   vi.mocked(authenticateApiKey).mockResolvedValue(key);
@@ -50,7 +50,7 @@ function useKey() {
 beforeEach(() => {
   cycleMock.mockReset();
   vi.mocked(authenticateApiKey).mockReset();
-  useKey();
+  freshKey();
 });
 
 const STORED = {
@@ -138,7 +138,7 @@ describe("POST /api/v1/milestones", () => {
     expect(cycleMock).toHaveBeenCalledWith({ orgId: ORG, userId: ISSUER, sandbox: false, kind: "milestone_added" });
 
     cycleMock.mockReset();
-    useKey();
+    freshKey();
     await workspace().send(valid);
     expect(cycleMock).not.toHaveBeenCalled();
   });
