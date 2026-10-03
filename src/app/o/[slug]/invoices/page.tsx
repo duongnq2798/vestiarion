@@ -2,6 +2,7 @@ import { FileSpreadsheet, FileText, ListFilter, PenLine, Repeat } from "lucide-r
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AutoRefresh } from "@/components/AutoRefresh";
+import InboxEmails from "@/components/InboxEmails";
 import AgentControls from "@/components/AgentControls";
 import InvoiceCsvImport from "@/components/intake/InvoiceCsvImport";
 import InvoiceDocumentIntake from "@/components/intake/InvoiceDocumentIntake";
@@ -30,6 +31,8 @@ import { requireMembership } from "@/lib/auth/membership";
 import { orgHref } from "@/lib/auth/org-paths";
 import { chainModes } from "@/lib/circle";
 import { inOrg } from "@/lib/dal/scope";
+import { inboxEmailsToDecide } from "@/lib/email-inbox/list";
+import { inboxSettingsFromEnv } from "@/lib/email-inbox/settings";
 import { listLedgerEntries, listLedgerEntriesForTargets } from "@/lib/ledger";
 import { listCounterparties, listInvoices, stats, type InvoiceRow } from "@/lib/queries";
 import { plural, utcDay } from "@/lib/copy";
@@ -65,7 +68,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
   const access = await requireMembership(slug);
   return inOrg(access, async () => {
     const query = await searchParams;
-    const [invoices, counterparties, headEntries, dashboardStats, canWrite, canDecide, schedules, deciding] = await Promise.all([
+    const [invoices, counterparties, headEntries, dashboardStats, canWrite, canDecide, schedules, deciding, emailed] = await Promise.all([
       listInvoices(),
       listCounterparties(),
       listLedgerEntries(1),
@@ -79,6 +82,13 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
       }),
       // A cycle running now is deciding the payables not yet decided: they say so (decision trail R1). Best effort.
       hasRunningCycle().catch(() => false),
+      // The invoices that arrived by email and wait for a person, on a deployment that receives them (email invoices E7).
+      inboxSettingsFromEnv()
+        ? inboxEmailsToDecide().catch((error: unknown) => {
+            console.error("invoices: emailed invoices not loaded", error instanceof Error ? error.message : error);
+            return [];
+          })
+        : [],
     ]);
     const entries = await listLedgerEntriesForTargets({ invoiceIds: invoices.map((invoice) => invoice.id) });
     const filter = typeof query.status === "string" ? query.status : undefined;
@@ -217,6 +227,8 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
             <Totals invoices={openPayables} />
           </StatTile>
         </div>
+
+        <InboxEmails orgSlug={slug} emails={emailed} canAdd={canWrite} />
 
         {canWrite ? (
           // Folded until it is needed; open on a workspace with no invoice yet, where adding one is the next step.

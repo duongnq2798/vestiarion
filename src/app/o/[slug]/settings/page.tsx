@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import ApiKeysPanel from "@/components/ApiKeysPanel";
 import DeleteWorkspacePanel from "@/components/DeleteWorkspacePanel";
+import EmailInboxPanel from "@/components/EmailInboxPanel";
 import GoLivePanel from "@/components/GoLivePanel";
 import LedgerKeyPanel from "@/components/LedgerKeyPanel";
 import NotificationsPanel from "@/components/NotificationsPanel";
@@ -14,6 +15,8 @@ import { can } from "@/lib/auth/roles";
 import { chainModes } from "@/lib/circle";
 import { platformDb, unwrap } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
+import { inboxFor } from "@/lib/email-inbox/inboxes";
+import { inboxAddress, inboxSettingsFromEnv } from "@/lib/email-inbox/settings";
 import { listApiKeys } from "@/lib/platform/api-keys";
 import { deletionContext } from "@/lib/platform/delete-workspace";
 import { goLiveStatus } from "@/lib/platform/go-live";
@@ -49,7 +52,8 @@ export default async function SettingsPage({
     const telegramOn = telegramSettingsFromEnv() !== null;
     // How connecting Slack went, from its way back (Slack design S3); only the codes the panel knows are shown.
     const { slack: slackOutcome } = await searchParams;
-    const [goLive, apiKeys, webhookEndpoints, ledgerKey, dashboardStats, deletion, usyc, slack, notifySwitch, telegramLink] = await Promise.all([
+    const inboxSettings = inboxSettingsFromEnv();
+    const [goLive, apiKeys, webhookEndpoints, ledgerKey, dashboardStats, deletion, usyc, slack, notifySwitch, telegramLink, inbox] = await Promise.all([
       goLiveStatus(membership.orgId),
       listApiKeys(membership.orgId),
       listWebhookEndpoints(membership.orgId),
@@ -74,6 +78,13 @@ export default async function SettingsPage({
         ? platformDb().from("memberships").select("notify_email").eq("org_id", membership.orgId).eq("user_id", access.user.id).single()
         : null,
       telegramOn ? telegramLinkFor(membership.orgId, access.user.id) : null,
+      // Only on a deployment that receives invoices by email; best effort, like Slack's.
+      inboxSettings
+        ? inboxFor(membership.orgId).catch((error: unknown) => {
+            console.error("settings: invoice address not loaded", error instanceof Error ? error.message : error);
+            return undefined;
+          })
+        : undefined,
     ]);
     const notifyEmail = notifySwitch ? (unwrap(notifySwitch) as { notify_email: boolean }).notify_email : false;
 
@@ -81,7 +92,7 @@ export default async function SettingsPage({
       <ProductShell day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()}>
         <PageHead
           title={sectionTitle("settings")}
-          sub="Your own notifications, taking this workspace live, the USYC reserve, API keys, outgoing webhooks, Slack, the ledger signing key, and deleting the workspace. An owner takes it live, rotates the signing key, or deletes it; an owner or admin manages API keys, webhooks and Slack, and a secret is shown once, right after it is created."
+          sub="Your own notifications, taking this workspace live, the USYC reserve, API keys, outgoing webhooks, Slack, invoices by email, the ledger signing key, and deleting the workspace. An owner takes it live, rotates the signing key, or deletes it; an owner or admin manages API keys, webhooks, Slack and invoices by email, and a secret is shown once, right after it is created."
         />
         <div className="space-y-12">
           <NotificationsPanel
@@ -103,6 +114,14 @@ export default async function SettingsPage({
               canManage={can(membership.role, "integrations.manage")}
               canAdminister={canAdminister}
               notice={typeof slackOutcome === "string" ? slackOutcome : null}
+            />
+          )}
+          {inboxSettings && inbox !== undefined && (
+            <EmailInboxPanel
+              orgSlug={slug}
+              // The address goes to an owner or admin alone: knowing it lets anyone file a draft.
+              view={inbox ? { on: true, address: can(membership.role, "integrations.manage") ? inboxAddress(inbox.code, inboxSettings.domain) : null } : { on: false }}
+              canManage={can(membership.role, "integrations.manage")}
             />
           )}
           <LedgerKeyPanel orgSlug={slug} status={ledgerKey} canAdminister={canAdminister} />

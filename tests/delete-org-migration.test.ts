@@ -37,7 +37,7 @@ afterAll(async () => {
 const ENVELOPE = { v: 1, iv: "x", tag: "y", data: "z" };
 const PLATFORM_TABLES = [
   "memberships", "invitations", "api_keys", "webhook_endpoints", "webhook_deliveries", "payee_links", "telegram_link_codes", "telegram_links",
-  "api_idempotency", "slack_installs", "slack_links",
+  "api_idempotency", "slack_installs", "slack_links", "invoice_inboxes",
 ] as const;
 
 const deleteOrg = (orgId: string, by: string | null = owner) =>
@@ -154,6 +154,9 @@ async function populated(slug: string): Promise<string> {
     [orgId, team, JSON.stringify(ENVELOPE)]
   );
   await db.query("insert into public.slack_links (org_id, user_id, team_id, slack_user_id) values ($1, $2, $3, 'U0MEMBER')", [orgId, member, team]);
+  // The workspace's address for invoices by email goes with it (0068).
+  const code = Array.from(crypto.randomBytes(12), (byte) => "abcdefghijklmnopqrstuvwxyz234567"[byte % 32]).join("");
+  await db.query("insert into public.invoice_inboxes (org_id, code) values ($1, $2)", [orgId, code]);
   await closeCycles(orgId);
   return orgId;
 }

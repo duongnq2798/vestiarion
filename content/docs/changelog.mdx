@@ -1,5 +1,14 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-03: Invoices by email
+
+- **New ledger actions**, delivered to webhooks like every entry:
+  - `invoice_inbox_on`, `invoice_inbox_changed` and `invoice_inbox_off`, actor `human`, domain `system`: an owner or admin turned on the workspace's address for invoices by email, replaced it, or turned it off. Their `detail` is `{ by }`; the address is never recorded.
+  - `invoice_email_received`, actor `system`, domain `ap`: an email arrived at the address and was read. Its `detail` is `{ inboxEmailId, from, authentication, read, document }`: the sender with most of its name hidden, SPF/DKIM/DMARC as Resend reported them, `read` one of `ready`, `needs_details` or `unreadable`, and the document's `kind` and `sha256`, or `null`.
+  - `invoice_email_dismissed`, actor `human`, domain `ap`: `{ by, inboxEmailId }`.
+- `create_invoice` entries gain `via: "email"` and `inboxEmailId` when a member added the payable from an email on AP / AR. Such an entry carries `document` as one added from a document does, with `changed: []`. Nothing that arrives by email is added without a person.
+- Nothing changes in `/api/v1`.
+
 ## 2026-10-03: Add milestones and payee links through the API
 
 - **[Add a milestone](/docs/api/create-milestone)**, `POST /api/v1/milestones`, with a read-and-write key.

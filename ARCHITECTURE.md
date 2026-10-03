@@ -503,6 +503,27 @@ too); a draft is held for an hour (`slack_drafts`, gone with its link) and
 answered to that member alone, and its **Add** runs `addInvoice` as them, for
 an owner or admin, whose entry names `via: "slack"` and the link.
 
+**Invoices can arrive by email**
+(docs/superpowers/specs/2026-10-03-email-invoices-design.md). Resend receives
+at the inbound domain (`INBOUND_EMAIL_DOMAIN`: Resend's managed
+`<id>.resend.app`, or a subdomain with its MX record); a workspace's address is
+`invoices-<code>@<domain>`, the code 12 random base32 characters kept in
+`invoice_inboxes` (migration `0068`, platform), which an owner or admin turns
+on, replaces or turns off from Settings (`integrations.manage`), recorded
+without the address. `POST /api/email/inbound` checks Resend's Svix signature
+over the raw body before anything is read (`src/lib/email-inbox/verify.ts`),
+routes the email to the first recipient whose code is an inbox's, stores it at
+once in `inbox_emails` (tenant rows, one per Resend email, so a redelivery
+stores nothing new), answers 200, and reads it in `after()`
+(`src/lib/email-inbox/receive.ts`): the email and its first PDF, `.eml` or
+`.txt` attachment from Resend's receiving API (the download only from Resend's
+hosts), else its text, through the same `readInvoiceDraft` and the shared draft
+rule. The row ends `ready`, `needs_details` or `unreadable`, with reasons a
+person reads; the workspace's Slack channel is told. Nothing is added by
+itself: on AP / AR an owner or admin runs `inbox.add` (the draft used once, put
+back if the invoice cannot be added; `create_invoice` names `via: "email"` and
+`inboxEmailId`) or `inbox.dismiss`.
+
 ## API
 
 The versioned API boundary lives under `src/app/api/v1/`:
