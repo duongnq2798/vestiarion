@@ -26,7 +26,7 @@ export function apiError(code: ApiErrorCode, message: string, headers?: HeadersI
   return NextResponse.json(body, { status: STATUS_FOR[code], headers });
 }
 
-const INTERNAL_MESSAGE = "The request could not be completed.";
+export const INTERNAL_MESSAGE = "The request could not be completed.";
 
 function clientIp(request: Request): string {
   return (

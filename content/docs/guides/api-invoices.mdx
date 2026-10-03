@@ -62,7 +62,7 @@ A network can fail between a request and its answer. Send an `Idempotency-Key` w
 
 - A repeat with the same body within 24 hours gets the first answer back, with `Idempotent-Replayed: true`, and adds nothing.
 - The same key with a different body answers `409 conflict`. So does a repeat while the first request is still being handled: wait a moment and send it again.
-- A `5xx` answer is not kept, so a repeat runs the request again.
+- A `5xx` answer is not kept, so a repeat runs the request again. Neither is a request that never finished, because it timed out or its connection dropped: after 10 minutes its key is free again.
 - A body that fails validation is not kept either: fix it, and send it again with the same key.
 
 Writes are limited to 30 a minute per key. Over that, the answer is `429 rate_limited`, with `Retry-After`.

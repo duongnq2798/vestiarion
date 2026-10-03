@@ -447,7 +447,9 @@ counted per key (`takeApiWriteToken`, 30 a minute) after the scope check.
 reaches, after the body validates: the first outcome is kept for 24 hours
 and replayed with `Idempotent-Replayed: true`, a different body or a request
 still in flight answers `409 conflict`, and a `5xx` releases the claim so a
-retry runs again.
+retry runs again. A claim left without an outcome for 10 minutes
+(`IN_FLIGHT_TIMEOUT_MS`, longer than any function runs) is taken over by the
+next request with that key.
 
 Collections intended for human browsing are newest first and use
 `created_at + id` as a stable cursor. The ledger is the exception: its `seq`

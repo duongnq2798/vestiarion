@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 import { describe, expect, it } from "vitest";
 import { withIdempotency } from "@/lib/api/idempotency";
@@ -155,6 +156,54 @@ describe("withIdempotency", () => {
 
     expect(response.status).toBe(201);
     expect(await response.json()).toEqual({ data: { id: "invoice-1" } });
+  });
+
+  it("takes over a claim left without an outcome for longer than any request runs, so a retry is not refused for a day", async () => {
+    // The first request claimed the key and died before it stored an outcome: a timeout, or a lost connection to the table.
+    const body = '{"amount":"10"}';
+    const abandoned: Row = {
+      org_id: ORG, idempotency_key: "order-1008", request_hash: crypto.createHash("sha256").update(`POST /api/v1/invoices
+${body}`).digest("hex"),
+      status: null, response: null, created_at: new Date(NOW - 11 * 60_000).toISOString(), completed_at: null,
+    };
+    const { fake, rows } = table([abandoned]);
+    const write = counted();
+
+    const response = await send(fake, body, "order-1008", write.run);
+
+    expect(response.status).toBe(201);
+    expect(write.calls()).toBe(1);
+    expect(rows.get(`${ORG}|order-1008`)).toMatchObject({ status: 201 });
+    // Only a claim still without an outcome, and still the one that was read, is taken over.
+    const takeover = fake.requests.find((sent) => sent.method === "DELETE");
+    expect(takeover?.params.get("status")).toBe("is.null");
+    expect(takeover?.params.get("created_at")).toBe(`eq.${abandoned.created_at}`);
+  });
+
+  it("still refuses a repeat while a claim without an outcome is younger than that", async () => {
+    const body = '{"amount":"10"}';
+    const running: Row = {
+      org_id: ORG, idempotency_key: "order-1009", request_hash: crypto.createHash("sha256").update(`POST /api/v1/invoices
+${body}`).digest("hex"),
+      status: null, response: null, created_at: new Date(NOW - 4 * 60_000).toISOString(), completed_at: null,
+    };
+    const { fake } = table([running]);
+    const write = counted();
+    const response = await send(fake, body, "order-1009", write.run);
+    expect(response.status).toBe(409);
+    expect(write.calls()).toBe(0);
+  });
+
+  it("answers 500 in the API's own shape when the outcomes cannot be reached, and runs nothing", async () => {
+    const fake = fakeSupabase(() => ({ status: 500, body: { code: "XX000", message: "connection reset", details: null, hint: null } }));
+    const write = counted();
+    const request = post("{}", "order-1010");
+
+    const response = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => withIdempotency(request, KEY, "{}", write.run, { now: () => NOW }));
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: { code: "internal", message: "The request could not be completed." } });
+    expect(write.calls()).toBe(0);
   });
 
   it.each([

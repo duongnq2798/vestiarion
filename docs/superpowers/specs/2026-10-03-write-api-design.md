@@ -57,6 +57,9 @@ route"), and the docs spec named it as the next surface.
     the same status and body back, with `Idempotent-Replayed: true`. A repeat with a different body gets
     `409 conflict`, and so does a repeat while the first is still being handled.
   - A 5xx outcome is not stored, so retrying it runs the request again.
+  - A claim still without an outcome after 10 minutes, longer than any function here runs, belongs to a request that
+    died; the next request with that key takes it over. A table that cannot be reached answers the API's own `500`,
+    and nothing runs.
   - A body that fails validation is answered before the key is claimed, so nothing is kept for it. The client can fix
     the body and send it again with the same key, as with Stripe's keys. What fails once the write has started, such
     as a `counterpartyId` the workspace does not hold, is kept like any other outcome.
