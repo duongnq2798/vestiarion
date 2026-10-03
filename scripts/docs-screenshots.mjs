@@ -84,6 +84,7 @@ const SHOTS = {
   "first-payment-stopped": async () => {},
   "first-payment-approval": async () => {},
   "first-payment-approval-own": async () => {},
+  "first-payment-approval-yours": async () => {},
   "first-payment-add-details": async (page) => {
     await page.click(`[...document.querySelectorAll("[data-docs-shot] button")].find((b) => b.textContent.trim() === "Add details")`);
     await page.waitFor(`document.querySelector("[role=dialog]")?.textContent.includes("Add details to Bluebird Logistics")`);

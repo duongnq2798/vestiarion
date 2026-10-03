@@ -188,7 +188,7 @@ When the model decided to pay but a guardrail stopped it, the card also has a "B
 A payable the agent stopped also says what you can do about it, on the console's **Stopped** section as on **AP / AR**. Under the card, a line names the cause and the way through, for example "It is above CME's payment limit. Pay it in Approvals, or raise the limit." **Decide in Approvals** opens Approvals at that payable's card. Owners and admins also get the page that removes the cause:
 
 - **Edit limit** or **Confirm address** opens the counterparty's row on **Counterparties**, already open;
-- **Review screening** opens **Compliance**, for a counterparty screened high risk;
+- **Review screening** opens the counterparty's row, for a counterparty screened high risk, where a wrong match is marked **Not this person**;
 - **Spending limit** opens the agent's spending limit on **Treasury**, when it had no room for the payment;
 - **Treasury**, when the operating wallet is short of EURC or the Gateway balance of a payout.
 
@@ -289,7 +289,16 @@ Owners, admins and approvers decide each one:
   caption="A held payable, with the three decisions a person can make."
 />
 
-**Approve and pay** is disabled in two cases, and the card says why. "You created this invoice" means that the person who added an invoice cannot also approve it: another member who can approve payments decides it. "Screened high risk" means that a high-risk counterparty is never paid.
+**Approve and pay** is disabled in two cases, and the card says why, and what you can do instead:
+
+- **You entered this invoice.** Beside the disabled button, the card says "You created this invoice". The person who adds an invoice cannot also approve it, so a payment made by hand always has two people behind it: another owner, admin or approver decides it. The card says so, and you can still reject it or return it to the agent. **See who can approve** opens **Members**. When a rule stopped the agent, the card also says what happens without anyone approving: for the agent's spending limit, "The agent pays it on its own once its spending limit has room: the next UTC day, or sooner if an owner or admin raises the limit." Owners and admins also get the page that removes the cause, here **Spending limit**.
+- **Screened high risk.** A counterparty screened high risk is never paid, not even by approval. If the screening matched someone else, **Review screening** opens the counterparty's row on **Counterparties**, where you mark the match **Not this person**; the agent then decides the invoice again.
+
+<Screenshot
+  src="/docs/guides/first-payment-approval-yours.png"
+  alt="An approval card for Bluebird Logistics, 3.00 USDC, Held, which the viewer entered: Approve and pay is disabled with You created this invoice beside it. Under the agent's reasoning, a box titled You entered this invoice says that another owner, admin or approver must approve it, that the person who enters a bill never also approves it, and that the agent pays it on its own once its spending limit has room, with the buttons Spending limit and See who can approve."
+  caption="A payable you entered: who must approve it, and what happens without them."
+/>
 
 If you are the only member of the workspace who can approve payments (the only owner, admin or approver), there is nobody else to approve what you add, so **Approve and pay** stays enabled on your own invoices and the card says "You entered this invoice. You are the only person in this workspace who can approve payments, so you can approve it yourself, and the ledger records that you did." The confirm dialog adds "It also records that you entered it yourself, as the workspace's only approver." In the audit log, the `approval_paid` entry ends "(entered and approved by the workspace's only approver)". Every other check still applies: a high-risk counterparty, a changed address and a short balance are still refused. Once a second member can approve payments, the rule applies again, and each of you approves what the other entered.
 

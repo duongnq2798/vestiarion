@@ -302,6 +302,7 @@ const HELD: WaitingPayable = {
   poReference: "PO-2213",
   goodsReceived: false,
   addedSinceDecision: null,
+  guardrailRule: null,
 };
 
 /** A payable the agent asked about because nothing of its three-way match is on file (complete held invoice). */
@@ -629,6 +630,26 @@ export const DOCS_SHOTS = {
       return (
         <ApprovalCard orgSlug={SLUG} payable={{ ...HELD, createdBy: "docs-sample-owner" }} canDecide canEdit viewerId="docs-sample-owner" sandbox={false} soleApprover />
       );
+    },
+  },
+  "first-payment-approval-yours": {
+    guide: "first-payment",
+    page: "approvals",
+    sub: "Payables the agent would not pay on its own, oldest due date first. Pay one now, reject it, or return it to the agent's next cycle.",
+    render: function YoursShot() {
+      // The person who entered it, in a workspace with other approvers, on a payable the spending limit held (approval guidance).
+      const payable: WaitingPayable = {
+        ...HELD,
+        id: "00000000-0000-4000-8000-0000000000e6",
+        createdBy: "docs-sample-owner",
+        amount: 3,
+        poReference: "PO-2213",
+        goodsReceived: true,
+        reasoning: "Held for a person to approve: paying 3.00 USDC would take the agent past its 5.00 USDC daily spending limit; 3.60 USDC already paid today, 1.40 USDC left.",
+        explanation: "Held for a person to approve: paying 3.00 USDC would take the agent past its 5.00 USDC daily spending limit; 3.60 USDC already paid today, 1.40 USDC left.",
+        guardrailRule: "workspace.outflow_budget",
+      };
+      return <ApprovalCard orgSlug={SLUG} payable={payable} canDecide canEdit viewerId="docs-sample-owner" sandbox={false} />;
     },
   },
   "first-payment-add-details": {
