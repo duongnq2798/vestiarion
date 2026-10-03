@@ -233,6 +233,19 @@ const HELD: WaitingPayable = {
   currency: "USDC",
   payeeChain: "ARC-TESTNET",
   bridgeFeeUsdc: null,
+  poReference: "PO-2213",
+  goodsReceived: false,
+  addedSinceDecision: null,
+};
+
+/** A payable the agent asked about because nothing of its three-way match is on file (complete held invoice). */
+const AWAITING: WaitingPayable = {
+  ...HELD,
+  id: "00000000-0000-4000-8000-0000000000e3",
+  status: "awaiting_info",
+  reasoning: "Asked for more information before paying 8.00 USDC to Bluebird Logistics: no purchase order is on file and no receipt is recorded, so the three-way match is incomplete.",
+  explanation: "Asked for more information before paying 8.00 USDC to Bluebird Logistics: no purchase order is on file and no receipt is recorded, so the three-way match is incomplete.",
+  poReference: null,
 };
 
 function HashChain({ entries }: { entries: LedgerEntry[] }) {
@@ -480,7 +493,18 @@ export const DOCS_SHOTS = {
     sub: "Payables the agent would not pay on its own, oldest due date first. Pay one now, reject it, or return it to the agent's next cycle.",
     render: function OwnApprovalShot() {
       // The workspace's only approver, looking at a payable they entered themselves (sole approver R5).
-      return <ApprovalCard orgSlug={SLUG} payable={{ ...HELD, createdBy: "docs-sample-owner" }} canDecide viewerId="docs-sample-owner" sandbox={false} soleApprover />;
+      return (
+        <ApprovalCard orgSlug={SLUG} payable={{ ...HELD, createdBy: "docs-sample-owner" }} canDecide canEdit viewerId="docs-sample-owner" sandbox={false} soleApprover />
+      );
+    },
+  },
+  "first-payment-add-details": {
+    guide: "first-payment",
+    page: "approvals",
+    sub: "Payables the agent would not pay on its own, oldest due date first. Pay one now, reject it, or return it to the agent's next cycle.",
+    render: function AddDetailsShot() {
+      // An owner adding what the agent asked for (complete held invoice R1, R2): the script opens the dialog and fills it.
+      return <ApprovalCard orgSlug={SLUG} payable={AWAITING} canDecide canEdit viewerId="docs-sample-owner" sandbox={false} />;
     },
   },
   "first-payment-onchain-limit": {

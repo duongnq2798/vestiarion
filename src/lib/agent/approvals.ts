@@ -15,8 +15,9 @@ import { isSoleApprover } from "./sole-approver";
 
 /**
  * The approvals library (spec §6): lets a person pay, reject or return a
- * payable the agent held for review. Every export here runs inside an
- * organization scope.
+ * payable the agent held for review, or add the purchase order or goods
+ * receipt it was missing so that the agent decides it again
+ * (`addInvoiceDetails`). Every export here runs inside an organization scope.
  *
  * The decision itself is claimed through `claim_invoice_decision` (migration
  * 0025) before anything else changes — a compare-and-set in the database, so
@@ -66,7 +67,9 @@ export type ApprovalErrorCode =
   | "no_operating_account"
   | "payment_in_flight"
   | "address_changed"
-  | "bridge_unsupported_token";
+  | "bridge_unsupported_token"
+  | "nothing_to_add"
+  | "invoice_changed";
 
 /** Every message except `insufficient_funds`, whose text names the actual balance. */
 const MESSAGES: Record<Exclude<ApprovalErrorCode, "insufficient_funds">, string> = {
@@ -78,6 +81,8 @@ const MESSAGES: Record<Exclude<ApprovalErrorCode, "insufficient_funds">, string>
   payment_in_flight: "A payment for this invoice was already sent. Approve and pay records it.",
   address_changed: "This counterparty's address changed after this page loaded. Check the new address and try again.",
   bridge_unsupported_token: "Only USDC crosses chains. This invoice is in EURC, and its payee is paid on another chain.",
+  nothing_to_add: "Enter a PO reference or tick Goods or services received.",
+  invoice_changed: "This invoice changed a moment ago. Reload the page to see it.",
 };
 
 export class ApprovalError extends Error {
@@ -301,6 +306,43 @@ export interface WaitingPayable {
   payeeChain: string;
   /** For a payee on another chain, the CCTP fee to it as read for this listing; null when not read or not needed (review I2). */
   bridgeFeeUsdc: number | null;
+  /** The purchase order on the invoice now; null without one. */
+  poReference: string | null;
+  /** Whether the goods or services are marked received now. */
+  goodsReceived: boolean;
+  /**
+   * What a person added since the agent's decision recorded its facts, which the agent's follow-up reopens the
+   * payable on at its next cycle (complete held invoice R4, R6); null when nothing was.
+   */
+  addedSinceDecision: AddedDetails | null;
+}
+
+/** What a person added to a payable the agent stopped on: only facts it lacked (complete held invoice R2). */
+export interface AddedDetails {
+  poReference?: string;
+  goodsReceived?: true;
+}
+
+/** The purchase order and goods receipt a decision's entry recorded in `observed`, each only when it recorded one. */
+function recordedFacts(entry: { detail: Record<string, unknown> } | null): { poReference?: string | null; goodsReceived?: boolean } {
+  const observed = entry?.detail.observed;
+  if (!observed || typeof observed !== "object") return {};
+  const facts = observed as Record<string, unknown>;
+  return {
+    ...("poReference" in facts ? { poReference: typeof facts.poReference === "string" ? facts.poReference : null } : {}),
+    ...("goodsReceived" in facts ? { goodsReceived: facts.goodsReceived === true } : {}),
+  };
+}
+
+/** What is on the invoice now that its decision recorded as missing: the changes the follow-up reopens it on. */
+function addedSince(
+  recorded: { poReference?: string | null; goodsReceived?: boolean },
+  onFile: { poReference: string | null; goodsReceived: boolean }
+): AddedDetails | null {
+  const added: AddedDetails = {};
+  if (recorded.poReference === null && onFile.poReference !== null) added.poReference = onFile.poReference;
+  if (recorded.goodsReceived === false && onFile.goodsReceived) added.goodsReceived = true;
+  return Object.keys(added).length > 0 ? added : null;
 }
 
 /** Every payable currently waiting for a person's decision — held, flagged, awaiting more information, or claimed by someone else right now. */
@@ -368,6 +410,10 @@ export async function listWaitingPayables(
   const now = Date.now();
   return rows.map((row) => {
     const intent = intents.get(row.id) ?? null;
+    const decision = entries.find((entry) => entry.detail.invoiceId === row.id && entry.detail.observed !== undefined) ?? null;
+    const onFile = { poReference: row.po_reference ?? null, goodsReceived: row.goods_received === true };
+    // The decision is explained from the facts it recorded, not from details a person added since (R6).
+    const recorded = recordedFacts(decision);
     return {
       id: row.id,
       counterpartyId: row.counterparty_id,
@@ -384,9 +430,9 @@ export async function listWaitingPayables(
           amount: num(row.amount),
           currency: currencyOf(row.currency),
           dueDate: row.due_date,
-          poReference: row.po_reference ?? null,
-          goodsReceived: row.goods_received === true,
-          entry: entries.find((entry) => entry.detail.invoiceId === row.id && entry.detail.observed !== undefined) ?? null,
+          poReference: recorded.poReference !== undefined ? recorded.poReference : onFile.poReference,
+          goodsReceived: recorded.goodsReceived ?? onFile.goodsReceived,
+          entry: decision,
         })
       ),
       decidedAt: row.decided_at,
@@ -400,6 +446,9 @@ export async function listWaitingPayables(
       currency: currencyOf(row.currency),
       payeeChain: payeeChain(row.counterparties?.chain).id,
       bridgeFeeUsdc: fees.get(row.id) ?? null,
+      poReference: onFile.poReference,
+      goodsReceived: onFile.goodsReceived,
+      addedSinceDecision: addedSince(recorded, onFile),
     };
   });
 }
@@ -424,13 +473,15 @@ interface LoadedInvoice {
   currency: Stablecoin;
   /** The payee's chain: another than Arc testnet is paid through CCTP (CCTP payouts X2). */
   destinationChain: string | null;
+  poReference: string | null;
+  goodsReceived: boolean;
 }
 
 async function loadWaitingPayable(invoiceId: string): Promise<LoadedInvoice> {
   const result = await db()
     .from("invoices")
     .select(
-      "id, amount, currency, status, direction, agent_reasoning, created_by, counterparty_id, early_pay_discount_pct, discount_due_date, counterparties(name, risk_level, address, chain)"
+      "id, amount, currency, status, direction, agent_reasoning, created_by, counterparty_id, early_pay_discount_pct, discount_due_date, po_reference, goods_received, counterparties(name, risk_level, address, chain)"
     )
     .eq("id", invoiceId)
     .maybeSingle();
@@ -447,6 +498,8 @@ async function loadWaitingPayable(invoiceId: string): Promise<LoadedInvoice> {
     counterparty_id: string;
     early_pay_discount_pct: string | number | null;
     discount_due_date: string | null;
+    po_reference?: string | null;
+    goods_received?: boolean | null;
     counterparties: { name: string; risk_level: string; address: string | null; chain?: string | null } | null;
   } | null;
 
@@ -467,6 +520,8 @@ async function loadWaitingPayable(invoiceId: string): Promise<LoadedInvoice> {
     discount: invoiceDiscount(row),
     currency: currencyOf(row.currency),
     destinationChain: row.counterparties?.chain ?? null,
+    poReference: row.po_reference ?? null,
+    goodsReceived: row.goods_received === true,
   };
 }
 
@@ -777,4 +832,69 @@ export async function returnInvoice(input: { actorId: string; invoiceId: string 
     summary: "An invoice was returned, undecided",
     detail: { by: input.actorId, invoiceId: input.invoiceId },
   });
+}
+
+/** The statuses a person may add details in: waiting, and not being decided by anyone (complete held invoice R3). */
+const COMPLETABLE_STATUSES = ["held", "flagged", "awaiting_info"] as const;
+
+/**
+ * Adds what a payable the agent stopped on was missing (spec 2026-10-03-complete-held-invoice-design): its purchase
+ * order, when it has none, and its goods or services received, when they are not marked so. Nothing already on file
+ * changes (R2), and only owners and admins call it (R1, in the action).
+ *
+ * The status stays as it is. At the next cycle the follow-up stage compares the payable's facts with those its
+ * decision recorded, reopens it on what changed with a signed `invoice_reopened`, and the AP stage decides it again,
+ * every check included (R4). A payment already sent is refused before any write, as Reject and Return refuse it; the
+ * write is a compare-and-set on a waiting status, and on the purchase order still being empty, so a decision or
+ * another person's addition in between wins (R3). `reviewed_by` records a person's hand on it (R5).
+ */
+export async function addInvoiceDetails(input: {
+  actorId: string;
+  invoiceId: string;
+  poReference: string | null;
+  goodsReceived: boolean;
+}): Promise<AddedDetails> {
+  const orgId = currentOrgId();
+  const invoice = await loadWaitingPayable(input.invoiceId);
+  if (!(COMPLETABLE_STATUSES as readonly string[]).includes(invoice.status)) raise("invoice_changed");
+
+  const poReference = input.poReference?.trim() || null;
+  const added: AddedDetails = {};
+  if (poReference !== null && invoice.poReference === null) added.poReference = poReference;
+  if (input.goodsReceived && !invoice.goodsReceived) added.goodsReceived = true;
+  if (added.poReference === undefined && added.goodsReceived === undefined) raise("nothing_to_add");
+
+  await refuseIfPaymentSent(invoice.id);
+
+  let write = db()
+    .from("invoices")
+    .update({
+      ...(added.poReference !== undefined ? { po_reference: added.poReference } : {}),
+      ...(added.goodsReceived ? { goods_received: true } : {}),
+      reviewed_by: input.actorId,
+      reviewed_at: new Date().toISOString(),
+    })
+    .eq("id", invoice.id)
+    .in("status", COMPLETABLE_STATUSES);
+  if (added.poReference !== undefined) write = write.is("po_reference", null);
+  if (added.goodsReceived) write = write.eq("goods_received", false);
+  const changed = unwrap(await write.select("id")) as Array<{ id: string }>;
+  if (changed.length === 0) raise("invoice_changed");
+
+  await appendLedgerEntryBestEffort(orgId, {
+    actor: "human",
+    domain: "ap",
+    action: "invoice_details_added",
+    summary: `Added ${addedWords(added)} to an invoice from ${invoice.counterpartyName} for ${invoice.amount} ${invoice.currency}`,
+    // No `observed`: the follow-up and the card read the decision's facts from the decision's own entry.
+    detail: { by: input.actorId, invoiceId: invoice.id, counterpartyId: invoice.counterpartyId, added },
+  });
+  return added;
+}
+
+/** "purchase order PO-100", "goods received", or both joined. */
+function addedWords(added: AddedDetails): string {
+  return [added.poReference !== undefined ? `purchase order ${added.poReference}` : null, added.goodsReceived ? "goods received" : null]
+    .filter((words): words is string => words !== null)
+    .join(" and ");
 }

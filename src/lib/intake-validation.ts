@@ -164,6 +164,12 @@ const csvBooleanSchema = z.union([z.boolean(), z.string()]).transform((value, co
   return z.NEVER;
 });
 
+/** What a person may add to a payable the agent stopped on, read as the invoice form reads it (complete held invoice R2). */
+export const invoiceDetailsInputSchema = z.object({
+  poReference: optionalText(100),
+  goodsReceived: z.boolean(),
+});
+
 export const csvInvoiceInputSchema = z
   .object({
     direction: z.string().trim().toLowerCase().pipe(z.enum(["payable", "receivable"])),

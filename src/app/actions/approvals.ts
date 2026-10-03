@@ -3,11 +3,12 @@
 import "server-only";
 
 import { z } from "zod";
-import { approveAndPay, ApprovalError, rejectInvoice, returnInvoice } from "@/lib/agent/approvals";
+import { addInvoiceDetails, approveAndPay, ApprovalError, rejectInvoice, returnInvoice } from "@/lib/agent/approvals";
 import { raiseCycleEvent } from "@/lib/agent/cycle-soon";
 import { authorize } from "@/lib/auth/authorize";
 import { revalidateOrgPages } from "@/lib/auth/revalidate";
 import { inOrg } from "@/lib/dal/scope";
+import { invoiceDetailsInputSchema, invoiceFormRefusal } from "@/lib/intake-validation";
 
 export interface ApprovalActionResult {
   ok: boolean;
@@ -87,6 +88,33 @@ export async function returnInvoiceAction(_previous: ApprovalActionResult, formD
       revalidateOrgPages();
       raiseCycleEvent(auth, "payable_returned");
       return { ok: true, message: "Returned to the agent. It usually decides it again within a minute." };
+    } catch (error) {
+      return fail(error);
+    }
+  });
+}
+
+/**
+ * Adds the purchase order or goods receipt a held payable was missing (complete held invoice). Entering facts is a
+ * records write, for owners and admins: an approver decides payments, and does not enter them (R1). The payable keeps
+ * its status; the cycle the event starts reopens it on the changed facts and decides it again (R4).
+ */
+export async function addInvoiceDetailsAction(_previous: ApprovalActionResult, formData: FormData): Promise<ApprovalActionResult> {
+  const auth = await authorize(formData.get("orgSlug"), "records.write");
+  if (!auth.ok) return { ok: false, message: auth.message };
+  return inOrg(auth, async () => {
+    const invoiceId = invoiceIdSchema.safeParse(formString(formData, "invoiceId"));
+    if (!invoiceId.success) return { ok: false, message: "That invoice is not waiting for a decision." };
+    const details = invoiceDetailsInputSchema.safeParse({
+      poReference: formString(formData, "poReference"),
+      goodsReceived: formData.get("goodsReceived") === "on",
+    });
+    if (!details.success) return { ok: false, message: invoiceFormRefusal(details.error).message };
+    try {
+      await addInvoiceDetails({ actorId: auth.user.id, invoiceId: invoiceId.data, ...details.data });
+      revalidateOrgPages();
+      raiseCycleEvent(auth, "details_added");
+      return { ok: true, message: "Details added. The agent usually decides it again within a minute." };
     } catch (error) {
       return fail(error);
     }

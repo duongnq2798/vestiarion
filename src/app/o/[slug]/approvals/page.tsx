@@ -75,6 +75,7 @@ export default async function ApprovalsPage({ params }: { params: Promise<{ slug
                 viewerId={user.id}
                 sandbox={membership.mode === "sandbox"}
                 soleApprover={soleApprover}
+                canEdit={can(membership.role, "records.write")}
               />
             ))}
           </div>
