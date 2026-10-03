@@ -579,6 +579,19 @@ changes `/api/v1` or webhooks adds a changelog entry** to
 `content/docs/changelog.mdx`: dated, newest first, saying what changed for an
 integrator.
 
+The TypeScript SDK lives in `sdk/` (`@vestiarion/sdk`). It has no dependencies, uses `fetch` and Web Crypto only, and
+is type-checked, linted and tested with the app. It is held to the code in three ways:
+
+- `sdk/src/types.ts` is rendered from the OpenAPI document by `npm run sdk:types` (`scripts/lib/sdk-types.ts`).
+  `tests/sdk-types.test.ts` fails when the file is stale.
+- `tests/sdk-contract.test.ts` runs the SDK against the v1 routes in-process.
+- `tests/sdk-webhooks.test.ts` holds its checks to `src/lib/webhooks/sign.ts`, `src/lib/ledger.ts` and the receipt
+  verifier.
+
+`npm run sdk:pack` compiles the package and packs it into `public/sdk/vestiarion-sdk-<version>.tgz`, the URL the docs
+install from. That file is committed, and a version already packed is never packed again, so a lockfile's integrity
+hash keeps matching. `tests/sdk-package.test.ts` holds the tarball to a fresh build.
+
 ## Data ownership
 
 Supabase tables read by the API include `accounts`, `counterparties`,

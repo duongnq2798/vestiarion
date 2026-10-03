@@ -263,6 +263,10 @@ workspace alone — there is no shared or platform-wide credential on that
 surface. The same key connects an AI agent to the
 [MCP server](https://www.vestiarion.xyz/docs/ai-integration/mcp) at `/api/mcp`, whose tools are the `/api/v1` operations.
 
+A typed TypeScript client, `@vestiarion/sdk` (`sdk/`), wraps every `/api/v1` operation and checks webhook signatures and
+ledger entries. Install it with `npm install https://www.vestiarion.xyz/sdk/vestiarion-sdk-0.1.0.tgz`; see
+[TypeScript SDK](https://www.vestiarion.xyz/docs/get-started/sdk).
+
 The same page lets an owner or admin (`webhooks.manage`) register up to 5
 HTTPS endpoints that receive the workspace's ledger, signed, as it happens —
 pushed rather than polled. See [Webhooks](https://www.vestiarion.xyz/docs/webhooks).
