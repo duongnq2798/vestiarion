@@ -206,6 +206,7 @@ A payable the agent stopped also says what you can do about it, on the console's
 - **Edit limit** or **Confirm address** opens the counterparty's row on **Counterparties**, already open;
 - **Review screening** opens the counterparty's row, for a counterparty screened high risk, where a wrong match is marked **Not this person**;
 - **Spending limit** opens the agent's spending limit on **Treasury**, when it had no room for the payment;
+- **USYC reserve** opens the reserve in **Settings**, when the operating wallet did not hold the cash a payment needs and the reserve could not cover it: bring cash back there, or add USDC to the operating wallet, and the agent decides the payment again on its own;
 - **Treasury**, when the operating wallet is short of EURC or the Gateway balance of a payout.
 
 A stop only a decision resolves, such as a payout fee above 10% of the invoice or a possible duplicate, says so and offers **Decide in Approvals**. A payable missing its purchase order or goods receipt offers **Add details** (see "Add what the agent was missing" below).
@@ -308,7 +309,7 @@ Owners, admins and approvers decide each one:
 
 **Approve and pay** is disabled in two cases, and the card says why, and what you can do instead:
 
-- **You entered this invoice.** Beside the disabled button, the card says "You created this invoice". The person who adds an invoice cannot also approve it, so a payment made by hand always has two people behind it: another owner, admin or approver decides it. The card says so, and you can still reject it or return it to the agent. **See who can approve** opens **Members**. When a rule stopped the agent, the card also says what happens without anyone approving: for the agent's spending limit, "The agent pays it on its own once its spending limit has room: the next UTC day, or sooner if an owner or admin raises the limit." Owners and admins also get the page that removes the cause, here **Spending limit**.
+- **You entered this invoice.** Beside the disabled button, the card says "You created this invoice". The person who adds an invoice cannot also approve it, so a payment made by hand always has two people behind it: another owner, admin or approver decides it. The card says so, and you can still reject it or return it to the agent. **See who can approve** opens **Members**. When a rule stopped the agent, the card also says what happens without anyone approving: for the agent's spending limit, "The agent pays it on its own once its spending limit has room: the next UTC day, or sooner if an owner or admin raises the limit." For a payment held for want of cash, "The agent decides it again on its own once cash comes in: USDC added to the operating wallet, or brought back from the reserve." Owners and admins also get the page that removes the cause, here **Spending limit**.
 - **Screened high risk.** A counterparty screened high risk is never paid, not even by approval. If the screening matched someone else, **Review screening** opens the counterparty's row on **Counterparties**, where you mark the match **Not this person**; the agent then decides the invoice again.
 
 <Screenshot
