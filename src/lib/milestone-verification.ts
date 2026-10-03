@@ -1,4 +1,5 @@
 import { parseGitHubPullRequestUrl, verifyGitHubPullRequest } from "./github-verification";
+import { pullRequestTokens } from "./github/tokens";
 import { appendLedgerEntry } from "./ledger";
 import { db, unwrap } from "./dal";
 
@@ -35,10 +36,13 @@ export async function refreshGitHubMilestones(): Promise<VerificationRefreshResu
     .map((row) => ({ row, ref: parseGitHubPullRequestUrl(row.verification_source) }))
     .filter((candidate) => candidate.ref !== null && candidate.row.verification_method !== "manual");
   const totals: VerificationRefreshResult = { checked: 0, verified: 0, unavailable: 0, failed: 0 };
+  if (candidates.length === 0) return totals;
+  // A connected installation's token for its own repositories, private ones included; the deployment's token otherwise (GitHub App design G5).
+  const tokenFor = await pullRequestTokens();
 
   for (const { row, ref } of candidates) {
     if (!ref) continue;
-    const result = await verifyGitHubPullRequest(ref);
+    const result = await verifyGitHubPullRequest(ref, { token: await tokenFor(ref) });
     totals.checked += 1;
     if (result.status === "verified") totals.verified += 1;
     if (result.status === "unavailable") totals.unavailable += 1;
