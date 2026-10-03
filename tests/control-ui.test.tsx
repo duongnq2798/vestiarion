@@ -3,7 +3,9 @@ import path from "node:path";
 import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import ApprovalCard, { addedDetailsSentence, OWN_ENTRY_RECORDED, OWN_INVOICE_NOTE, payConfirmDescription, payConfirmTitle } from "@/components/ApprovalCard";
+import ApprovalCard, { OWN_ENTRY_RECORDED, OWN_INVOICE_NOTE, payConfirmDescription, payConfirmTitle } from "@/components/ApprovalCard";
+import { WAITING_FOR_A_DECISION, WaitingPayableAction } from "@/components/WaitingPayableAction";
+import { addDetailsPrompt, addedDetailsSentence } from "@/lib/added-details";
 import AgentPauseControl, { PAUSE_DIALOG_DESCRIPTION } from "@/components/AgentPauseControl";
 import { AgentPausedBanner, pausedBanner } from "@/components/AgentPausedBanner";
 import type { WaitingPayable } from "@/lib/agent/approvals";
@@ -422,6 +424,8 @@ describe("the new control screens, as source", () => {
   const FILES = [
     "src/app/o/[slug]/approvals/page.tsx",
     "src/components/ApprovalCard.tsx",
+    "src/components/AddDetailsDialog.tsx",
+    "src/components/WaitingPayableAction.tsx",
     "src/components/AgentPauseControl.tsx",
     "src/components/AgentPausedBanner.tsx",
   ];
@@ -437,6 +441,14 @@ describe("the new control screens, as source", () => {
     const source = read(file);
     expect(source).not.toMatch(/#[0-9a-fA-F]{3,8}\b|\b(rgb|rgba|hsl|hsla|oklch)\(/);
     expect(source).not.toMatch(/\b(text|bg|border|ring|fill|stroke)-(white|black|(slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d{2,3})\b/);
+  });
+
+  it("Invoices tells a waiting payable's row what it needs, and gives its card what a person can do about it", () => {
+    const invoices = read("src/app/o/[slug]/invoices/page.tsx");
+    expect(invoices).toContain("hint: facts ? waitingHint(facts.onFile, facts.added) : undefined");
+    expect(invoices).toContain("needsYou.map((decision) => row(decision, needsYouFor))");
+    expect(invoices).toContain("<WaitingPayableAction");
+    expect(invoices).toContain('viewerCan(slug, "approval.decide")');
   });
 
   it("the console's Needs you tile links to the approvals inbox", () => {
@@ -513,6 +525,74 @@ describe("adding what a held payable was missing, on its card (complete held inv
 
   it("says nothing of the kind when nothing was added", () => {
     expect(card({}, { canEdit: true })).not.toContain("Since the agent stopped it");
+  });
+});
+
+describe("a payable waiting for a person, on its card on Invoices (complete held invoice)", () => {
+  const ID = "1b6c1c9e-4a4f-4a7e-9b1e-0000000000f1";
+  const action = (
+    facts: { poReference: string | null; goodsReceived: boolean },
+    props: Partial<{ added: { poReference?: string; goodsReceived?: true } | null; canAddDetails: boolean; canDecide: boolean }> = {}
+  ) =>
+    html(
+      <WaitingPayableAction
+        orgSlug="acme"
+        invoice={{ id: ID, counterpartyName: "Jiren", ...facts }}
+        added={props.added ?? null}
+        canAddDetails={props.canAddDetails ?? true}
+        canDecide={props.canDecide ?? true}
+      />
+    );
+  const DECIDE_LINK = `href="/o/acme/approvals#payable-${ID}"`;
+  /** As the markup escapes it. */
+  const WAITING = WAITING_FOR_A_DECISION.replaceAll("'", "&#x27;");
+
+  it("asks an owner or admin for what is missing, offers Add details right there, and opens the payable in Approvals", () => {
+    const markup = action({ poReference: null, goodsReceived: false });
+    expect(markup).toContain(addDetailsPrompt({ poReference: true, goodsReceived: true }));
+    expect(markup).toContain("Add details");
+    expect(markup).toContain("Decide in Approvals");
+    expect(markup).toContain(DECIDE_LINK);
+  });
+
+  it("names only what is missing", () => {
+    expect(action({ poReference: "PO-7", goodsReceived: false })).toContain("Confirm the goods or services were received, and the agent decides it again.");
+    expect(action({ poReference: null, goodsReceived: true })).toContain("Add the purchase order, and the agent decides it again.");
+  });
+
+  it("sends an approver, who does not enter invoices, to Approvals", () => {
+    const markup = action({ poReference: null, goodsReceived: false }, { canAddDetails: false });
+    expect(markup).toContain(WAITING);
+    expect(markup).not.toContain("Add details");
+    expect(markup).toContain(DECIDE_LINK);
+  });
+
+  it("offers only Approvals when nothing is missing", () => {
+    const markup = action({ poReference: "PO-7", goodsReceived: true });
+    expect(markup).toContain(WAITING);
+    expect(markup).not.toContain("Add details");
+    expect(markup).toContain("Decide in Approvals");
+  });
+
+  it("says what was added until the agent decides it again, and offers Add details for what is still missing", () => {
+    const added = action({ poReference: "PO-153", goodsReceived: false }, { added: { poReference: "PO-153" } });
+    expect(added).toContain(addedDetailsSentence({ poReference: "PO-153" }));
+    expect(added).toContain("Add details");
+    const complete = action({ poReference: "PO-153", goodsReceived: true }, { added: { poReference: "PO-153", goodsReceived: true } });
+    expect(complete).toContain(addedDetailsSentence({ poReference: "PO-153", goodsReceived: true }));
+    expect(complete).not.toContain("Add details");
+  });
+
+  it("shows a viewer nothing to do, but still what was added", () => {
+    expect(action({ poReference: null, goodsReceived: false }, { canAddDetails: false, canDecide: false })).toBe("");
+    const markup = action({ poReference: "PO-153", goodsReceived: true }, { canAddDetails: false, canDecide: false, added: { poReference: "PO-153", goodsReceived: true } });
+    expect(markup).toContain("Since the agent stopped it");
+    expect(markup).not.toContain("<button");
+    expect(markup).not.toContain("Decide in Approvals");
+  });
+
+  it("is the card Decide in Approvals opens at, on Approvals", () => {
+    expect(card()).toContain(`id="payable-${ID}"`);
   });
 });
 

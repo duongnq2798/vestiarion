@@ -9,6 +9,7 @@ import InvoiceIntake from "@/components/intake/InvoiceIntake";
 import RecurringPayableIntake, { RecurringPayablesList } from "@/components/intake/RecurringPayableIntake";
 import { PayLinkControl } from "@/components/PayLinkControl";
 import { ReceiptControl } from "@/components/ReceiptControl";
+import { WaitingPayableAction } from "@/components/WaitingPayableAction";
 import { Callout } from "@/components/ui/Callout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { DecisionRows, RowGroupHeading, type DecisionRowItem } from "@/components/vx/DecisionRows";
@@ -21,6 +22,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { sectionTitle } from "@/components/vx/nav";
+import { addedSince, latestDecision, recordedFacts, waitingHint } from "@/lib/added-details";
 import { viewerCan } from "@/lib/auth/authorize";
 import { requireMembership } from "@/lib/auth/membership";
 import { orgHref } from "@/lib/auth/org-paths";
@@ -60,12 +62,13 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
   const access = await requireMembership(slug);
   return inOrg(access, async () => {
     const query = await searchParams;
-    const [invoices, counterparties, headEntries, dashboardStats, canWrite, schedules] = await Promise.all([
+    const [invoices, counterparties, headEntries, dashboardStats, canWrite, canDecide, schedules] = await Promise.all([
       listInvoices(),
       listCounterparties(),
       listLedgerEntries(1),
       stats(),
       viewerCan(slug, "records.write"),
+      viewerCan(slug, "approval.decide"),
       // Best effort: a list that cannot be read hides its section, nothing else.
       listRecurringPayables().catch((error: unknown) => {
         console.error("invoices: recurring payments not loaded", error instanceof Error ? error.message : error);
@@ -101,12 +104,40 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
     const payLinkFor = (decision: ReturnType<typeof invoiceDecision>) =>
       payLinkable.has(decision.id) ? <PayLinkControl orgSlug={slug} invoiceId={decision.id} /> : undefined;
 
+    // A payable waiting for a person: the purchase order and goods receipt on file, and what a person added since
+    // the agent's decision. Its row says what it needs; its card lets an owner or admin add it, and opens it in
+    // Approvals (complete held invoice).
+    const waiting = new Map(
+      shown
+        .filter((invoice) => invoice.direction === "payable" && WAITING.has(invoice.status))
+        .map((invoice) => {
+          const onFile = { poReference: invoice.po_reference ?? null, goodsReceived: invoice.goods_received === true };
+          return [invoice.id, { onFile, added: addedSince(recordedFacts(latestDecision(entries, invoice.id)), onFile) }] as const;
+        })
+    );
+    const needsYouFor = (decision: ReturnType<typeof invoiceDecision>) => {
+      const invoice = invoicesById.get(decision.id);
+      const facts = waiting.get(decision.id);
+      if (!invoice || !facts) return receiptFor(decision);
+      return (
+        <WaitingPayableAction
+          orgSlug={slug}
+          invoice={{ id: invoice.id, counterpartyName: invoice.counterparty_name, ...facts.onFile }}
+          added={facts.added}
+          // A transfer recorded against it is approved in Approvals, never completed here (R3).
+          canAddDetails={canWrite && invoice.tx_ref === null}
+          canDecide={canDecide}
+        />
+      );
+    };
+
     // The work, not the documents (AP / AR layout): what waits for a person, what is coming, what is settled.
     const today = new Date().toISOString().slice(0, 10);
     const inAWeek = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
     const row = (decision: ReturnType<typeof invoiceDecision>, footerFor?: (decision: ReturnType<typeof invoiceDecision>) => React.ReactNode): DecisionRowItem => {
       const invoice = invoicesById.get(decision.id) as InvoiceRow;
-      return { decision, date: rowDate(invoice, today), footerAction: footerFor?.(decision) };
+      const facts = waiting.get(decision.id);
+      return { decision, date: rowDate(invoice, today), footerAction: footerFor?.(decision), hint: facts ? waitingHint(facts.onFile, facts.added) : undefined };
     };
     const statusOf = (decision: ReturnType<typeof invoiceDecision>) => invoicesById.get(decision.id)?.status ?? "";
     const byDue = (a: ReturnType<typeof invoiceDecision>, b: ReturnType<typeof invoiceDecision>) => dueOf(invoicesById.get(a.id)).localeCompare(dueOf(invoicesById.get(b.id)));
@@ -229,7 +260,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
                         </Button>
                       }
                     />
-                    <DecisionRows orgSlug={slug} items={needsYou.map((decision) => row(decision, receiptFor))} />
+                    <DecisionRows orgSlug={slug} items={needsYou.map((decision) => row(decision, needsYouFor))} />
                   </>
                 )}
                 {upcoming.length > 0 && (

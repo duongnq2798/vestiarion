@@ -12,6 +12,9 @@ import { paidAcrossChains, payeeChain } from "../payee-chains";
 import { bridgeFee, type BridgeFee } from "../circle/cctp";
 import { gatewayQuoter, type GatewayQuote } from "../circle/gateway-quote";
 import { isSoleApprover } from "./sole-approver";
+import { addedSince, latestDecision, recordedFacts, type AddedDetails } from "../added-details";
+
+export type { AddedDetails };
 
 /**
  * The approvals library (spec §6): lets a person pay, reject or return a
@@ -317,33 +320,6 @@ export interface WaitingPayable {
   addedSinceDecision: AddedDetails | null;
 }
 
-/** What a person added to a payable the agent stopped on: only facts it lacked (complete held invoice R2). */
-export interface AddedDetails {
-  poReference?: string;
-  goodsReceived?: true;
-}
-
-/** The purchase order and goods receipt a decision's entry recorded in `observed`, each only when it recorded one. */
-function recordedFacts(entry: { detail: Record<string, unknown> } | null): { poReference?: string | null; goodsReceived?: boolean } {
-  const observed = entry?.detail.observed;
-  if (!observed || typeof observed !== "object") return {};
-  const facts = observed as Record<string, unknown>;
-  return {
-    ...("poReference" in facts ? { poReference: typeof facts.poReference === "string" ? facts.poReference : null } : {}),
-    ...("goodsReceived" in facts ? { goodsReceived: facts.goodsReceived === true } : {}),
-  };
-}
-
-/** What is on the invoice now that its decision recorded as missing: the changes the follow-up reopens it on. */
-function addedSince(
-  recorded: { poReference?: string | null; goodsReceived?: boolean },
-  onFile: { poReference: string | null; goodsReceived: boolean }
-): AddedDetails | null {
-  const added: AddedDetails = {};
-  if (recorded.poReference === null && onFile.poReference !== null) added.poReference = onFile.poReference;
-  if (recorded.goodsReceived === false && onFile.goodsReceived) added.goodsReceived = true;
-  return Object.keys(added).length > 0 ? added : null;
-}
 
 /** Every payable currently waiting for a person's decision — held, flagged, awaiting more information, or claimed by someone else right now. */
 export async function listWaitingPayables(
@@ -410,7 +386,7 @@ export async function listWaitingPayables(
   const now = Date.now();
   return rows.map((row) => {
     const intent = intents.get(row.id) ?? null;
-    const decision = entries.find((entry) => entry.detail.invoiceId === row.id && entry.detail.observed !== undefined) ?? null;
+    const decision = latestDecision(entries, row.id);
     const onFile = { poReference: row.po_reference ?? null, goodsReceived: row.goods_received === true };
     // The decision is explained from the facts it recorded, not from details a person added since (R6).
     const recorded = recordedFacts(decision);

@@ -80,6 +80,7 @@ const SHOTS = {
   },
   "first-payment-document": async () => {},
   "first-payment-decision": async () => {},
+  "first-payment-needs-you": async () => {},
   "first-payment-approval": async () => {},
   "first-payment-approval-own": async () => {},
   "first-payment-add-details": async (page) => {
