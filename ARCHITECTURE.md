@@ -594,6 +594,16 @@ is type-checked, linted and tested with the app. It is held to the code in three
 install from. That file is committed, and a version already packed is never packed again, so a lockfile's integrity
 hash keeps matching. `tests/sdk-package.test.ts` holds the tarball to a fresh build.
 
+A released version also goes to the npm registry, published from that same file by an owner of the `@vestiarion` npm
+organization:
+
+```text
+npm publish public/sdk/vestiarion-sdk-<version>.tgz --access public
+```
+
+Both installs then get the same bytes. The next version's `sdk/README.md` should name `npm install @vestiarion/sdk`
+first; 0.1.0's README, inside its immutable tarball, names the site's URL.
+
 ## Data ownership
 
 Supabase tables read by the API include `accounts`, `counterparties`,

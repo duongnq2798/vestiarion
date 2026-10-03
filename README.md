@@ -264,7 +264,7 @@ surface. The same key connects an AI agent to the
 [MCP server](https://www.vestiarion.xyz/docs/ai-integration/mcp) at `/api/mcp`, whose tools are the `/api/v1` operations.
 
 A typed TypeScript client, `@vestiarion/sdk` (`sdk/`), wraps every `/api/v1` operation and checks webhook signatures and
-ledger entries. Install it with `npm install https://www.vestiarion.xyz/sdk/vestiarion-sdk-0.1.0.tgz`; see
+ledger entries. Install it with `npm install @vestiarion/sdk` (the site serves the same tarball); see
 [TypeScript SDK](https://www.vestiarion.xyz/docs/get-started/sdk).
 
 The same page lets an owner or admin (`webhooks.manage`) register up to 5
