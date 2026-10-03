@@ -37,7 +37,7 @@ afterAll(async () => {
 const ENVELOPE = { v: 1, iv: "x", tag: "y", data: "z" };
 const PLATFORM_TABLES = [
   "memberships", "invitations", "api_keys", "webhook_endpoints", "webhook_deliveries", "payee_links", "telegram_link_codes", "telegram_links",
-  "api_idempotency",
+  "api_idempotency", "slack_installs", "slack_links",
 ] as const;
 
 const deleteOrg = (orgId: string, by: string | null = owner) =>
@@ -147,6 +147,13 @@ async function populated(slug: string): Promise<string> {
   await db.query("insert into public.telegram_links (org_id, user_id, chat_id) values ($1, $2, $3)", [orgId, member, crypto.randomInt(1, 2 ** 31)]);
   // A write's remembered outcome goes with the workspace (0066).
   await db.query("insert into public.api_idempotency (org_id, idempotency_key, request_hash, status) values ($1, $2, $3, 201)", [orgId, `order-${slug}`, "c".repeat(64)]);
+  // The workspace's Slack install goes with it, and a member's Slack link with the install and the membership (0067).
+  const team = `T${crypto.randomBytes(6).toString("hex").toUpperCase()}`;
+  await db.query(
+    "insert into public.slack_installs (org_id, team_id, app_id, channel_id, bot_token_enc, webhook_url_enc) values ($1, $2, 'A0APP', 'C0FINANCE', $3::jsonb, $3::jsonb)",
+    [orgId, team, JSON.stringify(ENVELOPE)]
+  );
+  await db.query("insert into public.slack_links (org_id, user_id, team_id, slack_user_id) values ($1, $2, $3, 'U0MEMBER')", [orgId, member, team]);
   await closeCycles(orgId);
   return orgId;
 }
