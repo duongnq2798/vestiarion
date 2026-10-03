@@ -39,6 +39,8 @@ export interface ActivityItem {
   pathLabel: string;
   /** The Arc testnet transaction, when one went out. */
   txHash: string | null;
+  /** The payable a person decides, on an item that sends them to Approvals: what a chat's card is about (Slack design S8). */
+  invoiceId?: string;
 }
 
 /** A ledger entry as the route reads it. */
