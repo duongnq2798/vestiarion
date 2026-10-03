@@ -308,6 +308,40 @@ from the reserve, which passes `byPerson` to that call.
 `agent_paused`, and `agent_resumed` record every decision, pause, and resume,
 each carrying the acting person's user id, never an address.
 
+## Commands: one action from every surface
+
+A person's actions reach the domain through `src/lib/commands/`
+(docs/superpowers/specs/2026-10-03-integrations-design.md), so a new surface adds
+an adapter rather than a second gate. An **actor** is one member acting through
+one surface: `consoleActor(auth)` after the console's `authorize`, or
+`memberActor(orgId, userId, surface)`, which reads the member's role and the
+workspace's mode for that action, never from a link, a key or a button. A
+**command** is one function per action — `approvePayable`, `rejectPayable`,
+`returnPayable`, `addPayableDetails`, `payMilestoneNow`, `closeMilestoneUnpaid`,
+`pauseWorkspaceAgent`, `resumeWorkspaceAgent`, `runWorkspaceCycle`,
+`addInvoice` — whose first statement is `gate(actor, "<command>")`:
+
+- the scope in force must be the actor's workspace, or it throws
+  (`ActorScopeError`): a surface that entered one workspace cannot act for
+  another's member;
+- the role must hold the command's permission (`COMMAND_PERMISSIONS`, drawn from
+  the permission map);
+- the surface must be one that may run it (`SURFACE_COMMANDS`): the console runs
+  everything; Telegram adds invoices and decides nothing; the API adds records.
+
+The command then calls the domain function as the console always has, raises
+what follows (the agent's next look through `runCycleSoon`, a paid payee's
+notice through `sendNoticesSoon`), and returns the console's own words as
+`{ ok, message, … }` or `{ ok: false, code, message, changed? }`. A decision
+made anywhere but the console names its surface in its signed entry
+(`provenance`: `via`, with `linkId` or `apiKeyId`); the console's entries carry
+no `via`, as before. The console's server actions keep `authorize` first and
+refresh their pages through `consoleAnswer`
+(`src/app/actions/command-result.ts`); the Telegram bot's **Add** builds its
+actor with `memberActor`. `tests/commands-gates.test.ts` holds every command to
+its gate. The invoice form, the CSV import and the write API move onto
+`addInvoice` next.
+
 ## Notifications
 
 **A digest tells the members who can decide a payable that it is waiting for

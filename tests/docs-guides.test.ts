@@ -318,7 +318,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["Goods or services received", "src/components/AddDetailsDialog.tsx"],
     ["Since the agent stopped it", "src/lib/added-details.ts"],
     ["The agent decides it again at its next cycle, usually within a minute.", "src/lib/added-details.ts"],
-    ["Details added. The agent usually decides it again within a minute.", "src/app/actions/approvals.ts"],
+    ["Details added. The agent usually decides it again within a minute.", "src/lib/commands/payables.ts"],
     ["invoice_details_added", "src/lib/agent/approvals.ts"],
     ["invoice_reopened", "src/lib/agent/orchestrator.ts"],
     ["Awaiting information", APPROVAL_CARD],
@@ -516,7 +516,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["This draft was already used or has expired.", TELEGRAM_INTAKE],
     ["Send the invoice as a PDF, or paste its text.", TELEGRAM_UPDATES],
     ["Only an owner or admin can add invoices.", TELEGRAM_INTAKE],
-    ['via: "telegram"', TELEGRAM_INTAKE],
+    ['via: "telegram"', "src/lib/commands/invoices.ts"],
     ["Commands and invoices now go to", TELEGRAM_UPDATES],
   ],
   "guides/audit-export": [
