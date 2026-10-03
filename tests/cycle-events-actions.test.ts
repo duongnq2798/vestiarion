@@ -286,7 +286,7 @@ describe("resuming the agent", () => {
     mocks.resumeAgent.mockResolvedValue(undefined);
     const result = await resumeAgentAction({ ok: false, message: "" }, form({}));
     expect(result).toEqual({ ok: true, message: "Agent resumed." });
-    expect(raiseMock).toHaveBeenCalledWith(ACCESS, "agent_resumed");
+    expect(runSoonMock).toHaveBeenCalledWith({ orgId: ORG, userId: USER, sandbox: false, kind: "agent_resumed" });
   });
 });
 
