@@ -171,6 +171,8 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["Something went wrong; try again.", GO_LIVE_ACTIONS],
   ],
   "guides/first-payment": [
+    ["USYC reserve", "src/lib/next-step.ts"],
+    ["The agent decides it again on its own once cash comes in: USDC added to the operating wallet, or brought back from the reserve.", "src/lib/next-step.ts"],
     ["Service budget", "src/components/ServiceBudgetPanel.tsx"],
     ["Manage", "src/components/ServiceBudgetPanel.tsx"],
     ["Add to the budget", "src/components/ServiceBudgetPanel.tsx"],

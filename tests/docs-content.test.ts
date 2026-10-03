@@ -180,7 +180,8 @@ describe("the docs navigation", () => {
     const pages = flatPages();
     expect(neighbours("").prev).toBeUndefined();
     expect(neighbours("").next?.slug).toBe(pages[1].slug);
-    expect(neighbours("data-delivery").next?.slug).toBe("guides/try-it");
+    expect(neighbours("data-delivery").next?.slug).toBe("contracts");
+    expect(neighbours("contracts").next?.slug).toBe("guides/try-it");
     expect(neighbours("guides/try-it").next?.slug).toBe("guides/go-live");
     expect(neighbours("guides/first-payment").next?.slug).toBe("guides/pay-a-contractor");
     expect(neighbours("guides/pay-a-contractor").next?.slug).toBe("guides/get-paid");

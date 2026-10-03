@@ -1,0 +1,67 @@
+Vestiarion moves money on Arc testnet through two contracts of its own, which each workspace deploys for itself, and through contracts Circle runs. Every address below opens on Arcscan.
+
+## Vestiarion's contracts
+
+Both were written for Vestiarion and are not audited. Their source is in the repository's [`contracts/`](https://github.com/duongnq2798/vestiarion/tree/main/contracts) folder, compiled with Solidity 0.8.37, the optimizer on at 200 runs, for the `paris` EVM version. A workspace that uses one gets its own copy, deployed through Circle's Smart Contract Platform from a deployer wallet of its own. The app shows the copy's address: the escrow's on **Contractors** → **Milestone escrow**, and the spending limit's, with the agent's wallet, on **Treasury**, under the agent's spending limit, **On Arc**.
+
+### VestiarionEscrow
+
+Locks a milestone's USDC for a contractor before the work starts. See [Lock a milestone in escrow](/docs/guides/pay-a-contractor#lock-a-milestone-in-escrow).
+
+- Only the workspace's operating wallet, the payer, can call it.
+- `fund(id, payee, amount, refundAfter)` locks an amount for a payee. `release(id)` pays it to that payee. `refund(id)` returns it to the payer, and only from `refundAfter`. Each hold ends once, released or refunded.
+- It has no owner and cannot be upgraded.
+- It emits `Funded`, `Released` and `Refunded`.
+- An owner or admin deploys it with **Set up escrow**, signed in the ledger as `escrow_deployed`.
+
+### VestiarionSpendingLimit
+
+Makes the agent's spending limit binding on Arc. See [Enforce the limit on Arc](/docs/guides/first-payment#enforce-the-limit-on-arc).
+
+- The agent's payments leave the operating wallet through `pay(to, amount, ref)`, and only through it: the agent's own wallet holds no money. The operating wallet approves the contract for what it may draw.
+- `pay` refuses anything past the daily figure (the current UTC day) or the 7-day figure (that day and the six before it), and pays each `ref` once.
+- Only its owner, the operating wallet, changes the figures, with `setLimits`. It cannot be upgraded.
+- It emits `Paid` and `LimitsSet`. `spentToday()` and `spentThisWeek()` read what it paid.
+- An owner or admin deploys it with **Enforce on Arc**, signed in the ledger as `spending_limit_enforced`.
+
+### Deployed
+
+Both run in production in testnet-2, our own test workspace:
+
+| Contract | Address | Deployed | Deploy transaction |
+| --- | --- | --- | --- |
+| VestiarionEscrow | [`0x74af203fec3f121ff1cd3a763092d1211487702b`](https://testnet.arcscan.app/address/0x74af203fec3f121ff1cd3a763092d1211487702b) | Oct 1, 2026 | [`0x550727a6…1860`](https://testnet.arcscan.app/tx/0x550727a6a205d4d17f6998c06d5ed5ae84a21296466b2e3c348945884b971860) |
+| VestiarionSpendingLimit | [`0x9da3c47f73ea9399ac566806a189b0bf47b7d4ba`](https://testnet.arcscan.app/address/0x9da3c47f73ea9399ac566806a189b0bf47b7d4ba) | Oct 3, 2026 | [`0xf48ee082…e4ff`](https://testnet.arcscan.app/tx/0xf48ee082d2120142e4a6fa3727b64690f255cbc8d91d801403486b3b79b5e4ff) |
+
+The workspace's wallets around them:
+
+| Wallet | Address | What it does |
+| --- | --- | --- |
+| Operating | [`0x97f85033bbd83870a841cf7153f35b387746b6b6`](https://testnet.arcscan.app/address/0x97f85033bbd83870a841cf7153f35b387746b6b6) | Pays invoices and buys USYC. The escrow's payer, and the spending limit's owner and the treasury it draws from. |
+| Reserve | [`0xa8a4ced0cda82b24d11e0386f066eb8c27fd4887`](https://testnet.arcscan.app/address/0xa8a4ced0cda82b24d11e0386f066eb8c27fd4887) | Holds the USYC and sells it. |
+| Agent | [`0xa79bd77b00143ced32a81d1fb8215d7dca21526a`](https://testnet.arcscan.app/address/0xa79bd77b00143ced32a81d1fb8215d7dca21526a) | Calls `pay` on the spending-limit contract. It holds no money. |
+| Escrow deployer | [`0x2590cc3c26f691af6b7203bd283eb055160a1a6c`](https://testnet.arcscan.app/address/0x2590cc3c26f691af6b7203bd283eb055160a1a6c) | Deployed the escrow. |
+| Spending-limit deployer | [`0x10e8f32d53bdcae4b48cb391c0bb84374b7565f3`](https://testnet.arcscan.app/address/0x10e8f32d53bdcae4b48cb391c0bb84374b7565f3) | Deployed the spending-limit contract. |
+
+## Circle's contracts Vestiarion calls
+
+On Arc testnet:
+
+| Contract | Address | What Vestiarion does with it |
+| --- | --- | --- |
+| USDC | [`0x3600000000000000000000000000000000000000`](https://testnet.arcscan.app/address/0x3600000000000000000000000000000000000000) | Arc's USDC ERC-20 interface, 6 decimals: every payment, escrow lock and approval. |
+| EURC | [`0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a`](https://testnet.arcscan.app/address/0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a) | Pays invoices in EURC. |
+| USYC | [`0xe9185F0c5F296Ed1797AaE4238D26CCaBEadb86C`](https://testnet.arcscan.app/address/0xe9185F0c5F296Ed1797AaE4238D26CCaBEadb86C) | Circle's tokenized money market fund, which the reserve wallet holds. |
+| USYC Teller | [`0x9fdF14c5B14173D74C08Af27AebFf39240dC105A`](https://testnet.arcscan.app/address/0x9fdF14c5B14173D74C08Af27AebFf39240dC105A) | Buys USYC with `deposit`, only in its daily window, and sells it with `redeem`, at any hour. `mintPrice` says whether buying is open. |
+| USYC Entitlements | [`0xCC205224862C7641930c87679E98999d23C26113`](https://testnet.arcscan.app/address/0xCC205224862C7641930c87679E98999d23C26113) | Asked with `canCall` whether each wallet is allowlisted, before the reserve is turned on. |
+| Gateway Wallet | [`0x0077777d7EBA4688BDeF3E311b846F25870A19B9`](https://testnet.arcscan.app/address/0x0077777d7EBA4688BDeF3E311b846F25870A19B9) | Holds the USDC the operating wallet deposits for Gateway payouts and the service budget. |
+| Gateway Minter | [`0x0022222ABE238Cc2C7Bb1f21003F0a260052475B`](https://testnet.arcscan.app/address/0x0022222ABE238Cc2C7Bb1f21003F0a260052475B) | Mints a Gateway payout on the payee's chain, named in each burn intent. |
+| CCTP TokenMessengerV2 | [`0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA`](https://testnet.arcscan.app/address/0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA) | Burns USDC for a payout to another chain. Circle's Forwarding Service submits the mint there. |
+
+A payee on another chain is paid in that chain's USDC:
+
+| Chain | USDC |
+| --- | --- |
+| Base Sepolia | [`0x036CbD53842c5426634e7929541eC2318f3dCF7e`](https://sepolia.basescan.org/address/0x036CbD53842c5426634e7929541eC2318f3dCF7e) |
+| Arbitrum Sepolia | [`0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d`](https://sepolia.arbiscan.io/address/0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d) |
+| Ethereum Sepolia | [`0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238`](https://sepolia.etherscan.io/address/0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238) |

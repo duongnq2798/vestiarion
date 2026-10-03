@@ -53,6 +53,7 @@ type MdxModule = { default: ComponentType<MDXProps> };
 export const PAGE_LOADERS: Record<string, () => Promise<MdxModule>> = {
   "": () => import("../../../content/docs/index.mdx"),
   "data-delivery": () => import("../../../content/docs/data-delivery.mdx"),
+  contracts: () => import("../../../content/docs/contracts.mdx"),
   "guides/try-it": () => import("../../../content/docs/guides/try-it.mdx"),
   "guides/go-live": () => import("../../../content/docs/guides/go-live.mdx"),
   "guides/first-payment": () => import("../../../content/docs/guides/first-payment.mdx"),
