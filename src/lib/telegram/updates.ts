@@ -128,7 +128,7 @@ async function connect(chatId: number, code: string, username: string | null, de
   if (!link) {
     await deps.client.sendMessage(
       chatId,
-      "This link was already used or has expired. In Vestiarion, open <b>Members</b> and press <b>Connect Telegram</b> for a new one."
+      "This link was already used or has expired. In Vestiarion, open <b>Settings</b> and press <b>Connect Telegram</b> for a new one."
     );
     return;
   }
@@ -181,7 +181,7 @@ async function disconnectChat(link: TelegramLink, workspace: Workspace, deps: Up
     `${removed ? "Disconnected from" : "This chat was already disconnected from"} <b>${escapeHtml(workspace.name)}</b>. Its decisions are no longer sent here.` +
       (nextName
         ? ` Commands and invoices now go to <b>${escapeHtml(nextName)}</b>.`
-        : " To connect it again, press <b>Connect Telegram</b> on its Members page.")
+        : " To connect it again, press <b>Connect Telegram</b> in its Settings, under Notifications.")
   );
 }
 

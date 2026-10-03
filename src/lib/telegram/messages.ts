@@ -216,7 +216,7 @@ export function helpMessage(connected: boolean, workspaceName?: string): string 
     return [
       "This chat is not connected to a Vestiarion workspace yet.",
       "",
-      `In Vestiarion, open ${bold("Members")}, press ${bold("Connect Telegram")}, and open the link it gives you. The link works once, for 10 minutes.`,
+      `In Vestiarion, open ${bold("Settings")}, press ${bold("Connect Telegram")} under Notifications, and open the link it gives you. The link works once, for 10 minutes.`,
     ].join("\n");
   }
   return [

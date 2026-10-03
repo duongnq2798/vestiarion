@@ -503,7 +503,9 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["Audit log", APP_NAV],
   ],
   "guides/telegram": [
-    ["Members", APP_NAV],
+    ["Settings", APP_NAV],
+    ["Notifications", "src/components/NotificationsPanel.tsx"],
+    ["Email me when payments need a decision", "src/components/NotificationsPanel.tsx"],
     ["Telegram", TELEGRAM_CARD],
     ["Connect Telegram", TELEGRAM_CARD],
     ["Open Telegram", TELEGRAM_CARD],
