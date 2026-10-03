@@ -33,6 +33,7 @@ import { MOTION } from "@/components/ui/tokens";
 import { useActionForm } from "@/components/ui/useActionForm";
 import { TelegramCard } from "@/components/TelegramCard";
 import { canAssignRole, type OrgRole } from "@/lib/auth/roles";
+import { leaveWorkspaceDescription, removeMemberDescription } from "@/lib/member-keys";
 import type { Member, OpenInvitation } from "@/lib/platform/members";
 
 const INITIAL: MemberActionResult = { ok: false, message: "" };
@@ -124,8 +125,11 @@ function RoleCell({ orgSlug, member, assignable }: { orgSlug: string; member: Me
   );
 }
 
-/** Removing someone else. The viewer's own row uses `LeaveWorkspace` instead — see the note on that component. */
-function RemoveMember({ orgSlug, member }: { orgSlug: string; member: Member }) {
+/**
+ * Removing someone else. The viewer's own row uses `LeaveWorkspace` instead — see the note on that component.
+ * `keyNames` are the API keys the member created here, which stop working with their membership (migration 0069).
+ */
+function RemoveMember({ orgSlug, member, keyNames }: { orgSlug: string; member: Member; keyNames: string[] }) {
   const formId = `remove-${member.userId}`;
   const { state, pending, formProps } = useActionForm(removeMemberAction, INITIAL, { toastOnSuccess: true });
 
@@ -141,7 +145,7 @@ function RemoveMember({ orgSlug, member }: { orgSlug: string; member: Member }) 
           </Button>
         }
         title={`Remove ${member.email}?`}
-        description="They lose access to this workspace at once. The removal is recorded in the audit log, and you can invite them again later."
+        description={removeMemberDescription(keyNames)}
         confirmLabel="Remove member"
       />
       <RowError state={state} />
@@ -158,7 +162,7 @@ type LeaveForm = ReturnType<typeof useActionForm<MemberActionResult>>;
  * re-renders once membership changes — rather than in a per-row component
  * that a revalidation could unmount first.
  */
-function LeaveWorkspace({ orgSlug, userId, form }: { orgSlug: string; userId: string; form: LeaveForm }) {
+function LeaveWorkspace({ orgSlug, userId, form, keyNames }: { orgSlug: string; userId: string; form: LeaveForm; keyNames: string[] }) {
   const formId = "leave-workspace";
   return (
     <form id={formId} {...form.formProps} className="inline-flex flex-col items-end gap-1">
@@ -172,7 +176,7 @@ function LeaveWorkspace({ orgSlug, userId, form }: { orgSlug: string; userId: st
           </Button>
         }
         title="Leave this workspace?"
-        description="You lose access at once. An owner or admin can invite you back."
+        description={leaveWorkspaceDescription(keyNames)}
         confirmLabel="Leave workspace"
       />
       <RowError state={form.state} />
@@ -302,6 +306,7 @@ export default function MembersPanel({
   canDecide,
   notifyEmail,
   telegram = null,
+  keyNames = {},
 }: {
   orgSlug: string;
   members: Member[];
@@ -314,6 +319,8 @@ export default function MembersPanel({
   notifyEmail: boolean;
   /** The viewer's own Telegram chat for this workspace; null when this deployment has no bot (Telegram bot design R1). */
   telegram?: { link: { username: string | null; linkedAt: string } | null } | null;
+  /** The names of the active API keys each member created, by user id: the viewer's own and those of members they may remove. */
+  keyNames?: Record<string, string[]>;
 }) {
   const isManager = assignable.length > 0;
   const router = useRouter();
@@ -363,9 +370,9 @@ export default function MembersPanel({
                       <TableCell className="whitespace-nowrap text-ink-2">{joined(member.joinedAt)}</TableCell>
                       <TableCell className="text-right">
                         {isSelf ? (
-                          <LeaveWorkspace orgSlug={orgSlug} userId={member.userId} form={leave} />
+                          <LeaveWorkspace orgSlug={orgSlug} userId={member.userId} form={leave} keyNames={keyNames[member.userId] ?? []} />
                         ) : canChange ? (
-                          <RemoveMember orgSlug={orgSlug} member={member} />
+                          <RemoveMember orgSlug={orgSlug} member={member} keyNames={keyNames[member.userId] ?? []} />
                         ) : null}
                       </TableCell>
                     </m.tr>

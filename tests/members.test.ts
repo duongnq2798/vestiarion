@@ -288,12 +288,12 @@ describe("acceptInvitation", () => {
 });
 
 describe("the ledger entry after a committed change is best effort", () => {
-  it.each([
+  it.each<[string, () => Promise<unknown>]>([
     ["member_role_changed", () => changeMemberRole({ actorId: ACTOR, userId: TARGET, role: "approver" })],
     ["member_removed", () => removeMember({ actorId: ACTOR, userId: TARGET })],
     ["member_left", () => removeMember({ actorId: ACTOR, userId: ACTOR })],
     ["invitation_revoked", () => revokeInvitation({ actorId: ACTOR, invitationId: "inv-1" })],
-  ] as const)("%s resolves and logs when the append fails", async (action, change) => {
+  ])("%s resolves and logs when the append fails", async (action, change) => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     const { run } = membersFake({ ledgerFails: true });
 
