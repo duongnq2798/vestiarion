@@ -34,6 +34,7 @@ export const CYCLE_STAGES = [
   "treasury",
   "forecast",
   "proposals",
+  "collections",
   "notices",
   "telegram",
 ] as const;
@@ -66,6 +67,8 @@ export type CycleStage = (typeof CYCLE_STAGES)[number];
  *   proposals   Nothing. It proposes raising a counterparty's limit when people keep approving
  *               payments above it; a person accepts or dismisses the proposal, and nothing
  *               changes until then. Last, so it never delays a payment.
+ *   collections receipts. It emails clients the reminders a person turned on; if the cycle
+ *               could not read what arrived, it reminds no one who may just have paid.
  *   forecast    Nothing. It reads and records; it authorises nothing. It is the
  *               stage most worth keeping alive after a failure, because it is
  *               what tells a human where the cycle left the book.
@@ -87,6 +90,8 @@ export const STAGE_REQUIRES: Record<CycleStage, readonly CycleStage[]> = {
   treasury: ["reconcile"],
   forecast: [],
   proposals: [],
+  // Reminds clients of open receivables: never before reading what they may just have paid (collections R9).
+  collections: ["receipts"],
   notices: [],
   telegram: [],
 };

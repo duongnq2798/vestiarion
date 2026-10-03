@@ -2,10 +2,10 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createPayLinkAction } from "@/app/actions/pay-links";
+import { createPayLinkAction, setRemindersAction } from "@/app/actions/pay-links";
 import { checkPaymentAction } from "@/app/pay/[token]/actions";
 import PayPage from "@/app/pay/[token]/page";
-import { PayLinkControl } from "@/components/PayLinkControl";
+import { PayLinkControl, remindersSoFar } from "@/components/PayLinkControl";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { requiresSession } from "@/lib/auth/routes";
 import { PayLinkError } from "@/lib/platform/pay-links";
@@ -16,12 +16,15 @@ import { PayLinkError } from "@/lib/platform/pay-links";
  * only asks Vestiarion to look (R5). The library is faked; it is tested in tests/pay-links.test.ts.
  */
 
-const { authorizeMock, createMock, checkMock, previewMock } = vi.hoisted(() => ({
+const { authorizeMock, createMock, checkMock, previewMock, remindersMock, raiseMock } = vi.hoisted(() => ({
   authorizeMock: vi.fn(),
   createMock: vi.fn(),
   checkMock: vi.fn(),
   previewMock: vi.fn(),
+  remindersMock: vi.fn(),
+  raiseMock: vi.fn(),
 }));
+vi.mock("@/lib/agent/cycle-soon", () => ({ raiseCycleEvent: raiseMock, runCycleSoon: vi.fn() }));
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/auth/authorize", () => ({ authorize: authorizeMock }));
 vi.mock("@/lib/auth/revalidate", () => ({ revalidateOrgPages: vi.fn() }));
@@ -31,6 +34,7 @@ vi.mock("@/lib/platform/pay-links", async (importOriginal) => ({
   createPayLink: createMock,
   checkPayLink: checkMock,
   previewPayLink: previewMock,
+  setReminders: remindersMock,
 }));
 
 const text = (markup: string) => markup.replace(/<[^>]+>/g, " ").replace(/&#x27;/g, "'").replace(/\s+/g, " ").trim();
@@ -70,6 +74,35 @@ describe("createPayLinkAction", () => {
     createMock.mockClear();
     expect(await createPayLinkAction({ ok: false, message: "" }, form({ orgSlug: "mai", invoiceId: INVOICE }))).toEqual({ ok: false, message: "Only an owner or admin can do that." });
     expect(createMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("setRemindersAction (collections R1)", () => {
+  beforeEach(() => {
+    remindersMock.mockReset().mockResolvedValue({ madeNewLink: false, counterpartyName: "Acme" });
+    raiseMock.mockReset();
+  });
+
+  it("asks for records.write, turns reminders on and starts a cycle", async () => {
+    const result = await setRemindersAction({ ok: false, message: "" }, form({ orgSlug: "mai", invoiceId: INVOICE, on: "true" }));
+    expect(authorizeMock).toHaveBeenCalledWith("mai", "records.write");
+    expect(remindersMock).toHaveBeenCalledWith({ actorId: "u1", invoiceId: INVOICE, on: true });
+    expect(result).toEqual({ ok: true, message: "Reminders on. The agent decides when to remind Acme." });
+    expect(raiseMock).toHaveBeenCalledWith(expect.objectContaining({ user: { id: "u1", email: null } }), "reminders_on");
+  });
+
+  it("says when it made a new link, which stops the old one", async () => {
+    remindersMock.mockResolvedValueOnce({ madeNewLink: true, counterpartyName: "Acme" });
+    expect((await setRemindersAction({ ok: false, message: "" }, form({ orgSlug: "mai", invoiceId: INVOICE, on: "true" }))).message).toBe(
+      "Reminders on. The agent decides when to remind Acme, with a new pay link: a link sent before no longer works."
+    );
+  });
+
+  it("turns them off without a cycle, and shows a refusal", async () => {
+    expect(await setRemindersAction({ ok: false, message: "" }, form({ orgSlug: "mai", invoiceId: INVOICE, on: "false" }))).toEqual({ ok: true, message: "The agent no longer reminds Acme." });
+    expect(raiseMock).not.toHaveBeenCalled();
+    remindersMock.mockRejectedValueOnce(new PayLinkError("no_email"));
+    expect((await setRemindersAction({ ok: false, message: "" }, form({ orgSlug: "mai", invoiceId: INVOICE, on: "true" }))).message).toContain("billing email");
   });
 });
 
@@ -135,9 +168,66 @@ describe("the pay page", () => {
 });
 
 describe("PayLinkControl", () => {
+  const CLIENT = { id: "cp-mai", name: "Mai Studio", hasEmail: true };
+  const control = (props: Partial<Parameters<typeof PayLinkControl>[0]> = {}) =>
+    renderToStaticMarkup(
+      <TooltipProvider>
+        <PayLinkControl orgSlug="mai" invoiceId={INVOICE} dueDate="2026-10-10T12:00:00+00:00" client={CLIENT} {...props} />
+      </TooltipProvider>
+    );
+  const VIEW = { url: "https://www.vestiarion.xyz/pay/vxr_" + "a".repeat(43), legacy: false, remindersOnAt: null, deferredUntil: null, sent: [] };
+
   it("offers to make a pay link for the receivable", () => {
-    const markup = renderToStaticMarkup(<TooltipProvider><PayLinkControl orgSlug="mai" invoiceId={INVOICE} /></TooltipProvider>);
+    const markup = control();
     expect(text(markup)).toContain("Get paid on Arc");
     expect(markup).toContain(`value="${INVOICE}"`);
+  });
+
+  it("shows a kept link again, to copy, and offers a new one (collections R2)", () => {
+    const markup = control({ view: VIEW });
+    expect(markup).toContain(`value="${VIEW.url}"`);
+    expect(text(markup)).toContain("Copy link");
+    expect(text(markup)).toContain("Make a new link");
+  });
+
+  it("says a link made before links were kept cannot be shown again", () => {
+    expect(text(control({ view: { ...VIEW, url: null, legacy: true } }))).toContain("Make a new link to copy it; the old one then stops working.");
+  });
+
+  it("offers reminders with their rules, and turns them off once on (R1)", () => {
+    const off = text(control({ view: VIEW }));
+    expect(off).toContain("Remind the client by email");
+    expect(off).toContain("from 3 days before the due date, at most every 3 days, up to 4 reminders");
+    const on = control({ view: { ...VIEW, remindersOnAt: "2026-10-03T06:00:00Z", sent: [{ number: 1, tone: "friendly" as const, sentAt: "2026-10-07T09:00:00Z" }] } });
+    expect(text(on)).toContain("Reminders are on. Sent: Oct 7, 2026 (friendly).");
+    expect(text(on)).toContain("Turn off reminders");
+    expect(on).toContain('name="on" value="false"');
+  });
+
+  it("sends a client with no billing email to its row on Counterparties", () => {
+    const markup = control({ client: { ...CLIENT, hasEmail: false } });
+    expect(text(markup)).toContain("Add Mai Studio's billing email on Counterparties");
+    expect(markup).toContain('href="/o/mai/counterparties#counterparty-cp-mai"');
+    expect(text(markup)).not.toContain("Remind the client by email");
+  });
+});
+
+describe("what the reminders did so far", () => {
+  const VIEW = { url: null, legacy: false, remindersOnAt: "2026-10-03T06:00:00Z", deferredUntil: null, sent: [] as Array<{ number: number; tone: "friendly" | "firm" | "final"; sentAt: string }> };
+  const NOW = Date.parse("2026-10-03T08:00:00Z");
+
+  it("says when the agent starts deciding, before the first reminder may go", () => {
+    expect(remindersSoFar(VIEW, "2026-10-10T12:00:00+00:00", "Mai Studio", NOW)).toBe("Reminders are on. None sent yet. The agent decides from Oct 7, 2026, 3 days before the due date.");
+  });
+
+  it("says until when the agent waits", () => {
+    expect(remindersSoFar({ ...VIEW, deferredUntil: "2026-10-05T08:00:00Z" }, "2026-10-04T00:00:00Z", "Mai Studio", NOW)).toBe(
+      "Reminders are on. None sent yet. The agent waits until Oct 5, 2026 before deciding again."
+    );
+  });
+
+  it("hands the client to a person after the last reminder", () => {
+    const sent = [{ number: 4, tone: "final" as const, sentAt: "2026-10-20T09:00:00Z" }];
+    expect(remindersSoFar({ ...VIEW, sent }, "2026-10-10T12:00:00+00:00", "Mai Studio", NOW)).toBe("The agent sent its last reminder on Oct 20, 2026. Follow up with Mai Studio yourself.");
   });
 });

@@ -122,21 +122,20 @@ export default async function CounterpartiesPage({ params }: { params: Promise<{
                         <div className="min-w-0"><dt className="text-ink-3" title="The configured limit as its screening allows it today">Allowed now</dt><dd className="mt-0.5 text-ink">{counterparty.payment_limit == null ? "Not set" : <Money value={counterparty.payment_limit} />}</dd></div>
                         <div className="min-w-0"><dt className="text-ink-3">Jurisdiction</dt><dd className="mt-0.5 break-words text-ink">{counterparty.jurisdiction || "Not set"}</dd></div>
                         <div className="min-w-0"><dt className="text-ink-3">Last screened</dt><dd className="mt-0.5 break-words text-ink">{counterparty.last_screened_at ? new Date(counterparty.last_screened_at).toLocaleString() : "Not yet"}</dd></div>
-                        {/* A payee is emailed when it is paid, at the address set here (payment notices R1). */}
-                        {counterparty.role !== "client" && (
-                          <div className="col-span-2 min-w-0">
-                            <dt className="text-ink-3">Payment notices</dt>
-                            <dd className="mt-0.5 flex flex-wrap items-baseline gap-x-2 break-words text-ink">
-                              {counterparty.notice_email ?? "None"}
-                              {canWrite && (
-                                <CounterpartyNoticeEmailEdit
-                                  orgSlug={slug}
-                                  counterparty={{ id: counterparty.id, name: counterparty.name, noticeEmail: counterparty.notice_email ?? null }}
-                                />
-                              )}
-                            </dd>
-                          </div>
-                        )}
+                        {/* A payee is emailed when it is paid, a client the reminders turned on, at the address set here
+                            (payment notices R1, collections R8). */}
+                        <div className="col-span-2 min-w-0">
+                          <dt className="text-ink-3">Billing email</dt>
+                          <dd className="mt-0.5 flex flex-wrap items-baseline gap-x-2 break-words text-ink">
+                            {counterparty.notice_email ?? "None"}
+                            {canWrite && (
+                              <CounterpartyNoticeEmailEdit
+                                orgSlug={slug}
+                                counterparty={{ id: counterparty.id, name: counterparty.name, role: counterparty.role, noticeEmail: counterparty.notice_email ?? null }}
+                              />
+                            )}
+                          </dd>
+                        </div>
                       </dl>
                       <CounterpartyAddress
                         orgSlug={slug}

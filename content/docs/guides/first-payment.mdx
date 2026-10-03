@@ -29,11 +29,11 @@ A counterparty is a business or person the workspace pays or invoices. Open **Co
 - **Chain**: **Arc testnet** for a payee paid on Arc. For a payee who wants USDC on another chain, choose **Base Sepolia**, **Arbitrum Sepolia** or **Ethereum Sepolia**: see [Pay a payee on another chain](#pay-a-payee-on-another-chain).
 - **Payment address**: the counterparty's address on the chain you chose, `0x` followed by 40 hexadecimal characters.
 - **Jurisdiction**: an ISO code or a country name.
-- **Email for payment notices**, optional: where the counterparty is told each time it is paid (see [Tell the payee it was paid](#tell-the-payee-it-was-paid)).
+- **Billing email**, optional: a payee is told there each time it is paid (see [Tell the payee it was paid](#tell-the-payee-it-was-paid)), and a client gets the reminders you turn on (see [Let the agent remind the client](#let-the-agent-remind-the-client)).
 
 <Screenshot
   src="/docs/guides/first-payment-counterparty.png"
-  alt="Add counterparty opened on the Counterparties page, its form filled in: Legal or trading name Northstar Studio, Role Vendor, Payment limit (USDC) 50.00, Chain Arc testnet, a Payment address starting 0x, Jurisdiction US, and Email for payment notices accounts@northstar.example. The Add and screen button is at the bottom right."
+  alt="Add counterparty opened on the Counterparties page, its form filled in: Legal or trading name Northstar Studio, Role Vendor, Payment limit (USDC) 50.00, Chain Arc testnet, a Payment address starting 0x, Jurisdiction US, and Billing email accounts@northstar.example. The Add and screen button is at the bottom right."
   caption="A vendor with a payment limit and an Arc testnet address, ready to add and screen."
 />
 
@@ -356,7 +356,7 @@ On **AP / AR**, the payable waits under **Needs you**, and its row says what it 
 
 ### Tell the payee it was paid
 
-A business usually tells a supplier when it pays them. Give a counterparty an **Email for payment notices**, when you add it or later on its row on **Counterparties**, where **Payment notices** shows the address with **Add** or **Edit** (owners and admins; empty turns notices off). Someone you pay with **Pay a freelancer** gets them at the email you gave for the link.
+A business usually tells a supplier when it pays them. Give a counterparty a **Billing email**, when you add it or later on its row on **Counterparties**, where **Billing email** shows the address with **Add** or **Edit** (owners and admins; empty turns notices off). Someone you pay with **Pay a freelancer** gets them at the email you gave for the link.
 
 Each time a payment to it is confirmed on Arc testnet, whoever approved it, the agent or a person, Vestiarion emails that address from no-reply@vestiarion.xyz: "*Workspace* paid you *amount*", what it pays for (the invoice's memo and purchase order, or the milestone's title), the address it went to, when, and **View the transaction** on Arcscan.
 
@@ -418,3 +418,24 @@ A receivable is money a client owes the business. In a live workspace, an owner 
 3. **The agent matches it.** Every cycle, and on **I have paid**, Vestiarion reads the transfers that arrived in the operating wallet from Circle. A transfer of the same currency and amount as an open receivable, arriving after the receivable was added, settles it: from the client's own address on file, or, from any address, when it is the only such receivable and its client was sent the link. The receivable becomes received with its transaction, and the ledger records `ar_received`. Two open receivables of the same amount, with nothing to tell them apart, stay open for a person.
 
 Only a matched transfer counts as money received. Testnet faucet drips and swaps also arrive in the wallet, and they settle nothing.
+
+The link stays on the invoice's row: **Copy link** copies it again at any time. A link made before October 3, 2026 cannot be shown again; **Make a new link** replaces it.
+
+### Let the agent remind the client
+
+A client who forgets to pay can be reminded by the agent, by email, with the pay link. On **AP / AR**, under the open receivable, choose **Remind the client by email** (owners and admins, in a live workspace). It needs the client's **Billing email**: without one, the row offers **Add billing email**, which opens the client's row on **Counterparties**.
+
+From then on, each cycle, the agent decides whether to send a reminder now or to wait, and how firmly. Code sets the bounds:
+
+- **When.** From 3 days before the due date to 30 days after it, at most every 3 days, and at most 4 reminders. The written policy sends one 3 days before the due date, one on it, one 3 days after it and the last one 10 days after it; the model may wait up to 3 days at a time, and says why.
+- **How firmly.** Friendly at any time; firm only after the due date; final only 7 days after it, once 2 reminders went out. A firmer tone than allowed goes out as the firmest allowed, and the audit log says so.
+- **What it says.** A fixed text by tone: who asks, how much, what for, when it was due and how late it is, with **Pay on Arc testnet**, which opens the pay link. Nothing the model writes reaches the client.
+- **When it stops.** Once the agent matches the payment, or a person rejects the receivable, or after the final reminder. The row then says to follow up with the client yourself.
+
+<Screenshot
+  src="/docs/guides/first-payment-reminders.png"
+  alt="AP / AR, under Receivables, Open: a row for Acme Retail, October retainer, INV-1042, 12.50 USDC, due Oct 10, 2026. Under it the pay link with Copy link and Make a new link, then Reminders: Reminders are on. Sent: Oct 7, 2026 (friendly), Oct 10, 2026 (friendly), and a Turn off reminders button."
+  caption="A receivable whose reminders are on: the link, and the two reminders the agent sent."
+/>
+
+The row shows the reminders sent so far, with their dates and tones, and until when the agent waits. **Turn off reminders** stops them. Each reminder is a signed `ar_reminder_sent` entry, each wait an `ar_reminder_deferred` one, and both appear under the invoice's **How the agent decided**. Turning reminders on or off is signed as `ar_reminders_on` or `ar_reminders_off`.

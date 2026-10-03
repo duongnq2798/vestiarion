@@ -17,6 +17,7 @@ export const ACTIVITY_ACTIONS = [
   "milestone_release",
   "milestone_hold",
   "ar_received",
+  "ar_reminder_sent",
 ] as const;
 
 /** The people's actions on an invoice that give the agent something to decide: how long after one it decided is told. */
@@ -169,6 +170,17 @@ export function activityItem(entry: ActivityEntry, refs: ActivityRefs): Activity
 
   if (entry.action === "ar_received") {
     return { seq: entry.seq, text: `Received ${amount} from ${invoice.name}.`, detail: null, tone: "done", path: "/invoices", pathLabel: "AP / AR", txHash: arcTx(text(entry.detail.txHash)) };
+  }
+  if (entry.action === "ar_reminder_sent") {
+    const tone = text(entry.detail.tone) ?? "friendly";
+    return {
+      seq: entry.seq,
+      text: `Reminded ${invoice.name} by email of ${amount}${tone === "final" ? ", a final reminder" : ` (${tone})`}.`,
+      detail: deciderLine(entry.detail),
+      tone: "done",
+      ...how,
+      txHash: null,
+    };
   }
   const decide = { path: `/approvals#payable-${id}`, pathLabel: "Decide in Approvals" };
   if (blocked) {

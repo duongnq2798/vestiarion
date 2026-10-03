@@ -15,7 +15,8 @@ const INITIAL: IntakeActionResult = { ok: false, message: "" };
 const update = withSuccessToast(updateCounterpartyNoticeEmailAction);
 
 /**
- * "Edit" beside where a counterparty's payment notices go, for owners and admins (payment notices R1). Empty turns
+ * "Edit" beside a counterparty's billing email, for owners and admins: a payee's payment notices go to it (payment
+ * notices R1), and a client's reminders (collections R8). Empty turns
  * them off.
  */
 export default function CounterpartyNoticeEmailEdit({
@@ -23,7 +24,7 @@ export default function CounterpartyNoticeEmailEdit({
   counterparty,
 }: {
   orgSlug: string;
-  counterparty: { id: string; name: string; noticeEmail: string | null };
+  counterparty: { id: string; name: string; role?: string; noticeEmail: string | null };
 }) {
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
@@ -33,18 +34,22 @@ export default function CounterpartyNoticeEmailEdit({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" variant="link" className="text-xs" aria-label={`Edit where ${counterparty.name}'s payment notices go`}>
+        <Button size="sm" variant="link" className="text-xs" aria-label={`Edit ${counterparty.name}'s billing email`}>
           {counterparty.noticeEmail ? "Edit" : "Add"}
         </Button>
       </DialogTrigger>
       <DialogContent
-        title={`${counterparty.name}'s payment notices`}
-        description="Each time a payment to it is confirmed on Arc testnet, Vestiarion emails this address the amount, what it is for and the transaction. Leave it empty to send none."
+        title={`${counterparty.name}'s billing email`}
+        description={
+          counterparty.role === "client"
+            ? "When you turn on reminders for one of its invoices on AP / AR, the agent emails them here, with the pay link. Leave it empty to send none."
+            : "Each time a payment to it is confirmed on Arc testnet, Vestiarion emails this address the amount, what it is for and the transaction. Leave it empty to send none."
+        }
       >
         <form {...formProps} className="grid gap-5">
           <input type="hidden" name="orgSlug" value={orgSlug} />
           <input type="hidden" name="counterpartyId" value={counterparty.id} />
-          <Field id={fieldId} label="Email for payment notices" optional>
+          <Field id={fieldId} label="Billing email" optional>
             <Input name="noticeEmail" type="email" maxLength={254} defaultValue={counterparty.noticeEmail ?? ""} autoComplete="off" placeholder="accounts@example.com" />
           </Field>
           <FormMessage tone={state.message && !state.ok ? "error" : "neutral"}>{state.ok ? null : state.message}</FormMessage>

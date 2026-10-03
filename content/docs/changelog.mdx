@@ -1,5 +1,15 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-03: The agent reminds clients of what they owe
+
+- **New ledger actions**, domain `ar`, delivered to webhooks like every entry:
+  - `ar_reminders_on` and `ar_reminders_off`, actor `human`: an owner or admin turned the agent's reminders on or off for a receivable. `detail` is `{ by, invoiceId, counterpartyId }`, and for `ar_reminders_on` also `linkId` and `madeNewLink` (a link made before October 3 was replaced so the reminders can carry it).
+  - `ar_reminder_sent`, actor `agent`: the agent emailed the client a reminder. `detail` is `{ invoiceId, counterpartyId, to, number, tone, daysFromDue, amount, currency, linkId, decision, referenceDecision, decisionMode, agreedWithReference }`. `to` is the address with most of its name hidden; `number` is 1 to 4; `tone` is `friendly`, `firm` or `final`; `daysFromDue` is negative before the due date. `toneLimited: { chosen, sent }` is there when code sent a softer tone than the model chose.
+  - `ar_reminder_deferred`, actor `agent`: the agent decided to wait before reminding. `detail` is `{ invoiceId, counterpartyId, until, daysFromDue, remindersSent, decision, referenceDecision, decisionMode, agreedWithReference }`.
+- Turning reminders on starts a cycle; its `cycle_complete` entry lists the new event kind `reminders_on` in `events`.
+- A cycle's journal has a new stage, `collections`, between `proposals` and `notices`. It runs only when `receipts` completed.
+- `counterparty_notice_email_changed` now covers a counterparty's billing email, which also receives a client's reminders; its `summary` reads "Billing email for *name*: *address*", or "... removed".
+
 ## 2026-10-03: The agent's decisions in Telegram
 
 - **New ledger actions**, domain `system`, delivered to webhooks like every entry:

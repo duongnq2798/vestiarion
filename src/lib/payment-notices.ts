@@ -177,22 +177,30 @@ export async function sendPaymentNotices(
   return lines;
 }
 
-/** Sets, changes or clears a counterparty's address for payment notices (R1), and records it with both addresses masked. */
-export async function changeCounterpartyNoticeEmail(input: { actorId: string; counterpartyId: string; email: string | null }): Promise<{ name: string; email: string | null }> {
+/**
+ * Sets, changes or clears a counterparty's billing email (R1), and records it with both addresses masked: a payee's
+ * payment notices go to it, and a client's reminders, once a person turns them on (collections R8).
+ */
+export async function changeCounterpartyNoticeEmail(input: {
+  actorId: string;
+  counterpartyId: string;
+  email: string | null;
+}): Promise<{ name: string; email: string | null; role: string }> {
   const orgId = currentOrgId();
-  const before = (await db().from("counterparties").select("id, name, notice_email").eq("id", input.counterpartyId).maybeSingle()).data as {
+  const before = (await db().from("counterparties").select("id, name, role, notice_email").eq("id", input.counterpartyId).maybeSingle()).data as {
     id: string;
     name: string;
+    role: string;
     notice_email: string | null;
   } | null;
   if (!before) throw new Error("Counterparty not found.");
-  if ((before.notice_email ?? null) === input.email) return { name: before.name, email: input.email };
+  if ((before.notice_email ?? null) === input.email) return { name: before.name, email: input.email, role: before.role };
   unwrap(await db().from("counterparties").update({ notice_email: input.email }).eq("id", input.counterpartyId).select("id"));
   await appendLedgerEntryBestEffort(orgId, {
     actor: "human",
     domain: "compliance",
     action: "counterparty_notice_email_changed",
-    summary: input.email ? `Payment notices for ${before.name} go to ${maskEmail(input.email)}` : `Payment notices for ${before.name} turned off`,
+    summary: input.email ? `Billing email for ${before.name}: ${maskEmail(input.email)}` : `Billing email for ${before.name} removed`,
     detail: {
       by: input.actorId,
       counterpartyId: input.counterpartyId,
@@ -200,5 +208,5 @@ export async function changeCounterpartyNoticeEmail(input: { actorId: string; co
       to: input.email ? maskEmail(input.email) : null,
     },
   });
-  return { name: before.name, email: input.email };
+  return { name: before.name, email: input.email, role: before.role };
 }

@@ -137,6 +137,39 @@ const row = (overrides: Partial<InvoiceRow> = {}): InvoiceRow => ({
 const ledger = (entries: TrailEntry[]) =>
   [...entries].reverse().map((entry) => ({ ...entry, id: `e${entry.seq}`, bodyHash: "00", signature: "00", prevHash: null, hash: "00", signingKeyId: null })) as unknown as LedgerEntry[];
 
+describe("a receivable's trail (collections R8)", () => {
+  const RECEIVABLE: TrailEntry[] = [
+    step(1100, "06:00:00", "human", "ar_reminders_on", { by: "u1", linkId: "l1" }),
+    step(1101, "06:00:20", "agent", "ar_reminder_deferred", { decisionMode: "deepseek", agreedWithReference: false, until: "2026-10-05T06:00:20.000Z" }),
+    step(1102, "09:00:00", "agent", "ar_reminder_sent", {
+      decisionMode: "deepseek",
+      agreedWithReference: true,
+      tone: "firm",
+      daysFromDue: 3,
+      number: 2,
+      to: "bi***@acme.example",
+      toneLimited: { chosen: "final", sent: "firm" },
+    }),
+    step(1103, "10:00:00", "agent", "ar_received", { txHash: TX }),
+  ];
+
+  it("tells reminders turned on, a wait, a reminder sent and the payment matched", () => {
+    const steps = invoiceTrail([...RECEIVABLE].reverse(), INVOICE);
+    expect(steps.map((s) => s.text)).toEqual([
+      "A person turned on the agent's reminders to the client.",
+      "DeepSeek decided to wait until Oct 5 before reminding the client; the written policy would have decided otherwise.",
+      "DeepSeek decided to remind the client by email, in a firm tone, 3 days after the due date, as the written policy would.",
+      "The agent matched the payment received on Arc testnet.",
+    ]);
+    expect(steps[2].notes).toEqual(["· Reminder 2 of 4, sent to bi***@acme.example", "✗ It chose a final tone; code sent it firm"]);
+  });
+
+  it("is on the receivable's card", () => {
+    const decision = invoiceDecision(row({ direction: "receivable", status: "pending", tx_ref: null, paid_amount: null }), undefined, ledger(RECEIVABLE));
+    expect(decision.trail?.map((s) => s.seq)).toEqual([1100, 1101, 1102, 1103]);
+  });
+});
+
 describe("a payable's card", () => {
   it("carries its trail, folded under How the agent decided, which a link opens at", () => {
     const decision = invoiceDecision(row(), undefined, ledger(JIREN));

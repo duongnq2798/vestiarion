@@ -343,6 +343,27 @@ is logged with the workspace id and never fails the cycle or the tick.
 (`/o/[slug]/members`), which shows it — "Email me when payments need a
 decision" — only to a member who holds `approval.decide`; a viewer sees
 nothing, because a viewer cannot decide and so receives nothing.
+
+**Emails to counterparties** go to one address per counterparty, its billing
+email (`counterparties.notice_email`, migration `0063`), and only from `live`
+workspaces; the ledger keeps the address with most of its name hidden.
+
+- **Payment notices** (`src/lib/payment-notices.ts`: the cycle's `notices`
+  stage, and after a person's approval): a payee is told once each payment to
+  it is confirmed on Arc testnet. The payment intent is claimed
+  (`notice_sent_at`) before the send and released if it fails; each notice is
+  `payment_notice_sent`.
+- **Reminders** (`src/lib/agent/collections.ts`: the `collections` stage,
+  which needs `receipts`, so no one who may just have paid is reminded): only
+  for a receivable whose reminders an owner or admin turned on
+  (`receivable_links.reminders_on_at`, migration `0065`). Code decides whether a
+  reminder is allowed now and which tones are (`src/lib/collections.ts`); the
+  model decides between sending and waiting, beside the written policy's
+  answer. A reminder is claimed as an `ar_reminders` row, unique per receivable
+  and number, before the send, and deleted if it fails. The email is a fixed
+  template that carries the pay link, whose token is kept encrypted under the
+  platform master key (`receivable_links.token_enc`). Each reminder is
+  `ar_reminder_sent`, each wait `ar_reminder_deferred`.
 `setNotifyEmailAction` (`src/app/actions/notifications.ts`) is gated on
 `workspace.read`, and writes only the row named by the session's own user id
 — a `userId` field in the form is never read.

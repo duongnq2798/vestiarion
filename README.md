@@ -76,7 +76,12 @@ is hard-coded into the interface:
 5. **Continuous audit trail** — every decision above is appended to a hash-chained, Ed25519-signed
    ledger (`/audit`). A reviewer can verify the whole chain in one click and read *why* the agent
    acted, not just that a balance moved.
-6. **Human oversight** — a payable the agent held, flagged, or left awaiting information waits in
+6. **Receivables** — a client pays a receivable through a link on Arc testnet, and the agent matches the
+   transfer that arrives to what was owed. When an owner turns reminders on, the agent decides when to
+   email the client a reminder, with the link, and how firmly, within bounds code sets: from 3 days
+   before the due date, at most every 3 days, at most 4, a final tone only once the invoice is a week
+   late (`src/lib/agent/collections.ts`).
+7. **Human oversight** — a payable the agent held, flagged, or left awaiting information waits in
    an approvals inbox (`/o/<slug>/approvals`) for a person to decide: **approve and pay** it now,
    through the very payment step the agent itself uses, so a person's payment and the agent's
    cannot disagree about what happened; **reject** it, closing the obligation; or **return** it for
@@ -189,8 +194,8 @@ src/lib/agent/
   orchestrator.ts            The agent cycle: reconcile -> receipts ->
                              compliance -> follow-up -> recurring -> services
                              -> liquidity -> AP -> contractors -> treasury ->
-                             forecast -> proposals -> notices -> telegram, all
-                             logged to the ledger
+                             forecast -> proposals -> collections -> notices
+                             -> telegram, all logged to the ledger
   liquidity.ts               Redeems from USYC what today's payments need
                              before AP decides them; a person's Bring cash back
   cycle-metrics.ts           Counts outcomes, decision sources, and code-level
