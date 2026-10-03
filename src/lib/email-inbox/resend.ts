@@ -2,7 +2,7 @@
  * The two calls the inbox makes to Resend's receiving API (email invoices design E5), through its HTTP API as the
  * sending side does: a received email, and one of its attachments through the expiring download link Resend gives.
  * Each has a deadline; a failure is reported, never thrown. The key goes only to Resend's API, never to the download
- * link, which is fetched only on Resend's own hosts.
+ * link, which is fetched only on Resend's own domains: received attachments are served from cdn.resend.app.
  */
 
 const API = "https://api.resend.com";
@@ -105,11 +105,13 @@ export type AttachmentResult =
   | { ok: true; bytes: Uint8Array; contentType: string }
   | { ok: false; reason: "not_found" | "not_resend" | "too_large" | "unreachable" };
 
-/** A download link on Resend's own hosts, over https: anything else is not fetched. */
+const RESEND_DOMAINS = ["resend.com", "resend.app"];
+
+/** A download link on Resend's own domains, over https: anything else is not fetched. */
 function onResend(url: string): boolean {
   try {
     const parsed = new URL(url);
-    return parsed.protocol === "https:" && (parsed.hostname === "resend.com" || parsed.hostname.endsWith(".resend.com"));
+    return parsed.protocol === "https:" && RESEND_DOMAINS.some((domain) => parsed.hostname === domain || parsed.hostname.endsWith(`.${domain}`));
   } catch {
     return false;
   }

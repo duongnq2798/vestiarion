@@ -63,12 +63,17 @@ const UNREADABLE = "The invoice could not be read. Forward it again in a moment.
 type Chosen = { ok: true; input: DocumentInput } | { ok: false; reason: string };
 
 /** What to read: the email's first invoice file, fetched from Resend; else its text; else why there is nothing. */
-async function documentOf(email: ReceivedEmail, deps: InboundDeps): Promise<Chosen> {
+async function documentOf(email: ReceivedEmail, orgId: string, deps: InboundDeps): Promise<Chosen> {
   const attachment = email.attachments.find(readable);
   if (attachment) {
     if (attachment.size > MAX_DOCUMENT_BYTES) return { ok: false, reason: TOO_LARGE };
     const fetched = await downloadAttachment(deps.settings.apiKey, email.id, attachment.id, MAX_DOCUMENT_BYTES, deps.fetchImpl);
-    if (!fetched.ok) return { ok: false, reason: fetched.reason === "too_large" ? TOO_LARGE : NOT_FETCHED };
+    if (!fetched.ok && fetched.reason === "too_large") return { ok: false, reason: TOO_LARGE };
+    if (!fetched.ok) {
+      // The person is told to forward it again; why it failed is for whoever runs the deployment.
+      console.error("email inbox: attachment not fetched", orgId, fetched.reason);
+      return { ok: false, reason: NOT_FETCHED };
+    }
     return { ok: true, input: { bytes: fetched.bytes, name: attachment.filename, type: attachment.contentType || fetched.contentType } };
   }
   return email.text.trim() ? { ok: true, input: { text: email.text } } : { ok: false, reason: NOTHING_TO_READ };
@@ -133,7 +138,7 @@ async function readInboxEmail(inbox: InvoiceInbox, rowId: string, emailId: strin
     reasons = [UNREACHABLE];
   } else {
     from = bareAddress(email.from);
-    const chosen = await documentOf(email, deps);
+    const chosen = await documentOf(email, inbox.orgId, deps);
     if (!chosen.ok) {
       reasons = [chosen.reason];
     } else if (!takeDocumentReadToken(inbox.orgId)) {

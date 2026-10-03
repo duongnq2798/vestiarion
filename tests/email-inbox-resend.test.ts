@@ -10,7 +10,8 @@ import { downloadAttachment, emailText, fetchReceivedEmail } from "@/lib/email-i
 
 const EMAIL_ID = "4ef9a417-02e9-4d39-ad75-9611e0fcc33c";
 const ATTACHMENT_ID = "3b1d0df1-4223-5839-087f-54eedd27b419";
-const DOWNLOAD = `https://inbound-cdn.resend.com/${EMAIL_ID}/attachments/${ATTACHMENT_ID}?signature=sig`;
+/** An attachment's link as Resend gives it: signed, expiring, on cdn.resend.app. */
+const DOWNLOAD = `https://cdn.resend.app/receiving/${EMAIL_ID}/attachments/${ATTACHMENT_ID}?response-content-disposition=attachment&Expires=1791055056&Key-Pair-Id=K1EXAMPLE&Signature=sig`;
 
 interface Sent {
   url: string;
@@ -102,8 +103,22 @@ describe("downloadAttachment", () => {
     expect(result).toEqual({ ok: true, bytes: PDF, contentType: "application/pdf" });
   });
 
-  it("fetches a link only on Resend's own hosts", async () => {
-    for (const url of ["https://example.com/a.pdf", "http://inbound-cdn.resend.com/a.pdf", "https://inbound-cdn.resend.com.example.com/a.pdf"]) {
+  it("fetches a link on Resend's own domains, resend.app and resend.com, over https", async () => {
+    for (const url of [DOWNLOAD, "https://cdn.resend.com/a.pdf"]) {
+      const { sent, fetchImpl } = fakeFetch((call) => (call.url.startsWith("https://api.resend.com/") ? json({ ...meta, download_url: url }) : new Response(new Blob([PDF]))));
+      expect(await downloadAttachment("re_key", EMAIL_ID, ATTACHMENT_ID, 4_000_000, fetchImpl)).toMatchObject({ ok: true, bytes: PDF });
+      expect(sent.map((call) => call.url)[1]).toBe(url);
+    }
+  });
+
+  it("fetches a link nowhere else", async () => {
+    for (const url of [
+      "https://example.com/a.pdf",
+      "http://cdn.resend.app/a.pdf",
+      "https://cdn.resend.app.example.com/a.pdf",
+      "https://cdnresend.app/a.pdf",
+      "https://inbound-cdn.resend.com.example.com/a.pdf",
+    ]) {
       const { sent, fetchImpl } = fakeFetch(() => json({ ...meta, download_url: url }));
       expect(await downloadAttachment("re_key", EMAIL_ID, ATTACHMENT_ID, 4_000_000, fetchImpl)).toEqual({ ok: false, reason: "not_resend" });
       expect(sent).toHaveLength(1);

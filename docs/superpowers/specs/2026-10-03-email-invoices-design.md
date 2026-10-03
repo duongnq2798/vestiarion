@@ -35,10 +35,11 @@ then decides the payable as any other. If the workspace has Slack, its channel i
   response. A failure marks the row `unreadable` with a reason a person sees: nothing is lost silently.
 - **E5. Reading.** `GET /emails/receiving/{id}` gives the sender, the subject, the text, SPF, DKIM and DMARC, and the
   attachments' metadata. The first attachment that is a PDF, an `.eml` or a `.txt` of at most 4 MB is fetched through
-  `GET /emails/receiving/{id}/attachments/{aid}` and its `download_url` (https, Resend's hosts only); with none, the
-  email's text is read. `readInvoiceDraft` reads it; the draft rule every chat shares (`chatDraftOf`) decides whether
-  it can be added. The row becomes `ready`, `needs_details` (with the reasons) or `unreadable`. Five reads a minute per
-  workspace, as everywhere.
+  `GET /emails/receiving/{id}/attachments/{aid}` and its `download_url` (https, on Resend's own domains only:
+  `resend.com` or `resend.app`; Resend serves received attachments from `cdn.resend.app`); with none, the email's text
+  is read. `readInvoiceDraft` reads it; the draft rule every chat shares (`chatDraftOf`) decides whether it can be
+  added. The row becomes `ready`, `needs_details` (with the reasons) or `unreadable`; an attachment that could not be
+  fetched also logs why. Five reads a minute per workspace, as everywhere.
 - **E6. Nothing is added by itself.** A sender address is easy to fake, so a person adds every draft. The inbox shows
   whether the sender passed SPF, DKIM and DMARC, and whether it is a counterparty's billing email: information, never
   authority.
