@@ -80,6 +80,10 @@ const SHOTS = {
   },
   "first-payment-document": async () => {},
   "first-payment-decision": async () => {},
+  "first-payment-trail": async (page) => {
+    await page.click(`[...document.querySelectorAll("[data-docs-shot] summary")].find((s) => s.textContent.includes("How the agent decided"))`);
+    await page.waitFor(`document.querySelector("[data-docs-shot] details[id^=trail-]")?.open`);
+  },
   "first-payment-needs-you": async () => {},
   "first-payment-stopped": async () => {},
   "first-payment-approval": async () => {},
