@@ -35,7 +35,9 @@ afterAll(async () => {
 });
 
 const ENVELOPE = { v: 1, iv: "x", tag: "y", data: "z" };
-const PLATFORM_TABLES = ["memberships", "invitations", "api_keys", "webhook_endpoints", "webhook_deliveries", "payee_links"] as const;
+const PLATFORM_TABLES = [
+  "memberships", "invitations", "api_keys", "webhook_endpoints", "webhook_deliveries", "payee_links", "telegram_link_codes", "telegram_links",
+] as const;
 
 const deleteOrg = (orgId: string, by: string | null = owner) =>
   asServiceRole(db, (tx) => tx.query("select public.delete_org($1, $2)", [orgId, by]));
@@ -136,6 +138,12 @@ async function populated(slug: string): Promise<string> {
     "insert into public.webhook_deliveries (org_id, endpoint_id, event_type) values ($1, $2, 'webhook.test')",
     [orgId, endpoint]
   );
+  // A member's Telegram chat and an unused code go with the membership (0064).
+  await db.query(
+    "insert into public.telegram_link_codes (org_id, user_id, code_hash, expires_at) values ($1, $2, $3, now() + interval '10 minutes')",
+    [orgId, member, crypto.randomBytes(32).toString("hex")]
+  );
+  await db.query("insert into public.telegram_links (org_id, user_id, chat_id) values ($1, $2, $3)", [orgId, member, crypto.randomInt(1, 2 ** 31)]);
   await closeCycles(orgId);
   return orgId;
 }
