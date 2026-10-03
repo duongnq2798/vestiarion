@@ -1,10 +1,11 @@
-import { runCycleSoon } from "../agent/cycle-soon";
 import { can, type OrgRole } from "../auth/roles";
+import { memberActor } from "../commands/actor";
+import { addInvoice } from "../commands/invoices";
+import { gate } from "../commands/policy";
 import { platformDb, unwrap } from "../dal";
 import { invoiceFormRefusal, invoiceInputSchema } from "../intake-validation";
 import { readInvoiceDraft, type InvoiceDraftRead } from "../invoice-document/draft";
 import { DocumentReadError, type DocumentInput } from "../invoice-document/read";
-import { createInvoice } from "../invoices/create";
 import { takeDocumentReadToken } from "../rate-limit";
 import type { TelegramClient } from "./client";
 import { memberRole, type TelegramLink } from "./links";
@@ -159,13 +160,17 @@ async function claimDraft(link: TelegramLink, draftId: string, now: Date): Promi
 
 const USED = "This draft was already used or has expired. Send the invoice again to read it anew.";
 
-/** Adds the draft as a payable, as the member (R10), and starts the agent's cycle. */
+/**
+ * Adds the draft as a payable, as the member (R10), through the command every surface shares (integrations design
+ * §9), which starts the agent's cycle.
+ */
 export async function addDraft(link: TelegramLink, tap: DraftTap, deps: IntakeDeps): Promise<"added" | "used" | "refused" | "ignored" | "failed"> {
   if (!ownTap(link, tap)) return "ignored";
   const { client, workspace } = deps;
-  const role = await memberRole(link.orgId, link.userId);
-  if (!can(role, "records.write")) {
-    await client.editMessageText(tap.chatId, tap.messageId, roleRefusal(role, workspace.name));
+  const actor = await memberActor(link.orgId, link.userId, { kind: "telegram", linkId: link.id });
+  // Asked before the draft is claimed, so a refused tap leaves it for someone who may add it.
+  if (!actor || gate(actor, "invoice.add")) {
+    await client.editMessageText(tap.chatId, tap.messageId, roleRefusal(actor?.role ?? null, workspace.name));
     return "refused";
   }
   const stored = await claimDraft(link, tap.draftId, deps.now?.() ?? new Date());
@@ -175,20 +180,22 @@ export async function addDraft(link: TelegramLink, tap: DraftTap, deps: IntakeDe
   }
 
   const parsed = invoiceInputSchema.safeParse({ direction: "payable", ...stored.draft, goodsReceived: tap.goodsReceived });
-  const created = parsed.success
-    ? await createInvoice({ actorId: link.userId, invoice: parsed.data, document: { ...stored.document, changed: [] }, via: "telegram" })
-    : null;
-  if (!parsed.success || !created) {
-    await client.editMessageText(tap.chatId, tap.messageId, "The invoice could not be added: its counterparty is no longer in this workspace. Add it in Vestiarion.");
+  const added = parsed.success ? await addInvoice(actor, { invoice: parsed.data, document: { ...stored.document, changed: [] } }) : null;
+  if (!parsed.success || !added?.ok) {
+    const reason = added && !added.ok && added.code !== "counterparty_not_found" ? escapeHtml(added.message) : null;
+    await client.editMessageText(
+      tap.chatId,
+      tap.messageId,
+      reason ?? "The invoice could not be added: its counterparty is no longer in this workspace. Add it in Vestiarion."
+    );
     return "failed";
   }
 
-  runCycleSoon({ orgId: link.orgId, userId: link.userId, sandbox: workspace.mode === "sandbox", kind: "invoice_added" });
   const invoice = parsed.data;
   await client.editMessageText(
     tap.chatId,
     tap.messageId,
-    `Added a payable for ${escapeHtml(created.counterpartyName)}: ${escapeHtml(amountText(invoice.amount, invoice.currency))}, due ${escapeHtml(invoice.dueDate)}, ` +
+    `Added a payable for ${escapeHtml(added.counterpartyName)}: ${escapeHtml(amountText(invoice.amount, invoice.currency))}, due ${escapeHtml(invoice.dueDate)}, ` +
       `${tap.goodsReceived ? "goods received" : "goods not received yet"}. The agent usually decides within a minute, and its decision will be sent here.`
   );
   return "added";
