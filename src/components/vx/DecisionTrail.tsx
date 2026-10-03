@@ -23,10 +23,21 @@ export function trailAnchor(decisionId: string): string {
  * with its time to the second and how long after the step before it, what was checked, the transaction it sent and
  * the audit log entry it is. Folded until opened; a link to `#trail-<id>` opens it.
  */
-export function DecisionTrail({ id, steps, orgSlug }: { id: string; steps: TrailStep[]; orgSlug: string }) {
+export function DecisionTrail({
+  id,
+  steps,
+  orgSlug,
+  defaultOpen = false,
+}: {
+  id: string;
+  steps: TrailStep[];
+  orgSlug: string;
+  /** Open from the start: for a guide's screenshot. */
+  defaultOpen?: boolean;
+}) {
   if (steps.length === 0) return null;
   return (
-    <details id={trailAnchor(id)} className="group/trail scroll-mt-24 border-t border-line">
+    <details id={trailAnchor(id)} open={defaultOpen} className="group/trail scroll-mt-24 border-t border-line first:border-t-0">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-2.5 text-sm font-medium text-ink-2 transition-colors duration-150 ease-standard hover:text-ink sm:px-5 [&::-webkit-details-marker]:hidden">
         <span className="inline-flex items-center gap-2">
           <ChevronRight aria-hidden className="size-4 text-ink-3 transition-transform duration-200 ease-standard group-open/trail:rotate-90" />
@@ -53,7 +64,7 @@ export function DecisionTrail({ id, steps, orgSlug }: { id: string; steps: Trail
               </p>
               <p className={cn("mt-0.5 text-sm", step.tone === "stopped" ? "text-held" : "text-ink")}>{step.text}</p>
               {step.notes.length > 0 && (
-                <ul className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-ink-2">
+                <ul className="mt-1 space-y-0.5 text-xs text-ink-2">
                   {step.notes.map((note) => (
                     <li key={note}>{note}</li>
                   ))}
