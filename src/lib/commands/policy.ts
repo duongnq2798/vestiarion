@@ -1,0 +1,59 @@
+import { can, type Permission } from "../auth/roles";
+import { currentOrgId } from "../context";
+import type { Actor, SurfaceKind } from "./actor";
+import { refused, type Refused } from "./outcome";
+
+/**
+ * Every command, with the permission it needs (integrations design R1). One exported function in
+ * `src/lib/commands/` per entry, whose first statement is `gate(actor, "<name>")`.
+ */
+export const COMMAND_PERMISSIONS = {
+  "payable.approve": "approval.decide",
+  "payable.reject": "approval.decide",
+  "payable.return": "approval.decide",
+  "payable.add_details": "records.write",
+  "milestone.pay": "approval.decide",
+  "milestone.close": "approval.decide",
+  "agent.pause": "agent.pause",
+  "agent.resume": "agent.resume",
+  "agent.run_cycle": "agent.run_cycle",
+  "invoice.add": "records.write",
+} as const satisfies Record<string, Permission>;
+
+export type CommandName = keyof typeof COMMAND_PERMISSIONS;
+
+/**
+ * What each surface may run (R4). The console runs everything. Telegram adds invoices and decides nothing (Telegram
+ * bot design R11). The API adds records and never decides (write API R3). Slack runs nothing until its own design
+ * opens decisions, under a limit each workspace sets.
+ */
+export const SURFACE_COMMANDS: Record<SurfaceKind, readonly CommandName[]> = {
+  console: Object.keys(COMMAND_PERMISSIONS) as CommandName[],
+  telegram: ["invoice.add"],
+  api: ["invoice.add"],
+  slack: [],
+};
+
+/** A surface ran a command for an actor outside the scope it entered: a bug in that surface, never a refusal. */
+export class ActorScopeError extends Error {
+  constructor() {
+    super("A command ran outside its actor's workspace");
+    this.name = "ActorScopeError";
+  }
+}
+
+/**
+ * The first statement of every command. The workspace in scope must be the actor's (R2), or it throws. Then the
+ * actor's role must hold the command's permission, and the surface must be one that may run it; either refusal is
+ * returned before anything is read or written.
+ */
+export function gate(actor: Actor, command: CommandName): Refused | null {
+  if (currentOrgId() !== actor.orgId) throw new ActorScopeError();
+  if (!can(actor.role, COMMAND_PERMISSIONS[command])) {
+    return refused("forbidden", `Your role in this workspace (${actor.role}) cannot do that.`);
+  }
+  if (!SURFACE_COMMANDS[actor.surface.kind].includes(command)) {
+    return refused("surface", "That is done in the Vestiarion console, not from here.");
+  }
+  return null;
+}
