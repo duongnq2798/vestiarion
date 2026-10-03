@@ -8,6 +8,7 @@ import GoLivePanel from "@/components/GoLivePanel";
 import { HeldMilestoneActions } from "@/components/HeldMilestoneActions";
 import VerifyLedgerBadge from "@/components/VerifyLedgerBadge";
 import { DecisionCard } from "@/components/vx/DecisionCard";
+import { DecisionTrail } from "@/components/vx/DecisionTrail";
 import { WaitingPayableAction } from "@/components/WaitingPayableAction";
 import CounterpartyAddress from "@/components/intake/CounterpartyAddressEdit";
 import CounterpartyIntake from "@/components/intake/CounterpartyIntake";
@@ -595,8 +596,13 @@ export const DOCS_SHOTS = {
     guide: "first-payment",
     page: "invoices",
     render: function TrailShot() {
-      // The card alone, as an opened row on AP / AR shows it; the script opens How the agent decided.
-      return <DecisionCard decision={invoiceDecision(TRAIL_INVOICE, COUNTERPARTY, TRAIL_ENTRIES)} orgSlug={SLUG} />;
+      // How the agent decided, opened, as a payable's card shows it: the trail alone, each check on its own line.
+      const decision = invoiceDecision(TRAIL_INVOICE, COUNTERPARTY, TRAIL_ENTRIES);
+      return (
+        <Card className="overflow-hidden">
+          <DecisionTrail id={decision.id} steps={decision.trail ?? []} orgSlug={SLUG} defaultOpen />
+        </Card>
+      );
     },
   },
   "first-payment-needs-you": {

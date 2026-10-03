@@ -148,6 +148,9 @@ describe("a payable's card", () => {
     expect(markup).toContain("10 s later");
     expect(markup).toContain("22 s later");
     expect(markup).toContain('href="/o/acme/audit#seq-972"');
+    // Each check on its own line, read down a list (the partner's ask): never run together in one wrapped row.
+    expect(markup).toContain('<ul class="mt-1 space-y-0.5 text-xs text-ink-2"><li>✓ Purchase order PO-131 on file and the goods received</li><li>✓ Counterparty screened clear</li>');
+    expect(markup).not.toMatch(/<ul class="[^"]*flex-wrap[^"]*"><li>✓/);
   });
 
   it("says a payable not yet decided is being decided while a cycle runs", () => {
