@@ -378,18 +378,18 @@ describe("the MCP protocol, with a valid key", () => {
   });
 
   describe.each(ERAS)("a %s client", (_version, request) => {
-    it("lists the eleven tools: the nine reads read-only, the two writes as adding records (write API R9)", async () => {
+    it("lists the thirteen tools: the nine reads read-only, the four writes as adding records (write API R9; part 2, W7)", async () => {
       const fake = fakeSupabase(database());
       const response = await post(fake, request(2, "tools/list"));
       expect(response.status).toBe(200);
       const tools = (await reply(response)).result?.tools as Array<{ name: string; title: string; inputSchema: { type: string }; annotations: Record<string, unknown> }>;
-      expect(tools).toHaveLength(11);
+      expect(tools).toHaveLength(13);
       expect(tools.map((tool) => tool.name).sort()).toEqual(MCP_TOOLS.map((tool) => tool.name).sort());
       for (const tool of tools) {
-        const write = tool.name === "create_counterparty" || tool.name === "create_invoice";
+        const write = tool.name.startsWith("create_");
         expect(tool.annotations, tool.name).toEqual(
           write
-            ? { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }
+            ? { readOnlyHint: false, destructiveHint: tool.name === "create_payee_link", idempotentHint: false, openWorldHint: false }
             : { readOnlyHint: true, openWorldHint: false, idempotentHint: true }
         );
         expect(tool.inputSchema.type).toBe("object");

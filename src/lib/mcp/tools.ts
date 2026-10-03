@@ -21,12 +21,13 @@ export interface McpTool {
   inputSchema: z.ZodObject;
   /**
    * A read only reads, and asking twice changes nothing. A write adds a
-   * record: it changes and removes nothing, and a repeat without the same
-   * `idempotencyKey` adds another.
+   * record, and a repeat without the same `idempotencyKey` adds another. It
+   * changes and removes nothing, except where its operation says it can: a
+   * new payee link revokes the payee's unused one (write API part 2, W3).
    */
   annotations:
     | { readOnlyHint: true; openWorldHint: false; idempotentHint: true }
-    | { readOnlyHint: false; destructiveHint: false; idempotentHint: false; openWorldHint: false };
+    | { readOnlyHint: false; destructiveHint: boolean; idempotentHint: false; openWorldHint: false };
 }
 
 /** `list-invoices` → `list_invoices`. */
@@ -42,8 +43,9 @@ export function argumentName(param: Pick<DocParam, "name" | "in">): string {
 }
 
 const PAGING = "Returns one page; pass page.nextCursor back as cursor for the next.";
-const WRITING =
-  "Needs a read-and-write key. Pass idempotencyKey, unique to the record, to make a retry safe: a repeat with the same key and arguments adds nothing.";
+const WRITING = "Needs a read-and-write key.";
+const KEYED =
+  " Pass idempotencyKey, unique to the record, to make a retry safe: a repeat with the same key and arguments adds nothing.";
 
 function paramSchema(param: DocParam): z.ZodType {
   let schema: z.ZodType;
@@ -65,7 +67,9 @@ function paramSchema(param: DocParam): z.ZodType {
 function toTool(op: DocOperation): McpTool {
   const description = `${op.summary}. ${op.description}`;
   const params = Object.fromEntries(op.params.map((param) => [argumentName(param), paramSchema(param)]));
-  const note = op.collection ? PAGING : op.scope === "write" ? WRITING : null;
+  // Only a write that takes an `Idempotency-Key` is told about one: a payee link keeps no outcome for it (part 2, W3).
+  const keyed = op.params.some((param) => param.in === "header" && param.name === "Idempotency-Key");
+  const note = op.collection ? PAGING : op.scope === "write" ? WRITING + (keyed ? KEYED : "") : null;
   return {
     name: toolName(op.id),
     operationId: op.id,
@@ -76,7 +80,7 @@ function toTool(op: DocOperation): McpTool {
     inputSchema: op.requestBody ? z.strictObject({ ...op.requestBody.shape, ...params }) : z.object(params),
     annotations:
       op.scope === "write"
-        ? { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }
+        ? { readOnlyHint: false, destructiveHint: op.destructive === true, idempotentHint: false, openWorldHint: false }
         : { readOnlyHint: true, openWorldHint: false, idempotentHint: true },
   };
 }
