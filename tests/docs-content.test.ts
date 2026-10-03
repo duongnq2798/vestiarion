@@ -158,6 +158,7 @@ describe("the docs navigation", () => {
       ["guides/pay-a-contractor", "Pay a contractor for delivered work"],
       ["guides/get-paid", "Get paid as a freelancer"],
       ["guides/telegram", "Get the agent's decisions in Telegram"],
+      ["guides/slack", "Get the agent's decisions in Slack"],
       ["guides/api-invoices", "Add invoices from your own system"],
       ["guides/audit-export", "Verify an audit export"],
     ]);
@@ -188,7 +189,8 @@ describe("the docs navigation", () => {
     expect(neighbours("guides/first-payment").next?.slug).toBe("guides/pay-a-contractor");
     expect(neighbours("guides/pay-a-contractor").next?.slug).toBe("guides/get-paid");
     expect(neighbours("guides/get-paid").next?.slug).toBe("guides/telegram");
-    expect(neighbours("guides/telegram").next?.slug).toBe("guides/api-invoices");
+    expect(neighbours("guides/telegram").next?.slug).toBe("guides/slack");
+    expect(neighbours("guides/slack").next?.slug).toBe("guides/api-invoices");
     expect(neighbours("guides/api-invoices").next?.slug).toBe("guides/audit-export");
     expect(neighbours("guides/audit-export").next?.slug).toBe("research/model-vs-policy");
     expect(neighbours("research/model-vs-policy").next?.slug).toBe("get-started/quickstart");

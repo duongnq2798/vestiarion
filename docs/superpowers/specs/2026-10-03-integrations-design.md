@@ -1,7 +1,7 @@
 # Integrations: where Vestiarion meets the tools a business already uses
 
-Date: 2026-10-03. Status: review done; Phase 0 implemented on `feat/integrations` (PR #172); Phase 1 designed, not
-started. Decided under the standing autonomy grant.
+Date: 2026-10-03. Status: review done; Phase 0 implemented on `feat/integrations` (PR #172); Phase 1 (Slack)
+implemented on `feat/slack`. Decided under the standing autonomy grant.
 
 ## 1. The question
 

@@ -48,10 +48,20 @@ describe("what each surface may run (R4)", () => {
     expect([...SURFACE_COMMANDS.console].sort()).toEqual(Object.keys(COMMAND_PERMISSIONS).sort());
   });
 
-  it("lets Telegram and the API add invoices only, and Slack nothing yet", () => {
+  it("lets Telegram and the API add invoices only, and Slack decide a held payable and pause the agent", () => {
     expect(SURFACE_COMMANDS.telegram).toEqual(["invoice.add"]);
     expect(SURFACE_COMMANDS.api).toEqual(["invoice.add"]);
-    expect(SURFACE_COMMANDS.slack).toEqual([]);
+    expect(SURFACE_COMMANDS.slack).toEqual(["payable.approve", "payable.reject", "payable.return", "agent.pause"]);
+  });
+
+  it("refuses a decision from Slack while its workspace allows none there, and lets it pause", () => {
+    const off = actor({ surface: { kind: "slack", linkId: "l-2", decisionsLimitUsdc: null } });
+    expect(inScope(ORG, () => gate(off, "payable.reject"))).toMatchObject({ ok: false, code: "decisions_off" });
+    expect(inScope(ORG, () => gate(off, "agent.pause"))).toBeNull();
+    expect(inScope(ORG, () => gate(off, "agent.resume"))).toMatchObject({ code: "forbidden" });
+    const on = actor({ role: "owner", surface: { kind: "slack", linkId: "l-2", decisionsLimitUsdc: 5 } });
+    expect(inScope(ORG, () => gate(on, "payable.approve"))).toBeNull();
+    expect(inScope(ORG, () => gate(on, "agent.resume"))).toMatchObject({ code: "surface" });
   });
 
   it("asks the permission map's own permissions", () => {
@@ -71,7 +81,7 @@ describe("the actor", () => {
   it("records nothing for the console, and the link or key for any other surface (R3)", () => {
     expect(provenanceOf(actor())).toEqual({});
     expect(provenanceOf(actor({ surface: { kind: "telegram", linkId: "l-1" } }))).toEqual({ provenance: { via: "telegram", linkId: "l-1" } });
-    expect(provenanceOf(actor({ surface: { kind: "slack", linkId: "l-2" } }))).toEqual({ provenance: { via: "slack", linkId: "l-2" } });
+    expect(provenanceOf(actor({ surface: { kind: "slack", linkId: "l-2", decisionsLimitUsdc: 5 } }))).toEqual({ provenance: { via: "slack", linkId: "l-2" } });
     expect(provenanceOf(actor({ surface: { kind: "api", apiKeyId: "k-1" } }))).toEqual({ provenance: { via: "api", apiKeyId: "k-1" } });
   });
 
@@ -109,6 +119,6 @@ describe("memberActor", () => {
 
   it("is null for a role the map does not know", async () => {
     const { run } = world([{ role: "superuser" }], [{ mode: "live" }]);
-    expect(await run(() => memberActor(ORG, USER, { kind: "slack", linkId: "l-2" }))).toBeNull();
+    expect(await run(() => memberActor(ORG, USER, { kind: "slack", linkId: "l-2", decisionsLimitUsdc: null }))).toBeNull();
   });
 });

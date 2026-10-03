@@ -1,5 +1,17 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-03: The agent's decisions in Slack
+
+- **New ledger actions**, domain `system`, delivered to webhooks like every entry:
+  - `slack_installed`, actor `human`: an owner or admin connected a Slack workspace from **Settings**, and picked the channel the agent's decisions go to. Its `detail` is `{ by, teamId, channelId }`.
+  - `slack_uninstalled`: the workspace's Slack was disconnected, with every member's Slack link. Actor `human` when an owner or admin chose **Remove Slack** (`via: "settings"`); actor `system` when Slack said the app was removed from its workspace (`via: "slack"`), with `by` `null`. Its `detail` is `{ by, teamId, via }`.
+  - `slack_member_connected`, actor `human`: a member connected their own Slack account. Its `detail` is `{ by, linkId }`, plus `via: "install"` for the account of the person who connected the workspace.
+  - `slack_member_disconnected`, actor `human`: a member disconnected their own Slack account, with `/vestiarion disconnect` (`via: "slack"`) or from **Settings** (`via: "settings"`). Its `detail` is `{ by, userId, linkId, via }`. A member removed from the workspace loses the link with the membership, and that is recorded as the removal.
+  - `slack_decisions_limit_changed`, actor `human`: an owner set the most a payment approved from Slack may be, or turned deciding from Slack off. Its `detail` is `{ by, from, to }`, in USDC, `null` for off.
+- `approval_paid`, `approval_rejected` and `approval_returned` entries gain `via: "slack"` and `linkId` when a member decided the payable from its message in Slack, and `agent_paused` does when they paused the agent with `/vestiarion pause`. Everything else in them is what the console writes. Entries for actions taken in the console carry no `via`, as before.
+- A cycle's journal has a new stage, `slack`, after `telegram`, the last. It needs no other stage to have succeeded.
+- Nothing changes in `/api/v1`.
+
 ## 2026-10-03: A payable held for an unconfirmed address goes back to the agent once it is confirmed
 
 - A payable the agent held because its counterparty's address changed and no one had confirmed it (`guardrailRule: "counterparty.address_unconfirmed"`, `observed.addressUnconfirmed: true`) now goes back to the agent when a person confirms the address: an `invoice_reopened` entry whose `followUp.changes` reads "the counterparty's new address has since been confirmed", then a new decision in the same cycle. Until now it stayed held until a person approved it. Approving it still pays it, and confirms the address.

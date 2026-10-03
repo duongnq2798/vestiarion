@@ -19,6 +19,7 @@ type GuideSlug =
   | "guides/pay-a-contractor"
   | "guides/get-paid"
   | "guides/telegram"
+  | "guides/slack"
   | "guides/api-invoices"
   | "guides/audit-export";
 
@@ -94,6 +95,16 @@ const PAYEE_ACTIONS = "src/app/payee/[token]/actions.ts";
 const PAYEE_EMAIL = "src/lib/email/payee-link.ts";
 const HELD_ACTIONS = "src/components/HeldMilestoneActions.tsx";
 const MILESTONE_DECISIONS = "src/lib/agent/milestone-decisions.ts";
+const SLACK_PANEL = "src/components/SlackPanel.tsx";
+const SLACK_CONNECT_PAGE = "src/app/integrations/slack/connect/page.tsx";
+const SLACK_CONNECT_FORM = "src/components/SlackConnectForm.tsx";
+const SLACK_ACTIONS = "src/app/actions/slack.ts";
+const SLACK_BLOCKS = "src/lib/slack/blocks.ts";
+const SLACK_INTERACTIONS = "src/lib/slack/interactions.ts";
+const SLACK_INSTALLS = "src/lib/slack/installs.ts";
+const SLACK_LINKS = "src/lib/slack/links.ts";
+const SLACK_SETTINGS = "src/lib/slack/settings.ts";
+const CHAT_DECISIONS = "src/lib/commands/chat-decisions.ts";
 
 /** Each guide's quoted UI strings, as `[text, the file it must appear in]`. */
 const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
@@ -526,6 +537,55 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ['via: "telegram"', "src/lib/commands/invoices.ts"],
     ["Commands and invoices now go to", TELEGRAM_UPDATES],
   ],
+  "guides/slack": [
+    ["Settings", APP_NAV],
+    ["Slack", SLACK_PANEL],
+    ["Add to Slack", SLACK_PANEL],
+    ["Slack is connected. The agent's decisions now go to the channel you picked.", SLACK_PANEL],
+    ["That Slack workspace is already connected to another Vestiarion workspace.", SLACK_PANEL],
+    ["An owner or admin connects Slack.", SLACK_PANEL],
+    ["slack_installed", SLACK_INSTALLS],
+    ["/vestiarion connect", SLACK_BLOCKS],
+    ["Connect your Slack account", SLACK_CONNECT_PAGE],
+    ["Connect my Slack account", SLACK_CONNECT_FORM],
+    ["Connected. Back in Slack, try /vestiarion today.", SLACK_ACTIONS],
+    ["slack_member_connected", SLACK_LINKS],
+    ["the agent decided", SLACK_BLOCKS],
+    ["Arc testnet transaction", SLACK_BLOCKS],
+    ["How it decided", AGENT_ACTIVITY],
+    ["Decide in Approvals", AGENT_ACTIVITY],
+    ["/vestiarion today", SLACK_BLOCKS],
+    ["/vestiarion waiting", SLACK_BLOCKS],
+    ["/vestiarion ledger", SLACK_BLOCKS],
+    ["/vestiarion pause [reason]", SLACK_BLOCKS],
+    ["/vestiarion disconnect", SLACK_BLOCKS],
+    ["Safe to spend today", SLACK_BLOCKS],
+    ["Verify hash chain", VERIFY_BADGE],
+    ["Deciding payments from Slack", SLACK_PANEL],
+    ["Limit (USDC)", SLACK_PANEL],
+    ["Deciding payments from Slack is off", SLACK_PANEL],
+    ["slack_decisions_limit_changed", SLACK_INSTALLS],
+    ["Approve and pay", SLACK_BLOCKS],
+    ["Approve and pay?", SLACK_BLOCKS],
+    ["Reject", SLACK_BLOCKS],
+    ["Return to the agent", SLACK_BLOCKS],
+    ["Approve it in Vestiarion:", SLACK_BLOCKS],
+    ["Approve and pay", APPROVAL_CARD],
+    ["This payable changed after this message was posted. Open Vestiarion to see it as it is now.", CHAT_DECISIONS],
+    ["This button no longer works", SLACK_INTERACTIONS],
+    ["Connect your Slack account to Vestiarion first", SLACK_INTERACTIONS],
+    ["Approved and paid by", SLACK_BLOCKS],
+    ["Rejected by", SLACK_BLOCKS],
+    ["Returned to the agent by", SLACK_BLOCKS],
+    ["approval_paid", "src/lib/agent/approvals.ts"],
+    ["Disconnect my account", SLACK_PANEL],
+    ["slack_member_disconnected", SLACK_LINKS],
+    ["Remove Slack", SLACK_PANEL],
+    ["slack_uninstalled", SLACK_INSTALLS],
+    ["SLACK_CLIENT_ID", SLACK_SETTINGS],
+    ["SLACK_CLIENT_SECRET", SLACK_SETTINGS],
+    ["SLACK_SIGNING_SECRET", SLACK_SETTINGS],
+  ],
   "guides/api-invoices": [
     ["Settings", APP_NAV],
     ["API keys", API_KEYS_PANEL],
@@ -603,6 +663,7 @@ const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/pay-a-contractor": 20,
   "guides/get-paid": 20,
   "guides/telegram": 20,
+  "guides/slack": 20,
   "guides/api-invoices": 10,
   "guides/audit-export": 5,
 };
