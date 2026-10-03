@@ -21,6 +21,8 @@ export const COMMAND_PERMISSIONS = {
   "invoice.add": "records.write",
   "milestone.add": "records.write",
   "payee_link.create": "records.write",
+  "inbox.add": "records.write",
+  "inbox.dismiss": "records.write",
 } as const satisfies Record<string, Permission>;
 
 export type CommandName = keyof typeof COMMAND_PERMISSIONS;

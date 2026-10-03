@@ -13,7 +13,12 @@ import { gate } from "./policy";
  */
 export async function addInvoice(
   actor: Actor,
-  input: { invoice: InvoiceInput; document: DocumentProvenance | null }
+  input: {
+    invoice: InvoiceInput;
+    document: DocumentProvenance | null;
+    /** The inbox row it was read from, when it arrived by email (email invoices design E8). */
+    received?: { inboxEmailId: string };
+  }
 ): Promise<CommandOutcome<{ invoiceId: string; counterpartyName: string }>> {
   const refusal = gate(actor, "invoice.add");
   if (refusal) return refusal;
@@ -26,6 +31,8 @@ export async function addInvoice(
       // The entry names the bot exactly as it always has (Telegram bot design R10); Slack's names its link too (S15).
       ...(actor.surface.kind === "telegram" ? { via: "telegram" as const } : {}),
       ...(actor.surface.kind === "slack" ? { via: "slack" as const, linkId: actor.surface.linkId } : {}),
+      // An invoice that arrived by email names the email, whoever added it and wherever from.
+      ...(input.received ? { via: "email" as const, inboxEmailId: input.received.inboxEmailId } : {}),
     });
   } catch (error) {
     console.error("adding an invoice failed", actor.orgId, error instanceof Error ? error.message : "unknown error");
