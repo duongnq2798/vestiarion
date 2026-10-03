@@ -39,6 +39,7 @@ export const DOCS_NAV: NavSection[] = [
     pages: [
       { slug: "", title: "Overview", description: "What Vestiarion is, and what its API and webhooks give an integration." },
       { slug: "data-delivery", title: "Data delivery methods", description: "REST pull or webhook push: how each delivers data, and when to use which." },
+      { slug: "contracts", title: "Contracts on Arc testnet", description: "The contracts Vestiarion deploys and the Circle contracts it calls, with their addresses on Arc testnet." },
     ],
   },
   {

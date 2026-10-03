@@ -99,6 +99,34 @@ supported, and with no key at all the same decision points fall back to a transp
 heuristic — so the app runs end-to-end with zero credentials, and every ledger entry records which
 path produced it.
 
+## Contracts on Arc testnet
+
+Vestiarion deploys two contracts of its own, one copy per workspace that uses it, through Circle's
+Smart Contract Platform. Their source is in [`contracts/`](contracts); both were written for
+Vestiarion and are not audited. The copies running in production, in testnet-2, our own test
+workspace:
+
+| Contract | What it does | Address |
+| --- | --- | --- |
+| `VestiarionEscrow` | Locks a milestone's USDC for a contractor; only the operating wallet can release it to the contractor, or take it back from a refund date | [`0x74af203fec3f121ff1cd3a763092d1211487702b`](https://testnet.arcscan.app/address/0x74af203fec3f121ff1cd3a763092d1211487702b) |
+| `VestiarionSpendingLimit` | The agent's payments leave through `pay`, which refuses anything past the daily or 7-day limit | [`0x9da3c47f73ea9399ac566806a189b0bf47b7d4ba`](https://testnet.arcscan.app/address/0x9da3c47f73ea9399ac566806a189b0bf47b7d4ba) |
+
+The Circle contracts it calls on Arc testnet:
+
+| Contract | Address |
+| --- | --- |
+| USDC | [`0x3600000000000000000000000000000000000000`](https://testnet.arcscan.app/address/0x3600000000000000000000000000000000000000) |
+| EURC | [`0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a`](https://testnet.arcscan.app/address/0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a) |
+| USYC | [`0xe9185F0c5F296Ed1797AaE4238D26CCaBEadb86C`](https://testnet.arcscan.app/address/0xe9185F0c5F296Ed1797AaE4238D26CCaBEadb86C) |
+| USYC Teller | [`0x9fdF14c5B14173D74C08Af27AebFf39240dC105A`](https://testnet.arcscan.app/address/0x9fdF14c5B14173D74C08Af27AebFf39240dC105A) |
+| USYC Entitlements | [`0xCC205224862C7641930c87679E98999d23C26113`](https://testnet.arcscan.app/address/0xCC205224862C7641930c87679E98999d23C26113) |
+| Gateway Wallet | [`0x0077777d7EBA4688BDeF3E311b846F25870A19B9`](https://testnet.arcscan.app/address/0x0077777d7EBA4688BDeF3E311b846F25870A19B9) |
+| Gateway Minter | [`0x0022222ABE238Cc2C7Bb1f21003F0a260052475B`](https://testnet.arcscan.app/address/0x0022222ABE238Cc2C7Bb1f21003F0a260052475B) |
+| CCTP TokenMessengerV2 | [`0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA`](https://testnet.arcscan.app/address/0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA) |
+
+What each one is used for, the workspace's wallets around the two contracts, and the USDC of the
+chains payees are paid on: [Contracts on Arc testnet](https://www.vestiarion.xyz/docs/contracts).
+
 ## Architecture
 
 The layout below is the short version. [ARCHITECTURE.md](ARCHITECTURE.md) goes further, and
