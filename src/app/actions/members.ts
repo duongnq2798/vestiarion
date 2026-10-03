@@ -73,6 +73,13 @@ export async function changeMemberRoleAction(_previous: MemberActionResult, form
   });
 }
 
+/** What removing someone did, including the API keys their membership took with it (migration 0069). */
+function removedMessage(revokedKeys: number): string {
+  if (revokedKeys === 0) return "Member removed.";
+  if (revokedKeys === 1) return "Member removed. The API key they created was revoked.";
+  return `Member removed. The ${revokedKeys} API keys they created were revoked.`;
+}
+
 /**
  * Only `workspace.read` is required here — leaving is open to everyone. Inside
  * the scope, removing someone else still needs `members.manage`; the database
@@ -88,7 +95,7 @@ export async function removeMemberAction(_previous: MemberActionResult, formData
       return { ok: false, message: `Your role in this workspace (${auth.membership.role}) cannot do that.` };
     }
     try {
-      await removeMember({ actorId: auth.user.id, userId });
+      const { revokedKeys } = await removeMember({ actorId: auth.user.id, userId });
       // Self-removal ends the viewer's own membership. Revalidating here would
       // refresh the current route within this same transition — the
       // membership gate then calls notFound() — which can unmount the
@@ -98,7 +105,7 @@ export async function removeMemberAction(_previous: MemberActionResult, formData
       // stays mounted through it. Removing someone else does not touch the
       // viewer's own membership, so it revalidates as usual.
       if (!isSelf) revalidateOrgPages();
-      return { ok: true, message: isSelf ? "You left the workspace." : "Member removed.", left: isSelf };
+      return { ok: true, message: isSelf ? "You left the workspace." : removedMessage(revokedKeys), left: isSelf };
     } catch (error) {
       return fail(error);
     }

@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { bearerToken } from "../agent-security";
 import { currentOrgId, NoOrgScopeError } from "../context";
 import { platformDb, unwrap } from "../dal";
+import type { LedgerEntryInput } from "../ledger";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 
 /**
@@ -16,6 +17,11 @@ import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
  * The token and the secret never leave this module in a request, a log line or
  * a ledger entry. The ledger records ids only (K8), best effort, after the
  * change has committed (see `appendLedgerEntryBestEffort`).
+ *
+ * A key works only while the person who created it is a member of its
+ * workspace (docs/superpowers/specs/2026-10-03-member-api-keys-design.md):
+ * whatever ends the membership revokes the key in the same transaction
+ * (migration 0069), and `removeMember` and `deleteAccount` record why.
  */
 
 /** A key reads, or reads and writes (write API R1): `write` is never issued without `read`. */
@@ -36,7 +42,10 @@ export interface AuthenticatedKey {
   keyId: string;
   orgId: string;
   scopes: ApiKeyScope[];
-  /** Who issued the key; a key acts for them (write API R4). Null once their account is gone. */
+  /**
+   * Who issued the key; a key acts for them (write API R4). Null only for a key the operator inserted without one:
+   * a key whose issuer leaves, or whose account is deleted, is revoked with the membership (migration 0069).
+   */
   createdBy: string | null;
 }
 
@@ -218,6 +227,48 @@ export async function listApiKeys(orgId: string): Promise<ApiKeyRow[]> {
   return rows.map(toApiKeyRow);
 }
 
+/**
+ * The names of the workspace's active keys, by the member who created each, oldest first: the Members page names the
+ * keys that stop working when a membership ends (migration 0069). A key whose creator's account is gone has no entry.
+ */
+export async function activeKeyNamesByCreator(orgId: string): Promise<Record<string, string[]>> {
+  const rows = unwrap(
+    await platformDb()
+      .from("api_keys")
+      .select("name, created_by")
+      .eq("org_id", orgId)
+      .is("revoked_at", null)
+      .order("created_at")
+  ) as Array<{ name: string; created_by: string | null }>;
+  const byCreator: Record<string, string[]> = {};
+  for (const row of rows) {
+    if (row.created_by) (byCreator[row.created_by] ??= []).push(row.name);
+  }
+  return byCreator;
+}
+
+/** Why a key was revoked (member API keys design R5, R6): by a person in Settings, or because its creator's membership ended. */
+export type ApiKeyRevokedReason = "person" | "member_left" | "member_removed" | "account_deleted";
+
+/** `member` names the person removed, as `member_removed` does; for every other reason `by` says it all. */
+export type ApiKeyRevocation =
+  | { reason: "person" | "member_left" | "account_deleted"; by: string; keyId: string }
+  | { reason: "member_removed"; by: string; keyId: string; member: string };
+
+const REVOKED_SUMMARIES: Record<ApiKeyRevokedReason, string> = {
+  person: "An API key was revoked",
+  member_left: "An API key was revoked when the member who created it left",
+  member_removed: "An API key was revoked when the member who created it was removed",
+  account_deleted: "An API key was revoked when the member who created it deleted their account",
+};
+
+/** The `api_key_revoked` entry: ids only (K8), never the key's name or prefix. */
+export function apiKeyRevokedEntry(revocation: ApiKeyRevocation): LedgerEntryInput {
+  const detail: Record<string, unknown> = { by: revocation.by, keyId: revocation.keyId, reason: revocation.reason };
+  if (revocation.reason === "member_removed") detail.member = revocation.member;
+  return { actor: "human", domain: "system", action: "api_key_revoked", summary: REVOKED_SUMMARIES[revocation.reason], detail };
+}
+
 /** Revoking ends a key (K4). A revoked key reads, from then on, exactly like an unknown one. */
 export async function revokeApiKey(input: { orgId: string; actorId: string; keyId: string }): Promise<void> {
   if (!UUID.test(input.keyId)) throw new ApiKeyError("not_found");
@@ -234,13 +285,7 @@ export async function revokeApiKey(input: { orgId: string; actorId: string; keyI
 
   await appendLedgerEntryBestEffort(
     input.orgId,
-    {
-      actor: "human",
-      domain: "system",
-      action: "api_key_revoked",
-      summary: "An API key was revoked",
-      detail: { by: input.actorId, keyId: input.keyId },
-    },
+    apiKeyRevokedEntry({ reason: "person", by: input.actorId, keyId: input.keyId }),
     ledgerScope(input.orgId, input.actorId)
   );
 }

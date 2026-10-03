@@ -6,6 +6,19 @@ Changes to the API and webhooks that affect an integration, newest first. Change
 - The Slack app asks for one more permission, `files:read`, to read the file someone chooses. A Slack connected before this is connected again from **Settings** with **Reconnect Slack**; its members stay connected.
 - Nothing changes in `/api/v1`.
 
+## 2026-10-03: A member's API keys end with their membership
+
+- A workspace API key now works only while the person who created it is a member of the workspace. When they leave, are removed by an owner or an admin, or delete their account, every active key they created in that workspace, read-only or read-and-write, is revoked in the same step, and from then on answers `401 unauthorized` on `/api/v1` and on MCP, like any revoked key. Keys that other members created, and the person's keys in workspaces they still belong to, keep working.
+- Each such key gets its own `api_key_revoked` entry, delivered to webhooks like every entry, right after the member's `member_left` or `member_removed`. Its `detail` gains `reason`: `member_left`, `member_removed` (with `member`, the person removed, while `by` is who removed them) or `account_deleted`. A key revoked in Settings now carries `reason: "person"`.
+- A key can no longer be created for someone who is not a member of the workspace.
+- A read-and-write key whose issuer has left can no longer add records, so a `create_counterparty` or `create_invoice` entry with `via: "api"` always names its issuer in `by`.
+- Nothing was revoked when this shipped: no active key had outlived its creator's membership.
+
+## 2026-10-03: The TypeScript SDK on npm
+
+- `npm install @vestiarion/sdk` installs it from the npm registry.
+- Version 0.1.0 there is the same tarball, byte for byte, as `https://www.vestiarion.xyz/sdk/vestiarion-sdk-0.1.0.tgz`, which keeps working.
+
 ## 2026-10-03: A member's notifications move to Settings
 
 - `telegram_disconnected` entries for a chat its member disconnected from Vestiarion now carry `via: "settings"`: the **Telegram** card moved from **Members** to the **Notifications** section at the top of **Settings**, with the switch for the email about payments that need a decision. Entries made before keep `via: "members_page"`; `via: "telegram"` and `via: "blocked"` are unchanged.

@@ -106,8 +106,9 @@ export function DeleteAccountBody({ plan, pending, message, formProps }: DeleteA
   const mustPause = plan.soleWorkspaces.some((workspace) => workspace.live && !workspace.paused);
   const remains = (
     <p className="text-sm leading-relaxed text-ink-2">
-      Records you added in workspaces you share stay, without your name attached. Your memberships and the invitations you sent are removed. A
-      workspace&apos;s signed ledger is append-only, so entries you caused keep your account&apos;s id (never your email).
+      Records you added in workspaces you share stay, without your name attached. Your memberships and the invitations you sent are removed. API
+      keys you created stop working. A workspace&apos;s signed ledger is append-only, so entries you caused keep your account&apos;s id (never your
+      email).
     </p>
   );
 

@@ -49,8 +49,9 @@ route"), and the docs spec named it as the next surface.
 - **R4. A key acts for the person who issued it.**
   - The records it adds carry `created_by` = the key's issuer, so maker and checker still apply: the issuer cannot
     approve a held payable their own key added, unless they are the workspace's only approver.
-  - The ledger entries are `create_counterparty` and `create_invoice`, actor `human`, `by` the issuer (null when the
-    issuer's account is gone), with `via: "api"` and `apiKeyId`.
+  - The ledger entries are `create_counterparty` and `create_invoice`, actor `human`, `by` the issuer, with
+    `via: "api"` and `apiKeyId`. (`by` was null when the issuer's account was gone; since migration 0069 such a key is
+    revoked, `2026-10-03-member-api-keys-design.md`.)
 - **R5. `Idempotency-Key` makes a retry safe.**
   - The header is optional: 1–255 printable ASCII characters.
   - The first request with a given key in a workspace stores its outcome for 24 hours. A repeat with the same body gets

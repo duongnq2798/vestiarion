@@ -56,7 +56,7 @@ export const PLATFORM_TABLES = [
 export type PlatformTable = (typeof PLATFORM_TABLES)[number];
 
 export const PLATFORM_RPCS = [
-  "create_org", "invite_member", "accept_invitation", "change_member_role", "remove_member",
+  "create_org", "invite_member", "accept_invitation", "change_member_role", "remove_member_revoking_keys",
   "revoke_invitation", "org_members", "touch_org_activity", "delete_sandbox_org",
   "pending_invitations_for", "accept_invitation_by_id", "pause_agent", "resume_agent", "create_api_key",
   "claim_webhook_deliveries", "record_webhook_failure", "create_webhook_endpoint", "choose_hosted_wallet", "delete_org",

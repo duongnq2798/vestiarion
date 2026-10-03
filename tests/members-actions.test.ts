@@ -162,7 +162,7 @@ describe("removeMemberAction", () => {
 
   it("lets a viewer remove themselves, returns left: true, and does not revalidate", async () => {
     authorizeMock.mockResolvedValueOnce({ ok: true, user: { id: USER, email: null }, membership: membership("viewer") });
-    removeMemberMock.mockResolvedValueOnce(undefined);
+    removeMemberMock.mockResolvedValueOnce({ revokedKeys: 1 });
 
     const result = await run(() => removeMemberAction(INITIAL, removeForm(USER)));
 
@@ -178,13 +178,25 @@ describe("removeMemberAction", () => {
 
   it("removing someone else revalidates, and returns left: false", async () => {
     authorizeMock.mockResolvedValueOnce({ ok: true, user: { id: USER, email: null }, membership: membership("owner") });
-    removeMemberMock.mockResolvedValueOnce(undefined);
+    removeMemberMock.mockResolvedValueOnce({ revokedKeys: 0 });
 
     const result = await run(() => removeMemberAction(INITIAL, removeForm(OTHER)));
 
     expect(removeMemberMock).toHaveBeenCalledWith({ actorId: USER, userId: OTHER });
     expect(result).toEqual({ ok: true, message: "Member removed.", left: false });
     expect(revalidatePathMock).toHaveBeenCalled();
+  });
+
+  it.each([
+    [1, "Member removed. The API key they created was revoked."],
+    [2, "Member removed. The 2 API keys they created were revoked."],
+  ])("says so when removing someone revoked %i API key(s)", async (revokedKeys, message) => {
+    authorizeMock.mockResolvedValueOnce({ ok: true, user: { id: USER, email: null }, membership: membership("owner") });
+    removeMemberMock.mockResolvedValueOnce({ revokedKeys });
+
+    const result = await run(() => removeMemberAction(INITIAL, removeForm(OTHER)));
+
+    expect(result).toEqual({ ok: true, message, left: false });
   });
 });
 
