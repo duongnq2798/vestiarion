@@ -36,6 +36,7 @@ import { milestoneVerification } from "./milestone-evidence";
 import { recordIncomingTransfers } from "./receipts";
 import { createRecurringInvoices } from "./recurring";
 import { proposeLimitChanges } from "./proposals";
+import { sendReceivableReminders } from "./collections";
 import { buyPayeeHistories, type AddressHistoryFact } from "./services";
 import { cadenceLabel, type RecurringUnit } from "../recurring";
 import {
@@ -3624,6 +3625,14 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
   // When people keep approving one counterparty's payments above its limit,
   // the agent proposes a higher one for a person to accept (limit proposals).
   lines.push(...(await proposeLimitChanges(db)));
+  });
+
+  await stage("collections", async () => {
+  // --------------------------------------------------------- 6b. collections
+  // Each open receivable whose reminders a person turned on: the model decides
+  // whether to email the client now, and how firmly, within code's bounds
+  // (collections R3–R7). Live workspaces only.
+  lines.push(...(await sendReceivableReminders(db)));
   });
 
   await stage("notices", async () => {

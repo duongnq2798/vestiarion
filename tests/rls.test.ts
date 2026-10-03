@@ -49,6 +49,7 @@ const CRUD_UPDATE: Record<string, { column: string; expr: string }> = {
   recurring_payables: { column: "memo", expr: "'changed'" },
   policy_proposals: { column: "reasoning", expr: "'changed'" },
   spending_limit_contracts: { column: "circle_contract_id", expr: "coalesce(circle_contract_id, '') || '-changed'" },
+  ar_reminders: { column: "tone", expr: "'firm'" },
 };
 
 beforeAll(async () => {

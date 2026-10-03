@@ -249,7 +249,7 @@ describe("updateCounterpartyNoticeEmailAction", () => {
 
   it("sets the address, trimmed, and says where notices go", async () => {
     allow("admin");
-    changeNoticeMock.mockResolvedValueOnce({ name: "Centronex", email: "ap@centronex.example" });
+    changeNoticeMock.mockResolvedValueOnce({ name: "Centronex", email: "ap@centronex.example", role: "vendor" });
 
     const result = await run(() => updateCounterpartyNoticeEmailAction(INITIAL, form({ counterpartyId: COUNTERPARTY_ID, noticeEmail: "  ap@centronex.example " })));
 
@@ -260,12 +260,21 @@ describe("updateCounterpartyNoticeEmailAction", () => {
 
   it("turns notices off when the field is empty", async () => {
     allow("owner");
-    changeNoticeMock.mockResolvedValueOnce({ name: "Centronex", email: null });
+    changeNoticeMock.mockResolvedValueOnce({ name: "Centronex", email: null, role: "vendor" });
 
     const result = await run(() => updateCounterpartyNoticeEmailAction(INITIAL, form({ counterpartyId: COUNTERPARTY_ID, noticeEmail: "" })));
 
     expect(changeNoticeMock).toHaveBeenCalledWith({ actorId: USER, counterpartyId: COUNTERPARTY_ID, email: null });
     expect(result).toEqual({ ok: true, message: "Centronex is no longer emailed when it is paid." });
+  });
+
+  it("tells a client's billing email by what goes to it: the reminders turned on (collections R8)", async () => {
+    allow("owner");
+    changeNoticeMock.mockResolvedValueOnce({ name: "Mai Studio", email: "billing@mai.example", role: "client" });
+    expect(await run(() => updateCounterpartyNoticeEmailAction(INITIAL, form({ counterpartyId: COUNTERPARTY_ID, noticeEmail: "billing@mai.example" })))).toEqual({
+      ok: true,
+      message: "Reminders to Mai Studio go to billing@mai.example once you turn them on for an invoice.",
+    });
   });
 
   it("refuses an address that does not look right, changing nothing", async () => {

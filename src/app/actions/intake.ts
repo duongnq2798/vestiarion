@@ -192,7 +192,7 @@ export async function updateCounterpartyLimitAction(
   });
 }
 
-/** Sets, changes or clears where a counterparty is told it was paid (payment notices R1). */
+/** Sets, changes or clears a counterparty's billing email: a payee's payment notices, a client's reminders (collections R8). */
 export async function updateCounterpartyNoticeEmailAction(
   _previous: IntakeActionResult,
   formData: FormData
@@ -209,7 +209,14 @@ export async function updateCounterpartyNoticeEmailAction(
       revalidateOrgPages();
       return {
         ok: true,
-        message: result.email ? `${result.name} is emailed at ${result.email} when it is paid.` : `${result.name} is no longer emailed when it is paid.`,
+        message:
+          result.role === "client"
+            ? result.email
+              ? `Reminders to ${result.name} go to ${result.email} once you turn them on for an invoice.`
+              : `${result.name} has no billing email: the agent sends it no reminders.`
+            : result.email
+              ? `${result.name} is emailed at ${result.email} when it is paid.`
+              : `${result.name} is no longer emailed when it is paid.`,
       };
     } catch (error) {
       console.error("notice email change failed", error instanceof Error ? error.message : error);

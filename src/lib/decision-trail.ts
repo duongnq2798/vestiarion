@@ -110,6 +110,12 @@ function codeNotes(detail: Record<string, unknown>): { notes: string[]; refused:
   return { notes, refused };
 }
 
+/** ", as the written policy would", or how the model departed from it; nothing for the written policy itself. */
+function agreement(detail: Record<string, unknown>): string {
+  if (deciderName(detail.decisionMode) === "The written policy") return "";
+  return detail.agreedWithReference === true ? ", as the written policy would" : detail.agreedWithReference === false ? "; the written policy would have decided otherwise" : "";
+}
+
 /** One entry as a step, or null for one the trail does not show (receipts, links). */
 export function trailStep(entry: TrailEntry): TrailStep | null {
   const detail = entry.detail;
@@ -181,6 +187,36 @@ export function trailStep(entry: TrailEntry): TrailStep | null {
       return { ...base, who: "person", tone: "neutral", text: "A person returned it to the agent." };
     case "ar_received":
       return { ...base, who: "agent", tone: "done", text: "The agent matched the payment received on Arc testnet.", txHash: arcTx(detail.txHash) };
+    case "ar_reminders_on":
+      return { ...base, who: "person", tone: "neutral", text: "A person turned on the agent's reminders to the client." };
+    case "ar_reminders_off":
+      return { ...base, who: "person", tone: "neutral", text: "A person turned off the agent's reminders." };
+    case "ar_reminder_sent": {
+      const decider = deciderName(detail.decisionMode);
+      const tone = text(detail.tone) ?? "friendly";
+      const days = number(detail.daysFromDue);
+      const when = days === null ? "" : days === 0 ? ", on the due date" : days < 0 ? `, ${-days} ${days === -1 ? "day" : "days"} before the due date` : `, ${days} ${days === 1 ? "day" : "days"} after the due date`;
+      const limited = record(detail.toneLimited);
+      return {
+        ...base,
+        who: "agent",
+        tone: "done",
+        text: `${decider} decided to remind the client by email, ${tone === "final" ? "a final reminder" : `in a ${tone} tone`}${when}${agreement(detail)}.`,
+        notes: [
+          ...(number(detail.number) !== null ? [`· Reminder ${number(detail.number)} of 4, sent to ${text(detail.to) ?? "the client's billing email"}`] : []),
+          ...(limited ? [`✗ It chose a ${text(limited.chosen)} tone; code sent it ${text(limited.sent)}`] : []),
+        ],
+      };
+    }
+    case "ar_reminder_deferred": {
+      const until = text(detail.until);
+      return {
+        ...base,
+        who: "agent",
+        tone: "neutral",
+        text: `${deciderName(detail.decisionMode)} decided to wait${until ? ` until ${dayOf(until)}` : ""} before reminding the client${agreement(detail)}.`,
+      };
+    }
     default:
       return null;
   }

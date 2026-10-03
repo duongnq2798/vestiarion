@@ -6,6 +6,7 @@ import ApprovalCard from "@/components/ApprovalCard";
 import { CounterpartyRow as CounterpartyRowView } from "@/components/CounterpartyRow";
 import GoLivePanel from "@/components/GoLivePanel";
 import { HeldMilestoneActions } from "@/components/HeldMilestoneActions";
+import { PayLinkControl } from "@/components/PayLinkControl";
 import { UsycReservePanel } from "@/components/UsycReservePanel";
 import VerifyLedgerBadge from "@/components/VerifyLedgerBadge";
 import { DecisionCard } from "@/components/vx/DecisionCard";
@@ -169,6 +170,38 @@ const PAYMENT_ENTRY: LedgerEntry = {
 };
 
 const ENTRIES: LedgerEntry[] = [...EARLIER, PAYMENT_ENTRY];
+
+/** A receivable whose reminders are on, with the two the agent sent (collections R1–R8). */
+const OWED: InvoiceRow = {
+  ...INVOICE,
+  id: "00000000-0000-4000-8000-0000000000e9",
+  direction: "receivable",
+  counterparty_id: "00000000-0000-4000-8000-0000000000ea",
+  counterparty_name: "Acme Retail",
+  memo: "October retainer, INV-1042",
+  po_reference: null,
+  due_date: "2026-10-10",
+  status: "pending",
+  agent_reasoning: null,
+  tx_ref: null,
+  paid_amount: null,
+};
+const reminderEntry = (seq: number, ts: string, action: string, actor: LedgerEntry["actor"], detail: Record<string, unknown>): LedgerEntry => ({
+  ...PAYMENT_ENTRY,
+  seq,
+  id: `docs-reminder-${seq}`,
+  ts,
+  actor,
+  domain: "ar",
+  action,
+  summary: "",
+  detail: { invoiceId: OWED.id, ...detail },
+});
+const REMINDER_ENTRIES: LedgerEntry[] = [
+  reminderEntry(1201, "2026-10-10T09:00:04Z", "ar_reminder_sent", "agent", { decisionMode: "deepseek", agreedWithReference: true, tone: "friendly", daysFromDue: 0, number: 2, to: "ap***@acme.example" }),
+  reminderEntry(1200, "2026-10-07T09:00:05Z", "ar_reminder_sent", "agent", { decisionMode: "deepseek", agreedWithReference: true, tone: "friendly", daysFromDue: -3, number: 1, to: "ap***@acme.example" }),
+  reminderEntry(1199, "2026-10-06T08:00:00Z", "ar_reminders_on", "human", { by: "docs-owner", linkId: "docs-link" }),
+];
 
 /** A payment code refused over its counterparty's limit, as the console's Stopped section shows it (agent activity R5). */
 const STOPPED_INVOICE: InvoiceRow = {
@@ -616,6 +649,44 @@ export const DOCS_SHOTS = {
         </Card>
       );
     },
+  },
+  "first-payment-reminders": {
+    guide: "first-payment",
+    page: "invoices",
+    render: () => (
+      <section>
+        <SectionHeader title="Receivables" meta="1 invoice" />
+        <RowGroupHeading title="Open" count={1} />
+        <DecisionRows
+          orgSlug={SLUG}
+          items={[
+            {
+              decision: invoiceDecision(OWED, undefined, REMINDER_ENTRIES),
+              date: { label: "Due Oct 10, 2026" },
+              footerAction: (
+                <PayLinkControl
+                  orgSlug={SLUG}
+                  invoiceId={OWED.id}
+                  dueDate={OWED.due_date}
+                  client={{ id: OWED.counterparty_id, name: OWED.counterparty_name, hasEmail: true }}
+                  view={{
+                    url: `https://www.vestiarion.xyz/pay/vxr_${"d0c5".repeat(10)}abc`,
+                    legacy: false,
+                    remindersOnAt: "2026-10-06T08:00:00Z",
+                    deferredUntil: null,
+                    sent: [
+                      { number: 1, tone: "friendly", sentAt: "2026-10-07T09:00:05Z" },
+                      { number: 2, tone: "friendly", sentAt: "2026-10-10T09:00:04Z" },
+                    ],
+                  }}
+                />
+              ),
+              open: true,
+            },
+          ]}
+        />
+      </section>
+    ),
   },
   "first-payment-needs-you": {
     guide: "first-payment",

@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
-import { checkPayLink, createPayLink, PayLinkError, payLinkHash, previewPayLink } from "@/lib/platform/pay-links";
+import { checkPayLink, createPayLink, PayLinkError, payLinkHash, payLinkStates, payLinkToken, previewPayLink, setReminders } from "@/lib/platform/pay-links";
+import { encryptSecret, parseMasterKeys } from "@/lib/secrets";
 import { fakeSupabase, orgTestContext, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 
 /**
@@ -80,6 +81,94 @@ describe("createPayLink", () => {
     await expect(inOrg(() => createPayLink({ actorId: USER, invoiceId: INVOICE }))).rejects.toBeInstanceOf(PayLinkError);
     fake = fakeSupabase(workspace({ id: INVOICE, direction: "receivable", status: "received" }));
     await expect(inOrg(() => createPayLink({ actorId: USER, invoiceId: INVOICE }))).rejects.toMatchObject({ code: "closed" });
+  });
+});
+
+describe("a kept link (collections R2)", () => {
+  const KEYS = parseMasterKeys(`t1:${Buffer.alloc(32, 7).toString("base64")}`);
+  const kept = (token: string) => encryptSecret(token, { orgId: ORG, column: "receivable_links.token_enc" }, KEYS);
+
+  it("keeps a new link's token encrypted for its workspace, and reads it back", async () => {
+    fake = fakeSupabase((r) =>
+      r.path === "/rest/v1/invoices" ? { body: { id: INVOICE, direction: "receivable", status: "pending" } } : r.method === "POST" ? { body: { id: "link-1" } } : { body: [] }
+    );
+    const { token, kept: isKept } = await inOrg(() => createPayLink({ actorId: USER, invoiceId: INVOICE, keys: KEYS }));
+    expect(isKept).toBe(true);
+    const post = fake.requests.find((r) => r.path === "/rest/v1/receivable_links" && r.method === "POST")!;
+    const envelope = (post.body as { token_enc: unknown }).token_enc;
+    expect(payLinkToken(ORG, envelope, KEYS)).toBe(token);
+    // Bound to its workspace: another one cannot read it.
+    expect(payLinkToken("0b6c1c9e-4a4f-4a7e-9b1e-0000000000ff", envelope, KEYS)).toBeNull();
+  });
+
+  it("tells each receivable's card its link, or that an old one cannot be shown, with the reminders sent", async () => {
+    const OLD = "0b6c1c9e-4a4f-4a7e-9b1e-0000000001a2";
+    fake = fakeSupabase((r) => {
+      if (r.path === "/rest/v1/receivable_links") {
+        return {
+          body: [
+            { invoice_id: INVOICE, token_enc: kept(TOKEN), revoked_at: null, reminders_on_at: "2026-10-03T06:00:00Z", reminder_deferred_until: null },
+            { invoice_id: OLD, token_enc: null, revoked_at: null, reminders_on_at: null, reminder_deferred_until: null },
+          ],
+        };
+      }
+      if (r.path === "/rest/v1/ar_reminders") return { body: [{ invoice_id: INVOICE, number: 1, tone: "friendly", sent_at: "2026-10-07T09:00:00Z" }] };
+      return { body: [] };
+    });
+    const states = await inOrg(() => payLinkStates([INVOICE, OLD], KEYS));
+    expect(states.get(INVOICE)).toMatchObject({ legacy: false, remindersOnAt: "2026-10-03T06:00:00Z", sent: [{ number: 1, tone: "friendly", sentAt: "2026-10-07T09:00:00Z" }] });
+    expect(states.get(INVOICE)?.url).toMatch(new RegExp(`/pay/${TOKEN}$`));
+    expect(states.get(OLD)).toMatchObject({ url: null, legacy: true });
+  });
+
+  describe("reminders on and off (R1)", () => {
+    const world = (over: { client?: unknown; status?: string; link?: unknown } = {}) =>
+      fakeSupabase((r) => {
+        if (r.path === "/rest/v1/invoices") {
+          return {
+            body: {
+              id: INVOICE,
+              direction: "receivable",
+              status: over.status ?? "pending",
+              counterparty_id: "cp-acme",
+              counterparties: over.client === undefined ? { name: "Acme", notice_email: "billing@acme.example" } : over.client,
+            },
+          };
+        }
+        if (r.path === "/rest/v1/receivable_links" && r.method === "GET") return { body: over.link === undefined ? { id: "link-1", token_enc: kept(TOKEN), revoked_at: null } : over.link };
+        if (r.path === "/rest/v1/receivable_links" && r.method === "POST") return { body: { id: "link-2" } };
+        if (r.path === "/rest/v1/receivable_links" && r.method === "PATCH") return { body: [{ id: "link-1" }] };
+        return { body: [] };
+      });
+
+    it("turns them on with the kept link, and signs it", async () => {
+      fake = world();
+      expect(await inOrg(() => setReminders({ actorId: USER, invoiceId: INVOICE, on: true, keys: KEYS }))).toEqual({ madeNewLink: false, counterpartyName: "Acme" });
+      const patch = fake.requests.find((r) => r.path === "/rest/v1/receivable_links" && r.method === "PATCH")!;
+      expect(patch.body).toMatchObject({ reminders_on_by: USER, reminder_deferred_until: null });
+      expect(ledgerMock).toHaveBeenCalledWith(expect.objectContaining({ action: "ar_reminders_on", detail: { by: USER, invoiceId: INVOICE, counterpartyId: "cp-acme", linkId: "link-1", madeNewLink: false } }));
+    });
+
+    it("makes a new link when the old one was not kept, and says so", async () => {
+      fake = world({ link: { id: "link-1", token_enc: null, revoked_at: null } });
+      expect(await inOrg(() => setReminders({ actorId: USER, invoiceId: INVOICE, on: true, keys: KEYS }))).toEqual({ madeNewLink: true, counterpartyName: "Acme" });
+      expect(fake.requests.some((r) => r.path === "/rest/v1/receivable_links" && r.method === "POST")).toBe(true);
+    });
+
+    it("refuses without the client's billing email, or once the receivable is settled", async () => {
+      fake = world({ client: { name: "Acme", notice_email: null } });
+      await expect(inOrg(() => setReminders({ actorId: USER, invoiceId: INVOICE, on: true, keys: KEYS }))).rejects.toMatchObject({ code: "no_email" });
+      fake = world({ status: "received" });
+      await expect(inOrg(() => setReminders({ actorId: USER, invoiceId: INVOICE, on: true, keys: KEYS }))).rejects.toMatchObject({ code: "closed" });
+    });
+
+    it("turns them off, and signs it", async () => {
+      fake = world();
+      await inOrg(() => setReminders({ actorId: USER, invoiceId: INVOICE, on: false, keys: KEYS }));
+      const patch = fake.requests.find((r) => r.path === "/rest/v1/receivable_links" && r.method === "PATCH")!;
+      expect(patch.body).toEqual({ reminders_on_at: null, reminders_on_by: null, reminder_deferred_until: null });
+      expect(ledgerMock).toHaveBeenCalledWith(expect.objectContaining({ action: "ar_reminders_off", summary: "Turned off the agent's reminders to Acme" }));
+    });
   });
 });
 

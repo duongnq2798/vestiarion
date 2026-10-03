@@ -39,6 +39,7 @@ export type CycleEventKind =
   | "recurring_added"
   | "budget_raised"
   | "cash_returned"
+  | "reminders_on"
   | "agent_resumed"
   | "sample_loaded";
 

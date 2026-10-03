@@ -114,6 +114,16 @@ describe("what the agent did, in words", () => {
     expect(activityItem(entry("ar_received", { txHash: TX }), refs({ status: "received" }))).toMatchObject({ text: "Received 0.30 USDC from Jiren.", tone: "done", txHash: TX });
   });
 
+  it("says a reminder it sent a client, with who decided (collections R8)", () => {
+    expect(activityItem(entry("ar_reminder_sent", { tone: "firm", decisionMode: "deepseek", agreedWithReference: true }), refs())).toMatchObject({
+      text: "Reminded Jiren by email of 0.30 USDC (firm).",
+      detail: "DeepSeek decided, as the written policy would.",
+      tone: "done",
+      pathLabel: "How it decided",
+    });
+    expect(activityItem(entry("ar_reminder_sent", { tone: "final" }), refs())?.text).toBe("Reminded Jiren by email of 0.30 USDC, a final reminder.");
+  });
+
   it("tells nothing of a treasury hold, of an entry whose record is gone, or of a simulated transaction", () => {
     expect(activityItem({ seq: 1, action: "hold", detail: {} }, refs())).toBeNull();
     expect(activityItem(entry("ap_pay", { invoiceId: "gone" }), refs())).toBeNull();

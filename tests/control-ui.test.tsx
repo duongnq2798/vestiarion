@@ -482,12 +482,15 @@ describe("the new control screens, as source", () => {
     expect(read("src/components/AgentControlsClient.tsx")).toContain("window.dispatchEvent(new Event(AGENT_EXPECTED_EVENT));");
   });
 
-  it("a counterparty takes an address for payment notices when added, and on its row", () => {
-    expect(read("src/components/intake/CounterpartyIntake.tsx")).toContain('label="Email for payment notices"');
+  it("a counterparty takes a billing email when added, and on its row, whatever its role (collections R8)", () => {
+    expect(read("src/components/intake/CounterpartyIntake.tsx")).toContain('label="Billing email"');
     expect(read("src/components/intake/CounterpartyIntake.tsx")).toContain('name="noticeEmail"');
     const page = read("src/app/o/[slug]/counterparties/page.tsx");
-    expect(page).toContain("Payment notices");
+    expect(page).toContain("Billing email");
     expect(page).toContain("<CounterpartyNoticeEmailEdit");
+    // Shown for every role: a client's reminders go to it too.
+    const block = page.slice(page.indexOf("Billing email</dt>") - 260, page.indexOf("Billing email</dt>"));
+    expect(block).not.toContain('role !== "client"');
   });
 
   it("a cycle brings cash back from the reserve before it decides today's payments, and a person can too", () => {

@@ -212,6 +212,8 @@ function receivableDecision(invoice: InvoiceRow, entries: LedgerEntry[]): Decisi
     mint: null,
     auditSeq: received?.seq,
     at: received?.ts ?? invoice.due_date,
+    // The agent's reminders and the payment it matched, step by step (collections R8).
+    trail: invoiceTrail(entries, invoice.id),
   };
 }
 

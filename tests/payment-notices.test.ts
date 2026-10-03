@@ -233,7 +233,7 @@ describe("where payment notices go", () => {
       if (request.path === "/rest/v1/orgs") {
         return { body: { id: ORG, slug: "northstar", name: "Northstar", mode: "live", ledger_signing_key_enc: encryptSecret(LEDGER_PEM, { orgId: ORG, column: "ledger_signing_key_enc" }, parseMasterKeys(MASTER_KEYS)), circle_api_key_enc: null, circle_entity_secret_enc: null } };
       }
-      if (request.path === "/rest/v1/counterparties" && request.method === "GET") return { body: { id: VENDOR, name: "Northstar Studio", notice_email: "old@example.com" } };
+      if (request.path === "/rest/v1/counterparties" && request.method === "GET") return { body: { id: VENDOR, name: "Northstar Studio", role: "vendor", notice_email: "old@example.com" } };
       if (request.path === "/rest/v1/counterparties" && request.method === "PATCH") return { body: [{ id: VENDOR }] };
       if (request.path === "/rest/v1/rpc/append_ledger_entry") {
         return { body: { seq: 1, id: "e1", ts: "t", actor: "human", domain: "compliance", action: "x", summary: "", detail: {}, body_hash: "00", signature: "00", prev_hash: null, hash: "00", signing_key_id: null } };
@@ -244,11 +244,12 @@ describe("where payment notices go", () => {
     expect(await run(client, () => changeCounterpartyNoticeEmail({ actorId: ACTOR, counterpartyId: VENDOR, email: "linh@example.com" }))).toEqual({
       name: "Northstar Studio",
       email: "linh@example.com",
+      role: "vendor",
     });
     const patch = client.requests.find((r) => r.path === "/rest/v1/counterparties" && r.method === "PATCH")!;
     expect(patch.body).toEqual({ notice_email: "linh@example.com" });
     const [entry] = appends(client);
-    expect(entry).toMatchObject({ p_action: "counterparty_notice_email_changed", p_summary: "Payment notices for Northstar Studio go to li***@example.com" });
+    expect(entry).toMatchObject({ p_action: "counterparty_notice_email_changed", p_summary: "Billing email for Northstar Studio: li***@example.com" });
     expect(entry.p_detail).toEqual({ by: ACTOR, counterpartyId: VENDOR, from: "ol***@example.com", to: "li***@example.com" });
 
     const before = client.requests.length;

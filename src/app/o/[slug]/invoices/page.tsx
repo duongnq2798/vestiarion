@@ -33,6 +33,7 @@ import { inOrg } from "@/lib/dal/scope";
 import { listLedgerEntries, listLedgerEntriesForTargets } from "@/lib/ledger";
 import { listCounterparties, listInvoices, stats, type InvoiceRow } from "@/lib/queries";
 import { plural, utcDay } from "@/lib/copy";
+import { payLinkStates, type PayLinkState } from "@/lib/platform/pay-links";
 import { listRecurringPayables } from "@/lib/recurring-payables";
 import { receiptShareable } from "@/lib/receipts/facts";
 import { sharedReceipts } from "@/lib/receipts/share";
@@ -105,8 +106,25 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
         ? shown.filter((invoice) => invoice.direction === "receivable" && (invoice.status === "pending" || invoice.status === "matched")).map((invoice) => invoice.id)
         : []
     );
-    const payLinkFor = (decision: ReturnType<typeof invoiceDecision>) =>
-      payLinkable.has(decision.id) ? <PayLinkControl orgSlug={slug} invoiceId={decision.id} /> : undefined;
+    // Its link, kept so it can be copied again, and the agent's reminders to the client (collections R1, R2). Best effort.
+    const linkStates = await payLinkStates([...payLinkable]).catch((error: unknown) => {
+      console.error("invoices: pay links not read", error instanceof Error ? error.message : error);
+      return new Map<string, PayLinkState>();
+    });
+    const payLinkFor = (decision: ReturnType<typeof invoiceDecision>) => {
+      const invoice = invoicesById.get(decision.id);
+      if (!payLinkable.has(decision.id) || !invoice) return undefined;
+      const client = counterpartiesById.get(invoice.counterparty_id);
+      return (
+        <PayLinkControl
+          orgSlug={slug}
+          invoiceId={decision.id}
+          view={linkStates.get(decision.id) ?? null}
+          dueDate={invoice.due_date}
+          client={{ id: invoice.counterparty_id, name: invoice.counterparty_name, hasEmail: Boolean(client?.notice_email) }}
+        />
+      );
+    };
 
     // A payable waiting for a person: the purchase order and goods receipt on file, and what a person added since
     // the agent's decision. Its row says what it needs; its card lets an owner or admin add it, and opens it in
