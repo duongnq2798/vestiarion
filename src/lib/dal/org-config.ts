@@ -90,6 +90,9 @@ export function retiredKeyBundle(value: unknown, warnings: string[]): string | u
  * cannot be opened is left unset and reported: reading carries on with a
  * warning, and signing or paying fails loudly for want of the key (§8).
  *
+ * A sandbox does not get the platform's screening service either: it screens
+ * against the bundled list, as it simulates its payments (sandbox screening).
+ *
  * The one exception is explicit, never a fallback (hosted wallets H1, H7): an
  * organization whose own row says `wallet_host = 'hosted'` pays with the
  * platform's hosted Circle pair, and only then. One whose row says `'own'` or
@@ -180,6 +183,13 @@ export function orgConfig(
         // A live workspace whose owner turned the real reserve on (USYC live design R1).
         usycLive: org.mode === "live" && Boolean(org.usyc_live_at),
       },
+      // A sandbox simulates its payments, so it screens against the bundled list, which costs nothing, and does so
+      // every cycle; the screening service, metered per call, is for live workspaces, whose payments are real
+      // (sandbox screening R1, R2).
+      compliance:
+        org.mode === "live" || !base.compliance.openSanctionsUrl
+          ? base.compliance
+          : { ...base.compliance, openSanctionsUrl: undefined, openSanctionsApiKey: undefined, rescreenIntervalHours: 0 },
       ledgerSigningKey: open("ledger_signing_key_enc"),
       ledgerPublicKey: undefined,
       // Public material. Every workspace's own rotations live on its row; the

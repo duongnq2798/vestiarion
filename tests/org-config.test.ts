@@ -459,3 +459,32 @@ describe("retiredKeyBundle — only a readable public key reaches the keyring (f
     expect(readKeys.retired.map((key) => ledgerKeyId(key))).toEqual([good.id]);
   });
 });
+
+describe("orgConfig — screening by workspace mode (docs/superpowers/specs/2026-10-03-sandbox-screening-design.md)", () => {
+  const screened = configFromEnv({
+    NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid",
+    SUPABASE_SERVICE_ROLE_KEY: "test-service-role",
+    OPENSANCTIONS_API_URL: "https://api.opensanctions.example",
+    OPENSANCTIONS_API_KEY: "os-key-must-stay-with-live-workspaces",
+    COMPLIANCE_RESCREEN_HOURS: "720",
+  });
+
+  it("keeps the screening service for a live workspace, as the platform configures it", () => {
+    const { config } = orgConfig(screened, { ...row(OTHER_ORG), mode: "live" }, keys);
+    expect(config.compliance).toEqual(screened.compliance);
+    expect(config.compliance.openSanctionsUrl).toBe("https://api.opensanctions.example");
+  });
+
+  it("screens a sandbox against the bundled list: no service, no key, and again every cycle, since it costs nothing", () => {
+    const { config } = orgConfig(screened, { ...row(OTHER_ORG), mode: "sandbox" }, keys);
+    expect(config.compliance.openSanctionsUrl).toBeUndefined();
+    expect(config.compliance.openSanctionsApiKey).toBeUndefined();
+    expect(config.compliance.rescreenIntervalHours).toBe(0);
+    expect(JSON.stringify(config)).not.toContain("os-key-must-stay-with-live-workspaces");
+  });
+
+  it("changes nothing for a sandbox when no screening service is configured", () => {
+    const { config } = orgConfig(base, { ...row(OTHER_ORG), mode: "sandbox" }, keys);
+    expect(config.compliance).toEqual(base.compliance);
+  });
+});

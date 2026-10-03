@@ -160,8 +160,9 @@ export default function PrivacyPage() {
             decides, and nothing is sent.
           </li>
           <li>
-            <strong>OpenSanctions</strong>, when this deployment has it configured, receives counterparty names and jurisdictions to screen them. Without it,
-            names are checked against a list built into the app.
+            <strong>OpenSanctions</strong>, when this deployment has it configured, receives the names and jurisdictions of a live workspace&apos;s
+            counterparties to screen them. A sandbox, and any workspace on a deployment without it, checks names against a list built into the app and sends
+            them nowhere.
           </li>
           <li>
             <strong>GitHub</strong> is asked for a pull request&apos;s status when a milestone is verified by its link.
