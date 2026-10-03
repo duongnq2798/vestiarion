@@ -13,7 +13,8 @@ import type { Provenance } from "../provenance";
 export type Surface =
   | { kind: "console" }
   | { kind: "telegram"; linkId: string }
-  | { kind: "slack"; linkId: string }
+  /** The install's limit on deciding payments from Slack, as read for this action; null when deciding there is off (Slack design S8). */
+  | { kind: "slack"; linkId: string; decisionsLimitUsdc: number | null }
   | { kind: "api"; apiKeyId: string };
 
 export type SurfaceKind = Surface["kind"];

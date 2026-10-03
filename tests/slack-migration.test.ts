@@ -26,7 +26,7 @@ async function member(orgId: string, userId: string, role = "owner") {
 }
 
 async function install(orgId: string, teamId: string, fields: Record<string, unknown> = {}) {
-  const row = { app_id: "A0SLACKAPP", channel_id: "C0FINANCE", bot_token_enc: ENVELOPE, webhook_url_enc: ENVELOPE, ...fields };
+  const row: Record<string, unknown> = { app_id: "A0SLACKAPP", channel_id: "C0FINANCE", bot_token_enc: ENVELOPE, webhook_url_enc: ENVELOPE, ...fields };
   await db.query(
     `insert into public.slack_installs (org_id, team_id, app_id, channel_id, bot_token_enc, webhook_url_enc, decisions_limit_usdc)
      values ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7)`,

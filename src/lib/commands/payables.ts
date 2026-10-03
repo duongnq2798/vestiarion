@@ -2,6 +2,7 @@ import { addInvoiceDetails, approveAndPay, ApprovalError, rejectInvoice, returnI
 import { runCycleSoon } from "../agent/cycle-soon";
 import { sendNoticesSoon } from "../payment-notices-soon";
 import { accessOf, cycleEventOf, provenanceOf, type Actor } from "./actor";
+import { checkChatDecision, type ShownCard } from "./chat-decisions";
 import { done, refused, TRY_AGAIN, type CommandOutcome, type Refused } from "./outcome";
 import { gate } from "./policy";
 
@@ -9,7 +10,17 @@ import { gate } from "./policy";
  * A person's decisions on a payable the agent stopped (integrations design §9, Phase 0): the console's Approvals
  * buttons, and any surface allowed to run them. Each calls the approvals library as the console always has; what
  * follows a decision (the payee's notice, the agent's next look) is raised here, so every surface gets it (R5).
+ *
+ * A decision from any surface but the console answers a card the surface showed (`card`), and passes the chat's rules
+ * first (src/lib/commands/chat-decisions.ts, Slack design S10); an approval then pays the address those rules checked.
  */
+
+/** The chat's rules for a decision from any surface but the console; the console's decisions pass untouched. */
+async function chatRules(actor: Actor, decision: "approve" | "reject" | "return", invoiceId: string, card: ShownCard | undefined) {
+  if (actor.surface.kind === "console") return { ok: true as const, address: undefined };
+  const check = await checkChatDecision(actor, decision, invoiceId, card);
+  return check.ok ? { ok: true as const, address: check.address ?? undefined } : check;
+}
 
 /** An `ApprovalError` carries a message safe to show; anything else goes to the server log. */
 function approvalRefusal(error: unknown): Refused {
@@ -31,13 +42,16 @@ export function heldMessage(note: string): string {
 
 export async function approvePayable(
   actor: Actor,
-  input: { invoiceId: string; shownAddress?: string }
+  input: { invoiceId: string; shownAddress?: string; card?: ShownCard }
 ): Promise<CommandOutcome<{ status: "paid" | "matched"; txRef: string | null }>> {
   const refusal = gate(actor, "payable.approve");
   if (refusal) return refusal;
   let result: Awaited<ReturnType<typeof approveAndPay>>;
   try {
-    result = await approveAndPay({ actorId: actor.userId, invoiceId: input.invoiceId, shownAddress: input.shownAddress, ...provenanceOf(actor) });
+    const chat = await chatRules(actor, "approve", input.invoiceId, input.card);
+    if (!chat.ok) return chat.refusal;
+    const shownAddress = actor.surface.kind === "console" ? input.shownAddress : chat.address;
+    result = await approveAndPay({ actorId: actor.userId, invoiceId: input.invoiceId, shownAddress, ...provenanceOf(actor) });
   } catch (error) {
     return approvalRefusal(error);
   }
@@ -48,10 +62,12 @@ export async function approvePayable(
   return done(result.status === "paid" ? "Paid." : "Payment submitted; waiting for confirmation.", { status: result.status, txRef: result.txRef });
 }
 
-export async function rejectPayable(actor: Actor, input: { invoiceId: string; reason: string }): Promise<CommandOutcome> {
+export async function rejectPayable(actor: Actor, input: { invoiceId: string; reason: string; card?: ShownCard }): Promise<CommandOutcome> {
   const refusal = gate(actor, "payable.reject");
   if (refusal) return refusal;
   try {
+    const chat = await chatRules(actor, "reject", input.invoiceId, input.card);
+    if (!chat.ok) return chat.refusal;
     await rejectInvoice({ actorId: actor.userId, invoiceId: input.invoiceId, reason: input.reason, ...provenanceOf(actor) });
   } catch (error) {
     return approvalRefusal(error);
@@ -59,10 +75,12 @@ export async function rejectPayable(actor: Actor, input: { invoiceId: string; re
   return done("Rejected.");
 }
 
-export async function returnPayable(actor: Actor, input: { invoiceId: string }): Promise<CommandOutcome> {
+export async function returnPayable(actor: Actor, input: { invoiceId: string; card?: ShownCard }): Promise<CommandOutcome> {
   const refusal = gate(actor, "payable.return");
   if (refusal) return refusal;
   try {
+    const chat = await chatRules(actor, "return", input.invoiceId, input.card);
+    if (!chat.ok) return chat.refusal;
     await returnInvoice({ actorId: actor.userId, invoiceId: input.invoiceId, ...provenanceOf(actor) });
   } catch (error) {
     return approvalRefusal(error);

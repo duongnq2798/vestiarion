@@ -11,7 +11,7 @@ import { COMMAND_PERMISSIONS } from "@/lib/commands/policy";
  */
 
 const DIR = path.join(process.cwd(), "src", "lib", "commands");
-const SUPPORT = new Set(["actor.ts", "outcome.ts", "policy.ts", "index.ts"]);
+const SUPPORT = new Set(["actor.ts", "outcome.ts", "policy.ts", "index.ts", "chat-decisions.ts"]);
 const read = (name: string) => readFileSync(path.join(DIR, name), "utf8");
 const FILES = readdirSync(DIR).filter((name) => name.endsWith(".ts"));
 

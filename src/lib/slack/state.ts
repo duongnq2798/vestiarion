@@ -102,8 +102,5 @@ export function newNonce(): string {
   return crypto.randomBytes(32).toString("base64url");
 }
 
-/** The address a card was posted with, as it carries it: the first 16 hex of its SHA-256, any case; null for none. */
-export function addressHash(address: string | null): string | null {
-  if (!address) return null;
-  return crypto.createHash("sha256").update(address.toLowerCase(), "utf8").digest("hex").slice(0, 16);
-}
+/** The address a card was posted with, as it carries it: the one hash the command layer checks a click against. */
+export { addressHash } from "../commands/chat-decisions";
