@@ -7,6 +7,7 @@ import {
   boundTreasuryDecision,
   sameTreasuryDecision,
   treasuryBounds,
+  sweptHoldDays,
 } from "@/lib/agent/treasury";
 
 const base: TreasuryInputs = {
@@ -236,5 +237,46 @@ describe("code's bounds on the treasury's move (treasury bounds R1–R4)", () =>
     expect(sameTreasuryDecision(move("redeem_from_usyc", 10.6), move("redeem_from_usyc", 10))).toBe(false);
     expect(sameTreasuryDecision(move("hold", 0), move("hold", 0))).toBe(true);
     expect(sameTreasuryDecision(move("hold", 0), plan.decision)).toBe(false);
+  });
+});
+
+describe("how long swept cash would stay (treasury hold horizon R1–R2)", () => {
+  it("stays the whole 30 days when nothing within them calls it back", () => {
+    expect(sweptHoldDays(100, 110, [])).toBe(30);
+    expect(sweptHoldDays(100, 110, [{ days: 45, amount: 500 }])).toBe(30);
+    // What the operating wallet keeps pays what falls due first: the 7-day buffer covers it.
+    expect(sweptHoldDays(118.585001, 118.7, [{ days: 1.64, amount: 0.1 }])).toBe(30);
+  });
+
+  it("comes back, in part, on the day the operating wallet cannot cover what falls due", () => {
+    // Half the sweep comes back on day 10; the other half stays 30 days: 20 days on average.
+    expect(sweptHoldDays(100, 100, [{ days: 10, amount: 50 }])).toBe(20);
+    // The operating wallet's 10 pays the first 10 of the 60 due on day 6, the sweep the other 50.
+    expect(sweptHoldDays(100, 110, [{ days: 6, amount: 60 }])).toBe(18);
+  });
+
+  it("is at least a day, however soon it is all called back", () => {
+    expect(sweptHoldDays(10, 10, [{ days: 0, amount: 25 }])).toBe(1);
+  });
+});
+
+describe("planTreasury with what falls due, each on its day (hold horizon R1, R3)", () => {
+  // testnet-2 at 08:31 UTC on Oct 3 (#1103): 118.7 USDC in operating, 0.1 USDC due in 1.64 days, nothing after.
+  const now = { operatingBalance: 118.7, reserveBalance: 0.110738, apy: 0.0345, obligationsDue7d: 0.1, daysUntilNextObligation: 1.64, roundTripCostUsd: 0.00638 };
+
+  it("weighs a month of yield on cash nothing will call back, where the next obligation's horizon counted under two days", () => {
+    // Before: the whole sweep was assumed back in 1.64 days, so the yield weighed was under 2 cents.
+    expect(planTreasury(now)).toMatchObject({ holdDays: 1.64, projectedYieldUsd: 0.018382 });
+    const plan = planTreasury({ ...now, obligationSchedule: [{ days: 1.64, amount: 0.1 }] });
+    expect(plan.holdDays).toBe(30);
+    expect(plan.projectedYieldUsd).toBe(0.336261);
+    expect(plan.decision).toMatchObject({ action: "sweep_to_usyc", amount: 118.585001 });
+    expect(plan.decision.reasoning).toContain("over the 30 days the swept cash would stay, on average, before what falls due calls it back, that earns about $0.3363");
+  });
+
+  it("still holds a sweep too small to pay for its transfers", () => {
+    const plan = planTreasury({ ...now, operatingBalance: 2.1, obligationSchedule: [{ days: 1.64, amount: 0.1 }] });
+    expect(plan.decision.action).toBe("hold");
+    expect(plan.decision.reasoning).toContain("over the 30 days the swept cash would stay");
   });
 });

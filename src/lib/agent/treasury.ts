@@ -24,6 +24,12 @@ export interface TreasuryDecision {
   reasoning: string;
 }
 
+/** An amount falling due, in days from now: 0 for one due already, such as an open milestone. */
+export interface ObligationAt {
+  days: number;
+  amount: number;
+}
+
 export interface TreasuryInputs {
   operatingBalance: number;
   reserveBalance: number;
@@ -33,6 +39,11 @@ export interface TreasuryInputs {
   obligationsDue7d: number;
   /** Days until the soonest obligation. `Infinity` when nothing is outstanding. */
   daysUntilNextObligation: number;
+  /**
+   * What falls due over the next 30 days, each on its day (treasury hold horizon R1). With it, a sweep's yield is
+   * weighed over how long the swept cash would really stay; without it, until the next obligation, as before.
+   */
+  obligationSchedule?: readonly ObligationAt[];
   /** Cost of a sweep plus the redemption that must follow it. */
   roundTripCostUsd: number;
   /** Cushion held over the obligations themselves. 1.15 = 15%. */
@@ -61,6 +72,38 @@ export function expectedHoldDays(daysUntilNextObligation: number): number {
   return Math.min(30, Math.max(1, daysUntilNextObligation));
 }
 
+const HORIZON_DAYS = 30;
+
+/**
+ * How long swept cash would stay in the reserve, on average, over the next 30 days (treasury hold horizon R1–R2).
+ * After a sweep of `amount`, the operating wallet keeps the rest; each obligation is paid from it first, and only
+ * what it cannot cover is called back from the reserve, on the obligation's day. Cash nothing calls back stays the
+ * whole 30 days. Floored at 1 day, as `expectedHoldDays`: a same-day round trip still costs two transactions.
+ */
+export function sweptHoldDays(amount: number, operatingBalance: number, schedule: readonly ObligationAt[]): number {
+  if (!(amount > 0)) return HORIZON_DAYS;
+  let kept = Math.max(0, operatingBalance - amount);
+  let swept = amount;
+  let dollarDays = 0;
+  for (const obligation of [...schedule].filter((due) => due.days < HORIZON_DAYS && due.amount > 0).sort((a, b) => a.days - b.days)) {
+    const fromOperating = Math.min(kept, obligation.amount);
+    kept -= fromOperating;
+    const calledBack = Math.min(swept, obligation.amount - fromOperating);
+    dollarDays += calledBack * Math.max(0, obligation.days);
+    swept -= calledBack;
+    if (swept <= 0) break;
+  }
+  dollarDays += swept * HORIZON_DAYS;
+  return Math.min(HORIZON_DAYS, Math.max(1, dollarDays / amount));
+}
+
+/** "the 30 days the swept cash would stay before what falls due calls it back", or the next obligation's horizon. */
+function horizonWords(holdDays: number, scheduled: boolean): string {
+  if (!scheduled) return `the ${holdDays} day(s) until the next obligation`;
+  const days = Number(holdDays.toFixed(1));
+  return `the ${days} day${days === 1 ? "" : "s"} the swept cash would stay, on average, before what falls due calls it back`;
+}
+
 /** Truncates toward zero at USDC's six decimals; never rounds a balance up. */
 export function toUsdc(value: number): number {
   return Math.trunc(value * 1e6) / 1e6;
@@ -70,7 +113,11 @@ export function planTreasury(input: TreasuryInputs): TreasuryPlan {
   const bufferRatio = input.bufferRatio ?? 1.15;
   const buffer = toUsdc(input.obligationsDue7d * bufferRatio);
   const idle = toUsdc(input.operatingBalance - buffer);
-  const holdDays = expectedHoldDays(input.daysUntilNextObligation);
+  // The days the cash a sweep takes would stay before what falls due calls it back (hold horizon R1), when the
+  // schedule is known; otherwise until the next obligation, as before.
+  const scheduled = input.obligationSchedule !== undefined;
+  const holdDays =
+    scheduled && idle > 0 ? sweptHoldDays(idle, input.operatingBalance, input.obligationSchedule ?? []) : expectedHoldDays(input.daysUntilNextObligation);
 
   const base = { idle, buffer, holdDays, roundTripCostUsd: input.roundTripCostUsd };
 
@@ -117,8 +164,8 @@ export function planTreasury(input: TreasuryInputs): TreasuryPlan {
         amount,
         reasoning:
           `${amount} USDC sits above the ${buffer} USDC buffer for the ${input.obligationsDue7d} USDC ` +
-          `due within 7 days. At ${(input.apy * 100).toFixed(2)}% APY over the ${holdDays} day(s) until ` +
-          `the next obligation that earns about $${projectedYieldUsd.toFixed(4)}, against $` +
+          `due within 7 days. At ${(input.apy * 100).toFixed(2)}% APY over ${horizonWords(holdDays, scheduled)}, ` +
+          `that earns about $${projectedYieldUsd.toFixed(4)}, against $` +
           `${input.roundTripCostUsd.toFixed(4)} in sweep-and-redeem fees — so the sweep pays for itself.`,
       },
     };
@@ -133,7 +180,7 @@ export function planTreasury(input: TreasuryInputs): TreasuryPlan {
         amount: 0,
         reasoning:
           `${amount} USDC is idle above the ${buffer} USDC buffer, but at ${(input.apy * 100).toFixed(2)}% ` +
-          `APY over the ${holdDays} day(s) until the next obligation it would earn about $` +
+          `APY over ${horizonWords(holdDays, scheduled)} it would earn about $` +
           `${projectedYieldUsd.toFixed(4)} — less than the $${input.roundTripCostUsd.toFixed(4)} round-trip ` +
           `fee. Sweeping would cost more than it earns, so the cash stays liquid.`,
       },

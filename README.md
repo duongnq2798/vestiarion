@@ -66,8 +66,9 @@ is hard-coded into the interface:
 4. **Treasury** — idle operating cash above a 7-day obligation buffer is swept into Circle's USYC,
    a tokenized money market fund, on Arc testnet; the agent redeems back out ahead of due dates
    rather than after. The sweep only happens when it pays for itself: a sweep and the redemption
-   that must follow it are two transactions, so the policy computes the yield earned over the days
-   until the next obligation and compares it to the round-trip fee. Idle cash that would earn less
+   that must follow it are two transactions, so the policy computes the yield the swept cash would
+   earn over the days it would stay, before what falls due calls it back (at most 30), and compares
+   it to the round-trip fee. Idle cash that would earn less
    than it costs to move stays liquid (`src/lib/agent/treasury.ts`). Code bounds the model's moves:
    a sweep never takes the operating wallet below its buffer, and a redemption brings back at most
    what the next 14 days need. Payments come first: before
@@ -387,20 +388,23 @@ because the public faucet grants 20 testnet USDC every two hours and a demo deno
 thousands would never settle. The business narrative is the same; the decimal point moves.
 
 One consequence is worth knowing before you demo: **with a few USDC idle, the agent declines to
-sweep into USYC**, and it is right to. Here is a decision it actually recorded, at testnet scale:
+sweep into USYC**, and it is right to. Here is the arithmetic, at testnet scale, with 2 USDC idle
+above the buffer and nothing falling due that the buffer cannot pay:
 
 ```
-operating balance    23.44    USDC
-required buffer      12.989249 USDC   (obligations due within 7 days, +15%)
-idle above buffer    10.450751 USDC
-expected hold days    1               (next obligation is due today)
-projected yield       0.001288 USD
+idle above buffer     2.000000 USDC
+expected hold days   30               (nothing calls the swept cash back within a month)
+projected yield       0.005671 USD    (at USYC's 3.45% APY)
 round-trip cost       0.00638  USD    (two transfers, at the measured Arc fee)
 ```
 
-It holds, because sweeping would destroy about half a cent. That is not a threshold someone
+It holds, because sweeping would cost more than it earns. That is not a threshold someone
 tuned — it is the arithmetic in `planTreasury`, which is why the same policy flips to sweeping
-the moment the numbers justify it. Run in simulate mode (`SEED_SCALE=1`, no Circle keys) to see
+the moment the numbers justify it: with 118.59 USDC idle on the same terms, the month earns
+about $0.336, fifty times the cost. Until October 3, 2026 the policy assumed every swept dollar
+came back at the next obligation, so a 0.10 USDC bill due in two days cut that month to under
+two days of yield (#1103 in testnet-2: about $0.018). It now counts how long each dollar would
+actually stay. Run in simulate mode (`SEED_SCALE=1`, no Circle keys) to see
 exactly that: the identical book scaled up 1000x sweeps 13,900 USDC. An agent that sweeps
 regardless of whether sweeping pays is the cron job this project exists to not be. On Arc testnet,
 with 60.71 USDC idle above its buffer, the same arithmetic swept for real on Oct 3, 2026:
