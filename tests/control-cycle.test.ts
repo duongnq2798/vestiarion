@@ -612,6 +612,43 @@ describe("reconcileApInvoice — a matched payable with a payment in flight", ()
     expect(outcome.status).toBe("paid");
   });
 
+  it("resubmits through the spending limit contract when the workspace enforces it on Arc (onchain spending limit R3)", async () => {
+    payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", operatingBalance: 200, amountPaid: 150, discountTaken: 0 });
+    const { run } = cycleFake((r) => {
+      if (r.path === "/rest/v1/counterparties" && r.method === "GET") return { body: { risk_level: "low" } };
+      if (r.path === "/rest/v1/rpc/agent_paused") return { body: false };
+      return undefined;
+    });
+    const payment = { contract: `0x${"11".repeat(20)}`, agentWalletId: "wallet-agent", ref: `0x${"2".repeat(64)}` };
+    const onChainLimit = { check: vi.fn(async () => ({ contract: payment.contract, agent: `0x${"a9".repeat(20)}`, ref: payment.ref, covered: true, verdict: null, payment })) };
+
+    await run(() =>
+      reconcileApInvoice({ ...invoice, txRef: null }, { providerTxId: null, status: "submitting" }, { db: db(), provider, operating: { id: ACCOUNT_ID }, onChainLimit })
+    );
+
+    expect(payInvoiceMock.mock.calls[0][0]).toMatchObject({ spendingLimit: payment });
+  });
+
+  it("does not resubmit, and holds for a person, a payment the enforced contract cannot carry (onchain spending limit R4)", async () => {
+    const { fake, run } = cycleFake((r) => {
+      if (r.path === "/rest/v1/counterparties" && r.method === "GET") return { body: { risk_level: "low" } };
+      if (r.path === "/rest/v1/rpc/agent_paused") return { body: false };
+      return undefined;
+    });
+    const onChainLimit = {
+      check: vi.fn(async () => ({ contract: `0x${"11".repeat(20)}`, agent: `0x${"a9".repeat(20)}`, ref: `0x${"2".repeat(64)}`, covered: false, uncoveredBecause: "another_chain" as const, verdict: null, payment: null })),
+    };
+
+    const outcome = await run(() =>
+      reconcileApInvoice({ ...invoice, txRef: null, destinationChain: "BASE-SEPOLIA" }, { providerTxId: null, status: "submitting" }, { db: db(), provider, operating: { id: ACCOUNT_ID }, onChainLimit })
+    );
+
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+    expect(outcome.status).toBe("held");
+    const [body] = fake.requests.filter((r) => r.path === "/rest/v1/invoices" && r.method === "PATCH").map((r) => r.body as Record<string, string>);
+    expect(body.agent_reasoning).toContain("the agent's spending limit is enforced on Arc, and this payment cannot go through its contract");
+  });
+
   it("resubmits a payment to a payee on another chain to that chain, its fee bounded (CCTP payouts, review I7)", async () => {
     payInvoiceMock.mockResolvedValue({ status: "matched", txRef: "0xburn", execution: null, note: "", operatingBalance: null, amountPaid: 150, discountTaken: 0 });
     const { run } = cycleFake((r) => {

@@ -1,11 +1,12 @@
 "use client";
 
-import { Gauge } from "lucide-react";
+import { Gauge, ShieldCheck } from "lucide-react";
 import { useCallback, useState } from "react";
-import { setAgentBudgetAction } from "@/app/actions/agent";
+import { enforceSpendingLimitAction, setAgentBudgetAction, turnOffSpendingLimitAction } from "@/app/actions/agent";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
 import { cn } from "@/components/ui/cn";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogTrigger } from "@/components/ui/Dialog";
 import { Field } from "@/components/ui/Field";
 import { FormMessage } from "@/components/ui/FormMessage";
@@ -13,11 +14,37 @@ import { Input } from "@/components/ui/Input";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm, type ActionResult } from "@/components/ui/useActionForm";
-import { fmt, Money } from "@/components/vx/Primitives";
+import { fmt, Hash, Money } from "@/components/vx/Primitives";
 import { withSuccessToast } from "@/components/withSuccessToast";
 
 const INITIAL: ActionResult = { ok: false, message: "" };
 const save = withSuccessToast(setAgentBudgetAction);
+const enforce = withSuccessToast(enforceSpendingLimitAction);
+const turnOff = withSuccessToast(turnOffSpendingLimitAction);
+const ARCSCAN_ADDRESS = "https://testnet.arcscan.app/address/";
+
+/**
+ * The limit on Arc, as the console reads it (docs/superpowers/specs/2026-10-03-onchain-spending-limit-design.md §4,
+ * R14): its state, its contract and the agent's wallet, and the contract's own figures and count, or null when they
+ * could not be read.
+ */
+export interface OnChainLimitView {
+  state: "enforced" | "off" | "unfinished";
+  contract: string | null;
+  agent: string | null;
+  reading: { dailyUsdc: number | null; weeklyUsdc: number | null; spentToday: number; spentThisWeek: number } | null;
+}
+
+/** What the panel says about enforcing the limit on Arc, and the action it offers, if any. */
+export const ON_ARC_COPY = {
+  explain: "Enforce it on Arc, and the agent's own payments go through a contract that refuses anything past the limit, whatever the agent decides.",
+  enforced: "Enforced on Arc. The agent's own payments go through its contract, which refuses anything past the limit.",
+  needsFigure: "Set a daily or 7-day figure to enforce it on Arc.",
+  sandbox: "A live workspace can enforce it on Arc.",
+  unreadable: "The contract's figures could not be read just now.",
+  turnOffDescription:
+    "The agent's payments are then checked against the limit in code only. The contract stays on Arc, and the operating wallet's approval goes to 0, so it can draw nothing.",
+} as const;
 
 /** What the console knows of the agent's spending limit: plain numbers, nothing secret. */
 export interface AgentBudgetView {
@@ -34,7 +61,21 @@ export interface AgentBudgetView {
  * §4): what the agent paid on its own today and in the last 7 days, against each figure that is set,
  * and what is left. An owner or admin changes it from here.
  */
-export function AgentBudgetPanel({ orgSlug, view, canEdit }: { orgSlug: string; view: AgentBudgetView; canEdit: boolean }) {
+export function AgentBudgetPanel({
+  orgSlug,
+  view,
+  canEdit,
+  live = false,
+  onChain = null,
+}: {
+  orgSlug: string;
+  view: AgentBudgetView;
+  canEdit: boolean;
+  /** A live workspace: the only kind that can enforce the limit on Arc. */
+  live?: boolean;
+  /** The limit on Arc; null when it was never set up. */
+  onChain?: OnChainLimitView | null;
+}) {
   const unset = view.dailyUsdc === null && view.weeklyUsdc === null;
   return (
     <Card asChild>
@@ -60,6 +101,7 @@ export function AgentBudgetPanel({ orgSlug, view, canEdit }: { orgSlug: string; 
               : "A payment past it waits for you in Approvals. What a person approves does not count."}
           </p>
           {canEdit && <BudgetDialog orgSlug={orgSlug} view={view} unset={unset} />}
+          <OnArc orgSlug={orgSlug} onChain={onChain} canEdit={canEdit} live={live} unset={unset} />
         </CardContent>
       </section>
     </Card>
@@ -137,5 +179,116 @@ function BudgetDialog({ orgSlug, view, unset }: { orgSlug: string; view: AgentBu
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** The limit on Arc (onchain spending limit §4): what the contract counts, or the action that puts it there. */
+function OnArc({ orgSlug, onChain, canEdit, live, unset }: { orgSlug: string; onChain: OnChainLimitView | null; canEdit: boolean; live: boolean; unset: boolean }) {
+  const enforced = onChain?.state === "enforced";
+  const enforceForm = useActionForm(enforce, INITIAL);
+  const offForm = useActionForm(turnOff, INITIAL);
+  const offId = "spending-limit-off";
+  const reading = onChain?.reading ?? null;
+
+  return (
+    <div className="mt-4 space-y-2 border-t border-line pt-4 text-[0.8125rem]">
+      <p className="flex items-center gap-1.5 font-medium text-ink">
+        <ShieldCheck aria-hidden className={cn("size-4", enforced ? "text-agent" : "text-ink-3")} />
+        On Arc
+      </p>
+      {enforced ? (
+        <>
+          <p className="leading-5 text-ink-2">{ON_ARC_COPY.enforced}</p>
+          <dl className="space-y-1">
+            {onChain?.contract && (
+              <div className="flex items-baseline justify-between gap-3">
+                <dt className="text-ink-2">Contract</dt>
+                <dd>
+                  <Hash value={onChain.contract} href={`${ARCSCAN_ADDRESS}${onChain.contract}`} />
+                </dd>
+              </div>
+            )}
+            {onChain?.agent && (
+              <div className="flex items-baseline justify-between gap-3">
+                <dt className="text-ink-2">Agent&apos;s wallet</dt>
+                <dd>
+                  <Hash value={onChain.agent} href={`${ARCSCAN_ADDRESS}${onChain.agent}`} />
+                </dd>
+              </div>
+            )}
+            {reading ? (
+              <>
+                <OnChainCount label="Paid through it today" spent={reading.spentToday} limit={reading.dailyUsdc} />
+                <OnChainCount label="In the last 7 days" spent={reading.spentThisWeek} limit={reading.weeklyUsdc} />
+              </>
+            ) : (
+              <p className="text-xs text-ink-3">{ON_ARC_COPY.unreadable}</p>
+            )}
+          </dl>
+          {canEdit && (
+            <>
+              <form id={offId} className="contents" {...offForm.formProps}>
+                <input type="hidden" name="orgSlug" value={orgSlug} />
+              </form>
+              <ConfirmDialog
+                formId={offId}
+                trigger={
+                  <Button variant="ghost" size="sm" loading={offForm.pending}>
+                    Turn off on Arc
+                  </Button>
+                }
+                title="Stop enforcing the limit on Arc?"
+                description={ON_ARC_COPY.turnOffDescription}
+                confirmLabel="Turn off on Arc"
+              />
+              {/* Takes no room until turning it off has something to say. */}
+              <FormMessage tone="error" className={!offForm.state.ok && offForm.state.message ? "mt-2" : "min-h-0"}>
+                {offForm.state.ok ? null : offForm.state.message}
+              </FormMessage>
+            </>
+          )}
+        </>
+      ) : !live ? (
+        <p className="leading-5 text-ink-3">{ON_ARC_COPY.sandbox}</p>
+      ) : (
+        <>
+          <p className="leading-5 text-ink-2">{ON_ARC_COPY.explain}</p>
+          {unset ? (
+            <p className="text-xs text-ink-3">{ON_ARC_COPY.needsFigure}</p>
+          ) : (
+            canEdit && (
+              <form {...enforceForm.formProps} className="space-y-2">
+                <input type="hidden" name="orgSlug" value={orgSlug} />
+                <SubmitButton variant="secondary" size="sm" icon={<ShieldCheck />} pendingLabel="Enforcing on Arc…">
+                  {onChain?.state === "unfinished" ? "Finish enforcing on Arc" : "Enforce on Arc"}
+                </SubmitButton>
+                <FormMessage tone="error" className={!enforceForm.state.ok && enforceForm.state.message ? undefined : "min-h-0"}>
+                  {enforceForm.state.ok ? null : enforceForm.state.message}
+                </FormMessage>
+              </form>
+            )
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function OnChainCount({ label, spent, limit }: { label: string; spent: number; limit: number | null }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <dt className="min-w-0 text-ink-2">{label}</dt>
+      <dd className="shrink-0 text-ink">
+        <span className="tabular-nums">{fmt(spent)}</span>
+        {limit === null ? (
+          <span className="text-ink-3"> USDC · no figure</span>
+        ) : (
+          <>
+            <span className="text-ink-3"> of </span>
+            <Money value={limit} />
+          </>
+        )}
+      </dd>
+    </div>
   );
 }

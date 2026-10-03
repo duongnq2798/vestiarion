@@ -194,6 +194,20 @@ function reasonOf(facts: HeldFacts): Omit<HeldReason, "hint"> {
   if (execution.heldBecause === HELD_BECAUSE_PAUSED) {
     return { kind: "paused", text: "The agent decided to pay it while it was paused, so nothing was sent. Pay now sends it.", link: null, canPay: true, canClose: true, override: false };
   }
+  // The same limit on Arc (onchain spending limit §4): a person's Pay now is a plain transfer, not through the contract.
+  if (detail.guardrailRule === "workspace.onchain_limit" || detail.guardrailRule === "workspace.onchain_limit_route") {
+    return {
+      kind: "outflow_budget",
+      text:
+        detail.guardrailRule === "workspace.onchain_limit"
+          ? "The spending limit contract on Arc would have refused it. Pay now pays it; a person's payment does not go through that contract."
+          : "The agent's spending limit is enforced on Arc, and this release cannot go through its contract. Pay now pays it.",
+      link: { label: "Spending limit on Treasury", path: "/console" },
+      canPay: true,
+      canClose: true,
+      override: true,
+    };
+  }
   if (detail.guardrailRule === "workspace.outflow_budget" || execution.heldBecause === HELD_FOR_BUDGET) {
     return {
       kind: "outflow_budget",

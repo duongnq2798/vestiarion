@@ -17,11 +17,12 @@ import { CycleJournal, messageOf, type CycleStage } from "./journal";
 import { syncOnChainBalances, type BalanceSync } from "./balances";
 import { CycleRunningError, hasRunningCycle } from "./cycle-running";
 import { decide, type DecideResult } from "./decide";
-import { budgetClause, enforceApGuardrails } from "./guardrails";
+import { budgetClause, enforceApGuardrails, onChainLimitHold } from "./guardrails";
 import { usycSubscriptionsOpen, UsycSubscriptionsClosedError } from "../circle/usyc";
 import { arcRpcUrl } from "../circle/arcFees";
 import type { UsycExecution } from "../circle/types";
 import { budgetGate, countedUsdc, exceedsBudget, HELD_FOR_BUDGET, type BudgetGate, type BudgetRoom } from "./outflow-budget";
+import { onChainLimitGate, onChainLimitRecord, type OnChainLimitDecisionCheck, type OnChainLimitGate } from "./onchain-limit";
 import { addressUnconfirmed, payeeNotReady } from "../counterparty-address";
 import { SandboxCapReachedError } from "./sandbox-cap";
 import { AgentPausedError, HELD_BECAUSE_PAUSED, heldBecausePausedDetail, pausedPaymentNote, pausedTreasuryNote } from "./pause";
@@ -58,7 +59,7 @@ import { readEscrowContract } from "../circle/escrow-setup";
 import { gatewayQuoter, type GatewayQuote } from "../circle/gateway-quote";
 
 export type { GatewayQuote };
-import type { CrossChainRoute, PayoutRoute } from "../circle/types";
+import type { CrossChainRoute, PayoutRoute, SpendingLimitPayment } from "../circle/types";
 import { BRIDGE_FEE_CAP_PERCENT, payeeChain } from "../payee-chains";
 import {
   amountToPay,
@@ -472,6 +473,8 @@ export async function payApInvoiceIfNotPaused(
     destinationChain?: string;
     maxBridgeFeeUsdc?: number;
     route?: PayoutRoute;
+    /** Sent through the spending limit contract (onchain spending limit R3): only the agent's payments carry it. */
+    spendingLimit?: SpendingLimitPayment;
   },
   deps: { provider: ChainProvider; operating: { id: string } | null; swap?: () => Promise<SwapOutcome> }
 ): Promise<PayStepOutcome & { payment?: { amountPaid: number; discountTaken: number }; swap?: SwapOutcome }> {
@@ -705,7 +708,7 @@ export async function reconcileApInvoice(
     decidedAt?: string | null;
   },
   intent: ExistingPaymentIntent,
-  deps: { db: OrgDb; provider: ChainProvider; operating: { id: string } | null }
+  deps: { db: OrgDb; provider: ChainProvider; operating: { id: string } | null; onChainLimit?: OnChainLimitGate }
 ): Promise<{ status: string; operatingBalance: number | null; line: CycleLogLine }> {
   const input = {
     invoiceId: invoice.id,
@@ -802,7 +805,27 @@ export async function reconcileApInvoice(
       operatingBalance: null,
     };
   } else {
-    const resubmitted = await payApInvoiceIfNotPaused(input, { provider: deps.provider, operating: deps.operating });
+    // A transfer never sent is the agent's to send again: through the spending limit contract when the workspace
+    // enforces it on Arc, and for a person when the contract cannot carry it (onchain spending limit R3, R4).
+    const onChain = await (deps.onChainLimit ?? onChainLimitGate()).check({
+      sourceType: "invoice",
+      sourceId: invoice.id,
+      to: invoice.address,
+      amount: amountToPay(invoice.amount, invoice.discount ?? null, new Date()).amountPaid,
+      currency: input.currency,
+      destinationChain: invoice.destinationChain ?? null,
+    });
+    const resubmitted: PayStepOutcome & { payment?: { amountPaid: number; discountTaken: number } } =
+      onChain && !onChain.payment
+        ? {
+            status: "held",
+            txRef: null,
+            paymentExecution: null,
+            reasoningSuffix: " [not sent again: the agent's spending limit is enforced on Arc, and this payment cannot go through its contract — held for a person to approve]",
+            heldBecausePaused: false,
+            operatingBalance: null,
+          }
+        : await payApInvoiceIfNotPaused({ ...input, ...(onChain?.payment ? { spendingLimit: onChain.payment } : {}) }, { provider: deps.provider, operating: deps.operating });
     outcome = resubmitted;
     paidAmount =
       resubmitted.payment && (resubmitted.status === "paid" || resubmitted.status === "matched")
@@ -1171,6 +1194,8 @@ async function decideApPayable(
     swap: { quote: (usdcIn: number) => Promise<SwapQuote>; run: SwapRunner } | null;
     /** The agent's spending limit as this cycle has it (outflow budget spec R5). */
     budget: BudgetGate;
+    /** The same limit enforced on Arc, when the workspace enforces it (onchain spending limit R3, R7). */
+    onChainLimit: OnChainLimitGate;
     /** The payment history the agent bought for a counterparty's address within 7 days, if any (x402 payee history R6). */
     addressHistory?: (counterpartyId: string) => AddressHistoryFact | null;
   }
@@ -1519,6 +1544,19 @@ async function decideApPayable(
   // payment now, since a schedule is decided again on its day. A read that
   // fails throws, and the stage pays nothing (R8).
   const outflowBudget = decision.action === "pay" ? await ctx.budget.room() : null;
+  // The same limit on Arc (onchain spending limit R4, R7, R8): for a payment now, whether its contract can carry
+  // it and what the contract itself says, asked before anything is sent. Null when the workspace does not enforce it.
+  const onChainLimit =
+    decision.action === "pay"
+      ? await ctx.onChainLimit.check({
+          sourceType: "invoice",
+          sourceId: invoice.id,
+          to: counterparty.address,
+          amount: amountToPay(amount, discount, now).amountPaid,
+          currency,
+          destinationChain: crossChain ? destination.id : null,
+        })
+      : null;
 
   // A payment the agent commits to must be one it would be allowed to make:
   // `schedule` is refused exactly as `pay` is, against the full amount.
@@ -1546,6 +1584,7 @@ async function decideApPayable(
           }
         : null,
     outflowBudget,
+    onChainLimit,
   });
   const heldForBudget = guardrail.rule === "workspace.outflow_budget";
   metrics.recordDecisionMode(mode, agreedWithReference);
@@ -1584,6 +1623,7 @@ async function decideApPayable(
           discount,
           currency,
           ...(crossChain ? { destinationChain: destination.id, maxBridgeFeeUsdc: bridgeFeeCeiling(amount), route } : {}),
+          ...(onChainLimit?.payment ? { spendingLimit: onChainLimit.payment } : {}),
         },
         { provider, operating, swap: fundingSwap }
       );
@@ -1654,6 +1694,8 @@ async function decideApPayable(
       currency,
       // The spending limit a payment now was weighed against (outflow budget spec R4); absent with none set.
       ...(outflowBudget ? { outflowBudget } : {}),
+      // The same limit on Arc: the contract, the payment's ref and the contract's verdict (onchain spending limit R8, R12).
+      ...(onChainLimit ? { onChainLimit: onChainLimitRecord(onChainLimit) } : {}),
       // A payee on another chain: the route and the fee read for this decision (CCTP payouts X11).
       // A Gateway payout also records the Gateway balance it was weighed against.
       ...(crossChain
@@ -1791,6 +1833,8 @@ export interface ApStageInput {
   swaps?: { run: SwapRunner; resumeAll: () => Promise<SwapSweep> };
   /** The agent's spending limit, shared with the contractor stage (outflow budget spec R5); read from the workspace when absent. */
   budget?: BudgetGate;
+  /** The same limit enforced on Arc, shared with the contractor stage (onchain spending limit R3); read from the workspace when absent. */
+  onChainLimit?: OnChainLimitGate;
   /** Payment histories the `services` stage bought, by counterparty (x402 payee history R6). */
   addressHistory?: Map<string, AddressHistoryFact>;
 }
@@ -1829,6 +1873,7 @@ export async function runApStage(input: ApStageInput): Promise<number> {
   let operatingBalance = input.operatingBalance;
   const now = new Date();
   const budget = input.budget ?? budgetGate(db);
+  const onChainLimit = input.onChainLimit ?? onChainLimitGate();
 
   // Read only when a EURC payable is decided, once per stage, and only live.
   let eurcHeld: number | null | undefined;
@@ -2007,7 +2052,7 @@ export async function runApStage(input: ApStageInput): Promise<number> {
           decidedAt: invoice.decided_at ?? null,
         },
         intent,
-        { db, provider, operating }
+        { db, provider, operating, onChainLimit }
       );
       if (reconciled.operatingBalance !== null) operatingBalance = reconciled.operatingBalance;
       metrics.recordInvoice(reconciled.status, false);
@@ -2038,6 +2083,7 @@ export async function runApStage(input: ApStageInput): Promise<number> {
       gatewayQuote: gatewayQuote ??= input.gatewayQuote ?? gatewayQuoter(provider, db),
       swap: swaps ? { quote: quoteSwap, run: swaps.run } : null,
       budget,
+      onChainLimit,
       addressHistory: (counterpartyId) => input.addressHistory?.get(counterpartyId) ?? null,
     });
     if (decided.operatingBalance !== null) operatingBalance = decided.operatingBalance;
@@ -2057,7 +2103,7 @@ export async function runApStage(input: ApStageInput): Promise<number> {
  * the same reason: this call site is directly testable without a full cycle.
  */
 export async function releaseMilestoneIfNotPaused(
-  input: { milestoneId: string; destination: string; amount: number },
+  input: MilestoneRelease,
   deps: { provider: ChainProvider; operatingAccountId: string }
 ): Promise<PayStepOutcome> {
   const pauseNote = await pausedPaymentNote();
@@ -2072,6 +2118,17 @@ export async function releaseMilestoneIfNotPaused(
     };
   }
   return releaseMilestone(input, deps);
+}
+
+/**
+ * One milestone's release. `spendingLimit` is the contract an agent's release goes through while the workspace
+ * enforces its spending limit on Arc (onchain spending limit R3); a person's release never carries it (R6).
+ */
+export interface MilestoneRelease {
+  milestoneId: string;
+  destination: string;
+  amount: number;
+  spendingLimit?: SpendingLimitPayment;
 }
 
 /** A release that did not go out, held with a note appended to its reasoning. */
@@ -2093,7 +2150,7 @@ const heldRelease = (reasoningSuffix: string, heldBecausePaused = false): PaySte
  * agent is paused. One outcome per release, in order.
  */
 export async function releaseMilestones(
-  releases: Array<{ milestoneId: string; destination: string; amount: number }>,
+  releases: MilestoneRelease[],
   deps: { provider: ChainProvider; operatingAccountId: string; operatingBalance: number | null }
 ): Promise<PayStepOutcome[]> {
   const alone = async (list: typeof releases, release: typeof releaseMilestone) => {
@@ -2115,7 +2172,8 @@ export async function releaseMilestones(
       outcomes[index] = heldRelease(` [execution failed: ${(err as Error).message}]`);
       continue;
     }
-    if (escrow) outcomes[index] = await releaseMilestone(release, deps);
+    // A release from escrow is its own call, and so is one through the spending limit contract (onchain spending limit R3).
+    if (escrow || release.spendingLimit) outcomes[index] = await releaseMilestone(release, deps);
     else batchable.push({ index, release });
   }
   const total = batchable.reduce((sum, item) => sum + item.release.amount, 0);
@@ -2241,11 +2299,12 @@ export async function releaseHeldMilestone(
   input: { milestoneId: string; destination: string; amount: number },
   deps: { provider: ChainProvider; operatingAccountId: string }
 ): Promise<PayStepOutcome> {
-  return releaseMilestone(input, { ...deps, retryTerminalFailure: true });
+  // A person's payment: never through the agent's spending limit contract (onchain spending limit R6).
+  return releaseMilestone({ milestoneId: input.milestoneId, destination: input.destination, amount: input.amount }, { ...deps, retryTerminalFailure: true });
 }
 
 async function releaseMilestone(
-  input: { milestoneId: string; destination: string; amount: number },
+  input: MilestoneRelease,
   deps: { provider: ChainProvider; operatingAccountId: string; retryTerminalFailure?: boolean }
 ): Promise<PayStepOutcome> {
   let result;
@@ -2264,7 +2323,8 @@ async function releaseMilestone(
         destination: input.destination,
         amount: input.amount,
         memo: `Milestone ${input.milestoneId}`,
-        ...(escrow ? { route: "escrow" as const, escrow } : {}),
+        // A release from escrow leaves from the escrow, not the treasury, so never through the spending limit contract (R5).
+        ...(escrow ? { route: "escrow" as const, escrow } : input.spendingLimit ? { spendingLimit: input.spendingLimit } : {}),
       },
       // Only a person's Pay now sends a terminally failed release again (held milestone actions R2).
       deps.retryTerminalFailure ? { provider: deps.provider, retryTerminalFailure: true } : { provider: deps.provider }
@@ -2356,7 +2416,7 @@ export async function reconcileMilestone(
     txRef: string | null;
   },
   intent: ExistingPaymentIntent,
-  deps: { db: OrgDb; provider: ChainProvider; operating: { id: string } | null }
+  deps: { db: OrgDb; provider: ChainProvider; operating: { id: string } | null; onChainLimit?: OnChainLimitGate }
 ): Promise<{ status: string; operatingBalance: number | null; line: CycleLogLine }> {
   const transferExists = intent.providerTxId !== null || intent.status === "confirmed";
   const name = milestone.contractorName;
@@ -2434,7 +2494,12 @@ export async function reconcileMilestone(
       operatingBalance: null,
     };
   } else if (deps.operating) {
-    outcome = await releaseMilestoneIfNotPaused(release, { provider: deps.provider, operatingAccountId: deps.operating.id });
+    // Sent again by the agent: through the spending limit contract when the workspace enforces it (onchain spending limit R3).
+    const onChain = await (deps.onChainLimit ?? onChainLimitGate()).check({ sourceType: "milestone", sourceId: milestone.id, to: milestone.address, amount });
+    outcome = await releaseMilestoneIfNotPaused(
+      { ...release, ...(onChain?.payment ? { spendingLimit: onChain.payment } : {}) },
+      { provider: deps.provider, operatingAccountId: deps.operating.id }
+    );
   } else {
     outcome = {
       status: "held",
@@ -2877,6 +2942,8 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
   // use, and shared by the follow-up, AP and contractor stages, so each
   // payment this cycle makes counts against the next.
   const budget = budgetGate(db);
+  // The same limit enforced on Arc (onchain spending limit R3): read once, on first use, by both stages.
+  const onChainLimit = onChainLimitGate();
 
   await stage("follow_up", async () => {
   // ------------------------------------------------------- 1b. follow up
@@ -3019,6 +3086,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     metrics,
     lines,
     budget,
+    onChainLimit,
     addressHistory,
   });
 
@@ -3061,7 +3129,12 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
   // flight: it is reconciled, not decided again (see reconcileMilestone).
   const releasesInFlight = await existingMilestoneIntents(db, milestones);
 
-  type ContractorGuardrailRule = "counterparty.high_risk" | "counterparty.payment_limit" | "workspace.outflow_budget";
+  type ContractorGuardrailRule =
+    | "counterparty.high_risk"
+    | "counterparty.payment_limit"
+    | "workspace.outflow_budget"
+    | "workspace.onchain_limit"
+    | "workspace.onchain_limit_route";
   type Decided = {
     milestone: (typeof milestones)[number];
     amount: number;
@@ -3069,13 +3142,15 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     decided: DecideResult<MilestoneDecision>;
     reasoning: string;
     outflowBudget: BudgetRoom | null;
+    /** The spending limit on Arc's check of this release, when the workspace enforces it (onchain spending limit R8, R12). */
+    onChainLimit: OnChainLimitDecisionCheck | null;
   };
   // Releases that passed every check, sent once every milestone is decided (batch payouts §2).
   const planned: Decided[] = [];
 
   /** A milestone's decision and what came of it: its row, the metrics, its signed entry and its line. */
   const writeDecision = async (entry: Decided & { guardrailBlocked: boolean; guardrailRule: ContractorGuardrailRule | null; outcome: PayStepOutcome | null }) => {
-    const { milestone, amount, limit, guardrailBlocked, guardrailRule, outflowBudget, outcome } = entry;
+    const { milestone, amount, limit, guardrailBlocked, guardrailRule, outflowBudget, onChainLimit: onChainCheck, outcome } = entry;
     const { value: decision, mode, reference, agreedWithReference } = entry.decided;
     const contractor = milestone.counterparties;
     const status = outcome?.status ?? "held";
@@ -3114,6 +3189,8 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
         guardrailRule,
         // The spending limit a release was weighed against (outflow budget spec R4); absent with none set.
         ...(outflowBudget ? { outflowBudget } : {}),
+        // The same limit on Arc: the contract, the release's ref and the contract's verdict (onchain spending limit R8, R12).
+        ...(onChainCheck ? { onChainLimit: onChainLimitRecord(onChainCheck) } : {}),
         observed: {
           amount,
           paymentLimit: limit,
@@ -3172,7 +3249,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           txRef: milestone.tx_ref,
         },
         intent,
-        { db, provider, operating: operating ? { id: operating.id } : null }
+        { db, provider, operating: operating ? { id: operating.id } : null, onChainLimit }
       );
       if (reconciled.operatingBalance !== null) operatingBalance = reconciled.operatingBalance;
       metrics.recordMilestone(reconciled.status, false);
@@ -3254,10 +3331,17 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     let guardrailBlocked = false;
     let guardrailRule: ContractorGuardrailRule | null = null;
     let outflowBudget: BudgetRoom | null = null;
+    let onChainCheck: OnChainLimitDecisionCheck | null = null;
 
     if (decision.action === "release") {
       // The spending limit, after the contractor's own checks (outflow budget spec R4).
       outflowBudget = highRisk || overLimit ? null : await budget.room();
+      // The same limit on Arc (onchain spending limit R3, R5, R7): asked for a release not from escrow, whose money
+      // left the treasury when a person locked it.
+      const escrowed = ["funded", "funding"].includes(String((milestone as { escrow_state?: string | null }).escrow_state ?? ""));
+      onChainCheck =
+        highRisk || overLimit || escrowed ? null : await onChainLimit.check({ sourceType: "milestone", sourceId: milestone.id, to: contractor.address, amount });
+      const onChainHold = onChainLimitHold(onChainCheck, reasoning);
       if (highRisk || overLimit) {
         guardrailBlocked = true;
         guardrailRule = highRisk ? "counterparty.high_risk" : "counterparty.payment_limit";
@@ -3268,11 +3352,15 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
         guardrailBlocked = true;
         guardrailRule = "workspace.outflow_budget";
         reasoning += ` [guardrail override: releasing ${amount} USDC would take the agent past ${budgetClause(outflowBudget)}, ${outflowBudget.remaining} USDC left — release refused; decided again once the limit has room]`;
+      } else if (onChainHold) {
+        guardrailBlocked = true;
+        guardrailRule = onChainHold.rule;
+        reasoning = onChainHold.reasoning;
       } else if (operating) {
         // Sent once every milestone is decided, together where they can be (batch payouts §2). It counts
         // against the spending limit now, so the releases of one cycle never pass it together (R5).
         budget.spend(amount);
-        planned.push({ milestone, amount, limit, decided: { value: decision, mode, reference, agreedWithReference }, reasoning, outflowBudget });
+        planned.push({ milestone, amount, limit, decided: { value: decision, mode, reference, agreedWithReference }, reasoning, outflowBudget, onChainLimit: onChainCheck });
         continue;
       }
     }
@@ -3284,6 +3372,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
       decided: { value: decision, mode, reference, agreedWithReference },
       reasoning,
       outflowBudget,
+      onChainLimit: onChainCheck,
       guardrailBlocked,
       guardrailRule,
       outcome: null,
@@ -3293,10 +3382,11 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
   // Every release decided above goes out now: together in one Arc transaction where it can (batch payouts §2).
   if (planned.length > 0 && operating) {
     const outcomes = await releaseMilestones(
-      planned.map(({ milestone, amount }) => ({
+      planned.map(({ milestone, amount, onChainLimit: check }) => ({
         milestoneId: milestone.id,
         destination: payoutAddress(milestone.counterparties.address, milestone.counterparties.id),
         amount,
+        ...(check?.payment ? { spendingLimit: check.payment } : {}),
       })),
       { provider, operatingAccountId: operating.id, operatingBalance }
     );

@@ -4,6 +4,7 @@ import { addressUnconfirmed } from "../counterparty-address";
 import { BRIDGE_FEE_CAP_PERCENT } from "../payee-chains";
 import { SWAP_COST_CAP_PERCENT } from "../fx/swap-limits";
 import { exceedsBudget, type BudgetRoom } from "./outflow-budget";
+import type { SpendingLimitVerdict } from "../spending-limit/onchain";
 
 export interface ApGuardrailInput {
   action: "pay" | "schedule" | "hold" | "flag_fraud" | "request_info";
@@ -53,6 +54,19 @@ export interface ApGuardrailInput {
    * workspace set none. `amount` is weighed against `remaining`.
    */
   outflowBudget?: BudgetRoom | null;
+  /**
+   * The spending limit enforced on Arc (onchain spending limit R4, R7), null when the workspace does not enforce it:
+   * whether this payment can go through the contract (and why not), and the contract's verdict on it, null when it
+   * was not asked.
+   */
+  onChainLimit?: OnChainLimitCheck | null;
+}
+
+/** What the spending limit contract says about one payment the agent would make now. */
+export interface OnChainLimitCheck {
+  covered: boolean;
+  uncoveredBecause?: "eurc" | "another_chain";
+  verdict: SpendingLimitVerdict | null;
 }
 
 export type ApGuardrailRule =
@@ -68,7 +82,9 @@ export type ApGuardrailRule =
   | "bridge.fee_unavailable"
   | "bridge.fee_above_cap"
   | "bridge.gateway_balance_short"
-  | "workspace.outflow_budget";
+  | "workspace.outflow_budget"
+  | "workspace.onchain_limit_route"
+  | "workspace.onchain_limit";
 
 export { BRIDGE_FEE_CAP_PERCENT };
 
@@ -88,6 +104,37 @@ export function budgetClause(budget: BudgetRoom): string {
   return budget.binding === "day"
     ? `its ${budget.dailyUsdc} USDC daily spending limit: ${budget.spentToday} USDC already paid today`
     : `its ${budget.weeklyUsdc} USDC 7-day spending limit: ${budget.spentThisWeek} USDC already paid in the last 7 days`;
+}
+
+/** What the spending limit contract's refusal says, in a sentence's middle: its own figures, or what it refused. */
+export function onChainRefusalClause(verdict: Extract<SpendingLimitVerdict, { state: "refused" }>): string {
+  if (verdict.error === "OverDailyLimit" && "spent" in verdict) return `${verdict.spent} USDC already paid today against its ${verdict.limit} USDC daily limit`;
+  if (verdict.error === "OverWeeklyLimit" && "spent" in verdict) return `${verdict.spent} USDC paid in the last 7 days against its ${verdict.limit} USDC 7-day limit`;
+  if (verdict.error === "AlreadyPaid") return "this payment was already made through it";
+  return `it answers ${verdict.error}`;
+}
+
+/**
+ * The two checks of the spending limit enforced on Arc (onchain spending limit R4, R7), for a payment now: one the
+ * contract cannot carry is held for a person; one it would refuse is held with its figures. A verdict that could not
+ * be read stops nothing: the contract itself still refuses at send time (R9).
+ */
+export function onChainLimitHold(check: OnChainLimitCheck | null | undefined, reasoning: string): { rule: "workspace.onchain_limit_route" | "workspace.onchain_limit"; reasoning: string } | null {
+  if (!check) return null;
+  if (!check.covered) {
+    const what = check.uncoveredBecause === "eurc" ? "a payment in EURC" : "a payment to a payee on another chain";
+    return {
+      rule: "workspace.onchain_limit_route",
+      reasoning: `${reasoning} [guardrail override: the agent's spending limit is enforced on Arc, and ${what} cannot go through its contract — held for a person to approve]`,
+    };
+  }
+  if (check.verdict?.state === "refused") {
+    return {
+      rule: "workspace.onchain_limit",
+      reasoning: `${reasoning} [guardrail override: the spending limit contract on Arc would refuse this payment: ${onChainRefusalClause(check.verdict)} — nothing was sent; held for a person to approve]`,
+    };
+  }
+  return null;
 }
 
 /** The final code boundary between a model's recommendation and execution. */
@@ -203,6 +250,10 @@ export function enforceApGuardrails(input: ApGuardrailInput): ApGuardrailResult 
       reasoning: `${input.reasoning} [guardrail override: paying ${input.amount} USDC would take the agent past ${budgetClause(budget)}, ${budget.remaining} USDC left — held for a person to approve]`,
     };
   }
+  // The same limit on Arc (onchain spending limit R4, R7): after the code's own check, which speaks first (R8),
+  // and ahead of the EURC funding below, so no swap is made for a payment the contract cannot carry.
+  const onChain = input.action === "pay" ? onChainLimitHold(input.onChainLimit, input.reasoning) : null;
+  if (onChain) return { blocked: true, status: "held", rule: onChain.rule, reasoning: onChain.reasoning };
   // A EURC invoice is paid from EURC, never sent as USDC (E5). A payment the
   // wallet's EURC cannot cover waits for a person, unless the model chose to
   // fund it with the swap it was offered, within the swap's two bounds (EURC

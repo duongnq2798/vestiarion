@@ -1,4 +1,5 @@
 import { CYCLE_IN_PROGRESS_MS } from "./agent/balances";
+import { readSpendingLimitContract, setLimitsOnChain } from "./circle/spending-limit-setup";
 import { agentSpent, budgetRoom, parseBudgetForm, readOutflowBudget, type BudgetRoom, type BudgetSpent, type OutflowBudget } from "./agent/outflow-budget";
 import { currentOrgId } from "./context";
 import { db, unwrap } from "./dal";
@@ -11,19 +12,24 @@ import { appendLedgerEntryBestEffort } from "./ledger-best-effort";
  *
  * It is refused while a cycle is running, as a counterparty's limit is: the cycle read the limit
  * once when it began, so a change in the middle would apply to part of it only.
+ *
+ * While the limit is enforced on Arc (docs/superpowers/specs/2026-10-03-onchain-spending-limit-design.md R10),
+ * the contract is changed first, and the figures are saved only once Circle confirms it; removing both figures is
+ * refused then, since the contract always holds one.
  */
 
-export type AgentBudgetErrorCode = "invalid" | "unchanged" | "cycle_running";
+export type AgentBudgetErrorCode = "invalid" | "unchanged" | "cycle_running" | "enforced_needs_figure" | "onchain";
 
-const MESSAGES: Record<Exclude<AgentBudgetErrorCode, "invalid">, string> = {
+const MESSAGES: Record<Exclude<AgentBudgetErrorCode, "invalid" | "onchain">, string> = {
   unchanged: "That is already the agent's spending limit.",
   cycle_running: "A cycle is running. Try again in a minute, once it has finished.",
+  enforced_needs_figure: "Keep a daily or 7-day figure while the limit is enforced on Arc, or turn that off first.",
 };
 
 export class AgentBudgetError extends Error {
   constructor(
     readonly code: AgentBudgetErrorCode,
-    message: string = MESSAGES[code as Exclude<AgentBudgetErrorCode, "invalid">]
+    message: string = MESSAGES[code as Exclude<AgentBudgetErrorCode, "invalid" | "onchain">]
   ) {
     super(message);
     this.name = "AgentBudgetError";
@@ -73,6 +79,18 @@ export async function changeAgentBudget(input: {
   ) as Array<{ id: string }>;
   if (running.length > 0) throw new AgentBudgetError("cycle_running");
 
+  // The contract first, when the limit is enforced on Arc: the figures are saved only once it holds them (R10).
+  let onChain: { contract: string; txHash: string | null } | null = null;
+  const contract = await readSpendingLimitContract();
+  if (contract?.enforced) {
+    if (to.dailyUsdc === null && to.weeklyUsdc === null) throw new AgentBudgetError("enforced_needs_figure");
+    try {
+      onChain = await setLimitsOnChain(to);
+    } catch (error) {
+      throw new AgentBudgetError("onchain", error instanceof Error ? error.message : "Circle did not change the figures on the contract. The limit was not changed.");
+    }
+  }
+
   // A write that asks for nothing back: only its error says whether it happened.
   const write = await db()
     .from("agent_budgets")
@@ -87,7 +105,7 @@ export async function changeAgentBudget(input: {
     domain: "system",
     action: "agent_budget_changed",
     summary: summary(from, to),
-    detail: { by: input.actorId, from, to },
+    detail: { by: input.actorId, from, to, ...(onChain ? { onChain } : {}) },
   });
 
   return { from, to, loosened: budgetLoosened(from, to) };

@@ -149,7 +149,9 @@ function heldByOurConfiguration(entry: CounterpartyHistoryLedgerEntry): boolean 
     rule === "counterparty.high_risk" ||
     rule === "fx.rate_unavailable" ||
     rule === "treasury.insufficient_eurc" ||
-    rule === "workspace.outflow_budget"
+    rule === "workspace.outflow_budget" ||
+    rule === "workspace.onchain_limit" ||
+    rule === "workspace.onchain_limit_route"
   ) {
     return true;
   }

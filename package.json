@@ -27,6 +27,7 @@
     "org:adopt-env": "tsx scripts/org-adopt-env.ts",
     "numbers": "tsx scripts/open-numbers.ts",
     "escrow:compile": "tsx scripts/compile-escrow.ts",
+    "spending-limit:compile": "tsx scripts/compile-spending-limit.ts",
     "research:model-vs-policy": "tsx scripts/model-vs-policy.ts",
     "research:replay": "tsx scripts/replay-ap-decisions.ts"
   },

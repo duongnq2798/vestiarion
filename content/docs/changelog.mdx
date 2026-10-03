@@ -1,5 +1,15 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-03: The spending limit, enforced on Arc
+
+- **New ledger actions**, actor `human`, domain `system`, delivered to webhooks like every entry:
+  - `spending_limit_enforced`: a person enforced the agent's spending limit on Arc testnet. Its `detail` is `{ by, contract, agent, treasury, dailyUsdc, weeklyUsdc, deployTxHash, approveTxHash, setLimitsTxHash }`, where `agent` is the agent's own wallet and `treasury` the operating wallet.
+  - `spending_limit_unenforced`: a person turned it off. Its `detail` is `{ by, contract, txHash }`.
+- `agent_budget_changed` gains `onChain: { contract, txHash }` when the figures were changed on the contract too.
+- While the limit is enforced, the agent's payment decisions (`ap_*` and `milestone_*` entries, actor `agent`) carry `onChainLimit: { contract, agent, ref, covered, uncoveredBecause?, verdict }`. `covered` says whether the payment can go through the contract; `verdict` is the contract's answer before anything was sent: `{ state: "allowed" }`, `{ state: "refused", error, spent?, amount?, limit? }`, `{ state: "unreadable", reason }`, or `null` when it was not asked.
+- Two new values of `guardrailRule`: `workspace.onchain_limit` (the contract would refuse the payment) and `workspace.onchain_limit_route` (the payment is in EURC, or to another chain, which the contract cannot carry).
+- A payment sent through the contract has, as its transaction, a call to the contract's `pay(address,uint256,bytes32)` by the agent's wallet. Its logs hold the USDC transfer from the operating wallet to the payee.
+
 ## 2026-10-03: A workspace's only approver may approve what they entered
 
 - When the person who entered a payable, or added a milestone, is the only member of the workspace who may approve payments (the only owner, admin or approver), they may now approve it themselves. The `approval_paid` or `milestone_approval_paid` entry then carries `soleApprover: true` in its `detail`, and its `summary` ends "(entered and approved by the workspace's only approver)". An approval by anyone else carries neither. Once a second member may approve, the person who entered a record cannot approve it again.

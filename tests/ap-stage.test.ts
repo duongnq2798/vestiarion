@@ -7,6 +7,8 @@ import { runWith } from "@/lib/context";
 import { db } from "@/lib/dal";
 import { withOrg } from "@/lib/dal/scope";
 import { dueForDecision, obligationsDueBy, runApStage, type CycleLogLine } from "@/lib/agent/orchestrator";
+import { onChainLimitGate, type OnChainLimitGate } from "@/lib/agent/onchain-limit";
+import type { SpendingLimitVerdict } from "@/lib/spending-limit/onchain";
 import { CycleMetricsCollector } from "@/lib/agent/cycle-metrics";
 import type { DecideParams } from "@/lib/agent/decide";
 import type { BalanceSnapshot, ChainProvider, EarnResult, TransferParams, TransferResult } from "@/lib/circle";
@@ -176,6 +178,8 @@ function apFake(options: {
   /** The agent's spending limit row, and its payment decisions in the 7-day window (outflow budget spec). */
   budget?: { daily_usdc: string | null; weekly_usdc: string | null };
   agentPayments?: Array<Record<string, unknown>>;
+  /** The spending limit enforced on Arc, as the stage sees it (onchain spending limit spec); not enforced when absent. */
+  onChainLimit?: OnChainLimitGate;
 }) {
   const intents = paymentIntentsBackend(ORG);
   const fake = fakeSupabase((request) => {
@@ -204,7 +208,17 @@ function apFake(options: {
   const stage = (operatingBalance = 1000, reserveBalance = 0) =>
     runWith({ config, db: fake.client, fetch: fake.fetch }, () =>
       withOrg(ORG, () =>
-        runApStage({ db: db(), provider: chain, operating: { id: ACCOUNT_ID }, operatingBalance, reserveApy: 0.045, reserveBalance, metrics, lines })
+        runApStage({
+          db: db(),
+          provider: chain,
+          operating: { id: ACCOUNT_ID },
+          operatingBalance,
+          reserveApy: 0.045,
+          reserveBalance,
+          metrics,
+          lines,
+          onChainLimit: options.onChainLimit ?? onChainLimitGate({ read: async () => null }),
+        })
       )
     );
   return { fake, chain, metrics, lines, stage };
@@ -1161,5 +1175,93 @@ describe("the AP stage and the agent's spending limit (outflow budget spec)", ()
 
     expect(chain.transfers.map((t) => t.amount)).toEqual([300, 250]);
     expect(ledger(fake.requests).every((e) => !("outflowBudget" in (e.p_detail as Record<string, unknown>)))).toBe(true);
+  });
+});
+
+describe("the AP stage and the spending limit enforced on Arc (onchain spending limit spec)", () => {
+  const plain = { early_pay_discount_pct: null, discount_due_date: null };
+  const northwind = () => payable({ amount: "300", ...plain });
+  const payNow = () => model(() => ({ action: "pay", reasoning: "Matched and within the limit; paying now.", confidence: 0.9 }));
+  const LIMIT = { contract: "0x11a1700000000000000000000000000000001111", agentWalletId: "wallet-agent", agentAddress: "0xA9e7000000000000000000000000000000000A9e" };
+  const enforced = (verdict: SpendingLimitVerdict) => onChainLimitGate({ read: async () => LIMIT, verdict: async () => verdict });
+
+  it("pays through the contract from the agent's wallet when the contract allows it, and records the check", async () => {
+    today("2026-10-03T09:00:00.000Z");
+    payNow();
+    const { fake, chain, stage } = apFake({ book: [northwind()], onChainLimit: enforced({ state: "allowed" }) });
+
+    await stage();
+
+    expect(chain.transfers).toHaveLength(1);
+    expect(chain.transfers[0].spendingLimit).toMatchObject({ contract: LIMIT.contract, agentWalletId: "wallet-agent" });
+    expect(chain.transfers[0].spendingLimit?.ref).toMatch(/^0x[0-9a-f]{64}$/);
+    expect(invoicePatches(fake.requests)[0].body).toMatchObject({ status: "paid" });
+    const [entry] = ledger(fake.requests);
+    expect(entry.p_detail).toMatchObject({
+      guardrailBlocked: false,
+      onChainLimit: { contract: LIMIT.contract, agent: LIMIT.agentAddress, covered: true, verdict: { state: "allowed" } },
+    });
+  });
+
+  it("holds a payment the contract would refuse, sends nothing, and records the contract's figures", async () => {
+    today("2026-10-03T09:00:00.000Z");
+    payNow();
+    const refused = { state: "refused" as const, error: "OverDailyLimit", spent: 4.9, amount: 300, limit: 5 };
+    const { fake, chain, stage } = apFake({ book: [northwind()], onChainLimit: enforced(refused) });
+
+    await stage();
+
+    expect(chain.transfers).toEqual([]);
+    const [held] = invoicePatches(fake.requests);
+    expect(held.body).toMatchObject({ status: "held" });
+    expect((held.body as Record<string, string>).agent_reasoning).toContain(
+      "the spending limit contract on Arc would refuse this payment: 4.9 USDC already paid today against its 5 USDC daily limit — nothing was sent"
+    );
+    const [entry] = ledger(fake.requests);
+    expect(entry.p_detail).toMatchObject({ guardrailBlocked: true, guardrailRule: "workspace.onchain_limit", onChainLimit: { verdict: refused } });
+  });
+
+  it("holds for a person a payment the contract cannot carry, and sends nothing", async () => {
+    today("2026-10-03T09:00:00.000Z");
+    payNow();
+    const gate: OnChainLimitGate = {
+      check: async () => ({ contract: LIMIT.contract, agent: LIMIT.agentAddress, ref: `0x${"1".repeat(64)}`, covered: false, uncoveredBecause: "another_chain", verdict: null, payment: null }),
+    };
+    const { fake, chain, stage } = apFake({ book: [northwind()], onChainLimit: gate });
+
+    await stage();
+
+    expect(chain.transfers).toEqual([]);
+    expect(invoicePatches(fake.requests)[0].body).toMatchObject({ status: "held" });
+    expect(ledger(fake.requests)[0].p_detail).toMatchObject({ guardrailRule: "workspace.onchain_limit_route" });
+  });
+
+  it("lets the code's own limit speak first, and records the contract's verdict beside it", async () => {
+    today("2026-10-03T09:00:00.000Z");
+    payNow();
+    const refused = { state: "refused" as const, error: "OverDailyLimit", spent: 0, amount: 300, limit: 10 };
+    const { fake, chain, stage } = apFake({ book: [northwind()], budget: { daily_usdc: "10", weekly_usdc: null }, onChainLimit: enforced(refused) });
+
+    await stage();
+
+    expect(chain.transfers).toEqual([]);
+    expect(ledger(fake.requests)[0].p_detail).toMatchObject({
+      guardrailRule: "workspace.outflow_budget",
+      outflowBudget: { dailyUsdc: 10, remaining: 10 },
+      onChainLimit: { covered: true, verdict: refused },
+    });
+  });
+
+  it("does not ask the contract about a schedule: it is decided again on its day", async () => {
+    today("2026-10-03T09:00:00.000Z");
+    model(() => ({ action: "schedule", payOn: "2026-10-20", reasoning: "Pay on the due date.", confidence: 0.9 }));
+    const verdict = vi.fn(async () => ({ state: "allowed" as const }));
+    const { fake, chain, stage } = apFake({ book: [northwind()], onChainLimit: onChainLimitGate({ read: async () => LIMIT, verdict }) });
+
+    await stage();
+
+    expect(chain.transfers).toEqual([]);
+    expect(verdict).not.toHaveBeenCalled();
+    expect(ledger(fake.requests)[0].p_detail).not.toHaveProperty("onChainLimit");
   });
 });

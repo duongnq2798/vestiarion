@@ -48,6 +48,7 @@ const CRUD_UPDATE: Record<string, { column: string; expr: string }> = {
   agent_budgets: { column: "daily_usdc", expr: "coalesce(daily_usdc, 1) + 1" },
   recurring_payables: { column: "memo", expr: "'changed'" },
   policy_proposals: { column: "reasoning", expr: "'changed'" },
+  spending_limit_contracts: { column: "circle_contract_id", expr: "coalesce(circle_contract_id, '') || '-changed'" },
 };
 
 beforeAll(async () => {

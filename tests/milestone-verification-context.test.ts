@@ -86,3 +86,35 @@ describe("the contractor stage and the agent's spending limit (outflow budget sp
     expect(cycle.slice(cycle.indexOf('await stage("ap"'), cycle.indexOf('await stage("contractors"'))).toContain("budget,");
   });
 });
+
+describe("the contractor stage and the spending limit enforced on Arc (onchain spending limit R3, R5, R7, R8)", () => {
+  const source = readFileSync(path.join(process.cwd(), "src", "lib", "agent", "orchestrator.ts"), "utf8");
+  const stage = source.slice(source.indexOf("// --------------------------------------------------------------- 3. contractors"));
+  const release = stage.slice(stage.indexOf('if (decision.action === "release") {'), stage.indexOf("await writeDecision({"));
+
+  it("asks the contract about a release not from escrow, after the contractor's own checks", () => {
+    expect(release).toContain('["funded", "funding"].includes(String((milestone as { escrow_state?: string | null }).escrow_state ?? ""))');
+    expect(release).toContain('highRisk || overLimit || escrowed ? null : await onChainLimit.check({ sourceType: "milestone", sourceId: milestone.id, to: contractor.address, amount })');
+  });
+
+  it("lets the code's own limit speak first, then holds what the contract would refuse, before anything is planned", () => {
+    expect(release.indexOf("exceedsBudget(amount, outflowBudget)")).toBeLessThan(release.indexOf("} else if (onChainHold) {"));
+    expect(release.indexOf("} else if (onChainHold) {")).toBeLessThan(release.indexOf("planned.push("));
+    expect(release).toContain("guardrailRule = onChainHold.rule;");
+  });
+
+  it("sends a planned release through the contract, and records the check on the decision", () => {
+    expect(release).toContain("onChainLimit: onChainCheck });");
+    const dispatch = stage.slice(stage.indexOf("await releaseMilestones("), stage.indexOf("{ provider, operatingAccountId: operating.id, operatingBalance }"));
+    expect(dispatch).toContain("...(check?.payment ? { spendingLimit: check.payment } : {}),");
+    const entry = stage.slice(stage.indexOf("action: `milestone_${decision.action}`"));
+    expect(entry).toContain("...(onChainCheck ? { onChainLimit: onChainLimitRecord(onChainCheck) } : {}),");
+  });
+
+  it("shares one gate with the AP stage, and with the reconcile of a release in flight", () => {
+    const cycle = source.slice(source.indexOf("async function executeCycle("));
+    expect(cycle.indexOf("const onChainLimit = onChainLimitGate();")).toBeLessThan(cycle.indexOf('await stage("ap"'));
+    expect(cycle.slice(cycle.indexOf('await stage("ap"'), cycle.indexOf('await stage("contractors"'))).toContain("onChainLimit,");
+    expect(stage).toContain("{ db, provider, operating: operating ? { id: operating.id } : null, onChainLimit }");
+  });
+});
