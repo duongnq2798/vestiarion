@@ -5,7 +5,7 @@ import { runWith } from "@/lib/context";
 import { withOrg } from "@/lib/dal/scope";
 import { paymentNoticeEmail } from "@/lib/email/payment-notice";
 import { noticeEmailSchema } from "@/lib/intake-validation";
-import { changeCounterpartyNoticeEmail, maskEmail, NOTICE_WINDOW_DAYS, sendPaymentNotices } from "@/lib/payment-notices";
+import { changeCounterpartyNoticeEmail, maskEmail, sendPaymentNotices } from "@/lib/payment-notices";
 import { encryptSecret, parseMasterKeys } from "@/lib/secrets";
 import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 
