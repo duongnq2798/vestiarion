@@ -34,7 +34,7 @@ const config = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase
 
 const ORG_A = "0a0a0a0a-0000-4000-8000-00000000000a";
 const ORG_B = "0b0b0b0b-0000-4000-8000-00000000000b";
-const KEY_A: AuthenticatedKey = { keyId: "1a1a1a1a-0000-4000-8000-00000000001a", orgId: ORG_A, scopes: ["read"] };
+const KEY_A: AuthenticatedKey = { keyId: "1a1a1a1a-0000-4000-8000-00000000001a", orgId: ORG_A, scopes: ["read"], createdBy: null };
 const PRESENTED = `vxk_abcdefgh_${"A".repeat(43)}`;
 const AUTHORIZATION = `Bearer ${PRESENTED}`;
 const ORIGIN = "https://vestiarion.invalid";

@@ -137,7 +137,7 @@ vi.mock("@/lib/platform/api-keys", async (importOriginal) => {
 const config = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k", NEXT_PUBLIC_SUPABASE_ANON_KEY: "test-anon-key", SUPABASE_JWT_SECRET: "test-request-token-secret-at-least-32-characters" });
 
 const ORG = "0a0a0a0a-0000-4000-8000-00000000000a";
-const KEY: AuthenticatedKey = { keyId: "1a1a1a1a-0000-4000-8000-00000000001a", orgId: ORG, scopes: ["read"] };
+const KEY: AuthenticatedKey = { keyId: "1a1a1a1a-0000-4000-8000-00000000001a", orgId: ORG, scopes: ["read"], createdBy: null };
 const COUNTERPARTY_ID = "0b6c1c9e-4a4f-4a7e-9b1e-00000000c0de";
 const AT = "2026-09-29T00:00:00+00:00";
 

@@ -177,8 +177,8 @@ describe("generateApiKey and parseApiKey", () => {
     expect(parseApiKey(token)).toBeNull();
   });
 
-  it("offers only the read scope", () => {
-    expect(API_KEY_SCOPES).toEqual(["read"]);
+  it("offers read, and write beside it (write API R1)", () => {
+    expect(API_KEY_SCOPES).toEqual(["read", "write"]);
   });
 });
 
@@ -215,6 +215,15 @@ describe("createApiKey", () => {
     for (const leaked of [token, parsed.secret, parsed.prefix, sha256Hex(parsed.secret), "deploy bot"]) {
       expect(appendJson).not.toContain(leaked);
     }
+  });
+
+  it("issues read and write when asked, and records both scopes (write API R1)", async () => {
+    const { fake, run } = keysFake();
+    const { key } = await run(() => withOrg(ORG, () => createApiKey({ orgId: ORG, actorId: ACTOR, name: "billing sync", write: true })));
+
+    expect(rpcBodies(fake.requests, "create_api_key")[0]).toMatchObject({ p_scopes: ["read", "write"] });
+    expect(key.scopes).toEqual(["read", "write"]);
+    expect(rpcBodies(fake.requests, "append_ledger_entry")[0].p_detail).toEqual({ by: ACTOR, keyId: KEY_ID, scopes: ["read", "write"] });
   });
 
   it("asks the create RPC for the list columns only, never the hash", async () => {
@@ -414,15 +423,20 @@ describe("authenticateApiKey", () => {
 
     const result = await run(() => authenticateApiKey(`Bearer ${live.token}`));
 
-    expect(result).toEqual({ keyId: KEY_ID, orgId: ORG, scopes: ["read"] });
+    expect(result).toEqual({ keyId: KEY_ID, orgId: ORG, scopes: ["read"], createdBy: ACTOR });
     const lookup = fake.requests.find((request) => request.path === "/rest/v1/api_keys");
     expect(lookup?.method).toBe("GET");
     expect(lookup?.params.get("prefix")).toBe(`eq.${live.prefix}`);
-    expect(lookup?.params.get("select")).toBe("id,org_id,secret_hash,scopes,revoked_at");
+    expect(lookup?.params.get("select")).toBe("id,org_id,secret_hash,scopes,created_by,revoked_at");
     // Only the prefix leaves the process; the secret never does.
     const sent = everythingSent(fake.requests);
     expect(sent).not.toContain(live.token);
     expect(sent).not.toContain(parseApiKey(live.token)!.secret);
+  });
+
+  it("returns a read-and-write key with both scopes, and an issuer who is gone as null", async () => {
+    const { run } = authFake(storedKey(live.token, { scopes: ["read", "write"], created_by: null }));
+    expect(await run(() => authenticateApiKey(`Bearer ${live.token}`))).toEqual({ keyId: KEY_ID, orgId: ORG, scopes: ["read", "write"], createdBy: null });
   });
 
   it("returns null for a revoked key", async () => {

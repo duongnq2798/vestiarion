@@ -62,8 +62,8 @@ const config = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase
 
 const ORG_A = "0a0a0a0a-0000-4000-8000-00000000000a";
 const ORG_B = "0b0b0b0b-0000-4000-8000-00000000000b";
-const KEY_A: AuthenticatedKey = { keyId: "1a1a1a1a-0000-4000-8000-00000000001a", orgId: ORG_A, scopes: ["read"] };
-const KEY_B: AuthenticatedKey = { keyId: "1b1b1b1b-0000-4000-8000-00000000001b", orgId: ORG_B, scopes: ["read"] };
+const KEY_A: AuthenticatedKey = { keyId: "1a1a1a1a-0000-4000-8000-00000000001a", orgId: ORG_A, scopes: ["read"], createdBy: null };
+const KEY_B: AuthenticatedKey = { keyId: "1b1b1b1b-0000-4000-8000-00000000001b", orgId: ORG_B, scopes: ["read"], createdBy: null };
 const PLATFORM_TOKEN = "api-key-scope-platform-token";
 const COUNTERPARTY_ID = "0b6c1c9e-4a4f-4a7e-9b1e-00000000c0de";
 /** Well formed; `authenticateApiKey` is told which key it is in each test that uses it. */
