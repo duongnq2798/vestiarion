@@ -24,7 +24,7 @@ The first week's figures are as of 1 October 2026, 05:48 UTC; the second week's,
   - `decision`, the model's answer;
   - `referenceDecision`, the policy's answer;
   - `agreedWithReference`;
-  - when code refused the model, `guardrailRule` for a payable, or `guardrailBlocked` for a milestone.
+  - when code refused the model, `guardrailRule` for a payable, or `guardrailBlocked` for a milestone; for a treasury move code cut to the buffer, both, with `boundedTo`.
 
   Two answers agree when they choose the same action, and, for two schedules, the same day. A payable is compared after code has bounded the model's date.
 - **Guardrails** run after the model, whatever it says. For a payable, code refuses any payment, now or scheduled, that:
@@ -35,7 +35,7 @@ The first week's figures are as of 1 October 2026, 05:48 UTC; the second week's,
   - is in EURC with no rate or not enough EURC;
   - goes to a payee on another chain in EURC, or with no acceptable fee.
 
-  Code leaves the invoice held or flagged for a person. For a milestone, it checks the risk level and the limit. For both, a daily spending limit set on the workspace is checked last.
+  Code leaves the invoice held or flagged for a person. For a milestone, it checks the risk level and the limit. For both, a daily spending limit set on the workspace is checked last. For a treasury move, code cuts a redemption to what the 7-day buffer is short of and a sweep to the cash above it, since 2026-10-03.
 - **What people did** is in the ledger too: Approve and pay, Reject and Return on a payable; Pay now and Close without paying on a milestone. For each, the script finds the agent's last decision on the same invoice or milestone, and says why it waited for a person:
   - the agent stopped it as the written policy would, for example above a limit;
   - the model stopped it where the policy would have paid;

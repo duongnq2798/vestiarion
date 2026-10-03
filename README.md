@@ -67,7 +67,10 @@ is hard-coded into the interface:
    rather than after. The sweep only happens when it pays for itself: a sweep and the redemption
    that must follow it are two transactions, so the policy computes the yield earned over the days
    until the next obligation and compares it to the round-trip fee. Idle cash that would earn less
-   than it costs to move stays liquid (`src/lib/agent/treasury.ts`). Payments come first: before
+   than it costs to move stays liquid (`src/lib/agent/treasury.ts`). Code bounds every move the
+   agent decides: a redemption brings back at most what the operating wallet is short of that
+   buffer, and a sweep never takes cash the buffer needs; a bigger move is cut to the bound and
+   recorded as code's (`boundTreasuryMove`). Payments come first: before
    it decides any payment, each cycle redeems what the payables due today need beyond the
    operating balance, so no payment waits for cash sitting in the reserve, and an owner or admin
    can bring cash back at any hour with **Bring cash back** (`src/lib/agent/liquidity.ts`). USYC is
@@ -637,7 +640,9 @@ The agent's system prompt (`src/lib/agent/orchestrator.ts`) is the enforced poli
 suggestion — the orchestrator re-checks risk level and payment limit *after* the LLM decides and
 before executing a transfer, so a jailbroken or hallucinated "pay" decision on a flagged
 counterparty is blocked in code, not just discouraged in the prompt (see the
-`[guardrail override]` branch).
+`[guardrail override]` branch). The treasury stage does the same for the reserve: the model sizes a
+sweep or a redemption, and code cuts it to the 7-day buffer before anything moves
+(`boundTreasuryMove` in `src/lib/agent/treasury.ts`).
 
 ## License
 

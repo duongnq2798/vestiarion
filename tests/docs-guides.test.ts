@@ -118,6 +118,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["Get started", CHECKLIST],
   ],
   "guides/go-live": [
+    ["Code limited it", MAP],
     ["USYC reserve", "src/components/UsycReservePanel.tsx"],
     ["Turn on", "src/components/UsycReservePanel.tsx"],
     ["Bring cash back", "src/components/UsycReservePanel.tsx"],

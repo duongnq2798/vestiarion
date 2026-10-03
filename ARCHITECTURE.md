@@ -297,7 +297,12 @@ workspace is paused:
   deposit or withdrawal, holding instead of calling the payment provider
   and marking the ledger entry's detail with `heldBecause: "agent_paused"`
   (`src/lib/agent/pause.ts`). All three reserve moves share one call,
-  `moveTreasuryIfNotPaused` (`src/lib/agent/treasury-moves.ts`).
+  `moveTreasuryIfNotPaused` (`src/lib/agent/treasury-moves.ts`). The
+  treasury stage reaches it through `moveAgentTreasury`, which first bounds
+  the model's move by the 7-day buffer (`boundTreasuryMove`): a redemption
+  at most the shortfall, a sweep at most the cash above it, otherwise a
+  hold, recorded with `guardrailRule` and `boundedTo`. A person's **Bring
+  cash back** and the liquidity stage are not bounded.
 
 A person's own decisions in Approvals continue while the agent is paused —
 pausing is how the automation is stopped, and an approval is a deliberate

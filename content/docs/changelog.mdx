@@ -10,6 +10,14 @@ Changes to the API and webhooks that affect an integration, newest first. Change
 - A cycle's journal has a new stage, `collections`, between `proposals` and `notices`. It runs only when `receipts` completed.
 - `counterparty_notice_email_changed` now covers a counterparty's billing email, which also receives a client's reminders; its `summary` reads "Billing email for *name*: *address*", or "... removed".
 
+## 2026-10-03: The agent's treasury moves are bounded by the buffer
+
+- A treasury entry (`sweep_to_usyc`, `redeem_from_usyc`, `hold`, actor `agent`, domain `treasury`) whose move code cut gains `guardrailBlocked: true`, `guardrailRule` and `boundedTo: { action, amount }`. Its `action` and `summary` are what moved; `decision` stays the model's answer.
+  - `treasury.redeem_above_need`: the model asked to redeem more than the operating wallet is short of its 7-day buffer (the payables due within 7 days, plus 15%). Code redeems that shortfall, or holds when nothing is short.
+  - `treasury.sweep_below_buffer`: the model asked to sweep cash the buffer needs. Code sweeps what sits above the buffer, or holds when nothing does.
+- The cycle counts such a move in `cycle_complete`'s guardrail overrides, and the `treasury_actions` row records the amount that moved.
+- A person's **Bring cash back** and the `cash_brought_back` entries the cycle writes before payments are not bounded.
+
 ## 2026-10-03: The agent's decisions in Telegram
 
 - **New ledger actions**, domain `system`, delivered to webhooks like every entry:

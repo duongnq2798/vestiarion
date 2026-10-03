@@ -135,6 +135,8 @@ Every cycle, the agent decides whether idle USDC should earn in a reserve or com
 
    Each move is a real transaction, linked from its decision card on the console.
 
+   **How much moves** is set by the 7-day buffer: the payables due within 7 days, plus 15%. A redemption brings back what the operating wallet is short of that buffer, and a sweep takes only what sits above it. When the model asks for more, code moves only that much, and the decision card says **Code limited it**, with what the model asked for.
+
 **Payments come first.** Each cycle, before it decides any payment, the agent adds up the USDC payables due today. When the operating wallet holds less, it sells the USYC the difference needs first, so those payments are made in that cycle rather than held. The audit log records the move as `cash_brought_back`. A payment still held because the cash was not there is decided again at the first cycle after cash comes in: from the faucet, from a redemption, or from **Bring cash back**.
 
 **To bring cash back yourself**, an owner or admin opens **Settings** → **USYC reserve**, enters an amount in **Amount (USDC)**, or leaves it empty for everything, and chooses **Bring cash back**. The reserve wallet sells that much USYC at its latest price, at any hour, and the USDC comes back to the operating wallet. The audit log records it as `cash_brought_back`, by you. Vestiarion then runs a cycle, so payments waiting for cash are made within a minute, unless the agent is paused.
