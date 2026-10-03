@@ -1,4 +1,5 @@
 import { after } from "next/server";
+import { siteOrigin } from "@/lib/auth/env";
 import { handleInteraction } from "@/lib/slack/interactions";
 import { slackSettingsFromEnv } from "@/lib/slack/settings";
 
@@ -14,5 +15,5 @@ export const maxDuration = 300;
 export async function POST(request: Request): Promise<Response> {
   const settings = slackSettingsFromEnv();
   if (!settings) return Response.json({ error: "not_found" }, { status: 404 });
-  return handleInteraction(request, { settings, defer: (work) => after(work) });
+  return handleInteraction(request, { settings, origin: siteOrigin(), defer: (work) => after(work) });
 }

@@ -43,6 +43,13 @@ describe("addInvoice", () => {
     expect(mocks.runCycleSoon).toHaveBeenCalledWith({ orgId: ORG, userId: USER, sandbox: true, kind: "invoice_added" });
   });
 
+  it("adds a payable from Slack with the link it came through, and starts the agent", async () => {
+    mocks.createInvoice.mockResolvedValueOnce({ id: "inv-3", counterpartyName: "Test Freelancer A" });
+    await run(() => addInvoice(owner({ surface: { kind: "slack", linkId: "l-2", decisionsLimitUsdc: null } }), { invoice: invoice("payable"), document: null }));
+    expect(mocks.createInvoice).toHaveBeenCalledWith({ actorId: USER, invoice: invoice("payable"), document: null, via: "slack", linkId: "l-2" });
+    expect(mocks.runCycleSoon).toHaveBeenCalledWith({ orgId: ORG, userId: USER, sandbox: true, kind: "invoice_added" });
+  });
+
   it("names no surface from the console, and starts nothing for a receivable", async () => {
     mocks.createInvoice.mockResolvedValueOnce({ id: "inv-2", counterpartyName: "Acme" });
     await run(() => addInvoice(owner({ surface: { kind: "console" } }), { invoice: invoice("receivable"), document: null }));

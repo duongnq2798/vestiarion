@@ -138,6 +138,12 @@ export default function SlackPanel({
               {connectedOn(view.installedAt)}. The agent&apos;s decisions go to{" "}
               <strong className="font-semibold text-ink">{view.channelName ?? "the channel picked"}</strong>.
             </p>
+            {!view.canReadFiles && (
+              <p className="max-w-prose text-sm text-ink-2">
+                To add invoices from Slack, connect Slack again: Vestiarion now also asks to read the file someone chooses with Add invoice
+                to Vestiarion, and nothing else.
+              </p>
+            )}
             <div className="max-w-prose space-y-2">
               <p className="text-sm font-medium text-ink">Your Slack account</p>
               {view.youConnected ? (
@@ -161,7 +167,22 @@ export default function SlackPanel({
               </p>
               {canAdminister && <LimitForm orgSlug={orgSlug} limit={view.decisionsLimitUsdc} />}
             </div>
-            {canManage && <RemoveSlack orgSlug={orgSlug} />}
+            {canManage && (
+              <div className="max-w-prose space-y-3">
+                <p className="text-xs leading-5 text-ink-3">
+                  Reconnect to pick another channel, or to grant what Vestiarion asks of Slack. Members stay connected, and the limit stays.
+                </p>
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button asChild size="sm" variant="secondary">
+                    <a href={`/api/slack/install?org=${orgSlug}`}>
+                      <Hash aria-hidden />
+                      Reconnect Slack
+                    </a>
+                  </Button>
+                  <RemoveSlack orgSlug={orgSlug} />
+                </div>
+              </div>
+            )}
           </div>
         )}
       </Card>

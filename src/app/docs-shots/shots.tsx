@@ -929,7 +929,7 @@ export const DOCS_SHOTS = {
     render: () => (
       <SlackPanel
         orgSlug={SLUG}
-        view={{ installed: true, teamName: "Acme HQ", channelName: "#finance", installedAt: "2026-10-03T09:00:00Z", decisionsLimitUsdc: 5, youConnected: true }}
+        view={{ installed: true, teamName: "Acme HQ", channelName: "#finance", installedAt: "2026-10-03T09:00:00Z", decisionsLimitUsdc: 5, youConnected: true, canReadFiles: true }}
         canManage
         canAdminister
         notice={null}

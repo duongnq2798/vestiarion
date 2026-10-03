@@ -337,7 +337,7 @@ workspace's mode for that action, never from a link, a key or a button. A
   the permission map);
 - the surface must be one that may run it (`SURFACE_COMMANDS`): the console runs
   everything; Telegram adds invoices and decides nothing; Slack approves, rejects
-  or returns a payable and pauses the agent; the API adds records;
+  or returns a payable, pauses the agent and adds invoices; the API adds records;
 - a chat's decisions are off until an owner sets that chat's limit
   (`decisions_off`).
 
@@ -488,6 +488,18 @@ chat's rules and every check of the console's approval run, and rewrites the
 message to say who decided. Removing Slack from Settings uninstalls the app and
 deletes the install with its links; Slack's `app_uninstalled` and
 `tokens_revoked` events do the same.
+
+**An invoice can be added from Slack** (Slack design S15): the message shortcut
+**Add invoice to Vestiarion** sends the chosen message to the interactions
+route, and `src/lib/slack/intake.ts` reads its file, fetched only from
+`https://files.slack.com/` with the install's token under `files:read`
+(`slack_installs.scopes`, migration `0070`; an install made before asks for
+**Reconnect Slack**), or its text, with the same `readInvoiceDraft` as **From
+a document**. Whether a read may become a draft is the one rule every chat
+shares (`src/lib/invoice-document/chat-draft.ts`, which the Telegram bot uses
+too); a draft is held for an hour (`slack_drafts`, gone with its link) and
+answered to that member alone, and its **Add** runs `addInvoice` as them, for
+an owner or admin, whose entry names `via: "slack"` and the link.
 
 ## API
 

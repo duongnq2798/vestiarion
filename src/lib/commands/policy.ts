@@ -33,7 +33,7 @@ export const SURFACE_COMMANDS: Record<SurfaceKind, readonly CommandName[]> = {
   console: Object.keys(COMMAND_PERMISSIONS) as CommandName[],
   telegram: ["invoice.add"],
   api: ["invoice.add"],
-  slack: ["payable.approve", "payable.reject", "payable.return", "agent.pause"],
+  slack: ["payable.approve", "payable.reject", "payable.return", "agent.pause", "invoice.add"],
 };
 
 /** A person's decisions on what the agent stopped: off on a chat whose workspace allows none there (Slack design S8). */

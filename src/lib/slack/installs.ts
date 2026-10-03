@@ -26,6 +26,8 @@ export interface SlackInstall {
   notifiedSeq: number;
   /** Null: deciding payments from Slack is off (S8). */
   decisionsLimitUsdc: number | null;
+  /** The bot permissions Slack granted at install; none recorded for an install made before 0070 (S15). */
+  scopes: string[];
   botTokenEnc: SecretEnvelope;
   webhookUrlEnc: SecretEnvelope;
 }
@@ -43,12 +45,13 @@ interface InstallRow {
   installed_at: string;
   notified_seq: number | string;
   decisions_limit_usdc: number | string | null;
+  scopes?: string[] | null;
   bot_token_enc: SecretEnvelope;
   webhook_url_enc: SecretEnvelope;
 }
 
 const COLUMNS =
-  "id, org_id, team_id, team_name, app_id, bot_user_id, channel_id, channel_name, installed_by, installed_at, notified_seq, decisions_limit_usdc, bot_token_enc, webhook_url_enc";
+  "id, org_id, team_id, team_name, app_id, bot_user_id, channel_id, channel_name, installed_by, installed_at, notified_seq, decisions_limit_usdc, scopes, bot_token_enc, webhook_url_enc";
 const TOKEN_COLUMN = "slack_installs.bot_token_enc";
 const WEBHOOK_COLUMN = "slack_installs.webhook_url_enc";
 
@@ -65,6 +68,7 @@ const toInstall = (row: InstallRow): SlackInstall => ({
   installedAt: row.installed_at,
   notifiedSeq: Number(row.notified_seq),
   decisionsLimitUsdc: row.decisions_limit_usdc === null ? null : Number(row.decisions_limit_usdc),
+  scopes: row.scopes ?? [],
   botTokenEnc: row.bot_token_enc,
   webhookUrlEnc: row.webhook_url_enc,
 });
@@ -133,6 +137,7 @@ export async function saveInstall(
     installed_by: installedBy,
     installed_at: new Date().toISOString(),
     notified_seq: await ledgerHead(),
+    scopes: grant.scopes,
     bot_token_enc: encryptSecret(grant.botToken, { orgId, column: TOKEN_COLUMN }, keys),
     webhook_url_enc: encryptSecret(grant.webhookUrl, { orgId, column: WEBHOOK_COLUMN }, keys),
   };

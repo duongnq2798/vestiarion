@@ -1,6 +1,8 @@
 import type { ActivityItem } from "../agent-activity";
 import { orgHref } from "../auth/org-paths";
 import type { CommandOutcome } from "../commands/outcome";
+import { READER_NAMES } from "../invoice-document/chat-draft";
+import type { InvoiceDraftRead } from "../invoice-document/draft";
 import type { VerificationResult } from "../ledger";
 import { shortenAddresses } from "../telegram/messages";
 import type { TodayFacts, WaitingFact } from "../telegram/today";
@@ -244,4 +246,66 @@ export function connectAnswer(url: string): SlackMessage {
     text,
     blocks: [section(text), { type: "actions", elements: [urlButton("vx_connect", "Connect", url)] }],
   };
+}
+
+/**
+ * An invoice read from what someone chose with "Add invoice to Vestiarion" (S15), for them alone: every field to check
+ * before they add it, and the buttons that add it, with the goods received or not, or drop it. Each carries the draft.
+ */
+export function draftAnswer(read: InvoiceDraftRead, draftId: string): SlackMessage {
+  const { draft } = read;
+  const from = read.counterpartyName ?? draft.vendorName ?? "a vendor";
+  const lines = [
+    `*Read the invoice from ${mrkdwn(from)}.* Check it before adding it as a payable.`,
+    `Amount: ${amountText(draft.amount ?? 0, draft.currency ?? "USDC")}`,
+    `Due: ${mrkdwn(draft.dueDate ?? "not read")}`,
+    `Purchase order: ${mrkdwn(draft.poReference ?? "none")}`,
+  ];
+  if (draft.earlyPayDiscountPct && draft.discountDeadline) {
+    lines.push(`Early payment: ${mrkdwn(`${draft.earlyPayDiscountPct}% if paid by ${draft.discountDeadline}`)}`);
+  }
+  if (draft.invoiceNumber) lines.push(`Invoice number: ${mrkdwn(draft.invoiceNumber)}`);
+  if (draft.memo) lines.push(`Memo: ${mrkdwn(clip(draft.memo, 300))}`);
+  for (const warning of read.warnings) lines.push(`:warning: ${mrkdwn(clip(warning, 300))}`);
+  if (read.modelNote) lines.push(`_${mrkdwn(clip(`The model's note: ${read.modelNote}`, 300))}_`);
+  const button = (actionId: string, label: string, primary = false) => ({
+    type: "button",
+    action_id: actionId,
+    text: plain(label),
+    value: draftId,
+    ...(primary ? { style: "primary" } : {}),
+  });
+  return {
+    response_type: "ephemeral",
+    text: `Read the invoice from ${mrkdwn(from)}. Check it before adding it as a payable.`,
+    blocks: [
+      section(lines.join("\n")),
+      {
+        type: "actions",
+        block_id: `draft-${draftId}`,
+        elements: [button("vx_draft_received", "Add, goods received", true), button("vx_draft_not_received", "Add, not received yet"), button("vx_draft_cancel", "Cancel")],
+      },
+      context(`Read by ${READER_NAMES[read.reader]}. Only you see this. The agent decides once it is added; nothing is paid from here.`),
+    ],
+  };
+}
+
+/** An invoice read from what someone chose that cannot be added from Slack as it was read, and where to finish it (S15). */
+export function missingAnswer(read: InvoiceDraftRead, reasons: string[], invoicesUrl: string): SlackMessage {
+  const from = read.counterpartyName ?? read.draft.vendorName;
+  return textAnswer(
+    [
+      `*Read the invoice${from ? ` from ${mrkdwn(from)}` : ""}*, but it cannot be added from here:`,
+      ...reasons.map((reason) => `• ${mrkdwn(reason)}`),
+      `Add it in Vestiarion, where you can fix each field: ${link(invoicesUrl, "AP / AR")}.`,
+    ].join("\n")
+  );
+}
+
+/** A draft's button after its hour, or after the draft was added or dropped (S15). */
+export const DRAFT_USED = "This draft was already used or has expired. Choose *Add invoice to Vestiarion* on the message again to read it anew.";
+
+/** What replaces a draft's answer once its button was pressed: the outcome, for the person who pressed it. */
+export function draftOutcome(text: string): SlackMessage {
+  return { replace_original: true, text, blocks: [section(text)] };
 }

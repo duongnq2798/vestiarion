@@ -1,5 +1,11 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-03: Add an invoice from Slack
+
+- `create_invoice` entries gain `via: "slack"` and `linkId` when an owner or admin added the payable from a message in Slack with **Add invoice to Vestiarion**. Such an entry carries `document` as one added from a document on AP / AR does, with `changed: []`.
+- The Slack app asks for one more permission, `files:read`, to read the file someone chooses. A Slack connected before this is connected again from **Settings** with **Reconnect Slack**; its members stay connected.
+- Nothing changes in `/api/v1`.
+
 ## 2026-10-03: A member's API keys end with their membership
 
 - A workspace API key now works only while the person who created it is a member of the workspace. When they leave, are removed by an owner or an admin, or delete their account, every active key they created in that workspace, read-only or read-and-write, is revoked in the same step, and from then on answers `401 unauthorized` on `/api/v1` and on MCP, like any revoked key. Keys that other members created, and the person's keys in workspaces they still belong to, keep working.

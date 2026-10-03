@@ -3,7 +3,7 @@ import { memberActor } from "../commands/actor";
 import { addInvoice } from "../commands/invoices";
 import { gate } from "../commands/policy";
 import { platformDb, unwrap } from "../dal";
-import { invoiceFormRefusal, invoiceInputSchema } from "../intake-validation";
+import { chatDraftOf, invoiceOfDraft, type StoredChatDraft } from "../invoice-document/chat-draft";
 import { readInvoiceDraft, type InvoiceDraftRead } from "../invoice-document/draft";
 import { DocumentReadError, type DocumentInput } from "../invoice-document/read";
 import { takeDocumentReadToken } from "../rate-limit";
@@ -27,47 +27,11 @@ export interface IntakeDeps {
   now?: () => Date;
 }
 
-/** The form's fields as text, the way the invoice form posts them: what a draft keeps until its tap. */
-interface DraftFields {
-  counterpartyId: string;
-  amount: string;
-  currency: string;
-  memo: string;
-  poReference: string;
-  dueDate: string;
-  earlyPayDiscountPct: string;
-  discountDeadline: string;
-}
-
-interface StoredDraft {
-  draft: DraftFields;
-  document: { kind: "pdf" | "email" | "text"; sha256: string; reader: InvoiceDraftRead["reader"] };
-}
-
 /** Why a member cannot add invoices from the chat: no longer a member, or a role without records.write (R7). */
 export function roleRefusal(role: OrgRole | null, workspaceName: string): string {
   return role === null
     ? `You are no longer a member of ${escapeHtml(workspaceName)}.`
     : `Only an owner or admin can add invoices. Your role in ${escapeHtml(workspaceName)} is ${role}.`;
-}
-
-/** Why a read cannot become a payable from the chat, in words; empty when it can. */
-function missing(read: InvoiceDraftRead, fields: DraftFields | null): string[] {
-  const reasons: string[] = [];
-  if (!read.draft.counterpartyId) {
-    reasons.push(
-      read.draft.vendorName
-        ? `no counterparty in this workspace matches “${read.draft.vendorName}”`
-        : "no counterparty in this workspace matches the invoice's vendor"
-    );
-  }
-  if (!read.draft.amount) reasons.push("no amount could be read");
-  if (!read.draft.dueDate) reasons.push("no due date could be read");
-  if (reasons.length === 0 && fields) {
-    const parsed = invoiceInputSchema.safeParse({ direction: "payable", ...fields, goodsReceived: false });
-    if (!parsed.success) reasons.push(invoiceFormRefusal(parsed.error).message);
-  }
-  return reasons;
 }
 
 /** Reads what the member sent into a draft, and offers to add it; or says why it cannot be added from here. */
@@ -97,25 +61,12 @@ export async function readDraftForChat(link: TelegramLink, input: DocumentInput,
     return;
   }
 
-  const fields: DraftFields | null = read.draft.counterpartyId
-    ? {
-        counterpartyId: read.draft.counterpartyId,
-        amount: read.draft.amount ?? "",
-        currency: read.draft.currency ?? "USDC",
-        memo: read.draft.memo ?? "",
-        poReference: read.draft.poReference ?? "",
-        dueDate: read.draft.dueDate ?? "",
-        earlyPayDiscountPct: read.draft.earlyPayDiscountPct ?? "",
-        discountDeadline: read.draft.discountDeadline ?? "",
-      }
-    : null;
-  const reasons = missing(read, fields);
-  if (reasons.length > 0 || !fields) {
+  const { reasons, stored } = chatDraftOf(read);
+  if (!stored) {
     await client.sendMessage(link.chatId, missingMessage(read, reasons, orgUrl(deps.origin, workspace.slug, "/invoices")));
     return;
   }
 
-  const stored: StoredDraft = { draft: fields, document: { kind: read.document.kind, sha256: read.document.sha256, reader: read.reader } };
   const draft = unwrap(
     await platformDb()
       .from("telegram_drafts")
@@ -144,7 +95,7 @@ export interface DraftTap {
 const ownTap = (link: TelegramLink, tap: DraftTap) => tap.chatId === link.chatId && tap.fromId === link.chatId;
 
 /** Uses a draft up: once, before its hour is over, and only through the link it was read for. */
-async function claimDraft(link: TelegramLink, draftId: string, now: Date): Promise<StoredDraft | null> {
+async function claimDraft(link: TelegramLink, draftId: string, now: Date): Promise<StoredChatDraft | null> {
   const rows = unwrap(
     await platformDb()
       .from("telegram_drafts")
@@ -154,7 +105,7 @@ async function claimDraft(link: TelegramLink, draftId: string, now: Date): Promi
       .is("used_at", null)
       .gt("expires_at", now.toISOString())
       .select("draft, document")
-  ) as StoredDraft[];
+  ) as StoredChatDraft[];
   return rows[0] ?? null;
 }
 
@@ -179,9 +130,9 @@ export async function addDraft(link: TelegramLink, tap: DraftTap, deps: IntakeDe
     return "used";
   }
 
-  const parsed = invoiceInputSchema.safeParse({ direction: "payable", ...stored.draft, goodsReceived: tap.goodsReceived });
-  const added = parsed.success ? await addInvoice(actor, { invoice: parsed.data, document: { ...stored.document, changed: [] } }) : null;
-  if (!parsed.success || !added?.ok) {
+  const invoice = invoiceOfDraft(stored, tap.goodsReceived);
+  const added = invoice ? await addInvoice(actor, { invoice, document: { ...stored.document, changed: [] } }) : null;
+  if (!invoice || !added?.ok) {
     const reason = added && !added.ok && added.code !== "counterparty_not_found" ? escapeHtml(added.message) : null;
     await client.editMessageText(
       tap.chatId,
@@ -191,7 +142,6 @@ export async function addDraft(link: TelegramLink, tap: DraftTap, deps: IntakeDe
     return "failed";
   }
 
-  const invoice = parsed.data;
   await client.editMessageText(
     tap.chatId,
     tap.messageId,

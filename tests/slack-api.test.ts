@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { exchangeCode, postToResponseUrl, postToWebhook, uninstallApp } from "@/lib/slack/api";
+import { downloadSlackFile, exchangeCode, postToResponseUrl, postToWebhook, uninstallApp } from "@/lib/slack/api";
 
 /**
  * The few calls Vestiarion makes to Slack (Slack design S3, S7, S10, S13): exchanging an install's code, uninstalling,
@@ -57,8 +57,14 @@ describe("exchangeCode", () => {
       grant: {
         teamId: "T0TEAM", teamName: "Northstar", appId: "A0APP", botUserId: "U0BOT", botToken: "xoxb-1-2-abc",
         installerSlackUserId: "U0LINH", webhookUrl: WEBHOOK, channelId: "C0FINANCE", channelName: "#finance",
+        scopes: ["commands", "incoming-webhook"],
       },
     });
+  });
+
+  it("keeps the permissions Slack granted, so a file is read only once files:read is among them", async () => {
+    const result = await exchangeCode(SETTINGS, "x", "r", fakeFetch(() => json({ ...GRANT, scope: "commands, incoming-webhook,files:read" })).fetchImpl);
+    expect(result).toMatchObject({ ok: true, grant: { scopes: ["commands", "incoming-webhook", "files:read"] } });
   });
 
   it("refuses what Slack refused, an enterprise-wide install, and an install with no channel", async () => {
@@ -116,5 +122,48 @@ describe("posting", () => {
     expect(await postToWebhook("http://hooks.slack.com/services/x", { text: "x" }, fetchImpl)).toEqual({ ok: false, status: 0, error: "not_slack" });
     expect(sent).toEqual([]);
     expect(await postToResponseUrl("https://hooks.slack.com/actions/T0/1/abc", { text: "x", replace_original: true }, fetchImpl)).toMatchObject({ ok: true });
+  });
+});
+
+describe("downloadSlackFile", () => {
+  const FILE = "https://files.slack.com/files-pri/T0TEAM-F0FILE/download/invoice.pdf";
+  const PDF = new Uint8Array([37, 80, 68, 70, 45, 49, 46, 55]);
+  const pdf = (bytes: Uint8Array = PDF, headers: Record<string, string> = {}) =>
+    new Response(new Blob([bytes as Uint8Array<ArrayBuffer>]), { status: 200, headers: { "content-type": "application/pdf", ...headers } });
+
+  it("fetches the file from Slack's file host with the bot token", async () => {
+    const { sent, fetchImpl } = fakeFetch(() => pdf());
+    const result = await downloadSlackFile(FILE, "xoxb-1-2-abc", 4_000_000, fetchImpl);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].url).toBe(FILE);
+    expect(new Headers(sent[0].init.headers).get("authorization")).toBe("Bearer xoxb-1-2-abc");
+    expect(result).toEqual({ ok: true, bytes: PDF, contentType: "application/pdf" });
+  });
+
+  it("asks nothing of a host that is not Slack's own file host", async () => {
+    const { sent, fetchImpl } = fakeFetch(() => pdf());
+    for (const url of ["https://example.com/invoice.pdf", "https://files.slack.com.example.com/x.pdf", "http://files.slack.com/x.pdf"]) {
+      expect(await downloadSlackFile(url, "xoxb-1-2-abc", 4_000_000, fetchImpl)).toEqual({ ok: false, reason: "not_slack" });
+    }
+    expect(sent).toHaveLength(0);
+  });
+
+  it("says it has no access when Slack refuses, or answers with its sign-in page", async () => {
+    const refused = fakeFetch(() => new Response("forbidden", { status: 403 })).fetchImpl;
+    expect(await downloadSlackFile(FILE, "xoxb-1-2-abc", 4_000_000, refused)).toEqual({ ok: false, reason: "no_access" });
+    const signIn = fakeFetch(() => new Response("<!DOCTYPE html><html>Sign in</html>", { status: 200, headers: { "content-type": "text/html; charset=utf-8" } })).fetchImpl;
+    expect(await downloadSlackFile(FILE, "xoxb-1-2-abc", 4_000_000, signIn)).toEqual({ ok: false, reason: "no_access" });
+  });
+
+  it("refuses a file over the limit, whether Slack says so first or not", async () => {
+    const declared = fakeFetch(() => pdf(PDF, { "content-length": "5000000" })).fetchImpl;
+    expect(await downloadSlackFile(FILE, "xoxb-1-2-abc", 4_000_000, declared)).toEqual({ ok: false, reason: "too_large" });
+    const actual = fakeFetch(() => pdf(new Uint8Array(12))).fetchImpl;
+    expect(await downloadSlackFile(FILE, "xoxb-1-2-abc", 10, actual)).toEqual({ ok: false, reason: "too_large" });
+  });
+
+  it("reports Slack unreachable, without throwing", async () => {
+    const down = fakeFetch(() => Promise.reject(new Error("socket hang up"))).fetchImpl;
+    expect(await downloadSlackFile(FILE, "xoxb-1-2-abc", 4_000_000, down)).toEqual({ ok: false, reason: "unreachable" });
   });
 });

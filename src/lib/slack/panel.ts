@@ -14,6 +14,8 @@ export type SlackPanelView =
       installedAt: string;
       decisionsLimitUsdc: number | null;
       youConnected: boolean;
+      /** Whether Slack granted files:read, which adding an invoice from Slack needs (S15). */
+      canReadFiles: boolean;
     };
 
 export async function slackPanelView(orgId: string, userId: string): Promise<SlackPanelView> {
@@ -27,5 +29,6 @@ export async function slackPanelView(orgId: string, userId: string): Promise<Sla
     installedAt: install.installedAt,
     decisionsLimitUsdc: install.decisionsLimitUsdc,
     youConnected: link !== null,
+    canReadFiles: install.scopes.includes("files:read"),
   };
 }
