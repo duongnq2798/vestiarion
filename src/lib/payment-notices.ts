@@ -71,6 +71,16 @@ export async function sendPaymentNotices(
   const send = options.send ?? ((message: EmailMessage) => sendEmail(message, settings));
   const now = options.now ?? Date.now();
 
+  // Who wants notices at all, usually nobody: without them, no payment is read. The earliest time an address was set
+  // bounds the payments worth reading (R7), so a busy workspace's older payments never crowd out a new one.
+  const recipients = unwrap(
+    await db().from("counterparties").select("id, name, notice_email, notice_email_set_at").not("notice_email", "is", null).not("notice_email_set_at", "is", null)
+  ) as Array<{ id: string; name: string; notice_email: string | null; notice_email_set_at: string | null }>;
+  if (recipients.length === 0) return [];
+  const windowStart = now - NOTICE_WINDOW_DAYS * 86_400_000;
+  const earliestSet = Math.min(...recipients.map((row) => Date.parse(row.notice_email_set_at as string)));
+  const since = new Date(Math.max(windowStart, Number.isFinite(earliestSet) ? earliestSet : windowStart)).toISOString();
+
   const due = (unwrap(
     await db()
       .from("payment_intents")
@@ -78,9 +88,10 @@ export async function sendPaymentNotices(
       .eq("status", "confirmed")
       .eq("provider_mode", "live")
       .is("notice_sent_at", null)
-      .gt("confirmed_at", new Date(now - NOTICE_WINDOW_DAYS * 86_400_000).toISOString())
-      .order("confirmed_at", { ascending: true })
-      .limit(NOTICES_PER_RUN * 3)
+      .gte("confirmed_at", since)
+      // Newest first: what was just paid is told first, whatever came before it.
+      .order("confirmed_at", { ascending: false })
+      .limit(NOTICES_PER_RUN * 5)
   ) as DueIntent[])
     // Payments made on Arc testnet, with their transaction: a payout to another chain gets none yet (R3).
     .filter((intent) => (intent.chain ?? "ARC-TESTNET") === "ARC-TESTNET" && !intent.payout_route && /^0x[0-9a-fA-F]{64}$/.test(intent.tx_hash ?? ""));
@@ -101,16 +112,7 @@ export async function sendPaymentNotices(
   for (const row of unwrap(milestones) as Array<{ id: string; contractor_id: string; title: string }>) {
     sources.set(row.id, { counterpartyId: row.contractor_id, what: row.title, domain: "contractor", key: "milestoneId" });
   }
-  const counterpartyIds = [...new Set([...sources.values()].map((source) => source.counterpartyId))];
-  const counterparties = new Map(
-    (
-      unwrap(
-        counterpartyIds.length > 0
-          ? await db().from("counterparties").select("id, name, notice_email, notice_email_set_at").in("id", counterpartyIds)
-          : { data: [], error: null }
-      ) as Array<{ id: string; name: string; notice_email: string | null; notice_email_set_at: string | null }>
-    ).map((row) => [row.id, row])
-  );
+  const counterparties = new Map(recipients.map((row) => [row.id, row]));
 
   const origin = options.origin ?? siteOrigin();
   const lines: NoticeLine[] = [];

@@ -87,6 +87,8 @@ function fake(options: {
     if (request.path === "/rest/v1/counterparties" && request.method === "GET") {
       const email = options.noticeEmail === undefined ? "linh@example.com" : options.noticeEmail;
       const setAt = options.noticeEmailSetAt === undefined ? "2026-10-01T00:00:00Z" : options.noticeEmailSetAt;
+      // As PostgREST answers `notice_email=not.is.null&notice_email_set_at=not.is.null`.
+      if (email === null || setAt === null) return { body: [] };
       return {
         body: [
           { id: VENDOR, name: "Northstar Studio", notice_email: email, notice_email_set_at: setAt },
@@ -119,7 +121,10 @@ describe("sending payment notices", () => {
     expect(due.params.get("status")).toBe("eq.confirmed");
     expect(due.params.get("provider_mode")).toBe("eq.live");
     expect(due.params.get("notice_sent_at")).toBe("is.null");
-    expect(due.params.get("confirmed_at")).toBe(`gt.${new Date(NOW - NOTICE_WINDOW_DAYS * 86_400_000).toISOString()}`);
+    // From when the address was set, inside the three days (R4, R7).
+    expect(due.params.get("confirmed_at")).toBe("gte.2026-10-01T00:00:00.000Z");
+    // Newest first, so a busy workspace's older payments never crowd out the one just made.
+    expect(due.params.get("order")).toBe("confirmed_at.desc");
     // Claimed before the send, only while unclaimed (R4).
     const [claim] = patches(client);
     expect(claim.params.get("notice_sent_at")).toBe("is.null");
@@ -146,6 +151,22 @@ describe("sending payment notices", () => {
 
     expect(send.mock.calls[0][0].text).toContain("Northstar paid you 1.00 USDC on Arc testnet for Landing page.");
     expect(appends(client)[0]).toMatchObject({ p_domain: "contractor", p_detail: expect.objectContaining({ milestoneId: MILESTONE, counterpartyId: CONTRACTOR }) });
+  });
+
+  it("reads no payment when no counterparty wants notices, and only what came after the earliest address was set", async () => {
+    const none = fake({ noticeEmail: null });
+    const send = vi.fn();
+    expect(await run(none, () => sendPaymentNotices({ now: NOW, send }))).toEqual([]);
+    const recipients = none.requests.find((r) => r.path === "/rest/v1/counterparties")!;
+    expect(recipients.params.get("notice_email")).toBe("not.is.null");
+    expect(recipients.params.get("notice_email_set_at")).toBe("not.is.null");
+    expect(none.requests.some((r) => r.path === "/rest/v1/payment_intents")).toBe(false);
+
+    // An address set an hour ago: only payments since then are read.
+    const recent = fake({ noticeEmailSetAt: "2026-10-03T02:30:00Z" });
+    await run(recent, () => sendPaymentNotices({ now: NOW, send: vi.fn().mockResolvedValue({ sent: true, id: "re_3" }) }));
+    const due = recent.requests.find((r) => r.path === "/rest/v1/payment_intents" && r.method === "GET")!;
+    expect(due.params.get("confirmed_at")).toBe("gte.2026-10-03T02:30:00.000Z");
   });
 
   it("emails no one from a sandbox, whose payments are simulated", async () => {
