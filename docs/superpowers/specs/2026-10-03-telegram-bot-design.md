@@ -1,6 +1,6 @@
 # Telegram bot: the agent's decisions in a chat, and invoices sent to it
 
-Date: 2026-10-03. Status: implemented on `feat/telegram-bot` (PR #166); rollout pending. Decided under the standing autonomy grant.
+Date: 2026-10-03. Status: merged in PR #166 and rolled out on 2026-10-03 (record in §9). Decided under the standing autonomy grant.
 
 ## 1. The problem
 
@@ -158,3 +158,28 @@ scripts/telegram-setup.ts         npm run telegram:setup
    payable in the console: the decision should arrive in the chat within a minute. Then send a PDF invoice to the bot,
    tap **Add, goods received**, and check that the payable is decided and the decision arrives in the chat.
 4. Record the ledger entries and the transaction here.
+
+## 9. Rollout record (2026-10-03, UTC)
+
+- **Migration 0064** was applied by the partner and probed read-only: the three tables have RLS on, no policy, and no
+  access for `anon`, `authenticated` or `vestiarion_tenant`; codes and links cascade with `memberships`, drafts with their
+  link; `telegram_links_active_chat` is a partial unique index; both functions are security definer with
+  `search_path ""`, executable by `service_role` only. The earlier redefinitions the replay could revert (0038, 0040,
+  0043, 0061, 0062, 0063) were intact.
+- **PR #166** merged as `bdb2796` at 07:31. The partner made @vestiarion_bot with @BotFather, set the three variables,
+  and ran `npm run telegram:setup`: the webhook is `https://www.vestiarion.xyz/api/telegram`, with 6 commands in the
+  menu. The route answers 401 without the secret header and with a wrong one.
+- **testnet-2** (live):
+  - 07:36:08 the partner connected a chat from **Members**: ledger #1049 `telegram_connected` (`@du***`); one code
+    made and used.
+  - 07:37:58 a payable added on AP / AR, Centronex 0.10 USDC (#1050). The agent brought 0.099999 USDC back from the
+    reserve (#1053) and paid it (#1054): tx `0x49efd505030a614003b1e586f6c75999d88dc40a9b1c23484e87242ba4da6330`,
+    confirmed 07:38:29.
+  - 07:42:49 a second payable on AP / AR, Centronex 0.50 USDC (#1058), paid (#1062): tx
+    `0x2ca1421b8306bfec79c03d0e8295ebf151d37312b68e1c3fb5ec6a2fe48692e5`, confirmed 07:43:22.
+  - A PDF invoice (CX-TG-001, Centronex, 0.40 USDC, PO-TG-001) sent to the bot was read into a draft; the partner
+    tapped **Add, goods received**: #1066 `create_invoice` with `via: "telegram"` at 07:44:25, paid by the agent
+    (#1069): tx `0x5bdb8ded52127dc5f22a928b7b8daa7319b70fab052f6adfeeb06747aa3133ad`, confirmed 07:44:48, 23 s after
+    the tap. One draft made and used.
+  - Each of the three event cycles (07:38:05, 07:42:54, 07:44:29) recorded the `telegram` stage as completed, and the
+    chat's cursor stood at #1071 afterwards: it moves past a decision only once Telegram has accepted the message.
