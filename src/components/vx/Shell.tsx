@@ -1,5 +1,5 @@
-import { Clock } from "lucide-react";
 import type { ReactNode } from "react";
+import { AgentActivity } from "@/components/AgentActivity";
 import { Badge } from "@/components/ui/Badge";
 import { screeningMode } from "@/lib/compliance";
 import type { CycleClockMode } from "@/lib/clock";
@@ -43,10 +43,8 @@ export function ProductShell({
           <Badge size="sm" className="font-mono uppercase tracking-[0.11em] text-ink-2">
             {clockMode === "simulate" ? `Day ${day}` : "Wall clock"}
           </Badge>
-          <span className="inline-flex items-center gap-1.5">
-            <Clock aria-hidden className="size-3.5" />
-            {lastCycleAt ? `Last cycle ${new Date(lastCycleAt).toLocaleString()}` : "No cycle recorded yet"}
-          </span>
+          {/* When the last cycle ran, or that one is running now; and a toast for each decision as it lands. */}
+          <AgentActivity lastCycleAt={lastCycleAt} />
         </p>
         <ProvenanceBar legs={legs} compact />
       </div>

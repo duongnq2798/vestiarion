@@ -7,6 +7,7 @@ import AgentPauseControl from "@/components/AgentPauseControl";
 import { GatewayPanel } from "@/components/GatewayPanel";
 import { ServiceBudgetPanel } from "@/components/ServiceBudgetPanel";
 import { SampleDataLoaded, SampleDataOffer } from "@/components/SampleDataPanel";
+import { WaitingPayableAction } from "@/components/WaitingPayableAction";
 import { CycleReport } from "@/components/vx/CycleReport";
 import { DecisionCard } from "@/components/vx/DecisionCard";
 import { GettingStarted } from "@/components/vx/GettingStarted";
@@ -22,6 +23,7 @@ import { AccountsList, BalanceTile, balanceTileMode, ForecastPanel, MoreLink, St
 import type { Account, Forecast } from "@/components/vx/types";
 import { agentBudgetStatus } from "@/lib/agent-budget";
 import { listWaitingPayables } from "@/lib/agent/approvals";
+import { addedSince, latestDecision, recordedFacts } from "@/lib/added-details";
 import { requireMembership } from "@/lib/auth/membership";
 import { orgHref } from "@/lib/auth/org-paths";
 import { can } from "@/lib/auth/roles";
@@ -125,6 +127,26 @@ export default async function DashboardPage({
       invoiceDecision(invoice, counterpartiesById.get(invoice.counterparty_id), invoiceEntries)
     );
     const stopped = invoiceDecisions.filter((decision) => decision.outcome === "refused" || decision.outcome === "held");
+    // A stopped payable's card says what stopped it and where to handle it (agent activity spec R5), as on AP / AR.
+    const invoicesById = new Map(invoices.map((invoice) => [invoice.id, invoice]));
+    const canWrite = can(access.membership.role, "records.write");
+    const canDecide = can(access.membership.role, "approval.decide");
+    const nextStepFor = (decision: (typeof stopped)[number]) => {
+      const invoice = invoicesById.get(decision.id);
+      if (!invoice || invoice.direction !== "payable" || !["held", "flagged", "awaiting_info"].includes(invoice.status)) return undefined;
+      const onFile = { poReference: invoice.po_reference ?? null, goodsReceived: invoice.goods_received === true };
+      return (
+        <WaitingPayableAction
+          orgSlug={slug}
+          invoice={{ id: invoice.id, counterpartyName: invoice.counterparty_name, counterpartyId: invoice.counterparty_id, ...onFile }}
+          added={addedSince(recordedFacts(latestDecision(invoiceEntries, invoice.id)), onFile)}
+          canAddDetails={canWrite && invoice.tx_ref === null}
+          canDecide={canDecide}
+          rule={decision.guardrail?.rule ?? null}
+          canFix={canWrite}
+        />
+      );
+    };
     // What the agent will pay next, soonest first (payment timing design §1):
     // derived from the invoices already loaded above, no extra query.
     const scheduledPayments = scheduledPaymentRows(invoices);
@@ -218,7 +240,11 @@ export default async function DashboardPage({
             {stopped.length > 0 && (
               <section>
                 <SectionHeader title="Stopped" meta="refused by code, or waiting for you" />
-                <div className="space-y-4">{stopped.slice(0, 3).map((decision) => <DecisionCard key={decision.id} decision={decision} orgSlug={slug} />)}</div>
+                <div className="space-y-4">
+                  {stopped.slice(0, 3).map((decision) => (
+                    <DecisionCard key={decision.id} decision={decision} orgSlug={slug} footerAction={nextStepFor(decision)} />
+                  ))}
+                </div>
               </section>
             )}
 

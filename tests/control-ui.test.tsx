@@ -426,6 +426,7 @@ describe("the new control screens, as source", () => {
     "src/components/ApprovalCard.tsx",
     "src/components/AddDetailsDialog.tsx",
     "src/components/WaitingPayableAction.tsx",
+    "src/components/AgentActivity.tsx",
     "src/components/AgentPauseControl.tsx",
     "src/components/AgentPausedBanner.tsx",
   ];
@@ -449,6 +450,24 @@ describe("the new control screens, as source", () => {
     expect(invoices).toContain("needsYou.map((decision) => row(decision, needsYouFor))");
     expect(invoices).toContain("<WaitingPayableAction");
     expect(invoices).toContain('viewerCan(slug, "approval.decide")');
+  });
+
+  it("the console's Stopped cards say what stopped each payable and where to handle it", () => {
+    const console_ = read("src/app/o/[slug]/console/page.tsx");
+    expect(console_).toContain("footerAction={nextStepFor(decision)}");
+    expect(console_).toContain("rule={decision.guardrail?.rule ?? null}");
+    expect(read("src/app/o/[slug]/invoices/page.tsx")).toContain("rule={decision.guardrail?.rule ?? null}");
+  });
+
+  it("every page's frame shows the agent's live state, and a successful form tells it to watch closely", () => {
+    expect(read("src/components/vx/Shell.tsx")).toContain("<AgentActivity lastCycleAt={lastCycleAt} />");
+    expect(read("src/components/ui/useActionForm.ts")).toContain("window.dispatchEvent(new Event(AGENT_EXPECTED_EVENT));");
+    expect(read("src/components/AgentControlsClient.tsx")).toContain("window.dispatchEvent(new Event(AGENT_EXPECTED_EVENT));");
+  });
+
+  it("a link to a counterparty's row opens the row", () => {
+    expect(read("src/components/CounterpartyRow.tsx")).toContain("id={`counterparty-${counterparty.id}`}");
+    expect(read("src/components/vx/ScrollToHash.tsx")).toContain("fold.open = true");
   });
 
   it("the console's Needs you tile links to the approvals inbox", () => {
@@ -589,6 +608,59 @@ describe("a payable waiting for a person, on its card on Invoices (complete held
     expect(markup).toContain("Since the agent stopped it");
     expect(markup).not.toContain("<button");
     expect(markup).not.toContain("Decide in Approvals");
+  });
+
+  it("says which rule stopped it and links the page that removes the cause, for an owner or admin", () => {
+    const markup = html(
+      <WaitingPayableAction
+        orgSlug="acme"
+        invoice={{ id: ID, counterpartyName: "CME", counterpartyId: "cp-1", poReference: "PO-CME-1", goodsReceived: true }}
+        added={null}
+        canAddDetails
+        canDecide
+        rule="counterparty.payment_limit"
+        canFix
+      />
+    );
+    expect(markup).toContain("It is above CME&#x27;s payment limit. Pay it in Approvals, or raise the limit.");
+    expect(markup).toContain('href="/o/acme/counterparties#counterparty-cp-1"');
+    expect(markup).toContain("Edit limit");
+    expect(markup).toContain(DECIDE_LINK);
+  });
+
+  it("offers an approver only Approvals for a rule, and never Add details over a rule", () => {
+    const markup = html(
+      <WaitingPayableAction
+        orgSlug="acme"
+        invoice={{ id: ID, counterpartyName: "CME", counterpartyId: "cp-1", poReference: null, goodsReceived: false }}
+        added={null}
+        canAddDetails={false}
+        canDecide
+        rule="workspace.outflow_budget"
+        canFix={false}
+      />
+    );
+    expect(markup).toContain("The agent&#x27;s spending limit has no room for it.");
+    expect(markup).not.toContain("Spending limit</a>");
+    expect(markup).not.toContain("Add details");
+    expect(markup).toContain(DECIDE_LINK);
+  });
+
+  it("explains a rule with no page to fix it, and sends the person to Approvals", () => {
+    const markup = html(
+      <WaitingPayableAction
+        orgSlug="acme"
+        invoice={{ id: ID, counterpartyName: "CME", counterpartyId: "cp-1", poReference: "PO-1", goodsReceived: true }}
+        added={null}
+        canAddDetails
+        canDecide
+        rule="bridge.fee_above_cap"
+        canFix
+      />
+    );
+    expect(markup).toContain("The payout fee is above 10% of the invoice, more than the agent pays. Pay it with the fee in Approvals, or reject it.");
+    expect(markup).toContain(DECIDE_LINK);
+    expect(markup).not.toContain("Add details");
   });
 
   it("is the card Decide in Approvals opens at, on Approvals", () => {
