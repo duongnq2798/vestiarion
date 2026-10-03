@@ -6,3 +6,4 @@ export { addPayableDetails, approvePayable, heldMessage, rejectPayable, returnPa
 export { addMilestone, closeMilestoneUnpaid, payMilestoneNow } from "./milestones";
 export { pauseWorkspaceAgent, resumeWorkspaceAgent, runWorkspaceCycle } from "./agent";
 export { addInvoice } from "./invoices";
+export { issuePayeeLink } from "./payee-links";

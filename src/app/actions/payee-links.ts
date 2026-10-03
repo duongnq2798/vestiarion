@@ -5,10 +5,10 @@ import "server-only";
 import { z } from "zod";
 import { authorize } from "@/lib/auth/authorize";
 import { revalidateOrgPages } from "@/lib/auth/revalidate";
-import { db, unwrap } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
-import { createPayeeLink, PayeeLinkError, revokePayeeLink } from "@/lib/platform/payee-links";
-import { publicOrigin } from "@/lib/public-origin";
+import { consoleActor } from "@/lib/commands/actor";
+import { issuePayeeLink } from "@/lib/commands/payee-links";
+import { revokePayeeLink } from "@/lib/platform/payee-links";
 
 /**
  * An owner or admin's side of payee links (spec 2026-09-30-payee-links-design.md
@@ -31,34 +31,17 @@ function formString(formData: FormData, key: string): string {
   return typeof value === "string" ? value : "";
 }
 
+/** Makes a link through the command every surface shares (`issuePayeeLink`, write API part 2 W4), and shows it once. */
 export async function createPayeeLinkAction(_previous: PayeeLinkActionResult, formData: FormData): Promise<PayeeLinkActionResult> {
   const auth = await authorize(formData.get("orgSlug"), "records.write");
   if (!auth.ok) return { ok: false, message: auth.message };
   const counterpartyId = idSchema.safeParse(formString(formData, "counterpartyId"));
   if (!counterpartyId.success) return { ok: false, message: "Counterparty not found." };
   return inOrg(auth, async () => {
-    try {
-      // A payee link asks someone the agent pays for their address; a client is
-      // never paid, and the public page would tell them otherwise.
-      const found = unwrap(
-        await db().from("counterparties").select("id, role").eq("id", counterpartyId.data).limit(1)
-      ) as Array<{ id: string; role: string }>;
-      if (found.length === 0) return { ok: false, message: "Counterparty not found." };
-      if (found[0].role === "client") return { ok: false, message: "A payee link is for a vendor or a contractor the agent pays." };
-
-      const { link, token } = await createPayeeLink({ orgId: auth.membership.orgId, actorId: auth.user.id, counterpartyId: counterpartyId.data });
-      revalidateOrgPages();
-      return {
-        ok: true,
-        message: "Link created. Copy it now: it is shown only once.",
-        url: `${publicOrigin()}/payee/${token}`,
-        expiresAt: link.expiresAt,
-      };
-    } catch (error) {
-      if (error instanceof PayeeLinkError) return { ok: false, message: error.message };
-      console.error("payee link creation failed");
-      return { ok: false, message: "That did not work. Try again in a moment." };
-    }
+    const outcome = await issuePayeeLink(consoleActor(auth), { counterpartyId: counterpartyId.data });
+    if (!outcome.ok) return { ok: false, message: outcome.message };
+    revalidateOrgPages();
+    return { ok: true, message: outcome.message, url: outcome.url, expiresAt: outcome.expiresAt };
   });
 }
 

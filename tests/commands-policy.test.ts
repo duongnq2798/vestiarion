@@ -51,7 +51,7 @@ describe("what each surface may run (R4)", () => {
   it("lets Telegram add invoices only, the API add records only, and Slack decide a held payable and pause the agent", () => {
     expect(SURFACE_COMMANDS.telegram).toEqual(["invoice.add"]);
     // The API adds records and never decides (write API R3; part 2, W4).
-    expect(SURFACE_COMMANDS.api).toEqual(["invoice.add", "milestone.add"]);
+    expect(SURFACE_COMMANDS.api).toEqual(["invoice.add", "milestone.add", "payee_link.create"]);
     expect(SURFACE_COMMANDS.slack).toEqual(["payable.approve", "payable.reject", "payable.return", "agent.pause"]);
   });
 

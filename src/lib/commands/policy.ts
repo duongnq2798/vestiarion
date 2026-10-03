@@ -20,6 +20,7 @@ export const COMMAND_PERMISSIONS = {
   "agent.run_cycle": "agent.run_cycle",
   "invoice.add": "records.write",
   "milestone.add": "records.write",
+  "payee_link.create": "records.write",
 } as const satisfies Record<string, Permission>;
 
 export type CommandName = keyof typeof COMMAND_PERMISSIONS;
@@ -33,7 +34,7 @@ export type CommandName = keyof typeof COMMAND_PERMISSIONS;
 export const SURFACE_COMMANDS: Record<SurfaceKind, readonly CommandName[]> = {
   console: Object.keys(COMMAND_PERMISSIONS) as CommandName[],
   telegram: ["invoice.add"],
-  api: ["invoice.add", "milestone.add"],
+  api: ["invoice.add", "milestone.add", "payee_link.create"],
   slack: ["payable.approve", "payable.reject", "payable.return", "agent.pause"],
 };
 
