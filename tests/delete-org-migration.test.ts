@@ -37,7 +37,7 @@ afterAll(async () => {
 const ENVELOPE = { v: 1, iv: "x", tag: "y", data: "z" };
 const PLATFORM_TABLES = [
   "memberships", "invitations", "api_keys", "webhook_endpoints", "webhook_deliveries", "payee_links", "telegram_link_codes", "telegram_links",
-  "api_idempotency", "slack_installs", "slack_links", "invoice_inboxes",
+  "api_idempotency", "slack_installs", "slack_links", "invoice_inboxes", "github_installations",
 ] as const;
 
 const deleteOrg = (orgId: string, by: string | null = owner) =>
@@ -157,6 +157,11 @@ async function populated(slug: string): Promise<string> {
   // The workspace's address for invoices by email goes with it (0068).
   const code = Array.from(crypto.randomBytes(12), (byte) => "abcdefghijklmnopqrstuvwxyz234567"[byte % 32]).join("");
   await db.query("insert into public.invoice_inboxes (org_id, code) values ($1, $2)", [orgId, code]);
+  // The workspace's GitHub connections go with it (0071).
+  await db.query(
+    "insert into public.github_installations (org_id, installation_id, account_login, account_type, repository_selection, connected_by) values ($1, $2, 'acme', 'Organization', 'selected', $3)",
+    [orgId, crypto.randomInt(1, 2 ** 31), member]
+  );
   await closeCycles(orgId);
   return orgId;
 }

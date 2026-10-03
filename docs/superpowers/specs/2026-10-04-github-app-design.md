@@ -150,6 +150,8 @@ On GitHub: **Settings**, **Developer settings**, **GitHub Apps**, **New GitHub A
 - **Name:** "Vestiarion Payments". **Homepage URL:** `https://www.vestiarion.xyz`.
 - **Callback URL:** `https://www.vestiarion.xyz/api/github/callback`. Tick **Request user authorization (OAuth) during
   installation**.
+- **Redirect on update:** tick it. An account where the app is already installed then comes back to Vestiarion after
+  its installation is configured, so a second workspace, or one that disconnected, can connect it too.
 - **Webhook:** untick **Active**.
 - **Repository permissions:**
   - Pull requests: **Read and write**;
