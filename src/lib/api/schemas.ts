@@ -3,6 +3,7 @@ import type { ApiErrorCode } from "@/lib/api/contract";
 import { COUNTERPARTY_RISK_LEVELS, COUNTERPARTY_ROLES } from "@/lib/api/counterparties";
 import { INVOICE_DIRECTIONS } from "@/lib/api/invoices";
 import { MILESTONE_STATUSES } from "@/lib/api/milestones";
+import { PAYEE_CHAIN_IDS } from "@/lib/payee-chains";
 
 /**
  * A Zod schema for every payload `/api/v1` returns.
@@ -371,3 +372,35 @@ export const InsightsSchema = z
   .describe(
     "The telemetry behind the Insights charts: the most recent transfers, cycle runs, snapshots, treasury moves and screenings, each oldest first."
   );
+
+// ---------------------------------------------------------------------------
+// Request bodies (write API R2). Unknown fields are refused rather than ignored, as unknown filter values are: a typo
+// must not quietly drop a field. The console form's own schema then applies its rules on top.
+
+/** A 0x address of 40 hex characters. */
+export const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
+
+export const CreateCounterpartyBodySchema = z
+  .object({
+    name: z.string().describe("2 to 160 characters."),
+    role: z.enum(COUNTERPARTY_ROLES).describe("`vendor` or `contractor`, whom the business pays, or `client`, who pays the business."),
+    address: z
+      .string()
+      .regex(EVM_ADDRESS, "Use a 0x address of 40 hex characters")
+      .optional()
+      .describe(
+        "Where the agent pays it. An address added through the API waits for a person in the workspace to confirm it on Counterparties; until then the agent pays nothing to it."
+      ),
+    chain: z
+      .enum(PAYEE_CHAIN_IDS)
+      .optional()
+      .describe("The chain the address receives on. Defaults to `ARC-TESTNET`; only a vendor can be paid on another chain."),
+    jurisdiction: z.string().optional().describe("Where it is based, up to 80 characters; screening uses it."),
+    paymentLimit: z
+      .union([z.string(), z.number()])
+      .optional()
+      .describe("The most the agent pays it in one payment, in USDC, with up to 6 decimal places. Required for a vendor or a contractor."),
+    noticeEmail: z.string().optional().describe("Where it is emailed once a payment to it is confirmed."),
+  })
+  .strict()
+  .describe("A counterparty to add. It is screened as one added in the console.");

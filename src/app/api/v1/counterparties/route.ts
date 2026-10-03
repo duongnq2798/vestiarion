@@ -1,3 +1,4 @@
+import { NextResponse } from "next/server";
 import { db, unwrap } from "@/lib/dal";
 import { apiError, guardApiRequest, handleApiRequest } from "@/lib/api/guard";
 import {
@@ -12,6 +13,11 @@ import {
   mapCounterparty,
   type CounterpartyPayload,
 } from "@/lib/api/counterparties";
+import { withIdempotency } from "@/lib/api/idempotency";
+import { CreateCounterpartyBodySchema } from "@/lib/api/schemas";
+import { invalidBody, readJsonBody } from "@/lib/api/write";
+import { createCounterparty } from "@/lib/counterparties/create";
+import { counterpartyInputSchema } from "@/lib/intake-validation";
 
 export const dynamic = "force-dynamic";
 
@@ -70,5 +76,39 @@ export async function GET(request: Request) {
         id: counterparty.id,
       }));
     }
+  );
+}
+
+/**
+ * Adds a counterparty (docs/superpowers/specs/2026-10-03-write-api-design.md R2, R3): a read-and-write key's request,
+ * checked against the console form's own rules, added through the same `createCounterparty` and screened. An address it
+ * sets waits for a person to confirm it before the agent pays to it. The body is checked before an `Idempotency-Key` is
+ * claimed, so a body that fails is never remembered (R5).
+ */
+export async function POST(request: Request) {
+  const guard = await guardApiRequest(request, { scope: "write" });
+  if ("denied" in guard) return guard.denied;
+  const body = await readJsonBody(request);
+  if ("denied" in body) return body.denied;
+
+  const shape = CreateCounterpartyBodySchema.safeParse(body.value);
+  if (!shape.success) return invalidBody(shape.error);
+  const parsed = counterpartyInputSchema.safeParse({
+    name: shape.data.name,
+    role: shape.data.role,
+    address: shape.data.address ?? "",
+    chain: shape.data.chain ?? "ARC-TESTNET",
+    jurisdiction: shape.data.jurisdiction ?? "",
+    paymentLimit: shape.data.paymentLimit === undefined ? "" : String(shape.data.paymentLimit),
+    noticeEmail: shape.data.noticeEmail ?? "",
+  });
+  if (!parsed.success) return invalidBody(parsed.error);
+
+  return withIdempotency(request, guard.key, body.raw, () =>
+    handleApiRequest("POST /api/v1/counterparties", guard.key, async () => {
+      const created = await createCounterparty({ actorId: guard.key.createdBy, counterparty: parsed.data, via: "api", apiKeyId: guard.key.keyId });
+      const row = unwrap(await db().from("counterparties").select(SELECT).eq("id", created.id).single()) as Record<string, unknown>;
+      return NextResponse.json({ data: mapCounterparty(row) }, { status: 201 });
+    })
   );
 }

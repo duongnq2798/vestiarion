@@ -57,6 +57,9 @@ route"), and the docs spec named it as the next surface.
     the same status and body back, with `Idempotent-Replayed: true`. A repeat with a different body gets
     `409 conflict`, and so does a repeat while the first is still being handled.
   - A 5xx outcome is not stored, so retrying it runs the request again.
+  - A body that fails validation is answered before the key is claimed, so nothing is kept for it. The client can fix
+    the body and send it again with the same key, as with Stripe's keys. What fails once the write has started, such
+    as a `counterpartyId` the workspace does not hold, is kept like any other outcome.
   - Outcomes live in `api_idempotency`, which only the service role reads or writes. A row older than 24 hours is
     replaced by the next request with that key.
 - **R6. Writes are rate limited per key.** At most 30 writes a minute per key, counted on each instance. Over that, the
