@@ -119,8 +119,8 @@ const WRITE_ERRORS: ApiErrorCode[] = ["invalid_request", "unauthorized", "forbid
 /** A write that keeps no outcome for an `Idempotency-Key` cannot conflict over one (write API part 2, W3). */
 const WRITE_ERRORS_WITHOUT_KEY: ApiErrorCode[] = WRITE_ERRORS.filter((code) => code !== "conflict");
 
-/** The contractor the write examples pay. */
-const EXAMPLE_CONTRACTOR = "3d6f8a21-9c4b-4f0e-8b7a-5e2c1d9f6a48";
+/** The contractor the write examples pay: the one the testnet-2 check added (write API part 2, §5). */
+const EXAMPLE_CONTRACTOR = "26d6ffed-356d-474a-8d42-89bc942f6b4e";
 
 /** The header that makes a write safe to retry (write API R5), with an example of the kind of value to send. */
 function idempotencyKey(example: string): DocParam {
