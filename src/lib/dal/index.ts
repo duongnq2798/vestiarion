@@ -37,7 +37,7 @@ export const TENANT_TABLES = [
   "accounts", "counterparties", "invoices", "milestones", "treasury_actions", "compliance_checks",
   "forecasts", "ledger_entries", "payment_intents", "cycle_runs", "cycle_snapshots", "sim_clock", "gateway_signers", "payment_receipts", "escrow_contracts",
   "fx_swaps", "screening_dismissals", "receivable_links", "incoming_transfers", "agent_budgets", "recurring_payables", "policy_proposals",
-  "service_purchases", "spending_limit_contracts", "ar_reminders",
+  "service_purchases", "spending_limit_contracts", "ar_reminders", "inbox_emails",
 ] as const;
 export type TenantTable = (typeof TENANT_TABLES)[number];
 
@@ -51,7 +51,7 @@ export type TenantRpc = (typeof TENANT_RPCS)[number];
 export const PLATFORM_TABLES = [
   "orgs", "memberships", "invitations", "api_keys", "webhook_endpoints", "webhook_deliveries", "payee_links", "x402_sales",
   "telegram_link_codes", "telegram_links", "telegram_drafts", "api_idempotency",
-  "slack_installs", "slack_links", "slack_link_requests", "slack_drafts",
+  "slack_installs", "slack_links", "slack_link_requests", "slack_drafts", "invoice_inboxes",
 ] as const;
 export type PlatformTable = (typeof PLATFORM_TABLES)[number];
 

@@ -100,7 +100,7 @@ export const TENANT_TABLES = [
   "accounts", "counterparties", "invoices", "milestones", "treasury_actions", "compliance_checks",
   "forecasts", "ledger_entries", "payment_intents", "cycle_runs", "cycle_snapshots", "sim_clock", "gateway_signers", "payment_receipts", "escrow_contracts",
   "fx_swaps", "screening_dismissals", "receivable_links", "incoming_transfers", "agent_budgets", "recurring_payables", "policy_proposals",
-  "service_purchases", "spending_limit_contracts", "ar_reminders",
+  "service_purchases", "spending_limit_contracts", "ar_reminders", "inbox_emails",
 ] as const;
 
 export interface SeededRows {
@@ -165,6 +165,7 @@ export async function seedOrgRows(db: PGlite, orgId: string, tag: string): Promi
     [orgId, `circle-${tag}`]
   );
   await db.query("insert into ar_reminders (org_id, invoice_id, number, tone) values ($1, $2, 1, 'friendly')", [orgId, invoiceId]);
+  await db.query("insert into inbox_emails (org_id, resend_email_id, status, invoice_id) values ($1, $2, 'added', $3)", [orgId, `re-${tag}`, invoiceId]);
   await db.query("insert into agent_budgets (org_id, daily_usdc, weekly_usdc) values ($1, 100, 500)", [orgId]);
   await db.query(
     "insert into recurring_payables (org_id, counterparty_id, amount, memo, every_count, every_unit, starts_on) values ($1, $2, 5, $3, 1, 'month', '2026-10-31')",
