@@ -29,6 +29,7 @@ import {
 } from "@/lib/counterparty-address";
 import { changeCounterpartyLimit, CounterpartyLimitError } from "@/lib/counterparty-limit";
 import { documentProvenance } from "@/lib/invoice-document/provenance";
+import { createInvoice } from "@/lib/invoices/create";
 import { appendLedgerEntry } from "@/lib/ledger";
 
 export interface IntakeActionResult {
@@ -267,37 +268,6 @@ export async function createInvoiceAction(
 
     const input = parsed.data;
     try {
-      // Scoped to the organization, so another organization's counterparty id
-      // is not found here rather than linked to this organization's invoice,
-      // and is answered exactly like one that does not exist.
-      const lookup = await db()
-        .from("counterparties")
-        .select("id, name")
-        .eq("id", input.counterpartyId)
-        .maybeSingle<{ id: string; name: string }>();
-      if (lookup.error) throw new Error(lookup.error.message);
-      const counterparty = lookup.data;
-      if (!counterparty) return { ok: false, message: "Counterparty not found." };
-      const invoice = unwrap(
-        await db()
-          .from("invoices")
-          .insert({
-            direction: input.direction,
-            counterparty_id: counterparty.id,
-            amount: input.amount,
-            currency: input.currency,
-            memo: input.memo,
-            po_reference: input.poReference,
-            goods_received: input.goodsReceived,
-            due_date: dueDateIso(input.dueDate),
-            early_pay_discount_pct: input.earlyPayDiscountPct,
-            discount_due_date: input.discountDeadline ? dueDateIso(input.discountDeadline) : null,
-            created_by: auth.user.id,
-          })
-          .select("id")
-          .single<{ id: string }>()
-      );
-
       // An invoice read from a document records where it came from (invoice from a document D8).
       const document = documentProvenance(formData, {
         amount: input.amount,
@@ -307,32 +277,18 @@ export async function createInvoiceAction(
         earlyPayDiscountPct: input.earlyPayDiscountPct,
         discountDeadline: input.discountDeadline,
         memo: input.memo,
-        counterpartyId: counterparty.id,
+        counterpartyId: input.counterpartyId,
       });
-      await appendLedgerEntry({
-        actor: "human",
-        domain: input.direction === "payable" ? "ap" : "ar",
-        action: "create_invoice",
-        summary: `Added ${input.direction} invoice for ${counterparty.name}: ${input.amount} ${input.currency}`,
-        detail: {
-          by: auth.user.id,
-          invoiceId: invoice.id,
-          counterpartyId: counterparty.id,
-          counterpartyName: counterparty.name,
-          amount: input.amount,
-          currency: input.currency,
-          dueDate: input.dueDate,
-          poReference: input.poReference,
-          goodsReceived: input.goodsReceived,
-          ...(document ? { document } : {}),
-        },
-      });
+      // The counterparty is looked up in the organization's scope, so another organization's id is not found
+      // rather than linked to this organization's invoice, and is answered exactly like one that does not exist.
+      const created = await createInvoice({ actorId: auth.user.id, invoice: input, document });
+      if (!created) return { ok: false, message: "Counterparty not found." };
 
       revalidatePath("/");
       revalidateOrgPages();
-      if (input.direction !== "payable") return { ok: true, created: 1, message: `Invoice added for ${counterparty.name}.` };
+      if (input.direction !== "payable") return { ok: true, created: 1, message: `Invoice added for ${created.counterpartyName}.` };
       raiseCycleEvent(auth, "invoice_added");
-      return { ok: true, created: 1, message: `Invoice added for ${counterparty.name}. The agent usually decides on it within a minute.` };
+      return { ok: true, created: 1, message: `Invoice added for ${created.counterpartyName}. The agent usually decides on it within a minute.` };
     } catch (error) {
       console.error("invoice intake failed", error);
       return { ok: false, message: error instanceof Error ? error.message : "Invoice could not be added." };
