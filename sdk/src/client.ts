@@ -25,7 +25,7 @@ export const DEFAULT_BASE_URL = "https://www.vestiarion.xyz";
 export interface VestiarionOptions {
   /** A workspace API key, `vxk_<prefix>_<secret>`. Keep it on a server: it reads the whole workspace. */
   apiKey: string;
-  /** Where the API is. Defaults to `https://www.vestiarion.xyz`. */
+  /** Where the API is. Defaults to `https://www.vestiarion.xyz`. Plain `http` is refused, except to localhost. */
   baseUrl?: string;
   /** Defaults to the runtime's `fetch`. */
   fetch?: FetchLike;
@@ -56,6 +56,19 @@ export interface Collection<T, P> {
 }
 
 const KEY_FORMAT = /^vxk_[a-z2-7]{8}_[A-Za-z0-9_-]{43}$/;
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+/** An https URL, or plain http to this machine for local testing: the key must never travel in the clear. */
+function isSafeBaseUrl(value: unknown): boolean {
+  if (typeof value !== "string") return false;
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  return url.protocol === "https:" || (url.protocol === "http:" && LOOPBACK_HOSTS.has(url.hostname));
+}
 
 function collection<T, P extends { cursor?: string }>(transport: Transport, path: string): Collection<T, P> {
   const list = (params?: P) => transport.request<List<T>>({ method: "GET", path, query: params });
@@ -96,15 +109,16 @@ export class Vestiarion {
     if (typeof options?.apiKey !== "string" || !KEY_FORMAT.test(options.apiKey)) {
       throw new TypeError("apiKey must be a workspace API key, shaped vxk_<prefix>_<secret>.");
     }
+    const baseUrl = options.baseUrl ?? DEFAULT_BASE_URL;
+    if (!isSafeBaseUrl(baseUrl)) throw new TypeError("baseUrl must be an https URL, or http to localhost: the key must not travel in the clear.");
+    // NaN here would retry a failing request forever, or time out every attempt.
+    const maxRetries = options.maxRetries ?? 2;
+    if (!Number.isInteger(maxRetries) || maxRetries < 0) throw new TypeError("maxRetries must be a whole number, 0 or more.");
+    const timeoutMs = options.timeoutMs ?? 30_000;
+    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new TypeError("timeoutMs must be a positive number of milliseconds.");
     const fetchImpl = options.fetch ?? (typeof globalThis.fetch === "function" ? (globalThis.fetch.bind(globalThis) as FetchLike) : undefined);
     if (!fetchImpl) throw new TypeError("This runtime has no fetch: pass one as options.fetch.");
-    const transport = createTransport({
-      apiKey: options.apiKey,
-      baseUrl: options.baseUrl ?? DEFAULT_BASE_URL,
-      fetch: fetchImpl,
-      maxRetries: options.maxRetries ?? 2,
-      timeoutMs: options.timeoutMs ?? 30_000,
-    });
+    const transport = createTransport({ apiKey: options.apiKey, baseUrl, fetch: fetchImpl, maxRetries, timeoutMs });
     const one = <T>(path: string) => transport.request<{ data: T }>({ method: "GET", path }).then((answer) => answer.data);
     const add = <T>(path: string, body: unknown, write?: WriteOptions) =>
       transport.request<{ data: T }>({ method: "POST", path, body, idempotencyKey: write?.idempotencyKey }).then((answer) => answer.data);

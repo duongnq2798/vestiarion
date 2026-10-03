@@ -49,6 +49,22 @@ describe("new Vestiarion", () => {
     expect(attempt).not.toThrow(/sk_live_not_ours_123/);
   });
 
+  it.each([
+    ["a base URL over plain HTTP", { baseUrl: "http://www.vestiarion.xyz" }, /baseUrl/],
+    ["a base URL that is not a URL", { baseUrl: "vestiarion" }, /baseUrl/],
+    ["maxRetries that is not a whole number", { maxRetries: Number.NaN }, /maxRetries/],
+    ["negative maxRetries", { maxRetries: -1 }, /maxRetries/],
+    ["a timeout that is not a positive number", { timeoutMs: 0 }, /timeoutMs/],
+  ])("refuses %s, rather than send the key in the clear or retry forever", (_label, options, message) => {
+    expect(() => new Vestiarion({ apiKey: KEY, ...options })).toThrow(message);
+  });
+
+  it("allows plain HTTP to a server on this machine, for local testing", () => {
+    for (const baseUrl of ["http://localhost:3000", "http://127.0.0.1:3000", "http://[::1]:3000"]) {
+      expect(() => new Vestiarion({ apiKey: KEY, baseUrl })).not.toThrow();
+    }
+  });
+
   it("uses the runtime's fetch by default, called as a function, on www.vestiarion.xyz", async () => {
     const seen: string[] = [];
     vi.stubGlobal("fetch", function (this: unknown, url: string) {

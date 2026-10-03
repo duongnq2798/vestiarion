@@ -29,7 +29,7 @@ The key is a [workspace API key](/docs/get-started/authentication). Keep it on a
 
 | Option | Default |
 | --- | --- |
-| `baseUrl` | `https://www.vestiarion.xyz` |
+| `baseUrl` | `https://www.vestiarion.xyz`. Plain `http` is refused, except to localhost, so the key never travels in the clear. |
 | `fetch` | The runtime's own `fetch`. Pass another to route, record or proxy requests. |
 | `maxRetries` | `2` |
 | `timeoutMs` | `30000`, per attempt. |

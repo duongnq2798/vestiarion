@@ -47,6 +47,15 @@ describe("verifyWebhook", () => {
     expect(await reasonOf(verifyWebhook({ secret: SECRET, payload: BODY, signature, now: at(T - 301) }))).toBe("expired");
   });
 
+  it.each([
+    ["a tolerance that is not a number", { toleranceSeconds: Number.NaN }],
+    ["a negative tolerance", { toleranceSeconds: -1 }],
+    ["a now that is not a date", { now: new Date("not a date") }],
+  ])("refuses %s rather than accept a delivery signed a day ago", async (_label, over) => {
+    const dayOld = signWebhook(SECRET, BODY, T - 86_400);
+    await expect(verifyWebhook({ secret: SECRET, payload: BODY, signature: dayOld, now: at(T), ...over })).rejects.toThrow(TypeError);
+  });
+
   it("accepts any one of several v1 values, and ignores other schemes", async () => {
     const genuine = signWebhook(SECRET, BODY, T).split(",")[1];
     const signature = `t=${T},v0=abc,v1=${"0".repeat(64)},${genuine}`;

@@ -83,6 +83,10 @@ export async function verifyWebhook(input: {
   now?: Date;
 }): Promise<WebhookEvent> {
   const tolerance = input.toleranceSeconds ?? WEBHOOK_TOLERANCE_SECONDS;
+  // NaN in either would make every timestamp "within" the window, and turn replay protection off.
+  if (!Number.isFinite(tolerance) || tolerance < 0) throw new TypeError("toleranceSeconds must be a number of seconds, 0 or more.");
+  const nowMs = (input.now ?? new Date()).getTime();
+  if (!Number.isFinite(nowMs)) throw new TypeError("now must be a valid Date.");
   if (typeof input.payload !== "string") {
     throw new WebhookVerificationError("malformed", "payload must be the raw request body as a string, not a parsed object.");
   }
@@ -104,7 +108,7 @@ export async function verifyWebhook(input: {
     }
   }
   if (t === null || candidates.length === 0) throw new WebhookVerificationError("malformed", "Vestiarion-Signature needs a t and a v1.");
-  const nowSeconds = Math.floor((input.now ?? new Date()).getTime() / 1000);
+  const nowSeconds = Math.floor(nowMs / 1000);
   if (Math.abs(nowSeconds - t) > tolerance) throw new WebhookVerificationError("expired", `The delivery was signed more than ${tolerance} s from now.`);
 
   const key = await subtle().importKey("raw", utf8(input.secret), { name: "HMAC", hash: "SHA-256" }, false, ["verify"]);
