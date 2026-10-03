@@ -1,5 +1,10 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-03: A sandbox screens against the bundled watchlist
+
+- `GET /api/v1/status` reports `screening: "simulate"` for a sandbox workspace, whatever the deployment configures; a live workspace reports `live` when OpenSanctions is configured, as before.
+- A sandbox's counterparties are screened against the bundled watchlist at every cycle, and their `compliance_sweep` entries name that source. One screened by OpenSanctions before is screened again against the watchlist at its next cycle.
+
 ## 2026-10-03: Nothing is paid to a counterparty never screened
 
 - A new value of `guardrailRule`: `counterparty.unscreened`. The agent holds a payment, a schedule or a milestone release to a counterparty whose `riskLevel` is still `unscreened`, because screening could not run when it was added. The decision is made again once screening gives a verdict. A counterparty whose later screening fails keeps its earlier verdict, as before.
