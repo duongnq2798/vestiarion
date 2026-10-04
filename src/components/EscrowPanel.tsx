@@ -8,9 +8,9 @@ import { SectionHeader } from "@/components/ui/SectionHeader";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
 import { Hash } from "@/components/vx/Primitives";
+import { arcAddressUrl } from "@/lib/payee-chains";
 
 const INITIAL: EscrowActionResult = { ok: false, message: "" };
-const ARCSCAN_ADDRESS = "https://testnet.arcscan.app/address/";
 
 /**
  * The workspace's milestone escrow on Contractors (docs/superpowers/specs/2026-10-01-milestone-escrow-design.md
@@ -42,7 +42,7 @@ export function EscrowPanel({
       </p>
       {address ? (
         <p className="flex flex-wrap items-center gap-2 text-sm text-ink-2">
-          Contract <Hash value={address} href={`${ARCSCAN_ADDRESS}${address}`} />
+          Contract <Hash value={address} href={arcAddressUrl(address)} />
         </p>
       ) : deploying ? (
         <p className="text-sm text-ink-2">A setup was started and has not finished.</p>

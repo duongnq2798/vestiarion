@@ -1,12 +1,13 @@
-import { explorerTx, Hash } from "@/components/vx/Primitives";
+import { Hash } from "@/components/vx/Primitives";
 import { utcMinute } from "@/lib/copy";
-import { paidAcrossChains, payeeChain } from "@/lib/payee-chains";
+import { arcTxUrl, paidAcrossChains, payeeChain } from "@/lib/payee-chains";
 import type { OurPayment } from "@/lib/platform/open-numbers";
 import { formatFigure } from "./OpenNumbersTable";
 
 /**
- * Our own workspaces' latest settled payments, each linked to arcscan (spec
- * R6). A customer's payments are counted in the table and never listed.
+ * Our own workspaces' latest settled payments, each linked to its chain's
+ * explorer (spec R6). A customer's payments are counted in the table and never
+ * listed.
  */
 export function OurPayments({ payments }: { payments: OurPayment[] }) {
   return (
@@ -30,7 +31,7 @@ export function OurPayments({ payments }: { payments: OurPayment[] }) {
                 {formatFigure(payment.amount, "usdc")} {payment.token ?? "USDC"}
               </span>
               {/* A Gateway payout's hash is its mint on the payee's chain (Gateway payouts G5); everything else is on Arc testnet. */}
-              <Hash value={payment.txHash} href={paidAcrossChains(payment.chain) ? `${payeeChain(payment.chain).explorerTx}${payment.txHash}` : explorerTx(payment.txHash)} />
+              <Hash value={payment.txHash} href={paidAcrossChains(payment.chain) ? `${payeeChain(payment.chain).explorerTx}${payment.txHash}` : arcTxUrl(payment.txHash)} />
             </li>
           ))}
         </ul>

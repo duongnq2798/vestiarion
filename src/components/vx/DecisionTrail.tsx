@@ -3,7 +3,8 @@ import Link from "next/link";
 import { cn } from "@/components/ui/cn";
 import { orgHref } from "@/lib/auth/org-paths";
 import { laterBy, type TrailStep } from "@/lib/decision-trail";
-import { explorerTx, Hash } from "./Primitives";
+import { arcTxUrl } from "@/lib/payee-chains";
+import { Hash } from "./Primitives";
 
 const DOT: Record<TrailStep["who"], string> = {
   agent: "bg-agent",
@@ -72,7 +73,7 @@ export function DecisionTrail({
               )}
               {step.txHash && (
                 <p className="mt-1 text-xs text-ink-3">
-                  Transaction <Hash value={step.txHash} href={explorerTx(step.txHash)} />
+                  Transaction <Hash value={step.txHash} href={arcTxUrl(step.txHash)} />
                 </p>
               )}
             </li>

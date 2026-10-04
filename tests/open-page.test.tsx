@@ -13,7 +13,7 @@ vi.mock("@/lib/platform/open-numbers", async (importOriginal) => {
 /**
  * The public /open page (docs/superpowers/specs/2026-09-30-open-numbers-design.md
  * §2): one table with customers, ours and the total; the payments chart; our
- * own payments with arcscan links; and the method. The figures come from
+ * own payments with explorer links; and the method. The figures come from
  * readOpenNumbers, faked here; parsePeriod and dailySeries are the real ones.
  */
 
@@ -161,9 +161,9 @@ describe("the /open page", () => {
     expect(vi.mocked(readOpenNumbers).mock.calls[0][0]).toMatchObject({ key: "all", fallback: true });
   });
 
-  it("links our own payments to arcscan, and says customers' are counted but not listed", async () => {
+  it("links our own payments to Arc's explorer, and says customers' are counted but not listed", async () => {
     const markup = await render();
-    expect(markup).toContain('href="https://testnet.arcscan.app/tx/0xabc1234567890def"');
+    expect(markup).toContain('href="https://explorer.testnet.arc.io/tx/0xabc1234567890def"');
     expect(text(markup)).toContain("counted above and never listed");
   });
 

@@ -7,10 +7,11 @@ import { Card } from "@/components/ui/Card";
 import { cn } from "@/components/ui/cn";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { orgHref } from "@/lib/auth/org-paths";
+import { arcTxUrl } from "@/lib/payee-chains";
 import { CollapsibleReasoning } from "./CollapsibleReasoning";
 import { DecisionTrail } from "./DecisionTrail";
 import { DOMAIN_NAME, DomainGlyph } from "./Glyphs";
-import { explorerTx, fmt, Hash, Money, OutcomeBadge, Reasoning } from "./Primitives";
+import { fmt, Hash, Money, OutcomeBadge, Reasoning } from "./Primitives";
 import type { Decision, Evidence, Guardrail, Outcome } from "./types";
 
 const CARD_TONE: Partial<Record<Outcome, "refused" | "held" | "simulated">> = {
@@ -126,7 +127,7 @@ export function DecisionCard({
                     </Link>
                   )}
                   {decision.txHash ? (
-                    <Hash value={decision.txHash} href={explorerTx(decision.txHash)} />
+                    <Hash value={decision.txHash} href={arcTxUrl(decision.txHash)} />
                   ) : refused ? (
                     <span className="font-mono text-xs text-refused">no transaction sent</span>
                   ) : null}

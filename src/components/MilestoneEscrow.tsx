@@ -8,7 +8,8 @@ import { FormMessage } from "@/components/ui/FormMessage";
 import { Input } from "@/components/ui/Input";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
-import { explorerTx, Hash } from "@/components/vx/Primitives";
+import { Hash } from "@/components/vx/Primitives";
+import { arcTxUrl } from "@/lib/payee-chains";
 
 const INITIAL: EscrowActionResult = { ok: false, message: "" };
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -33,7 +34,7 @@ function day(at: string): string {
 const short = (address: string) => `${address.slice(0, 6)}…${address.slice(-4)}`;
 
 function TxLink({ hash }: { hash: string | null }) {
-  return hash ? <Hash value={hash} href={explorerTx(hash)} /> : null;
+  return hash ? <Hash value={hash} href={arcTxUrl(hash)} /> : null;
 }
 
 /**

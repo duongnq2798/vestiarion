@@ -16,12 +16,12 @@ import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm, type ActionResult } from "@/components/ui/useActionForm";
 import { fmt, Hash, Money } from "@/components/vx/Primitives";
 import { withSuccessToast } from "@/components/withSuccessToast";
+import { arcAddressUrl } from "@/lib/payee-chains";
 
 const INITIAL: ActionResult = { ok: false, message: "" };
 const save = withSuccessToast(setAgentBudgetAction);
 const enforce = withSuccessToast(enforceSpendingLimitAction);
 const turnOff = withSuccessToast(turnOffSpendingLimitAction);
-const ARCSCAN_ADDRESS = "https://testnet.arcscan.app/address/";
 
 /**
  * The limit on Arc, as the console reads it (docs/superpowers/specs/2026-10-03-onchain-spending-limit-design.md §4,
@@ -204,7 +204,7 @@ function OnArc({ orgSlug, onChain, canEdit, live, unset }: { orgSlug: string; on
               <div className="flex items-baseline justify-between gap-3">
                 <dt className="text-ink-2">Contract</dt>
                 <dd>
-                  <Hash value={onChain.contract} href={`${ARCSCAN_ADDRESS}${onChain.contract}`} />
+                  <Hash value={onChain.contract} href={arcAddressUrl(onChain.contract)} />
                 </dd>
               </div>
             )}
@@ -212,7 +212,7 @@ function OnArc({ orgSlug, onChain, canEdit, live, unset }: { orgSlug: string; on
               <div className="flex items-baseline justify-between gap-3">
                 <dt className="text-ink-2">Agent&apos;s wallet</dt>
                 <dd>
-                  <Hash value={onChain.agent} href={`${ARCSCAN_ADDRESS}${onChain.agent}`} />
+                  <Hash value={onChain.agent} href={arcAddressUrl(onChain.agent)} />
                 </dd>
               </div>
             )}

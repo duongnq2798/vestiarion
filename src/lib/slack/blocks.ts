@@ -4,6 +4,7 @@ import type { CommandOutcome } from "../commands/outcome";
 import { READER_NAMES } from "../invoice-document/chat-draft";
 import type { InvoiceDraftRead } from "../invoice-document/draft";
 import type { VerificationResult } from "../ledger";
+import { arcTxUrl } from "../payee-chains";
 import { shortenAddresses } from "../telegram/messages";
 import type { TodayFacts, WaitingFact } from "../telegram/today";
 import type { SlackMessage } from "./api";
@@ -35,11 +36,6 @@ function clip(text: string, max: number): string {
 const link = (url: string, label: string) => `<${url}|${mrkdwn(label)}>`;
 const orgUrl = (origin: string, slug: string, path: string) => `${origin}${orgHref(slug, path)}`;
 const amountText = (amount: number | string, currency: string) => `${AMOUNT.format(Number(amount))} ${currency}`;
-
-/** An Arc testnet transaction on the explorer. */
-export function arcTxUrl(hash: string): string {
-  return `https://testnet.arcscan.app/tx/${hash}`;
-}
 
 /** A UTC day as "Oct 5". */
 function shortDay(day: string): string {

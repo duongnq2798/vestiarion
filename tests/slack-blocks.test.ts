@@ -46,7 +46,7 @@ describe("decisionsMessage", () => {
     const text = allText(message);
     expect(text).toContain("Paid Centronex 0.30 USDC.");
     expect(text).toContain("DeepSeek decided to pay it");
-    expect(text).toContain(`https://testnet.arcscan.app/tx/${TX}`);
+    expect(text).toContain(`https://explorer.testnet.arc.io/tx/${TX}`);
     expect(text).toContain(`${ORIGIN}/o/northstar/invoices#trail-${INVOICE}`);
   });
 
@@ -100,7 +100,7 @@ describe("a decided card", () => {
 
   it("says each outcome, with the transaction when one went out on Arc", () => {
     expect(outcomeLine("approve", "U0LINH", { ok: true, message: "Paid.", status: "paid", txRef: TX })).toBe(
-      `Approved and paid by <@U0LINH>. <https://testnet.arcscan.app/tx/${TX}|Arc testnet transaction>`
+      `Approved and paid by <@U0LINH>. <https://explorer.testnet.arc.io/tx/${TX}|Arc testnet transaction>`
     );
     expect(outcomeLine("approve", "U0LINH", { ok: true, message: "", status: "matched", txRef: null })).toBe(
       "Approved by <@U0LINH>. The payment was sent; Arc testnet is confirming it."

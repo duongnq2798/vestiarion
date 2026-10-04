@@ -349,7 +349,7 @@ describe("invoiceDecision: a EURC invoice paid from USDC by a swap (EURC swap sp
       undefined,
       [decided({ swap: { swapId: "s-1", state: "confirmed", usdcIn: 2.507384, eurcReceived: 2.063076, swapTxHash: SWAP_TX, reason: null } })]
     );
-    expect(decision.evidence).toContainEqual({ label: "Funded by swap", value: "2.507384 USDC → 2.063076 EURC", href: `https://testnet.arcscan.app/tx/${SWAP_TX}`, state: "ok" });
+    expect(decision.evidence).toContainEqual({ label: "Funded by swap", value: "2.507384 USDC → 2.063076 EURC", href: `https://explorer.testnet.arc.io/tx/${SWAP_TX}`, state: "ok" });
   });
 
   it("says a swap failed, or is in flight", () => {

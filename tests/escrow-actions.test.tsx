@@ -74,7 +74,7 @@ describe("the escrow panel", () => {
 
   it("links the contract once it is set up, and offers nothing to someone who may not set it up", () => {
     const markup = renderToStaticMarkup(<EscrowPanel orgSlug="testnet-2" address={ESCROW} deploying={false} canSetUp={false} />);
-    expect(markup).toContain(`href="https://testnet.arcscan.app/address/${ESCROW}"`);
+    expect(markup).toContain(`href="https://explorer.testnet.arc.io/address/${ESCROW}"`);
     expect(text(markup)).not.toContain("Set up escrow");
   });
 });

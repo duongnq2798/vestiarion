@@ -5,11 +5,13 @@ import { ARC_TESTNET_USDC, TOKEN_MESSENGER_V2 } from "@/lib/circle/cctp";
 import { GATEWAY_MINTER, GATEWAY_WALLET, USDC_BY_CHAIN } from "@/lib/circle/gateway";
 import { ARC_TESTNET_USYC, USYC_ENTITLEMENTS, USYC_TELLER } from "@/lib/circle/usyc";
 import { ARC_TESTNET_EURC } from "@/lib/fx/quote";
+import { arcAddressUrl } from "@/lib/payee-chains";
 
 /**
  * The contract addresses the docs and the README publish are the ones the code calls, so neither goes stale when
- * an address changes in code. The deployed copies of Vestiarion's own contracts are production data, not code:
- * they are checked here only for their shape and their Arcscan links.
+ * an address changes in code, and each links where the app links an address on Arc. The deployed copies of
+ * Vestiarion's own contracts are production data, not code: they are checked here only for their shape and their
+ * Arcscan links.
  */
 
 const ROOT = process.cwd();
@@ -17,7 +19,7 @@ const PAGE = readFileSync(path.join(ROOT, "content", "docs", "contracts.mdx"), "
 const README = readFileSync(path.join(ROOT, "README.md"), "utf8");
 const ARC_CONTRACTS = [ARC_TESTNET_USDC, ARC_TESTNET_EURC, ARC_TESTNET_USYC, USYC_TELLER, USYC_ENTITLEMENTS, GATEWAY_WALLET, GATEWAY_MINTER, TOKEN_MESSENGER_V2];
 const DEPLOYED = ["0x74af203fec3f121ff1cd3a763092d1211487702b", "0x9da3c47f73ea9399ac566806a189b0bf47b7d4ba"];
-const arcscan = (address: string) => `](https://testnet.arcscan.app/address/${address})`;
+const arcscan = (address: string) => `](${arcAddressUrl(address)})`;
 
 describe("Contracts on Arc testnet", () => {
   it.each(ARC_CONTRACTS)("the page and the README link %s, the address the code calls, on Arcscan", (address) => {

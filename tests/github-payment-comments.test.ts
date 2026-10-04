@@ -177,7 +177,7 @@ describe("pullRequestCommentBody", () => {
     const body = pullRequestCommentBody({ amount: "0.10", token: "USDC", orgName: "testnet-2", txHash: TX, origin: "https://www.vestiarion.xyz" });
     expect(body).toContain("0.10 USDC on Arc testnet");
     expect(body).toContain("testnet\\-2");
-    expect(body).toContain(`https://testnet.arcscan.app/tx/${TX}`);
+    expect(body).toContain(`https://explorer.testnet.arc.io/tx/${TX}`);
     expect(body).toContain("https://www.vestiarion.xyz");
   });
 

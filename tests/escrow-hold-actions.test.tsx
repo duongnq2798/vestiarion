@@ -123,7 +123,7 @@ describe("the milestone's escrow on its card", () => {
     expect(funded).toContain("2 USDC locked in escrow for 0x67C8…0504 until 31 Oct 2026");
     const released = renderToStaticMarkup(<MilestoneEscrow {...base} paid hold={{ state: "released", refundAfter: "2026-10-31T00:00:00Z", amount: 2, fundTxHash: FUND, releaseTxHash: `0x${"3".repeat(64)}`, refundTxHash: null }} />);
     expect(text(released)).toContain("Released from escrow");
-    expect(released).toContain(`href="https://testnet.arcscan.app/tx/0x${"3".repeat(64)}"`);
+    expect(released).toContain(`href="https://explorer.testnet.arc.io/tx/0x${"3".repeat(64)}"`);
     expect(text(renderToStaticMarkup(<MilestoneEscrow {...base} hold={{ state: "refunded", refundAfter: "2026-10-31T00:00:00Z", amount: 2, fundTxHash: FUND, releaseTxHash: null, refundTxHash: `0x${"4".repeat(64)}` }} />))).toContain(
       "Refunded from escrow"
     );

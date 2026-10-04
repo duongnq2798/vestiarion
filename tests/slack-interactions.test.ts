@@ -142,7 +142,7 @@ describe("handleInteraction", () => {
     expect(replies[0]).toMatchObject({ replace_original: true });
     const rewritten = JSON.stringify(replies[0]);
     expect(rewritten).toContain("Approved and paid by <@U0LINH>.");
-    expect(rewritten).toContain(`https://testnet.arcscan.app/tx/${TX}`);
+    expect(rewritten).toContain(`https://explorer.testnet.arc.io/tx/${TX}`);
     expect(rewritten).not.toContain("vx_approve");
   });
 

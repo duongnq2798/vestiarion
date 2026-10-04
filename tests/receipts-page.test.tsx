@@ -52,7 +52,7 @@ describe("a receipt", () => {
   it("links a CCTP payout's burn on Arc testnet as well as its mint", () => {
     const markup = renderToStaticMarkup(<ReceiptView view={view({ facts: { ...view().facts, chain: "BASE-SEPOLIA", route: "cctp", sourceTxHash: BURN, feeUsdc: 0.054604 } })} />);
     expect(text(markup)).toContain("Through CCTP from Arc testnet, with a 0.054604 USDC fee");
-    expect(markup).toContain(`href="https://testnet.arcscan.app/tx/${BURN}"`);
+    expect(markup).toContain(`href="https://explorer.testnet.arc.io/tx/${BURN}"`);
     expect(markup).toContain(`href="https://sepolia.basescan.org/tx/${MINT}"`);
   });
 

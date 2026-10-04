@@ -55,7 +55,7 @@ describe("the Gateway panel", () => {
 // The decision card's route and links are tested on invoiceDecision itself, in tests/invoice-decision.test.ts (Gateway review I4).
 
 describe("/open's list of our payments", () => {
-  it("links a payout minted on another chain to that chain's explorer, and one on Arc to arcscan", () => {
+  it("links a payout minted on another chain to that chain's explorer, and one on Arc to Arc's", () => {
     const markup = renderToStaticMarkup(
       <OurPayments
         payments={[
@@ -65,6 +65,6 @@ describe("/open's list of our payments", () => {
       />
     );
     expect(markup).toContain('href="https://sepolia.basescan.org/tx/0xbase"');
-    expect(markup).toContain('href="https://testnet.arcscan.app/tx/0xarc"');
+    expect(markup).toContain('href="https://explorer.testnet.arc.io/tx/0xarc"');
   });
 });

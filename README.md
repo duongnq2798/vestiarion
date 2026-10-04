@@ -18,21 +18,21 @@ An autonomous treasury agent for a small business, settled in USDC on Arc.
 - **Updates:** [@vestiarionhq](https://x.com/vestiarionhq) on X, where what ships is posted with its receipts.
 - **Real transactions on Arc testnet**, made by the agent in production:
   - a USDC payable paid 53 seconds after it was added, with no one pressing Run:
-    [`0x81381c50…4e68`](https://testnet.arcscan.app/tx/0x81381c50f5d0cadb49d1af77f1abb06c1727c8377aa88cbe1cfbf327f09c4e68);
+    [`0x81381c50…4e68`](https://explorer.testnet.arc.io/tx/0x81381c50f5d0cadb49d1af77f1abb06c1727c8377aa88cbe1cfbf327f09c4e68);
   - a EURC invoice, weighed against a USDC limit at a rate quoted by Circle's Stablecoin Service:
-    [`0x2e66257f…8f58`](https://testnet.arcscan.app/tx/0x2e66257f2cf478ecd2d0f7e263e1ad78bf9877b0afb93f3679c0601ef7328f58);
+    [`0x2e66257f…8f58`](https://explorer.testnet.arc.io/tx/0x2e66257f2cf478ecd2d0f7e263e1ad78bf9877b0afb93f3679c0601ef7328f58);
   - a payout to a vendor on Base Sepolia through CCTP. The burn is on Arc,
-    [`0xbc1961bb…d49c`](https://testnet.arcscan.app/tx/0xbc1961bbe2896e7e91d452498b595f1a1de8d45f34b7db8b3fd9d873d908d49c),
+    [`0xbc1961bb…d49c`](https://explorer.testnet.arc.io/tx/0xbc1961bbe2896e7e91d452498b595f1a1de8d45f34b7db8b3fd9d873d908d49c),
     and Circle forwarded the mint of exactly 1 USDC on Base Sepolia,
     [`0x6c749323…ef9a`](https://sepolia.basescan.org/tx/0x6c749323f9e36efe21fcd5c33df2e55ba5db82040dbd06ff2a8872045c6fef9a);
   - an invoice read from a PDF by the model, checked by a person, and paid 16 seconds after it was added:
-    [`0x197e979f…64b3`](https://testnet.arcscan.app/tx/0x197e979f3b108d759f5e5e5ee0d7bc67e67acb1c520de1b3c7e969ae689c64b3);
+    [`0x197e979f…64b3`](https://explorer.testnet.arc.io/tx/0x197e979f3b108d759f5e5e5ee0d7bc67e67acb1c520de1b3c7e969ae689c64b3);
   - idle cash put to work: 60.71 USDC deposited into Circle's USYC through its Teller contract, and 53.28 USYC sent to the reserve wallet:
-    [`0x1cf65900…f42e`](https://testnet.arcscan.app/tx/0x1cf659007ce734a73908a705e2537a56065d87fd0f52571d7e67d0654b94f42e);
+    [`0x1cf65900…f42e`](https://explorer.testnet.arc.io/tx/0x1cf659007ce734a73908a705e2537a56065d87fd0f52571d7e67d0654b94f42e);
   - a payable due today, with too little cash in the operating wallet: the agent redeemed the missing 0.88 USDC from USYC,
-    [`0x4b5186db…c7f2`](https://testnet.arcscan.app/tx/0x4b5186db4820df87532869e0a9797df5a79a7e9e3a5feb1e3edb09500160c7f2),
+    [`0x4b5186db…c7f2`](https://explorer.testnet.arc.io/tx/0x4b5186db4820df87532869e0a9797df5a79a7e9e3a5feb1e3edb09500160c7f2),
     then paid the 2 USDC 34 seconds after the invoice was added,
-    [`0x365da374…9d8b`](https://testnet.arcscan.app/tx/0x365da374f902fcb995643713962554b41e6114b62bb40695874aa519dd829d8b).
+    [`0x365da374…9d8b`](https://explorer.testnet.arc.io/tx/0x365da374f902fcb995643713962554b41e6114b62bb40695874aa519dd829d8b).
 
   Each feature's design under `docs/superpowers/specs/` ends with its rollout record: what was run in production, with its ledger entries and transactions.
 
@@ -141,21 +141,21 @@ workspace:
 
 | Contract | What it does | Address |
 | --- | --- | --- |
-| `VestiarionEscrow` | Locks a milestone's USDC for a contractor; only the operating wallet can release it to the contractor, or take it back from a refund date | [`0x74af203fec3f121ff1cd3a763092d1211487702b`](https://testnet.arcscan.app/address/0x74af203fec3f121ff1cd3a763092d1211487702b) |
-| `VestiarionSpendingLimit` | The agent's payments leave through `pay`, which refuses anything past the daily or 7-day limit | [`0x9da3c47f73ea9399ac566806a189b0bf47b7d4ba`](https://testnet.arcscan.app/address/0x9da3c47f73ea9399ac566806a189b0bf47b7d4ba) |
+| `VestiarionEscrow` | Locks a milestone's USDC for a contractor; only the operating wallet can release it to the contractor, or take it back from a refund date | [`0x74af203fec3f121ff1cd3a763092d1211487702b`](https://explorer.testnet.arc.io/address/0x74af203fec3f121ff1cd3a763092d1211487702b) |
+| `VestiarionSpendingLimit` | The agent's payments leave through `pay`, which refuses anything past the daily or 7-day limit | [`0x9da3c47f73ea9399ac566806a189b0bf47b7d4ba`](https://explorer.testnet.arc.io/address/0x9da3c47f73ea9399ac566806a189b0bf47b7d4ba) |
 
 The Circle contracts it calls on Arc testnet:
 
 | Contract | Address |
 | --- | --- |
-| USDC | [`0x3600000000000000000000000000000000000000`](https://testnet.arcscan.app/address/0x3600000000000000000000000000000000000000) |
-| EURC | [`0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a`](https://testnet.arcscan.app/address/0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a) |
-| USYC | [`0xe9185F0c5F296Ed1797AaE4238D26CCaBEadb86C`](https://testnet.arcscan.app/address/0xe9185F0c5F296Ed1797AaE4238D26CCaBEadb86C) |
-| USYC Teller | [`0x9fdF14c5B14173D74C08Af27AebFf39240dC105A`](https://testnet.arcscan.app/address/0x9fdF14c5B14173D74C08Af27AebFf39240dC105A) |
-| USYC Entitlements | [`0xCC205224862C7641930c87679E98999d23C26113`](https://testnet.arcscan.app/address/0xCC205224862C7641930c87679E98999d23C26113) |
-| Gateway Wallet | [`0x0077777d7EBA4688BDeF3E311b846F25870A19B9`](https://testnet.arcscan.app/address/0x0077777d7EBA4688BDeF3E311b846F25870A19B9) |
-| Gateway Minter | [`0x0022222ABE238Cc2C7Bb1f21003F0a260052475B`](https://testnet.arcscan.app/address/0x0022222ABE238Cc2C7Bb1f21003F0a260052475B) |
-| CCTP TokenMessengerV2 | [`0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA`](https://testnet.arcscan.app/address/0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA) |
+| USDC | [`0x3600000000000000000000000000000000000000`](https://explorer.testnet.arc.io/address/0x3600000000000000000000000000000000000000) |
+| EURC | [`0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a`](https://explorer.testnet.arc.io/address/0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a) |
+| USYC | [`0xe9185F0c5F296Ed1797AaE4238D26CCaBEadb86C`](https://explorer.testnet.arc.io/address/0xe9185F0c5F296Ed1797AaE4238D26CCaBEadb86C) |
+| USYC Teller | [`0x9fdF14c5B14173D74C08Af27AebFf39240dC105A`](https://explorer.testnet.arc.io/address/0x9fdF14c5B14173D74C08Af27AebFf39240dC105A) |
+| USYC Entitlements | [`0xCC205224862C7641930c87679E98999d23C26113`](https://explorer.testnet.arc.io/address/0xCC205224862C7641930c87679E98999d23C26113) |
+| Gateway Wallet | [`0x0077777d7EBA4688BDeF3E311b846F25870A19B9`](https://explorer.testnet.arc.io/address/0x0077777d7EBA4688BDeF3E311b846F25870A19B9) |
+| Gateway Minter | [`0x0022222ABE238Cc2C7Bb1f21003F0a260052475B`](https://explorer.testnet.arc.io/address/0x0022222ABE238Cc2C7Bb1f21003F0a260052475B) |
+| CCTP TokenMessengerV2 | [`0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA`](https://explorer.testnet.arc.io/address/0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA) |
 
 What each one is used for, the workspace's wallets around the two contracts, and the USDC of the
 chains payees are paid on: [Contracts on Arc testnet](https://www.vestiarion.xyz/docs/contracts).

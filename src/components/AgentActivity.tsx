@@ -5,10 +5,10 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { toast } from "@/components/ui/Toaster";
-import { explorerTx } from "@/components/vx/Primitives";
 import { AGENT_EXPECTED_EVENT, EXPECT_AGENT_MS, nextPollMs, TOLD_ONE_BY_ONE, workingLabel, type ActivityItem } from "@/lib/agent-activity";
 import { isValidSlug, orgHref } from "@/lib/auth/org-paths";
 import { utcMinute } from "@/lib/copy";
+import { arcTxUrl } from "@/lib/payee-chains";
 
 /** The route's answer (src/app/api/agent/activity/route.ts). */
 interface ActivityAnswer {
@@ -146,7 +146,7 @@ export function ActivityToastBody({
           {action}
         </Button>
         {txHash && (
-          <a href={explorerTx(txHash)} target="_blank" rel="noreferrer" className="text-xs font-medium text-agent underline-offset-2 hover:underline">
+          <a href={arcTxUrl(txHash)} target="_blank" rel="noreferrer" className="text-xs font-medium text-agent underline-offset-2 hover:underline">
             View on Arcscan
           </a>
         )}

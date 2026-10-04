@@ -93,8 +93,6 @@ export function Hash({ value, href, className }: { value: string; href?: string;
   );
 }
 
-export const explorerTx = (hash: string) => `https://testnet.arcscan.app/tx/${hash}`;
-
 const FACT = /(\b[a-z]+-pr#\d+\b|\b\d[\d,]*(?:\.\d+)?\s?(?:USDC|USYC)\b|\bPO[-#]?[A-Z0-9-]+\b|\bINV[-#]?[A-Z0-9-]+\b|\b0x[0-9a-fA-F]{6,}\b|\b\d+(?:\.\d+)?%|\bday \d+\b|#\d+\b)/gi;
 
 /** The agent's reasoning in the serif face, with the facts a reader checks set in mono. */

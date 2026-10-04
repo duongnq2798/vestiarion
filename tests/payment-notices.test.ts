@@ -135,7 +135,7 @@ describe("sending payment notices", () => {
     expect(message.to).toBe("linh@example.com");
     expect(message.subject).toBe("Northstar paid you 12.50 USDC");
     expect(message.text).toContain("Northstar paid you 12.50 USDC on Arc testnet for October design retainer (PO-2207).");
-    expect(message.text).toContain(`https://testnet.arcscan.app/tx/${TX}`);
+    expect(message.text).toContain(`https://explorer.testnet.arc.io/tx/${TX}`);
     expect(message.text).toContain("Sent to 0x7a3c9e2b41d05f8a6c1e3b9d2f4a8c6e0b5d1f93 on Oct 3, 2026, 03:27 UTC.");
 
     const [entry] = appends(client);
@@ -268,7 +268,7 @@ describe("the payment notice email", () => {
       what: "October design retainer (PO-2207)",
       address: "0x7a3c",
       paidAt: "Oct 3, 2026, 03:27 UTC",
-      txUrl: `https://testnet.arcscan.app/tx/${TX}`,
+      txUrl: `https://explorer.testnet.arc.io/tx/${TX}`,
       origin: "https://www.vestiarion.xyz",
     });
     expect(email.subject).toBe("Acme <Ops> paid you 12.50 USDC");

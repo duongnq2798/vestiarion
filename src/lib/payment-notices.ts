@@ -5,6 +5,7 @@ import { db, platformDb, unwrap } from "./dal";
 import { paymentNoticeEmail } from "./email/payment-notice";
 import { emailSettingsFromEnv, sendEmail, type EmailMessage, type SendResult } from "./email/send";
 import { appendLedgerEntryBestEffort } from "./ledger-best-effort";
+import { arcTxUrl } from "./payee-chains";
 
 /**
  * Payment notices (docs/superpowers/specs/2026-10-03-payment-notices-design.md): once a payment to a counterparty is
@@ -28,7 +29,6 @@ export function maskEmail(email: string): string {
 }
 
 const AMOUNT = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 });
-const ARC_TX = (hash: string) => `https://testnet.arcscan.app/tx/${hash}`;
 
 interface DueIntent {
   id: string;
@@ -141,7 +141,7 @@ export async function sendPaymentNotices(
       what: source.what,
       address: intent.destination ?? "your address",
       paidAt: utcMinute(intent.confirmed_at ?? new Date(now).toISOString()),
-      txUrl: ARC_TX(intent.tx_hash as string),
+      txUrl: arcTxUrl(intent.tx_hash as string),
       origin,
     });
     let result: SendResult;
