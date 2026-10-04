@@ -87,6 +87,14 @@ paid with a comment of their own. Every bounty comment also shows Vestiarion to 
   - the daily spending limit and its contract on Arc.
 
   After payment, the existing comment says "Paid".
+- **B13. A merge starts the cycle (added after the first rollout).** In testnet-2 the bounty on #195 waited after its
+  merge, because only a cycle runs the GitHub check, and the next one was the schedule's.
+  - The webhook also takes `pull_request` events. On one closed as merged, every workspace that connected the
+    installation and has a pending milestone for that pull request gets `runCycleSoon`.
+  - The event kind is `pull_request_merged`, and the cycle runs under the member who connected GitHub.
+  - The pull request is matched as the GitHub check reads a link, so a link the check cannot verify starts nothing.
+  - The app subscribes to **Pull request** events; its Pull requests permission already allows them.
+  - Cost if wrong: a merged pull request with no milestone in a connected repository costs one query per workspace.
 
 ## 4. Pieces
 
@@ -139,7 +147,7 @@ paid with a comment of their own. Every bounty comment also shows Vestiarion to 
 1. Run migration 0072.
 2. On the GitHub App's settings page:
    - **Permissions → Repository → Issues: Read-only**, since GitHub sends comment events only with it;
-   - **Subscribe to events → Issue comment**;
+   - **Subscribe to events → Issue comment** and **Pull request** (B13);
    - **Webhook: Active**, URL `https://www.vestiarion.xyz/api/github/webhook`, with a new random secret.
 3. Set the same secret as `GITHUB_APP_WEBHOOK_SECRET` in Vercel, then redeploy.
 4. Accept the app's new permission on the installation, where GitHub asks for it.

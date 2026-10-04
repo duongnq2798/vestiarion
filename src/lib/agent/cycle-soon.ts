@@ -41,7 +41,9 @@ export type CycleEventKind =
   | "cash_returned"
   | "reminders_on"
   | "agent_resumed"
-  | "sample_loaded";
+  | "sample_loaded"
+  /** A pull request a milestone waits on was merged (bounties B13). */
+  | "pull_request_merged";
 
 export interface CycleEvent {
   orgId: string;

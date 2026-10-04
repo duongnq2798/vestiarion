@@ -584,7 +584,11 @@ records `github_bounty_attached`. `/payto <address>` from the pull request's
 author goes through `changeCounterpartyAddress` as a payee link's address
 does: stamped, held until a member confirms it, and emailed to them. Every
 outcome gets a reply on the pull request; the agent then releases the
-milestone under every guardrail, as any other.
+milestone under every guardrail, as any other. A `pull_request` delivery closed as
+merged (`src/lib/github/merges.ts`) starts `runCycleSoon` (`pull_request_merged`)
+for each connected workspace with a pending milestone on that pull request, as
+the GitHub check reads its link, so the payment follows the merge within a
+minute instead of waiting for the schedule.
 
 ## API
 

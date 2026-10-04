@@ -10,8 +10,12 @@ import type { GitHubAppSettings } from "@/lib/github/settings";
  * once with the work done after the response.
  */
 
-const { handleMock } = vi.hoisted(() => ({ handleMock: vi.fn() }));
+const { handleMock, mergedMock } = vi.hoisted(() => ({ handleMock: vi.fn(), mergedMock: vi.fn() }));
 vi.mock("server-only", () => ({}));
+vi.mock("@/lib/github/merges", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/github/merges")>()),
+  handlePullRequestMerged: mergedMock,
+}));
 vi.mock("@/lib/github/bounties", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/github/bounties")>()),
   handlePullRequestComment: handleMock,
@@ -51,6 +55,7 @@ function deps() {
 beforeEach(() => {
   handleMock.mockReset();
   handleMock.mockResolvedValue({ kind: "replied", result: "attached" });
+  mergedMock.mockReset();
 });
 
 describe("handleGitHubDelivery (B2)", () => {
@@ -104,6 +109,34 @@ describe("handleGitHubDelivery (B2)", () => {
     await expect(deferred[0]()).resolves.toBeUndefined();
     expect(errors).toHaveBeenCalled();
     errors.mockRestore();
+  });
+});
+
+describe("handleGitHubDelivery: a merged pull request (B13)", () => {
+  const pullRequest = (fields: Record<string, unknown> = {}) => ({
+    action: "closed",
+    installation: { id: 42 },
+    repository: { name: "widgets", owner: { login: "Acme" } },
+    pull_request: { number: 7, html_url: "https://github.com/Acme/widgets/pull/7", merged: true },
+    ...fields,
+  });
+
+  it("answers at once, and starts the cycles waiting on it after the response", async () => {
+    mergedMock.mockResolvedValue(["org-1"]);
+    const { deferred, value } = deps();
+    const response = await handleGitHubDelivery(delivery(pullRequest(), { event: "pull_request" }), value);
+    expect(response.status).toBe(202);
+    expect(mergedMock).not.toHaveBeenCalled();
+    await deferred[0]();
+    expect(mergedMock).toHaveBeenCalledWith({ installationId: 42, owner: "Acme", repo: "widgets", number: 7, url: "https://github.com/Acme/widgets/pull/7" });
+  });
+
+  it("is quiet for a pull request closed without merging, and for one opened", async () => {
+    for (const body of [pullRequest({ pull_request: { number: 7, html_url: "https://github.com/Acme/widgets/pull/7", merged: false } }), pullRequest({ action: "opened" })]) {
+      const { deferred, value } = deps();
+      expect((await handleGitHubDelivery(delivery(body, { event: "pull_request" }), value)).status).toBe(204);
+      expect(deferred).toHaveLength(0);
+    }
   });
 });
 

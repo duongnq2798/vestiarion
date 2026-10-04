@@ -19,7 +19,7 @@ If you are a member of a GitHub organization who may not install apps there, Git
 
 ## 2. Pay for pull requests
 
-Add milestones as you do already, with the pull request as their evidence: from **Contractors**, or [through the API](/docs/guides/api-milestones). Each cycle asks GitHub whether the pull request was merged. Once it was, the milestone is verified (`verify_milestone_github`), and the agent decides the payment.
+Add milestones as you do already, with the pull request as their evidence: from **Contractors**, or [through the API](/docs/guides/api-milestones). Each cycle asks GitHub whether the pull request was merged. Once it was, the milestone is verified (`verify_milestone_github`), and the agent decides the payment. In a repository the app is installed on, the merge itself starts that cycle, so the payment is decided within a minute of the merge rather than at the next scheduled cycle.
 
 In a repository the app is installed on, this works for private repositories too. The check reads them with the installation's own access. Any other pull request is read as before, so it must be public.
 

@@ -1,4 +1,5 @@
 import { handlePullRequestComment, readPullRequestComment } from "./bounties";
+import { handlePullRequestMerged, readMergedPullRequest } from "./merges";
 import type { GitHubAppSettings } from "./settings";
 import { readCommentCommand, verifyWebhookSignature } from "./webhook";
 
@@ -22,8 +23,9 @@ export async function handleGitHubDelivery(
   if (!verifyWebhookSignature(deps.secret, raw, request.headers.get("x-hub-signature-256"))) {
     return Response.json({ error: "invalid_signature" }, { status: 401 });
   }
+  const event = request.headers.get("x-github-event");
   // GitHub's ping when the webhook is set up, and every event the app does not act on.
-  if (request.headers.get("x-github-event") !== "issue_comment") return new Response(null, { status: 204 });
+  if (event !== "issue_comment" && event !== "pull_request") return new Response(null, { status: 204 });
 
   let payload: unknown;
   try {
@@ -31,6 +33,21 @@ export async function handleGitHubDelivery(
   } catch {
     return Response.json({ error: "invalid_json" }, { status: 400 });
   }
+
+  if (event === "pull_request") {
+    // A merged pull request a milestone waits on starts that workspace's cycle (B13).
+    const merged = readMergedPullRequest(payload);
+    if (!merged) return new Response(null, { status: 204 });
+    deps.defer(async () => {
+      try {
+        await handlePullRequestMerged(merged);
+      } catch (error) {
+        console.error("github: merged pull request not handled", `${merged.owner}/${merged.repo}#${merged.number}`, error instanceof Error ? error.message : "unknown error");
+      }
+    });
+    return new Response(null, { status: 202 });
+  }
+
   const comment = readPullRequestComment(payload);
   if (!comment || !readCommentCommand(comment.comment.body)) return new Response(null, { status: 204 });
 
