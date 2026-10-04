@@ -18,6 +18,8 @@
  * in a prompt string.
  */
 
+import { REASONING_SHAPE } from "../reasoning-copy";
+
 export interface TreasuryDecision {
   action: "sweep_to_usyc" | "redeem_from_usyc" | "hold";
   amount: number;
@@ -284,4 +286,73 @@ export function boundTreasuryDecision(model: TreasuryDecision, facts: TreasuryBo
     return { decision: model, limited: null };
   }
   return { decision: model, limited: null };
+}
+
+/**
+ * Where payments come from, as the treasury model is told it (treasury cash facts). Without it the model once held
+ * with nothing in the operating wallet, reasoning that the reserve already covered what fell due that day (testnet-2,
+ * 2026-10-04, ledger #1267).
+ */
+export const TREASURY_PAYMENTS_NOTE =
+  "Every payment leaves from the operating wallet: the reserve pays no one, and its cash counts toward a payment only once it is redeemed into the wallet. " +
+  "Each cycle, before it decides any payment, code brings back from the reserve what the operating wallet lacks for the payables due that day and the verified milestones. " +
+  "A redemption here keeps the buffer for what falls due within 7 days in the operating wallet ahead of its day.";
+
+export interface TreasuryPromptFacts {
+  operatingBalance: number;
+  reserveBalance: number;
+  apy: number;
+  obligationsDue7d: number;
+  obligationsDue14d: number;
+  obligationsOpenTotal: number;
+  daysUntilNextObligation: number;
+  plan: TreasuryPlan;
+  /** A real USYC reserve, and whether USYC can be bought now (null when the read failed); null while it is simulated. */
+  usyc: { subscriptionsOpen: boolean | null } | null;
+  bounds: { sweepAtMost: number; redeemAtMost: number; redeemAtLeast: number };
+}
+
+/** The treasury stage's question to the model: the figures, where payments come from, the economics and code's bounds. */
+export function treasuryUserPrompt(facts: TreasuryPromptFacts): string {
+  const { plan, bounds } = facts;
+  return JSON.stringify({
+    task: "Decide whether to sweep idle operating cash into the USYC-yielding reserve, redeem from the reserve back into operating, or hold.",
+    operatingBalance: facts.operatingBalance,
+    reserveBalance: facts.reserveBalance,
+    reserveApy: facts.apy,
+    upcomingObligationsNext7Days: facts.obligationsDue7d,
+    upcomingObligationsNext14Days: facts.obligationsDue14d,
+    totalOpenObligations: facts.obligationsOpenTotal,
+    daysUntilNextObligation: Number.isFinite(facts.daysUntilNextObligation) ? Number(facts.daysUntilNextObligation.toFixed(2)) : null,
+    payments: { note: TREASURY_PAYMENTS_NOTE },
+    economics: {
+      idleAboveBuffer: plan.idle,
+      requiredBuffer: plan.buffer,
+      expectedHoldDays: plan.holdDays,
+      projectedYieldUsd: plan.projectedYieldUsd,
+      roundTripCostUsd: plan.roundTripCostUsd,
+      note: "A sweep costs one transfer now and one redemption later. Sweeping is only worth doing when projectedYieldUsd exceeds roundTripCostUsd. expectedHoldDays is how long the swept cash would stay, on average over the next 30 days, before what falls due calls it back: only what the operating wallet cannot cover comes back, on its day.",
+    },
+    ...(facts.usyc
+      ? {
+          usyc: {
+            reserveIsRealUsyc: true,
+            subscriptionsOpen: facts.usyc.subscriptionsOpen,
+            note: "USYC can be bought only between its daily price update and 14:00 New York time on business days; a sweep while subscriptionsOpen is false is not executed. Redemptions are always possible.",
+          },
+        }
+      : {}),
+    // What code lets a move be, whatever the answer (treasury bounds R1–R3).
+    bounds: {
+      sweepAtMostUsdc: bounds.sweepAtMost,
+      redeemAtMostUsdc: bounds.redeemAtMost,
+      redeemAtLeastUsdc: bounds.redeemAtLeast,
+      note: "Code moves no more than these: a sweep never takes the operating wallet below its 7-day buffer, and a redemption brings back at most what falls due within 14 days needs, with its 15% cushion.",
+    },
+    responseShape: {
+      action: "sweep_to_usyc | redeem_from_usyc | hold",
+      amount: "number",
+      reasoning: REASONING_SHAPE,
+    },
+  });
 }
