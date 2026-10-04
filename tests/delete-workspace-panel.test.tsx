@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import DeleteWorkspacePanel, { DeleteWorkspaceConsequences, DeleteWorkspaceForm, dismissGuards } from "@/components/DeleteWorkspacePanel";
+import DeleteWorkspacePanel, { DeleteWorkspaceConsequences, DeleteWorkspaceForm, dismissGuards, PAUSE_REASON } from "@/components/DeleteWorkspacePanel";
 import { Dialog } from "@/components/ui/Dialog";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import type { DeletionContext } from "@/lib/platform/delete-workspace";
@@ -14,6 +14,7 @@ import type { DeletionContext } from "@/lib/platform/delete-workspace";
  */
 
 vi.mock("@/app/actions/workspace", () => ({ deleteWorkspaceAction: vi.fn() }));
+vi.mock("@/app/actions/agent", () => ({ pauseAgentAction: vi.fn() }));
 
 const html = (node: ReactElement) => renderToStaticMarkup(<TooltipProvider>{node}</TooltipProvider>);
 const text = (markup: string) => markup.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").replace(/&#x27;/g, "'").trim();
@@ -46,6 +47,13 @@ describe("DeleteWorkspacePanel", () => {
 
   it("asks a live workspace whose agent is running to pause it first", () => {
     expect(text(panel({ live: true, paused: false }))).toContain(PAUSE);
+  });
+
+  it("pauses the agent from the note itself, giving why (Settings structure design S6)", () => {
+    const markup = panel({ live: true, paused: false });
+    expect(text(markup)).toContain("Pause the agent");
+    expect(markup).toContain(`name="reason" value="${PAUSE_REASON}"`);
+    expect(panel({ live: true, paused: true })).not.toContain('name="reason"');
   });
 
   it("says nothing about pausing for a paused live workspace, or a sandbox", () => {
@@ -144,6 +152,13 @@ describe("DeleteWorkspaceForm", () => {
   it("shows the pause note inside the dialog too, when the workspace is live and running", () => {
     expect(text(form({ live: true }))).toContain(PAUSE);
     expect(text(form({ live: true, paused: true }))).not.toContain(PAUSE);
+  });
+
+  it("keeps the note's pause form beside the delete form, never inside it", () => {
+    const markup = form({ live: true });
+    expect(markup.match(/<form/g)).toHaveLength(2);
+    // The pause form closes before the delete form opens: no form holds another.
+    expect(markup.indexOf("</form>")).toBeLessThan(markup.lastIndexOf("<form"));
   });
 });
 

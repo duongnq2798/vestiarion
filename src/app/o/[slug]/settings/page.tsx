@@ -3,9 +3,10 @@ import ApiKeysPanel from "@/components/ApiKeysPanel";
 import DeleteWorkspacePanel from "@/components/DeleteWorkspacePanel";
 import EmailInboxPanel from "@/components/EmailInboxPanel";
 import GoLivePanel from "@/components/GoLivePanel";
+import GitHubPanel from "@/components/GitHubPanel";
 import LedgerKeyPanel from "@/components/LedgerKeyPanel";
 import NotificationsPanel from "@/components/NotificationsPanel";
-import GitHubPanel from "@/components/GitHubPanel";
+import { SettingsSections, type SettingsGroup } from "@/components/SettingsSections";
 import SlackPanel from "@/components/SlackPanel";
 import { UsycReservePanel } from "@/components/UsycReservePanel";
 import WebhooksPanel from "@/components/WebhooksPanel";
@@ -99,54 +100,126 @@ export default async function SettingsPage({
     ]);
     const notifyEmail = notifySwitch ? (unwrap(notifySwitch) as { notify_email: boolean }).notify_email : false;
 
+    const canManageIntegrations = can(membership.role, "integrations.manage");
+
+    // Every section Settings has, grouped; each is null where this viewer or this deployment does not get it, and
+    // SettingsSections leaves those out of the page and its contents alike (Settings structure design S1).
+    const groups: SettingsGroup[] = [
+      {
+        key: "you",
+        label: "You",
+        sections: [
+          {
+            id: "notifications-title",
+            title: "Notifications",
+            content:
+              canDecide || telegramOn ? (
+                <NotificationsPanel
+                  orgSlug={slug}
+                  canDecide={canDecide}
+                  notifyEmail={notifyEmail}
+                  telegram={telegramOn ? { link: telegramLink ? { username: telegramLink.username, linkedAt: telegramLink.linkedAt } : null } : null}
+                />
+              ) : null,
+          },
+        ],
+      },
+      {
+        key: "workspace",
+        label: "Workspace",
+        sections: [
+          // goLiveStatus carries no credential and no wallet id, so the whole status can cross into the client component.
+          { id: "go-live-title", title: "Go live", content: <GoLivePanel orgSlug={slug} status={goLive} canAdminister={canAdminister} /> },
+          {
+            id: "usyc-reserve-title",
+            title: "USYC reserve",
+            content: usyc ? <UsycReservePanel orgSlug={slug} status={usyc} canManage={can(membership.role, "treasury.manage")} /> : null,
+          },
+        ],
+      },
+      {
+        key: "developers",
+        label: "Developers",
+        sections: [
+          { id: "api-keys-title", title: "API keys", content: <ApiKeysPanel orgSlug={slug} apiKeys={apiKeys} canManage={canManageKeys} /> },
+          {
+            id: "webhooks-title",
+            title: "Webhooks",
+            // The full URL never crosses into the client component for a non-manager — built server-side, not just hidden at render time.
+            content: <WebhooksPanel orgSlug={slug} endpoints={toWebhookEndpointViews(webhookEndpoints, canManageWebhooks)} canManage={canManageWebhooks} />,
+          },
+        ],
+      },
+      {
+        key: "integrations",
+        label: "Integrations",
+        sections: [
+          {
+            id: "slack-title",
+            title: "Slack",
+            content: slack ? (
+              <SlackPanel
+                orgSlug={slug}
+                view={slack}
+                canManage={canManageIntegrations}
+                canAdminister={canAdminister}
+                notice={typeof slackOutcome === "string" ? slackOutcome : null}
+              />
+            ) : null,
+          },
+          {
+            id: "github-title",
+            title: "GitHub",
+            content: github ? (
+              <GitHubPanel
+                orgSlug={slug}
+                installations={github}
+                canManage={canManageIntegrations}
+                notice={typeof githubOutcome === "string" ? githubOutcome : null}
+              />
+            ) : null,
+          },
+          {
+            id: "email-inbox-settings-title",
+            title: "Invoices by email",
+            content:
+              inboxSettings && inbox !== undefined ? (
+                <EmailInboxPanel
+                  orgSlug={slug}
+                  // The address goes to an owner or admin alone: knowing it lets anyone file a draft.
+                  view={inbox ? { on: true, address: canManageIntegrations ? inboxAddress(inbox.code, inboxSettings.domain) : null } : { on: false }}
+                  canManage={canManageIntegrations}
+                />
+              ) : null,
+          },
+        ],
+      },
+      {
+        key: "security",
+        label: "Security",
+        sections: [{ id: "ledger-key-title", title: "Ledger signing key", content: <LedgerKeyPanel orgSlug={slug} status={ledgerKey} canAdminister={canAdminister} /> }],
+      },
+      {
+        key: "danger",
+        label: "Danger zone",
+        sections: [
+          {
+            id: "delete-workspace-title",
+            title: "Delete workspace",
+            // deletionContext carries counts and booleans only. Only an owner's page reads it, and never for the founding workspace.
+            content: deletion && !deletion.isFounding ? <DeleteWorkspacePanel orgSlug={slug} context={deletion} canAdminister={canAdminister} /> : null,
+          },
+        ],
+      },
+    ];
+
     return (
       <ProductShell day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()}>
         <PageHead
           title={sectionTitle("settings")}
-          sub="Your own notifications, taking this workspace live, the USYC reserve, API keys, outgoing webhooks, Slack, GitHub, invoices by email, the ledger signing key, and deleting the workspace. An owner takes it live, rotates the signing key, or deletes it; an owner or admin manages API keys, webhooks, Slack, GitHub and invoices by email, and a secret is shown once, right after it is created."
+          sub="Your own notifications, and how this workspace goes live, connects to other tools and signs its ledger. An owner takes it live, rotates the ledger signing key or deletes it; an owner or admin manages API keys, webhooks and integrations."
         />
-        <div className="space-y-12">
-          <NotificationsPanel
-            orgSlug={slug}
-            canDecide={canDecide}
-            notifyEmail={notifyEmail}
-            telegram={telegramOn ? { link: telegramLink ? { username: telegramLink.username, linkedAt: telegramLink.linkedAt } : null } : null}
-          />
-          {/* goLiveStatus carries no credential and no wallet id, so the whole status can cross into the client component. */}
-          <GoLivePanel orgSlug={slug} status={goLive} canAdminister={canAdminister} />
-          {usyc && <UsycReservePanel orgSlug={slug} status={usyc} canManage={can(membership.role, "treasury.manage")} />}
-          <ApiKeysPanel orgSlug={slug} apiKeys={apiKeys} canManage={canManageKeys} />
-          {/* The full URL never crosses into the client component for a non-manager — built server-side, not just hidden at render time. */}
-          <WebhooksPanel orgSlug={slug} endpoints={toWebhookEndpointViews(webhookEndpoints, canManageWebhooks)} canManage={canManageWebhooks} />
-          {slack && (
-            <SlackPanel
-              orgSlug={slug}
-              view={slack}
-              canManage={can(membership.role, "integrations.manage")}
-              canAdminister={canAdminister}
-              notice={typeof slackOutcome === "string" ? slackOutcome : null}
-            />
-          )}
-          {github && (
-            <GitHubPanel
-              orgSlug={slug}
-              installations={github}
-              canManage={can(membership.role, "integrations.manage")}
-              notice={typeof githubOutcome === "string" ? githubOutcome : null}
-            />
-          )}
-          {inboxSettings && inbox !== undefined && (
-            <EmailInboxPanel
-              orgSlug={slug}
-              // The address goes to an owner or admin alone: knowing it lets anyone file a draft.
-              view={inbox ? { on: true, address: can(membership.role, "integrations.manage") ? inboxAddress(inbox.code, inboxSettings.domain) : null } : { on: false }}
-              canManage={can(membership.role, "integrations.manage")}
-            />
-          )}
-          <LedgerKeyPanel orgSlug={slug} status={ledgerKey} canAdminister={canAdminister} />
-          {/* deletionContext carries counts and booleans only; the panel renders nothing for the founding workspace. */}
-          {deletion && <DeleteWorkspacePanel orgSlug={slug} context={deletion} canAdminister={canAdminister} />}
-        </div>
+        <SettingsSections groups={groups} />
       </ProductShell>
     );
   });

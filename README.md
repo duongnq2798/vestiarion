@@ -481,7 +481,7 @@ assert about your own system drift, and figures you read do not.
 
 The simulator and the real integration share one interface (`ChainProvider` in
 `src/lib/circle/types.ts`), so switching is additive. A workspace's **owner** does it from the
-**Go live** section at the top of **Settings** (`/o/<slug>/settings`), in three steps, each unlocked
+**Go live** section of **Settings** (`/o/<slug>/settings`, under **Workspace**), in three steps, each unlocked
 by the one before:
 
 1. **Connect Circle.** Paste an **API key** and the **entity secret** from the

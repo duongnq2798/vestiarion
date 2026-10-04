@@ -37,6 +37,19 @@ describe("SlackPanel", () => {
     expect(markup).not.toContain('name="limit"');
   });
 
+  it("lays the connection out as label and value rows (Settings structure design S5)", () => {
+    const markup = renderToStaticMarkup(<SlackPanel orgSlug="acme" view={installed} canManage canAdminister={false} notice={null} />);
+    expect(markup).toMatch(/<dt[^>]*>Slack workspace<\/dt><dd[^>]*>Acme HQ<\/dd>/);
+    expect(markup).toMatch(/<dt[^>]*>Decisions go to<\/dt><dd[^>]*>#finance<\/dd>/);
+    expect(markup).toMatch(/<dt[^>]*>Connected since<\/dt><dd[^>]*>Oct 3<\/dd>/);
+  });
+
+  it("offers Save only once the limit differs from the one saved", () => {
+    const markup = renderToStaticMarkup(<SlackPanel orgSlug="acme" view={{ ...installed, decisionsLimitUsdc: 5 }} canManage canAdminister notice={null} />);
+    expect(markup).toContain('value="5"');
+    expect(markup).toMatch(/<button[^>]*type="submit"[^>]*disabled=""[^>]*>(?:(?!<\/button>).)*Save/);
+  });
+
   it("lets an owner set the limit, and says the one set", () => {
     const markup = renderToStaticMarkup(<SlackPanel orgSlug="acme" view={{ ...installed, decisionsLimitUsdc: 5, youConnected: true }} canManage canAdminister notice={null} />);
     expect(markup).toContain('name="limit"');
