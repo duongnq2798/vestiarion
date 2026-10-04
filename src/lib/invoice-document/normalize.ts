@@ -78,16 +78,26 @@ function escapeRegExp(value: string): string {
 }
 
 /**
+ * A figure written with a decimal comma, as most of Europe and Vietnam write money: one or two digits after the comma,
+ * and before it plain digits or groups of three set off by points or spaces. "3,50" is 3.50 and "1.200,00" is 1200.00;
+ * a comma followed by three digits is a thousands separator, so "1,250" never reads this way (reader follow-up F1).
+ */
+const DECIMAL_COMMA = /^(\d{1,3}(?:[. ]\d{3})+|\d+),(\d{1,2})$/;
+
+/**
  * Every amount written in the text. A comma counts as a thousands separator
- * only between groups of three digits, so "1,200.00" is 1200 and "12,50" is
- * no figure at all, rather than 1250. Digits inside an address, a purchase
- * order, an invoice number or a date are not figures (review C1, I1).
+ * only between groups of three digits, so "1,200.00" is 1200, and as a decimal
+ * comma only before one or two final digits, so "12,50" is 12.50: never 1250.
+ * Digits inside an address, a purchase order, an invoice number or a date are
+ * not figures (review C1, I1; reader follow-up F1).
  */
 function figures(text: string): Set<bigint> {
   const spaced = text
     .replace(/0x[0-9a-fA-F]+/g, " ")
     .replace(new RegExp(`\\b(${CURRENCY_CODES})(?=\\d)`, "gi"), "$1 ")
-    .replace(new RegExp(`(\\d)(${CURRENCY_CODES})\\b`, "gi"), "$1 $2");
+    .replace(new RegExp(`(\\d)(${CURRENCY_CODES})\\b`, "gi"), "$1 $2")
+    // "1 200,00": thousands set off by spaces stay one figure.
+    .replace(/(?<![\d.,])(\d{1,3}(?: \d{3})+),(\d{1,2})(?!\d)/g, (_figure, whole: string, cents: string) => `${whole.replace(/ /g, "")},${cents}`);
   const found = new Set<bigint>();
   for (const token of spaced.split(/\s+/)) {
     // A word that mixes letters and digits is an identifier: PO-1042, INV-2207, an IBAN.
@@ -96,11 +106,25 @@ function figures(text: string): Set<bigint> {
       const value = micros(figure.replace(/,/g, ""));
       if (value !== null) found.add(value);
     }
+    for (const [figure] of token.matchAll(/(?<![\d.,\-/#])(?:\d{1,3}(?:\.\d{3})+|\d+),\d{1,2}(?![\d.,\-/])/g)) {
+      const plain = commaDecimal(figure);
+      const value = plain === null ? null : micros(plain);
+      if (value !== null) found.add(value);
+    }
   }
   return found;
 }
 
-/** The model's amount as a plain decimal, or null when it is not one: "1,200.00" is 1200.00; "12,50" and "1.200,00" are not read. */
+/** A decimal-comma figure as a plain decimal, or null when it is not one. */
+function commaDecimal(value: string): string | null {
+  const match = DECIMAL_COMMA.exec(value);
+  return match ? `${match[1].replace(/[. ]/g, "")}.${match[2]}` : null;
+}
+
+/**
+ * The model's amount as a plain decimal, or null when it is not one: "1,200.00" is 1200.00, "3,50" is 3.50 and
+ * "1.200,00" is 1200.00; a figure that is neither form, such as "1,200,5", is not read.
+ */
 function plainAmount(value: string): string | null {
   const bare = value
     .replace(/^[$€]\s*/, "")
@@ -108,7 +132,7 @@ function plainAmount(value: string): string | null {
     .trim();
   if (/^\d{1,3}(?:,\d{3})+(?:\.\d{1,6})?$/.test(bare)) return bare.replace(/,/g, "");
   if (/^\d+(?:\.\d{1,6})?$/.test(bare)) return bare;
-  return null;
+  return commaDecimal(bare);
 }
 
 type AmountReading = { amount: string } | { amount: null; why: "absent" | "unreadable" | "not_found" };
@@ -137,6 +161,62 @@ function isRealDate(value: string | null): value is string {
   if (value === null || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const parsed = new Date(`${value}T12:00:00.000Z`);
   return !Number.isNaN(parsed.valueOf()) && parsed.toISOString().startsWith(value);
+}
+
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+/** "3 November 2026". */
+function spelled(iso: string): string {
+  const [year, month, day] = iso.split("-").map(Number);
+  return `${day} ${MONTHS[month - 1]} ${year}`;
+}
+
+function isoOf(year: string, month: string, day: string): string | null {
+  const iso = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+  return isRealDate(iso) ? iso : null;
+}
+
+/** Each date the text writes all in numbers that reads as two different days, day first or month first, with both. */
+function swappableDates(text: string): Array<{ written: string; readings: string[] }> {
+  const found: Array<{ written: string; readings: string[] }> = [];
+  for (const [written, first, , second, year] of text.matchAll(/(?<![\d./-])(\d{1,2})([./-])(\d{1,2})\2(\d{4})(?![\d./-])/g)) {
+    const dayFirst = isoOf(year, second, first);
+    const monthFirst = isoOf(year, first, second);
+    if (dayFirst && monthFirst && dayFirst !== monthFirst) found.push({ written, readings: [dayFirst, monthFirst] });
+  }
+  return found;
+}
+
+/** Whether the text writes this day so it can only be it: 2026-11-03, 15/10/2026, 05.05.2026, 3 November 2026, Nov 3, 2026. */
+function writtenPlainly(text: string, iso: string): boolean {
+  if (text.includes(iso)) return true;
+  const [year, month, day] = iso.split("-").map(Number);
+  const name = `(?:${MONTHS[month - 1]}|${MONTHS[month - 1].slice(0, 3)}\\.?)`;
+  const dayOf = `0?${day}(?:st|nd|rd|th)?`;
+  if (new RegExp(`(?<!\\d)${dayOf}\\s+${name},?\\s+${year}|${name}\\s+${dayOf},?\\s+${year}`, "i").test(text)) return true;
+  if (day <= 12 && day !== month) return false;
+  return new RegExp(`(?<![\\d./-])(?:0?${day}([./-])0?${month}\\1${year}|0?${month}([./-])0?${day}\\2${year})(?![\\d./-])`).test(text);
+}
+
+/**
+ * A due date read from a date written all in numbers may have been the other day: 03/11/2026 is 3 November in most of
+ * the world and 11 March in the United States. The model chooses; a member should know there was a choice, and which
+ * one it made, as should a due date worked out from such an invoice date (reader follow-up F2). Information only.
+ */
+function dateNotes(text: string, dueDate: string | null, issueDate: string | null): string[] {
+  if (!dueDate) return [];
+  const swappable = swappableDates(text);
+  const due = swappable.find((date) => date.readings.includes(dueDate));
+  if (due) {
+    const other = due.readings.find((reading) => reading !== dueDate) ?? dueDate;
+    return [`The due date, ${spelled(dueDate)}, was read from ${due.written}, which can also mean ${spelled(other)}. Check it against the invoice.`];
+  }
+  const issued = issueDate ? swappable.find((date) => date.readings.includes(issueDate)) : undefined;
+  if (!issueDate || !issued || writtenPlainly(text, dueDate)) return [];
+  const other = issued.readings.find((reading) => reading !== issueDate) ?? issueDate;
+  return [
+    `The due date, ${spelled(dueDate)}, was worked out from the invoice date ${issued.written}, read as ${spelled(issueDate)}; it can also mean ${spelled(other)}. Check both against the invoice.`,
+  ];
 }
 
 function cut(value: string | null, max: number): string | null {
@@ -188,6 +268,7 @@ export function normalizeExtraction(raw: RawExtraction, text: string): Normalize
   }
 
   const dueDate = isRealDate(raw.dueDate) ? raw.dueDate : null;
+  notes.push(...dateNotes(text, dueDate, isRealDate(raw.issueDate) ? raw.issueDate : null));
 
   // A percent the document states reaches the form even when its deadline cannot be used: the form then
   // requires a deadline, so the member enters it or clears the discount, rather than adding the invoice

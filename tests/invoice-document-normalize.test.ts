@@ -112,6 +112,38 @@ describe("checking what the model read against the document", () => {
     expect(normalize({ dueDate: "31/10/2026", earlyPayDiscountPct: null, discountDeadline: null }).fields.dueDate).toBeNull();
   });
 
+  describe("a date written in numbers whose day and month could swap", () => {
+    const plain = { amount: "0.80", currency: "USDC", poReference: null, payToAddress: null, earlyPayDiscountPct: null, discountDeadline: null };
+
+    it("says the due date could have been the other day, and which one was read", () => {
+      const text = "INVOICE\nPuka Hotel\nDate: 04/10/2026\nPayment due: 03/11/2026\nTotal due: 0.80 USDC";
+      const { fields, notes } = normalize({ ...plain, issueDate: "2026-10-04", dueDate: "2026-11-03" }, text);
+      expect(fields.dueDate).toBe("2026-11-03");
+      expect(notes).toEqual(["The due date, 3 November 2026, was read from 03/11/2026, which can also mean 11 March 2026. Check it against the invoice."]);
+    });
+
+    it("says so of the invoice date a due date was worked out from, when the due date is not written", () => {
+      const text = "GOZO TRADING CO.\nINVOICE # 1047\nDATE 10/04/2026\nTERMS Net 30\nBALANCE DUE USDC 0.80";
+      const { notes } = normalize({ ...plain, issueDate: "2026-10-04", dueDate: "2026-11-03" }, text);
+      expect(notes).toEqual([
+        "The due date, 3 November 2026, was worked out from the invoice date 10/04/2026, read as 4 October 2026; it can also mean 10 April 2026. Check both against the invoice.",
+      ]);
+    });
+
+    it("says nothing when the date can be read only one way", () => {
+      for (const [text, dueDate] of [
+        ["Due 15/10/2026\nTotal due 0.80 USDC", "2026-10-15"],
+        ["Due 10/15/2026\nTotal due 0.80 USDC", "2026-10-15"],
+        ["Due 2026-10-15\nTotal due 0.80 USDC", "2026-10-15"],
+        ["Due 05.05.2026\nTotal due 0.80 USDC", "2026-05-05"],
+        ["Date 10/04/2026\nDue November 3, 2026\nTotal due 0.80 USDC", "2026-11-03"],
+        ["Date 10/04/2026\nDue 3 Nov 2026\nTotal due 0.80 USDC", "2026-11-03"],
+      ]) {
+        expect(normalize({ ...plain, issueDate: "2026-10-04", dueDate }, text).notes, text).toEqual([]);
+      }
+    });
+  });
+
   // A percent the document states is never dropped for want of a deadline: the form
   // then requires one, so the member enters it or clears the discount (intake rule, 2026-10-02).
   it("keeps a stated percent whose deadline is after the due date, leaves the deadline blank, and says why", () => {
@@ -158,9 +190,27 @@ describe("checking what the model read against the document", () => {
     expect(normalize({ notes: null }).modelNote).toBeNull();
   });
 
-  it("blanks an amount written with a decimal comma, rather than reading it a hundred times larger, and says why", () => {
-    for (const [amount, text] of [["12,50", "Total due 12,50 EUR"], ["1.200,00", "Total due 1.200,00 EUR"], ["1 200,00", "Total due 1 200,00 EUR"]]) {
-      const { fields, notes } = normalize({ amount, currency: "EUR" }, text);
+  it("reads an amount written with a decimal comma when it can only be one: one or two digits after the comma", () => {
+    const noDiscount = { currency: "EUR", earlyPayDiscountPct: null, discountDeadline: null };
+    for (const [amount, text, read] of [
+      ["12,50", "Total due 12,50 EUR", "12.50"],
+      ["3,50", "Tổng cộng thanh toán: 3,50 USDC", "3.50"],
+      ["1.200,00", "Total due 1.200,00 EUR", "1200.00"],
+      ["1 200,00", "Total due 1 200,00 EUR", "1200.00"],
+      ["0,5", "Gesamt 0,5 EUR", "0.5"],
+    ]) {
+      const { fields, notes } = normalize({ amount, ...noDiscount }, text);
+      expect(fields.amount, amount).toBe(read);
+      expect(notes, amount).toEqual([]);
+    }
+    // The model may write the figure with a point: the document's comma is still found.
+    expect(normalize({ amount: "3.50", ...noDiscount }, "Tổng cộng thanh toán: 3,50 USDC").fields.amount).toBe("3.50");
+  });
+
+  it("still reads three digits after a comma as thousands, and blanks a figure that is neither form, saying why", () => {
+    expect(normalize({ amount: "1,250", currency: "USDC" }, "Total due 1,250 USDC").fields.amount).toBe("1250");
+    for (const amount of ["1,200,5", "1.2,50", "12,5,0"]) {
+      const { fields, notes } = normalize({ amount, currency: "EUR" }, `Total due ${amount} EUR`);
       expect(fields.amount, amount).toBeNull();
       expect(notes, amount).toContain("The amount could not be read as a number. Type it in from the invoice.");
     }

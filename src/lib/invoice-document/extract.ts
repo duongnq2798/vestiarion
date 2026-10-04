@@ -49,6 +49,20 @@ function lastFigure(line: string): string | null {
   return all ? all[all.length - 1] : null;
 }
 
+const CURRENCY_MARK = String.raw`(?:\b(?:USDC|EURC|USD|EUR)\b|US\$|[$€£])`;
+const WRITTEN_AMOUNT = String.raw`\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,6})?|\d+(?:[.,]\d{1,6})?`;
+const AGAINST_CURRENCY = new RegExp(`${CURRENCY_MARK}\\s?(${WRITTEN_AMOUNT})|(${WRITTEN_AMOUNT})\\s?${CURRENCY_MARK}`, "gi");
+
+/**
+ * The figure a line writes against a currency code or symbol, the last when there are several: "Total: 45 USDC.
+ * Please pay by Oct 20." is 45, not 20 (reader follow-up F3).
+ */
+function currencyFigure(line: string): string | null {
+  let last: string | null = null;
+  for (const match of line.matchAll(AGAINST_CURRENCY)) last = match[1] ?? match[2] ?? last;
+  return last;
+}
+
 /**
  * The reader used without a model: regular expressions for the parts of an
  * invoice that have a usual shape. It is also what the model's reading is
@@ -89,7 +103,7 @@ export function ruleBasedExtraction(text: string): RawExtraction {
   return rawExtractionSchema.parse({
     vendorName: lines.find((line) => !/^invoice$/i.test(line)) ?? null,
     invoiceNumber: text.match(/invoice\s*(?:number|no\.?|#)\s*[:#]?\s*([A-Z0-9][A-Z0-9\-/]*)/i)?.[1] ?? null,
-    amount: totalLine ? lastFigure(totalLine) : null,
+    amount: totalLine ? (currencyFigure(totalLine) ?? lastFigure(totalLine)) : null,
     currency,
     issueDate,
     dueDate,
