@@ -116,7 +116,7 @@ describe("a decided card", () => {
 describe("answers to /vestiarion", () => {
   it("says what is safe to spend today, what waits, and what the agent pays next", () => {
     const answer = todayAnswer("Northstar", {
-      safeToSpend: 12.5, cash: 50, dueIn30d: 37.5, eurcLeftOut: 0, shortOn: null, waiting: 2,
+      safeToSpend: 12.5, cash: 50, reserve: 0, dueIn30d: 37.5, eurcLeftOut: 0, shortOn: null, waiting: 2,
       scheduled: [{ name: "Centronex", amount: 2, currency: "USDC", on: "2026-10-05" }], lastCycleAt: "2026-10-03T07:55:00Z",
     }, `${ORIGIN}/o/northstar/console`);
     const text = allText(answer);
@@ -145,5 +145,14 @@ describe("answers to /vestiarion", () => {
     expect(allText(helpAnswer(true, "Northstar"))).toContain("/vestiarion pause");
     expect(allText(helpAnswer(true, "Northstar"))).toContain("*Add invoice*");
     expect(allText(helpAnswer(false))).toContain("/vestiarion connect");
+  });
+});
+
+describe("todayAnswer's wallet line", () => {
+  it("names the USYC reserve it counts, and only when there is one", () => {
+    const base = { safeToSpend: 154.38, cash: 0.23, reserve: 154.381758, dueIn30d: 0.2, eurcLeftOut: 0, shortOn: null, waiting: 0, scheduled: [], lastCycleAt: null };
+    const answer = JSON.stringify(todayAnswer("testnet-2", base, "https://www.vestiarion.xyz/o/testnet-2/console"));
+    expect(answer).toContain("The operating wallet holds 0.23 USDC and the USYC reserve 154.381758 USDC, back in seconds; 0.20 USDC is due in the next 30 days.");
+    expect(JSON.stringify(todayAnswer("testnet-2", { ...base, reserve: 0 }, "https://www.vestiarion.xyz/o/testnet-2/console"))).not.toContain("USYC reserve");
   });
 });

@@ -152,10 +152,11 @@ export default async function DashboardPage({
     // derived from the invoices already loaded above, no extra query.
     const scheduledPayments = scheduledPaymentRows(invoices);
     // Safe to spend today and the next 30 days (safe to spend design), from the rows already loaded: the
-    // operating wallet's USDC less what the agent counts as owed.
+    // operating wallet's USDC and the USYC reserve's, less what the agent counts as owed.
     const outlook = cashOutlook({
       now: Date.now(),
       operatingUsdc: Number(accountsRows.find((account) => account.kind === "operating")?.balance ?? 0),
+      reserveUsdc: Number(accountsRows.find((account) => account.kind === "reserve")?.balance ?? 0),
       payables: invoices
         .filter((invoice) => invoice.direction === "payable")
         .map((invoice) => ({ ...invoice, counterparty: invoice.counterparty_name, currency: invoice.currency ?? null, scheduled_for: invoice.scheduled_for ?? null })),
@@ -225,7 +226,7 @@ export default async function DashboardPage({
             syncedAt={accountsRows.find((account) => account.kind === "operating" && account.circle_wallet_id)?.balance_synced_at ?? null}
           />
           {/* The figure; how it is reached, and the 30 days behind it, are the Next 30 days section below. */}
-          <StatTile label="Safe to spend today" tone={outlook.safeToSpend < 0 ? "held" : "default"} href="#cash-outlook" sub="After everything already owed">
+          <StatTile label="Safe to spend today" tone={outlook.safeToSpend < 0 ? "held" : "default"} href="#cash-outlook" sub={outlook.reserve > 0 ? "After everything already owed, the USYC reserve included" : "After everything already owed"}>
             <SafeToSpendFigure outlook={outlook} />
           </StatTile>
           <StatTile label="Paid out to date" sub={`${dashboardStats.onchainTransfers} settled on-chain`}>

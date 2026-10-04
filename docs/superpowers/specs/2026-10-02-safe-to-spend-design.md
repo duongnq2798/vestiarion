@@ -44,3 +44,11 @@ sweep (`planTreasury`); the owner could not see the answer.
 - `src/components/vx/CashOutlook.tsx`: `SafeToSpendPanel` and `CashCalendar`.
 - The console page, and the design page with a fixture that runs short.
 - The try-it guide.
+
+## Amendment 2026-10-04: the USYC reserve counts
+
+The treasury keeps only a cushion in the operating wallet and sweeps the rest to the USYC reserve, so a figure from the
+wallet alone read 0.00 USDC in testnet-2 while 154.38 USDC sat in the reserve. The reserve comes back within seconds at
+any hour, and since PR #188 the cycle brings back what payables due today and verified milestones need before it pays
+them. So Safe to spend today, the next 30 days and the chats' `/today` now start from the wallet and the reserve
+together; the breakdown names the reserve on its own line, and the console tile says it is included.

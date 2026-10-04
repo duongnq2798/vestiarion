@@ -4,7 +4,10 @@ import { OPEN_PAYABLE_STATUSES } from "./agent/obligations";
  * Safe to spend today, and the next 30 days of money moving
  * (docs/superpowers/specs/2026-10-02-safe-to-spend-design.md).
  *
- * The figure starts from the operating wallet's USDC and takes off what the agent itself counts as owed:
+ * The figure starts from the operating wallet's USDC, and the USYC reserve's, which comes back to the wallet within
+ * seconds at any hour and which the agent brings back itself before it pays what is due. The treasury keeps only a
+ * cushion in the wallet and sweeps the rest to the reserve, so the wallet alone would read nearly nothing. From that
+ * it takes off what the agent itself counts as owed:
  * every open USDC payable leaving within 30 days (a scheduled one on its day, an overdue one today, a held
  * one still, since a hold is unresolved and never forgiven), every open milestone (payable the day it is
  * verified, so counted today), and the cushion the treasury keeps over what leaves within 7 days (its
@@ -17,6 +20,8 @@ import { OPEN_PAYABLE_STATUSES } from "./agent/obligations";
 export interface OutlookInput {
   now: number;
   operatingUsdc: number;
+  /** The USYC reserve's value in USDC; 0 without one. */
+  reserveUsdc?: number;
   payables: Array<{ id: string; counterparty: string; amount: number; currency: string | null; due_date: string; status: string; scheduled_for: string | null }>;
   milestones: Array<{ id: string; title: string; contractor: string; amount: number; status: string; escrow_state?: string | null }>;
   receivables: Array<{ id: string; counterparty: string; amount: number; currency: string | null; due_date: string; status: string }>;
@@ -41,7 +46,10 @@ export interface OutlookDay {
 
 export interface CashOutlook {
   safeToSpend: number;
+  /** The operating wallet's USDC. */
   cash: number;
+  /** The USYC reserve's value in USDC, counted as cash today. */
+  reserve: number;
   dueIn30d: number;
   dueCount: number;
   milestonesOpen: number;
@@ -125,8 +133,11 @@ export function cashOutlook(input: OutlookInput): CashOutlook {
   }
 
   const order: Record<OutlookItem["kind"], number> = { out: 0, milestone: 1, in: 2 };
-  let balance = input.operatingUsdc;
-  let withExpected = input.operatingUsdc;
+  const reserve = input.reserveUsdc ?? 0;
+  // What the agent can pay with today: the wallet, and the reserve it brings back in seconds.
+  const available = input.operatingUsdc + reserve;
+  let balance = available;
+  let withExpected = available;
   let shortOn: string | null = null;
   const days: OutlookDay[] = [...byDay.keys()]
     .sort((a, b) => a - b)
@@ -145,8 +156,9 @@ export function cashOutlook(input: OutlookInput): CashOutlook {
 
   const cushion = round((dueIn7d + milestonesOpen) * CUSHION);
   return {
-    safeToSpend: round(input.operatingUsdc - dueIn30d - milestonesOpen - cushion),
+    safeToSpend: round(available - dueIn30d - milestonesOpen - cushion),
     cash: input.operatingUsdc,
+    reserve: round(reserve),
     dueIn30d: round(dueIn30d),
     dueCount,
     milestonesOpen: round(milestonesOpen),

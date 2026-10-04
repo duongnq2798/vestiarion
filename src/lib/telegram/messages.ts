@@ -115,7 +115,7 @@ export function todayMessage(workspaceName: string, facts: TodayFacts, consoleUr
     `${bold(workspaceName)} · today`,
     "",
     `${bold(`Safe to spend today: ${amountText(facts.safeToSpend, "USDC")}`)}`,
-    `The operating wallet holds ${escapeHtml(amountText(facts.cash, "USDC"))}; ${escapeHtml(amountText(facts.dueIn30d, "USDC"))} is due in the next 30 days.`,
+    `The operating wallet holds ${escapeHtml(amountText(facts.cash, "USDC"))}${facts.reserve > 0 ? ` and the USYC reserve ${escapeHtml(amountText(facts.reserve, "USDC"))}, back in seconds` : ""}; ${escapeHtml(amountText(facts.dueIn30d, "USDC"))} is due in the next 30 days.`,
   ];
   if (facts.eurcLeftOut > 0) lines.push(`EURC payables due: ${escapeHtml(amountText(facts.eurcLeftOut, "EURC"))}, paid from EURC.`);
   if (facts.shortOn) lines.push(`⚠️ Before any receivable arrives, the wallet runs short on ${shortDay(facts.shortOn)}.`);

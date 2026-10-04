@@ -60,10 +60,12 @@ describe("todayFacts", () => {
   it("works out safe to spend today as the console does, and what waits and what is paid next", async () => {
     const facts = await workspace()(() => todayFacts(NOW));
 
-    // 100 in the operating wallet, less 45 USDC due within 30 days (30 + 10 held + 5 scheduled), less the 4 USDC
-    // verified milestone, less a 15% cushion on the 39 USDC leaving within 7 days (30 + 5 + 4): 100 - 45 - 4 - 5.85.
-    expect(facts.safeToSpend).toBe(45.15);
+    // 100 in the operating wallet and 50 in the USYC reserve, less 45 USDC due within 30 days (30 + 10 held + 5
+    // scheduled), less the 4 USDC verified milestone, less a 15% cushion on the 39 USDC leaving within 7 days
+    // (30 + 5 + 4): 150 - 45 - 4 - 5.85.
+    expect(facts.safeToSpend).toBe(95.15);
     expect(facts.cash).toBe(100);
+    expect(facts.reserve).toBe(50);
     expect(facts.dueIn30d).toBe(45);
     expect(facts.eurcLeftOut).toBe(8);
     // Jiren's held payable, and Mr Pop's held milestone.
@@ -74,8 +76,16 @@ describe("todayFacts", () => {
 });
 
 describe("todayMessage", () => {
+  it("names the USYC reserve it counts, and only when there is one", () => {
+    const base = { safeToSpend: 154.38, cash: 0.23, reserve: 154.381758, dueIn30d: 0.2, eurcLeftOut: 0, shortOn: null, waiting: 0, scheduled: [], lastCycleAt: null };
+    expect(todayMessage("testnet-2", base, "https://www.vestiarion.xyz/o/testnet-2/console")).toContain(
+      "The operating wallet holds 0.23 USDC and the USYC reserve 154.381758 USDC, back in seconds; 0.20 USDC is due in the next 30 days."
+    );
+    expect(todayMessage("testnet-2", { ...base, reserve: 0 }, "https://www.vestiarion.xyz/o/testnet-2/console")).not.toContain("USYC reserve");
+  });
+
   const facts: TodayFacts = {
-    safeToSpend: 45.15, cash: 100, dueIn30d: 45, eurcLeftOut: 8, shortOn: null, waiting: 2,
+    safeToSpend: 45.15, cash: 100, reserve: 0, dueIn30d: 45, eurcLeftOut: 8, shortOn: null, waiting: 2,
     scheduled: [{ name: "Puka & Co", amount: 5, currency: "USDC", on: "2026-10-05" }], lastCycleAt: "2026-10-03T07:55:00Z",
   };
 

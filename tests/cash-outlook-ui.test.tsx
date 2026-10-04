@@ -13,6 +13,7 @@ const text = (markup: string) => markup.replace(/<[^>]+>/g, " ").replace(/&#x27;
 const OUTLOOK: CashOutlook = {
   safeToSpend: 35.5,
   cash: 100,
+  reserve: 0,
   dueIn30d: 50,
   dueCount: 2,
   milestonesOpen: 10,
@@ -45,6 +46,13 @@ describe("SafeToSpendPanel", () => {
     expect(page).toContain("Open milestones (1)");
     expect(page).toContain("Cushion: 15% of the next 7 days");
     expect(page).toContain("not counted until they arrive");
+  });
+
+  it("names the USYC reserve it counts, and only when there is one", () => {
+    const withReserve = text(renderToStaticMarkup(<SafeToSpendPanel outlook={{ ...OUTLOOK, cash: 0.23, reserve: 154.381758, safeToSpend: 154.381758 }} />));
+    expect(withReserve).toContain("In the USYC reserve, back in seconds");
+    expect(withReserve).toContain("154.381758");
+    expect(text(renderToStaticMarkup(<SafeToSpendPanel outlook={OUTLOOK} />))).not.toContain("USYC reserve");
   });
 
   it("says by how much it is short, and the day the wallet runs out", () => {

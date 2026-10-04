@@ -11,6 +11,8 @@ import { listAccounts, listInvoices, listMilestones } from "../queries";
 export interface TodayFacts {
   safeToSpend: number;
   cash: number;
+  /** The USYC reserve's value in USDC, counted in safe to spend: it comes back to the wallet within seconds. */
+  reserve: number;
   dueIn30d: number;
   /** EURC payables due within 30 days, paid from EURC and so outside the figure. */
   eurcLeftOut: number;
@@ -50,6 +52,7 @@ export async function todayFacts(now: number = Date.now()): Promise<TodayFacts> 
   const outlook = cashOutlook({
     now,
     operatingUsdc: Number(accounts.find((account) => account.kind === "operating")?.balance ?? 0),
+    reserveUsdc: Number(accounts.find((account) => account.kind === "reserve")?.balance ?? 0),
     payables: payables.map((invoice) => ({
       id: invoice.id,
       counterparty: invoice.counterparty_name,
@@ -90,6 +93,7 @@ export async function todayFacts(now: number = Date.now()): Promise<TodayFacts> 
   return {
     safeToSpend: outlook.safeToSpend,
     cash: outlook.cash,
+    reserve: outlook.reserve,
     dueIn30d: outlook.dueIn30d,
     eurcLeftOut: outlook.eurcLeftOut,
     shortOn: outlook.shortOn,
