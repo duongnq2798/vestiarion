@@ -26,9 +26,16 @@ function world(reply: (sent: RecordedRequest) => FakeReply = () => ({ body: [] }
 
 beforeEach(() => ledgerMock.mockReset());
 
+/**
+ * As PostgREST answers a write: the rows only when the request selected some, and otherwise a 201 with no body, which
+ * supabase-js reads as `data: null`.
+ */
+const postgrest = (sent: RecordedRequest): FakeReply =>
+  sent.params.get("select") ? { status: 201, body: [{ installation_id: 42 }] } : { status: 201, body: null };
+
 describe("saveInstallation", () => {
   it("keeps one row per workspace and installation, as the person who connected it, and records it", async () => {
-    const { fake, run } = world(() => ({ status: 201, body: [] }));
+    const { fake, run } = world(postgrest);
     await run(() => saveInstallation({ orgId: ORG, connectedBy: USER, installation: INSTALLATION }));
 
     const upsert = fake.requests.find((sent) => sent.path === "/rest/v1/github_installations")!;

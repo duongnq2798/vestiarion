@@ -36,6 +36,8 @@ export async function saveInstallation(input: { orgId: string; connectedBy: stri
         },
         { onConflict: "org_id,installation_id" }
       )
+      // The row back: without it PostgREST answers 201 with no body, which `unwrap` takes for a failure.
+      .select("installation_id")
   );
   await appendLedgerEntryBestEffort(orgId, {
     actor: "human",
