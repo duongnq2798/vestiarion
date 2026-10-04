@@ -3,12 +3,14 @@
 import "server-only";
 
 import { consoleAnswer } from "@/app/actions/command-result";
+import type { IntakeActionResult } from "@/app/actions/intake";
 import { authorize } from "@/lib/auth/authorize";
 import { revalidateOrgPages } from "@/lib/auth/revalidate";
 import { consoleActor } from "@/lib/commands/actor";
-import { addFromInbox, dismissFromInbox } from "@/lib/commands/inbox";
+import { addFromInbox, dismissFromInbox, finishFromInbox } from "@/lib/commands/inbox";
 import { inOrg } from "@/lib/dal/scope";
 import { changeInboxAddress, turnInboxOff, turnInboxOn } from "@/lib/email-inbox/inboxes";
+import { invoiceFormRefusal, invoiceInputSchema } from "@/lib/intake-validation";
 
 export interface InboxActionResult {
   ok: boolean;
@@ -32,6 +34,35 @@ export async function addInboxEmailAction(_previous: InboxActionResult, formData
   return inOrg(auth, async () =>
     consoleAnswer(await addFromInbox(consoleActor(auth), { inboxEmailId, goodsReceived: formString(formData, "goodsReceived") === "true" }))
   );
+}
+
+/**
+ * Adds an emailed invoice as the person finished it in the invoice form on AP / AR (reader follow-up F5): a records
+ * write, read by the form's own rules, and always a payable, whatever the form posted.
+ */
+export async function finishInboxEmailAction(_previous: IntakeActionResult, formData: FormData): Promise<IntakeActionResult> {
+  const auth = await authorize(formData.get("orgSlug"), "records.write");
+  if (!auth.ok) return { ok: false, message: auth.message };
+  const inboxEmailId = formString(formData, "inboxEmailId");
+  if (!UUID.test(inboxEmailId)) return { ok: false, message: "This email was already decided." };
+  const parsed = invoiceInputSchema.safeParse({
+    direction: "payable",
+    counterpartyId: formString(formData, "counterpartyId"),
+    amount: formString(formData, "amount"),
+    currency: formString(formData, "currency"),
+    memo: formString(formData, "memo"),
+    poReference: formString(formData, "poReference"),
+    goodsReceived: formData.get("goodsReceived") === "on",
+    dueDate: formString(formData, "dueDate"),
+    earlyPayDiscountPct: formString(formData, "earlyPayDiscountPct"),
+    discountDeadline: formString(formData, "discountDeadline"),
+  });
+  if (!parsed.success) return { ok: false, ...invoiceFormRefusal(parsed.error) };
+  const invoice = parsed.data;
+  return inOrg(auth, async () => {
+    const answer = consoleAnswer(await finishFromInbox(consoleActor(auth), { inboxEmailId, invoice }));
+    return answer.ok ? { ...answer, created: 1 } : answer;
+  });
 }
 
 /** Dismisses an emailed invoice still to decide. */

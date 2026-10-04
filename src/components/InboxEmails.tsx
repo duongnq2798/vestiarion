@@ -1,8 +1,10 @@
 "use client";
 
 import { MailCheck, X } from "lucide-react";
-import { addInboxEmailAction, dismissInboxEmailAction, type InboxActionResult } from "@/app/actions/email-inbox";
+import { addInboxEmailAction, dismissInboxEmailAction, finishInboxEmailAction, type InboxActionResult } from "@/app/actions/email-inbox";
+import InvoiceIntake, { type IntakeCounterparty } from "@/components/intake/InvoiceIntake";
 import { Card } from "@/components/ui/Card";
+import { Disclosure } from "@/components/ui/Disclosure";
 import { FormMessage } from "@/components/ui/FormMessage";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { SubmitButton } from "@/components/ui/SubmitButton";
@@ -69,7 +71,38 @@ function Decide({ orgSlug, email }: { orgSlug: string; email: InboxEmailView }) 
   );
 }
 
-function EmailCard({ orgSlug, email, canAdd }: { orgSlug: string; email: InboxEmailView; canAdd: boolean }) {
+/**
+ * The invoice form, started from what was read, for a person to fix any field and add it (reader follow-up F5): a
+ * ready email edited before it is added, one that lacks a detail finished, one that could not be read typed in.
+ */
+function FinishForm({ orgSlug, email, counterparties }: { orgSlug: string; email: InboxEmailView; counterparties: IntakeCounterparty[] }) {
+  const read = email.read;
+  // An email read before the inbox kept the counterparty's id is matched again by its name.
+  const counterpartyId = read?.counterpartyId ?? counterparties.find((counterparty) => counterparty.name === read?.counterpartyName)?.id ?? null;
+  return (
+    <Disclosure summary={email.status === "ready" ? "Edit and add" : "Finish and add"}>
+      <InvoiceIntake
+        orgSlug={orgSlug}
+        counterparties={counterparties}
+        inboxEmailId={email.id}
+        action={finishInboxEmailAction}
+        idPrefix={`email-${email.id}`}
+        initial={{
+          counterpartyId,
+          amount: read?.amount ?? null,
+          currency: read?.currency ?? null,
+          dueDate: read?.dueDate ?? null,
+          earlyPayDiscountPct: read?.earlyPayDiscountPct ?? null,
+          discountDeadline: read?.discountDeadline ?? null,
+          memo: read?.memo ?? null,
+          poReference: read?.poReference ?? null,
+        }}
+      />
+    </Disclosure>
+  );
+}
+
+function EmailCard({ orgSlug, email, canAdd, counterparties }: { orgSlug: string; email: InboxEmailView; canAdd: boolean; counterparties: IntakeCounterparty[] }) {
   const read = email.read;
   const who = read?.counterpartyName ?? read?.vendorName ?? null;
   return (
@@ -113,7 +146,7 @@ function EmailCard({ orgSlug, email, canAdd }: { orgSlug: string; email: InboxEm
               <li key={reason}>{reason}</li>
             ))}
           </ul>
-          <p className="mt-1 text-xs text-ink-3">Add it with From a document under New invoice, where every field can be fixed.</p>
+          {canAdd && <p className="mt-1 text-xs text-ink-3">Fix what is missing with Finish and add.</p>}
         </div>
       )}
       {email.status === "unreadable" && (
@@ -128,7 +161,10 @@ function EmailCard({ orgSlug, email, canAdd }: { orgSlug: string; email: InboxEm
         </p>
       )}
       {canAdd ? (
-        <Decide orgSlug={orgSlug} email={email} />
+        <>
+          <Decide orgSlug={orgSlug} email={email} />
+          {email.status !== "received" && <FinishForm orgSlug={orgSlug} email={email} counterparties={counterparties} />}
+        </>
       ) : (
         <p className="text-xs text-ink-3">An owner or admin adds it, or dismisses it.</p>
       )}
@@ -141,14 +177,25 @@ function EmailCard({ orgSlug, email, canAdd }: { orgSlug: string; email: InboxEm
  * E6, E7): what was read, the sender's checks, and for an owner or admin Add (with the goods received or not) and
  * Dismiss. Nothing here is added by itself. Renders nothing when nothing waits.
  */
-export default function InboxEmails({ orgSlug, emails, canAdd }: { orgSlug: string; emails: InboxEmailView[]; canAdd: boolean }) {
+export default function InboxEmails({
+  orgSlug,
+  emails,
+  canAdd,
+  counterparties,
+}: {
+  orgSlug: string;
+  emails: InboxEmailView[];
+  canAdd: boolean;
+  /** The workspace's counterparties, for the form that finishes an email. */
+  counterparties: IntakeCounterparty[];
+}) {
   if (emails.length === 0) return null;
   return (
     <section aria-labelledby="email-inbox-title" id="email-inbox" className="mb-8">
       <SectionHeader id="email-inbox-title" title="From email" meta={`${emails.length} to decide · sent to this workspace's invoice address`} />
       <div className="space-y-3">
         {emails.map((email) => (
-          <EmailCard key={email.id} orgSlug={orgSlug} email={email} canAdd={canAdd} />
+          <EmailCard key={email.id} orgSlug={orgSlug} email={email} canAdd={canAdd} counterparties={counterparties} />
         ))}
       </div>
     </section>

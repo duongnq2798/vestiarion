@@ -4,8 +4,10 @@ import { describe, expect, it, vi } from "vitest";
 import type { InboxEmailView } from "@/lib/email-inbox/list";
 
 vi.mock("@/app/actions/email-inbox", () => ({
-  addInboxEmailAction: vi.fn(), dismissInboxEmailAction: vi.fn(), turnOnInboxAction: vi.fn(), changeInboxAddressAction: vi.fn(), turnOffInboxAction: vi.fn(),
+  addInboxEmailAction: vi.fn(), finishInboxEmailAction: vi.fn(), dismissInboxEmailAction: vi.fn(),
+  turnOnInboxAction: vi.fn(), changeInboxAddressAction: vi.fn(), turnOffInboxAction: vi.fn(),
 }));
+vi.mock("@/app/actions/intake", () => ({ createInvoiceAction: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 
 import EmailInboxPanel from "@/components/EmailInboxPanel";
@@ -34,9 +36,13 @@ const READY: InboxEmailView = {
   authentication: { spf: "pass", dkim: "pass", dmarc: "pass" },
 };
 
+const COUNTERPARTIES = [{ id: "0b6c1c9e-4a4f-4a7e-9b1e-00000000c0de", name: "Northwind Hosting", role: "vendor" }];
+const MISSING: InboxEmailView = { ...READY, id: "0b6c1c9e-4a4f-4a7e-9b1e-000000000e42", status: "needs_details", reasons: ["no counterparty in this workspace matches “Quillfeather”"] };
+const UNREADABLE: InboxEmailView = { ...READY, id: "0b6c1c9e-4a4f-4a7e-9b1e-000000000e43", status: "unreadable", read: null, reasons: ["Its attachment is larger than 4 MB."] };
+
 describe("InboxEmails", () => {
   it("shows an email ready to add with what was read, the sender's checks, and the buttons for an owner or admin", () => {
-    const markup = renderToStaticMarkup(<InboxEmails orgSlug="acme" emails={[READY]} canAdd />);
+    const markup = html(<InboxEmails orgSlug="acme" emails={[READY]} canAdd counterparties={COUNTERPARTIES} />);
     expect(markup).toContain('id="email-inbox"');
     expect(markup).toContain("From email");
     expect(markup).toContain("Invoice INV-2207");
@@ -48,17 +54,17 @@ describe("InboxEmails", () => {
     for (const button of ["Add, goods received", "Add, not received yet", "Dismiss"]) expect(markup).toContain(button);
   });
 
-  it("shows anyone else what came in, without the buttons", () => {
-    const markup = renderToStaticMarkup(<InboxEmails orgSlug="acme" emails={[READY]} canAdd={false} />);
+  it("shows anyone else what came in, without the buttons or the form", () => {
+    const markup = html(<InboxEmails orgSlug="acme" emails={[READY, MISSING]} canAdd={false} counterparties={COUNTERPARTIES} />);
     expect(markup).toContain("Northwind Hosting");
     expect(markup).not.toContain("Add, goods received");
+    expect(markup).not.toContain("<summary");
+    expect(markup).not.toContain('name="inboxEmailId"');
     expect(markup).toContain("An owner or admin adds it");
   });
 
   it("says why an email cannot be added as it was read, or could not be read, and offers to dismiss it", () => {
-    const missing = { ...READY, id: "0b6c1c9e-4a4f-4a7e-9b1e-000000000e42", status: "needs_details" as const, reasons: ["no counterparty in this workspace matches “Quillfeather”"] };
-    const unreadable = { ...READY, id: "0b6c1c9e-4a4f-4a7e-9b1e-000000000e43", status: "unreadable" as const, read: null, reasons: ["Its attachment is larger than 4 MB."] };
-    const markup = renderToStaticMarkup(<InboxEmails orgSlug="acme" emails={[missing, unreadable]} canAdd />);
+    const markup = html(<InboxEmails orgSlug="acme" emails={[MISSING, UNREADABLE]} canAdd counterparties={COUNTERPARTIES} />);
     expect(markup).toContain("Cannot be added as it was read");
     expect(markup).toContain("Quillfeather");
     expect(markup).toContain("Could not be read");
@@ -67,15 +73,25 @@ describe("InboxEmails", () => {
     expect(markup.match(/Dismiss/g)?.length).toBe(2);
   });
 
+  it("lets an owner or admin edit a ready email before adding it, and finish one that cannot be added as read (reader follow-up F5)", () => {
+    const markup = html(<InboxEmails orgSlug="acme" emails={[READY, MISSING, UNREADABLE]} canAdd counterparties={COUNTERPARTIES} />);
+    const summaries = [...markup.matchAll(/<summary[^>]*>([\s\S]*?)<\/summary>/g)].map(([, inner]) => inner.replace(/<[^>]+>/g, ""));
+    expect(summaries).toEqual(["Edit and add", "Finish and add", "Finish and add"]);
+    // Each form posts its own email, starts from what was read, and is a payable.
+    for (const email of [READY, MISSING, UNREADABLE]) expect(markup).toContain(`name="inboxEmailId" value="${email.id}"`);
+    expect(markup).toMatch(/<input[^>]*name="amount"[^>]*value="200.00"/);
+    expect(markup).toContain("Fix what is missing with Finish and add.");
+  });
+
   it("warns when the sender did not pass its checks", () => {
     const unverified = { ...READY, authentication: { spf: "fail", dkim: "pass", dmarc: "fail" }, read: { ...READY.read!, knownSender: false } };
-    const markup = renderToStaticMarkup(<InboxEmails orgSlug="acme" emails={[unverified]} canAdd />);
+    const markup = html(<InboxEmails orgSlug="acme" emails={[unverified]} canAdd counterparties={COUNTERPARTIES} />);
     expect(markup).toContain("did not pass SPF and DMARC");
     expect(markup).not.toContain("has on file");
   });
 
   it("shows nothing when nothing waits", () => {
-    expect(renderToStaticMarkup(<InboxEmails orgSlug="acme" emails={[]} canAdd />)).toBe("");
+    expect(html(<InboxEmails orgSlug="acme" emails={[]} canAdd counterparties={COUNTERPARTIES} />)).toBe("");
   });
 });
 

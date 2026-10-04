@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  addInboxEmailAction, changeInboxAddressAction, dismissInboxEmailAction, turnOffInboxAction, turnOnInboxAction, type InboxActionResult,
+  addInboxEmailAction, changeInboxAddressAction, dismissInboxEmailAction, finishInboxEmailAction, turnOffInboxAction, turnOnInboxAction, type InboxActionResult,
 } from "@/app/actions/email-inbox";
+import type { IntakeActionResult } from "@/app/actions/intake";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { fakeSupabase } from "./support/fake-supabase";
@@ -15,13 +16,16 @@ import { fakeSupabase } from "./support/fake-supabase";
 const { ORG, USER, mocks } = vi.hoisted(() => ({
   ORG: "0b6c1c9e-4a4f-4a7e-9b1e-000000000e51",
   USER: "0b6c1c9e-4a4f-4a7e-9b1e-000000000e52",
-  mocks: { authorize: vi.fn(), revalidate: vi.fn(), addFromInbox: vi.fn(), dismissFromInbox: vi.fn(), turnInboxOn: vi.fn(), changeInboxAddress: vi.fn(), turnInboxOff: vi.fn() },
+  mocks: {
+    authorize: vi.fn(), revalidate: vi.fn(), addFromInbox: vi.fn(), finishFromInbox: vi.fn(), dismissFromInbox: vi.fn(),
+    turnInboxOn: vi.fn(), changeInboxAddress: vi.fn(), turnInboxOff: vi.fn(),
+  },
 }));
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/auth/authorize", () => ({ authorize: mocks.authorize }));
 vi.mock("@/lib/auth/revalidate", () => ({ revalidateOrgPages: mocks.revalidate }));
-vi.mock("@/lib/commands/inbox", () => ({ addFromInbox: mocks.addFromInbox, dismissFromInbox: mocks.dismissFromInbox }));
+vi.mock("@/lib/commands/inbox", () => ({ addFromInbox: mocks.addFromInbox, finishFromInbox: mocks.finishFromInbox, dismissFromInbox: mocks.dismissFromInbox }));
 vi.mock("@/lib/email-inbox/inboxes", () => ({ turnInboxOn: mocks.turnInboxOn, changeInboxAddress: mocks.changeInboxAddress, turnInboxOff: mocks.turnInboxOff }));
 
 const config = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k" });
@@ -72,6 +76,46 @@ describe("adding and dismissing an emailed invoice", () => {
     mocks.authorize.mockResolvedValue(access("admin"));
     expect(await dismissInboxEmailAction(INITIAL, form({ inboxEmailId: "../x" }))).toMatchObject({ ok: false });
     expect(mocks.dismissFromInbox).not.toHaveBeenCalled();
+  });
+});
+
+describe("finishing an emailed invoice in the invoice form (reader follow-up F5)", () => {
+  const COUNTERPARTY = "0b6c1c9e-4a4f-4a7e-9b1e-00000000c0de";
+  const STARTED: IntakeActionResult = { ok: false, message: "" };
+  const filled = (fields: Record<string, string> = {}) =>
+    form({
+      inboxEmailId: ROW, counterpartyId: COUNTERPARTY, amount: "200.00", currency: "USDC", dueDate: "2026-10-31", memo: "", poReference: "PO-1042",
+      earlyPayDiscountPct: "", discountDeadline: "", goodsReceived: "on", ...fields,
+    });
+
+  it("asks for records.write, reads the form as the invoice form does, and finishes it as a payable as the session's member", async () => {
+    mocks.authorize.mockResolvedValue(access("admin"));
+    mocks.finishFromInbox.mockResolvedValue({ ok: true, message: "Added a payable for Northwind Hosting.", invoiceId: "inv-1" });
+    const result = await finishInboxEmailAction(STARTED, filled({ direction: "receivable" }));
+
+    expect(mocks.authorize).toHaveBeenCalledWith("acme", "records.write");
+    expect(mocks.finishFromInbox).toHaveBeenCalledWith(expect.objectContaining({ orgId: ORG, userId: USER, role: "admin", surface: { kind: "console" } }), {
+      inboxEmailId: ROW,
+      invoice: expect.objectContaining({ direction: "payable", counterpartyId: COUNTERPARTY, amount: "200.00", currency: "USDC", goodsReceived: true, memo: null }),
+    });
+    expect(result).toEqual({ ok: true, created: 1, message: "Added a payable for Northwind Hosting." });
+    expect(mocks.revalidate).toHaveBeenCalled();
+  });
+
+  it("answers a field the invoice form refuses under that field, and finishes nothing", async () => {
+    mocks.authorize.mockResolvedValue(access("admin"));
+    const result = await finishInboxEmailAction(STARTED, filled({ amount: "-3" }));
+    expect(result.ok).toBe(false);
+    expect(result.fieldErrors?.amount).toBeTruthy();
+    expect(mocks.finishFromInbox).not.toHaveBeenCalled();
+  });
+
+  it("finishes nothing for a refused session or a row id that is not one", async () => {
+    mocks.authorize.mockResolvedValue({ ok: false, message: "You cannot do that here." });
+    expect(await finishInboxEmailAction(STARTED, filled())).toEqual({ ok: false, message: "You cannot do that here." });
+    mocks.authorize.mockResolvedValue(access("admin"));
+    expect(await finishInboxEmailAction(STARTED, filled({ inboxEmailId: "../x" }))).toMatchObject({ ok: false });
+    expect(mocks.finishFromInbox).not.toHaveBeenCalled();
   });
 });
 

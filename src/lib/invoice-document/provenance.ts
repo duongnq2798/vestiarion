@@ -22,7 +22,8 @@ export interface DocumentProvenance {
 const READERS: readonly DecisionMode[] = ["anthropic", "openai", "deepseek", "heuristic"];
 const NUMERIC: ReadonlySet<DocumentField> = new Set(["amount", "earlyPayDiscountPct"]);
 
-type Submitted = Record<DocumentField, string | null>;
+/** The fields as a member submitted them, each a string or null. */
+export type Submitted = Record<DocumentField, string | null>;
 
 function blank(value: unknown): string | null {
   return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
@@ -35,6 +36,16 @@ function same(field: DocumentField, read: string | null, submitted: string | nul
   return read === submitted;
 }
 
+/** Whether a reader named in stored or submitted data is one Vestiarion has. */
+export function isReader(value: unknown): value is DecisionMode {
+  return typeof value === "string" && READERS.includes(value as DecisionMode);
+}
+
+/** The fields a member changed from what was read: an empty value and a missing one are the same, as are 10.5 and 10.50. */
+export function changedFields(read: Partial<Record<DocumentField, unknown>>, submitted: Submitted): DocumentField[] {
+  return DOCUMENT_FIELDS.filter((field) => !same(field, blank(read[field]), submitted[field]));
+}
+
 export function documentProvenance(formData: FormData, submitted: Submitted): DocumentProvenance | null {
   const sha256 = formData.get("documentSha256");
   const kind = formData.get("documentKind");
@@ -42,7 +53,7 @@ export function documentProvenance(formData: FormData, submitted: Submitted): Do
   const readJson = formData.get("documentRead");
   if (typeof sha256 !== "string" || !/^[0-9a-f]{64}$/.test(sha256)) return null;
   if (kind !== "pdf" && kind !== "email" && kind !== "text") return null;
-  if (typeof reader !== "string" || !READERS.includes(reader as DecisionMode)) return null;
+  if (!isReader(reader)) return null;
   if (typeof readJson !== "string") return null;
 
   let read: unknown;
@@ -52,8 +63,5 @@ export function documentProvenance(formData: FormData, submitted: Submitted): Do
     return null;
   }
   if (typeof read !== "object" || read === null || Array.isArray(read)) return null;
-
-  const values = read as Record<string, unknown>;
-  const changed = DOCUMENT_FIELDS.filter((field) => !same(field, blank(values[field]), submitted[field]));
-  return { kind, sha256, reader: reader as DecisionMode, changed };
+  return { kind, sha256, reader, changed: changedFields(read as Record<string, unknown>, submitted) };
 }

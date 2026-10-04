@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Actor } from "@/lib/commands/actor";
-import { addFromInbox, dismissFromInbox } from "@/lib/commands/inbox";
+import { addFromInbox, dismissFromInbox, finishFromInbox } from "@/lib/commands/inbox";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
+import { invoiceInputSchema } from "@/lib/intake-validation";
 import { withOrg } from "@/lib/dal/scope";
 import { fakeSupabase, type RecordedRequest } from "./support/fake-supabase";
 import { APPENDED_LEDGER_ROW, signedOrgs } from "./support/signed-org";
@@ -36,10 +37,13 @@ const STORED = {
 
 let claimed: unknown[];
 let counterpartyGone: boolean;
+/** The inbox row as finishFromInbox reads it. */
+let row: unknown;
 
 beforeEach(() => {
   claimed = [{ draft: STORED }];
   counterpartyGone = false;
+  row = null;
   runCycleSoonMock.mockReset();
 });
 
@@ -48,6 +52,7 @@ const actor = (role: Actor["role"] = "admin"): Actor => ({ orgId: ORG, userId: U
 function world() {
   const fake = fakeSupabase((sent: RecordedRequest) => {
     if (sent.path === "/rest/v1/orgs") return { body: orgs.orgRow(ORG) };
+    if (sent.path === "/rest/v1/inbox_emails" && sent.method === "GET") return { body: row };
     if (sent.path === "/rest/v1/inbox_emails" && sent.method === "PATCH") {
       const body = sent.body as { status?: string };
       if (body.status === "added") return { body: claimed };
@@ -109,6 +114,94 @@ describe("addFromInbox", () => {
     expect(restored?.body).toMatchObject({ status: "ready", decided_by: null, decided_at: null });
     expect(restored?.params.get("status")).toBe("eq.added");
     expect(fake.requests.some((sent) => sent.path === "/rest/v1/invoices" && sent.method === "POST")).toBe(false);
+  });
+});
+
+describe("finishFromInbox (reader follow-up F5)", () => {
+  /** What the inbox read of an email it could not add: no amount, and a vendor name that matched no counterparty. */
+  const READ = {
+    counterpartyName: null, vendorName: "Northwind Hosting GmbH", amount: null, currency: "USDC", dueDate: "2026-10-31", poReference: "PO-1042",
+    invoiceNumber: "INV-2207", memo: null, warnings: [], modelNote: null, reader: "deepseek", knownSender: false,
+    counterpartyId: null, earlyPayDiscountPct: null, discountDeadline: null, document: { kind: "pdf", sha256: "b".repeat(64) },
+  };
+  /** The invoice as the person finished it: the counterparty chosen and the amount typed in. */
+  const finished = (fields: Record<string, unknown> = {}) =>
+    invoiceInputSchema.parse({
+      direction: "payable", counterpartyId: COUNTERPARTY.id, amount: "200.00", currency: "USDC", memo: "", poReference: "PO-1042",
+      goodsReceived: true, dueDate: "2026-10-31", earlyPayDiscountPct: "", discountDeadline: "", ...fields,
+    });
+
+  it("adds an email that needed details as the person finished it, naming the email, the document and what they changed", async () => {
+    row = { status: "needs_details", read: READ, draft: null };
+    const { fake, run } = world();
+    const outcome = await run(() => finishFromInbox(actor(), { inboxEmailId: ROW, invoice: finished() }));
+
+    expect(outcome).toMatchObject({ ok: true, invoiceId: INVOICE });
+    const [claim, link] = inboxPatches(fake.requests);
+    expect(claim.params.get("id")).toBe(`eq.${ROW}`);
+    expect(claim.params.get("status")).toBe("eq.needs_details");
+    expect(claim.body).toMatchObject({ status: "added", decided_by: USER });
+    expect(link.body).toEqual({ invoice_id: INVOICE });
+    const insert = fake.requests.find((sent) => sent.path === "/rest/v1/invoices" && sent.method === "POST");
+    expect(insert?.body).toMatchObject({ direction: "payable", amount: "200.00", goods_received: true, created_by: USER });
+    const [entry] = ledger(fake.requests);
+    expect(entry.p_action).toBe("create_invoice");
+    expect(entry.p_detail).toMatchObject({
+      by: USER, via: "email", inboxEmailId: ROW,
+      document: { kind: "pdf", sha256: "b".repeat(64), reader: "deepseek", changed: ["amount", "counterpartyId"] },
+    });
+    expect(runCycleSoonMock).toHaveBeenCalledWith(expect.objectContaining({ orgId: ORG, kind: "invoice_added" }));
+  });
+
+  it("adds an email that could not be read as it was typed in, naming the email and no document", async () => {
+    row = { status: "unreadable", read: null, draft: null };
+    const { fake, run } = world();
+    expect(await run(() => finishFromInbox(actor(), { inboxEmailId: ROW, invoice: finished() }))).toMatchObject({ ok: true });
+    expect(inboxPatches(fake.requests)[0].params.get("status")).toBe("eq.unreadable");
+    const [entry] = ledger(fake.requests);
+    expect(entry.p_detail).toMatchObject({ via: "email", inboxEmailId: ROW });
+    expect(entry.p_detail.document ?? null).toBeNull();
+  });
+
+  it("compares a ready email read before the inbox kept its document with the stored draft", async () => {
+    const { counterpartyId: _kept, document: _doc, ...older } = READ;
+    row = { status: "ready", read: older, draft: STORED };
+    const { fake, run } = world();
+    expect(await run(() => finishFromInbox(actor(), { inboxEmailId: ROW, invoice: finished({ dueDate: "2026-11-15" }) }))).toMatchObject({ ok: true });
+    expect(inboxPatches(fake.requests)[0].params.get("status")).toBe("eq.ready");
+    expect(ledger(fake.requests)[0].p_detail).toMatchObject({ document: { kind: "pdf", sha256: "a".repeat(64), reader: "heuristic", changed: ["dueDate"] } });
+  });
+
+  it("adds nothing for an email already decided, or decided by someone else in between", async () => {
+    row = { status: "added", read: READ, draft: null };
+    const first = world();
+    expect(await first.run(() => finishFromInbox(actor(), { inboxEmailId: ROW, invoice: finished() }))).toMatchObject({ ok: false, code: "not_found" });
+    expect(inboxPatches(first.fake.requests)).toEqual([]);
+
+    row = { status: "needs_details", read: READ, draft: null };
+    claimed = [];
+    const second = world();
+    expect(await second.run(() => finishFromInbox(actor(), { inboxEmailId: ROW, invoice: finished() }))).toMatchObject({ ok: false, code: "not_found" });
+    expect(second.fake.requests.some((sent) => sent.path === "/rest/v1/invoices")).toBe(false);
+  });
+
+  it("puts the email back as it was when the invoice could not be added", async () => {
+    row = { status: "needs_details", read: READ, draft: null };
+    counterpartyGone = true;
+    const { fake, run } = world();
+    expect(await run(() => finishFromInbox(actor(), { inboxEmailId: ROW, invoice: finished() }))).toMatchObject({ ok: false });
+    const restored = inboxPatches(fake.requests).at(-1);
+    expect(restored?.body).toMatchObject({ status: "needs_details", decided_by: null, decided_at: null });
+    expect(restored?.params.get("status")).toBe("eq.added");
+  });
+
+  it("refuses an approver before reading anything, and a receivable", async () => {
+    row = { status: "needs_details", read: READ, draft: null };
+    const { fake, run } = world();
+    expect(await run(() => finishFromInbox(actor("approver"), { inboxEmailId: ROW, invoice: finished() }))).toMatchObject({ ok: false, code: "forbidden" });
+    expect(fake.requests.some((sent) => sent.path === "/rest/v1/inbox_emails")).toBe(false);
+    expect(await run(() => finishFromInbox(actor(), { inboxEmailId: ROW, invoice: finished({ direction: "receivable" }) }))).toMatchObject({ ok: false, code: "invalid" });
+    expect(inboxPatches(fake.requests)).toEqual([]);
   });
 });
 
