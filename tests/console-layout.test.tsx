@@ -20,6 +20,7 @@ const page = readFileSync(path.join(process.cwd(), "src", "app", "o", "[slug]", 
 const OUTLOOK: CashOutlook = {
   safeToSpend: 35.5,
   cash: 100,
+  reserve: 0,
   dueIn30d: 50,
   dueCount: 2,
   milestonesOpen: 10,

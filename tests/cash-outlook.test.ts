@@ -27,8 +27,29 @@ const payable = (id: string, amount: number, due: string, over: Record<string, u
 describe("cashOutlook: safe to spend today", () => {
   it("is the whole balance when nothing is owed", () => {
     const outlook = cashOutlook(base());
-    expect(outlook).toMatchObject({ safeToSpend: 100, cash: 100, dueIn30d: 0, milestonesOpen: 0, cushion: 0, shortOn: null });
+    expect(outlook).toMatchObject({ safeToSpend: 100, cash: 100, reserve: 0, dueIn30d: 0, milestonesOpen: 0, cushion: 0, shortOn: null });
     expect(outlook.days).toEqual([]);
+  });
+
+  it("counts the USYC reserve too: it comes back to the wallet within seconds, and the agent brings it back before it pays", () => {
+    // testnet-2 on 2026-10-04: the treasury kept 0.23 in the wallet, 1.15 times the 0.20 owed, and swept the rest.
+    const outlook = cashOutlook(
+      base({
+        operatingUsdc: 0.23,
+        reserveUsdc: 154.381758,
+        milestones: [{ id: "m1", title: "Test PR", contractor: "DN", amount: 0.2, status: "verified", escrow_state: null }],
+      })
+    );
+    expect(outlook).toMatchObject({ cash: 0.23, reserve: 154.381758, milestonesOpen: 0.2, cushion: 0.03, safeToSpend: 154.381758 });
+    // Not short: what the wallet lacks, the reserve covers.
+    expect(outlook.shortOn).toBeNull();
+    expect(outlook.days[0]).toMatchObject({ balance: 154.411758 });
+  });
+
+  it("still runs short when even the reserve cannot cover what is owed", () => {
+    const outlook = cashOutlook(base({ operatingUsdc: 1, reserveUsdc: 2, payables: [payable("a", 10, day(1))] }));
+    expect(outlook.safeToSpend).toBeLessThan(0);
+    expect(outlook.shortOn).toBe("2026-10-03");
   });
 
   it("takes off what is due within 30 days, every open milestone, and a 15% cushion on the next 7 days", () => {

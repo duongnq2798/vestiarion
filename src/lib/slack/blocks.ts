@@ -174,7 +174,7 @@ export function todayAnswer(workspaceName: string, facts: TodayFacts, consoleUrl
   const lines = [
     `*${mrkdwn(workspaceName)}* · today`,
     `*Safe to spend today: ${amountText(facts.safeToSpend, "USDC")}*`,
-    `The operating wallet holds ${amountText(facts.cash, "USDC")}; ${amountText(facts.dueIn30d, "USDC")} is due in the next 30 days.`,
+    `The operating wallet holds ${amountText(facts.cash, "USDC")}${facts.reserve > 0 ? ` and the USYC reserve ${amountText(facts.reserve, "USDC")}, back in seconds` : ""}; ${amountText(facts.dueIn30d, "USDC")} is due in the next 30 days.`,
   ];
   if (facts.eurcLeftOut > 0) lines.push(`EURC payables due: ${amountText(facts.eurcLeftOut, "EURC")}, paid from EURC.`);
   if (facts.shortOn) lines.push(`Before any receivable arrives, the wallet runs short on ${shortDay(facts.shortOn)}.`);

@@ -102,7 +102,7 @@ describe("handleSlashCommand", () => {
   });
 
   it("answers Slack at once with nothing, then posts the answer to the command's response_url", async () => {
-    mocks.todayFacts.mockResolvedValue({ safeToSpend: 12.5, cash: 50, dueIn30d: 37.5, eurcLeftOut: 0, shortOn: null, waiting: 0, scheduled: [], lastCycleAt: null });
+    mocks.todayFacts.mockResolvedValue({ safeToSpend: 12.5, cash: 50, reserve: 0, dueIn30d: 37.5, eurcLeftOut: 0, shortOn: null, waiting: 0, scheduled: [], lastCycleAt: null });
     const { handle, answers } = world();
     const response = await handle(signedRequest({ text: "today" }));
     expect(response.status).toBe(200);

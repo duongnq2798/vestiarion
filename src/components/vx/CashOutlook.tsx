@@ -15,10 +15,14 @@ import { Money } from "./Primitives";
 const dayLabel = (day: string) => utcDay(`${day}T00:00:00Z`);
 const plural = (count: number, one: string) => `${count} ${one}${count === 1 ? "" : "s"}`;
 
-/** How Safe to spend today is reached: the wallet, less what is owed, with what is left out and the first short day. */
+/**
+ * How Safe to spend today is reached: the wallet and the USYC reserve, less what is owed, with what is left out and
+ * the first short day.
+ */
 function SafeToSpendBreakdown({ outlook, columns = false }: { outlook: CashOutlook; columns?: boolean }) {
   const rows: Array<{ label: string; value: number; sign?: "−" }> = [
     { label: "In the operating wallet", value: outlook.cash },
+    ...(outlook.reserve > 0 ? [{ label: "In the USYC reserve, back in seconds", value: outlook.reserve }] : []),
     { label: `Due within 30 days (${plural(outlook.dueCount, "invoice")})`, value: outlook.dueIn30d, sign: "−" },
     { label: `Open milestones (${outlook.milestoneCount})`, value: outlook.milestonesOpen, sign: "−" },
     { label: "Cushion: 15% of the next 7 days", value: outlook.cushion, sign: "−" },
@@ -52,7 +56,7 @@ function SafeToSpendBreakdown({ outlook, columns = false }: { outlook: CashOutlo
       </p>
       {outlook.shortOn && (
         <Callout tone="held" title={`The wallet runs short on ${dayLabel(outlook.shortOn)}`} className="mt-4">
-          That is before any receivable arrives. Fund the operating wallet, or the agent holds what it cannot cover.
+          That is before any receivable arrives, with the USYC reserve brought back. Fund the operating wallet, or the agent holds what it cannot cover.
         </Callout>
       )}
     </>
