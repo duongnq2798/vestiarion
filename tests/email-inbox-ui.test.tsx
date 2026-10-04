@@ -83,6 +83,13 @@ describe("InboxEmails", () => {
     expect(markup).toContain("Fix what is missing with Finish and add.");
   });
 
+  it("names a vendor no counterparty matches as not in Counterparties, never as the counterparty", () => {
+    const unmatched: InboxEmailView = { ...MISSING, read: { ...READY.read!, counterpartyName: null, vendorName: "Quillfeather Studio", knownSender: false } };
+    const markup = html(<InboxEmails orgSlug="acme" emails={[unmatched, READY]} canAdd counterparties={COUNTERPARTIES} />);
+    expect(markup).toMatch(/Quillfeather Studio[\s\S]{0,80}not in Counterparties/);
+    expect(markup.match(/not in Counterparties/g)?.length).toBe(1);
+  });
+
   it("warns when the sender did not pass its checks", () => {
     const unverified = { ...READY, authentication: { spf: "fail", dkim: "pass", dmarc: "fail" }, read: { ...READY.read!, knownSender: false } };
     const markup = html(<InboxEmails orgSlug="acme" emails={[unverified]} canAdd counterparties={COUNTERPARTIES} />);

@@ -104,7 +104,9 @@ function FinishForm({ orgSlug, email, counterparties }: { orgSlug: string; email
 
 function EmailCard({ orgSlug, email, canAdd, counterparties }: { orgSlug: string; email: InboxEmailView; canAdd: boolean; counterparties: IntakeCounterparty[] }) {
   const read = email.read;
-  const who = read?.counterpartyName ?? read?.vendorName ?? null;
+  // The counterparty the invoice matched. A vendor name read but matched to none is said as such, never as one.
+  const who = read?.counterpartyName ?? null;
+  const unmatchedVendor = who ? null : (read?.vendorName ?? null);
   return (
     <Card className="space-y-3 p-4 sm:p-5">
       <div className="min-w-0">
@@ -117,7 +119,16 @@ function EmailCard({ orgSlug, email, canAdd, counterparties }: { orgSlug: string
       {read && email.status !== "unreadable" && (
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
           <dt className="text-ink-3">Counterparty</dt>
-          <dd className="text-ink">{who ?? "not matched"}</dd>
+          <dd className="text-ink">
+            {who ??
+              (unmatchedVendor ? (
+                <>
+                  {unmatchedVendor} <span className="text-ink-3">· not in Counterparties</span>
+                </>
+              ) : (
+                "not matched"
+              ))}
+          </dd>
           <dt className="text-ink-3">Amount</dt>
           <dd className="text-ink">{read.amount ? `${AMOUNT.format(Number(read.amount))} ${read.currency ?? "USDC"}` : "not read"}</dd>
           <dt className="text-ink-3">Due</dt>

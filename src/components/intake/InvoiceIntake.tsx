@@ -24,6 +24,17 @@ export function directionNote(direction: Direction, counterparty: { name: string
     : `Money you owe ${counterparty.name}.`;
 }
 
+/**
+ * What the form says when the amount typed is not the one read from the invoice (reader follow-up F7): the person may
+ * be fixing a misreading, or may have mistyped, so it names the amount read and asks for a check. Nothing when they
+ * agree, when nothing was read, or while the field holds no plain number.
+ */
+export function amountNote(read: string | null | undefined, typed: string): string | undefined {
+  const value = typed.trim();
+  if (!read || !/^\d+(?:\.\d+)?$/.test(value)) return undefined;
+  return Number(value) === Number(read) ? undefined : `The invoice was read as ${read}: check this amount before you add it.`;
+}
+
 export interface IntakeCounterparty {
   id: string;
   name: string;
@@ -93,6 +104,9 @@ export default function InvoiceIntake({
   const [dueDate, setDueDate] = useState(initial?.dueDate ?? "");
   const pctEntered = discountPct.trim() !== "";
   const deadlineEntered = discountDeadline !== "";
+  // An amount read from a document is checked against the one typed over it (reader follow-up F7).
+  const [amount, setAmount] = useState(initial?.amount ?? "");
+  const amountChanged = fromDocument ? amountNote(initial?.amount, amount) : undefined;
 
   // The direction follows the counterparty chosen: a client pays you, so its invoice is a receivable; anyone else is
   // paid (client payables R2). A person can still choose otherwise, and the form says what that means.
@@ -106,6 +120,7 @@ export default function InvoiceIntake({
     setDiscountPct(initial?.earlyPayDiscountPct ?? "");
     setDiscountDeadline(initial?.discountDeadline ?? "");
     setDueDate(initial?.dueDate ?? "");
+    setAmount(initial?.amount ?? "");
     setChosen(initial?.counterpartyId ?? null);
     setDirection(directionFor(initial?.counterpartyId));
   }
@@ -169,8 +184,20 @@ export default function InvoiceIntake({
             </SelectContent>
           </Select>
         </Field>
-        <Field id={id("amount")} label="Amount" error={fieldError("amount")}>
-          <Input name="amount" required inputMode="decimal" placeholder="1250.00" defaultValue={start(initial?.amount)} />
+        <Field
+          id={id("amount")}
+          label="Amount"
+          description={amountChanged ? <span className="text-refused">{amountChanged}</span> : undefined}
+          error={fieldError("amount")}
+        >
+          <Input
+            name="amount"
+            required
+            inputMode="decimal"
+            placeholder="1250.00"
+            defaultValue={start(initial?.amount)}
+            onChange={(event) => setAmount(event.target.value)}
+          />
         </Field>
         <Field
           id={id("currency")}
