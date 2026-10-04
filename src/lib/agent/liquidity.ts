@@ -43,6 +43,18 @@ export async function payablesDueToday(orgDb: OrgDb, today: string): Promise<{ t
   return { total: due.reduce((sum, row) => sum + num(row.amount), 0), count: due.length };
 }
 
+/**
+ * The verified milestones waiting for the agent to release them, which it pays from the operating wallet too. Not one
+ * whose USDC is locked in escrow, or being locked there: its release comes from the escrow, not from the wallet.
+ */
+export async function milestonesToRelease(orgDb: OrgDb): Promise<{ total: number; count: number }> {
+  const rows = unwrap(
+    await orgDb.from("milestones").select("amount, escrow_state").eq("status", "verified").eq("verified", true)
+  ) as Array<{ amount: string | number; escrow_state: string | null }>;
+  const due = rows.filter((row) => row.escrow_state !== "funded" && row.escrow_state !== "funding");
+  return { total: due.reduce((sum, row) => sum + num(row.amount), 0), count: due.length };
+}
+
 interface CashBackMove {
   db: OrgDb;
   provider: ChainProvider;
@@ -102,7 +114,9 @@ export async function bringCashForTodaysPayments(input: {
   moveKey: string;
   today: string;
 }): Promise<{ operatingBalance: number; line: { domain: string; message: string } } | null> {
-  const due = await payablesDueToday(input.db, input.today);
+  // Today's payables, and the verified milestones the contractor stage releases in the same cycle.
+  const [payables, milestones] = await Promise.all([payablesDueToday(input.db, input.today), milestonesToRelease(input.db)]);
+  const due = { total: payables.total + milestones.total, count: payables.count + milestones.count };
   const short = upToUnits(due.total - input.operatingBalance);
   if (due.count === 0 || short <= 0 || input.reserveBalance <= 0) return null;
   const amount = Math.min(short, input.reserveBalance);

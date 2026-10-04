@@ -76,6 +76,13 @@ describe("githubAppSettingsFromEnv", () => {
     expect(flattened?.privateKey).toBe(PEM.trim());
   });
 
+  it("takes the app's public link for its slug too, since that is where the slug is read from", () => {
+    for (const link of ["https://github.com/apps/vestiarion-payments", "https://github.com/apps/vestiarion-payments/"]) {
+      expect(githubAppSettingsFromEnv({ ...ENV, GITHUB_APP_SLUG: link })?.slug).toBe("vestiarion-payments");
+    }
+    expect(githubAppSettingsFromEnv({ ...ENV, GITHUB_APP_SLUG: "https://example.com/apps/vestiarion-payments" })).toBeNull();
+  });
+
   it("calls back to the deployment's own route", () => {
     expect(githubCallbackUri("https://www.vestiarion.xyz")).toBe("https://www.vestiarion.xyz/api/github/callback");
   });

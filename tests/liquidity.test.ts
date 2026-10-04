@@ -3,7 +3,7 @@ import type { BalanceSnapshot, ChainProvider, EarnDepositParams, EarnResult, Tra
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { db } from "@/lib/dal";
-import { bringCashBackByPerson, bringCashForTodaysPayments, CashBackError, HELD_FOR_CASH, payablesDueToday } from "@/lib/agent/liquidity";
+import { bringCashBackByPerson, bringCashForTodaysPayments, CashBackError, HELD_FOR_CASH, milestonesToRelease, payablesDueToday } from "@/lib/agent/liquidity";
 import { heldForCash } from "@/lib/next-step";
 import { fakeSupabase, orgTestContext, type RecordedRequest } from "./support/fake-supabase";
 
@@ -48,10 +48,13 @@ class ReserveProvider implements ChainProvider {
   }
 }
 
-function fake(options: { invoices?: Array<Record<string, unknown>>; paused?: boolean; accounts?: Array<Record<string, unknown>> } = {}) {
+function fake(
+  options: { invoices?: Array<Record<string, unknown>>; milestones?: Array<Record<string, unknown>>; paused?: boolean; accounts?: Array<Record<string, unknown>> } = {}
+) {
   return fakeSupabase((request: RecordedRequest) => {
     if (request.path === "/rest/v1/rpc/agent_paused") return { body: options.paused === true };
     if (request.path === "/rest/v1/invoices") return { body: options.invoices ?? [] };
+    if (request.path === "/rest/v1/milestones") return { body: options.milestones ?? [] };
     if (request.path === "/rest/v1/accounts" && request.method === "GET") {
       return { body: options.accounts ?? [{ id: "operating-1", kind: "operating", balance: "0.119389" }, { id: "reserve-1", kind: "reserve", balance: "60.691351" }] };
     }
@@ -83,6 +86,21 @@ describe("what today's payments need", () => {
     const asked = client.requests.find((r) => r.path === "/rest/v1/invoices")!;
     expect(asked.params.get("direction")).toBe("eq.payable");
     expect(asked.params.get("status")).toBe("in.(pending,scheduled)");
+  });
+
+  it("counts the verified milestones waiting to be released, but not one whose USDC is in escrow or being locked there", async () => {
+    const client = fake({
+      milestones: [
+        { amount: "0.10", escrow_state: null },
+        { amount: "0.25", escrow_state: "refunded" },
+        { amount: "5", escrow_state: "funded" },
+        { amount: "3", escrow_state: "funding" },
+      ],
+    });
+    expect(await run(client, () => milestonesToRelease(db()))).toEqual({ total: 0.35, count: 2 });
+    const asked = client.requests.find((r) => r.path === "/rest/v1/milestones")!;
+    expect(asked.params.get("status")).toBe("eq.verified");
+    expect(asked.params.get("verified")).toBe("eq.true");
   });
 });
 
@@ -123,6 +141,17 @@ describe("the cycle's liquidity step (R3)", () => {
     );
     // Not a decision: the ledger entry carries no `decision`, so /open never counts it as one.
     expect(appendMock.mock.calls[0][0].detail).not.toHaveProperty("decision");
+  });
+
+  it("brings back what a verified milestone needs too, so the agent can release it rather than hold it for want of cash", async () => {
+    const provider = new ReserveProvider();
+    const client = fake({ milestones: [{ amount: "0.10", escrow_state: null }] });
+
+    const moved = await step(client, provider, { operatingBalance: 0 });
+
+    expect(provider.withdrawCalls).toEqual([{ accountId: "operating-1", reserveAccountId: "reserve-1", key: "cycle-1/liquidity/redeem_from_usyc", amount: 0.1 }]);
+    expect(moved).toEqual({ operatingBalance: 0.1, line: { domain: "treasury", message: "brought 0.10 USDC back from the reserve for 1 payment due today" } });
+    expect(appendMock.mock.calls[0][0].detail).toMatchObject({ neededUsdc: 0.1, payments: 1, operatingBalance: 0 });
   });
 
   it.each<[string, Parameters<typeof fake>[0], Partial<Parameters<typeof bringCashForTodaysPayments>[0]>]>([

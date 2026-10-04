@@ -228,7 +228,7 @@ A discount needs its deadline. Once you enter a percent, **Discount deadline** i
 - With an early-payment discount still available, it schedules the payment for the discount's last day, and pays the discounted amount then.
 - Otherwise, it schedules the payment for the due date, holding the cash until it is owed.
 - A payable due today, or overdue, is paid at once rather than scheduled.
-- Before it decides, the agent brings back from the reserve what today's payments need beyond the operating balance.
+- Before it decides, the agent brings back from the reserve what today's payments need beyond the operating balance: the payables due today, and the verified milestones waiting to be paid.
 - If the cash still cannot cover a payable after the payables that fall due on or before its day, the agent holds it rather than scheduling or paying it. It decides the payable again at the first cycle after cash comes in.
 
 A scheduled invoice's decision card reads "Scheduled for *date*", with the agent's reasoning for choosing that day. On the day itself, the next cycle checks everything again before anything moves: the counterparty's risk level, its payment limit, whether its address is confirmed, and whether the agent is paused. Pausing the agent stops a scheduled payment exactly as it stops any other.

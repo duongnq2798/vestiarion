@@ -16,10 +16,13 @@ export interface GitHubAppSettings {
 const APP_ID = /^[0-9]{1,12}$/;
 /** As GitHub makes an app's slug from its name: lower case, digits and dashes. */
 const SLUG = /^[a-z0-9][a-z0-9-]{0,99}$/;
+/** The app's public link, which is where its slug is read from: taken for the slug itself. */
+const APP_LINK = /^https:\/\/github\.com\/apps\/([^/]+)\/?$/;
 
 export function githubAppSettingsFromEnv(env: Record<string, string | undefined> = process.env): GitHubAppSettings | null {
   const appId = env.GITHUB_APP_ID?.trim();
-  const slug = env.GITHUB_APP_SLUG?.trim();
+  const rawSlug = env.GITHUB_APP_SLUG?.trim();
+  const slug = rawSlug ? (APP_LINK.exec(rawSlug)?.[1] ?? rawSlug) : rawSlug;
   const clientId = env.GITHUB_APP_CLIENT_ID?.trim();
   const clientSecret = env.GITHUB_APP_CLIENT_SECRET?.trim();
   // A dashboard often keeps a PEM on one line, its newlines written as the two characters \n (G7).
