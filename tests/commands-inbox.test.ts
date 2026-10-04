@@ -164,7 +164,10 @@ describe("finishFromInbox (reader follow-up F5)", () => {
   });
 
   it("compares a ready email read before the inbox kept its document with the stored draft", async () => {
-    const { counterpartyId: _kept, document: _doc, ...older } = READ;
+    // As stored before 2026-10-04: no counterparty id, no document.
+    const older: Record<string, unknown> = { ...READ };
+    delete older.counterpartyId;
+    delete older.document;
     row = { status: "ready", read: older, draft: STORED };
     const { fake, run } = world();
     expect(await run(() => finishFromInbox(actor(), { inboxEmailId: ROW, invoice: finished({ dueDate: "2026-11-15" }) }))).toMatchObject({ ok: true });
