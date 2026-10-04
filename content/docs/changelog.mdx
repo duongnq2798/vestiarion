@@ -1,5 +1,10 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-04: A merge starts the cycle
+
+- A `cycle_complete` entry's `events` can now include `pull_request_merged`. A pull request was merged in a repository the workspace's GitHub connection covers, and a pending milestone waited on it, so the cycle that verifies and pays it started within a minute of the merge rather than at the next scheduled cycle.
+- Nothing changes in `/api/v1`.
+
 ## 2026-10-04: Bounties from a pull request comment
 
 - **A new ledger action**, delivered to webhooks as `ledger.appended` like every entry: `github_bounty_attached`, actor `human`, domain `contractor`. Someone who can write to a repository attached a bounty to a pull request with `/bounty`. Its `detail` is `{ by, via: "github", installationId, login, pullRequest, author, amount, milestoneId, counterpartyId, commentUrl }`. `by` is the member who connected GitHub, under whose name the milestone was added, and `login` is the GitHub user who commented. See [Show payments on GitHub](/docs/guides/github).
