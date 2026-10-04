@@ -23,6 +23,7 @@ type GuideSlug =
   | "guides/email-invoices"
   | "guides/api-invoices"
   | "guides/api-milestones"
+  | "guides/github"
   | "guides/audit-export";
 
 const PANEL = "src/components/GoLivePanel.tsx";
@@ -69,6 +70,9 @@ const PAYEE_LINK = "src/components/intake/PayeeLinkControl.tsx";
 const CONTRACTORS_PAGE = "src/app/o/[slug]/contractors/page.tsx";
 const MILESTONE_FORM = "src/components/intake/MilestoneIntake.tsx";
 const MILESTONE_ACTIONS = "src/app/actions/milestones.ts";
+const GITHUB_PANEL = "src/components/GitHubPanel.tsx";
+const GITHUB_INSTALLS = "src/lib/github/installs.ts";
+const GITHUB_COMMENTS = "src/lib/github/payment-comments.ts";
 const MILESTONE_COMMAND = "src/lib/commands/milestones.ts";
 const MILESTONE_CREATE = "src/lib/milestones/create.ts";
 const PAYEE_LINKS_LIBRARY = "src/lib/platform/payee-links.ts";
@@ -679,6 +683,23 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["Address to confirm", CONTRACTORS_PAGE],
     ["Verify manually", MILESTONE_CHECK],
   ],
+  "guides/github": [
+    ["Settings", APP_NAV],
+    ["GitHub", GITHUB_PANEL],
+    ["Connect GitHub", GITHUB_PANEL],
+    ["Connect another account", GITHUB_PANEL],
+    ["Disconnect", GITHUB_PANEL],
+    ["GitHub is connected. A milestone paid for a pull request in its repositories now gets a comment on it.", GITHUB_PANEL],
+    ["An owner or admin connects GitHub.", GITHUB_PANEL],
+    ["github_connected", GITHUB_INSTALLS],
+    ["github_disconnected", GITHUB_INSTALLS],
+    ["Contractors", APP_NAV],
+    ["verify_milestone_github", GITHUB_CHECK],
+    ["Paid:", GITHUB_COMMENTS],
+    ["on Arc testnet", GITHUB_COMMENTS],
+    ["for this pull request, by", GITHUB_COMMENTS],
+    ["pull_request_commented", GITHUB_COMMENTS],
+  ],
   "guides/audit-export": [
     ["Audit log", APP_NAV],
     ["Download", EXPORT_MENU],
@@ -743,6 +764,7 @@ const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/email-invoices": 20,
   "guides/api-invoices": 10,
   "guides/api-milestones": 10,
+  "guides/github": 10,
   "guides/audit-export": 5,
 };
 

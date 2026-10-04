@@ -55,6 +55,7 @@ export const DOCS_NAV: NavSection[] = [
       { slug: "guides/slack", title: "Get the agent's decisions in Slack", description: "Connect a workspace to a Slack channel: the agent's decisions as it makes them, /vestiarion for what is safe to spend and waiting, and stopped payments decided from Slack when an owner allows it." },
       { slug: "guides/api-invoices", title: "Add invoices from your own system", description: "Create a read-and-write API key, add a counterparty and an invoice through the API, confirm the address, and follow the agent's decision." },
       { slug: "guides/api-milestones", title: "Pay for merged pull requests", description: "Add a contractor, a payee link and a milestone through the API, and the agent pays once the pull request is merged. With a GitHub Actions workflow." },
+      { slug: "guides/github", title: "Show payments on GitHub", description: "Connect GitHub so a milestone paid for a pull request gets a comment on it, and pull requests in private repositories verify." },
       { slug: "guides/audit-export", title: "Verify an audit export", description: "Download a workspace's signed ledger and check it with a standalone verifier." },
     ],
   },

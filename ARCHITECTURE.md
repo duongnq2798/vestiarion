@@ -86,8 +86,9 @@ workspace's own API keys — `owner` and `admin` hold it; every other member see
 `/o/[slug]/settings` without the controls), and `webhooks.manage` (`src/app/actions/webhooks.ts`,
 for adding, testing and removing a workspace's own webhook endpoints — `owner` and `admin` hold it;
 every other member sees the endpoint list with each URL reduced to its host — see
-[Webhooks security](https://www.vestiarion.xyz/docs/webhooks/security#who-sees-what)), and `integrations.manage` (`src/app/actions/slack.ts` and
-`/api/slack/install`, for connecting and removing the workspace's Slack — `owner` and `admin` hold it; the
+[Webhooks security](https://www.vestiarion.xyz/docs/webhooks/security#who-sees-what)), and `integrations.manage` (`src/app/actions/slack.ts`,
+`/api/slack/install`, `src/app/actions/github.ts` and `/api/github/install`, for connecting and removing the workspace's Slack and
+GitHub — `owner` and `admin` hold it; the
 limit on deciding payments from Slack takes `org.administer`, an owner's). The remaining permissions — `workspace.read` (beyond
 the leaving case above) and `org.administer` — and `canAssignRole`'s rule that an admin may grant
 `approver` or `viewer` but nothing at its own rank or above while only an owner assigns `admin` or
@@ -523,6 +524,32 @@ person reads; the workspace's Slack channel is told. Nothing is added by
 itself: on AP / AR an owner or admin runs `inbox.add` (the draft used once, put
 back if the invoice cannot be added; `create_invoice` names `via: "email"` and
 `inboxEmailId`) or `inbox.dismiss`.
+
+**A workspace can connect GitHub**
+(docs/superpowers/specs/2026-10-04-github-app-design.md). One GitHub App serves
+the deployment, on only when the five `GITHUB_APP_*` variables are set
+(`src/lib/github/settings.ts`); `/api/github/*` answers 404 otherwise. An
+owner's or admin's **Connect GitHub** (`/api/github/install`,
+`integrations.manage`) goes to the app's install page with a state signed under
+its own key derived from the master keys (ten minutes) and bound to an HttpOnly
+nonce cookie, as Slack's is. `/api/github/callback` checks both, exchanges
+GitHub's code for the person's own token, and connects the `installation_id`
+only if `GET /user/installations` lists it for them, since GitHub's own
+advice is never to trust that parameter; the token is then dropped.
+`github_installations` (migration `0071`, platform) keeps the installation's
+id, account and coverage, many to many with workspaces. The app's RS256 JWT
+(`src/lib/github/app.ts`) finds a repository's installation and mints its
+token for one run. The GitHub check (`refreshGitHubMilestones`) reads a
+connected repository's pull requests with that token, so private ones verify
+(`src/lib/github/tokens.ts`), and the deployment's `GITHUB_TOKEN` otherwise.
+The cycle's `notices` stage comments on the pull request a milestone was paid
+for (`src/lib/github/payment-comments.ts`): live payments confirmed on Arc
+testnet within three days and after the first connection, only where the
+repository's installation is one this workspace connected, claimed in
+`payment_intents.pr_comment_at` and released if GitHub refuses, recorded as
+`pull_request_commented` with the comment's link. The body escapes the
+workspace's name, so it cannot link, mention or point at an issue, and never
+names the payee.
 
 ## API
 

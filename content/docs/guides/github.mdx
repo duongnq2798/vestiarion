@@ -1,0 +1,39 @@
+Connect GitHub, and every milestone paid for a pull request says so on that pull request. Once the payment is confirmed, the Vestiarion app comments there with the amount and the Arc testnet transaction. Contributors, maintainers and anyone reading the pull request see it was paid, where the work was done. The same connection lets the agent verify pull requests in your private repositories.
+
+The app reads pull requests and writes comments, on the repositories you choose. It never changes code, never merges and never approves a payment: the agent decides each payment with every guardrail, as before.
+
+## 1. Connect GitHub
+
+An owner or an admin opens **Settings**. Under **GitHub**, they choose **Connect GitHub**.
+
+GitHub asks two things:
+
+1. **Where to install the app.** Your own account or an organization, and all of its repositories or only the ones you select. Choose the repositories your contributors work in.
+2. **To confirm who you are.** Vestiarion asks GitHub which installations of the app your account can reach, and connects this one only if GitHub lists it. A forged or copied link cannot connect someone else's repositories.
+
+Back in Settings, the panel says "GitHub is connected. A milestone paid for a pull request in its repositories now gets a comment on it." It lists the account, whether it covers all repositories or selected ones, and when it was connected. The ledger records `github_connected`.
+
+To add repositories later, change the installation on GitHub. To connect a second GitHub account or organization, choose **Connect another account**. Other members see the connected accounts; "An owner or admin connects GitHub."
+
+If you are a member of a GitHub organization who may not install apps there, GitHub asks its owners to approve the app instead. Connect again once they have.
+
+## 2. Pay for pull requests
+
+Add milestones as you do already, with the pull request as their evidence: from **Contractors**, or [through the API](/docs/guides/api-milestones). Each cycle asks GitHub whether the pull request was merged. Once it was, the milestone is verified (`verify_milestone_github`), and the agent decides the payment.
+
+In a repository the app is installed on, this works for private repositories too. The check reads them with the installation's own access. Any other pull request is read as before, so it must be public.
+
+## 3. The comment
+
+Once the payment is confirmed on Arc testnet, the next cycle comments on the pull request. The comment starts with "Paid:", then the amount, "on Arc testnet", "for this pull request, by" your workspace's name, and the transaction's link. The ledger records `pull_request_commented`, with the comment's link.
+
+- **Who is named.** Only your workspace. The comment never names the payee; their address is visible on chain through the transaction's link, as for any payment on Arc testnet.
+- **Where.** Only in a repository whose installation your workspace connected. A pull request in any other repository is paid as usual and gets no comment.
+- **When.** Once per payment, confirmed within the last three days, and after you connected GitHub: connecting never comments on pull requests paid before.
+- **If GitHub refuses.** The comment is tried again at each cycle within those three days. This happens when the app has been uninstalled, for example.
+
+## 4. Disconnect
+
+In Settings, **Disconnect** removes the account from this workspace. The ledger records `github_disconnected`. From then on, no comment is posted there, and its private pull requests are no longer read.
+
+GitHub keeps the app installed until you uninstall it, on the account's GitHub settings, under Applications. Uninstalling is what takes the app's access away.

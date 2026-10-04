@@ -1,5 +1,15 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-04: Payments said on the pull request
+
+- **A workspace can connect GitHub** from Settings, by installing the Vestiarion app on the repositories it chooses. See [Show payments on GitHub](/docs/guides/github).
+- **Three new ledger actions**, delivered to webhooks as `ledger.appended` like every entry:
+  - `github_connected`, with `installationId`, `account`, `accountType` and `repositorySelection`;
+  - `github_disconnected`, with `installationId` and `account`;
+  - `pull_request_commented`, with `milestoneId`, `pullRequest`, `commentUrl`, `amount`, `token` and `txHash`. It is written when the app commented on the pull request a milestone was paid for. The comment names the amount, the network, the paying workspace and the transaction, never the payee.
+- **Private pull requests verify** in a repository the app is installed on, so `verify_milestone_github` can now follow a private pull request's merge.
+- Nothing changes in `/api/v1`.
+
 ## 2026-10-03: Invoices by email
 
 - **New ledger actions**, delivered to webhooks like every entry:

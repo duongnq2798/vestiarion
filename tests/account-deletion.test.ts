@@ -104,6 +104,7 @@ describe("0023 is idempotent", () => {
         { tbl: "api_keys", col: "created_by", action: "n" },
         { tbl: "escrow_contracts", col: "created_by", action: "n" },
         { tbl: "gateway_signers", col: "created_by", action: "n" },
+        { tbl: "github_installations", col: "connected_by", action: "n" },
         { tbl: "inbox_emails", col: "decided_by", action: "n" },
         { tbl: "invitations", col: "invited_by", action: "c" },
         { tbl: "invoice_inboxes", col: "created_by", action: "n" },
