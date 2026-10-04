@@ -50,12 +50,18 @@ export interface InvoiceFormDocument {
   read: string;
 }
 
-/** One invoice, typed in or read from a document, in USDC or EURC. The agent evaluates it on its next cycle. */
+/**
+ * One invoice, typed in or read from a document, in USDC or EURC. The agent evaluates it on its next cycle. Given an
+ * inbox email, it finishes an invoice that arrived by email (reader follow-up F5): always a payable, posted with the
+ * email, to the action that adds it from the inbox.
+ */
 export default function InvoiceIntake({
   counterparties,
   orgSlug,
   initial,
   document,
+  inboxEmailId,
+  action = createInvoiceAction,
   onAdded,
   idPrefix = "invoice",
 }: {
@@ -63,11 +69,15 @@ export default function InvoiceIntake({
   orgSlug: string;
   initial?: InvoiceFormInitial;
   document?: InvoiceFormDocument;
+  /** The email an invoice arrived by, when this form finishes it. */
+  inboxEmailId?: string;
+  action?: (previous: IntakeActionResult, formData: FormData) => Promise<IntakeActionResult>;
   onAdded?: () => void;
   /** Distinct per form on a page, so each label names its own field (review I5). */
   idPrefix?: string;
 }) {
-  const { state, formProps } = useActionForm(createInvoiceAction, INITIAL, { resetOnSuccess: true, toastOnSuccess: true, onSuccess: onAdded });
+  const { state, formProps } = useActionForm(action, INITIAL, { resetOnSuccess: true, toastOnSuccess: true, onSuccess: onAdded });
+  const fromDocument = !!document || !!inboxEmailId;
   const none = counterparties.length === 0;
   const start = (value: string | null | undefined) => value ?? undefined;
   // Typed in, an invoice is in USDC unless changed. Read from a document that names no currency, the member chooses.
@@ -111,18 +121,26 @@ export default function InvoiceIntake({
           <input type="hidden" name="documentRead" value={document.read} />
         </>
       )}
+      {inboxEmailId && (
+        <>
+          <input type="hidden" name="inboxEmailId" value={inboxEmailId} />
+          <input type="hidden" name="direction" value="payable" />
+        </>
+      )}
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field id={id("direction")} label="Direction" description={directionNote(direction, chosenParty)} error={fieldError("direction")}>
-          <Select name="direction" value={direction} onValueChange={(value) => setDirection(value === "receivable" ? "receivable" : "payable")}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="payable">Payable</SelectItem>
-              <SelectItem value="receivable">Receivable</SelectItem>
-            </SelectContent>
-          </Select>
-        </Field>
+        {!inboxEmailId && (
+          <Field id={id("direction")} label="Direction" description={directionNote(direction, chosenParty)} error={fieldError("direction")}>
+            <Select name="direction" value={direction} onValueChange={(value) => setDirection(value === "receivable" ? "receivable" : "payable")}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="payable">Payable</SelectItem>
+                <SelectItem value="receivable">Receivable</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+        )}
         <Field
           id={id("counterparty")}
           label="Counterparty"
@@ -209,7 +227,7 @@ export default function InvoiceIntake({
       <Checkbox
         name="goodsReceived"
         label="Goods or services received"
-        description={document ? "A document cannot say this; tick it only if you received them." : undefined}
+        description={fromDocument ? "A document cannot say this; tick it only if you received them." : undefined}
       />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <FormMessage tone="error">{state.ok ? null : state.message}</FormMessage>

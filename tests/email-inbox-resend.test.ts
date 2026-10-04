@@ -61,8 +61,8 @@ describe("fetchReceivedEmail", () => {
       text: "Please find the invoice attached.",
       authentication: { spf: "pass", dkim: "pass", dmarc: "fail" },
       attachments: [
-        { id: "2a0c9ce0-3112-4728-976e-47ddcd16a318", filename: "logo.png", contentType: "image/png", size: 4096 },
-        { id: ATTACHMENT_ID, filename: "Invoice-TFA-2026-1003.pdf", contentType: "application/pdf", size: 62263 },
+        { id: "2a0c9ce0-3112-4728-976e-47ddcd16a318", filename: "logo.png", contentType: "image/png", size: 4096, inline: true },
+        { id: ATTACHMENT_ID, filename: "Invoice-TFA-2026-1003.pdf", contentType: "application/pdf", size: 62263, inline: false },
       ],
     });
   });

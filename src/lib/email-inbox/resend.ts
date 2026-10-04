@@ -15,6 +15,8 @@ export interface ReceivedAttachment {
   filename: string;
   contentType: string;
   size: number;
+  /** Shown in the email's body, such as a logo, rather than attached to it. */
+  inline: boolean;
 }
 
 /** A received email as the inbox reads it: who sent it, the text, what Resend's checks said, and the attachments. */
@@ -88,7 +90,15 @@ export async function fetchReceivedEmail(apiKey: string, emailId: string, fetchI
     const attachment = record(item);
     const id = text(attachment?.id);
     if (!attachment || !ID.test(id)) return [];
-    return [{ id, filename: text(attachment.filename), contentType: text(attachment.content_type), size: typeof attachment.size === "number" ? attachment.size : 0 }];
+    return [
+      {
+        id,
+        filename: text(attachment.filename),
+        contentType: text(attachment.content_type),
+        size: typeof attachment.size === "number" ? attachment.size : 0,
+        inline: attachment.content_disposition === "inline",
+      },
+    ];
   });
   return {
     id: emailId,

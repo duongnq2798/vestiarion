@@ -228,7 +228,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
           </StatTile>
         </div>
 
-        <InboxEmails orgSlug={slug} emails={emailed} canAdd={canWrite} />
+        <InboxEmails orgSlug={slug} emails={emailed} canAdd={canWrite} counterparties={counterparties.map(({ id, name, role }) => ({ id, name, role }))} />
 
         {canWrite ? (
           // Folded until it is needed; open on a workspace with no invoice yet, where adding one is the next step.

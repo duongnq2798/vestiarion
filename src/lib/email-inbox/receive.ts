@@ -3,7 +3,7 @@ import { db, unwrap } from "../dal";
 import { withOrg } from "../dal/scope";
 import { chatDraftOf } from "../invoice-document/chat-draft";
 import { readInvoiceDraft, type InvoiceDraftRead } from "../invoice-document/draft";
-import { DocumentReadError, MAX_DOCUMENT_BYTES, type DocumentInput } from "../invoice-document/read";
+import { DocumentReadError, MAX_DOCUMENT_BYTES, type DocumentInput, type DocumentReadErrorCode } from "../invoice-document/read";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { maskEmail } from "../payment-notices";
 import { takeDocumentReadToken } from "../rate-limit";
@@ -53,12 +53,26 @@ function bareAddress(from: string): string {
 const readable = (attachment: ReceivedAttachment) =>
   /\.(pdf|eml|txt)$/i.test(attachment.filename) || READABLE_TYPES.includes(attachment.contentType.toLowerCase());
 
+/** A picture attached to the email, not shown in its body: a photo or a scan of an invoice, which is not read. */
+const attachedImage = (attachment: ReceivedAttachment) =>
+  !attachment.inline && (attachment.contentType.toLowerCase().startsWith("image/") || /\.(jpe?g|png|gif|webp|heic|heif|tiff?|bmp)$/i.test(attachment.filename));
+
 const UNREACHABLE = "Resend did not give Vestiarion this email. Forward it again in a moment.";
 const NOT_FETCHED = "Its attachment could not be fetched from Resend. Forward it again in a moment.";
 const NOTHING_TO_READ = "Attach the invoice as a PDF, an .eml or a .txt file, or put its text in the email.";
 const TOO_LARGE = "Its attachment is larger than 4 MB. Add the invoice in Vestiarion instead.";
 const SLOW_DOWN = "Five invoices are read a minute, and this one came in over that. Forward it again in a minute.";
 const UNREADABLE = "The invoice could not be read. Forward it again in a moment.";
+const IMAGE = (filename: string) =>
+  `Its invoice is attached as an image (${filename.slice(0, 80) || "a picture"}), which Vestiarion cannot read yet. Ask the sender for the PDF, or type it in with Finish and add.`;
+
+/** Why a document could not be read, in the words that fit an email: the inbox has no text box to paste into (F4). */
+const READ_REFUSALS: Partial<Record<DocumentReadErrorCode, string>> = {
+  scan: "Its PDF has no text to read; it may be a scan. Ask the sender for the invoice as a PDF with text, or type it in with Finish and add.",
+  unsupported: "Its PDF could not be read. Ask the sender to send it again, or type it in with Finish and add.",
+  empty: NOTHING_TO_READ,
+  too_large: TOO_LARGE,
+};
 
 type Chosen = { ok: true; input: DocumentInput } | { ok: false; reason: string };
 
@@ -76,7 +90,9 @@ async function documentOf(email: ReceivedEmail, orgId: string, deps: InboundDeps
     }
     return { ok: true, input: { bytes: fetched.bytes, name: attachment.filename, type: attachment.contentType || fetched.contentType } };
   }
-  return email.text.trim() ? { ok: true, input: { text: email.text } } : { ok: false, reason: NOTHING_TO_READ };
+  if (email.text.trim()) return { ok: true, input: { text: email.text } };
+  const image = email.attachments.find(attachedImage);
+  return { ok: false, reason: image ? IMAGE(image.filename) : NOTHING_TO_READ };
 }
 
 /** Whether the sender is the billing email the matched counterparty has on file: information, never authority (E6). */
@@ -102,6 +118,10 @@ function shown(read: InvoiceDraftRead, known: boolean): ShownRead {
     modelNote: read.modelNote,
     reader: read.reader,
     knownSender: known,
+    counterpartyId: draft.counterpartyId,
+    earlyPayDiscountPct: draft.earlyPayDiscountPct,
+    discountDeadline: draft.discountDeadline,
+    document: { kind: read.document.kind, sha256: read.document.sha256 },
   };
 }
 
@@ -151,8 +171,12 @@ async function readInboxEmail(inbox: InvoiceInbox, rowId: string, emailId: strin
         reasons = verdict.reasons;
         draft = verdict.stored;
         shownRead = shown(read, await knownSender(read.draft.counterpartyId, from));
+        // The email's own words were read because nothing attached could be: when they do not hold the invoice and a
+        // picture is attached, the picture is why, and is said first.
+        const image = "text" in chosen.input ? email.attachments.find(attachedImage) : undefined;
+        if (status !== "ready" && image) reasons = [IMAGE(image.filename), ...reasons];
       } catch (error) {
-        reasons = [error instanceof DocumentReadError ? error.message : UNREADABLE];
+        reasons = [error instanceof DocumentReadError ? (READ_REFUSALS[error.code] ?? error.message) : UNREADABLE];
         if (!(error instanceof DocumentReadError)) {
           console.error("email inbox: invoice read failed", inbox.orgId, error instanceof Error ? error.message : "unknown error");
         }

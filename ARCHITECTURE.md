@@ -518,12 +518,17 @@ once in `inbox_emails` (tenant rows, one per Resend email, so a redelivery
 stores nothing new), answers 200, and reads it in `after()`
 (`src/lib/email-inbox/receive.ts`): the email and its first PDF, `.eml` or
 `.txt` attachment from Resend's receiving API (the download only from Resend's
-hosts), else its text, through the same `readInvoiceDraft` and the shared draft
-rule. The row ends `ready`, `needs_details` or `unreadable`, with reasons a
-person reads; the workspace's Slack channel is told. Nothing is added by
-itself: on AP / AR an owner or admin runs `inbox.add` (the draft used once, put
-back if the invoice cannot be added; `create_invoice` names `via: "email"` and
-`inboxEmailId`) or `inbox.dismiss`.
+own domains, `resend.com` and `resend.app`), else its text, through the same
+`readInvoiceDraft` and the shared draft rule; a picture attached instead of a
+document is named in the reasons. The row ends `ready`, `needs_details` or
+`unreadable`, with reasons a person reads, and keeps what was read (with the
+matched counterparty's id and the document's hash); the workspace's Slack
+channel is told. Nothing is added by itself: on AP / AR an owner or admin runs
+`inbox.add` (the draft used once, put back if the invoice cannot be added;
+`create_invoice` names `via: "email"` and `inboxEmailId`), `inbox.finish` (the
+invoice form started from what was read, for any email ready, needing details
+or unreadable; the entry also lists the fields the person changed) or
+`inbox.dismiss`.
 
 **A workspace can connect GitHub**
 (docs/superpowers/specs/2026-10-04-github-app-design.md). One GitHub App serves

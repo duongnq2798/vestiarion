@@ -22,6 +22,7 @@ export const COMMAND_PERMISSIONS = {
   "milestone.add": "records.write",
   "payee_link.create": "records.write",
   "inbox.add": "records.write",
+  "inbox.finish": "records.write",
   "inbox.dismiss": "records.write",
 } as const satisfies Record<string, Permission>;
 

@@ -43,6 +43,24 @@ describe("InvoiceIntake", () => {
   });
 });
 
+describe("InvoiceIntake for an invoice that arrived by email (reader follow-up F5)", () => {
+  const EMAIL = "0b6c1c9e-4a4f-4a7e-9b1e-000000000e42";
+  const markup = renderToStaticMarkup(
+    <InvoiceIntake orgSlug="acme" counterparties={COUNTERPARTIES} inboxEmailId={EMAIL} action={vi.fn()} initial={{ amount: "3.50", currency: "USDC", dueDate: "2026-10-15" }} />
+  );
+
+  it("posts the email, always as a payable, with no direction to choose", () => {
+    expect(input(markup, "inboxEmailId")).toContain(`value="${EMAIL}"`);
+    expect(input(markup, "direction")).toMatch(/type="hidden"[^>]*value="payable"|value="payable"[^>]*type="hidden"/);
+    expect(markup).not.toContain(">Direction<");
+    expect(input(markup, "amount")).toContain('value="3.50"');
+  });
+
+  it("says a document cannot tell whether the goods were received", () => {
+    expect(markup).toContain("A document cannot say this; tick it only if you received them.");
+  });
+});
+
 describe("the invoice form's early-payment discount", () => {
   afterEach(() => {
     refused.state = null;

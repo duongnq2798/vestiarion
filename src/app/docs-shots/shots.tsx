@@ -952,6 +952,7 @@ export const DOCS_SHOTS = {
       <InboxEmails
         orgSlug={SLUG}
         canAdd
+        counterparties={[{ id: COUNTERPARTY.id, name: COUNTERPARTY.name, role: COUNTERPARTY.role }]}
         emails={[
           {
             id: "00000000-0000-4000-8000-0000000000e1",

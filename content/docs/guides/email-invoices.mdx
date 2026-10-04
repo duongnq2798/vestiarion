@@ -23,13 +23,16 @@ Vestiarion reads the first PDF, `.eml` or `.txt` file attached, of at most 4 MB,
 
 <Screenshot
   src="/docs/guides/email-inbox-ap.png"
-  alt="AP / AR with a From email section: an email titled Invoice INV-2207 from Northwind Billing, read as Northwind Hosting, 200.00 USDC due Oct 31 with purchase order PO-1042; a line saying SPF, DKIM and DMARC pass for this sender and that it is the billing email Northwind Hosting has on file; and the Add, goods received, Add, not received yet and Dismiss buttons."
+  alt="AP / AR with a From email section: an email titled Invoice INV-2207 from Northwind Billing, read as Northwind Hosting, 200.00 USDC due Oct 31 with purchase order PO-1042; a line saying SPF, DKIM and DMARC pass for this sender and that it is the billing email Northwind Hosting has on file; the Add, goods received, Add, not received yet and Dismiss buttons; and below them a folded Edit and add section."
   caption="An invoice that arrived by email, read and waiting for a person on AP / AR."
 />
 
 - An email ready to add shows the counterparty it matched, the amount, the due date, the purchase order, and what to check.
-- **Cannot be added as it was read** says why: no counterparty in the workspace matches the vendor, or no amount or due date could be read. Add it with **From a document** under **New invoice**, where every field can be fixed.
-- **Could not be read** says why: a scan with no text, a file over 4 MB, or nothing to read.
+- **Cannot be added as it was read** says why: no counterparty in the workspace matches the vendor, or no amount or due date could be read. "Fix what is missing with Finish and add."
+- **Could not be read** says why: a scan with no text, a file over 4 MB, or nothing to read. A scanned PDF says "Its PDF has no text to read; it may be a scan. Ask the sender for the invoice as a PDF with text, or type it in with Finish and add."
+- An invoice sent as a photo or picture is not read. Its email says so first: "Its invoice is attached as an image (…), which Vestiarion cannot read yet. Ask the sender for the PDF, or type it in with Finish and add."
+
+The invoice can be laid out any way and written in any language: the model reads it. Amounts written with a decimal comma, such as 3,50 USDC or 1.200,00 EUR, are read as 3.50 and 1200.00. When the due date comes from a date written in numbers whose day and month could swap, such as 03/11/2026, a note says which day was taken and which it can also mean, so you can "Check it against the invoice."
 
 Each says whether the sender passed SPF, DKIM and DMARC, and whether it is the billing email the counterparty has on file. That is a check for you, never permission: Vestiarion adds nothing by itself.
 
@@ -40,6 +43,7 @@ If the workspace has Slack, its channel is told a new invoice arrived by email, 
 An owner or admin chooses:
 
 - **Add, goods received** or **Add, not received yet**: the payable is added as one added on AP / AR is, by you. The ledger's `create_invoice` entry names you, and adds `via: "email"`, the email's id in the inbox and the hash of the document. The agent usually decides within a minute.
+- **Edit and add**, on an email ready to add, or **Finish and add**, on one that cannot be added as it was read or could not be read: the invoice form opens with what was read. Choose the counterparty, fix the amount or the due date, tick **Goods or services received** if you have them, and choose **Add invoice**. It is always a payable. The `create_invoice` entry names the email as above, and lists the fields you changed from what was read.
 - **Dismiss**: the email leaves the list, and the ledger records `invoice_email_dismissed`.
 
 An email is added once. A second press is told "This email was already decided, or cannot be added as it was read."

@@ -120,8 +120,9 @@ is hard-coded into the interface:
    [guide](https://www.vestiarion.xyz/docs/guides/slack)).
 9. **Invoices by email** — an owner or admin turns on a workspace address in **Settings**; an
    invoice forwarded there is read as **From a document** reads one, and waits on **AP / AR** for a
-   person to add it with one press, or dismiss it. Nothing that arrives by email is added or paid by
-   itself; the sender's SPF/DKIM/DMARC results are shown, never trusted
+   person to add it with one press, fix it in the invoice form first (**Edit and add**, **Finish and
+   add**), or dismiss it. Nothing that arrives by email is added or paid by itself; the sender's
+   SPF/DKIM/DMARC results are shown, never trusted
    (`src/lib/email-inbox/`, [guide](https://www.vestiarion.xyz/docs/guides/email-invoices)).
 
 Every decision is made by asking an LLM for a structured `{action, reasoning, confidence}` verdict

@@ -52,6 +52,13 @@ describe("the rule-based reader", () => {
   it("leaves what it cannot find as null", () => {
     expect(ruleBasedExtraction("Thank you for your business")).toMatchObject({ amount: null, dueDate: null, poReference: null, payToAddress: null });
   });
+
+  it("takes the total written against its currency, not a later figure on the same line such as a date", () => {
+    expect(ruleBasedExtraction("Hi team,\nTotal: 45 USDC. Please pay by Oct 20.\nThanks").amount).toBe("45");
+    expect(ruleBasedExtraction("GOZO TRADING CO.\nBALANCE DUE USDC 2.50 (net 30)").amount).toBe("2.50");
+    expect(ruleBasedExtraction("Jiren GmbH\nTotal due: €12.40 by 20.10.2026").amount).toBe("12.40");
+    expect(ruleBasedExtraction("STM\nTổng cộng thanh toán: 3,50 USDC\nTotal due 3,50 USDC trước 15/10/2026").amount).toBe("3,50");
+  });
 });
 
 describe("reading an invoice with the workspace's model", () => {

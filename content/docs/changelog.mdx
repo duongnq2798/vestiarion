@@ -1,5 +1,11 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-04: Emailed invoices finished by hand
+
+- A `create_invoice` entry with `via: "email"` no longer always carries `changed: []`. An owner or admin can now finish an emailed invoice in the invoice form on AP / AR, with **Edit and add** or **Finish and add**. Its `document.changed` then lists the fields they changed from what was read, as for an invoice added from a document.
+- Such an entry carries no `document` when the email could not be read and the invoice was typed in.
+- Nothing changes in `/api/v1`.
+
 ## 2026-10-04: Cash back for milestones too
 
 - A `cash_brought_back` entry with `reason: "payments_due_today"` now also counts the verified milestones waiting to be paid in `neededUsdc` and `payments`, so a cycle brings their cash back from the reserve before it releases them. A milestone whose USDC is locked in escrow is not counted.

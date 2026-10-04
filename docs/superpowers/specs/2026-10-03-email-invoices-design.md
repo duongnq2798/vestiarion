@@ -78,3 +78,48 @@ member, `via: "email"`; dismiss; roles); the docs-guides quotes.
    cannot read. Redeploy.
 4. testnet-2: Settings → Invoices by email → Turn on; forward the test PDF to the address; Add from AP / AR; the agent
    decides; the Slack channel was told.
+
+**Record (2026-10-03/04, testnet-2).** The first real email (18:14 UTC) was stored and its sender checks read, but it
+was marked unreadable: Resend serves a received attachment's `download_url` from `cdn.resend.app`, and the download
+allowed only `resend.com`. Fixed in PR #185, which also logs why an attachment was not fetched. Then, on 2026-10-04: an
+email from Gmail with `Invoice-TH-2026-1004.pdf` arrived at 02:04:16 UTC, read by DeepSeek into a ready draft (ledger
+#1250, `invoice_email_received`, SPF, DKIM and DMARC pass); a person chose Add, goods received at 02:07:13 (#1251,
+`create_invoice`, `via: "email"`, no field changed); the agent brought 0.472501 USDC back from the USYC reserve (#1253)
+and paid Trading Handrock 0.60 USDC (#1254, DeepSeek at 0.9, agreeing with the policy), confirmed on Arc testnet at
+02:07:47 in tx `0xef98a774469457dffc4c16938823c590c391d3c8cf363502787673e88c3d92ac`.
+
+## 6. Follow-up: invoices as people send them (2026-10-04)
+
+Twelve invoices in common layouts were read through the same steps as production (DeepSeek, testnet-2's
+counterparties, twice, with the same results): a Stripe-like USD invoice, a QuickBooks-like one with a US numeric date
+and Net 30, a European one with dotted dates and euros, a freelancer's note with a due date without a year, one that
+tries to instruct the reader and asks for a new address, one in GBP, one from an unknown vendor, a receipt, a scan, a
+Vietnamese one with a decimal comma, one with day-first numeric dates, and an email whose invoice is a photo. Six were
+ready and right, four were refused with the right reason; these did not hold up, and are now ruled:
+
+- **F1. Decimal commas.** "3,50 USDC" was read by the model and then blanked, because review C1 refused any decimal
+  comma. A comma before one or two final digits, with plain digits or point/space groups of three before it, is a
+  decimal comma ("3,50" is 3.50, "1.200,00" and "1 200,00" are 1200.00), in the model's reading and in the document the
+  figure is checked against; a comma before three digits stays a thousands separator, so C1's harm, "12,50" read as
+  1250, still cannot happen.
+- **F2. Dates whose day and month could swap.** A due date read from such a numeric date (03/11/2026), or worked out
+  from such an invoice date, gets a note naming both days and the one taken, unless the document also writes the due
+  date so it can only be that day (in words, as 2026-11-03, or in numbers with a day over 12). Information only: the
+  draft still adds.
+- **F3. The total by rule.** The reference reading takes the figure written against a currency code or symbol on the
+  total line, so "Total: 45 USDC. Please pay by Oct 20." no longer raises a false "total line reads 20" warning.
+- **F4. Pictures and scans by email.** An email whose invoice is a picture attached to it says so first, rather than
+  "no amount could be read" from its own words; a scan no longer says to paste text, which the inbox cannot take.
+- **F5. Finish and add.** Every email still to decide (ready, needs details, unreadable) carries the invoice form,
+  started from what was read: Edit and add, or Finish and add. It is always a payable, posted with the email to
+  `inbox.finish` (records.write, as `inbox.add`): the email is claimed once from the status it had and put back if the
+  invoice cannot be added; `create_invoice` names `via: "email"`, `inboxEmailId`, and, when the email was read, the
+  document's kind, hash and reader with the fields the person changed (against the stored draft for a ready email,
+  else against what was read).
+- **F6. What is kept of a read.** The stored read also keeps the matched counterparty's id, the discount fields and the
+  document's kind and hash; emails stored before keep working without them (the counterparty is matched by name).
+
+Not done: reading pictures (the workspace's model may have no vision; a person types the invoice in instead);
+statements that list several invoices; and a figure grouped by points with no decimals, "1.250 €", which still reads as
+1.25, as it did before: it can only read less than the invoice asks, and the card shows the person 1.25 before they add
+it.

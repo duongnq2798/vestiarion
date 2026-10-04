@@ -20,6 +20,14 @@ export interface ShownRead {
   modelNote: string | null;
   reader: string;
   knownSender: boolean;
+  /**
+   * What the form that finishes it starts from, and the document its entry names (reader follow-up F5, F6). Absent on
+   * emails read before 2026-10-04.
+   */
+  counterpartyId?: string | null;
+  earlyPayDiscountPct?: string | null;
+  discountDeadline?: string | null;
+  document?: { kind: "pdf" | "email" | "text"; sha256: string };
 }
 
 export type InboxStatus = "received" | "ready" | "needs_details" | "unreadable";
