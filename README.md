@@ -607,7 +607,10 @@ With the five `GITHUB_APP_*` variables set (see `.env.example`), a workspace can
 GitHub from Settings by installing the platform's GitHub App on the repositories it chooses.
 A milestone paid for a pull request there then gets a comment on that pull request once the
 payment is confirmed: the amount, the network, the paying workspace and the transaction, never the
-payee. The installation's own token reads its private pull requests, so they verify too. See
+payee. The installation's own token reads its private pull requests, so they verify too. With the
+app's webhook on and `GITHUB_APP_WEBHOOK_SECRET` set, a maintainer attaches a bounty from the pull
+request itself with `/bounty 25`, and its author says where to be paid with `/payto 0x…`; the agent
+pays once the pull request is merged and a member has confirmed the address. See
 [Show payments on GitHub](https://www.vestiarion.xyz/docs/guides/github).
 
 ### Measurement provenance

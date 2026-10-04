@@ -15,7 +15,9 @@ export type Surface =
   | { kind: "telegram"; linkId: string }
   /** The install's limit on deciding payments from Slack, as read for this action; null when deciding there is off (Slack design S8). */
   | { kind: "slack"; linkId: string; decisionsLimitUsdc: number | null }
-  | { kind: "api"; apiKeyId: string };
+  | { kind: "api"; apiKeyId: string }
+  /** A comment on a pull request in an installation the workspace connected, by the GitHub user who wrote it (bounties B5). */
+  | { kind: "github"; installationId: number; login: string };
 
 export type SurfaceKind = Surface["kind"];
 
@@ -70,6 +72,8 @@ export function provenanceOf(actor: Actor): { provenance?: Provenance } {
       return { provenance: { via: surface.kind, linkId: surface.linkId } };
     case "api":
       return { provenance: { via: "api", apiKeyId: surface.apiKeyId } };
+    case "github":
+      return { provenance: { via: "github", installationId: surface.installationId, login: surface.login } };
   }
 }
 

@@ -6,6 +6,7 @@ import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { arcTxUrl } from "../payee-chains";
 import { createPullRequestComment, installationToken, repositoryInstallationId } from "./app";
 import { githubInstallations } from "./installs";
+import { literal } from "./markdown";
 import { githubAppSettingsFromEnv, type GitHubAppSettings } from "./settings";
 
 /**
@@ -26,15 +27,6 @@ export const COMMENTS_PER_RUN = 10;
 
 const AMOUNT = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 });
 const TX_HASH = /^0x[0-9a-fA-F]{64}$/;
-
-/**
- * Text as it is, in Markdown: every ASCII punctuation mark escaped, so a name cannot become a link or HTML. GitHub finds
- * mentions and issue references in the rendered text, after the escapes are gone, so a word joiner (U+2060) follows
- * each `@` and `#`: a name cannot mention anyone or point at an issue either.
- */
-function literal(text: string): string {
-  return text.replace(/[!-/:-@[-`{-~]/g, (mark) => (mark === "@" || mark === "#" ? `\\${mark}⁠` : `\\${mark}`));
-}
 
 /** The comment: what was paid, on which network, by whom, and the transaction. Never the payee (G4). */
 export function pullRequestCommentBody(input: { amount: string; token: "USDC" | "EURC"; orgName: string; txHash: string; origin: string }): string {

@@ -123,6 +123,27 @@ export async function userInstallations(userToken: string, deps: Deps = {}): Pro
   });
 }
 
+export type RepositoryPermission = "admin" | "write" | "read" | "none";
+const PERMISSIONS: readonly RepositoryPermission[] = ["admin", "write", "read", "none"];
+
+/**
+ * What a person may do in a repository, as GitHub answers it for the installation (bounties B4). `maintain` reads as
+ * `write` and `triage` as `read`, as GitHub's `permission` field gives them. Someone GitHub does not know there, and
+ * any answer it does not document, is `none`.
+ */
+export async function repositoryPermission(token: string, owner: string, repo: string, login: string, deps: Deps = {}): Promise<RepositoryPermission> {
+  const { status, body } = await call(
+    `${API}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/collaborators/${encodeURIComponent(login)}/permission`,
+    { method: "GET", headers: { ...API_HEADERS, Authorization: `Bearer ${token}` } },
+    "a repository permission lookup",
+    deps,
+    [404]
+  );
+  if (status === 404) return "none";
+  const permission = (body as { permission?: unknown } | null)?.permission;
+  return PERMISSIONS.includes(permission as RepositoryPermission) ? (permission as RepositoryPermission) : "none";
+}
+
 /** A comment on a pull request, as the installation: GitHub keeps a pull request's conversation as its issue's. */
 export async function createPullRequestComment(
   token: string,

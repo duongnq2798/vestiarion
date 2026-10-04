@@ -32,13 +32,15 @@ export type CommandName = keyof typeof COMMAND_PERMISSIONS;
  * What each surface may run (R4). The console runs everything. Telegram adds invoices and decides nothing (Telegram
  * bot design R11). The API adds records and never decides (write API R3; part 2, W4). Slack decides a held payable, under a limit
  * each workspace sets and the chat's own rules (Slack design S8, S10), pauses the agent, and adds an invoice from a
- * message; resuming, and every other command, stays in the console.
+ * message; resuming, and every other command, stays in the console. A pull request comment attaches a bounty, which is a
+ * milestone, and nothing else (bounties B5).
  */
 export const SURFACE_COMMANDS: Record<SurfaceKind, readonly CommandName[]> = {
   console: Object.keys(COMMAND_PERMISSIONS) as CommandName[],
   telegram: ["invoice.add"],
   api: ["invoice.add", "milestone.add", "payee_link.create"],
   slack: ["payable.approve", "payable.reject", "payable.return", "agent.pause", "invoice.add"],
+  github: ["milestone.add"],
 };
 
 /** A person's decisions on what the agent stopped: off on a chat whose workspace allows none there (Slack design S8). */

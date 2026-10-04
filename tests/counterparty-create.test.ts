@@ -93,6 +93,23 @@ describe("createCounterparty", () => {
     expect(result).toEqual({ id: CREATED, name: "Quill Studio", screening: { error: "OpenSanctions unavailable" } });
   });
 
+  it("records a counterparty a pull request comment added as from GitHub, with the installation and the commenter (bounties B11)", async () => {
+    const { fake, run } = workspace();
+    await run(() =>
+      createCounterparty({
+        actorId: USER,
+        counterparty: input({ name: "octocat (GitHub)", role: "contractor", address: "", jurisdiction: "", paymentLimit: "5" }),
+        via: "github",
+        github: { installationId: 42, login: "maintainer-1" },
+        now: () => NOW,
+      })
+    );
+    expect(insertOf(fake.requests)).toMatchObject({ role: "contractor", address: null, baseline_payment_limit: "5" });
+    expect(insertOf(fake.requests)).not.toHaveProperty("address_changed_at");
+    expect(ledgerOf(fake.requests).p_detail).toMatchObject({ via: "github", installationId: 42, login: "maintainer-1", addressNeedsConfirmation: false });
+    expect(ledgerOf(fake.requests).p_detail).not.toHaveProperty("apiKeyId");
+  });
+
   it("records an issuer whose account is gone as no one", async () => {
     const { fake, run } = workspace();
     await run(() => createCounterparty({ actorId: null, counterparty: input(), via: "api", apiKeyId: KEY_ID, now: () => NOW }));

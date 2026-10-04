@@ -206,7 +206,9 @@ export default function PrivacyPage() {
             workspace&apos;s name and the transaction&apos;s link, never the payee&apos;s name. The app keeps the installation&apos;s id, its
             account&apos;s login and type, and whether it covers all repositories or selected ones; disconnecting GitHub deletes them, and the
             signed ledger keeps only the ids and the login. The token of the person connecting, used once to check they can reach the installation,
-            is not kept.
+            is not kept. GitHub also sends the app the comments on pull requests in those repositories. Only a comment with a line starting
+            /bounty or /payto is acted on, and the rest are not kept. For each bounty, the app keeps the pull request, the logins of its author and
+            of the person who attached it, the amount and the comment&apos;s link, and asks GitHub whether that person can write to the repository.
           </li>
           <li>
             <strong>Google Analytics</strong> receives page views, as described below.

@@ -7,6 +7,7 @@ import {
   GitHubError,
   installationToken,
   repositoryInstallationId,
+  repositoryPermission,
   userInstallations,
 } from "@/lib/github/app";
 import { githubAppSettingsFromEnv, githubCallbackUri, type GitHubAppSettings } from "@/lib/github/settings";
@@ -146,6 +147,20 @@ describe("the app's calls", () => {
     expect(sent[0]).toMatchObject({ url: "https://api.github.com/repos/acme/app/issues/42/comments", method: "POST" });
     expect(sent[0].headers.authorization).toBe("Bearer ghs_installation");
     expect(JSON.parse(sent[0].body!)).toEqual({ body: "Paid." });
+  });
+
+  it("reads a person's permission on a repository, with an installation token (bounties B4)", async () => {
+    const { sent, fetchImpl } = recorder(() => ({ status: 200, body: { permission: "write", role_name: "maintain", user: { login: "maintainer-1" } } }));
+    expect(await repositoryPermission("ghs_installation", "Acme", "app", "maintainer-1", { fetchImpl })).toBe("write");
+    expect(sent[0]).toMatchObject({ url: "https://api.github.com/repos/Acme/app/collaborators/maintainer-1/permission", method: "GET" });
+    expect(sent[0].headers.authorization).toBe("Bearer ghs_installation");
+  });
+
+  it("reads someone GitHub does not know on the repository as having no permission, and anything unexpected as none", async () => {
+    const missing = recorder(() => ({ status: 404, body: { message: "Not Found" } }));
+    expect(await repositoryPermission("ghs_installation", "acme", "app", "stranger", { fetchImpl: missing.fetchImpl })).toBe("none");
+    const odd = recorder(() => ({ status: 200, body: { permission: "superuser" } }));
+    expect(await repositoryPermission("ghs_installation", "acme", "app", "someone", { fetchImpl: odd.fetchImpl })).toBe("none");
   });
 
   it("throws a GitHubError naming the status, and never the token, when GitHub refuses", async () => {

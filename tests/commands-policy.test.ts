@@ -55,6 +55,15 @@ describe("what each surface may run (R4)", () => {
     expect(SURFACE_COMMANDS.slack).toEqual(["payable.approve", "payable.reject", "payable.return", "agent.pause", "invoice.add"]);
   });
 
+  it("lets a pull request comment add a milestone and nothing else, recording the installation and the commenter (bounties B5)", () => {
+    expect(SURFACE_COMMANDS.github).toEqual(["milestone.add"]);
+    const fromGitHub = actor({ role: "owner", surface: { kind: "github", installationId: 42, login: "maintainer-1" } });
+    expect(inScope(ORG, () => gate(fromGitHub, "milestone.add"))).toBeNull();
+    expect(inScope(ORG, () => gate(fromGitHub, "payee_link.create"))).toMatchObject({ code: "surface" });
+    expect(inScope(ORG, () => gate(fromGitHub, "payable.approve"))).toMatchObject({ code: "surface" });
+    expect(provenanceOf(fromGitHub)).toEqual({ provenance: { via: "github", installationId: 42, login: "maintainer-1" } });
+  });
+
   it("lets an owner add an invoice from Slack whether or not deciding there is on, and refuses an approver", () => {
     const off = actor({ role: "owner", surface: { kind: "slack", linkId: "l-2", decisionsLimitUsdc: null } });
     expect(inScope(ORG, () => gate(off, "invoice.add"))).toBeNull();
