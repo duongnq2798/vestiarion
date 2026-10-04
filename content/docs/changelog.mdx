@@ -1,5 +1,11 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-04: Emailed invoices finished by hand
+
+- A `create_invoice` entry with `via: "email"` no longer always carries `changed: []`. An owner or admin can now finish an emailed invoice in the invoice form on AP / AR, with **Edit and add** or **Finish and add**. Its `document.changed` then lists the fields they changed from what was read, as for an invoice added from a document.
+- Such an entry carries no `document` when the email could not be read and the invoice was typed in.
+- Nothing changes in `/api/v1`.
+
 ## 2026-10-04: Payments said on the pull request
 
 - **A workspace can connect GitHub** from Settings, by installing the Vestiarion app on the repositories it chooses. See [Show payments on GitHub](/docs/guides/github).

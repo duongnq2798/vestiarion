@@ -195,7 +195,8 @@ function writtenPlainly(text: string, iso: string): boolean {
   const dayOf = `0?${day}(?:st|nd|rd|th)?`;
   if (new RegExp(`(?<!\\d)${dayOf}\\s+${name},?\\s+${year}|${name}\\s+${dayOf},?\\s+${year}`, "i").test(text)) return true;
   if (day <= 12 && day !== month) return false;
-  return new RegExp(`(?<![\\d./-])(?:0?${day}([./-])0?${month}\\1${year}|0?${month}([./-])0?${day}\\2${year})(?![\\d./-])`).test(text);
+  // Each backreference is closed off from the year after it: "\12026" would read as one escape, not \1 then 2026.
+  return new RegExp(`(?<![\\d./-])(?:0?${day}([./-])0?${month}(?:\\1)${year}|0?${month}([./-])0?${day}(?:\\2)${year})(?![\\d./-])`).test(text);
 }
 
 /**

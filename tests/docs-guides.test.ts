@@ -39,6 +39,7 @@ const INVOICE_FORM = "src/components/intake/InvoiceIntake.tsx";
 const INVOICES_PAGE = "src/app/o/[slug]/invoices/page.tsx";
 const DOCUMENT_TAB = "src/components/intake/InvoiceDocumentIntake.tsx";
 const DOCUMENT_READ = "src/lib/invoice-document/read.ts";
+const DOCUMENT_NORMALIZE = "src/lib/invoice-document/normalize.ts";
 const GATEWAY_PANEL = "src/components/GatewayPanel.tsx";
 const ESCROW_PANEL = "src/components/EscrowPanel.tsx";
 const MILESTONE_ESCROW = "src/components/MilestoneEscrow.tsx";
@@ -289,6 +290,8 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["Read invoice", DOCUMENT_TAB],
     ["The amount the model gave is not in the document, so it was left blank.", DOCUMENT_TAB],
     ["A document cannot say this; tick it only if you received them.", INVOICE_FORM],
+    ["which can also mean", DOCUMENT_NORMALIZE],
+    ["Check it against the invoice.", DOCUMENT_NORMALIZE],
     ["This PDF has no text to read; it may be a scan. Paste the invoice's text instead.", DOCUMENT_READ],
     ["Gateway balance", GATEWAY_PANEL],
     ["Amount to move from the operating wallet (USDC)", GATEWAY_PANEL],
@@ -575,6 +578,15 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["Add, goods received", INBOX_EMAILS],
     ["Add, not received yet", INBOX_EMAILS],
     ["Dismiss", INBOX_EMAILS],
+    ["Fix what is missing with Finish and add.", INBOX_EMAILS],
+    ["Edit and add", INBOX_EMAILS],
+    ["Finish and add", INBOX_EMAILS],
+    ["Goods or services received", INVOICE_FORM],
+    ["Add invoice", INVOICE_FORM],
+    ["Its PDF has no text to read; it may be a scan. Ask the sender for the invoice as a PDF with text, or type it in with Finish and add.", INBOX_RECEIVE],
+    ["Its invoice is attached as an image (", INBOX_RECEIVE],
+    ["which Vestiarion cannot read yet. Ask the sender for the PDF, or type it in with Finish and add.", INBOX_RECEIVE],
+    ["Check it against the invoice.", DOCUMENT_NORMALIZE],
     ["Review in AP / AR", INBOX_RECEIVE],
     ["invoice_email_received", INBOX_RECEIVE],
     ["invoice_email_dismissed", INBOX_COMMANDS],
