@@ -103,8 +103,9 @@ ready and right, four were refused with the right reason; these did not hold up,
   figure is checked against; a comma before three digits stays a thousands separator, so C1's harm, "12,50" read as
   1250, still cannot happen.
 - **F2. Dates whose day and month could swap.** A due date read from such a numeric date (03/11/2026), or worked out
-  from such an invoice date when the due date is not written plainly, gets a note naming both days and the one taken.
-  Information only: the draft still adds.
+  from such an invoice date, gets a note naming both days and the one taken, unless the document also writes the due
+  date so it can only be that day (in words, as 2026-11-03, or in numbers with a day over 12). Information only: the
+  draft still adds.
 - **F3. The total by rule.** The reference reading takes the figure written against a currency code or symbol on the
   total line, so "Total: 45 USDC. Please pay by Oct 20." no longer raises a false "total line reads 20" warning.
 - **F4. Pictures and scans by email.** An email whose invoice is a picture attached to it says so first, rather than
@@ -118,5 +119,7 @@ ready and right, four were refused with the right reason; these did not hold up,
 - **F6. What is kept of a read.** The stored read also keeps the matched counterparty's id, the discount fields and the
   document's kind and hash; emails stored before keep working without them (the counterparty is matched by name).
 
-Not done: reading pictures (the workspace's model may have no vision; a person types the invoice in instead), and
-statements that list several invoices.
+Not done: reading pictures (the workspace's model may have no vision; a person types the invoice in instead);
+statements that list several invoices; and a figure grouped by points with no decimals, "1.250 €", which still reads as
+1.25, as it did before: it can only read less than the invoice asks, and the card shows the person 1.25 before they add
+it.
