@@ -17,7 +17,7 @@ export interface CreatedCounterparty {
 
 /**
  * Adds one counterparty: the row, its `create_counterparty` entry, and its first screening. The one way a counterparty
- * is added, from the console form or the write API (write API R2). Runs inside the organization's scope.
+ * is added, from the console form, the write API (write API R2) or a bounty on a pull request (bounties B7). Runs inside the organization's scope.
  *
  * An address that arrives through the API is stored as a change waiting for a person (R3): `address_changed_at` is set
  * and nobody has confirmed it, so the agent holds every payment to it until an owner, admin or approver confirms it on
@@ -27,12 +27,15 @@ export interface CreatedCounterparty {
 export async function createCounterparty(input: {
   actorId: string | null;
   counterparty: CounterpartyInput;
-  via?: "api";
+  via?: "api" | "github";
   apiKeyId?: string;
+  /** With `via: "github"`: the installation the comment came through, and the GitHub user who wrote it (bounties B11). */
+  github?: { installationId: number; login: string };
   now?: () => string;
 }): Promise<CreatedCounterparty> {
-  const { actorId, counterparty, via, apiKeyId } = input;
-  const addressNeedsConfirmation = via === "api" && counterparty.address !== null;
+  const { actorId, counterparty, via, apiKeyId, github } = input;
+  // An address that came from outside the console waits for a person, whatever brought it.
+  const addressNeedsConfirmation = via !== undefined && counterparty.address !== null;
 
   const row = unwrap(
     await db()
@@ -67,7 +70,8 @@ export async function createCounterparty(input: {
       baselinePaymentLimit: counterparty.paymentLimit || null,
       // Masked: who is told of a payment, not their whole address (payment notices R1).
       noticeEmail: counterparty.noticeEmail ? maskEmail(counterparty.noticeEmail) : null,
-      ...(via ? { via, apiKeyId, addressNeedsConfirmation } : {}),
+      ...(via === "api" ? { via, apiKeyId, addressNeedsConfirmation } : {}),
+      ...(via === "github" ? { via, installationId: github?.installationId, login: github?.login, addressNeedsConfirmation } : {}),
     },
   });
 

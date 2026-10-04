@@ -29,8 +29,10 @@ create table if not exists public.github_bounties (
   -- The pull request's author, who is paid (B7): a GitHub login as GitHub writes it, matched in lower case.
   author_login       text not null
                        constraint github_bounties_author_login_check check (author_login ~ '^[A-Za-z0-9][A-Za-z0-9-]{0,38}$'),
-  counterparty_id    uuid not null,
-  milestone_id       uuid not null,
+  -- Null while the bounty is claimed and its counterparty and milestone are being made: the claim holds the pull
+  -- request first, so two comments at once never make two milestones, and is removed if making them fails.
+  counterparty_id    uuid,
+  milestone_id       uuid,
   amount             numeric(20, 6) not null
                        constraint github_bounties_amount_check check (amount > 0),
   -- Who attached it, as GitHub named them, and the comment that did.

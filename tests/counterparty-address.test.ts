@@ -173,6 +173,22 @@ describe("changeCounterpartyAddress", () => {
     expect(entry.p_summary).toBe("An address was entered through Acme Supplies's payee link; the next payment waits for a person to confirm it");
   });
 
+  it("records a payee's own change from a pull request comment as GitHub's, with the comment, and no person (bounties B9)", async () => {
+    const { fake, run } = addressFake({ row: counterpartyRow({ address: null }) });
+    const github = { installationId: 42, login: "octocat", commentUrl: "https://github.com/acme/widgets/pull/7#issuecomment-99" };
+
+    const result = await run(() => changeCounterpartyAddress({ github, counterpartyId: COUNTERPARTY_ID, raw: NEW }));
+
+    expect(result).toEqual({ name: "Acme Supplies", from: null, to: NEW });
+    // Stamped like a payee link's change: payments wait for a member to confirm it.
+    const body = patches(fake.requests)[0].body as Record<string, unknown>;
+    expect(Number.isNaN(Date.parse(String(body.address_changed_at)))).toBe(false);
+    const [entry] = ledgerBodies(fake.requests);
+    expect(entry.p_actor).toBe("human");
+    expect(entry.p_detail).toEqual({ by: null, via: "github", installationId: 42, login: "octocat", commentUrl: github.commentUrl, counterpartyId: COUNTERPARTY_ID, from: null, to: NEW });
+    expect(entry.p_summary).toBe("octocat entered Acme Supplies's address on GitHub; the next payment waits for a person to confirm it");
+  });
+
   it("guards on the change and the confirmation it read, so a confirmation that lands first makes this a conflict", async () => {
     const CONFIRMED_AT = "2026-09-30T12:05:00.654321+00:00";
     const { fake, run } = addressFake({ row: counterpartyRow({ address_changed_at: CHANGED_AT, address_confirmed_at: CONFIRMED_AT }) });

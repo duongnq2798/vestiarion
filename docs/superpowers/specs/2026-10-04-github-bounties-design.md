@@ -49,6 +49,9 @@ paid with a comment of their own. Every bounty comment also shows Vestiarion to 
   nothing twice.
   - A second `/bounty` on the same pull request gets a reply naming the bounty on file. Changing it is done in
     Vestiarion.
+  - The row is claimed before the counterparty and the milestone are made, with both left empty until they exist.
+    Two comments at once therefore never make two milestones, which would pay the pull request twice. A claim whose
+    milestone could not be made is removed.
 - **B7. The payee.** The pull request's author. A bot author is refused.
   - The same GitHub account is the same counterparty across a workspace's bounties, found through `github_bounties`.
   - A new one is added as a contractor named `<login> (GitHub)`, on Arc testnet, with no address yet. Its payment

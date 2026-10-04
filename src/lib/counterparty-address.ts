@@ -97,11 +97,16 @@ async function loadCounterparty(counterpartyId: string): Promise<AddressRow> {
 }
 
 /**
- * Who changed the address: a member (`actorId`), or the payee themselves through
- * a one-time payee link (`payeeLinkId`, spec 2026-09-30-payee-links-design.md).
- * Either way the change is stamped, so payments wait for a member to confirm it.
+ * Who changed the address: a member (`actorId`), or the payee themselves, through
+ * a one-time payee link (`payeeLinkId`, spec 2026-09-30-payee-links-design.md) or
+ * with `/payto` on their pull request (`github`, bounties B9). Every way, the change
+ * is stamped, so payments wait for a member to confirm it.
  */
-export type AddressChangeInput = ({ actorId: string } | { payeeLinkId: string }) & {
+export type AddressChangeInput = (
+  | { actorId: string }
+  | { payeeLinkId: string }
+  | { github: { installationId: number; login: string; commentUrl: string } }
+) & {
   counterpartyId: string;
   raw: string;
 };
@@ -131,17 +136,24 @@ export async function changeCounterpartyAddress(
   if (rows.length === 0) throw new CounterpartyAddressError("conflict");
 
   const byPayee = "payeeLinkId" in input;
+  const onGitHub = "github" in input ? input.github : null;
   await appendLedgerEntryBestEffort(currentOrgId(), {
     actor: "human",
     domain: "compliance",
     action: "counterparty_address_changed",
-    summary: byPayee
+    summary: onGitHub
+      ? `${onGitHub.login} entered ${current.name}'s address on GitHub; the next payment waits for a person to confirm it`
+      : byPayee
       ? `An address was entered through ${current.name}'s payee link; the next payment waits for a person to confirm it`
       : parsed.address === null
         ? `Cleared ${current.name}'s payment address`
         : `Changed ${current.name}'s payment address; the next payment waits for a person to confirm it`,
     detail: {
-      ...(byPayee ? { by: null, via: "payee_link", linkId: input.payeeLinkId } : { by: input.actorId }),
+      ...(onGitHub
+        ? { by: null, via: "github", installationId: onGitHub.installationId, login: onGitHub.login, commentUrl: onGitHub.commentUrl }
+        : byPayee
+          ? { by: null, via: "payee_link", linkId: input.payeeLinkId }
+          : { by: "actorId" in input ? input.actorId : null }),
       counterpartyId: current.id,
       from: current.address,
       to: parsed.address,

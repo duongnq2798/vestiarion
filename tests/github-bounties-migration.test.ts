@@ -78,6 +78,11 @@ describe("github_bounties", () => {
     await expect(insert()).rejects.toThrow(/github_bounties_pull_key/);
   });
 
+  it("holds a pull request with a claim before its milestone exists, so two comments at once never make two milestones (B6)", async () => {
+    await insert({ pull_number: 30, counterparty_id: null, milestone_id: null });
+    await expect(insert({ pull_number: 30, counterparty_id: null, milestone_id: null })).rejects.toThrow(/github_bounties_pull_key/);
+  });
+
   it("takes each comment once, so a redelivered comment attaches nothing twice (B6)", async () => {
     await expect(insert({ pull_number: 8, comment_id: 1000 })).rejects.toThrow(/github_bounties_comment_key/);
   });
