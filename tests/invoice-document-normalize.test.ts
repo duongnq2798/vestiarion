@@ -142,6 +142,8 @@ describe("checking what the model read against the document", () => {
         ["Ngày lập: 04/10/2026\nHạn thanh toán: 15/10/2026\nTotal due 0.80 USDC", "2026-10-15"],
         ["Invoice date: 04.10.2026\nDue date: 20.10.2026\nTotal due 0.80 USDC", "2026-10-20"],
         ["Invoice date: 04-10-2026\nDue date: 10-15-2026\nTotal due 0.80 USDC", "2026-10-15"],
+        // Written in numbers that could swap, but also in words.
+        ["Payment due: 03/11/2026 (3 November 2026)\nTotal due 0.80 USDC", "2026-11-03"],
       ]) {
         expect(normalize({ ...plain, issueDate: "2026-10-04", dueDate }, text).notes, text).toEqual([]);
       }

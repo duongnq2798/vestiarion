@@ -205,7 +205,8 @@ function writtenPlainly(text: string, iso: string): boolean {
  * one it made, as should a due date worked out from such an invoice date (reader follow-up F2). Information only.
  */
 function dateNotes(text: string, dueDate: string | null, issueDate: string | null): string[] {
-  if (!dueDate) return [];
+  // A due date the document also writes so it can only be that day leaves no choice to report.
+  if (!dueDate || writtenPlainly(text, dueDate)) return [];
   const swappable = swappableDates(text);
   const due = swappable.find((date) => date.readings.includes(dueDate));
   if (due) {
@@ -213,7 +214,7 @@ function dateNotes(text: string, dueDate: string | null, issueDate: string | nul
     return [`The due date, ${spelled(dueDate)}, was read from ${due.written}, which can also mean ${spelled(other)}. Check it against the invoice.`];
   }
   const issued = issueDate ? swappable.find((date) => date.readings.includes(issueDate)) : undefined;
-  if (!issueDate || !issued || writtenPlainly(text, dueDate)) return [];
+  if (!issueDate || !issued) return [];
   const other = issued.readings.find((reading) => reading !== issueDate) ?? issueDate;
   return [
     `The due date, ${spelled(dueDate)}, was worked out from the invoice date ${issued.written}, read as ${spelled(issueDate)}; it can also mean ${spelled(other)}. Check both against the invoice.`,
