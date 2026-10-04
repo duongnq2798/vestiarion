@@ -37,7 +37,7 @@ afterAll(async () => {
 const ENVELOPE = { v: 1, iv: "x", tag: "y", data: "z" };
 const PLATFORM_TABLES = [
   "memberships", "invitations", "api_keys", "webhook_endpoints", "webhook_deliveries", "payee_links", "telegram_link_codes", "telegram_links",
-  "api_idempotency", "slack_installs", "slack_links", "invoice_inboxes", "github_installations",
+  "api_idempotency", "slack_installs", "slack_links", "invoice_inboxes", "github_installations", "github_bounties",
 ] as const;
 
 const deleteOrg = (orgId: string, by: string | null = owner) =>
@@ -157,6 +157,16 @@ async function populated(slug: string): Promise<string> {
   // The workspace's address for invoices by email goes with it (0068).
   const code = Array.from(crypto.randomBytes(12), (byte) => "abcdefghijklmnopqrstuvwxyz234567"[byte % 32]).join("");
   await db.query("insert into public.invoice_inboxes (org_id, code) values ($1, $2)", [orgId, code]);
+  // A bounty attached from a pull request comment goes with its milestone and counterparty, which delete_org deletes (0072).
+  const bountyMilestone = (await db.query<{ id: string }>(
+    "insert into public.milestones (org_id, contractor_id, title, amount) values ($1, $2, $3, 1) returning id",
+    [orgId, seeded.counterpartyId, `PR #7: ${slug}`]
+  )).rows[0].id;
+  await db.query(
+    `insert into public.github_bounties (org_id, installation_id, repository, pull_number, pull_url, author_login, counterparty_id, milestone_id,
+       amount, attached_by_login, comment_id, comment_url) values ($1, 42, $2, 7, $3, 'octocat', $4, $5, 1, 'maintainer', $6, $3)`,
+    [orgId, `acme/${slug}`, `https://github.com/acme/${slug}/pull/7`, seeded.counterpartyId, bountyMilestone, crypto.randomInt(1, 2 ** 31)]
+  );
   // The workspace's GitHub connections go with it (0071).
   await db.query(
     "insert into public.github_installations (org_id, installation_id, account_login, account_type, repository_selection, connected_by) values ($1, $2, 'acme', 'Organization', 'selected', $3)",
