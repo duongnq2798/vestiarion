@@ -51,6 +51,35 @@ describe("ApiKeysPanel", () => {
     expect(shown).not.toContain("Create a new key");
   });
 
+  const REVOKED: ApiKeyRow = { ...KEY, id: "key-3", name: "old-sync", prefix: "r3v0k3d0", revokedAt: "2026-10-02T09:00:00.000Z" };
+
+  it("lists the keys that work, and folds revoked ones under them with the day each stopped (Settings structure design S4)", () => {
+    const markup = html(<ApiKeysPanel orgSlug="acme" apiKeys={[KEY, REVOKED]} canManage />);
+    const [table, fold] = markup.split("<details");
+    expect(text(table)).toContain("test-api-key");
+    expect(text(table)).not.toContain("old-sync");
+    expect(text(fold)).toContain("Revoked keys (1)");
+    expect(text(fold)).toContain("old-sync vxk_r3v0k3d0_…");
+    expect(text(fold)).toContain("Oct 2, 2026");
+    expect(fold).not.toContain("<details open");
+    expect(text(markup)).toContain("1 active, 1 revoked");
+    // One Revoke, for the one key that can still be revoked.
+    expect(text(markup).match(/\bRevoke\b/g)).toHaveLength(1);
+  });
+
+  it("counts the keys in the workspace when none is revoked, and shows no fold", () => {
+    const markup = html(<ApiKeysPanel orgSlug="acme" apiKeys={[KEY]} canManage />);
+    expect(text(markup)).toContain("1 in this workspace");
+    expect(markup).not.toContain("<details");
+  });
+
+  it("says no key is active when every key was revoked", () => {
+    const shown = text(html(<ApiKeysPanel orgSlug="acme" apiKeys={[REVOKED]} canManage />));
+    expect(shown).toContain("No active keys.");
+    expect(shown).toContain("Revoked keys (1)");
+    expect(shown).not.toContain("No API keys yet");
+  });
+
   it("says nothing about lost keys when there are none", () => {
     const shown = text(html(<ApiKeysPanel orgSlug="acme" apiKeys={[]} canManage />));
     expect(shown).toContain("No API keys yet");

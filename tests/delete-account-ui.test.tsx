@@ -18,6 +18,7 @@ import type { AccountDeletionPlan } from "@/lib/platform/delete-account";
 vi.mock("@/app/account/actions", () => ({ deleteAccountAction: vi.fn(), accountDeletionPlanAction: vi.fn() }));
 vi.mock("@/app/login/actions", () => ({ signOut: vi.fn() }));
 vi.mock("@/app/actions/workspace", () => ({ deleteWorkspaceAction: vi.fn() }));
+vi.mock("@/app/actions/agent", () => ({ pauseAgentAction: vi.fn() }));
 
 const html = (node: ReactElement) => renderToStaticMarkup(<TooltipProvider>{node}</TooltipProvider>);
 const text = (markup: string) => markup.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").replace(/&#x27;/g, "'").trim();
@@ -75,6 +76,9 @@ describe("DeleteAccountBody", () => {
     expect(words).toContain("Vestiarion's testnet account");
     expect(words).toContain("Pause the agent first, so no cycle runs while the workspace is deleted.");
     expect(markup).toContain('href="/o/hosted-co/console"');
+    // The note sits inside this dialog's form, so it points to the console and holds no pause form of its own.
+    expect(markup.match(/<form/g)).toHaveLength(1);
+    expect(words).not.toContain("Pause it here");
     // A live workspace whose agent runs keeps the button disabled, whatever is typed.
     expect(submit(markup)).toContain('disabled=""');
   });

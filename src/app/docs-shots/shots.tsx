@@ -75,7 +75,7 @@ const SLUG = DESIGN_SLUG;
 
 /** Settings' line under its title, as the page has it. */
 const SETTINGS_SUB =
-  "Your own notifications, taking this workspace live, the USYC reserve, API keys, outgoing webhooks, Slack, GitHub, invoices by email, the ledger signing key, and deleting the workspace. An owner takes it live, rotates the signing key, or deletes it; an owner or admin manages API keys, webhooks, Slack, GitHub and invoices by email, and a secret is shown once, right after it is created.";
+  "Your own notifications, and how this workspace goes live, connects to other tools and signs its ledger. An owner takes it live, rotates the ledger signing key or deletes it; an owner or admin manages API keys, webhooks and integrations.";
 
 // ---------------------------------------------------------------------------
 // Go live

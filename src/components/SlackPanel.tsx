@@ -1,6 +1,7 @@
 "use client";
 
 import { Hash, Link2Off, Unplug } from "lucide-react";
+import { useState } from "react";
 import {
   disconnectSlackAccountAction, removeSlackAction, setSlackDecisionsLimitAction, type SlackActionResult,
 } from "@/app/actions/slack";
@@ -38,17 +39,27 @@ function Refusal({ state }: { state: SlackActionResult }) {
   return <FormMessage tone={state.message && !state.ok ? "error" : "neutral"}>{state.ok ? null : state.message}</FormMessage>;
 }
 
+/** The limit form. Save is offered once the amount differs from the one saved (Settings structure design S5). */
 function LimitForm({ orgSlug, limit }: { orgSlug: string; limit: number | null }) {
   const { state, formProps } = useActionForm(setSlackDecisionsLimitAction, INITIAL, { toastOnSuccess: true });
+  const saved = limit === null ? "" : String(limit);
+  const [amount, setAmount] = useState(saved);
   return (
     <form {...formProps} className="space-y-3">
       <input type="hidden" name="orgSlug" value={orgSlug} />
       <p className="text-xs leading-5 text-ink-3">Leave the amount empty to turn deciding from Slack off.</p>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
         <Field id="slack-decisions-limit" label="Limit (USDC)" optional>
-          <Input name="limit" inputMode="decimal" autoComplete="off" defaultValue={limit ?? ""} className="sm:w-40" />
+          <Input
+            name="limit"
+            inputMode="decimal"
+            autoComplete="off"
+            value={amount}
+            onChange={(event) => setAmount(event.target.value)}
+            className="sm:w-40"
+          />
         </Field>
-        <SubmitButton variant="secondary" pendingLabel="Saving…">
+        <SubmitButton variant="secondary" pendingLabel="Saving…" disabled={amount.trim() === saved}>
           Save
         </SubmitButton>
         <FormMessage className="sm:self-center" tone={state.message && !state.ok ? "error" : "neutral"}>
@@ -132,35 +143,38 @@ export default function SlackPanel({
             )}
           </div>
         ) : (
-          <div className="space-y-4">
-            <p className="max-w-prose text-sm text-ink-2">
-              Connected to <strong className="font-semibold text-ink">{view.teamName ?? "a Slack workspace"}</strong> since{" "}
-              {connectedOn(view.installedAt)}. The agent&apos;s decisions go to{" "}
-              <strong className="font-semibold text-ink">{view.channelName ?? "the channel picked"}</strong>.
-            </p>
+          <div className="space-y-4 [&>*+*]:border-t [&>*+*]:border-line [&>*+*]:pt-4">
+            <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-1.5 text-sm [&_dd]:break-words">
+              <dt className="text-ink-2">Slack workspace</dt>
+              <dd className="font-medium text-ink">{view.teamName ?? "A Slack workspace"}</dd>
+              <dt className="text-ink-2">Decisions go to</dt>
+              <dd className="font-medium text-ink">{view.channelName ?? "The channel picked"}</dd>
+              <dt className="text-ink-2">Connected since</dt>
+              <dd className="text-ink">{connectedOn(view.installedAt)}</dd>
+            </dl>
             {!view.canReadFiles && (
               <p className="max-w-prose text-sm text-ink-2">
                 To add invoices from Slack, connect Slack again: Vestiarion now also asks to read the file someone chooses with Add invoice,
                 and nothing else.
               </p>
             )}
-            <div className="max-w-prose space-y-2">
+            <div className="space-y-2">
               <p className="text-sm font-medium text-ink">Your Slack account</p>
               {view.youConnected ? (
                 <>
-                  <p className="text-sm text-ink-2">Your Slack account is connected: /vestiarion and the buttons in Slack act as you, with your role here.</p>
+                  <p className="max-w-prose text-sm text-ink-2">Your Slack account is connected: /vestiarion and the buttons in Slack act as you, with your role here.</p>
                   <DisconnectMine orgSlug={orgSlug} />
                 </>
               ) : (
-                <p className="text-sm text-ink-2">
+                <p className="max-w-prose text-sm text-ink-2">
                   In Slack, type <code className="font-mono text-xs">/vestiarion connect</code> and open the link it gives you. Each member connects
                   their own account.
                 </p>
               )}
             </div>
-            <div className="max-w-prose space-y-2">
+            <div className="space-y-2">
               <p className="text-sm font-medium text-ink">Deciding payments from Slack</p>
-              <p className="text-sm text-ink-2">
+              <p className="max-w-prose text-sm text-ink-2">
                 {view.decisionsLimitUsdc === null
                   ? "Deciding payments from Slack is off: a payment the agent stopped links to Approvals."
                   : `Anyone who may approve can approve and pay a stopped payment from Slack up to ${view.decisionsLimitUsdc} USDC, in USDC on Arc, to a confirmed address. Reject and Return work at any amount.`}
@@ -168,8 +182,8 @@ export default function SlackPanel({
               {canAdminister && <LimitForm orgSlug={orgSlug} limit={view.decisionsLimitUsdc} />}
             </div>
             {canManage && (
-              <div className="max-w-prose space-y-3">
-                <p className="text-xs leading-5 text-ink-3">
+              <div className="space-y-3">
+                <p className="max-w-prose text-xs leading-5 text-ink-3">
                   Reconnect to pick another channel, or to grant what Vestiarion asks of Slack. Members stay connected, and the limit stays.
                 </p>
                 <div className="flex flex-wrap items-center gap-3">

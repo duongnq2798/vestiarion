@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { cn } from "@/components/ui/cn";
+import { useActiveHeading } from "@/components/ui/useActiveHeading";
 import type { Heading } from "@/lib/docs/headings";
 
 /** How far below the top of the window a heading counts as the one being read: under the sticky header. */
@@ -9,33 +9,14 @@ const READING_LINE = 112;
 
 /**
  * "On this page": the page's `##` and `###` headings. The one being read is
- * highlighted — the last heading above the reading line, looked for again
- * whenever an `IntersectionObserver` sees a heading cross into or out of the
- * band below that line. There is no scroll listener.
- * The links are plain anchors; the page scrolls itself.
+ * highlighted (`useActiveHeading`). The links are plain anchors; the page
+ * scrolls itself.
  */
 export function DocsToc({ headings }: { headings: Heading[] }) {
-  const [active, setActive] = useState<string | null>(headings[0]?.id ?? null);
-
-  useEffect(() => {
-    const elements = headings.map((heading) => document.getElementById(heading.id)).filter((element): element is HTMLElement => element !== null);
-    if (elements.length === 0) return;
-
-    const pick = () => {
-      let current = elements[0].id;
-      for (const element of elements) {
-        if (element.getBoundingClientRect().top <= READING_LINE) current = element.id;
-        else break;
-      }
-      setActive(current);
-    };
-
-    // The band starts at the reading line, so a heading crossing it is an intersection change.
-    const observer = new IntersectionObserver(pick, { rootMargin: `-${READING_LINE}px 0px -50% 0px` });
-    for (const element of elements) observer.observe(element);
-    pick();
-    return () => observer.disconnect();
-  }, [headings]);
+  const active = useActiveHeading(
+    headings.map((heading) => heading.id),
+    READING_LINE
+  );
 
   if (headings.length === 0) return null;
 

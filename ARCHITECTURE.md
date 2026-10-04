@@ -164,8 +164,15 @@ organization per UTC day. The cap is enforced inside `begin_cycle_run` (migratio
 opens the `cycle_runs` row under a per-organization lock and counts the day's runs in the same
 transaction, so it holds across serverless instances rather than resetting per cold start.
 
+**Settings** (`/o/[slug]/settings`) is one page in six groups: You, Workspace, Developers, Integrations,
+Security and Danger zone (`docs/superpowers/specs/2026-10-04-settings-structure-design.md`). The page lists every
+section once, each with its heading's id and `null` where this viewer or deployment does not get it, and
+`SettingsSections` (`src/components/SettingsSections.tsx`) draws the groups and their contents from that one list: a
+column beside the sections from `xl`, marking the one being read, and a list above them on a narrower screen. Links
+into Settings use a section heading's id, such as `#go-live-title` or `#usyc-reserve-title`.
+
 **Going live** is self-serve, owner only (`docs/superpowers/specs/2026-09-29-go-live-design.md`).
-The **Go live** section at the top of Settings (`src/components/GoLivePanel.tsx`) renders
+The **Go live** section of Settings, first under Workspace (`src/components/GoLivePanel.tsx`), renders
 `goLiveStatus` (`src/lib/platform/go-live.ts`) — the step, whether credentials are stored, the
 wallet addresses and when the workspace went live, never a credential or a wallet id — and drives
 the three actions in `src/app/actions/go-live.ts`, each gated on `org.administer`:

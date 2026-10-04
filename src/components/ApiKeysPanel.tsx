@@ -5,7 +5,6 @@ import { Ban, BookOpen, KeyRound, Plus } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { createApiKeyAction, revokeApiKeyAction, type ApiKeyActionResult } from "@/app/actions/api-keys";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Checkbox } from "@/components/ui/Checkbox";
@@ -21,6 +20,7 @@ import { SubmitButton } from "@/components/ui/SubmitButton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/Table";
 import { MOTION } from "@/components/ui/tokens";
 import { useActionForm } from "@/components/ui/useActionForm";
+import { ManageDisclosure } from "@/components/vx/ManageDisclosure";
 import type { ApiKeyRow } from "@/lib/platform/api-keys";
 
 const INITIAL: ApiKeyActionResult = { ok: false, message: "" };
@@ -144,14 +144,44 @@ function RevokeKeyForm({ orgSlug, apiKey }: { orgSlug: string; apiKey: ApiKeyRow
   );
 }
 
+function KeyCells({ apiKey }: { apiKey: ApiKeyRow }) {
+  return (
+    <>
+      <TableCell className="max-w-[16rem] truncate">{apiKey.name}</TableCell>
+      <TableCell className="whitespace-nowrap font-mono text-xs text-ink-2">{`vxk_${apiKey.prefix}_…`}</TableCell>
+      <TableCell className="whitespace-nowrap text-ink-2">{apiKey.scopes.includes("write") ? "Read and write" : "Read only"}</TableCell>
+      <TableCell className="whitespace-nowrap text-ink-2">{formatted(apiKey.createdAt)}</TableCell>
+      <TableCell className="whitespace-nowrap text-ink-2">{formatted(apiKey.lastUsedAt)}</TableCell>
+    </>
+  );
+}
+
+function KeyHeads() {
+  return (
+    <>
+      <TableHead>Name</TableHead>
+      <TableHead>Key</TableHead>
+      <TableHead>Access</TableHead>
+      <TableHead>Created</TableHead>
+      <TableHead>Last used</TableHead>
+    </>
+  );
+}
+
+/**
+ * The keys that work, in a table; the revoked ones folded under it, closed, since nothing can be done with them but
+ * read when they stopped (Settings structure design S4). A key revoked here leaves the table and joins the fold.
+ */
 export default function ApiKeysPanel({ orgSlug, apiKeys, canManage }: { orgSlug: string; apiKeys: ApiKeyRow[]; canManage: boolean }) {
+  const active = apiKeys.filter((apiKey) => apiKey.revokedAt === null);
+  const revoked = apiKeys.filter((apiKey) => apiKey.revokedAt !== null);
   return (
     <div className="space-y-8">
       <section aria-labelledby="api-keys-title">
         <SectionHeader
           id="api-keys-title"
           title="API keys"
-          meta={`${apiKeys.length} in this workspace`}
+          meta={revoked.length > 0 ? `${active.length} active, ${revoked.length} revoked` : `${active.length} in this workspace`}
           action={
             <div className="flex items-center gap-3">
               <Button asChild variant="link">
@@ -176,45 +206,58 @@ export default function ApiKeysPanel({ orgSlug, apiKeys, canManage }: { orgSlug:
           />
         ) : (
           <Card className="overflow-hidden">
-            <Table className="min-w-[40rem]">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Key</TableHead>
-                  <TableHead>Access</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead>Last used</TableHead>
-                  <TableHead>Status</TableHead>
-                  {canManage && (
-                    <TableHead>
-                      <span className="sr-only">Actions</span>
-                    </TableHead>
-                  )}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                <AnimatePresence initial={false}>
-                  {apiKeys.map((apiKey) => {
-                    const revoked = apiKey.revokedAt !== null;
-                    return (
+            {active.length === 0 ? (
+              <p className="px-4 py-4 text-sm text-ink-2 sm:px-5">
+                {canManage ? "No active keys. Create one to read this workspace's data, or to add records." : "No active keys."}
+              </p>
+            ) : (
+              <Table className="min-w-[36rem]">
+                <TableHeader>
+                  <TableRow>
+                    <KeyHeads />
+                    {canManage && (
+                      <TableHead>
+                        <span className="sr-only">Actions</span>
+                      </TableHead>
+                    )}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <AnimatePresence initial={false}>
+                    {active.map((apiKey) => (
                       <m.tr key={apiKey.id} exit={{ opacity: 0 }} transition={EXIT}>
-                        <TableCell className="max-w-[16rem] truncate">{apiKey.name}</TableCell>
-                        <TableCell className="whitespace-nowrap font-mono text-xs text-ink-2">{`vxk_${apiKey.prefix}_…`}</TableCell>
-                        <TableCell className="whitespace-nowrap text-ink-2">{apiKey.scopes.includes("write") ? "Read and write" : "Read only"}</TableCell>
-                        <TableCell className="whitespace-nowrap text-ink-2">{formatted(apiKey.createdAt)}</TableCell>
-                        <TableCell className="whitespace-nowrap text-ink-2">{formatted(apiKey.lastUsedAt)}</TableCell>
-                        <TableCell>
-                          <Badge tone={revoked ? "refused" : "proof"} size="sm" dot>
-                            {revoked ? "Revoked" : "Active"}
-                          </Badge>
-                        </TableCell>
-                        {canManage && <TableCell className="text-right">{!revoked && <RevokeKeyForm orgSlug={orgSlug} apiKey={apiKey} />}</TableCell>}
+                        <KeyCells apiKey={apiKey} />
+                        {canManage && (
+                          <TableCell className="text-right">
+                            <RevokeKeyForm orgSlug={orgSlug} apiKey={apiKey} />
+                          </TableCell>
+                        )}
                       </m.tr>
-                    );
-                  })}
-                </AnimatePresence>
-              </TableBody>
-            </Table>
+                    ))}
+                  </AnimatePresence>
+                </TableBody>
+              </Table>
+            )}
+            {revoked.length > 0 && (
+              <ManageDisclosure label={`Revoked keys (${revoked.length})`}>
+                <Table className="min-w-[36rem]">
+                  <TableHeader>
+                    <TableRow>
+                      <KeyHeads />
+                      <TableHead>Revoked</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {revoked.map((apiKey) => (
+                      <TableRow key={apiKey.id}>
+                        <KeyCells apiKey={apiKey} />
+                        <TableCell className="whitespace-nowrap text-ink-2">{formatted(apiKey.revokedAt)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </ManageDisclosure>
+            )}
           </Card>
         )}
         {apiKeys.length > 0 && (
