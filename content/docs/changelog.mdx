@@ -1,5 +1,10 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-04: Cash back for milestones too
+
+- A `cash_brought_back` entry with `reason: "payments_due_today"` now also counts the verified milestones waiting to be paid in `neededUsdc` and `payments`, so a cycle brings their cash back from the reserve before it releases them. A milestone whose USDC is locked in escrow is not counted.
+- A person's **Pay now** on a milestone for a pull request now gets its `pull_request_commented` entry once the payment is confirmed, rather than at the next cycle.
+
 ## 2026-10-04: Payments said on the pull request
 
 - **A workspace can connect GitHub** from Settings, by installing the Vestiarion app on the repositories it chooses. See [Show payments on GitHub](/docs/guides/github).
