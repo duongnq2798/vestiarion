@@ -18,6 +18,8 @@ import { APPENDED_LEDGER_ROW, signedOrgs } from "./support/signed-org";
  */
 
 vi.mock("server-only", () => ({}));
+// Five reads a minute per workspace is the From a document limit, tested with it; here every test reads in one workspace.
+vi.mock("@/lib/rate-limit", async (actual) => ({ ...(await actual<typeof import("@/lib/rate-limit")>()), takeDocumentReadToken: () => true }));
 
 const ORG = "0b6c1c9e-4a4f-4a7e-9b1e-000000000e21";
 const ROW_ID = "0b6c1c9e-4a4f-4a7e-9b1e-000000000e22";
@@ -79,12 +81,14 @@ let stored: boolean;
 let resendEmail: unknown;
 let slackInstalled: boolean;
 let downloadUrl: string;
+let downloadBytes: Buffer;
 
 beforeEach(() => {
   stored = false;
   resendEmail = email();
   slackInstalled = false;
   downloadUrl = DOWNLOAD;
+  downloadBytes = PDF;
 });
 
 function world() {
@@ -121,9 +125,9 @@ function world() {
       return resendEmail ? Response.json(resendEmail) : new Response("not found", { status: 404 });
     }
     if (url === `https://api.resend.com/emails/receiving/${EMAIL_ID}/attachments/${ATTACHMENT_ID}`) {
-      return Response.json({ id: ATTACHMENT_ID, filename: "northwind-inv-2207.pdf", size: PDF.length, content_type: "application/pdf", download_url: downloadUrl });
+      return Response.json({ id: ATTACHMENT_ID, filename: "northwind-inv-2207.pdf", size: downloadBytes.length, content_type: "application/pdf", download_url: downloadUrl });
     }
-    if (url === DOWNLOAD) return new Response(new Blob([new Uint8Array(PDF)]), { headers: { "content-type": "application/pdf" } });
+    if (url === DOWNLOAD) return new Response(new Blob([new Uint8Array(downloadBytes)]), { headers: { "content-type": "application/pdf" } });
     if (url.startsWith("https://hooks.slack.com/")) return new Response("ok");
     return new Response("unexpected", { status: 500 });
   }) as typeof fetch;
@@ -190,6 +194,9 @@ describe("handleInbound", () => {
       read: { counterpartyName: "Northwind Hosting", amount: "200.00", currency: "USDC", knownSender: true },
       authentication: { spf: "pass", dkim: "pass", dmarc: "pass" },
     });
+    // What the form that finishes it starts from, and what its entry names (reader follow-up F5, F6).
+    const sha256 = crypto.createHash("sha256").update(PDF).digest("hex");
+    expect(patch.read).toMatchObject({ counterpartyId: COUNTERPARTIES[0].id, earlyPayDiscountPct: "2", discountDeadline: "2026-10-11", document: { kind: "pdf", sha256 } });
     const entries = ledger(fake.requests);
     expect(entries.map((entry) => entry.p_action)).toEqual(["invoice_email_received"]);
     expect(entries[0].p_detail).toMatchObject({ inboxEmailId: ROW_ID, from: "bi***@northwind.example", read: "ready", document: { kind: "pdf" } });
@@ -232,6 +239,45 @@ describe("handleInbound", () => {
     expect(patch).toMatchObject({ status: "unreadable", reasons: ["Its attachment could not be fetched from Resend. Forward it again in a moment."] });
     expect(errors).toHaveBeenCalledWith("email inbox: attachment not fetched", ORG, "not_resend");
     errors.mockRestore();
+  });
+
+  describe("an invoice it cannot read, said plainly (reader follow-up F4)", () => {
+    const photo = { id: "2a0c9ce0-3112-4728-976e-47ddcd16a318", filename: "invoice-october.jpg", content_type: "image/jpeg", content_disposition: "attachment", size: 120_000 };
+    const IMAGE = "Its invoice is attached as an image (invoice-october.jpg), which Vestiarion cannot read yet. Ask the sender for the PDF, or type it in with Finish and add.";
+
+    it("says first that the invoice is a picture, when the email's own words do not hold it, and fetches nothing", async () => {
+      resendEmail = email({ attachments: [photo], text: "Please find attached our invoice for October." });
+      const { fake, calls, handle } = world();
+      await handle(signedEvent(received()));
+      const [patch] = patches(fake.requests);
+      expect(patch).toMatchObject({ status: "needs_details" });
+      expect((patch.reasons as string[])[0]).toBe(IMAGE);
+      expect(calls.some((call) => call.url.includes("/attachments/"))).toBe(false);
+    });
+
+    it("says only that, when the email has no words of its own", async () => {
+      resendEmail = email({ attachments: [photo], text: "" });
+      const { fake, handle } = world();
+      await handle(signedEvent(received()));
+      expect(patches(fake.requests)[0]).toMatchObject({ status: "unreadable", reasons: [IMAGE] });
+    });
+
+    it("reads the PDF as before when the only picture is inline, such as a logo", async () => {
+      resendEmail = email({ attachments: [{ ...photo, filename: "logo.png", content_type: "image/png", content_disposition: "inline" }, ...email().attachments] });
+      const { fake, handle } = world();
+      await handle(signedEvent(received()));
+      expect(patches(fake.requests)[0]).toMatchObject({ status: "ready", reasons: [] });
+    });
+
+    it("says a scanned PDF has no text, and what to do from the inbox", async () => {
+      downloadBytes = readFileSync(path.join(__dirname, "fixtures", "invoice-document", "scan.pdf"));
+      const { fake, handle } = world();
+      await handle(signedEvent(received()));
+      expect(patches(fake.requests)[0]).toMatchObject({
+        status: "unreadable",
+        reasons: ["Its PDF has no text to read; it may be a scan. Ask the sender for the invoice as a PDF with text, or type it in with Finish and add."],
+      });
+    });
   });
 
   it("tells the workspace's Slack channel that an invoice arrived, with a link to it", async () => {
