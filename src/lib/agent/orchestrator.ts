@@ -75,7 +75,7 @@ import {
   type PaymentTiming,
   type PaymentTimingInput,
 } from "./payment-timing";
-import { boundTreasuryDecision, planTreasury, sameTreasuryDecision, treasuryBounds, type TreasuryDecision } from "./treasury";
+import { boundTreasuryDecision, planTreasury, sameTreasuryDecision, treasuryBounds, treasuryUserPrompt, type TreasuryDecision } from "./treasury";
 import { moveTreasuryIfNotPaused } from "./treasury-moves";
 import { bringCashForTodaysPayments, HELD_FOR_CASH } from "./liquidity";
 import { plural, utcDay } from "../copy";
@@ -3483,46 +3483,17 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     const bounds = treasuryBounds(boundFacts);
     const { value: modelDecision, mode, reference } = await decide<TreasuryDecision>({
       systemPrompt: SYSTEM_PROMPT,
-      userPrompt: JSON.stringify({
-        task: "Decide whether to sweep idle operating cash into the USYC-yielding reserve, redeem from the reserve back into operating, or hold.",
+      userPrompt: treasuryUserPrompt({
         operatingBalance,
         reserveBalance,
-        reserveApy: apy,
-        upcomingObligationsNext7Days: obligationsDue7d,
-        upcomingObligationsNext14Days: obligationsDue14d,
-        totalOpenObligations: obligationsOpenTotal,
-        daysUntilNextObligation: Number.isFinite(daysUntilNextObligation)
-          ? Number(daysUntilNextObligation.toFixed(2))
-          : null,
-        economics: {
-          idleAboveBuffer: plan.idle,
-          requiredBuffer: plan.buffer,
-          expectedHoldDays: plan.holdDays,
-          projectedYieldUsd: plan.projectedYieldUsd,
-          roundTripCostUsd: plan.roundTripCostUsd,
-          note: "A sweep costs one transfer now and one redemption later. Sweeping is only worth doing when projectedYieldUsd exceeds roundTripCostUsd. expectedHoldDays is how long the swept cash would stay, on average over the next 30 days, before what falls due calls it back: only what the operating wallet cannot cover comes back, on its day.",
-        },
-        ...(provider.earnMode === "live"
-          ? {
-              usyc: {
-                reserveIsRealUsyc: true,
-                subscriptionsOpen,
-                note: "USYC can be bought only between its daily price update and 14:00 New York time on business days; a sweep while subscriptionsOpen is false is not executed. Redemptions are always possible.",
-              },
-            }
-          : {}),
-        // What code lets a move be, whatever the answer (treasury bounds R1–R3).
-        bounds: {
-          sweepAtMostUsdc: bounds.sweepAtMost,
-          redeemAtMostUsdc: bounds.redeemAtMost,
-          redeemAtLeastUsdc: bounds.redeemAtLeast,
-          note: "Code moves no more than these: a sweep never takes the operating wallet below its 7-day buffer, and a redemption brings back at most what falls due within 14 days needs, with its 15% cushion.",
-        },
-        responseShape: {
-          action: "sweep_to_usyc | redeem_from_usyc | hold",
-          amount: "number",
-          reasoning: REASONING_SHAPE,
-        },
+        apy,
+        obligationsDue7d,
+        obligationsDue14d,
+        obligationsOpenTotal,
+        daysUntilNextObligation,
+        plan,
+        usyc: provider.earnMode === "live" ? { subscriptionsOpen } : null,
+        bounds,
       }),
       schema: treasuryDecisionSchema,
       fallback: (): TreasuryDecision => referencePlan,

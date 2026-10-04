@@ -8,6 +8,7 @@ import {
   sameTreasuryDecision,
   treasuryBounds,
   sweptHoldDays,
+  treasuryUserPrompt,
 } from "@/lib/agent/treasury";
 
 const base: TreasuryInputs = {
@@ -278,5 +279,48 @@ describe("planTreasury with what falls due, each on its day (hold horizon R1, R3
     const plan = planTreasury({ ...now, operatingBalance: 2.1, obligationSchedule: [{ days: 1.64, amount: 0.1 }] });
     expect(plan.decision.action).toBe("hold");
     expect(plan.decision.reasoning).toContain("over the 30 days the swept cash would stay");
+  });
+});
+
+describe("what the treasury model is told (treasury cash facts)", () => {
+  // testnet-2, 2026-10-04 02:42 UTC, ledger #1267: the wallet held 0 USDC, the reserve 134.72, and 0.20 fell due that
+  // day. The model held, reasoning that "the reserve already covers it without moving cash".
+  const plan = planTreasury({ operatingBalance: 0, reserveBalance: 134.718108, apy: 0.0345, obligationsDue7d: 0.2, daysUntilNextObligation: 0, roundTripCostUsd: 0.00638 });
+  const facts = {
+    operatingBalance: 0,
+    reserveBalance: 134.718108,
+    apy: 0.0345,
+    obligationsDue7d: 0.2,
+    obligationsDue14d: 0.2,
+    obligationsOpenTotal: 0.2,
+    daysUntilNextObligation: 0,
+    plan,
+    usyc: { subscriptionsOpen: true },
+    bounds: { sweepAtMost: 0, redeemAtMost: 0.23, redeemAtLeast: 0.23 },
+  };
+
+  it("says the reserve pays no one: every payment leaves from the operating wallet, and what is due that day comes back first", () => {
+    const { payments } = JSON.parse(treasuryUserPrompt(facts));
+    expect(payments.note).toContain("Every payment leaves from the operating wallet");
+    expect(payments.note).toContain("the reserve pays no one");
+    expect(payments.note).toContain("before it decides any payment");
+  });
+
+  it("hands over the figures and bounds the model weighs, and USYC's window only for a real reserve", () => {
+    expect(JSON.parse(treasuryUserPrompt(facts))).toMatchObject({
+      operatingBalance: 0,
+      reserveBalance: 134.718108,
+      reserveApy: 0.0345,
+      upcomingObligationsNext7Days: 0.2,
+      upcomingObligationsNext14Days: 0.2,
+      totalOpenObligations: 0.2,
+      daysUntilNextObligation: 0,
+      economics: { idleAboveBuffer: plan.idle, requiredBuffer: plan.buffer, expectedHoldDays: plan.holdDays },
+      usyc: { reserveIsRealUsyc: true, subscriptionsOpen: true },
+      bounds: { sweepAtMostUsdc: 0, redeemAtMostUsdc: 0.23, redeemAtLeastUsdc: 0.23 },
+      responseShape: { action: "sweep_to_usyc | redeem_from_usyc | hold" },
+    });
+    expect(JSON.parse(treasuryUserPrompt({ ...facts, usyc: null })).usyc).toBeUndefined();
+    expect(JSON.parse(treasuryUserPrompt({ ...facts, daysUntilNextObligation: Infinity })).daysUntilNextObligation).toBeNull();
   });
 });

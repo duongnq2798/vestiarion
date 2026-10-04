@@ -506,7 +506,9 @@ describe("the new control screens, as source", () => {
     const orchestrator = read("src/lib/agent/orchestrator.ts");
     expect(orchestrator).toContain("const bounded = boundTreasuryDecision(modelDecision, boundFacts);");
     expect(orchestrator).toContain('const agreedWithReference = mode === "heuristic" ? null : sameTreasuryDecision(modelDecision, referencePlan);');
-    expect(orchestrator).toContain("redeemAtMostUsdc: bounds.redeemAtMost,");
+    // The model is told the bounds in the question treasuryUserPrompt builds (tests/treasury.test.ts reads it).
+    expect(orchestrator).toContain("userPrompt: treasuryUserPrompt({");
+    expect(read("src/lib/agent/treasury.ts")).toContain("redeemAtMostUsdc: bounds.redeemAtMost,");
     expect(orchestrator).toContain("...(bounded.limited ? { boundedByCode: { chosen: { action: modelDecision.action, amount: modelDecision.amount }, reason: bounded.limited } } : {}),");
     // What moves is the bounded decision, never the model's raw one.
     expect(orchestrator).toContain("const moveOutcome = await moveTreasuryIfNotPaused(decision, {");
