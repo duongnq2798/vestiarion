@@ -802,7 +802,7 @@ describe("a toast for what the agent decided", () => {
   it("links a payment's transaction beside its quiet button", () => {
     const markup = html(<ActivityToastBody detail={null} action="How it decided" txHash={`0x${"ab".repeat(32)}`} primary={false} onAction={() => {}} />);
     expect(markup).toContain("How it decided");
-    expect(markup).toContain(`href="https://testnet.arcscan.app/tx/0x${"ab".repeat(32)}"`);
+    expect(markup).toContain(`href="https://explorer.testnet.arc.io/tx/0x${"ab".repeat(32)}"`);
     expect(markup).toContain("View on Arcscan");
   });
 });

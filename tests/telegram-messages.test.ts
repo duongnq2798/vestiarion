@@ -41,11 +41,11 @@ describe("decisionsMessage", () => {
 
   it("links the transaction on Arc testnet only when there is one, and the page under the workspace", () => {
     const paid = decisionsMessage(WORKSPACE, [item()], ORIGIN);
-    expect(paid).toContain(`<a href="https://testnet.arcscan.app/tx/${TX}">Arc testnet transaction</a>`);
+    expect(paid).toContain(`<a href="https://explorer.testnet.arc.io/tx/${TX}">Arc testnet transaction</a>`);
     expect(paid).toContain('<a href="https://www.vestiarion.xyz/o/acme/invoices#invoice-1">See it on AP / AR</a>');
 
     const held = decisionsMessage(WORKSPACE, [item({ txHash: null, tone: "stopped", path: "/approvals#payable-9", pathLabel: "Decide in Approvals" })], ORIGIN);
-    expect(held).not.toContain("arcscan");
+    expect(held).not.toContain("/tx/");
     expect(held).toContain('<a href="https://www.vestiarion.xyz/o/acme/approvals#payable-9">Decide in Approvals</a>');
   });
 
@@ -170,7 +170,7 @@ describe("wallet addresses", () => {
     const decision = decisionsMessage(WORKSPACE, [item({ detail: `The model noted the payee ${ADDRESS} changed.` })], ORIGIN);
     expect(decision).not.toContain(ADDRESS);
     expect(decision).toContain("0xc0ff…ee00");
-    expect(decision).toContain(`https://testnet.arcscan.app/tx/${TX}`);
+    expect(decision).toContain(`https://explorer.testnet.arc.io/tx/${TX}`);
 
     const draft = draftMessage({
       ...READ,

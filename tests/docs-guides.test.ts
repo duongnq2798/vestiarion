@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { readSource } from "@/lib/docs/content";
+import { arcTxUrl } from "@/lib/payee-chains";
 import { GoLiveError, type GoLiveErrorCode } from "@/lib/platform/go-live";
 
 /**
@@ -411,7 +412,6 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
       "The payment is still in flight on Arc testnet. It cannot be rejected or returned until Circle settles it; approving checks it again.",
       APPROVAL_CARD,
     ],
-    ["https://testnet.arcscan.app/tx/", PRIMITIVES],
     ["Audit log", APP_NAV],
     ["Verify hash chain", VERIFY_BADGE],
     ["Chain intact", VERIFY_BADGE],
@@ -816,6 +816,10 @@ describe("the first-payment guide's steps", () => {
   it("says the sample data's annual support plan is scheduled for its discount deadline", () => {
     const tour = guide.split("## Try it with sample data first")[1]?.split("\n## ")[0] ?? "";
     expect(tour).toMatch(/^- an annual support plan .*scheduled for its discount deadline/m);
+  });
+
+  it("gives the explorer link a settled card opens, as the app builds it", () => {
+    expect(guide).toContain(`at \`${arcTxUrl("")}\` followed by the hash`);
   });
 });
 

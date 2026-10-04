@@ -243,7 +243,7 @@ describe("the payee's page", () => {
     expect(page).toContain("For 10 social posts");
     expect(page).toContain("Paid on Oct 2, 2026, 09:05 UTC");
     expect(page).toContain("View on Arcscan");
-    expect(markup).toContain(`href="https://testnet.arcscan.app/tx/0x${"ab".repeat(32)}"`);
+    expect(markup).toContain(`href="https://explorer.testnet.arc.io/tx/0x${"ab".repeat(32)}"`);
   });
 
   it("says the same neutral thing for any unusable link, naming no one", async () => {

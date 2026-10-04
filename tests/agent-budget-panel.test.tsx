@@ -58,8 +58,8 @@ describe("the spending limit panel, on Arc", () => {
   it("shows the contract, the agent's wallet and the contract's own count once enforced, with a way to turn it off", () => {
     const markup = render({ onChain: ENFORCED });
     expect(text(markup)).toContain(ON_ARC_COPY.enforced);
-    expect(markup).toContain(`href="https://testnet.arcscan.app/address/${CONTRACT}"`);
-    expect(markup).toContain(`href="https://testnet.arcscan.app/address/${AGENT}"`);
+    expect(markup).toContain(`href="https://explorer.testnet.arc.io/address/${CONTRACT}"`);
+    expect(markup).toContain(`href="https://explorer.testnet.arc.io/address/${AGENT}"`);
     expect(text(markup)).toContain("Paid through it today 1.20 of");
     expect(text(markup)).toContain("Turn off on Arc");
     expect(text(markup)).not.toContain("Enforce on Arc");

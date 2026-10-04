@@ -48,7 +48,7 @@ describe("DecisionCard", () => {
     const markup = html(<DecisionCard decision={{ ...base, auditSeq: 42, txHash: `0x${"ab".repeat(32)}` }} orgSlug="acme" />);
     expect(markup).toContain('href="/o/acme/audit#seq-42"');
     expect(markup).toContain("audit #0042");
-    expect(markup).toContain("https://testnet.arcscan.app/tx/0x");
+    expect(markup).toContain("https://explorer.testnet.arc.io/tx/0x");
   });
 
   it("links the mint on the payee's chain after the burn on Arc (CCTP payouts X11)", () => {
@@ -58,7 +58,7 @@ describe("DecisionCard", () => {
         orgSlug="acme"
       />
     );
-    expect(markup).toContain("https://testnet.arcscan.app/tx/0x");
+    expect(markup).toContain("https://explorer.testnet.arc.io/tx/0x");
     expect(markup).toContain(`href="https://sepolia.basescan.org/tx/0x${"cd".repeat(32)}"`);
     expect(markup).toContain("minted on Base Sepolia");
   });

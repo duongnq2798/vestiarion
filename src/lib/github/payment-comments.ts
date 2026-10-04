@@ -3,6 +3,7 @@ import { currentOrgId } from "../context";
 import { db, platformDb, unwrap } from "../dal";
 import { parseGitHubPullRequestUrl, type GitHubPullRequestRef } from "../github-verification";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
+import { arcTxUrl } from "../payee-chains";
 import { createPullRequestComment, installationToken, repositoryInstallationId } from "./app";
 import { githubInstallations } from "./installs";
 import { githubAppSettingsFromEnv, type GitHubAppSettings } from "./settings";
@@ -24,7 +25,6 @@ export const COMMENT_WINDOW_DAYS = 3;
 export const COMMENTS_PER_RUN = 10;
 
 const AMOUNT = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 });
-const ARC_TX = (hash: string) => `https://testnet.arcscan.app/tx/${hash}`;
 const TX_HASH = /^0x[0-9a-fA-F]{64}$/;
 
 /**
@@ -42,7 +42,7 @@ export function pullRequestCommentBody(input: { amount: string; token: "USDC" | 
   return [
     `**Paid: ${input.amount} ${input.token} on Arc testnet** for this pull request, by ${literal(input.orgName)}.`,
     "",
-    `Transaction: [${short}](${ARC_TX(input.txHash)})`,
+    `Transaction: [${short}](${arcTxUrl(input.txHash)})`,
     "",
     `<sub>Posted by [Vestiarion](${input.origin}) once the payment was confirmed. The payment is a signed entry in the payer's ledger.</sub>`,
   ].join("\n");

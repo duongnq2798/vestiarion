@@ -3,6 +3,7 @@ import { orgHref } from "../auth/org-paths";
 import { READER_NAMES } from "../invoice-document/chat-draft";
 import type { InvoiceDraftRead } from "../invoice-document/draft";
 import type { VerificationResult } from "../ledger";
+import { arcTxUrl } from "../payee-chains";
 import type { TodayFacts, WaitingFact } from "./today";
 
 /**
@@ -47,11 +48,6 @@ const bold = (text: string) => `<b>${escapeHtml(text)}</b>`;
 /** A page of the workspace, as an absolute link. */
 export function orgUrl(origin: string, slug: string, path: string): string {
   return `${origin}${orgHref(slug, path)}`;
-}
-
-/** An Arc testnet transaction on the explorer. */
-export function arcTxUrl(hash: string): string {
-  return `https://testnet.arcscan.app/tx/${hash}`;
 }
 
 export function amountText(amount: number | string, currency: string): string {

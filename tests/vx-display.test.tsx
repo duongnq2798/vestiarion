@@ -52,7 +52,7 @@ describe("Hash", () => {
   });
 
   it("says a link opens a new tab", () => {
-    const markup = html(<Hash value={value} href="https://testnet.arcscan.app/tx/0x1" />);
+    const markup = html(<Hash value={value} href="https://explorer.testnet.arc.io/tx/0x1" />);
     expect(markup).toContain('target="_blank"');
     expect(markup).toContain("opens in a new tab");
   });
