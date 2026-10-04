@@ -237,14 +237,15 @@ the ledger key, managing members. Each of these changes who can be paid, or how 
 
 - **Goal.** A team installs Vestiarion in Slack, sees the agent's decisions in a channel, asks the three questions,
   pauses the agent, and, if an owner allows it, decides a held payable without opening the console.
-- **Setup by the platform's operator, once.** Create the Slack app from `integrations/slack/manifest.json` ("From an
+- **Setup by the platform's operator, once.** Create the Slack app from `integrations/slack/manifest.yaml` ("From an
   app manifest"), turn on public distribution, and set `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET` and
   `SLACK_SIGNING_SECRET`. With any of them missing, the feature is off: the routes answer 404 and Settings shows
   nothing.
-- **Manifest.** Bot scopes `commands` and `incoming-webhook`, nothing else: Vestiarion posts to the channel the
-  installer picks, answers its own slash command, and updates a message through the `response_url` Slack gives each
-  click (5 uses within 30 minutes). Slash command `/vestiarion`. Interactivity, and events `app_uninstalled` and
-  `tokens_revoked`.
+- **Manifest.** Bot scopes `commands` and `incoming-webhook`: Vestiarion posts to the channel the installer picks,
+  answers its own slash command, and updates a message through the `response_url` Slack gives each click (5 uses
+  within 30 minutes). Slash command `/vestiarion`. Interactivity, and events `app_uninstalled` and `tokens_revoked`.
+  A third scope, `files:read`, came later with the **Add invoice** message shortcut, which reads only the file a person
+  points at (Slack design S15).
 - **Build.**
   - `src/lib/slack/settings.ts`, `verify.ts` (signature, 300 s window), `oauth.ts` (state signed with HMAC and bound
     to a cookie and the session's user), `installs.ts`, `links.ts`, `action-token.ts` (`vxa1`, HKDF from the master
