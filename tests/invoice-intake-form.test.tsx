@@ -18,7 +18,7 @@ vi.mock("@/components/ui/useActionForm", async (importOriginal) => {
   };
 });
 
-import InvoiceIntake from "@/components/intake/InvoiceIntake";
+import InvoiceIntake, { amountNote } from "@/components/intake/InvoiceIntake";
 
 const COUNTERPARTIES = [{ id: "0b6c1c9e-4a4f-4a7e-9b1e-00000000c0de", name: "Northstar Studio", role: "vendor" }];
 const DEADLINE_MISSING = "Enter the last day the discount applies, on or before the due date, or clear the discount.";
@@ -58,6 +58,20 @@ describe("InvoiceIntake for an invoice that arrived by email (reader follow-up F
 
   it("says a document cannot tell whether the goods were received", () => {
     expect(markup).toContain("A document cannot say this; tick it only if you received them.");
+  });
+});
+
+describe("an amount typed over the one read (reader follow-up F7)", () => {
+  it("says what the invoice was read as, when the amount typed differs", () => {
+    expect(amountNote("1.20", "1.5")).toBe("The invoice was read as 1.20: check this amount before you add it.");
+  });
+
+  it("says nothing when they agree, when nothing was read, or while the field is empty or not a number", () => {
+    for (const typed of ["1.2", "1.20", "1.200000", " 1.20 "]) expect(amountNote("1.20", typed), typed).toBeUndefined();
+    expect(amountNote(null, "1.5")).toBeUndefined();
+    expect(amountNote(undefined, "1.5")).toBeUndefined();
+    expect(amountNote("1.20", "")).toBeUndefined();
+    expect(amountNote("1.20", "1,5")).toBeUndefined();
   });
 });
 

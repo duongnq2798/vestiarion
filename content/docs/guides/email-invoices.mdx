@@ -28,7 +28,7 @@ Vestiarion reads the first PDF, `.eml` or `.txt` file attached, of at most 4 MB,
 />
 
 - An email ready to add shows the counterparty it matched, the amount, the due date, the purchase order, and what to check.
-- **Cannot be added as it was read** says why: no counterparty in the workspace matches the vendor, or no amount or due date could be read. "Fix what is missing with Finish and add."
+- **Cannot be added as it was read** says why: no counterparty in the workspace matches the vendor, or no amount or due date could be read. A vendor that matches none shows by its name, marked "not in Counterparties". "Fix what is missing with Finish and add."
 - **Could not be read** says why: a scan with no text, a file over 4 MB, or nothing to read. A scanned PDF says "Its PDF has no text to read; it may be a scan. Ask the sender for the invoice as a PDF with text, or type it in with Finish and add."
 - An invoice sent as a photo or picture is not read. Its email says so first: "Its invoice is attached as an image (…), which Vestiarion cannot read yet. Ask the sender for the PDF, or type it in with Finish and add."
 
@@ -43,7 +43,7 @@ If the workspace has Slack, its channel is told a new invoice arrived by email, 
 An owner or admin chooses:
 
 - **Add, goods received** or **Add, not received yet**: the payable is added as one added on AP / AR is, by you. The ledger's `create_invoice` entry names you, and adds `via: "email"`, the email's id in the inbox and the hash of the document. The agent usually decides within a minute.
-- **Edit and add**, on an email ready to add, or **Finish and add**, on one that cannot be added as it was read or could not be read: the invoice form opens with what was read. Choose the counterparty, fix the amount or the due date, tick **Goods or services received** if you have them, and choose **Add invoice**. It is always a payable. The `create_invoice` entry names the email as above, and lists the fields you changed from what was read.
+- **Edit and add**, on an email ready to add, or **Finish and add**, on one that cannot be added as it was read or could not be read: the invoice form opens with what was read. Choose the counterparty, fix the amount or the due date, tick **Goods or services received** if you have them, and choose **Add invoice**. If you type over an amount that was read, the form names it, for instance "The invoice was read as 1.20: check this amount before you add it." It is always a payable. The `create_invoice` entry names the email as above, and lists the fields you changed from what was read. An amount typed wrong can't be edited afterwards: **Reject** the payable while it waits, and add it again.
 - **Dismiss**: the email leaves the list, and the ledger records `invoice_email_dismissed`.
 
 An email is added once. A second press is told "This email was already decided, or cannot be added as it was read."

@@ -117,6 +117,7 @@ What the model read is checked before you see it:
 - An amount, purchase order or address that the document does not contain is left blank: "The amount the model gave is not in the document, so it was left blank."
 - An amount written with a decimal comma, as much of Europe and Vietnam write money, is read as such: 3,50 is 3.50 and 1.200,00 is 1200.00. A comma before three digits is a thousands separator, so 1,250 is 1250.
 - A due date read from a date written in numbers whose day and month could swap gets a note naming both days, the one taken first: "The due date, 3 November 2026, was read from 03/11/2026, which can also mean 11 March 2026. Check it against the invoice."
+- When you type over the amount that was read, the form names what was read: "The invoice was read as 12.50: check this amount before you add it."
 - The counterparty is matched by its address on file, or else by its name. When none matches, the form says so: add it on **Counterparties** first, or choose one.
 - When the invoice asks to be paid to another address than the one on file, the form warns you. The agent pays the address on file; a document never changes it.
 - **Goods or services received** is never ticked for you: "A document cannot say this; tick it only if you received them."

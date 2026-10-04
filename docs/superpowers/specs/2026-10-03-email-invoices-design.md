@@ -118,6 +118,13 @@ ready and right, four were refused with the right reason; these did not hold up,
   else against what was read).
 - **F6. What is kept of a read.** The stored read also keeps the matched counterparty's id, the discount fields and the
   document's kind and hash; emails stored before keep working without them (the counterparty is matched by name).
+- **F7. An amount typed over the one read.** Testing Finish and add, the partner typed 1.5 for a 1.20 invoice (the
+  agent asked for information, as there was no purchase order; the payable was rejected, never paid). Wherever the
+  invoice form starts from a read, a typed amount that differs from the one read is named under the field: "The invoice
+  was read as 1.20: check this amount before you add it." Information only; the entry already lists `amount` as changed.
+  A picture has no amount read, so nothing to compare: the person's own check is the guard there.
+- **F8. A vendor that matches no counterparty.** The email's card showed the vendor's name as its Counterparty although
+  none matched. It now reads "Northwind Hosting · not in Counterparties"; only a matched counterparty fills the row.
 
 Not done: reading pictures (the workspace's model may have no vision; a person types the invoice in instead);
 statements that list several invoices; and a figure grouped by points with no decimals, "1.250 €", which still reads as
