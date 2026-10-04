@@ -158,3 +158,23 @@ paid with a comment of their own. Every bounty comment also shows Vestiarion to 
    - merge.
 
    It is proven when the "Paid" comment appears.
+
+## 7. Rollout record
+
+2026-10-04, in testnet-2, on `duongnq2798/vestiarion#195`:
+
+- **Attach.** `/bounty 0.1` by the repository's owner at 05:59:43 UTC; the app replied at 05:59:54.
+  - `create_counterparty` #1330, via GitHub: `duongnq2798 (GitHub)`, a contractor.
+  - `screen_counterparty` #1331: clear.
+  - `create_milestone` #1332: "PR #195: …", 0.1 USDC.
+  - `github_bounty_attached` #1333.
+- **Address.** `/payto` from the pull request's author at 06:00:50; the app replied at 06:00:58.
+  - `counterparty_address_changed` #1338, via GitHub, waiting for a member.
+  - A member confirmed it at 06:03:40 (#1339).
+- **Pay.** Merged at 06:06:34. No cycle followed, which is the gap B13 closes: only a cycle runs the GitHub check, and
+  the next one was the schedule's. A manual Run cycle then:
+  - verified it at 06:10:04 (#1344);
+  - released it at 06:10:19 (#1345): transaction
+    `0xc50836ef89cd6ba6a32ae600fb0a6a193882649e21eaae561b47639b618cb155`, status 1, block 65410639;
+  - commented "Paid" at 06:10:27 (#1347):
+    https://github.com/duongnq2798/vestiarion/pull/195#issuecomment-5977198065.
