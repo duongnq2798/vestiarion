@@ -563,6 +563,29 @@ repository's installation is one this workspace connected, claimed in
 workspace's name, so it cannot link, mention or point at an issue, and never
 names the payee.
 
+**A bounty can be attached from a pull request comment**
+(docs/superpowers/specs/2026-10-04-github-bounties-design.md). The app's
+webhook, `/api/github/webhook`, is on only with `GITHUB_APP_WEBHOOK_SECRET` as
+well; `src/lib/github/deliveries.ts` checks GitHub's `X-Hub-Signature-256`
+over the raw body before reading it, answers 204 to every event but a new pull
+request comment carrying a command, and 202 to that, handling it after the
+response with `after()`. `src/lib/github/bounties.ts` acts for the one
+workspace that connected the delivery's installation, saying nothing where
+none did and refusing where several did. `/bounty <amount>` needs GitHub to
+say the commenter can write to the repository (`repositoryPermission`), then
+runs `milestone.add` as the member who connected the installation, read now
+through `memberActor` on the `github` surface, which may run nothing else.
+`github_bounties` (migration `0072`, platform) is claimed before anything is
+made, unique per pull request and per comment, so two comments at once never
+make two milestones and a delivery sent again does nothing twice; it then
+gains its counterparty (the author's, created as a contractor named after the
+login, or the one an earlier bounty made) and its milestone, and the ledger
+records `github_bounty_attached`. `/payto <address>` from the pull request's
+author goes through `changeCounterpartyAddress` as a payee link's address
+does: stamped, held until a member confirms it, and emailed to them. Every
+outcome gets a reply on the pull request; the agent then releases the
+milestone under every guardrail, as any other.
+
 ## API
 
 The versioned API boundary lives under `src/app/api/v1/`:

@@ -1,6 +1,6 @@
-Connect GitHub, and every milestone paid for a pull request says so on that pull request. Once the payment is confirmed, the Vestiarion app comments there with the amount and the Arc testnet transaction. Contributors, maintainers and anyone reading the pull request see it was paid, where the work was done. The same connection lets the agent verify pull requests in your private repositories.
+Connect GitHub, and every milestone paid for a pull request says so on that pull request. Once the payment is confirmed, the Vestiarion app comments there with the amount and the Arc testnet transaction. Contributors, maintainers and anyone reading the pull request see it was paid, where the work was done. The same connection lets the agent verify pull requests in your private repositories, and lets a maintainer attach a bounty with a comment, without leaving GitHub.
 
-The app reads pull requests and writes comments, on the repositories you choose. It never changes code, never merges and never approves a payment: the agent decides each payment with every guardrail, as before.
+The app reads pull requests and their comments, and writes comments, on the repositories you choose. It never changes code, never merges and never approves a payment: the agent decides each payment with every guardrail, as before.
 
 ## 1. Connect GitHub
 
@@ -23,7 +23,44 @@ Add milestones as you do already, with the pull request as their evidence: from 
 
 In a repository the app is installed on, this works for private repositories too. The check reads them with the installation's own access. Any other pull request is read as before, so it must be public.
 
-## 3. The comment
+## 3. Attach a bounty from a comment
+
+Anyone who can write to the repository can attach a bounty to a pull request from GitHub. On a line of its own, they comment:
+
+```text
+/bounty 25
+```
+
+The amount is in USDC, with at most 6 decimal places; `/bounty 25 USDC` works too. The app replies on the pull request with the bounty, and asks its author where to be paid.
+
+Vestiarion adds two things, as if you had added them on **Contractors**:
+
+- **A contractor** for the pull request's author, named after their GitHub login with "(GitHub)", whose payment limit is the bounty's amount. The same GitHub account stays the same contractor for every later bounty in the workspace.
+- **A milestone** for the pull request, named "PR #" with its number and title, with the pull request as its evidence. It is verified once the pull request is merged, as in [Pay for pull requests](#2-pay-for-pull-requests).
+
+They are added under the name of the person who connected GitHub. The audit log records `github_bounty_attached` with the login of the person who commented. If the person who connected GitHub has left the workspace, or can no longer add records, the app says so on the pull request, and someone connects GitHub again in Settings.
+
+The pull request's author then says where to be paid:
+
+```text
+/payto 0xYourArcAddress
+```
+
+Only the pull request's author can do this. The address waits for an owner, admin or approver to confirm it on **Counterparties**, as an address a payee sends through a payee link does, and they are emailed that it arrived. The agent pays nothing to it before then. A contributor paid before is paid to the address on file, and the reply says so.
+
+Once the pull request is merged and the address confirmed, the agent decides the payment with every guardrail: screening, the contractor's payment limit, and the daily spending limit, with its contract on Arc. The app then comments that it was paid, as below.
+
+When it attaches nothing, the app says why:
+
+| The app replies | Why |
+| --- | --- |
+| Only someone who can write to this repository can attach a bounty. | GitHub says the person who commented cannot write to the repository. |
+| This pull request already has a bounty | A pull request has one bounty. Change its amount on its milestone in Vestiarion. |
+| A bounty pays a person, and this pull request was opened by a bot. | The pull request's author is a bot account. |
+| This pull request was closed without being merged | There is no work to pay for. A merged pull request can still be given a bounty: it is paid at the agent's next run. |
+| This repository is connected to more than one Vestiarion workspace | Two workspaces connected the same GitHub account. Add the milestone in Vestiarion instead. |
+
+## 4. The comment
 
 Once the payment is confirmed on Arc testnet, the next cycle comments on the pull request. The comment starts with "Paid:", then the amount, "on Arc testnet", "for this pull request, by" your workspace's name, and the transaction's link. The ledger records `pull_request_commented`, with the comment's link.
 
@@ -32,7 +69,7 @@ Once the payment is confirmed on Arc testnet, the next cycle comments on the pul
 - **When.** Once per payment, confirmed within the last three days, and after you connected GitHub: connecting never comments on pull requests paid before.
 - **If GitHub refuses.** The comment is tried again at each cycle within those three days. This happens when the app has been uninstalled, for example.
 
-## 4. Disconnect
+## 5. Disconnect
 
 In Settings, **Disconnect** removes the account from this workspace. The ledger records `github_disconnected`. From then on, no comment is posted there, and its private pull requests are no longer read.
 

@@ -1,5 +1,12 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-04: Bounties from a pull request comment
+
+- **A new ledger action**, delivered to webhooks as `ledger.appended` like every entry: `github_bounty_attached`, actor `human`, domain `contractor`. Someone who can write to a repository attached a bounty to a pull request with `/bounty`. Its `detail` is `{ by, via: "github", installationId, login, pullRequest, author, amount, milestoneId, counterpartyId, commentUrl }`. `by` is the member who connected GitHub, under whose name the milestone was added, and `login` is the GitHub user who commented. See [Show payments on GitHub](/docs/guides/github).
+- `create_counterparty` and `create_milestone` entries gain `via: "github"`, `installationId` and `login` for the contractor and the milestone a bounty added.
+- `counterparty_address_changed` entries gain `via: "github"`, `installationId`, `login` and `commentUrl` when a pull request's author set their address with `/payto`. Their `by` is `null`, as for an address sent through a payee link, and the address waits for a member's confirmation the same way.
+- Nothing changes in `/api/v1`.
+
 ## 2026-10-04: Emailed invoices finished by hand
 
 - A `create_invoice` entry with `via: "email"` no longer always carries `changed: []`. An owner or admin can now finish an emailed invoice in the invoice form on AP / AR, with **Edit and add** or **Finish and add**. Its `document.changed` then lists the fields they changed from what was read, as for an invoice added from a document.
