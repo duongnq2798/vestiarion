@@ -13,6 +13,7 @@ const { chainModesMock } = vi.hoisted(() => ({ chainModesMock: vi.fn() }));
 vi.mock("@/lib/circle", () => ({ chainModes: chainModesMock }));
 
 import { operatingEurcBalance, readEurcBalance } from "@/lib/fx/eurc-balance";
+import { ARC_TESTNET } from "@/lib/network";
 
 const ORG = "0b6c1c9e-4a4f-4a7e-9b1e-0000000e0ba1";
 const WALLET = "0x97F85033bBD83870a841cF7153F35b387746B6b6";
@@ -30,19 +31,19 @@ beforeEach(() => {
 describe("readEurcBalance", () => {
   it("asks EURC's balanceOf for the wallet, and reads the 6-decimal answer exactly", async () => {
     const fetch = rpc(`0x${(16_600_000).toString(16).padStart(64, "0")}`);
-    expect(await readEurcBalance(WALLET, { fetch })).toBe(16.6);
+    expect(await readEurcBalance(WALLET, { network: ARC_TESTNET, fetch })).toBe(16.6);
     const body = JSON.parse(String((fetch.mock.calls[0] as unknown as [string, RequestInit])[1].body));
     expect(body).toMatchObject({ method: "eth_call", params: [{ to: EURC, data: `0x70a08231${WALLET.slice(2).toLowerCase().padStart(64, "0")}` }, "latest"] });
   });
 
   it("is null when the chain does not answer, or answers with something else", async () => {
-    expect(await readEurcBalance(WALLET, { fetch: rpc(undefined) })).toBeNull();
-    expect(await readEurcBalance(WALLET, { fetch: rpc("0x", 200) })).toBeNull();
-    expect(await readEurcBalance(WALLET, { fetch: rpc("0x1", 500) })).toBeNull();
+    expect(await readEurcBalance(WALLET, { network: ARC_TESTNET, fetch: rpc(undefined) })).toBeNull();
+    expect(await readEurcBalance(WALLET, { network: ARC_TESTNET, fetch: rpc("0x", 200) })).toBeNull();
+    expect(await readEurcBalance(WALLET, { network: ARC_TESTNET, fetch: rpc("0x1", 500) })).toBeNull();
     const down = vi.fn(async () => {
       throw new Error("offline");
     });
-    expect(await readEurcBalance(WALLET, { fetch: down as unknown as typeof fetch })).toBeNull();
+    expect(await readEurcBalance(WALLET, { network: ARC_TESTNET, fetch: down as unknown as typeof fetch })).toBeNull();
   });
 });
 

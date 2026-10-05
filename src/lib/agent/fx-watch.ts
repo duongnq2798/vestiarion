@@ -142,6 +142,7 @@ async function workspaceQuotes(): Promise<Quotes> {
   const operatingAddress =
     (unwrap(await db().from("accounts").select("address").eq("kind", "operating").limit(1)) as Array<{ address: string | null }>)[0]?.address ?? null;
   return onceQuotes({
+    network: provider.network,
     operatingAddress,
     canSwap: provider.mode === "live" && typeof provider.swapForEurc === "function",
     apiKey: currentOrgConfig().chain.circleApiKey ?? null,

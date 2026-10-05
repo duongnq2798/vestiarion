@@ -1,10 +1,10 @@
 import crypto from "node:crypto";
 import type { ChainProvider, SwapCallResult } from "../circle";
-import { ARC_TESTNET_RPC_URL } from "../circle/arcFees";
+import { networkRpcUrl } from "../circle/arcFees";
 import { currentOrgId } from "../context";
 import { db } from "../dal";
 import { appendLedgerEntry } from "../ledger";
-import { ARC_TESTNET_EURC, FxQuoteError } from "./quote";
+import { FxQuoteError } from "./quote";
 import { createSwapTransaction, swapCostPercent, type SwapOffer } from "./swap-service";
 import { SWAP_COST_CAP_PERCENT } from "./swap-limits";
 
@@ -75,7 +75,7 @@ const unknownYet = (swapId: string, error: unknown): SwapOutcome => ({ ok: false
 async function eurcReceivedIn(txHash: string | null, wallet: string, deps: SwapDeps): Promise<number | null> {
   if (!txHash) return null;
   try {
-    const response = await (deps.fetch ?? fetch)(deps.rpcUrl ?? ARC_TESTNET_RPC_URL, {
+    const response = await (deps.fetch ?? fetch)(deps.rpcUrl ?? networkRpcUrl(deps.provider.network), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_getTransactionReceipt", params: [txHash] }),
@@ -85,7 +85,7 @@ async function eurcReceivedIn(txHash: string | null, wallet: string, deps: SwapD
     if (!response.ok || !receipt?.logs) return null;
     const to = `0x${wallet.slice(2).toLowerCase().padStart(64, "0")}`;
     const units = receipt.logs
-      .filter((log) => log.address.toLowerCase() === ARC_TESTNET_EURC.toLowerCase() && log.topics[0] === TRANSFER_TOPIC && log.topics[2]?.toLowerCase() === to)
+      .filter((log) => log.address.toLowerCase() === deps.provider.network.tokens.EURC.toLowerCase() && log.topics[0] === TRANSFER_TOPIC && log.topics[2]?.toLowerCase() === to)
       .reduce((sum, log) => sum + BigInt(log.data), BigInt(0));
     return Number(units) / 1_000_000;
   } catch {
@@ -170,7 +170,7 @@ export async function swapForPayment(
 ): Promise<SwapOutcome> {
   let transaction;
   try {
-    transaction = await createSwapTransaction(input.offer.usdcIn, { fromAddress: deps.operatingAddress, apiKey: deps.apiKey, fetch: deps.fetch, retryDelayMs: deps.retryDelayMs });
+    transaction = await createSwapTransaction(input.offer.usdcIn, { network: deps.provider.network, fromAddress: deps.operatingAddress, apiKey: deps.apiKey, fetch: deps.fetch, retryDelayMs: deps.retryDelayMs });
   } catch (error) {
     // Nothing is recorded or sent yet: no swap, and the payable is decided again next cycle.
     const why =

@@ -1,16 +1,9 @@
 import { decodeFunctionData } from "viem";
 import { describe, expect, it, vi } from "vitest";
-import { ARC_TESTNET_EURC, ARC_TESTNET_USDC, FxQuoteError } from "@/lib/fx/quote";
-import {
-  ADAPTER,
-  ADAPTER_EXECUTE_ABI,
-  createSwapTransaction,
-  quoteUsdcForEurc,
-  sizeSwap,
-  SWAP_COST_CAP_PERCENT,
-  type SwapQuote,
-} from "@/lib/fx/swap-service";
+import { FxQuoteError } from "@/lib/fx/quote";
+import { ADAPTER_EXECUTE_ABI, createSwapTransaction, quoteUsdcForEurc, sizeSwap, SWAP_COST_CAP_PERCENT, type SwapQuote } from "@/lib/fx/swap-service";
 import answer from "./fixtures/stablecoin-swap-answer.json";
+import { ARC_TESTNET } from "@/lib/network";
 
 /**
  * Circle's Stablecoin Service for a USDC→EURC swap on Arc testnet (docs/superpowers/specs/2026-10-01-eurc-swap-design.md
@@ -27,21 +20,21 @@ const noRoute = () => json({ code: 331001, message: "No route available" }, 404)
 
 describe("the Adapter App Kit names for Arc testnet", () => {
   it("is the address in @circle-fin/app-kit's chain definition", () => {
-    expect(ADAPTER).toBe("0xBBD70b01a1CAbc96d5b7b129Ae1AAabdf50dd40b");
+    expect(ARC_TESTNET.swapAdapter).toBe("0xBBD70b01a1CAbc96d5b7b129Ae1AAabdf50dd40b");
   });
 });
 
 describe("quoteUsdcForEurc", () => {
   it("asks for USDC→EURC on Arc testnet in base units, and reads the amounts exactly", async () => {
     const fetch = vi.fn().mockResolvedValue(quoteAnswer("2058000", "1996260"));
-    const quote = await quoteUsdcForEurc(2.5, { fromAddress: FROM, fetch });
+    const quote = await quoteUsdcForEurc(2.5, { network: ARC_TESTNET, fromAddress: FROM, fetch });
 
     const url = new URL(fetch.mock.calls[0][0] as string);
     expect(`${url.origin}${url.pathname}`).toBe("https://api.circle.com/v1/stablecoinKits/quote");
     expect(Object.fromEntries(url.searchParams)).toEqual({
-      tokenInAddress: ARC_TESTNET_USDC,
+      tokenInAddress: ARC_TESTNET.tokens.USDC,
       tokenInChain: "Arc_Testnet",
-      tokenOutAddress: ARC_TESTNET_EURC,
+      tokenOutAddress: ARC_TESTNET.tokens.EURC,
       tokenOutChain: "Arc_Testnet",
       fromAddress: FROM,
       toAddress: FROM,
@@ -53,38 +46,38 @@ describe("quoteUsdcForEurc", () => {
 
   it("asks once more when there is no route, as Arc testnet's route comes and goes", async () => {
     const fetch = vi.fn().mockResolvedValueOnce(noRoute()).mockResolvedValueOnce(quoteAnswer("822815", "798131"));
-    const quote = await quoteUsdcForEurc(1, { fromAddress: FROM, fetch, retryDelayMs: 0 });
+    const quote = await quoteUsdcForEurc(1, { network: ARC_TESTNET, fromAddress: FROM, fetch, retryDelayMs: 0 });
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(quote.eurcEstimated).toBe(0.822815);
   });
 
   it("asks up to four times, as the route answered only on the third ask on 2026-10-05", async () => {
     const fetch = vi.fn().mockResolvedValueOnce(noRoute()).mockResolvedValueOnce(noRoute()).mockResolvedValueOnce(quoteAnswer("996690", "966789"));
-    const quote = await quoteUsdcForEurc(1, { fromAddress: FROM, fetch, retryDelayMs: 0 });
+    const quote = await quoteUsdcForEurc(1, { network: ARC_TESTNET, fromAddress: FROM, fetch, retryDelayMs: 0 });
     expect(fetch).toHaveBeenCalledTimes(3);
     expect(quote.eurcEstimated).toBe(0.99669);
   });
 
   it("asks only once when told to (FX re-evaluation F9)", async () => {
     const fetch = vi.fn().mockImplementation(async () => noRoute());
-    await expect(quoteUsdcForEurc(1, { fromAddress: FROM, fetch, retryDelayMs: 0, once: true })).rejects.toMatchObject({ code: "no_route" });
+    await expect(quoteUsdcForEurc(1, { network: ARC_TESTNET, fromAddress: FROM, fetch, retryDelayMs: 0, once: true })).rejects.toMatchObject({ code: "no_route" });
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   it("says there is no route when all four answers are the same", async () => {
     const fetch = vi.fn().mockImplementation(async () => noRoute());
-    await expect(quoteUsdcForEurc(1, { fromAddress: FROM, fetch, retryDelayMs: 0 })).rejects.toMatchObject({ code: "no_route" });
+    await expect(quoteUsdcForEurc(1, { network: ARC_TESTNET, fromAddress: FROM, fetch, retryDelayMs: 0 })).rejects.toMatchObject({ code: "no_route" });
     expect(fetch).toHaveBeenCalledTimes(4);
   });
 
   it("calls a rate limit unavailable", async () => {
     const fetch = vi.fn().mockImplementation(async () => json({ code: 5, message: "API rate limit error" }, 429));
-    await expect(quoteUsdcForEurc(1, { fromAddress: FROM, fetch, retryDelayMs: 0 })).rejects.toMatchObject({ code: "unavailable" });
+    await expect(quoteUsdcForEurc(1, { network: ARC_TESTNET, fromAddress: FROM, fetch, retryDelayMs: 0 })).rejects.toMatchObject({ code: "unavailable" });
   });
 
   it("sends the workspace's Circle key as a bearer token, and asks without it when the service refuses the key", async () => {
     const fetch = vi.fn().mockResolvedValueOnce(json({ code: 401, message: "Unauthorized" }, 401)).mockResolvedValueOnce(quoteAnswer("822815", "798131"));
-    await quoteUsdcForEurc(1, { fromAddress: FROM, fetch, apiKey: "TEST_API_KEY:id:secret", retryDelayMs: 0 });
+    await quoteUsdcForEurc(1, { network: ARC_TESTNET, fromAddress: FROM, fetch, apiKey: "TEST_API_KEY:id:secret", retryDelayMs: 0 });
     expect((fetch.mock.calls[0][1] as RequestInit).headers).toMatchObject({ authorization: "Bearer TEST_API_KEY:id:secret" });
     expect((fetch.mock.calls[1][1] as RequestInit).headers).not.toHaveProperty("authorization");
   });
@@ -142,22 +135,22 @@ describe("createSwapTransaction", () => {
 
   it("asks for the swap of exactly this USDC, and returns the Adapter call App Kit's adapters send", async () => {
     const fetch = vi.fn().mockResolvedValue(swapAnswer());
-    const swap = await createSwapTransaction(1, { fromAddress: FROM, fetch });
+    const swap = await createSwapTransaction(1, { network: ARC_TESTNET, fromAddress: FROM, fetch });
 
     expect(fetch.mock.calls[0][0]).toBe("https://api.circle.com/v1/stablecoinKits/swap");
     const request = fetch.mock.calls[0][1] as RequestInit;
     expect(request.method).toBe("POST");
     expect(JSON.parse(request.body as string)).toEqual({
-      tokenInAddress: ARC_TESTNET_USDC,
+      tokenInAddress: ARC_TESTNET.tokens.USDC,
       tokenInChain: "Arc_Testnet",
-      tokenOutAddress: ARC_TESTNET_EURC,
+      tokenOutAddress: ARC_TESTNET.tokens.EURC,
       tokenOutChain: "Arc_Testnet",
       fromAddress: FROM,
       toAddress: FROM,
       amount: "1000000",
       slippageBps: 300,
     });
-    expect(swap).toMatchObject({ eurcEstimated: 0.822815, eurcMinimum: 0.798131, adapter: ADAPTER, provider: "lifi" });
+    expect(swap).toMatchObject({ eurcEstimated: 0.822815, eurcMinimum: 0.798131, adapter: ARC_TESTNET.swapAdapter, provider: "lifi" });
     expect(swap.deadline.toISOString()).toBe(new Date(Number(answer.transaction.executionParams.deadline) * 1000).toISOString());
 
     const call = decodeFunctionData({ abi: ADAPTER_EXECUTE_ABI, data: swap.callData });
@@ -172,7 +165,7 @@ describe("createSwapTransaction", () => {
       sent.instructions.map((instruction) => [instruction.target, instruction.data, BigInt(instruction.value), BigInt(instruction.amountToApprove), BigInt(instruction.minTokenOut)])
     );
     // Approved beforehand, so no permit: App Kit's PermitType.NONE.
-    expect(tokenInputs).toEqual([{ permitType: 0, token: ARC_TESTNET_USDC, amount: BigInt(1_000_000), permitCalldata: "0x" }]);
+    expect(tokenInputs).toEqual([{ permitType: 0, token: ARC_TESTNET.tokens.USDC, amount: BigInt(1_000_000), permitCalldata: "0x" }]);
     expect(signature).toBe(answer.transaction.signature);
   });
 
@@ -180,17 +173,17 @@ describe("createSwapTransaction", () => {
     const elsewhere = structuredClone(answer);
     elsewhere.transaction.executionParams.tokens[1].beneficiary = "0x2222222222222222222222222222222222222222";
     const fetch = vi.fn().mockResolvedValue(json(elsewhere));
-    await expect(createSwapTransaction(1, { fromAddress: FROM, fetch })).rejects.toMatchObject({ code: "malformed" });
+    await expect(createSwapTransaction(1, { network: ARC_TESTNET, fromAddress: FROM, fetch })).rejects.toMatchObject({ code: "malformed" });
   });
 
   it("refuses an answer with no transaction to send", async () => {
     const fetch = vi.fn().mockResolvedValue(json({ ...answer, transaction: { data: "0x00" } }));
-    await expect(createSwapTransaction(1, { fromAddress: FROM, fetch })).rejects.toMatchObject({ code: "malformed" });
+    await expect(createSwapTransaction(1, { network: ARC_TESTNET, fromAddress: FROM, fetch })).rejects.toMatchObject({ code: "malformed" });
   });
 
   it("asks again when there is no route, up to four times", async () => {
     const fetch = vi.fn().mockResolvedValueOnce(noRoute()).mockResolvedValueOnce(noRoute()).mockResolvedValueOnce(swapAnswer());
-    await createSwapTransaction(1, { fromAddress: FROM, fetch, retryDelayMs: 0 });
+    await createSwapTransaction(1, { network: ARC_TESTNET, fromAddress: FROM, fetch, retryDelayMs: 0 });
     expect(fetch).toHaveBeenCalledTimes(3);
   });
 });
@@ -198,7 +191,7 @@ describe("createSwapTransaction", () => {
 describe("review fixes (EURC swap review #2, #4, #5)", () => {
   it("calls a quote whose minimum is zero unreadable, rather than dividing by it", async () => {
     const fetch = vi.fn().mockResolvedValue(quoteAnswer("822815", "0"));
-    await expect(quoteUsdcForEurc(1, { fromAddress: FROM, fetch })).rejects.toMatchObject({ code: "malformed" });
+    await expect(quoteUsdcForEurc(1, { network: ARC_TESTNET, fromAddress: FROM, fetch })).rejects.toMatchObject({ code: "malformed" });
   });
 
   it("rounds a swap's cost up, so one just above the cap is never shown at the cap (review #4)", async () => {
@@ -216,26 +209,26 @@ describe("review fixes (EURC swap review #2, #4, #5)", () => {
   };
 
   it("refuses an answer for another amount than the one asked for (review #5)", async () => {
-    await expect(createSwapTransaction(1, { fromAddress: FROM, fetch: variant((c) => (c.amount = "2000000")) })).rejects.toMatchObject({ code: "malformed" });
+    await expect(createSwapTransaction(1, { network: ARC_TESTNET, fromAddress: FROM, fetch: variant((c) => (c.amount = "2000000")) })).rejects.toMatchObject({ code: "malformed" });
   });
 
   it("refuses an answer whose instructions would approve more USDC than the swap's", async () => {
     await expect(
-      createSwapTransaction(1, { fromAddress: FROM, fetch: variant((c) => (c.transaction.executionParams.instructions[1].amountToApprove = "1999800")) })
+      createSwapTransaction(1, { network: ARC_TESTNET, fromAddress: FROM, fetch: variant((c) => (c.transaction.executionParams.instructions[1].amountToApprove = "1999800")) })
     ).rejects.toMatchObject({ code: "malformed" });
   });
 
   it("refuses an answer with no instruction that yields EURC, or none returned to the wallet", async () => {
     await expect(
-      createSwapTransaction(1, { fromAddress: FROM, fetch: variant((c) => (c.transaction.executionParams.instructions[1].tokenOut = ARC_TESTNET_USDC)) })
+      createSwapTransaction(1, { network: ARC_TESTNET, fromAddress: FROM, fetch: variant((c) => (c.transaction.executionParams.instructions[1].tokenOut = ARC_TESTNET.tokens.USDC)) })
     ).rejects.toMatchObject({ code: "malformed" });
     await expect(
-      createSwapTransaction(1, { fromAddress: FROM, fetch: variant((c) => c.transaction.executionParams.tokens.splice(1, 1)) })
+      createSwapTransaction(1, { network: ARC_TESTNET, fromAddress: FROM, fetch: variant((c) => c.transaction.executionParams.tokens.splice(1, 1)) })
     ).rejects.toMatchObject({ code: "malformed" });
   });
 
   it("takes as its minimum the EURC the chain enforces, when the instructions promise less than the answer reports", async () => {
-    const swap = await createSwapTransaction(1, { fromAddress: FROM, fetch: variant((c) => (c.transaction.executionParams.instructions[1].minTokenOut = "700000")) });
+    const swap = await createSwapTransaction(1, { network: ARC_TESTNET, fromAddress: FROM, fetch: variant((c) => (c.transaction.executionParams.instructions[1].minTokenOut = "700000")) });
     expect(swap.eurcMinimum).toBe(0.7);
   });
 });

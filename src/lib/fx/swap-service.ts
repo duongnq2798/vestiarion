@@ -1,7 +1,7 @@
-import { ArcTestnet } from "@circle-fin/app-kit/chains";
 import { encodeFunctionData, type Hex } from "viem";
 import { z } from "zod";
-import { ARC_TESTNET_EURC, ARC_TESTNET_USDC, FxQuoteError, fromBaseUnits, STABLECOIN_SERVICE_CHAIN, toBaseUnits } from "./quote";
+import { FxQuoteError, fromBaseUnits, stablecoinServiceOf, toBaseUnits } from "./quote";
+import { FeatureOffError, type NetworkProfile } from "../network";
 import { askAgain } from "./retry";
 import { SWAP_SLIPPAGE_BPS } from "./swap-limits";
 
@@ -22,9 +22,6 @@ const QUOTE_URL = "https://api.circle.com/v1/stablecoinKits/quote";
 const SWAP_URL = "https://api.circle.com/v1/stablecoinKits/swap";
 const DEADLINE_MS = 10_000;
 const NO_ROUTE = 331001;
-
-/** The Adapter contract on Arc testnet, from App Kit's own chain definition. */
-export const ADAPTER: string = ArcTestnet.kitContracts.adapter;
 
 /** App Kit's Adapter `execute`, as its EVM adapters encode it (selector 0xaa3e079c). */
 export const ADAPTER_EXECUTE_ABI = [
@@ -112,6 +109,8 @@ export interface SwapTransaction {
 }
 
 interface AskOptions {
+  /** The network asked about (network threading P2): its tokens, its name at the service, and its Adapter. */
+  network: NetworkProfile;
   fromAddress: string;
   /** The workspace's Circle API key, sent as a bearer token: the service rate-limits requests without one. */
   apiKey?: string | null;
@@ -167,12 +166,13 @@ const quoteSchema = z.object({
 /** What swapping `usdcIn` USDC for EURC on Arc testnet would give now. Throws `FxQuoteError`. */
 export async function quoteUsdcForEurc(usdcIn: number, options: AskOptions): Promise<SwapQuote> {
   if (!Number.isFinite(usdcIn) || usdcIn <= 0) throw new RangeError("A USDC amount to swap must be positive");
+  const service = stablecoinServiceOf(options.network);
   const url = new URL(QUOTE_URL);
   url.search = new URLSearchParams({
-    tokenInAddress: ARC_TESTNET_USDC,
-    tokenInChain: STABLECOIN_SERVICE_CHAIN,
-    tokenOutAddress: ARC_TESTNET_EURC,
-    tokenOutChain: STABLECOIN_SERVICE_CHAIN,
+    tokenInAddress: service.usdc,
+    tokenInChain: service.chain,
+    tokenOutAddress: service.eurc,
+    tokenOutChain: service.chain,
     fromAddress: options.fromAddress,
     toAddress: options.fromAddress,
     amount: toBaseUnits(usdcIn),
@@ -271,12 +271,15 @@ const swapSchema = z.object({
  * an answer that would send any token to anyone but the wallet. Throws `FxQuoteError`.
  */
 export async function createSwapTransaction(usdcIn: number, options: AskOptions): Promise<SwapTransaction> {
+  const service = stablecoinServiceOf(options.network);
+  const adapter = options.network.swapAdapter;
+  if (!adapter) throw new FxQuoteError("unavailable", new FeatureOffError("The EURC swap", options.network).message);
   const units = toBaseUnits(usdcIn);
   const body = JSON.stringify({
-    tokenInAddress: ARC_TESTNET_USDC,
-    tokenInChain: STABLECOIN_SERVICE_CHAIN,
-    tokenOutAddress: ARC_TESTNET_EURC,
-    tokenOutChain: STABLECOIN_SERVICE_CHAIN,
+    tokenInAddress: service.usdc,
+    tokenInChain: service.chain,
+    tokenOutAddress: service.eurc,
+    tokenOutChain: service.chain,
     fromAddress: options.fromAddress,
     toAddress: options.fromAddress,
     amount: units,
@@ -287,7 +290,7 @@ export async function createSwapTransaction(usdcIn: number, options: AskOptions)
     if (!parsed.success) throw new FxQuoteError("malformed");
     const { executionParams, signature } = parsed.data.transaction;
     const wallet = options.fromAddress.toLowerCase();
-    const eurc = ARC_TESTNET_EURC.toLowerCase();
+    const eurc = service.eurc.toLowerCase();
     // What is signed is checked, not only what is reported (review #5): the amount asked for; no
     // instruction approving more USDC than it; every token returned to the wallet, EURC among them;
     // and the EURC the chain enforces, which is the minimum relied on.
@@ -320,7 +323,7 @@ export async function createSwapTransaction(usdcIn: number, options: AskOptions)
           deadline: BigInt(executionParams.deadline),
           metadata: executionParams.metadata as Hex,
         },
-        [{ permitType: 0, token: ARC_TESTNET_USDC as Hex, amount: BigInt(units), permitCalldata: "0x" }],
+        [{ permitType: 0, token: service.usdc as Hex, amount: BigInt(units), permitCalldata: "0x" }],
         signature as Hex,
       ],
     });
@@ -328,7 +331,7 @@ export async function createSwapTransaction(usdcIn: number, options: AskOptions)
       eurcEstimated: fromBaseUnits(parsed.data.estimatedAmount),
       eurcMinimum: fromBaseUnits((enforced < stopLimit ? enforced : stopLimit).toString()),
       provider: parsed.data.route?.provider ?? null,
-      adapter: ADAPTER,
+      adapter,
       callData,
       deadline: new Date(Number(BigInt(executionParams.deadline)) * 1000),
     };

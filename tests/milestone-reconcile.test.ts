@@ -9,6 +9,7 @@ import type { ChainProvider } from "@/lib/circle";
 import type { PaymentExecution } from "@/lib/payments";
 import { encryptSecret, parseMasterKeys } from "@/lib/secrets";
 import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
+import { ARC_TESTNET } from "@/lib/network";
 
 /**
  * The contractor stage's twin of the AP stage's in-flight reconcile (see
@@ -120,7 +121,7 @@ function execution(overrides: Partial<PaymentExecution>): PaymentExecution {
   };
 }
 
-const provider = { mode: "live", earnMode: "simulate", estimatedFeeUsd: 0.003 } as unknown as ChainProvider;
+const provider = { mode: "live", earnMode: "simulate", network: ARC_TESTNET, estimatedFeeUsd: 0.003 } as unknown as ChainProvider;
 const milestone = {
   id: MILESTONE_ID,
   title: "Checkout redesign",

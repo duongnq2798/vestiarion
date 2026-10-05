@@ -27,7 +27,6 @@ const ALLOWED: Record<string, number> = {
   "src/lib/agent/orchestrator.ts": 2,
   "src/lib/agent/receipts.ts": 1,
   "src/lib/api/schemas.ts": 1,
-  "src/lib/fx/swap-service.ts": 2,
   "src/lib/github/bounties.ts": 1,
   "src/lib/github/payment-comments.ts": 2,
   "src/lib/intake-validation.ts": 1,

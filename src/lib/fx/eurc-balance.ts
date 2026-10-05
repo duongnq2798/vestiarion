@@ -1,7 +1,8 @@
 import { chainModes } from "../circle";
-import { ARC_TESTNET_RPC_URL, arcRpcUrl } from "../circle/arcFees";
+import { networkRpcUrl } from "../circle/arcFees";
+import type { NetworkProfile } from "../network";
+import { workspaceNetwork } from "../workspace-network";
 import { db } from "../dal";
-import { ARC_TESTNET_EURC } from "./quote";
 
 /**
  * The operating wallet's EURC, for the balance tile beside its USDC. Read from Arc testnet's public RPC
@@ -12,16 +13,16 @@ import { ARC_TESTNET_EURC } from "./quote";
 /** `keccak256("balanceOf(address)")`'s first four bytes. */
 const BALANCE_OF = "0x70a08231";
 
-export async function readEurcBalance(address: string, options: { fetch?: typeof fetch; rpcUrl?: string } = {}): Promise<number | null> {
+export async function readEurcBalance(address: string, options: { network: NetworkProfile; fetch?: typeof fetch; rpcUrl?: string }): Promise<number | null> {
   try {
-    const response = await (options.fetch ?? fetch)(options.rpcUrl ?? ARC_TESTNET_RPC_URL, {
+    const response = await (options.fetch ?? fetch)(options.rpcUrl ?? networkRpcUrl(options.network), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         jsonrpc: "2.0",
         id: 1,
         method: "eth_call",
-        params: [{ to: ARC_TESTNET_EURC, data: `${BALANCE_OF}${address.slice(2).toLowerCase().padStart(64, "0")}` }, "latest"],
+        params: [{ to: options.network.tokens.EURC, data: `${BALANCE_OF}${address.slice(2).toLowerCase().padStart(64, "0")}` }, "latest"],
       }),
       signal: AbortSignal.timeout(4_000),
       cache: "no-store",
@@ -42,5 +43,6 @@ export async function operatingEurcBalance(options: { fetch?: typeof fetch; rpcU
   const address = row.data?.address;
   if (row.error || !address || !/^0x[0-9a-fA-F]{40}$/.test(address)) return null;
   // The node this workspace is configured to read Arc testnet from, as the fee and receipt reads use.
-  return readEurcBalance(address, { fetch: options.fetch, rpcUrl: options.rpcUrl ?? arcRpcUrl() });
+  const network = workspaceNetwork();
+  return readEurcBalance(address, { network, fetch: options.fetch, rpcUrl: options.rpcUrl ?? networkRpcUrl(network) });
 }

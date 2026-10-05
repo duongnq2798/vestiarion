@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { FxQuoteError } from "./errors";
 import { askAgain } from "./retry";
-import { ARC_TESTNET } from "../network";
+import { FeatureOffError, type NetworkProfile } from "../network";
 
 /**
  * The EURC→USDC rate for an EURC invoice (docs/superpowers/specs/2026-10-01-eurc-invoices-design.md, E2).
@@ -16,10 +16,15 @@ import { ARC_TESTNET } from "../network";
  * arithmetic on the decimal string, never through a float multiply.
  */
 
-export const ARC_TESTNET_EURC = ARC_TESTNET.tokens.EURC;
-export const ARC_TESTNET_USDC = ARC_TESTNET.tokens.USDC;
-/** The Stablecoin Service's name for Arc testnet. */
-export const STABLECOIN_SERVICE_CHAIN = ARC_TESTNET.stablecoinServiceChain;
+/**
+ * The Stablecoin Service on a network (docs/superpowers/specs/2026-10-05-network-threading-design.md P2, P5): its name for
+ * the chain, and the chain's USDC and EURC. A network without the service has no quote to give: it refuses as a quote
+ * error does, so the payable waits as it does when Circle has no route, and says why.
+ */
+export function stablecoinServiceOf(network: NetworkProfile): { chain: string; usdc: string; eurc: string } {
+  if (!network.stablecoinServiceChain) throw new FxQuoteError("unavailable", new FeatureOffError("The EURC swap", network).message);
+  return { chain: network.stablecoinServiceChain, usdc: network.tokens.USDC, eurc: network.tokens.EURC };
+}
 
 const QUOTE_URL = "https://api.circle.com/v1/stablecoinKits/quote";
 const DEADLINE_MS = 10_000;
@@ -58,27 +63,36 @@ const cache = new Map<string, { at: number; value: EurcQuote }>();
  */
 export async function quoteEurcInUsdc(
   amountEurc: number,
-  options: { fromAddress: string; now?: number; fetch?: typeof fetch; retryDelayMs?: number; once?: boolean }
+  options: { network: NetworkProfile; fromAddress: string; now?: number; fetch?: typeof fetch; retryDelayMs?: number; once?: boolean }
 ): Promise<EurcQuote> {
   if (!Number.isFinite(amountEurc) || amountEurc <= 0) throw new RangeError("An EURC amount to quote must be positive");
+  const service = stablecoinServiceOf(options.network);
   const now = options.now ?? Date.now();
   const amount = toBaseUnits(amountEurc);
-  const held = cache.get(amount);
+  const key = `${options.network.id}:${amount}`;
+  const held = cache.get(key);
   if (held && now - held.at <= CACHE_MS) return held.value;
 
   // Arc testnet's route comes and goes, so a no-route or failed answer is asked
   // again before the payable is held for want of a rate (E4; src/lib/fx/retry.ts).
-  return askAgain(() => askForQuote(amount, options.fromAddress, now, options.fetch), { delayMs: options.retryDelayMs, once: options.once });
+  return askAgain(() => askForQuote(service, key, amount, options.fromAddress, now, options.fetch), { delayMs: options.retryDelayMs, once: options.once });
 }
 
 /** One request to the Stablecoin Service for `amount` base units of EURC, cached when it answers. */
-async function askForQuote(amount: string, fromAddress: string, now: number, fetchImpl: typeof fetch | undefined): Promise<EurcQuote> {
+async function askForQuote(
+  service: { chain: string; usdc: string; eurc: string },
+  key: string,
+  amount: string,
+  fromAddress: string,
+  now: number,
+  fetchImpl: typeof fetch | undefined
+): Promise<EurcQuote> {
   const url = new URL(QUOTE_URL);
   url.search = new URLSearchParams({
-    tokenInAddress: ARC_TESTNET_EURC,
-    tokenInChain: STABLECOIN_SERVICE_CHAIN,
-    tokenOutAddress: ARC_TESTNET_USDC,
-    tokenOutChain: STABLECOIN_SERVICE_CHAIN,
+    tokenInAddress: service.eurc,
+    tokenInChain: service.chain,
+    tokenOutAddress: service.usdc,
+    tokenOutChain: service.chain,
     fromAddress,
     toAddress: fromAddress,
     amount,
@@ -112,7 +126,7 @@ async function askForQuote(amount: string, fromAddress: string, now: number, fet
     source: "circle-stablecoin-quote",
     quotedAt: new Date(now).toISOString(),
   };
-  cache.set(amount, { at: now, value });
+  cache.set(key, { at: now, value });
   return value;
 }
 

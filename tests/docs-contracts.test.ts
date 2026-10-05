@@ -1,8 +1,6 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { ARC_TESTNET_USDC } from "@/lib/circle/cctp";
-import { ARC_TESTNET_EURC } from "@/lib/fx/quote";
 import { arcAddressUrl } from "@/lib/payee-chains";
 import { ARC_TESTNET } from "@/lib/network";
 
@@ -16,7 +14,7 @@ import { ARC_TESTNET } from "@/lib/network";
 const ROOT = process.cwd();
 const PAGE = readFileSync(path.join(ROOT, "content", "docs", "contracts.mdx"), "utf8");
 const README = readFileSync(path.join(ROOT, "README.md"), "utf8");
-const ARC_CONTRACTS = [ARC_TESTNET_USDC, ARC_TESTNET_EURC, ARC_TESTNET.usyc.token, ARC_TESTNET.usyc.teller, ARC_TESTNET.usyc.entitlements, ARC_TESTNET.gateway.wallet, ARC_TESTNET.gateway.minter, ARC_TESTNET.cctp.tokenMessenger];
+const ARC_CONTRACTS = [ARC_TESTNET.tokens.USDC, ARC_TESTNET.tokens.EURC, ARC_TESTNET.usyc.token, ARC_TESTNET.usyc.teller, ARC_TESTNET.usyc.entitlements, ARC_TESTNET.gateway.wallet, ARC_TESTNET.gateway.minter, ARC_TESTNET.cctp.tokenMessenger];
 const DEPLOYED = ["0x74af203fec3f121ff1cd3a763092d1211487702b", "0x9da3c47f73ea9399ac566806a189b0bf47b7d4ba"];
 const arcscan = (address: string) => `](${arcAddressUrl(address)})`;
 

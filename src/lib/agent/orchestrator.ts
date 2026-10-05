@@ -58,7 +58,7 @@ import {
   twoApprovalsHeldValue,
 } from "./follow-up";
 import { OPEN_PAYABLE_STATUSES, summarizePayableObligations, sumUsdcAmounts } from "./obligations";
-import { ARC_TESTNET_EURC, quoteEurcInUsdc, type EurcQuote } from "../fx/quote";
+import { quoteEurcInUsdc, type EurcQuote } from "../fx/quote";
 import { quoteUsdcForEurc, sizeSwap, SWAP_COST_CAP_PERCENT, SWAP_NOT_QUOTED, type SwapOffer, type SwapQuote } from "../fx/swap-service";
 import { resumeOpenSwaps, swapForPayment, type SwapOutcome, type SwapSweep } from "../fx/swap";
 import { onceQuotes, probeFx } from "../fx/probe";
@@ -2025,7 +2025,7 @@ export async function runApStage(input: ApStageInput): Promise<number> {
   let eurcHeld: number | null | undefined;
   const eurc: EurcFunds = {
     // Any address will do for a quote, which moves nothing: the wallet's own when it has one.
-    quote: input.quoteEurc ?? ((amountEurc) => quoteEurcInUsdc(amountEurc, { fromAddress: input.operatingAddress ?? ARC_TESTNET_EURC })),
+    quote: input.quoteEurc ?? ((amountEurc) => quoteEurcInUsdc(amountEurc, { network: provider.network, fromAddress: input.operatingAddress ?? provider.network.tokens.EURC })),
     balance: async () => {
       if (provider.mode !== "live" || !provider.getTokenBalance || !operating) return null;
       if (eurcHeld === undefined) {
@@ -2087,7 +2087,7 @@ export async function runApStage(input: ApStageInput): Promise<number> {
   }
   const swaps = swapper && swapsAvailable ? swapper : null;
   const quoteSwap =
-    input.quoteSwap ?? ((usdcIn: number) => quoteUsdcForEurc(usdcIn, { fromAddress: swapAddress as string, apiKey: currentOrgConfig().chain.circleApiKey ?? null }));
+    input.quoteSwap ?? ((usdcIn: number) => quoteUsdcForEurc(usdcIn, { network: provider.network, fromAddress: swapAddress as string, apiKey: currentOrgConfig().chain.circleApiKey ?? null }));
 
   // In the order they were submitted (id breaks a tie), so each cycle decides
   // them in the same order: of two identical invoices, the one submitted
@@ -3179,6 +3179,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
       const operatingAddress =
         (unwrap(await db.from("accounts").select("address").eq("kind", "operating").limit(1)) as Array<{ address: string | null }>)[0]?.address ?? null;
       const quotes = onceQuotes({
+        network: provider.network,
         operatingAddress,
         canSwap: provider.mode === "live" && typeof provider.swapForEurc === "function",
         apiKey: currentOrgConfig().chain.circleApiKey ?? null,

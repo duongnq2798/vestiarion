@@ -4,6 +4,8 @@ import { gatewayOf } from "@/lib/circle/gateway";
 import { batchCalls } from "@/lib/circle/batch";
 import { SimulateProvider } from "@/lib/circle/simulateProvider";
 import { readUsycPrice, usycOf } from "@/lib/circle/usyc";
+import { quoteEurcInUsdc } from "@/lib/fx/quote";
+import { quoteUsdcForEurc } from "@/lib/fx/swap-service";
 import { ARC_MAINNET, ARC_TESTNET } from "@/lib/network";
 
 /**
@@ -48,5 +50,12 @@ describe("the USYC reserve reads the profile", () => {
   it("gives Arc testnet's contracts, and refuses on a network without a reserve before any request", async () => {
     expect(usycOf(ARC_TESTNET).teller).toBe("0x9fdF14c5B14173D74C08Af27AebFf39240dC105A");
     await expect(readUsycPrice({ network: ARC_MAINNET, rpcUrl: ARC_MAINNET.rpcUrl, fetch: noRequest })).rejects.toThrow("The USYC reserve does not run on Arc mainnet yet");
+  });
+});
+
+describe("the EURC swap reads the profile", () => {
+  it("refuses by name on a network without the Stablecoin Service, before any request", async () => {
+    await expect(quoteUsdcForEurc(1, { network: ARC_MAINNET, apiKey: "k", fromAddress: PAYEE, fetch: noRequest })).rejects.toThrow("The EURC swap does not run on Arc mainnet yet");
+    await expect(quoteEurcInUsdc(1, { network: ARC_MAINNET, fromAddress: PAYEE, fetch: noRequest })).rejects.toThrow("The EURC swap does not run on Arc mainnet yet");
   });
 });

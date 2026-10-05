@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from "vitest";
 import { LiveProvider, type LiveProviderClient } from "@/lib/circle/liveProvider";
 import { usycStepKey, UsycSubscriptionsClosedError } from "@/lib/circle/usyc";
 import type { ChainConfig } from "@/lib/config";
-import { ARC_TESTNET_USDC } from "@/lib/fx/quote";
 import { ARC_TESTNET } from "@/lib/network";
 
 /**
@@ -88,7 +87,7 @@ describe("LiveProvider: a sweep into USYC", () => {
     expect(c.created).toHaveLength(2);
     expect(c.created[0]).toMatchObject({
       walletId: "wallet-op",
-      contractAddress: ARC_TESTNET_USDC,
+      contractAddress: ARC_TESTNET.tokens.USDC,
       abiFunctionSignature: "approve(address,uint256)",
       abiParameters: [ARC_TESTNET.usyc.teller, "10000000"],
       idempotencyKey: usycStepKey("cycle-7/sweep_to_usyc/approve"),

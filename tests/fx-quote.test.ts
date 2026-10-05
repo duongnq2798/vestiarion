@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ARC_TESTNET_EURC, ARC_TESTNET_USDC, FxQuoteError, quoteEurcInUsdc, resetFxQuotesForTests } from "@/lib/fx/quote";
+import { FxQuoteError, quoteEurcInUsdc, resetFxQuotesForTests } from "@/lib/fx/quote";
+import { ARC_TESTNET } from "@/lib/network";
 
 /**
  * The EURC→USDC rate (EURC invoices spec E2): a quote from Circle's
@@ -26,14 +27,14 @@ beforeEach(() => resetFxQuotesForTests());
 describe("quoteEurcInUsdc", () => {
   it("asks for EURC→USDC on Arc testnet in base units, and reads the amounts exactly", async () => {
     const fetch = vi.fn().mockResolvedValue(answer("12161872", "11797015"));
-    const quote = await quoteEurcInUsdc(10, { fromAddress: FROM, now: NOW, fetch });
+    const quote = await quoteEurcInUsdc(10, { network: ARC_TESTNET, fromAddress: FROM, now: NOW, fetch });
 
     const url = new URL(fetch.mock.calls[0][0] as string);
     expect(`${url.origin}${url.pathname}`).toBe("https://api.circle.com/v1/stablecoinKits/quote");
     expect(Object.fromEntries(url.searchParams)).toEqual({
-      tokenInAddress: ARC_TESTNET_EURC,
+      tokenInAddress: ARC_TESTNET.tokens.EURC,
       tokenInChain: "Arc_Testnet",
-      tokenOutAddress: ARC_TESTNET_USDC,
+      tokenOutAddress: ARC_TESTNET.tokens.USDC,
       tokenOutChain: "Arc_Testnet",
       fromAddress: FROM,
       toAddress: FROM,
@@ -51,16 +52,16 @@ describe("quoteEurcInUsdc", () => {
 
   it("turns amounts into base units without float drift", async () => {
     const fetch = vi.fn().mockResolvedValue(answer("1", "1"));
-    await quoteEurcInUsdc(0.1 + 0.2, { fromAddress: FROM, now: NOW, fetch });
+    await quoteEurcInUsdc(0.1 + 0.2, { network: ARC_TESTNET, fromAddress: FROM, now: NOW, fetch });
     expect(new URL(fetch.mock.calls[0][0] as string).searchParams.get("amount")).toBe("300000");
   });
 
   it("answers the same amount from memory for 5 minutes, then asks again", async () => {
     const fetch = vi.fn().mockImplementation(async () => answer("12161872", "11797015"));
-    await quoteEurcInUsdc(10, { fromAddress: FROM, now: NOW, fetch });
-    await quoteEurcInUsdc(10, { fromAddress: FROM, now: NOW + 5 * 60_000, fetch });
+    await quoteEurcInUsdc(10, { network: ARC_TESTNET, fromAddress: FROM, now: NOW, fetch });
+    await quoteEurcInUsdc(10, { network: ARC_TESTNET, fromAddress: FROM, now: NOW + 5 * 60_000, fetch });
     expect(fetch).toHaveBeenCalledTimes(1);
-    await quoteEurcInUsdc(10, { fromAddress: FROM, now: NOW + 5 * 60_000 + 1, fetch });
+    await quoteEurcInUsdc(10, { network: ARC_TESTNET, fromAddress: FROM, now: NOW + 5 * 60_000 + 1, fetch });
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 
@@ -68,54 +69,54 @@ describe("quoteEurcInUsdc", () => {
 
   it("asks once more when the service answers no route, as Arc testnet's route comes and goes (seen 2026-10-01)", async () => {
     const fetch = vi.fn().mockResolvedValueOnce(noRoute()).mockResolvedValueOnce(answer("2310362", "2241051"));
-    const quote = await quoteEurcInUsdc(1.9, { fromAddress: FROM, now: NOW, fetch, retryDelayMs: 0 });
+    const quote = await quoteEurcInUsdc(1.9, { network: ARC_TESTNET, fromAddress: FROM, now: NOW, fetch, retryDelayMs: 0 });
     expect(quote.usdcEstimated).toBe(2.310362);
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 
   it("asks up to four times, as the route answered only on the third ask on 2026-10-05", async () => {
     const fetch = vi.fn().mockResolvedValueOnce(noRoute()).mockResolvedValueOnce(noRoute()).mockResolvedValueOnce(answer("607630", "589401"));
-    const quote = await quoteEurcInUsdc(0.5, { fromAddress: FROM, now: NOW, fetch, retryDelayMs: 0 });
+    const quote = await quoteEurcInUsdc(0.5, { network: ARC_TESTNET, fromAddress: FROM, now: NOW, fetch, retryDelayMs: 0 });
     expect(quote.usdcEstimated).toBe(0.60763);
     expect(fetch).toHaveBeenCalledTimes(3);
   });
 
   it("says there is no route when the service has none four times", async () => {
     const fetch = vi.fn().mockImplementation(async () => noRoute());
-    await expect(quoteEurcInUsdc(10, { fromAddress: FROM, now: NOW, fetch, retryDelayMs: 0 })).rejects.toMatchObject({ code: "no_route" });
+    await expect(quoteEurcInUsdc(10, { network: ARC_TESTNET, fromAddress: FROM, now: NOW, fetch, retryDelayMs: 0 })).rejects.toMatchObject({ code: "no_route" });
     expect(fetch).toHaveBeenCalledTimes(4);
   });
 
   it("says it is unavailable when the service fails or does not answer in time, after asking four times", async () => {
     const down = vi.fn().mockRejectedValue(new TypeError("fetch failed"));
-    await expect(quoteEurcInUsdc(10, { fromAddress: FROM, now: NOW, fetch: down, retryDelayMs: 0 })).rejects.toMatchObject({ code: "unavailable" });
+    await expect(quoteEurcInUsdc(10, { network: ARC_TESTNET, fromAddress: FROM, now: NOW, fetch: down, retryDelayMs: 0 })).rejects.toMatchObject({ code: "unavailable" });
     expect(down).toHaveBeenCalledTimes(4);
     const slow = vi.fn().mockImplementation((_url: string, init: RequestInit) => {
       expect(init.signal).toBeInstanceOf(AbortSignal);
       return Promise.reject(new DOMException("The operation was aborted due to timeout", "TimeoutError"));
     });
-    await expect(quoteEurcInUsdc(11, { fromAddress: FROM, now: NOW, fetch: slow, retryDelayMs: 0 })).rejects.toBeInstanceOf(FxQuoteError);
+    await expect(quoteEurcInUsdc(11, { network: ARC_TESTNET, fromAddress: FROM, now: NOW, fetch: slow, retryDelayMs: 0 })).rejects.toBeInstanceOf(FxQuoteError);
   });
 
   it("asks only once when told to (FX re-evaluation F9)", async () => {
     const fetch = vi.fn().mockImplementation(async () => noRoute());
-    await expect(quoteEurcInUsdc(12, { fromAddress: FROM, now: NOW, fetch, retryDelayMs: 0, once: true })).rejects.toMatchObject({ code: "no_route" });
+    await expect(quoteEurcInUsdc(12, { network: ARC_TESTNET, fromAddress: FROM, now: NOW, fetch, retryDelayMs: 0, once: true })).rejects.toMatchObject({ code: "no_route" });
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   it("refuses an answer of the wrong shape, or with no USDC out", async () => {
     const malformed = vi.fn().mockResolvedValue(new Response(JSON.stringify({ quote: {} }), { status: 200 }));
-    await expect(quoteEurcInUsdc(10, { fromAddress: FROM, now: NOW, fetch: malformed })).rejects.toMatchObject({ code: "malformed" });
+    await expect(quoteEurcInUsdc(10, { network: ARC_TESTNET, fromAddress: FROM, now: NOW, fetch: malformed })).rejects.toMatchObject({ code: "malformed" });
     // An answer that came back and cannot be read is not asked for again.
     expect(malformed).toHaveBeenCalledTimes(1);
     const zero = vi.fn().mockResolvedValue(answer("0", "0"));
-    await expect(quoteEurcInUsdc(12, { fromAddress: FROM, now: NOW, fetch: zero })).rejects.toMatchObject({ code: "malformed" });
+    await expect(quoteEurcInUsdc(12, { network: ARC_TESTNET, fromAddress: FROM, now: NOW, fetch: zero })).rejects.toMatchObject({ code: "malformed" });
   });
 
   it("refuses to quote nothing or a negative amount, asking nothing", async () => {
     const fetch = vi.fn();
     for (const amount of [0, -1, Number.NaN]) {
-      await expect(quoteEurcInUsdc(amount, { fromAddress: FROM, now: NOW, fetch })).rejects.toBeInstanceOf(RangeError);
+      await expect(quoteEurcInUsdc(amount, { network: ARC_TESTNET, fromAddress: FROM, now: NOW, fetch })).rejects.toBeInstanceOf(RangeError);
     }
     expect(fetch).not.toHaveBeenCalled();
   });
@@ -126,7 +127,7 @@ describe("the rate's precision (review M3)", () => {
     resetFxQuotesForTests();
     const fetch = async () =>
       new Response(JSON.stringify({ quote: { estimatedAmount: "3647451", minAmount: "3538027" } }), { status: 200, headers: { "content-type": "application/json" } });
-    const quote = await quoteEurcInUsdc(3, { fromAddress: "0x0000000000000000000000000000000000000001", fetch: fetch as unknown as typeof globalThis.fetch });
+    const quote = await quoteEurcInUsdc(3, { network: ARC_TESTNET, fromAddress: "0x0000000000000000000000000000000000000001", fetch: fetch as unknown as typeof globalThis.fetch });
     expect(quote.rate).toBe(1.215817);
   });
 });
