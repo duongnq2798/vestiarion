@@ -37,6 +37,7 @@ describe("the Arc testnet profile", () => {
       stablecoinServiceChain: "Arc_Testnet",
       hostedWallets: true,
       circleKeyPrefix: "TEST_API_KEY:",
+      modularWallets: { chain: "arcTestnet" },
     });
   });
 
@@ -74,6 +75,7 @@ describe("the Arc mainnet profile", () => {
       stablecoinServiceChain: null,
       hostedWallets: false,
       circleKeyPrefix: "LIVE_API_KEY:",
+      modularWallets: null,
     });
   });
 });

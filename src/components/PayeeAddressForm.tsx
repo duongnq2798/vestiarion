@@ -2,8 +2,9 @@
 
 import { CircleCheck, PenLine } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { submitPayeeAddressAction, type PayeeAddressResult } from "@/app/payee/[token]/actions";
+import { PasskeyWalletOption } from "@/components/payee/PasskeyWalletOption";
 import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Field } from "@/components/ui/Field";
@@ -25,26 +26,44 @@ export const ADDRESS_CHECKS = [
   "The first and last characters match my wallet.",
 ] as const;
 
+/** What a payee reads under a wallet the page just made for them, in place of the three boxes (payee passkey wallet P3). */
+export const PASSKEY_WALLET_LINE =
+  "Your passkey is the only way into this wallet, so keep it. To see or send what you're paid, open www.vestiarion.xyz/wallet with the same passkey.";
+
 /**
  * The payee's address, in two screens (freelancer journey §4): the field, then the address read
  * back in fours with three boxes to tick before Send my address. Once it is sent the page refreshes
  * into the next step, which the link now shows. `intro`, how it works, shows with the field only, so
  * the check screen has the address and the boxes and nothing else.
+ *
+ * `passkey`, when offered (payee passkey wallet P1), adds a secondary button under Continue that makes a passkey wallet,
+ * or uses one made from an earlier link. Its address is read back under "Your new wallet" or "Your passkey wallet", with
+ * one line about the passkey instead of the boxes, which guard against a mistyped or exchange address, and is sent the
+ * same way (P3). While the passkey is asked, the typed path waits, so the two never cross (review finding 8).
  */
 export default function PayeeAddressForm({
   token,
   chainLabel = "Arc testnet",
   orgName,
   intro,
+  passkey = false,
 }: {
   token: string;
   chainLabel?: string;
   orgName: string;
   intro?: ReactNode;
+  passkey?: boolean;
 }) {
   const router = useRouter();
   const [step, setStep] = useState<"enter" | "check">("enter");
+  const stepNow = useRef(step);
+  useEffect(() => {
+    stepNow.current = step;
+  }, [step]);
   const [address, setAddress] = useState("");
+  // Made (`Register`) or used (`Login`) on this page with a passkey, rather than typed (P3).
+  const [madeWith, setMadeWith] = useState<"Register" | "Login" | null>(null);
+  const [passkeyPending, setPasskeyPending] = useState(false);
   const [error, setError] = useState("");
   const [checked, setChecked] = useState<boolean[]>(ADDRESS_CHECKS.map(() => false));
   const { state, formProps } = useActionForm(submitPayeeAddressAction, INITIAL, { onSuccess: () => router.refresh() });
@@ -87,15 +106,73 @@ export default function PayeeAddressForm({
             spellCheck={false}
             className="font-mono"
             placeholder="0x…"
+            disabled={passkeyPending}
           />
         </Field>
-        <Button type="submit">Continue</Button>
+        <Button type="submit" disabled={passkeyPending}>
+          Continue
+        </Button>
+        {passkey && (
+          <PasskeyWalletOption
+            orgName={orgName}
+            onPending={setPasskeyPending}
+            onAddress={(made, mode) => {
+              // A passkey answer that comes after the payee moved on is not theirs to apply.
+              if (stepNow.current !== "enter") return;
+              setAddress(made);
+              setMadeWith(mode);
+              setError("");
+              setStep("check");
+            }}
+          />
+        )}
       </form>
     );
   }
 
   const trimmed = address.trim();
   const groups = groupAddress(trimmed);
+
+  if (madeWith) {
+    return (
+      <form {...formProps} className="grid gap-5">
+        <input type="hidden" name="token" value={token} />
+        <input type="hidden" name="address" value={trimmed} />
+        <div>
+          <h2 className="text-base font-semibold text-ink">{madeWith === "Register" ? "Your new wallet" : "Your passkey wallet"}</h2>
+          <p className="mt-2 flex flex-wrap gap-x-1.5 gap-y-1 rounded-xl border border-line bg-raised px-3 py-2.5 font-mono text-[0.9375rem] tabular-nums text-ink">
+            <span className="sr-only">{trimmed}</span>
+            {groups.map((group, index) => (
+              <span key={index} aria-hidden>
+                {group}
+              </span>
+            ))}
+          </p>
+          <p className="mt-3 text-sm leading-6 text-ink-2">{PASSKEY_WALLET_LINE}</p>
+        </div>
+        <div className="grid gap-2">
+          <p className="text-xs leading-5 text-ink-3">After you send it, this link can&apos;t change it. {orgName} confirms it before paying you.</p>
+          <FormMessage tone={state.message ? "error" : "neutral"}>{state.message || null}</FormMessage>
+        </div>
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
+          <Button
+            type="button"
+            variant="ghost"
+            icon={<PenLine />}
+            onClick={() => {
+              setMadeWith(null);
+              setAddress("");
+              setStep("enter");
+            }}
+          >
+            Use another address
+          </Button>
+          <SubmitButton pendingLabel="Sending…">Send my address</SubmitButton>
+        </div>
+      </form>
+    );
+  }
+
   const ready = checked.every(Boolean);
   return (
     <form {...formProps} className="grid gap-5">

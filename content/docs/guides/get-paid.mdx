@@ -3,7 +3,7 @@ This guide is for the person being paid. A business that uses Vestiarion can pay
 ## What you need
 
 - **The link.** It comes in an email titled "*Business* wants to pay you *amount* USDC", with an **Add my address** button. A business can also send you the link itself; it starts with `https://www.vestiarion.xyz/payee/`.
-- **A wallet you control** that can hold USDC on Arc testnet, such as MetaMask. Its address starts with `0x` and has 42 characters. Your address on Arc testnet is the same as your Ethereum address in that wallet.
+- **A wallet you control** that can hold USDC on Arc testnet, such as MetaMask. Its address starts with `0x` and has 42 characters. Your address on Arc testnet is the same as your Ethereum address in that wallet. No wallet? On Arc testnet the page can make you one with a passkey: see [No wallet yet?](#no-wallet-yet) below.
 - **Nothing else.** No account, no fee, no password. Vestiarion only needs your address. It never asks for your recovery phrase or private key. If anyone asks you for those, stop.
 
 To see Arc testnet in MetaMask, add it as a network:
@@ -29,6 +29,18 @@ Copy your address from your wallet's receive screen rather than typing it. Paste
 />
 
 If what you pasted is not an address, the page says "That doesn't look like a wallet address. It starts with 0x and has 42 characters in all." Copy it again, in full.
+
+### No wallet yet?
+
+When the business pays you on Arc testnet, step 1 also has a second button under **Continue**: **No wallet yet? Create one with a passkey**. A passkey is the fingerprint, face or device PIN your phone or computer already uses to sign in.
+
+- **Choose it,** and your browser asks you to create a passkey for Vestiarion, saved under the name of the business that pays you. Nothing is installed, and there is no recovery phrase to write down.
+- **Made one before,** from another link? Choose **Already made one here? Use my passkey wallet** instead, and use the same passkey: the page reads back the same wallet's address under **Your passkey wallet**.
+- **The next screen,** **Your new wallet**, shows the new wallet's address. It is a Circle smart account on Arc testnet, and only your passkey opens it. Choose **Send my address**, and the business confirms it as it would any address. **Use another address** goes back to the field.
+- **It costs nothing.** Receiving needs no transaction, and Circle's Gas Station pays the network fee when you send.
+- **Keep the passkey.** It is the only way into the wallet. If your passkeys sync, through iCloud Keychain or Google Password Manager, a new device opens it too.
+
+If you cancel the passkey prompt, the page says "No passkey was created. Nothing changed." If your browser has no passkeys, it says "This browser cannot create passkeys. Enter an address from another wallet instead."
 
 ## 2. Check it, then send it
 
@@ -125,6 +137,16 @@ If the business has your email, you are also told by email, from no-reply@vestia
 | Stuck on Waiting for *business* to confirm | Nobody at the business has confirmed it yet. | Ask them to confirm it on their Counterparties page. |
 | Paid, but nothing in your wallet | The wallet is not showing Arc testnet, or not its USDC. | Add Arc testnet with the table above, then check again. The transaction on Arcscan shows where it went. |
 | You sent a wrong address | The link cannot change it. | Tell the business before they confirm, and ask for a new link. A payment already sent cannot be reversed. |
+
+## Your passkey wallet
+
+If you made your wallet with a passkey, open it at `https://www.vestiarion.xyz/wallet`. Choose **Open my wallet** and use the same passkey. The page shows the wallet's address and its USDC on Arc testnet.
+
+- **To send USDC,** fill in **Send USDC**: an address on Arc testnet and an amount, then **Review**.
+- **The review** names the address, the amount, the network and who pays the gas: "Paid by Circle Gas Station". Check the address, then choose **Send with my passkey**. A send on Arc testnet cannot be taken back.
+- **When it lands,** the page links the transaction on the Arc explorer. If Arc testnet did not carry it out, the page says your USDC did not move. If Circle took it but Arc testnet has not confirmed it yet, the page says so: choose **Refresh** in a minute and check your USDC before sending again.
+
+Vestiarion never sees your passkey and keeps no record of the wallet page.
 
 ## After you are paid
 

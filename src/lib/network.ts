@@ -36,6 +36,11 @@ export interface NetworkProfile {
   hostedWallets: boolean;
   /** The prefix of a Circle API key for this network (N5). */
   circleKeyPrefix: string;
+  /**
+   * Circle Modular Wallets' path for this chain, for a payee's passkey wallet (payee passkey wallet P1); null where they
+   * do not run.
+   */
+  modularWallets: { chain: string } | null;
 }
 
 export const ARC_TESTNET = {
@@ -57,6 +62,7 @@ export const ARC_TESTNET = {
   stablecoinServiceChain: "Arc_Testnet",
   hostedWallets: true,
   circleKeyPrefix: "TEST_API_KEY:",
+  modularWallets: { chain: "arcTestnet" },
 } as const satisfies NetworkProfile;
 
 export const ARC_MAINNET = {
@@ -74,6 +80,7 @@ export const ARC_MAINNET = {
   stablecoinServiceChain: null,
   hostedWallets: false,
   circleKeyPrefix: "LIVE_API_KEY:",
+  modularWallets: null,
 } as const satisfies NetworkProfile;
 
 export const NETWORKS: Record<Network, NetworkProfile> = { "arc-testnet": ARC_TESTNET, "arc-mainnet": ARC_MAINNET };

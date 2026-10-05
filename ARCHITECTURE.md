@@ -210,6 +210,20 @@ balance covers the amount and its fee and it costs no more than CCTP, CCTP other
 is kept. `payoutFundsShort` counts what leaves from where it leaves: a CCTP payout's amount and fee from the operating
 wallet, a Gateway payout's from the Gateway balance. The Approvals card names the route and its fee.
 
+**A payee with no wallet creates one with a passkey** (`docs/superpowers/specs/2026-10-05-payee-passkey-wallet-design.md`).
+- **On a payee link:** the address field stays the primary path. On Arc testnet, when
+  `NEXT_PUBLIC_MODULAR_WALLETS_CLIENT_KEY` and `NEXT_PUBLIC_MODULAR_WALLETS_CLIENT_URL` are set, a secondary button
+  creates a Circle Modular Wallets smart account owned by a WebAuthn passkey. Its counterfactual address is sent like a
+  typed one and confirmed by a person.
+- **At `/wallet`:** the payee opens it with the passkey and sends USDC as a user operation whose gas Circle Gas Station
+  pays.
+- **Code:** `src/lib/passkey-wallet.ts` holds the order and the failures, with the SDK injected, and imports viem's
+  types only, since a payee link loads it. `src/lib/passkey-wallet-send.ts` holds the balance, the send checks and the
+  send's outcome (sent, reverted, or taken with no receipt yet), for `/wallet`. `src/lib/passkey-wallet-sdk.ts` binds
+  `@circle-fin/modular-wallets-core`, signs under the passkey's own rpId, and is imported dynamically, so the address
+  path never loads it. The chain's Modular Wallets path lives in the network profile (`modularWallets`). Nothing about a
+  passkey is stored server-side.
+
 **A person's payment draws on the reserve, and a person's cash back stays**
 (`docs/superpowers/specs/2026-10-05-approval-cash-from-reserve-design.md`).
 - **Approve and pay, and Pay now on a milestone:** a new USDC payment from the operating wallet that the wallet cannot
