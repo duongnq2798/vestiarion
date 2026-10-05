@@ -470,6 +470,8 @@ describe("the new control screens, as source", () => {
     // A hold for want of cash is no guardrail rule, but is explained like one (reserve cash back R4).
     expect(console_).toContain("rule={decision.guardrail?.rule ?? (decision.heldForCash ? CASH_SHORTFALL : null)}");
     expect(read("src/app/o/[slug]/invoices/page.tsx")).toContain("rule={decision.guardrail?.rule ?? (decision.heldForCash ? CASH_SHORTFALL : null)}");
+    // A counterparty paid without purchase orders is never asked for one there either (three-way match design M2).
+    expect(console_).toContain("purchaseOrderRequired: counterpartiesById.get(invoice.counterparty_id)?.purchase_order_required !== false");
   });
 
   it("AP / AR says which payables a running cycle is deciding", () => {

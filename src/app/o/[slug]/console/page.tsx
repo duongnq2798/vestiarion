@@ -135,7 +135,12 @@ export default async function DashboardPage({
     const nextStepFor = (decision: (typeof stopped)[number]) => {
       const invoice = invoicesById.get(decision.id);
       if (!invoice || invoice.direction !== "payable" || !["held", "flagged", "awaiting_info"].includes(invoice.status)) return undefined;
-      const onFile = { poReference: invoice.po_reference ?? null, goodsReceived: invoice.goods_received === true };
+      const onFile = {
+        poReference: invoice.po_reference ?? null,
+        goodsReceived: invoice.goods_received === true,
+        // A counterparty paid without purchase orders is never asked for one (three-way match design M2).
+        purchaseOrderRequired: counterpartiesById.get(invoice.counterparty_id)?.purchase_order_required !== false,
+      };
       return (
         <WaitingPayableAction
           orgSlug={slug}
