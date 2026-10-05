@@ -37,7 +37,12 @@ restrictive `tenant_isolation_guard`, both testing
 `request.jwt.claims`, because a custom role cannot use Supabase's `auth`
 schema. `ledger_entries` and `cycle_snapshots` grant only `select, insert` to
 the tenant role, so the audit trail and its snapshots are append-only even
-for a compromised or buggy request. `anon` and `authenticated` keep no
+for a compromised or buggy request. Since `0077` the tenant role holds only
+`select` on `ledger_entries`: every entry goes through `append_ledger_entry`,
+which links the hash chain, runs as its owner, refuses a workspace other than
+the token's, and pins its search path (`extensions, public`), so no request can
+put an entry in the ledger that no chain step links
+(`docs/superpowers/specs/2026-10-05-payment-integrity-design.md` I3). `anon` and `authenticated` keep no
 privileges, as since `0003`. Row-level security does not constrain
 foreign-key checks, so migration `0019` makes every tenant-to-tenant foreign
 key composite (`org_id, ...`) and widens `cycle_snapshots`'s unique key to

@@ -254,7 +254,8 @@ describe("the tenant RPCs under the tenant role", () => {
   });
 
   it("refuses appending to another organization's chain", async () => {
-    await expect(asTenant(db, A, (tx) => tx.query(append, [B, ...signed("theirs")]))).rejects.toThrow(/row-level security/);
+    // The append runs as its owner since 0077 (payment integrity I3), so it refuses another workspace itself.
+    await expect(asTenant(db, A, (tx) => tx.query(append, [B, ...signed("theirs")]))).rejects.toThrow(/p_org_id is not the request's organization/);
   });
 
   it("refuses advancing another organization's clock", async () => {

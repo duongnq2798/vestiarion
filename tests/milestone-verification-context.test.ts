@@ -116,6 +116,7 @@ describe("the contractor stage and the spending limit enforced on Arc (onchain s
     const cycle = source.slice(source.indexOf("async function executeCycle("));
     expect(cycle.indexOf("const onChainLimit = onChainLimitGate();")).toBeLessThan(cycle.indexOf('await stage("ap"'));
     expect(cycle.slice(cycle.indexOf('await stage("ap"'), cycle.indexOf('await stage("contractors"'))).toContain("onChainLimit,");
-    expect(stage).toContain("{ db, provider, operating: operating ? { id: operating.id } : null, onChainLimit }");
+    // With the stage's two-approvals figure since payment integrity I4.
+    expect(stage).toContain("{ db, provider, operating: operating ? { id: operating.id } : null, onChainLimit, twoApprovalsAbove }");
   });
 });

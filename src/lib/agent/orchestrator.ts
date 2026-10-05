@@ -21,7 +21,8 @@ import { decide, type DecideResult } from "./decide";
 import { budgetClause, enforceApGuardrails, onChainLimitHold } from "./guardrails";
 import { readTwoApprovalsAbove } from "../approval-policy";
 import { choosePayoutRoute } from "../payout-route";
-import { TWO_APPROVALS_RULE } from "../two-approvals";
+import { needsTwoApprovals, TWO_APPROVALS_RULE } from "../two-approvals";
+import { approvedByTwo, type PaymentSource } from "./second-approval";
 import { usycSubscriptionsOpen } from "../circle/usyc";
 import { arcRpcUrl } from "../circle/arcFees";
 import { budgetGate, countedUsdc, exceedsBudget, HELD_FOR_BUDGET, type BudgetGate, type BudgetRoom } from "./outflow-budget";
@@ -606,6 +607,26 @@ async function resubmissionBlocker(
   return null;
 }
 
+/** Appended to a held payable's or milestone's reasoning when the agent will not send again on its own what needs two approvals. */
+function notResubmittedTwoApprovalsNote(above: number): string {
+  return ` [not resubmitted: payments above ${above} USDC need two approvals — held for two people to approve]`;
+}
+
+/**
+ * Why the agent must not send again on its own a payment it never sent (payment integrity I4): payments above the
+ * workspace's figure need two approvals, this one is above it, weighed as a new payment is (a EURC payment's USDC value
+ * is not known here, so it is held), and two people's approvals of it were not used to pay it. The figure may have been
+ * set or lowered since the first send.
+ */
+async function twoApprovalsResendBlocker(
+  source: PaymentSource,
+  payment: { amount: number; currency: Stablecoin; address: string | null },
+  above: number | null | undefined
+): Promise<"workspace.two_approvals" | null> {
+  if (above == null || !needsTwoApprovals({ amount: payment.amount, currency: payment.currency, usdcValue: null }, above)) return null;
+  return (await approvedByTwo(source, payment)) ? null : "workspace.two_approvals";
+}
+
 /** The payment intent a payable already has: enough to tell whether a transfer exists. */
 export interface ExistingPaymentIntent {
   providerTxId: string | null;
@@ -745,7 +766,14 @@ export async function reconcileApInvoice(
     decidedAt?: string | null;
   },
   intent: ExistingPaymentIntent,
-  deps: { db: OrgDb; provider: ChainProvider; operating: { id: string } | null; onChainLimit?: OnChainLimitGate }
+  deps: {
+    db: OrgDb;
+    provider: ChainProvider;
+    operating: { id: string } | null;
+    onChainLimit?: OnChainLimitGate;
+    /** The workspace's figure above which a payment needs two approvals, as the stage read it; null or absent when off. */
+    twoApprovalsAbove?: number | null;
+  }
 ): Promise<{ status: string; operatingBalance: number | null; line: CycleLogLine }> {
   const input = {
     invoiceId: invoice.id,
@@ -771,10 +799,15 @@ export async function reconcileApInvoice(
   }
 
   let outcome: PayStepOutcome;
-  let notResubmitted: Exclude<Awaited<ReturnType<typeof resubmissionBlocker>>, null> | null = null;
+  let notResubmitted: "counterparty.high_risk" | "counterparty.address_unconfirmed" | "workspace.two_approvals" | null = null;
   // `undefined` leaves the invoice's recorded paid amount as it is.
   let paidAmount: number | null | undefined;
-  const blocker = transferExists ? null : await resubmissionBlocker(deps.db, invoice.counterpartyId);
+  // A payment never sent is sent again only to a counterparty still fit to pay, and only on its own when one approval
+  // may pay it (payment integrity I4).
+  const blocker = transferExists
+    ? null
+    : ((await resubmissionBlocker(deps.db, invoice.counterpartyId)) ??
+      (await twoApprovalsResendBlocker({ type: "invoice", id: invoice.id }, { amount: invoice.amount, currency, address: invoice.address }, deps.twoApprovalsAbove)));
   if (transferExists) {
     const result = await payInvoice(input, { provider: deps.provider, operating: deps.operating });
     const execution = result.execution;
@@ -837,7 +870,12 @@ export async function reconcileApInvoice(
       status: "held",
       txRef: null,
       paymentExecution: null,
-      reasoningSuffix: blocker === "counterparty.high_risk" ? NOT_RESUBMITTED_HIGH_RISK_NOTE : NOT_RESUBMITTED_ADDRESS_NOTE,
+      reasoningSuffix:
+        blocker === "counterparty.high_risk"
+          ? NOT_RESUBMITTED_HIGH_RISK_NOTE
+          : blocker === "workspace.two_approvals"
+            ? notResubmittedTwoApprovalsNote(deps.twoApprovalsAbove as number)
+            : NOT_RESUBMITTED_ADDRESS_NOTE,
       heldBecausePaused: false,
       operatingBalance: null,
     };
@@ -921,6 +959,8 @@ export async function reconcileApInvoice(
       ? `${name}: not resubmitted, the counterparty is now screened high risk (${invoice.amount} ${currency})`
       : notResubmitted === "counterparty.address_unconfirmed"
       ? `${name}: not resubmitted, the counterparty's address changed and no one has confirmed it (${invoice.amount} ${currency})`
+      : notResubmitted === "workspace.two_approvals"
+      ? `${name}: not resubmitted, payments above ${deps.twoApprovalsAbove} USDC need two approvals (${invoice.amount} ${currency})`
       : status === "paid"
       ? `${invoice.counterpartyName}: reconciled an in-flight payment, now paid (${invoice.amount} ${currency})`
       : status === "matched"
@@ -2160,7 +2200,8 @@ export async function runApStage(input: ApStageInput): Promise<number> {
           decidedAt: invoice.decided_at ?? null,
         },
         intent,
-        { db, provider, operating, onChainLimit }
+        // The stage's figure, so a payment it never sent goes again on its own only when one approval may pay it (I4).
+        { db, provider, operating, onChainLimit, twoApprovalsAbove }
       );
       if (reconciled.operatingBalance !== null) operatingBalance = reconciled.operatingBalance;
       metrics.recordInvoice(reconciled.status, false);
@@ -2530,7 +2571,14 @@ export async function reconcileMilestone(
     txRef: string | null;
   },
   intent: ExistingPaymentIntent,
-  deps: { db: OrgDb; provider: ChainProvider; operating: { id: string } | null; onChainLimit?: OnChainLimitGate }
+  deps: {
+    db: OrgDb;
+    provider: ChainProvider;
+    operating: { id: string } | null;
+    onChainLimit?: OnChainLimitGate;
+    /** The workspace's figure above which a payment needs two approvals, as the stage read it; null or absent when off. */
+    twoApprovalsAbove?: number | null;
+  }
 ): Promise<{ status: string; operatingBalance: number | null; line: CycleLogLine }> {
   const transferExists = intent.providerTxId !== null || intent.status === "confirmed";
   const name = milestone.contractorName;
@@ -2559,8 +2607,14 @@ export async function reconcileMilestone(
     };
   }
 
+  // Sent again on its own only when one approval may pay it (payment integrity I4).
+  const twoApprovals =
+    transferExists || blocker
+      ? null
+      : await twoApprovalsResendBlocker({ type: "milestone", id: milestone.id }, { amount, currency: "USDC", address: milestone.address }, deps.twoApprovalsAbove);
+
   let outcome: PayStepOutcome;
-  let notResubmitted: "counterparty.high_risk" | null = null;
+  let notResubmitted: "counterparty.high_risk" | "workspace.two_approvals" | null = null;
   if (transferExists && deps.operating) {
     const result = await releaseMilestone(release, { provider: deps.provider, operatingAccountId: deps.operating.id });
     const execution = result.paymentExecution;
@@ -2604,6 +2658,16 @@ export async function reconcileMilestone(
       txRef: null,
       paymentExecution: null,
       reasoningSuffix: NOT_RESUBMITTED_HIGH_RISK_NOTE,
+      heldBecausePaused: false,
+      operatingBalance: null,
+    };
+  } else if (twoApprovals) {
+    notResubmitted = twoApprovals;
+    outcome = {
+      status: "held",
+      txRef: null,
+      paymentExecution: null,
+      reasoningSuffix: notResubmittedTwoApprovalsNote(deps.twoApprovalsAbove as number),
       heldBecausePaused: false,
       operatingBalance: null,
     };
@@ -2664,7 +2728,9 @@ export async function reconcileMilestone(
 
   const message = outcome.heldBecausePaused
     ? `${name}: not paid, the agent was paused (${amount} USDC)`
-    : notResubmitted
+    : notResubmitted === "workspace.two_approvals"
+      ? `${name}: not resubmitted, payments above ${deps.twoApprovalsAbove} USDC need two approvals (${amount} USDC)`
+      : notResubmitted
       ? `${name}: not resubmitted, the contractor is now screened high risk (${amount} USDC)`
       : status === "paid"
         ? `${name}: reconciled an in-flight release, now paid (${amount} USDC)`
@@ -3428,7 +3494,8 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           txRef: milestone.tx_ref,
         },
         intent,
-        { db, provider, operating: operating ? { id: operating.id } : null, onChainLimit }
+        // The stage's figure, so a release it never sent goes again on its own only when one approval may pay it (I4).
+        { db, provider, operating: operating ? { id: operating.id } : null, onChainLimit, twoApprovalsAbove }
       );
       if (reconciled.operatingBalance !== null) operatingBalance = reconciled.operatingBalance;
       metrics.recordMilestone(reconciled.status, false);

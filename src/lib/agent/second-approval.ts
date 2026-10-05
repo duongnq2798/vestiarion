@@ -53,6 +53,18 @@ export async function openApprovals(source: PaymentSource): Promise<GivenApprova
 }
 
 /**
+ * Whether two people's approvals of this payment, as it stands, were used to pay it (payment integrity I4): the agent
+ * sends again on its own, above the figure, only a payment two people paid.
+ */
+export async function approvedByTwo(source: PaymentSource, payment: ApprovedPayment): Promise<boolean> {
+  const rows = unwrap(
+    await db().from("payment_approvals").select(COLUMNS).eq("source_type", source.type).eq("source_id", source.id).not("used_at", "is", null)
+  ) as ApprovalRow[];
+  const people = new Set(rows.map(given).filter((approval) => approvalAgrees(approval, payment)).map((approval) => approval.by));
+  return people.size >= 2;
+}
+
+/**
  * Whether an approval is of this payment as it stands (T4): the same amount, currency and address. A payee with no address
  * yet agrees with an approval of a payment to no address: a sandbox pays it to its stand-in, and a live payment to no
  * address is refused before anything is sent.

@@ -145,8 +145,8 @@ describe("approvers_besides (0076)", () => {
     expect(await besides(org, org, [viewer, outsider])).toBe(3);
   });
 
-  it("answers 0 for another workspace than the token's, and is not for anon", async () => {
-    expect(await besides(other, org, [])).toBe(0);
+  it("answers null for another workspace than the token's (0077, payment integrity I2), and is not for anon", async () => {
+    expect(await besides(other, org, [])).toBeNull();
     await expect(asRole(db, "anon", (tx) => tx.query("select public.approvers_besides($1, '{}'::uuid[])", [org]))).rejects.toThrow(/permission denied/);
   });
 });
