@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { AgentActivity } from "@/components/AgentActivity";
 import { Badge } from "@/components/ui/Badge";
-import { screeningMode } from "@/lib/compliance";
+import { screeningMode, screeningSourceLabel } from "@/lib/compliance";
 import type { CycleClockMode } from "@/lib/clock";
 import { ProvenanceBar, type ProvenanceLeg } from "./Provenance";
 import { ScrollToHash } from "./ScrollToHash";
@@ -33,7 +33,7 @@ export function ProductShell({
   const legs: ProvenanceLeg[] = [
     { label: "Payments", detail: "Arc testnet", live: chainModes.mode === "live" },
     { label: "Yield", detail: "USYC reserve", live: chainModes.earnMode === "live" },
-    { label: "Screening", detail: screeningMode() === "live" ? "OpenSanctions" : "bundled list", live: screeningMode() === "live" },
+    { label: "Screening", detail: screeningSourceLabel(), live: screeningMode() === "live" },
   ];
 
   return (

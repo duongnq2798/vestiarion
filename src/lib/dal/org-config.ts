@@ -185,11 +185,16 @@ export function orgConfig(
       },
       // A sandbox simulates its payments, so it screens against the bundled list, which costs nothing, and does so
       // every cycle; the screening service, metered per call, is for live workspaces, whose payments are real
-      // (sandbox screening R1, R2).
+      // (sandbox screening R1, R2). A live workspace never screens against the bundled list: on a deployment with no
+      // service, its screening gives no verdict, and its counterparties stay unscreened (payment safety K1).
       compliance:
-        org.mode === "live" || !base.compliance.openSanctionsUrl
-          ? base.compliance
-          : { ...base.compliance, openSanctionsUrl: undefined, openSanctionsApiKey: undefined, rescreenIntervalHours: 0 },
+        org.mode === "live"
+          ? base.compliance.openSanctionsUrl
+            ? base.compliance
+            : { ...base.compliance, serviceRequired: true }
+          : base.compliance.openSanctionsUrl
+            ? { ...base.compliance, openSanctionsUrl: undefined, openSanctionsApiKey: undefined, rescreenIntervalHours: 0 }
+            : base.compliance,
       ledgerSigningKey: open("ledger_signing_key_enc"),
       ledgerPublicKey: undefined,
       // Public material. Every workspace's own rotations live on its row; the

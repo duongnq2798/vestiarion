@@ -85,6 +85,15 @@ fixes have run for days before any mainnet workspace exists:
   - Where the deployment has no `OPENSANCTIONS_API_URL`, a live workspace's counterparties are not screened "clear" by
     the demo list. They stay `unscreened`, and the agent pays them nothing (the unscreened hold).
   - Sandboxes keep the demo list.
+- **K2. Rulings made while building it.**
+  - `orgConfig` marks a live workspace on a deployment with no service (`compliance.serviceRequired`). Its screening
+    then fails, and the failure is recorded as any outage is: a counterparty with no verdict stays `unscreened`, and the
+    sweep says it is incomplete.
+  - No demo-list verdict can reach a live workspace from before. Going live deletes the sandbox's counterparties
+    (migration 0029), and with the service on, a verdict from another source is screened again at once.
+  - Production changes nothing today. A read-only probe on 2026-10-05 found every live workspace's cycles of the last
+    three days screened with the service. The rule guards a deployment that forgets `OPENSANCTIONS_API_URL`.
+  - The workspace header names the source: OpenSanctions, the bundled list, or "no service".
 
 ## 3. Testing
 

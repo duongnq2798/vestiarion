@@ -97,6 +97,11 @@ export interface ComplianceConfig {
   openSanctionsApiKey?: string;
   /** Hours a screening stays fresh. 0 re-screens every cycle. */
   rescreenIntervalHours: number;
+  /**
+   * A live workspace on a deployment with no screening service (payment safety K1): screening gives no verdict rather
+   * than the demo list's, which knows two names and would clear everyone else. Set only by `orgConfig`.
+   */
+  serviceRequired?: boolean;
 }
 
 export interface FollowUpConfig {

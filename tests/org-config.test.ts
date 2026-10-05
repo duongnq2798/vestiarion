@@ -483,6 +483,11 @@ describe("orgConfig — screening by workspace mode (docs/superpowers/specs/2026
     expect(JSON.stringify(config)).not.toContain("os-key-must-stay-with-live-workspaces");
   });
 
+  it("requires the screening service of a live workspace on a deployment without one, so the demo list never clears its counterparties (payment safety K1)", () => {
+    const { config } = orgConfig(base, { ...row(OTHER_ORG), mode: "live" }, keys);
+    expect(config.compliance).toEqual({ ...base.compliance, serviceRequired: true });
+  });
+
   it("changes nothing for a sandbox when no screening service is configured", () => {
     const { config } = orgConfig(base, { ...row(OTHER_ORG), mode: "sandbox" }, keys);
     expect(config.compliance).toEqual(base.compliance);
