@@ -232,6 +232,20 @@ async function refusal(promise: Promise<unknown>): Promise<string> {
   return (error as MilestoneDecisionError).code;
 }
 
+describe("Pay now while payments are switched off (payment safety S4)", () => {
+  it("refuses at once, before reading the milestone or claiming it", async () => {
+    const { fake, claimed } = world();
+
+    const attempt = runWith({ config: { ...config, paymentsDisabled: true }, db: fake.client, fetch: fake.fetch }, () =>
+      withOrg(ORG, () => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }))
+    );
+    expect(await refusal(attempt)).toBe("payments_off");
+    await expect(attempt).rejects.toThrow("Payments are switched off for every workspace right now.");
+    expect(fake.requests.some((request) => request.path === "/rest/v1/milestones")).toBe(false);
+    expect(claimed()).toBe(false);
+  });
+});
+
 describe("Pay now", () => {
   it("sends again a release Circle failed, records it on the milestone and in the ledger, even for whoever added it", async () => {
     releaseHeldMilestoneMock.mockResolvedValue(PAID);

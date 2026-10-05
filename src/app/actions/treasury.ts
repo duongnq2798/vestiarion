@@ -16,6 +16,7 @@ import { bringCashBackByPerson, CashBackError } from "@/lib/agent/liquidity";
 import { raiseCycleEvent } from "@/lib/agent/cycle-soon";
 import { agentPaused } from "@/lib/agent/pause";
 import { getChainProvider } from "@/lib/circle";
+import { PaymentsDisabledError } from "@/lib/payments-switch";
 
 export interface RefreshBalanceResult {
   ok: boolean;
@@ -207,7 +208,7 @@ export async function bringCashBackAction(_previous: UsycReserveActionResult, fo
           : `${brought} The agent pays what was waiting for cash within a minute.`,
       };
     } catch (error) {
-      if (error instanceof CashBackError) return { ok: false, message: error.message };
+      if (error instanceof CashBackError || error instanceof PaymentsDisabledError) return { ok: false, message: error.message };
       console.error("bringCashBackAction failed", error instanceof Error ? error.name : "unknown");
       return { ok: false, message: "That did not work. Try again in a moment." };
     }

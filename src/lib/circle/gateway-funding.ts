@@ -8,6 +8,7 @@ import { ARC_TESTNET_USDC } from "./cctp";
 import { GATEWAY_WALLET, gatewayBalance, gatewayStepKey } from "./gateway";
 import { circleCall, CircleCallFailed, treasuryWalletSetId, walletIdempotencyKey } from "./provision";
 import { awaitSettlement } from "./settlement";
+import { assertPaymentsEnabled } from "../payments-switch";
 
 /**
  * Funds the workspace's Gateway balance (docs/superpowers/specs/2026-10-01-gateway-payouts-design.md G1):
@@ -140,6 +141,8 @@ export async function fundGateway(
     balancePollMs?: number;
   } = {}
 ): Promise<FundGatewayResult> {
+  // Nothing moves while the platform has payments switched off (payment safety S2).
+  assertPaymentsEnabled();
   if (!Number.isFinite(input.amount) || input.amount <= 0) throw new Error("Enter an amount greater than zero.");
   const chain = currentOrgConfig().chain;
   if (chain.credentialsUnreadable) throw new Error("This workspace's Circle credentials are stored but could not be read.");
@@ -302,6 +305,8 @@ export async function fundServiceBudget(
     balancePollMs?: number;
   } = {}
 ): Promise<{ signerAddress: string; txHash: string | null; balanceUsdc: number | null }> {
+  // Nothing moves while the platform has payments switched off (payment safety S2).
+  assertPaymentsEnabled();
   if (!Number.isFinite(input.amount) || input.amount <= 0) throw new Error("Enter an amount greater than zero.");
   if (input.amount > SERVICE_BUDGET_MAX_DEPOSIT_USDC) {
     throw new Error(`Add at most ${SERVICE_BUDGET_MAX_DEPOSIT_USDC} USDC at a time: the budget pays for lookups of a thousandth of a USDC.`);

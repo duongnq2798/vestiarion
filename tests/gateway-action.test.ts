@@ -26,6 +26,7 @@ vi.mock("@/lib/circle/gateway-funding", () => ({
 
 import { fundGatewayAction } from "@/app/actions/treasury";
 import { GatewayStepFailed } from "@/lib/circle/gateway-funding";
+import { PaymentsDisabledError } from "@/lib/payments-switch";
 
 const REQUEST = "0b6c1c9e-4a4f-4a7e-9b1e-00000000f00d";
 const access = (mode: "live" | "sandbox") => ({
@@ -89,6 +90,13 @@ describe("fundGatewayAction", () => {
     syncWalletBalances.mockRejectedValue(new Error("Circle did not answer"));
     expect(await fundGatewayAction({ ok: false, message: "" }, form("1"))).toEqual({ ok: true, message: "Deposited 1 USDC into Gateway. The Gateway balance is 3 USDC." });
     expect(revalidateOrgPages).toHaveBeenCalled();
+  });
+
+  it("says payments are switched off, in the same words, and reads no balance (payment safety S4)", async () => {
+    authorizeMock.mockResolvedValue(access("live"));
+    fundGateway.mockRejectedValue(new PaymentsDisabledError());
+    expect(await fundGatewayAction({ ok: false, message: "" }, form("1"))).toEqual({ ok: false, message: "Payments are switched off for every workspace right now." });
+    expect(syncWalletBalances).not.toHaveBeenCalled();
   });
 
   it("reads no balance when the funding failed", async () => {

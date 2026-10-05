@@ -128,7 +128,7 @@ export function getChainProvider(): ChainProvider {
   }
   const provider: ChainProvider =
     circleApiKey && circleEntitySecret
-      ? new HybridProvider(new LiveProvider(config.chain), new SimulateProvider(), config.chain.usycLive === true)
+      ? new HybridProvider(new LiveProvider(config.chain, { paymentsDisabled: config.paymentsDisabled === true }), new SimulateProvider(), config.chain.usycLive === true)
       : new SimulateProvider();
 
   providers.set(config, provider);

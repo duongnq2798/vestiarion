@@ -165,3 +165,17 @@ describe("setting up escrow", () => {
     expect(c.calls).toEqual([]);
   });
 });
+
+describe("setting up escrow while payments are switched off (payment safety S2)", () => {
+  it("deploys and funds nothing, before reading the workspace or calling Circle", async () => {
+    const fake = fakeSupabase(() => ({ body: [] }));
+    const wallets = vi.fn();
+    const scp = vi.fn();
+    const run = <T>(fn: () => Promise<T>) => runWith(orgTestContext({ config: { ...config, paymentsDisabled: true }, client: fake.client, orgId: ORG, userId: USER }), fn);
+
+    await expect(run(() => setUpEscrow({ actorId: USER }, { wallets, scp }))).rejects.toThrow("Payments are switched off for every workspace right now.");
+    expect(fake.requests).toHaveLength(0);
+    expect(wallets).not.toHaveBeenCalled();
+    expect(scp).not.toHaveBeenCalled();
+  });
+});

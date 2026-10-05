@@ -8,6 +8,7 @@ import { appendLedgerEntry } from "../ledger";
 import { ARC_TESTNET_USDC } from "./cctp";
 import { circleCall, CircleCallFailed, treasuryWalletSetId, walletIdempotencyKey } from "./provision";
 import { awaitSettlement } from "./settlement";
+import { assertPaymentsEnabled } from "../payments-switch";
 
 /**
  * Setting up a workspace's milestone escrow (docs/superpowers/specs/2026-10-01-milestone-escrow-design.md E2):
@@ -97,6 +98,8 @@ export async function setUpEscrow(
     waitMs?: number;
   } = {}
 ): Promise<{ address: string; alreadySetUp: boolean }> {
+  // Nothing moves while the platform has payments switched off (payment safety S2).
+  assertPaymentsEnabled();
   const existing = await readEscrowContract();
   if (existing?.address) return { address: existing.address, alreadySetUp: true };
 

@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LiveProvider, type LiveProviderClient } from "@/lib/circle/liveProvider";
+import { BatchNotSentError } from "@/lib/circle/batch";
+import { PaymentsDisabledError } from "@/lib/payments-switch";
 import type { ChainConfig } from "@/lib/config";
 
 vi.mock("server-only", () => ({}));
@@ -147,6 +149,35 @@ describe("a send Circle never answered says so (payment safety R1)", () => {
     await expect(new LiveProvider(CHAIN, { client }).transfer(release)).rejects.toThrow(
       "Circle did not answer the escrow release (ECONNABORTED); it may or may not have been accepted"
     );
+  });
+});
+
+/** The backstop of the platform's stop switch (payment safety S2): no way of moving money gets past the provider. */
+describe("a live provider with payments switched off (payment safety S2)", () => {
+  it("refuses every way of moving money, before reading an account or calling Circle", async () => {
+    const client = fakeClient({});
+    const provider = new LiveProvider(CHAIN, { client, paymentsDisabled: true });
+    const earn = { accountId: "account-1", amount: 1, reserveAccountId: "account-2", key: "move-1" };
+
+    await expect(provider.transfer(TRANSFER)).rejects.toBeInstanceOf(PaymentsDisabledError);
+    await expect(provider.depositToEarn(earn)).rejects.toBeInstanceOf(PaymentsDisabledError);
+    await expect(provider.withdrawFromEarn(earn)).rejects.toBeInstanceOf(PaymentsDisabledError);
+    await expect(
+      provider.swapForEurc({ fromAccountId: "account-1", adapter: "0x3333333333333333333333333333333333333333", usdcIn: 1, callData: "0x", approveKey: "a", executeKey: "e" })
+    ).rejects.toBeInstanceOf(PaymentsDisabledError);
+    // A batch that never left is undone and each payment sent alone, which the transfer refuses in turn (batch payouts R4).
+    const batch = provider.batchTransfer({ fromAccountId: "account-1", transfers: [{ toAddress: TRANSFER.toAddress, amount: 1 }], idempotencyKey: "batch-1" });
+    await expect(batch).rejects.toBeInstanceOf(BatchNotSentError);
+    await expect(batch).rejects.toThrow("Payments are switched off for every workspace right now; nothing was sent.");
+    expect(accountSingle).not.toHaveBeenCalled();
+  });
+
+  it("still reads a balance", async () => {
+    const getWalletTokenBalance = vi.fn(async () => ({ data: { tokenBalances: [{ token: { id: "usdc-token-id", symbol: "USDC" }, amount: "12.5" }] } }));
+    const client = fakeClient({ getWalletTokenBalance } as unknown as Partial<LiveProviderClient>);
+    const provider = new LiveProvider(CHAIN, { client, paymentsDisabled: true });
+
+    await expect(provider.getBalance("account-1")).resolves.toMatchObject({ balance: 12.5 });
   });
 });
 

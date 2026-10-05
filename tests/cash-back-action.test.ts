@@ -25,6 +25,7 @@ vi.mock("@/lib/circle", async (importOriginal) => ({
 }));
 
 import { bringCashBackAction } from "@/app/actions/treasury";
+import { PaymentsDisabledError } from "@/lib/payments-switch";
 
 const config = configFromEnv({
   NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid",
@@ -90,6 +91,13 @@ describe("bringCashBackAction", () => {
     expect(result.ok).toBe(false);
     expect(result.message).not.toBe("");
     expect(cashBackMock).not.toHaveBeenCalled();
+  });
+
+  it("says payments are switched off, and starts no cycle (payment safety S4)", async () => {
+    authorizeMock.mockResolvedValueOnce(ACCESS);
+    cashBackMock.mockRejectedValueOnce(new PaymentsDisabledError());
+    expect(await run(() => bringCashBackAction(INITIAL, form("")))).toEqual({ ok: false, message: "Payments are switched off for every workspace right now." });
+    expect(raiseMock).not.toHaveBeenCalled();
   });
 
   it("says why nothing came back, and starts no cycle", async () => {

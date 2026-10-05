@@ -147,6 +147,11 @@ export interface VestiarionConfig {
    * `choose_hosted_wallet()` under an advisory lock; 0 admits none.
    */
   hostedWorkspaceLimit: number;
+  /**
+   * The platform's stop switch (PAYMENTS_DISABLED; payment safety S1): true stops every payment in every workspace.
+   * `src/lib/payments-switch.ts` reads it; `orgConfig` carries it into each organization unchanged.
+   */
+  paymentsDisabled?: boolean;
 }
 
 /** Reads a positive number, falling back when absent or nonsense. */
@@ -291,6 +296,8 @@ export function configFromEnv(env: EnvLike = process.env): VestiarionConfig {
     clockMode: clockModeFrom(env),
     seedScale: env.SEED_SCALE == null ? undefined : Number(env.SEED_SCALE),
     hostedWorkspaceLimit: nonNegativeInteger(env.HOSTED_WORKSPACE_LIMIT, 100),
+    // Only a plain yes switches payments off: a value it cannot read leaves them on, as unset does.
+    paymentsDisabled: ["1", "true", "yes"].includes(trimmed(env.PAYMENTS_DISABLED)?.toLowerCase() ?? ""),
   };
 }
 

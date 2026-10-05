@@ -18,6 +18,7 @@ vi.mock("@/lib/dal/scope", () => ({ inOrg: (_access: unknown, fn: () => Promise<
 vi.mock("@/lib/circle/escrow-holds", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/circle/escrow-holds")>()), ...lib }));
 
 import { EscrowHoldError } from "@/lib/circle/escrow-holds";
+import { PaymentsDisabledError } from "@/lib/payments-switch";
 
 const MILESTONE = "0b6c1c9e-4a4f-4a7e-9b1e-0000000001aa";
 const REQUEST = "0b6c1c9e-4a4f-4a7e-9b1e-00000000f00d";
@@ -54,6 +55,14 @@ describe("lockMilestoneAction", () => {
     expect((await lockMilestoneAction(empty, form({ refundAfter: "soon" }))).message).toBe("Choose a refund date after today, and within a year.");
     expect((await lockMilestoneAction(empty, form({ requestId: "" }))).message).toBe("Reload the page and try again.");
     expect(lib.lockMilestone).not.toHaveBeenCalled();
+  });
+
+  it("says payments are switched off, for a lock and for a refund (payment safety S4)", async () => {
+    authorizeMock.mockResolvedValue(access("live"));
+    lib.lockMilestone.mockRejectedValueOnce(new PaymentsDisabledError());
+    expect(await lockMilestoneAction(empty, form())).toEqual({ ok: false, message: "Payments are switched off for every workspace right now." });
+    lib.refundMilestone.mockRejectedValueOnce(new PaymentsDisabledError());
+    expect(await refundMilestoneAction(empty, form())).toEqual({ ok: false, message: "Payments are switched off for every workspace right now." });
   });
 
   it("says why it could not lock, and asks for a new request id after a step Circle failed", async () => {

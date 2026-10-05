@@ -17,6 +17,7 @@ import { ActivityToastBody } from "@/components/AgentActivity";
 import { addDetailsPrompt, addedDetailsSentence } from "@/lib/added-details";
 import AgentPauseControl, { PAUSE_DIALOG_DESCRIPTION } from "@/components/AgentPauseControl";
 import { AgentPausedBanner, pausedBanner } from "@/components/AgentPausedBanner";
+import { PaymentsOffBanner } from "@/components/PaymentsOffBanner";
 import type { WaitingPayable } from "@/lib/agent/approvals";
 import { utcDay, utcMinute } from "@/lib/copy";
 
@@ -419,6 +420,14 @@ describe("AgentPauseControl", () => {
   });
 });
 
+describe("PaymentsOffBanner (payment safety S5)", () => {
+  it("says payments are switched off for every workspace, that the agent does not run, and that every page still reads", () => {
+    const markup = html(<PaymentsOffBanner />);
+    expect(markup).toContain("Payments are switched off for every workspace right now.");
+    expect(markup).toContain("The agent does not run, and nothing is paid, moved or locked until they are back on. Every page still reads as usual.");
+  });
+});
+
 describe("AgentPausedBanner", () => {
   const members = [{ userId: CREATOR, email: "ada@example.com", role: "owner" as const, joinedAt: "2026-09-01T00:00:00Z" }];
 
@@ -470,6 +479,7 @@ describe("the new control screens, as source", () => {
     "src/components/AgentActivity.tsx",
     "src/components/AgentPauseControl.tsx",
     "src/components/AgentPausedBanner.tsx",
+    "src/components/PaymentsOffBanner.tsx",
   ];
   const read = (file: string) => readFileSync(path.join(ROOT, file), "utf8");
 
@@ -570,6 +580,11 @@ describe("the new control screens, as source", () => {
 
   it("the console treats an unreadable pause as not paused", () => {
     expect(read("src/app/o/[slug]/console/page.tsx")).toMatch(/pauseStateOf\(access\.membership\.orgId\)\.catch\(/);
+  });
+
+  it("the workspace layout draws the payments-off banner from the deployment's switch (payment safety S5)", () => {
+    const layout = read("src/app/o/[slug]/layout.tsx");
+    expect(layout).toContain("{paymentsDisabled() && <PaymentsOffBanner />}");
   });
 
   it("the workspace layout draws the paused banner from platform data", () => {

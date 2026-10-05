@@ -39,6 +39,17 @@ describe("getChainProvider — stored Circle credentials that cannot be read", (
   });
 });
 
+describe("getChainProvider — the platform's payment switch (payment safety S2)", () => {
+  it("gives a live workspace a provider that refuses to move money while payments are switched off", async () => {
+    const off = { ...config, paymentsDisabled: true, chain: { ...config.chain, circleApiKey: "placeholder-api-key", circleEntitySecret: "placeholder-entity-secret" } };
+    await runWith({ ...orgTestContext({ config, client: fakeSupabase().client, orgId: ORG }), config: off }, async () => {
+      await expect(
+        getChainProvider().transfer({ fromAccountId: "operating", toAddress: "0x1111111111111111111111111111111111111111", amount: 1, memo: "m", idempotencyKey: "k" })
+      ).rejects.toThrow("Payments are switched off for every workspace right now.");
+    });
+  });
+});
+
 describe("chainModes — must render a page even when getChainProvider() refuses", () => {
   it("reports simulate/simulate without constructing a provider", () => {
     const reason = "could not decrypt circle_entity_secret_enc of organization x: wrong master key, or the ciphertext was altered or moved";

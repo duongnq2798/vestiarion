@@ -10,6 +10,7 @@ import { readSpendingLimit, SET_LIMITS_SIGNATURE, usdcUnits, type SpendingLimitR
 import { ARC_TESTNET_USDC } from "./cctp";
 import { circleCall, CircleCallFailed, createScaWallet, treasuryWalletSetId, walletIdempotencyKey } from "./provision";
 import { awaitSettlement } from "./settlement";
+import { assertPaymentsEnabled } from "../payments-switch";
 
 /**
  * Enforcing the agent's spending limit on Arc (docs/superpowers/specs/2026-10-03-onchain-spending-limit-design.md
@@ -189,6 +190,8 @@ const figures = (budget: OutflowBudget): [string, string] => [
 ];
 
 export async function enforceSpendingLimit(input: { actorId: string }, options: Options = {}): Promise<{ contract: string; agent: string; alreadyEnforced: boolean }> {
+  // Nothing moves while the platform has payments switched off (payment safety S2).
+  assertPaymentsEnabled();
   const existing = await readSpendingLimitContract();
   if (existing?.enforced && existing.address && existing.agent_address) {
     return { contract: existing.address, agent: existing.agent_address, alreadyEnforced: true };
@@ -403,6 +406,8 @@ export async function turnOffSpendingLimit(input: { actorId: string }, options: 
 
 /** The contract's new figures, from the operating wallet, once Circle confirms them (R10). Throws, changing nothing, otherwise. */
 export async function setLimitsOnChain(budget: OutflowBudget, options: Options = {}): Promise<{ contract: string; txHash: string | null }> {
+  // Nothing moves while the platform has payments switched off (payment safety S2).
+  assertPaymentsEnabled();
   const row = await readSpendingLimitContract();
   if (!row?.address) throw new SpendingLimitSetupError("This workspace has no spending limit contract.");
   const { wallets } = clientsFor(options);

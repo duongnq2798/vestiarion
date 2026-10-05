@@ -42,6 +42,17 @@ fixes have run for days before any mainnet workspace exists:
     off for every workspace right now".
 - **S5. Seen.** The console says that payments are switched off for every workspace, so no one mistakes it for a stuck
   agent.
+- **S6. Rulings made while building it.**
+  - The switch is a config value (`paymentsDisabled`, read once by `configFromEnv`), as every setting is.
+    `getChainProvider` hands it to the live provider. Only a plain `1`, `true` or `yes` turns it on; anything else
+    leaves payments on, as unset does.
+  - Turning the spending limit off stays allowed while payments are off. It only takes the agent's power to pay away,
+    which is what someone stopping payments wants. Cost if wrong: a little USDC is spent as gas for the revoke.
+  - A batch refused by the switch is a batch that never left (`BatchNotSentError`). Each payment then goes alone, and
+    `transfer` refuses in turn, so no member is left waiting to be looked for on Circle.
+  - The schedule and the FX watcher skip every workspace outright (`payments_off`), without entering any of them.
+  - A budget change on a workspace that enforces its limit on Arc is refused, as when Circle refuses the change. Its
+    figures are saved only once the contract holds them.
 - **A1. Addresses are checked where they enter.**
   - On the console form and the API, an Arc address must be `0x` followed by 40 hex characters.
   - When it mixes upper- and lower-case letters, it must be a valid EIP-55 checksum.

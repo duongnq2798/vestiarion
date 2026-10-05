@@ -7,6 +7,7 @@ import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { currentOrgId } from "../context";
 import { heldBecausePausedDetail } from "./pause";
 import { moveTreasuryIfNotPaused, type TreasuryMoveOutcome } from "./treasury-moves";
+import { assertPaymentsEnabled } from "../payments-switch";
 
 /**
  * Cash back from the reserve (docs/superpowers/specs/2026-10-03-reserve-cash-back-design.md): the agent brings back
@@ -172,6 +173,8 @@ export async function bringCashBackByPerson(input: {
   amount: number | null;
   provider: ChainProvider;
 }): Promise<{ amount: number; execution: UsycExecution | null }> {
+  // Nothing moves while the platform has payments switched off (payment safety S4).
+  assertPaymentsEnabled();
   const orgId = currentOrgId();
   const orgDb = tenantDb();
   const accounts = unwrap(await orgDb.from("accounts").select("id, kind, balance")) as Array<{ id: string; kind: string; balance: string | number }>;

@@ -12,6 +12,7 @@ import { HELD_FOR_BUDGET } from "./outflow-budget";
 import { payoutAddress, syncOperatingBalance } from "./pay";
 import { HELD_BECAUSE_PAUSED } from "./pause";
 import { isSoleApprover } from "./sole-approver";
+import { PAYMENTS_OFF, paymentsDisabled } from "../payments-switch";
 
 /**
  * A person decides a held milestone (docs/superpowers/specs/2026-10-02-held-milestone-actions-design.md): every
@@ -46,7 +47,8 @@ export type MilestoneDecisionErrorCode =
   | "insufficient_funds"
   | "payment_in_flight"
   | "escrow_locked"
-  | "reason_required";
+  | "reason_required"
+  | "payments_off";
 
 const MESSAGES: Record<MilestoneDecisionErrorCode, string> = {
   milestone_not_found: "That milestone is not in this workspace.",
@@ -64,6 +66,7 @@ const MESSAGES: Record<MilestoneDecisionErrorCode, string> = {
   payment_in_flight: "A transfer for this milestone may still settle. Pay now records it; nothing is sent twice.",
   escrow_locked: "This milestone's USDC is locked in escrow. Refund the hold from its refund date first, then close it.",
   reason_required: "Say why it is closed without paying, in up to 500 characters.",
+  payments_off: PAYMENTS_OFF,
 };
 
 export class MilestoneDecisionError extends Error {
@@ -376,6 +379,8 @@ export async function payHeldMilestone(input: {
   milestoneId: string;
   provenance?: Provenance;
 }): Promise<{ status: string; txRef: string | null; note: string }> {
+  // Nothing is paid while the platform has payments switched off (payment safety S4): refused before anything is read.
+  if (paymentsDisabled()) raise("payments_off");
   const orgId = currentOrgId();
   const provider = getChainProvider();
   const milestone = await loadMilestone(input.milestoneId, provider.mode === "live");

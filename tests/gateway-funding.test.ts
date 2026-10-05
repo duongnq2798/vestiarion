@@ -254,3 +254,16 @@ describe("adding to the agent's service budget (x402 payee history R4)", () => {
     await expect(add(database({ signer: SIGNER }), circle(), 2)).rejects.toThrow(/at most 1 USDC/);
   });
 });
+
+describe("funding Gateway while payments are switched off (payment safety S2)", () => {
+  it("deposits nothing for payouts or for services, before reading the workspace or calling Circle", async () => {
+    const fake = fakeSupabase(() => ({ body: [] }));
+    const client = vi.fn();
+    const run = <T>(fn: () => Promise<T>) => runWith(orgTestContext({ config: { ...config, paymentsDisabled: true }, client: fake.client, orgId: ORG, userId: USER }), fn);
+
+    await expect(run(() => fundGateway({ actorId: USER, amount: 1, requestId: "req-off" }, { client }))).rejects.toThrow("Payments are switched off for every workspace right now.");
+    await expect(run(() => fundServiceBudget({ actorId: USER, amount: 1, requestId: "req-off" }, { client }))).rejects.toThrow("Payments are switched off for every workspace right now.");
+    expect(fake.requests).toHaveLength(0);
+    expect(client).not.toHaveBeenCalled();
+  });
+});

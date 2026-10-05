@@ -769,6 +769,21 @@ describe("approveAndPay", () => {
   });
 });
 
+describe("approveAndPay while payments are switched off (payment safety S4)", () => {
+  it("refuses at once, before reading the invoice or claiming it", async () => {
+    const { fake } = approvalsFake();
+
+    const attempt = runWith({ config: { ...config, paymentsDisabled: true }, db: fake.client, fetch: fake.fetch }, () =>
+      withOrg(ORG, () => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))
+    );
+    await expect(attempt).rejects.toMatchObject({ code: "payments_off" });
+    await expect(attempt).rejects.toThrow("Payments are switched off for every workspace right now.");
+    expect(fake.requests.some((r) => r.path === "/rest/v1/invoices")).toBe(false);
+    expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+  });
+});
+
 describe("approveAndPay after Circle ended the last attempt in a terminal failure", () => {
   const retried = () =>
     payInvoiceMock.mockResolvedValue({

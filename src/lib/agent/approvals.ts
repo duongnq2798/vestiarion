@@ -7,6 +7,7 @@ import { listLedgerEntriesForTargets } from "../ledger";
 import { explainPayable, presentReasoning } from "../reasoning-copy";
 import { isTerminalFailure } from "../payments";
 import { MAY_HAVE_BEEN_ACCEPTED } from "../circle/settlement";
+import { PAYMENTS_OFF, paymentsDisabled } from "../payments-switch";
 import { payInvoice, syncOperatingBalance } from "./pay";
 import { invoiceDiscount, type InvoiceDiscount } from "./payment-timing";
 import { paidAcrossChains, payeeChain } from "../payee-chains";
@@ -76,6 +77,7 @@ export type ApprovalErrorCode =
   | "no_operating_account"
   | "payment_in_flight"
   | "payment_unknown"
+  | "payments_off"
   | "address_changed"
   | "bridge_unsupported_token"
   | "nothing_to_add"
@@ -90,6 +92,7 @@ const MESSAGES: Record<Exclude<ApprovalErrorCode, "insufficient_funds">, string>
   no_operating_account: "This workspace has no operating account.",
   invoice_not_found: "That invoice is not waiting for a decision.",
   payment_in_flight: "A payment for this invoice was already sent. Approve and pay records it.",
+  payments_off: PAYMENTS_OFF,
   payment_unknown:
     "Circle did not answer when this invoice's payment was sent, so it may have taken the transfer. Approve and pay asks Circle again under the same key, so nothing is sent twice; Reject and Return wait until it is known.",
   address_changed: "This counterparty's address changed after this page loaded. Check the new address and try again.",
@@ -610,6 +613,8 @@ export async function approveAndPay(
     gatewayQuote?: (chain: string, amount: number) => Promise<GatewayQuote | null>;
   } = {}
 ): Promise<{ status: "paid" | "matched" | "held"; txRef: string | null; note: string }> {
+  // Nothing is paid while the platform has payments switched off (payment safety S4): refused before anything is read.
+  if (paymentsDisabled()) raise("payments_off");
   const orgId = currentOrgId();
   const invoice = await loadWaitingPayable(input.invoiceId);
 

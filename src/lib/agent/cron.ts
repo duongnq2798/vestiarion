@@ -5,6 +5,7 @@ import { notifyWaitingDecisions } from "../notifications/waiting";
 import { CycleRunningError } from "./cycle-running";
 import { runAgentCycle, type CycleResult } from "./orchestrator";
 import { AgentPausedError } from "./pause";
+import { paymentsDisabled, PaymentsDisabledError } from "../payments-switch";
 
 /** The `orgs` columns the cron needs to enter each organization's scope,
  * name it in a result, and tell whether its agent is paused. */
@@ -16,7 +17,7 @@ interface LiveOrgRow {
 
 export type CronRunResult<T> =
   | { slug: string; ok: true; result: T }
-  | { slug: string; ok: true; skipped: "paused" | "running" }
+  | { slug: string; ok: true; skipped: "paused" | "running" | "payments_off" }
   | { slug: string; ok: false; error: string };
 
 /**
@@ -33,6 +34,10 @@ export type CronRunResult<T> =
  * same correct refusal, so it is reported as skipped, not as a failure. So is
  * a workspace whose cycle is already running — an event's cycle, or a
  * person's — since one cycle at a time is the rule (event-driven cycles E3).
+ *
+ * While the platform has payments switched off, every organization is skipped
+ * the same way, its scope never entered; a cycle that refuses for that reason
+ * anyway is a skip too (payment safety S3).
  */
 export async function runLiveOrganizations<T>(run: () => Promise<T>): Promise<CronRunResult<T>[]> {
   const orgs = unwrap(
@@ -40,7 +45,12 @@ export async function runLiveOrganizations<T>(run: () => Promise<T>): Promise<Cr
   ) as unknown as LiveOrgRow[];
 
   const results: CronRunResult<T>[] = [];
+  const off = paymentsDisabled();
   for (const org of orgs) {
+    if (off) {
+      results.push({ slug: org.slug, ok: true, skipped: "payments_off" });
+      continue;
+    }
     if (org.agent_paused_at) {
       results.push({ slug: org.slug, ok: true, skipped: "paused" });
       continue;
@@ -55,6 +65,10 @@ export async function runLiveOrganizations<T>(run: () => Promise<T>): Promise<Cr
       }
       if (error instanceof CycleRunningError) {
         results.push({ slug: org.slug, ok: true, skipped: "running" });
+        continue;
+      }
+      if (error instanceof PaymentsDisabledError) {
+        results.push({ slug: org.slug, ok: true, skipped: "payments_off" });
         continue;
       }
       console.error("cycle failed for", org.slug, error);

@@ -4,6 +4,7 @@ import { currentOrgId, runWith } from "@/lib/context";
 import { runLiveOrganizations, runScheduledCycle } from "@/lib/agent/cron";
 import { CycleRunningError } from "@/lib/agent/cycle-running";
 import { AgentPausedError } from "@/lib/agent/pause";
+import { PaymentsDisabledError } from "@/lib/payments-switch";
 import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 
 // What a cycle does is the orchestrator's tests' job, and what a digest does
@@ -104,6 +105,37 @@ describe("runLiveOrganizations", () => {
     ]);
     // c-corp's scope was never entered: run only ever saw A.
     expect(seen).toEqual([A]);
+  });
+
+  it("skips every workspace, without entering it, while payments are switched off (payment safety S3)", async () => {
+    const fake = fakeSupabase(liveOrgsDatabase);
+    const seen: string[] = [];
+    const run = async () => {
+      seen.push(currentOrgId());
+      return "ok";
+    };
+
+    const results = await runWith({ config: { ...config, paymentsDisabled: true }, db: fake.client, fetch: fake.fetch }, () => runLiveOrganizations(run));
+
+    expect(results).toEqual([
+      { slug: "a-corp", ok: true, skipped: "payments_off" },
+      { slug: "b-corp", ok: true, skipped: "payments_off" },
+    ]);
+    expect(seen).toEqual([]);
+  });
+
+  it("reports a cycle refused because payments are switched off as skipped, not failed", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const fake = fakeSupabase(liveOrgsDatabase);
+    const run = async () => {
+      if (currentOrgId() === B) throw new PaymentsDisabledError();
+      return "ok";
+    };
+
+    const results = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => runLiveOrganizations(run));
+
+    expect(results[1]).toEqual({ slug: "b-corp", ok: true, skipped: "payments_off" });
+    expect(error).not.toHaveBeenCalled();
   });
 
   it("reports an organization paused between the listing and begin_cycle_run as skipped, not failed", async () => {
