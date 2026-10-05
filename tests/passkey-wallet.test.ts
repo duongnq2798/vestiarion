@@ -3,7 +3,7 @@ import path from "node:path";
 import { decodeFunctionData, erc20Abi } from "viem";
 import { describe, expect, it, vi } from "vitest";
 import { ARC_MAINNET, ARC_TESTNET } from "@/lib/network";
-import { passkeyFailure, passkeyName, passkeyWalletAddress, passkeyWalletConfig, passkeyWalletOffered, type PasskeySdk } from "@/lib/passkey-wallet";
+import { passkeyFailure, passkeyMark, passkeyName, passkeyWalletAddress, passkeyWalletConfig, passkeyWalletOffered, type PasskeySdk } from "@/lib/passkey-wallet";
 import { openPasskeyWallet, sendProblem, transferCall, usdcText, usdcUnits } from "@/lib/passkey-wallet-send";
 
 /**
@@ -67,10 +67,29 @@ describe("when a passkey wallet is offered (P1, P6)", () => {
 });
 
 describe("the passkey's name (P2)", () => {
-  it("names the business that pays and Vestiarion, with a short mark, and not the payee (review finding 7)", () => {
-    expect(passkeyName("  Northstar   Studio ", "4f2a")).toBe("Northstar Studio (Vestiarion 4f2a)");
-    expect(passkeyName("", "4f2a")).toBe("Vestiarion wallet 4f2a");
-    expect(passkeyName("x".repeat(80), "4f2a")).toBe(`${"x".repeat(40)} (Vestiarion 4f2a)`);
+  /** Circle's rule for a passkey's username, as its registration answered on 2026-10-05 (-32025). */
+  const CIRCLE_USERNAME = /^[A-Za-z0-9_@.:+-]{5,50}$/;
+
+  it("names the business that pays, then a mark, in letters Circle accepts, and not the payee (review finding 7)", () => {
+    expect(passkeyName("  Northstar   Studio ", "4f2a9c1e")).toBe("Northstar-Studio-4f2a9c1e");
+    expect(passkeyName("testnet-2", "4f2a9c1e")).toBe("testnet-2-4f2a9c1e");
+    expect(passkeyName("Công ty Đất Việt", "4f2a9c1e")).toBe("Cong-ty-Dat-Viet-4f2a9c1e");
+    expect(passkeyName("Tom's Café & Co.", "4f2a9c1e")).toBe("Toms-Cafe-Co-4f2a9c1e");
+    expect(passkeyName("Straße Øst", "4f2a9c1e")).toBe("Strasse-Ost-4f2a9c1e");
+    expect(passkeyName("", "4f2a9c1e")).toBe("Vestiarion-4f2a9c1e");
+    expect(passkeyName("北京工作室", "4f2a9c1e")).toBe("Vestiarion-4f2a9c1e");
+    expect(passkeyName("x".repeat(80), "4f2a9c1e")).toBe(`${"x".repeat(32)}-4f2a9c1e`);
+  });
+
+  it("gives Circle a name it accepts whatever the business is called: 5 to 50 letters, digits and _@.:+-", () => {
+    const businesses = ["testnet-2 (Vestiarion)", "A", `${"a".repeat(31)} b`, "Ünïcødé GmbH", "🙂 Studio", "...", "-x-", "Acme, Inc.", "A&B / C", " ", "Đ"];
+    for (const business of businesses) expect(passkeyName(business, passkeyMark())).toMatch(CIRCLE_USERNAME);
+  });
+
+  it("marks each attempt afresh with eight hex characters: Circle keeps a name once asked, used or not (-32024)", () => {
+    const marks = new Set(Array.from({ length: 50 }, () => passkeyMark()));
+    expect(marks.size).toBe(50);
+    for (const mark of marks) expect(mark).toMatch(/^[0-9a-f]{8}$/);
   });
 });
 

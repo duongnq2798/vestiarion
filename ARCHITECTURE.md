@@ -217,8 +217,9 @@ wallet, a Gateway payout's from the Gateway balance. The Approvals card names th
   typed one and confirmed by a person.
 - **At `/wallet`:** the payee opens it with the passkey and sends USDC as a user operation whose gas Circle Gas Station
   pays.
-- **Code:** `src/lib/passkey-wallet.ts` holds the order and the failures, with the SDK injected, and imports viem's
-  types only, since a payee link loads it. `src/lib/passkey-wallet-send.ts` holds the balance, the send checks and the
+- **Code:** `src/lib/passkey-wallet.ts` holds the order, the failures and the passkey's name, with the SDK injected,
+  and imports viem's types only, since a payee link loads it. The name keeps to Circle's rule (5 to 50 letters,
+  digits and _@.:+-, never asked twice), which `tests/passkey-wallet-sdk.test.ts` holds its faked Circle to. `src/lib/passkey-wallet-send.ts` holds the balance, the send checks and the
   send's outcome (sent, reverted, or taken with no receipt yet), for `/wallet`. `src/lib/passkey-wallet-sdk.ts` binds
   `@circle-fin/modular-wallets-core`, signs under the passkey's own rpId, and is imported dynamically, so the address
   path never loads it. The chain's Modular Wallets path lives in the network profile (`modularWallets`). Nothing about a

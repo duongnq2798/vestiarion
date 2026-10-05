@@ -25,8 +25,14 @@ Station pays that gas.
 - **P2: creating the wallet.**
   - The passkey code loads only when the button is chosen, or is about to be (the pointer or focus reaching it), so
     the address path stays as light as before: the module the link loads imports viem's types only.
-  - The browser asks to create a passkey named after the business that pays and Vestiarion, with a short mark. The
-    payee's own name is not sent to Circle. The wallet is a Circle Smart Account on Arc testnet, owned by that passkey.
+  - The browser asks to create a passkey named after the business that pays, then a mark of eight hex characters, such
+    as "Cong-ty-Dat-Viet-4f2a9c1e". The payee's own name is not sent to Circle. The wallet is a Circle Smart Account on
+    Arc testnet, owned by that passkey.
+  - Circle's rules for that name, as its registration answered on 2026-10-05:
+    - 5 to 50 letters, digits and _@.:+- only (-32025), so accents are dropped and every other character becomes a
+      hyphen;
+    - a name is kept from the moment a registration asks for it, whether or not a passkey follows, and refused after
+      (-32024), so every attempt draws a new mark.
   - While the passkey is asked, the address field and Continue wait, so a late answer never replaces a typed address.
   - Its address is worked out at once. Nothing is deployed, nothing is paid, and nothing about the passkey is stored by
     Vestiarion. The private key never leaves the payee's device or password manager.
