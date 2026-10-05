@@ -8,6 +8,7 @@ import { revalidateOrgPages } from "@/lib/auth/revalidate";
 import { EscrowHoldError, lockMilestone, refundMilestone } from "@/lib/circle/escrow-holds";
 import { EscrowSetupError, setUpEscrow } from "@/lib/circle/escrow-setup";
 import { inOrg } from "@/lib/dal/scope";
+import { PaymentsDisabledError } from "@/lib/payments-switch";
 
 export interface EscrowActionResult {
   ok: boolean;
@@ -37,6 +38,7 @@ export async function setUpEscrowAction(_previous: EscrowActionResult, formData:
       revalidateOrgPages();
       return { ok: true, message: `Escrow is set up at ${escrow.address}. Lock a milestone in it from its card.` };
     } catch (error) {
+      if (error instanceof PaymentsDisabledError) return { ok: false, message: error.message };
       if (error instanceof EscrowSetupError) {
         revalidateOrgPages();
         return { ok: false, message: error.message };
@@ -67,6 +69,7 @@ export async function lockMilestoneAction(_previous: EscrowActionResult, formDat
       revalidateOrgPages();
       return { ok: true, message: `Locked in escrow until ${refundAfter.data}.` };
     } catch (error) {
+      if (error instanceof PaymentsDisabledError) return { ok: false, message: error.message };
       if (error instanceof EscrowHoldError) return error.renew ? { ok: false, message: error.message, renew: true } : { ok: false, message: error.message };
       console.error("lockMilestoneAction failed", error instanceof Error ? error.name : "unknown");
       return { ok: false, message: "Locking did not finish. Try again: nothing is locked twice." };
@@ -89,6 +92,7 @@ export async function refundMilestoneAction(_previous: EscrowActionResult, formD
       revalidateOrgPages();
       return { ok: true, message: "Refunded from escrow to this workspace." };
     } catch (error) {
+      if (error instanceof PaymentsDisabledError) return { ok: false, message: error.message };
       if (error instanceof EscrowHoldError) {
         revalidateOrgPages();
         return error.renew ? { ok: false, message: error.message, renew: true } : { ok: false, message: error.message };

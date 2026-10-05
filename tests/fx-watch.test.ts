@@ -124,6 +124,20 @@ describe("watchFxHolds", () => {
     expect(fake.requests.some((request) => request.path === "/rest/v1/invoices")).toBe(false);
   });
 
+  it("skips every workspace without entering it while payments are switched off (payment safety S3)", async () => {
+    const fake = workspace({ held: [heldRow("inv-1")], entries: [decision("inv-1", 1434)] });
+    const quoteRate = vi.fn();
+
+    const results = await runWith({ config: { ...config, paymentsDisabled: true }, db: fake.client, fetch: fake.fetch }, () =>
+      watchFxHolds({ quotes: async () => ({ quoteRate }), now: () => NOW })
+    );
+
+    expect(results).toEqual([{ slug: "demo-wp", held: 0, probed: 0, cleared: 0, cycle: "payments_off" }]);
+    expect(fake.requests.some((request) => request.path === "/rest/v1/invoices")).toBe(false);
+    expect(quoteRate).not.toHaveBeenCalled();
+    expect(runAgentCycleMock).not.toHaveBeenCalled();
+  });
+
   it("reports a cycle already running instead of starting a second one", async () => {
     runAgentCycleMock.mockRejectedValue(new CycleRunningError());
     const fake = workspace({ held: [heldRow("inv-1")], entries: [decision("inv-1", 1434)] });

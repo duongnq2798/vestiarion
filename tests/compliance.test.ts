@@ -10,6 +10,7 @@ import {
   screenName,
   type CounterpartyScreeningRow,
 } from "@/lib/compliance";
+import { screeningSourceLabel } from "@/lib/screening-source";
 
 function row(over: Partial<CounterpartyScreeningRow> = {}): CounterpartyScreeningRow {
   return {
@@ -419,5 +420,36 @@ describe("rescreenIntervalMs", () => {
     for (const bad of ["", "abc", "-5", "0"]) {
       expect(interval({ COMPLIANCE_RESCREEN_HOURS: bad })).toBe(0);
     }
+  });
+});
+
+/**
+ * A live workspace on a deployment with no screening service (payment safety K1): the demo list knows two names, so
+ * it would clear everyone else. Screening gives no verdict instead, the counterparty stays unscreened, and the agent
+ * pays it nothing (the unscreened hold). A sandbox keeps the demo list.
+ */
+describe("a live workspace with no screening service (payment safety K1)", () => {
+  const plain = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://p.supabase.co", SUPABASE_SERVICE_ROLE_KEY: "k" });
+
+  it("gives no verdict rather than the demo list's", async () => {
+    const live = { ...plain, compliance: { ...plain.compliance, serviceRequired: true } };
+
+    await expect(runWithConfig(live, () => screenName("Vercel Inc"))).rejects.toThrow(
+      "This deployment has no screening service, so a live workspace's counterparties are not screened against the demo list. They stay unscreened, and the agent pays them nothing."
+    );
+  });
+
+  it("still screens a sandbox against the demo list", async () => {
+    expect((await runWithConfig(plain, () => screenName("Vercel Inc"))).riskLevel).toBe("clear");
+  });
+});
+
+describe("the screening source the console names (payment safety K1)", () => {
+  const plain = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://p.supabase.co", SUPABASE_SERVICE_ROLE_KEY: "k" });
+
+  it("names the service, the bundled list, or no service for a live workspace on a deployment without one", () => {
+    expect(runWithConfig({ ...plain, compliance: { ...plain.compliance, openSanctionsUrl: "https://yente.internal" } }, () => screeningSourceLabel())).toBe("OpenSanctions");
+    expect(runWithConfig(plain, () => screeningSourceLabel())).toBe("bundled list");
+    expect(runWithConfig({ ...plain, compliance: { ...plain.compliance, serviceRequired: true } }, () => screeningSourceLabel())).toBe("no service");
   });
 });

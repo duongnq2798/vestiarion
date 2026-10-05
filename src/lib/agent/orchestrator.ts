@@ -29,6 +29,7 @@ import { onChainLimitGate, onChainLimitRecord, type OnChainLimitDecisionCheck, t
 import { addressUnconfirmed, payeeNotReady } from "../counterparty-address";
 import { SandboxCapReachedError } from "./sandbox-cap";
 import { AgentPausedError, HELD_BECAUSE_PAUSED, heldBecausePausedDetail, pausedPaymentNote } from "./pause";
+import { assertPaymentsEnabled } from "../payments-switch";
 import {
   blockingDuplicate,
   duplicateMatchContext,
@@ -2744,6 +2745,9 @@ export function reconcileLines(sync: Pick<BalanceSync, "outcomes">): CycleLogLin
 export async function runAgentCycle(
   options: { triggeredBy?: string; dailyCap?: number; trigger?: CycleTrigger } = {}
 ): Promise<CycleResult> {
+  // While the platform has payments switched off, no cycle starts (payment safety S3): nothing is decided, so nothing
+  // is held that would need undoing once they are back on. Refused before anything is read or written.
+  assertPaymentsEnabled();
   const orgDb = db();
   const provider = getChainProvider();
   const lines: CycleLogLine[] = [];

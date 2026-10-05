@@ -1,3 +1,4 @@
+import { addressProblem, ARC_ADDRESS, NOT_AN_ARC_ADDRESS } from "./address-checksum";
 import { currentOrgId } from "./context";
 import { db, unwrap } from "./dal";
 import { appendLedgerEntryBestEffort } from "./ledger-best-effort";
@@ -20,13 +21,13 @@ import { appendLedgerEntryBestEffort } from "./ledger-best-effort";
  * confirms an address they did not see.
  */
 
-/** An Arc (EVM) address: 0x and 40 hex characters. */
-export const ARC_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
+/** An Arc (EVM) address: 0x and 40 hex characters (./address-checksum, shared with the console's forms). */
+export { ARC_ADDRESS };
 
 export type CounterpartyAddressErrorCode = "invalid" | "unchanged" | "conflict" | "not_found" | "stale";
 
 const MESSAGES: Record<CounterpartyAddressErrorCode, string> = {
-  invalid: "Enter an Arc address: 0x followed by 40 hex characters.",
+  invalid: NOT_AN_ARC_ADDRESS,
   unchanged: "That is already this counterparty's address.",
   conflict: "Someone else changed this address a moment ago.",
   not_found: "Counterparty not found.",
@@ -44,8 +45,8 @@ export class CounterpartyAddressError extends Error {
 export function parseAddressInput(raw: string): { ok: true; address: string | null } | { ok: false; message: string } {
   const trimmed = raw.trim();
   if (trimmed === "") return { ok: true, address: null };
-  if (!ARC_ADDRESS.test(trimmed)) return { ok: false, message: MESSAGES.invalid };
-  return { ok: true, address: trimmed };
+  const problem = addressProblem(trimmed);
+  return problem ? { ok: false, message: problem } : { ok: true, address: trimmed };
 }
 
 /** Whether a person changed the address and no one has confirmed it since. */

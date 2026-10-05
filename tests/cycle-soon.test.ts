@@ -4,6 +4,7 @@ import { runWith } from "@/lib/context";
 import { raiseCycleEvent, resetCycleSoonForTests, runCycleSoon } from "@/lib/agent/cycle-soon";
 import { CycleRunningError } from "@/lib/agent/cycle-running";
 import { AgentPausedError } from "@/lib/agent/pause";
+import { PaymentsDisabledError } from "@/lib/payments-switch";
 import { SANDBOX_DAILY_CYCLES, SandboxCapReachedError } from "@/lib/agent/sandbox-cap";
 import { fakeSupabase, orgTestContext } from "./support/fake-supabase";
 
@@ -195,6 +196,15 @@ describe("runCycleSoon", () => {
     runCycleSoon({ ...live(B), sandbox: true, kind: "invoice_added" });
     await drain();
     expect(runAgentCycleMock).toHaveBeenCalledTimes(2);
+    expect(error).not.toHaveBeenCalled();
+  });
+
+  it("drops the event quietly while payments are switched off (payment safety S3)", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    runAgentCycleMock.mockRejectedValueOnce(new PaymentsDisabledError());
+    runCycleSoon({ ...live(), kind: "invoice_added" });
+    await drain();
+    expect(runAgentCycleMock).toHaveBeenCalledTimes(1);
     expect(error).not.toHaveBeenCalled();
   });
 

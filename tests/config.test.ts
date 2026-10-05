@@ -152,6 +152,15 @@ describe("configFromEnv — the hosted Circle account (hosted wallets H2, H5)", 
     expect(config.chain.circleApiKey).toBe("platform-key");
   });
 
+  it("switches payments off when PAYMENTS_DISABLED says so, in any case, and leaves them on otherwise (payment safety S1)", () => {
+    for (const raw of ["1", "true", "TRUE", " yes ", "Yes"]) {
+      expect(configFromEnv(env({ PAYMENTS_DISABLED: raw })).paymentsDisabled, raw).toBe(true);
+    }
+    for (const raw of [undefined, "", "0", "false", "no", "off", "disabled"]) {
+      expect(configFromEnv(env({ PAYMENTS_DISABLED: raw })).paymentsDisabled, String(raw)).toBe(false);
+    }
+  });
+
   it("limits hosted workspaces to 100 by default", () => {
     expect(configFromEnv(env()).hostedWorkspaceLimit).toBe(100);
   });

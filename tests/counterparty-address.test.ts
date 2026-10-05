@@ -108,6 +108,19 @@ describe("parseAddressInput", () => {
     expect(parseAddressInput("   ")).toEqual({ ok: true, address: null });
   });
 
+  it("accepts a checksummed address, and one written in a single case, as it is (payment safety A1)", () => {
+    expect(parseAddressInput("0x840de234Bfc3F66fA380888A0a8204D9487D60d4")).toEqual({ ok: true, address: "0x840de234Bfc3F66fA380888A0a8204D9487D60d4" });
+    expect(parseAddressInput("0x840de234bfc3f66fa380888a0a8204d9487d60d4")).toEqual({ ok: true, address: "0x840de234bfc3f66fa380888a0a8204d9487d60d4" });
+    expect(parseAddressInput("0x840DE234BFC3F66FA380888A0A8204D9487D60D4")).toEqual({ ok: true, address: "0x840DE234BFC3F66FA380888A0A8204D9487D60D4" });
+  });
+
+  it("refuses an address whose capital letters do not match its checksum: a character is likely wrong", () => {
+    expect(parseAddressInput("0x840De234Bfc3F66fA380888A0a8204D9487D60d4")).toEqual({
+      ok: false,
+      message: "This address's capital letters do not match its checksum, so a character is likely wrong. Copy it again from where it came.",
+    });
+  });
+
   it.each(["0x123", "1111111111111111111111111111111111111111", `${NEW}0`, "0xZZ22222222222222222222222222222222222222", "vitalik.eth"])(
     "refuses %s",
     (raw) => {

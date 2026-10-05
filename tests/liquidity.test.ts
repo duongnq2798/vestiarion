@@ -201,6 +201,18 @@ describe("a person's Bring cash back (R2)", () => {
     );
   });
 
+  it("brings nothing back while payments are switched off, before reading an account (payment safety S4)", async () => {
+    const provider = new ReserveProvider();
+    const client = fake();
+    const off = runWith(orgTestContext({ config: { ...config, paymentsDisabled: true }, client: client.client, orgId: ORG, userId: USER }), () =>
+      bringCashBackByPerson({ actorId: USER, amount: null, provider })
+    );
+
+    await expect(off).rejects.toThrow("Payments are switched off for every workspace right now.");
+    expect(provider.withdrawCalls).toHaveLength(0);
+    expect(client.requests.some((request) => request.path === "/rest/v1/accounts")).toBe(false);
+  });
+
   it("brings back the amount asked", async () => {
     const provider = new ReserveProvider();
     expect((await run(fake(), () => bringCashBackByPerson({ actorId: USER, amount: 5, provider }))).amount).toBe(5);

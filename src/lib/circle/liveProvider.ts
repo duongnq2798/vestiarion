@@ -21,8 +21,10 @@ import type {
 } from "./types";
 import { ARC_FEE_USD } from "./types";
 import { fetchArcFeeUsd } from "./arcFees";
-import { awaitSettlement, FAILED_STATES, withDeadline, type Settlement } from "./settlement";
+import { awaitSettlement, FAILED_STATES, MAY_HAVE_BEEN_ACCEPTED, withDeadline, type Settlement } from "./settlement";
+import { circleHttpStatus } from "./check";
 import { batchCalls, BatchNotSentError, SCA_EXECUTE_BATCH } from "./batch";
+import { PAYMENTS_OFF, PaymentsDisabledError } from "../payments-switch";
 import { ARC_TESTNET_USDC, BridgeFeeError, bridgeFee, bridgeStepKey, burnCalls, forwardedMint, type ContractCall } from "./cctp";
 import { burnIntent, burnIntentTypedData, estimateGateway, gatewaySalt, gatewayTransferStatus, submitGatewayTransfer, type GatewayTransferStatus } from "./gateway";
 import { payeeChain, paidAcrossChains } from "../payee-chains";
@@ -76,6 +78,34 @@ function gatewayProviderState(transfer: GatewayTransferStatus): string {
 const CREATE_TRANSACTION_DEADLINE_MS = 20_000;
 const BALANCE_READ_DEADLINE_MS = 15_000;
 const RECONCILE_TRANSFER_DEADLINE_MS = 15_000;
+
+/** Connection failures in which the request never left, so Circle cannot hold it (payment safety R1). */
+const NEVER_SENT = new Set(["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "ENETUNREACH", "EHOSTUNREACH"]);
+
+/**
+ * Sends a write that moves money, under the deadline, and returns the id Circle gave it (payment safety R1). When
+ * Circle never says what became of it — the deadline runs out, the connection drops after the request left, Circle
+ * answers 5xx, or it answers with no id — the error says it may or may not have been accepted: Circle may hold it
+ * under its idempotency key, so nothing closes over it, and the same write sent again under that key returns it
+ * rather than repeats it. A refusal (4xx), a connection never made, and an error that is not an HTTP one keep their
+ * own words. The SDK's errors carry an HTTP `status` when Circle answered, and a network `code` when it did not.
+ */
+async function sendToCircle(work: Promise<{ data?: { id?: string } }>, what: string, subject = "it"): Promise<string> {
+  const unknown = `${subject} ${MAY_HAVE_BEEN_ACCEPTED}`;
+  let created: { data?: { id?: string } };
+  try {
+    created = await withDeadline(work, CREATE_TRANSACTION_DEADLINE_MS, `Circle did not answer ${what} within ${CREATE_TRANSACTION_DEADLINE_MS} ms; ${unknown}`);
+  } catch (error) {
+    const status = circleHttpStatus(error);
+    const code = (error as { code?: unknown } | null)?.code;
+    if (status !== undefined && status >= 500) throw new Error(`Circle answered ${what} with HTTP ${status}, which does not say what became of it; ${unknown}`);
+    if (status === undefined && typeof code === "string" && !NEVER_SENT.has(code)) throw new Error(`Circle did not answer ${what} (${code}); ${unknown}`);
+    throw error;
+  }
+  const id = created.data?.id;
+  if (!id) throw new Error(`Circle answered ${what} with no transaction id; ${unknown}`);
+  return id;
+}
 
 interface AccountRow {
   id: string;
@@ -149,7 +179,13 @@ export class LiveProvider implements ChainProvider {
    * sets of Circle wallets can then exist in one process, which a constructor
    * that consulted `process.env` made impossible.
    */
-  constructor(chain: ChainConfig, options: { client?: LiveProviderClient; fetch?: typeof fetch; bridgeMintWaitMs?: number } = {}) {
+  /** The platform's stop switch (payment safety S2): every way of moving money refuses, before an account is read. */
+  private readonly paymentsDisabled: boolean;
+
+  constructor(
+    chain: ChainConfig,
+    options: { client?: LiveProviderClient; fetch?: typeof fetch; bridgeMintWaitMs?: number; paymentsDisabled?: boolean } = {}
+  ) {
     if (!chain.circleApiKey || !chain.circleEntitySecret) {
       throw new Error("LiveProvider requires a Circle API key and entity secret");
     }
@@ -161,6 +197,11 @@ export class LiveProvider implements ChainProvider {
     this.arcRpcUrl = chain.arcRpcUrl;
     this.fetch = options.fetch;
     this.bridgeMintWaitMs = options.bridgeMintWaitMs ?? BRIDGE_MINT_WAIT_MS;
+    this.paymentsDisabled = options.paymentsDisabled === true;
+  }
+
+  private refuseWhilePaymentsOff(): void {
+    if (this.paymentsDisabled) throw new PaymentsDisabledError();
   }
 
   private async account(accountId: string): Promise<AccountRow & { walletId: string }> {
@@ -215,6 +256,7 @@ export class LiveProvider implements ChainProvider {
   }
 
   async transfer(params: TransferParams): Promise<TransferResult> {
+    this.refuseWhilePaymentsOff();
     if (params.toAddress.startsWith("sim:")) {
       throw new Error(
         `Counterparty has no on-chain address (${params.toAddress}). Add this counterparty's Arc address on the Counterparties page.`
@@ -230,7 +272,7 @@ export class LiveProvider implements ChainProvider {
     const tokenId = await this.resolveTokenId(account.walletId, params.token ?? "USDC");
     const started = Date.now();
 
-    const created = await withDeadline(
+    const txId = await sendToCircle(
       this.client.createTransaction({
         walletId: account.walletId,
         tokenId,
@@ -240,12 +282,9 @@ export class LiveProvider implements ChainProvider {
         refId: params.memo,
         fee: { type: "level", config: { feeLevel: "MEDIUM" } },
       }),
-      CREATE_TRANSACTION_DEADLINE_MS,
-      `Circle did not answer createTransaction within ${CREATE_TRANSACTION_DEADLINE_MS} ms; the transfer may or may not have been accepted`
+      "createTransaction",
+      "the transfer"
     );
-
-    const txId = created.data?.id;
-    if (!txId) throw new Error("Circle did not return a transaction id");
 
     // Arc settles in well under a second, but Circle's pipeline
     // (INITIATED -> CLEARED -> QUEUED -> SENT -> CONFIRMED -> COMPLETE) is
@@ -289,6 +328,8 @@ export class LiveProvider implements ChainProvider {
    * `BatchNotSentError` before Circle is called.
    */
   async batchTransfer(params: BatchTransferParams): Promise<TransferResult> {
+    // Nothing leaves: the batch is undone and each payment sent alone, which `transfer` refuses in turn (R4).
+    if (this.paymentsDisabled) throw new BatchNotSentError(PAYMENTS_OFF.replace(/\.$/, ""));
     const unpaid = params.transfers.find((transfer) => transfer.toAddress.startsWith("sim:"));
     if (unpaid) {
       throw new BatchNotSentError(`Counterparty has no on-chain address (${unpaid.toAddress}). Add this counterparty's Arc address on the Counterparties page`);
@@ -302,7 +343,7 @@ export class LiveProvider implements ChainProvider {
     }
     if (!account.address) throw new BatchNotSentError("The operating wallet's address is not known");
     const started = Date.now();
-    const created = await withDeadline(
+    const txId = await sendToCircle(
       this.client.createContractExecutionTransaction({
         walletId: account.walletId,
         // The wallet itself: Circle runs `executeBatch` on the smart account rather than wrapping it in `execute`.
@@ -313,11 +354,8 @@ export class LiveProvider implements ChainProvider {
         refId: params.idempotencyKey,
         fee: { type: "level", config: { feeLevel: "MEDIUM" } },
       } as Parameters<LiveProviderClient["createContractExecutionTransaction"]>[0]),
-      CREATE_TRANSACTION_DEADLINE_MS,
-      `Circle did not answer the batch within ${CREATE_TRANSACTION_DEADLINE_MS} ms; it may or may not have been accepted`
+      "the batch"
     );
-    const txId = created.data?.id;
-    if (!txId) throw new Error("Circle did not return a transaction id");
     const { status, transaction } = await awaitSettlement(this.client, txId);
     const txHash = transaction?.txHash ?? null;
     const fee = transaction ? await resolveFee(this.arcRpcUrl, transaction.networkFeeInUSD, txHash ?? undefined) : { feeUsd: ARC_FEE_USD, feeSource: "provider_estimate" as const };
@@ -371,7 +409,7 @@ export class LiveProvider implements ChainProvider {
       throw new Error("Only USDC paid on Arc testnet goes through the spending limit contract; nothing was sent.");
     }
     const started = Date.now();
-    const created = await withDeadline(
+    const txId = await sendToCircle(
       this.client.createContractExecutionTransaction({
         walletId: limit.agentWalletId,
         contractAddress: limit.contract,
@@ -381,11 +419,8 @@ export class LiveProvider implements ChainProvider {
         refId: params.memo,
         fee: { type: "level", config: { feeLevel: "MEDIUM" } },
       }),
-      CREATE_TRANSACTION_DEADLINE_MS,
-      `Circle did not answer the payment through the spending limit contract within ${CREATE_TRANSACTION_DEADLINE_MS} ms; it may or may not have been accepted`
+      "the payment through the spending limit contract"
     );
-    const txId = created.data?.id;
-    if (!txId) throw new Error("Circle did not return a transaction id");
     const { status, transaction } = await awaitSettlement(this.client, txId);
     const txHash = transaction?.txHash ?? null;
     const fee = transaction ? await resolveFee(this.arcRpcUrl, transaction.networkFeeInUSD, txHash ?? undefined) : { feeUsd: ARC_FEE_USD, feeSource: "provider_estimate" as const };
@@ -413,7 +448,7 @@ export class LiveProvider implements ChainProvider {
   private async escrowRelease(params: TransferParams, account: { walletId: string; chain: string }): Promise<TransferResult> {
     if (!params.escrow) throw new Error("An escrow release names no hold; nothing was sent.");
     const started = Date.now();
-    const created = await withDeadline(
+    const txId = await sendToCircle(
       this.client.createContractExecutionTransaction({
         walletId: account.walletId,
         contractAddress: params.escrow.contract,
@@ -423,11 +458,8 @@ export class LiveProvider implements ChainProvider {
         refId: params.memo,
         fee: { type: "level", config: { feeLevel: "MEDIUM" } },
       }),
-      CREATE_TRANSACTION_DEADLINE_MS,
-      `Circle did not answer the escrow release within ${CREATE_TRANSACTION_DEADLINE_MS} ms; it may or may not have been accepted`
+      "the escrow release"
     );
-    const txId = created.data?.id;
-    if (!txId) throw new Error("Circle did not return a transaction id");
     const { status, transaction } = await awaitSettlement(this.client, txId);
     const txHash = transaction?.txHash ?? null;
     const fee = transaction ? await resolveFee(this.arcRpcUrl, transaction.networkFeeInUSD, txHash ?? undefined) : { feeUsd: ARC_FEE_USD, feeSource: "provider_estimate" as const };
@@ -575,7 +607,7 @@ export class LiveProvider implements ChainProvider {
   }
 
   private async execute(walletId: string, call: ContractCall, idempotencyKey: string, memo: string | undefined): Promise<string> {
-    const created = await withDeadline(
+    return sendToCircle(
       this.client.createContractExecutionTransaction({
         walletId,
         contractAddress: call.contractAddress,
@@ -585,12 +617,8 @@ export class LiveProvider implements ChainProvider {
         refId: memo,
         fee: { type: "level", config: { feeLevel: "MEDIUM" } },
       }),
-      CREATE_TRANSACTION_DEADLINE_MS,
-      `Circle did not answer createContractExecutionTransaction within ${CREATE_TRANSACTION_DEADLINE_MS} ms; it may or may not have been accepted`
+      "createContractExecutionTransaction"
     );
-    const id = created.data?.id;
-    if (!id) throw new Error("Circle did not return a transaction id");
-    return id;
   }
 
   /** The Forwarding Service's mint for a burn, read from Iris until it appears or the wait runs out. */
@@ -698,6 +726,7 @@ export class LiveProvider implements ChainProvider {
    * waited for. Refused before anything is sent while USYC cannot be bought.
    */
   async depositToEarn(params: EarnDepositParams): Promise<EarnResult> {
+    this.refuseWhilePaymentsOff();
     const { operating, reserve, key } = await this.usycAccounts(params);
     const read = { rpcUrl: this.arcRpcUrl, fetch: this.fetch };
     if (!(await usycSubscriptionsOpen(read))) throw new UsycSubscriptionsClosedError();
@@ -719,6 +748,7 @@ export class LiveProvider implements ChainProvider {
    * the USDC asked, never more than it holds, with the operating wallet as receiver.
    */
   async withdrawFromEarn(params: EarnDepositParams): Promise<EarnResult> {
+    this.refuseWhilePaymentsOff();
     const { operating, reserve, key } = await this.usycAccounts(params);
     const read = { rpcUrl: this.arcRpcUrl, fetch: this.fetch };
     const [price, held] = await Promise.all([readUsycPrice(read), readUsycShares(reserve.address, read)]);
@@ -775,6 +805,7 @@ export class LiveProvider implements ChainProvider {
    * when the approval did not confirm.
    */
   async swapForEurc(params: SwapCallParams): Promise<SwapCallResult> {
+    this.refuseWhilePaymentsOff();
     const account = await this.account(params.fromAccountId);
     const send = async (call: Record<string, unknown>, key: string): Promise<SwapStep> => {
       const created = await withDeadline(

@@ -18,6 +18,7 @@ vi.mock("@/lib/dal/scope", () => ({ inOrg: (_access: unknown, fn: () => Promise<
 vi.mock("@/lib/circle/escrow-setup", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/circle/escrow-setup")>()), ...lib }));
 
 import { EscrowSetupError } from "@/lib/circle/escrow-setup";
+import { PaymentsDisabledError } from "@/lib/payments-switch";
 
 const ESCROW = "0xE5c0000000000000000000000000000000000E5c";
 const access = (mode: "live" | "sandbox") => ({ ok: true, user: { id: "user-1", email: null }, membership: { orgId: "org-1", slug: "testnet-2", name: "Testnet 2", mode, role: "owner" } });
@@ -49,6 +50,12 @@ describe("setUpEscrowAction", () => {
     authorizeMock.mockResolvedValue({ ok: false, message: "You do not have permission to do that." });
     expect(await setUpEscrowAction(empty, form())).toEqual({ ok: false, message: "You do not have permission to do that." });
     expect(lib.setUpEscrow).not.toHaveBeenCalled();
+  });
+
+  it("says payments are switched off, not that the setup should be tried again (payment safety S4)", async () => {
+    authorizeMock.mockResolvedValue(access("live"));
+    lib.setUpEscrow.mockRejectedValueOnce(new PaymentsDisabledError());
+    expect(await setUpEscrowAction(empty, form())).toEqual({ ok: false, message: "Payments are switched off for every workspace right now." });
   });
 
   it("says what stopped the setup in its own words, and nothing of an unexpected failure", async () => {

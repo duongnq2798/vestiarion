@@ -238,3 +238,16 @@ describe("readHold", () => {
     });
   });
 });
+
+describe("escrow holds while payments are switched off (payment safety S2)", () => {
+  it("locks nothing and refunds nothing, before reading the workspace or calling Circle", async () => {
+    const fake = fakeSupabase(() => ({ body: [] }));
+    const client = vi.fn();
+    const run = <T>(fn: () => Promise<T>) => runWith(orgTestContext({ config: { ...config, paymentsDisabled: true }, client: fake.client, orgId: ORG, userId: USER }), fn);
+
+    await expect(run(() => lockMilestone({ actorId: USER, milestoneId: MILESTONE, refundAfter: "2026-11-01T00:00:00Z", requestId: REQUEST }, { client }))).rejects.toThrow("Payments are switched off for every workspace right now.");
+    await expect(run(() => refundMilestone({ actorId: USER, milestoneId: MILESTONE, requestId: REQUEST }, { client }))).rejects.toThrow("Payments are switched off for every workspace right now.");
+    expect(fake.requests).toHaveLength(0);
+    expect(client).not.toHaveBeenCalled();
+  });
+});

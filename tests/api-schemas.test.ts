@@ -78,3 +78,19 @@ describe("each write operation's request example", () => {
     }
   });
 });
+
+describe("a counterparty's address through the API (payment safety A1)", () => {
+  const body = (address: string) => ({ name: "Quill Studio", role: "vendor", address, paymentLimit: "25" });
+
+  it("accepts a checksummed address, and one in a single case", () => {
+    for (const address of ["0x840de234Bfc3F66fA380888A0a8204D9487D60d4", "0x840de234bfc3f66fa380888a0a8204d9487d60d4"]) {
+      expect(S.CreateCounterpartyBodySchema.safeParse(body(address)).success, address).toBe(true);
+    }
+  });
+
+  it("refuses one whose capital letters do not match its checksum", () => {
+    const result = S.CreateCounterpartyBodySchema.safeParse(body("0x840De234Bfc3F66fA380888A0a8204D9487D60d4"));
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.message).toBe("This address's capital letters do not match its checksum, so a character is likely wrong.");
+  });
+});

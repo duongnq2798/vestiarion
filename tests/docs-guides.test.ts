@@ -413,6 +413,12 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
       "The payment is still in flight on Arc testnet. It cannot be rejected or returned until Circle settles it; approving checks it again.",
       APPROVAL_CARD,
     ],
+    [
+      "Circle did not answer when this payment was sent, so it may have taken the transfer. Approving asks Circle again under the same key, so nothing is sent twice; it cannot be rejected or returned until then.",
+      APPROVAL_CARD,
+    ],
+    ["This address's capital letters do not match its checksum, so a character is likely wrong.", "src/lib/address-checksum.ts"],
+    ["Payments are switched off for every workspace right now.", "src/lib/payments-switch.ts"],
     ["Audit log", APP_NAV],
     ["Verify hash chain", VERIFY_BADGE],
     ["Chain intact", VERIFY_BADGE],

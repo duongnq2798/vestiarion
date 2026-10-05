@@ -31,6 +31,15 @@ function statusOf(transaction: Transaction): TransferResult["status"] {
 }
 
 /**
+ * The words a payment's error carries when Circle never said what became of the request that sends it (payment
+ * safety R1, docs/superpowers/specs/2026-10-05-payment-safety-design.md): the deadline ran out, the connection dropped
+ * after the request left, Circle answered 5xx, or it answered with no id. Circle may hold the transfer under the
+ * request's idempotency key, so nothing closes over it, and the same request sent again under that key returns it
+ * rather than repeats it.
+ */
+export const MAY_HAVE_BEEN_ACCEPTED = "may or may not have been accepted";
+
+/**
  * Settles `work`, or rejects once `ms` have passed. The SDK has no HTTP
  * timeout of its own — its abort signal only cuts the pause between polls —
  * so a hung request would otherwise hold the cycle indefinitely.

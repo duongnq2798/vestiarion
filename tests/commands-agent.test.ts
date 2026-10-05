@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { AgentPausedError } from "@/lib/agent/pause";
+import { PaymentsDisabledError } from "@/lib/payments-switch";
 import { PauseError } from "@/lib/platform/pause";
 import type { Actor } from "@/lib/commands/actor";
 import { pauseWorkspaceAgent, resumeWorkspaceAgent, runWorkspaceCycle } from "@/lib/commands/agent";
@@ -93,6 +94,13 @@ describe("runWorkspaceCycle", () => {
     mocks.runAgentCycle.mockRejectedValueOnce(new AgentPausedError());
     expect(await run(() => runWorkspaceCycle(owner()))).toEqual({
       ok: false, code: "agent_paused", message: "The agent is paused. Resume it to run a cycle.",
+    });
+  });
+
+  it("says payments are switched off in its own words (payment safety S3)", async () => {
+    mocks.runAgentCycle.mockRejectedValueOnce(new PaymentsDisabledError());
+    expect(await run(() => runWorkspaceCycle(owner()))).toEqual({
+      ok: false, code: "payments_off", message: "Payments are switched off for every workspace right now.",
     });
   });
 

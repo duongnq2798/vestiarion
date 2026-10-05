@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { PAYEE_CHAINS, payeeChain, type PayeeChain } from "../payee-chains";
 import { ARC_TESTNET_DOMAIN, ARC_TESTNET_USDC } from "./cctp";
+import { MAY_HAVE_BEEN_ACCEPTED } from "./settlement";
 
 /**
  * Circle Gateway from Arc testnet (docs/superpowers/specs/2026-10-01-gateway-payouts-design.md).
@@ -32,9 +33,12 @@ const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
 /** A Gateway API refusal or silence, in words that are safe to record. */
 export class GatewayError extends Error {
-  constructor(message: string) {
+  /** Gateway's HTTP status, when it answered with one. */
+  readonly status?: number;
+  constructor(message: string, status?: number) {
     super(message);
     this.name = "GatewayError";
+    this.status = status;
   }
 }
 
@@ -165,7 +169,7 @@ async function call(what: string, url: string, init: RequestInit, fetcher: typeo
   const body = (await response.json().catch(() => null)) as { message?: unknown } | null;
   if (!response.ok) {
     const said = typeof body?.message === "string" ? `: ${body.message.slice(0, 200)}` : "";
-    throw new GatewayError(`Gateway answered ${response.status} to the ${what}${said}`);
+    throw new GatewayError(`Gateway answered ${response.status} to the ${what}${said}`, response.status);
   }
   return body;
 }
@@ -200,9 +204,20 @@ export async function gatewayBalance(depositor: string, options: { fetch?: typeo
 }
 
 /** Sends a signed burn intent, with forwarding: Circle mints on the payee's chain. Returns the transfer's id. */
+/**
+ * Sends the signed transfer to Gateway and returns its id. When Gateway never says what became of it — no answer, a
+ * 5xx, or an answer with no id — the error says it may or may not have been accepted (payment safety R1): GatewayWallet
+ * may hold it, and the same intent sent again is spent once. A refusal (4xx) keeps Gateway's own words.
+ */
 export async function submitGatewayTransfer(intent: BurnIntent, signature: string, options: { fetch?: typeof fetch } = {}): Promise<string> {
-  const answer = (await call("transfer", `${GATEWAY_API}/transfer?enableForwarder=true`, post([{ burnIntent: intent, signature }]), options.fetch ?? fetch)) as { transferId?: unknown } | null;
-  if (typeof answer?.transferId !== "string" || !answer.transferId) throw new GatewayError("Gateway accepted the transfer but returned no transfer id");
+  let answer: { transferId?: unknown } | null;
+  try {
+    answer = (await call("transfer", `${GATEWAY_API}/transfer?enableForwarder=true`, post([{ burnIntent: intent, signature }]), options.fetch ?? fetch)) as { transferId?: unknown } | null;
+  } catch (error) {
+    if (error instanceof GatewayError && error.status !== undefined && error.status < 500) throw error;
+    throw new GatewayError(`${(error as Error).message}; it ${MAY_HAVE_BEEN_ACCEPTED}`);
+  }
+  if (typeof answer?.transferId !== "string" || !answer.transferId) throw new GatewayError(`Gateway answered the transfer with no transfer id; it ${MAY_HAVE_BEEN_ACCEPTED}`);
   return answer.transferId;
 }
 

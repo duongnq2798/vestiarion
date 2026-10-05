@@ -8,6 +8,7 @@ import { CycleRunningError } from "./cycle-running";
 import type { CycleEventKind } from "./cycle-soon";
 import { runAgentCycle } from "./orchestrator";
 import { AgentPausedError } from "./pause";
+import { paymentsDisabled, PaymentsDisabledError } from "../payments-switch";
 
 /**
  * The watcher that decides a EURC payable again when the rate changes what held it, with no one pressing anything
@@ -33,7 +34,8 @@ export interface FxWatchResult {
   probed: number;
   /** How many a quote cleared. */
   cleared: number;
-  cycle: "none" | "ran" | "running" | "paused" | "failed";
+  /** `payments_off`: the platform has payments switched off, so nothing is asked or run (payment safety S3). */
+  cycle: "none" | "ran" | "running" | "paused" | "failed" | "payments_off";
   error?: string;
 }
 
@@ -51,7 +53,12 @@ export async function watchFxHolds(deps: WatchDeps = {}): Promise<FxWatchResult[
   ) as unknown as Array<{ id: string; slug: string; agent_paused_at: string | null }>;
 
   const results: FxWatchResult[] = [];
+  const off = paymentsDisabled();
   for (const org of orgs) {
+    if (off) {
+      results.push({ slug: org.slug, held: 0, probed: 0, cleared: 0, cycle: "payments_off" });
+      continue;
+    }
     if (org.agent_paused_at) {
       results.push({ slug: org.slug, held: 0, probed: 0, cleared: 0, cycle: "paused" });
       continue;
@@ -124,6 +131,7 @@ async function watchWorkspace(slug: string, deps: WatchDeps): Promise<FxWatchRes
     // One cycle at a time (F7): the cycle already running re-checks the same payables in its follow-up stage.
     if (error instanceof CycleRunningError) return result(due.length, cleared, "running");
     if (error instanceof AgentPausedError) return result(due.length, cleared, "paused");
+    if (error instanceof PaymentsDisabledError) return result(due.length, cleared, "payments_off");
     throw error;
   }
 }

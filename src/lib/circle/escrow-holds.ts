@@ -8,6 +8,7 @@ import { ARC_TESTNET_USDC } from "./cctp";
 import { escrowStepKey, readEscrowContract } from "./escrow-setup";
 import { circleCall, CircleCallFailed } from "./provision";
 import { awaitSettlement } from "./settlement";
+import { assertPaymentsEnabled } from "../payments-switch";
 
 /**
  * A milestone's hold in the workspace's escrow (docs/superpowers/specs/2026-10-01-milestone-escrow-design.md
@@ -109,6 +110,8 @@ export async function lockMilestone(
   input: { actorId: string; milestoneId: string; refundAfter: string; requestId: string; now?: Date },
   options: { client?: (credentials: { apiKey: string; entitySecret: string }) => EscrowHoldClient; fetch?: typeof fetch; rpcUrl?: string } = {}
 ): Promise<{ fundTxHash: string | null }> {
+  // Nothing moves while the platform has payments switched off (payment safety S2).
+  assertPaymentsEnabled();
   const escrow = await readEscrowContract();
   if (!escrow?.address) throw new EscrowHoldError("Set up escrow for this workspace first.");
   const milestone = unwrap(
@@ -237,6 +240,8 @@ export async function refundMilestone(
   input: { actorId: string; milestoneId: string; requestId: string; now?: Date },
   options: { client?: (credentials: { apiKey: string; entitySecret: string }) => EscrowHoldClient; fetch?: typeof fetch; rpcUrl?: string } = {}
 ): Promise<{ refundTxHash: string | null }> {
+  // Nothing moves while the platform has payments switched off (payment safety S2).
+  assertPaymentsEnabled();
   const escrow = await readEscrowContract();
   if (!escrow?.address) throw new EscrowHoldError("Set up escrow for this workspace first.");
   const milestone = unwrap(

@@ -87,6 +87,13 @@ describe("what a held milestone waits for", () => {
     expect(reason.text).toBe("Circle did not send it: Circle could not prepare the transaction (Circle: ESTIMATION_ERROR). Nothing moved. Pay now sends it again.");
   });
 
+  it("says Circle never answered its transfer's send, which Pay now asks again under the same key, and never closes over it (payment safety R1)", () => {
+    const intent = { status: "failed", provider_tx_id: null, last_error: "Circle did not answer createTransaction within 20000 ms; the transfer may or may not have been accepted", provider_state: null, failure_reason: null };
+    const reason = heldReason(facts({ intent, lastEntry: { action: "milestone_release", detail: {} } }));
+    expect(reason).toMatchObject({ kind: "in_flight", canPay: true, canClose: false, override: false });
+    expect(reason.text).toBe("Circle did not answer when its transfer was sent, so it may have taken it. Pay now asks Circle again under the same key; nothing is sent twice.");
+  });
+
   it("records a transfer that went out, or may still, and never closes over it", () => {
     for (const intent of [
       { ...FAILED_INTENT, status: "pending", provider_state: "SENT", failure_reason: null },
@@ -225,6 +232,20 @@ async function refusal(promise: Promise<unknown>): Promise<string> {
   return (error as MilestoneDecisionError).code;
 }
 
+describe("Pay now while payments are switched off (payment safety S4)", () => {
+  it("refuses at once, before reading the milestone or claiming it", async () => {
+    const { fake, claimed } = world();
+
+    const attempt = runWith({ config: { ...config, paymentsDisabled: true }, db: fake.client, fetch: fake.fetch }, () =>
+      withOrg(ORG, () => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }))
+    );
+    expect(await refusal(attempt)).toBe("payments_off");
+    await expect(attempt).rejects.toThrow("Payments are switched off for every workspace right now.");
+    expect(fake.requests.some((request) => request.path === "/rest/v1/milestones")).toBe(false);
+    expect(claimed()).toBe(false);
+  });
+});
+
 describe("Pay now", () => {
   it("sends again a release Circle failed, records it on the milestone and in the ledger, even for whoever added it", async () => {
     releaseHeldMilestoneMock.mockResolvedValue(PAID);
@@ -262,6 +283,32 @@ describe("Pay now", () => {
       expect(claimed()).toBe(false);
     }
     expect(releaseHeldMilestoneMock).not.toHaveBeenCalled();
+  });
+
+  describe("over a transfer Circle never answered (payment safety R1)", () => {
+    const UNKNOWN = { status: "failed", provider_tx_id: null, last_error: "Circle did not answer createTransaction within 20000 ms; the transfer may or may not have been accepted", provider_state: null, failure_reason: null };
+
+    it("refuses what the agent's release refuses, since sending it again may be a new payment", async () => {
+      const cases: Array<[Record<string, unknown>, string]> = [
+        [{ risk_level: "high" }, "high_risk"],
+        [{ payment_limit: "0.25", risk_notes: "Matched a politically exposed person" }, "above_limit"],
+        [{ address_changed_at: "2026-10-02T09:00:00Z" }, "address_unconfirmed"],
+      ];
+      for (const [contractor, code] of cases) {
+        const { run, claimed } = world({ intent: UNKNOWN, milestone: { counterparties: { ...milestoneRow().counterparties, ...contractor } } });
+        expect(await refusal(run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }))), code).toBe(code);
+        expect(claimed()).toBe(false);
+      }
+      expect(releaseHeldMilestoneMock).not.toHaveBeenCalled();
+    });
+
+    it("sends it again under its key without the balance check, which the transfer may already have lowered", async () => {
+      releaseHeldMilestoneMock.mockResolvedValue(PAID);
+      const { run } = world({ intent: UNKNOWN, balance: "0" });
+
+      await expect(run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }))).resolves.toMatchObject({ status: "paid" });
+      expect(releaseHeldMilestoneMock).toHaveBeenCalledTimes(1);
+    });
   });
 
   it("needs someone other than whoever added it to override the agent's own hold", async () => {
@@ -343,6 +390,9 @@ describe("Close without paying", () => {
     const sending = world({ intent: { ...FAILED_INTENT, status: "pending", provider_state: "SENT", failure_reason: null } });
     expect(await refusal(sending.run(() => closeMilestone({ actorId: ACTOR, milestoneId: MILESTONE, reason: "Not needed" })))).toBe("payment_in_flight");
     expect(sending.claimed()).toBe(false);
+    const unknown = world({ intent: { ...FAILED_INTENT, provider_tx_id: null, provider_state: null, failure_reason: null, last_error: "Circle did not answer createTransaction within 20000 ms; the transfer may or may not have been accepted" } });
+    expect(await refusal(unknown.run(() => closeMilestone({ actorId: ACTOR, milestoneId: MILESTONE, reason: "Not needed" })))).toBe("payment_in_flight");
+    expect(unknown.claimed()).toBe(false);
     const locked = world({ milestone: { escrow_state: "funded" }, intent: null });
     expect(await refusal(locked.run(() => closeMilestone({ actorId: ACTOR, milestoneId: MILESTONE, reason: "Not needed" })))).toBe("escrow_locked");
   });

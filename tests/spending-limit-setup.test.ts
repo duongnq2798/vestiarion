@@ -64,7 +64,7 @@ const EMPTY: Omit<Row, "id"> = {
 
 function database(
   start: Partial<Row> | null = null,
-  options: { budget?: { daily_usdc: string | null; weekly_usdc: string | null } | null; operating?: typeof OPERATING } = {}
+  options: { budget?: { daily_usdc: string | null; weekly_usdc: string | null } | null; operating?: typeof OPERATING; config?: VestiarionConfig } = {}
 ) {
   let row: Row | null = start ? { id: "lim-1", ...EMPTY, ...start } : null;
   const budget = options.budget === undefined ? { daily_usdc: "5", weekly_usdc: "20" } : options.budget;
@@ -90,7 +90,7 @@ function database(
     }
     throw new Error(`unexpected request ${request.method} ${request.path}`);
   });
-  const run = <T>(fn: () => Promise<T>) => runWith(orgTestContext({ config, client: fake.client, orgId: ORG, userId: USER }), fn);
+  const run = <T>(fn: () => Promise<T>) => runWith(orgTestContext({ config: options.config ?? config, client: fake.client, orgId: ORG, userId: USER }), fn);
   return { fake, run, row: () => row };
 }
 
@@ -346,5 +346,26 @@ describe("before migration 0062", () => {
     const { readSpendingLimitContract } = await import("@/lib/circle/spending-limit-setup");
     const fake = fakeSupabase(() => ({ status: 500, body: { code: "57014", message: "canceling statement due to statement timeout" } }));
     await expect(runWith(orgTestContext({ config, client: fake.client, orgId: ORG, userId: USER }), () => readSpendingLimitContract())).rejects.toThrow(/statement timeout/);
+  });
+});
+
+describe("the spending limit contract while payments are switched off (payment safety S2)", () => {
+  const off = (): VestiarionConfig => ({ ...config, paymentsDisabled: true });
+
+  it("enforces nothing and changes no figures, before reading the workspace or calling Circle", async () => {
+    const db = database({ address: LIMIT, agent_wallet_id: "wallet-agent", agent_address: AGENT, approve_tx_id: "tx-a", enforced: true }, { config: off() });
+    const c = circle();
+
+    await expect(db.run(() => enforceSpendingLimit({ actorId: USER }, clients(c)))).rejects.toThrow("Payments are switched off for every workspace right now.");
+    await expect(db.run(() => setLimitsOnChain({ dailyUsdc: 7.5, weeklyUsdc: null }, clients(c)))).rejects.toThrow("Payments are switched off for every workspace right now.");
+    expect(db.fake.requests).toHaveLength(0);
+    expect(c.calls).toHaveLength(0);
+  });
+
+  it("still turns the limit off, which only takes the agent's power to pay away", async () => {
+    const db = database({ address: LIMIT, agent_wallet_id: "wallet-agent", agent_address: AGENT, approve_tx_id: "tx-a", enforced: true }, { config: off() });
+
+    expect(await db.run(() => turnOffSpendingLimit({ actorId: USER }, clients(circle())))).toEqual({ contract: LIMIT, txHash: "0xhash-tx-1" });
+    expect(db.row()?.enforced).toBe(false);
   });
 });

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { CycleRunningError } from "@/lib/agent/cycle-running";
+import { PaymentsDisabledError } from "@/lib/payments-switch";
 import { agentCycleSuccessMessage, cycleCompleteSummary, runAgentCycle, triggerDetail } from "@/lib/agent/orchestrator";
 import { fakeSupabase, orgTestContext, type RecordedRequest } from "./support/fake-supabase";
 
@@ -113,6 +114,15 @@ describe("runAgentCycle — one cycle at a time in a workspace", () => {
     expect(check?.params.get("status")).toBe("eq.running");
     expect(check?.params.get("org_id")).toBe(`eq.${ORG}`);
     expect(check?.params.get("started_at")).toMatch(/^gt\./);
+  });
+
+  it("refuses while payments are switched off, before reading or writing anything (payment safety S3)", async () => {
+    const fake = fakeSupabase(() => ({ body: [] }));
+
+    await expect(
+      runWith(orgTestContext({ config: { ...config, paymentsDisabled: true }, client: fake.client, orgId: ORG }), () => runAgentCycle())
+    ).rejects.toBeInstanceOf(PaymentsDisabledError);
+    expect(fake.requests).toHaveLength(0);
   });
 
   it("refuses as well when begin_cycle_run finds a run another instance opened after the check (0043)", async () => {

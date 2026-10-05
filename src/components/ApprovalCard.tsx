@@ -59,11 +59,16 @@ export function payConfirmTitle(
  * What the confirm dialog says will happen when Approve and pay is chosen. A
  * transfer already sent — including one still in flight — is only checked,
  * never sent again; a terminal failure is sent again, as a new transfer;
- * otherwise this is the first attempt. A sole approver approving what they
+ * otherwise this is the first attempt. A payment Circle never answered is sent
+ * again under the same key, which returns the transfer if Circle took it
+ * (payment safety R1). A sole approver approving what they
  * entered is told the ledger records that too (sole approver R5).
  */
 export function payConfirmDescription(payable: Pick<WaitingPayable, "paymentSent" | "lastAttempt">, ownEntry = false): string {
   const own = ownEntry ? ` ${OWN_ENTRY_RECORDED}` : "";
+  if (payable.lastAttempt?.state === "unanswered") {
+    return `It is sent again under the same key: if Circle took the first send, Circle returns that transfer, so nothing is sent twice. The ledger records who approved it.${own}`;
+  }
   if (payable.paymentSent || payable.lastAttempt?.state === "in_flight" || (payable.lastAttempt?.state === "failed" && payable.lastAttempt.resend === false)) {
     return `Nothing new is sent: Vestiarion checks the transfer already made with Circle, and the ledger records who approved it.${own}`;
   }
@@ -181,7 +186,7 @@ export default function ApprovalCard({
               {payable.lastAttempt?.state !== "failed" && " If it was a payment, Approve and pay records it without paying twice."}
             </p>
           )}
-          {payable.paymentSent && payable.lastAttempt?.state !== "in_flight" && (
+          {payable.paymentSent && payable.lastAttempt?.state !== "in_flight" && payable.lastAttempt?.state !== "unanswered" && (
             <p className="mt-2 text-sm text-ink-2">A payment was already sent; Approve and pay records it.</p>
           )}
           {canDecide && !processing && ownEntry && payable.riskLevel !== "high" && <p className="mt-2 text-sm text-ink-2">{OWN_INVOICE_NOTE}</p>}
@@ -199,6 +204,11 @@ export default function ApprovalCard({
           {payable.lastAttempt?.state === "in_flight" && (
             <Callout tone="held" className="mt-2">
               The payment is still in flight on Arc testnet. It cannot be rejected or returned until Circle settles it; approving checks it again.
+            </Callout>
+          )}
+          {payable.lastAttempt?.state === "unanswered" && (
+            <Callout tone="held" className="mt-2">
+              Circle did not answer when this payment was sent, so it may have taken the transfer. Approving asks Circle again under the same key, so nothing is sent twice; it cannot be rejected or returned until then.
             </Callout>
           )}
         </CardContent>

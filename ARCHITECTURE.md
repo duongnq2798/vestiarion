@@ -198,6 +198,31 @@ payment to an address.
 - **Afterwards:** the follow-up reopens a payable held this way once its address is paid, or two parties stand behind
   it.
 
+**Payment safety** (`docs/superpowers/specs/2026-10-05-payment-safety-design.md`) closes four gaps that real money
+would find.
+- **A stop switch for the platform:** `PAYMENTS_DISABLED` on the deployment becomes `paymentsDisabled` in the
+  config (`src/lib/payments-switch.ts`).
+  - The live provider's money methods refuse before reading an account; `getChainProvider` hands it the switch.
+  - So do the direct Circle writers: escrow holds and setup, Gateway funding, and enforcing or changing the spending
+    limit. Turning the limit off stays allowed, since it only takes the agent's power to pay away.
+  - `runAgentCycle` refuses first. The schedule and the FX watcher skip every workspace as `payments_off`, and
+    event cycles drop quietly.
+  - Approve and pay, Pay now and Bring cash back refuse before anything is read, and the workspace layout draws
+    `PaymentsOffBanner`.
+- **Addresses checked where they enter:** the console's forms and `POST /api/v1/counterparties` refuse an address
+  that mixes cases against its EIP-55 checksum (`src/lib/address-checksum.ts`).
+- **No rejection over an unknown transfer:**
+  - A send can end without Circle saying what became of it: the deadline, a connection dropped after the request
+    left, a 5xx, or an answer with no id. The live provider's `sendToCircle` then writes "may or may not have been
+    accepted" into the error, and Gateway's transfer the same (`src/lib/circle/gateway.ts`).
+  - `transferUnknown` (`src/lib/agent/approvals.ts`) reads that on a failed intent with no provider id. Reject,
+    Return and Add details refuse with `payment_unknown`, and a held milestone cannot be closed.
+  - Approve and pay sends it again under the same key, skipping the funds check, and Circle's idempotency returns
+    the transfer it holds.
+- **Screening that fails closed:** `orgConfig` marks a live workspace on a deployment with no screening service
+  (`compliance.serviceRequired`). `screenName` then gives no verdict rather than the bundled list's, so its
+  counterparties stay `unscreened`.
+
 **Settings** (`/o/[slug]/settings`) is one page in six groups: You, Workspace, Developers, Integrations,
 Security and Danger zone (`docs/superpowers/specs/2026-10-04-settings-structure-design.md`). The page lists every
 section once, each with its heading's id and `null` where this viewer or deployment does not get it, and

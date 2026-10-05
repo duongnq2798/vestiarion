@@ -2,6 +2,7 @@ import { CycleRunningError } from "../agent/cycle-running";
 import { runCycleSoon } from "../agent/cycle-soon";
 import { agentCycleSuccessMessage, runAgentCycle } from "../agent/orchestrator";
 import { AgentPausedError } from "../agent/pause";
+import { PaymentsDisabledError } from "../payments-switch";
 import { SANDBOX_DAILY_CYCLES, SandboxCapReachedError } from "../agent/sandbox-cap";
 import { pauseAgent, PauseError, resumeAgent } from "../platform/pause";
 import { cycleEventOf, provenanceOf, type Actor } from "./actor";
@@ -58,6 +59,7 @@ export async function runWorkspaceCycle(actor: Actor): Promise<CommandOutcome<{ 
     if (error instanceof SandboxCapReachedError) return refused("sandbox_cap_reached", error.message);
     if (error instanceof AgentPausedError) return refused("agent_paused", error.message);
     if (error instanceof CycleRunningError) return refused("cycle_running", error.message);
+    if (error instanceof PaymentsDisabledError) return refused("payments_off", error.message);
     console.error("agent cycle failed", error);
     return refused("failed", error instanceof Error ? error.message : "The agent cycle did not complete.");
   }

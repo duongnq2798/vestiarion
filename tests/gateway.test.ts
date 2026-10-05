@@ -120,10 +120,29 @@ describe("the Gateway API", () => {
     expect(await read({ status: "expired", destinationDomain: 0 })).toEqual({ status: "failed", state: "expired", mintTxHash: null, failureReason: "Gateway's attestation expired before the mint", destinationChain: "ETH-SEPOLIA" });
   });
 
+  it("says a transfer Gateway never answered, answered 5xx, or took with no id may or may not have been accepted (payment safety R1)", async () => {
+    const intent = burnIntent({ depositor: DEPOSITOR, signer: SIGNER, recipient: PAYEE, chain: "BASE-SEPOLIA", amount: 1, salt: gatewaySalt("k"), maxFee: BigInt(1), maxBlockHeight: "1" });
+    const down = (async () => {
+      throw new Error("ECONNRESET");
+    }) as unknown as typeof globalThis.fetch;
+    const failing = (async () => respond(503, { message: "Service Unavailable" })) as unknown as typeof globalThis.fetch;
+    const noId = (async () => respond(200, {})) as unknown as typeof globalThis.fetch;
+
+    await expect(submitGatewayTransfer(intent, "0xsig", { fetch: down })).rejects.toThrow(
+      new GatewayError("Gateway did not answer the transfer; it may or may not have been accepted")
+    );
+    await expect(submitGatewayTransfer(intent, "0xsig", { fetch: failing })).rejects.toThrow(
+      new GatewayError("Gateway answered 503 to the transfer: Service Unavailable; it may or may not have been accepted")
+    );
+    await expect(submitGatewayTransfer(intent, "0xsig", { fetch: noId })).rejects.toThrow(
+      new GatewayError("Gateway answered the transfer with no transfer id; it may or may not have been accepted")
+    );
+  });
+
   it("turns an HTTP error or no answer into a GatewayError, with Gateway's own message", async () => {
     const refused = (async () => respond(400, { message: "Insufficient balance for depositor" })) as unknown as typeof globalThis.fetch;
     await expect(submitGatewayTransfer(burnIntent({ depositor: DEPOSITOR, signer: SIGNER, recipient: PAYEE, chain: "BASE-SEPOLIA", amount: 1, salt: gatewaySalt("k"), maxFee: BigInt(1), maxBlockHeight: "1" }), "0xsig", { fetch: refused })).rejects.toThrow(
-      new GatewayError("Gateway answered 400 to the transfer: Insufficient balance for depositor")
+      new GatewayError("Gateway answered 400 to the transfer: Insufficient balance for depositor", 400)
     );
     const down = (async () => {
       throw new Error("ECONNRESET");

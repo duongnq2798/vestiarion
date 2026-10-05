@@ -69,6 +69,10 @@ export const MATCHES_KEPT = 25;
 
 export const STRONG_SANCTIONS_MATCH_THRESHOLD = 0.85;
 
+/** Why a live workspace on a deployment with no screening service gets no verdict (payment safety K1). */
+export const NO_SCREENING_SERVICE =
+  "This deployment has no screening service, so a live workspace's counterparties are not screened against the demo list. They stay unscreened, and the agent pays them nothing.";
+
 export function screeningMode(): "live" | "simulate" {
   return currentConfig().compliance.openSanctionsUrl ? "live" : "simulate";
 }
@@ -156,8 +160,12 @@ function matchEndpoint(baseUrl: string, limit: number): string {
  * the best match left, if any, is judged as usual.
  */
 export async function screenName(name: string, jurisdiction?: string | null, dismissed: ReadonlySet<string> = new Set()): Promise<ScreeningResult> {
-  const { openSanctionsUrl: baseUrl, openSanctionsApiKey } = currentConfig().compliance;
-  if (!baseUrl) return screenBundledName(name);
+  const { openSanctionsUrl: baseUrl, openSanctionsApiKey, serviceRequired } = currentConfig().compliance;
+  if (!baseUrl) {
+    // A live workspace is never cleared by the bundled list (payment safety K1): no verdict, so it stays unscreened.
+    if (serviceRequired) throw new Error(NO_SCREENING_SERVICE);
+    return screenBundledName(name);
+  }
 
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (openSanctionsApiKey) headers.Authorization = `ApiKey ${openSanctionsApiKey}`;

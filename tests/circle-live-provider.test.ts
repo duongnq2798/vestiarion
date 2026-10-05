@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LiveProvider, type LiveProviderClient } from "@/lib/circle/liveProvider";
+import { BatchNotSentError } from "@/lib/circle/batch";
+import { PaymentsDisabledError } from "@/lib/payments-switch";
 import type { ChainConfig } from "@/lib/config";
 
 vi.mock("server-only", () => ({}));
@@ -91,6 +93,92 @@ beforeEach(() => {
 afterEach(() => {
   vi.clearAllTimers();
   vi.useRealTimers();
+});
+
+/**
+ * A send that ends with no word from Circle on what became of it (payment safety R1): the error says the transfer may
+ * or may not have been accepted, which Reject and Return read, so nothing closes over a transfer Circle may hold. The
+ * SDK's errors carry an HTTP `status` when Circle answered, and a network `code` when it did not.
+ */
+describe("a send Circle never answered says so (payment safety R1)", () => {
+  const failing = (error: unknown) =>
+    fakeClient({ createTransaction: vi.fn(async () => { throw error; }) as unknown as LiveProviderClient["createTransaction"] });
+
+  it.each([
+    [
+      "the connection dropped after the request left",
+      Object.assign(new Error("Connection reset"), { code: "ECONNRESET" }),
+      "Circle did not answer createTransaction (ECONNRESET); the transfer may or may not have been accepted",
+    ],
+    [
+      "Circle answered 5xx",
+      Object.assign(new Error("Internal Server Error"), { status: 500, code: -1 }),
+      "Circle answered createTransaction with HTTP 500, which does not say what became of it; the transfer may or may not have been accepted",
+    ],
+  ])("when %s", async (_label, error, message) => {
+    const provider = new LiveProvider(CHAIN, { client: failing(error) });
+
+    await expect(provider.transfer(TRANSFER)).rejects.toThrow(message);
+  });
+
+  it.each([
+    ["Circle refused it", Object.assign(new Error("the asset amount owned by the wallet is insufficient"), { status: 400, code: 155201 })],
+    ["the connection was never made", Object.assign(new Error("Connection refused"), { code: "ECONNREFUSED" })],
+    ["the error is not an HTTP one", new Error("Circle rejected createTransaction")],
+  ])("keeps the error's own words when %s", async (_label, error) => {
+    const provider = new LiveProvider(CHAIN, { client: failing(error) });
+
+    await expect(provider.transfer(TRANSFER)).rejects.toBe(error);
+  });
+
+  it("says so when Circle answers with no transaction id", async () => {
+    const client = fakeClient({ createTransaction: vi.fn(async () => ({ data: {} })) as unknown as LiveProviderClient["createTransaction"] });
+
+    await expect(new LiveProvider(CHAIN, { client }).transfer(TRANSFER)).rejects.toThrow(
+      "Circle answered createTransaction with no transaction id; the transfer may or may not have been accepted"
+    );
+  });
+
+  it("says so for a release from escrow too", async () => {
+    const createContractExecutionTransaction = vi.fn(async () => {
+      throw Object.assign(new Error("Request timeout"), { code: "ECONNABORTED" });
+    });
+    const client = fakeClient({ createContractExecutionTransaction } as unknown as Partial<LiveProviderClient>);
+    const release = { ...TRANSFER, route: "escrow" as const, escrow: { contract: "0x2222222222222222222222222222222222222222", holdId: `0x${"ab".repeat(32)}` } };
+
+    await expect(new LiveProvider(CHAIN, { client }).transfer(release)).rejects.toThrow(
+      "Circle did not answer the escrow release (ECONNABORTED); it may or may not have been accepted"
+    );
+  });
+});
+
+/** The backstop of the platform's stop switch (payment safety S2): no way of moving money gets past the provider. */
+describe("a live provider with payments switched off (payment safety S2)", () => {
+  it("refuses every way of moving money, before reading an account or calling Circle", async () => {
+    const client = fakeClient({});
+    const provider = new LiveProvider(CHAIN, { client, paymentsDisabled: true });
+    const earn = { accountId: "account-1", amount: 1, reserveAccountId: "account-2", key: "move-1" };
+
+    await expect(provider.transfer(TRANSFER)).rejects.toBeInstanceOf(PaymentsDisabledError);
+    await expect(provider.depositToEarn(earn)).rejects.toBeInstanceOf(PaymentsDisabledError);
+    await expect(provider.withdrawFromEarn(earn)).rejects.toBeInstanceOf(PaymentsDisabledError);
+    await expect(
+      provider.swapForEurc({ fromAccountId: "account-1", adapter: "0x3333333333333333333333333333333333333333", usdcIn: 1, callData: "0x", approveKey: "a", executeKey: "e" })
+    ).rejects.toBeInstanceOf(PaymentsDisabledError);
+    // A batch that never left is undone and each payment sent alone, which the transfer refuses in turn (batch payouts R4).
+    const batch = provider.batchTransfer({ fromAccountId: "account-1", transfers: [{ toAddress: TRANSFER.toAddress, amount: 1 }], idempotencyKey: "batch-1" });
+    await expect(batch).rejects.toBeInstanceOf(BatchNotSentError);
+    await expect(batch).rejects.toThrow("Payments are switched off for every workspace right now; nothing was sent.");
+    expect(accountSingle).not.toHaveBeenCalled();
+  });
+
+  it("still reads a balance", async () => {
+    const getWalletTokenBalance = vi.fn(async () => ({ data: { tokenBalances: [{ token: { id: "usdc-token-id", symbol: "USDC" }, amount: "12.5" }] } }));
+    const client = fakeClient({ getWalletTokenBalance } as unknown as Partial<LiveProviderClient>);
+    const provider = new LiveProvider(CHAIN, { client, paymentsDisabled: true });
+
+    await expect(provider.getBalance("account-1")).resolves.toMatchObject({ balance: 12.5 });
+  });
 });
 
 describe("LiveProvider Circle request deadlines", () => {

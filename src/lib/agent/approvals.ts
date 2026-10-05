@@ -6,6 +6,8 @@ import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { listLedgerEntriesForTargets } from "../ledger";
 import { explainPayable, presentReasoning } from "../reasoning-copy";
 import { isTerminalFailure } from "../payments";
+import { MAY_HAVE_BEEN_ACCEPTED } from "../circle/settlement";
+import { PAYMENTS_OFF, paymentsDisabled } from "../payments-switch";
 import { payInvoice, syncOperatingBalance } from "./pay";
 import { invoiceDiscount, type InvoiceDiscount } from "./payment-timing";
 import { paidAcrossChains, payeeChain } from "../payee-chains";
@@ -74,6 +76,8 @@ export type ApprovalErrorCode =
   | "insufficient_funds"
   | "no_operating_account"
   | "payment_in_flight"
+  | "payment_unknown"
+  | "payments_off"
   | "address_changed"
   | "bridge_unsupported_token"
   | "nothing_to_add"
@@ -88,6 +92,9 @@ const MESSAGES: Record<Exclude<ApprovalErrorCode, "insufficient_funds">, string>
   no_operating_account: "This workspace has no operating account.",
   invoice_not_found: "That invoice is not waiting for a decision.",
   payment_in_flight: "A payment for this invoice was already sent. Approve and pay records it.",
+  payments_off: PAYMENTS_OFF,
+  payment_unknown:
+    "Circle did not answer when this invoice's payment was sent, so it may have taken the transfer. Approve and pay asks Circle again under the same key, so nothing is sent twice; Reject and Return wait until it is known.",
   address_changed: "This counterparty's address changed after this page loaded. Check the new address and try again.",
   bridge_unsupported_token: "Only USDC crosses chains. This invoice is in EURC, and its payee is paid on another chain.",
   nothing_to_add: "Enter a PO reference or tick Goods or services received.",
@@ -175,13 +182,25 @@ function failedTerminally(intent: IntentState): boolean {
 }
 
 /**
+ * Whether the intent's current attempt was sent to Circle and Circle never said what became of it (payment safety R1):
+ * `failed`, no provider id, and an error in the provider's words for that — the deadline ran out, the connection
+ * dropped after the request left, Circle answered 5xx or with no id. Circle may hold the transfer under the attempt's
+ * key. Sending it again under that key returns it rather than repeats it, so Approve and pay settles the question;
+ * until then nothing closes over it.
+ */
+export function transferUnknown(intent: IntentState | null): boolean {
+  return intent !== null && intent.status === "failed" && intent.provider_tx_id === null && (intent.last_error?.includes(MAY_HAVE_BEEN_ACCEPTED) ?? false);
+}
+
+/**
  * Whether a payment for the invoice may already have moved, so that
  * rejecting or returning it would misrecord a real transfer. It has, unless:
  * - there is no intent;
  * - no transfer exists for its current attempt — no provider id, and the
  *   intent is `created` or `failed` (a submission that failed before Circle
- *   returned an id). One `submitting` may reach Circle any moment, and one
- *   `pending` or `confirmed` did;
+ *   returned an id), unless Circle never answered the send (`transferUnknown`).
+ *   One `submitting` may reach Circle any moment, and one `pending` or
+ *   `confirmed` did;
  * - or Circle ended that transfer in a terminal failure state.
  * Anything else with a provider id counts as sent: Circle's `STUCK` (sent,
  * and it can still be mined), `SENT`, `QUEUED`, `INITIATED`, `CLEARED`,
@@ -192,7 +211,7 @@ function failedTerminally(intent: IntentState): boolean {
 export function paymentWasSent(intent: IntentState | null): boolean {
   if (!intent) return false;
   if (intent.status === "confirmed" || intent.status === "pending" || intent.status === "submitting") return true;
-  if (intent.provider_tx_id === null) return false;
+  if (intent.provider_tx_id === null) return transferUnknown(intent);
   return !failedTerminally(intent) && !gatewayFailed(intent);
 }
 
@@ -210,7 +229,10 @@ function gatewayFailed(intent: IntentState): boolean {
  * moved rather than send one: a confirmed intent, or a provider id whose
  * attempt Circle did not end in a terminal failure. A terminally failed one
  * is sent again on approval, so it is a new payment and the balance is
- * checked for it.
+ * checked for it. One Circle never answered (`transferUnknown`) is not a
+ * transfer that exists: sent again under its key, it is a new payment when
+ * Circle never had it, so it is checked as one, all but the balance, which
+ * the transfer Circle may hold could already have lowered (payment safety R3).
  */
 export function transferExists(intent: IntentState | null): boolean {
   if (intent === null) return false;
@@ -222,6 +244,8 @@ export type LastPaymentAttempt =
   /** `resend: false`: approving reads the failed transfer again and sends nothing new (a Gateway transfer that failed). */
   | { state: "failed"; reason: string; resend?: false }
   | { state: "in_flight" }
+  /** Circle never answered the send (`transferUnknown`): it may hold the transfer, and approving asks it again under the same key. */
+  | { state: "unanswered" }
   | null;
 
 /**
@@ -249,6 +273,7 @@ const REASON_IN_PLAIN_WORDS: Record<string, string> = {
  * reads from Circle.
  */
 export function lastAttemptOf(intent: IntentState | null, token: Stablecoin = "USDC"): LastPaymentAttempt {
+  if (transferUnknown(intent)) return { state: "unanswered" };
   if (!intent || intent.provider_tx_id === null || intent.status === "confirmed") return null;
   if (gatewayFailed(intent)) {
     return { state: "failed", reason: intent.failure_reason ? `Gateway could not mint it (${intent.failure_reason})` : "Gateway could not mint it", resend: false };
@@ -275,9 +300,14 @@ async function paymentIntentOf(invoiceId: string): Promise<IntentState | null> {
   return (result.data as IntentState | null) ?? null;
 }
 
-/** Reject and Return refuse, before any claim, an invoice whose payment was already sent. */
+/**
+ * Reject and Return refuse, before any claim, an invoice whose payment was already sent, or whose send Circle never
+ * answered (payment safety R1): either would close a bill whose money may have left.
+ */
 async function refuseIfPaymentSent(invoiceId: string): Promise<void> {
-  if (paymentWasSent(await paymentIntentOf(invoiceId))) raise("payment_in_flight");
+  const intent = await paymentIntentOf(invoiceId);
+  if (transferUnknown(intent)) raise("payment_unknown");
+  if (paymentWasSent(intent)) raise("payment_in_flight");
 }
 
 /** Logs a failed write after a claim went through, by invoice id: the row is left `processing` until it is reclaimed. */
@@ -584,6 +614,8 @@ export async function approveAndPay(
     gatewayQuote?: (chain: string, amount: number) => Promise<GatewayQuote | null>;
   } = {}
 ): Promise<{ status: "paid" | "matched" | "held"; txRef: string | null; note: string }> {
+  // Nothing is paid while the platform has payments switched off (payment safety S4): refused before anything is read.
+  if (paymentsDisabled()) raise("payments_off");
   const orgId = currentOrgId();
   const invoice = await loadWaitingPayable(input.invoiceId);
 
@@ -614,7 +646,10 @@ export async function approveAndPay(
   const provider = getChainProvider();
   const intent = await paymentIntentOf(invoice.id);
   const alreadySent = transferExists(intent);
-  if (!alreadySent && invoice.currency === "USDC") {
+  // A send Circle never answered may have lowered the balance already (payment safety R3): only the funds check is
+  // skipped for it, since sending it again under its key may still be a new payment.
+  const mayExist = alreadySent || transferUnknown(intent);
+  if (!mayExist && invoice.currency === "USDC") {
     const balance = provider.mode === "live" ? await syncOperatingBalance(operating.id) : operating.balance;
     if (balance < invoice.amount) {
       throw new ApprovalError("insufficient_funds", `The operating account holds ${balance} USDC, less than this invoice.`);
@@ -622,7 +657,7 @@ export async function approveAndPay(
   }
   // A EURC payable is paid from the wallet's EURC, read from the chain. A
   // sandbox simulates its payments and has no EURC balance to check (E7).
-  if (!alreadySent && invoice.currency === "EURC" && provider.mode === "live" && provider.getTokenBalance) {
+  if (!mayExist && invoice.currency === "EURC" && provider.mode === "live" && provider.getTokenBalance) {
     const { balance } = await provider.getTokenBalance(operating.id, "EURC");
     if (balance < invoice.amount) {
       throw new ApprovalError("insufficient_funds", `The operating wallet holds ${balance} EURC, less than this invoice.`);
@@ -684,7 +719,7 @@ export async function approveAndPay(
       // now report a terminal failure, that is recorded, the invoice is held
       // again, and the next approval sends it. executePayment still reads
       // Circle before any retry.
-      { provider, operating: { id: operating.id }, retryTerminalFailure: !alreadySent }
+      { provider, operating: { id: operating.id }, retryTerminalFailure: !mayExist }
     );
   } catch (err) {
     // The claim went through, but nothing about the payment itself is known.

@@ -6,12 +6,13 @@ import { firstPaymentCheck } from "../new-payee-facts";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { listLedgerEntriesForTargets } from "../ledger";
 import type { Provenance } from "../provenance";
-import { lastAttemptOf, paymentWasSent, SOLE_APPROVER_NOTE, transferExists, type IntentState } from "./approvals";
+import { lastAttemptOf, paymentWasSent, SOLE_APPROVER_NOTE, transferExists, transferUnknown, type IntentState } from "./approvals";
 import { releaseHeldMilestone } from "./orchestrator";
 import { HELD_FOR_BUDGET } from "./outflow-budget";
 import { payoutAddress, syncOperatingBalance } from "./pay";
 import { HELD_BECAUSE_PAUSED } from "./pause";
 import { isSoleApprover } from "./sole-approver";
+import { PAYMENTS_OFF, paymentsDisabled } from "../payments-switch";
 
 /**
  * A person decides a held milestone (docs/superpowers/specs/2026-10-02-held-milestone-actions-design.md): every
@@ -46,7 +47,8 @@ export type MilestoneDecisionErrorCode =
   | "insufficient_funds"
   | "payment_in_flight"
   | "escrow_locked"
-  | "reason_required";
+  | "reason_required"
+  | "payments_off";
 
 const MESSAGES: Record<MilestoneDecisionErrorCode, string> = {
   milestone_not_found: "That milestone is not in this workspace.",
@@ -64,6 +66,7 @@ const MESSAGES: Record<MilestoneDecisionErrorCode, string> = {
   payment_in_flight: "A transfer for this milestone may still settle. Pay now records it; nothing is sent twice.",
   escrow_locked: "This milestone's USDC is locked in escrow. Refund the hold from its refund date first, then close it.",
   reason_required: "Say why it is closed without paying, in up to 500 characters.",
+  payments_off: PAYMENTS_OFF,
 };
 
 export class MilestoneDecisionError extends Error {
@@ -163,6 +166,17 @@ function reasonOf(facts: HeldFacts): Omit<HeldReason, "hint"> {
   // A transfer that went out, or may still: recorded, never sent twice, and never closed over.
   if (intent?.status === "confirmed") {
     return { kind: "in_flight", text: "Its transfer went through, but it is not marked paid yet. Pay now records it; nothing is sent twice.", link: null, canPay: true, canClose: false, override: false };
+  }
+  // Circle never answered its send (payment safety R1): it may hold the transfer, which the same key returns.
+  if (transferUnknown(intent)) {
+    return {
+      kind: "in_flight",
+      text: "Circle did not answer when its transfer was sent, so it may have taken it. Pay now asks Circle again under the same key; nothing is sent twice.",
+      link: null,
+      canPay: true,
+      canClose: false,
+      override: false,
+    };
   }
   if (paymentWasSent(intent)) {
     return { kind: "in_flight", text: "A transfer for it is on its way. Pay now records it once Circle confirms it; nothing is sent twice.", link: null, canPay: true, canClose: false, override: false };
@@ -365,6 +379,8 @@ export async function payHeldMilestone(input: {
   milestoneId: string;
   provenance?: Provenance;
 }): Promise<{ status: string; txRef: string | null; note: string }> {
+  // Nothing is paid while the platform has payments switched off (payment safety S4): refused before anything is read.
+  if (paymentsDisabled()) raise("payments_off");
   const orgId = currentOrgId();
   const provider = getChainProvider();
   const milestone = await loadMilestone(input.milestoneId, provider.mode === "live");
@@ -373,6 +389,10 @@ export async function payHeldMilestone(input: {
 
   const reason = heldReason(milestone.facts);
   const alreadySent = transferExists(milestone.facts.intent);
+  // A send Circle never answered is sent again under its key, which may be a new payment (payment safety R3): it is
+  // judged as one, by what would hold it if no transfer existed, and only the funds check is skipped.
+  const unknown = transferUnknown(milestone.facts.intent);
+  const blocking = unknown ? heldReason({ ...milestone.facts, intent: null }) : reason;
   let soleApprover = false;
   // A transfer that already exists is recorded whatever stands in the way now: nothing new can move.
   if (!alreadySent) {
@@ -383,9 +403,9 @@ export async function payHeldMilestone(input: {
       no_address: "no_address",
       address_unconfirmed: "address_unconfirmed",
     };
-    const code = blocked[reason.kind];
+    const code = blocked[blocking.kind];
     if (code) raise(code);
-    if (reason.override && milestone.createdBy === input.actorId) {
+    if (blocking.override && milestone.createdBy === input.actorId) {
       if (!(await isSoleApprover(input.actorId))) raise("self_approval");
       soleApprover = true;
     }
@@ -401,7 +421,7 @@ export async function payHeldMilestone(input: {
   if (!operating) raise("no_operating_account");
   const operatingId = operating.id;
   // A release from escrow is paid by the hold, not the operating account.
-  if (!alreadySent && milestone.escrowState !== "funded") {
+  if (!alreadySent && !unknown && milestone.escrowState !== "funded") {
     const balance = provider.mode === "live" ? await syncOperatingBalance(operatingId) : num(operating.balance);
     if (balance < milestone.amount) raise("insufficient_funds", `The operating account holds ${balance} USDC, less than this milestone.`);
   }

@@ -3,6 +3,7 @@ import { withOrg } from "../dal/scope";
 import { CycleRunningError, hasRunningCycle } from "./cycle-running";
 import { runAgentCycle } from "./orchestrator";
 import { AgentPausedError } from "./pause";
+import { PaymentsDisabledError } from "../payments-switch";
 import { SANDBOX_DAILY_CYCLES, SandboxCapReachedError } from "./sandbox-cap";
 
 /**
@@ -124,7 +125,7 @@ async function runPending(orgId: string): Promise<void> {
       console.info(SKIPPED, orgId);
       return;
     }
-    if (error instanceof AgentPausedError || error instanceof SandboxCapReachedError) return;
+    if (error instanceof AgentPausedError || error instanceof SandboxCapReachedError || error instanceof PaymentsDisabledError) return;
     console.error("event cycle failed", orgId, error instanceof Error ? error.message : String(error));
   }
 }
