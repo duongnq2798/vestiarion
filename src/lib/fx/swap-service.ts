@@ -1,7 +1,7 @@
 import { ArcTestnet } from "@circle-fin/app-kit/chains";
 import { encodeFunctionData, type Hex } from "viem";
 import { z } from "zod";
-import { ARC_TESTNET_EURC, ARC_TESTNET_USDC, FxQuoteError, fromBaseUnits, toBaseUnits } from "./quote";
+import { ARC_TESTNET_EURC, ARC_TESTNET_USDC, FxQuoteError, fromBaseUnits, STABLECOIN_SERVICE_CHAIN, toBaseUnits } from "./quote";
 import { askAgain } from "./retry";
 import { SWAP_SLIPPAGE_BPS } from "./swap-limits";
 
@@ -170,9 +170,9 @@ export async function quoteUsdcForEurc(usdcIn: number, options: AskOptions): Pro
   const url = new URL(QUOTE_URL);
   url.search = new URLSearchParams({
     tokenInAddress: ARC_TESTNET_USDC,
-    tokenInChain: "Arc_Testnet",
+    tokenInChain: STABLECOIN_SERVICE_CHAIN,
     tokenOutAddress: ARC_TESTNET_EURC,
-    tokenOutChain: "Arc_Testnet",
+    tokenOutChain: STABLECOIN_SERVICE_CHAIN,
     fromAddress: options.fromAddress,
     toAddress: options.fromAddress,
     amount: toBaseUnits(usdcIn),
@@ -274,9 +274,9 @@ export async function createSwapTransaction(usdcIn: number, options: AskOptions)
   const units = toBaseUnits(usdcIn);
   const body = JSON.stringify({
     tokenInAddress: ARC_TESTNET_USDC,
-    tokenInChain: "Arc_Testnet",
+    tokenInChain: STABLECOIN_SERVICE_CHAIN,
     tokenOutAddress: ARC_TESTNET_EURC,
-    tokenOutChain: "Arc_Testnet",
+    tokenOutChain: STABLECOIN_SERVICE_CHAIN,
     fromAddress: options.fromAddress,
     toAddress: options.fromAddress,
     amount: units,

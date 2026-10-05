@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { PAYEE_CHAINS, payeeChain, type PayeeChain } from "../payee-chains";
 import { ARC_TESTNET_DOMAIN, ARC_TESTNET_USDC } from "./cctp";
 import { MAY_HAVE_BEEN_ACCEPTED } from "./settlement";
+import { ARC_TESTNET } from "../network";
 
 /**
  * Circle Gateway from Arc testnet (docs/superpowers/specs/2026-10-01-gateway-payouts-design.md).
@@ -16,7 +17,7 @@ import { MAY_HAVE_BEEN_ACCEPTED } from "./settlement";
 /** GatewayWallet and GatewayMinter: the same addresses on every EVM testnet, Arc's included. */
 export const GATEWAY_WALLET = "0x0077777d7EBA4688BDeF3E311b846F25870A19B9";
 export const GATEWAY_MINTER = "0x0022222ABE238Cc2C7Bb1f21003F0a260052475B";
-export const GATEWAY_API = "https://gateway-api-testnet.circle.com/v1";
+export const GATEWAY_API = ARC_TESTNET.gateway.api;
 /** What a forwarded Gateway payout takes: the attestation is instant, and the mint is the next block on the payee's chain. */
 export const EXPECTED_GATEWAY_SECONDS = 5;
 

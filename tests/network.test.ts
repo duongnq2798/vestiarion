@@ -1,0 +1,99 @@
+import { describe, expect, it } from "vitest";
+import { configFromEnv } from "@/lib/config";
+import { runWithConfig } from "@/lib/context";
+import { currentNetwork } from "@/lib/current-network";
+import { ARC_MAINNET, ARC_TESTNET, NETWORKS, networkOf, networkProfile } from "@/lib/network";
+import { arcAddressUrl, arcTxUrl, PAYEE_CHAINS } from "@/lib/payee-chains";
+import { ARC_TESTNET_DOMAIN, ARC_TESTNET_USDC } from "@/lib/circle/cctp";
+import { GATEWAY_API } from "@/lib/circle/gateway";
+import { ARC_TESTNET_EURC, ARC_TESTNET_USDC as QUOTE_USDC } from "@/lib/fx/quote";
+import { ARC_TESTNET_CHAIN_ID, ARC_TESTNET_RPC_URL } from "@/lib/circle/arcFees";
+import { ARC_TESTNET_USYC, USYC_ENTITLEMENTS, USYC_TELLER } from "@/lib/circle/usyc";
+import { GATEWAY_FACILITATOR_URL, X402_NETWORK } from "@/lib/x402/offer";
+
+/**
+ * One profile per network (docs/superpowers/specs/2026-10-05-network-foundation-design.md N6): each network's facts in
+ * one place. Today's Arc testnet constants read their values from the testnet profile, unchanged.
+ */
+
+describe("the Arc testnet profile", () => {
+  it("holds the values every module used before it", () => {
+    expect(ARC_TESTNET).toEqual({
+      id: "arc-testnet",
+      label: "Arc testnet",
+      circleBlockchain: "ARC-TESTNET",
+      chainId: 5042002,
+      caip2: "eip155:5042002",
+      rpcUrl: "https://rpc.testnet.arc.network",
+      explorer: "https://explorer.testnet.arc.io",
+      tokens: { USDC: "0x3600000000000000000000000000000000000000", EURC: "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a" },
+      cctp: { domain: 26, iris: "https://iris-api-sandbox.circle.com" },
+      gateway: { api: "https://gateway-api-testnet.circle.com/v1", facilitator: "https://gateway-api-testnet.circle.com" },
+      usyc: {
+        token: "0xe9185F0c5F296Ed1797AaE4238D26CCaBEadb86C",
+        teller: "0x9fdF14c5B14173D74C08Af27AebFf39240dC105A",
+        entitlements: "0xCC205224862C7641930c87679E98999d23C26113",
+      },
+      stablecoinServiceChain: "Arc_Testnet",
+      hostedWallets: true,
+      circleKeyPrefix: "TEST_API_KEY:",
+    });
+  });
+
+  it("is where today's constants read their values from", () => {
+    expect(arcTxUrl("0xabc")).toBe(`${ARC_TESTNET.explorer}/tx/0xabc`);
+    expect(arcAddressUrl("0xdef")).toBe(`${ARC_TESTNET.explorer}/address/0xdef`);
+    expect(PAYEE_CHAINS[0]).toMatchObject({ id: ARC_TESTNET.circleBlockchain, label: ARC_TESTNET.label, domain: ARC_TESTNET.cctp.domain });
+    expect(ARC_TESTNET_DOMAIN).toBe(ARC_TESTNET.cctp.domain);
+    expect(ARC_TESTNET_USDC).toBe(ARC_TESTNET.tokens.USDC);
+    expect(QUOTE_USDC).toBe(ARC_TESTNET.tokens.USDC);
+    expect(ARC_TESTNET_EURC).toBe(ARC_TESTNET.tokens.EURC);
+    expect(GATEWAY_API).toBe(ARC_TESTNET.gateway.api);
+    expect(GATEWAY_FACILITATOR_URL).toBe(ARC_TESTNET.gateway.facilitator);
+    expect(ARC_TESTNET_RPC_URL).toBe(ARC_TESTNET.rpcUrl);
+    expect(ARC_TESTNET_CHAIN_ID).toBe(ARC_TESTNET.chainId);
+    expect([ARC_TESTNET_USYC, USYC_TELLER, USYC_ENTITLEMENTS]).toEqual([ARC_TESTNET.usyc.token, ARC_TESTNET.usyc.teller, ARC_TESTNET.usyc.entitlements]);
+    expect(X402_NETWORK).toBe(ARC_TESTNET.caip2);
+  });
+});
+
+describe("the Arc mainnet profile", () => {
+  it("holds Arc mainnet's facts as read on 2026-10-04, with what is not verified there off", () => {
+    expect(ARC_MAINNET).toEqual({
+      id: "arc-mainnet",
+      label: "Arc mainnet",
+      circleBlockchain: "ARC",
+      chainId: 5042,
+      caip2: "eip155:5042",
+      rpcUrl: "https://rpc.mainnet.arc.io",
+      explorer: "https://explorer.arc.io",
+      tokens: { USDC: "0x3600000000000000000000000000000000000000", EURC: "0xbEf5f6d51CB62b58e6A8f77868681825C6fe21c1" },
+      cctp: null,
+      gateway: null,
+      usyc: null,
+      stablecoinServiceChain: null,
+      hostedWallets: false,
+      circleKeyPrefix: "LIVE_API_KEY:",
+    });
+  });
+});
+
+describe("a network's id", () => {
+  it("names one of the two profiles", () => {
+    expect(Object.keys(NETWORKS)).toEqual(["arc-testnet", "arc-mainnet"]);
+    expect(networkProfile("arc-mainnet")).toBe(ARC_MAINNET);
+  });
+
+  it("reads a missing one as Arc testnet, and refuses anything else rather than guess", () => {
+    expect(networkOf(undefined)).toBe("arc-testnet");
+    expect(networkOf(null)).toBe("arc-testnet");
+    expect(networkOf("arc-mainnet")).toBe("arc-mainnet");
+    expect(() => networkOf("arc-sepolia")).toThrow('"arc-sepolia" is not a network Vestiarion knows');
+  });
+
+  it("is the organization's in scope, Arc testnet by default", () => {
+    const base = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k" });
+    expect(runWithConfig(base, () => currentNetwork())).toBe("arc-testnet");
+    expect(runWithConfig({ ...base, network: "arc-mainnet" }, () => currentNetwork())).toBe("arc-mainnet");
+  });
+});

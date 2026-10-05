@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { decodeFunctionResult, encodeFunctionData, parseAbi, toFunctionSelector, type Hex } from "viem";
 import { ARC_TESTNET_RPC_URL } from "./arcFees";
+import { ARC_TESTNET } from "../network";
 
 /**
  * USYC on Arc testnet (docs/superpowers/specs/2026-10-02-usyc-live-design.md): Circle's tokenized
@@ -9,9 +10,9 @@ import { ARC_TESTNET_RPC_URL } from "./arcFees";
  * have 6 decimals, and the oracle's price has 18.
  */
 
-export const ARC_TESTNET_USYC = "0xe9185F0c5F296Ed1797AaE4238D26CCaBEadb86C";
-export const USYC_TELLER = "0x9fdF14c5B14173D74C08Af27AebFf39240dC105A";
-export const USYC_ENTITLEMENTS = "0xCC205224862C7641930c87679E98999d23C26113";
+export const ARC_TESTNET_USYC = ARC_TESTNET.usyc.token;
+export const USYC_TELLER = ARC_TESTNET.usyc.teller;
+export const USYC_ENTITLEMENTS = ARC_TESTNET.usyc.entitlements;
 
 const PRICE_SCALE = 10n ** 18n;
 const UNITS = 1_000_000;

@@ -1,8 +1,10 @@
+import { ARC_TESTNET } from "./network";
+
 /**
- * Arc testnet's block explorer, as docs.arc.io names it (Arc mainnet's is https://explorer.arc.io). Every link to
- * Arc is built from it: in the app, the Telegram and Slack messages, the payment emails and the GitHub comments.
+ * Arc testnet's block explorer, from its network profile (./network; Arc mainnet's is there too). Every link to Arc
+ * is built from it: in the app, the Telegram and Slack messages, the payment emails and the GitHub comments.
  */
-const ARC_EXPLORER = "https://explorer.testnet.arc.io";
+const ARC_EXPLORER = ARC_TESTNET.explorer;
 
 /**
  * The chains a payee can be paid on (docs/superpowers/specs/2026-10-01-cctp-payouts-design.md
@@ -10,7 +12,7 @@ const ARC_EXPLORER = "https://explorer.testnet.arc.io";
  * client components. `domain` is CCTP's identifier for the chain; Arc testnet is domain 26.
  */
 export const PAYEE_CHAINS = [
-  { id: "ARC-TESTNET", label: "Arc testnet", domain: 26, explorerTx: `${ARC_EXPLORER}/tx/` },
+  { id: ARC_TESTNET.circleBlockchain, label: ARC_TESTNET.label, domain: ARC_TESTNET.cctp.domain, explorerTx: `${ARC_EXPLORER}/tx/` },
   { id: "BASE-SEPOLIA", label: "Base Sepolia", domain: 6, explorerTx: "https://sepolia.basescan.org/tx/" },
   { id: "ARB-SEPOLIA", label: "Arbitrum Sepolia", domain: 3, explorerTx: "https://sepolia.arbiscan.io/tx/" },
   { id: "ETH-SEPOLIA", label: "Ethereum Sepolia", domain: 0, explorerTx: "https://sepolia.etherscan.io/tx/" },

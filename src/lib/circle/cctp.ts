@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { payeeChain, type PayeeChain } from "../payee-chains";
+import { ARC_TESTNET } from "../network";
 
 /**
  * CCTP V2 from Arc testnet, with Circle's Forwarding Service
@@ -10,11 +11,11 @@ import { payeeChain, type PayeeChain } from "../payee-chains";
  * (R1). Iris, Circle's attestation API, quotes the fee and reports the mint.
  */
 
-export const ARC_TESTNET_DOMAIN = 26;
+export const ARC_TESTNET_DOMAIN = ARC_TESTNET.cctp.domain;
 /** TokenMessengerV2: the same address on every CCTP testnet, Arc's included. */
 export const TOKEN_MESSENGER_V2 = "0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA";
 /** Arc's USDC ERC-20 interface: 6 decimals, the native USDC's balance. */
-export const ARC_TESTNET_USDC = "0x3600000000000000000000000000000000000000";
+export const ARC_TESTNET_USDC = ARC_TESTNET.tokens.USDC;
 /** `depositForBurnWithHook`'s hook data asking the Forwarding Service to submit the mint ("cctp-forward"). */
 export const CCTP_FORWARD_HOOK = "0x636374702d666f72776172640000000000000000000000000000000000000000";
 /** Fast transfer: attested at "confirmed" finality, in seconds rather than minutes. */
@@ -22,7 +23,7 @@ export const FAST_FINALITY = 1000;
 /** What a fast forwarded transfer takes end to end, as Circle documents it (8–20 s), rounded up. */
 export const EXPECTED_BRIDGE_SECONDS = 30;
 
-const IRIS = "https://iris-api-sandbox.circle.com";
+const IRIS = ARC_TESTNET.cctp.iris;
 const IRIS_DEADLINE_MS = 10_000;
 const ZERO_BYTES32 = `0x${"0".repeat(64)}`;
 
