@@ -109,6 +109,7 @@ A sandbox workspace has no Gateway account, so its payouts across chains stay on
 - **R4: an EOA delegate created through Circle, never a key Vestiarion holds.** Cost if wrong: none known.
 - **R5: a salt derived from the attempt's key, and the route kept on the intent.** A transfer whose POST gave no answer is sent again unchanged, or held for a person. Cost if wrong: one person's check in a rare case.
 - **R7: a person's Approve and pay uses the intent's route.** An intent that has none yet (it was held before any attempt) is paid through CCTP. Cost if wrong: a held payout that could have gone through Gateway goes through CCTP.
+  - Superseded on 2026-10-05 (`2026-10-05-approval-payout-route-design.md` P1): an intent with no route yet takes the agent's rule, and the funds check counts the route's fee where it is paid from.
 - **R6: no withdrawal from Gateway in this version.** Cost if wrong: funds stay in Gateway until they are paid out.
 
 ## 4. Tests

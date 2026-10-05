@@ -1,5 +1,11 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-05: A person's payout to another chain takes the agent's route
+
+- An `approval_paid` entry for a new payment to another chain can now carry `payout.route: "gateway"`, with `gatewayBalanceUsdc`, on a person's first attempt. A person's Approve and pay now chooses the route as the agent does: Gateway when the workspace's Gateway balance covers the amount and Gateway's fee, and Gateway costs no more than CCTP; CCTP otherwise. Before, a person's first attempt always went through CCTP.
+- Approve and pay now refuses, before anything is sent, a CCTP payout the operating wallet cannot cover with its fee, and a Gateway payout the Gateway balance cannot cover. No ledger entry is written for a refusal.
+- Nothing changes in `/api/v1`.
+
 ## 2026-10-05: Two approvals above a figure the workspace sets
 
 - **A new guardrail rule**, `workspace.two_approvals`. Above the figure a workspace's owner sets, the agent never pays or schedules a payable, or releases a milestone: code holds it for two people. Its entry carries `guardrailBlocked: true`, `execution.resultingStatus: "held"` and `observed.twoApprovalsAbove`, the figure it was weighed against. A EURC payable is weighed at its `usdcValue`.

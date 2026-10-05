@@ -198,6 +198,12 @@ payment to an address.
 - **Afterwards:** the follow-up reopens a payable held this way once its address is paid, or two parties stand behind
   it.
 
+**A person's payout to another chain takes the agent's route** (`docs/superpowers/specs/2026-10-05-approval-payout-route-design.md`).
+`choosePayoutRoute` (`src/lib/payout-route.ts`) is the one rule for the AP stage and Approve and pay: Gateway when its
+balance covers the amount and its fee and it costs no more than CCTP, CCTP otherwise, and a route an earlier attempt took
+is kept. `payoutFundsShort` counts what leaves from where it leaves: a CCTP payout's amount and fee from the operating
+wallet, a Gateway payout's from the Gateway balance. The Approvals card names the route and its fee.
+
 **Two approvals above a figure** (`docs/superpowers/specs/2026-10-05-two-approvals-design.md`, phase 2 of the mainnet
 plan, on Arc testnet).
 - **The figure:** `approval_policies.two_approvals_above`, one per workspace, an owner's to set (`approval.policy`),

@@ -40,19 +40,25 @@ const giveBack = withSuccessToast(returnInvoiceAction);
  */
 export function payConfirmTitle(
   payable: Pick<WaitingPayable, "amount" | "counterpartyName" | "discount"> &
-    Partial<Pick<WaitingPayable, "currency" | "payeeChain" | "bridgeFeeUsdc">>,
+    Partial<Pick<WaitingPayable, "currency" | "payeeChain" | "bridgeFeeUsdc" | "payoutRoute">>,
   sandbox: boolean,
   now: Date = new Date()
 ): string {
   const { amountPaid, discountTaken } = amountToPay(payable.amount, payable.discount, now);
   const discount = discountTaken > 0 && payable.discount ? ` (${payable.discount.pct}% discount through ${utcDay(payable.discount.deadline)})` : "";
-  // A payee on another chain: where the money goes, and the fee on top of it (CCTP payouts, review I2).
+  // A payee on another chain: where the money goes, and the fee of the route it takes on top of it (CCTP payouts,
+  // review I2; approval payout route P4). A Gateway payout is paid from the Gateway balance.
   const elsewhere = paidAcrossChains(payable.payeeChain) ? ` on ${payeeChain(payable.payeeChain).label}` : "";
+  const gateway = payable.payoutRoute === "gateway";
   const fee = !elsewhere
     ? ""
     : payable.bridgeFeeUsdc != null
-      ? ` The CCTP fee, about ${payable.bridgeFeeUsdc} USDC, comes on top.`
-      : " A CCTP fee comes on top.";
+      ? gateway
+        ? ` The Gateway fee, about ${payable.bridgeFeeUsdc} USDC, comes on top, from the Gateway balance.`
+        : ` The CCTP fee, about ${payable.bridgeFeeUsdc} USDC, comes on top.`
+      : gateway
+        ? " A Gateway fee comes on top, from the Gateway balance."
+        : " A CCTP fee comes on top.";
   return `Pay ${fmt(amountPaid)} ${payable.currency ?? "USDC"} to ${payable.counterpartyName}${elsewhere} now?${discount}${sandbox ? " (simulated)" : ""}${fee}`;
 }
 

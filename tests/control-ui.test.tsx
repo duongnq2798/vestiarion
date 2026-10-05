@@ -336,6 +336,10 @@ describe("ApprovalCard", () => {
     expect(payConfirmTitle(payable({ payeeChain: "BASE-SEPOLIA", bridgeFeeUsdc: null }), false)).toBe(
       "Pay 1,250.00 USDC to Northwind Supply on Base Sepolia now? A CCTP fee comes on top."
     );
+    // The route Approve and pay takes, by the agent's rule (approval payout route P4).
+    expect(payConfirmTitle(payable({ payeeChain: "ARB-SEPOLIA", payoutRoute: "gateway", bridgeFeeUsdc: 0.163 }), false)).toBe(
+      "Pay 1,250.00 USDC to Northwind Supply on Arbitrum Sepolia now? The Gateway fee, about 0.163 USDC, comes on top, from the Gateway balance."
+    );
     expect(payConfirmTitle(payable(), true)).toBe("Pay 1,250.00 USDC to Northwind Supply now? (simulated)");
   });
 
