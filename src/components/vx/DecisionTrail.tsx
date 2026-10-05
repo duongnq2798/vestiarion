@@ -3,7 +3,8 @@ import Link from "next/link";
 import { cn } from "@/components/ui/cn";
 import { orgHref } from "@/lib/auth/org-paths";
 import { laterBy, type TrailStep } from "@/lib/decision-trail";
-import { arcTxUrl } from "@/lib/payee-chains";
+import { txUrl } from "@/lib/payee-chains";
+import type { Network } from "@/lib/network";
 import { Hash } from "./Primitives";
 
 const DOT: Record<TrailStep["who"], string> = {
@@ -28,11 +29,14 @@ export function DecisionTrail({
   id,
   steps,
   orgSlug,
+  network,
   defaultOpen = false,
 }: {
   id: string;
   steps: TrailStep[];
   orgSlug: string;
+  /** The workspace's network: each step's transaction is linked on its explorer. */
+  network: Network;
   /** Open from the start: for a guide's screenshot. */
   defaultOpen?: boolean;
 }) {
@@ -73,7 +77,7 @@ export function DecisionTrail({
               )}
               {step.txHash && (
                 <p className="mt-1 text-xs text-ink-3">
-                  Transaction <Hash value={step.txHash} href={arcTxUrl(step.txHash)} />
+                  Transaction <Hash value={step.txHash} href={txUrl(network, step.txHash)} />
                 </p>
               )}
             </li>

@@ -4,7 +4,8 @@ import { Badge, type BadgeProps } from "@/components/ui/Badge";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Money, shortHash } from "@/components/vx/Primitives";
 import { addressUnconfirmed } from "@/lib/counterparty-address";
-import { payeeChain } from "@/lib/payee-chains";
+import { chainOn } from "@/lib/payee-chains";
+import type { Network } from "@/lib/network";
 import type { CounterpartyRow as CounterpartyRecord } from "@/lib/queries";
 
 /**
@@ -39,7 +40,10 @@ export function CounterpartyRow({
   counterparty,
   defaultOpen,
   children,
+  network,
 }: {
+  /** The workspace's network: its explorer links what this shows (network threading P6). */
+  network: Network;
   counterparty: Fields & Pick<CounterpartyRecord, "id" | "name" | "chain" | "payment_limit"> & { sample?: boolean };
   defaultOpen?: boolean;
   children: ReactNode;
@@ -47,7 +51,7 @@ export function CounterpartyRow({
   const ready = readiness(counterparty);
   const role = (
     <>
-      <span className="capitalize">{counterparty.role}</span> · {payeeChain(counterparty.chain).label}
+      <span className="capitalize">{counterparty.role}</span> · {chainOn(network, counterparty.chain).label}
     </>
   );
   const risk = (className?: string) => (

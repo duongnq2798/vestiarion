@@ -461,8 +461,8 @@ export default function DesignPage() {
                   ],
                 }}
               />
-              <AgentBudgetPanel orgSlug={DESIGN_SLUG} canEdit view={{ dailyUsdc: 500, weeklyUsdc: 2000, spentToday: 320, spentThisWeek: 1240.5, remaining: 180 }} />
-              <AgentBudgetPanel orgSlug={DESIGN_SLUG} canEdit view={{ dailyUsdc: null, weeklyUsdc: null, spentToday: 12.5, spentThisWeek: 40, remaining: null }} />
+              <AgentBudgetPanel network="arc-testnet" orgSlug={DESIGN_SLUG} canEdit view={{ dailyUsdc: 500, weeklyUsdc: 2000, spentToday: 320, spentThisWeek: 1240.5, remaining: 180 }} />
+              <AgentBudgetPanel network="arc-testnet" orgSlug={DESIGN_SLUG} canEdit view={{ dailyUsdc: null, weeklyUsdc: null, spentToday: 12.5, spentThisWeek: 40, remaining: null }} />
               <ProposalCard
                 orgSlug={DESIGN_SLUG}
                 canDecide
@@ -553,7 +553,7 @@ export default function DesignPage() {
                 right={<AgentControlsClient orgSlug={DESIGN_SLUG} nextDay={27} clockMode="simulate" paused leading={<AgentPauseControl orgSlug={DESIGN_SLUG} paused canPause canResume />} />}
               />
             </Card>
-            <CounterpartyIntake orgSlug={DESIGN_SLUG} />
+            <CounterpartyIntake orgSlug={DESIGN_SLUG} network="arc-testnet" />
             <Card className="p-4 sm:p-6">
               <Tabs defaultValue="manual">
                 <TabsList aria-label="Invoice intake">
@@ -581,11 +581,11 @@ export default function DesignPage() {
               <Eyebrow>Milestone verification</Eyebrow>
               <MilestoneVerification orgSlug={DESIGN_SLUG} milestoneId="00000000-0000-4000-8000-00000000000a" verified={false} />
             </Card>
-            <EscrowPanel orgSlug={DESIGN_SLUG} address={null} deploying={false} canSetUp />
-            <EscrowPanel orgSlug={DESIGN_SLUG} address="0xE5c0000000000000000000000000000000000E5c" deploying={false} canSetUp />
+            <EscrowPanel network="arc-testnet" orgSlug={DESIGN_SLUG} address={null} deploying={false} canSetUp />
+            <EscrowPanel network="arc-testnet" orgSlug={DESIGN_SLUG} address="0xE5c0000000000000000000000000000000000E5c" deploying={false} canSetUp />
             <Card className="space-y-3 p-4 sm:p-5">
               <Eyebrow>Milestone escrow, under a milestone&apos;s card</Eyebrow>
-              <MilestoneEscrow
+              <MilestoneEscrow network="arc-testnet"
                 orgSlug={DESIGN_SLUG}
                 milestoneId="00000000-0000-4000-8000-00000000000c"
                 requestId="00000000-0000-4000-8000-0000000000aa"
@@ -601,7 +601,7 @@ export default function DesignPage() {
                 lockable
                 hold={null}
               />
-              <MilestoneEscrow
+              <MilestoneEscrow network="arc-testnet"
                 orgSlug={DESIGN_SLUG}
                 milestoneId="00000000-0000-4000-8000-00000000000d"
                 requestId="00000000-0000-4000-8000-0000000000ab"
@@ -617,7 +617,7 @@ export default function DesignPage() {
                 refundable
                 hold={{ state: "funded", refundAfter: "2026-10-31T00:00:00Z", amount: 2, fundTxHash: `0x${"2a".repeat(32)}`, releaseTxHash: null, refundTxHash: null }}
               />
-              <MilestoneEscrow
+              <MilestoneEscrow network="arc-testnet"
                 orgSlug={DESIGN_SLUG}
                 milestoneId="00000000-0000-4000-8000-00000000000e"
                 requestId="00000000-0000-4000-8000-0000000000ac"

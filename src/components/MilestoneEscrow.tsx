@@ -9,7 +9,8 @@ import { Input } from "@/components/ui/Input";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
 import { Hash } from "@/components/vx/Primitives";
-import { arcTxUrl } from "@/lib/payee-chains";
+import { txUrl } from "@/lib/payee-chains";
+import type { Network } from "@/lib/network";
 
 const INITIAL: EscrowActionResult = { ok: false, message: "" };
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -33,8 +34,8 @@ function day(at: string): string {
 
 const short = (address: string) => `${address.slice(0, 6)}…${address.slice(-4)}`;
 
-function TxLink({ hash }: { hash: string | null }) {
-  return hash ? <Hash value={hash} href={arcTxUrl(hash)} /> : null;
+function TxLink({ hash, network }: { hash: string | null; network: Network }) {
+  return hash ? <Hash value={hash} href={txUrl(network, hash)} /> : null;
 }
 
 /**
@@ -58,6 +59,7 @@ export function MilestoneEscrow({
   amount,
   lockable,
   hold,
+  network,
 }: {
   orgSlug: string;
   milestoneId: string;
@@ -77,6 +79,8 @@ export function MilestoneEscrow({
   /** Whether it can be locked now: not yet verified, for a contractor with a confirmed Arc testnet address. */
   lockable: boolean;
   hold: MilestoneHold | null;
+  /** The workspace's network: its explorer links what this shows (network threading P6). */
+  network: Network;
 }) {
   const [requestId, setRequestId] = useState(initialRequestId);
   const renew = (result: EscrowActionResult) => (result.ok || result.renew) && setRequestId(crypto.randomUUID());
@@ -94,17 +98,17 @@ export function MilestoneEscrow({
           {hold.state === "funded" ? (
             <>
               {hold.amount} USDC locked in escrow{holdPayee ? ` for ${short(holdPayee)}` : ""} until {day(hold.refundAfter)}
-              <TxLink hash={hold.fundTxHash} />
+              <TxLink hash={hold.fundTxHash} network={network} />
             </>
           ) : hold.state === "released" ? (
             <>
               Released from escrow to the contractor
-              <TxLink hash={hold.releaseTxHash} />
+              <TxLink hash={hold.releaseTxHash} network={network} />
             </>
           ) : (
             <>
               Refunded from escrow to this workspace
-              <TxLink hash={hold.refundTxHash} />
+              <TxLink hash={hold.refundTxHash} network={network} />
             </>
           )}
         </p>

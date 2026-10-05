@@ -15,6 +15,8 @@ import { literal } from "./markdown";
 import { githubAppSettingsFromEnv, type GitHubAppSettings } from "./settings";
 import { readCommentCommand } from "./webhook";
 import { CHECKSUM_MISMATCH } from "../address-checksum";
+import { homeChain } from "../payee-chains";
+import { workspaceNetwork } from "../workspace-network";
 
 /**
  * Bounties from a pull request comment (docs/superpowers/specs/2026-10-04-github-bounties-design.md).
@@ -332,7 +334,7 @@ async function attach(
         name: `${event.pull.author} (GitHub)`,
         role: "contractor",
         address: "",
-        chain: "ARC-TESTNET",
+        chain: homeChain(workspaceNetwork().id).id,
         jurisdiction: "",
         paymentLimit: amount,
       }),

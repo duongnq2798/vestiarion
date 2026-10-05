@@ -69,18 +69,18 @@ describe("setUpEscrowAction", () => {
 
 describe("the escrow panel", () => {
   it("explains escrow and offers to set it up", () => {
-    const markup = text(renderToStaticMarkup(<EscrowPanel orgSlug="testnet-2" address={null} deploying={false} canSetUp />));
+    const markup = text(renderToStaticMarkup(<EscrowPanel network="arc-testnet" orgSlug="testnet-2" address={null} deploying={false} canSetUp />));
     expect(markup).toContain("Milestone escrow");
     expect(markup).toContain("Set up escrow");
     expect(markup).toContain("not audited");
   });
 
   it("offers to finish a setup that was interrupted", () => {
-    expect(text(renderToStaticMarkup(<EscrowPanel orgSlug="testnet-2" address={null} deploying canSetUp />))).toContain("Finish setting up");
+    expect(text(renderToStaticMarkup(<EscrowPanel network="arc-testnet" orgSlug="testnet-2" address={null} deploying canSetUp />))).toContain("Finish setting up");
   });
 
   it("links the contract once it is set up, and offers nothing to someone who may not set it up", () => {
-    const markup = renderToStaticMarkup(<EscrowPanel orgSlug="testnet-2" address={ESCROW} deploying={false} canSetUp={false} />);
+    const markup = renderToStaticMarkup(<EscrowPanel network="arc-testnet" orgSlug="testnet-2" address={ESCROW} deploying={false} canSetUp={false} />);
     expect(markup).toContain(`href="https://explorer.testnet.arc.io/address/${ESCROW}"`);
     expect(text(markup)).not.toContain("Set up escrow");
   });

@@ -16,6 +16,7 @@ const text = (markup: string) => markup.replace(/<[^>]+>/g, " ").replace(/&#x27;
 
 const DECISION: Decision = {
   id: "inv-1",
+  network: "arc-testnet",
   domain: "ap",
   action: "Pay",
   subject: "API Service",

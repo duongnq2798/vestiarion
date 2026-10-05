@@ -130,10 +130,11 @@ describe("the CSV import's preview (review M2)", () => {
 });
 
 describe("the counterparty form's chain (CCTP payouts X1)", () => {
-  it("offers the chains Vestiarion pays on, Arc testnet first", async () => {
+  it("offers the chains its workspace's network pays on, that network's own first (network threading P3)", async () => {
     const { readFileSync } = await import("node:fs");
     const source = readFileSync("src/components/intake/CounterpartyIntake.tsx", "utf8");
-    expect(source).toContain('<Select name="chain" defaultValue="ARC-TESTNET">');
-    expect(source).toContain("PAYEE_CHAINS.map");
+    expect(source).toContain('<Select name="chain" defaultValue={homeChain(network).id}>');
+    expect(source).toContain("chainsOn(network).map");
+    expect(readFileSync("src/app/o/[slug]/counterparties/page.tsx", "utf8")).toContain("<CounterpartyIntake orgSlug={slug} framed={false} network={network} />");
   });
 });

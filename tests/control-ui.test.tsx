@@ -531,7 +531,7 @@ describe("the new control screens, as source", () => {
   it("AP / AR says which payables a running cycle is deciding", () => {
     const invoices = read("src/app/o/[slug]/invoices/page.tsx");
     expect(invoices).toContain("hasRunningCycle().catch(() => false)");
-    expect(invoices).toContain("entries, { deciding })");
+    expect(invoices).toContain("entries, { network, deciding })");
   });
 
   it("every page's frame shows the agent's live state, and a successful form tells it to watch closely", () => {

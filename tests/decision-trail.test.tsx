@@ -191,14 +191,14 @@ describe("a receivable's trail (collections R8)", () => {
   });
 
   it("is on the receivable's card", () => {
-    const decision = invoiceDecision(row({ direction: "receivable", status: "pending", tx_ref: null, paid_amount: null }), undefined, ledger(RECEIVABLE));
+    const decision = invoiceDecision(row({ direction: "receivable", status: "pending", tx_ref: null, paid_amount: null }), undefined, ledger(RECEIVABLE), { network: "arc-testnet" });
     expect(decision.trail?.map((s) => s.seq)).toEqual([1100, 1101, 1102, 1103]);
   });
 });
 
 describe("a payable's card", () => {
   it("carries its trail, folded under How the agent decided, which a link opens at", () => {
-    const decision = invoiceDecision(row(), undefined, ledger(JIREN));
+    const decision = invoiceDecision(row(), undefined, ledger(JIREN), { network: "arc-testnet" });
     expect(decision.trail?.map((s) => s.seq)).toEqual([963, 965, 968, 971, 972]);
     const markup = renderToStaticMarkup(<DecisionCard decision={decision} orgSlug="acme" />);
     expect(markup).toContain(`id="trail-${INVOICE}"`);
@@ -214,11 +214,11 @@ describe("a payable's card", () => {
 
   it("says a payable not yet decided is being decided while a cycle runs", () => {
     const pending = row({ status: "pending", tx_ref: null, paid_amount: null, agent_reasoning: null });
-    const deciding = invoiceDecision(pending, undefined, [], { deciding: true });
+    const deciding = invoiceDecision(pending, undefined, [], { network: "arc-testnet", deciding: true });
     expect(deciding).toMatchObject({ outcome: "deciding", reasoning: DECIDING_NOW });
     expect(renderToStaticMarkup(<DecisionCard decision={deciding} orgSlug="acme" />)).toContain("Deciding now");
-    expect(invoiceDecision(pending, undefined, [])).toMatchObject({ outcome: "scheduled", outcomeLabel: "Not yet decided" });
+    expect(invoiceDecision(pending, undefined, [], { network: "arc-testnet" })).toMatchObject({ outcome: "scheduled", outcomeLabel: "Not yet decided" });
     // A decided payable stays as it was.
-    expect(invoiceDecision(row(), undefined, ledger(JIREN), { deciding: true }).outcome).toBe("settled");
+    expect(invoiceDecision(row(), undefined, ledger(JIREN), { network: "arc-testnet", deciding: true }).outcome).toBe("settled");
   });
 });

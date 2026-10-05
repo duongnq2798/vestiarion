@@ -19,6 +19,7 @@ import {
   invoiceInputSchema,
   noticeEmailSchema,
   type InvoiceField,
+  counterpartyChainProblem,
 } from "@/lib/intake-validation";
 import { changeCounterpartyNoticeEmail } from "@/lib/payment-notices";
 import {
@@ -32,6 +33,7 @@ import { documentProvenance } from "@/lib/invoice-document/provenance";
 import { createCounterparty } from "@/lib/counterparties/create";
 import { createInvoice } from "@/lib/invoices/create";
 import { appendLedgerEntry } from "@/lib/ledger";
+import { workspaceNetwork } from "@/lib/workspace-network";
 
 export interface IntakeActionResult {
   ok: boolean;
@@ -64,6 +66,8 @@ export async function createCounterpartyAction(
       paymentLimit: formString(formData, "paymentLimit"),
     });
     if (!parsed.success) return { ok: false, message: firstZodMessage(parsed.error) };
+    const chainProblem = counterpartyChainProblem(workspaceNetwork().id, parsed.data.chain);
+    if (chainProblem) return { ok: false, message: chainProblem };
 
     try {
       // The one way a counterparty is added, shared with the write API (write API R2).

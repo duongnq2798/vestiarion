@@ -47,28 +47,28 @@ const cctpMint = paid({ payout: { route: "cctp", feeUsdc: 0.05482 }, execution: 
 
 describe("a payable paid to another chain", () => {
   it("reads Settled on the chain a Gateway payout was minted on", () => {
-    const decision = invoiceDecision(invoice(), counterparty("ARB-SEPOLIA"), [gatewayMint]);
+    const decision = invoiceDecision(invoice(), counterparty("ARB-SEPOLIA"), [gatewayMint], { network: "arc-testnet" });
     expect(decision.outcome).toBe("settled");
     expect(decision.outcomeLabel).toBe("Settled on Arbitrum Sepolia");
   });
 
   it("reads Settled on the chain a CCTP payout was minted on, though its own transaction is the burn on Arc", () => {
-    const decision = invoiceDecision(invoice({ tx_ref: BURN }), counterparty("BASE-SEPOLIA"), [cctpMint]);
+    const decision = invoiceDecision(invoice({ tx_ref: BURN }), counterparty("BASE-SEPOLIA"), [cctpMint], { network: "arc-testnet" });
     expect(decision.outcomeLabel).toBe("Settled on Base Sepolia");
   });
 
   it("names the payee's chain for a payout recorded before its mint was", () => {
-    const decision = invoiceDecision(invoice({ tx_ref: BURN }), counterparty("BASE-SEPOLIA"), [paid({ payout: { route: "cctp" } })]);
+    const decision = invoiceDecision(invoice({ tx_ref: BURN }), counterparty("BASE-SEPOLIA"), [paid({ payout: { route: "cctp" } })], { network: "arc-testnet" });
     expect(decision.outcomeLabel).toBe("Settled on Base Sepolia");
   });
 
   it("keeps the chain the money was minted on after the payee moves to another", () => {
-    const decision = invoiceDecision(invoice(), counterparty("ARC-TESTNET"), [gatewayMint]);
+    const decision = invoiceDecision(invoice(), counterparty("ARC-TESTNET"), [gatewayMint], { network: "arc-testnet" });
     expect(decision.outcomeLabel).toBe("Settled on Arbitrum Sepolia");
   });
 
   it("shows the label on the card, and never Settled on Arc", () => {
-    const markup = renderToStaticMarkup(<DecisionCard decision={invoiceDecision(invoice(), counterparty("ARB-SEPOLIA"), [gatewayMint])} orgSlug="acme" />);
+    const markup = renderToStaticMarkup(<DecisionCard decision={invoiceDecision(invoice(), counterparty("ARB-SEPOLIA"), [gatewayMint], { network: "arc-testnet" })} orgSlug="acme" />);
     expect(markup).toContain("Settled on Arbitrum Sepolia");
     expect(markup).not.toContain("Settled on Arc");
   });
@@ -76,20 +76,20 @@ describe("a payable paid to another chain", () => {
 
 describe("a payable that did not settle on another chain", () => {
   it("still reads Settled on Arc when it was paid on Arc", () => {
-    const decision = invoiceDecision(invoice(), counterparty("ARC-TESTNET"), [paid({})]);
+    const decision = invoiceDecision(invoice(), counterparty("ARC-TESTNET"), [paid({})], { network: "arc-testnet" });
     expect(decision.outcome).toBe("settled");
     expect(decision.outcomeLabel).toBeUndefined();
     expect(renderToStaticMarkup(<DecisionCard decision={decision} orgSlug="acme" />)).toContain("Settled on Arc");
   });
 
   it("is not called settled while it waits for a person", () => {
-    const decision = invoiceDecision(invoice({ status: "held", tx_ref: null }), counterparty("ARB-SEPOLIA"), [paid({ payout: { route: "gateway" } })]);
+    const decision = invoiceDecision(invoice({ status: "held", tx_ref: null }), counterparty("ARB-SEPOLIA"), [paid({ payout: { route: "gateway" } })], { network: "arc-testnet" });
     expect(decision.outcome).toBe("held");
     expect(decision.outcomeLabel ?? "").not.toMatch(/^Settled/);
   });
 
   it("is not called settled when it was simulated", () => {
-    const decision = invoiceDecision(invoice({ tx_ref: "sim_44bd8923" }), counterparty("BASE-SEPOLIA"), [paid({ payout: { route: "cctp" } })]);
+    const decision = invoiceDecision(invoice({ tx_ref: "sim_44bd8923" }), counterparty("BASE-SEPOLIA"), [paid({ payout: { route: "cctp" } })], { network: "arc-testnet" });
     expect(decision.outcome).toBe("simulated");
     expect(decision.outcomeLabel ?? "").not.toMatch(/^Settled/);
   });

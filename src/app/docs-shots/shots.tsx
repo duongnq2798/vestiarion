@@ -515,7 +515,7 @@ export const DOCS_SHOTS = {
     render: function CounterpartyShot() {
       return (
         <IntakeFold label="Add counterparty" meta="human-entered · screened on submission" defaultOpen className="">
-          <CounterpartyIntake orgSlug={SLUG} framed={false} />
+          <CounterpartyIntake orgSlug={SLUG} framed={false} network="arc-testnet" />
         </IntakeFold>
       );
     },
@@ -530,7 +530,7 @@ export const DOCS_SHOTS = {
           <Card className="overflow-hidden">
             <ul className="divide-y divide-line">
               <li>
-                <CounterpartyRowView counterparty={{ ...COUNTERPARTY, address_changed_at: "2026-09-30T12:20:00Z", address_confirmed_at: null }} defaultOpen>
+                <CounterpartyRowView network="arc-testnet" counterparty={{ ...COUNTERPARTY, address_changed_at: "2026-09-30T12:20:00Z", address_confirmed_at: null }} defaultOpen>
                   {/* As the page shows it above the address: the limits, where it is, when it was screened. */}
                   <dl className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3 text-xs sm:grid-cols-4">
                     <div><dt className="text-ink-3">Configured limit</dt><dd className="mt-0.5 text-ink">50.00 USDC</dd></div>
@@ -640,7 +640,7 @@ export const DOCS_SHOTS = {
         <section>
           <SectionHeader title="Payables" meta="1 invoice · open one for the agent's reasoning" />
           <RowGroupHeading title="Paid and closed" count={1} />
-          <DecisionRows orgSlug={SLUG} items={[{ decision: invoiceDecision(INVOICE, COUNTERPARTY, ENTRIES), date: { label: "Due Oct 15, 2026" }, open: true }]} />
+          <DecisionRows orgSlug={SLUG} items={[{ decision: invoiceDecision(INVOICE, COUNTERPARTY, ENTRIES, { network: "arc-testnet" }), date: { label: "Due Oct 15, 2026" }, open: true }]} />
         </section>
       );
     },
@@ -650,10 +650,10 @@ export const DOCS_SHOTS = {
     page: "invoices",
     render: function TrailShot() {
       // How the agent decided, opened, as a payable's card shows it: the trail alone, each check on its own line.
-      const decision = invoiceDecision(TRAIL_INVOICE, COUNTERPARTY, TRAIL_ENTRIES);
+      const decision = invoiceDecision(TRAIL_INVOICE, COUNTERPARTY, TRAIL_ENTRIES, { network: "arc-testnet" });
       return (
         <Card className="overflow-hidden">
-          <DecisionTrail id={decision.id} steps={decision.trail ?? []} orgSlug={SLUG} defaultOpen />
+          <DecisionTrail id={decision.id} steps={decision.trail ?? []} orgSlug={SLUG} network="arc-testnet" defaultOpen />
         </Card>
       );
     },
@@ -669,7 +669,7 @@ export const DOCS_SHOTS = {
           orgSlug={SLUG}
           items={[
             {
-              decision: invoiceDecision(OWED, undefined, REMINDER_ENTRIES),
+              decision: invoiceDecision(OWED, undefined, REMINDER_ENTRIES, { network: "arc-testnet" }),
               date: { label: "Due Oct 10, 2026" },
               footerAction: (
                 <PayLinkControl
@@ -717,7 +717,7 @@ export const DOCS_SHOTS = {
             orgSlug={SLUG}
             items={[
               {
-                decision: invoiceDecision(ASKED_INVOICE, COUNTERPARTY, [ASK_ENTRY]),
+                decision: invoiceDecision(ASKED_INVOICE, COUNTERPARTY, [ASK_ENTRY], { network: "arc-testnet" }),
                 date: { label: "Due Oct 15, 2026" },
                 hint: waitingHint(onFile, null),
                 footerAction: (
@@ -745,7 +745,7 @@ export const DOCS_SHOTS = {
         <section>
           <SectionHeader title="Stopped" meta="refused by code, or waiting for you" />
           <DecisionCard
-            decision={invoiceDecision(STOPPED_INVOICE, COUNTERPARTY, [STOP_ENTRY])}
+            decision={invoiceDecision(STOPPED_INVOICE, COUNTERPARTY, [STOP_ENTRY], { network: "arc-testnet" })}
             orgSlug={SLUG}
             footerAction={
               <WaitingPayableAction
@@ -818,7 +818,7 @@ export const DOCS_SHOTS = {
       // The spending limit enforced on Arc (onchain spending limit §4): sample addresses, the contract's own count.
       return (
         <div className="mx-auto max-w-sm">
-          <AgentBudgetPanel
+          <AgentBudgetPanel network="arc-testnet"
             orgSlug={SLUG}
             canEdit
             live
@@ -894,7 +894,7 @@ export const DOCS_SHOTS = {
           orgSlug={SLUG}
           items={[
             {
-              decision: milestoneDecision(HELD_MILESTONE, [HELD_ENTRY]),
+              decision: milestoneDecision(HELD_MILESTONE, [HELD_ENTRY], { network: "arc-testnet" }),
               date: { label: "Held Oct 2, 2026", tone: "held" },
               hint: HELD_REASON.hint,
               before: (

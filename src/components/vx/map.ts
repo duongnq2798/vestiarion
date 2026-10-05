@@ -9,7 +9,8 @@ import type { LedgerEntry } from "@/lib/ledger";
 import type { CounterpartyRow, InvoiceRow, MilestoneRow, TreasuryActionRow } from "@/lib/queries";
 import type { Decision, Evidence, Guardrail, Outcome } from "./types";
 import { fmt } from "./Primitives";
-import { BRIDGE_FEE_CAP_PERCENT, paidAcrossChains, payeeChain } from "@/lib/payee-chains";
+import { BRIDGE_FEE_CAP_PERCENT, chainById, homeChain, paidAcrossChains } from "@/lib/payee-chains";
+import type { Network } from "@/lib/network";
 import { SWAP_COST_CAP_PERCENT } from "@/lib/fx/swap-limits";
 
 /**
@@ -88,7 +89,7 @@ function termsEvidence(invoice: InvoiceRow): Evidence | null {
  * The swap of USDC for EURC that funded a EURC payment, linked to its transaction on Arc testnet, or a
  * swap that failed or is still in flight (EURC swap spec S9). Null when no swap was made.
  */
-function swapEvidence(detail: Record<string, unknown> | undefined): Evidence | null {
+function swapEvidence(detail: Record<string, unknown> | undefined, network: Network): Evidence | null {
   const swap = record(detail?.swap);
   const state = stringValue(swap?.state);
   if (state === "confirmed") {
@@ -97,7 +98,7 @@ function swapEvidence(detail: Record<string, unknown> | undefined): Evidence | n
     return {
       label: "Funded by swap",
       value: `${numberValue(swap?.usdcIn)} USDC → ${received ?? "?"} EURC`,
-      ...(hash ? { href: `${payeeChain("ARC-TESTNET").explorerTx}${hash}` } : {}),
+      ...(hash ? { href: `${homeChain(network).explorerTx}${hash}` } : {}),
       state: "ok",
     };
   }
@@ -169,7 +170,7 @@ const shortAddress = (address: string) => (address.length > 12 ? `${address.slic
  * client, and once a transfer settled it, it says who sent it and how the agent matched it, from the signed
  * `ar_received` entry, with the transaction.
  */
-function receivableDecision(invoice: InvoiceRow, entries: LedgerEntry[]): Decision {
+function receivableDecision(invoice: InvoiceRow, entries: LedgerEntry[]): Omit<Decision, "network"> {
   const received = entries.find((entry) => entry.action === "ar_received" && entry.detail.invoiceId === invoice.id);
   const detail = received?.detail;
   const currency = invoice.currency ?? "USDC";
@@ -221,12 +222,22 @@ function receivableDecision(invoice: InvoiceRow, entries: LedgerEntry[]): Decisi
 export const DECIDING_NOW =
   "The agent is deciding this invoice now. It checks the purchase order and goods receipt, the counterparty's screening and limit, the balance and what else falls due, then pays, schedules or holds it.";
 
+/** An invoice's decision, on the workspace's network (network threading P6): its card and trail link transactions there. */
 export function invoiceDecision(
   invoice: InvoiceRow,
   counterparty: CounterpartyRow | undefined,
   entries: LedgerEntry[],
-  options: { deciding?: boolean } = {}
+  options: { network: Network; deciding?: boolean }
 ): Decision {
+  return { ...decideInvoice(invoice, counterparty, entries, options), network: options.network };
+}
+
+function decideInvoice(
+  invoice: InvoiceRow,
+  counterparty: CounterpartyRow | undefined,
+  entries: LedgerEntry[],
+  options: { network: Network; deciding?: boolean }
+): Omit<Decision, "network"> {
   if (invoice.direction === "receivable") return receivableDecision(invoice, entries);
   // A payable not yet decided while a cycle runs is being decided now (decision trail R1).
   const deciding = options.deciding === true && invoice.status === "pending";
@@ -252,7 +263,7 @@ export function invoiceDecision(
   const mint = mintOf(invoice.id, entries);
   // A payout to another chain settles on that chain, not on Arc: named from its recorded mint, or
   // from the payee's chain for one recorded before mints were.
-  const settledOn = outcome !== "settled" ? null : mint ? mint.chainLabel : paidAcrossChains(counterparty?.chain) ? payeeChain(counterparty?.chain).label : null;
+  const settledOn = outcome !== "settled" ? null : mint ? mint.chainLabel : paidAcrossChains(counterparty?.chain) ? chainById(counterparty?.chain as string).label : null;
 
   return {
     id: invoice.id,
@@ -294,8 +305,8 @@ export function invoiceDecision(
       { label: "Due", value: new Date(invoice.due_date).toLocaleDateString("en-US"), state: "neutral" },
       termsEvidence(invoice),
       paidEvidence(invoice),
-      eurc ? swapEvidence(entry?.detail) : null,
-      paidAcrossChains(counterparty?.chain) ? { label: "Payee's chain", value: `${payeeChain(counterparty?.chain).label}, through ${route}${routeFees ?? ""}`, state: "neutral" as const } : null,
+      eurc ? swapEvidence(entry?.detail, options.network) : null,
+      paidAcrossChains(counterparty?.chain) ? { label: "Payee's chain", value: `${chainById(counterparty?.chain as string).label}, through ${route}${routeFees ?? ""}`, state: "neutral" as const } : null,
       duplicateEvidence(observed),
     ].filter((item): item is Evidence => item !== null),
     guardrail: guardrailBlocked ? invoiceGuardrail(invoice.amount, currency, usdcValue, limit, risk, rule, entry?.detail) : null,
@@ -347,7 +358,10 @@ function mintOf(invoiceId: string, entries: LedgerEntry[]): Decision["mint"] {
     const txHash = stringValue(execution?.mintTxHash);
     // A simulated mint has nothing on chain to link (review M3).
     if (!txHash || !txHash.startsWith("0x")) continue;
-    const chain = payeeChain(stringValue(execution?.destinationChain));
+    // A mint is on the payee's chain, which its entry records (every mint on record names one).
+    const destination = stringValue(execution?.destinationChain);
+    if (!destination) continue;
+    const chain = chainById(destination);
     return { chainLabel: chain.label, txHash, href: `${chain.explorerTx}${txHash}` };
   }
   return null;
@@ -493,6 +507,8 @@ function milestoneEvidenceLink(source: string | null, githubSource: string | und
  * contractor stage's payeeNotReady): an address someone must confirm, or one the payee has still to add.
  */
 export interface MilestoneContext {
+  /** The workspace's network, for the decision's links. */
+  network: Network;
   riskLevel?: string | null;
   waiting?: "unconfirmed" | "no_address" | null;
 }
@@ -510,7 +526,12 @@ function milestoneProgress(milestone: MilestoneRow, waiting: MilestoneContext["w
   return { label: "Being decided", line: "Verified. The agent decides on pay within a minute." };
 }
 
-export function milestoneDecision(milestone: MilestoneRow, entries: LedgerEntry[], context: MilestoneContext = {}): Decision {
+/** A milestone's decision, on the workspace's network (network threading P6). */
+export function milestoneDecision(milestone: MilestoneRow, entries: LedgerEntry[], context: MilestoneContext): Decision {
+  return { ...decideMilestone(milestone, entries, context), network: context.network };
+}
+
+function decideMilestone(milestone: MilestoneRow, entries: LedgerEntry[], context: MilestoneContext): Omit<Decision, "network"> {
   const entry = matchingEntry(entries, "milestoneId", milestone.id);
   // What the agent observed when it last decided: a person's decision after it (Pay now, Close) records none.
   const decided = entries.find((candidate) => candidate.detail.milestoneId === milestone.id && record(candidate.detail.observed));
@@ -575,7 +596,12 @@ export function treasuryDecisionEntries(entries: LedgerEntry[], count: number): 
   return entries.filter((entry) => TREASURY_DECISIONS.has(entry.action)).slice(0, count);
 }
 
-export function treasuryLedgerDecision(entry: LedgerEntry): Decision {
+/** A treasury entry's decision, on the workspace's network (network threading P6). */
+export function treasuryLedgerDecision(entry: LedgerEntry, network: Network): Decision {
+  return { ...decideTreasuryEntry(entry), network };
+}
+
+function decideTreasuryEntry(entry: LedgerEntry): Omit<Decision, "network"> {
   const decision = record(entry.detail.decision);
   const economics = record(entry.detail.economics);
   const action = stringValue(decision?.action) ?? entry.action;
@@ -613,7 +639,12 @@ export function treasuryLedgerDecision(entry: LedgerEntry): Decision {
   };
 }
 
-export function treasuryActionDecision(action: TreasuryActionRow): Decision {
+/** A reserve move's decision, on the workspace's network (network threading P6). */
+export function treasuryActionDecision(action: TreasuryActionRow, network: Network): Decision {
+  return { ...decideTreasuryAction(action), network };
+}
+
+function decideTreasuryAction(action: TreasuryActionRow): Omit<Decision, "network"> {
   const title = action.action === "sweep_to_usyc" ? "Sweep" : "Redeem";
   return {
     id: action.id,

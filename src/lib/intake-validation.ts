@@ -1,6 +1,7 @@
 import { addressProblem } from "./address-checksum";
 import { z } from "zod";
-import { PAYEE_CHAIN_IDS } from "./payee-chains";
+import { ALL_PAYEE_CHAIN_IDS, ChainNotOnNetworkError, chainOn, paidAcrossChains } from "./payee-chains";
+import type { Network } from "./network";
 
 const USDC_PATTERN = /^(?:0|[1-9]\d{0,13})(?:\.\d{1,6})?$/;
 
@@ -74,7 +75,7 @@ const optionalCsvText = (max: number) => z.string().trim().max(max).nullish().tr
 const payeeChainSchema = z
   .string()
   .transform((value) => value.trim().toUpperCase())
-  .pipe(z.enum(PAYEE_CHAIN_IDS, { message: "Choose a chain Vestiarion can pay on: Arc testnet, Base Sepolia, Arbitrum Sepolia or Ethereum Sepolia." }));
+  .pipe(z.enum(ALL_PAYEE_CHAIN_IDS, { message: "Choose a chain Vestiarion can pay on: Arc testnet, Base Sepolia, Arbitrum Sepolia or Ethereum Sepolia." }));
 
 /** An address for payment notices as a form gives it: trimmed, empty for none, shaped like an email address (payment notices R1). */
 export const noticeEmailSchema = z
@@ -97,13 +98,14 @@ export const counterpartyInputSchema = z.object({
       if (problem) context.addIssue({ code: "custom", message: problem });
     })
     .transform((value) => value || null),
-  chain: payeeChainSchema,
+  // Absent: the workspace's own chain, which `createCounterparty` reads in its scope (network threading P3).
+  chain: payeeChainSchema.optional(),
   jurisdiction: optionalText(80),
   paymentLimit: z.string().trim(),
 }).superRefine((value, context) => {
   // A contractor's milestones are released on Arc testnet: only a vendor is
   // paid on another chain, through CCTP (CCTP payouts, review C1).
-  if (value.chain !== "ARC-TESTNET" && value.role !== "vendor") {
+  if (paidAcrossChains(value.chain) && value.role !== "vendor") {
     context.addIssue({ code: "custom", path: ["chain"], message: "Only a vendor can be paid on another chain; a contractor's milestones are released on Arc testnet." });
   }
   if (value.role === "client" && value.paymentLimit === "") return;
@@ -272,4 +274,18 @@ export function csvBatchMessage(error: z.ZodError): string {
   const [row, ...column] = issue?.path ?? [];
   if (typeof row !== "number") return firstZodMessage(error);
   return `Row ${row + 1}: ${column.length > 0 ? `${column.join(".")}: ` : ""}${issue.message}`;
+}
+
+/**
+ * Why a counterparty's chain cannot be one the workspace pays on (network threading P3), in plain words; null when it
+ * can. No chain is the workspace's own. Checked in the workspace's scope, where its network is known.
+ */
+export function counterpartyChainProblem(network: Network, chain: string | null | undefined): string | null {
+  try {
+    chainOn(network, chain);
+    return null;
+  } catch (error) {
+    if (error instanceof ChainNotOnNetworkError) return error.message;
+    throw error;
+  }
 }

@@ -30,6 +30,7 @@ import { listLedgerEntries } from "@/lib/ledger";
 import { listActivePayeeLinks } from "@/lib/platform/payee-links";
 import { plural } from "@/lib/copy";
 import { listCounterparties, stats } from "@/lib/queries";
+import { workspaceNetwork } from "@/lib/workspace-network";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +40,7 @@ export default async function CounterpartiesPage({ params }: { params: Promise<{
   const { slug } = await params;
   const access = await requireMembership(slug);
   return inOrg(access, async () => {
+    const network = workspaceNetwork().id;
     // A live match names the entity it matched, which Not this person dismisses (dismiss screening match R6).
     const liveScreening = screeningMode() === "live";
     const [counterparties, dashboardStats, entries, canWrite, canConfirm] = await Promise.all([
@@ -70,7 +72,7 @@ export default async function CounterpartiesPage({ params }: { params: Promise<{
         {canWrite ? (
           // Folded until it is needed; open on a workspace with no counterparty yet, where adding one is the next step.
           <IntakeFold label="Add counterparty" meta="human-entered · screened on submission" defaultOpen={counterparties.length === 0}>
-            <CounterpartyIntake orgSlug={slug} framed={false} />
+            <CounterpartyIntake orgSlug={slug} framed={false} network={network} />
           </IntakeFold>
         ) : (
           <Callout className="mb-8">Only an owner or admin of this workspace can add counterparties.</Callout>
@@ -89,7 +91,7 @@ export default async function CounterpartiesPage({ params }: { params: Promise<{
               <ul className="divide-y divide-line">
                 {ordered.map((counterparty) => (
                   <li key={counterparty.id}>
-                    <CounterpartyRow counterparty={counterparty}>
+                    <CounterpartyRow counterparty={counterparty} network={network}>
                       <ScreeningMatch
                         orgSlug={slug}
                         counterparty={{

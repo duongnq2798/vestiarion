@@ -39,6 +39,7 @@ import { pauseStateOf } from "@/lib/platform/pause";
 import { cashOutlook } from "@/lib/cash-outlook";
 import { latestForecast, listAccounts, listCounterparties, listInvoices, listMilestones, listTreasuryActions, stats } from "@/lib/queries";
 import { offerSampleData } from "@/lib/sample-data-offer";
+import { workspaceNetwork } from "@/lib/workspace-network";
 
 export const dynamic = "force-dynamic";
 
@@ -54,6 +55,7 @@ export default async function DashboardPage({
   const { slug } = await params;
   const access = await requireMembership(slug);
   return inOrg(access, async () => {
+    const network = workspaceNetwork().id;
     const query = await searchParams;
     const [accountsRows, actionRows, forecastRow, dashboardStats, invoices, counterparties, headEntries, waiting, pause, milestones, budget, onChainLimit] = await Promise.all([
       listAccounts(),
@@ -125,7 +127,7 @@ export default async function DashboardPage({
         : Promise.resolve(null),
     ]);
     const invoiceDecisions = invoices.map((invoice) =>
-      invoiceDecision(invoice, counterpartiesById.get(invoice.counterparty_id), invoiceEntries)
+      invoiceDecision(invoice, counterpartiesById.get(invoice.counterparty_id), invoiceEntries, { network })
     );
     const stopped = invoiceDecisions.filter((decision) => decision.outcome === "refused" || decision.outcome === "held");
     // A stopped payable's card says what stopped it and where to handle it (agent activity spec R5), as on AP / AR.
@@ -170,8 +172,8 @@ export default async function DashboardPage({
         .filter((invoice) => invoice.direction === "receivable")
         .map((invoice) => ({ ...invoice, counterparty: invoice.counterparty_name, currency: invoice.currency ?? null })),
     });
-    const treasuryDecisions = treasuryDecisionEntries(treasuryEntries, 2).map(treasuryLedgerDecision);
-    const executedReserveMoves = actionRows.slice(0, 2).map(treasuryActionDecision);
+    const treasuryDecisions = treasuryDecisionEntries(treasuryEntries, 2).map((entry) => treasuryLedgerDecision(entry, network));
+    const executedReserveMoves = actionRows.slice(0, 2).map((action) => treasuryActionDecision(action, network));
     const headSeq = headEntries[0]?.seq ?? 0;
     // What the approvals inbox holds for a person, so the tile and the page it links to agree. A row
     // someone else is deciding right now does not need you; one whose claim did not finish does.
@@ -286,6 +288,7 @@ export default async function DashboardPage({
           <aside className="min-w-0 space-y-6 md:grid md:grid-cols-2 md:items-start md:gap-6 md:space-y-0 xl:block xl:space-y-6">
             {budget && (
               <AgentBudgetPanel
+                network={network}
                 orgSlug={slug}
                 canEdit={can(role, "agent.budget")}
                 live={access.membership.mode === "live"}

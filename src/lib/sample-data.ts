@@ -3,6 +3,8 @@ import { RECLAIM_AFTER_MS } from "./agent/approvals";
 import { currentOrgId } from "./context";
 import { db, platformDb, unwrap } from "./dal";
 import { appendLedgerEntryBestEffort } from "./ledger-best-effort";
+import { homeChain } from "./payee-chains";
+import { workspaceNetwork } from "./workspace-network";
 
 /**
  * Sample data (docs/superpowers/specs/2026-09-30-sample-data-design.md): one
@@ -194,7 +196,7 @@ export async function loadSampleData(input: { actorId: string; now?: Date }): Pr
       fixture.counterparties.map((row) => ({
         name: row.name,
         role: row.role,
-        chain: "ARC-TESTNET",
+        chain: homeChain(workspaceNetwork().id).id,
         payment_limit: row.limit,
         baseline_payment_limit: row.limit,
         sample: true,

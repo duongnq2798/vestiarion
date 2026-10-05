@@ -16,20 +16,9 @@ const PROFILE = "src/lib/network.ts";
 
 /** The files that still hold a testnet identifier, and how many: lower these as they move into the profile. */
 const ALLOWED: Record<string, number> = {
-  "src/app/api/v1/counterparties/route.ts": 1,
   "src/app/design/fixtures.ts": 4,
   "src/app/docs-shots/shots.tsx": 3,
-  "src/app/o/[slug]/contractors/page.tsx": 2,
-  "src/components/intake/CounterpartyIntake.tsx": 1,
-  "src/components/payee/PayeeJourney.tsx": 2,
-  "src/components/vx/map.ts": 1,
   "src/lib/api/schemas.ts": 1,
-  "src/lib/github/bounties.ts": 1,
-  "src/lib/intake-validation.ts": 1,
-  "src/lib/pay-freelancer.ts": 2,
-  "src/lib/platform/payee-links.ts": 1,
-  "src/lib/platform/workspace.ts": 2,
-  "src/lib/sample-data.ts": 1,
   "src/lib/seed.ts": 9,
 };
 

@@ -28,7 +28,7 @@ const ENFORCED: OnChainLimitView = {
 
 const render = (props: { view?: AgentBudgetView; canEdit?: boolean; live?: boolean; onChain?: OnChainLimitView | null }) =>
   renderToStaticMarkup(
-    <AgentBudgetPanel orgSlug="testnet-2" view={props.view ?? VIEW} canEdit={props.canEdit ?? true} live={props.live ?? true} onChain={props.onChain ?? null} />
+    <AgentBudgetPanel network="arc-testnet" orgSlug="testnet-2" view={props.view ?? VIEW} canEdit={props.canEdit ?? true} live={props.live ?? true} onChain={props.onChain ?? null} />
   );
 
 describe("the spending limit panel, on Arc", () => {

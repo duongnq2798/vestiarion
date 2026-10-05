@@ -10,6 +10,7 @@ const html = (node: ReactElement) => renderToStaticMarkup(node);
 
 const base: Decision = {
   id: "d1",
+  network: "arc-testnet",
   domain: "ap",
   action: "Paid",
   subject: "INV-204 to Northwind Supply",
@@ -120,7 +121,7 @@ describe("DecisionCard for an invoice", () => {
     paid_amount: null,
     ...overrides,
   });
-  const cardFor = (row: InvoiceRow) => html(<DecisionCard decision={invoiceDecision(row, undefined, [])} orgSlug="acme" />);
+  const cardFor = (row: InvoiceRow) => html(<DecisionCard decision={invoiceDecision(row, undefined, [], { network: "arc-testnet" })} orgSlug="acme" />);
 
   it("reads Not yet decided for a pending invoice", () => {
     const markup = cardFor(invoice({ status: "pending" }));

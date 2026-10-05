@@ -37,6 +37,9 @@ export function arcAddressUrl(address: string): string {
 const EVERY_CHAIN = NETWORK_IDS.flatMap((network) => networkProfile(network).payeeChains.map((chain) => ({ network, chain })));
 const OWN_CHAINS = new Set(NETWORK_IDS.map((network) => networkProfile(network).payeeChains[0].id));
 
+/** Every chain a payee can be paid on, across the networks: which of them a workspace pays on is checked in its scope. */
+export const ALL_PAYEE_CHAIN_IDS = EVERY_CHAIN.map((entry) => entry.chain.id) as [string, ...string[]];
+
 /** A chain a workspace's network does not pay on (P3). */
 export class ChainNotOnNetworkError extends Error {
   constructor(chain: string) {

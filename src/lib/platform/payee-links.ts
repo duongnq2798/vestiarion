@@ -127,8 +127,8 @@ export interface PayeeLinkPreview {
   orgName: string;
   counterpartyName: string;
   expiresAt: string;
-  /** The chain the payee is paid on, so the page asks for an address there (CCTP payouts, review I3). */
-  chain: string;
+  /** The chain the payee is paid on, so the page asks for an address there (CCTP payouts, review I3); null when not read. */
+  chain: string | null;
 }
 
 /** What the payee's page shows for a usable link; null for any other (R4). */
@@ -142,8 +142,8 @@ export async function previewPayeeLink(token: string, options: { withChain?: boo
   }>;
   const row = rows[0];
   if (!row) return null;
-  // Read on its own (0044): a chain that cannot be read is Arc testnet, where every payee was paid before.
-  let chain = "ARC-TESTNET";
+  // Read on its own (0044); null when it was not read, rather than a network's chain assumed (network threading P3).
+  let chain: string | null = null;
   if (options.withChain !== false) {
     try {
       const found = unwrap(await platformDb().rpc("payee_link_chain", { p_token_hash: hash }));
