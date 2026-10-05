@@ -164,8 +164,9 @@ export function factChanges(current: DecisionFacts, atDecision: DecisionFacts): 
   }
 
   // One way only, as for the address: a counterparty now paid without purchase orders may complete a match that waited
-  // for one. Requiring them again reopens nothing; the guardrail asks for the purchase order in any case.
-  if (atDecision.purchaseOrderRequired !== false && current.purchaseOrderRequired === false) {
+  // for one, so only a decision taken with none on file. Requiring them again reopens nothing; the guardrail asks for
+  // the purchase order in any case.
+  if (atDecision.purchaseOrderRequired !== false && current.purchaseOrderRequired === false && (atDecision.poReference ?? null) === null) {
     changes.push("the counterparty is now paid without purchase orders");
   }
 

@@ -419,6 +419,12 @@ describe("follow-up — a counterparty now paid without purchase orders (three-w
     expect(planFollowUp(waiting(), neededOne, NOW, config).action).toBe("wait");
   });
 
+  it("leaves a payable that had its purchase order: it waits for something the setting does not change", () => {
+    const plan = planFollowUp(waiting({ poReference: "PO-7", purchaseOrderRequired: false }), { ...neededOne, poReference: "PO-7" }, NOW, config);
+    expect(plan.action).toBe("wait");
+    expect(plan.changes).toEqual([]);
+  });
+
   it("reads a decision recorded before the setting existed as one where purchase orders were needed", () => {
     const plan = planFollowUp(waiting({ purchaseOrderRequired: false }), { ...facts, goodsReceived: true }, NOW, config);
     expect(plan.changes).toEqual(["the counterparty is now paid without purchase orders"]);
