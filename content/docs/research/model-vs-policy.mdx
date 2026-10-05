@@ -2,7 +2,7 @@ Vestiarion's agent decides with a language model. For the same facts, the code a
 
 This note reads every decision the agent has made in production so far. It covers how often the model chose the policy's action, where it did not, and what followed. Since its second week, it also covers what people did with what the agent left them.
 
-The first week's figures are as of 1 October 2026, 05:48 UTC; the second week's, as of 2 October 2026, 16:43 UTC. Both come from `npm run research:model-vs-policy`; `-- --from` and `-- --to` measure one window. The running totals are on [www.vestiarion.xyz/open](https://www.vestiarion.xyz/open).
+The first week's figures are as of 1 October 2026, 05:48 UTC; the second week's, as of 2 October 2026, 16:43 UTC; the third week's, as of 5 October 2026, 00:40 UTC. All come from `npm run research:model-vs-policy`; `-- --from` and `-- --to` measure one window. The running totals are on [www.vestiarion.xyz/open](https://www.vestiarion.xyz/open).
 
 ## How it is measured
 
@@ -26,7 +26,7 @@ The first week's figures are as of 1 October 2026, 05:48 UTC; the second week's,
   - `agreedWithReference`;
   - when code refused the model, `guardrailRule` for a payable, or `guardrailBlocked` for a milestone.
 
-  Two answers agree when they choose the same action, and, for two schedules, the same day. A payable is compared after code has bounded the model's date. Since October 3, 2026, two treasury answers agree only when their amounts are also within 5% of the policy's, or 0.01 USDC. The script judges every entry this way. Every treasury decision in the windows below was a hold, so their figures are unchanged.
+  Two answers agree when they choose the same action, and, for two schedules, the same day. A payable is compared after code has bounded the model's date. Since October 3, 2026, two treasury answers agree only when their amounts are also within 5% of the policy's, or 0.01 USDC. The script judges every entry this way. Every treasury decision in weeks one and two was a hold, so their figures are unchanged; week three is the first where the amount decides it.
 - **Guardrails** run after the model, whatever it says. For a payable, code refuses any payment, now or scheduled, that:
   - is over the counterparty's limit;
   - goes to a counterparty screened as high risk;
@@ -186,9 +186,67 @@ Besides #686, code refused two payments the model and the policy both chose. Eac
 
 That makes four payments refused by code in two weeks, out of 211 decisions: #505, #686, #691 and #817.
 
+## Week three
+
+From 2 October, 16:43 UTC, to 5 October, 00:40 UTC, the agent made 139 decisions in 5 workspaces, all by DeepSeek, and every one recorded the policy's answer beside the model's. Eleven were in the live workspace /open counts as a customer's.
+
+| | Compared | Same action as the policy |
+|---|---|---|
+| Payables | 36 | 31 (86.1%) |
+| Contractor milestones | 5 | 5 |
+| Treasury | 96 | 81 (84.4%) |
+| Reminders to clients | 2 | 2 |
+| **All** | **139** | **119 (85.6%)** |
+
+Across the three weeks, the model chose the policy's action 305 times in 336: 90.8%, and 73 times in 88 on payables (83.0%). Its confidence was again lower where it differed: 0.89 on average, against 0.94 where it matched.
+
+This was the first week the treasury moved money. The reserve became real USYC on Arc testnet on 3 October, and 15 of the week's 20 differences were treasury decisions.
+
+### The treasury, with real USYC
+
+#### Too much, then bounded by code
+
+In #1063, at 07:43 UTC on 3 October, the operating wallet was empty, 58.21 USDC sat in the reserve, and 0.10 USDC fell due in two days. The policy redeemed 0.115 USDC: the bill and its 15% cushion. The model redeemed 58.1 USDC, reasoning that a redemption "costs nothing since redemptions are always possible".
+
+Measured by action alone, as this note did until then, the two agreed. That is why agreement now weighs the amount. It is also why code now bounds every move: a redemption brings back at most what falls due within 14 days needs, with its cushion, and a sweep never takes the operating wallet below its 7-day buffer.
+
+#### A wrong premise, then a right one
+
+In eight decisions the model held where the policy would have redeemed a buffer. Until 4 October its reason rested on a mistake. In #1267, with nothing in the operating wallet and 0.20 USDC due that day, it held because "the reserve already covers it without moving cash".
+Only the operating wallet pays anyone. In the same cycle, a milestone release had just been refused by the spending limit contract on Arc, because the wallet it would pay from was empty (#1266).
+
+Two changes followed:
+- each cycle now brings back from USYC what the day's payables and verified milestones need, before it decides them;
+- the model is told that payments leave only from the operating wallet.
+
+Its next decision (#1336) saw that the wallet was short, and redeemed 0.115 USDC as the policy would. When it held again (#1354), it cited the right facts: "the reserve's 154.27 USDC is redeemed automatically on the day a payment needs it". That hold still counts as a difference, and it is one the design allows: code bounds what a move may be, and a hold is the model's to make.
+
+#### A thinner margin than the policy's
+
+In six decisions the model declined sweeps of 97 to 119 USDC that the policy would have made (#1070 to #1103). The projected yield was 0.02 USDC over the 1.7 days before the next bill, against a round trip of 0.01 USDC. The policy sweeps whenever the yield beats the cost. The model wanted a wider margin, and said so: "the gain is too thin to justify locking the cash up".
+
+### Payables: looser than the policy on purchase orders
+
+Four of the five payable differences were one rule, the three-way match. Each invoice had its goods received and no purchase order, and the policy asked for information. The model paid two of them, 0.5 USDC each to Centronex (#1172, #1182). It scheduled the other two: 3.5 USDC to STM for 15 October (#1297), and 0.8 USDC to Puka Hotel for 3 November (#1302). One of its reasons says that "no three-way match is required for this service invoice".
+
+Code does not check the match, so nothing stopped these. Before this week, every time the model was looser than the policy, a check in code refused it: a limit (#505) or a fee cap (#686). This is the first looser call that moved money with no check in its way.
+
+What we take from it: whether an invoice needs a purchase order is the business's rule to set, not the model's to waive. The next change makes the match a check in code, with a setting for the payees a business pays without purchase orders.
+
+The fifth difference, #977, is the third time the model named a rule and then broke it. It called the payout's fee "37.3% of the invoice and too high", and chose to pay anyway. Code refused it as above the fee cap, and a person paid it.
+
+### Code refused seven payments
+
+- Four would have taken the agent past the daily spending limit of testnet-2: #941, #990, #995 and #1079. The last was a payable to a client, entered by mistake as one to pay. Code now holds any payable to a client.
+- #977, above the payout fee cap.
+- #1118, to an address that arrived through the API and that no one had confirmed yet.
+- #1266, a milestone release that the spending limit contract on Arc refused, because the wallet was empty.
+
+That makes 11 payments refused by code in three weeks, out of 336 decisions.
+
 ## People and the agent
 
-In both weeks together, people decided 15 payables and milestones the agent had left them.
+In weeks one and two together, people decided 15 payables and milestones the agent had left them.
 
 | Why it waited for a person | Paid | Rejected or closed | Returned to the agent |
 |---|---|---|---|
@@ -206,17 +264,23 @@ In both weeks together, people decided 15 payables and milestones the agent had 
 
 People agreed with the model's own extra stops none of the three times they decided one. That is the clearest signal in two weeks, and it points the same way as week one.
 
+In week three, people decided seven more:
+- of five the agent stopped as the policy would, they paid two, rejected or closed two, and returned one to the agent;
+- of two that code refused, they paid one and rejected one.
+
+None was a stop the model made alone. This week the model's departures went the other way, toward paying (see purchase orders, above).
+
 ## The limits of this note
 
-- **The sample is small.** 211 decisions over two weeks, from one provider, cannot show a trend. The people figures rest on 15 decisions.
-- **Nearly every decision was made in a workspace we run or test with:** the founding workspace, testnet-2, sandboxes, a fresh account one of us opened to test [Try it in 5 minutes](/docs/guides/try-it), and two workspaces made to test the freelancer and milestone paths. The exception is the live workspace in week two that /open counts as a customer's.
-  - /open counts that last account as a customer's, because its creator is not on the platform team, so its 14 decisions appear on the customers' side there.
+- **The sample is small.** 336 decisions over three weeks, from one provider, cannot show a trend. The people figures rest on 22 decisions.
+- **Nearly every decision was made in a workspace we run or test with:** the founding workspace, testnet-2, sandboxes, a fresh account one of us opened to test [Try it in 5 minutes](/docs/guides/try-it), and two workspaces made to test the freelancer and milestone paths. The exception is the live workspace that /open counts as a customer's.
+  - /open counts that last account as a customer's, because its creator is not on the platform team, so its 25 decisions (14 in week two, 11 in week three) appear on the customers' side there.
   - Several of the invoices were built to exercise a rule, so the rate says little about everyday invoices.
   - No outside business's invoice has been decided yet.
-- **Agreement compares actions, not reasons or amounts.** Two holds for different reasons count as agreeing.
+- **Agreement compares actions, and for the treasury since 3 October amounts, but never reasons.** Two holds for different reasons count the same. #1267 and #1354 are both differences, though only the second rests on the facts.
 
 ## Check it yourself
 
 - Every entry named here is signed with Ed25519 and linked to the entry before it, in its workspace's ledger. A member of the workspace can export that ledger and check it without Vestiarion; see [Verify an audit export](/docs/guides/audit-export).
-- With access to the production database, `npm run research:model-vs-policy` recomputes the counts, the rates, the table of differences and what people did, read-only; `-- --from 2026-10-01T05:48:00Z` measures week two alone. It counts a customer's workspace but never names it. The rest is read from the entries named here.
+- With access to the production database, `npm run research:model-vs-policy` recomputes the counts, the rates, the table of differences and what people did, read-only; `-- --from 2026-10-01T05:48:00Z --to 2026-10-02T16:43:00Z` measures week two alone, and `-- --from 2026-10-02T16:43:00Z --to 2026-10-05T00:40:00Z` week three. It counts a customer's workspace but never names it. The rest is read from the entries named here.
 - `npm run research:replay -- 426 429 387 385 545 --runs 3` repeats the replay. It reads the database read-only and records nothing; a model answers differently from run to run, so expect the same pattern, not the same answers.
