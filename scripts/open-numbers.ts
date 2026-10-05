@@ -43,25 +43,29 @@ async function team(argv: string[]) {
 
 async function numbers(argv: string[]) {
   const { dailySeries, parsePeriod, readOpenNumbers } = await import("../src/lib/platform/open-numbers");
+  const { ARC_MAINNET, ARC_TESTNET } = await import("../src/lib/network");
   const period = parsePeriod({ since: option(argv, "--since"), period: option(argv, "--period") });
   if (period.fallback) throw new Error(`That period could not be read. Usage: ${USAGE}`);
-  const numbers = await readOpenNumbers(period);
 
-  console.log(`${period.label} — read ${numbers.generatedAt}\n`);
-  const rows = Object.keys(numbers.sides.total) as Array<keyof typeof numbers.sides.total>;
-  const table = Object.fromEntries(
-    rows.map((row) => [row, { customers: numbers.sides.customers[row], ours: numbers.sides.ours[row], total: numbers.sides.total[row] }])
-  );
-  console.table(table);
+  // Each network apart, as /open shows them: nothing is added across them (network foundation N7).
+  for (const network of [ARC_MAINNET, ARC_TESTNET]) {
+    const numbers = await readOpenNumbers(period, network.id);
+    console.log(`\n== ${network.label}: ${period.label} — read ${numbers.generatedAt}\n`);
+    const rows = Object.keys(numbers.sides.total) as Array<keyof typeof numbers.sides.total>;
+    const table = Object.fromEntries(
+      rows.map((row) => [row, { customers: numbers.sides.customers[row], ours: numbers.sides.ours[row], total: numbers.sides.total[row] }])
+    );
+    console.table(table);
 
-  const series = dailySeries(numbers.daily, period).filter((day) => day.customers + day.ours > 0);
-  if (series.length > 0) {
-    console.log("\nSettled Arc testnet payments by day (UTC)");
-    console.table(Object.fromEntries(series.map((day) => [day.day, { customers: day.customers, ours: day.ours, oursUsdc: day.oursUsdc }])));
-  }
-  if (numbers.ourPayments.length > 0) {
-    console.log("\nOur own workspaces' latest payments");
-    for (const payment of numbers.ourPayments) console.log(`${payment.at}   ${payment.amount.toFixed(2)} ${payment.token ?? "USDC"}   ${payment.txHash}`);
+    const series = dailySeries(numbers.daily, period).filter((day) => day.customers + day.ours > 0);
+    if (series.length > 0) {
+      console.log(`\nSettled ${network.label} payments by day (UTC)`);
+      console.table(Object.fromEntries(series.map((day) => [day.day, { customers: day.customers, ours: day.ours, oursUsdc: day.oursUsdc }])));
+    }
+    if (numbers.ourPayments.length > 0) {
+      console.log(`\nOur own workspaces' latest payments on ${network.label}`);
+      for (const payment of numbers.ourPayments) console.log(`${payment.at}   ${payment.amount.toFixed(2)} ${payment.token ?? "USDC"}   ${payment.txHash}`);
+    }
   }
 }
 

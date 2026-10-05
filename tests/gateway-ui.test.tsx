@@ -5,6 +5,7 @@ vi.mock("@/app/actions/treasury", () => ({ fundGatewayAction: vi.fn() }));
 
 import { GatewayPanel, nextRequestId } from "@/components/GatewayPanel";
 import { OurPayments } from "@/components/open/OurPayments";
+import { ARC_TESTNET } from "@/lib/network";
 
 /**
  * What a person sees of the Gateway route (docs/superpowers/specs/2026-10-01-gateway-payouts-design.md G5):
@@ -62,6 +63,7 @@ describe("/open's list of our payments", () => {
           { at: "2026-10-01T06:00:00Z", amount: 1, token: "USDC", txHash: "0xbase", chain: "BASE-SEPOLIA" },
           { at: "2026-10-01T05:00:00Z", amount: 1.25, token: "USDC", txHash: "0xarc", chain: "ARC-TESTNET" },
         ]}
+        network={ARC_TESTNET}
       />
     );
     expect(markup).toContain('href="https://sepolia.basescan.org/tx/0xbase"');

@@ -5,6 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { utcDay } from "@/lib/copy";
 import type { DailyPayments } from "@/lib/platform/open-numbers";
 import { formatFigure } from "./OpenNumbersTable";
+import type { NetworkProfile } from "@/lib/network";
 
 /**
  * Settled payments per UTC day, customers' stacked under ours (spec §2). A
@@ -42,14 +43,15 @@ function dayTitle(row: DailyPayments): string {
   return `${fullDay(row.day)}: ${row.customers} by customers, ${row.ours} by our workspaces (${formatFigure(row.oursUsdc, "usdc")} USDC)`;
 }
 
-export function PaymentsChart({ series }: { series: DailyPayments[] }) {
+export function PaymentsChart({ series, network }: { series: DailyPayments[]; network: NetworkProfile }) {
   const customers = series.reduce((sum, row) => sum + row.customers, 0);
   const ours = series.reduce((sum, row) => sum + row.ours, 0);
+  const id = `payments-by-day-${network.id}`;
 
   return (
-    <section aria-labelledby="payments-by-day" className="mt-12">
+    <section aria-labelledby={id} className="mt-12">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <h2 id="payments-by-day" className="text-xl font-semibold tracking-tight text-ink">
+        <h2 id={id} className="text-xl font-semibold tracking-tight text-ink">
           Settled payments by day
         </h2>
         {series.length > 0 && (
@@ -64,15 +66,15 @@ export function PaymentsChart({ series }: { series: DailyPayments[] }) {
         )}
       </div>
       {series.length === 0 ? (
-        <EmptyState compact className="mt-4" title="No payment settled in this period." body="Settled Arc testnet payments appear here by day." />
+        <EmptyState compact className="mt-4" title="No payment settled in this period." body={`Settled ${network.label} payments appear here by day.`} />
       ) : (
-        <Chart series={series} customers={customers} ours={ours} />
+        <Chart series={series} customers={customers} ours={ours} label={network.label} />
       )}
     </section>
   );
 }
 
-function Chart({ series, customers, ours }: { series: DailyPayments[]; customers: number; ours: number }) {
+function Chart({ series, customers, ours, label }: { series: DailyPayments[]; customers: number; ours: number; label: string }) {
   const x = scaleBand<string>()
     .domain(series.map((row) => row.day))
     .range([MARGIN.left, WIDTH - MARGIN.right]);
@@ -86,7 +88,7 @@ function Chart({ series, customers, ours }: { series: DailyPayments[]; customers
 
   return (
     <figure className="mt-4 rounded-2xl border border-line bg-surface p-4 shadow-surface">
-      <div role="region" aria-label="Settled payments by day, chart" tabIndex={0} className="overflow-x-auto rounded-lg">
+      <div role="region" aria-label={`Settled payments by day on ${label}, chart`} tabIndex={0} className="overflow-x-auto rounded-lg">
         <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} role="img" aria-label={summary} className="h-auto w-full min-w-[40rem]">
           {ticks.map((tick) => (
             <g key={tick}>

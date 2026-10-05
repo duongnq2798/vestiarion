@@ -59,9 +59,29 @@ async function render(params: Record<string, string> = {}) {
   return renderToStaticMarkup(await OpenPage({ searchParams: Promise.resolve(params) }));
 }
 
+/** A network with nothing in it: no workspace, no payment (network foundation N7). */
+const zero = () => ({ ...side(0), medianMinutesToFirstPayment: null });
+const EMPTY: OpenNumbers = { generatedAt: "2026-09-30T12:00:00+00:00", sides: { customers: zero(), ours: zero(), total: zero() }, daily: [], ourPayments: [] };
+
+/** Each network's figures, as the page asks for them. */
+function byNetwork(numbers: { mainnet: OpenNumbers | Error; testnet: OpenNumbers | Error }) {
+  vi.mocked(readOpenNumbers).mockImplementation(async (_period, network) => {
+    const answer = network === "arc-mainnet" ? numbers.mainnet : numbers.testnet;
+    if (answer instanceof Error) throw answer;
+    return answer;
+  });
+}
+
+/** The markup of one network's section. */
+function sectionOf(markup: string, id: "mainnet" | "testnet"): string {
+  const start = markup.indexOf(`<section aria-labelledby="${id}"`);
+  const end = id === "mainnet" ? markup.indexOf('<section aria-labelledby="testnet"') : markup.indexOf('<section aria-labelledby="method"');
+  return markup.slice(start, end);
+}
+
 beforeEach(() => {
   vi.mocked(readOpenNumbers).mockReset();
-  vi.mocked(readOpenNumbers).mockResolvedValue(NUMBERS);
+  byNetwork({ mainnet: EMPTY, testnet: NUMBERS });
 });
 
 describe("the /open page", () => {
@@ -81,14 +101,16 @@ describe("the /open page", () => {
     expect(table.match(/<th scope="row"/g)).toHaveLength(OPEN_ROWS.length);
     // Each label says no more than its figure counts: milestones paid by a settled Arc payment; refusals by code,
     // whichever path proposed the decision.
-    expect(OPEN_ROWS.find((row) => row.key === "milestonesReleased")?.label).toBe("Contractor milestones paid on Arc testnet");
+    // Each section names its network, so no row does (network foundation N7).
+    expect(OPEN_ROWS.find((row) => row.key === "milestonesReleased")?.label).toBe("Contractor milestones paid");
+    for (const row of [...OPEN_ROWS, ...OUTCOME_ROWS]) expect(row.label).not.toMatch(/Arc testnet|Arc mainnet/);
     expect(OPEN_ROWS.find((row) => row.key === "refusedByCode")?.label).toBe("Decisions refused by code");
   });
 
   it("shows the first payments and the median time to one, with a dash where there is none", async () => {
     const markup = await render();
     expect(cellsOf(markup, "Median time from workspace opened to first payment")).toEqual(["1 h 35 min", "—", "4 h 45 min"]);
-    expect(text(markup)).toContain("Workspaces that made a first payment on Arc testnet");
+    expect(text(markup)).toContain("Workspaces that made a first payment");
   });
 
   it("shows how the agent's payment decisions turned out, in a table of their own", async () => {
@@ -100,7 +122,7 @@ describe("the /open page", () => {
     expect(cellsOf(markup, "Payment decisions the agent carried out itself")).toEqual(["3", "6", "9"]);
     expect(cellsOf(markup, "Decided by the agent itself")).toEqual(["75%", "75%", "75%"]);
     expect(cellsOf(markup, "Agent flags a person upheld")).toEqual(["1 of 2", "2 of 4", "3 of 6"]);
-    expect(cellsOf(markup, "Invoices paid on time on Arc testnet")).toEqual(["3 of 4", "6 of 8", "9 of 12"]);
+    expect(cellsOf(markup, "Invoices paid on time")).toEqual(["3 of 4", "6 of 8", "9 of 12"]);
     expect(cellsOf(markup, "Paid on time with no person involved")).toEqual(["2 of 4", "4 of 8", "6 of 12"]);
     expect(cellsOf(markup, "Duplicate invoices caught")).toEqual(["0", "0", "0"]);
   });
@@ -114,12 +136,12 @@ describe("the /open page", () => {
     vi.mocked(readOpenNumbers).mockResolvedValue({ ...NUMBERS, sides });
     const markup = await render();
     for (const row of OUTCOME_ROWS) expect(cellsOf(markup, row.label)).toEqual(["—", "—", "—"]);
-    expect(cellsOf(markup, "Payments settled on Arc testnet")).toEqual(["4", "8", "12"]);
+    expect(cellsOf(markup, "Payments settled")).toEqual(["4", "8", "12"]);
   });
 
   it("writes a share as a whole percent and a ratio as x of y, with a dash when there is nothing to measure", () => {
     const share = OUTCOME_ROWS.find((row) => row.format === "percent")!;
-    const onTime = OUTCOME_ROWS.find((row) => row.label === "Invoices paid on time on Arc testnet")!;
+    const onTime = OUTCOME_ROWS.find((row) => row.label === "Invoices paid on time")!;
     expect(formatRow({ ...side(1), decisionsCarriedOut: 2, decisionsEscalated: 1 }, share)).toBe("67%");
     expect(formatRow({ ...side(1), decisionsCarriedOut: 0, decisionsEscalated: 0 }, share)).toBe("—");
     expect(formatRow({ ...side(1), invoicesPaidOnTime: 0, invoicesPaidOnArc: 0 }, onTime)).toBe("—");
@@ -171,7 +193,7 @@ describe("the /open page", () => {
     const markup = await render();
     expect(markup).toContain('role="img"');
     // On a phone the chart keeps a legible width and scrolls inside a focusable region, never the page.
-    expect(markup).toMatch(/<div role="region" aria-label="Settled payments by day, chart" tabindex="0" class="[^"]*overflow-x-auto[^"]*"><svg[^>]*class="[^"]*min-w-\[40rem\]/);
+    expect(markup).toMatch(/<div role="region" aria-label="Settled payments by day on Arc testnet, chart" tabindex="0" class="[^"]*overflow-x-auto[^"]*"><svg[^>]*class="[^"]*min-w-\[40rem\]/);
     const page = text(markup);
     expect(page).toContain("Settled payments by day");
     expect(page).toContain("Sep 28, 2026");
@@ -191,13 +213,53 @@ describe("the /open page", () => {
   });
 
   it("still renders, without figures, when the numbers cannot be read", async () => {
-    vi.mocked(readOpenNumbers).mockRejectedValue(new Error("function open_numbers does not exist"));
+    byNetwork({ mainnet: new Error("function open_numbers does not exist"), testnet: new Error("function open_numbers does not exist") });
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});
     const markup = await render();
     errors.mockRestore();
-    expect(text(markup)).toContain("The numbers could not be read right now.");
+    expect(text(markup)).toContain("The Arc mainnet numbers could not be read right now.");
+    expect(text(markup)).toContain("The Arc testnet numbers could not be read right now.");
     expect(markup).not.toContain("<table");
     expect(markup).not.toContain("open_numbers does not exist");
+  });
+});
+
+describe("the /open page, one network at a time (network foundation N7)", () => {
+  it("shows Arc mainnet first, then Arc testnet, each in a section of its own", async () => {
+    const markup = await render();
+    const headings = [...markup.matchAll(/<h2 id="(mainnet|testnet)"[^>]*>(.*?)<\/h2>/g)].map((match) => text(match[2]));
+    expect(headings).toEqual(["Arc mainnet", "Arc testnet"]);
+    expect(vi.mocked(readOpenNumbers).mock.calls.map((call) => call[1]).sort()).toEqual(["arc-mainnet", "arc-testnet"]);
+  });
+
+  it("says no workspace runs on Arc mainnet yet, rather than show a table of zeros", async () => {
+    const markup = await render();
+    const mainnet = sectionOf(markup, "mainnet");
+    expect(text(mainnet)).toContain("No workspace runs on Arc mainnet yet.");
+    expect(mainnet).not.toContain("<table");
+    expect(sectionOf(markup, "testnet")).toContain("<table");
+  });
+
+  it("shows Arc mainnet's own figures when it has some, never added to Arc testnet's", async () => {
+    byNetwork({ mainnet: { ...NUMBERS, sides: { customers: side(10), ours: side(20), total: side(30) }, daily: [], ourPayments: [] }, testnet: NUMBERS });
+    const markup = await render();
+    expect(cellsOf(sectionOf(markup, "mainnet"), "Payments settled")).toEqual(["40", "80", "120"]);
+    expect(cellsOf(sectionOf(markup, "testnet"), "Payments settled")).toEqual(["4", "8", "12"]);
+  });
+
+  it("keeps Arc testnet's figures when Arc mainnet's cannot be read", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    byNetwork({ mainnet: new Error("function open_numbers does not exist"), testnet: NUMBERS });
+    const markup = await render();
+    errors.mockRestore();
+    expect(text(sectionOf(markup, "mainnet"))).toContain("The Arc mainnet numbers could not be read right now.");
+    expect(cellsOf(sectionOf(markup, "testnet"), "Payments settled")).toEqual(["4", "8", "12"]);
+  });
+
+  it("says in what counts that the two networks are counted apart", async () => {
+    const page = text(await render());
+    expect(page).toContain("Arc mainnet and Arc testnet are counted apart, and nothing is ever added across them.");
+    expect(page).not.toContain("A payment counts once Circle confirms it on Arc testnet.");
   });
 });
 

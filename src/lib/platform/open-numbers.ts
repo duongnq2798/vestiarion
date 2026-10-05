@@ -1,20 +1,23 @@
 import { z } from "zod";
 import { utcDay } from "../copy";
 import { platformDb, unwrap, type PlatformRpc } from "../dal";
+import type { Network } from "../network";
 
 /**
  * The open numbers (docs/superpowers/specs/2026-09-30-open-numbers-design.md):
  * platform-wide usage for the public /open page and `npm run numbers`.
  *
  * Every figure comes from three database functions, the only readers that
- * cross workspaces (R2): `open_numbers(p_since)`; `open_first_payments(p_since)`
- * for the first payments and the time to them (first-payment design §3); and
- * `open_outcomes(p_since)` for how the agent's payment decisions turned out
- * (docs/superpowers/specs/2026-10-01-open-outcomes-design.md). They return
- * aggregates only, split into customers' workspaces, ours, and the total (R3);
- * this module validates the documents, merges them into one set of figures per
- * side, and keeps it for 60 seconds per period, so a busy public page cannot
- * hammer the database (R9).
+ * cross workspaces (R2): `open_numbers(p_since, p_network)`;
+ * `open_first_payments(p_since, p_network)` for the first payments and the time
+ * to them (first-payment design §3); and `open_outcomes(p_since, p_network)` for
+ * how the agent's payment decisions turned out
+ * (docs/superpowers/specs/2026-10-01-open-outcomes-design.md). Each counts one
+ * network, so Arc mainnet is never added to Arc testnet (network foundation N7).
+ * They return aggregates only, split into customers' workspaces, ours, and the
+ * total (R3); this module validates the documents, merges them into one set of
+ * figures per side, and keeps it for 60 seconds per period and network, so a
+ * busy public page cannot hammer the database (R9).
  */
 
 const figure = z.coerce.number();
@@ -169,8 +172,8 @@ export function dailySeries(daily: DailyPayments[], period: Period, now: Date = 
 const MEMO_MS = 60_000;
 const memo = new Map<string, { at: number; value: Promise<OpenNumbers> }>();
 
-function memoKey(period: Period): string {
-  return period.key === "since" && period.since ? `since:${period.since.toISOString()}` : period.key;
+function memoKey(period: Period, network: Network): string {
+  return `${network}:${period.key === "since" && period.since ? `since:${period.since.toISOString()}` : period.key}`;
 }
 
 /**
@@ -178,8 +181,8 @@ function memoKey(period: Period): string {
  * (before its migration is applied, say), every side gets `missing` and the
  * rest of /open still shows.
  */
-function readSides<S>(fn: PlatformRpc, since: { p_since: string | null }, schema: z.ZodType<{ sides: Record<SideKey, S> }>, missing: S) {
-  return Promise.resolve(platformDb().rpc(fn, since))
+function readSides<S>(fn: PlatformRpc, params: { p_since: string | null; p_network: Network }, schema: z.ZodType<{ sides: Record<SideKey, S> }>, missing: S) {
+  return Promise.resolve(platformDb().rpc(fn, params))
     .then((result) => schema.parse(unwrap(result)).sides)
     .catch((error: unknown): Record<SideKey, S> => {
       console.error(`open numbers: ${fn} not read`, error instanceof Error ? error.message : error);
@@ -187,24 +190,24 @@ function readSides<S>(fn: PlatformRpc, since: { p_since: string | null }, schema
     });
 }
 
-async function fetchOpenNumbers(period: Period): Promise<OpenNumbers> {
-  const since = { p_since: period.since ? period.since.toISOString() : null };
+async function fetchOpenNumbers(period: Period, network: Network): Promise<OpenNumbers> {
+  const params = { p_since: period.since ? period.since.toISOString() : null, p_network: network };
   const [numbers, first, outcomes] = await Promise.all([
-    platformDb().rpc("open_numbers", since),
-    readSides("open_first_payments", since, firstPaymentsSchema, NO_FIRSTS),
-    readSides<OutcomeSide>("open_outcomes", since, outcomesSchema, NO_OUTCOMES),
+    platformDb().rpc("open_numbers", params),
+    readSides("open_first_payments", params, firstPaymentsSchema, NO_FIRSTS),
+    readSides<OutcomeSide>("open_outcomes", params, outcomesSchema, NO_OUTCOMES),
   ]);
   const document = openNumbersSchema.parse(unwrap(numbers));
   const merge = (side: SideKey): SideNumbers => ({ ...document.sides[side], ...first[side], ...outcomes[side] });
   return { ...document, sides: { customers: merge("customers"), ours: merge("ours"), total: merge("total") } };
 }
 
-/** The open numbers for a period, read at most once a minute per period on this instance. */
-export function readOpenNumbers(period: Period, now: number = Date.now()): Promise<OpenNumbers> {
-  const key = memoKey(period);
+/** One network's open numbers for a period, read at most once a minute per period and network on this instance. */
+export function readOpenNumbers(period: Period, network: Network = "arc-testnet", now: number = Date.now()): Promise<OpenNumbers> {
+  const key = memoKey(period, network);
   const held = memo.get(key);
   if (held && now - held.at <= MEMO_MS) return held.value;
-  const value = fetchOpenNumbers(period);
+  const value = fetchOpenNumbers(period, network);
   memo.set(key, { at: now, value });
   value.catch(() => {
     if (memo.get(key)?.value === value) memo.delete(key);
