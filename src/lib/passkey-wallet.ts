@@ -38,18 +38,36 @@ export function passkeyWalletOffered(chain: string, config: PasskeyWalletConfig 
   return config !== null && PASSKEY_WALLET_NETWORK.modularWallets !== null && chain === PASSKEY_WALLET_NETWORK.circleBlockchain;
 }
 
+/** Latin letters that Unicode does not split into a letter and an accent, as `passkeyName` writes them. */
+const PLAIN_LETTERS: Record<string, string> = {
+  đ: "d", Đ: "D", ð: "d", Ð: "D", ß: "ss", æ: "ae", Æ: "AE", ø: "o", Ø: "O", œ: "oe", Œ: "OE", ł: "l", Ł: "L", þ: "th", Þ: "Th",
+};
+
 /**
- * The name the passkey is saved under, as the payee's password manager lists it (P2): the business that pays and
- * Vestiarion, with a short mark so two wallets never share a name. The payee's own name is not sent to Circle.
+ * The name the passkey is saved under, as the payee's password manager lists it beside www.vestiarion.xyz (P2): the
+ * business that pays, then a mark, so two wallets never share a name. Circle takes 5 to 50 letters, digits and _@.:+-
+ * only, and refuses anything else (-32025), so accents are dropped and every other character becomes a hyphen:
+ * "Công ty Đất Việt" is saved as "Cong-ty-Dat-Viet-4f2a9c1e". The payee's own name is not sent to Circle.
  */
 export function passkeyName(businessName: string, mark: string): string {
-  const name = businessName.trim().replace(/\s+/g, " ").slice(0, 40);
-  return name ? `${name} (Vestiarion ${mark})` : `Vestiarion wallet ${mark}`;
+  const business = businessName
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .replace(/[đĐðÐßæÆøØœŒłŁþÞ]/g, (letter) => PLAIN_LETTERS[letter])
+    .replace(/['’]/g, "")
+    .replace(/[^A-Za-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 32)
+    .replace(/-+$/, "");
+  return `${business || "Vestiarion"}-${mark}`;
 }
 
-/** Four hex characters from the browser's random source, for `passkeyName`. */
+/**
+ * Eight hex characters from the browser's random source, for `passkeyName`, drawn for every attempt: Circle keeps a name
+ * from the moment a registration asks for it, whether or not a passkey follows, and refuses it after (-32024).
+ */
 export function passkeyMark(): string {
-  const bytes = new Uint8Array(2);
+  const bytes = new Uint8Array(4);
   crypto.getRandomValues(bytes);
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }

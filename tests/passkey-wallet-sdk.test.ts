@@ -1,14 +1,16 @@
 import { decodeFunctionData, erc20Abi, isAddress } from "viem";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { ARC_TESTNET } from "@/lib/network";
-import { passkeyWalletAddress, type PasskeySdk } from "@/lib/passkey-wallet";
+import { passkeyMark, passkeyName, passkeyWalletAddress, type PasskeySdk } from "@/lib/passkey-wallet";
 import { passkeySdk } from "@/lib/passkey-wallet-sdk";
 import { openPasskeyWallet } from "@/lib/passkey-wallet-send";
 
 /**
  * The real binding (src/lib/passkey-wallet-sdk.ts): Circle's Modular Wallets SDK and the app's viem, run together as the
  * browser runs them, with only the browser's passkey API and the network faked (payee passkey wallet review). A swapped
- * mode, a wrong bundler key or a lost rpId fails here, where the module's own tests inject the SDK whole.
+ * mode, a wrong bundler key or a lost rpId fails here, where the module's own tests inject the SDK whole. The faked
+ * Circle answers a passkey's registration as the live one did on 2026-10-05: a username outside its rule is refused
+ * (-32025), and so is one it has been asked for before (-32024).
  */
 
 const HOST = "www.vestiarion.xyz";
@@ -16,6 +18,9 @@ const CREDENTIAL_ID = "Y3JlZGVudGlhbC1pZC0x";
 const ENTRY_POINT = "0x0000000071727De22E5E9d8BAf0edAc6f37da032";
 
 const assertions: Array<{ rpId: string }> = [];
+const created: Array<{ rpId: string; name: string }> = [];
+const usernames = new Set<string>();
+let createdKey: ArrayBuffer | null = null;
 const rpc: Array<{ url: string; method: string; params: unknown[] }> = [];
 let circleAddress = "0x0000000000000000000000000000000000000000";
 let receipt: "success" | "reverted" | "unreachable" = "success";
@@ -31,6 +36,13 @@ beforeAll(() => {
     location: { hostname: HOST, protocol: "https:" },
     navigator: {
       credentials: {
+        async create(options: { publicKey: { rp: { id: string }; user: { name: string } } }) {
+          created.push({ rpId: options.publicKey.rp.id, name: options.publicKey.user.name });
+          const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
+          createdKey = await crypto.subtle.exportKey("spki", pair.publicKey);
+          const spki = createdKey;
+          return { id: CREDENTIAL_ID, rawId: new Uint8Array(16).buffer, type: "public-key", response: { getPublicKey: () => spki } };
+        },
         async get(options: { publicKey: { rpId: string; challenge: Uint8Array } }) {
           assertions.push({ rpId: options.publicKey.rpId });
           const clientDataJSON = JSON.stringify({ type: "webauthn.get", challenge: base64url(options.publicKey.challenge), origin: `https://${HOST}` });
@@ -51,7 +63,26 @@ beforeAll(() => {
     rpc.push({ url, method: body.method, params: body.params });
     const params = body.params as Array<Record<string, unknown>>;
     const reply = (result: unknown) => new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, result }), { status: 200, headers: { "content-type": "application/json" } });
+    const refuse = (code: number, message: string) => new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, error: { code, message } }), { status: 200 });
     switch (body.method) {
+      case "rp_getRegistrationOptions": {
+        const username = String(body.params[0]);
+        if (!/^[A-Za-z0-9_@.:+-]{5,50}$/.test(username)) {
+          return refuse(-32025, "The username is invalid. It should be 5 to 50 characters and contain only alphanumeric and _@.:+- characters.");
+        }
+        if (usernames.has(username)) return refuse(-32024, "The username is duplicated.");
+        usernames.add(username);
+        return reply({
+          rp: { name: HOST, id: HOST },
+          user: { name: username, displayName: username, id: base64url(new Uint8Array(16).fill(7)) },
+          challenge: base64url(new Uint8Array(32).fill(9)),
+          pubKeyCredParams: [{ type: "public-key", alg: -7 }],
+          timeout: 300000,
+          authenticatorSelection: { requireResidentKey: true, residentKey: "required", userVerification: "required" },
+        });
+      }
+      case "rp_getRegistrationVerification":
+        return reply({ verified: true });
       case "circle_getAddress":
         return reply({ id: "w1", address: circleAddress, blockchain: "ARC-TESTNET", state: "LIVE", name: (params[0].metadata as { name: string }).name, scaConfiguration: params[0].scaConfiguration });
       case "eth_chainId":
@@ -106,6 +137,8 @@ afterAll(() => {
 
 beforeEach(() => {
   assertions.length = 0;
+  created.length = 0;
+  createdKey = null;
   rpc.length = 0;
   receipt = "success";
   sentOperation = null;
@@ -128,6 +161,16 @@ const LOCAL = { clientKey: "TEST_CLIENT_KEY:x", clientUrl: "https://rpc.example.
 const CIRCLE = { clientKey: "TEST_CLIENT_KEY:x", clientUrl: "https://modular-sdk.circle.com/v1/rpc/w3s/buidl" };
 
 describe("the Modular Wallets binding, with the app's viem", () => {
+  it("registers the passkey with Circle under the name a payee link gives it, whatever the business is called", async () => {
+    circleAddress = "0x840de234Bfc3F66fA380888A0a8204D9487D60d4";
+    const name = passkeyName("testnet-2 (Công ty Đất Việt)", passkeyMark());
+    const made = await passkeyWalletAddress({ config: CIRCLE, mode: "Register", username: name, sdk: passkeySdk() });
+    expect(rpc.filter((call) => call.method === "rp_getRegistrationOptions").map((call) => call.params)).toEqual([[name]]);
+    expect(created).toEqual([{ rpId: HOST, name }]);
+    expect(createdKey).not.toBeNull();
+    expect(made.address).toBe(circleAddress);
+  }, 30_000);
+
   it("gives the same wallet for a passkey registered from a payee link and the same passkey logging in at /wallet", async () => {
     const key = await publicKey();
     const modes: string[] = [];
