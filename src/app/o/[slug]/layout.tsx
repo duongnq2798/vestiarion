@@ -6,7 +6,7 @@ import { AppFrame } from "@/components/vx/AppFrame";
 import type { WorkspaceSummary } from "@/components/vx/workspace";
 import { membershipFor, membershipsOf, requireMembership, type OrgMembership } from "@/lib/auth/membership";
 import { getSessionUser } from "@/lib/auth/session";
-import { paymentsDisabled } from "@/lib/payments-switch";
+import { paymentsSwitchForPages } from "@/lib/payments-switch";
 
 type OrgLayoutProps = {
   children: ReactNode;
@@ -55,16 +55,16 @@ function summary(membership: OrgMembership): WorkspaceSummary {
  *
  * The paused banner is platform data too: the pause lives on the
  * organization row, and the pauser's address comes from its member list. The
- * payments-off banner reads only the deployment's own switch (payment safety S5).
+ * payments-off banner reads only the platform's switch (payment safety S5, S7).
  */
 export default async function OrgLayout({ children, params }: OrgLayoutProps) {
   const { slug } = await params;
   const { user, membership } = await requireMembership(slug);
-  const [memberships, paused] = await Promise.all([membershipsOf(user.id), pausedBanner(membership.orgId)]);
+  const [memberships, paused, payments] = await Promise.all([membershipsOf(user.id), pausedBanner(membership.orgId), paymentsSwitchForPages()]);
 
   return (
     <AppFrame workspace={summary(membership)} workspaces={memberships.map(summary)} email={user.email}>
-      {paymentsDisabled() && <PaymentsOffBanner />}
+      {payments.off && <PaymentsOffBanner reason={payments.reason} />}
       {paused && <AgentPausedBanner pause={paused.pause} members={paused.members} />}
       {children}
     </AppFrame>

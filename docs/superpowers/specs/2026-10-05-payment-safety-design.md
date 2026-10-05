@@ -118,3 +118,51 @@ fixes have run for days before any mainnet workspace exists:
 - Turning the switch on is a Vercel environment change and a redeploy; turning it off, the same.
 - Proof on testnet: set `PAYMENTS_DISABLED` on a preview deployment and see the cycle skip and Approve and pay refuse;
   type a mis-cased address on Counterparties and see it refused.
+
+## 5. After review (2026-10-05, follow-up to PR #205)
+
+A fresh review of the merged branch found that a send Circle never answered was still sent again blind, and that the
+switch, read once per deployment, did not reach a console tab that Vercel's skew protection keeps on an older
+deployment. These rulings replace the parts of R1–R3 and S1 they name.
+
+- **R4. Look, never send again blind.**
+  - A payment whose send Circle never answered is looked for on Circle before anything is sent again. That is either a
+    failed intent with no provider id and the marker, or one left `submitting` for more than 2 minutes.
+  - It is looked for by its reference in the wallet it was sent from, around the time it was sent, and nothing is sent
+    while it is looked for.
+  - **Found:** recorded and reconciled.
+  - **Not listed 15 minutes after the send:** Circle never took it. The intent records that Circle has no transfer for
+    it, and the next send goes as a new payment.
+  - **Still inside those 15 minutes, or the lookup did not complete:** nothing is sent, and the intent stays unknown.
+  - **Routes Circle cannot look up this way keep their own safety.**
+    - Gateway's transfer is the same spec, spent once.
+    - CCTP's steps are the same keys on the same wallet.
+    - A batch is looked for by its own key, as before.
+- **R5. The reference and the wallet.**
+  - The reference is the payment's memo (`Invoice <id>`, `Milestone <id>`), unique to its source. The transactions of
+    earlier attempts are left out.
+  - The wallet is the operating wallet, or the agent's own for a payment through the spending limit contract. The intent
+    records which when the send starts (`payment_intents.sent_wallet_id`, migration 0074).
+- **R6. Reject, Return, Add details and Close look too.**
+  - Circle has none: allowed.
+  - Found: refused as sent, unless Circle ended it in a terminal failure.
+  - Still being listed: refused, saying when to try again.
+  - So no unknown send is a dead end. That includes one to a counterparty since screened high risk.
+- **R7. An unknown send stays unknown until Circle answers about it.** A send of a Gateway or CCTP payment again that
+  fails without that answer keeps the marker.
+- **R8. Nothing is marked where nothing could have left.** CCTP's approve step moves no money, and a Gateway connection
+  never made sent nothing.
+- **R9. A transfer Circle took but we failed to record keeps the marker,** so it is looked for and found, never
+  rejected over.
+- **S7. The switch is in the database too.**
+  - `platform_controls.payments_disabled_at` (migration 0074) is set and cleared with `npm run payments -- off
+    "<reason>"` and `npm run payments -- on`.
+  - Every check reads it, cached for 10 seconds, so every running deployment stops at once, with no redeploy. That
+    includes one a tab is pinned to.
+  - `PAYMENTS_DISABLED` still works; either one stops payments.
+  - A read that fails stops money, never a page.
+- **S8. Records keep working while payments are off.** Approve and pay, and Pay now, go through when the transfer
+  already exists, because they only read Circle; the provider still refuses any send.
+- **S9. The agent's purchases from its service budget (x402) check the switch too.**
+- **A3. A checksum failure says so** on the address edit, the payee link and `/payto`, instead of a message about the
+  address's length.

@@ -34,6 +34,8 @@ function database(milestone: Record<string, unknown> = {}, operating: Record<str
     counterparties: { address: PAYEE, chain: "ARC-TESTNET", name: "Centronex", address_changed_at: null, address_confirmed_at: null }, ...milestone,
   };
   const fake = fakeSupabase((request: RecordedRequest): FakeReply => {
+    // The platform's payment switch (payment safety S7): on.
+    if (request.path === "/rest/v1/platform_controls") return { body: null };
     const wantsObject = request.headers.get("accept")?.includes("application/vnd.pgrst.object+json") ?? false;
     if (request.path === "/rest/v1/accounts") {
       const account = { id: "acct-op", circle_wallet_id: "wallet-op", address: "0x97F85033bBD83870a841cF7153F35b387746B6b6", balance: "10", ...operating };

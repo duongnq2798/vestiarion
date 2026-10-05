@@ -380,7 +380,7 @@ export async function payHeldMilestone(input: {
   provenance?: Provenance;
 }): Promise<{ status: string; txRef: string | null; note: string }> {
   // Nothing is paid while the platform has payments switched off (payment safety S4): refused before anything is read.
-  if (paymentsDisabled()) raise("payments_off");
+  if (await paymentsDisabled()) raise("payments_off");
   const orgId = currentOrgId();
   const provider = getChainProvider();
   const milestone = await loadMilestone(input.milestoneId, provider.mode === "live");

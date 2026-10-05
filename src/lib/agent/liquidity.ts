@@ -174,7 +174,7 @@ export async function bringCashBackByPerson(input: {
   provider: ChainProvider;
 }): Promise<{ amount: number; execution: UsycExecution | null }> {
   // Nothing moves while the platform has payments switched off (payment safety S4).
-  assertPaymentsEnabled();
+  await assertPaymentsEnabled();
   const orgId = currentOrgId();
   const orgDb = tenantDb();
   const accounts = unwrap(await orgDb.from("accounts").select("id, kind, balance")) as Array<{ id: string; kind: string; balance: string | number }>;

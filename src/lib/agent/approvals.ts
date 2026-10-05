@@ -615,7 +615,7 @@ export async function approveAndPay(
   } = {}
 ): Promise<{ status: "paid" | "matched" | "held"; txRef: string | null; note: string }> {
   // Nothing is paid while the platform has payments switched off (payment safety S4): refused before anything is read.
-  if (paymentsDisabled()) raise("payments_off");
+  if (await paymentsDisabled()) raise("payments_off");
   const orgId = currentOrgId();
   const invoice = await loadWaitingPayable(input.invoiceId);
 

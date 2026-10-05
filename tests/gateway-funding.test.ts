@@ -37,6 +37,8 @@ interface SignerRow {
 function database(start: { signer?: SignerRow | null } = {}) {
   let signer: SignerRow | null = start.signer ?? null;
   const fake = fakeSupabase((request: RecordedRequest): FakeReply => {
+    // The platform's payment switch (payment safety S7): on.
+    if (request.path === "/rest/v1/platform_controls") return { body: null };
     const wantsObject = request.headers.get("accept")?.includes("application/vnd.pgrst.object+json") ?? false;
     if (request.method === "GET" && request.path === "/rest/v1/accounts") return { body: wantsObject ? OPERATING : [OPERATING] };
     if (request.path === "/rest/v1/gateway_signers") {

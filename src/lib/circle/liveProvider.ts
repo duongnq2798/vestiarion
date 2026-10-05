@@ -179,12 +179,20 @@ export class LiveProvider implements ChainProvider {
    * sets of Circle wallets can then exist in one process, which a constructor
    * that consulted `process.env` made impossible.
    */
-  /** The platform's stop switch (payment safety S2): every way of moving money refuses, before an account is read. */
-  private readonly paymentsDisabled: boolean;
+  /**
+   * The platform's stop switch (payment safety S2, S7): every way of moving money refuses, before an account is read.
+   * `getChainProvider` hands it the switch to read at each call; a test may hand it a fixed answer.
+   */
+  private readonly paymentsDisabled: () => Promise<boolean>;
 
   constructor(
     chain: ChainConfig,
-    options: { client?: LiveProviderClient; fetch?: typeof fetch; bridgeMintWaitMs?: number; paymentsDisabled?: boolean } = {}
+    options: {
+      client?: LiveProviderClient;
+      fetch?: typeof fetch;
+      bridgeMintWaitMs?: number;
+      paymentsDisabled?: boolean | (() => Promise<boolean>);
+    } = {}
   ) {
     if (!chain.circleApiKey || !chain.circleEntitySecret) {
       throw new Error("LiveProvider requires a Circle API key and entity secret");
@@ -197,11 +205,12 @@ export class LiveProvider implements ChainProvider {
     this.arcRpcUrl = chain.arcRpcUrl;
     this.fetch = options.fetch;
     this.bridgeMintWaitMs = options.bridgeMintWaitMs ?? BRIDGE_MINT_WAIT_MS;
-    this.paymentsDisabled = options.paymentsDisabled === true;
+    const off = options.paymentsDisabled;
+    this.paymentsDisabled = typeof off === "function" ? off : async () => off === true;
   }
 
-  private refuseWhilePaymentsOff(): void {
-    if (this.paymentsDisabled) throw new PaymentsDisabledError();
+  private async refuseWhilePaymentsOff(): Promise<void> {
+    if (await this.paymentsDisabled()) throw new PaymentsDisabledError();
   }
 
   private async account(accountId: string): Promise<AccountRow & { walletId: string }> {
@@ -256,7 +265,7 @@ export class LiveProvider implements ChainProvider {
   }
 
   async transfer(params: TransferParams): Promise<TransferResult> {
-    this.refuseWhilePaymentsOff();
+    await this.refuseWhilePaymentsOff();
     if (params.toAddress.startsWith("sim:")) {
       throw new Error(
         `Counterparty has no on-chain address (${params.toAddress}). Add this counterparty's Arc address on the Counterparties page.`
@@ -329,7 +338,7 @@ export class LiveProvider implements ChainProvider {
    */
   async batchTransfer(params: BatchTransferParams): Promise<TransferResult> {
     // Nothing leaves: the batch is undone and each payment sent alone, which `transfer` refuses in turn (R4).
-    if (this.paymentsDisabled) throw new BatchNotSentError(PAYMENTS_OFF.replace(/\.$/, ""));
+    if (await this.paymentsDisabled()) throw new BatchNotSentError(PAYMENTS_OFF.replace(/\.$/, ""));
     const unpaid = params.transfers.find((transfer) => transfer.toAddress.startsWith("sim:"));
     if (unpaid) {
       throw new BatchNotSentError(`Counterparty has no on-chain address (${unpaid.toAddress}). Add this counterparty's Arc address on the Counterparties page`);
@@ -726,7 +735,7 @@ export class LiveProvider implements ChainProvider {
    * waited for. Refused before anything is sent while USYC cannot be bought.
    */
   async depositToEarn(params: EarnDepositParams): Promise<EarnResult> {
-    this.refuseWhilePaymentsOff();
+    await this.refuseWhilePaymentsOff();
     const { operating, reserve, key } = await this.usycAccounts(params);
     const read = { rpcUrl: this.arcRpcUrl, fetch: this.fetch };
     if (!(await usycSubscriptionsOpen(read))) throw new UsycSubscriptionsClosedError();
@@ -748,7 +757,7 @@ export class LiveProvider implements ChainProvider {
    * the USDC asked, never more than it holds, with the operating wallet as receiver.
    */
   async withdrawFromEarn(params: EarnDepositParams): Promise<EarnResult> {
-    this.refuseWhilePaymentsOff();
+    await this.refuseWhilePaymentsOff();
     const { operating, reserve, key } = await this.usycAccounts(params);
     const read = { rpcUrl: this.arcRpcUrl, fetch: this.fetch };
     const [price, held] = await Promise.all([readUsycPrice(read), readUsycShares(reserve.address, read)]);
@@ -805,7 +814,7 @@ export class LiveProvider implements ChainProvider {
    * when the approval did not confirm.
    */
   async swapForEurc(params: SwapCallParams): Promise<SwapCallResult> {
-    this.refuseWhilePaymentsOff();
+    await this.refuseWhilePaymentsOff();
     const account = await this.account(params.fromAccountId);
     const send = async (call: Record<string, unknown>, key: string): Promise<SwapStep> => {
       const created = await withDeadline(

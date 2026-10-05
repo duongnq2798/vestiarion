@@ -111,7 +111,7 @@ export async function lockMilestone(
   options: { client?: (credentials: { apiKey: string; entitySecret: string }) => EscrowHoldClient; fetch?: typeof fetch; rpcUrl?: string } = {}
 ): Promise<{ fundTxHash: string | null }> {
   // Nothing moves while the platform has payments switched off (payment safety S2).
-  assertPaymentsEnabled();
+  await assertPaymentsEnabled();
   const escrow = await readEscrowContract();
   if (!escrow?.address) throw new EscrowHoldError("Set up escrow for this workspace first.");
   const milestone = unwrap(
@@ -241,7 +241,7 @@ export async function refundMilestone(
   options: { client?: (credentials: { apiKey: string; entitySecret: string }) => EscrowHoldClient; fetch?: typeof fetch; rpcUrl?: string } = {}
 ): Promise<{ refundTxHash: string | null }> {
   // Nothing moves while the platform has payments switched off (payment safety S2).
-  assertPaymentsEnabled();
+  await assertPaymentsEnabled();
   const escrow = await readEscrowContract();
   if (!escrow?.address) throw new EscrowHoldError("Set up escrow for this workspace first.");
   const milestone = unwrap(

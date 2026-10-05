@@ -16,6 +16,7 @@ import { SimulateProvider } from "./simulateProvider";
 import { LiveProvider } from "./liveProvider";
 import { currentOrgConfig } from "../context";
 import type { VestiarionConfig } from "../config";
+import { paymentsDisabled } from "../payments-switch";
 
 /**
  * Payments settle on Arc testnet through Circle's Developer-Controlled
@@ -128,7 +129,7 @@ export function getChainProvider(): ChainProvider {
   }
   const provider: ChainProvider =
     circleApiKey && circleEntitySecret
-      ? new HybridProvider(new LiveProvider(config.chain, { paymentsDisabled: config.paymentsDisabled === true }), new SimulateProvider(), config.chain.usycLive === true)
+      ? new HybridProvider(new LiveProvider(config.chain, { paymentsDisabled: () => paymentsDisabled() }), new SimulateProvider(), config.chain.usycLive === true)
       : new SimulateProvider();
 
   providers.set(config, provider);

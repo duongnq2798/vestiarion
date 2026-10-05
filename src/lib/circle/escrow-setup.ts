@@ -99,7 +99,7 @@ export async function setUpEscrow(
   } = {}
 ): Promise<{ address: string; alreadySetUp: boolean }> {
   // Nothing moves while the platform has payments switched off (payment safety S2).
-  assertPaymentsEnabled();
+  await assertPaymentsEnabled();
   const existing = await readEscrowContract();
   if (existing?.address) return { address: existing.address, alreadySetUp: true };
 

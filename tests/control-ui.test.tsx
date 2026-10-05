@@ -425,6 +425,11 @@ describe("PaymentsOffBanner (payment safety S5)", () => {
     const markup = html(<PaymentsOffBanner />);
     expect(markup).toContain("Payments are switched off for every workspace right now.");
     expect(markup).toContain("The agent does not run, and nothing is paid, moved or locked until they are back on. Every page still reads as usual.");
+    expect(markup).not.toContain("Why:");
+  });
+
+  it("gives the reason the switch records (S7)", () => {
+    expect(html(<PaymentsOffBanner reason="Incident 7" />)).toContain("Why: Incident 7");
   });
 });
 
@@ -584,7 +589,8 @@ describe("the new control screens, as source", () => {
 
   it("the workspace layout draws the payments-off banner from the deployment's switch (payment safety S5)", () => {
     const layout = read("src/app/o/[slug]/layout.tsx");
-    expect(layout).toContain("{paymentsDisabled() && <PaymentsOffBanner />}");
+    expect(layout).toContain("paymentsSwitchForPages()");
+    expect(layout).toContain("{payments.off && <PaymentsOffBanner reason={payments.reason} />}");
   });
 
   it("the workspace layout draws the paused banner from platform data", () => {
