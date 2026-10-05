@@ -139,6 +139,15 @@ describe("the Gateway API", () => {
     );
   });
 
+  it("never says a transfer whose connection was never made may have been accepted: nothing left (payment safety R8)", async () => {
+    const intent = burnIntent({ depositor: DEPOSITOR, signer: SIGNER, recipient: PAYEE, chain: "BASE-SEPOLIA", amount: 1, salt: gatewaySalt("k"), maxFee: BigInt(1), maxBlockHeight: "1" });
+    const refused = (async () => {
+      throw Object.assign(new TypeError("fetch failed"), { cause: { code: "ECONNREFUSED" } });
+    }) as unknown as typeof globalThis.fetch;
+
+    await expect(submitGatewayTransfer(intent, "0xsig", { fetch: refused })).rejects.toThrow(/^Gateway did not answer the transfer$/);
+  });
+
   it("turns an HTTP error or no answer into a GatewayError, with Gateway's own message", async () => {
     const refused = (async () => respond(400, { message: "Insufficient balance for depositor" })) as unknown as typeof globalThis.fetch;
     await expect(submitGatewayTransfer(burnIntent({ depositor: DEPOSITOR, signer: SIGNER, recipient: PAYEE, chain: "BASE-SEPOLIA", amount: 1, salt: gatewaySalt("k"), maxFee: BigInt(1), maxBlockHeight: "1" }), "0xsig", { fetch: refused })).rejects.toThrow(

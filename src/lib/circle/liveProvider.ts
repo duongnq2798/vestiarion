@@ -89,9 +89,11 @@ const NEVER_SENT = new Set(["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "ENETUNREA
  * under its idempotency key, so nothing closes over it, and the same write sent again under that key returns it
  * rather than repeats it. A refusal (4xx), a connection never made, and an error that is not an HTTP one keep their
  * own words. The SDK's errors carry an HTTP `status` when Circle answered, and a network `code` when it did not.
+ * A write that moves no money (`movesMoney` false: a bridge's approve) says so instead, since nothing could have left
+ * (payment safety R8).
  */
-async function sendToCircle(work: Promise<{ data?: { id?: string } }>, what: string, subject = "it"): Promise<string> {
-  const unknown = `${subject} ${MAY_HAVE_BEEN_ACCEPTED}`;
+async function sendToCircle(work: Promise<{ data?: { id?: string } }>, what: string, subject = "it", movesMoney = true): Promise<string> {
+  const unknown = movesMoney ? `${subject} ${MAY_HAVE_BEEN_ACCEPTED}` : `${subject} moved no money`;
   let created: { data?: { id?: string } };
   try {
     created = await withDeadline(work, CREATE_TRANSACTION_DEADLINE_MS, `Circle did not answer ${what} within ${CREATE_TRANSACTION_DEADLINE_MS} ms; ${unknown}`);
@@ -523,7 +525,11 @@ export class LiveProvider implements ChainProvider {
     // A failed approve moved nothing; one Circle has not confirmed yet is
     // thrown, so the next attempt sends the same approve, and Circle answers
     // with the one it has.
-    const approveId = await this.execute(account.walletId, approve, bridgeStepKey(params.idempotencyKey, "approve"), params.memo);
+    // The approve moves no money: one Circle did not answer is never a payment that may exist (R8).
+    const approveId = await this.execute(account.walletId, approve, bridgeStepKey(params.idempotencyKey, "approve"), params.memo, {
+      what: "the approve for the bridge",
+      movesMoney: false,
+    });
     const approved = await awaitSettlement(this.client, approveId);
     if (approved.status === "failed") {
       return this.bridgeResult(`${APPROVE_ID}${approveId}`, approved, base, null, started);
@@ -622,7 +628,13 @@ export class LiveProvider implements ChainProvider {
     };
   }
 
-  private async execute(walletId: string, call: ContractCall, idempotencyKey: string, memo: string | undefined): Promise<string> {
+  private async execute(
+    walletId: string,
+    call: ContractCall,
+    idempotencyKey: string,
+    memo: string | undefined,
+    options: { what?: string; movesMoney?: boolean } = {}
+  ): Promise<string> {
     return sendToCircle(
       this.client.createContractExecutionTransaction({
         walletId,
@@ -633,7 +645,9 @@ export class LiveProvider implements ChainProvider {
         refId: memo,
         fee: { type: "level", config: { feeLevel: "MEDIUM" } },
       }),
-      "createContractExecutionTransaction"
+      options.what ?? "createContractExecutionTransaction",
+      "it",
+      options.movesMoney ?? true
     );
   }
 
