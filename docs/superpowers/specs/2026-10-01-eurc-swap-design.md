@@ -1,6 +1,6 @@
 # Paying a EURC invoice from USDC by a swap
 
-Status: design, 2026-10-01. Extends `2026-10-01-eurc-invoices-design.md`, whose "Stretch" this is.
+Status: shipped (PR #107, 0048), proven in production on 2026-10-05 (§6). Extends `2026-10-01-eurc-invoices-design.md`, whose "Stretch" this is.
 
 ## 1. Goal
 
@@ -321,3 +321,23 @@ call it never received is created now.
    - the `fx_swap` entry, and its tx on arcscan: USDC out of the operating wallet, EURC in;
    - the `ap_pay` entry with `detail.swap`;
    - the EURC transfer to the payee.
+
+### Rollout record (2026-10-05)
+
+- **Where:** demo-wp, a live workspace. Loto (Arc testnet payee, screened clear, limit 1 USDC) billed 0.50 EURC with
+  purchase order PO-SWAP-1 and goods received, due that day. The operating wallet held 17.8 USDC and 0 EURC.
+  testnet-2 was not used: its operating USDC was swept to USYC.
+- **First two decisions held it** (#1423, #1434): Circle's Stablecoin Service answered "No route available" to the
+  EURC→USDC quote, so the payable had no USDC value. #199 then made a quote ask up to four times. The route came back
+  at 00:48, dropped before 01:38, and came back at 01:46 UTC.
+- **Return to agent** by a person at 01:48:52 UTC (#1437). In the cycle it started:
+  - DeepSeek decided to pay with `fundWithSwap: true`, as the written policy would (`agreedWithReference: true`);
+  - 0.5 EURC was weighed at 0.607631 USDC (1.215262 USDC per EURC), within the limit.
+- **Swap** (#1439, `fx_swap`): 0.626424 USDC for 0.624412 EURC through the Stablecoin Service, tx
+  `0xa986bfc63fa29ee7be038814033eb7995592853b0036abdc2b4de30db3bd0c82`.
+  - The offer's cost was recorded as -17.46%: the USDC→EURC pool priced EURC far below the EURC→USDC quote.
+  - Testnet pools need not agree with each other, and the cap only bounds a cost above the quoted rate.
+- **Payment** (#1440, `ap_pay`, `detail.swap.state: "confirmed"`): 0.50 EURC to Loto, tx
+  `0x1b6324c163af71827e6d7c4cd4e8000113df23ea2b1372a84b22571b1cd276df`, 39 seconds after the return.
+- **Follow-up:** `docs/superpowers/specs/2026-10-05-fx-reevaluation-design.md` decides such a payable again with no one
+  pressing Return to agent, once a fresh quote clears what held it.
