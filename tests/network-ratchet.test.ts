@@ -40,7 +40,6 @@ const ALLOWED: Record<string, number> = {
   "src/lib/github/payment-comments.ts": 2,
   "src/lib/intake-validation.ts": 1,
   "src/lib/pay-freelancer.ts": 2,
-  "src/lib/payee-chains.ts": 1,
   "src/lib/payment-notices.ts": 2,
   "src/lib/platform/payee-links.ts": 1,
   "src/lib/platform/workspace.ts": 2,

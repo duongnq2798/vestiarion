@@ -1,5 +1,5 @@
 import { currentConfig } from "../context";
-import { ARC_TESTNET } from "../network";
+import { ARC_TESTNET, type NetworkProfile } from "../network";
 
 /**
  * Reads what a transfer actually cost, from Arc itself.
@@ -98,6 +98,19 @@ async function arcRpc(
  */
 export function arcRpcUrl(): string {
   return currentConfig().chain.arcRpcUrl || ARC_TESTNET_RPC_URL;
+}
+
+/**
+ * The RPC for a network's own chain (docs/superpowers/specs/2026-10-05-network-threading-design.md P2): ARC_RPC_URL,
+ * a keyed endpoint, replaces Arc testnet's only, never another network's.
+ */
+export function rpcUrlFor(network: NetworkProfile, override: string | undefined): string {
+  return network.id === "arc-testnet" && override ? override : network.rpcUrl;
+}
+
+/** `rpcUrlFor` with the running configuration's ARC_RPC_URL. */
+export function networkRpcUrl(network: NetworkProfile): string {
+  return rpcUrlFor(network, currentConfig().chain.arcRpcUrl);
 }
 
 /**
