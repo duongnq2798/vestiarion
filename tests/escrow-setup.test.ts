@@ -38,6 +38,8 @@ interface Row {
 function database(start: Partial<Row> | null = null, operating = OPERATING) {
   let row: Row | null = start ? { id: "esc-1", address: null, circle_contract_id: null, deployer_wallet_id: null, deployer_address: null, gas_tx_id: null, deploy_tx_hash: null, ...start } : null;
   const fake = fakeSupabase((request: RecordedRequest): FakeReply => {
+    // The platform's payment switch (payment safety S7): on.
+    if (request.path === "/rest/v1/platform_controls") return { body: null };
     const wantsObject = request.headers.get("accept")?.includes("application/vnd.pgrst.object+json") ?? false;
     const none: FakeReply = { status: 406, body: { code: "PGRST116", message: "no rows" } };
     if (request.path === "/rest/v1/accounts") return { body: wantsObject ? operating : [operating] };

@@ -29,7 +29,8 @@ describe("runAgentCycle — refuses before touching the database (R12)", () => {
     await expect(
       runWith({ ...orgTestContext({ config, client: fake.client, orgId: ORG }), config: unreadable }, () => runAgentCycle())
     ).rejects.toThrow(/refusing to fall back to simulated payments/);
-    expect(fake.requests).toEqual([]);
+    // Only the platform's payment switch is read first (payment safety S3, S7); nothing of the workspace's.
+    expect(fake.requests.filter((request) => request.path !== "/rest/v1/platform_controls")).toEqual([]);
   });
 });
 

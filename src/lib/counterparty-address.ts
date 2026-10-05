@@ -1,4 +1,4 @@
-import { addressProblem, ARC_ADDRESS, NOT_AN_ARC_ADDRESS } from "./address-checksum";
+import { CHECKSUM_MISMATCH, addressProblem, ARC_ADDRESS, NOT_AN_ARC_ADDRESS } from "./address-checksum";
 import { currentOrgId } from "./context";
 import { db, unwrap } from "./dal";
 import { appendLedgerEntryBestEffort } from "./ledger-best-effort";
@@ -24,10 +24,12 @@ import { appendLedgerEntryBestEffort } from "./ledger-best-effort";
 /** An Arc (EVM) address: 0x and 40 hex characters (./address-checksum, shared with the console's forms). */
 export { ARC_ADDRESS };
 
-export type CounterpartyAddressErrorCode = "invalid" | "unchanged" | "conflict" | "not_found" | "stale";
+export type CounterpartyAddressErrorCode = "invalid" | "checksum" | "unchanged" | "conflict" | "not_found" | "stale";
 
 const MESSAGES: Record<CounterpartyAddressErrorCode, string> = {
   invalid: NOT_AN_ARC_ADDRESS,
+  // A mistyped address, told apart from one that is no address (payment safety A3).
+  checksum: `${CHECKSUM_MISMATCH} Copy it again from where it came.`,
   unchanged: "That is already this counterparty's address.",
   conflict: "Someone else changed this address a moment ago.",
   not_found: "Counterparty not found.",
@@ -42,11 +44,13 @@ export class CounterpartyAddressError extends Error {
 }
 
 /** A form's address field: an Arc address, trimmed, or `null` when left empty to clear it. */
-export function parseAddressInput(raw: string): { ok: true; address: string | null } | { ok: false; message: string } {
+export function parseAddressInput(
+  raw: string
+): { ok: true; address: string | null } | { ok: false; message: string; /** The shape is right, but its capital letters do not match its checksum (A3). */ checksum: boolean } {
   const trimmed = raw.trim();
   if (trimmed === "") return { ok: true, address: null };
   const problem = addressProblem(trimmed);
-  return problem ? { ok: false, message: problem } : { ok: true, address: trimmed };
+  return problem ? { ok: false, message: problem, checksum: ARC_ADDRESS.test(trimmed) } : { ok: true, address: trimmed };
 }
 
 /** Whether a person changed the address and no one has confirmed it since. */
@@ -116,7 +120,7 @@ export async function changeCounterpartyAddress(
   input: AddressChangeInput
 ): Promise<{ name: string; from: string | null; to: string | null }> {
   const parsed = parseAddressInput(input.raw);
-  if (!parsed.ok) throw new CounterpartyAddressError("invalid");
+  if (!parsed.ok) throw new CounterpartyAddressError(parsed.checksum ? "checksum" : "invalid");
 
   const current = await loadCounterparty(input.counterpartyId);
   if (sameAddress(current.address, parsed.address)) throw new CounterpartyAddressError("unchanged");

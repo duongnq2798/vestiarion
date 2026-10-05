@@ -700,9 +700,12 @@ before executing a transfer, so a jailbroken or hallucinated "pay" decision on a
 counterparty is blocked in code, not just discouraged in the prompt (see the
 `[guardrail override]` branch).
 
-Payments can be stopped for every workspace at once: set `PAYMENTS_DISABLED=1` on the deployment
-and redeploy. Nothing then moves money, the agent runs no cycle, and every workspace page says so,
-while reads keep working. An Arc address typed into the console or sent to the API must match its
+Payments can be stopped for every workspace at once: `npm run payments -- off "<reason>"` stops
+them within 10 seconds on every running deployment, and `npm run payments -- on` starts them again.
+`PAYMENTS_DISABLED=1` on the deployment does the same after a redeploy. Nothing then moves money,
+the agent runs no cycle, and every workspace page says so, while reads keep working. A payment whose
+send Circle did not answer is looked for on Circle before anything is sent again, so it is never
+paid twice or closed over. An Arc address typed into the console or sent to the API must match its
 EIP-55 checksum when it mixes capital and small letters
 (`docs/superpowers/specs/2026-10-05-payment-safety-design.md`).
 

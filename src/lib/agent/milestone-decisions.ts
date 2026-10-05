@@ -6,7 +6,16 @@ import { firstPaymentCheck } from "../new-payee-facts";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { listLedgerEntriesForTargets } from "../ledger";
 import type { Provenance } from "../provenance";
-import { lastAttemptOf, paymentWasSent, SOLE_APPROVER_NOTE, transferExists, transferUnknown, type IntentState } from "./approvals";
+import {
+  lastAttemptOf,
+  lookForUnknownSend,
+  paymentWasSent,
+  SOLE_APPROVER_NOTE,
+  transferExists,
+  transferUnknown,
+  unknownSendMessage,
+  type IntentState,
+} from "./approvals";
 import { releaseHeldMilestone } from "./orchestrator";
 import { HELD_FOR_BUDGET } from "./outflow-budget";
 import { payoutAddress, syncOperatingBalance } from "./pay";
@@ -48,7 +57,8 @@ export type MilestoneDecisionErrorCode =
   | "payment_in_flight"
   | "escrow_locked"
   | "reason_required"
-  | "payments_off";
+  | "payments_off"
+  | "payment_unknown";
 
 const MESSAGES: Record<MilestoneDecisionErrorCode, string> = {
   milestone_not_found: "That milestone is not in this workspace.",
@@ -67,6 +77,7 @@ const MESSAGES: Record<MilestoneDecisionErrorCode, string> = {
   escrow_locked: "This milestone's USDC is locked in escrow. Refund the hold from its refund date first, then close it.",
   reason_required: "Say why it is closed without paying, in up to 500 characters.",
   payments_off: PAYMENTS_OFF,
+  payment_unknown: unknownSendMessage("milestone", null),
 };
 
 export class MilestoneDecisionError extends Error {
@@ -86,6 +97,7 @@ function raise(code: MilestoneDecisionErrorCode, message?: string): never {
 /** What a held milestone waits for, worst first: the reason line on its row. */
 export type HeldReasonKind =
   | "in_flight"
+  | "unknown"
   | "high_risk"
   | "unscreened"
   | "screening_limit"
@@ -138,6 +150,7 @@ const COUNTERPARTIES = { label: "Counterparties", path: "/counterparties" };
 
 const HINTS: Record<HeldReasonKind, string> = {
   in_flight: "Transfer to record",
+  unknown: "Transfer to look for",
   high_risk: "Screened high risk",
   unscreened: "Not screened yet",
   screening_limit: "Limit lowered by a screening match",
@@ -167,15 +180,19 @@ function reasonOf(facts: HeldFacts): Omit<HeldReason, "hint"> {
   if (intent?.status === "confirmed") {
     return { kind: "in_flight", text: "Its transfer went through, but it is not marked paid yet. Pay now records it; nothing is sent twice.", link: null, canPay: true, canClose: false, override: false };
   }
-  // Circle never answered its send (payment safety R1): it may hold the transfer, which the same key returns.
+  // Circle never answered its send (payment safety R1, R6): Pay now and Close look for it on Circle first. A send
+  // again may be a new payment, so whatever would hold it with no transfer still holds Pay now, and its override.
   if (transferUnknown(intent)) {
+    const underlying = reasonOf({ ...facts, intent: null });
+    const looks =
+      "Circle did not answer when its transfer was sent, so it may have taken it. Pay now and Close look for it on Circle first: Pay now records it if Circle has it, and sends it only once Circle shows none.";
     return {
-      kind: "in_flight",
-      text: "Circle did not answer when its transfer was sent, so it may have taken it. Pay now asks Circle again under the same key; nothing is sent twice.",
-      link: null,
-      canPay: true,
-      canClose: false,
-      override: false,
+      kind: "unknown",
+      text: underlying.canPay ? looks : `${looks} ${underlying.text}`,
+      link: underlying.canPay ? null : underlying.link,
+      canPay: underlying.canPay,
+      canClose: true,
+      override: underlying.override,
     };
   }
   if (paymentWasSent(intent)) {
@@ -379,8 +396,6 @@ export async function payHeldMilestone(input: {
   milestoneId: string;
   provenance?: Provenance;
 }): Promise<{ status: string; txRef: string | null; note: string }> {
-  // Nothing is paid while the platform has payments switched off (payment safety S4): refused before anything is read.
-  if (paymentsDisabled()) raise("payments_off");
   const orgId = currentOrgId();
   const provider = getChainProvider();
   const milestone = await loadMilestone(input.milestoneId, provider.mode === "live");
@@ -389,6 +404,8 @@ export async function payHeldMilestone(input: {
 
   const reason = heldReason(milestone.facts);
   const alreadySent = transferExists(milestone.facts.intent);
+  // Nothing new is paid while payments are switched off (payment safety S4); a transfer already sent is still recorded (S8).
+  if (!alreadySent && (await paymentsDisabled())) raise("payments_off");
   // A send Circle never answered is sent again under its key, which may be a new payment (payment safety R3): it is
   // judged as one, by what would hold it if no transfer existed, and only the funds check is skipped.
   const unknown = transferUnknown(milestone.facts.intent);
@@ -502,7 +519,14 @@ export async function closeMilestone(input: { actorId: string; milestoneId: stri
   if (reason.length === 0 || reason.length > 500) raise("reason_required");
   const milestone = await loadMilestone(input.milestoneId, getChainProvider().mode === "live");
   if (milestone.status !== "held") raise("not_held");
-  if (paymentWasSent(milestone.facts.intent)) raise("payment_in_flight");
+  let intent = milestone.facts.intent;
+  // A send Circle never answered is looked for first, sending nothing (payment safety R6).
+  if (transferUnknown(intent)) {
+    const looked = await lookForUnknownSend("milestone", milestone.id);
+    if (looked.answer === "undecided") raise("payment_unknown", unknownSendMessage("milestone", looked.retryAt));
+    intent = (await loadMilestone(input.milestoneId, getChainProvider().mode === "live")).facts.intent;
+  }
+  if (paymentWasSent(intent)) raise("payment_in_flight");
   if (milestone.escrowState === "funding" || milestone.escrowState === "funded") raise("escrow_locked");
   const heldFor = heldReason(milestone.facts).kind;
 

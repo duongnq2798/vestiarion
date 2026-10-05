@@ -118,13 +118,14 @@ describe("parseAddressInput", () => {
     expect(parseAddressInput("0x840De234Bfc3F66fA380888A0a8204D9487D60d4")).toEqual({
       ok: false,
       message: "This address's capital letters do not match its checksum, so a character is likely wrong. Copy it again from where it came.",
+      checksum: true,
     });
   });
 
   it.each(["0x123", "1111111111111111111111111111111111111111", `${NEW}0`, "0xZZ22222222222222222222222222222222222222", "vitalik.eth"])(
     "refuses %s",
     (raw) => {
-      expect(parseAddressInput(raw)).toEqual({ ok: false, message: "Enter an Arc address: 0x followed by 40 hex characters." });
+      expect(parseAddressInput(raw)).toEqual({ ok: false, message: "Enter an Arc address: 0x followed by 40 hex characters.", checksum: false });
     }
   );
 });
@@ -249,6 +250,16 @@ describe("changeCounterpartyAddress", () => {
 
     await expect(attempt).rejects.toBeInstanceOf(CounterpartyAddressError);
     await expect(attempt).rejects.toThrow("Enter an Arc address: 0x followed by 40 hex characters.");
+    expect(fake.requests.filter((r) => r.path === "/rest/v1/counterparties")).toHaveLength(0);
+  });
+
+  it("refuses an address whose capital letters do not match its checksum, saying so (payment safety A3)", async () => {
+    const { fake, run } = addressFake();
+
+    const attempt = run(() => changeCounterpartyAddress({ actorId: ACTOR, counterpartyId: COUNTERPARTY_ID, raw: "0x19801daA2F1E5E5e707b7E57Ff664f3d27fFdd12" }));
+
+    await expect(attempt).rejects.toMatchObject({ code: "checksum" });
+    await expect(attempt).rejects.toThrow("This address's capital letters do not match its checksum, so a character is likely wrong. Copy it again from where it came.");
     expect(fake.requests.filter((r) => r.path === "/rest/v1/counterparties")).toHaveLength(0);
   });
 

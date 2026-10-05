@@ -122,6 +122,15 @@ class MemoryStore implements PaymentIntentStore {
     return { ...this.intent };
   }
 
+  async markSending(key: string, sentWalletId: string | null): Promise<void> {
+    this.calls.push(`markSending:${key}:${sentWalletId}`);
+    this.intent = { ...this.current(key), sentWalletId };
+  }
+
+  async findBySource(sourceType: string, sourceId: string): Promise<PaymentIntent | null> {
+    return this.intent && this.intent.sourceType === sourceType && this.intent.sourceId === sourceId ? { ...this.intent } : null;
+  }
+
   async beginRetry(intent: PaymentIntent): Promise<PaymentIntent | null> {
     const next = paymentIdempotencyKey(intent.sourceType, intent.sourceId, intent.transferAttempt + 1);
     this.calls.push(`beginRetry:${intent.idempotencyKey}->${next}`);
@@ -190,6 +199,22 @@ class FakeProvider implements ChainProvider {
     if (next instanceof Error) throw next;
     if (!next) throw new Error("missing fake reconciliation result");
     return next;
+  }
+
+  /** What a lookup of a send by its reference finds, in order: a transfer, nothing (null), or a failure. */
+  found: Array<TransferResult | null | Error> = [];
+  lookups: Array<{ fromAccountId: string; refId: string; window: { from: string; to: string }; options?: { walletId?: string; exclude?: string[] } }> = [];
+
+  async findTransferByRef(
+    fromAccountId: string,
+    refId: string,
+    window: { from: string; to: string },
+    options?: { walletId?: string; exclude?: string[] }
+  ): Promise<TransferResult | null> {
+    this.lookups.push({ fromAccountId, refId, window, options });
+    const next = this.found.shift();
+    if (next instanceof Error) throw next;
+    return next ?? null;
   }
 
   async getBalance(): Promise<BalanceSnapshot> { throw new Error("not used"); }
@@ -869,5 +894,166 @@ describe("SupabasePaymentIntentStore by source, and its attempts", () => {
     );
 
     expect(await result).toBeNull();
+  });
+});
+
+/**
+ * A send Circle never answered is looked for, never sent again blind
+ * (docs/superpowers/specs/2026-10-05-payment-safety-design.md R4, R5, R7, R9): found, it is recorded; not listed 15
+ * minutes after the send, it was never taken, and goes as a new payment; until then, nothing is sent.
+ */
+describe("executePayment after a send Circle never answered (payment safety R4)", () => {
+  const SENT_AT = "2026-10-05T04:00:00.000Z";
+  const MINUTE = 60_000;
+  const UNANSWERED = "Circle did not answer createTransaction within 20000 ms; the transfer may or may not have been accepted";
+
+  async function unknownSend(overrides: Partial<PaymentIntent> = {}): Promise<MemoryStore> {
+    const store = new MemoryStore();
+    await store.ensure({ ...request, idempotencyKey: paymentIdempotencyKey("invoice", request.sourceId), provider: "circle" });
+    store.intent = { ...store.intent!, status: "failed", attemptCount: 1, lastError: UNANSWERED, updatedAt: SENT_AT, ...overrides };
+    return store;
+  }
+
+  it("looks for it by its reference around the send, and records the transfer Circle has, sending nothing", async () => {
+    const store = await unknownSend();
+    const provider = new FakeProvider();
+    provider.found.push(transferResult("confirmed", "circle-tx-9"));
+
+    const result = await executePayment(request, { provider, store, now: Date.parse(SENT_AT) + 2 * MINUTE });
+
+    expect(provider.transfers).toEqual([]);
+    expect(provider.lookups).toHaveLength(1);
+    expect(provider.lookups[0]).toMatchObject({ fromAccountId: "account-1", refId: "Invoice test" });
+    expect(Date.parse(provider.lookups[0].window.from)).toBeLessThan(Date.parse(SENT_AT));
+    expect(Date.parse(provider.lookups[0].window.to)).toBeGreaterThan(Date.parse(SENT_AT) + 15 * MINUTE);
+    expect(result).toMatchObject({ status: "confirmed", providerTxId: "circle-tx-9", reconciled: true });
+    expect(store.intent).toMatchObject({ providerTxId: "circle-tx-9", lastError: null });
+  });
+
+  it("sends nothing while Circle has not listed it, within 15 minutes of the send, and keeps it unknown", async () => {
+    const store = await unknownSend();
+    const provider = new FakeProvider();
+    provider.found.push(null);
+
+    const result = await executePayment(request, { provider, store, now: Date.parse(SENT_AT) + 5 * MINUTE });
+
+    expect(provider.transfers).toEqual([]);
+    expect(result.status).toBe("pending");
+    expect(result.error).toBe("Circle has not listed this payment's earlier send yet; it is looked for again from 04:15 UTC, and sent only if Circle has none.");
+    expect(store.intent?.lastError).toBe(UNANSWERED);
+  });
+
+  it("sends it as a new payment once Circle has listed nothing for 15 minutes after the send", async () => {
+    const store = await unknownSend();
+    const provider = new FakeProvider();
+    provider.found.push(null);
+    provider.transferResults.push(transferResult("confirmed", "circle-tx-2"));
+
+    const result = await executePayment(request, { provider, store, now: Date.parse(SENT_AT) + 16 * MINUTE });
+
+    expect(provider.transfers).toHaveLength(1);
+    expect(provider.transfers[0].idempotencyKey).toBe(paymentIdempotencyKey("invoice", request.sourceId));
+    expect(store.calls).toContain(`recordError:${paymentIdempotencyKey("invoice", request.sourceId)}`);
+    expect(result).toMatchObject({ status: "confirmed", providerTxId: "circle-tx-2" });
+  });
+
+  it("sends nothing, and keeps it unknown, when Circle cannot be asked", async () => {
+    const store = await unknownSend();
+    const provider = new FakeProvider();
+    provider.found.push(new Error("Circle listed 50 transactions around the batch without it; it could not be looked for in full"));
+
+    const result = await executePayment(request, { provider, store, now: Date.parse(SENT_AT) + 30 * MINUTE });
+
+    expect(provider.transfers).toEqual([]);
+    expect(result.status).toBe("pending");
+    expect(result.error).toBe(
+      "Circle could not be asked about this payment's earlier send (Circle listed 50 transactions around the batch without it; it could not be looked for in full); it is looked for again, and sent only if Circle has none."
+    );
+    expect(store.intent?.lastError).toBe(UNANSWERED);
+  });
+
+  it("looks in the agent's own wallet for a send through the spending limit contract, leaving out earlier attempts", async () => {
+    const store = await unknownSend({
+      sentWalletId: "wallet-agent",
+      previousAttempts: [{ attempt: 1, idempotencyKey: "key-0", providerTxId: "circle-tx-0", providerState: "FAILED", failureReason: null, failedAt: "2026-10-05T03:00:00.000Z" }],
+    });
+    const provider = new FakeProvider();
+    provider.found.push(transferResult("pending", "circle-tx-9"));
+
+    await executePayment(request, { provider, store, now: Date.parse(SENT_AT) + MINUTE });
+
+    expect(provider.lookups[0].options).toEqual({ walletId: "wallet-agent", exclude: ["circle-tx-0"] });
+  });
+
+  it("looks for a send left submitting for more than 2 minutes before sending it again", async () => {
+    const store = await unknownSend({ status: "submitting", lastError: null });
+    const provider = new FakeProvider();
+    provider.found.push(transferResult("confirmed", "circle-tx-9"));
+
+    const result = await executePayment(request, { provider, store, now: Date.parse(SENT_AT) + 3 * MINUTE });
+
+    expect(provider.transfers).toEqual([]);
+    expect(result.providerTxId).toBe("circle-tx-9");
+  });
+
+  it("reads a send it cannot look up as pending, never as a failure that could be rejected", async () => {
+    const store = await unknownSend();
+    const provider = new FakeProvider();
+    provider.found.push(null);
+    const result = await executePayment(request, { provider, store, now: Date.parse(SENT_AT) + MINUTE });
+    expect(result.status).toBe("pending");
+  });
+
+  it("keeps a Gateway payout's own safety: the same spec sent again, never looked up", async () => {
+    const store = await unknownSend({ route: "gateway", destinationChain: "BASE-SEPOLIA", lastError: "Gateway did not answer the transfer; it may or may not have been accepted" });
+    const provider = new FakeProvider();
+    provider.transferResults.push(transferResult("confirmed", "gateway:tr-1"));
+
+    await executePayment({ ...request, destinationChain: "BASE-SEPOLIA" }, { provider, store, now: Date.parse(SENT_AT) + MINUTE });
+
+    expect(provider.lookups).toEqual([]);
+    expect(provider.transfers).toHaveLength(1);
+  });
+
+  it("keeps the marker when a Gateway payout sent again fails without word on the first send (R7)", async () => {
+    const store = await unknownSend({ route: "gateway", destinationChain: "BASE-SEPOLIA", lastError: "Gateway did not answer the transfer; it may or may not have been accepted" });
+    const provider = new FakeProvider();
+    provider.transferResults.push(new Error("Gateway's fee estimate had no fee"));
+
+    await executePayment({ ...request, destinationChain: "BASE-SEPOLIA" }, { provider, store, now: Date.parse(SENT_AT) + MINUTE });
+
+    expect(store.intent?.lastError).toBe("Gateway's fee estimate had no fee (an earlier send under this key may or may not have been accepted)");
+  });
+
+  it("records the wallet a send through the spending limit contract goes from, before it is sent (R5)", async () => {
+    const store = new MemoryStore();
+    const provider = new FakeProvider();
+    provider.transferResults.push(transferResult("confirmed"));
+    const limit = { contract: "0xcontract", agentWalletId: "wallet-agent", agentAddress: "0xagent", ref: "0xref" };
+
+    await executePayment({ ...request, spendingLimit: limit }, { provider, store });
+
+    expect(store.calls.indexOf(`markSending:${paymentIdempotencyKey("invoice", request.sourceId)}:wallet-agent`)).toBeGreaterThan(-1);
+    expect(store.calls.findIndex((call) => call.startsWith("markSending"))).toBeLessThan(store.calls.findIndex((call) => call.startsWith("recordResult")));
+  });
+
+  it("keeps the marker when Circle took the transfer but recording it failed (R9)", async () => {
+    const store = new MemoryStore();
+    const provider = new FakeProvider();
+    provider.transferResults.push(transferResult("confirmed", "circle-tx-5"));
+    const recordResult = store.recordResult.bind(store);
+    let first = true;
+    store.recordResult = async (key, transfer) => {
+      if (first) {
+        first = false;
+        throw new Error("statement timeout");
+      }
+      return recordResult(key, transfer);
+    };
+
+    const result = await executePayment(request, { provider, store });
+
+    expect(result.status).toBe("pending");
+    expect(store.intent?.lastError).toBe("Circle took this transfer (circle-tx-5), but it could not be recorded (statement timeout); it may or may not have been accepted");
   });
 });

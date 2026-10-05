@@ -1,7 +1,7 @@
 import { db } from "../dal";
 import { getChainProvider, type ChainProvider, type Stablecoin } from "../circle";
 import type { PayoutRoute, SpendingLimitPayment } from "../circle/types";
-import { executePayment, type PaymentExecution } from "../payments";
+import { executePayment, type PaymentExecution, paymentMemo } from "../payments";
 import { amountToPay, type InvoiceDiscount } from "./payment-timing";
 
 const num = (v: unknown) => (typeof v === "number" ? v : Number(v ?? 0));
@@ -125,7 +125,7 @@ export async function payInvoice(
         fromAccountId: operating.id,
         destination: payoutAddress(input.address, input.counterpartyId),
         amount: amountPaid,
-        memo: `Invoice ${input.invoiceId}`,
+        memo: paymentMemo("invoice", input.invoiceId),
         token: input.currency ?? "USDC",
         ...(input.destinationChain ? { destinationChain: input.destinationChain } : {}),
         ...(input.maxBridgeFeeUsdc != null ? { maxBridgeFeeUsdc: input.maxBridgeFeeUsdc } : {}),
@@ -153,7 +153,8 @@ export async function payInvoice(
   if (result.status === "failed") {
     note = ` [transfer failed: ${result.error ?? "provider reported failure"}]`;
   } else if (result.status === "pending") {
-    note = " [transfer submitted; awaiting provider confirmation]";
+    // A send Circle never answered is pending too, with what the lookup said (payment safety R4).
+    note = result.error ? ` [${result.error}]` : " [transfer submitted; awaiting provider confirmation]";
   } else if ((input.currency ?? "USDC") === "USDC") {
     // The transfer is already confirmed — status, txRef and execution below
     // are real regardless of what happens next. A sync failure here must not

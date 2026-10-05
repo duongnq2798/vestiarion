@@ -45,7 +45,7 @@ export async function runLiveOrganizations<T>(run: () => Promise<T>): Promise<Cr
   ) as unknown as LiveOrgRow[];
 
   const results: CronRunResult<T>[] = [];
-  const off = paymentsDisabled();
+  const off = await paymentsDisabled();
   for (const org of orgs) {
     if (off) {
       results.push({ slug: org.slug, ok: true, skipped: "payments_off" });

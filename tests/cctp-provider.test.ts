@@ -96,6 +96,31 @@ describe("LiveProvider: a payee on another chain", () => {
     });
   });
 
+  it("never says an approve Circle did not answer may have moved money: an approve moves none (payment safety R8)", async () => {
+    const { client, raw } = circle();
+    raw.createContractExecutionTransaction.mockImplementationOnce(async () => {
+      throw Object.assign(new Error("Connection reset"), { code: "ECONNRESET" });
+    });
+
+    const sent = new LiveProvider(CHAIN, { client, fetch: iris("0xmint"), bridgeMintWaitMs: 0 }).transfer(TRANSFER);
+
+    await expect(sent).rejects.toThrow("Circle did not answer the approve for the bridge (ECONNRESET); it moved no money");
+    await expect(sent).rejects.not.toThrow(/may or may not have been accepted/);
+  });
+
+  it("says a burn Circle did not answer may or may not have been accepted", async () => {
+    const { client, raw } = circle();
+    raw.createContractExecutionTransaction
+      .mockImplementationOnce(async () => ({ data: { id: "approve-tx", state: "INITIATED" } }))
+      .mockImplementationOnce(async () => {
+        throw Object.assign(new Error("Connection reset"), { code: "ECONNRESET" });
+      });
+
+    const sent = new LiveProvider(CHAIN, { client, fetch: iris("0xmint"), bridgeMintWaitMs: 0 }).transfer(TRANSFER);
+
+    await expect(sent).rejects.toThrow("Circle did not answer createContractExecutionTransaction (ECONNRESET); it may or may not have been accepted");
+  });
+
   it("is in flight, not paid, while the mint has not been forwarded", async () => {
     const { client } = circle();
     const provider = new LiveProvider(CHAIN, { client, fetch: iris(null), bridgeMintWaitMs: 0 });

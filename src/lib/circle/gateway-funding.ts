@@ -142,7 +142,7 @@ export async function fundGateway(
   } = {}
 ): Promise<FundGatewayResult> {
   // Nothing moves while the platform has payments switched off (payment safety S2).
-  assertPaymentsEnabled();
+  await assertPaymentsEnabled();
   if (!Number.isFinite(input.amount) || input.amount <= 0) throw new Error("Enter an amount greater than zero.");
   const chain = currentOrgConfig().chain;
   if (chain.credentialsUnreadable) throw new Error("This workspace's Circle credentials are stored but could not be read.");
@@ -306,7 +306,7 @@ export async function fundServiceBudget(
   } = {}
 ): Promise<{ signerAddress: string; txHash: string | null; balanceUsdc: number | null }> {
   // Nothing moves while the platform has payments switched off (payment safety S2).
-  assertPaymentsEnabled();
+  await assertPaymentsEnabled();
   if (!Number.isFinite(input.amount) || input.amount <= 0) throw new Error("Enter an amount greater than zero.");
   if (input.amount > SERVICE_BUDGET_MAX_DEPOSIT_USDC) {
     throw new Error(`Add at most ${SERVICE_BUDGET_MAX_DEPOSIT_USDC} USDC at a time: the budget pays for lookups of a thousandth of a USDC.`);

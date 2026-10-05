@@ -2747,7 +2747,7 @@ export async function runAgentCycle(
 ): Promise<CycleResult> {
   // While the platform has payments switched off, no cycle starts (payment safety S3): nothing is decided, so nothing
   // is held that would need undoing once they are back on. Refused before anything is read or written.
-  assertPaymentsEnabled();
+  await assertPaymentsEnabled();
   const orgDb = db();
   const provider = getChainProvider();
   const lines: CycleLogLine[] = [];

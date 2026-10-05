@@ -5,7 +5,7 @@ import { confirmCounterpartyAddress, sameAddress } from "../counterparty-address
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { listLedgerEntriesForTargets } from "../ledger";
 import { explainPayable, presentReasoning } from "../reasoning-copy";
-import { isTerminalFailure } from "../payments";
+import { isTerminalFailure, settleUnknownSend, type UnknownSendAnswer } from "../payments";
 import { MAY_HAVE_BEEN_ACCEPTED } from "../circle/settlement";
 import { PAYMENTS_OFF, paymentsDisabled } from "../payments-switch";
 import { payInvoice, syncOperatingBalance } from "./pay";
@@ -94,7 +94,7 @@ const MESSAGES: Record<Exclude<ApprovalErrorCode, "insufficient_funds">, string>
   payment_in_flight: "A payment for this invoice was already sent. Approve and pay records it.",
   payments_off: PAYMENTS_OFF,
   payment_unknown:
-    "Circle did not answer when this invoice's payment was sent, so it may have taken the transfer. Approve and pay asks Circle again under the same key, so nothing is sent twice; Reject and Return wait until it is known.",
+    "Circle did not answer when this invoice's payment was sent, and Vestiarion cannot tell yet whether Circle took it. Approve and pay looks for it first and sends nothing twice; until it is known, it cannot be closed.",
   address_changed: "This counterparty's address changed after this page loaded. Check the new address and try again.",
   bridge_unsupported_token: "Only USDC crosses chains. This invoice is in EURC, and its payee is paid on another chain.",
   nothing_to_add: "Enter a PO reference or tick Goods or services received.",
@@ -301,13 +301,33 @@ async function paymentIntentOf(invoiceId: string): Promise<IntentState | null> {
 }
 
 /**
- * Reject and Return refuse, before any claim, an invoice whose payment was already sent, or whose send Circle never
- * answered (payment safety R1): either would close a bill whose money may have left.
+ * Reject and Return refuse, before any claim, an invoice whose payment was already sent (payment safety R1). One whose
+ * send Circle never answered is looked for first, sending nothing (R6): found, it was sent; never taken, the bill may be
+ * closed; still being listed, they refuse, saying when to try again.
  */
 async function refuseIfPaymentSent(invoiceId: string): Promise<void> {
-  const intent = await paymentIntentOf(invoiceId);
-  if (transferUnknown(intent)) raise("payment_unknown");
+  let intent = await paymentIntentOf(invoiceId);
+  if (transferUnknown(intent)) {
+    const looked = await lookForUnknownSend("invoice", invoiceId);
+    if (looked.answer === "undecided") throw new ApprovalError("payment_unknown", unknownSendMessage("invoice", looked.retryAt));
+    intent = await paymentIntentOf(invoiceId);
+  }
   if (paymentWasSent(intent)) raise("payment_in_flight");
+}
+
+/** Looks for a source's unknown send on Circle from the operating wallet, sending nothing (R6). */
+export async function lookForUnknownSend(type: "invoice" | "milestone", id: string): Promise<UnknownSendAnswer> {
+  const operating = await operatingAccount();
+  if (!operating) return { answer: "undecided", retryAt: null };
+  return settleUnknownSend({ type, id }, { provider: getChainProvider(), fromAccountId: operating.id });
+}
+
+/** Why a bill whose send Circle never answered cannot be closed yet (R6), with when to try again when that is known. */
+export function unknownSendMessage(what: "invoice" | "milestone", retryAt: string | null): string {
+  const sent = `Circle did not answer when this ${what}'s payment was sent`;
+  return retryAt
+    ? `${sent}, and has not listed it yet. Try again from ${retryAt.slice(11, 16)} UTC: by then Vestiarion can tell whether Circle took it.`
+    : `${sent}, and Vestiarion cannot tell yet whether Circle took it. Approve and pay looks for it first and sends nothing twice; until it is known, it cannot be closed.`;
 }
 
 /** Logs a failed write after a claim went through, by invoice id: the row is left `processing` until it is reclaimed. */
@@ -614,8 +634,6 @@ export async function approveAndPay(
     gatewayQuote?: (chain: string, amount: number) => Promise<GatewayQuote | null>;
   } = {}
 ): Promise<{ status: "paid" | "matched" | "held"; txRef: string | null; note: string }> {
-  // Nothing is paid while the platform has payments switched off (payment safety S4): refused before anything is read.
-  if (paymentsDisabled()) raise("payments_off");
   const orgId = currentOrgId();
   const invoice = await loadWaitingPayable(input.invoiceId);
 
@@ -649,6 +667,9 @@ export async function approveAndPay(
   // A send Circle never answered may have lowered the balance already (payment safety R3): only the funds check is
   // skipped for it, since sending it again under its key may still be a new payment.
   const mayExist = alreadySent || transferUnknown(intent);
+  // Nothing new is paid while the platform has payments switched off (payment safety S4), but a transfer already sent
+  // is still recorded: that only reads Circle, and the provider refuses any send (S8).
+  if (!alreadySent && (await paymentsDisabled())) raise("payments_off");
   if (!mayExist && invoice.currency === "USDC") {
     const balance = provider.mode === "live" ? await syncOperatingBalance(operating.id) : operating.balance;
     if (balance < invoice.amount) {

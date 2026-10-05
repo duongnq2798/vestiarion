@@ -134,6 +134,14 @@ describe("submitPayeeAddressAction — no session needed", () => {
     });
   });
 
+  it("says a mistyped address is likely wrong, and asks the payee to copy it again (payment safety A3)", async () => {
+    lib.submitPayeeAddress.mockResolvedValueOnce({ ok: false, reason: "checksum_address" });
+    expect(await submitPayeeAddressAction(empty, form({ token: TOKEN, address: "0x1" }))).toEqual({
+      ok: false,
+      message: "This address's capital letters do not match its checksum, so a character is likely wrong. Copy it again from your wallet.",
+    });
+  });
+
   it("asks for a real address, and says an unusable link is no longer valid", async () => {
     lib.submitPayeeAddress.mockResolvedValueOnce({ ok: false, reason: "invalid_address" }).mockResolvedValueOnce({ ok: false, reason: "invalid_link" });
     expect(await submitPayeeAddressAction(empty, form({ token: TOKEN, address: "0x1" }))).toEqual({

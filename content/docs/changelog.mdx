@@ -1,5 +1,16 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-05: A payment Circle did not answer is looked for, never sent again blind
+
+- **A payment whose send Circle did not answer is now in flight, not held.** Its decision's `execution.resultingStatus` is `matched`, as for any payment Circle is still settling.
+  - Vestiarion then looks for the send on Circle by its reference before anything is sent again.
+  - If Circle has it, it is recorded as the payment.
+  - If Circle has listed nothing 15 minutes after the send, the payment is sent as a new one.
+  - Reject and Return look for it the same way before they act.
+- **Payments can also be switched off from the database** (`npm run payments -- off "<reason>"`). Every running deployment stops within 10 seconds, with no redeploy. While they are off, the agent appends no entries.
+- Approve and pay still records a transfer that was already sent while payments are off, since that only reads Circle.
+- Nothing changes in `/api/v1`.
+
 ## 2026-10-05: Checked addresses, a stop switch, and no rejection over an unknown transfer
 
 - `POST /api/v1/counterparties` refuses an `address` that mixes capital and small letters when they do not match its EIP-55 checksum: `400 invalid_request`, with the message `address: This address's capital letters do not match its checksum, so a character is likely wrong.` An address written in one case alone is taken as written, as before.

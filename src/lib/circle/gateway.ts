@@ -35,11 +35,22 @@ const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 export class GatewayError extends Error {
   /** Gateway's HTTP status, when it answered with one. */
   readonly status?: number;
-  constructor(message: string, status?: number) {
+  /** True when the connection was never made, so the request never left (payment safety R8). */
+  readonly neverSent?: boolean;
+  constructor(message: string, status?: number, neverSent?: boolean) {
     super(message);
     this.name = "GatewayError";
     this.status = status;
+    if (neverSent) this.neverSent = true;
   }
+}
+
+/** Connection failures in which the request never left (payment safety R8), as Node's fetch reports them in `cause`. */
+const NEVER_SENT = new Set(["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "ENETUNREACH", "EHOSTUNREACH"]);
+
+function connectionNeverMade(error: unknown): boolean {
+  const code = (error as { cause?: { code?: unknown } } | null)?.cause?.code;
+  return typeof code === "string" && NEVER_SENT.has(code);
 }
 
 const toBytes32 = (address: string) => `0x${address.toLowerCase().replace(/^0x/, "").padStart(64, "0")}`;
@@ -163,8 +174,8 @@ async function call(what: string, url: string, init: RequestInit, fetcher: typeo
   let response: Response;
   try {
     response = await fetcher(url, { ...init, signal: AbortSignal.timeout(GATEWAY_DEADLINE_MS), cache: "no-store" });
-  } catch {
-    throw new GatewayError(`Gateway did not answer the ${what}`);
+  } catch (error) {
+    throw new GatewayError(`Gateway did not answer the ${what}`, undefined, connectionNeverMade(error));
   }
   const body = (await response.json().catch(() => null)) as { message?: unknown } | null;
   if (!response.ok) {
@@ -214,7 +225,7 @@ export async function submitGatewayTransfer(intent: BurnIntent, signature: strin
   try {
     answer = (await call("transfer", `${GATEWAY_API}/transfer?enableForwarder=true`, post([{ burnIntent: intent, signature }]), options.fetch ?? fetch)) as { transferId?: unknown } | null;
   } catch (error) {
-    if (error instanceof GatewayError && error.status !== undefined && error.status < 500) throw error;
+    if (error instanceof GatewayError && (error.neverSent || (error.status !== undefined && error.status < 500))) throw error;
     throw new GatewayError(`${(error as Error).message}; it ${MAY_HAVE_BEEN_ACCEPTED}`);
   }
   if (typeof answer?.transferId !== "string" || !answer.transferId) throw new GatewayError(`Gateway answered the transfer with no transfer id; it ${MAY_HAVE_BEEN_ACCEPTED}`);

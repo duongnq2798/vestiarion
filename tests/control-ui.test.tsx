@@ -238,16 +238,14 @@ describe("ApprovalCard", () => {
     expect(markup).not.toContain("Return to agent");
   });
 
-  it("says Circle never answered the payment's send, and offers only Approve and pay, which asks again under the same key (payment safety R1)", () => {
+  it("says Circle never answered the payment's send, and offers all three decisions, each of which looks for it first (payment safety R6)", () => {
     const markup = card({ paymentSent: true, lastAttempt: { state: "unanswered" } });
-    expect(markup).toContain(
-      "Circle did not answer when this payment was sent, so it may have taken the transfer. Approving asks Circle again under the same key, so nothing is sent twice; it cannot be rejected or returned until then."
-    );
+    expect(markup).toContain("Circle did not answer when this payment was sent, so it may have taken the transfer. Approve and pay, Reject and Return look for it on Circle first: Approve and pay records it if Circle has it, and sends it only once Circle shows none.");
     expect(markup).not.toContain("A payment was already sent; Approve and pay records it.");
     expect(markup).toContain("Approve and pay");
     expect(markup).not.toMatch(APPROVE_DISABLED);
-    expect(markup).not.toContain("Reject");
-    expect(markup).not.toContain("Return to agent");
+    expect(markup).toContain("Reject");
+    expect(markup).toContain("Return to agent");
   });
 
   it("shows the in-flight line instead of the sent-payment line when a payment already sent is in flight", () => {
@@ -377,10 +375,8 @@ describe("ApprovalCard", () => {
     );
   });
 
-  it("says a payment Circle never answered is sent again under the same key, which returns the transfer Circle took (payment safety R1)", () => {
-    expect(payConfirmDescription(payable({ paymentSent: true, lastAttempt: { state: "unanswered" } }))).toBe(
-      "It is sent again under the same key: if Circle took the first send, Circle returns that transfer, so nothing is sent twice. The ledger records who approved it."
-    );
+  it("says a payment Circle never answered is looked for on Circle first, and sent only once Circle shows none (payment safety R4)", () => {
+    expect(payConfirmDescription(payable({ paymentSent: true, lastAttempt: { state: "unanswered" } }))).toBe("Vestiarion looks for the earlier transfer on Circle first: it records it if Circle has it, and sends the payment only once Circle shows none. The ledger records who approved it.");
   });
 
   it("says nothing new is sent when a payment was already sent, even without a reported last attempt", () => {
@@ -425,6 +421,11 @@ describe("PaymentsOffBanner (payment safety S5)", () => {
     const markup = html(<PaymentsOffBanner />);
     expect(markup).toContain("Payments are switched off for every workspace right now.");
     expect(markup).toContain("The agent does not run, and nothing is paid, moved or locked until they are back on. Every page still reads as usual.");
+    expect(markup).not.toContain("Why:");
+  });
+
+  it("gives the reason the switch records (S7)", () => {
+    expect(html(<PaymentsOffBanner reason="Incident 7" />)).toContain("Why: Incident 7");
   });
 });
 
@@ -584,7 +585,8 @@ describe("the new control screens, as source", () => {
 
   it("the workspace layout draws the payments-off banner from the deployment's switch (payment safety S5)", () => {
     const layout = read("src/app/o/[slug]/layout.tsx");
-    expect(layout).toContain("{paymentsDisabled() && <PaymentsOffBanner />}");
+    expect(layout).toContain("paymentsSwitchForPages()");
+    expect(layout).toContain("{payments.off && <PaymentsOffBanner reason={payments.reason} />}");
   });
 
   it("the workspace layout draws the paused banner from platform data", () => {
@@ -606,10 +608,8 @@ describe("the new control screens, as source", () => {
     expect(read("src/components/ApprovalCard.tsx")).toContain("A new transfer starts as soon as you confirm, and the ledger records who approved it.");
   });
 
-  it("the pay confirmation says a payment Circle never answered is sent again under the same key", () => {
-    expect(read("src/components/ApprovalCard.tsx")).toContain(
-      "It is sent again under the same key: if Circle took the first send, Circle returns that transfer, so nothing is sent twice. The ledger records who approved it."
-    );
+  it("the pay confirmation says a payment Circle never answered is looked for on Circle first", () => {
+    expect(read("src/components/ApprovalCard.tsx")).toContain("Vestiarion looks for the earlier transfer on Circle first: it records it if Circle has it, and sends the payment only once Circle shows none. The ledger records who approved it.");
   });
 
   it("the pay confirmation says nothing new is sent for a transfer already made", () => {

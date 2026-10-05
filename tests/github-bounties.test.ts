@@ -340,6 +340,17 @@ describe("handlePullRequestComment: /payto", () => {
     expect(mocks.notifyPayeeAddress).not.toHaveBeenCalled();
   });
 
+  it("says an address whose capital letters do not match its checksum is likely mistyped (payment safety A3)", async () => {
+    const { CounterpartyAddressError } = await import("@/lib/counterparty-address");
+    mocks.changeCounterpartyAddress.mockRejectedValue(new CounterpartyAddressError("checksum"));
+    const { run, replies } = world({ bounties: onFile });
+    await run(comment(`/payto ${ADDRESS}`, { author: "octocat" }));
+    expect(replies()[0]).toBe(
+      "This address's capital letters do not match its checksum, so a character is likely wrong. Copy it again from your wallet and comment `/payto` with it."
+    );
+    expect(mocks.notifyPayeeAddress).not.toHaveBeenCalled();
+  });
+
   it("shows the right form for an address it cannot read, to the author", async () => {
     const { run, replies } = world({ bounties: onFile });
     await run(comment("/payto my-wallet", { author: "octocat" }));

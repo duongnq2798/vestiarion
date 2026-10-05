@@ -14,6 +14,7 @@ import { createPullRequestComment, installationToken, repositoryPermission } fro
 import { literal } from "./markdown";
 import { githubAppSettingsFromEnv, type GitHubAppSettings } from "./settings";
 import { readCommentCommand } from "./webhook";
+import { CHECKSUM_MISMATCH } from "../address-checksum";
 
 /**
  * Bounties from a pull request comment (docs/superpowers/specs/2026-10-04-github-bounties-design.md).
@@ -100,6 +101,7 @@ export type BountyReply =
   | { kind: "no_bounty" }
   | { kind: "not_author"; author: string }
   | { kind: "payto_usage" }
+  | { kind: "payto_checksum" }
   | { kind: "address_received"; author: string; address: string; orgName: string }
   | { kind: "address_on_file"; author: string };
 
@@ -138,6 +140,8 @@ export function bountyReply(reply: BountyReply): string {
       return "There is no bounty on this pull request.";
     case "not_author":
       return `Only @${reply.author}, who opened this pull request, can say where its bounty is paid.`;
+    case "payto_checksum":
+      return `${CHECKSUM_MISMATCH} Copy it again from your wallet and comment \`/payto\` with it.`;
     case "payto_usage":
       return "To say where you are paid, comment `/payto` and your Arc address: 0x followed by 40 hex characters.";
     case "address_received":
@@ -222,6 +226,8 @@ export async function handlePullRequestComment(event: PullRequestComment, option
       await notifyPayeeAddress({ orgId, orgName, payeeName: changed.name, address: command.address });
     } catch (error) {
       if (error instanceof CounterpartyAddressError && error.code === "unchanged") return reply({ kind: "address_on_file", author: event.comment.author }, "refused");
+      // A mistyped address is told apart from one that is no address (payment safety A3).
+      if (error instanceof CounterpartyAddressError && error.code === "checksum") return reply({ kind: "payto_checksum" }, "refused");
       console.error("github: address from a pull request comment not saved", orgId, error instanceof Error ? error.message : "unknown error");
       return reply({ kind: "failed" }, "refused");
     }

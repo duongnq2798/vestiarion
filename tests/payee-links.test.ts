@@ -258,6 +258,12 @@ describe("submitPayeeAddress", () => {
     expect(changeMock).not.toHaveBeenCalled();
   });
 
+  it("tells a mistyped address from one that is no address, without using the link (payment safety A3)", async () => {
+    const { fake, result } = platform(() => submitPayeeAddress(TOKEN, "0x19801daA2F1E5E5e707b7E57Ff664f3d27fFdd12"), usable());
+    expect(await result).toEqual({ ok: false, reason: "checksum_address" });
+    expect(fake.requests.some((request) => rpc(request, "claim_payee_link"))).toBe(false);
+  });
+
   it("says the link is invalid when it cannot be claimed, such as a second submission of the same token", async () => {
     const { result } = platform(() => submitPayeeAddress(TOKEN, ADDRESS), usable([]));
     expect(await result).toEqual({ ok: false, reason: "invalid_link" });

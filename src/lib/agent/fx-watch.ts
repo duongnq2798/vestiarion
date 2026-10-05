@@ -53,7 +53,7 @@ export async function watchFxHolds(deps: WatchDeps = {}): Promise<FxWatchResult[
   ) as unknown as Array<{ id: string; slug: string; agent_paused_at: string | null }>;
 
   const results: FxWatchResult[] = [];
-  const off = paymentsDisabled();
+  const off = await paymentsDisabled();
   for (const org of orgs) {
     if (off) {
       results.push({ slug: org.slug, held: 0, probed: 0, cleared: 0, cycle: "payments_off" });
