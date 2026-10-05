@@ -20,6 +20,7 @@ import { CycleRunningError, hasRunningCycle } from "./cycle-running";
 import { decide, type DecideResult } from "./decide";
 import { budgetClause, enforceApGuardrails, onChainLimitHold } from "./guardrails";
 import { readTwoApprovalsAbove } from "../approval-policy";
+import { choosePayoutRoute } from "../payout-route";
 import { TWO_APPROVALS_RULE } from "../two-approvals";
 import { usycSubscriptionsOpen } from "../circle/usyc";
 import { arcRpcUrl } from "../circle/arcFees";
@@ -1300,11 +1301,10 @@ async function decideApPayable(
   // The route (Gateway payouts G2): the one an earlier attempt took, which
   // every later attempt keeps (review I3); otherwise the workspace's Gateway
   // balance when it covers the amount and its fee, and that fee is no higher
-  // than CCTP's; CCTP otherwise. The fee weighed from here on is the route's.
+  // than CCTP's; CCTP otherwise. The same rule a person's approval follows
+  // (approval payout route P1). The fee weighed from here on is the route's.
   const pinned = crossChain && !isEurc ? await pinnedPayoutRoute(db, invoice.id) : null;
-  const route: CrossChainRoute =
-    pinned ??
-    (gateway !== null && gateway.balanceUsdc >= amount + gateway.feeUsdc && (fee === null || gateway.feeUsdc <= fee.feeUsdc) ? "gateway" : "cctp");
+  const route: CrossChainRoute = choosePayoutRoute({ amount, pinned, cctpFeeUsdc: fee?.feeUsdc ?? null, gateway });
   const viaGateway = crossChain && route === "gateway";
   const routeLabel = viaGateway ? "Gateway" : "CCTP";
   const routeFeeUsdc = viaGateway ? (gateway?.feeUsdc ?? null) : (fee?.feeUsdc ?? null);

@@ -250,6 +250,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["You approved it", "src/components/ApprovalCard.tsx"],
     ["Needs a second approver", "src/components/ApprovalCard.tsx"],
     ["Turn off two approvals?", "src/components/TwoApprovalsPanel.tsx"],
+    [", comes on top, from the Gateway balance.", "src/components/ApprovalCard.tsx"],
     ["recurring_payable_created", "src/lib/recurring-payables.ts"],
     ["recurring_payable_stopped", "src/lib/recurring-payables.ts"],
     ["recurring_invoice_created", "src/lib/agent/recurring.ts"],

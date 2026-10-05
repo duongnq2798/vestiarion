@@ -13,6 +13,8 @@ import { invoiceDiscount, type InvoiceDiscount } from "./payment-timing";
 import { paidAcrossChains, payeeChain } from "../payee-chains";
 import { bridgeFee, type BridgeFee } from "../circle/cctp";
 import { gatewayQuoter, type GatewayQuote } from "../circle/gateway-quote";
+import { choosePayoutRoute, payoutFundsShort, type GatewayFigures } from "../payout-route";
+import type { CrossChainRoute } from "../circle/types";
 import { isSoleApprover } from "./sole-approver";
 import { newPayeeCheck } from "../new-payee";
 import { firstPaymentCheck, loadNewPayeeFacts } from "../new-payee-facts";
@@ -187,7 +189,7 @@ export interface IntentState {
   provider_state: string | null;
   /** Circle's `errorReason`; read only by the listing. */
   failure_reason?: string | null;
-  /** The route a payment across chains took on its first attempt (Gateway payouts G2); read only by the approval. */
+  /** The route a payment across chains took on its first attempt (Gateway payouts G2); every later attempt keeps it. */
   payout_route?: string | null;
 }
 
@@ -382,8 +384,16 @@ export interface WaitingPayable {
   currency: Stablecoin;
   /** The chain the payee is paid on (CCTP payouts X1): ARC-TESTNET, or one paid through CCTP. */
   payeeChain: string;
-  /** For a payee on another chain, the CCTP fee to it as read for this listing; null when not read or not needed (review I2). */
+  /**
+   * For a payee on another chain, the fee of the route Approve and pay would take (`payoutRoute`), as read for this
+   * listing; null when not read or not needed (review I2).
+   */
   bridgeFeeUsdc: number | null;
+  /**
+   * For a payee on another chain, paid in USDC: the route Approve and pay would take, by the agent's rule, or the one an
+   * earlier attempt took (approval payout route P1, P4). Absent otherwise.
+   */
+  payoutRoute?: CrossChainRoute;
   /** The purchase order on the invoice now; null without one. */
   poReference: string | null;
   /** Whether the goods or services are marked received now. */
@@ -414,7 +424,10 @@ export interface WaitingPayable {
 
 /** Every payable currently waiting for a person's decision — held, flagged, awaiting more information, or claimed by someone else right now. */
 export async function listWaitingPayables(
-  options: { bridgeFee?: (chain: string, amount: number) => Promise<BridgeFee> } = {}
+  options: {
+    bridgeFee?: (chain: string, amount: number) => Promise<BridgeFee>;
+    gatewayQuote?: (chain: string, amount: number) => Promise<GatewayQuote | null>;
+  } = {}
 ): Promise<WaitingPayable[]> {
   const rows = unwrap(
     await db()
@@ -446,20 +459,17 @@ export async function listWaitingPayables(
   // The decision each was held on, with its facts: what its reasoning is explained from (plain reasoning R3).
   const entries = rows.length > 0 ? await listLedgerEntriesForTargets({ invoiceIds: rows.map((row) => row.id) }) : [];
 
-  // The fee to a payee on another chain, read now, so the person approving
-  // sees what leaves (CCTP payouts, review I2). One that cannot be read is null.
-  const readFee = options.bridgeFee ?? ((chain: string, amount: number) => bridgeFee(chain, amount));
-  const fees = new Map<string, number | null>();
+  // Both routes' figures for a payee on another chain, read now, so the person approving sees the route Approve and pay
+  // takes and what leaves (CCTP payouts, review I2; approval payout route P4). A figure that cannot be read is null.
+  const read = {
+    bridgeFee: options.bridgeFee ?? ((chain: string, amount: number) => bridgeFee(chain, amount)),
+    gatewayQuote: options.gatewayQuote ?? gatewayQuoter(getChainProvider(), db()),
+  };
+  const quotes = new Map<string, PayoutQuotes>();
   await Promise.all(
     rows
       .filter((row) => paidAcrossChains(row.counterparties?.chain) && currencyOf(row.currency) === "USDC")
-      .map(async (row) => {
-        try {
-          fees.set(row.id, (await readFee(payeeChain(row.counterparties?.chain).id, num(row.amount))).feeUsdc);
-        } catch {
-          fees.set(row.id, null);
-        }
-      })
+      .map(async (row) => quotes.set(row.id, await readPayoutQuotes(payeeChain(row.counterparties?.chain).id, num(row.amount), read)))
   );
 
   const intents = new Map<string, IntentState>();
@@ -467,7 +477,7 @@ export async function listWaitingPayables(
     const found = unwrap(
       await db()
         .from("payment_intents")
-        .select("source_id, status, provider_tx_id, last_error, provider_state, failure_reason")
+        .select("source_id, status, provider_tx_id, last_error, provider_state, failure_reason, payout_route")
         .eq("source_type", "invoice")
         .in("source_id", rows.map((row) => row.id))
     ) as Array<IntentState & { source_id: string }>;
@@ -505,6 +515,10 @@ export async function listWaitingPayables(
     const intent = intents.get(row.id) ?? null;
     const newPayee = newPayeeOf(row);
     const decision = latestDecision(entries, row.id);
+    // The route Approve and pay would take, as it would choose it (P1), and that route's fee (P4).
+    const quote = quotes.get(row.id) ?? null;
+    const pinned = intent?.payout_route === "gateway" || intent?.payout_route === "cctp" ? intent.payout_route : null;
+    const payoutRoute = quote ? choosePayoutRoute({ amount: num(row.amount), pinned, cctpFeeUsdc: quote.cctpFeeUsdc, gateway: quote.gateway }) : null;
     const onFile = { poReference: row.po_reference ?? null, goodsReceived: row.goods_received === true };
     // The decision is explained from the facts it recorded, not from details a person added since (R6).
     const recorded = recordedFacts(decision);
@@ -539,7 +553,8 @@ export async function listWaitingPayables(
       discount: invoiceDiscount(row),
       currency: currencyOf(row.currency),
       payeeChain: payeeChain(row.counterparties?.chain).id,
-      bridgeFeeUsdc: fees.get(row.id) ?? null,
+      bridgeFeeUsdc: quote ? (payoutRoute === "gateway" ? (quote.gateway?.feeUsdc ?? null) : quote.cctpFeeUsdc) : null,
+      ...(payoutRoute ? { payoutRoute } : {}),
       poReference: onFile.poReference,
       goodsReceived: onFile.goodsReceived,
       addedSinceDecision: addedSince(recorded, onFile),
@@ -791,10 +806,36 @@ export async function approveAndPay(
     approvals = [{ by: other.by, at: other.at }, { by: input.actorId, at: new Date().toISOString() }];
     if (excluded.includes(other.by)) fewApprovers = true;
   }
+  // A new payment to another chain (approval payout route P1): both routes' fees and the Gateway balance, read now, and
+  // the route by the agent's rule, keeping the one an earlier attempt took. A transfer already sent is only reconciled:
+  // its decision recorded them.
+  const crossChain = !alreadySent && invoice.currency === "USDC" && paidAcrossChains(invoice.destinationChain);
+  const quotes = crossChain
+    ? await readPayoutQuotes(invoice.destinationChain as string, invoice.amount, {
+        bridgeFee: options.bridgeFee ?? ((chain, amount) => bridgeFee(chain, amount)),
+        gatewayQuote: options.gatewayQuote ?? gatewayQuoter(provider, db()),
+      })
+    : null;
+  const pinned: CrossChainRoute | null = intent?.payout_route === "gateway" || intent?.payout_route === "cctp" ? intent.payout_route : null;
+  const route = quotes ? choosePayoutRoute({ amount: invoice.amount, pinned, cctpFeeUsdc: quotes.cctpFeeUsdc, gateway: quotes.gateway }) : null;
+
+  // What leaves, counted where it leaves from (P2): a Gateway payout from the Gateway balance, which the operating wallet
+  // does not touch; anything else from the operating wallet, a CCTP payout with its fee on top.
   if (!mayExist && invoice.currency === "USDC") {
-    const balance = provider.mode === "live" ? await syncOperatingBalance(operating.id) : operating.balance;
-    if (balance < invoice.amount) {
-      throw new ApprovalError("insufficient_funds", `The operating account holds ${balance} USDC, less than this invoice.`);
+    if (route === "gateway") {
+      const short = payoutFundsShort({ route, amount: invoice.amount, operatingUsdc: 0, cctpFeeUsdc: null, gateway: quotes?.gateway ?? null });
+      if (short) throw new ApprovalError("insufficient_funds", gatewayShortMessage(short.holds, quotes?.gateway?.feeUsdc ?? null));
+    } else {
+      const balance = provider.mode === "live" ? await syncOperatingBalance(operating.id) : operating.balance;
+      const fee = route === "cctp" ? (quotes?.cctpFeeUsdc ?? null) : null;
+      if (payoutFundsShort({ route: "cctp", amount: invoice.amount, operatingUsdc: balance, cctpFeeUsdc: fee, gateway: null })) {
+        throw new ApprovalError(
+          "insufficient_funds",
+          fee !== null
+            ? `The operating account holds ${balance} USDC, less than this invoice and its ${fee} USDC CCTP fee.`
+            : `The operating account holds ${balance} USDC, less than this invoice.`
+        );
+      }
     }
   }
   // A EURC payable is paid from the wallet's EURC, read from the chain. A
@@ -806,15 +847,8 @@ export async function approveAndPay(
     }
   }
 
-  // A new payment to another chain records both routes' fees, read now, with the route it takes, so the
-  // card can set one against the other. A transfer already sent is only reconciled: its decision recorded them.
-  const payout =
-    !alreadySent && invoice.currency === "USDC" && paidAcrossChains(invoice.destinationChain)
-      ? await payoutEvidence(invoice.destinationChain as string, invoice.amount, intent?.payout_route ?? null, {
-          bridgeFee: options.bridgeFee ?? ((chain, amount) => bridgeFee(chain, amount)),
-          gatewayQuote: options.gatewayQuote ?? gatewayQuoter(provider, db()),
-        })
-      : null;
+  // The route it takes and both routes' fees, so the card can set one against the other.
+  const payout = quotes && route ? payoutRecord(invoice.destinationChain as string, route, quotes) : null;
 
   const claim = await db()
     .rpc("claim_invoice_decision", { p_invoice_id: invoice.id, p_by: input.actorId, p_decision: "approve" })
@@ -861,7 +895,9 @@ export async function approveAndPay(
         currency: invoice.currency,
         // A person approving a payout to another chain lets its fee be at most the invoice itself (review I2, I4):
         // a fee read higher at the burn sends nothing.
-        ...(paidAcrossChains(invoice.destinationChain) ? { destinationChain: invoice.destinationChain as string, maxBridgeFeeUsdc: invoice.amount } : {}),
+        ...(paidAcrossChains(invoice.destinationChain)
+          ? { destinationChain: invoice.destinationChain as string, maxBridgeFeeUsdc: invoice.amount, ...(route ? { route } : {}) }
+          : {}),
       },
       // A person's approval is the one caller that may send a payment Circle
       // ended in a terminal failure again, and only when the failure was
@@ -944,21 +980,21 @@ export async function approveAndPay(
   return { status: result.status, txRef: result.txRef, note: result.note };
 }
 
-/**
- * What an approved payment to another chain records of its route: the route it takes (the one an
- * earlier attempt took, which every later attempt keeps; CCTP for a first one, Gateway payouts R7),
- * that route's fee, and both routes' fees, read now. A fee that cannot be read is null: reading it
- * never stops an approval.
- */
-async function payoutEvidence(
+/** Both routes' figures for a payout to another chain, read now: CCTP's fee, and Gateway's fee with its balance. */
+interface PayoutQuotes {
+  cctpFeeUsdc: number | null;
+  gateway: GatewayFigures | null;
+}
+
+/** Reads both routes' figures. A figure that cannot be read is null: reading it never stops an approval by itself. */
+async function readPayoutQuotes(
   chain: string,
   amount: number,
-  pinned: string | null,
   read: {
     bridgeFee: (chain: string, amount: number) => Promise<BridgeFee>;
     gatewayQuote: (chain: string, amount: number) => Promise<GatewayQuote | null>;
   }
-): Promise<Record<string, unknown>> {
+): Promise<PayoutQuotes> {
   const [cctpFeeUsdc, gateway] = await Promise.all([
     read.bridgeFee(chain, amount).then(
       (fee) => fee.feeUsdc,
@@ -966,15 +1002,30 @@ async function payoutEvidence(
     ),
     read.gatewayQuote(chain, amount).catch(() => null),
   ]);
-  const route = pinned === "gateway" ? "gateway" : "cctp";
+  return { cctpFeeUsdc, gateway: gateway ? { feeUsdc: gateway.feeUsdc, balanceUsdc: gateway.balanceUsdc } : null };
+}
+
+/**
+ * What an approved payment to another chain records of its route (approval payout route P1, P5): the route it takes,
+ * by the agent's rule or the one an earlier attempt took, that route's fee, the Gateway balance for a Gateway payout,
+ * and both routes' fees.
+ */
+function payoutRecord(chain: string, route: CrossChainRoute, quotes: PayoutQuotes): Record<string, unknown> {
   return {
     chain,
     route,
     domain: payeeChain(chain).domain,
-    feeUsdc: route === "gateway" ? (gateway?.feeUsdc ?? null) : cctpFeeUsdc,
-    ...(route === "gateway" && gateway ? { gatewayBalanceUsdc: gateway.balanceUsdc } : {}),
-    quotes: { cctpFeeUsdc, gatewayFeeUsdc: gateway?.feeUsdc ?? null },
+    feeUsdc: route === "gateway" ? (quotes.gateway?.feeUsdc ?? null) : quotes.cctpFeeUsdc,
+    ...(route === "gateway" && quotes.gateway ? { gatewayBalanceUsdc: quotes.gateway.balanceUsdc } : {}),
+    quotes: { cctpFeeUsdc: quotes.cctpFeeUsdc, gatewayFeeUsdc: quotes.gateway?.feeUsdc ?? null },
   };
+}
+
+/** Why a Gateway payout is refused before it is sent (P2): what the balance holds against what it needs. */
+function gatewayShortMessage(holds: number | null, feeUsdc: number | null): string {
+  return holds === null || feeUsdc === null
+    ? "Circle gave no Gateway figures for this payout, so its balance cannot be checked. Try again in a moment."
+    : `The Gateway balance, ${holds} USDC, does not cover this payout and its ${feeUsdc} USDC fee. Fund Gateway on Treasury first.`;
 }
 
 /**
