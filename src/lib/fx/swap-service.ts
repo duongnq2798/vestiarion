@@ -117,6 +117,8 @@ interface AskOptions {
   apiKey?: string | null;
   fetch?: typeof fetch;
   retryDelayMs?: number;
+  /** Ask once, as a re-check of a held payable does (FX re-evaluation F9). */
+  once?: boolean;
 }
 
 const micro = (amount: number) => Math.ceil(Number((amount * 1_000_000).toFixed(3))) / 1_000_000;
@@ -153,8 +155,8 @@ async function ask(url: string, init: RequestInit, options: AskOptions): Promise
 }
 
 /** Arc testnet's route comes and goes (src/lib/fx/retry.ts): a missing route or a failed request is asked again. */
-function once<T>(work: () => Promise<T>, retryDelayMs: number | undefined): Promise<T> {
-  return askAgain(work, { delayMs: retryDelayMs });
+function once<T>(work: () => Promise<T>, retryDelayMs: number | undefined, askOnce?: boolean): Promise<T> {
+  return askAgain(work, { delayMs: retryDelayMs, once: askOnce });
 }
 
 const baseUnits = z.string().regex(/^\d+$/);
@@ -187,7 +189,24 @@ export async function quoteUsdcForEurc(usdcIn: number, options: AskOptions): Pro
       eurcMinimum: fromBaseUnits(parsed.data.quote.minAmount),
       provider: parsed.data.quote.route?.provider ?? null,
     };
-  }, options.retryDelayMs);
+  }, options.retryDelayMs, options.once);
+}
+
+/** Why no swap could be offered because of Circle's answer, as a decision records it (`swapUnavailable`). */
+export const NO_SWAP_ROUTE = "No USDC→EURC route on Arc testnet right now.";
+export const SWAP_QUOTE_UNREADABLE = "The USDC→EURC quote could not be read.";
+export const SWAP_QUOTE_UNANSWERED = "Circle's Stablecoin Service did not answer for a USDC→EURC quote.";
+export const SWAP_NOT_QUOTED = "The USDC→EURC swap could not be quoted.";
+const SWAP_MINIMUM_SHORT = "The swap's minimum,";
+
+/**
+ * Whether a decision's `swapUnavailable` says Circle gave no usable swap — no route, no answer, an unreadable quote, or
+ * a minimum short of what was needed — which a later quote can change (FX re-evaluation F1). A swap refused because the
+ * payment had already started is not one.
+ */
+export function swapUnavailableForFx(reason: string | null | undefined): boolean {
+  if (!reason) return false;
+  return [NO_SWAP_ROUTE, SWAP_QUOTE_UNREADABLE, SWAP_QUOTE_UNANSWERED, SWAP_NOT_QUOTED].includes(reason) || reason.startsWith(SWAP_MINIMUM_SHORT);
 }
 
 /**
@@ -212,7 +231,7 @@ export async function sizeSwap(short: number, usdcPerEurc: number, quote: (usdcI
       answer = await quote(usdcIn);
     }
     if (answer.eurcMinimum < short) {
-      return { offer: null, reason: `The swap's minimum, ${answer.eurcMinimum} EURC, would not cover the ${short} EURC needed.` };
+      return { offer: null, reason: `${SWAP_MINIMUM_SHORT} ${answer.eurcMinimum} EURC, would not cover the ${short} EURC needed.` };
     }
     return { offer: offerFor(usdcIn, answer) };
   } catch (error) {
@@ -220,11 +239,7 @@ export async function sizeSwap(short: number, usdcPerEurc: number, quote: (usdcI
     return {
       offer: null,
       reason:
-        error.code === "no_route"
-          ? "No USDC→EURC route on Arc testnet right now."
-          : error.code === "malformed"
-            ? "The USDC→EURC quote could not be read."
-            : "Circle's Stablecoin Service did not answer for a USDC→EURC quote.",
+        error.code === "no_route" ? NO_SWAP_ROUTE : error.code === "malformed" ? SWAP_QUOTE_UNREADABLE : SWAP_QUOTE_UNANSWERED,
     };
   }
 }

@@ -164,6 +164,23 @@ organization per UTC day. The cap is enforced inside `begin_cycle_run` (migratio
 opens the `cycle_runs` row under a per-organization lock and counts the day's runs in the same
 transaction, so it holds across serverless instances rather than resetting per cold start.
 
+**The FX watch** (`POST /api/agent/fx-watch`, `src/lib/agent/fx-watch.ts`,
+`docs/superpowers/specs/2026-10-05-fx-reevaluation-design.md`) runs every 5 minutes from
+`.github/workflows/fx-watch.yml` with the same bearer token. It decides again, without a person, a EURC payable a
+decision held for FX:
+- what held it is read from that decision's own entry (`fxHoldOf`, `src/lib/fx/recheck.ts`): no rate, no swap,
+  a swap above the 3% cap, or a value above the limit;
+- in each live, unpaused workspace it asks one quote, once, for at most three such payables not reopened for FX in the
+  last 30 minutes (`probeFx`, `src/lib/fx/probe.ts`);
+- it runs a cycle with the event `fx_changed` only when a quote crossed the threshold that held one. With nothing
+  waiting or nothing cleared, it runs no cycle, writes nothing and calls no model.
+
+The cycle's follow-up stage makes the same re-check for at most five payables, with its own quote. It reopens the
+payable, recording `reevaluation` (the trigger, the decision it reopens, and the quote before and after) in
+`invoice_reopened`. The AP stage then decides it in the same cycle and records the reopen it follows. A reopen is the
+follow-up's compare-and-set on `held`, so a person acting at the same moment wins; one cycle per workspace runs at a
+time, and payments keep their idempotent intents.
+
 **Settings** (`/o/[slug]/settings`) is one page in six groups: You, Workspace, Developers, Integrations,
 Security and Danger zone (`docs/superpowers/specs/2026-10-04-settings-structure-design.md`). The page lists every
 section once, each with its heading's id and `null` where this viewer or deployment does not get it, and

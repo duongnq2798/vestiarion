@@ -29,6 +29,16 @@ export function takeAgentCycleToken(key: string, now = Date.now()): boolean {
   return take(cycleBuckets, key, 2, 60_000, now);
 }
 
+const fxWatchBuckets = new Map<string, Bucket>();
+
+/**
+ * Two FX watches a minute per client (FX re-evaluation F4), in their own bucket so a watch never takes the tick's
+ * token. Single-instance, like the cycle guard.
+ */
+export function takeFxWatchToken(key: string, now = Date.now()): boolean {
+  return take(fxWatchBuckets, key, 2, 60_000, now);
+}
+
 const documentBuckets = new Map<string, Bucket>();
 
 /**

@@ -180,6 +180,8 @@ function apFake(options: {
   agentPayments?: Array<Record<string, unknown>>;
   /** The spending limit enforced on Arc, as the stage sees it (onchain spending limit spec); not enforced when absent. */
   onChainLimit?: OnChainLimitGate;
+  /** Payables the follow-up reopened this cycle because a fresh quote cleared what held them (FX re-evaluation F6). */
+  reevaluations?: Map<string, { reopenedSeq: number; trigger: string; previousDecisionSeq: number; previousAction: string | null }>;
 }) {
   const intents = paymentIntentsBackend(ORG);
   const fake = fakeSupabase((request) => {
@@ -218,6 +220,7 @@ function apFake(options: {
           metrics,
           lines,
           onChainLimit: options.onChainLimit ?? onChainLimitGate({ read: async () => null }),
+          reevaluations: options.reevaluations,
         })
       )
     );
@@ -1398,5 +1401,28 @@ describe("the AP stage and the three-way match (three-way match design)", () => 
   it("tells the model that whether a purchase order is needed is the business's setting", () => {
     expect(SYSTEM_PROMPT).toContain("counterparty.purchaseOrderRequired");
     expect(SYSTEM_PROMPT).toMatch(/purchaseOrderRequired[^\n]*business/);
+  });
+});
+
+describe("the AP stage and a payable reopened because a fresh quote cleared what held it (FX re-evaluation F6)", () => {
+  it("records the reopen, the trigger and the decision it follows on the new decision", async () => {
+    today("2026-10-01T09:00:00.000Z");
+    model(() => ({ action: "schedule", payOn: "2026-10-11", reasoning: "Take the 2% discount on its deadline.", confidence: 0.9 }));
+    const reevaluation = { reopenedSeq: 1440, trigger: "rate_available", previousDecisionSeq: 1434, previousAction: "hold" };
+    const { fake, stage } = apFake({ book: [payable()], reevaluations: new Map([[INVOICE_ID, reevaluation]]) });
+
+    await stage();
+
+    expect(ledger(fake.requests)[0].p_detail).toMatchObject({ reevaluation });
+  });
+
+  it("records none for a payable decided for any other reason", async () => {
+    today("2026-10-01T09:00:00.000Z");
+    model(() => ({ action: "schedule", payOn: "2026-10-11", reasoning: "Take the 2% discount on its deadline.", confidence: 0.9 }));
+    const { fake, stage } = apFake({ book: [payable()] });
+
+    await stage();
+
+    expect(ledger(fake.requests)[0].p_detail).not.toHaveProperty("reevaluation");
   });
 });

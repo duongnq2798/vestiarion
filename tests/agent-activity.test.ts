@@ -62,6 +62,18 @@ describe("what the agent did, in words", () => {
     );
   });
 
+  it("says what came back when the agent decided a payable again because a fresh quote cleared what held it (FX re-evaluation F6)", () => {
+    const decidedAgain = (trigger: string) =>
+      activityItem(
+        entry("ap_pay", { reevaluation: { reopenedSeq: 971, trigger, previousDecisionSeq: 965, previousAction: "hold" }, execution: { txRef: TX, resultingStatus: "paid" } }),
+        refs({ currency: "EURC" })
+      )?.text;
+    expect(decidedAgain("rate_available")).toBe("Paid Jiren 0.30 EURC · decided again once a EURC rate was quoted.");
+    expect(decidedAgain("swap_available")).toBe("Paid Jiren 0.30 EURC · decided again once a USDC→EURC swap was quoted.");
+    expect(decidedAgain("swap_cost_within_cap")).toBe("Paid Jiren 0.30 EURC · decided again once a swap cost within its cap.");
+    expect(decidedAgain("value_within_limit")).toBe("Paid Jiren 0.30 EURC · decided again once the rate brought it within the limit.");
+  });
+
   it("says how long after the person's action the agent decided", () => {
     const paid = { ...entry("ap_pay", { execution: { txRef: TX, resultingStatus: "paid" } }), ts: "2026-10-03T02:20:53Z" };
     const withTriggers = (action: string, ts: string) => ({ ...refs(), triggers: new Map([[INVOICE, [{ seq: 968, ts, action }]]]) });

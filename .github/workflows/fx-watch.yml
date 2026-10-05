@@ -1,0 +1,33 @@
+name: Vestiarion FX watch
+
+# Decides again, without a person, a EURC payable held because Circle quoted no rate or no swap, or one above its cap
+# or limit, once a fresh quote clears it (docs/superpowers/specs/2026-10-05-fx-reevaluation-design.md F4). A run with
+# nothing to re-check asks no quote and starts no cycle.
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fx-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger the protected FX watch
+        env:
+          VESTIARION_URL: ${{ secrets.VESTIARION_URL }}
+          AGENT_API_TOKEN: ${{ secrets.AGENT_API_TOKEN }}
+        run: |
+          test -n "$VESTIARION_URL"
+          test -n "$AGENT_API_TOKEN"
+          curl --fail-with-body --silent --show-error \
+            --max-time 330 \
+            --request POST \
+            --header "Authorization: Bearer $AGENT_API_TOKEN" \
+            "${VESTIARION_URL%/}/api/agent/fx-watch"

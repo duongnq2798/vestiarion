@@ -65,6 +65,12 @@ describe("quoteUsdcForEurc", () => {
     expect(quote.eurcEstimated).toBe(0.99669);
   });
 
+  it("asks only once when told to (FX re-evaluation F9)", async () => {
+    const fetch = vi.fn().mockImplementation(async () => noRoute());
+    await expect(quoteUsdcForEurc(1, { fromAddress: FROM, fetch, retryDelayMs: 0, once: true })).rejects.toMatchObject({ code: "no_route" });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
   it("says there is no route when all four answers are the same", async () => {
     const fetch = vi.fn().mockImplementation(async () => noRoute());
     await expect(quoteUsdcForEurc(1, { fromAddress: FROM, fetch, retryDelayMs: 0 })).rejects.toMatchObject({ code: "no_route" });

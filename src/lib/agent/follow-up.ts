@@ -32,6 +32,7 @@
 
 import { currentConfig } from "../context";
 import type { FollowUpConfig } from "../config";
+import { fxChange, type FxChange, type FxHold, type FxNow } from "../fx/recheck";
 
 export type { FollowUpConfig };
 
@@ -64,6 +65,11 @@ export interface FrozenInvoice {
   addressUnconfirmed?: boolean;
   /** Whether the counterparty needs a purchase order, now (three-way match design M5). Absent when it was not read. */
   purchaseOrderRequired?: boolean;
+  /**
+   * A fresh quote for a EURC payable held for FX (FX re-evaluation F3). Absent when it was not asked: nothing held it for
+   * FX, or it was reopened for FX within the last 30 minutes (F5).
+   */
+  fx?: FxNow;
 }
 
 /** The facts as they stood when the decision was taken, from the ledger. */
@@ -89,6 +95,8 @@ export interface DecisionFacts {
    * before the setting existed, when every counterparty needed one.
    */
   purchaseOrderRequired?: boolean;
+  /** What held a EURC payable that a fresh quote can change (FX re-evaluation F1); null or absent otherwise. */
+  fxHold?: FxHold | null;
 }
 
 export type FollowUpAction = "reopen" | "escalate" | "wait";
@@ -101,6 +109,16 @@ export interface FollowUpPlan {
   changes: string[];
   ageDays: number | null;
   pastDue: boolean;
+  /** For a reopen a fresh quote caused: what held it, and the quote before and after (FX re-evaluation F6). */
+  reevaluation?: FxReevaluation;
+}
+
+/** What `invoice_reopened` records when a fresh quote cleared what held a EURC payable (FX re-evaluation F6). */
+export interface FxReevaluation {
+  trigger: FxChange["trigger"];
+  previousDecision: { seq: number; action: string | null; guardrailRule: string | null };
+  before: FxChange["before"];
+  after: FxChange["after"];
 }
 
 const DAY_MS = 86_400_000;
@@ -233,6 +251,9 @@ export function planFollowUp(
   if (budgetChange) changes.push(budgetChange);
   const cashChange = atDecision.heldForCash ? cashChangeSince(invoice.cash, atDecision.heldForCash) : null;
   if (cashChange) changes.push(cashChange);
+  // A fresh quote that crossed the threshold that held a EURC payable (FX re-evaluation F2), weighed against the limit now.
+  const fx = atDecision.fxHold && invoice.fx ? fxChange(atDecision.fxHold, invoice.fx, invoice.paymentLimit) : null;
+  if (fx) changes.push(fx.sentence);
 
   if (changes.length > 0) {
     return {
@@ -240,6 +261,16 @@ export function planFollowUp(
       action: "reopen",
       changes,
       reason: `The evidence this decision rested on has changed: ${changes.join("; ")}. Returning it to the decision loop.`,
+      ...(fx && atDecision.fxHold
+        ? {
+            reevaluation: {
+              trigger: fx.trigger,
+              previousDecision: { seq: atDecision.fxHold.decisionSeq, action: atDecision.fxHold.action, guardrailRule: atDecision.fxHold.guardrailRule },
+              before: fx.before,
+              after: fx.after,
+            },
+          }
+        : {}),
     };
   }
 

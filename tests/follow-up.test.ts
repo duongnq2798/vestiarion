@@ -430,3 +430,59 @@ describe("follow-up — a counterparty now paid without purchase orders (three-w
     expect(plan.changes).toEqual(["the counterparty is now paid without purchase orders"]);
   });
 });
+
+describe("follow-up — a EURC payable held for FX (FX re-evaluation F2, F3, F6)", () => {
+  // Loto's 0.5 EURC, held because Circle quoted no rate (#1434).
+  const heldForRate: DecisionFacts = {
+    poReference: "PO-SWAP-1",
+    goodsReceived: true,
+    riskLevel: "clear",
+    paymentLimit: 1,
+    fxHold: {
+      blocker: "no_rate",
+      decisionSeq: 1434,
+      action: "hold",
+      guardrailRule: null,
+      amount: 0.5,
+      rate: null,
+      usdcValue: null,
+      swapCostPercent: null,
+      eurcShort: 0.5,
+    },
+  };
+  const loto = (over: Partial<FrozenInvoice> = {}) =>
+    frozen({ status: "held", amount: 0.5, currency: "EURC", poReference: "PO-SWAP-1", goodsReceived: true, paymentLimit: 1, ...over });
+  const quoted = { rate: 1.215262, usdcValue: 0.607631, swapCostPercent: null, swapAvailable: null, quotedAt: "2026-09-24T12:00:00.000Z" };
+
+  it("reopens it once a fresh quote clears what held it, with the change and what the reopen records", () => {
+    const plan = planFollowUp(loto({ fx: quoted }), heldForRate, NOW, config);
+    expect(plan.action).toBe("reopen");
+    expect(plan.changes).toEqual([
+      "a EURC rate is quoted again: 0.5 EURC is worth 0.607631 USDC at 1.215262 USDC per EURC, where there was none at the decision",
+    ]);
+    expect(plan.reevaluation).toEqual({
+      trigger: "rate_available",
+      previousDecision: { seq: 1434, action: "hold", guardrailRule: null },
+      before: { rate: null, usdcValue: null, swapCostPercent: null },
+      after: { rate: 1.215262, usdcValue: 0.607631, swapCostPercent: null, quotedAt: "2026-09-24T12:00:00.000Z" },
+    });
+  });
+
+  it("leaves it held when the quote still fails, or was not asked", () => {
+    expect(planFollowUp(loto({ fx: { ...quoted, rate: null, usdcValue: null } }), heldForRate, NOW, config)).toMatchObject({ action: "wait", changes: [] });
+    const notAsked = planFollowUp(loto(), heldForRate, NOW, config);
+    expect(notAsked.action).toBe("wait");
+    expect(notAsked.reevaluation).toBeUndefined();
+  });
+
+  it("weighs a value above the limit against the counterparty's limit now", () => {
+    const over: DecisionFacts = {
+      ...heldForRate,
+      paymentLimit: 2,
+      fxHold: { ...heldForRate.fxHold!, blocker: "over_limit", amount: 1.9, rate: 1.215956, usdcValue: 2.310316, guardrailRule: "counterparty.payment_limit", action: "pay" },
+    };
+    const cheaper = { ...quoted, rate: 1.05, usdcValue: 1.995 };
+    expect(planFollowUp(loto({ amount: 1.9, paymentLimit: 2, fx: cheaper }), over, NOW, config).reevaluation?.trigger).toBe("value_within_limit");
+    expect(planFollowUp(loto({ amount: 1.9, paymentLimit: 1.5, fx: cheaper }), { ...over, paymentLimit: 1.5 }, NOW, config).action).toBe("wait");
+  });
+});
