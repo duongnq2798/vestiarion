@@ -1,19 +1,16 @@
-import { encodeFunctionData, erc20Abi, formatUnits, parseUnits } from "viem";
-import { checksumMatches, CHECKSUM_MISMATCH } from "./address-checksum";
+import type { erc20Abi } from "viem";
 import { ARC_TESTNET } from "./network";
-import { looksLikeAddress, NOT_AN_ADDRESS } from "./payee-journey";
 
 /**
  * A payee's passkey wallet (docs/superpowers/specs/2026-10-05-payee-passkey-wallet-design.md): a Circle Smart Account on
- * Arc testnet owned by a passkey, created from a payee link (P2) and opened at /wallet (P4). The Modular Wallets SDK and
- * viem come in as `sdk` (the browser's binding is src/lib/passkey-wallet-sdk.ts, loaded only when a person chooses this),
- * so the order of the calls, the failures and the USDC arithmetic are plain functions. Safe in client components.
+ * Arc testnet owned by a passkey, made or used from a payee link (P2) and opened at /wallet (P4). The Modular Wallets SDK
+ * and viem come in as `sdk` (the browser's binding is src/lib/passkey-wallet-sdk.ts, loaded only when a person chooses
+ * this), so the order of the calls and the failures are plain functions. Safe in client components, and light: the
+ * payee link loads it, so viem is imported here for its types only; sending lives in src/lib/passkey-wallet-send.ts.
  */
 
 /** Where passkey wallets live: Arc testnet, the one network Modular Wallets serve here (P1). */
 export const PASSKEY_WALLET_NETWORK = ARC_TESTNET;
-
-const USDC_DECIMALS = 6;
 
 /** The Modular Wallets client key and client URL from the Circle Console (P6). */
 export interface PasskeyWalletConfig {
@@ -42,11 +39,11 @@ export function passkeyWalletOffered(chain: string, config: PasskeyWalletConfig 
 }
 
 /**
- * The name the passkey is saved under, as the payee's password manager lists it (P2): their name and Vestiarion, with a
- * short mark so two payees of one name never collide.
+ * The name the passkey is saved under, as the payee's password manager lists it (P2): the business that pays and
+ * Vestiarion, with a short mark so two wallets never share a name. The payee's own name is not sent to Circle.
  */
-export function passkeyName(payeeName: string, mark: string): string {
-  const name = payeeName.trim().replace(/\s+/g, " ").slice(0, 40);
+export function passkeyName(businessName: string, mark: string): string {
+  const name = businessName.trim().replace(/\s+/g, " ").slice(0, 40);
   return name ? `${name} (Vestiarion ${mark})` : `Vestiarion wallet ${mark}`;
 }
 
@@ -57,18 +54,18 @@ export function passkeyMark(): string {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-/** The bundler client calls this module makes: a user operation, and its receipt. */
+/** The bundler client calls a send makes: a user operation, and its receipt, which says whether it was carried out. */
 export interface PasskeyBundler {
   sendUserOperation(operation: { calls: Array<{ to: `0x${string}`; data: `0x${string}` }>; paymaster: true }): Promise<string>;
-  waitForUserOperationReceipt(parameters: { hash: string }): Promise<{ receipt: { transactionHash: string } }>;
+  waitForUserOperationReceipt(parameters: { hash: string }): Promise<{ success: boolean; receipt: { transactionHash: string } }>;
 }
 
-/** The public client call this module makes: a USDC balance. */
+/** The public client call /wallet makes: a USDC balance. */
 export interface PasskeyPublicClient {
   readContract(parameters: { address: `0x${string}`; abi: typeof erc20Abi; functionName: "balanceOf"; args: [`0x${string}`] }): Promise<bigint>;
 }
 
-/** The parts of the Modular Wallets SDK and viem this module uses, passed in so it runs without a browser in tests. */
+/** The parts of the Modular Wallets SDK and viem these modules use, passed in so they run without a browser in tests. */
 export interface PasskeySdk {
   /** viem's chain for `PASSKEY_WALLET_NETWORK`. */
   chain: unknown;
@@ -81,8 +78,11 @@ export interface PasskeySdk {
   createBundlerClient(parameters: { account: unknown; client: unknown; chain: unknown; transport: unknown }): PasskeyBundler;
 }
 
-/** The passkey, then the smart account it owns on Arc testnet: worked out, never deployed here (P2). */
-async function smartAccount(input: { config: PasskeyWalletConfig; sdk: PasskeySdk; mode: "Register" | "Login"; username?: string }) {
+/**
+ * The passkey, registered or used, then the smart account it owns on Arc testnet: worked out, never deployed here (P2).
+ * The same passkey gives the same wallet either way.
+ */
+export async function passkeySmartAccount(input: { config: PasskeyWalletConfig; sdk: PasskeySdk; mode: "Register" | "Login"; username?: string }) {
   const { config, sdk } = input;
   const chainPath = PASSKEY_WALLET_NETWORK.modularWallets?.chain;
   if (!chainPath) throw new Error("Passkey wallets do not run on this network");
@@ -96,92 +96,46 @@ async function smartAccount(input: { config: PasskeyWalletConfig; sdk: PasskeySd
 }
 
 /**
- * Creates a passkey and works out the wallet it owns (P2): its address, which a payee link then sends as any typed one
- * (P3). Nothing is deployed and nothing is paid; Vestiarion keeps nothing of the passkey.
+ * The address of a passkey wallet, for a payee link to send as any typed one (P2, P3): a new passkey (`Register`), or
+ * one the payee made before (`Login`), so a second link uses the same wallet rather than another. Nothing is deployed
+ * and nothing is paid; Vestiarion keeps nothing of the passkey.
  */
-export async function createPasskeyWallet(input: { config: PasskeyWalletConfig; username: string; sdk: PasskeySdk }): Promise<{ address: string }> {
-  const { account } = await smartAccount({ config: input.config, sdk: input.sdk, mode: "Register", username: input.username });
+export async function passkeyWalletAddress(input: {
+  config: PasskeyWalletConfig;
+  mode: "Register" | "Login";
+  username?: string;
+  sdk: PasskeySdk;
+}): Promise<{ address: string }> {
+  const { account } = await passkeySmartAccount(input);
   return { address: account.address };
 }
 
-/** A passkey wallet opened at /wallet (P4): its address, its USDC, and a send. */
-export interface OpenPasskeyWallet {
-  address: string;
-  /** Its USDC on Arc testnet, in units of 6 decimals. */
-  balance(): Promise<bigint>;
-  /** Sends USDC as a user operation whose gas Circle Gas Station pays; the transaction's hash once it lands. */
-  send(to: string, units: bigint): Promise<string>;
+const KNOWN_FAILURES = new Set(["NotAllowedError", "NotSupportedError", "SecurityError"]);
+
+/** The browser's own reason for a failure, however deep a library wrapped it: signing wraps a cancelled prompt. */
+function browserReason(error: unknown): string {
+  let current: unknown = error;
+  for (let depth = 0; current && depth < 6; depth += 1) {
+    const name = (current as { name?: unknown }).name;
+    if (typeof name === "string" && KNOWN_FAILURES.has(name)) return name;
+    current = (current as { cause?: unknown }).cause;
+  }
+  return "";
 }
 
-/** The USDC transfer a send makes: the token contract, and `transfer(to, units)`. */
-export function transferCall(to: string, units: bigint): { to: `0x${string}`; data: `0x${string}` } {
-  return {
-    to: PASSKEY_WALLET_NETWORK.tokens.USDC as `0x${string}`,
-    data: encodeFunctionData({ abi: erc20Abi, functionName: "transfer", args: [to as `0x${string}`, units] }),
-  };
-}
-
-/** Logs in with the passkey and opens the wallet it owns (P4). */
-export async function openPasskeyWallet(input: { config: PasskeyWalletConfig; sdk: PasskeySdk }): Promise<OpenPasskeyWallet> {
-  const { account, client, transport } = await smartAccount({ config: input.config, sdk: input.sdk, mode: "Login" });
-  const bundler = input.sdk.createBundlerClient({ account, client, chain: input.sdk.chain, transport });
-  const address = account.address;
-  return {
-    address,
-    balance: () =>
-      client.readContract({
-        address: PASSKEY_WALLET_NETWORK.tokens.USDC as `0x${string}`,
-        abi: erc20Abi,
-        functionName: "balanceOf",
-        args: [address as `0x${string}`],
-      }),
-    async send(to, units) {
-      const hash = await bundler.sendUserOperation({ calls: [transferCall(to, units)], paymaster: true });
-      const { receipt } = await bundler.waitForUserOperationReceipt({ hash });
-      return receipt.transactionHash;
-    },
-  };
-}
-
-/** An amount a person typed, in USDC units of 6 decimals; null for anything that cannot be sent. */
-export function usdcUnits(text: string): bigint | null {
-  const value = text.trim();
-  if (!/^\d+(\.\d{1,6})?$/.test(value)) return null;
-  const units = parseUnits(value, USDC_DECIMALS);
-  return units > 0n ? units : null;
-}
-
-/** Units as USDC, with at least two decimals: "12.34", "0.000001", "0.00". */
-export function usdcText(units: bigint): string {
-  const [whole, fraction = ""] = formatUnits(units, USDC_DECIMALS).split(".");
-  return `${whole}.${fraction.padEnd(2, "0")}`;
-}
-
-/** Why a send cannot go yet, before the passkey is asked (P4); null when it can. */
-export function sendProblem(input: { to: string; amount: string; balance: bigint; from: string }): string | null {
-  const to = input.to.trim();
-  if (!looksLikeAddress(to)) return NOT_AN_ADDRESS;
-  if (!checksumMatches(to)) return `${CHECKSUM_MISMATCH} Copy it again from where it came.`;
-  if (to.toLowerCase() === input.from.toLowerCase()) return "That is this wallet's own address.";
-  const units = usdcUnits(input.amount);
-  if (units === null) return "Enter an amount of USDC, such as 1.50.";
-  if (units > input.balance) return `This wallet holds ${usdcText(input.balance)} USDC.`;
-  return null;
-}
-
-/** What a person is told when creating, opening or sending fails (P5). Anything unforeseen goes to the console only. */
+/** What a person is told when making, opening or sending fails (P5). Anything unforeseen goes to the console only. */
 export function passkeyFailure(error: unknown, during: "create" | "open" | "send"): string {
-  const name = typeof (error as { name?: unknown } | null)?.name === "string" ? (error as { name: string }).name : "";
-  if (name === "NotAllowedError") {
+  const reason = browserReason(error);
+  if (reason === "NotAllowedError") {
     if (during === "create") return "No passkey was created. Nothing changed.";
     return during === "open" ? "The passkey was not used. Nothing changed." : "The passkey was not used. Nothing was sent.";
   }
-  if (name === "NotSupportedError") {
+  if (reason === "NotSupportedError") {
     return during === "create"
       ? "This browser cannot create passkeys. Enter an address from another wallet instead."
       : "This browser cannot use passkeys. Open this page in a browser that can, such as Chrome or Safari.";
   }
-  if (name === "SecurityError") return "Passkeys for Vestiarion wallets work only on www.vestiarion.xyz.";
+  if (reason === "SecurityError") return "Passkeys for Vestiarion wallets work only on www.vestiarion.xyz.";
   console.error("passkey wallet", during, error instanceof Error ? error.message : error);
   if (during === "create") return "That did not work. Try again in a moment, or enter an address from another wallet.";
   return during === "open" ? "That did not work. Try again in a moment." : "Nothing was sent. Try again in a moment.";

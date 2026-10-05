@@ -495,6 +495,9 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["Review", "src/components/wallet/PasskeyWallet.tsx"],
     ["Paid by Circle Gas Station", "src/components/wallet/PasskeyWallet.tsx"],
     ["Send with my passkey", "src/components/wallet/PasskeyWallet.tsx"],
+    ["Already made one here? Use my passkey wallet", "src/components/payee/PasskeyWalletOption.tsx"],
+    ["Your passkey wallet", PAYEE_FORM],
+    ["Refresh", "src/components/wallet/PasskeyWallet.tsx"],
   ],
   "guides/pay-a-contractor": [
     ["Pay a freelancer", "src/app/o/[slug]/contractors/page.tsx"],

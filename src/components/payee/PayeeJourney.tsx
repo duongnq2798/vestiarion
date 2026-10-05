@@ -59,7 +59,7 @@ function AddressStep({ token, status }: { token: string; status: PayeeLinkStatus
   const chain = payeeChain(status.chain).label;
   const owed = amountsLine(status.payments);
   // A passkey wallet, the secondary way, for a payee paid on Arc testnet when Modular Wallets are set up (P1, P6).
-  const passkey = passkeyWalletOffered(status.chain, passkeyWalletConfig()) ? { payeeName: status.payeeName } : undefined;
+  const passkey = passkeyWalletOffered(status.chain, passkeyWalletConfig());
   return (
     <>
       <Heading>

@@ -2,7 +2,7 @@
 
 import { CircleCheck, PenLine } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { submitPayeeAddressAction, type PayeeAddressResult } from "@/app/payee/[token]/actions";
 import { PasskeyWalletOption } from "@/components/payee/PasskeyWalletOption";
 import { Button } from "@/components/ui/Button";
@@ -36,28 +36,34 @@ export const PASSKEY_WALLET_LINE =
  * into the next step, which the link now shows. `intro`, how it works, shows with the field only, so
  * the check screen has the address and the boxes and nothing else.
  *
- * `passkey`, when offered (payee passkey wallet P1), adds a secondary button under Continue that creates a passkey
- * wallet. Its address is read back under "Your new wallet", with one line about the passkey instead of the boxes, which
- * guard against a mistyped or exchange address, and is sent the same way (P3).
+ * `passkey`, when offered (payee passkey wallet P1), adds a secondary button under Continue that makes a passkey wallet,
+ * or uses one made from an earlier link. Its address is read back under "Your new wallet" or "Your passkey wallet", with
+ * one line about the passkey instead of the boxes, which guard against a mistyped or exchange address, and is sent the
+ * same way (P3). While the passkey is asked, the typed path waits, so the two never cross (review finding 8).
  */
 export default function PayeeAddressForm({
   token,
   chainLabel = "Arc testnet",
   orgName,
   intro,
-  passkey,
+  passkey = false,
 }: {
   token: string;
   chainLabel?: string;
   orgName: string;
   intro?: ReactNode;
-  passkey?: { payeeName: string };
+  passkey?: boolean;
 }) {
   const router = useRouter();
   const [step, setStep] = useState<"enter" | "check">("enter");
+  const stepNow = useRef(step);
+  useEffect(() => {
+    stepNow.current = step;
+  }, [step]);
   const [address, setAddress] = useState("");
-  // Made on this page with a passkey, rather than typed (P3).
-  const [created, setCreated] = useState(false);
+  // Made (`Register`) or used (`Login`) on this page with a passkey, rather than typed (P3).
+  const [madeWith, setMadeWith] = useState<"Register" | "Login" | null>(null);
+  const [passkeyPending, setPasskeyPending] = useState(false);
   const [error, setError] = useState("");
   const [checked, setChecked] = useState<boolean[]>(ADDRESS_CHECKS.map(() => false));
   const { state, formProps } = useActionForm(submitPayeeAddressAction, INITIAL, { onSuccess: () => router.refresh() });
@@ -100,15 +106,21 @@ export default function PayeeAddressForm({
             spellCheck={false}
             className="font-mono"
             placeholder="0x…"
+            disabled={passkeyPending}
           />
         </Field>
-        <Button type="submit">Continue</Button>
+        <Button type="submit" disabled={passkeyPending}>
+          Continue
+        </Button>
         {passkey && (
           <PasskeyWalletOption
-            payeeName={passkey.payeeName}
-            onCreated={(made) => {
+            orgName={orgName}
+            onPending={setPasskeyPending}
+            onAddress={(made, mode) => {
+              // A passkey answer that comes after the payee moved on is not theirs to apply.
+              if (stepNow.current !== "enter") return;
               setAddress(made);
-              setCreated(true);
+              setMadeWith(mode);
               setError("");
               setStep("check");
             }}
@@ -121,13 +133,13 @@ export default function PayeeAddressForm({
   const trimmed = address.trim();
   const groups = groupAddress(trimmed);
 
-  if (created) {
+  if (madeWith) {
     return (
       <form {...formProps} className="grid gap-5">
         <input type="hidden" name="token" value={token} />
         <input type="hidden" name="address" value={trimmed} />
         <div>
-          <h2 className="text-base font-semibold text-ink">Your new wallet</h2>
+          <h2 className="text-base font-semibold text-ink">{madeWith === "Register" ? "Your new wallet" : "Your passkey wallet"}</h2>
           <p className="mt-2 flex flex-wrap gap-x-1.5 gap-y-1 rounded-xl border border-line bg-raised px-3 py-2.5 font-mono text-[0.9375rem] tabular-nums text-ink">
             <span className="sr-only">{trimmed}</span>
             {groups.map((group, index) => (
@@ -148,7 +160,7 @@ export default function PayeeAddressForm({
             variant="ghost"
             icon={<PenLine />}
             onClick={() => {
-              setCreated(false);
+              setMadeWith(null);
               setAddress("");
               setStep("enter");
             }}

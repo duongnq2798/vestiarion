@@ -1,30 +1,23 @@
 "use client";
 
-import { ArrowUpRight, KeyRound, Send, Wallet } from "lucide-react";
-import { useState, type FormEvent, type ReactNode } from "react";
+import { ArrowUpRight, KeyRound, RefreshCw, Send, Wallet } from "lucide-react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
+import { Callout } from "@/components/ui/Callout";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Field } from "@/components/ui/Field";
 import { FormMessage } from "@/components/ui/FormMessage";
 import { Input } from "@/components/ui/Input";
 import { arcAddressUrl, arcTxUrl } from "@/lib/payee-chains";
 import { maskAddress } from "@/lib/payee-journey";
-import {
-  openPasskeyWallet,
-  PASSKEY_WALLET_NETWORK,
-  passkeyFailure,
-  passkeyWalletConfig,
-  sendProblem,
-  usdcText,
-  usdcUnits,
-  type OpenPasskeyWallet,
-} from "@/lib/passkey-wallet";
+import { PASSKEY_WALLET_NETWORK, passkeyFailure, passkeyWalletConfig } from "@/lib/passkey-wallet";
+import { openPasskeyWallet, sendProblem, usdcText, usdcUnits, type OpenPasskeyWallet } from "@/lib/passkey-wallet-send";
 
 /**
  * A payee's passkey wallet, opened at /wallet (docs/superpowers/specs/2026-10-05-payee-passkey-wallet-design.md P4):
  * the passkey opens it, it shows its address and USDC on Arc testnet, and it sends USDC after a confirmation that names
- * the destination, the amount, the network and the token. Circle Gas Station pays the gas. Vestiarion records none of
- * it: the wallet is the payee's.
+ * the destination, the amount, the network and the gas. Circle Gas Station pays the gas. A send Circle took is never
+ * reported as nothing sent (review finding 1). Vestiarion records none of it: the wallet is the payee's.
  */
 
 export const OPEN_WALLET = "Open my wallet";
@@ -33,7 +26,9 @@ type Screen =
   | { kind: "closed" }
   | { kind: "open" }
   | { kind: "confirm"; to: string; units: bigint }
-  | { kind: "sent"; txHash: string; units: bigint; to: string };
+  | { kind: "sent"; txHash: string; units: bigint; to: string }
+  | { kind: "reverted"; txHash: string }
+  | { kind: "unconfirmed" };
 
 export function PasskeyWallet({ configured }: { configured: boolean }) {
   const [wallet, setWallet] = useState<OpenPasskeyWallet | null>(null);
@@ -43,6 +38,11 @@ export function PasskeyWallet({ configured }: { configured: boolean }) {
   const [error, setError] = useState("");
   const [to, setTo] = useState("");
   const [amount, setAmount] = useState("");
+
+  // The page is for the passkey: its code starts loading on arrival, so the prompt follows the tap closely (review finding 9).
+  useEffect(() => {
+    if (configured) void import("@/lib/passkey-wallet-sdk").catch(() => undefined);
+  }, [configured]);
 
   if (!configured) {
     return (
@@ -55,12 +55,15 @@ export function PasskeyWallet({ configured }: { configured: boolean }) {
     );
   }
 
-  async function refreshBalance(opened: OpenPasskeyWallet) {
+  async function readBalance(opened: OpenPasskeyWallet): Promise<bigint | null> {
     try {
-      setBalance(await opened.balance());
+      const value = await opened.balance();
+      setBalance(value);
+      return value;
     } catch (failure) {
       console.error("passkey wallet balance", failure instanceof Error ? failure.message : failure);
       setBalance(null);
+      return null;
     }
   }
 
@@ -74,7 +77,7 @@ export function PasskeyWallet({ configured }: { configured: boolean }) {
       const opened = await openPasskeyWallet({ config, sdk: passkeySdk() });
       setWallet(opened);
       setScreen({ kind: "open" });
-      await refreshBalance(opened);
+      await readBalance(opened);
     } catch (failure) {
       setError(passkeyFailure(failure, "open"));
     } finally {
@@ -82,10 +85,14 @@ export function PasskeyWallet({ configured }: { configured: boolean }) {
     }
   }
 
-  function review(event: FormEvent<HTMLFormElement>) {
+  async function review(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!wallet) return;
-    const problem = sendProblem({ to, amount, balance: balance ?? 0n, from: wallet.address });
+    // What it holds is read again before the review, so a send is checked against it as it is now (review finding 4).
+    setBusy(true);
+    const held = await readBalance(wallet);
+    setBusy(false);
+    const problem = sendProblem({ to, amount, balance: held, from: wallet.address });
     if (problem) {
       setError(problem);
       return;
@@ -99,12 +106,15 @@ export function PasskeyWallet({ configured }: { configured: boolean }) {
     setBusy(true);
     setError("");
     try {
-      const txHash = await wallet.send(target, units);
-      setScreen({ kind: "sent", txHash, units, to: target });
+      const outcome = await wallet.send(target, units);
+      if (outcome.kind === "sent") setScreen({ kind: "sent", txHash: outcome.txHash, units, to: target });
+      else if (outcome.kind === "reverted") setScreen({ kind: "reverted", txHash: outcome.txHash });
+      else setScreen({ kind: "unconfirmed" });
       setTo("");
       setAmount("");
-      await refreshBalance(wallet);
+      await readBalance(wallet);
     } catch (failure) {
+      // Circle never took it: nothing was sent.
       setError(passkeyFailure(failure, "send"));
     } finally {
       setBusy(false);
@@ -112,6 +122,11 @@ export function PasskeyWallet({ configured }: { configured: boolean }) {
   }
 
   const network = PASSKEY_WALLET_NETWORK.label;
+  const sendMore = (
+    <Button type="button" variant="ghost" onClick={() => setScreen({ kind: "open" })}>
+      Send more
+    </Button>
+  );
 
   return (
     <section className="rounded-2xl border border-line bg-surface p-6 shadow-surface">
@@ -119,8 +134,7 @@ export function PasskeyWallet({ configured }: { configured: boolean }) {
       {screen.kind === "closed" && (
         <div className="mt-3 grid gap-4">
           <p className="text-sm leading-6 text-ink-2">
-            The wallet you created from a payment link, on {network}. It opens with the passkey you saved then: your fingerprint, face or device
-            PIN.
+            The wallet you made from a payment link, on {network}. It opens with the passkey you saved then: your fingerprint, face or device PIN.
           </p>
           <Button type="button" icon={<KeyRound />} onClick={open} loading={busy}>
             {OPEN_WALLET}
@@ -129,14 +143,21 @@ export function PasskeyWallet({ configured }: { configured: boolean }) {
       )}
 
       {wallet && screen.kind !== "closed" && (
-        <dl className="mt-5 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2.5 text-sm">
+        <dl className="mt-5 grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-2.5 text-sm">
           <Row term="Address">
             <a href={arcAddressUrl(wallet.address)} target="_blank" rel="noreferrer" className="font-mono text-agent underline-offset-4 hover:underline">
               {wallet.address}
               <span className="sr-only"> (opens in a new tab)</span>
             </a>
           </Row>
-          <Row term="USDC">{balance === null ? "Not read yet" : `${usdcText(balance)} USDC on ${network}`}</Row>
+          <Row term="USDC">
+            <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              {balance === null ? "Could not be read" : `${usdcText(balance)} USDC on ${network}`}
+              <Button type="button" variant="link" icon={<RefreshCw />} onClick={() => readBalance(wallet)} disabled={busy}>
+                Refresh
+              </Button>
+            </span>
+          </Row>
         </dl>
       )}
 
@@ -149,7 +170,7 @@ export function PasskeyWallet({ configured }: { configured: boolean }) {
           <Field id="wallet-amount" label="Amount (USDC)">
             <Input value={amount} onChange={(event) => setAmount(event.target.value)} inputMode="decimal" autoComplete="off" placeholder="1.50" />
           </Field>
-          <Button type="submit" variant="secondary" icon={<Send />}>
+          <Button type="submit" variant="secondary" icon={<Send />} loading={busy}>
             Review
           </Button>
         </form>
@@ -185,16 +206,26 @@ export function PasskeyWallet({ configured }: { configured: boolean }) {
           <p role="status" className="text-sm font-medium text-proof">
             Sent {usdcText(screen.units)} USDC to {maskAddress(screen.to)}.
           </p>
-          <Button asChild variant="secondary">
-            <a href={arcTxUrl(screen.txHash)} target="_blank" rel="noreferrer">
-              View the transaction
-              <ArrowUpRight aria-hidden />
-              <span className="sr-only">(opens in a new tab)</span>
-            </a>
-          </Button>
-          <Button type="button" variant="ghost" onClick={() => setScreen({ kind: "open" })}>
-            Send more
-          </Button>
+          <TransactionLink txHash={screen.txHash} />
+          {sendMore}
+        </div>
+      )}
+
+      {screen.kind === "reverted" && (
+        <div className="mt-6 grid gap-4 border-t border-line pt-5">
+          <Callout tone="refused">{network} did not carry out this transfer, so your USDC did not move.</Callout>
+          <TransactionLink txHash={screen.txHash} />
+          {sendMore}
+        </div>
+      )}
+
+      {screen.kind === "unconfirmed" && (
+        <div className="mt-6 grid gap-4 border-t border-line pt-5">
+          <Callout tone="held">
+            Circle took this transfer, but {network} has not confirmed it yet, so it may still land. Choose Refresh in a minute and check your USDC
+            before sending again.
+          </Callout>
+          {sendMore}
         </div>
       )}
 
@@ -205,6 +236,18 @@ export function PasskeyWallet({ configured }: { configured: boolean }) {
         This wallet is yours. Vestiarion never sees your passkey and keeps no record of this page.
       </p>
     </section>
+  );
+}
+
+function TransactionLink({ txHash }: { txHash: string }) {
+  return (
+    <Button asChild variant="secondary">
+      <a href={arcTxUrl(txHash)} target="_blank" rel="noreferrer">
+        View the transaction
+        <ArrowUpRight aria-hidden />
+        <span className="sr-only">(opens in a new tab)</span>
+      </a>
+    </Button>
   );
 }
 

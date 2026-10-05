@@ -33,7 +33,10 @@ export function passkeySdk(): PasskeySdk {
     toModularTransport: (url, clientKey) => toModularTransport(url, clientKey),
     createPublicClient: (parameters) =>
       createPublicClient({ chain: parameters.chain as never, transport: parameters.transport as never }) as unknown as PasskeyPublicClient,
-    toWebAuthnAccount: (parameters) => toWebAuthnAccount({ credential: parameters.credential as never }),
+    // Signs under the passkey's own rpId, not the page's host: they differ when the Console's passkey domain is the apex
+    // (review finding 2).
+    toWebAuthnAccount: (parameters) =>
+      toWebAuthnAccount({ credential: parameters.credential as never, rpId: (parameters.credential as { rpId?: string }).rpId }),
     toCircleSmartAccount: (parameters) => toCircleSmartAccount({ client: parameters.client as never, owner: parameters.owner as never }),
     createBundlerClient: (parameters) =>
       createBundlerClient({

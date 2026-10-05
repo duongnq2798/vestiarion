@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import PayeeAddressForm from "@/components/PayeeAddressForm";
 import { PayeeJourney } from "@/components/payee/PayeeJourney";
-import { PASSKEY_OPTION } from "@/components/payee/PasskeyWalletOption";
+import { PASSKEY_OPTION, PASSKEY_REUSE } from "@/components/payee/PasskeyWalletOption";
 import { PasskeyWallet } from "@/components/wallet/PasskeyWallet";
 import type { PayeeLinkStatus } from "@/lib/payee-journey";
 import { ARC_TESTNET } from "@/lib/network";
@@ -43,13 +43,18 @@ afterEach(() => {
 
 describe("the payee link's address step (P1)", () => {
   it("keeps the address and Continue as the page's one primary action, with the passkey wallet as a secondary button beneath", () => {
-    const markup = html(<PayeeAddressForm token="t" orgName="Northstar" passkey={{ payeeName: "Lena Ortiz" }} />);
+    const markup = html(<PayeeAddressForm token="t" orgName="Northstar" passkey />);
     expect(markup).toContain("Your wallet address on Arc testnet");
     expect(markup).toMatch(/<button[^>]*type="submit"[^>]*>(?:(?!<\/button>).)*Continue<\/button>/);
     expect(markup).toContain(PASSKEY_OPTION);
+    // A payee who made one from an earlier link uses it, rather than making another (review finding 7).
+    expect(markup).toContain(PASSKEY_REUSE);
     expect(markup.indexOf(PASSKEY_OPTION)).toBeGreaterThan(markup.indexOf("Continue"));
-    // Secondary: not a submit, and not the primary style.
-    expect(markup).toMatch(new RegExp(`<button[^>]*type="button"[^>]*>(?:(?!</button>).)*${PASSKEY_OPTION.replace(/[?]/g, "\\?")}`));
+    // Secondary: not a submit, and drawn as the secondary button rather than the filled primary one Continue is.
+    const button = markup.match(new RegExp(`<button[^>]*>(?:(?!</button>).)*${PASSKEY_OPTION.replace(/[?]/g, "\\?")}`))?.[0] ?? "";
+    expect(button).toContain('type="button"');
+    expect(button).toContain("border-line-strong");
+    expect(button).not.toContain("bg-agent ");
   });
 
   it("shows no passkey option unless offered", () => {
