@@ -2,7 +2,7 @@
 
 import "server-only";
 
-import { NOT_AN_ADDRESS } from "@/lib/payee-journey";
+import { ADDRESS_CHECKSUM, NOT_AN_ADDRESS } from "@/lib/payee-journey";
 import { submitPayeeAddress } from "@/lib/platform/payee-links";
 
 /**
@@ -30,9 +30,9 @@ export async function submitPayeeAddressAction(_previous: PayeeAddressResult, fo
         ? { ok: true, message: `That is already the address ${result.orgName} has on file.` }
         : { ok: true, message: `Thanks. ${result.orgName} will confirm your address before paying you.` };
     }
-    return result.reason === "invalid_address"
-      ? { ok: false, message: NOT_AN_ADDRESS }
-      : { ok: false, message: "This link is no longer valid. Ask the business that sent it for a new one." };
+    if (result.reason === "invalid_address") return { ok: false, message: NOT_AN_ADDRESS };
+    if (result.reason === "checksum_address") return { ok: false, message: ADDRESS_CHECKSUM };
+    return { ok: false, message: "This link is no longer valid. Ask the business that sent it for a new one." };
   } catch {
     console.error("payee address submission failed");
     return { ok: false, message: "That did not work. Try again in a moment." };

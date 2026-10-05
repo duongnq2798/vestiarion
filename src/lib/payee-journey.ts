@@ -1,4 +1,5 @@
 import { utcDay } from "./copy";
+import { CHECKSUM_MISMATCH } from "./address-checksum";
 
 /**
  * The freelancer's side of a payment
@@ -69,6 +70,9 @@ const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 
 /** What the payee reads when what they typed is not an address, in the form and from the server alike. */
 export const NOT_AN_ADDRESS = "That doesn't look like a wallet address. It starts with 0x and has 42 characters in all.";
+
+/** What the payee reads when the address's capital letters do not match its checksum: a character is likely mistyped (payment safety A3). */
+export const ADDRESS_CHECKSUM = `${CHECKSUM_MISMATCH} Copy it again from your wallet.`;
 
 /** Whether the text is an EVM address, as the payee's form checks it before the server does. */
 export function looksLikeAddress(raw: string): boolean {

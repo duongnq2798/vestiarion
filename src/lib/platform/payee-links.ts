@@ -182,7 +182,7 @@ export async function payeeLinkStatus(token: string): Promise<PayeeLinkStatus | 
 
 export type PayeeSubmission =
   | { ok: true; orgName: string; unchanged: boolean }
-  | { ok: false; reason: "invalid_address" | "invalid_link" };
+  | { ok: false; reason: "invalid_address" | "checksum_address" | "invalid_link" };
 
 /**
  * The payee's submission: the address is checked first, so a typo never uses
@@ -194,7 +194,8 @@ export async function submitPayeeAddress(token: string, raw: string): Promise<Pa
   const hash = payeeLinkHash(token);
   if (!hash) return { ok: false, reason: "invalid_link" };
   const parsed = parseAddressInput(raw);
-  if (!parsed.ok || parsed.address === null) return { ok: false, reason: "invalid_address" };
+  if (!parsed.ok) return { ok: false, reason: parsed.checksum ? "checksum_address" : "invalid_address" };
+  if (parsed.address === null) return { ok: false, reason: "invalid_address" };
 
   // The submission needs the business's name, not the chain.
   const preview = await previewPayeeLink(token, { withChain: false });
