@@ -105,12 +105,17 @@ describe("payee_link_status (0053)", () => {
 
   it("lists open payments and those paid since the link was made, never rejected or older paid ones, newest ten", async () => {
     const vendor = await payee("Northwind", "BASE-SEPOLIA");
-    const add = (memo: string, status: string, extra = "") =>
-      db.query(
-        `insert into public.invoices (org_id, counterparty_id, direction, amount, currency, memo, due_date, status${extra ? ", settled_at, tx_ref" : ""})
-         values ($1, $2, 'payable', 10, 'USDC', $3, now() + interval '5 days', $4${extra})`,
-        [org, vendor, memo, status]
+    // Each invoice is created a millisecond after the one before, so the order the listing reads is never a tie,
+    // however fast two inserts run.
+    let tick = 0;
+    const add = (memo: string, status: string, extra = "") => {
+      tick += 1;
+      return db.query(
+        `insert into public.invoices (org_id, counterparty_id, direction, amount, currency, memo, due_date, status, created_at${extra ? ", settled_at, tx_ref" : ""})
+         values ($1, $2, 'payable', 10, 'USDC', $3, now() + interval '5 days', $4, clock_timestamp() + make_interval(secs => $5::int / 1000.0)${extra})`,
+        [org, vendor, memo, status, tick]
       );
+    };
     await add("Paid last year", "paid", ", now() - interval '400 days', '0xold'");
     await add("Rejected", "rejected");
     await link(vendor, 7);
