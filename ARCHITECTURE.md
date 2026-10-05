@@ -295,8 +295,11 @@ phase 1b).
 - **Wallets** (escrow, the spending limit, Gateway funding, a new workspace's accounts) are created on the profile's
   blockchain.
 - **A feature a network lacks** refuses by name (`FeatureOffError`: "… does not run on Arc mainnet yet") and never
-  falls back to testnet values. This covers CCTP, Gateway, the USYC reserve, the EURC swap, x402 buying and passkey
-  wallets.
+  falls back to testnet values. This covers CCTP, Gateway, the USYC reserve, the EURC swap, x402 buying and hosted
+  wallets, which the Go live panel leaves out there too. Passkey wallets are simply not offered off Arc testnet.
+- **Display reads the record's chain; decisions read the workspace's.** A row, a list or a receipt labels a payee by its
+  own stored chain and never fails for one off the network. Approve and pay, and a chat's Approve, refuse such a chain
+  in plain words before any claim.
 - **Two ratchets:**
   - `tests/network-ratchet.test.ts` counts hard-coded testnet identifiers.
   - `tests/network-constants-ratchet.test.ts` counts readers of the testnet profile.

@@ -20,7 +20,7 @@ import { paymentIdempotencyKey, type PaymentExecution } from "@/lib/payments";
 import { UsycNotConfirmedError } from "@/lib/circle/usyc";
 import { encryptSecret, parseMasterKeys } from "@/lib/secrets";
 import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
-import { ARC_TESTNET } from "@/lib/network";
+import { ARC_MAINNET, ARC_TESTNET } from "@/lib/network";
 
 /**
  * `src/lib/agent/approvals.ts` against a real supabase-js client whose
@@ -850,6 +850,28 @@ describe("approveAndPay", () => {
     const detail = append.p_detail as Record<string, unknown>;
     expect(detail.attempt).toBe(1);
     expect(detail).not.toHaveProperty("retriedAfter");
+  });
+});
+
+describe("a payee whose stored chain is another network's (network threading P3, final review)", () => {
+  it("is refused by Approve and pay, in plain words and before any claim, never paid on the workspace's own chain", async () => {
+    getChainProviderMock.mockReturnValue({ mode: "live", network: ARC_MAINNET, earnMode: "simulate", estimatedFeeUsd: 0.003 });
+    const { fake, run } = approvalsFake({
+      invoice: (r) => (r.params.get("id") ? { body: invoiceRow({ counterparties: { name: "Acme", risk_level: "low", address: "0xdead", chain: "ARC-TESTNET" } }) } : undefined),
+    });
+    const attempt = run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+    await expect(attempt).rejects.toThrow("ARC-TESTNET is not a chain this workspace pays on");
+    expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+  });
+
+  it("is listed with its own chain, rather than failing the Approvals page", async () => {
+    getChainProviderMock.mockReturnValue({ mode: "simulate", network: ARC_MAINNET, earnMode: "simulate", estimatedFeeUsd: 0.01 });
+    const { run } = approvalsFake({
+      invoice: (r) => (r.params.get("id") ? undefined : { body: [invoiceRow({ counterparties: { name: "Acme", risk_level: "low", address: "0xdead", chain: "ARB-SEPOLIA" } })] }),
+    });
+    const [listed] = await run(() => listWaitingPayables({ bridgeFee: vi.fn(async () => ({ feeUsdc: 0.1, maxFeeUnits: BigInt(100000), domain: 3 })), gatewayQuote: vi.fn(async () => null) }));
+    expect(listed).toMatchObject({ payeeChain: "ARB-SEPOLIA" });
   });
 });
 

@@ -4,6 +4,9 @@ import { db } from "../dal";
 import { paidAcrossChains } from "../payee-chains";
 import type { Actor, SurfaceKind } from "./actor";
 import { refused, type Refused } from "./outcome";
+import { counterpartyChainProblem } from "../intake-validation";
+import type { Network } from "../network";
+import { workspaceNetwork } from "../workspace-network";
 
 /**
  * The chat's rules on a person's decision about a payable (Slack design S8–S11), which the payable commands apply for
@@ -55,6 +58,8 @@ const no = (refusal: Refused): ChatCheck => ({ ok: false, refusal });
 
 /** What Approve and pay from a chat needs to know of a payable and its payee. */
 export interface ApprovalFacts {
+  /** The workspace's network: a payee's chain must be one it pays on (network threading P3). */
+  network: Network;
   amount: number | string;
   currency: string | null;
   chain: string | null;
@@ -70,6 +75,8 @@ export interface ApprovalFacts {
  */
 export function approveRefusal(facts: ApprovalFacts, limit: number | null, where: string): Refused | null {
   if (facts.currency === "EURC") return refused("open_in_console", "This payable is in EURC.");
+  const chainProblem = counterpartyChainProblem(facts.network, facts.chain);
+  if (chainProblem) return refused("open_in_console", `${chainProblem}.`);
   if (paidAcrossChains(facts.chain)) return refused("open_in_console", "Its payee is paid on another chain, and Vestiarion shows the fee.");
   if (limit === null || Number(facts.amount) > limit) {
     return refused("over_chat_limit", `It is above the ${limit ?? 0} USDC this workspace allows from ${where}.`);
@@ -114,6 +121,7 @@ export async function checkChatDecision(
   const limit = "decisionsLimitUsdc" in actor.surface ? actor.surface.decisionsLimitUsdc : null;
   const refusal = approveRefusal(
     {
+      network: workspaceNetwork().id,
       amount: row.amount,
       currency: row.currency,
       chain: payee?.chain ?? null,

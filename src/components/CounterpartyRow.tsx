@@ -4,7 +4,7 @@ import { Badge, type BadgeProps } from "@/components/ui/Badge";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Money, shortHash } from "@/components/vx/Primitives";
 import { addressUnconfirmed } from "@/lib/counterparty-address";
-import { chainOn } from "@/lib/payee-chains";
+import { chainById, homeChain } from "@/lib/payee-chains";
 import type { Network } from "@/lib/network";
 import type { CounterpartyRow as CounterpartyRecord } from "@/lib/queries";
 
@@ -51,7 +51,7 @@ export function CounterpartyRow({
   const ready = readiness(counterparty);
   const role = (
     <>
-      <span className="capitalize">{counterparty.role}</span> · {chainOn(network, counterparty.chain).label}
+      <span className="capitalize">{counterparty.role}</span> · {(counterparty.chain ? chainById(counterparty.chain) : homeChain(network)).label}
     </>
   );
   const risk = (className?: string) => (

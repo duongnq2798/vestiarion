@@ -84,6 +84,8 @@ interface State {
     circle_api_key_enc: SecretEnvelope | null;
     circle_entity_secret_enc: SecretEnvelope | null;
     wallet_host: "own" | "hosted" | null;
+    /** Its network (0075); absent is Arc testnet. */
+    network?: "arc-testnet" | "arc-mainnet";
   };
   accounts: AccountRow[];
   wentLive: Array<{ ts: string }>;
@@ -1065,6 +1067,25 @@ describe("hosted testnet wallets (hosted wallets H1, H3, H4)", () => {
     fake.requests.filter((request) => request.path === "/rest/v1/rpc/choose_hosted_wallet");
 
   describe("chooseHostedWallet", () => {
+    it("refuses on a network without hosted wallets, by name, and never calls choose_hosted_wallet (network threading P5)", async () => {
+      const state = sandbox({ network: "arc-mainnet" });
+      const { fake, inScope } = database(state, { platform: hostedConfig });
+
+      const error = await refusal(inScope(() => chooseHostedWallet({ orgId: ORG, actorId: ACTOR })));
+
+      expect(error.code).toBe("hosted_network");
+      expect(error.message).toBe("A hosted wallet does not run on Arc mainnet yet");
+      expect(rpcCalls(fake)).toEqual([]);
+      expect(state.org.wallet_host).toBeNull();
+    });
+
+    it("is not offered on such a network: the Go live panel leaves it out (network threading P5)", async () => {
+      const { inScope } = database(sandbox({ network: "arc-mainnet" }), { platform: hostedConfig });
+      await expect(inScope(() => goLiveStatus(ORG))).resolves.toMatchObject({ hostedAvailable: false });
+      const testnet = database(sandbox(), { platform: hostedConfig });
+      await expect(testnet.inScope(() => goLiveStatus(ORG))).resolves.toMatchObject({ hostedAvailable: true });
+    });
+
     it("refuses while sample data is loaded, and never calls choose_hosted_wallet", async () => {
       const state = sandbox();
       state.sampleLoaded = true;

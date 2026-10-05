@@ -119,3 +119,23 @@ describe("a page's links (P6)", () => {
     expect(markup).toContain(`https://explorer.arc.io/tx/${HASH}`);
   });
 });
+
+// ---------------------------------------------------------------- final review: display reads the record's chain; decisions refuse another network's
+describe("a payee whose stored chain is another network's (final review)", () => {
+  it("still shows its row, labelled with its own chain, rather than failing the page", async () => {
+    const { CounterpartyRow } = await import("@/components/CounterpartyRow");
+    const counterparty = {
+      id: "cp-1", name: "Acme", role: "vendor", address: "0x840de234Bfc3F66fA380888A0a8204D9487D60d4", chain: "BASE-SEPOLIA", payment_limit: 5,
+      risk_level: "clear", risk_notes: null, address_changed_at: null, address_confirmed_at: null, sample: false,
+    };
+    const markup = renderToStaticMarkup(createElement(CounterpartyRow, { counterparty: counterparty as never, network: "arc-mainnet" } as never, null));
+    expect(markup).toContain("Base Sepolia");
+  });
+
+  it("is refused from a chat, in plain words, rather than paid on the workspace's own chain", async () => {
+    const { approveRefusal } = await import("@/lib/commands/chat-decisions");
+    const facts = { amount: 1, currency: "USDC", chain: "ARC-TESTNET", address: "0x840de234Bfc3F66fA380888A0a8204D9487D60d4", addressChangedAt: null, addressConfirmedAt: null };
+    expect(approveRefusal({ ...facts, network: "arc-mainnet" }, 10, "Slack")).toMatchObject({ code: "open_in_console", message: "ARC-TESTNET is not a chain this workspace pays on." });
+    expect(approveRefusal({ ...facts, network: "arc-testnet" }, 10, "Slack")).toBeNull();
+  });
+});
