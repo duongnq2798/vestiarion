@@ -1,7 +1,7 @@
 import { db } from "../dal";
 import { getChainProvider, type ChainProvider, type Stablecoin } from "../circle";
 import type { PayoutRoute, SpendingLimitPayment } from "../circle/types";
-import { executePayment, type PaymentExecution } from "../payments";
+import { executePayment, type PaymentExecution, paymentMemo } from "../payments";
 import { amountToPay, type InvoiceDiscount } from "./payment-timing";
 
 const num = (v: unknown) => (typeof v === "number" ? v : Number(v ?? 0));
@@ -125,7 +125,7 @@ export async function payInvoice(
         fromAccountId: operating.id,
         destination: payoutAddress(input.address, input.counterpartyId),
         amount: amountPaid,
-        memo: `Invoice ${input.invoiceId}`,
+        memo: paymentMemo("invoice", input.invoiceId),
         token: input.currency ?? "USDC",
         ...(input.destinationChain ? { destinationChain: input.destinationChain } : {}),
         ...(input.maxBridgeFeeUsdc != null ? { maxBridgeFeeUsdc: input.maxBridgeFeeUsdc } : {}),

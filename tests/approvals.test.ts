@@ -1314,15 +1314,22 @@ describe("returnInvoice", () => {
 
 /** An invoice's intent whose send Circle never answered: no provider id, and the provider's own words for it (payment safety R1). */
 function unanswered(overrides: Record<string, unknown> = {}) {
-  return {
-    source_id: INVOICE_ID,
+  return intentRow({
     status: "failed",
     provider_tx_id: null,
     last_error: "Circle did not answer createTransaction within 20000 ms; the transfer may or may not have been accepted",
     provider_state: null,
     failure_reason: null,
+    updated_at: new Date(Date.now() - 5 * 60_000).toISOString(),
     ...overrides,
-  };
+  });
+}
+
+/** A live provider that can look a send up (payment safety R4): `found` is what Circle lists for it. */
+function lookingProvider(found: TransferResult | null) {
+  const findTransferByRef = vi.fn(async () => found);
+  getChainProviderMock.mockReturnValue({ mode: "live", earnMode: "simulate", estimatedFeeUsd: 0.003, findTransferByRef });
+  return findTransferByRef;
 }
 
 describe("a payment Circle never answered (payment safety R1)", () => {
@@ -1356,17 +1363,46 @@ describe("a payment Circle never answered (payment safety R1)", () => {
     expect(transferUnknown(null)).toBe(false);
   });
 
-  it("refuses Reject with payment_unknown, before any claim", async () => {
-    const { fake, run } = approvalsFake({ intents: [unanswered()] });
+  it("looks for it on Circle first, and refuses Reject, saying when to try again, while Circle has not listed it (R6)", async () => {
+    const findTransferByRef = lookingProvider(null);
+    const sentAt = new Date(Date.now() - 5 * 60_000);
+    const { fake, run } = approvalsFake({ intents: [unanswered({ updated_at: sentAt.toISOString() })] });
 
     const attempt = run(() => rejectInvoice({ actorId: ACTOR, invoiceId: INVOICE_ID }));
     await expect(attempt).rejects.toBeInstanceOf(ApprovalError);
     await expect(attempt).rejects.toMatchObject({ code: "payment_unknown" });
+    const at = new Date(sentAt.getTime() + 15 * 60_000).toISOString().slice(11, 16);
     await expect(attempt).rejects.toThrow(
-      "Circle did not answer when this invoice's payment was sent, so it may have taken the transfer. Approve and pay asks Circle again under the same key, so nothing is sent twice; Reject and Return wait until it is known."
+      `Circle did not answer when this invoice's payment was sent, and has not listed it yet. Try again from ${at} UTC: by then Vestiarion can tell whether Circle took it.`
     );
+    expect(findTransferByRef).toHaveBeenCalledWith(ACCOUNT_ID, `Invoice ${INVOICE_ID}`, expect.anything(), expect.anything());
     expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
     expect(patchBodies(fake.requests, "/rest/v1/invoices")).toHaveLength(0);
+  });
+
+  it("rejects once Circle has listed nothing 15 minutes after the send, recording that nothing was sent (R6)", async () => {
+    lookingProvider(null);
+    const { fake, run } = approvalsFake({ intents: [unanswered({ updated_at: new Date(Date.now() - 20 * 60_000).toISOString() })] });
+
+    await run(() => rejectInvoice({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+
+    expect(patchBodies(fake.requests, "/rest/v1/payment_intents")[0]).toMatchObject({
+      status: "failed",
+      last_error: "Circle has no transfer for this payment's earlier send; nothing was sent.",
+    });
+    expect(patchBodies(fake.requests, "/rest/v1/invoices")[0].status).toBe("rejected");
+  });
+
+  it("records the transfer Circle has, and refuses Reject as a payment already sent (R6)", async () => {
+    lookingProvider({
+      providerTxId: "circle-tx-7", txHash: null, txRef: "circle-tx-7", chain: "ARC-TESTNET", status: "pending", feeUsd: 0.003,
+      feeSource: "provider_estimate", providerMode: "live", settledInMs: null, providerState: "SENT", failureReason: null,
+    });
+    const { fake, run } = approvalsFake({ intents: [unanswered()] });
+
+    await expect(run(() => rejectInvoice({ actorId: ACTOR, invoiceId: INVOICE_ID }))).rejects.toMatchObject({ code: "payment_in_flight" });
+    expect(patchBodies(fake.requests, "/rest/v1/payment_intents")[0]).toMatchObject({ provider_tx_id: "circle-tx-7", status: "pending" });
+    expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
   });
 
   it("refuses Return with payment_unknown, before any claim", async () => {

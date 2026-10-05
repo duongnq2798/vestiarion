@@ -33,6 +33,17 @@ const close = withSuccessToast(closeMilestoneAction);
  * sees the decisions. Overriding the agent's own hold needs someone other than whoever added the milestone,
  * unless they are the workspace's sole approver, and then the row says so (sole approver R5).
  */
+/**
+ * What Pay now's confirmation says will happen: a transfer to record is only checked; one Circle never answered is
+ * looked for on Circle first and sent only once Circle shows none (payment safety R4); one Circle failed is sent anew.
+ */
+export function payNowDescription(kind: HeldReason["kind"]): string {
+  if (kind === "in_flight") return "Nothing new is sent: Vestiarion checks the transfer already made with Circle, and the ledger records who approved it.";
+  if (kind === "unknown") return "Vestiarion looks for the earlier transfer on Circle first: it records it if Circle has it, and sends the payment only once Circle shows none. The ledger records who approved it.";
+  if (kind === "transfer_failed") return "A new transfer starts as soon as you confirm, and the ledger records who approved it.";
+  return "The transfer starts as soon as you confirm, and the ledger records who approved it.";
+}
+
 export function HeldMilestoneActions({
   orgSlug,
   milestone,
@@ -91,13 +102,7 @@ export function HeldMilestoneActions({
                       </Button>
                     }
                     title={`Pay ${fmt(milestone.amount)} USDC to ${milestone.contractorName} now?${sandbox ? " (simulated)" : ""}`}
-                    description={`${
-                      reason.kind === "in_flight"
-                        ? "Nothing new is sent: Vestiarion checks the transfer already made with Circle, and the ledger records who approved it."
-                        : reason.kind === "transfer_failed"
-                          ? "A new transfer starts as soon as you confirm, and the ledger records who approved it."
-                          : "The transfer starts as soon as you confirm, and the ledger records who approved it."
-                    }${ownEntry ? ` ${OWN_MILESTONE_RECORDED}` : ""}`}
+                    description={`${payNowDescription(reason.kind)}${ownEntry ? ` ${OWN_MILESTONE_RECORDED}` : ""}`}
                     confirmLabel="Pay now"
                   />
                 </>

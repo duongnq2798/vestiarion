@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { HeldMilestoneActions, OWN_MILESTONE_NOTE } from "@/components/HeldMilestoneActions";
+import { HeldMilestoneActions, OWN_MILESTONE_NOTE, payNowDescription } from "@/components/HeldMilestoneActions";
 import type { HeldReason } from "@/lib/agent/milestone-decisions";
 
 vi.mock("@/app/actions/milestones", () => ({
@@ -77,5 +77,17 @@ describe("HeldMilestoneActions", () => {
     const markup = render(FAILED, { canDecide: false });
     expect(text(markup)).not.toContain("Close without paying");
     expect(text(markup)).toContain("An owner, admin or approver can pay it now or close it.");
+  });
+});
+
+describe("the Pay now confirmation (payment safety R4)", () => {
+  it("says a transfer Circle never answered is looked for on Circle first, and sent only once Circle shows none", () => {
+    expect(payNowDescription("unknown")).toBe("Vestiarion looks for the earlier transfer on Circle first: it records it if Circle has it, and sends the payment only once Circle shows none. The ledger records who approved it.");
+  });
+
+  it("keeps what it said for a transfer to record, one Circle failed, and a first send", () => {
+    expect(payNowDescription("in_flight")).toBe("Nothing new is sent: Vestiarion checks the transfer already made with Circle, and the ledger records who approved it.");
+    expect(payNowDescription("transfer_failed")).toBe("A new transfer starts as soon as you confirm, and the ledger records who approved it.");
+    expect(payNowDescription("agent_held")).toBe("The transfer starts as soon as you confirm, and the ledger records who approved it.");
   });
 });

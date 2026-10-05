@@ -59,15 +59,15 @@ export function payConfirmTitle(
  * What the confirm dialog says will happen when Approve and pay is chosen. A
  * transfer already sent — including one still in flight — is only checked,
  * never sent again; a terminal failure is sent again, as a new transfer;
- * otherwise this is the first attempt. A payment Circle never answered is sent
- * again under the same key, which returns the transfer if Circle took it
- * (payment safety R1). A sole approver approving what they
+ * otherwise this is the first attempt. A payment Circle never answered is
+ * looked for on Circle first, and sent only once Circle shows none (payment
+ * safety R4). A sole approver approving what they
  * entered is told the ledger records that too (sole approver R5).
  */
 export function payConfirmDescription(payable: Pick<WaitingPayable, "paymentSent" | "lastAttempt">, ownEntry = false): string {
   const own = ownEntry ? ` ${OWN_ENTRY_RECORDED}` : "";
   if (payable.lastAttempt?.state === "unanswered") {
-    return `It is sent again under the same key: if Circle took the first send, Circle returns that transfer, so nothing is sent twice. The ledger records who approved it.${own}`;
+    return `Vestiarion looks for the earlier transfer on Circle first: it records it if Circle has it, and sends the payment only once Circle shows none. The ledger records who approved it.${own}`;
   }
   if (payable.paymentSent || payable.lastAttempt?.state === "in_flight" || (payable.lastAttempt?.state === "failed" && payable.lastAttempt.resend === false)) {
     return `Nothing new is sent: Vestiarion checks the transfer already made with Circle, and the ledger records who approved it.${own}`;
@@ -208,7 +208,7 @@ export default function ApprovalCard({
           )}
           {payable.lastAttempt?.state === "unanswered" && (
             <Callout tone="held" className="mt-2">
-              Circle did not answer when this payment was sent, so it may have taken the transfer. Approving asks Circle again under the same key, so nothing is sent twice; it cannot be rejected or returned until then.
+              Circle did not answer when this payment was sent, so it may have taken the transfer. Approve and pay, Reject and Return look for it on Circle first: Approve and pay records it if Circle has it, and sends it only once Circle shows none.
             </Callout>
           )}
         </CardContent>
@@ -308,7 +308,7 @@ function Decisions({
           confirmLabel="Pay now"
         />
         {canAddDetails && <AddDetailsDialog orgSlug={orgSlug} payable={payable} />}
-        {!payable.paymentSent && payable.lastAttempt?.state !== "in_flight" && (
+        {(!payable.paymentSent || payable.lastAttempt?.state === "unanswered") && payable.lastAttempt?.state !== "in_flight" && (
           <>
             <RejectDialog orgSlug={orgSlug} payable={payable} />
             <form id={returnId} className="contents" {...returnForm.formProps} onSubmit={submitting("return", returnForm.formProps.onSubmit)}>

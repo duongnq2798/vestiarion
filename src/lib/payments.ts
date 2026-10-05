@@ -382,6 +382,7 @@ export class SupabasePaymentIntentStore implements PaymentIntentStore, PaymentBa
   }
 
   async findBySource(sourceType: PaymentSourceType, sourceId: string): Promise<PaymentIntent | null> {
+    // An intent is found by its source, as `ensure` finds it, and never created here.
     const result = await db().from("payment_intents").select("*").eq("source_type", sourceType).eq("source_id", sourceId).maybeSingle<PaymentIntentRow>();
     if (result.error) throw new Error(result.error.message);
     return result.data ? fromRow(result.data) : null;
@@ -452,6 +453,11 @@ export function unknownSend(intent: Pick<PaymentIntent, "status" | "providerTxId
   if (intent.providerTxId) return false;
   if (intent.status === "failed") return intent.lastError?.includes(MAY_HAVE_BEEN_ACCEPTED) ?? false;
   return intent.status === "submitting" && now - Date.parse(intent.updatedAt) > STALE_SUBMISSION_MS;
+}
+
+/** A payment's reference on Circle (its memo, and refId): unique to its source, the same on every attempt. */
+export function paymentMemo(sourceType: PaymentSourceType, sourceId: string): string {
+  return `${sourceType === "invoice" ? "Invoice" : "Milestone"} ${sourceId}`;
 }
 
 /** What an intent records once Circle has listed nothing for its unknown send after the grace period (R4). */
@@ -664,7 +670,7 @@ function utcClock(at: number): string {
  */
 async function lookForUnknownSend(
   intent: PaymentIntent,
-  request: PaymentRequest,
+  request: Pick<PaymentRequest, "fromAccountId" | "memo" | "destinationChain">,
   provider: ChainProvider,
   store: PaymentIntentStore,
   now: number
@@ -696,6 +702,44 @@ async function lookForUnknownSend(
   }
   await store.recordError(intent.idempotencyKey, NO_EARLIER_SEND);
   return NOT_SENT;
+}
+
+/** What looking for a source's unknown send found (payment safety R6). */
+export type UnknownSendAnswer =
+  /** The source's send is not unknown: nothing was looked for. */
+  | { answer: "known" }
+  /** Circle has the transfer, now recorded. */
+  | { answer: "found" }
+  /** Circle never took it, now recorded: the payment was never sent. */
+  | { answer: "not_sent" }
+  /** Not listed yet (`retryAt`: when it can be told), Circle could not be asked, or this route cannot be looked up. */
+  | { answer: "undecided"; retryAt: string | null };
+
+/**
+ * Looks for a source's send Circle never answered, sending nothing (payment safety R6): what Reject, Return, Add
+ * details and Close ask before they act, so no unknown send is a dead end. Found and never-taken are recorded, as
+ * `executePayment` records them.
+ */
+export async function settleUnknownSend(
+  source: { type: PaymentSourceType; id: string },
+  deps: { provider: ChainProvider; fromAccountId: string; store?: PaymentIntentStore; now?: number }
+): Promise<UnknownSendAnswer> {
+  const store = deps.store ?? new SupabasePaymentIntentStore();
+  const now = deps.now ?? Date.now();
+  if (!store.findBySource) throw new Error("this payment store cannot find an intent by its source");
+  const intent = await store.findBySource(source.type, source.id);
+  if (!intent || !unknownSend(intent, now)) return { answer: "known" };
+  const looked = await lookForUnknownSend(
+    intent,
+    { fromAccountId: deps.fromAccountId, memo: paymentMemo(source.type, source.id), destinationChain: intent.destinationChain ?? undefined },
+    deps.provider,
+    store,
+    now
+  );
+  if (looked === NOT_SENT) return { answer: "not_sent" };
+  if (looked?.providerTxId) return { answer: "found" };
+  const listedBy = Date.parse(intent.updatedAt) + UNKNOWN_SEND_GRACE_MS;
+  return { answer: "undecided", retryAt: looked && looked.error?.startsWith("Circle has not listed") ? new Date(listedBy).toISOString() : null };
 }
 
 /** A claimed attempt, sent alone under its own key: `executePayment`'s send, and a batch member's when it cannot go in a batch. */

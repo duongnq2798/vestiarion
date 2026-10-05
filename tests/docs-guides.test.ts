@@ -414,7 +414,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
       APPROVAL_CARD,
     ],
     [
-      "Circle did not answer when this payment was sent, so it may have taken the transfer. Approving asks Circle again under the same key, so nothing is sent twice; it cannot be rejected or returned until then.",
+      "Circle did not answer when this payment was sent, so it may have taken the transfer. Approve and pay, Reject and Return look for it on Circle first: Approve and pay records it if Circle has it, and sends it only once Circle shows none.",
       APPROVAL_CARD,
     ],
     ["This address's capital letters do not match its checksum, so a character is likely wrong.", "src/lib/address-checksum.ts"],
