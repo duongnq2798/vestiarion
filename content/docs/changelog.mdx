@@ -1,5 +1,17 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-05: Two people before the first payment to an address
+
+- **A new guardrail rule**, `counterparty.new_payee`. Wherever payments are real, the agent never makes a payment or milestone release that would be the first to an address unless two different parties stand behind it:
+  - the payee sent the address and a member confirmed it; or
+  - one member gave it and another confirmed it.
+
+  Its entry carries `guardrailBlocked: true` and `execution.resultingStatus: "held"`.
+- A decision on a first payment records `observed.newPayee: { addressBy, confirmedBy, twoParties }`. `addressBy` is a member id, `"payee"`, or null when no entry says who gave it.
+- `approval_paid` and `milestone_approval_paid` gain `firstPayment: true` when a person made an address's first payment. Approve and pay, and Pay now, now refuse the member who gave the address, unless they are the workspace's only approver.
+- An `invoice_reopened` entry's `followUp.changes` can name `the payee's address has received a confirmed payment since` or `a second person now stands behind the payee's address`.
+- Nothing changes in `/api/v1`.
+
 ## 2026-10-05: A EURC payable decided again when the rate changes what held it
 
 - An `invoice_reopened` entry gains `reevaluation` when a fresh quote cleared what held a EURC payable. Its shape is `{ trigger, previousDecision: { seq, action, guardrailRule }, before: { rate, usdcValue, swapCostPercent }, after: { rate, usdcValue, swapCostPercent, quotedAt } }`.

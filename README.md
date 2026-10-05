@@ -61,7 +61,9 @@ is hard-coded into the interface:
    attached to the line item. Code refuses to pay or schedule an invoice whose match is
    incomplete, whatever the model decides; a counterparty the business marks as paid without
    purchase orders needs only the goods received. A payable to a client, which pays the
-   business, is never paid by the agent: it waits for a person.
+   business, is never paid by the agent: it waits for a person. The first payment to an
+   address needs two people behind it: the agent never makes one that only the person who
+   gave the address stands behind, and that person cannot approve it either.
 3. **Contractor payments** — a GitHub PR URL can be checked for an actual merge before a
    milestone is released. Human verification remains available and is recorded as a human ledger
    action. Verified milestones are released the same day instead of waiting for Net-30.

@@ -181,6 +181,23 @@ payable, recording `reevaluation` (the trigger, the decision it reopens, and the
 follow-up's compare-and-set on `held`, so a person acting at the same moment wins; one cycle per workspace runs at a
 time, and payments keep their idempotent intents.
 
+**The new payee check** (`docs/superpowers/specs/2026-10-05-new-payee-check-design.md`) puts two people before the first
+payment to an address.
+- **What a first payment is** (`newPayeeCheck`, `src/lib/new-payee.ts`): one to an address that no confirmed
+  `payment_intents` row has paid.
+- **Who stands behind the address:** read from the counterparty's `compliance` ledger entries, newest first. The
+  entry that set the address (`create_counterparty`, `counterparty_address_changed`) names who gave it: a member, or
+  the payee for a payee link or GitHub. `counterparty_address_confirmed` entries after it name who confirmed it.
+- **Where it applies:** wherever payments are real, meaning the chain provider is live. Real payments follow readable
+  Circle credentials, not `orgs.mode`.
+- **The agent's side:** the cycle passes the AP and contractor stages the facts (`loadNewPayeeFacts`,
+  `src/lib/new-payee-facts.ts`). Code holds a first payment one party alone stands behind as
+  `counterparty.new_payee`.
+- **A person's side:** Approve and pay, and Pay now on a milestone, refuse the member who gave the address unless they
+  are the sole approver.
+- **Afterwards:** the follow-up reopens a payable held this way once its address is paid, or two parties stand behind
+  it.
+
 **Settings** (`/o/[slug]/settings`) is one page in six groups: You, Workspace, Developers, Integrations,
 Security and Danger zone (`docs/superpowers/specs/2026-10-04-settings-structure-design.md`). The page lists every
 section once, each with its heading's id and `null` where this viewer or deployment does not get it, and
