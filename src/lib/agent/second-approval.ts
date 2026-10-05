@@ -97,7 +97,7 @@ export async function giveApproval(source: PaymentSource, by: string, payment: A
 }
 
 /** Marks a payment's open approvals used, once the approval that pays it has claimed it (T6). */
-export async function useApprovals(source: PaymentSource): Promise<void> {
+export async function markApprovalsUsed(source: PaymentSource): Promise<void> {
   const update = await db()
     .from("payment_approvals")
     .update({ used_at: new Date().toISOString() })

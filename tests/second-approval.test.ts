@@ -5,11 +5,11 @@ import {
   approvalAgrees,
   clearApprovals,
   giveApproval,
+  markApprovalsUsed,
   mayGiveApproval,
   openApprovals,
   standingApprovals,
   twoApprovalsFacts,
-  useApprovals,
 } from "@/lib/agent/second-approval";
 import { fakeSupabase, orgTestContext, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 
@@ -121,10 +121,10 @@ describe("giveApproval", () => {
   });
 });
 
-describe("useApprovals and clearApprovals", () => {
+describe("markApprovalsUsed and clearApprovals", () => {
   it("marks a payment's open approvals used", async () => {
     fake = fakeSupabase(workspace());
-    await run(() => useApprovals(SOURCE));
+    await run(() => markApprovalsUsed(SOURCE));
     const patch = fake.requests.find((r) => r.method === "PATCH")!;
     expect(patch.path).toBe("/rest/v1/payment_approvals");
     expect(patch.params.get("source_id")).toBe(`eq.${INVOICE}`);

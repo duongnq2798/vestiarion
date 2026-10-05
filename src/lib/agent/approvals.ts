@@ -24,10 +24,10 @@ import { needsTwoApprovals, type TwoApprovalsFacts } from "../two-approvals";
 import {
   clearApprovals,
   giveApproval,
+  markApprovalsUsed,
   mayGiveApproval,
   standingApprovals,
   twoApprovalsFacts,
-  useApprovals,
   type GivenApproval,
   type PaymentSource,
 } from "./second-approval";
@@ -815,7 +815,7 @@ export async function approveAndPay(
   // The approvals that let it through are used by this payment (T6). Best effort: the claim already holds the row.
   if (approvals.length > 0) {
     try {
-      await useApprovals(source);
+      await markApprovalsUsed(source);
     } catch (error) {
       console.error("approval: approvals not marked used", invoice.id, (error as Error).message);
     }

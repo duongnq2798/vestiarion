@@ -25,7 +25,7 @@ import { PAYMENTS_OFF, paymentsDisabled } from "../payments-switch";
 import { readTwoApprovalsAbove } from "../approval-policy";
 import { TWO_APPROVALS_RULE } from "../two-approvals";
 import { SECOND_OF_TWO_NOTE } from "./approvals";
-import { clearApprovals, giveApproval, mayGiveApproval, standingApprovals, useApprovals, type GivenApproval, type PaymentSource } from "./second-approval";
+import { clearApprovals, giveApproval, markApprovalsUsed, mayGiveApproval, standingApprovals, type GivenApproval, type PaymentSource } from "./second-approval";
 
 /**
  * A person decides a held milestone (docs/superpowers/specs/2026-10-02-held-milestone-actions-design.md): every
@@ -523,7 +523,7 @@ export async function payHeldMilestone(input: {
   // The approvals that let it through are used by this payment (T6). Best effort: the claim already holds the row.
   if (approvals.length > 0) {
     try {
-      await useApprovals(source);
+      await markApprovalsUsed(source);
     } catch (error) {
       console.error("milestone decision: approvals not marked used", milestone.id, error instanceof Error ? error.message : error);
     }
