@@ -208,8 +208,7 @@ export default function ApprovalCard({
           )}
           {payable.lastAttempt?.state === "unanswered" && (
             <Callout tone="held" className="mt-2">
-              Circle did not answer when this payment was sent, so it may have taken the transfer. Approving asks Circle again under the same key, so
-              nothing is sent twice; it cannot be rejected or returned until then.
+              Circle did not answer when this payment was sent, so it may have taken the transfer. Approving asks Circle again under the same key, so nothing is sent twice; it cannot be rejected or returned until then.
             </Callout>
           )}
         </CardContent>

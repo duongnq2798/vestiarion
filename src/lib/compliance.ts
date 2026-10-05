@@ -77,16 +77,6 @@ export function screeningMode(): "live" | "simulate" {
   return currentConfig().compliance.openSanctionsUrl ? "live" : "simulate";
 }
 
-/**
- * The screening source the console names: the service, the bundled list, or no service at all for a live workspace on
- * a deployment without one, whose counterparties stay unscreened (payment safety K1).
- */
-export function screeningSourceLabel(): "OpenSanctions" | "bundled list" | "no service" {
-  const { openSanctionsUrl, serviceRequired } = currentConfig().compliance;
-  if (openSanctionsUrl) return "OpenSanctions";
-  return serviceRequired ? "no service" : "bundled list";
-}
-
 export function screenBundledName(name: string): ScreeningResult {
   for (const entry of WATCHLIST) {
     if (entry.pattern.test(name)) {

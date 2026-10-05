@@ -99,7 +99,9 @@ is hard-coded into the interface:
    click; the payment intent's idempotency key, keyed on the invoice, is what keeps an invoice from
    being paid twice, whether by two people or by a person and the agent's own cycle. A payment
    still pending is reconciled by the next cycle, never decided again, so the agent cannot undo a
-   person's approval. Anyone who can approve a payment can also pause the
+   person's approval. A payment whose send Circle never answered may exist under its key, so it
+   cannot be rejected or returned: approving asks Circle again under the same key, and nothing is
+   sent twice. Anyone who can approve a payment can also pause the
    agent for the whole workspace, with a reason shown on every page until someone resumes it, and
    only an owner or admin may resume it. Pausing stops the agent's own cycles and the money it would
    move mid-cycle, including reserve sweeps and redemptions; it never stops a person's own decision
@@ -566,9 +568,10 @@ which produced each entry:
   wallets first, and an owner turns it on in **Settings → USYC reserve**. Until then the reserve is
   simulated, and labelled so.
 - **Live when configured** — sanctions screening calls an OpenSanctions/yente match endpoint when
-  `OPENSANCTIONS_API_URL` is set. Without it, the product explicitly labels the small bundled
-  watchlist as simulated. Provider errors create an incomplete check and retain the previous
-  verdict; they never silently clear a counterparty.
+  `OPENSANCTIONS_API_URL` is set. Without it, a sandbox screens against the small bundled
+  watchlist, labelled as simulated, and a live workspace gets no verdict at all: its
+  counterparties stay unscreened, and the agent pays them nothing. Provider errors create an
+  incomplete check and retain the previous verdict; they never silently clear a counterparty.
 
 ## Bringing your own business
 
@@ -696,6 +699,12 @@ suggestion — the orchestrator re-checks risk level and payment limit *after* t
 before executing a transfer, so a jailbroken or hallucinated "pay" decision on a flagged
 counterparty is blocked in code, not just discouraged in the prompt (see the
 `[guardrail override]` branch).
+
+Payments can be stopped for every workspace at once: set `PAYMENTS_DISABLED=1` on the deployment
+and redeploy. Nothing then moves money, the agent runs no cycle, and every workspace page says so,
+while reads keep working. An Arc address typed into the console or sent to the API must match its
+EIP-55 checksum when it mixes capital and small letters
+(`docs/superpowers/specs/2026-10-05-payment-safety-design.md`).
 
 ## License
 

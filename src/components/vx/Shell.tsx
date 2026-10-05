@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { AgentActivity } from "@/components/AgentActivity";
 import { Badge } from "@/components/ui/Badge";
-import { screeningMode, screeningSourceLabel } from "@/lib/compliance";
+import { screeningMode } from "@/lib/compliance";
+import { screeningSourceLabel } from "@/lib/screening-source";
 import type { CycleClockMode } from "@/lib/clock";
 import { ProvenanceBar, type ProvenanceLeg } from "./Provenance";
 import { ScrollToHash } from "./ScrollToHash";

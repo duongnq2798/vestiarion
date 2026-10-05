@@ -1,5 +1,13 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-05: Checked addresses, a stop switch, and no rejection over an unknown transfer
+
+- `POST /api/v1/counterparties` refuses an `address` that mixes capital and small letters when they do not match its EIP-55 checksum: `400 invalid_request`, with the message `address: This address's capital letters do not match its checksum, so a character is likely wrong.` An address written in one case alone is taken as written, as before.
+- **Payments can be switched off for every workspace** by whoever runs the deployment (`PAYMENTS_DISABLED`). While they are, no agent cycle runs, so the agent appends no entries and webhooks receive none from it.
+- When a payment's send ends without Circle saying what became of it, the invoice can be neither rejected nor returned until a person approves it, which asks Circle again under the same key. No ledger entry changes shape.
+- On a deployment with no screening service, a live workspace's counterparties stay `unscreened` instead of being screened against the demo list. Its `compliance_sweep` entries say the screening is incomplete.
+- Otherwise nothing changes in `/api/v1`.
+
 ## 2026-10-05: Two people before the first payment to an address
 
 - **A new guardrail rule**, `counterparty.new_payee`. Wherever payments are real, the agent never makes a payment or milestone release that would be the first to an address unless two different parties stand behind it:

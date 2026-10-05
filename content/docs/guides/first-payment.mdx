@@ -27,7 +27,7 @@ A counterparty is a business or person the workspace pays or invoices. Open **Co
 - **Role**: **Vendor** or **Contractor** for someone you pay.
 - **Payment limit (USDC)**: the most the agent may pay this counterparty in one payment. Screening can lower it: the card shows the limit you set and the current one.
 - **Chain**: **Arc testnet** for a payee paid on Arc. For a payee who wants USDC on another chain, choose **Base Sepolia**, **Arbitrum Sepolia** or **Ethereum Sepolia**: see [Pay a payee on another chain](#pay-a-payee-on-another-chain).
-- **Payment address**: the counterparty's address on the chain you chose, `0x` followed by 40 hexadecimal characters.
+- **Payment address**: the counterparty's address on the chain you chose, `0x` followed by 40 hexadecimal characters. An address that mixes capital and small letters must match its checksum, or the form says "This address's capital letters do not match its checksum, so a character is likely wrong." A payment to a mistyped address reaches no one, so copy it again from where it came. An address in one case alone is taken as written.
 - **Jurisdiction**: an ISO code or a country name.
 - **Billing email**, optional: a payee is told there each time it is paid (see [Tell the payee it was paid](#tell-the-payee-it-was-paid)), and a client gets the reminders you turn on (see [Let the agent remind the client](#let-the-agent-remind-the-client)).
 
@@ -350,6 +350,10 @@ If you are the only member of the workspace who can approve payments (the only o
 />
 
 If a payment attempt fails, the card says "The last payment attempt failed: " and Circle's reason, then "Approving sends a new transfer." Fix the cause first if you need to — for example, fund the operating wallet — then choose **Approve and pay** again to send it. Vestiarion never sends a second transfer while the first could still settle: a payment still in flight on Arc testnet instead says "The payment is still in flight on Arc testnet. It cannot be rejected or returned until Circle settles it; approving checks it again." Only **Reject** and **Return to agent** go away then — **Approve and pay** stays: for an invoice waiting here, approving is how its in-flight transfer is checked again, and it never sends a second one.
+
+Sometimes Circle does not answer a payment at all, and Circle may still have taken it. The card then says "Circle did not answer when this payment was sent, so it may have taken the transfer. Approving asks Circle again under the same key, so nothing is sent twice; it cannot be rejected or returned until then." **Approve and pay** sends the payment again under the same key. If Circle took the first send, it returns that transfer rather than making a second one; if it did not, the payment is made now.
+
+If every page says "Payments are switched off for every workspace right now.", whoever runs this deployment has stopped all payments. The agent runs no cycle, and **Approve and pay** says the same, until they turn payments back on. Everything else still reads as usual.
 
 ### Add what the agent was missing
 

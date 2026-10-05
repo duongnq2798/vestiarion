@@ -7,10 +7,10 @@ import {
   paymentLimitForRisk,
   planScreening,
   rescreenIntervalMs,
-  screeningSourceLabel,
   screenName,
   type CounterpartyScreeningRow,
 } from "@/lib/compliance";
+import { screeningSourceLabel } from "@/lib/screening-source";
 
 function row(over: Partial<CounterpartyScreeningRow> = {}): CounterpartyScreeningRow {
   return {
