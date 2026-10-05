@@ -8,10 +8,12 @@ import LedgerKeyPanel from "@/components/LedgerKeyPanel";
 import NotificationsPanel from "@/components/NotificationsPanel";
 import { SettingsSections, type SettingsGroup } from "@/components/SettingsSections";
 import SlackPanel from "@/components/SlackPanel";
+import TwoApprovalsPanel from "@/components/TwoApprovalsPanel";
 import { UsycReservePanel } from "@/components/UsycReservePanel";
 import WebhooksPanel from "@/components/WebhooksPanel";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { sectionTitle } from "@/components/vx/nav";
+import { twoApprovalsStatus } from "@/lib/approval-policy";
 import { requireMembership } from "@/lib/auth/membership";
 import { can } from "@/lib/auth/roles";
 import { chainModes } from "@/lib/circle";
@@ -58,7 +60,7 @@ export default async function SettingsPage({
     // And how connecting GitHub went (GitHub App design G2).
     const { slack: slackOutcome, github: githubOutcome } = await searchParams;
     const inboxSettings = inboxSettingsFromEnv();
-    const [goLive, apiKeys, webhookEndpoints, ledgerKey, dashboardStats, deletion, usyc, slack, notifySwitch, telegramLink, inbox, github] = await Promise.all([
+    const [goLive, apiKeys, webhookEndpoints, ledgerKey, dashboardStats, deletion, usyc, slack, notifySwitch, telegramLink, inbox, github, twoApprovals] = await Promise.all([
       goLiveStatus(membership.orgId),
       listApiKeys(membership.orgId),
       listWebhookEndpoints(membership.orgId),
@@ -97,6 +99,11 @@ export default async function SettingsPage({
             return null;
           })
         : null,
+      // The figure for two approvals (two approvals T1); best effort, like the reserve's.
+      twoApprovalsStatus().catch((error: unknown) => {
+        console.error("settings: two approvals not loaded", error instanceof Error ? error.message : error);
+        return null;
+      }),
     ]);
     const notifyEmail = notifySwitch ? (unwrap(notifySwitch) as { notify_email: boolean }).notify_email : false;
 
@@ -197,7 +204,14 @@ export default async function SettingsPage({
       {
         key: "security",
         label: "Security",
-        sections: [{ id: "ledger-key-title", title: "Ledger signing key", content: <LedgerKeyPanel orgSlug={slug} status={ledgerKey} canAdminister={canAdminister} /> }],
+        sections: [
+          {
+            id: "two-approvals-title",
+            title: "Two approvals",
+            content: twoApprovals ? <TwoApprovalsPanel orgSlug={slug} status={twoApprovals} canChange={can(membership.role, "approval.policy")} /> : null,
+          },
+          { id: "ledger-key-title", title: "Ledger signing key", content: <LedgerKeyPanel orgSlug={slug} status={ledgerKey} canAdminister={canAdminister} /> },
+        ],
       },
       {
         key: "danger",
@@ -217,7 +231,7 @@ export default async function SettingsPage({
       <ProductShell day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()}>
         <PageHead
           title={sectionTitle("settings")}
-          sub="Your own notifications, and how this workspace goes live, connects to other tools and signs its ledger. An owner takes it live, rotates the ledger signing key or deletes it; an owner or admin manages API keys, webhooks and integrations."
+          sub="Your own notifications, and how this workspace goes live, connects to other tools, approves payments and signs its ledger. An owner takes it live, sets two approvals, rotates the ledger signing key or deletes it; an owner or admin manages API keys, webhooks and integrations."
         />
         <SettingsSections groups={groups} />
       </ProductShell>

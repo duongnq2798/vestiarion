@@ -78,6 +78,13 @@ export function ruleNextStep(rule: string | null | undefined, counterparty: { id
         sentence: `Its three-way match is incomplete. Add the purchase order or confirm the goods with Add details, and the agent decides it again; or mark ${counterparty.name} as paid without purchase orders, if it is.`,
         fix: { label: "Purchase orders", path: row },
       };
+    case "workspace.two_approvals":
+      // Two people's approval above the workspace's figure (two approvals T3, T4): the first is recorded, the second pays.
+      return {
+        sentence:
+          "Payments above the workspace's figure need two people's approval. Two people who can approve payments approve it in Approvals: the first approval is recorded, and the second pays it.",
+        fix: null,
+      };
     case "workspace.outflow_budget":
       return {
         sentence: "The agent's spending limit has no room for it. The agent pays it on its own once there is room, the next UTC day or once the limit is raised; or pay it in Approvals.",
@@ -131,6 +138,8 @@ export function agentResumes(rule: string | null | undefined): string | null {
       return "The agent decides it again on its own once an owner or admin adds what the match lacks, or marks the counterparty as paid without purchase orders.";
     case "counterparty.new_payee":
       return "The agent decides it again on its own once another payment to this address goes through.";
+    case "workspace.two_approvals":
+      return "The agent decides it again on its own if an owner raises the figure for two approvals to its amount or more, or turns it off.";
     case CASH_SHORTFALL:
       return "The agent decides it again on its own once cash comes in: USDC added to the operating wallet, or brought back from the reserve.";
     default:
@@ -157,6 +166,8 @@ export function ruleInBrief(rule: string | null | undefined): string | null {
       return "its three-way match is incomplete";
     case "counterparty.new_payee":
       return "it would be the first payment to an address only one person stands behind";
+    case "workspace.two_approvals":
+      return "payments above the workspace's figure need two people's approval";
     case "workspace.outflow_budget":
       return "the agent's spending limit has no room today, and the agent pays it once there is";
     case "workspace.onchain_limit":
