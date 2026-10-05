@@ -73,6 +73,24 @@ describe("orgConfig", () => {
     expect(orgConfig({ ...base, allowGeneratedLedgerKey: true }, row(OTHER_ORG), keys).config.allowGeneratedLedgerKey).toBe(false);
   });
 
+  it("gives the organization its network, and Arc testnet to a row from before 0075 (network foundation N1)", () => {
+    expect(orgConfig(base, row(OTHER_ORG), keys).config.network).toBe("arc-testnet");
+    expect(orgConfig(base, { ...row(OTHER_ORG), network: "arc-testnet" }, keys).config.network).toBe("arc-testnet");
+    expect(orgConfig(base, { ...row(OTHER_ORG), network: "arc-mainnet" }, keys).config.network).toBe("arc-mainnet");
+  });
+
+  it("gives a workspace on Arc mainnet no Circle credentials, and says why, so it pays nothing yet (N3)", () => {
+    const { config, warnings } = orgConfig(base, { ...row(OTHER_ORG, { apiKey: "org-key", entity: "org-secret" }), network: "arc-mainnet" }, keys);
+    expect(config.chain.circleApiKey).toBeUndefined();
+    expect(config.chain.circleEntitySecret).toBeUndefined();
+    expect(config.chain.credentialsUnreadable).toBe("this workspace is on Arc mainnet, where Vestiarion does not move money yet");
+    expect(warnings).toContain("this workspace is on Arc mainnet, where Vestiarion does not move money yet");
+  });
+
+  it("refuses a network it does not know rather than guess one", () => {
+    expect(() => orgConfig(base, { ...row(OTHER_ORG), network: "arc-sepolia" as never }, keys)).toThrow('"arc-sepolia" is not a network Vestiarion knows');
+  });
+
   it("keeps the platform settings it does not own", () => {
     const { config } = orgConfig(base, row(OTHER_ORG), keys);
     expect(config.database).toEqual(base.database);
