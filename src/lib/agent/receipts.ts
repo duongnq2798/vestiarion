@@ -155,7 +155,7 @@ export async function recordIncomingTransfers(
       from: row.from_address,
       amount: Number(row.amount),
       token: row.token,
-      chain: "ARC-TESTNET",
+      chain: provider.network.circleBlockchain,
       receivedAt: row.received_at,
     };
     const match = matchTransfer(transfer, open);

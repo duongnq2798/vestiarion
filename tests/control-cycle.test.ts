@@ -381,7 +381,7 @@ describe("existingPaymentIntents — which payables the AP stage reconciles inst
 });
 
 describe("reconcileApInvoice — a matched payable with a payment in flight", () => {
-  const provider = { mode: "live", earnMode: "simulate", network: ARC_TESTNET, estimatedFeeUsd: 0.003 } as unknown as ChainProvider;
+  const provider = { mode: "live", network: ARC_TESTNET, earnMode: "simulate", estimatedFeeUsd: 0.003 } as unknown as ChainProvider;
   const invoice = {
     id: INVOICE_ID,
     amount: 150,
@@ -733,7 +733,7 @@ describe("reconcileApInvoice — a matched payable with a payment in flight", ()
 });
 
 describe("reconcileApInvoice — a payment the agent never sent, above the figure for two approvals (payment integrity I4)", () => {
-  const provider = { mode: "live", earnMode: "simulate", network: ARC_TESTNET, estimatedFeeUsd: 0.003 } as unknown as ChainProvider;
+  const provider = { mode: "live", network: ARC_TESTNET, earnMode: "simulate", estimatedFeeUsd: 0.003 } as unknown as ChainProvider;
   const FIRST = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000e1";
   const SECOND = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000e2";
   const invoice = {

@@ -10,7 +10,7 @@ import { MAY_HAVE_BEEN_ACCEPTED } from "../circle/settlement";
 import { PAYMENTS_OFF, paymentsDisabled, PaymentsDisabledError } from "../payments-switch";
 import { payInvoice, syncOperatingBalance } from "./pay";
 import { invoiceDiscount, type InvoiceDiscount } from "./payment-timing";
-import { paidAcrossChains, payeeChain } from "../payee-chains";
+import { chainById, chainOn, paidAcrossChains } from "../payee-chains";
 import { bridgeFee, type BridgeFee } from "../circle/cctp";
 import { gatewayQuoter, type GatewayQuote } from "../circle/gateway-quote";
 import { choosePayoutRoute, payoutFundsShort, type GatewayFigures } from "../payout-route";
@@ -469,15 +469,17 @@ export async function listWaitingPayables(
 
   // Both routes' figures for a payee on another chain, read now, so the person approving sees the route Approve and pay
   // takes and what leaves (CCTP payouts, review I2; approval payout route P4). A figure that cannot be read is null.
+  // The payees' chains are on the workspace's network, as its provider is (network threading P3).
+  const network = getChainProvider().network;
   const read = {
-    bridgeFee: options.bridgeFee ?? ((chain: string, amount: number) => bridgeFee(getChainProvider().network, chain, amount)),
+    bridgeFee: options.bridgeFee ?? ((chain: string, amount: number) => bridgeFee(network, chain, amount)),
     gatewayQuote: options.gatewayQuote ?? gatewayQuoter(getChainProvider(), db()),
   };
   const quotes = new Map<string, PayoutQuotes>();
   await Promise.all(
     rows
       .filter((row) => paidAcrossChains(row.counterparties?.chain) && currencyOf(row.currency) === "USDC")
-      .map(async (row) => quotes.set(row.id, await readPayoutQuotes(payeeChain(row.counterparties?.chain).id, num(row.amount), read)))
+      .map(async (row) => quotes.set(row.id, await readPayoutQuotes(chainOn(network.id, row.counterparties?.chain).id, num(row.amount), read)))
   );
 
   const intents = new Map<string, IntentState>();
@@ -570,7 +572,7 @@ export async function listWaitingPayables(
       lastAttempt: lastAttemptOf(intent, currencyOf(row.currency)),
       discount: invoiceDiscount(row),
       currency: currencyOf(row.currency),
-      payeeChain: payeeChain(row.counterparties?.chain).id,
+      payeeChain: chainOn(network.id, row.counterparties?.chain).id,
       bridgeFeeUsdc: quote ? (payoutRoute === "gateway" ? (quote.gateway?.feeUsdc ?? null) : quote.cctpFeeUsdc) : null,
       ...(payoutRoute ? { payoutRoute } : {}),
       poReference: onFile.poReference,
@@ -1063,7 +1065,7 @@ function payoutRecord(chain: string, route: CrossChainRoute, quotes: PayoutQuote
   return {
     chain,
     route,
-    domain: payeeChain(chain).domain,
+    domain: chainById(chain).domain,
     feeUsdc: route === "gateway" ? (quotes.gateway?.feeUsdc ?? null) : quotes.cctpFeeUsdc,
     ...(route === "gateway" && quotes.gateway ? { gatewayBalanceUsdc: quotes.gateway.balanceUsdc } : {}),
     quotes: { cctpFeeUsdc: quotes.cctpFeeUsdc, gatewayFeeUsdc: quotes.gateway?.feeUsdc ?? null },

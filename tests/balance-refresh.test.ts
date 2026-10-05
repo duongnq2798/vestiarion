@@ -60,7 +60,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   chain = new FakeChain();
   getChainProviderMock.mockReturnValue(chain);
-  chainModesMock.mockReturnValue({ mode: "live", earnMode: "simulate" });
+  chainModesMock.mockReturnValue({ mode: "live", network: ARC_TESTNET, earnMode: "simulate" });
 });
 
 const ids = (filter: string | null): string[] =>
@@ -147,7 +147,7 @@ describe("refreshOnChainBalances", () => {
   });
 
   it("makes no Circle call when payments are simulated", async () => {
-    chainModesMock.mockReturnValue({ mode: "simulate", earnMode: "simulate" });
+    chainModesMock.mockReturnValue({ mode: "simulate", network: ARC_TESTNET, earnMode: "simulate" });
     const answer = await run(database([operating(), reserve()]), () => refreshOnChainBalances({ now: NOW }));
 
     expect(answer).toEqual({ refreshed: false, reason: "not_live", balance: 100, syncedAt: null });

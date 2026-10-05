@@ -21,11 +21,12 @@ vi.mock("@/lib/agent/liquidity", async (importOriginal) => ({
 }));
 vi.mock("@/lib/circle", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/circle")>()),
-  getChainProvider: () => ({ mode: "live", earnMode: "live" }),
+  getChainProvider: () => ({ mode: "live", network: ARC_TESTNET, earnMode: "live" }),
 }));
 
 import { bringCashBackAction } from "@/app/actions/treasury";
 import { PaymentsDisabledError } from "@/lib/payments-switch";
+import { ARC_TESTNET } from "@/lib/network";
 
 const config = configFromEnv({
   NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid",

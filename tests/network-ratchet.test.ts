@@ -24,8 +24,6 @@ const ALLOWED: Record<string, number> = {
   "src/components/payee/PayeeJourney.tsx": 2,
   "src/components/receipt/ReceiptView.tsx": 1,
   "src/components/vx/map.ts": 1,
-  "src/lib/agent/orchestrator.ts": 2,
-  "src/lib/agent/receipts.ts": 1,
   "src/lib/api/schemas.ts": 1,
   "src/lib/github/bounties.ts": 1,
   "src/lib/github/payment-comments.ts": 2,

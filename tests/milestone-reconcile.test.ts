@@ -121,7 +121,7 @@ function execution(overrides: Partial<PaymentExecution>): PaymentExecution {
   };
 }
 
-const provider = { mode: "live", earnMode: "simulate", network: ARC_TESTNET, estimatedFeeUsd: 0.003 } as unknown as ChainProvider;
+const provider = { mode: "live", network: ARC_TESTNET, earnMode: "simulate", estimatedFeeUsd: 0.003 } as unknown as ChainProvider;
 const milestone = {
   id: MILESTONE_ID,
   title: "Checkout redesign",

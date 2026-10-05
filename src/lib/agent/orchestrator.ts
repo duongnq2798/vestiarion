@@ -74,7 +74,7 @@ import { gatewayQuoter, type GatewayQuote } from "../circle/gateway-quote";
 
 export type { GatewayQuote };
 import type { CrossChainRoute, PayoutRoute, SpendingLimitPayment } from "../circle/types";
-import { BRIDGE_FEE_CAP_PERCENT, payeeChain } from "../payee-chains";
+import { BRIDGE_FEE_CAP_PERCENT, chainOn, paidAcrossChains } from "../payee-chains";
 import {
   amountToPay,
   boundPayOn,
@@ -1324,8 +1324,8 @@ async function decideApPayable(
   // A payee on another chain is paid from Arc through CCTP (CCTP payouts X2–X7):
   // the fee, read now, is weighed by the model, bounded by code, and paid on
   // top of the invoice out of the operating USDC. Only USDC crosses.
-  const destination = payeeChain(counterparty.chain);
-  const crossChain = destination.id !== "ARC-TESTNET";
+  const destination = chainOn(ctx.provider.network.id, counterparty.chain);
+  const crossChain = paidAcrossChains(destination.id);
   let fee: BridgeFee | null = null;
   let gateway: GatewayQuote | null = null;
   if (crossChain && !isEurc) {
@@ -2198,7 +2198,7 @@ export async function runApStage(input: ApStageInput): Promise<number> {
           txRef: invoice.tx_ref,
           discount: invoiceDiscount(invoice),
           currency: invoiceCurrency(invoice.currency),
-          ...(payeeChain(counterparty.chain).id !== "ARC-TESTNET" ? { destinationChain: payeeChain(counterparty.chain).id } : {}),
+          ...(paidAcrossChains(counterparty.chain) ? { destinationChain: chainOn(provider.network.id, counterparty.chain).id } : {}),
           decidedAt: invoice.decided_at ?? null,
         },
         intent,

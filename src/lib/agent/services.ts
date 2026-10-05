@@ -1,4 +1,5 @@
 import { workspaceNetwork } from "../workspace-network";
+import { FeatureOffError } from "../network";
 import { initiateDeveloperControlledWalletsClient } from "@circle-fin/developer-controlled-wallets";
 import { currentOrgConfig } from "../context";
 import { unwrap, type OrgDb } from "../dal";
@@ -109,6 +110,12 @@ export async function buyPayeeHistories(input: {
   }
 
   if (!input.live) return facts;
+  // A purchase is paid from the workspace's Gateway balance, on its network (network threading P5).
+  const network = workspaceNetwork();
+  if (network.gateway === null) {
+    input.lines.push({ domain: "compliance", message: new FeatureOffError("Buying services over x402", network).message });
+    return facts;
+  }
   const signer = (await db.from("gateway_signers").select("circle_wallet_id, address").maybeSingle()).data as { circle_wallet_id: string; address: string } | null;
   if (!signer && !input.buy) return facts;
   // Spending is moving money: a paused agent buys nothing, and nothing is bought while payments are off (payment safety S9).
