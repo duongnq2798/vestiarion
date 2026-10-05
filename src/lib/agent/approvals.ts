@@ -31,6 +31,7 @@ import {
   mayGiveApproval,
   standingApprovals,
   twoApprovalsFacts,
+  usdcValueOfLatestDecision,
   type GivenApproval,
   type PaymentSource,
 } from "./second-approval";
@@ -714,11 +715,6 @@ export const SOLE_APPROVER_NOTE = "(entered and approved by the workspace's only
 export const SECOND_OF_TWO_NOTE = "(the second of two approvals)";
 
 /** A EURC payable's USDC value as the agent last weighed it (its latest decision's `usdcValue`), null when it has none (two approvals T2). */
-async function usdcValueOfLatestDecision(invoiceId: string): Promise<number | null> {
-  const decision = latestDecision(await listLedgerEntriesForTargets({ invoiceIds: [invoiceId] }), invoiceId);
-  const value = decision?.detail.usdcValue;
-  return typeof value === "number" ? value : null;
-}
 
 /**
  * `shownAddress` is the counterparty address the approval card showed the
@@ -907,10 +903,10 @@ export async function approveAndPay(
   }
 
   // The approvals that let it through are used by this payment, or nothing is sent (T6): approvals left open could send
-  // it again on one approval after a failed transfer.
+  // it again on one approval after a failed transfer. This one, which pays it, is stored with them, as used (I4).
   if (approvals.length > 0) {
     try {
-      await markApprovalsUsed(source);
+      await markApprovalsUsed(source, { by: input.actorId, payment });
     } catch (error) {
       await giveBackAfterClaim(invoice, `approvals not marked used: ${(error as Error).message}`);
       throw error;

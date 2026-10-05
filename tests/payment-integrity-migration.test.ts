@@ -57,7 +57,25 @@ const claim = (actor: string, invoiceId: string) =>
   asTenant(db, org, async (tx) =>
     (await tx.query<{ status: string }>("select status from public.claim_invoice_decision($1, $2, $3, 'approve')", [org, invoiceId, actor])).rows[0]);
 
+/** Whether whoever entered a payable may claim it on a matching approval (I1), for the replay test. */
+async function claimable(): Promise<boolean> {
+  const invoiceId = await heldInvoice(admin);
+  await approve(invoiceId, approver, 100);
+  try {
+    await claim(admin, invoiceId);
+    return false;
+  } catch (error) {
+    return /self_approval/.test((error as Error).message);
+  }
+}
+
 describe("claim_invoice_decision counts only an approval that agrees and stands (0077, I1)", () => {
+  it("counts a matching approval in EURC for a EURC payable", async () => {
+    const invoiceId = await heldInvoice(admin, "EURC");
+    await approve(invoiceId, approver, 120, "EURC");
+    expect((await claim(admin, invoiceId)).status).toBe("processing");
+  });
+
   it("lets whoever entered it give the second approval on another person's open approval of this payment", async () => {
     const invoiceId = await heldInvoice(admin);
     await approve(invoiceId, approver);
@@ -98,57 +116,85 @@ describe("approvers_besides (0077, I2)", () => {
   });
 });
 
-describe("the ledger is appended only through append_ledger_entry (0077, I3)", () => {
+describe("a tenant's ledger insert must link the chain as append_ledger_entry links it (0077, I3)", () => {
   const entry = (action: string): LedgerEntryInput => ({ actor: "agent", domain: "treasury", action, summary: action, detail: { n: action } });
-  async function append(tx: Tx, orgId: string, input: LedgerEntryInput) {
+  const signed = (input: LedgerEntryInput) => {
     const bodyHash = bodyHashOf(input);
-    const signature = crypto.sign(null, Buffer.from(bodyHash, "hex"), KEY).toString("hex");
-    const result = await tx.query<{ seq: number; prev_hash: string; hash: string; body_hash: string; signature: string; org_id: string }>(
-      "select * from public.append_ledger_entry($1::uuid, $2, $3, $4, $5, $6::jsonb, $7, $8, $9)",
-      [orgId, input.actor, input.domain, input.action, input.summary, JSON.stringify(input.detail), bodyHash, signature, null]
+    return { bodyHash, signature: crypto.sign(null, Buffer.from(bodyHash, "hex"), KEY).toString("hex") };
+  };
+  const chainStep = (prev: string, bodyHash: string, signature: string) => crypto.createHash("sha256").update(`${prev}${bodyHash}${signature}`).digest("hex");
+  type Row = { seq: number; ts: string; prev_hash: string; hash: string; body_hash: string; signature: string; org_id: string };
+  async function append(tx: Tx, orgId: string, input: LedgerEntryInput) {
+    const { bodyHash, signature } = signed(input);
+    const result = await tx.query<Row>("select * from public.append_ledger_entry($1::uuid, $2, $3, $4, $5, $6::jsonb, $7, $8, $9)", [
+      orgId, input.actor, input.domain, input.action, input.summary, JSON.stringify(input.detail), bodyHash, signature, null,
+    ]);
+    return result.rows[0];
+  }
+  const head = async (orgId: string) =>
+    (await db.query<{ hash: string }>("select hash from public.ledger_entries where org_id = $1 order by seq desc limit 1", [orgId])).rows[0]?.hash ?? "0".repeat(64);
+  async function insertDirect(tx: Tx, orgId: string, input: LedgerEntryInput, link: { prev: string; hash?: string; ts?: string }) {
+    const { bodyHash, signature } = signed(input);
+    const result = await tx.query<Row>(
+      `insert into public.ledger_entries (org_id, actor, domain, action, summary, detail, body_hash, signature, prev_hash, hash${link.ts ? ", ts" : ""})
+       values ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10${link.ts ? ", $11" : ""}) returning *`,
+      [orgId, input.actor, input.domain, input.action, input.summary, JSON.stringify(input.detail), bodyHash, signature, link.prev, link.hash ?? chainStep(link.prev, bodyHash, signature), ...(link.ts ? [link.ts] : [])]
     );
     return result.rows[0];
   }
 
-  it("refuses a tenant's direct insert", async () => {
-    await expect(
-      asTenant(db, org, (tx) =>
-        tx.query(
-          `insert into public.ledger_entries (org_id, actor, domain, action, summary, detail, body_hash, signature, prev_hash, hash)
-           values ($1, 'agent', 'treasury', 'forged', 'forged', '{}', '00', '00', '00', '00')`,
-          [org]
-        )
-      )
-    ).rejects.toThrow(/permission denied/);
-  });
-
-  it("appends for the token's workspace through the function, linking the chain exactly as before", async () => {
+  it("appends through the function exactly as before, each entry linked to the last", async () => {
     const first = await asTenant(db, org, (tx) => append(tx, org, entry("first")));
     const second = await asTenant(db, org, (tx) => append(tx, org, entry("second")));
     expect(second.org_id).toBe(org);
     expect(second.prev_hash).toBe(first.hash);
-    expect(second.hash).toBe(crypto.createHash("sha256").update(`${second.prev_hash}${second.body_hash}${second.signature}`).digest("hex"));
+    expect(second.hash).toBe(chainStep(second.prev_hash, second.body_hash, second.signature));
   });
 
-  it("refuses an append for another workspace than the token's", async () => {
-    await expect(asTenant(db, org, (tx) => append(tx, other, entry("elsewhere")))).rejects.toThrow(
-      /append_ledger_entry: p_org_id is not the request's organization/
+  it("refuses a tenant's direct insert that does not follow the workspace's last entry", async () => {
+    await expect(asTenant(db, org, (tx) => insertDirect(tx, org, entry("forked"), { prev: "0".repeat(64) }))).rejects.toThrow(
+      /an entry must link the chain as append_ledger_entry links it/
     );
   });
 
-  it("still lets the server's service role append, and no browser role", async () => {
-    const row = await asServiceRole(db, (tx) => append(tx, other, entry("server")));
-    expect(row.org_id).toBe(other);
+  it("refuses one whose hash is not the chain step", async () => {
+    const prev = await head(org);
+    await expect(asTenant(db, org, (tx) => insertDirect(tx, org, entry("bad-hash"), { prev, hash: "f".repeat(64) }))).rejects.toThrow(
+      /an entry must link the chain as append_ledger_entry links it/
+    );
+  });
+
+  it("takes a linked direct insert as the function would, at the time of the insert rather than one it names", async () => {
+    const prev = await head(org);
+    const row = await asTenant(db, org, (tx) => insertDirect(tx, org, entry("linked"), { prev, ts: "2020-01-01T00:00:00Z" }));
+    expect(row.prev_hash).toBe(prev);
+    expect(Date.parse(row.ts)).toBeGreaterThan(Date.parse("2026-01-01T00:00:00Z"));
+    // The function still follows it.
+    const next = await asTenant(db, org, (tx) => append(tx, org, entry("after")));
+    expect(next.prev_hash).toBe(row.hash);
+  });
+
+  it("still refuses an append for another workspace, and still lets the server's own roles write", async () => {
+    await expect(asTenant(db, org, (tx) => append(tx, other, entry("elsewhere")))).rejects.toThrow(/row-level security/);
+    expect((await asServiceRole(db, (tx) => append(tx, other, entry("server")))).org_id).toBe(other);
+    // The platform's own connection is trusted, as migrations and backfills are.
+    await db.query(
+      `insert into public.ledger_entries (org_id, actor, domain, action, summary, detail, body_hash, signature, prev_hash, hash)
+       values ($1, 'system', 'treasury', 'backfill', 'backfill', '{}', 'b', 's', 'p', 'h')`,
+      [other]
+    );
     await expect(asRole(db, "anon", (tx) => append(tx, org, entry("anon")))).rejects.toThrow(/permission denied/);
   });
 
-  it("runs as its owner with its search path pinned, so nothing a tenant creates stands in for digest()", async () => {
-    const fn = (
-      await db.query<{ prosecdef: boolean; proconfig: string[] | null }>(
-        "select prosecdef, proconfig from pg_proc where proname = 'append_ledger_entry' and pronargs = 9"
-      )
-    ).rows[0];
-    expect(fn.prosecdef).toBe(true);
-    expect(fn.proconfig).toEqual(["search_path=extensions, public"]);
-  });
+  it("keeps all of it when every migration is replayed, as the runner does on each run", async () => {
+    await applyMigrations(db);
+    const before = await head(org);
+    const after = await asTenant(db, org, (tx) => append(tx, org, entry("replayed")));
+    expect(after.prev_hash).toBe(before);
+    expect(after.hash).toBe(chainStep(after.prev_hash, after.body_hash, after.signature));
+    await expect(asTenant(db, org, (tx) => insertDirect(tx, org, entry("forked-again"), { prev: "0".repeat(64) }))).rejects.toThrow(
+      /an entry must link the chain as append_ledger_entry links it/
+    );
+    expect(await claimable()).toBe(true);
+  }, 60_000);
 });

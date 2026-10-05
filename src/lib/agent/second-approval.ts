@@ -1,6 +1,8 @@
 import { currentOrgId } from "../context";
 import { sameAddress } from "../counterparty-address";
 import { db, unwrap } from "../dal";
+import { latestDecision } from "../added-details";
+import { listLedgerEntriesForTargets } from "../ledger";
 import { approversBesides, readTwoApprovalsAbove } from "../approval-policy";
 import { excludedSlots, mayApproveNow, type TwoApprovalsFacts } from "../two-approvals";
 
@@ -107,15 +109,42 @@ export async function giveApproval(source: PaymentSource, by: string, payment: A
   return given(inserted.data as ApprovalRow);
 }
 
-/** Marks a payment's open approvals used, once the approval that pays it has claimed it (T6). */
-export async function markApprovalsUsed(source: PaymentSource): Promise<void> {
+/**
+ * Marks a payment's open approvals used, once the approval that pays it has claimed it (T6), and stores that paying
+ * approval too, as used (payment integrity I4): two people's approvals of the payment are then on record, which is what
+ * lets the agent send again a payment of theirs Circle never took. The paying approval goes first, so a failure leaves
+ * the open approvals standing.
+ */
+export async function markApprovalsUsed(source: PaymentSource, payer?: { by: string; payment: ApprovedPayment }): Promise<void> {
+  const now = new Date().toISOString();
+  if (payer) {
+    const stored = await db()
+      .from("payment_approvals")
+      .insert({
+        source_type: source.type,
+        source_id: source.id,
+        approved_by: payer.by,
+        amount: payer.payment.amount,
+        currency: payer.payment.currency,
+        address: payer.payment.address,
+        used_at: now,
+      });
+    if (stored.error) throw new Error(stored.error.message);
+  }
   const update = await db()
     .from("payment_approvals")
-    .update({ used_at: new Date().toISOString() })
+    .update({ used_at: now })
     .eq("source_type", source.type)
     .eq("source_id", source.id)
     .is("used_at", null);
   if (update.error) throw new Error(update.error.message);
+}
+
+/** A EURC payable's value in USDC, as its latest decision weighed it; null when no decision did (two approvals T2). */
+export async function usdcValueOfLatestDecision(invoiceId: string): Promise<number | null> {
+  const decision = latestDecision(await listLedgerEntriesForTargets({ invoiceIds: [invoiceId] }), invoiceId);
+  const value = decision?.detail.usdcValue;
+  return typeof value === "number" ? value : null;
 }
 
 /** Deletes a payment's open approvals: Reject, Return to agent and Close without paying end the decision they were for (T6). */

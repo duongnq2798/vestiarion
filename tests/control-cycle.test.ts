@@ -797,7 +797,21 @@ describe("reconcileApInvoice — a payment the agent never sent, above the figur
     }
   });
 
-  it("holds a EURC payment whose value in USDC it cannot weigh", async () => {
+  it("weighs a EURC payment at the USDC value its decision recorded, and holds one whose value is not known", async () => {
+    paid();
+    const decided = cycleFake((r) => {
+      if (r.path === "/rest/v1/counterparties" && r.method === "GET") return { body: { risk_level: "low" } };
+      if (r.path === "/rest/v1/rpc/agent_paused") return { body: false };
+      if (r.path === "/rest/v1/payment_approvals" && r.method === "GET") return { body: [] };
+      if (r.path === "/rest/v1/rpc/ledger_entries_for_targets") {
+        return { body: [{ seq: 9, id: "e9", ts: "2026-10-05T08:00:00Z", actor: "agent", domain: "ap", action: "ap_pay", summary: "", detail: { invoiceId: INVOICE_ID, decision: { action: "pay" }, observed: {}, usdcValue: 175.5 }, body_hash: "00", signature: "00", prev_hash: "00", hash: "00", signing_key_id: null }] };
+      }
+      return undefined;
+    });
+    // 150 EURC weighed at 175.5 USDC: under a 1000 USDC figure it goes again on its own, above a 100 USDC one it waits.
+    expect((await decided.run(() => reconcileApInvoice({ ...invoice, currency: "EURC" }, neverSent, { db: db(), provider, operating: { id: ACCOUNT_ID }, twoApprovalsAbove: 1000 }))).status).toBe("paid");
+    expect((await decided.run(() => reconcileApInvoice({ ...invoice, currency: "EURC" }, neverSent, { db: db(), provider, operating: { id: ACCOUNT_ID }, twoApprovalsAbove: 100 }))).status).toBe("held");
+
     const { run } = world([]);
     const outcome = await run(() =>
       reconcileApInvoice({ ...invoice, currency: "EURC" }, neverSent, { db: db(), provider, operating: { id: ACCOUNT_ID }, twoApprovalsAbove: 1000 })

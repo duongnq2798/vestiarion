@@ -22,7 +22,7 @@ import { budgetClause, enforceApGuardrails, onChainLimitHold } from "./guardrail
 import { readTwoApprovalsAbove } from "../approval-policy";
 import { choosePayoutRoute } from "../payout-route";
 import { needsTwoApprovals, TWO_APPROVALS_RULE } from "../two-approvals";
-import { approvedByTwo, type PaymentSource } from "./second-approval";
+import { approvedByTwo, usdcValueOfLatestDecision, type PaymentSource } from "./second-approval";
 import { usycSubscriptionsOpen } from "../circle/usyc";
 import { arcRpcUrl } from "../circle/arcFees";
 import { budgetGate, countedUsdc, exceedsBudget, HELD_FOR_BUDGET, type BudgetGate, type BudgetRoom } from "./outflow-budget";
@@ -614,16 +614,18 @@ function notResubmittedTwoApprovalsNote(above: number): string {
 
 /**
  * Why the agent must not send again on its own a payment it never sent (payment integrity I4): payments above the
- * workspace's figure need two approvals, this one is above it, weighed as a new payment is (a EURC payment's USDC value
- * is not known here, so it is held), and two people's approvals of it were not used to pay it. The figure may have been
- * set or lowered since the first send.
+ * workspace's figure need two approvals, this one is above it, weighed as a new payment is (a EURC payable at the USDC
+ * value its latest decision recorded, held when none did), and two people's approvals of it were not used to pay it.
+ * The figure may have been set or lowered since the first send.
  */
 async function twoApprovalsResendBlocker(
   source: PaymentSource,
   payment: { amount: number; currency: Stablecoin; address: string | null },
   above: number | null | undefined
 ): Promise<"workspace.two_approvals" | null> {
-  if (above == null || !needsTwoApprovals({ amount: payment.amount, currency: payment.currency, usdcValue: null }, above)) return null;
+  if (above == null) return null;
+  const usdcValue = payment.currency === "EURC" && source.type === "invoice" ? await usdcValueOfLatestDecision(source.id) : null;
+  if (!needsTwoApprovals({ amount: payment.amount, currency: payment.currency, usdcValue }, above)) return null;
   return (await approvedByTwo(source, payment)) ? null : "workspace.two_approvals";
 }
 

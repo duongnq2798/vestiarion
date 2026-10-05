@@ -1,6 +1,6 @@
 -- Payment integrity (docs/superpowers/specs/2026-10-05-payment-integrity-design.md I1–I3): what the two-approvals review
--- left. Idempotent: scripts/migrate.ts re-runs every migration each time, and this file runs after 0017, 0018 and 0076,
--- whose definitions and grants it supersedes.
+-- left. Idempotent: scripts/migrate.ts re-runs every migration each time, and this file runs after 0076, whose two
+-- function definitions it supersedes. It does not touch append_ledger_entry or the ledger's grants.
 
 -- I1: whoever entered a payable may claim its approval only on another person's open approval of this payment, of the
 -- same amount and currency, by someone who may still approve payments (approvers_among). Otherwise as in 0076.
@@ -70,70 +70,50 @@ $$;
 revoke execute on function public.approvers_besides(uuid, uuid[]) from public, anon, authenticated;
 grant execute on function public.approvers_besides(uuid, uuid[]) to vestiarion_tenant, service_role;
 
--- I3: the ledger is appended only through this function. It runs as its owner, so a tenant needs no INSERT on the
--- table, and checks the workspace itself, as row-level security no longer does for it: a tenant appends only to the
--- workspace its token names; the server's service role, whose token names none, appends to any. The search path is
--- pinned, extensions first: digest() lives there on Supabase and in public on a local database, and nothing a tenant
--- creates can stand in for it. The chain step is unchanged from 0017.
-create or replace function public.append_ledger_entry(
-  p_org_id         uuid,
-  p_actor          text,
-  p_domain         text,
-  p_action         text,
-  p_summary        text,
-  p_detail         jsonb,
-  p_body_hash      text,
-  p_signature      text,
-  p_signing_key_id text default null
-) returns public.ledger_entries
+-- I3: a request's insert into the ledger must link the chain exactly as append_ledger_entry links it. The tenant may call
+-- that function, so it gains nothing by inserting directly; this makes sure a direct insert, from a bug or a stolen
+-- request token, cannot add an entry that no chain step links. The check is a trigger, not a revoked grant and a definer
+-- function: the migration runner replays 0016–0018 before this file on every run, and their append (as its caller) and
+-- grant would otherwise leave tenant appends failing until this file ran again. Each step takes the workspace's ledger
+-- lock (the same key as append_ledger_entry's, so the two are one queue), reads the last entry, and checks the previous
+-- hash and the hash: sha256 of the text, as pgcrypto's digest() in append_ledger_entry computes it. It stamps the time,
+-- as the function does through the column default. The platform's own roles (migrations, the service role) write as
+-- before.
+create or replace function public.ledger_entries_linked() returns trigger
 language plpgsql
-security definer
-set search_path = extensions, public
+set search_path = ''
 as $$
 declare
-  v_prev_hash text;
-  v_hash      text;
-  v_row       public.ledger_entries;
+  v_head text;
 begin
-  if p_org_id is null then
-    raise exception 'append_ledger_entry: p_org_id is required';
+  if current_user <> 'vestiarion_tenant' then
+    return new;
   end if;
-  if public.request_org_id() is not null and p_org_id <> public.request_org_id() then
-    raise exception 'append_ledger_entry: p_org_id is not the request''s organization';
-  end if;
-
-  perform pg_advisory_xact_lock(hashtext('vestiarion_ledger:' || p_org_id::text));
-
-  select hash into v_prev_hash
-    from public.ledger_entries
-   where org_id = p_org_id
-   order by seq desc
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext('vestiarion_ledger:' || new.org_id::text));
+  select e.hash into v_head
+    from public.ledger_entries e
+   where e.org_id = new.org_id
+   order by e.seq desc
    limit 1;
-  v_prev_hash := coalesce(v_prev_hash, repeat('0', 64));
-
-  v_hash := encode(digest(v_prev_hash || p_body_hash || p_signature, 'sha256'), 'hex');
-
-  insert into public.ledger_entries (org_id, actor, domain, action, summary, detail,
-                                     body_hash, signature, prev_hash, hash, signing_key_id)
-  values (p_org_id, p_actor, p_domain, p_action, p_summary, coalesce(p_detail, '{}'::jsonb),
-          p_body_hash, p_signature, v_prev_hash, v_hash, p_signing_key_id)
-  returning * into v_row;
-
-  return v_row;
+  v_head := coalesce(v_head, pg_catalog.repeat('0', 64));
+  if new.prev_hash is distinct from v_head
+     or new.hash is distinct from pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(new.prev_hash || new.body_hash || new.signature, 'UTF8')), 'hex') then
+    raise exception 'ledger_entries: an entry must link the chain as append_ledger_entry links it';
+  end if;
+  new.ts := pg_catalog.now();
+  return new;
 end;
 $$;
 
-revoke execute on function public.append_ledger_entry(uuid, text, text, text, text, jsonb, text, text, text)
-  from public, anon, authenticated;
-grant execute on function public.append_ledger_entry(uuid, text, text, text, text, jsonb, text, text, text)
-  to vestiarion_tenant, service_role;
+revoke execute on function public.ledger_entries_linked() from public, anon, authenticated;
 
--- 0018 grants the tenant select and insert on the ledger, replayed on every run before this one: the insert goes.
-revoke insert on table public.ledger_entries from vestiarion_tenant;
+drop trigger if exists ledger_entries_linked on public.ledger_entries;
+create trigger ledger_entries_linked before insert on public.ledger_entries
+  for each row execute function public.ledger_entries_linked();
 
 notify pgrst, 'reload schema';
 
 -- Down (by hand, never by migrate.ts):
--- grant insert on table public.ledger_entries to vestiarion_tenant;
--- then re-run 0017_org_scope_contract.sql for its append_ledger_entry, and 0076_two_approvals.sql for its
--- claim_invoice_decision and approvers_besides.
+-- drop trigger if exists ledger_entries_linked on public.ledger_entries;
+-- drop function if exists public.ledger_entries_linked();
+-- then re-run 0076_two_approvals.sql for its claim_invoice_decision and approvers_besides.

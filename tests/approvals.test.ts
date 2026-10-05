@@ -2189,8 +2189,12 @@ describe("approveAndPay above the workspace's figure for two approvals (two appr
     const result = await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
 
     expect(result.status).toBe("paid");
-    // The approval that pays is never stored before the claim (review finding 2): the entry is its record.
-    expect(approvalRequests(fake.requests, "POST")).toHaveLength(0);
+    // The approval that pays is never stored before the claim (review finding 2); after it, it is stored as used, so two
+    // people's approvals of this payment are on record (payment integrity I4).
+    const stored = approvalRequests(fake.requests, "POST");
+    expect(stored).toHaveLength(1);
+    expect(stored[0].body).toMatchObject({ source_type: "invoice", source_id: INVOICE_ID, approved_by: ACTOR, amount: 150, currency: "USDC", address: "0xdead", used_at: expect.any(String) });
+    expect(fake.requests.indexOf(stored[0])).toBeGreaterThan(fake.requests.findIndex((r) => r.path === "/rest/v1/rpc/claim_invoice_decision"));
     expect(rpcBodies(fake.requests, "claim_invoice_decision")).toEqual([{ p_org_id: ORG, p_invoice_id: INVOICE_ID, p_by: ACTOR, p_decision: "approve" }]);
     expect(payInvoiceMock).toHaveBeenCalledTimes(1);
     const used = approvalRequests(fake.requests, "PATCH");

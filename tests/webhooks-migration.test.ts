@@ -500,14 +500,15 @@ describe("replaying 0028", () => {
     }
   }, 60_000);
 
-  it("replays every migration twice without error, leaving one trigger on ledger_entries", async () => {
+  it("replays every migration twice without error, leaving each trigger on ledger_entries once", async () => {
     const fresh = await createDatabase();
     try {
       await applyMigrations(fresh);
       await applyMigrations(fresh);
       const { rows } = await fresh.query<{ tgname: string }>(
-        "select tgname from pg_trigger where tgrelid = 'public.ledger_entries'::regclass and not tgisinternal");
-      expect(rows).toEqual([{ tgname: "ledger_entries_enqueue_webhooks" }]);
+        "select tgname from pg_trigger where tgrelid = 'public.ledger_entries'::regclass and not tgisinternal order by tgname");
+      // The webhooks' queue, and since 0077 the chain check on a request's insert (payment integrity I3).
+      expect(rows).toEqual([{ tgname: "ledger_entries_enqueue_webhooks" }, { tgname: "ledger_entries_linked" }]);
     } finally {
       await fresh.close();
     }
