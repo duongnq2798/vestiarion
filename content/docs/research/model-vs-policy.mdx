@@ -231,7 +231,7 @@ Four of the five payable differences were one rule, the three-way match. Each in
 
 Code does not check the match, so nothing stopped these. Before this week, every time the model was looser than the policy, a check in code refused it: a limit (#505) or a fee cap (#686). This is the first looser call that moved money with no check in its way.
 
-What we take from it: whether an invoice needs a purchase order is the business's rule to set, not the model's to waive. The next change makes the match a check in code, with a setting for the payees a business pays without purchase orders.
+What we take from it: whether an invoice needs a purchase order is the business's rule to set, not the model's to waive. Since 5 October, code checks the match. A payment or a schedule on an incomplete match is refused, and the invoice waits for its details. A business marks on **Counterparties** the payees it pays without purchase orders.
 
 The fifth difference, #977, is the third time the model named a rule and then broke it. It called the payout's fee "37.3% of the invoice and too high", and chose to pay anyway. Code refused it as above the fee cap, and a person paid it.
 

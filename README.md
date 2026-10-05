@@ -13,7 +13,7 @@ An autonomous treasury agent for a small business, settled in USDC on Arc.
 - **Research:** [When the model and the policy disagree](https://www.vestiarion.xyz/docs/research/model-vs-policy). Over three weeks, 336 of the agent's decisions were recorded beside the written policy's answer to the same facts. The model chose the policy's action 305 times (90.8%), and 73 times in 88 on payables. Code refused 11 payments it chose.
   - In weeks one and two its departures were mostly extra caution, and people overruled all three stops only the model made.
   - In week three, with the treasury moving real USYC, it once redeemed far more than was due; code now bounds every move.
-  - It also paid or scheduled four invoices with no purchase order, which nothing in code checked. That rule is moving into code.
+  - It also paid or scheduled four invoices with no purchase order, which nothing in code checked. Code now checks that rule too.
 - **Live numbers:** [www.vestiarion.xyz/open](https://www.vestiarion.xyz/open) shows the payments, payees and decisions, read from the production database, with our own workspaces counted apart from customers'.
 - **Updates:** [@vestiarionhq](https://x.com/vestiarionhq) on X, where what ships is posted with its receipts.
 - **Real transactions on Arc testnet**, made by the agent in production:
@@ -60,8 +60,8 @@ is hard-coded into the interface:
    info** (no PO match), or **flag as fraud** (high-risk counterparty) — with its reasoning
    attached to the line item. Code refuses to pay or schedule an invoice whose match is
    incomplete, whatever the model decides; a counterparty the business marks as paid without
-   purchase orders needs only the goods received. A payable to a client, which pays the business, is never paid by the
-   agent: it waits for a person.
+   purchase orders needs only the goods received. A payable to a client, which pays the
+   business, is never paid by the agent: it waits for a person.
 3. **Contractor payments** — a GitHub PR URL can be checked for an actual merge before a
    milestone is released. Human verification remains available and is recorded as a human ledger
    action. Verified milestones are released the same day instead of waiting for Net-30.
