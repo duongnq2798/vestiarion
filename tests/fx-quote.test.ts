@@ -73,16 +73,23 @@ describe("quoteEurcInUsdc", () => {
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 
-  it("says there is no route when the service has none twice", async () => {
-    const fetch = vi.fn().mockImplementation(async () => noRoute());
-    await expect(quoteEurcInUsdc(10, { fromAddress: FROM, now: NOW, fetch, retryDelayMs: 0 })).rejects.toMatchObject({ code: "no_route" });
-    expect(fetch).toHaveBeenCalledTimes(2);
+  it("asks up to four times, as the route answered only on the third ask on 2026-10-05", async () => {
+    const fetch = vi.fn().mockResolvedValueOnce(noRoute()).mockResolvedValueOnce(noRoute()).mockResolvedValueOnce(answer("607630", "589401"));
+    const quote = await quoteEurcInUsdc(0.5, { fromAddress: FROM, now: NOW, fetch, retryDelayMs: 0 });
+    expect(quote.usdcEstimated).toBe(0.60763);
+    expect(fetch).toHaveBeenCalledTimes(3);
   });
 
-  it("says it is unavailable when the service fails or does not answer in time, after one more try", async () => {
+  it("says there is no route when the service has none four times", async () => {
+    const fetch = vi.fn().mockImplementation(async () => noRoute());
+    await expect(quoteEurcInUsdc(10, { fromAddress: FROM, now: NOW, fetch, retryDelayMs: 0 })).rejects.toMatchObject({ code: "no_route" });
+    expect(fetch).toHaveBeenCalledTimes(4);
+  });
+
+  it("says it is unavailable when the service fails or does not answer in time, after asking four times", async () => {
     const down = vi.fn().mockRejectedValue(new TypeError("fetch failed"));
     await expect(quoteEurcInUsdc(10, { fromAddress: FROM, now: NOW, fetch: down, retryDelayMs: 0 })).rejects.toMatchObject({ code: "unavailable" });
-    expect(down).toHaveBeenCalledTimes(2);
+    expect(down).toHaveBeenCalledTimes(4);
     const slow = vi.fn().mockImplementation((_url: string, init: RequestInit) => {
       expect(init.signal).toBeInstanceOf(AbortSignal);
       return Promise.reject(new DOMException("The operation was aborted due to timeout", "TimeoutError"));
