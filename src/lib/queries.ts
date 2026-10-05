@@ -64,6 +64,8 @@ export interface CounterpartyRow {
   sample: boolean;
   /** Where the counterparty is emailed when it is paid (payment notices R1, 0063); null for none, or before 0063. */
   notice_email?: string | null;
+  /** Whether the agent needs a purchase order on file before it pays (three-way match design M2, 0073); absent before 0073. */
+  purchase_order_required?: boolean;
 }
 
 export async function listCounterparties(): Promise<CounterpartyRow[]> {

@@ -6,6 +6,7 @@ import CounterpartyAddress from "@/components/intake/CounterpartyAddressEdit";
 import CounterpartyIntake from "@/components/intake/CounterpartyIntake";
 import CounterpartyLimitEdit from "@/components/intake/CounterpartyLimitEdit";
 import CounterpartyNoticeEmailEdit from "@/components/intake/CounterpartyNoticeEmailEdit";
+import CounterpartyPurchaseOrdersEdit, { purchaseOrdersLabel } from "@/components/intake/CounterpartyPurchaseOrdersEdit";
 import ScreeningMatch from "@/components/intake/ScreeningMatch";
 import PayeeLinkControl from "@/components/intake/PayeeLinkControl";
 import { Callout } from "@/components/ui/Callout";
@@ -136,6 +137,22 @@ export default async function CounterpartiesPage({ params }: { params: Promise<{
                             )}
                           </dd>
                         </div>
+                        {/* Whether the agent needs a purchase order before it pays (three-way match design M2). A payable to a
+                            client waits for a person whatever its match (client payables R1). */}
+                        {counterparty.role !== "client" && (
+                          <div className="col-span-2 min-w-0">
+                            <dt className="text-ink-3">Purchase orders</dt>
+                            <dd className="mt-0.5 flex flex-wrap items-baseline gap-x-2 break-words text-ink">
+                              {purchaseOrdersLabel(counterparty.purchase_order_required !== false)}
+                              {canWrite && (
+                                <CounterpartyPurchaseOrdersEdit
+                                  orgSlug={slug}
+                                  counterparty={{ id: counterparty.id, name: counterparty.name, purchaseOrderRequired: counterparty.purchase_order_required !== false }}
+                                />
+                              )}
+                            </dd>
+                          </div>
+                        )}
                       </dl>
                       <CounterpartyAddress
                         orgSlug={slug}
