@@ -279,7 +279,10 @@ export function invoiceDecision(
         })
       ) || "The agent has not evaluated this invoice yet.",
     evidence: [
-      { label: "PO", value: invoice.po_reference ?? "none", state: invoice.po_reference ? "ok" : "missing" },
+      // A counterparty paid without purchase orders needs none (three-way match design M2).
+      !invoice.po_reference && counterparty?.purchase_order_required === false
+        ? { label: "PO", value: "not needed", state: "neutral" as const }
+        : { label: "PO", value: invoice.po_reference ?? "none", state: invoice.po_reference ? ("ok" as const) : ("missing" as const) },
       { label: "Goods received", value: invoice.goods_received ? "yes" : "no", state: invoice.goods_received ? "ok" : "missing" },
       { label: "Risk", value: risk, state: risk === "high" ? "missing" : "neutral" },
       { label: "Limit", value: counterparty?.payment_limit == null ? "none" : `${fmt(counterparty.payment_limit)} USDC`, state: counterparty?.payment_limit != null && usdcValue != null && usdcValue > counterparty.payment_limit ? "missing" : "neutral" },
