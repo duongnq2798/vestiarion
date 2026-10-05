@@ -65,7 +65,9 @@ is hard-coded into the interface:
    purchase orders needs only the goods received. A payable to a client, which pays the
    business, is never paid by the agent: it waits for a person. The first payment to an
    address needs two people behind it: the agent never makes one that only the person who
-   gave the address stands behind, and that person cannot approve it either.
+   gave the address stands behind, and that person cannot approve it either. Above a figure
+   the workspace's owner sets, every payment needs two approvals: the agent holds it, the
+   first approval is recorded, and only a second person's approval pays it.
 3. **Contractor payments** — a GitHub PR URL can be checked for an actual merge before a
    milestone is released. Human verification remains available and is recorded as a human ledger
    action. Verified milestones are released the same day instead of waiting for Net-30.

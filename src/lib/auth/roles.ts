@@ -19,6 +19,8 @@ export const PERMISSIONS = {
   "agent.resume": ["owner", "admin"],
   // The agent's spending limit: loosening it is as deliberate as resuming the agent.
   "agent.budget": ["owner", "admin"],
+  // The figure above which a payment needs two approvals: a control over everyone who approves, admins included.
+  "approval.policy": ["owner"],
   "members.manage": ["owner", "admin"],
   "api_keys.manage": ["owner", "admin"],
   "webhooks.manage": ["owner", "admin"],

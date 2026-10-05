@@ -7,6 +7,7 @@ import { sendNoticesSoon } from "../payment-notices-soon";
 import { accessOf, cycleEventOf, provenanceOf, type Actor } from "./actor";
 import { done, refused, type CommandOutcome, type Refused } from "./outcome";
 import { gate } from "./policy";
+import { APPROVAL_RECORDED } from "../two-approvals";
 
 /**
  * A person's decisions on a milestone the agent held (held milestone actions R2, R3; integrations design §9). The
@@ -37,6 +38,8 @@ export async function payMilestoneNow(
     return done("Paid.", { status: result.status, txRef: result.txRef });
   }
   if (result.status === "verified") return done("Payment submitted; waiting for Circle to confirm it.", { status: result.status, txRef: result.txRef });
+  // Above the workspace's figure, the first of two approvals is recorded and sends nothing (two approvals T4, T8).
+  if (result.status === "approved") return done(APPROVAL_RECORDED, { status: result.status, txRef: null });
   const reason = /\[(?:transfer|execution) failed:\s*(.+?)\]\s*$/.exec(result.note)?.[1] ?? /\[not paid:\s*(.+?)\]\s*$/.exec(result.note)?.[1];
   return refused("not_paid", reason ? `Not paid: ${reason}. The milestone is still held.` : "Not paid. The milestone is still held.", { changed: true });
 }

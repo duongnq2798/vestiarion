@@ -177,7 +177,7 @@ describe("a code stop, in a few words", () => {
       "bridge.fee_above_cap", "bridge.fee_unavailable", "bridge.gateway_balance_short", "bridge.unsupported_token",
       "counterparty.address_unconfirmed", "counterparty.client_payable", "counterparty.high_risk", "counterparty.payment_limit", "counterparty.unscreened",
       "fx.rate_unavailable", "fx.swap_cost_above_cap", "fx.swap_usdc_short", "invoice.duplicate_of_settled", "invoice.match_incomplete", "counterparty.new_payee",
-      "treasury.insufficient_eurc", "workspace.onchain_limit", "workspace.onchain_limit_route", "workspace.outflow_budget",
+      "treasury.insufficient_eurc", "workspace.onchain_limit", "workspace.onchain_limit_route", "workspace.outflow_budget", "workspace.two_approvals",
     ];
     for (const rule of rules) {
       expect(ruleInBrief(rule), rule).not.toBeNull();
@@ -247,6 +247,18 @@ describe("what to do about a payable code stopped", () => {
     expect(agentResumes("counterparty.new_payee")).toBe("The agent decides it again on its own once another payment to this address goes through.");
   });
 
+  it("sends a payment above the figure for two approvals to two people, in Approvals (two approvals T3)", () => {
+    expect(ruleNextStep("workspace.two_approvals", counterparty)).toEqual({
+      sentence:
+        "Payments above the workspace's figure need two people's approval. Two people who can approve payments approve it in Approvals: the first approval is recorded, and the second pays it.",
+      fix: null,
+    });
+    expect(ruleInBrief("workspace.two_approvals")).toBe("payments above the workspace's figure need two people's approval");
+    expect(agentResumes("workspace.two_approvals")).toBe(
+      "The agent decides it again on its own if an owner raises the figure for two approvals to its amount or more, or turns it off."
+    );
+  });
+
   it("explains a hold for want of cash, says the agent resumes once cash comes in, and links the reserve (reserve cash back R4)", () => {
     expect(ruleNextStep(CASH_SHORTFALL, counterparty)).toEqual({
       sentence:
@@ -269,7 +281,7 @@ describe("what to do about a payable code stopped", () => {
       "bridge.fee_above_cap", "bridge.fee_unavailable", "bridge.gateway_balance_short", "bridge.unsupported_token",
       "counterparty.address_unconfirmed", "counterparty.client_payable", "counterparty.high_risk", "counterparty.payment_limit", "counterparty.unscreened",
       "fx.rate_unavailable", "fx.swap_cost_above_cap", "fx.swap_usdc_short", "invoice.duplicate_of_settled",
-      "treasury.insufficient_eurc", "workspace.onchain_limit", "workspace.onchain_limit_route", "workspace.outflow_budget",
+      "treasury.insufficient_eurc", "workspace.onchain_limit", "workspace.onchain_limit_route", "workspace.outflow_budget", "workspace.two_approvals",
     ];
     for (const rule of rules) expect(ruleNextStep(rule, counterparty), rule).not.toBeNull();
     expect(ruleNextStep(null, counterparty)).toBeNull();

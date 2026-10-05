@@ -102,6 +102,7 @@ describe("0023 is idempotent", () => {
       expect(keys.rows).toEqual([
         { tbl: "agent_budgets", col: "updated_by", action: "n" },
         { tbl: "api_keys", col: "created_by", action: "n" },
+        { tbl: "approval_policies", col: "updated_by", action: "n" },
         { tbl: "escrow_contracts", col: "created_by", action: "n" },
         { tbl: "gateway_signers", col: "created_by", action: "n" },
         { tbl: "github_installations", col: "connected_by", action: "n" },
@@ -119,6 +120,7 @@ describe("0023 is idempotent", () => {
         { tbl: "orgs", col: "created_by", action: "n" },
         { tbl: "orgs", col: "usyc_live_by", action: "n" },
         { tbl: "payee_links", col: "created_by", action: "n" },
+        { tbl: "payment_approvals", col: "approved_by", action: "c" },
         { tbl: "payment_receipts", col: "created_by", action: "n" },
         { tbl: "platform_team", col: "user_id", action: "c" },
         { tbl: "policy_proposals", col: "decided_by", action: "n" },

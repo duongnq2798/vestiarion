@@ -141,6 +141,18 @@ export function withOutcome(blocks: unknown[], invoiceId: string, line: string):
   });
 }
 
+/**
+ * A card one person approved, of a payment that needs two (two approvals T8): its buttons stay for the second approval,
+ * with who approved just above them. A later approval that still did not pay replaces that line.
+ */
+export function withApprovalGiven(blocks: unknown[], invoiceId: string, line: string): unknown[] {
+  const id = `approved-${invoiceId}`;
+  const kept = blocks.filter((block) => (block as { block_id?: unknown }).block_id !== id);
+  const note = { type: "context", block_id: id, elements: [{ type: "mrkdwn", text: line }] };
+  const at = kept.findIndex((block) => (block as { block_id?: unknown }).block_id === `payable-${invoiceId}`);
+  return at === -1 ? [...kept, note] : [...kept.slice(0, at), note, ...kept.slice(at)];
+}
+
 const VERB: Record<"approve" | "reject" | "return", string> = { approve: "approved it", reject: "rejected it", return: "returned it" };
 
 /** The line a decided card says: who decided, what came of it, and the transaction when one went out on Arc. */
@@ -157,6 +169,7 @@ export function outcomeLine(
     const tx = outcome.txRef && /^0x[0-9a-fA-F]{64}$/.test(outcome.txRef) ? ` ${link(arcTxUrl(outcome.txRef), "Arc testnet transaction")}` : "";
     return `Approved and paid by ${who}.${tx}`;
   }
+  if (outcome.status === "approved") return `Approved by ${who}. One more approval, by another person, pays it.`;
   return `Approved by ${who}. The payment was sent; Arc testnet is confirming it.`;
 }
 

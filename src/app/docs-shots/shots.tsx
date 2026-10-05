@@ -75,7 +75,7 @@ const SLUG = DESIGN_SLUG;
 
 /** Settings' line under its title, as the page has it. */
 const SETTINGS_SUB =
-  "Your own notifications, and how this workspace goes live, connects to other tools and signs its ledger. An owner takes it live, rotates the ledger signing key or deletes it; an owner or admin manages API keys, webhooks and integrations.";
+  "Your own notifications, and how this workspace goes live, connects to other tools, approves payments and signs its ledger. An owner takes it live, sets two approvals, rotates the ledger signing key or deletes it; an owner or admin manages API keys, webhooks and integrations.";
 
 // ---------------------------------------------------------------------------
 // Go live

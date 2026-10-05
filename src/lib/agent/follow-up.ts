@@ -33,6 +33,7 @@
 import { currentConfig } from "../context";
 import type { FollowUpConfig } from "../config";
 import { fxChange, type FxChange, type FxHold, type FxNow } from "../fx/recheck";
+import { TWO_APPROVALS_RULE } from "../two-approvals";
 
 export type { FollowUpConfig };
 
@@ -75,6 +76,11 @@ export interface FrozenInvoice {
    * has received a confirmed payment, and whether two parties stand behind it. Absent when it was not read.
    */
   newPayee?: { addressPaid: boolean; twoParties: boolean };
+  /**
+   * The workspace's figure above which a payment needs two approvals, now: null when none is set (two approvals T3).
+   * Absent when it was not read, because nothing waited on it.
+   */
+  twoApprovalsAbove?: number | null;
 }
 
 /** The facts as they stood when the decision was taken, from the ledger. */
@@ -104,6 +110,8 @@ export interface DecisionFacts {
   fxHold?: FxHold | null;
   /** Held by code as the first payment to an address one party alone stood behind (`counterparty.new_payee`, N7). */
   newPayeeHeld?: boolean;
+  /** Held by code for two approvals (`workspace.two_approvals`): the USDC it was weighed at, and the figure then. Null otherwise. */
+  heldForTwoApprovals?: { value: number; above: number } | null;
 }
 
 export type FollowUpAction = "reopen" | "escalate" | "wait";
@@ -156,6 +164,28 @@ function budgetRoomChange(room: number | null | undefined, needed: number): stri
 }
 
 const CASH_EPSILON = 0.0000005;
+
+/**
+ * What a decision held for two approvals was weighed at (two approvals T3): the USDC value (a EURC payable's
+ * `usdcValue`, else the amount) and the figure, from its ledger entry. Null for any other decision, or one that recorded
+ * no figure.
+ */
+export function twoApprovalsHeldValue(entry: { detail: Record<string, unknown> }): { value: number; above: number } | null {
+  const { detail } = entry;
+  const observed = (detail.observed ?? {}) as Record<string, unknown>;
+  if (detail.guardrailRule !== TWO_APPROVALS_RULE || observed.twoApprovalsAbove == null) return null;
+  return { value: Number(detail.usdcValue ?? observed.amount), above: Number(observed.twoApprovalsAbove) };
+}
+
+/**
+ * A hold for two approvals ends when the figure no longer covers what was held: turned off, or raised to its value or
+ * more (two approvals T3). Null while it still holds it, or while the figure was not read.
+ */
+function twoApprovalsChange(now: number | null | undefined, held: { value: number; above: number }): string | null {
+  if (now === undefined) return null;
+  if (now === null) return `two approvals above ${held.above} USDC were turned off`;
+  return held.value <= now ? `the figure for two approvals was raised from ${held.above} USDC to ${now} USDC, which covers its ${held.value} USDC` : null;
+}
 
 /**
  * A hold for want of cash ends when the operating wallet and the reserve, which the liquidity step brings back from
@@ -261,6 +291,9 @@ export function planFollowUp(
   // A first payment held for want of a second person: decided again once the address was paid, or two parties stand behind it.
   if (atDecision.newPayeeHeld && invoice.newPayee?.addressPaid) changes.push("the payee's address has received a confirmed payment since");
   else if (atDecision.newPayeeHeld && invoice.newPayee?.twoParties) changes.push("a second person now stands behind the payee's address");
+  // A payment held for two approvals: decided again once the figure no longer covers it.
+  const twoApprovals = atDecision.heldForTwoApprovals ? twoApprovalsChange(invoice.twoApprovalsAbove, atDecision.heldForTwoApprovals) : null;
+  if (twoApprovals) changes.push(twoApprovals);
   // A fresh quote that crossed the threshold that held a EURC payable (FX re-evaluation F2), weighed against the limit now.
   const fx = atDecision.fxHold && invoice.fx ? fxChange(atDecision.fxHold, invoice.fx, invoice.paymentLimit) : null;
   if (fx) changes.push(fx.sentence);
@@ -338,6 +371,8 @@ export interface HeldMilestone {
   verificationSource: string | null;
   /** What the agent's spending limit leaves now; null with none set; absent when not read (outflow budget spec R6). */
   budgetRoom?: number | null;
+  /** The figure above which a payment needs two approvals, now; null with none set; absent when not read (two approvals T3). */
+  twoApprovalsAbove?: number | null;
 }
 
 /** What the milestone decision rested on, from its ledger entry's `observed` and `execution`. */
@@ -349,6 +384,8 @@ export interface MilestoneDecisionFacts {
   heldBecausePaused: boolean;
   /** Held only for the agent's spending limit (`execution.heldBecause`). */
   heldForBudget?: boolean;
+  /** Held by code for two approvals (`workspace.two_approvals`). */
+  heldForTwoApprovals?: boolean;
 }
 
 export interface MilestoneFollowUpPlan {
@@ -389,6 +426,13 @@ export function planMilestoneFollowUp(milestone: HeldMilestone, atDecision: Mile
   }
   const budgetChange = atDecision.heldForBudget ? budgetRoomChange(milestone.budgetRoom, milestone.amount) : null;
   if (budgetChange) changes.push(budgetChange);
+  // Held for two approvals: decided again once the figure no longer covers it (two approvals T3).
+  if (atDecision.heldForTwoApprovals && milestone.twoApprovalsAbove !== undefined) {
+    if (milestone.twoApprovalsAbove === null) changes.push("two approvals were turned off");
+    else if (milestone.amount <= milestone.twoApprovalsAbove) {
+      changes.push(`the figure for two approvals is now ${milestone.twoApprovalsAbove} USDC, which covers its ${milestone.amount} USDC`);
+    }
+  }
 
   if (changes.length > 0) {
     return {

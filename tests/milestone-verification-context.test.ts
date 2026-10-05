@@ -61,7 +61,7 @@ describe("the contractor stage and the agent's spending limit (outflow budget sp
 
   it("weighs a release against what the limit leaves, after the contractor's own checks and before anything is sent", () => {
     // After the new payee check too (new payee check N3): a release held for want of a second person reads no limit.
-    expect(release).toContain("outflowBudget = highRisk || unscreened || overLimit || newPayeeHeld ? null : await budget.room();");
+    expect(release).toContain("outflowBudget = highRisk || unscreened || overLimit || newPayeeHeld || twoApprovalsHeld ? null : await budget.room();");
     expect(release.indexOf("exceedsBudget(amount, outflowBudget)")).toBeLessThan(release.indexOf("planned.push("));
     expect(release).toContain('guardrailRule = "workspace.outflow_budget";');
     // Sent only after every milestone is decided (batch payouts §2).
@@ -95,7 +95,7 @@ describe("the contractor stage and the spending limit enforced on Arc (onchain s
 
   it("asks the contract about a release not from escrow, after the contractor's own checks", () => {
     expect(release).toContain('["funded", "funding"].includes(String((milestone as { escrow_state?: string | null }).escrow_state ?? ""))');
-    expect(release).toContain('highRisk || unscreened || overLimit || newPayeeHeld || escrowed ? null : await onChainLimit.check({ sourceType: "milestone", sourceId: milestone.id, to: contractor.address, amount })');
+    expect(release).toContain('highRisk || unscreened || overLimit || newPayeeHeld || twoApprovalsHeld || escrowed ? null : await onChainLimit.check({ sourceType: "milestone", sourceId: milestone.id, to: contractor.address, amount })');
   });
 
   it("lets the code's own limit speak first, then holds what the contract would refuse, before anything is planned", () => {

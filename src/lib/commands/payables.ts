@@ -5,6 +5,7 @@ import { accessOf, cycleEventOf, provenanceOf, type Actor } from "./actor";
 import { checkChatDecision, type ShownCard } from "./chat-decisions";
 import { done, refused, TRY_AGAIN, type CommandOutcome, type Refused } from "./outcome";
 import { gate } from "./policy";
+import { APPROVAL_RECORDED } from "../two-approvals";
 
 /**
  * A person's decisions on a payable the agent stopped (integrations design §9, Phase 0): the console's Approvals
@@ -43,7 +44,7 @@ export function heldMessage(note: string): string {
 export async function approvePayable(
   actor: Actor,
   input: { invoiceId: string; shownAddress?: string; card?: ShownCard }
-): Promise<CommandOutcome<{ status: "paid" | "matched"; txRef: string | null }>> {
+): Promise<CommandOutcome<{ status: "paid" | "matched" | "approved"; txRef: string | null }>> {
   const refusal = gate(actor, "payable.approve");
   if (refusal) return refusal;
   let result: Awaited<ReturnType<typeof approveAndPay>>;
@@ -57,6 +58,8 @@ export async function approvePayable(
   }
   // A failed transfer leaves the invoice held with the provider's reason: something changed, and it is still a failure.
   if (result.status === "held") return refused("transfer_failed", heldMessage(result.note), { changed: true });
+  // Above the workspace's figure, the first of two approvals is recorded and sends nothing (two approvals T4, T8).
+  if (result.status === "approved") return done(APPROVAL_RECORDED, { status: "approved", txRef: null });
   // A confirmed payment's payee hears of it now, not at the next cycle (payment notices R5).
   if (result.status === "paid") sendNoticesSoon(accessOf(actor));
   return done(result.status === "paid" ? "Paid." : "Payment submitted; waiting for confirmation.", { status: result.status, txRef: result.txRef });

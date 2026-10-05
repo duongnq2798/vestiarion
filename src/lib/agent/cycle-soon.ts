@@ -41,6 +41,8 @@ export type CycleEventKind =
   | "purchase_orders_waived"
   | "recurring_added"
   | "budget_raised"
+  /** The figure for two approvals was raised or turned off: a payment held for two approvals may need one now (two approvals T3). */
+  | "two_approvals_raised"
   | "cash_returned"
   | "reminders_on"
   | "agent_resumed"

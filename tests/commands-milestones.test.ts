@@ -41,6 +41,14 @@ describe("payMilestoneNow", () => {
     expect(mocks.sendNoticesSoon).toHaveBeenCalledTimes(1);
   });
 
+  it("says an approval was recorded and one more pays it, telling no payee (two approvals T8)", async () => {
+    mocks.payHeldMilestone.mockResolvedValueOnce({ status: "approved", txRef: null, note: "" });
+    expect(await run(() => payMilestoneNow(approver(), { milestoneId: MILESTONE }))).toEqual({
+      ok: true, message: "Approved. One more approval, by another person, pays it.", status: "approved", txRef: null,
+    });
+    expect(mocks.sendNoticesSoon).not.toHaveBeenCalled();
+  });
+
   it("says a submitted transfer waits for Circle", async () => {
     mocks.payHeldMilestone.mockResolvedValueOnce({ status: "verified", txRef: null, note: "" });
     expect(await run(() => payMilestoneNow(approver(), { milestoneId: MILESTONE }))).toMatchObject({

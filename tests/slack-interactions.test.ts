@@ -146,6 +146,17 @@ describe("handleInteraction", () => {
     expect(rewritten).not.toContain("vx_approve");
   });
 
+  it("keeps the card's buttons after an approval that did not pay yet, saying one more pays it (two approvals T8)", async () => {
+    mocks.approve.mockResolvedValue({ ok: true, message: "Approved. One more approval, by another person, pays it.", status: "approved", txRef: null });
+    const { handle, replies } = world();
+    await handle(signedClick("vx_approve", cardToken(CARD, keys())));
+    expect(replies).toHaveLength(1);
+    expect(replies[0]).toMatchObject({ replace_original: true });
+    const rewritten = JSON.stringify(replies[0]);
+    expect(rewritten).toContain("Approved by <@U0LINH>. One more approval, by another person, pays it.");
+    expect(rewritten).toContain("vx_approve");
+  });
+
   it("rejects and returns with the same card", async () => {
     mocks.reject.mockResolvedValue({ ok: true, message: "Rejected." });
     mocks.return.mockResolvedValue({ ok: true, message: "Returned." });

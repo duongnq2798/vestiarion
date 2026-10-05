@@ -2,7 +2,8 @@ import { currentOrgId } from "../context";
 import { db } from "../dal";
 import { getChainProvider } from "../circle";
 import { payeeNotReady } from "../counterparty-address";
-import { firstPaymentCheck } from "../new-payee-facts";
+import { firstPaymentCheck, loadNewPayeeFacts } from "../new-payee-facts";
+import { newPayeeCheck } from "../new-payee";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { listLedgerEntriesForTargets } from "../ledger";
 import type { Provenance } from "../provenance";
@@ -22,6 +23,19 @@ import { payoutAddress, syncOperatingBalance } from "./pay";
 import { HELD_BECAUSE_PAUSED } from "./pause";
 import { isSoleApprover } from "./sole-approver";
 import { PAYMENTS_OFF, paymentsDisabled } from "../payments-switch";
+import { approversBesides, readTwoApprovalsAbove } from "../approval-policy";
+import { needsSecondApprover, TWO_APPROVALS_RULE, type TwoApprovalsFacts } from "../two-approvals";
+import { SECOND_OF_TWO_NOTE } from "./approvals";
+import {
+  clearApprovals,
+  giveApproval,
+  markApprovalsUsed,
+  mayGiveApproval,
+  standingApprovals,
+  twoApprovalsFacts,
+  type GivenApproval,
+  type PaymentSource,
+} from "./second-approval";
 
 /**
  * A person decides a held milestone (docs/superpowers/specs/2026-10-02-held-milestone-actions-design.md): every
@@ -36,6 +50,9 @@ import { PAYMENTS_OFF, paymentsDisabled } from "../payments-switch";
  * Overriding a hold the agent chose (rather than sending again a release it decided) needs someone other than
  * whoever added the milestone, as approving a held payable does — unless they are the workspace's sole approver
  * (docs/superpowers/specs/2026-10-03-sole-approver-design.md), and then the ledger entry says so.
+ *
+ * Above the workspace's figure for two approvals (docs/superpowers/specs/2026-10-05-two-approvals-design.md T4–T6), the
+ * first Pay now records an approval and sends nothing; another person's Pay now pays it. Close clears the approvals.
  *
  * Both decisions are claimed through `claim_milestone_decision` (migration 0059) first, so two people never
  * decide one milestone at once; the milestone stays `held` while claimed, where the agent's cycle never looks.
@@ -58,7 +75,9 @@ export type MilestoneDecisionErrorCode =
   | "escrow_locked"
   | "reason_required"
   | "payments_off"
-  | "payment_unknown";
+  | "payment_unknown"
+  | "already_approved"
+  | "needs_second_approver";
 
 const MESSAGES: Record<MilestoneDecisionErrorCode, string> = {
   milestone_not_found: "That milestone is not in this workspace.",
@@ -78,6 +97,9 @@ const MESSAGES: Record<MilestoneDecisionErrorCode, string> = {
   reason_required: "Say why it is closed without paying, in up to 500 characters.",
   payments_off: PAYMENTS_OFF,
   payment_unknown: unknownSendMessage("milestone", null),
+  already_approved: "You approved this already. Another person who can approve payments must approve it to pay.",
+  needs_second_approver:
+    "Payments above the workspace's figure need two approvals, and only one person in this workspace can approve payments. Raise the figure in Settings, or add an approver on Members.",
 };
 
 export class MilestoneDecisionError extends Error {
@@ -109,6 +131,7 @@ export type HeldReasonKind =
   | "paused"
   | "outflow_budget"
   | "new_payee"
+  | "two_approvals"
   | "agent_held";
 
 export interface HeldReason {
@@ -162,6 +185,7 @@ const HINTS: Record<HeldReasonKind, string> = {
   paused: "Held while the agent was paused",
   outflow_budget: "Past the agent's spending limit",
   new_payee: "First payment to a new address",
+  two_approvals: "Needs two approvals",
   agent_held: "The agent held it",
 };
 const usdc = (value: number) => `${value} USDC`;
@@ -269,6 +293,19 @@ function reasonOf(facts: HeldFacts): Omit<HeldReason, "hint"> {
       override: true,
     };
   }
+  // Above the workspace's figure for two approvals (two approvals T3, T4): two people pay it now, each with Pay now.
+  if (detail.guardrailRule === TWO_APPROVALS_RULE) {
+    const observed = (detail.observed ?? {}) as Record<string, unknown>;
+    const figure = observed.twoApprovalsAbove != null ? `above ${Number(observed.twoApprovalsAbove)} USDC` : "above the workspace's figure";
+    return {
+      kind: "two_approvals",
+      text: `Payments ${figure} need two approvals in this workspace. The first Pay now records an approval and sends nothing; another person's Pay now pays it.`,
+      link: null,
+      canPay: true,
+      canClose: true,
+      override: true,
+    };
+  }
   if (detail.guardrailRule === "workspace.outflow_budget" || execution.heldBecause === HELD_FOR_BUDGET) {
     return {
       kind: "outflow_budget",
@@ -312,8 +349,18 @@ interface LoadedMilestone {
   agentReasoning: string | null;
   escrowState: string | null;
   escrowRefundAfter: string | null;
+  /** When a person last claimed its decision: under 10 minutes ago, someone is deciding it. */
+  decisionClaimedAt: string | null;
   contractorId: string;
   facts: HeldFacts;
+}
+
+/**
+ * The entry a held milestone's reason reads (`heldReason`): its newest, but neither a receipt nor an approval a person
+ * gave it, which says nothing of why it is held (two approvals T8).
+ */
+export function decisionEntryOf<Entry extends { action: string }>(entries: readonly Entry[]): Entry | null {
+  return entries.find((entry) => !entry.action.startsWith("receipt_") && entry.action !== "milestone_approval_given") ?? null;
 }
 
 const num = (value: unknown) => (typeof value === "number" ? value : Number(value ?? 0));
@@ -338,7 +385,7 @@ async function loadMilestone(milestoneId: string, live: boolean): Promise<Loaded
     .maybeSingle();
   if (intentRead.error) throw new Error(intentRead.error.message);
   const entries = await listLedgerEntriesForTargets({ milestoneIds: [milestoneId] });
-  const last = entries.find((entry) => !entry.action.startsWith("receipt_")) ?? null;
+  const last = decisionEntryOf(entries);
 
   const amount = num(milestone.amount);
   const agentReasoning = (milestone.agent_reasoning as string | null) ?? null;
@@ -352,6 +399,7 @@ async function loadMilestone(milestoneId: string, live: boolean): Promise<Loaded
     agentReasoning,
     escrowState: (milestone.escrow_state as string | null) ?? null,
     escrowRefundAfter: (milestone.escrow_refund_after as string | null) ?? null,
+    decisionClaimedAt: (milestone.decision_claimed_at as string | null) ?? null,
     contractorId: String(contractor.id),
     facts: {
       amount,
@@ -371,6 +419,40 @@ async function loadMilestone(milestoneId: string, live: boolean): Promise<Loaded
       live,
     },
   };
+}
+
+/**
+ * For the held milestones a page lists, those above the figure for two approvals (two approvals T8): the approvals given
+ * that still count, and who is left out, as Pay now weighs them. Whoever added it is left out and, for a first payment
+ * where payments are real, whoever gave the address (new payee check N4). With no figure set, nothing more is read.
+ */
+export async function heldMilestonesTwoApprovals(
+  held: ReadonlyArray<{ id: string; amount: number; created_by?: string | null; contractor_id: string }>,
+  contractors: ReadonlyMap<string, { address: string | null }>,
+  intents: ReadonlyMap<string, IntentState>
+): Promise<Map<string, TwoApprovalsFacts>> {
+  if (held.length === 0) return new Map();
+  const above = await readTwoApprovalsAbove(db());
+  if (above === null) return new Map();
+  const live = getChainProvider().mode === "live";
+  const newPayeeFacts = live ? await loadNewPayeeFacts(db(), [...new Set(held.map((milestone) => milestone.contractor_id))]) : null;
+  return twoApprovalsFacts(
+    "milestone",
+    held.map((milestone) => {
+      const address = contractors.get(milestone.contractor_id)?.address ?? null;
+      const check = newPayeeFacts
+        ? newPayeeCheck({ address, paidTo: newPayeeFacts.paidTo, entries: newPayeeFacts.entries.get(milestone.contractor_id) ?? [] })
+        : null;
+      return {
+        id: milestone.id,
+        payment: { amount: milestone.amount, currency: "USDC", address },
+        weighed: milestone.amount,
+        excluded: [milestone.created_by, check?.firstPayment ? check.addressBy : null],
+        sent: transferExists(intents.get(milestone.id) ?? null),
+      };
+    }),
+    above
+  );
 }
 
 /** `claim_milestone_decision` raises `<code>: <detail>` (the 0025 pattern); anything else is rethrown as is. */
@@ -399,6 +481,7 @@ export async function payHeldMilestone(input: {
   const orgId = currentOrgId();
   const provider = getChainProvider();
   const milestone = await loadMilestone(input.milestoneId, provider.mode === "live");
+  const contractorAddress = milestone.facts.contractor.address;
   if (milestone.status !== "held") raise("not_held");
   if (!milestone.verified) raise("not_verified");
 
@@ -410,7 +493,19 @@ export async function payHeldMilestone(input: {
   // judged as one, by what would hold it if no transfer existed, and only the funds check is skipped.
   const unknown = transferUnknown(milestone.facts.intent);
   const blocking = unknown ? heldReason({ ...milestone.facts, intent: null }) : reason;
+  // Above the workspace's figure a payment needs two people's approval (two approvals T4); a transfer already sent is
+  // only recorded, on one approval (T6).
+  const above = alreadySent ? null : await readTwoApprovalsAbove(db());
+  const twoNeeded = above !== null && milestone.amount > above;
+  // A first payment to an address, and who gave it (new payee check N4).
+  const firstPayment = !alreadySent && provider.mode === "live" ? await firstPaymentCheck(db(), { id: milestone.contractorId, address: contractorAddress }) : null;
+  // Whoever added it, and whoever gave a first payment's address.
+  const excluded = [milestone.createdBy, firstPayment?.addressBy ?? null];
+  const source: PaymentSource = { type: "milestone", id: milestone.id };
+  const payment = { amount: milestone.amount, currency: "USDC", address: contractorAddress };
   let soleApprover = false;
+  let fewApprovers = false;
+  let standing: GivenApproval[] = [];
   // A transfer that already exists is recorded whatever stands in the way now: nothing new can move.
   if (!alreadySent) {
     const blocked: Partial<Record<HeldReasonKind, MilestoneDecisionErrorCode>> = {
@@ -422,15 +517,57 @@ export async function payHeldMilestone(input: {
     };
     const code = blocked[blocking.kind];
     if (code) raise(code);
-    if (blocking.override && milestone.createdBy === input.actorId) {
+    if (twoNeeded) {
+      // No approval is taken while someone is deciding it.
+      if (milestone.decisionClaimedAt && Date.parse(milestone.decisionClaimedAt) > Date.now() - 10 * 60_000) raise("already_claimed");
+      // With fewer than two people who can approve payments, it could never be paid: no approval is taken (T5).
+      if ((await approversBesides([])) < 2) raise("needs_second_approver", needsSecondApprover(above as number));
+      standing = await standingApprovals(source, payment);
+      // Whoever added it, or gave its address, gives only the approvals no one independent of it can (T5).
+      if (excluded.includes(input.actorId)) {
+        if (!(await mayGiveApproval({ actorId: input.actorId, excluded, given: standing }))) raise(milestone.createdBy === input.actorId ? "self_approval" : "new_payee_self");
+        fewApprovers = true;
+      }
+    } else if (blocking.override && milestone.createdBy === input.actorId) {
       if (!(await isSoleApprover(input.actorId))) raise("self_approval");
       soleApprover = true;
     }
   }
   // A first payment to an address needs someone other than whoever gave it, unless they decide alone (new payee check N4).
-  const firstPayment =
-    !alreadySent && provider.mode === "live" ? await firstPaymentCheck(db(), { id: milestone.contractorId, address: milestone.facts.contractor.address }) : null;
-  if (firstPayment?.addressBy === input.actorId && !(await isSoleApprover(input.actorId))) raise("new_payee_self");
+  if (!twoNeeded && firstPayment?.addressBy === input.actorId && !(await isSoleApprover(input.actorId))) raise("new_payee_self");
+
+  // Two approvals (T4): the first is recorded and sends nothing; the second, by another person, pays.
+  let approvals: Array<{ by: string; at: string }> = [];
+  if (twoNeeded) {
+    const other = standing.find((approval) => approval.by !== input.actorId);
+    if (!other) {
+      if (standing.some((approval) => approval.by === input.actorId)) raise("already_approved");
+      await giveApproval(source, input.actorId, payment);
+      await appendLedgerEntryBestEffort(orgId, {
+        actor: "human",
+        domain: "contractor",
+        action: "milestone_approval_given",
+        summary: `Approved milestone "${milestone.title}" for ${milestone.facts.contractor.name}: ${milestone.amount} USDC; one more approval pays it (payments above ${above} USDC need two)`,
+        detail: {
+          by: input.actorId,
+          milestoneId: milestone.id,
+          counterpartyId: milestone.contractorId,
+          amount: milestone.amount,
+          currency: "USDC",
+          address: contractorAddress,
+          twoApprovalsAbove: above,
+          // Given by whoever added it, or gave its address, as fewer than two others can approve (T5).
+          ...(fewApprovers ? { fewApprovers: true } : {}),
+          ...input.provenance,
+        },
+      });
+      return { status: "approved", txRef: null, note: "" };
+    }
+    // Another person's approval stands, so this one pays. Nothing of it is stored before the claim: a refusal on the way
+    // leaves no approval behind, and the ledger entry is its record (T6).
+    approvals = [{ by: other.by, at: other.at }, { by: input.actorId, at: new Date().toISOString() }];
+    if (excluded.includes(other.by)) fewApprovers = true;
+  }
 
   const operatingRead = await db().from("accounts").select("id, balance").eq("kind", "operating").maybeSingle();
   if (operatingRead.error) throw new Error(operatingRead.error.message);
@@ -444,6 +581,18 @@ export async function payHeldMilestone(input: {
   }
 
   await claim(milestone.id, input.actorId);
+
+  // The approvals that let it through are used by this payment, or nothing is sent (T6): approvals left open could send
+  // it again on one approval after a failed transfer. The milestone is let go for the next decision.
+  if (approvals.length > 0) {
+    try {
+      await markApprovalsUsed(source);
+    } catch (error) {
+      const released = await db().from("milestones").update(RELEASED).eq("id", milestone.id);
+      if (released.error) console.error("milestone decision: claim not released", milestone.id, released.error.message);
+      throw error;
+    }
+  }
 
   const outcome = await releaseHeldMilestone(
     { milestoneId: milestone.id, destination: payoutAddress(milestone.facts.contractor.address, milestone.contractorId), amount: milestone.amount },
@@ -474,7 +623,7 @@ export async function payHeldMilestone(input: {
 
   const name = milestone.facts.contractor.name;
   const execution = outcome.paymentExecution;
-  const own = soleApprover ? ` ${SOLE_APPROVER_NOTE}` : "";
+  const own = soleApprover ? ` ${SOLE_APPROVER_NOTE}` : approvals.length > 0 ? ` ${SECOND_OF_TWO_NOTE}` : "";
   await appendLedgerEntryBestEffort(orgId, {
     actor: "human",
     domain: "contractor",
@@ -501,6 +650,9 @@ export async function payHeldMilestone(input: {
       ...(soleApprover ? { soleApprover: true } : {}),
       // The address's first payment, which this person stood behind beside whoever gave the address (new payee check N4).
       ...(firstPayment ? { firstPayment: true } : {}),
+      // Above the figure: the two approvals, the earlier first (two approvals T7).
+      ...(approvals.length > 0 ? { approvals: approvals.map((approval) => ({ by: approval.by, at: approval.at })), twoApprovalsAbove: above } : {}),
+      ...(fewApprovers ? { fewApprovers: true } : {}),
       ...input.provenance,
     },
   });
@@ -547,6 +699,12 @@ export async function closeMilestone(input: { actorId: string; milestoneId: stri
     .eq("id", milestone.id)
     .eq("status", "held");
   if (update.error) throw new Error(update.error.message);
+  // It is never paid now: the approvals given for it end with it (two approvals T6). Best effort.
+  try {
+    await clearApprovals({ type: "milestone", id: milestone.id });
+  } catch (error) {
+    console.error("milestone decision: approvals not cleared", milestone.id, error instanceof Error ? error.message : error);
+  }
 
   await appendLedgerEntryBestEffort(orgId, {
     actor: "human",

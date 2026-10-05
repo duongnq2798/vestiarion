@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { withOrg } from "@/lib/dal/scope";
-import { closeMilestone, heldReason, MilestoneDecisionError, payHeldMilestone, type HeldFacts } from "@/lib/agent/milestone-decisions";
+import { closeMilestone, heldMilestonesTwoApprovals, heldReason, MilestoneDecisionError, payHeldMilestone, type HeldFacts } from "@/lib/agent/milestone-decisions";
 import { encryptSecret, parseMasterKeys } from "@/lib/secrets";
 import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 
@@ -209,6 +209,16 @@ function world(options: {
   soleApprover?: FakeReply;
   /** The contractor's entries that set or confirmed its address, newest first (new payee check N2); none by default. */
   addressEntries?: Array<Record<string, unknown>>;
+  /** The workspace's figure above which a payment needs two approvals (two approvals T1); none by default. */
+  twoApprovals?: number;
+  /** The milestone's open approvals (two approvals T4); none by default. */
+  approvals?: Array<Record<string, unknown>>;
+  /** How many members may approve payments besides those named (`approvers_besides`): one figure, or one per set left out; 2 by default. */
+  approversBesides?: number | ((excluded: string[]) => number);
+  /** The milestone's ledger entries, newest first; the one `last` names by default. */
+  entries?: Array<ReturnType<typeof entryRow>>;
+  /** The reply to marking approvals used; success by default. */
+  approvalsPatch?: FakeReply;
 } = {}) {
   let intentRow: Record<string, unknown> | null = options.intent === undefined ? FAILED_INTENT : options.intent;
   const fake = fakeSupabase((request: RecordedRequest) => {
@@ -223,10 +233,23 @@ function world(options: {
       return { body: [] };
     }
     if (request.path === "/rest/v1/payment_intents") return { body: intentRow };
-    if (request.path === "/rest/v1/rpc/ledger_entries_for_targets") return { body: [options.last ?? entryRow("milestone_release", {})] };
+    if (request.path === "/rest/v1/rpc/ledger_entries_for_targets") return { body: options.entries ?? [options.last ?? entryRow("milestone_release", {})] };
     if (request.path === "/rest/v1/accounts") return { body: { id: "acct-1", balance: options.balance ?? "8" } };
     if (request.path === "/rest/v1/rpc/claim_milestone_decision") return options.claim ? options.claim() : { body: milestoneRow() };
     if (request.path === "/rest/v1/rpc/sole_approver" && options.soleApprover) return options.soleApprover;
+    if (request.path === "/rest/v1/approval_policies") return { body: options.twoApprovals ? [{ two_approvals_above: String(options.twoApprovals) }] : [] };
+    if (request.path === "/rest/v1/payment_approvals" && request.method === "GET") return { body: options.approvals ?? [] };
+    if (request.path === "/rest/v1/payment_approvals" && request.method === "POST") {
+      const body = request.body as Record<string, unknown>;
+      return { status: 201, body: { id: "appr-new", approved_by: body.approved_by, approved_at: "2026-10-05T09:00:00.000Z", amount: String(body.amount), currency: body.currency, address: body.address } };
+    }
+    if (request.path === "/rest/v1/rpc/approvers_among") return { body: (request.body as { p_users: string[] }).p_users };
+    if (request.path === "/rest/v1/rpc/approvers_besides") {
+      const excluded = (request.body as { p_excluded: string[] }).p_excluded;
+      const count = options.approversBesides;
+      return { body: typeof count === "function" ? count(excluded) : (count ?? 2) };
+    }
+    if (request.path === "/rest/v1/payment_approvals" && request.method === "PATCH" && options.approvalsPatch) return options.approvalsPatch;
     if (request.path === "/rest/v1/rpc/append_ledger_entry") {
       return { body: { ...entryRow("x", {}), seq: 800, actor: "human" } };
     }
@@ -477,3 +500,165 @@ describe("Pay now and the first payment to an address (new payee check N4)", () 
   });
 });
 
+
+describe("a held milestone above the workspace's figure for two approvals (two approvals T3–T7)", () => {
+  const OTHER = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000c3";
+  const HELD = entryRow("milestone_release", {
+    guardrailBlocked: true,
+    guardrailRule: "workspace.two_approvals",
+    observed: { amount: 0.3, twoApprovalsAbove: 0.2 },
+  });
+  const approval = (by: string, over: Record<string, unknown> = {}) => ({
+    id: `appr-${by.slice(-2)}`, approved_by: by, approved_at: "2026-10-05T08:00:00.000Z", amount: "0.300000", currency: "USDC", address: ADDRESS, ...over,
+  });
+  const approvalRequests = (requests: RecordedRequest[], method: string) => requests.filter((r) => r.path === "/rest/v1/payment_approvals" && r.method === method);
+
+  it("says it waits for two approvals, and that Pay now gives one", () => {
+    const reason = heldReason(facts({ intent: null, lastEntry: { action: HELD.action, detail: HELD.detail } }));
+    expect(reason).toMatchObject({ kind: "two_approvals", hint: "Needs two approvals", canPay: true, canClose: true, override: true, link: null });
+    expect(reason.text).toBe(
+      "Payments above 0.2 USDC need two approvals in this workspace. The first Pay now records an approval and sends nothing; another person's Pay now pays it."
+    );
+  });
+
+  it("records the first Pay now as an approval, and sends nothing", async () => {
+    const { fake, run, claimed, ledger } = world({ intent: null, last: HELD, twoApprovals: 0.2 });
+
+    const result = await run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }));
+
+    expect(result).toEqual({ status: "approved", txRef: null, note: "" });
+    expect(claimed()).toBe(false);
+    expect(releaseHeldMilestoneMock).not.toHaveBeenCalled();
+    expect(approvalRequests(fake.requests, "POST")[0].body).toMatchObject({
+      source_type: "milestone", source_id: MILESTONE, approved_by: ACTOR, amount: 0.3, currency: "USDC", address: ADDRESS,
+    });
+    const [entry] = ledger();
+    expect(entry).toMatchObject({
+      p_actor: "human",
+      p_domain: "contractor",
+      p_action: "milestone_approval_given",
+      p_summary: 'Approved milestone "Clean service" for Puka Hotel: 0.3 USDC; one more approval pays it (payments above 0.2 USDC need two)',
+      p_detail: { by: ACTOR, milestoneId: MILESTONE, counterpartyId: CONTRACTOR, amount: 0.3, currency: "USDC", address: ADDRESS, twoApprovalsAbove: 0.2 },
+    });
+  });
+
+  it("pays on another person's Pay now, using both approvals, and names them", async () => {
+    releaseHeldMilestoneMock.mockResolvedValue({ ...PAID, paymentExecution: null });
+    const { fake, run, claimed, ledger } = world({ intent: null, last: HELD, twoApprovals: 0.2, approvals: [approval(OTHER)] });
+
+    const result = await run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }));
+
+    expect(result.status).toBe("paid");
+    expect(claimed()).toBe(true);
+    expect(approvalRequests(fake.requests, "PATCH")).toHaveLength(1);
+    expect(approvalRequests(fake.requests, "POST")).toHaveLength(0);
+    const [entry] = ledger();
+    expect(entry.p_action).toBe("milestone_approval_paid");
+    expect(entry.p_summary).toBe('Paid milestone "Clean service" to Puka Hotel now: 0.3 USDC (the second of two approvals)');
+    expect(entry.p_detail).toMatchObject({
+      twoApprovalsAbove: 0.2,
+      approvals: [
+        { by: OTHER, at: "2026-10-05T08:00:00.000Z" },
+        { by: ACTOR, at: expect.any(String) },
+      ],
+    });
+  });
+
+  it("refuses the same person twice, and whoever added it while two others can approve", async () => {
+    const twice = world({ intent: null, last: HELD, twoApprovals: 0.2, approvals: [approval(ACTOR)] });
+    expect(await refusal(twice.run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE })))).toBe("already_approved");
+
+    const own = world({ intent: null, last: HELD, twoApprovals: 0.2, milestone: { created_by: ACTOR } });
+    expect(await refusal(own.run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE })))).toBe("self_approval");
+    expect(approvalRequests(own.fake.requests, "POST")).toHaveLength(0);
+  });
+
+  it("lets whoever added it give one when fewer than two others can, and says so", async () => {
+    const { run, ledger } = world({ intent: null, last: HELD, twoApprovals: 0.2, milestone: { created_by: ACTOR }, approversBesides: (excluded) => (excluded.length === 0 ? 2 : 1) });
+    expect((await run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }))).status).toBe("approved");
+    expect(ledger()[0].p_detail).toMatchObject({ fewApprovers: true });
+  });
+
+  it("clears the approvals given when it is closed without paying", async () => {
+    const { fake, run } = world({ intent: null, last: HELD, twoApprovals: 0.2 });
+    await run(() => closeMilestone({ actorId: ACTOR, milestoneId: MILESTONE, reason: "Not delivered" }));
+    const cleared = approvalRequests(fake.requests, "DELETE");
+    expect(cleared).toHaveLength(1);
+    expect(cleared[0].params.get("source_type")).toBe("eq.milestone");
+    expect(cleared[0].params.get("source_id")).toBe(`eq.${MILESTONE}`);
+  });
+});
+
+describe("a held milestone above the figure, after review (two approvals T4–T6)", () => {
+  const OTHER = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000c3";
+  const HELD = entryRow("milestone_release", { guardrailBlocked: true, guardrailRule: "workspace.two_approvals", observed: { amount: 0.3, twoApprovalsAbove: 0.2 } });
+  const GIVEN = { ...entryRow("milestone_approval_given", { by: OTHER, amount: 0.3, twoApprovalsAbove: 0.2 }), seq: 790, actor: "human" };
+  const approval = (by: string) => ({ id: `appr-${by.slice(-2)}`, approved_by: by, approved_at: "2026-10-05T08:00:00.000Z", amount: "0.300000", currency: "USDC", address: ADDRESS });
+  const approvalRequests = (requests: RecordedRequest[], method: string) => requests.filter((r) => r.path === "/rest/v1/payment_approvals" && r.method === method);
+
+  it("still waits for two approvals after the first, and the paid entry says that is what held it", async () => {
+    releaseHeldMilestoneMock.mockResolvedValue({ ...PAID, paymentExecution: null });
+    const { run, ledger } = world({ intent: null, entries: [GIVEN, HELD], twoApprovals: 0.2, approvals: [approval(OTHER)] });
+
+    expect((await run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }))).status).toBe("paid");
+    expect(ledger()[0].p_detail).toMatchObject({ heldFor: "two_approvals" });
+  });
+
+  it("keeps no approval when the payment it would have made is refused", async () => {
+    const { fake, run, claimed } = world({ intent: null, last: HELD, twoApprovals: 0.2, approvals: [approval(OTHER)], balance: "0.1" });
+
+    expect(await refusal(run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE })))).toBe("insufficient_funds");
+    expect(claimed()).toBe(false);
+    expect(approvalRequests(fake.requests, "POST")).toHaveLength(0);
+  });
+
+  it("sends nothing when the approvals it uses cannot be marked used, and lets go of the milestone", async () => {
+    const { run, patch } = world({ intent: null, last: HELD, twoApprovals: 0.2, approvals: [approval(OTHER)], approvalsPatch: { status: 500, body: { message: "write failed" } } });
+
+    await expect(run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }))).rejects.toThrow();
+    expect(releaseHeldMilestoneMock).not.toHaveBeenCalled();
+    expect(patch()?.body).toEqual({ decision_claimed_by: null, decision_claimed_at: null });
+  });
+
+  it("takes no approval while another person is deciding it", async () => {
+    const { fake, run } = world({ intent: null, last: HELD, twoApprovals: 0.2, milestone: { decision_claimed_at: new Date().toISOString(), decision_claimed_by: OTHER } });
+
+    expect(await refusal(run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE })))).toBe("already_claimed");
+    expect(approvalRequests(fake.requests, "POST")).toHaveLength(0);
+  });
+
+  it("takes no approval where fewer than two people can approve payments", async () => {
+    const { fake, run } = world({ intent: null, last: HELD, twoApprovals: 0.2, approversBesides: (excluded) => (excluded.length === 0 ? 1 : 0) });
+
+    expect(await refusal(run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE })))).toBe("needs_second_approver");
+    expect(approvalRequests(fake.requests, "POST")).toHaveLength(0);
+  });
+});
+
+describe("heldMilestonesTwoApprovals (two approvals T8)", () => {
+  const GAVE = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000d4";
+  const HELD_ROW = { id: MILESTONE, amount: 0.3, created_by: CREATOR, contractor_id: CONTRACTOR };
+  const CONTRACTORS = new Map([[CONTRACTOR, { address: ADDRESS }]]);
+
+  it("leaves out whoever added it and, for a first payment where payments are real, whoever gave the address", async () => {
+    getChainProviderMock.mockReturnValue({ mode: "live", earnMode: "simulate", estimatedFeeUsd: 0.003 });
+    const { run } = world({
+      twoApprovals: 0.2,
+      addressEntries: [{ action: "create_counterparty", detail: { by: GAVE, counterpartyId: CONTRACTOR, address: ADDRESS } }],
+      approversBesides: (excluded) => (excluded.length === 0 ? 3 : 1),
+    });
+
+    const facts = await run(() => heldMilestonesTwoApprovals([HELD_ROW], CONTRACTORS, new Map()));
+
+    expect(facts.get(MILESTONE)).toEqual({ above: 0.2, approvals: [], excluded: [CREATOR, GAVE], excludedSlots: 1, approvers: 3 });
+  });
+
+  it("reads nothing more than the figure when none is set", async () => {
+    getChainProviderMock.mockReturnValue({ mode: "live", earnMode: "simulate", estimatedFeeUsd: 0.003 });
+    const { fake, run } = world({});
+
+    expect((await run(() => heldMilestonesTwoApprovals([HELD_ROW], CONTRACTORS, new Map()))).size).toBe(0);
+    // Besides the workspace's own row, which the scope reads.
+    expect(fake.requests.map((r) => r.path).filter((p) => p !== "/rest/v1/orgs")).toEqual(["/rest/v1/approval_policies"]);
+  });
+});

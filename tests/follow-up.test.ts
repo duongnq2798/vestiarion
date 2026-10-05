@@ -11,6 +11,7 @@ import {
   type FrozenInvoice,
   type HeldMilestone,
   type MilestoneDecisionFacts,
+  twoApprovalsHeldValue,
 } from "@/lib/agent/follow-up";
 
 const NOW = Date.parse("2026-09-24T12:00:00.000Z");
@@ -510,5 +511,51 @@ describe("follow-up — a payable held as a new payee (new payee check N7)", () 
   it("asks nothing of a payable held for anything else", () => {
     const other: DecisionFacts = { ...heldAsNewPayee, newPayeeHeld: false };
     expect(planFollowUp(held({ newPayee: { addressPaid: true, twoParties: true } }), other, NOW, config).action).toBe("wait");
+  });
+});
+
+describe("follow-up — a payment held for two approvals (two approvals T3)", () => {
+  const heldForTwo: DecisionFacts = { poReference: "PO-1", goodsReceived: true, riskLevel: "clear", paymentLimit: 500, heldForTwoApprovals: { value: 300, above: 250 } };
+  const held = (over: Partial<FrozenInvoice> = {}) => frozen({ status: "held", amount: 300, poReference: "PO-1", goodsReceived: true, paymentLimit: 500, ...over });
+
+  it("reopens a payable once the figure is turned off", () => {
+    const plan = planFollowUp(held({ twoApprovalsAbove: null }), heldForTwo, NOW, config);
+    expect(plan.action).toBe("reopen");
+    expect(plan.changes).toEqual(["two approvals above 250 USDC were turned off"]);
+  });
+
+  it("reopens it once the figure is raised to its value or more", () => {
+    expect(planFollowUp(held({ twoApprovalsAbove: 300 }), heldForTwo, NOW, config).changes).toEqual([
+      "the figure for two approvals was raised from 250 USDC to 300 USDC, which covers its 300 USDC",
+    ]);
+  });
+
+  it("leaves it while the figure still holds it, or when the figure was not read", () => {
+    expect(planFollowUp(held({ twoApprovalsAbove: 299 }), heldForTwo, NOW, config).action).toBe("wait");
+    expect(planFollowUp(held(), heldForTwo, NOW, config).action).toBe("wait");
+  });
+
+  it("asks nothing of a payable held for anything else", () => {
+    const other: DecisionFacts = { ...heldForTwo, heldForTwoApprovals: null };
+    expect(planFollowUp(held({ twoApprovalsAbove: null }), other, NOW, config).action).toBe("wait");
+  });
+
+  it("reopens a milestone held for two approvals once the figure no longer covers it", () => {
+    const milestone: HeldMilestone = { id: "ms-1", title: "Design", amount: 300, riskLevel: "clear", paymentLimit: 500, verificationSource: null };
+    const atDecision: MilestoneDecisionFacts = { riskLevel: "clear", paymentLimit: 500, verificationSource: null, heldBecausePaused: false, heldForTwoApprovals: true };
+    expect(planMilestoneFollowUp({ ...milestone, twoApprovalsAbove: null }, atDecision)).toMatchObject({ action: "reopen", changes: ["two approvals were turned off"] });
+    expect(planMilestoneFollowUp({ ...milestone, twoApprovalsAbove: 300 }, atDecision).changes).toEqual(["the figure for two approvals is now 300 USDC, which covers its 300 USDC"]);
+    expect(planMilestoneFollowUp({ ...milestone, twoApprovalsAbove: 299 }, atDecision).action).toBe("wait");
+    expect(planMilestoneFollowUp(milestone, atDecision).action).toBe("wait");
+    expect(planMilestoneFollowUp({ ...milestone, twoApprovalsAbove: null }, { ...atDecision, heldForTwoApprovals: false }).action).toBe("wait");
+  });
+});
+
+describe("twoApprovalsHeldValue", () => {
+  it("is the value and figure a decision held for two approvals was weighed at, null for any other", () => {
+    expect(twoApprovalsHeldValue({ detail: { guardrailRule: "workspace.two_approvals", observed: { amount: 300, twoApprovalsAbove: 250 } } })).toEqual({ value: 300, above: 250 });
+    expect(twoApprovalsHeldValue({ detail: { guardrailRule: "workspace.two_approvals", usdcValue: 108, observed: { amount: 100, twoApprovalsAbove: 100 } } })).toEqual({ value: 108, above: 100 });
+    expect(twoApprovalsHeldValue({ detail: { guardrailRule: "counterparty.payment_limit", observed: { amount: 300 } } })).toBeNull();
+    expect(twoApprovalsHeldValue({ detail: { guardrailRule: "workspace.two_approvals", observed: { amount: 300 } } })).toBeNull();
   });
 });

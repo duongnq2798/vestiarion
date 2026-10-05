@@ -10,6 +10,7 @@ const TABLE: Array<[Permission, { owner: boolean; admin: boolean; approver: bool
   ["agent.run_cycle",  { owner: true,  admin: true,  approver: false, viewer: false }],
   ["agent.resume",     { owner: true,  admin: true,  approver: false, viewer: false }],
   ["agent.budget",     { owner: true,  admin: true,  approver: false, viewer: false }],
+  ["approval.policy",  { owner: true,  admin: false, approver: false, viewer: false }],
   ["members.manage",   { owner: true,  admin: true,  approver: false, viewer: false }],
   ["api_keys.manage",  { owner: true,  admin: true,  approver: false, viewer: false }],
   ["webhooks.manage",  { owner: true,  admin: true,  approver: false, viewer: false }],

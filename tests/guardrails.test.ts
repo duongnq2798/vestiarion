@@ -413,3 +413,47 @@ describe("AP guardrails — two parties before the first payment to an address (
     expect(enforceApGuardrails({ ...base, action: "pay", amount: 50, newPayee: { twoParties: false } }).rule).toBe("counterparty.new_payee");
   });
 });
+
+describe("AP guardrails — two approvals above the workspace's figure (two approvals T3)", () => {
+  const base = { action: "pay" as const, reasoning: "Pay now.", amount: 120, riskLevel: "clear", paymentLimit: 500 };
+
+  it("holds a payment above the figure for two people", () => {
+    const result = enforceApGuardrails({ ...base, twoApprovalsAbove: 100 });
+    expect(result).toMatchObject({ blocked: true, status: "held", rule: "workspace.two_approvals" });
+    expect(result.reasoning).toBe(
+      "Pay now. [guardrail override: payments above 100 USDC need two people's approval in this workspace — payment refused before execution; two people approve it in Approvals]"
+    );
+  });
+
+  it("holds a schedule above it too, which the agent could never pay alone", () => {
+    const result = enforceApGuardrails({ ...base, action: "schedule", twoApprovalsAbove: 100 });
+    expect(result).toMatchObject({ blocked: true, rule: "workspace.two_approvals" });
+    expect(result.reasoning).toContain("scheduling refused before execution");
+  });
+
+  it("lets through a payment at or under the figure, and any payment with none set", () => {
+    expect(enforceApGuardrails({ ...base, amount: 100, twoApprovalsAbove: 100 }).blocked).toBe(false);
+    expect(enforceApGuardrails({ ...base, twoApprovalsAbove: null }).blocked).toBe(false);
+    expect(enforceApGuardrails(base).blocked).toBe(false);
+  });
+
+  it("weighs a EURC payment at its USDC value, which is the amount it is given", () => {
+    const eurc = { ...base, currency: "EURC" as const, fxAvailable: true };
+    expect(enforceApGuardrails({ ...eurc, amount: 108, twoApprovalsAbove: 100 }).rule).toBe("workspace.two_approvals");
+    // A EURC payment with no rate has no USDC value, and waits for a person on that account first.
+    expect(enforceApGuardrails({ ...eurc, fxAvailable: false, twoApprovalsAbove: 100 }).rule).toBe("fx.rate_unavailable");
+  });
+
+  it("names the counterparty's own limit first, and holds before the spending limit and any EURC swap", () => {
+    expect(enforceApGuardrails({ ...base, paymentLimit: 110, twoApprovalsAbove: 100 }).rule).toBe("counterparty.payment_limit");
+    const budget: BudgetRoom = { dailyUsdc: 100, weeklyUsdc: null, spentToday: 90, spentThisWeek: 90, remaining: 10, binding: "day" };
+    expect(enforceApGuardrails({ ...base, outflowBudget: budget, twoApprovalsAbove: 100 }).rule).toBe("workspace.two_approvals");
+    const swap = { requested: true, offer: { usdcIn: 130, costPercent: 0.1 }, usdcBalance: 500, usdcDueWithin7Days: 0 };
+    const result = enforceApGuardrails({ ...base, currency: "EURC", fxAvailable: true, eurcShort: { balance: 0, needed: 110, swap }, twoApprovalsAbove: 100 });
+    expect(result.rule).toBe("workspace.two_approvals");
+  });
+
+  it("does not rewrite a decision that pays nothing", () => {
+    expect(enforceApGuardrails({ ...base, action: "hold", twoApprovalsAbove: 1 }).blocked).toBe(false);
+  });
+});
