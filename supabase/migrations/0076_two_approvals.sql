@@ -24,7 +24,7 @@ create table if not exists public.approval_policies (
 
 alter table public.approval_policies enable row level security;
 revoke all privileges on table public.approval_policies from anon, authenticated, vestiarion_tenant;
-grant select, insert, update on table public.approval_policies to vestiarion_tenant;
+grant select, insert, update, delete on table public.approval_policies to vestiarion_tenant;
 grant all privileges on table public.approval_policies to service_role;
 
 drop policy if exists tenant_isolation on public.approval_policies;

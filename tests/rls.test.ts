@@ -51,6 +51,8 @@ const CRUD_UPDATE: Record<string, { column: string; expr: string }> = {
   spending_limit_contracts: { column: "circle_contract_id", expr: "coalesce(circle_contract_id, '') || '-changed'" },
   ar_reminders: { column: "tone", expr: "'firm'" },
   inbox_emails: { column: "status", expr: "'dismissed'" },
+  approval_policies: { column: "two_approvals_above", expr: "coalesce(two_approvals_above, 1) + 1" },
+  payment_approvals: { column: "used_at", expr: "now()" },
 };
 
 beforeAll(async () => {
