@@ -42,7 +42,8 @@ describe("rebuilding a recorded payable decision's facts", () => {
 
   it("takes the invoice and counterparty facts the entry recorded", () => {
     expect(facts.invoice).toEqual({ amount: 2, currency: "USDC", usdcValue: 2, memo: "Monitoring", poReference: "PO-100", goodsReceived: true, dueDate: "2026-09-30T12:00:00.000Z" });
-    expect(facts.counterparty).toEqual({ name: "Centronex", riskLevel: "clear", paymentLimit: 2, performanceHistory: { score: 0.6, status: "measured_from_ledger" } });
+    // Recorded before the business could mark a counterparty paid without purchase orders, when every one needed them.
+    expect(facts.counterparty).toEqual({ name: "Centronex", riskLevel: "clear", paymentLimit: 2, purchaseOrderRequired: true, performanceHistory: { score: 0.6, status: "measured_from_ledger" } });
     expect(facts.treasury).toEqual({ operatingBalance: 22.5, reserveBalance: 0 });
   });
 
@@ -73,6 +74,14 @@ describe("rebuilding a recorded payable decision's facts", () => {
     expect(gone.counterparty.name).toBe("Centronex");
     expect(gone.invoice.memo).toBeNull();
     expect(gone.invoice.dueDate).toBe("2026-09-30");
+  });
+
+  it("replays a counterparty paid without purchase orders as the entry recorded it (three-way match design M4)", () => {
+    const waived = factsFromEntry(
+      { ...ENTRY, detail: { ...ENTRY.detail, observed: { ...(ENTRY.detail.observed as Record<string, unknown>), poReference: null, purchaseOrderRequired: false } } },
+      { invoice: null, counterparty: null, others: new Map() }
+    );
+    expect(waived.counterparty.purchaseOrderRequired).toBe(false);
   });
 
   it("uses the timing an entry recorded, as the model was shown it", () => {

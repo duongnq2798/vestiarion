@@ -74,6 +74,8 @@ export function factsFromEntry(entry: ReplayEntry, rows: ReplayRows): ApPromptFa
       name: rows.counterparty?.name ?? /from (.+?) for /.exec(entry.summary)?.[1] ?? "the counterparty",
       riskLevel: String(observed.riskLevel ?? "clear"),
       paymentLimit: (observed.paymentLimit as number | null | undefined) ?? null,
+      // Unrecorded before the business could waive purchase orders (three-way match design M2), when every counterparty needed one.
+      purchaseOrderRequired: observed.purchaseOrderRequired !== false,
       performanceHistory: observed.performanceHistory ?? null,
     },
     treasury: { operatingBalance: (observed.operatingBalance as number | null | undefined) ?? null, reserveBalance: 0 },

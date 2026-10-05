@@ -30,7 +30,7 @@ describe("the cycle and an unconfirmed address", () => {
     // The rule is planFollowUp's (tests/follow-up.test.ts). Its wiring: the frozen payables read the address
     // timestamps, and each decision's facts carry whether the address waited for a person when it was taken.
     const followUp = source.slice(source.indexOf("const frozenRows = unwrap("), source.indexOf("followUpHeldMilestones(db, budget)"));
-    expect(followUp).toContain("counterparties(risk_level, payment_limit, address_changed_at, address_confirmed_at)");
+    expect(followUp).toContain("counterparties(risk_level, payment_limit, address_changed_at, address_confirmed_at");
     expect(followUp).toContain("addressUnconfirmed: observed.addressUnconfirmed === true,");
     expect(followUp).toContain("addressUnconfirmed: addressUnconfirmed(row.counterparties.address_changed_at, row.counterparties.address_confirmed_at),");
   });
