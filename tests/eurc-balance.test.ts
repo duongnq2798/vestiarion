@@ -25,7 +25,7 @@ const rpc = (result: unknown, status = 200) =>
 
 beforeEach(() => {
   chainModesMock.mockReset();
-  chainModesMock.mockReturnValue({ mode: "live", network: ARC_TESTNET, earnMode: "simulate" });
+  chainModesMock.mockReturnValue({ mode: "live", earnMode: "simulate" });
 });
 
 describe("readEurcBalance", () => {
@@ -64,7 +64,7 @@ describe("operatingEurcBalance", () => {
   });
 
   it("reads nothing in a sandbox", async () => {
-    chainModesMock.mockReturnValue({ mode: "simulate", network: ARC_TESTNET, earnMode: "simulate" });
+    chainModesMock.mockReturnValue({ mode: "simulate", earnMode: "simulate" });
     const d = database(WALLET);
     const fetch = rpc("0x0");
     expect(await d.run(() => operatingEurcBalance({ fetch }))).toBeNull();
