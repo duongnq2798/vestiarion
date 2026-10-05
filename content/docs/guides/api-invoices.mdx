@@ -50,7 +50,7 @@ curl https://www.vestiarion.xyz/api/v1/invoices \
 
 The answer is `201`, with the invoice in `status: "pending"`. A payable is now the agent's to decide, usually within a minute, as one typed in:
 
-- With a `poReference` and `goodsReceived: true`, the three-way match can complete. Without either, the agent asks for the missing detail instead of paying.
+- With a `poReference` and `goodsReceived: true`, the three-way match can complete. Without `goodsReceived: true`, or without a `poReference` for a counterparty that needs one, the agent asks for the missing detail instead of paying, and code refuses a payment either way. Every counterparty needs a purchase order unless an owner or admin marked it as paid without them on **Counterparties**.
 - A payment over the counterparty's limit, or to an address no one has confirmed, is held for a person. One to a high-risk counterparty, or one that repeats an invoice already paid, is flagged.
 - The workspace's spending limits, and its contract on Arc testnet, still bound every payment.
 

@@ -53,6 +53,15 @@ The form marks **Payment address** "Optional until payment setup", but the agent
 
 Owners and admins open the counterparty's row and change its limit with **Edit limit**, under **Configured limit**. Enter the new **Payment limit (USDC)** and choose **Save limit**. **Allowed now** follows at once: the whole limit for a counterparty screened clear, a quarter of it for medium risk, and 0 for high risk. A vendor or contractor always has a limit, because without one the agent could pay any amount. The ledger records who changed the limit, and from what to what.
 
+### Pay a counterparty without purchase orders
+
+The agent pays an invoice on its own only when its three-way match is complete: the goods or services received and a purchase order on file. Some suppliers never issue one, such as a utility or a subscription. A vendor's or contractor's row on **Counterparties** shows **Purchase orders**: "Needed before the agent pays", as for every counterparty at first, or "Not needed · goods received still is". Owners and admins choose **Change** beside it, then **Pay without purchase orders** or **Require purchase orders**.
+
+- **Paid without purchase orders.** The agent pays the counterparty's invoices with no purchase order on file. The goods or services still have to be marked received, and every other check stays. Its invoices that waited only for a purchase order are decided again within a minute.
+- **Needing them again.** The agent asks for a purchase order before it pays or schedules any of its invoices. A payment already scheduled without one waits for the details on its day.
+- **Enforced in code.** The model is told whether the counterparty needs purchase orders, and the written policy asks for information on the same condition. If the model chooses to pay or schedule an invoice whose match is incomplete anyway, code refuses it, and the invoice waits for the details as if the agent had asked.
+- **Recorded.** The ledger records who changed it, as `counterparty_purchase_orders_changed`.
+
 ### Ask a payee for their address
 
 You don't have to collect a payee's address yourself. In the counterparty's row, owners and admins choose **Ask for address**, then **Create link**:
@@ -92,7 +101,7 @@ Open **AP / AR** and open **New invoice**. Choose **Enter one invoice**, **From 
 - **Due date**.
 - **Early-payment discount (%)** and **Discount deadline**, if the vendor offers one. See [When the agent pays](#5-when-the-agent-pays).
 - **Memo**, if you like.
-- **PO reference**, and tick **Goods or services received**. Without a purchase order or confirmed receipt, the three-way match is incomplete, and the agent asks for more information instead of paying.
+- **PO reference**, and tick **Goods or services received**. Without confirmed receipt, or without a purchase order from a counterparty that needs one, the three-way match is incomplete, and the agent asks for more information instead of paying. Every counterparty needs a purchase order until it is marked as paid without them: see [Pay a counterparty without purchase orders](#pay-a-counterparty-without-purchase-orders).
 
 <Screenshot
   src="/docs/guides/first-payment-invoice.png"
@@ -207,6 +216,7 @@ At the foot of a payable's card, **How the agent decided** opens its steps, olde
 A payable the agent stopped also says what you can do about it, on the console's **Stopped** section as on **AP / AR**. Under the card, a line names the cause and the way through, for example "It is above CME's payment limit. Pay it in Approvals, or raise the limit." **Decide in Approvals** opens Approvals at that payable's card. Owners and admins also get the page that removes the cause:
 
 - **Edit limit** or **Confirm address** opens the counterparty's row on **Counterparties**, already open;
+- **Purchase orders** opens the counterparty's row too, when code refused a payable for a missing purchase order, for a counterparty that is in fact paid without them;
 - **Review screening** opens the counterparty's row, for a counterparty screened high risk, where a wrong match is marked **Not this person**;
 - **Spending limit** opens the agent's spending limit on **Treasury**, when it had no room for the payment;
 - **USYC reserve** opens the reserve in **Settings**, when the operating wallet did not hold the cash a payment needs and the reserve could not cover it: bring cash back there, or add USDC to the operating wallet, and the agent decides the payment again on its own;
@@ -334,7 +344,7 @@ If a payment attempt fails, the card says "The last payment attempt failed: " an
 
 ### Add what the agent was missing
 
-The agent pays an invoice on its own only when its three-way match is complete: a purchase order on file and the goods or services received. Without them it asks for more information, and the card is marked **Awaiting information**. When you have what it asked for, you do not need to approve the payment yourself: give the agent the facts, and it decides again.
+The agent pays an invoice on its own only when its three-way match is complete: the goods or services received and, unless its counterparty is paid without them, a purchase order on file. Without them it asks for more information, and the card is marked **Awaiting information**. If the model chooses to pay or schedule it anyway, code refuses, and the card waits the same way. When you have what it asked for, you do not need to approve the payment yourself: give the agent the facts, and it decides again.
 
 Owners and admins choose **Add details** on the card. The dialog offers only what the invoice is missing: a **PO reference**, the **Goods or services received** box, or both. Fill them in and choose **Add details**. A message says "Details added. The agent usually decides it again within a minute."
 
@@ -344,7 +354,7 @@ Owners and admins choose **Add details** on the card. The dialog offers only wha
   caption="Adding the purchase order and the goods receipt the agent asked for."
 />
 
-On **AP / AR**, the payable waits under **Needs you**, and its row says what it needs: "Needs a purchase order and goods received", "Needs a purchase order" or "Needs goods received". Open the row: under the agent's reasoning, its card asks for what is missing and offers **Add details** there too, beside **Decide in Approvals**, which opens Approvals at that payable's card. Once you have added details, the row reads "Details added · the agent decides it again" until it does.
+On **AP / AR**, the payable waits under **Needs you**, and its row says what it needs: "Needs a purchase order and goods received", "Needs a purchase order" or "Needs goods received". A counterparty paid without purchase orders is never asked for one. Open the row: under the agent's reasoning, its card asks for what is missing and offers **Add details** there too, beside **Decide in Approvals**, which opens Approvals at that payable's card. Once you have added details, the row reads "Details added · the agent decides it again" until it does.
 
 <Screenshot
   src="/docs/guides/first-payment-needs-you.png"

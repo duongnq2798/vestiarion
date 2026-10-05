@@ -58,7 +58,9 @@ is hard-coded into the interface:
 2. **AP automation** — each payable invoice gets a three-way match (PO ↔ goods received ↔
    invoice) plus a risk check, and the agent decides to **pay**, **hold** (over limit), **request
    info** (no PO match), or **flag as fraud** (high-risk counterparty) — with its reasoning
-   attached to the line item. A payable to a client, which pays the business, is never paid by the
+   attached to the line item. Code refuses to pay or schedule an invoice whose match is
+   incomplete, whatever the model decides; a counterparty the business marks as paid without
+   purchase orders needs only the goods received. A payable to a client, which pays the business, is never paid by the
    agent: it waits for a person.
 3. **Contractor payments** — a GitHub PR URL can be checked for an actual merge before a
    milestone is released. Human verification remains available and is recorded as a human ledger

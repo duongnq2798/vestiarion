@@ -1,5 +1,14 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-05: The three-way match, checked in code
+
+- **A new guardrail rule**, `invoice.match_incomplete`. When the agent chooses to pay or schedule a payable whose goods are not confirmed received, or whose counterparty needs a purchase order and has none on file, code refuses it. Its `ap_pay` or `ap_schedule` entry carries `guardrailBlocked: true`, `guardrailRule: "invoice.match_incomplete"` and `execution.resultingStatus: "awaiting_info"`, and the invoice waits for its details.
+- An AP decision's `detail.observed` gains `purchaseOrderRequired`: whether the counterparty needed a purchase order when it was decided. Every counterparty needs one unless an owner or admin marked it as paid without them.
+- **A new ledger action**, delivered to webhooks as `ledger.appended` like every entry: `counterparty_purchase_orders_changed`, actor `human`, domain `compliance`. Its `detail` is `{ by, counterpartyId, from, to }`, where `from` and `to` say whether the counterparty needed a purchase order before and after.
+- A `cycle_complete` entry's `events` can include `purchase_orders_waived`: a counterparty was marked as paid without purchase orders, so its payables that waited for one were decided again within a minute.
+- The `invoice_reopened` entry for such a payable names `the counterparty is now paid without purchase orders` in `followUp.changes`.
+- Nothing changes in `/api/v1`.
+
 ## 2026-10-04: A merge starts the cycle
 
 - A `cycle_complete` entry's `events` can now include `pull_request_merged`. A pull request was merged in a repository the workspace's GitHub connection covers, and a pending milestone waited on it, so the cycle that verifies and pays it started within a minute of the merge rather than at the next scheduled cycle.
