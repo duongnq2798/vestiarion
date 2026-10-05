@@ -377,3 +377,39 @@ describe("AP guardrails — the three-way match (three-way match design M1, M3)"
     expect(overLimit.rule).toBe("invoice.match_incomplete");
   });
 });
+
+describe("AP guardrails — two parties before the first payment to an address (new payee check N3)", () => {
+  const base = { reasoning: "Pay it.", amount: 0.5, riskLevel: "clear", paymentLimit: 5 } as const;
+
+  it("holds a first payment to an address only one party stands behind, for a person to approve", () => {
+    const result = enforceApGuardrails({ ...base, action: "pay", newPayee: { twoParties: false } });
+    expect(result).toMatchObject({ blocked: true, status: "held", rule: "counterparty.new_payee" });
+    expect(result.reasoning).toContain(
+      "[guardrail override: this is the first payment to this address, and only one person stands behind it — payment refused before execution; another person approves it"
+    );
+  });
+
+  it("holds a schedule the same way", () => {
+    expect(enforceApGuardrails({ ...base, action: "schedule", newPayee: { twoParties: false } })).toMatchObject({
+      blocked: true,
+      rule: "counterparty.new_payee",
+    });
+  });
+
+  it("lets a first payment through when two parties stand behind the address, and any payment that is not a first", () => {
+    expect(enforceApGuardrails({ ...base, action: "pay", newPayee: { twoParties: true } })).toMatchObject({ blocked: false, rule: null });
+    expect(enforceApGuardrails({ ...base, action: "pay", newPayee: null })).toMatchObject({ blocked: false, rule: null });
+  });
+
+  it("leaves a hold alone", () => {
+    expect(enforceApGuardrails({ ...base, action: "hold", newPayee: { twoParties: false } })).toMatchObject({ blocked: false, status: null });
+  });
+
+  it("lets the address check and the three-way match speak first, and speaks before the limit", () => {
+    const address = enforceApGuardrails({ ...base, action: "pay", newPayee: { twoParties: false }, addressChangedAt: "2026-10-05T00:00:00Z", addressConfirmedAt: null });
+    expect(address.rule).toBe("counterparty.address_unconfirmed");
+    const match = enforceApGuardrails({ ...base, action: "pay", newPayee: { twoParties: false }, match: { poReference: null, goodsReceived: true, purchaseOrderRequired: true } });
+    expect(match.rule).toBe("invoice.match_incomplete");
+    expect(enforceApGuardrails({ ...base, action: "pay", amount: 50, newPayee: { twoParties: false } }).rule).toBe("counterparty.new_payee");
+  });
+});

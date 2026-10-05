@@ -58,6 +58,8 @@ export interface VestiarionContext {
   tenantDb?: SupabaseClient;
   /** The fetch `contextFor` builds `tenantDb` with. Production leaves it unset; tests pass a recorder. */
   fetch?: typeof fetch;
+  /** Whether the organization in scope is a sandbox or live, from its row. Set only by the DAL. */
+  orgMode?: "sandbox" | "live";
 }
 
 const storage = new AsyncLocalStorage<VestiarionContext>();
@@ -174,6 +176,14 @@ function organizationContext(): VestiarionContext {
  */
 export function currentOrgConfig(): VestiarionConfig {
   return organizationContext().config;
+}
+
+/**
+ * Whether the organization in scope is a sandbox or live, from the row its scope was entered with; null outside one.
+ * What only real money needs asks it, such as the check before a first payment (new payee check N5).
+ */
+export function currentOrgMode(): "sandbox" | "live" | null {
+  return storage.getStore()?.orgMode ?? null;
 }
 
 /** Why some of the organization's stored secrets could not be read; guarded like its configuration. */
