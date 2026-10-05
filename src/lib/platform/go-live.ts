@@ -7,6 +7,7 @@ import { encryptSecret, masterKeysFromEnv } from "../secrets";
 import { getChainProvider, type ChainProvider } from "../circle";
 import { hasSampleData } from "../sample-data";
 import { checkCircleApiKey, defaultCircleClient, type CircleClient, type CircleClientFactory } from "../circle/check";
+import { NETWORK_IDS, networkOf, networkProfile } from "../network";
 import {
   circleCall,
   CircleCallFailed,
@@ -71,7 +72,8 @@ export type GoLiveErrorCode =
   | "hosted_not_allowed"
   | "hosted_limit_reached"
   | "hosted_has_wallets"
-  | "sample_data_loaded";
+  | "sample_data_loaded"
+  | "key_network";
 
 const MESSAGES: Record<GoLiveErrorCode, string> = {
   invalid: "Paste both the API key and the entity secret.",
@@ -90,6 +92,7 @@ const MESSAGES: Record<GoLiveErrorCode, string> = {
   hosted_limit_reached: "All hosted testnet wallets are taken; connect your own Circle account instead.",
   hosted_has_wallets: "This workspace's wallets are hosted by Vestiarion; start a new workspace to use your own Circle account.",
   sample_data_loaded: "Remove the sample data first. It exists only to try the agent with simulated payments.",
+  key_network: "This Circle API key is for Arc mainnet (LIVE_API_KEY). This workspace is on Arc testnet: paste a test key (TEST_API_KEY).",
 };
 
 export class GoLiveError extends Error {
@@ -110,6 +113,8 @@ interface OrgState {
   apiKeyIv: string | null;
   /** `orgs.wallet_host` (0030). */
   walletHost: "own" | "hosted" | null;
+  /** `orgs.network` (0075): absent on a row read before it, which is Arc testnet. */
+  network: string | null;
 }
 
 /**
@@ -121,13 +126,14 @@ async function orgState(orgId: string): Promise<OrgState> {
   const result = await platformDb()
     .from("orgs")
     .select(
-      "mode, wallet_host, api_key_stored:circle_api_key_enc->>k, entity_secret_stored:circle_entity_secret_enc->>k, api_key_iv:circle_api_key_enc->>iv"
+      "mode, wallet_host, network, api_key_stored:circle_api_key_enc->>k, entity_secret_stored:circle_entity_secret_enc->>k, api_key_iv:circle_api_key_enc->>iv"
     )
     .eq("id", orgId)
     .maybeSingle();
   if (result.error) throw new Error(result.error.message);
   const row = result.data as {
     mode: "sandbox" | "live";
+    network?: string | null;
     wallet_host?: "own" | "hosted" | null;
     api_key_stored: string | null;
     entity_secret_stored: string | null;
@@ -140,6 +146,7 @@ async function orgState(orgId: string): Promise<OrgState> {
     entitySecretStored: row.entity_secret_stored !== null,
     apiKeyIv: row.api_key_iv,
     walletHost: row.wallet_host === "hosted" || row.wallet_host === "own" ? row.wallet_host : null,
+    network: row.network ?? null,
   };
 }
 
@@ -276,6 +283,13 @@ export async function connectCircle(input: {
   const keys = masterKeysFromEnv();
   const state = await orgState(input.orgId);
   const factory = input.client ?? defaultCircleClient;
+
+  // The key is for the workspace's network (network foundation N5): a key whose prefix names another network is
+  // refused before Circle is asked or anything is stored, so a mainnet key never reaches a testnet workspace.
+  const network = networkOf(state.network);
+  if (NETWORK_IDS.some((other) => other !== network && apiKey.startsWith(networkProfile(other).circleKeyPrefix))) {
+    throw new GoLiveError("key_network");
+  }
 
   if (isHosted(state)) {
     const hostedAccounts = await inScopeOf(input.orgId, input.actorId, walletAccounts);

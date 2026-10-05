@@ -23,20 +23,20 @@ export interface OpenRow {
 
 export const OPEN_ROWS: ReadonlyArray<OpenRow> = [
   { key: "workspacesOpened", label: "Workspaces opened", kind: "period", format: "count" },
-  { key: "liveWorkspaces", label: "Workspaces live on Arc testnet", kind: "now", format: "count" },
+  { key: "liveWorkspaces", label: "Workspaces live", kind: "now", format: "count" },
   { key: "people", label: "People in workspaces", kind: "now", format: "count" },
-  { key: "payments", label: "Payments settled on Arc testnet", kind: "period", format: "count" },
+  { key: "payments", label: "Payments settled", kind: "period", format: "count" },
   { key: "usdcPaid", label: "USDC paid", kind: "period", format: "usdc" },
   { key: "payees", label: "Payee wallets paid", kind: "period", format: "count" },
-  { key: "firstPayments", label: "Workspaces that made a first payment on Arc testnet", kind: "period", format: "count" },
+  { key: "firstPayments", label: "Workspaces that made a first payment", kind: "period", format: "count" },
   { key: "medianMinutesToFirstPayment", label: "Median time from workspace opened to first payment", kind: "period", format: "duration" },
   { key: "invoicesDecided", label: "Invoices decided", kind: "period", format: "count" },
-  { key: "milestonesReleased", label: "Contractor milestones paid on Arc testnet", kind: "period", format: "count" },
+  { key: "milestonesReleased", label: "Contractor milestones paid", kind: "period", format: "count" },
   { key: "cycles", label: "Agent cycles run", kind: "period", format: "count" },
   { key: "modelDecisions", label: "Decisions made by a model", kind: "period", format: "count" },
   { key: "policyDepartures", label: "Model departed from the written policy", kind: "period", format: "count" },
   { key: "refusedByCode", label: "Decisions refused by code", kind: "period", format: "count" },
-  { key: "usdcInWallets", label: "USDC in Arc testnet wallets", kind: "now", format: "usdc" },
+  { key: "usdcInWallets", label: "USDC in wallets", kind: "now", format: "usdc" },
 ];
 
 export const OUTCOME_ROWS: ReadonlyArray<OpenRow> = [
@@ -51,7 +51,7 @@ export const OUTCOME_ROWS: ReadonlyArray<OpenRow> = [
   },
   { key: "escalationsResolved", label: "Escalations a person resolved", kind: "period", format: "count" },
   { key: "flagsUpheld", label: "Agent flags a person upheld", kind: "period", format: "ratio", of: ["flagsResolved"] },
-  { key: "invoicesPaidOnTime", label: "Invoices paid on time on Arc testnet", kind: "period", format: "ratio", of: ["invoicesPaidOnArc"] },
+  { key: "invoicesPaidOnTime", label: "Invoices paid on time", kind: "period", format: "ratio", of: ["invoicesPaidOnArc"] },
   {
     key: "invoicesPaidOnTimeUntouched",
     label: "Paid on time with no person involved",

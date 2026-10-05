@@ -1,4 +1,5 @@
 import { currentConfig } from "../context";
+import { ARC_TESTNET } from "../network";
 
 /**
  * Reads what a transfer actually cost, from Arc itself.
@@ -30,8 +31,8 @@ import { currentConfig } from "../context";
  */
 
 /** Arc testnet, chain id 5042002. Matches viem's `arcTestnet` definition. */
-export const ARC_TESTNET_RPC_URL = "https://rpc.testnet.arc.network";
-export const ARC_TESTNET_CHAIN_ID = 5042002;
+export const ARC_TESTNET_RPC_URL = ARC_TESTNET.rpcUrl;
+export const ARC_TESTNET_CHAIN_ID = ARC_TESTNET.chainId;
 
 /** Arc's gas token is USDC at 18 decimals, so wei convert straight to dollars. */
 const ARC_NATIVE_DECIMALS = 18n;

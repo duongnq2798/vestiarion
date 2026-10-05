@@ -149,7 +149,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["Audit log", APP_NAV],
     ["Verify hash chain", VERIFY_BADGE],
     ["Chain intact", VERIFY_BADGE],
-    ["Payments settled on Arc testnet", OPEN_TABLE],
+    ["Payments settled", OPEN_TABLE],
     ["Remove sample data", SAMPLE_PANEL],
     ["Remove the sample data first. It exists only to try the agent with simulated payments.", GO_LIVE_LIBRARY],
     ["Get started", CHECKLIST],
@@ -762,6 +762,7 @@ const GO_LIVE_ERRORS: Record<GoLiveErrorCode, true> = {
   hosted_limit_reached: true,
   hosted_has_wallets: true,
   sample_data_loaded: true,
+  key_network: true,
 };
 
 /** Copy for real users on Arc testnet names the network plainly; it never hedges it away. */

@@ -14,7 +14,7 @@ An autonomous treasury agent for a small business, settled in USDC on Arc.
   - In weeks one and two its departures were mostly extra caution, and people overruled all three stops only the model made.
   - In week three, with the treasury moving real USYC, it once redeemed far more than was due; code now bounds every move.
   - It also paid or scheduled four invoices with no purchase order, which nothing in code checked. Code now checks that rule too.
-- **Live numbers:** [www.vestiarion.xyz/open](https://www.vestiarion.xyz/open) shows the payments, payees and decisions, read from the production database, with our own workspaces counted apart from customers'.
+- **Live numbers:** [www.vestiarion.xyz/open](https://www.vestiarion.xyz/open) shows the payments, payees and decisions, read from the production database, with Arc mainnet and Arc testnet counted apart, and our own workspaces counted apart from customers'.
 - **Updates:** [@vestiarionhq](https://x.com/vestiarionhq) on X, where what ships is posted with its receipts.
 - **Real transactions on Arc testnet**, made by the agent in production:
   - a USDC payable paid 53 seconds after it was added, with no one pressing Run:
@@ -491,9 +491,10 @@ The simulator and the real integration share one interface (`ChainProvider` in
 by the one before:
 
 1. **Connect Circle.** Paste an **API key** and the **entity secret** from the
-   [Circle Console](https://console.circle.com). The server checks the key with Circle, then
-   encrypts both onto the workspace's row in `orgs`; they are never shown again, logged, or sent
-   back to the browser.
+   [Circle Console](https://console.circle.com). The key must be for the workspace's network: a
+   testnet key (`TEST_API_KEY`) for an Arc testnet workspace, so a mainnet key is refused before
+   anything is stored. The server checks the key with Circle, then encrypts both onto the
+   workspace's row in `orgs`; they are never shown again, logged, or sent back to the browser.
 2. **Create treasury wallets.** One click creates, in your own Circle account, a wallet set and an
    Arc-testnet wallet for each account that has none, drops "(simulated)" from their names, and
    starts each new wallet's balance at zero: nothing simulated carries into live mode.

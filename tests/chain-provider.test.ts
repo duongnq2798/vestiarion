@@ -50,6 +50,16 @@ describe("getChainProvider — the platform's payment switch (payment safety S2)
   });
 });
 
+describe("getChainProvider — a workspace on Arc mainnet (network foundation N3)", () => {
+  it("refuses to pay from it, and its pages read as simulated", () => {
+    const mainnet = { ...config, network: "arc-mainnet" as const, chain: { ...config.chain, credentialsUnreadable: "this workspace is on Arc mainnet, where Vestiarion does not move money yet" } };
+    runWith({ ...orgTestContext({ config, client: fakeSupabase().client, orgId: ORG }), config: mainnet }, () => {
+      expect(() => getChainProvider()).toThrow(/this workspace is on Arc mainnet, where Vestiarion does not move money yet/);
+      expect(chainModes()).toEqual({ mode: "simulate", earnMode: "simulate" });
+    });
+  });
+});
+
 describe("chainModes — must render a page even when getChainProvider() refuses", () => {
   it("reports simulate/simulate without constructing a provider", () => {
     const reason = "could not decrypt circle_entity_secret_enc of organization x: wrong master key, or the ciphertext was altered or moved";

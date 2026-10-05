@@ -198,6 +198,25 @@ payment to an address.
 - **Afterwards:** the follow-up reopens a payable held this way once its address is paid, or two parties stand behind
   it.
 
+**A network for every workspace** (`docs/superpowers/specs/2026-10-05-network-foundation-design.md`, phase 1 of the
+mainnet plan).
+- **The column:** `orgs.network` is `arc-testnet` or `arc-mainnet`, Arc testnet by default (migration 0075).
+  - A trigger locks it once the workspace went live or holds a Circle wallet, so mainnet is always a workspace of its
+    own.
+  - `payment_intents.network` is filled from the workspace when an intent is inserted, so no caller can mislabel one.
+- **The profile:** `src/lib/network.ts` holds each network's facts.
+  - These are its name in copy, Circle's blockchain name, chain id, RPC, explorer, tokens, CCTP, Gateway, USYC and
+    the swap's chain, plus whether hosted wallets are offered.
+  - Today's testnet constants read their values from the testnet profile.
+  - `tests/network-ratchet.test.ts` fails on any new hard-coded testnet identifier outside it.
+- **Mainnet pays nothing yet:**
+  - `orgConfig` carries the network (`currentNetwork()`) and gives a workspace on Arc mainnet no Circle
+    credentials, with the reason, so its provider refuses.
+  - Go live refuses a Circle key whose prefix names another network.
+- **`/open`:** one section per network, Arc mainnet first.
+  - `open_numbers`, `open_first_payments` and `open_outcomes` take `(p_since, p_network)` and count one network.
+  - Their one-argument versions stay for older code.
+
 **Payment safety** (`docs/superpowers/specs/2026-10-05-payment-safety-design.md`) closes four gaps that real money
 would find.
 - **A stop switch for the platform** (`src/lib/payments-switch.ts`), with two halves; either one stops payments.

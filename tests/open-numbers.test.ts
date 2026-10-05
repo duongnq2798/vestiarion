@@ -132,12 +132,12 @@ describe("readOpenNumbers", () => {
   const since = (date: string) => parsePeriod({ since: date }, NOW);
 
   it("asks open_numbers, open_first_payments and open_outcomes for the period's start and reads figures sent as strings", async () => {
-    const { fake, result } = platform(() => readOpenNumbers(since("2026-09-20"), NOW.getTime()), reply);
+    const { fake, result } = platform(() => readOpenNumbers(since("2026-09-20"), "arc-testnet", NOW.getTime()), reply);
     const numbers = await result;
     expect(fake.requests.map((request) => [request.path, request.body]).sort()).toEqual([
-      ["/rest/v1/rpc/open_first_payments", { p_since: "2026-09-20T00:00:00.000Z" }],
-      ["/rest/v1/rpc/open_numbers", { p_since: "2026-09-20T00:00:00.000Z" }],
-      ["/rest/v1/rpc/open_outcomes", { p_since: "2026-09-20T00:00:00.000Z" }],
+      ["/rest/v1/rpc/open_first_payments", { p_since: "2026-09-20T00:00:00.000Z", p_network: "arc-testnet" }],
+      ["/rest/v1/rpc/open_numbers", { p_since: "2026-09-20T00:00:00.000Z", p_network: "arc-testnet" }],
+      ["/rest/v1/rpc/open_outcomes", { p_since: "2026-09-20T00:00:00.000Z", p_network: "arc-testnet" }],
     ]);
     expect(numbers.sides.ours.usdcPaid).toBe(3);
     expect(numbers.daily[0]).toEqual({ day: "2026-09-28", customers: 1, ours: 2, oursUsdc: 5 });
@@ -145,7 +145,7 @@ describe("readOpenNumbers", () => {
   });
 
   it("merges the first payments into each side, keeping a missing median missing", async () => {
-    const { result } = platform(() => readOpenNumbers(since("2026-09-19"), NOW.getTime()), reply);
+    const { result } = platform(() => readOpenNumbers(since("2026-09-19"), "arc-testnet", NOW.getTime()), reply);
     const numbers = await result;
     expect(numbers.sides.customers).toMatchObject({ payments: 2, firstPayments: 2, medianMinutesToFirstPayment: 780.5 });
     expect(numbers.sides.ours).toMatchObject({ firstPayments: 0, medianMinutesToFirstPayment: null });
@@ -155,7 +155,7 @@ describe("readOpenNumbers", () => {
   it("still reads every other figure when open_first_payments cannot be read, with no first-payment figures", async () => {
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
     const { result } = platform(
-      () => readOpenNumbers(since("2026-09-24"), 1_000),
+      () => readOpenNumbers(since("2026-09-24"), "arc-testnet", 1_000),
       (request) =>
         request.path === "/rest/v1/rpc/open_first_payments"
           ? { status: 404, body: { message: "function open_first_payments does not exist" } }
@@ -171,7 +171,7 @@ describe("readOpenNumbers", () => {
   });
 
   it("merges the outcomes into each side", async () => {
-    const { result } = platform(() => readOpenNumbers(since("2026-09-18"), NOW.getTime()), reply);
+    const { result } = platform(() => readOpenNumbers(since("2026-09-18"), "arc-testnet", NOW.getTime()), reply);
     const numbers = await result;
     expect(numbers.sides.customers).toMatchObject({ payments: 2, ...OUTCOME_SIDE });
     expect(numbers.sides.ours.decisionsCarriedOut).toBe(7);
@@ -180,7 +180,7 @@ describe("readOpenNumbers", () => {
   it("still reads every other figure when open_outcomes cannot be read, with no outcome figures", async () => {
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
     const { result } = platform(
-      () => readOpenNumbers(since("2026-09-17"), 1_000),
+      () => readOpenNumbers(since("2026-09-17"), "arc-testnet", 1_000),
       (request) =>
         request.path === "/rest/v1/rpc/open_outcomes"
           ? { status: 404, body: { message: "function open_outcomes does not exist" } }
@@ -197,34 +197,48 @@ describe("readOpenNumbers", () => {
 
   it("sends a null start for all time", async () => {
     const all = parsePeriod({}, NOW);
-    const { fake, result } = platform(() => readOpenNumbers(all, NOW.getTime() + 10 * 60_000), reply);
+    const { fake, result } = platform(() => readOpenNumbers(all, "arc-testnet", NOW.getTime() + 10 * 60_000), reply);
     await result;
-    expect(fake.requests.map((request) => request.body)).toEqual([{ p_since: null }, { p_since: null }, { p_since: null }]);
+    expect(fake.requests.map((request) => request.body)).toEqual([{ p_since: null, p_network: "arc-testnet" }, { p_since: null, p_network: "arc-testnet" }, { p_since: null, p_network: "arc-testnet" }]);
   });
 
   it("answers the same period from memory for 60 seconds, then reads again", async () => {
     const period = since("2026-09-21");
-    const first = platform(() => readOpenNumbers(period, 1_000), reply);
+    const first = platform(() => readOpenNumbers(period, "arc-testnet", 1_000), reply);
     await first.result;
-    const second = platform(() => readOpenNumbers(period, 60_000), reply);
+    const second = platform(() => readOpenNumbers(period, "arc-testnet", 60_000), reply);
     await second.result;
     expect(second.fake.requests).toEqual([]);
-    const third = platform(() => readOpenNumbers(period, 61_001), reply);
+    const third = platform(() => readOpenNumbers(period, "arc-testnet", 61_001), reply);
     await third.result;
     expect(third.fake.requests).toHaveLength(3);
   });
 
   it("forgets a failed read, so the next request tries again", async () => {
     const period = since("2026-09-22");
-    const failing = platform(() => readOpenNumbers(period, 1_000), () => ({ status: 404, body: { message: "function open_numbers does not exist" } }));
+    const failing = platform(() => readOpenNumbers(period, "arc-testnet", 1_000), () => ({ status: 404, body: { message: "function open_numbers does not exist" } }));
     await expect(failing.result).rejects.toThrow(/open_numbers/);
-    const retry = platform(() => readOpenNumbers(period, 2_000), reply);
+    const retry = platform(() => readOpenNumbers(period, "arc-testnet", 2_000), reply);
     await retry.result;
     expect(retry.fake.requests).toHaveLength(3);
   });
 
+  it("asks for the network it is given, and keeps each network's figures apart in memory (network foundation N7)", async () => {
+    const period = since("2026-09-25");
+    const mainnet = platform(() => readOpenNumbers(period, "arc-mainnet", 1_000), reply);
+    await mainnet.result;
+    expect(mainnet.fake.requests.map((request) => request.body)).toEqual([
+      { p_since: "2026-09-25T00:00:00.000Z", p_network: "arc-mainnet" },
+      { p_since: "2026-09-25T00:00:00.000Z", p_network: "arc-mainnet" },
+      { p_since: "2026-09-25T00:00:00.000Z", p_network: "arc-mainnet" },
+    ]);
+    const testnet = platform(() => readOpenNumbers(period, "arc-testnet", 2_000), reply);
+    await testnet.result;
+    expect(testnet.fake.requests).toHaveLength(3);
+  });
+
   it("refuses a document of the wrong shape", async () => {
-    const { result } = platform(() => readOpenNumbers(since("2026-09-23"), 1_000), () => ({ body: { sides: {} } }));
+    const { result } = platform(() => readOpenNumbers(since("2026-09-23"), "arc-testnet", 1_000), () => ({ body: { sides: {} } }));
     await expect(result).rejects.toThrow();
   });
 });

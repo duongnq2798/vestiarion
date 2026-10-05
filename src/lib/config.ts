@@ -153,6 +153,10 @@ export interface VestiarionConfig {
    */
   hostedWorkspaceLimit: number;
   /**
+   * The organization's network (network foundation N1): set by `orgConfig` from its row; Arc testnet when absent.
+   */
+  network?: import("./network").Network;
+  /**
    * The platform's stop switch (PAYMENTS_DISABLED; payment safety S1): true stops every payment in every workspace.
    * `src/lib/payments-switch.ts` reads it; `orgConfig` carries it into each organization unchanged.
    */

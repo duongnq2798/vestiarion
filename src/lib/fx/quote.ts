@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { FxQuoteError } from "./errors";
 import { askAgain } from "./retry";
+import { ARC_TESTNET } from "../network";
 
 /**
  * The EURC→USDC rate for an EURC invoice (docs/superpowers/specs/2026-10-01-eurc-invoices-design.md, E2).
@@ -15,8 +16,10 @@ import { askAgain } from "./retry";
  * arithmetic on the decimal string, never through a float multiply.
  */
 
-export const ARC_TESTNET_EURC = "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a";
-export const ARC_TESTNET_USDC = "0x3600000000000000000000000000000000000000";
+export const ARC_TESTNET_EURC = ARC_TESTNET.tokens.EURC;
+export const ARC_TESTNET_USDC = ARC_TESTNET.tokens.USDC;
+/** The Stablecoin Service's name for Arc testnet. */
+export const STABLECOIN_SERVICE_CHAIN = ARC_TESTNET.stablecoinServiceChain;
 
 const QUOTE_URL = "https://api.circle.com/v1/stablecoinKits/quote";
 const DEADLINE_MS = 10_000;
@@ -73,9 +76,9 @@ async function askForQuote(amount: string, fromAddress: string, now: number, fet
   const url = new URL(QUOTE_URL);
   url.search = new URLSearchParams({
     tokenInAddress: ARC_TESTNET_EURC,
-    tokenInChain: "Arc_Testnet",
+    tokenInChain: STABLECOIN_SERVICE_CHAIN,
     tokenOutAddress: ARC_TESTNET_USDC,
-    tokenOutChain: "Arc_Testnet",
+    tokenOutChain: STABLECOIN_SERVICE_CHAIN,
     fromAddress,
     toAddress: fromAddress,
     amount,

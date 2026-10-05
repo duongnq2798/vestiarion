@@ -1,5 +1,6 @@
 import { ARC_TESTNET_USDC } from "../circle/cctp";
 import { GATEWAY_WALLET } from "../circle/gateway";
+import { ARC_TESTNET } from "../network";
 
 /**
  * Vestiarion's x402 offer for payee history (docs/superpowers/specs/2026-10-02-x402-payee-history-design.md
@@ -8,13 +9,13 @@ import { GATEWAY_WALLET } from "../circle/gateway";
  */
 
 /** Arc testnet, as x402 names a network (CAIP-2). */
-export const X402_NETWORK = "eip155:5042002" as const;
+export const X402_NETWORK = ARC_TESTNET.caip2;
 
 /** Circle Gateway's batched settlement: the buyer signs against GatewayWallet, not USDC (Gateway nanopayments). */
 export const GATEWAY_BATCHING = { name: "GatewayWalletBatched", version: "1", verifyingContract: GATEWAY_WALLET } as const;
 
 /** Circle's x402 facilitator for testnets: verifies and settles Gateway-batched payments. */
-export const GATEWAY_FACILITATOR_URL = "https://gateway-api-testnet.circle.com";
+export const GATEWAY_FACILITATOR_URL = ARC_TESTNET.gateway.facilitator;
 
 export const PAYEE_HISTORY_PATH = "/api/x402/payee-history";
 

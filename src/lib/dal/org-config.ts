@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import type { VestiarionConfig } from "../config";
 import { decryptSecret, type MasterKey, type SecretEnvelope } from "../secrets";
+import { networkOf, type Network } from "../network";
 
 export const FOUNDING_ORG_ID = "00000000-0000-4000-8000-000000000001";
 
@@ -18,10 +19,15 @@ export interface OrgRow {
   ledger_retired_keys?: unknown;
   /** When an owner or admin turned the real USYC reserve on; null while it is simulated (0054). */
   usyc_live_at?: string | null;
+  /** The network the workspace pays on (0075); absent on a row read before it, which is Arc testnet. */
+  network?: Network | null;
 }
 
 export const ORG_SECRET_COLUMNS =
-  "id, slug, name, mode, ledger_signing_key_enc, circle_api_key_enc, circle_entity_secret_enc, wallet_host, ledger_retired_keys, usyc_live_at";
+  "id, slug, name, mode, ledger_signing_key_enc, circle_api_key_enc, circle_entity_secret_enc, wallet_host, ledger_retired_keys, usyc_live_at, network";
+
+/** Why a workspace on Arc mainnet has no Circle credentials yet (network foundation N3). */
+export const MAINNET_NOT_YET = "this workspace is on Arc mainnet, where Vestiarion does not move money yet";
 
 /** Why a hosted organization has no Circle credentials: this deployment lacks the hosted pair (H1, Review Focus 5). */
 export const HOSTED_NOT_CONFIGURED = "the hosted Circle account is not configured on this deployment";
@@ -169,10 +175,21 @@ export function orgConfig(
     circleEntitySecret = openCircleSecret("circle_entity_secret_enc");
   }
 
+  // A workspace on Arc mainnet pays nothing until mainnet support ships (network foundation N3): it gets no Circle
+  // credentials, and the reason, so its chain provider refuses rather than simulating or paying on testnet constants.
+  const network = networkOf(org.network);
+  if (network !== "arc-testnet") {
+    circleApiKey = undefined;
+    circleEntitySecret = undefined;
+    credentialsUnreadable = MAINNET_NOT_YET;
+    warnings.push(MAINNET_NOT_YET);
+  }
+
   return {
     config: {
       ...base,
       businessName: org.name,
+      network,
       chain: {
         ...platformChain,
         circleApiKey,
