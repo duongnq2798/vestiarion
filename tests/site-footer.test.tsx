@@ -193,7 +193,7 @@ describe("the Product Hunt page", () => {
   it("is Vestiarion's product page, and the badge links to it with Product Hunt's tags", () => {
     expect(PRODUCT_HUNT_URL).toBe("https://www.producthunt.com/products/vestiarion");
     expect(PRODUCT_HUNT_BADGE.href.startsWith(`${PRODUCT_HUNT_URL}?embed=true&`)).toBe(true);
-    expect(PRODUCT_HUNT_BADGE.src).toBe("https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1269583&theme=neutral");
+    expect(PRODUCT_HUNT_BADGE.src).toBe("https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1269583&theme=light");
   });
 
   it("is written only in src/lib/site-links.ts", () => {

@@ -21,13 +21,13 @@ export const X_URL = `https://x.com/${X_HANDLE.slice(1)}`;
 export const PRODUCT_HUNT_URL = "https://www.producthunt.com/products/vestiarion";
 
 /**
- * Product Hunt's "Featured" badge, as its embed code gives it, in the neutral
+ * Product Hunt's "Featured" badge, as its embed code gives it, in the light
  * theme. Product Hunt draws the image, upvote count included, and the link
  * carries its own campaign tags.
  */
 export const PRODUCT_HUNT_BADGE = {
   href: `${PRODUCT_HUNT_URL}?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-vestiarion`,
-  src: "https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1269583&theme=neutral",
+  src: "https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1269583&theme=light",
   alt: "Vestiarion - AI treasury operations for invoices, freelancers and GitHub | Product Hunt",
   width: 250,
   height: 54,
