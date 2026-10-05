@@ -21,15 +21,7 @@ import { firstPaymentCheck, loadNewPayeeFacts } from "../new-payee-facts";
 import { addedSince, latestDecision, recordedFacts, type AddedDetails } from "../added-details";
 import { heldForCash } from "../next-step";
 import type { Provenance } from "../provenance";
-import {
-  amountFromReserve,
-  bringCashForApproval,
-  CashBackError,
-  cashShortMessage,
-  reserveCover,
-  reserveFundsPayments,
-  type ReserveCover,
-} from "./liquidity";
+import { amountFromReserve, bringCashForApproval, CashBackError, cashShortMessage, reserveCover, type ReserveCover } from "./liquidity";
 import { approversBesides, readTwoApprovalsAbove } from "../approval-policy";
 import { needsSecondApprover, needsTwoApprovals, type TwoApprovalsFacts } from "../two-approvals";
 import {
@@ -525,9 +517,8 @@ export async function listWaitingPayables(
     })
   );
 
-  // The stored balances, for what Approve and pay would bring back from the reserve first (approval cash R5), where the
-  // reserve can stand behind a payment (R1).
-  const balances = rows.length > 0 && reserveFundsPayments(getChainProvider()) ? await storedBalances() : null;
+  // The stored balances, for what Approve and pay would bring back from the reserve first (approval cash R5).
+  const balances = rows.length > 0 ? await storedBalances() : null;
 
   const now = Date.now();
   return rows.map((row) => {
@@ -864,10 +855,7 @@ export async function approveAndPay(
       const fee = route === "cctp" ? (quotes?.cctpFeeUsdc ?? null) : null;
       const short = payoutFundsShort({ route: "cctp", amount: invoice.amount, operatingUsdc: balance, cctpFeeUsdc: fee, gateway: null });
       if (short) {
-        // Only a reserve as real as the payment stands behind it (approval cash R1).
-        const read = reserveFundsPayments(provider)
-          ? await reserveCover(db(), { neededUsdc: short.needs ?? invoice.amount, operatingBalance: balance })
-          : { cover: null, reserveBalance: null };
+        const read = await reserveCover(db(), { neededUsdc: short.needs ?? invoice.amount, operatingBalance: balance });
         if (!read.cover) throw new ApprovalError("insufficient_funds", cashShortMessage({ operatingUsdc: balance, reserveUsdc: read.reserveBalance, feeUsdc: fee, what: "invoice" }));
         fromReserve = read.cover;
       }

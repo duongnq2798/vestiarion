@@ -188,15 +188,6 @@ export async function reserveCover(
 }
 
 /**
- * Whether the reserve can stand behind a person's payment (approval cash R1): a real USYC reserve where payments are
- * real, and any reserve in a sandbox, whose payments are simulated too. A simulated reserve in a workspace that pays for
- * real holds a figure only: redeeming it moves nothing on chain, so the payment would fail at Circle.
- */
-export function reserveFundsPayments(provider: Pick<ChainProvider, "mode" | "earnMode">): boolean {
-  return provider.mode !== "live" || provider.earnMode === "live";
-}
-
-/**
  * What a payment needing `neededUsdc` lacks beyond what the operating wallet holds, up to the next micro-USDC, when the
  * reserve holds that much (approval cash R1); null when nothing is lacking, or the reserve cannot cover it.
  */

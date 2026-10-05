@@ -26,7 +26,7 @@ import { PAYMENTS_OFF, paymentsDisabled } from "../payments-switch";
 import { approversBesides, readTwoApprovalsAbove } from "../approval-policy";
 import { needsSecondApprover, TWO_APPROVALS_RULE, type TwoApprovalsFacts } from "../two-approvals";
 import { SECOND_OF_TWO_NOTE } from "./approvals";
-import { bringCashForApproval, CashBackError, cashShortMessage, reserveCover, reserveFundsPayments, type ReserveCover } from "./liquidity";
+import { bringCashForApproval, CashBackError, cashShortMessage, reserveCover, type ReserveCover } from "./liquidity";
 import {
   clearApprovals,
   giveApproval,
@@ -582,10 +582,7 @@ export async function payHeldMilestone(input: {
   if (!alreadySent && !unknown && milestone.escrowState !== "funded") {
     const balance = provider.mode === "live" ? await syncOperatingBalance(operatingId) : num(operating.balance);
     if (balance < milestone.amount) {
-      // Only a reserve as real as the payment stands behind it (approval cash R1).
-      const read = reserveFundsPayments(provider)
-        ? await reserveCover(db(), { neededUsdc: milestone.amount, operatingBalance: balance })
-        : { cover: null, reserveBalance: null };
+      const read = await reserveCover(db(), { neededUsdc: milestone.amount, operatingBalance: balance });
       if (!read.cover) raise("insufficient_funds", cashShortMessage({ operatingUsdc: balance, reserveUsdc: read.reserveBalance, feeUsdc: null, what: "milestone" }));
       fromReserve = read.cover;
     }
