@@ -212,7 +212,8 @@ Measured by action alone, as this note did until then, the two agreed. That is w
 
 #### A wrong premise, then a right one
 
-In eight decisions the model held where the policy would have redeemed a buffer. Until 4 October its reason rested on a mistake. In #1267, with nothing in the operating wallet and 0.20 USDC due that day, it held because "the reserve already covers it without moving cash". Only the operating wallet pays anyone. In the same cycle, a milestone release had just been refused by the spending limit contract on Arc, because the wallet it would pay from was empty (#1266).
+In eight decisions the model held where the policy would have redeemed a buffer. Until 4 October its reason rested on a mistake. In #1267, with nothing in the operating wallet and 0.20 USDC due that day, it held because "the reserve already covers it without moving cash".
+Only the operating wallet pays anyone. In the same cycle, a milestone release had just been refused by the spending limit contract on Arc, because the wallet it would pay from was empty (#1266).
 
 Two changes followed:
 - each cycle now brings back from USYC what the day's payables and verified milestones need, before it decides them;
@@ -236,7 +237,7 @@ The fifth difference, #977, is the third time the model named a rule and then br
 
 ### Code refused seven payments
 
-- Four would have taken the agent past testnet-2's daily spending limit: #941, #990, #995 and #1079. The last was a payable to a client, entered by mistake as one to pay. Code now holds any payable to a client.
+- Four would have taken the agent past the daily spending limit of testnet-2: #941, #990, #995 and #1079. The last was a payable to a client, entered by mistake as one to pay. Code now holds any payable to a client.
 - #977, above the payout fee cap.
 - #1118, to an address that arrived through the API and that no one had confirmed yet.
 - #1266, a milestone release that the spending limit contract on Arc refused, because the wallet was empty.
