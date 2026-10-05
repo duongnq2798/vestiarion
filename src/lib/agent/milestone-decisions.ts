@@ -396,8 +396,6 @@ export async function payHeldMilestone(input: {
   milestoneId: string;
   provenance?: Provenance;
 }): Promise<{ status: string; txRef: string | null; note: string }> {
-  // Nothing is paid while the platform has payments switched off (payment safety S4): refused before anything is read.
-  if (await paymentsDisabled()) raise("payments_off");
   const orgId = currentOrgId();
   const provider = getChainProvider();
   const milestone = await loadMilestone(input.milestoneId, provider.mode === "live");
@@ -406,6 +404,8 @@ export async function payHeldMilestone(input: {
 
   const reason = heldReason(milestone.facts);
   const alreadySent = transferExists(milestone.facts.intent);
+  // Nothing new is paid while payments are switched off (payment safety S4); a transfer already sent is still recorded (S8).
+  if (!alreadySent && (await paymentsDisabled())) raise("payments_off");
   // A send Circle never answered is sent again under its key, which may be a new payment (payment safety R3): it is
   // judged as one, by what would hold it if no transfer existed, and only the funds check is skipped.
   const unknown = transferUnknown(milestone.facts.intent);

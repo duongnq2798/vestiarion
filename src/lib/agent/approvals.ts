@@ -634,8 +634,6 @@ export async function approveAndPay(
     gatewayQuote?: (chain: string, amount: number) => Promise<GatewayQuote | null>;
   } = {}
 ): Promise<{ status: "paid" | "matched" | "held"; txRef: string | null; note: string }> {
-  // Nothing is paid while the platform has payments switched off (payment safety S4): refused before anything is read.
-  if (await paymentsDisabled()) raise("payments_off");
   const orgId = currentOrgId();
   const invoice = await loadWaitingPayable(input.invoiceId);
 
@@ -669,6 +667,9 @@ export async function approveAndPay(
   // A send Circle never answered may have lowered the balance already (payment safety R3): only the funds check is
   // skipped for it, since sending it again under its key may still be a new payment.
   const mayExist = alreadySent || transferUnknown(intent);
+  // Nothing new is paid while the platform has payments switched off (payment safety S4), but a transfer already sent
+  // is still recorded: that only reads Circle, and the provider refuses any send (S8).
+  if (!alreadySent && (await paymentsDisabled())) raise("payments_off");
   if (!mayExist && invoice.currency === "USDC") {
     const balance = provider.mode === "live" ? await syncOperatingBalance(operating.id) : operating.balance;
     if (balance < invoice.amount) {

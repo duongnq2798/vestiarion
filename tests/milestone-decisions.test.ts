@@ -279,7 +279,7 @@ describe("Close over a transfer Circle never answered (payment safety R6)", () =
 });
 
 describe("Pay now while payments are switched off (payment safety S4)", () => {
-  it("refuses at once, before reading the milestone or claiming it", async () => {
+  it("refuses a new payment before any claim", async () => {
     const { fake, claimed } = world();
 
     const attempt = runWith({ config: { ...config, paymentsDisabled: true }, db: fake.client, fetch: fake.fetch }, () =>
@@ -287,8 +287,19 @@ describe("Pay now while payments are switched off (payment safety S4)", () => {
     );
     expect(await refusal(attempt)).toBe("payments_off");
     await expect(attempt).rejects.toThrow("Payments are switched off for every workspace right now.");
-    expect(fake.requests.some((request) => request.path === "/rest/v1/milestones")).toBe(false);
     expect(claimed()).toBe(false);
+  });
+
+  it("still records a transfer already sent, which only reads Circle (payment safety S8)", async () => {
+    releaseHeldMilestoneMock.mockResolvedValue(PAID);
+    const { fake, claimed } = world({ intent: { ...FAILED_INTENT, status: "pending", provider_state: "SENT", failure_reason: null } });
+
+    await runWith({ config: { ...config, paymentsDisabled: true }, db: fake.client, fetch: fake.fetch }, () =>
+      withOrg(ORG, () => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }))
+    );
+
+    expect(claimed()).toBe(true);
+    expect(releaseHeldMilestoneMock).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -9,6 +9,7 @@ import { publicOrigin } from "../public-origin";
 import { buyX402, circleTypedData, PurchaseRefused, type Purchase, type X402Signer } from "../x402/buyer";
 import { isArcAddress, PAYEE_HISTORY_PATH, payeeHistoryRequirements } from "../x402/offer";
 import { pausedPaymentNote } from "./pause";
+import { paymentsDisabled } from "../payments-switch";
 
 /**
  * The cycle's `services` stage (docs/superpowers/specs/2026-10-02-x402-payee-history-design.md R3–R7): before
@@ -109,8 +110,9 @@ export async function buyPayeeHistories(input: {
   if (!input.live) return facts;
   const signer = (await db.from("gateway_signers").select("circle_wallet_id, address").maybeSingle()).data as { circle_wallet_id: string; address: string } | null;
   if (!signer && !input.buy) return facts;
-  // Spending is moving money: a paused agent buys nothing.
+  // Spending is moving money: a paused agent buys nothing, and nothing is bought while payments are off (payment safety S9).
   if (await pausedPaymentNote()) return facts;
+  if (await paymentsDisabled()) return facts;
 
   const candidates = await firstPaymentsAwaiting(db);
   const retryAfter = now.getTime() - RETRY_AFTER_HOURS * 3_600_000;

@@ -49,9 +49,9 @@ function world(over: World = {}) {
 }
 const history = (address: string, workspacesPaid = 2) => ({ address, workspacesPaid, paymentsConfirmed: 4, firstPaidAt: "2026-09-29T10:00:00Z", lastPaidAt: "2026-10-01T10:00:00Z", asOf: NOW.toISOString(), seller: "Vestiarion" });
 const bought = (address: string) => ({ data: history(address), priceUsdc: 0.001, payer: "0x325d7ba3ff3d1da5fb0b66ea47f86206e3f4f6b6", payTo: "0x2fafddA3F973e8f993911F1c2196d5E72D51d71d", nonce: `0x${"1".repeat(64)}`, settlement: "gateway-transfer-1" });
-const run = (buy: BuyHistory, extra: { live?: boolean; purse?: number } = {}) => {
+const run = (buy: BuyHistory, extra: { live?: boolean; purse?: number; paymentsDisabled?: boolean } = {}) => {
   const lines: Array<{ domain: string; message: string }> = [];
-  const result = runWith(orgTestContext({ config, client: fake.client, orgId: ORG }), () =>
+  const result = runWith(orgTestContext({ config: { ...config, paymentsDisabled: extra.paymentsDisabled }, client: fake.client, orgId: ORG }), () =>
     buyPayeeHistories({ db: db(), live: extra.live ?? true, lines, now: NOW, buy, purse: async () => extra.purse ?? 0.05 })
   );
   return { result, lines };
@@ -140,6 +140,14 @@ describe("buyPayeeHistories", () => {
     await run(buy).result;
     world();
     await run(buy, { live: false }).result;
+    expect(buy).not.toHaveBeenCalled();
+    expect(inserts()).toEqual([]);
+  });
+
+  it("buys nothing while the platform has payments switched off, though it still hands over what it bought before (payment safety S9)", async () => {
+    const buy = vi.fn<BuyHistory>(async (address) => bought(address));
+    world();
+    await run(buy, { paymentsDisabled: true }).result;
     expect(buy).not.toHaveBeenCalled();
     expect(inserts()).toEqual([]);
   });

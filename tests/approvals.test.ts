@@ -770,7 +770,7 @@ describe("approveAndPay", () => {
 });
 
 describe("approveAndPay while payments are switched off (payment safety S4)", () => {
-  it("refuses at once, before reading the invoice or claiming it", async () => {
+  it("refuses a new payment before any claim", async () => {
     const { fake } = approvalsFake();
 
     const attempt = runWith({ config: { ...config, paymentsDisabled: true }, db: fake.client, fetch: fake.fetch }, () =>
@@ -778,9 +778,20 @@ describe("approveAndPay while payments are switched off (payment safety S4)", ()
     );
     await expect(attempt).rejects.toMatchObject({ code: "payments_off" });
     await expect(attempt).rejects.toThrow("Payments are switched off for every workspace right now.");
-    expect(fake.requests.some((r) => r.path === "/rest/v1/invoices")).toBe(false);
     expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
     expect(payInvoiceMock).not.toHaveBeenCalled();
+  });
+
+  it("still records a transfer already sent, which only reads Circle (payment safety S8)", async () => {
+    payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: execution(), note: "", operatingBalance: 100 });
+    const { fake } = approvalsFake({ intents: [{ source_id: INVOICE_ID, status: "pending", provider_tx_id: "circle-tx-1", last_error: null, provider_state: "SENT" }] });
+
+    const result = await runWith({ config: { ...config, paymentsDisabled: true }, db: fake.client, fetch: fake.fetch }, () =>
+      withOrg(ORG, () => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))
+    );
+
+    expect(result.status).toBe("paid");
+    expect(payInvoiceMock.mock.calls[0][1]).toMatchObject({ retryTerminalFailure: false });
   });
 });
 
