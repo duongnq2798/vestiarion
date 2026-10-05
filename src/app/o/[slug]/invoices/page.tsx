@@ -143,7 +143,12 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
       shown
         .filter((invoice) => invoice.direction === "payable" && WAITING.has(invoice.status))
         .map((invoice) => {
-          const onFile = { poReference: invoice.po_reference ?? null, goodsReceived: invoice.goods_received === true };
+          const onFile = {
+            poReference: invoice.po_reference ?? null,
+            goodsReceived: invoice.goods_received === true,
+            // A counterparty paid without purchase orders is never asked for one (three-way match design M2).
+            purchaseOrderRequired: counterpartiesById.get(invoice.counterparty_id)?.purchase_order_required !== false,
+          };
           return [invoice.id, { onFile, added: addedSince(recordedFacts(latestDecision(entries, invoice.id)), onFile) }] as const;
         })
     );

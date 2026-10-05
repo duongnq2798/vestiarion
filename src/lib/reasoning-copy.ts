@@ -211,7 +211,10 @@ export function explainPayable(facts: PayableFacts): string[] {
       ? facts.goodsReceived
         ? `The purchase order ${facts.poReference} is on file and the goods were received.`
         : `The purchase order ${facts.poReference} is on file, but the goods are not marked received.`
-      : "No purchase order is on file.",
+      : // A counterparty paid without purchase orders needs none (three-way match design M4).
+        observed.purchaseOrderRequired === false
+        ? `No purchase order is needed for ${facts.name}, ${facts.goodsReceived ? "and the goods were received" : "but the goods are not marked received"}.`
+        : "No purchase order is on file.",
   ];
   const balance = num(observed.operatingBalance);
   if (balance != null && facts.currency === "USDC") {

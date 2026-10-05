@@ -27,6 +27,7 @@ import {
   CounterpartyAddressError,
 } from "@/lib/counterparty-address";
 import { changeCounterpartyLimit, CounterpartyLimitError } from "@/lib/counterparty-limit";
+import { changeCounterpartyPurchaseOrders, CounterpartyPurchaseOrdersError } from "@/lib/counterparty-purchase-orders";
 import { documentProvenance } from "@/lib/invoice-document/provenance";
 import { createCounterparty } from "@/lib/counterparties/create";
 import { createInvoice } from "@/lib/invoices/create";
@@ -91,9 +92,14 @@ export async function createCounterpartyAction(
 
 const counterpartyIdSchema = z.string().uuid();
 
-/** A `CounterpartyAddressError` or `CounterpartyLimitError` carries a message safe to show; anything else stays in the server log. */
+/**
+ * A `CounterpartyAddressError`, `CounterpartyLimitError` or `CounterpartyPurchaseOrdersError` carries a message safe to
+ * show; anything else stays in the server log.
+ */
 function addressFailure(error: unknown, what: string): IntakeActionResult {
-  if (error instanceof CounterpartyAddressError || error instanceof CounterpartyLimitError) return { ok: false, message: error.message };
+  if (error instanceof CounterpartyAddressError || error instanceof CounterpartyLimitError || error instanceof CounterpartyPurchaseOrdersError) {
+    return { ok: false, message: error.message };
+  }
   console.error(what, error instanceof Error ? error.message : "unknown error");
   return { ok: false, message: "That did not work. Try again in a moment." };
 }
@@ -152,6 +158,35 @@ export async function updateCounterpartyLimitAction(
       };
     } catch (error) {
       return addressFailure(error, "counterparty limit change failed");
+    }
+  });
+}
+
+/**
+ * Marks a counterparty as paid without purchase orders, or as needing them again (three-way match design M2): whether
+ * the agent needs a purchase order on file before it pays or schedules the counterparty's invoices.
+ */
+export async function updateCounterpartyPurchaseOrdersAction(
+  _previous: IntakeActionResult,
+  formData: FormData
+): Promise<IntakeActionResult> {
+  const auth = await authorize(formData.get("orgSlug"), "records.write");
+  if (!auth.ok) return { ok: false, message: auth.message };
+  return inOrg(auth, async () => {
+    const id = counterpartyIdSchema.safeParse(formString(formData, "counterpartyId"));
+    if (!id.success) return { ok: false, message: "Counterparty not found." };
+    const required = formString(formData, "purchaseOrderRequired");
+    if (required !== "true" && required !== "false") return { ok: false, message: "Choose whether this counterparty needs purchase orders." };
+    try {
+      const result = await changeCounterpartyPurchaseOrders({ actorId: auth.user.id, counterpartyId: id.data, required: required === "true" });
+      revalidateOrgPages();
+      if (result.to) return { ok: true, message: `${result.name} needs a purchase order on file again before the agent pays it.` };
+      // Relaxing it can complete a match that waited for a purchase order, so the agent looks again within a minute
+      // (follow-up reopens it, M5). Requiring them again unblocks nothing.
+      raiseCycleEvent(auth, "purchase_orders_waived");
+      return { ok: true, message: `The agent now pays ${result.name} without a purchase order. It still needs the goods or services marked received.` };
+    } catch (error) {
+      return addressFailure(error, "counterparty purchase order change failed");
     }
   });
 }

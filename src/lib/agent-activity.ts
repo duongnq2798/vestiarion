@@ -113,6 +113,8 @@ function checksLine(detail: Record<string, unknown>): string | null {
   const observed = record(detail.observed) ?? {};
   const checks: string[] = [];
   if (text(observed.poReference) && observed.goodsReceived === true) checks.push("purchase order and goods");
+  // A counterparty paid without purchase orders: its match is the goods received (three-way match design M4).
+  else if (observed.purchaseOrderRequired === false && observed.goodsReceived === true) checks.push("goods received, with no purchase order needed");
   const limit = number(observed.paymentLimit);
   if (limit !== null) checks.push(`the ${AMOUNT.format(limit)} USDC limit`);
   if (observed.riskLevel === "clear") checks.push("screening");

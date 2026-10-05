@@ -6,7 +6,7 @@ import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { db } from "@/lib/dal";
 import { withOrg } from "@/lib/dal/scope";
-import { dueForDecision, obligationsDueBy, runApStage, type CycleLogLine } from "@/lib/agent/orchestrator";
+import { dueForDecision, obligationsDueBy, runApStage, SYSTEM_PROMPT, type CycleLogLine } from "@/lib/agent/orchestrator";
 import { onChainLimitGate, type OnChainLimitGate } from "@/lib/agent/onchain-limit";
 import type { SpendingLimitVerdict } from "@/lib/spending-limit/onchain";
 import { CycleMetricsCollector } from "@/lib/agent/cycle-metrics";
@@ -1293,5 +1293,110 @@ describe("the AP stage and a payable to a client (client payables R1)", () => {
     expect(patch.body).toMatchObject({ status: "held" });
     expect(ledger(fake.requests)[0].p_detail).toMatchObject({ guardrailBlocked: true, guardrailRule: "counterparty.client_payable" });
     expect(chain.transfers).toEqual([]);
+  });
+});
+
+/**
+ * The three-way match, checked in code (docs/superpowers/specs/2026-10-05-three-way-match-design.md M1–M4, M8): the
+ * model is told whether the counterparty needs a purchase order, the written policy asks for information on the same
+ * condition, and the agent's pay or schedule on an incomplete match is refused before anything moves.
+ */
+describe("the AP stage and the three-way match (three-way match design)", () => {
+  const dueToday = { due_date: "2026-10-01T12:00:00+00:00", early_pay_discount_pct: null, discount_due_date: null };
+
+  it("refuses to pay a payable with no purchase order, leaves it waiting for the details, and moves nothing", async () => {
+    today("2026-10-01T09:00:00.000Z");
+    model(() => ({ action: "pay", payOn: null, reasoning: "No three-way match is required for this service invoice; paying it today.", confidence: 0.8 }));
+    const { fake, chain, lines, stage } = apFake({ book: [payable({ ...dueToday, po_reference: null })] });
+
+    await stage();
+
+    expect(promptOf().counterparty).toMatchObject({ purchaseOrderRequired: true });
+    expect(chain.transfers).toEqual([]);
+    expect(fake.requests.some((r) => r.path.includes("payment_intents"))).toBe(false);
+    const [patch] = invoicePatches(fake.requests);
+    expect(patch.body).toMatchObject({ status: "awaiting_info", scheduled_for: null, paid_amount: null, tx_ref: null });
+    expect((patch.body as Record<string, string>).agent_reasoning).toContain(
+      "the three-way match is incomplete: no purchase order is on file — payment refused before execution"
+    );
+    const [entry] = ledger(fake.requests);
+    expect(entry.p_action).toBe("ap_pay");
+    expect(entry.p_detail).toMatchObject({
+      guardrailBlocked: true,
+      guardrailRule: "invoice.match_incomplete",
+      referenceDecision: { action: "request_info" },
+      agreedWithReference: false,
+      observed: { poReference: null, goodsReceived: true, purchaseOrderRequired: true },
+      execution: { txRef: null, resultingStatus: "awaiting_info" },
+    });
+    expect(lines[0].message).toContain("Northwind");
+  });
+
+  it("refuses to schedule one whose goods are not confirmed received", async () => {
+    today("2026-10-01T09:00:00.000Z");
+    model(() => ({ action: "schedule", payOn: "2026-10-11", reasoning: "Take the 2% discount on its deadline.", confidence: 0.8 }));
+    const { fake, chain, stage } = apFake({ book: [payable({ goods_received: false })] });
+
+    await stage();
+
+    expect(chain.transfers).toEqual([]);
+    const [patch] = invoicePatches(fake.requests);
+    expect(patch.body).toMatchObject({ status: "awaiting_info", scheduled_for: null });
+    expect((patch.body as Record<string, string>).agent_reasoning).toContain("the goods are not confirmed received — scheduling refused before execution");
+    expect(ledger(fake.requests)[0].p_detail).toMatchObject({ guardrailBlocked: true, guardrailRule: "invoice.match_incomplete" });
+  });
+
+  it("pays one with no purchase order when the business marked its counterparty as paid without them, as the policy would", async () => {
+    today("2026-10-01T09:00:00.000Z");
+    model(() => ({ action: "pay", payOn: null, reasoning: "Goods received and within the limit; due today, so paying now.", confidence: 0.85 }));
+    const waived = counterparty({ purchase_order_required: false });
+    const { fake, chain, stage } = apFake({ book: [payable({ ...dueToday, po_reference: null, counterparties: waived })] });
+
+    await stage();
+
+    expect(promptOf().counterparty).toMatchObject({ purchaseOrderRequired: false });
+    expect(chain.transfers.map((t) => t.amount)).toEqual([400]);
+    expect(invoicePatches(fake.requests)[0].body).toMatchObject({ status: "paid" });
+    expect(ledger(fake.requests)[0].p_detail).toMatchObject({
+      guardrailBlocked: false,
+      referenceDecision: { action: "pay" },
+      agreedWithReference: true,
+      observed: { poReference: null, purchaseOrderRequired: false },
+    });
+  });
+
+  it("asks for the goods received, with no model, even for a counterparty paid without purchase orders", async () => {
+    today("2026-10-01T09:00:00.000Z");
+    const waived = counterparty({ purchase_order_required: false });
+    const { fake, chain, stage } = apFake({ book: [payable({ ...dueToday, po_reference: null, goods_received: false, counterparties: waived })] });
+
+    await stage();
+
+    expect(chain.transfers).toEqual([]);
+    const [entry] = ledger(fake.requests);
+    expect(entry.p_action).toBe("ap_request_info");
+    expect(entry.p_detail).toMatchObject({ decision: { action: "request_info" } });
+    expect((invoicePatches(fake.requests)[0].body as Record<string, string>).agent_reasoning).toContain("goods received false");
+  });
+
+  it("refuses on its day a payable scheduled before the rule with no purchase order (M8)", async () => {
+    today("2026-10-11T06:00:00.000Z");
+    model(() => ({ action: "pay", payOn: null, reasoning: "Scheduled for today; paying at the discount.", confidence: 0.9 }));
+    const { fake, chain, stage } = apFake({ book: [scheduledPayable({ po_reference: null })] });
+
+    await stage();
+
+    expect(chain.transfers).toEqual([]);
+    expect(invoicePatches(fake.requests)[0].body).toMatchObject({ status: "awaiting_info", scheduled_for: null, paid_amount: null });
+    expect(ledger(fake.requests)[0].p_detail).toMatchObject({
+      guardrailBlocked: true,
+      guardrailRule: "invoice.match_incomplete",
+      scheduledFor: "2026-10-11T00:00:00+00:00",
+    });
+  });
+
+  it("tells the model that whether a purchase order is needed is the business's setting", () => {
+    expect(SYSTEM_PROMPT).toContain("counterparty.purchaseOrderRequired");
+    expect(SYSTEM_PROMPT).toMatch(/purchaseOrderRequired[^\n]*business/);
   });
 });

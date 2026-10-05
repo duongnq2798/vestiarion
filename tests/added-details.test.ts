@@ -48,6 +48,13 @@ describe("what a waiting payable needs", () => {
     expect(missingDetails({ poReference: "PO-1", goodsReceived: true })).toBeNull();
   });
 
+  it("does not ask a counterparty paid without purchase orders for one (three-way match design M2)", () => {
+    expect(missingDetails({ poReference: null, goodsReceived: true, purchaseOrderRequired: false })).toBeNull();
+    expect(missingDetails({ poReference: null, goodsReceived: false, purchaseOrderRequired: false })).toEqual({ poReference: false, goodsReceived: true });
+    expect(missingDetails({ poReference: null, goodsReceived: true, purchaseOrderRequired: true })).toEqual({ poReference: true, goodsReceived: false });
+    expect(waitingHint({ poReference: null, goodsReceived: false, purchaseOrderRequired: false }, null)).toBe("Needs goods received");
+  });
+
   it("says it under the row's name, or that details were added", () => {
     expect(waitingHint({ poReference: null, goodsReceived: false }, null)).toBe("Needs a purchase order and goods received");
     expect(waitingHint({ poReference: null, goodsReceived: true }, null)).toBe("Needs a purchase order");

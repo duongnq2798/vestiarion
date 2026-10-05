@@ -62,6 +62,8 @@ export interface FrozenInvoice {
   cash?: { operating: number; reserve: number };
   /** Whether the counterparty's address changed and no one has confirmed it, now. Absent when it was not read. */
   addressUnconfirmed?: boolean;
+  /** Whether the counterparty needs a purchase order, now (three-way match design M5). Absent when it was not read. */
+  purchaseOrderRequired?: boolean;
 }
 
 /** The facts as they stood when the decision was taken, from the ledger. */
@@ -82,6 +84,11 @@ export interface DecisionFacts {
    * decision recorded before the address was observed.
    */
   addressUnconfirmed?: boolean;
+  /**
+   * Whether the counterparty needed a purchase order (`observed.purchaseOrderRequired`). Absent for a decision recorded
+   * before the setting existed, when every counterparty needed one.
+   */
+  purchaseOrderRequired?: boolean;
 }
 
 export type FollowUpAction = "reopen" | "escalate" | "wait";
@@ -156,6 +163,13 @@ export function factChanges(current: DecisionFacts, atDecision: DecisionFacts): 
     changes.push("the counterparty's new address has since been confirmed");
   }
 
+  // One way only, as for the address: a counterparty now paid without purchase orders may complete a match that waited
+  // for one, so only a decision taken with none on file. Requiring them again reopens nothing; the guardrail asks for
+  // the purchase order in any case.
+  if (atDecision.purchaseOrderRequired !== false && current.purchaseOrderRequired === false && (atDecision.poReference ?? null) === null) {
+    changes.push("the counterparty is now paid without purchase orders");
+  }
+
   if ((current.poReference ?? null) !== (atDecision.poReference ?? null)) {
     changes.push(
       atDecision.poReference == null
@@ -211,6 +225,7 @@ export function planFollowUp(
       riskLevel: invoice.riskLevel,
       paymentLimit: invoice.paymentLimit,
       addressUnconfirmed: invoice.addressUnconfirmed,
+      purchaseOrderRequired: invoice.purchaseOrderRequired,
     },
     atDecision
   );

@@ -333,3 +333,47 @@ describe("the agent's spending limit (outflow budget R4)", () => {
     expect(result.rule).toBe("workspace.outflow_budget");
   });
 });
+
+describe("AP guardrails — the three-way match (three-way match design M1, M3)", () => {
+  const base = { reasoning: "Pay it.", amount: 0.5, riskLevel: "clear", paymentLimit: 5 } as const;
+  const match = (poReference: string | null, goodsReceived: boolean, purchaseOrderRequired = true) => ({ poReference, goodsReceived, purchaseOrderRequired });
+
+  it("refuses a payment with no purchase order when the counterparty needs one, and asks for information", () => {
+    const result = enforceApGuardrails({ ...base, action: "pay", match: match(null, true) });
+    expect(result).toMatchObject({ blocked: true, status: "awaiting_info", rule: "invoice.match_incomplete" });
+    expect(result.reasoning).toContain("no purchase order is on file");
+    expect(result.reasoning).toContain("payment refused before execution");
+  });
+
+  it("refuses a schedule the same way: an incomplete match is never committed to a date either", () => {
+    const result = enforceApGuardrails({ ...base, action: "schedule", match: match(null, true) });
+    expect(result).toMatchObject({ blocked: true, status: "awaiting_info", rule: "invoice.match_incomplete" });
+    expect(result.reasoning).toContain("scheduling refused before execution");
+  });
+
+  it("refuses goods not received, whatever the counterparty's purchase orders", () => {
+    for (const required of [true, false]) {
+      const result = enforceApGuardrails({ ...base, action: "pay", match: match("PO-1", false, required) });
+      expect(result).toMatchObject({ blocked: true, status: "awaiting_info", rule: "invoice.match_incomplete" });
+      expect(result.reasoning).toContain("the goods are not confirmed received");
+    }
+  });
+
+  it("lets a complete match through, and one with no purchase order for a counterparty paid without them", () => {
+    expect(enforceApGuardrails({ ...base, action: "pay", match: match("PO-1", true) })).toMatchObject({ blocked: false, rule: null });
+    expect(enforceApGuardrails({ ...base, action: "pay", match: match(null, true, false) })).toMatchObject({ blocked: false, rule: null });
+  });
+
+  it("leaves a hold or a request for information alone", () => {
+    for (const action of ["hold", "request_info"] as const) {
+      expect(enforceApGuardrails({ ...base, action, match: match(null, false) })).toMatchObject({ blocked: false, status: null });
+    }
+  });
+
+  it("lets a changed address speak first, and speaks before the limit", () => {
+    const address = enforceApGuardrails({ ...base, action: "pay", match: match(null, true), addressChangedAt: "2026-10-05T00:00:00Z", addressConfirmedAt: null });
+    expect(address.rule).toBe("counterparty.address_unconfirmed");
+    const overLimit = enforceApGuardrails({ ...base, action: "pay", amount: 50, match: match(null, true) });
+    expect(overLimit.rule).toBe("invoice.match_incomplete");
+  });
+});

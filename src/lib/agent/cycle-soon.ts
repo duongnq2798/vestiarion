@@ -36,6 +36,8 @@ export type CycleEventKind =
   | "match_dismissed"
   | "payment_received"
   | "limit_raised"
+  /** A counterparty is now paid without purchase orders (three-way match design M5). */
+  | "purchase_orders_waived"
   | "recurring_added"
   | "budget_raised"
   | "cash_returned"

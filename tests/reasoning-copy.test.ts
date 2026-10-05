@@ -86,6 +86,10 @@ describe("the notes code adds", () => {
     expect(noteSentence("closed without paying by a person: Paid in cash")).toBe("A person closed it without paying: Paid in cash.");
     expect(noteSentence("guardrail override: contractor is high risk — release refused")).toBe("Not released: the contractor is high risk.");
     expect(noteSentence("guardrail override: 3 exceeds the 0.25 USDC payment limit — pay refused before execution")).toBe("Not paid: the amount exceeds the 0.25 USDC payment limit.");
+    // The three-way match, checked in code (three-way match design M3).
+    expect(
+      noteSentence("guardrail override: the three-way match is incomplete: no purchase order is on file — payment refused before execution; it waits for the details in Approvals")
+    ).toBe("Not paid: the three-way match is incomplete; no purchase order is on file. It waits for the details in Approvals.");
     expect(noteSentence("guardrail override: the counterparty's address changed on 2026-09-30 and no one has confirmed it — held for a person to approve")).toBe(
       "Held for a person to approve: the counterparty's address changed on Sep 30, 2026 and no one has confirmed it."
     );
@@ -162,6 +166,24 @@ describe("explaining what a decision recorded", () => {
       "It resembles 2 earlier invoices from Bluebird Logistics.",
       "The agent asked for more information before paying it.",
     ]);
+  });
+});
+
+describe("explaining a payable to a counterparty paid without purchase orders (three-way match design M4)", () => {
+  const explain = (goodsReceived: boolean) =>
+    explainPayable({
+      name: "Northwind",
+      amount: 8,
+      currency: "USDC",
+      dueDate: "2026-10-09",
+      poReference: null,
+      goodsReceived,
+      entry: { ts: "2026-09-30T12:04:00Z", detail: { decision: { action: "pay" }, observed: { riskLevel: "clear", paymentLimit: 50, purchaseOrderRequired: false } } },
+    })[2];
+
+  it("says no purchase order was needed, and whether the goods were received", () => {
+    expect(explain(true)).toBe("No purchase order is needed for Northwind, and the goods were received.");
+    expect(explain(false)).toBe("No purchase order is needed for Northwind, but the goods are not marked received.");
   });
 });
 

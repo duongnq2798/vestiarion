@@ -402,3 +402,31 @@ describe("follow-up — held only for the agent's spending limit (outflow budget
     expect(planMilestoneFollowUp(held({ budgetRoom: 50 }), { ...atDecision, heldForBudget: false }).action).toBe("wait");
   });
 });
+
+describe("follow-up — a counterparty now paid without purchase orders (three-way match design M5)", () => {
+  // Decided while the counterparty needed a purchase order and none was on file: the guardrail asked for information.
+  const neededOne: DecisionFacts = { ...facts, goodsReceived: true, purchaseOrderRequired: true };
+  const waiting = (over: Partial<FrozenInvoice> = {}) => frozen({ goodsReceived: true, ...over });
+
+  it("reopens a payable that waited for a purchase order once its counterparty needs none", () => {
+    const plan = planFollowUp(waiting({ purchaseOrderRequired: false }), neededOne, NOW, config);
+    expect(plan.action).toBe("reopen");
+    expect(plan.changes).toEqual(["the counterparty is now paid without purchase orders"]);
+  });
+
+  it("reopens nothing when purchase orders are required again, or the setting was not read", () => {
+    expect(planFollowUp(waiting({ purchaseOrderRequired: true }), { ...neededOne, purchaseOrderRequired: false }, NOW, config).action).toBe("wait");
+    expect(planFollowUp(waiting(), neededOne, NOW, config).action).toBe("wait");
+  });
+
+  it("leaves a payable that had its purchase order: it waits for something the setting does not change", () => {
+    const plan = planFollowUp(waiting({ poReference: "PO-7", purchaseOrderRequired: false }), { ...neededOne, poReference: "PO-7" }, NOW, config);
+    expect(plan.action).toBe("wait");
+    expect(plan.changes).toEqual([]);
+  });
+
+  it("reads a decision recorded before the setting existed as one where purchase orders were needed", () => {
+    const plan = planFollowUp(waiting({ purchaseOrderRequired: false }), { ...facts, goodsReceived: true }, NOW, config);
+    expect(plan.changes).toEqual(["the counterparty is now paid without purchase orders"]);
+  });
+});

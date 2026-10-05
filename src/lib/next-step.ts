@@ -26,6 +26,12 @@ export function heldForCash(detail: Record<string, unknown> | null | undefined):
   return typeof execution === "object" && execution !== null && (execution as Record<string, unknown>).heldBecause === "cash_shortfall";
 }
 
+/**
+ * The guardrail rule for an incomplete three-way match (three-way match design M3). Unlike the other rules, what removes
+ * its cause can be added where the payable waits: the details it lacks, with Add details.
+ */
+export const MATCH_INCOMPLETE = "invoice.match_incomplete";
+
 /** A counterparty's row on Counterparties, which a link opens at (`ScrollToHash` opens a closed row). */
 export function counterpartyPath(counterpartyId: string): string {
   return `/counterparties#counterparty-${counterpartyId}`;
@@ -60,6 +66,12 @@ export function ruleNextStep(rule: string | null | undefined, counterparty: { id
       };
     case "invoice.duplicate_of_settled":
       return { sentence: "It repeats an invoice already paid, being paid or scheduled. Reject it in Approvals if it is a duplicate.", fix: null };
+    case MATCH_INCOMPLETE:
+      // The counterparty's row says whether it needs purchase orders, and an owner or admin changes it there (M2, M7).
+      return {
+        sentence: `Its three-way match is incomplete. Add the purchase order or confirm the goods with Add details, and the agent decides it again; or mark ${counterparty.name} as paid without purchase orders, if it is.`,
+        fix: { label: "Purchase orders", path: row },
+      };
     case "workspace.outflow_budget":
       return {
         sentence: "The agent's spending limit has no room for it. The agent pays it on its own once there is room, the next UTC day or once the limit is raised; or pay it in Approvals.",
@@ -109,6 +121,8 @@ export function agentResumes(rule: string | null | undefined): string | null {
       return "The agent decides it again on its own once an owner or admin raises the counterparty's payment limit.";
     case "counterparty.unscreened":
       return "The agent decides it again on its own once screening gives a verdict.";
+    case MATCH_INCOMPLETE:
+      return "The agent decides it again on its own once an owner or admin adds what the match lacks, or marks the counterparty as paid without purchase orders.";
     case CASH_SHORTFALL:
       return "The agent decides it again on its own once cash comes in: USDC added to the operating wallet, or brought back from the reserve.";
     default:
@@ -131,6 +145,8 @@ export function ruleInBrief(rule: string | null | undefined): string | null {
       return "the counterparty is a client, which pays you";
     case "invoice.duplicate_of_settled":
       return "it repeats an invoice already paid";
+    case MATCH_INCOMPLETE:
+      return "its three-way match is incomplete";
     case "workspace.outflow_budget":
       return "the agent's spending limit has no room today, and the agent pays it once there is";
     case "workspace.onchain_limit":

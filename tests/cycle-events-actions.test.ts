@@ -3,7 +3,13 @@ import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { addInvoiceDetailsAction, returnInvoiceAction } from "@/app/actions/approvals";
 import { resumeAgentAction, setAgentBudgetAction } from "@/app/actions/agent";
-import { confirmCounterpartyAddressAction, createInvoiceAction, importInvoicesAction, updateCounterpartyLimitAction } from "@/app/actions/intake";
+import {
+  confirmCounterpartyAddressAction,
+  createInvoiceAction,
+  importInvoicesAction,
+  updateCounterpartyLimitAction,
+  updateCounterpartyPurchaseOrdersAction,
+} from "@/app/actions/intake";
 import { manualMilestoneVerificationAction } from "@/app/actions/milestones";
 import { loadSampleDataAction } from "@/app/actions/sample-data";
 import { refreshOnChainBalanceAction } from "@/app/actions/treasury";
@@ -30,6 +36,7 @@ const { ORG, USER, raiseMock, runSoonMock, authorizeMock, mocks } = vi.hoisted((
     resumeAgent: vi.fn(),
     confirmCounterpartyAddress: vi.fn(),
     changeCounterpartyLimit: vi.fn(),
+    changeCounterpartyPurchaseOrders: vi.fn(),
     changeAgentBudget: vi.fn(),
     loadSampleData: vi.fn(),
     refreshOnChainBalances: vi.fn(),
@@ -59,6 +66,10 @@ vi.mock("@/lib/counterparty-address", async (importOriginal) => ({
 vi.mock("@/lib/counterparty-limit", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/counterparty-limit")>()),
   changeCounterpartyLimit: mocks.changeCounterpartyLimit,
+}));
+vi.mock("@/lib/counterparty-purchase-orders", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/counterparty-purchase-orders")>()),
+  changeCounterpartyPurchaseOrders: mocks.changeCounterpartyPurchaseOrders,
 }));
 vi.mock("@/lib/agent-budget", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/agent-budget")>()),
@@ -278,6 +289,45 @@ describe("changing a counterparty's limit", () => {
     mocks.changeCounterpartyLimit.mockRejectedValue(new Error("conflict"));
     await change("5").catch(() => undefined);
     expect(raiseMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("changing whether a counterparty needs purchase orders (three-way match design M2, M5)", () => {
+  const change = (purchaseOrderRequired: string) =>
+    updateCounterpartyPurchaseOrdersAction(empty, form({ counterpartyId: COUNTERPARTY, purchaseOrderRequired }));
+
+  it("raises purchase_orders_waived when it is now paid without them, so a payable that waited for one is decided again", async () => {
+    mocks.changeCounterpartyPurchaseOrders.mockResolvedValue({ name: "Acme", from: true, to: false });
+    expect(await change("false")).toEqual({
+      ok: true,
+      message: "The agent now pays Acme without a purchase order. It still needs the goods or services marked received.",
+    });
+    expect(mocks.changeCounterpartyPurchaseOrders).toHaveBeenCalledWith({ actorId: USER, counterpartyId: COUNTERPARTY, required: false });
+    expect(raiseMock).toHaveBeenCalledWith(ACCESS, "purchase_orders_waived");
+  });
+
+  it("raises nothing when it needs them again: what waits still waits", async () => {
+    mocks.changeCounterpartyPurchaseOrders.mockResolvedValue({ name: "Acme", from: false, to: true });
+    expect(await change("true")).toEqual({ ok: true, message: "Acme needs a purchase order on file again before the agent pays it." });
+    expect(raiseMock).not.toHaveBeenCalled();
+  });
+
+  it("raises nothing when the change is refused, and says why", async () => {
+    const { CounterpartyPurchaseOrdersError } = await import("@/lib/counterparty-purchase-orders");
+    mocks.changeCounterpartyPurchaseOrders.mockRejectedValue(new CounterpartyPurchaseOrdersError("unchanged", "Acme is already paid without purchase orders."));
+    expect(await change("false")).toEqual({ ok: false, message: "Acme is already paid without purchase orders." });
+    expect(raiseMock).not.toHaveBeenCalled();
+  });
+
+  it("asks for records.write, as a limit does", async () => {
+    mocks.changeCounterpartyPurchaseOrders.mockResolvedValue({ name: "Acme", from: true, to: false });
+    await change("false");
+    expect(authorizeMock).toHaveBeenCalledWith("northstar", "records.write");
+  });
+
+  it("changes nothing on a value that is neither true nor false", async () => {
+    expect(await change("maybe")).toEqual({ ok: false, message: "Choose whether this counterparty needs purchase orders." });
+    expect(mocks.changeCounterpartyPurchaseOrders).not.toHaveBeenCalled();
   });
 });
 

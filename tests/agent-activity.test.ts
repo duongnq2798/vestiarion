@@ -50,6 +50,18 @@ describe("what the agent did, in words", () => {
     });
   });
 
+  it("says the goods were checked, with no purchase order needed, for a counterparty paid without them (three-way match design M4)", () => {
+    const paid = entry("ap_pay", {
+      decisionMode: "deepseek",
+      agreedWithReference: true,
+      observed: { riskLevel: "clear", paymentLimit: 30, poReference: null, goodsReceived: true, purchaseOrderRequired: false },
+      execution: { txRef: TX, resultingStatus: "paid" },
+    });
+    expect(activityItem(paid, refs())?.detail).toBe(
+      "DeepSeek decided, as the written policy would. Checks passed: goods received, with no purchase order needed, the 30.00 USDC limit, screening."
+    );
+  });
+
   it("says how long after the person's action the agent decided", () => {
     const paid = { ...entry("ap_pay", { execution: { txRef: TX, resultingStatus: "paid" } }), ts: "2026-10-03T02:20:53Z" };
     const withTriggers = (action: string, ts: string) => ({ ...refs(), triggers: new Map([[INVOICE, [{ seq: 968, ts, action }]]]) });
@@ -152,7 +164,7 @@ describe("a code stop, in a few words", () => {
     const rules = [
       "bridge.fee_above_cap", "bridge.fee_unavailable", "bridge.gateway_balance_short", "bridge.unsupported_token",
       "counterparty.address_unconfirmed", "counterparty.client_payable", "counterparty.high_risk", "counterparty.payment_limit", "counterparty.unscreened",
-      "fx.rate_unavailable", "fx.swap_cost_above_cap", "fx.swap_usdc_short", "invoice.duplicate_of_settled",
+      "fx.rate_unavailable", "fx.swap_cost_above_cap", "fx.swap_usdc_short", "invoice.duplicate_of_settled", "invoice.match_incomplete",
       "treasury.insufficient_eurc", "workspace.onchain_limit", "workspace.onchain_limit_route", "workspace.outflow_budget",
     ];
     for (const rule of rules) {
@@ -199,6 +211,18 @@ describe("what to do about a payable code stopped", () => {
     for (const rule of ["invoice.duplicate_of_settled", "workspace.onchain_limit_route", "bridge.fee_unavailable", "bridge.unsupported_token", "fx.rate_unavailable"]) {
       expect(ruleNextStep(rule, counterparty)?.fix, rule).toBeNull();
     }
+  });
+
+  it("asks for what an incomplete three-way match lacks, or for the counterparty to be marked paid without purchase orders (three-way match design M7)", () => {
+    expect(ruleNextStep("invoice.match_incomplete", counterparty)).toEqual({
+      sentence:
+        "Its three-way match is incomplete. Add the purchase order or confirm the goods with Add details, and the agent decides it again; or mark CME as paid without purchase orders, if it is.",
+      fix: { label: "Purchase orders", path: counterpartyPath("cp-1") },
+    });
+    expect(ruleInBrief("invoice.match_incomplete")).toBe("its three-way match is incomplete");
+    expect(agentResumes("invoice.match_incomplete")).toBe(
+      "The agent decides it again on its own once an owner or admin adds what the match lacks, or marks the counterparty as paid without purchase orders."
+    );
   });
 
   it("explains a hold for want of cash, says the agent resumes once cash comes in, and links the reserve (reserve cash back R4)", () => {

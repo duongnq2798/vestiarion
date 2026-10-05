@@ -459,6 +459,8 @@ describe("the new control screens, as source", () => {
     expect(invoices).toContain("hint: facts ? waitingHint(facts.onFile, facts.added) : undefined");
     expect(invoices).toContain("needsYou.map((decision) => row(decision, needsYouFor))");
     expect(invoices).toContain("<WaitingPayableAction");
+    // A counterparty paid without purchase orders is never asked for one (three-way match design M2).
+    expect(invoices).toContain("purchaseOrderRequired: counterpartiesById.get(invoice.counterparty_id)?.purchase_order_required !== false");
     expect(invoices).toContain('viewerCan(slug, "approval.decide")');
   });
 
@@ -468,6 +470,8 @@ describe("the new control screens, as source", () => {
     // A hold for want of cash is no guardrail rule, but is explained like one (reserve cash back R4).
     expect(console_).toContain("rule={decision.guardrail?.rule ?? (decision.heldForCash ? CASH_SHORTFALL : null)}");
     expect(read("src/app/o/[slug]/invoices/page.tsx")).toContain("rule={decision.guardrail?.rule ?? (decision.heldForCash ? CASH_SHORTFALL : null)}");
+    // A counterparty paid without purchase orders is never asked for one there either (three-way match design M2).
+    expect(console_).toContain("purchaseOrderRequired: counterpartiesById.get(invoice.counterparty_id)?.purchase_order_required !== false");
   });
 
   it("AP / AR says which payables a running cycle is deciding", () => {
@@ -696,6 +700,63 @@ describe("a payable waiting for a person, on its card on Invoices (complete held
     expect(markup).toContain("The agent&#x27;s spending limit has no room for it.");
     expect(markup).not.toContain("Spending limit</a>");
     expect(markup).not.toContain("Add details");
+    expect(markup).toContain(DECIDE_LINK);
+  });
+
+  it("offers Add details for an incomplete three-way match, with the counterparty's purchase orders beside them when one is missing (three-way match design M7)", () => {
+    const markup = html(
+      <WaitingPayableAction
+        orgSlug="acme"
+        invoice={{ id: ID, counterpartyName: "CME", counterpartyId: "cp-1", poReference: null, goodsReceived: true }}
+        added={null}
+        canAddDetails
+        canDecide
+        rule="invoice.match_incomplete"
+        canFix
+      />
+    );
+    expect(markup).toContain("Add the purchase order, and the agent decides it again. Or, if CME is paid without purchase orders, mark it so.");
+    expect(markup).toContain("Add details");
+    expect(markup).toContain('href="/o/acme/counterparties#counterparty-cp-1"');
+    expect(markup).toContain(">Purchase orders</a>");
+    expect(markup).toContain(DECIDE_LINK);
+  });
+
+  it("asks an incomplete match only for the goods when a purchase order is on file or not needed, with no link to purchase orders", () => {
+    const card = (facts: { poReference: string | null; goodsReceived: boolean; purchaseOrderRequired?: boolean }) =>
+      html(
+        <WaitingPayableAction
+          orgSlug="acme"
+          invoice={{ id: ID, counterpartyName: "CME", counterpartyId: "cp-1", ...facts }}
+          added={null}
+          canAddDetails
+          canDecide
+          rule="invoice.match_incomplete"
+          canFix
+        />
+      );
+    for (const markup of [card({ poReference: "PO-1", goodsReceived: false }), card({ poReference: null, goodsReceived: false, purchaseOrderRequired: false })]) {
+      expect(markup).toContain("Confirm the goods or services were received, and the agent decides it again.");
+      expect(markup).toContain("Add details");
+      expect(markup).not.toContain(">Purchase orders</a>");
+    }
+  });
+
+  it("tells an approver what an incomplete match needs, and sends them to Approvals", () => {
+    const markup = html(
+      <WaitingPayableAction
+        orgSlug="acme"
+        invoice={{ id: ID, counterpartyName: "CME", counterpartyId: "cp-1", poReference: null, goodsReceived: true }}
+        added={null}
+        canAddDetails={false}
+        canDecide
+        rule="invoice.match_incomplete"
+        canFix={false}
+      />
+    );
+    expect(markup).toContain("Its three-way match is incomplete.");
+    // The sentence names Add details; the button is an owner's or admin's.
+    expect(markup).not.toContain("<button");
     expect(markup).toContain(DECIDE_LINK);
   });
 

@@ -384,6 +384,21 @@ describe("invoiceDecision: a EURC invoice paid from USDC by a swap (EURC swap sp
   });
 });
 
+describe("invoiceDecision: the purchase order of a counterparty paid without them (three-way match design M2)", () => {
+  const counterparty = (purchaseOrderRequired: boolean) =>
+    ({ id: "cp-1", name: "Northwind Supply", role: "vendor", risk_level: "clear", payment_limit: 1000, purchase_order_required: purchaseOrderRequired }) as unknown as Parameters<typeof invoiceDecision>[1];
+  const po = (purchaseOrderRequired: boolean) =>
+    invoiceDecision(invoice({ po_reference: null }), counterparty(purchaseOrderRequired), []).evidence.find((item) => item.label === "PO");
+
+  it("shows no purchase order as not needed, not as missing", () => {
+    expect(po(false)).toEqual({ label: "PO", value: "not needed", state: "neutral" });
+  });
+
+  it("shows it missing for a counterparty that needs one", () => {
+    expect(po(true)).toEqual({ label: "PO", value: "none", state: "missing" });
+  });
+});
+
 describe("invoiceDecision: a receivable (receivables on Arc)", () => {
   // A receivable is money a client owes the business. Its card must not read like a payable's (PO, goods
   // received, payment limit, the payee's chain) nor say the agent never evaluated it once a transfer settled it

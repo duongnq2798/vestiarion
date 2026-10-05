@@ -78,10 +78,15 @@ function checksOf(detail: Record<string, unknown>, paying: boolean): string[] {
   const notes: string[] = [];
   const po = text(observed.poReference);
   if ("poReference" in observed || "goodsReceived" in observed) {
+    const goods = observed.goodsReceived === true;
+    // A counterparty paid without purchase orders needs none: its match is the goods received (three-way match design M4).
+    const waived = !po && observed.purchaseOrderRequired === false;
     notes.push(
-      po && observed.goodsReceived === true
-        ? `✓ Purchase order ${po} on file and the goods received`
-        : `✗ ${po ? `Purchase order ${po} on file, but the goods not marked received` : "No purchase order on file"}`
+      waived
+        ? `${goods ? "✓ The goods received" : "✗ The goods not marked received"}; no purchase order needed for this counterparty`
+        : po && goods
+          ? `✓ Purchase order ${po} on file and the goods received`
+          : `✗ ${po ? `Purchase order ${po} on file, but the goods not marked received` : "No purchase order on file"}`
     );
   }
   const risk = text(observed.riskLevel);

@@ -62,6 +62,11 @@ export interface ApGuardrailInput {
    * was not asked.
    */
   onChainLimit?: OnChainLimitCheck | null;
+  /**
+   * The invoice's three-way match (three-way match design M1): its purchase order, whether the goods were received,
+   * and whether its counterparty needs a purchase order at all. Absent where a caller has no invoice to match.
+   */
+  match?: { poReference: string | null; goodsReceived: boolean; purchaseOrderRequired: boolean } | null;
 }
 
 /** What the spending limit contract says about one payment the agent would make now. */
@@ -78,6 +83,7 @@ export type ApGuardrailRule =
   | "counterparty.payment_limit"
   | "counterparty.address_unconfirmed"
   | "invoice.duplicate_of_settled"
+  | "invoice.match_incomplete"
   | "fx.rate_unavailable"
   | "treasury.insufficient_eurc"
   | "fx.swap_cost_above_cap"
@@ -94,9 +100,18 @@ export { BRIDGE_FEE_CAP_PERCENT };
 
 export interface ApGuardrailResult {
   blocked: boolean;
-  status: "held" | "flagged" | null;
+  status: "held" | "flagged" | "awaiting_info" | null;
   rule: ApGuardrailRule | null;
   reasoning: string;
+}
+
+/** What an incomplete match lacks, in words, or null when it is complete or there is nothing to match. */
+function matchGaps(match: ApGuardrailInput["match"]): string | null {
+  if (!match) return null;
+  const gaps: string[] = [];
+  if (match.purchaseOrderRequired && !match.poReference?.trim()) gaps.push("no purchase order is on file");
+  if (!match.goodsReceived) gaps.push("the goods are not confirmed received");
+  return gaps.length > 0 ? gaps.join(" and ") : null;
 }
 
 function routeName(bridge: NonNullable<ApGuardrailInput["bridge"]>): string {
@@ -204,6 +219,18 @@ export function enforceApGuardrails(input: ApGuardrailInput): ApGuardrailResult 
       status: "held",
       rule: "counterparty.address_unconfirmed",
       reasoning: `${input.reasoning} [guardrail override: the counterparty's address changed on ${(changedAt as string).slice(0, 10)} and no one has confirmed it — held for a person to approve]`,
+    };
+  }
+  // The three-way match (three-way match design M1, M3): the goods received and, for a counterparty that needs one, a
+  // purchase order on file. Whether one is needed is the business's rule, set on the counterparty, never the model's to
+  // waive. An incomplete match waits for its details, as the written policy's request for information does.
+  const gaps = matchGaps(input.match);
+  if (gaps) {
+    return {
+      blocked: true,
+      status: "awaiting_info",
+      rule: "invoice.match_incomplete",
+      reasoning: `${input.reasoning} [guardrail override: the three-way match is incomplete: ${gaps} — ${verb} refused before execution; it waits for the details in Approvals]`,
     };
   }
   // A EURC payable with no quote has no USDC value, so its limit cannot be
