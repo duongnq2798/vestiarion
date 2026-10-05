@@ -2989,7 +2989,10 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     const entriesByInvoice = new Map<string, Array<{ seq: number; ts: string; action: string; detail: Record<string, unknown> }>>();
     for (const entry of priorEntries) {
       const invoiceId = entry.detail.invoiceId as string | undefined;
-      if (invoiceId) entriesByInvoice.set(invoiceId, [...(entriesByInvoice.get(invoiceId) ?? []), entry]);
+      if (!invoiceId) continue;
+      const list = entriesByInvoice.get(invoiceId);
+      if (list) list.push(entry);
+      else entriesByInvoice.set(invoiceId, [entry]);
     }
 
     const factsByInvoice = new Map<string, DecisionFacts>();

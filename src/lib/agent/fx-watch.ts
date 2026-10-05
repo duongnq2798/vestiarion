@@ -93,7 +93,10 @@ async function watchWorkspace(slug: string, deps: WatchDeps): Promise<FxWatchRes
   const byInvoice = new Map<string, RecheckEntry[]>();
   for (const entry of entries) {
     const invoiceId = entry.detail.invoiceId as string | undefined;
-    if (invoiceId) byInvoice.set(invoiceId, [...(byInvoice.get(invoiceId) ?? []), entry]);
+    if (!invoiceId) continue;
+    const list = byInvoice.get(invoiceId);
+    if (list) list.push(entry);
+    else byInvoice.set(invoiceId, [entry]);
   }
 
   const due = fxRecheckCandidates(

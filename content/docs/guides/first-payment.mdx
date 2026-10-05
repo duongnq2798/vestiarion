@@ -140,6 +140,11 @@ A vendor that bills in euros can be paid in EURC, Circle's euro stablecoin, on A
 
 - **The rate.** Payment limits stay in USDC. Before it decides a EURC payable, the agent asks Circle's Stablecoin Service what the amount is worth in USDC on Arc testnet, and checks that value against the limit. The decision's ledger entry records the rate and when it was quoted. It is the testnet market's rate, not a reference exchange rate.
 - **No rate, no payment.** When the quote does not answer, the payable is held for a person, and its card shows **USDC value** "no rate". If the model had decided to pay it anyway, the card's "Blocked by code, not by the model" band names the rule, `fx.rate_unavailable`. You can still approve it on **Approvals**.
+- **Decided again when the rate comes back.** Arc testnet's route comes and goes. Every 5 minutes, Vestiarion asks Circle again for each EURC payable held for want of a rate, of a swap, of a swap within its cost cap, or of a value within the limit. Once a quote clears what held it, the agent takes it up again within a minute and decides it with every check, with no one pressing anything.
+  - **On the payable.** Under **How the agent decided**, the reopen step names what came back, for example "A EURC rate is quoted again: 0.5 EURC is worth 0.607631 USDC at 1.215262 USDC per EURC, where there was none at the decision".
+  - **In the activity line.** For example "Paid Loto 0.50 EURC · decided again once a EURC rate was quoted".
+  - **In the ledger.** The reopen and the decision after it record the rate before and after, and the decision they follow.
+  - **Not a loop.** A route that comes and goes reopens a payable at most once in 30 minutes. **Return to agent** on **Approvals** still works at any time.
 - **Paid from EURC.** A EURC payable is paid in EURC from the operating wallet; USDC is never sent in its place.
   - **When the wallet's EURC is short:** the agent can buy the EURC with USDC first (next point). Otherwise the payable is held. If the model had decided to pay it anyway, the band names the rule, `treasury.insufficient_eurc`.
   - **Testnet EURC:** get it at [faucet.circle.com](https://faucet.circle.com) for the operating wallet's address, the same way as USDC.

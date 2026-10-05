@@ -1,5 +1,14 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-05: A EURC payable decided again when the rate changes what held it
+
+- An `invoice_reopened` entry gains `reevaluation` when a fresh quote cleared what held a EURC payable. Its shape is `{ trigger, previousDecision: { seq, action, guardrailRule }, before: { rate, usdcValue, swapCostPercent }, after: { rate, usdcValue, swapCostPercent, quotedAt } }`.
+  - `trigger` is one of `rate_available`, `swap_available`, `swap_cost_within_cap` or `value_within_limit`.
+  - `followUp.changes` says the same in words.
+- The `ap_*` decision that follows such a reopen in the same cycle gains `reevaluation: { reopenedSeq, trigger, previousDecisionSeq, previousAction }`. Its own `fx` is the rate it was decided at.
+- A `cycle_complete` entry's `events` can include `fx_changed`. The FX watch started that cycle, every 5 minutes at most, not a person, so its `by` is absent.
+- Nothing changes in `/api/v1`.
+
 ## 2026-10-05: The three-way match, checked in code
 
 - **A new guardrail rule**, `invoice.match_incomplete`. When the agent chooses to pay or schedule a payable whose goods are not confirmed received, or whose counterparty needs a purchase order and has none on file, code refuses it. Its `ap_pay` or `ap_schedule` entry carries `guardrailBlocked: true`, `guardrailRule: "invoice.match_incomplete"` and `execution.resultingStatus: "awaiting_info"`, and the invoice waits for its details.

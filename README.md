@@ -597,7 +597,10 @@ stop the others. Configure repository secrets `VESTIARION_URL` (the deployment o
 `AGENT_API_TOKEN` (the same server secret used by the app). GitHub Actions schedules can be delayed,
 so the ledger timestamp—not the nominal cron minute—is the source of truth for when a cycle ran.
 Sandbox workspaces are never in this list; their cycles run from the console, one **Run cycle**
-click at a time, up to the daily cap above.
+click at a time, up to the daily cap above. `.github/workflows/fx-watch.yml` calls
+`POST /api/agent/fx-watch` every 5 minutes with the same secrets: a EURC payable held because
+Circle quoted no rate or no swap, or one above its swap cap or limit, is decided again once a fresh
+quote clears it, with no one pressing anything. A run with nothing to re-check starts no cycle.
 
 For automatic contractor evidence, put a full `https://github.com/<owner>/<repo>/pull/<number>` URL
 in `verification_source` and configure a read-only `GITHUB_TOKEN`. A merged response verifies the
