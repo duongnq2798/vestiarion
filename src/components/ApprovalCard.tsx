@@ -25,7 +25,7 @@ import { agentResumes, CASH_SHORTFALL, counterpartyPath, ruleNextStep } from "@/
 import { amountToPay } from "@/lib/agent/payment-timing";
 import { utcDay, utcMinute } from "@/lib/copy";
 import { paidAcrossChains, payeeChain } from "@/lib/payee-chains";
-import { approveFirstDescription, onlyApproverOfTwo, SECOND_APPROVAL_PAYS, twoApprovalsLine } from "@/lib/two-approvals";
+import { approveFirstDescription, mayApproveNow, onlyApproverOfTwo, SECOND_APPROVAL_PAYS, twoApprovalsLine } from "@/lib/two-approvals";
 
 const INITIAL: ActionResult = { ok: false, message: "" };
 const approve = withSuccessToast(approveInvoiceAction);
@@ -191,7 +191,7 @@ export default function ApprovalCard({
             {paidAcrossChains(payable.payeeChain) && ` on ${payeeChain(payable.payeeChain).label}`}
           </p>
           {two && <p className="mt-2 text-sm text-ink-2">{twoApprovalsLine(two, viewerId, memberEmails)}</p>}
-          {two && canDecide && soleApprover && (
+          {two && canDecide && two.approvers < 2 && (
             <Callout tone="held" className="mt-2">
               {onlyApproverOfTwo(two.above)}
             </Callout>
@@ -216,7 +216,7 @@ export default function ApprovalCard({
               orgSlug={orgSlug}
               payable={payable}
               // Above the figure, whoever entered it gives one of the two approvals when too few others can.
-              selfEntered={payable.createdBy === viewerId && !ownEntry && !two?.fewApprovers}
+              selfEntered={payable.createdBy === viewerId && !ownEntry && !(two && mayApproveNow(two, viewerId))}
               canEdit={canEdit}
             />
           )}
@@ -235,7 +235,10 @@ export default function ApprovalCard({
           )}
           {payable.lastAttempt?.state === "unanswered" && (
             <Callout tone="held" className="mt-2">
-              Circle did not answer when this payment was sent, so it may have taken the transfer. Approve and pay, Reject and Return look for it on Circle first: Approve and pay records it if Circle has it, and sends it only once Circle shows none.
+              {/* A first approval of two looks nothing up and sends nothing: the approval that pays it does (two approvals T6). */}
+              {two && !two.approvals.some((approval) => approval.by !== viewerId)
+                ? "Circle did not answer when this payment was sent, so it may have taken the transfer. The approval that pays it looks for it on Circle first: it records it if Circle has it, and sends it only once Circle shows none."
+                : "Circle did not answer when this payment was sent, so it may have taken the transfer. Approve and pay, Reject and Return look for it on Circle first: Approve and pay records it if Circle has it, and sends it only once Circle shows none."}
             </Callout>
           )}
         </CardContent>
@@ -294,12 +297,14 @@ function Decisions({
   const viewerApproved = two?.approvals.some((approval) => approval.by === viewerId) ?? false;
   const willPay = !two || two.approvals.some((approval) => approval.by !== viewerId);
   const blocked = two
-    ? viewerApproved
-      ? "You approved it"
-      : payable.createdBy === viewerId && !two.fewApprovers
-        ? "You created this invoice"
-        : payable.firstPaymentAddressBy === viewerId && !two.fewApprovers
-          ? "You gave this payee's address"
+    ? two.approvers < 2
+      ? "Needs a second approver"
+      : viewerApproved && !willPay
+        ? "You approved it"
+        : !mayApproveNow(two, viewerId)
+          ? payable.createdBy === viewerId
+            ? "You created this invoice"
+            : "You gave this payee's address"
           : payable.riskLevel === "high"
             ? "Screened high risk"
             : null

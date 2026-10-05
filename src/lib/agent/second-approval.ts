@@ -2,7 +2,7 @@ import { currentOrgId } from "../context";
 import { sameAddress } from "../counterparty-address";
 import { db, unwrap } from "../dal";
 import { approversBesides, readTwoApprovalsAbove } from "../approval-policy";
-import type { TwoApprovalsFacts } from "../two-approvals";
+import { excludedSlots, mayApproveNow, type TwoApprovalsFacts } from "../two-approvals";
 
 /**
  * The approvals people give a payment above the workspace's figure (docs/superpowers/specs/2026-10-05-two-approvals-design.md
@@ -52,14 +52,13 @@ export async function openApprovals(source: PaymentSource): Promise<GivenApprova
   return rows.map(given);
 }
 
-/** Whether an approval is of this payment as it stands (T4): the same amount, currency and address. */
+/**
+ * Whether an approval is of this payment as it stands (T4): the same amount, currency and address. A payee with no address
+ * yet agrees with an approval of a payment to no address: a sandbox pays it to its stand-in, and a live payment to no
+ * address is refused before anything is sent.
+ */
 export function approvalAgrees(approval: ApprovedPayment, payment: ApprovedPayment): boolean {
-  return (
-    Math.abs(approval.amount - payment.amount) < 0.0000005 &&
-    approval.currency === payment.currency &&
-    payment.address !== null &&
-    sameAddress(approval.address, payment.address)
-  );
+  return Math.abs(approval.amount - payment.amount) < 0.0000005 && approval.currency === payment.currency && sameAddress(approval.address, payment.address);
 }
 
 /** Of the people named, those who may approve payments in the workspace now (`approvers_among`, migration 0076). */
@@ -118,15 +117,22 @@ const MEMBER_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
 const memberIds = (ids: Array<string | null | undefined>) => [...new Set(ids.filter((id): id is string => typeof id === "string" && MEMBER_ID.test(id)))];
 
 /**
- * Whether this person may give one of a payment's two approvals (T5): anyone who may approve payments, except whoever
- * entered it and, for a first payment to an address, whoever gave the address, unless fewer than two others can. Whether
- * the person may approve payments at all is the command's gate.
+ * Whether this person may give one of a payment's two approvals now (T5). Anyone who may approve payments may, except
+ * whoever entered it and, for a first payment to an address, whoever gave the address: as many of the two approvals as
+ * can come from people independent of the payment must. So those left out give none while two others can approve, one
+ * while one other can, and both only when no one else can. `given` is the approvals that stand already. Whether the
+ * person may approve payments at all is the command's gate.
  */
-export async function mayGiveApproval(input: { actorId: string; excluded: Array<string | null | undefined> }): Promise<boolean> {
+export async function mayGiveApproval(input: {
+  actorId: string;
+  excluded: Array<string | null | undefined>;
+  given: ReadonlyArray<{ by: string }>;
+}): Promise<boolean> {
   // Members only: a first payment's address may have been given by the payee ("payee"), who is no one here.
   const excluded = memberIds(input.excluded);
   if (!excluded.includes(input.actorId)) return true;
-  return (await approversBesides(excluded)) < 2;
+  const slots = excludedSlots(await approversBesides(excluded));
+  return mayApproveNow({ excluded, excludedSlots: slots, approvals: input.given.map(({ by }) => ({ by, at: "" })) }, input.actorId);
 }
 
 /** A payment waiting for a person, as a page lists it, for `twoApprovalsFacts`. */
@@ -147,10 +153,15 @@ export interface WaitingPayment {
  * when one is above it, their open approvals, who of their givers may still approve, and the count for each set of
  * people left out.
  */
-export async function twoApprovalsFacts(type: PaymentSource["type"], items: WaitingPayment[]): Promise<Map<string, TwoApprovalsFacts>> {
+export async function twoApprovalsFacts(
+  type: PaymentSource["type"],
+  items: WaitingPayment[],
+  /** The figure, when the caller already read it. */
+  knownAbove?: number | null
+): Promise<Map<string, TwoApprovalsFacts>> {
   const facts = new Map<string, TwoApprovalsFacts>();
   if (items.length === 0) return facts;
-  const above = await readTwoApprovalsAbove(db());
+  const above = knownAbove !== undefined ? knownAbove : await readTwoApprovalsAbove(db());
   if (above === null) return facts;
   const needing = items.filter((item) => !item.sent && (item.weighed === null || item.weighed > above));
   if (needing.length === 0) return facts;
@@ -173,6 +184,8 @@ export async function twoApprovalsFacts(type: PaymentSource["type"], items: Wait
   }
   const givers = [...new Set([...agreeing.values()].flat().map((approval) => approval.by))];
   const approvers = givers.length > 0 ? await approversAmong(givers) : new Set<string>();
+  // How many people can approve payments at all: with fewer than two, nothing above the figure can be paid.
+  const everyone = await approversBesides([]);
 
   // One count per set of people left out, however many payments share it.
   const counts = new Map<string, number>();
@@ -183,7 +196,9 @@ export async function twoApprovalsFacts(type: PaymentSource["type"], items: Wait
     facts.set(item.id, {
       above,
       approvals: (agreeing.get(item.id) ?? []).filter((approval) => approvers.has(approval.by)).map((approval) => ({ by: approval.by, at: approval.at })),
-      fewApprovers: excluded.length > 0 && (counts.get(key) ?? 2) < 2,
+      excluded,
+      excludedSlots: excluded.length > 0 ? excludedSlots(counts.get(key) ?? everyone) : 0,
+      approvers: everyone,
     });
   }
   return facts;

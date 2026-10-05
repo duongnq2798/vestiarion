@@ -171,8 +171,10 @@ function approvalsFake(options: {
   approvals?: Array<Record<string, unknown>>;
   /** Who of those named may approve payments now (`approvers_among`); everyone named by default. */
   approversAmong?: (users: string[]) => string[];
-  /** How many members may approve payments besides those named (`approvers_besides`); 2 by default. */
-  approversBesides?: number;
+  /** How many members may approve payments besides those named (`approvers_besides`): one figure, or one per set left out; 2 by default. */
+  approversBesides?: number | ((excluded: string[]) => number);
+  /** The reply to marking approvals used; success by default. */
+  approvalsPatch?: FakeReply;
 } = {}) {
   const intents = options.intents ?? [];
   const eq = (request: RecordedRequest, column: string) => request.params.get(column)?.match(/^eq\.(.+)$/)?.[1];
@@ -265,7 +267,12 @@ function approvalsFake(options: {
       const users = (request.body as { p_users: string[] }).p_users;
       return { body: options.approversAmong ? options.approversAmong(users) : users };
     }
-    if (request.path === "/rest/v1/rpc/approvers_besides") return { body: options.approversBesides ?? 2 };
+    if (request.path === "/rest/v1/rpc/approvers_besides") {
+      const excluded = (request.body as { p_excluded: string[] }).p_excluded;
+      const count = options.approversBesides;
+      return { body: typeof count === "function" ? count(excluded) : (count ?? 2) };
+    }
+    if (request.path === "/rest/v1/payment_approvals" && request.method === "PATCH" && options.approvalsPatch) return options.approvalsPatch;
     if (request.path === "/rest/v1/rpc/append_ledger_entry") {
       if (options.ledgerFails) return { status: 500, body: { message: "ledger unavailable" } };
       return {
@@ -2121,6 +2128,8 @@ describe("approveAndPay above the workspace's figure for two approvals (two appr
     const result = await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
 
     expect(result.status).toBe("paid");
+    // The approval that pays is never stored before the claim (review finding 2): the entry is its record.
+    expect(approvalRequests(fake.requests, "POST")).toHaveLength(0);
     expect(rpcBodies(fake.requests, "claim_invoice_decision")).toEqual([{ p_org_id: ORG, p_invoice_id: INVOICE_ID, p_by: ACTOR, p_decision: "approve" }]);
     expect(payInvoiceMock).toHaveBeenCalledTimes(1);
     const used = approvalRequests(fake.requests, "PATCH");
@@ -2135,7 +2144,7 @@ describe("approveAndPay above the workspace's figure for two approvals (two appr
         twoApprovalsAbove: 100,
         approvals: [
           { by: OTHER, at: "2026-10-05T08:00:00.000Z" },
-          { by: ACTOR, at: "2026-10-05T09:00:00.000Z" },
+          { by: ACTOR, at: expect.any(String) },
         ],
       },
     });
@@ -2165,17 +2174,21 @@ describe("approveAndPay above the workspace's figure for two approvals (two appr
     const { fake, run } = approvalsFake({ twoApprovals: 100, approversBesides: 2 });
 
     await expect(run(() => approveAndPay({ actorId: CREATOR, invoiceId: INVOICE_ID }))).rejects.toThrow("You created this invoice, so someone else must approve it.");
-    expect(rpcBodies(fake.requests, "approvers_besides")).toEqual([{ p_org_id: ORG, p_excluded: [CREATOR] }]);
+    // First how many can approve at all, then how many besides whoever entered it.
+    expect(rpcBodies(fake.requests, "approvers_besides")).toEqual([
+      { p_org_id: ORG, p_excluded: [] },
+      { p_org_id: ORG, p_excluded: [CREATOR] },
+    ]);
     expect(approvalRequests(fake.requests, "POST")).toHaveLength(0);
   });
 
   it("lets whoever entered it give one of the two when fewer than two others can, and says so", async () => {
-    const first = approvalsFake({ twoApprovals: 100, approversBesides: 1 });
+    const first = approvalsFake({ twoApprovals: 100, approversBesides: (excluded) => (excluded.length === 0 ? 2 : 1) });
     expect((await first.run(() => approveAndPay({ actorId: CREATOR, invoiceId: INVOICE_ID }))).status).toBe("approved");
     expect(rpcBodies(first.fake.requests, "append_ledger_entry")[0].p_detail).toMatchObject({ fewApprovers: true });
 
     paid();
-    const second = approvalsFake({ twoApprovals: 100, approversBesides: 1, approvals: [approval(OTHER)] });
+    const second = approvalsFake({ twoApprovals: 100, approversBesides: (excluded) => (excluded.length === 0 ? 2 : 1), approvals: [approval(OTHER)] });
     expect((await second.run(() => approveAndPay({ actorId: CREATOR, invoiceId: INVOICE_ID }))).status).toBe("paid");
     expect(rpcBodies(second.fake.requests, "claim_invoice_decision")[0]).toMatchObject({ p_by: CREATOR });
     expect(rpcBodies(second.fake.requests, "append_ledger_entry")[0].p_detail).toMatchObject({ fewApprovers: true });
@@ -2241,8 +2254,11 @@ describe("listWaitingPayables above the figure for two approvals (two approvals 
 
     const [row] = await run(() => listWaitingPayables());
 
-    expect(row.twoApprovals).toEqual({ above: 100, approvals: [{ by: OTHER, at: "2026-10-05T08:00:00.000Z" }], fewApprovers: true });
-    expect(rpcBodies(fake.requests, "approvers_besides")).toEqual([{ p_org_id: ORG, p_excluded: [CREATOR] }]);
+    expect(row.twoApprovals).toEqual({ above: 100, approvals: [{ by: OTHER, at: "2026-10-05T08:00:00.000Z" }], excluded: [CREATOR], excludedSlots: 1, approvers: 1 });
+    expect(rpcBodies(fake.requests, "approvers_besides")).toEqual([
+      { p_org_id: ORG, p_excluded: [] },
+      { p_org_id: ORG, p_excluded: [CREATOR] },
+    ]);
   });
 
   it("gives none at or under the figure, or with none set", async () => {
@@ -2250,5 +2266,82 @@ describe("listWaitingPayables above the figure for two approvals (two approvals 
     expect((await under.run(() => listWaitingPayables()))[0]).not.toHaveProperty("twoApprovals");
     const none = approvalsFake();
     expect((await none.run(() => listWaitingPayables()))[0]).not.toHaveProperty("twoApprovals");
+  });
+});
+
+describe("approveAndPay above the figure, after review (two approvals T4–T6)", () => {
+  const OTHER = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000c3";
+  const GAVE = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000d4";
+  const approval = (by: string) => ({
+    id: `appr-${by.slice(-2)}`, approved_by: by, approved_at: "2026-10-05T08:00:00.000Z", amount: "150.000000", currency: "USDC", address: "0xdead",
+  });
+  const approvalRequests = (requests: RecordedRequest[], method: string) => requests.filter((r) => r.path === "/rest/v1/payment_approvals" && r.method === method);
+  /** A live workspace where the payable would be the first payment to an address GAVE gave. */
+  const live = () => {
+    getChainProviderMock.mockReturnValue({ mode: "live", earnMode: "simulate", estimatedFeeUsd: 0.003 });
+    syncOperatingBalanceMock.mockResolvedValue(500);
+    return { addressEntries: [{ action: "create_counterparty", detail: { by: GAVE, counterpartyId: COUNTERPARTY_ID, address: "0xdead" } }] };
+  };
+
+  it("keeps whoever entered it and whoever gave its address from being its two approvers while someone else can approve", async () => {
+    const { fake, run } = approvalsFake({
+      ...live(),
+      twoApprovals: 100,
+      approvals: [approval(GAVE)],
+      approversBesides: (excluded) => (excluded.length === 0 ? 3 : 1),
+    });
+
+    await expect(run(() => approveAndPay({ actorId: CREATOR, invoiceId: INVOICE_ID }))).rejects.toThrow("You created this invoice, so someone else must approve it.");
+    expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+  });
+
+  it("lets them be its two approvers when no one else can approve", async () => {
+    payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", amountPaid: 150, discountTaken: 0, operatingBalance: 0 });
+    const { run } = approvalsFake({
+      ...live(),
+      twoApprovals: 100,
+      approvals: [approval(GAVE)],
+      approversBesides: (excluded) => (excluded.length === 0 ? 2 : 0),
+    });
+
+    expect((await run(() => approveAndPay({ actorId: CREATOR, invoiceId: INVOICE_ID }))).status).toBe("paid");
+  });
+
+  it("keeps no approval when the payment it would have made is refused", async () => {
+    const { fake, run } = approvalsFake({ twoApprovals: 100, approvals: [approval(OTHER)], account: () => ({ body: accountRow("100") }) });
+
+    await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).rejects.toThrow(/less than this invoice/);
+    expect(approvalRequests(fake.requests, "POST")).toHaveLength(0);
+    expect(approvalRequests(fake.requests, "PATCH")).toHaveLength(0);
+  });
+
+  it("sends nothing when the approvals it uses cannot be marked used, and gives the payable back", async () => {
+    const { fake, run } = approvalsFake({ twoApprovals: 100, approvals: [approval(OTHER)], approvalsPatch: { status: 500, body: { message: "write failed" } } });
+
+    await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).rejects.toThrow();
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+    expect(patchBodies(fake.requests, "/rest/v1/invoices")).toEqual([expect.objectContaining({ status: "held" })]);
+  });
+
+  it("takes no approval while another person's payment of it is being decided", async () => {
+    const { fake, run } = approvalsFake({
+      twoApprovals: 100,
+      invoice: (request) => (request.params.get("id") ? { body: invoiceRow({ status: "processing", reviewed_at: new Date().toISOString() }) } : undefined),
+    });
+
+    await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).rejects.toThrow("Someone else decided this invoice a moment ago.");
+    expect(approvalRequests(fake.requests, "POST")).toHaveLength(0);
+  });
+
+  it("takes no approval where fewer than two people can approve payments: it could never be paid", async () => {
+    const { fake, run } = approvalsFake({ twoApprovals: 100, approversBesides: (excluded) => (excluded.length === 0 ? 1 : 0) });
+
+    const attempt = run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+    await expect(attempt).rejects.toMatchObject({ code: "needs_second_approver" });
+    await expect(attempt).rejects.toThrow(
+      "Payments above 100 USDC need two approvals, and only one person in this workspace can approve payments. Raise the figure in Settings, or add an approver on Members."
+    );
+    expect(approvalRequests(fake.requests, "POST")).toHaveLength(0);
   });
 });

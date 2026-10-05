@@ -33,6 +33,9 @@ describe("TwoApprovalsPanel", () => {
       "Above the figure, the agent never pays on its own and no one person pays alone: a first approval is recorded, and a second person's approval pays it."
     );
     expect(words).toContain("3 people can approve payments here.");
+    expect(words).toContain(
+      "As many of the two as can come from people who neither entered the payment nor gave a new payee's address must; those two give the rest only when no one else can."
+    );
   });
 
   it("says the figure when it is on, and offers an owner to change it or turn it off", () => {

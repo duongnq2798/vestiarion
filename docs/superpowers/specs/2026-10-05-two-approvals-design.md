@@ -62,17 +62,21 @@ and the signed ledger shows who stood behind each payment.
 - **T5. Who gives the two approvals.**
   - Members who may approve payments, other than whoever entered it and, for a first payment to an address, whoever
     gave the address.
-  - When fewer than two such members exist, those people may approve too. Two different people are still needed, and
-    the paying entry records `fewApprovers: true`.
-  - A workspace with one approver can never pay above the figure: one person cannot be two. The card says to raise the
-    figure or add an approver. (Turning it on needs two approvers; this happens only when one leaves.)
+  - As many of the two approvals as can come from such members must: with two or more, both; with one, one. Whoever
+    entered it, or gave the address, gives the rest only then, and with none they may give both. Two different people
+    are always needed, and the paying entry records `fewApprovers: true` when one of them was left out.
+  - A workspace with fewer than two approvers can never pay above the figure: one person cannot be two. No approval is
+    taken there (`needs_second_approver`), and the card says to raise the figure or add an approver. (Turning it on
+    needs two approvers; this happens only when one leaves.)
   - In the database, `claim_invoice_decision` also lets the person who entered an invoice claim its approval when
     another person's open approval of it is on file: they give the second approval. The two-approval rule itself is
     checked by the approval action, as the new payee check is.
   - Cost if wrong: in a workspace with two approvers, whoever entered a bill above the figure gives one of its two
     approvals.
 - **T6. Approvals are used once.**
-  - The approval that pays claims the payment, and the open approvals are marked used.
+  - The approval that pays claims the payment, and the open approvals are marked used. It is never stored itself before
+    the claim, so a refusal on the way leaves no approval behind; approvals that cannot be marked used send nothing.
+  - No approval is taken while someone is deciding the payment.
   - A transfer that then fails needs two approvals again to be sent again.
   - A transfer already sent is only recorded: approving it needs one person and moves nothing. A send Circle never
     answered counts as a new payment, since it may be sent again.
@@ -127,10 +131,32 @@ and the signed ledger shows who stood behind each payment.
 
 ## 4. Rollout
 
-- Migration `0076_two_approvals.sql` (the partner runs it before the merge). Until it has run there is no table, and the
-  figure reads as none, so a deploy that comes first leaves payments as they were.
+- Migration `0076_two_approvals.sql` (the partner runs it before the merge). A figure that cannot be read, its table
+  missing included, stops what reads it rather than letting one approval pay (review finding 5).
 - Proof in testnet-2, with a second member who may approve:
   - an owner sets Two approvals above 1 USDC;
   - a 2 USDC payable: the agent holds it as `workspace.two_approvals`;
   - one member approves: recorded as `approval_given`, nothing sent;
   - the other approves: paid on Arc testnet, and `approval_paid` names both approvals.
+
+## 5. After review (2026-10-05, before the merge)
+
+A fresh review of the branch found no path that pays above the figure on one approval or by the agent alone. Fixed:
+
+- Whoever entered a payment and whoever gave its address could have been its two approvers while someone independent
+  could approve. As many of the two as can now come from people who did neither (T5).
+- The paying approval was stored before the funds check and the claim, and kept when they refused: both people then saw
+  "You approved it", and in a two-approver workspace nobody could pay it from the console. It is no longer stored before
+  the claim (T6), and "You approved it" disables the button only when the viewer's approval would not pay.
+- A payee with no address yet could never be paid above the figure: an approval of a payment to no address now agrees.
+- Approvals that cannot be marked used send nothing, and no approval is taken while someone is deciding the payment.
+- A figure that cannot be read fails closed.
+- After a first Pay now, a held milestone's reason fell back to "The agent chose to hold it": an approval entry is no
+  longer read as the decision.
+- Fewer than two approvers in all: no approval is taken. The Contractors page leaves out a first payment's address
+  giver as Pay now does.
+- The Slack guide, and the card's line for a transfer Circle never answered, said what a first approval does not do.
+
+Not in this change: tighter database checks on the claim (an approval of the same amount and currency, by someone who
+may still approve) and on `approvers_besides` with a null or another workspace; and the agent resending a transfer
+Circle never answered after the figure was lowered.

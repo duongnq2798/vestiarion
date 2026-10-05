@@ -248,6 +248,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["milestone_approval_given", "src/lib/agent/milestone-decisions.ts"],
     ["Approved. One more approval, by another person, pays it.", "src/lib/two-approvals.ts"],
     ["You approved it", "src/components/ApprovalCard.tsx"],
+    ["Needs a second approver", "src/components/ApprovalCard.tsx"],
     ["Turn off two approvals?", "src/components/TwoApprovalsPanel.tsx"],
     ["recurring_payable_created", "src/lib/recurring-payables.ts"],
     ["recurring_payable_stopped", "src/lib/recurring-payables.ts"],

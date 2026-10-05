@@ -7,7 +7,7 @@ Changes to the API and webhooks that affect an integration, newest first. Change
   - `approval_given` (domain `ap`) and `milestone_approval_given` (domain `contractor`): the first of two approvals, which sends nothing. Its `detail` is `{ by, invoiceId | milestoneId, counterpartyId, amount, currency, address, usdcValue?, twoApprovalsAbove, fewApprovers? }`.
   - `approval_policy_changed` (domain `system`): an owner set, raised, lowered or turned off the figure. Its `detail` is `{ by, from, to }`, each a figure in USDC or null for off.
 - **`approval_paid` and `milestone_approval_paid`** gain `approvals: [{ by, at }, …]`, the earlier first, and `twoApprovalsAbove` when two people approved the payment. Their `summary` then ends "(the second of two approvals)".
-  - They also carry `fewApprovers: true` when whoever entered the payment, or gave its address, gave one of the two because fewer than two others could approve.
+  - They also carry `fewApprovers: true` when whoever entered the payment, or gave its address, gave one of the two because no one else could. As many of the two as can come from other people must.
 - An `invoice_reopened` entry's `followUp.changes` can say that two approvals were turned off, or the figure raised to cover the payment. A `milestone_reopened` entry's can say the same.
 - Nothing changes in `/api/v1`.
 

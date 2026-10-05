@@ -211,11 +211,13 @@ plan, on Arc testnet).
 - **A person's side** (`src/lib/agent/second-approval.ts`):
   - Approve and pay and Pay now record a first approval in `payment_approvals`, bound to the amount, currency and address,
     and send nothing (`approval_given`).
-  - A second approval by another person pays it, and the open approvals are marked used.
+  - A second approval by another person pays it, and the open approvals are marked used. The paying approval is never
+    stored before the claim, and approvals that cannot be marked used send nothing.
   - An approval stops counting once the payment changes, or its giver can no longer approve (`approvers_among`).
-  - Whoever entered the payment, or gave a first payment's address, gives one of the two only when fewer than two others
-    can (`approvers_besides`). `claim_invoice_decision` lets them claim the second approval when another person's is
-    on file.
+  - As many of the two as can must come from people who neither entered the payment nor gave a first payment's
+    address; those two give the rest only when no one else can (`approvers_besides`, `mayApproveNow`).
+    `claim_invoice_decision` lets whoever entered it claim the second approval when another person's is on file. With
+    fewer than two approvers in all, no approval is taken.
   - Reject, Return and Close clear the approvals; a transfer already sent is recorded on one approval.
 
 **A network for every workspace** (`docs/superpowers/specs/2026-10-05-network-foundation-design.md`, phase 1 of the

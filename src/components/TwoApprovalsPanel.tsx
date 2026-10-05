@@ -87,8 +87,8 @@ export default function TwoApprovalsPanel({ orgSlug, status, canChange }: TwoApp
           <p className="text-sm font-medium text-ink">{status.above === null ? "Off: one approval pays any payment." : twoApprovalsSentence(status.above)}</p>
           <p className="text-sm text-ink-2">
             Above the figure, the agent never pays on its own and no one person pays alone: a first approval is recorded, and a second person&apos;s
-            approval pays it. Whoever entered a payment, or gave a new payee&apos;s address, gives one of the two only when fewer than two others can
-            approve.
+            approval pays it. As many of the two as can come from people who neither entered the payment nor gave a new payee&apos;s address must;
+            those two give the rest only when no one else can.
           </p>
           <p className="text-xs text-ink-3">{approversLine(status.approvers)}</p>
         </div>

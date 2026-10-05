@@ -41,14 +41,34 @@ export function parseTwoApprovalsForm(raw: string): { ok: true; above: number | 
 }
 
 /**
- * A payment above the figure, as the pages that decide it show it (T8): the figure, the approvals given that still count
- * (the earlier first), and whether whoever entered it, or gave its address, may give one because fewer than two others
- * can approve.
+ * A payment above the figure, as the pages that decide it show it (T8), and as the server weighs an approval of it (T5).
  */
 export interface TwoApprovalsFacts {
   above: number;
+  /** The approvals given that still count, the earlier first. */
   approvals: Array<{ by: string; at: string }>;
-  fewApprovers: boolean;
+  /** The members left out: whoever entered it, and whoever gave a first payment's address. */
+  excluded: string[];
+  /** How many of the two approvals those left out may give (`excludedSlots`). */
+  excludedSlots: number;
+  /** How many people can approve payments in the workspace: with fewer than two, nothing above the figure can be paid. */
+  approvers: number;
+}
+
+/**
+ * How many of a payment's two approvals the people left out may give (T5), from how many others can approve: as many of
+ * the two as can come from people independent of the payment must. None while two others can approve, one while one
+ * can, both when no one else can.
+ */
+export function excludedSlots(independentApprovers: number): number {
+  return 2 - Math.min(2, Math.max(0, independentApprovers));
+}
+
+/** Whether this person's approval may be given now (T5): the rule the server keeps, and the card shows. */
+export function mayApproveNow(facts: Pick<TwoApprovalsFacts, "excluded" | "excludedSlots" | "approvals">, actorId: string): boolean {
+  if (!facts.excluded.includes(actorId)) return true;
+  const byExcluded = facts.approvals.filter((approval) => approval.by !== actorId && facts.excluded.includes(approval.by)).length;
+  return byExcluded + 1 <= facts.excludedSlots;
 }
 
 /** What an approval says when it is the first of two and sends nothing (T8). */
@@ -56,14 +76,21 @@ export const APPROVAL_RECORDED = "Approved. One more approval, by another person
 
 /**
  * What a card says of a payment above the figure (T8): the rule, and who approved it so far, by email; the viewer is
- * "You".
+ * "You". Two approvals standing at once (two people approved together) say that the next one pays it, under the name
+ * the button has where it is shown (`payLabel`).
  */
-export function twoApprovalsLine(facts: TwoApprovalsFacts, viewerId: string, emails: Record<string, string> = {}): string {
+export function twoApprovalsLine(
+  facts: Pick<TwoApprovalsFacts, "above" | "approvals">,
+  viewerId: string,
+  emails: Record<string, string> = {},
+  payLabel = "Approve and pay"
+): string {
   const head = `Payments above ${facts.above} USDC need two approvals.`;
-  const first = facts.approvals[0];
+  const [first, second] = facts.approvals;
   if (!first) return `${head} No one has approved it yet.`;
-  const who = first.by === viewerId ? "You" : (emails[first.by] ?? "Another member");
-  return `${head} ${who} approved it on ${utcMinute(first.at)}. One more approval, by another person, pays it.`;
+  const name = (by: string, capital: boolean) => (by === viewerId ? (capital ? "You" : "you") : (emails[by] ?? (capital ? "Another member" : "another member")));
+  if (second) return `${head} ${name(first.by, true)} and ${name(second.by, false)} approved it, so the next ${payLabel} pays it.`;
+  return `${head} ${name(first.by, true)} approved it on ${utcMinute(first.at)}. One more approval, by another person, pays it.`;
 }
 
 /** What a card says to the workspace's only approver of a payment above the figure: one person cannot give two approvals. */
@@ -78,6 +105,11 @@ export function approveFirstDescription(above: number): string {
 
 /** The paying confirmation's added sentence when it is the second of two approvals. */
 export const SECOND_APPROVAL_PAYS = "Yours is the second of two approvals, so it pays.";
+
+/** Why an approval above the figure is refused where fewer than two people can approve payments: it could never pay (T5). */
+export function needsSecondApprover(above: number): string {
+  return `Payments above ${above} USDC need two approvals, and only one person in this workspace can approve payments. Raise the figure in Settings, or add an approver on Members.`;
+}
 
 /** The rule in a sentence, as the card and the settings say it. */
 export function twoApprovalsSentence(above: number): string {

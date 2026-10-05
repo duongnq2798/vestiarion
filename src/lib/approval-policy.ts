@@ -34,14 +34,13 @@ export class ApprovalPolicyError extends Error {
 const numeric = (value: string | number | null | undefined) => (value == null ? null : Number(value));
 
 /**
- * The workspace's figure, or null when none is set or it is turned off. Before migration 0076 has run there is no table,
- * and so no figure: PostgREST's "no such table" (PGRST205) or Postgres's (42P01) reads as none, so a deploy that comes
- * before the migration leaves payments as they always were. Any other error is thrown.
+ * The workspace's figure, or null when none is set or it is turned off. A figure that cannot be read, its table missing
+ * included, throws: what reads it stops, rather than let one approval, or the agent, pay any amount.
  */
 export async function readTwoApprovalsAbove(orgDb: OrgDb): Promise<number | null> {
   const result = await orgDb.from("approval_policies").select("two_approvals_above").limit(1);
-  if (result.error && (result.error.code === "PGRST205" || result.error.code === "42P01")) return null;
-  const rows = unwrap(result) as Array<{ two_approvals_above: string | number | null }>;
+  if (result.error) throw new Error(`approval_policies not read: ${result.error.message}`);
+  const rows = (result.data ?? []) as Array<{ two_approvals_above: string | number | null }>;
   return numeric(rows[0]?.two_approvals_above);
 }
 
@@ -49,7 +48,8 @@ export async function readTwoApprovalsAbove(orgDb: OrgDb): Promise<number | null
 export async function approversBesides(excluded: string[]): Promise<number> {
   const result = await db().rpc("approvers_besides", { p_org_id: currentOrgId(), p_excluded: excluded });
   if (result.error) throw new Error(result.error.message);
-  return Number(result.data ?? 0);
+  if (typeof result.data !== "number") throw new Error("approvers_besides gave no count");
+  return result.data;
 }
 
 function summary(from: number | null, to: number | null): string {

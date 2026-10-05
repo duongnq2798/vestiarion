@@ -948,8 +948,12 @@ describe("ApprovalCard above the figure for two approvals (two approvals T8)", (
   const OTHER = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000d4";
   const AT = "2026-10-05T08:00:00.000Z";
   const plain = (markup: string) => markup.replace(/<[^>]+>/g, " ").replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/\s+/g, " ").trim();
-  const two = (approvals: Array<{ by: string; at: string }> = [], fewApprovers = false): Partial<WaitingPayable> => ({
-    twoApprovals: { above: 1000, approvals, fewApprovers },
+  const GAVE = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000a7";
+  const two = (
+    approvals: Array<{ by: string; at: string }> = [],
+    options: { slots?: number; approvers?: number; excluded?: string[] } = {}
+  ): Partial<WaitingPayable> => ({
+    twoApprovals: { above: 1000, approvals, excluded: options.excluded ?? [CREATOR], excludedSlots: options.slots ?? 0, approvers: options.approvers ?? 3 },
   });
   const named = (overrides: Partial<WaitingPayable>, props: Partial<{ viewerId: string; soleApprover: boolean }> = {}) =>
     html(
@@ -965,7 +969,7 @@ describe("ApprovalCard above the figure for two approvals (two approvals T8)", (
     );
   /** A button whose label, after its icon, is exactly Approve; disabled or not. */
   const approveButton = (disabled: boolean) =>
-    new RegExp(`<button[^>]*${disabled ? 'disabled=""' : ""}[^>]*>(?:(?!</button>).)*>Approve</button>`);
+    new RegExp(`<button${disabled ? '[^>]*disabled=""' : '(?![^>]*disabled="")'}[^>]*>(?:(?!</button>).)*>Approve</button>`);
 
   it("says no one approved it yet, and offers Approve, which pays nothing", () => {
     const markup = card(two());
@@ -990,14 +994,40 @@ describe("ApprovalCard above the figure for two approvals (two approvals T8)", (
   it("keeps it from whoever entered it while two others can approve, and lets them give one when fewer can", () => {
     expect(card(two(), { viewerId: CREATOR })).toMatch(approveButton(true));
     expect(plain(card(two(), { viewerId: CREATOR }))).toContain("You created this invoice");
-    const few = card(two([], true), { viewerId: CREATOR });
+    const few = card(two([], { slots: 1 }), { viewerId: CREATOR });
     expect(few).toMatch(approveButton(false));
     expect(plain(few)).not.toContain("You entered this invoice");
   });
 
-  it("tells the only approver it cannot be paid until the figure is raised or someone else can approve", () => {
-    expect(plain(card(two(), { soleApprover: true }))).toContain(onlyApproverOfTwo(1000));
+  it("tells the only approver it cannot be paid until the figure is raised or someone else can approve, and takes no approval", () => {
+    const only = card(two([], { approvers: 1 }), { soleApprover: true });
+    expect(plain(only)).toContain(onlyApproverOfTwo(1000));
+    expect(only).toMatch(approveButton(true));
+    expect(plain(only)).toContain("Needs a second approver");
     expect(plain(card({}, { soleApprover: true }))).not.toContain("need two approvals");
+  });
+
+  it("lets either of two people who both approved it pay it, and says the next approval pays it", () => {
+    const markup = named(two([{ by: OTHER, at: AT }, { by: VIEWER, at: AT }]));
+    expect(markup).toContain("Approve and pay");
+    expect(markup).not.toMatch(/<button[^>]*disabled=""[^>]*>(?:(?!<\/button>).)*Approve and pay<\/button>/);
+    expect(plain(markup)).toContain("linh@acme.test and you approved it, so the next Approve and pay pays it.");
+  });
+
+  it("keeps whoever entered it from giving the second approval after whoever gave the address gave the first, while someone else can", () => {
+    const markup = card(two([{ by: GAVE, at: AT }], { slots: 1, excluded: [CREATOR, GAVE] }), { viewerId: CREATOR });
+    expect(plain(markup)).toContain("You created this invoice");
+    expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>(?:(?!<\/button>).)*Approve and pay<\/button>/);
+  });
+
+  it("says that the approval that pays a transfer Circle never answered looks for it first, not the first one", () => {
+    const unanswered = { lastAttempt: { state: "unanswered" } } as Partial<WaitingPayable>;
+    const first = plain(card({ ...two(), ...unanswered }));
+    expect(first).toContain(
+      "Circle did not answer when this payment was sent, so it may have taken the transfer. The approval that pays it looks for it on Circle first: it records it if Circle has it, and sends it only once Circle shows none."
+    );
+    expect(first).not.toContain("Approve and pay, Reject and Return look for it on Circle first");
+    expect(plain(card({ ...two([{ by: OTHER, at: AT }]), ...unanswered }))).toContain("Approve and pay, Reject and Return look for it on Circle first");
   });
 
   it("says what the first approval does, and what the second does, in their confirmations", () => {

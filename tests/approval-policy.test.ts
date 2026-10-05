@@ -49,17 +49,14 @@ describe("readTwoApprovalsAbove", () => {
   });
 });
 
-describe("readTwoApprovalsAbove before migration 0076", () => {
-  it("reads no figure while the table is not there yet, so a cycle runs as it always did", async () => {
+describe("readTwoApprovalsAbove when the figure cannot be read", () => {
+  it("fails, rather than read no figure and let one approval pay any amount, the table missing included", async () => {
     fake = fakeSupabase((r) =>
       r.path === "/rest/v1/approval_policies"
         ? { status: 404, body: { code: "PGRST205", message: "Could not find the table 'public.approval_policies' in the schema cache" } }
         : { body: [] }
     );
-    expect(await run(() => readTwoApprovalsAbove(db()))).toBeNull();
-  });
-
-  it("still fails on any other error, rather than guess there is no figure", async () => {
+    await expect(run(() => readTwoApprovalsAbove(db()))).rejects.toThrow(/approval_policies/);
     fake = fakeSupabase((r) => (r.path === "/rest/v1/approval_policies" ? { status: 500, body: { code: "XX000", message: "boom" } } : { body: [] }));
     await expect(run(() => readTwoApprovalsAbove(db()))).rejects.toThrow("boom");
   });

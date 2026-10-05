@@ -19,8 +19,8 @@ import { firstPaymentCheck, loadNewPayeeFacts } from "../new-payee-facts";
 import { addedSince, latestDecision, recordedFacts, type AddedDetails } from "../added-details";
 import { heldForCash } from "../next-step";
 import type { Provenance } from "../provenance";
-import { readTwoApprovalsAbove } from "../approval-policy";
-import { needsTwoApprovals, type TwoApprovalsFacts } from "../two-approvals";
+import { approversBesides, readTwoApprovalsAbove } from "../approval-policy";
+import { needsSecondApprover, needsTwoApprovals, type TwoApprovalsFacts } from "../two-approvals";
 import {
   clearApprovals,
   giveApproval,
@@ -98,10 +98,11 @@ export type ApprovalErrorCode =
   | "bridge_unsupported_token"
   | "nothing_to_add"
   | "invoice_changed"
-  | "already_approved";
+  | "already_approved"
+  | "needs_second_approver";
 
-/** Every message except `insufficient_funds`, whose text names the actual balance. */
-const MESSAGES: Record<Exclude<ApprovalErrorCode, "insufficient_funds">, string> = {
+/** Every message except `insufficient_funds` and `needs_second_approver`, whose texts name the balance and the figure. */
+const MESSAGES: Record<Exclude<ApprovalErrorCode, "insufficient_funds" | "needs_second_approver">, string> = {
   already_decided: "Someone else decided this invoice a moment ago.",
   self_approval: "You created this invoice, so someone else must approve it.",
   new_payee_self: "You gave this payee's address, so someone else must approve its first payment.",
@@ -129,7 +130,7 @@ export class ApprovalError extends Error {
   }
 }
 
-function raise(code: Exclude<ApprovalErrorCode, "insufficient_funds">): never {
+function raise(code: Exclude<ApprovalErrorCode, "insufficient_funds" | "needs_second_approver">): never {
   throw new ApprovalError(code, MESSAGES[code]);
 }
 
@@ -559,6 +560,8 @@ interface LoadedInvoice {
   id: string;
   amount: number;
   status: string;
+  /** When its decision was claimed: a `processing` row claimed under 10 minutes ago is being decided by someone else. */
+  reviewedAt: string | null;
   agentReasoning: string | null;
   createdBy: string | null;
   counterpartyId: string;
@@ -578,7 +581,7 @@ async function loadWaitingPayable(invoiceId: string): Promise<LoadedInvoice> {
   const result = await db()
     .from("invoices")
     .select(
-      "id, amount, currency, status, direction, agent_reasoning, created_by, counterparty_id, early_pay_discount_pct, discount_due_date, po_reference, goods_received, counterparties(name, risk_level, address, chain)"
+      "id, amount, currency, status, direction, agent_reasoning, created_by, reviewed_at, counterparty_id, early_pay_discount_pct, discount_due_date, po_reference, goods_received, counterparties(name, risk_level, address, chain)"
     )
     .eq("id", invoiceId)
     .maybeSingle();
@@ -592,6 +595,7 @@ async function loadWaitingPayable(invoiceId: string): Promise<LoadedInvoice> {
     direction: string;
     agent_reasoning: string | null;
     created_by: string | null;
+    reviewed_at?: string | null;
     counterparty_id: string;
     early_pay_discount_pct: string | number | null;
     discount_due_date: string | null;
@@ -608,6 +612,7 @@ async function loadWaitingPayable(invoiceId: string): Promise<LoadedInvoice> {
     id: row.id,
     amount: num(row.amount),
     status: row.status,
+    reviewedAt: row.reviewed_at ?? null,
     agentReasoning: row.agent_reasoning,
     createdBy: row.created_by,
     counterpartyId: row.counterparty_id,
@@ -703,14 +708,22 @@ export async function approveAndPay(
   const twoNeeded = above !== null && needsTwoApprovals({ amount: invoice.amount, currency: invoice.currency, usdcValue }, above);
   // Whoever entered it, and whoever gave a first payment's address (new payee check N4).
   const excluded = [invoice.createdBy, firstPayment?.addressBy ?? null];
+  const source: PaymentSource = { type: "invoice", id: invoice.id };
+  const payment = { amount: invoice.amount, currency: invoice.currency, address: invoice.address };
 
   // Early refusals, before any claim — none of these contend for the row.
   let soleApprover = false;
   let fewApprovers = false;
+  let standing: GivenApproval[] = [];
   if (twoNeeded) {
-    // Either of them gives one of the two approvals only when fewer than two others can (T5).
+    // No approval is taken while another person's payment of it is being decided.
+    if (invoice.status === "processing" && !isReclaimable(invoice.status, invoice.reviewedAt, Date.now())) raise("already_decided");
+    // With fewer than two people who can approve payments, it could never be paid: no approval is taken (T5).
+    if ((await approversBesides([])) < 2) throw new ApprovalError("needs_second_approver", needsSecondApprover(above as number));
+    standing = await standingApprovals(source, payment);
+    // Whoever entered it, or gave its address, gives only the approvals no one independent of it can (T5).
     if (excluded.includes(input.actorId)) {
-      if (!(await mayGiveApproval({ actorId: input.actorId, excluded }))) raise(invoice.createdBy === input.actorId ? "self_approval" : "new_payee_self");
+      if (!(await mayGiveApproval({ actorId: input.actorId, excluded, given: standing }))) raise(invoice.createdBy === input.actorId ? "self_approval" : "new_payee_self");
       fewApprovers = true;
     }
   } else {
@@ -746,11 +759,8 @@ export async function approveAndPay(
   if (!alreadySent && (await paymentsDisabled())) raise("payments_off");
 
   // Two approvals (T4): the first is recorded and sends nothing; the second, by another person, pays.
-  const source: PaymentSource = { type: "invoice", id: invoice.id };
-  let approvals: GivenApproval[] = [];
+  let approvals: Array<{ by: string; at: string }> = [];
   if (twoNeeded) {
-    const payment = { amount: invoice.amount, currency: invoice.currency, address: invoice.address };
-    const standing = await standingApprovals(source, payment);
     const other = standing.find((approval) => approval.by !== input.actorId);
     if (!other) {
       if (standing.some((approval) => approval.by === input.actorId)) raise("already_approved");
@@ -776,10 +786,9 @@ export async function approveAndPay(
       });
       return { status: "approved", txRef: null, note: "" };
     }
-    // Another person's approval stands, so this one pays. It is recorded beside it, and both are used once the
-    // payment is claimed (T6).
-    const mine = standing.find((approval) => approval.by === input.actorId) ?? (await giveApproval(source, input.actorId, payment));
-    approvals = [other, mine];
+    // Another person's approval stands, so this one pays. Nothing of it is stored before the claim: a refusal on the way
+    // leaves no approval behind, and the ledger entry is its record (T6).
+    approvals = [{ by: other.by, at: other.at }, { by: input.actorId, at: new Date().toISOString() }];
     if (excluded.includes(other.by)) fewApprovers = true;
   }
   if (!mayExist && invoice.currency === "USDC") {
@@ -812,12 +821,14 @@ export async function approveAndPay(
     .single();
   if (claim.error) raiseFromClaim(claim.error);
 
-  // The approvals that let it through are used by this payment (T6). Best effort: the claim already holds the row.
+  // The approvals that let it through are used by this payment, or nothing is sent (T6): approvals left open could send
+  // it again on one approval after a failed transfer.
   if (approvals.length > 0) {
     try {
       await markApprovalsUsed(source);
     } catch (error) {
-      console.error("approval: approvals not marked used", invoice.id, (error as Error).message);
+      await giveBackAfterClaim(invoice, `approvals not marked used: ${(error as Error).message}`);
+      throw error;
     }
   }
 
@@ -868,18 +879,7 @@ export async function approveAndPay(
     // Give the invoice back to the waiting queue rather than leave it stuck
     // as `processing` — the payment's own idempotency key (keyed on the
     // invoice) protects a retry from paying twice.
-    try {
-      const rollback = await db()
-        .from("invoices")
-        .update({
-          status: "held",
-          agent_reasoning: `${invoice.agentReasoning ?? ""} [approval interrupted: ${(err as Error).message}]`,
-        })
-        .eq("id", invoice.id);
-      if (rollback.error) console.error("approval: rollback to held failed after the claim", invoice.id, rollback.error.message);
-    } catch (rollbackError) {
-      console.error("approval: rollback to held failed after the claim", invoice.id, (rollbackError as Error).message);
-    }
+    await giveBackAfterClaim(invoice, (err as Error).message);
     throw err;
   }
 
@@ -986,6 +986,19 @@ async function clearApprovalsAfter(invoiceId: string): Promise<void> {
     await clearApprovals({ type: "invoice", id: invoiceId });
   } catch (error) {
     console.error("approval: approvals not cleared", invoiceId, (error as Error).message);
+  }
+}
+
+/** Gives a claimed payable back to the waiting queue, as held, when what follows the claim did not happen. Best effort. */
+async function giveBackAfterClaim(invoice: Pick<LoadedInvoice, "id" | "agentReasoning">, why: string): Promise<void> {
+  try {
+    const rollback = await db()
+      .from("invoices")
+      .update({ status: "held", agent_reasoning: `${invoice.agentReasoning ?? ""} [approval interrupted: ${why}]` })
+      .eq("id", invoice.id);
+    if (rollback.error) console.error("approval: rollback to held failed after the claim", invoice.id, rollback.error.message);
+  } catch (rollbackError) {
+    console.error("approval: rollback to held failed after the claim", invoice.id, (rollbackError as Error).message);
   }
 }
 

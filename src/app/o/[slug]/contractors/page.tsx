@@ -22,9 +22,7 @@ import { StatTile } from "@/components/vx/StatTile";
 import { milestoneDecision } from "@/components/vx/map";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { sectionTitle } from "@/components/vx/nav";
-import { transferExists } from "@/lib/agent/approvals";
-import { heldReason, milestoneIntents } from "@/lib/agent/milestone-decisions";
-import { twoApprovalsFacts } from "@/lib/agent/second-approval";
+import { decisionEntryOf, heldMilestonesTwoApprovals, heldReason, milestoneIntents } from "@/lib/agent/milestone-decisions";
 import { isSoleApprover } from "@/lib/agent/sole-approver";
 import { viewerCan } from "@/lib/auth/authorize";
 import { requireMembership } from "@/lib/auth/membership";
@@ -77,16 +75,7 @@ export default async function ContractorsPage({ params, searchParams }: { params
     const contractorsById = new Map(counterparties.map((counterparty) => [counterparty.id, counterparty]));
     // Held milestones above the figure for two approvals: who approved each so far, and whether whoever added it may give
     // one (two approvals T8); the approvers' emails are read only when someone has approved.
-    const twoApprovals = await twoApprovalsFacts(
-      "milestone",
-      held.map((milestone) => ({
-        id: milestone.id,
-        payment: { amount: milestone.amount, currency: "USDC", address: contractorsById.get(milestone.contractor_id)?.address ?? null },
-        weighed: milestone.amount,
-        excluded: [milestone.created_by],
-        sent: transferExists(intents.get(milestone.id) ?? null),
-      }))
-    );
+    const twoApprovals = await heldMilestonesTwoApprovals(held, contractorsById, intents);
     const approverIds = new Set([...twoApprovals.values()].flatMap((facts) => facts.approvals.map((approval) => approval.by)));
     const memberEmails: Record<string, string> =
       approverIds.size > 0
@@ -161,7 +150,7 @@ export default async function ContractorsPage({ params, searchParams }: { params
     // What a held milestone waits for, and a person's decisions on it (held milestone actions R1–R3).
     const waitingFor = (milestone: MilestoneRow) => {
       const contractor = contractorsById.get(milestone.contractor_id);
-      const last = entries.find((entry) => entry.detail.milestoneId === milestone.id && !entry.action.startsWith("receipt_"));
+      const last = decisionEntryOf(entries.filter((entry) => entry.detail.milestoneId === milestone.id));
       return heldReason({
         amount: milestone.amount,
         agentReasoning: milestone.agent_reasoning,

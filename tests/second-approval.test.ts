@@ -75,6 +75,10 @@ describe("approvalAgrees", () => {
     expect(approvalAgrees(given, PAYMENT)).toBe(true);
   });
 
+  it("agrees with a payment to a payee with no address yet, paid to the sandbox's stand-in", () => {
+    expect(approvalAgrees({ ...given, address: null }, { ...PAYMENT, address: null })).toBe(true);
+  });
+
   it("does not once the amount, the currency or the address changed", () => {
     expect(approvalAgrees(given, { ...PAYMENT, amount: 121 })).toBe(false);
     expect(approvalAgrees(given, { ...PAYMENT, currency: "EURC" })).toBe(false);
@@ -142,24 +146,36 @@ describe("markApprovalsUsed and clearApprovals", () => {
 });
 
 describe("mayGiveApproval", () => {
+  const by = (id: string) => ({ by: id });
+
   it("lets anyone not left out give one", async () => {
     fake = fakeSupabase(workspace({ besides: 0 }));
-    expect(await run(() => mayGiveApproval({ actorId: ANNA, excluded: [BAO, null] }))).toBe(true);
+    expect(await run(() => mayGiveApproval({ actorId: ANNA, excluded: [BAO, null], given: [] }))).toBe(true);
     expect(fake.requests.some((r) => r.path === "/rest/v1/rpc/approvers_besides")).toBe(false);
   });
 
-  it("lets whoever entered it, or gave the address, give one only when fewer than two others can", async () => {
+  it("keeps whoever entered it, or gave the address, out while two others can approve", async () => {
     fake = fakeSupabase(workspace({ besides: 2 }));
-    expect(await run(() => mayGiveApproval({ actorId: ANNA, excluded: [ANNA, BAO] }))).toBe(false);
+    expect(await run(() => mayGiveApproval({ actorId: ANNA, excluded: [ANNA, BAO], given: [] }))).toBe(false);
     expect(fake.requests.find((r) => r.path === "/rest/v1/rpc/approvers_besides")?.body).toEqual({ p_org_id: ORG, p_excluded: [ANNA, BAO] });
+  });
+
+  it("lets one of them give one of the two while one other can approve, keeping the other for that person", async () => {
     fake = fakeSupabase(workspace({ besides: 1 }));
-    expect(await run(() => mayGiveApproval({ actorId: ANNA, excluded: [ANNA, ANNA, null] }))).toBe(true);
+    expect(await run(() => mayGiveApproval({ actorId: ANNA, excluded: [ANNA, ANNA, null], given: [] }))).toBe(true);
     expect(fake.requests.find((r) => r.path === "/rest/v1/rpc/approvers_besides")?.body).toEqual({ p_org_id: ORG, p_excluded: [ANNA] });
+    fake = fakeSupabase(workspace({ besides: 1 }));
+    expect(await run(() => mayGiveApproval({ actorId: ANNA, excluded: [ANNA, BAO], given: [by(BAO)] }))).toBe(false);
+  });
+
+  it("lets both give one each when no one else can approve", async () => {
+    fake = fakeSupabase(workspace({ besides: 0 }));
+    expect(await run(() => mayGiveApproval({ actorId: ANNA, excluded: [ANNA, BAO], given: [by(BAO)] }))).toBe(true);
   });
 
   it("leaves out only members: a payee who gave its own address is no one here", async () => {
     fake = fakeSupabase(workspace({ besides: 1 }));
-    expect(await run(() => mayGiveApproval({ actorId: ANNA, excluded: ["payee", ANNA] }))).toBe(true);
+    expect(await run(() => mayGiveApproval({ actorId: ANNA, excluded: ["payee", ANNA], given: [] }))).toBe(true);
     expect(fake.requests.find((r) => r.path === "/rest/v1/rpc/approvers_besides")?.body).toEqual({ p_org_id: ORG, p_excluded: [ANNA] });
   });
 });
@@ -179,7 +195,10 @@ describe("twoApprovalsFacts", () => {
       if (r.path === "/rest/v1/approval_policies") return { body: over.above === null || over.above === undefined ? [] : [{ two_approvals_above: String(over.above) }] };
       if (r.path === "/rest/v1/payment_approvals") return { body: over.open ?? [] };
       if (r.path === "/rest/v1/rpc/approvers_among") return { body: (r.body as { p_users: string[] }).p_users };
-      if (r.path === "/rest/v1/rpc/approvers_besides") return { body: over.besides ?? 2 };
+      if (r.path === "/rest/v1/rpc/approvers_besides") {
+        const excluded = (r.body as { p_excluded: string[] }).p_excluded;
+        return { body: excluded.length === 0 ? 3 : (over.besides ?? 2) };
+      }
       return { body: [] };
     };
   }
@@ -204,15 +223,18 @@ describe("twoApprovalsFacts", () => {
     );
 
     expect([...facts.keys()]).toEqual([INVOICE]);
-    expect(facts.get(INVOICE)).toEqual({ above: 100, approvals: [{ by: ANNA, at: "2026-10-05T08:00:00.000Z" }], fewApprovers: true });
+    expect(facts.get(INVOICE)).toEqual({ above: 100, approvals: [{ by: ANNA, at: "2026-10-05T08:00:00.000Z" }], excluded: [BAO], excludedSlots: 1, approvers: 3 });
     const read = fake.requests.find((r) => r.path === "/rest/v1/payment_approvals")!;
     expect(read.params.get("source_id")).toBe(`in.(${INVOICE})`);
-    expect(fake.requests.find((r) => r.path === "/rest/v1/rpc/approvers_besides")?.body).toEqual({ p_org_id: ORG, p_excluded: [BAO] });
+    expect(fake.requests.filter((r) => r.path === "/rest/v1/rpc/approvers_besides").map((r) => r.body)).toEqual([
+      { p_org_id: ORG, p_excluded: [] },
+      { p_org_id: ORG, p_excluded: [BAO] },
+    ]);
   });
 
   it("counts a payment whose value is not known as above the figure", async () => {
     fake = fakeSupabase(listing({ above: 100 }));
     const facts = await run(() => twoApprovalsFacts("milestone", [item(INVOICE, { weighed: null })]));
-    expect(facts.get(INVOICE)).toEqual({ above: 100, approvals: [], fewApprovers: false });
+    expect(facts.get(INVOICE)).toEqual({ above: 100, approvals: [], excluded: [], excludedSlots: 0, approvers: 3 });
   });
 });

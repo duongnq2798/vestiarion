@@ -17,7 +17,7 @@ import { fmt } from "@/components/vx/Primitives";
 import { withSuccessToast } from "@/components/withSuccessToast";
 import type { HeldReason } from "@/lib/agent/milestone-decisions";
 import { orgHref } from "@/lib/auth/org-paths";
-import { approveFirstDescription, onlyApproverOfTwo, SECOND_APPROVAL_PAYS, twoApprovalsLine, type TwoApprovalsFacts } from "@/lib/two-approvals";
+import { approveFirstDescription, mayApproveNow, onlyApproverOfTwo, SECOND_APPROVAL_PAYS, twoApprovalsLine, type TwoApprovalsFacts } from "@/lib/two-approvals";
 
 const INITIAL: ActionResult = { ok: false, message: "" };
 
@@ -84,10 +84,20 @@ export function HeldMilestoneActions({
   const viewerApproved = two?.approvals.some((approval) => approval.by === viewerId) ?? false;
   const willPay = !two || two.approvals.some((approval) => approval.by !== viewerId);
   const ownOverride = reason.canPay && reason.override && selfAdded;
-  // Whoever added it gives one of two approvals only when too few others can; one person never pays it alone.
-  const selfBlocked = two ? selfAdded && !two.fewApprovers : ownOverride && !soleApprover;
+  // Whoever added it, or gave its address, gives only the approvals no one independent of it can; one person never pays
+  // it alone (two approvals T5).
+  const selfBlocked = two ? !mayApproveNow(two, viewerId ?? "") : ownOverride && !soleApprover;
   const ownEntry = !two && ownOverride && soleApprover;
-  const blocked = viewerApproved ? "You approved it" : selfBlocked ? "You added this milestone, so someone else must approve paying it." : null;
+  const blocked =
+    two && two.approvers < 2
+      ? "Needs a second approver"
+      : viewerApproved && !willPay
+        ? "You approved it"
+        : selfBlocked
+          ? two && !selfAdded
+            ? "You gave this payee's address, so someone else must approve its first payment."
+            : "You added this milestone, so someone else must approve paying it."
+          : null;
 
   return (
     <Callout tone="held" title="What it waits for">
@@ -102,8 +112,8 @@ export function HeldMilestoneActions({
           </>
         )}
       </p>
-      {two && <p className="mt-2">{twoApprovalsLine(two, viewerId ?? "", memberEmails)}</p>}
-      {two && canDecide && soleApprover && <p className="mt-2">{onlyApproverOfTwo(two.above)}</p>}
+      {two && <p className="mt-2">{twoApprovalsLine(two, viewerId ?? "", memberEmails, "Pay now")}</p>}
+      {two && canDecide && two.approvers < 2 && <p className="mt-2">{onlyApproverOfTwo(two.above)}</p>}
       {canDecide ? (
         (reason.canPay || reason.canClose) && (
           <div className="mt-3">

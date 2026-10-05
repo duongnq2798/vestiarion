@@ -106,7 +106,7 @@ describe("HeldMilestoneActions above the figure for two approvals (two approvals
     canClose: true,
     override: true,
   };
-  const renderTwo = (approvals: Array<{ by: string; at: string }>, options: { selfAdded?: boolean; soleApprover?: boolean; fewApprovers?: boolean } = {}) =>
+  const renderTwo = (approvals: Array<{ by: string; at: string }>, options: { selfAdded?: boolean; soleApprover?: boolean; slots?: number; approvers?: number } = {}) =>
     renderToStaticMarkup(
       <HeldMilestoneActions
         orgSlug="testnet-2"
@@ -117,11 +117,12 @@ describe("HeldMilestoneActions above the figure for two approvals (two approvals
         sandbox={false}
         soleApprover={options.soleApprover ?? false}
         viewerId={VIEWER}
-        twoApprovals={{ above: 0.2, approvals, fewApprovers: options.fewApprovers ?? false }}
+        twoApprovals={{ above: 0.2, approvals, excluded: options.selfAdded ? [VIEWER] : [], excludedSlots: options.slots ?? 0, approvers: options.approvers ?? 3 }}
         memberEmails={{ [OTHER]: "linh@acme.test" }}
       />
     );
-  const button = (label: string, disabled: boolean) => new RegExp(`<button[^>]*${disabled ? 'disabled=""' : ""}[^>]*>(?:(?!</button>).)*>${label}</button>`);
+  const button = (label: string, disabled: boolean) =>
+    new RegExp(`<button${disabled ? '[^>]*disabled=""' : '(?![^>]*disabled="")'}[^>]*>(?:(?!</button>).)*>${label}</button>`);
 
   it("offers Approve until another person approved it, then Pay now, saying who did", () => {
     const first = renderTwo([]);
@@ -139,12 +140,18 @@ describe("HeldMilestoneActions above the figure for two approvals (two approvals
     const own = renderTwo([], { selfAdded: true });
     expect(own).toMatch(button("Approve", true));
     expect(text(own)).toContain("You added this milestone, so someone else must approve paying it.");
-    expect(renderTwo([], { selfAdded: true, fewApprovers: true })).toMatch(button("Approve", false));
+    expect(renderTwo([], { selfAdded: true, slots: 1 })).toMatch(button("Approve", false));
   });
 
-  it("tells the only approver it cannot be paid as things stand, and never calls it their own to pay", () => {
-    const markup = renderTwo([], { selfAdded: true, soleApprover: true, fewApprovers: true });
+  it("tells the only approver it cannot be paid as things stand, takes no approval, and never calls it their own to pay", () => {
+    const markup = renderTwo([], { selfAdded: true, soleApprover: true, slots: 2, approvers: 1 });
     expect(text(markup)).toContain(onlyApproverOfTwo(0.2));
+    expect(markup).toMatch(button("Approve", true));
+    expect(text(markup)).toContain("Needs a second approver");
     expect(text(markup)).not.toContain(OWN_MILESTONE_NOTE);
+  });
+
+  it("offers Pay now to either of two people who both approved it", () => {
+    expect(renderTwo([{ by: OTHER, at: AT }, { by: VIEWER, at: AT }])).toMatch(button("Pay now", false));
   });
 });
