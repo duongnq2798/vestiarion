@@ -176,7 +176,7 @@ describe("a code stop, in a few words", () => {
     const rules = [
       "bridge.fee_above_cap", "bridge.fee_unavailable", "bridge.gateway_balance_short", "bridge.unsupported_token",
       "counterparty.address_unconfirmed", "counterparty.client_payable", "counterparty.high_risk", "counterparty.payment_limit", "counterparty.unscreened",
-      "fx.rate_unavailable", "fx.swap_cost_above_cap", "fx.swap_usdc_short", "invoice.duplicate_of_settled", "invoice.match_incomplete",
+      "fx.rate_unavailable", "fx.swap_cost_above_cap", "fx.swap_usdc_short", "invoice.duplicate_of_settled", "invoice.match_incomplete", "counterparty.new_payee",
       "treasury.insufficient_eurc", "workspace.onchain_limit", "workspace.onchain_limit_route", "workspace.outflow_budget",
     ];
     for (const rule of rules) {
@@ -235,6 +235,16 @@ describe("what to do about a payable code stopped", () => {
     expect(agentResumes("invoice.match_incomplete")).toBe(
       "The agent decides it again on its own once an owner or admin adds what the match lacks, or marks the counterparty as paid without purchase orders."
     );
+  });
+
+  it("sends the first payment to an address one person alone stands behind to someone else, in Approvals (new payee check N3)", () => {
+    expect(ruleNextStep("counterparty.new_payee", counterparty)).toEqual({
+      sentence:
+        "It is the first payment to CME's address, and only one person stands behind it. Someone other than whoever gave the address approves it in Approvals; after that, the agent pays this address on its own.",
+      fix: null,
+    });
+    expect(ruleInBrief("counterparty.new_payee")).toBe("it would be the first payment to an address only one person stands behind");
+    expect(agentResumes("counterparty.new_payee")).toBe("The agent decides it again on its own once another payment to this address goes through.");
   });
 
   it("explains a hold for want of cash, says the agent resumes once cash comes in, and links the reserve (reserve cash back R4)", () => {

@@ -12,6 +12,8 @@ import { paidAcrossChains, payeeChain } from "../payee-chains";
 import { bridgeFee, type BridgeFee } from "../circle/cctp";
 import { gatewayQuoter, type GatewayQuote } from "../circle/gateway-quote";
 import { isSoleApprover } from "./sole-approver";
+import { newPayeeCheck } from "../new-payee";
+import { firstPaymentCheck, loadNewPayeeFacts } from "../new-payee-facts";
 import { addedSince, latestDecision, recordedFacts, type AddedDetails } from "../added-details";
 import { heldForCash } from "../next-step";
 import type { Provenance } from "../provenance";
@@ -67,6 +69,7 @@ export type ApprovalErrorCode =
   | "invoice_not_found"
   | "already_decided"
   | "self_approval"
+  | "new_payee_self"
   | "high_risk"
   | "insufficient_funds"
   | "no_operating_account"
@@ -80,6 +83,7 @@ export type ApprovalErrorCode =
 const MESSAGES: Record<Exclude<ApprovalErrorCode, "insufficient_funds">, string> = {
   already_decided: "Someone else decided this invoice a moment ago.",
   self_approval: "You created this invoice, so someone else must approve it.",
+  new_payee_self: "You gave this payee's address, so someone else must approve its first payment.",
   high_risk: "This counterparty is screened high risk. Clear it in Compliance first.",
   no_operating_account: "This workspace has no operating account.",
   invoice_not_found: "That invoice is not waiting for a decision.",
@@ -324,6 +328,12 @@ export interface WaitingPayable {
   guardrailRule: string | null;
   /** Held because the cash it needs was not there, which the agent decides again once cash comes in (reserve cash back R4). */
   heldForCash?: boolean;
+  /**
+   * Present when paying it would be the first payment to its address, where payments are real: who gave the address, a
+   * member's id, "payee", or null when not known (new payee check N4). That member may not approve it unless they
+   * decide alone.
+   */
+  firstPaymentAddressBy?: string | null;
 }
 
 
@@ -389,9 +399,16 @@ export async function listWaitingPayables(
     for (const intent of found) intents.set(intent.source_id, intent);
   }
 
+  // Whose address a first payment would go to, where payments are real (new payee check N4): read once for the list.
+  const newPayeeFacts =
+    rows.length > 0 && getChainProvider().mode === "live" ? await loadNewPayeeFacts(db(), [...new Set(rows.map((row) => row.counterparty_id))]) : null;
+
   const now = Date.now();
   return rows.map((row) => {
     const intent = intents.get(row.id) ?? null;
+    const newPayee = newPayeeFacts
+      ? newPayeeCheck({ address: row.counterparties?.address ?? null, paidTo: newPayeeFacts.paidTo, entries: newPayeeFacts.entries.get(row.counterparty_id) ?? [] })
+      : null;
     const decision = latestDecision(entries, row.id);
     const onFile = { poReference: row.po_reference ?? null, goodsReceived: row.goods_received === true };
     // The decision is explained from the facts it recorded, not from details a person added since (R6).
@@ -433,6 +450,7 @@ export async function listWaitingPayables(
       addedSinceDecision: addedSince(recorded, onFile),
       guardrailRule: decision?.detail.guardrailBlocked === true && typeof decision.detail.guardrailRule === "string" ? decision.detail.guardrailRule : null,
       ...(row.status === "held" && heldForCash(decision?.detail) ? { heldForCash: true } : {}),
+      ...(newPayee?.firstPayment ? { firstPaymentAddressBy: newPayee.addressBy } : {}),
     };
   });
 }
@@ -509,6 +527,14 @@ async function loadWaitingPayable(invoiceId: string): Promise<LoadedInvoice> {
   };
 }
 
+/**
+ * Whether paying this invoice would be the first payment to its counterparty's address, and who gave the address, where
+ * payments are real (new payee check N1, N2, N5); null otherwise.
+ */
+async function firstPaymentTo(invoice: Pick<LoadedInvoice, "counterpartyId" | "address">): Promise<ReturnType<typeof newPayeeCheck>> {
+  return getChainProvider().mode === "live" ? firstPaymentCheck(db(), { id: invoice.counterpartyId, address: invoice.address }) : null;
+}
+
 /** The operating account, or `null` when the workspace has none configured yet. */
 async function operatingAccount(): Promise<{ id: string; balance: number } | null> {
   const result = await db().from("accounts").select("id, balance").eq("kind", "operating").maybeSingle();
@@ -566,6 +592,9 @@ export async function approveAndPay(
   // approver; the claim asks the database the same question again.
   const soleApprover = invoice.createdBy === input.actorId;
   if (soleApprover && !(await isSoleApprover(input.actorId))) raise("self_approval");
+  // A first payment to an address needs someone other than whoever gave it, unless they decide alone (new payee check N4).
+  const firstPayment = await firstPaymentTo(invoice);
+  if (firstPayment?.addressBy === input.actorId && !(await isSoleApprover(input.actorId))) raise("new_payee_self");
   if (invoice.riskLevel === "high") raise("high_risk");
   const shownAddress = input.shownAddress?.trim();
   if (shownAddress !== undefined && !sameAddress(invoice.address, shownAddress === "" ? null : shownAddress)) {
@@ -726,6 +755,8 @@ export async function approveAndPay(
       ...(payout ? { payout } : {}),
       // The person who entered it approved it, as the workspace's only approver.
       ...(soleApprover ? { soleApprover: true } : {}),
+      // The address's first payment, which this person stood behind beside whoever gave the address (new payee check N4).
+      ...(firstPayment ? { firstPayment: true } : {}),
       ...input.provenance,
     },
   });

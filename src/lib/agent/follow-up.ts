@@ -70,6 +70,11 @@ export interface FrozenInvoice {
    * FX, or it was reopened for FX within the last 30 minutes (F5).
    */
   fx?: FxNow;
+  /**
+   * Who stands behind the counterparty's address now, for a payable held as a new payee (new payee check N7): whether it
+   * has received a confirmed payment, and whether two parties stand behind it. Absent when it was not read.
+   */
+  newPayee?: { addressPaid: boolean; twoParties: boolean };
 }
 
 /** The facts as they stood when the decision was taken, from the ledger. */
@@ -97,6 +102,8 @@ export interface DecisionFacts {
   purchaseOrderRequired?: boolean;
   /** What held a EURC payable that a fresh quote can change (FX re-evaluation F1); null or absent otherwise. */
   fxHold?: FxHold | null;
+  /** Held by code as the first payment to an address one party alone stood behind (`counterparty.new_payee`, N7). */
+  newPayeeHeld?: boolean;
 }
 
 export type FollowUpAction = "reopen" | "escalate" | "wait";
@@ -251,6 +258,9 @@ export function planFollowUp(
   if (budgetChange) changes.push(budgetChange);
   const cashChange = atDecision.heldForCash ? cashChangeSince(invoice.cash, atDecision.heldForCash) : null;
   if (cashChange) changes.push(cashChange);
+  // A first payment held for want of a second person: decided again once the address was paid, or two parties stand behind it.
+  if (atDecision.newPayeeHeld && invoice.newPayee?.addressPaid) changes.push("the payee's address has received a confirmed payment since");
+  else if (atDecision.newPayeeHeld && invoice.newPayee?.twoParties) changes.push("a second person now stands behind the payee's address");
   // A fresh quote that crossed the threshold that held a EURC payable (FX re-evaluation F2), weighed against the limit now.
   const fx = atDecision.fxHold && invoice.fx ? fxChange(atDecision.fxHold, invoice.fx, invoice.paymentLimit) : null;
   if (fx) changes.push(fx.sentence);

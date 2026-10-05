@@ -267,6 +267,19 @@ describe("ApprovalCard", () => {
     expect(markup.replace(/&#x27;/g, "'")).toContain(OWN_INVOICE_NOTE);
   });
 
+  it("does not let the person who gave the payee's address pay its first payment, and says why (new payee check N4)", () => {
+    const markup = card({ createdBy: CREATOR, firstPaymentAddressBy: VIEWER });
+    expect(markup).toContain("You gave this payee&#x27;s address");
+    expect(markup).toMatch(APPROVE_DISABLED);
+  });
+
+  it("lets the workspace's sole approver pay the first payment to an address they gave, and anyone else pay it", () => {
+    expect(card({ createdBy: CREATOR, firstPaymentAddressBy: VIEWER }, { soleApprover: true })).not.toMatch(APPROVE_DISABLED);
+    const otherGiver = card({ createdBy: CREATOR, firstPaymentAddressBy: "someone-else" });
+    expect(otherGiver).not.toContain("You gave this payee");
+    expect(otherGiver).not.toMatch(APPROVE_DISABLED);
+  });
+
   it("says nothing about a sole approver on an invoice someone else entered", () => {
     const markup = card({ createdBy: CREATOR }, { soleApprover: true });
     expect(markup.replace(/&#x27;/g, "'")).not.toContain(OWN_INVOICE_NOTE);

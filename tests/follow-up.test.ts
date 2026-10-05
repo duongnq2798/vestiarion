@@ -486,3 +486,29 @@ describe("follow-up — a EURC payable held for FX (FX re-evaluation F2, F3, F6)
     expect(planFollowUp(loto({ amount: 1.9, paymentLimit: 1.5, fx: cheaper }), { ...over, paymentLimit: 1.5 }, NOW, config).action).toBe("wait");
   });
 });
+
+describe("follow-up — a payable held as a new payee (new payee check N7)", () => {
+  const heldAsNewPayee: DecisionFacts = { poReference: "PO-1", goodsReceived: true, riskLevel: "clear", paymentLimit: 2, newPayeeHeld: true };
+  const held = (over: Partial<FrozenInvoice> = {}) => frozen({ status: "held", poReference: "PO-1", goodsReceived: true, ...over });
+
+  it("reopens it once its address has received a confirmed payment", () => {
+    const plan = planFollowUp(held({ newPayee: { addressPaid: true, twoParties: false } }), heldAsNewPayee, NOW, config);
+    expect(plan.action).toBe("reopen");
+    expect(plan.changes).toEqual(["the payee's address has received a confirmed payment since"]);
+  });
+
+  it("reopens it once a second person stands behind its address", () => {
+    const plan = planFollowUp(held({ newPayee: { addressPaid: false, twoParties: true } }), heldAsNewPayee, NOW, config);
+    expect(plan.changes).toEqual(["a second person now stands behind the payee's address"]);
+  });
+
+  it("leaves it while one person alone still stands behind it, or when that was not read", () => {
+    expect(planFollowUp(held({ newPayee: { addressPaid: false, twoParties: false } }), heldAsNewPayee, NOW, config).action).toBe("wait");
+    expect(planFollowUp(held(), heldAsNewPayee, NOW, config).action).toBe("wait");
+  });
+
+  it("asks nothing of a payable held for anything else", () => {
+    const other: DecisionFacts = { ...heldAsNewPayee, newPayeeHeld: false };
+    expect(planFollowUp(held({ newPayee: { addressPaid: true, twoParties: true } }), other, NOW, config).action).toBe("wait");
+  });
+});

@@ -187,6 +187,21 @@ describe("explaining a payable to a counterparty paid without purchase orders (t
   });
 });
 
+describe("explaining the first payment to a new address (new payee check N6)", () => {
+  it("says when only one person stood behind the address", () => {
+    const lines = explainPayable({
+      name: "Northwind",
+      amount: 8,
+      currency: "USDC",
+      dueDate: "2026-10-09",
+      poReference: "PO-1",
+      goodsReceived: true,
+      entry: { ts: "2026-09-30T12:04:00Z", detail: { decision: { action: "pay" }, observed: { riskLevel: "clear", paymentLimit: 50, newPayee: { addressBy: "m1", confirmedBy: null, twoParties: false } } } },
+    });
+    expect(lines).toContain("This is the first payment to Northwind's address, and only one person stands behind it.");
+  });
+});
+
 describe("the prompt", () => {
   it("asks the model for plain English, not the input's field names", () => {
     expect(REASONING_RULE).toContain("never as a field name or path from the input");

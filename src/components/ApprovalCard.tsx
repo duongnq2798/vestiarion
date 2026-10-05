@@ -134,6 +134,8 @@ export default function ApprovalCard({
 }) {
   const unfinished = payable.status === "processing" && payable.reclaimable;
   const ownEntry = soleApprover && payable.createdBy === viewerId;
+  // A sole approver paying the first payment to an address they gave themselves (new payee check N4).
+  const ownAddress = soleApprover && payable.firstPaymentAddressBy === viewerId;
   const status = unfinished ? UNFINISHED : STATUS[payable.status];
   const processing = payable.status === "processing" && !payable.reclaimable;
   const canAddDetails =
@@ -205,7 +207,7 @@ export default function ApprovalCard({
             <p className="text-sm text-ink-2">Being decided by someone else right now.</p>
           </CardFooter>
         ) : canDecide ? (
-          <Decisions orgSlug={orgSlug} payable={payable} viewerId={viewerId} sandbox={sandbox} ownEntry={ownEntry} canAddDetails={canAddDetails} />
+          <Decisions orgSlug={orgSlug} payable={payable} viewerId={viewerId} sandbox={sandbox} ownEntry={ownEntry} ownAddress={ownAddress} canAddDetails={canAddDetails} />
         ) : null}
       </article>
     </Card>
@@ -230,6 +232,7 @@ function Decisions({
   viewerId,
   sandbox,
   ownEntry,
+  ownAddress,
   canAddDetails,
 }: {
   orgSlug: string;
@@ -238,6 +241,8 @@ function Decisions({
   sandbox: boolean;
   /** A sole approver deciding an invoice they entered: Approve and pay stays enabled. */
   ownEntry: boolean;
+  /** A sole approver paying the first payment to an address they gave: Approve and pay stays enabled. */
+  ownAddress: boolean;
   /** An owner or admin, on a payable missing its purchase order or goods receipt with no payment sent. */
   canAddDetails: boolean;
 }) {
@@ -248,7 +253,13 @@ function Decisions({
   const shown = last === "approve" ? approveForm.state : last === "return" ? returnForm.state : INITIAL;
 
   const blocked =
-    payable.createdBy === viewerId && !ownEntry ? "You created this invoice" : payable.riskLevel === "high" ? "Screened high risk" : null;
+    payable.createdBy === viewerId && !ownEntry
+      ? "You created this invoice"
+      : payable.firstPaymentAddressBy === viewerId && !ownAddress
+        ? "You gave this payee's address"
+        : payable.riskLevel === "high"
+          ? "Screened high risk"
+          : null;
   const approveId = `approve-${payable.id}`;
   const returnId = `return-${payable.id}`;
   const blockedId = `${approveId}-blocked`;

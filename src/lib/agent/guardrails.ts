@@ -67,6 +67,11 @@ export interface ApGuardrailInput {
    * and whether its counterparty needs a purchase order at all. Absent where a caller has no invoice to match.
    */
   match?: { poReference: string | null; goodsReceived: boolean; purchaseOrderRequired: boolean } | null;
+  /**
+   * For the first payment to the counterparty's address in a live workspace: whether two different parties stand
+   * behind the address (new payee check N3). Null or absent for a payment that is not a first, or in a sandbox.
+   */
+  newPayee?: { twoParties: boolean } | null;
 }
 
 /** What the spending limit contract says about one payment the agent would make now. */
@@ -84,6 +89,7 @@ export type ApGuardrailRule =
   | "counterparty.address_unconfirmed"
   | "invoice.duplicate_of_settled"
   | "invoice.match_incomplete"
+  | "counterparty.new_payee"
   | "fx.rate_unavailable"
   | "treasury.insufficient_eurc"
   | "fx.swap_cost_above_cap"
@@ -231,6 +237,16 @@ export function enforceApGuardrails(input: ApGuardrailInput): ApGuardrailResult 
       status: "awaiting_info",
       rule: "invoice.match_incomplete",
       reasoning: `${input.reasoning} [guardrail override: the three-way match is incomplete: ${gaps} — ${verb} refused before execution; it waits for the details in Approvals]`,
+    };
+  }
+  // The first payment to an address one party alone stands behind (new payee check N3): code never makes it. A person
+  // other than whoever gave the address approves it, and after that the agent pays the address on its own.
+  if (input.newPayee && !input.newPayee.twoParties) {
+    return {
+      blocked: true,
+      status: "held",
+      rule: "counterparty.new_payee",
+      reasoning: `${input.reasoning} [guardrail override: this is the first payment to this address, and only one person stands behind it — ${verb} refused before execution; another person approves it]`,
     };
   }
   // A EURC payable with no quote has no USDC value, so its limit cannot be

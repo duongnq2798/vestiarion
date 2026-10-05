@@ -56,6 +56,8 @@ import { ARC_TESTNET_EURC, quoteEurcInUsdc, type EurcQuote } from "../fx/quote";
 import { quoteUsdcForEurc, sizeSwap, SWAP_COST_CAP_PERCENT, SWAP_NOT_QUOTED, type SwapOffer, type SwapQuote } from "../fx/swap-service";
 import { resumeOpenSwaps, swapForPayment, type SwapOutcome, type SwapSweep } from "../fx/swap";
 import { onceQuotes, probeFx } from "../fx/probe";
+import { newPayeeCheck } from "../new-payee";
+import { loadNewPayeeFacts, type NewPayeeFacts } from "../new-payee-facts";
 import { fxHoldOf, fxRecheckCandidates, type FxNow } from "../fx/recheck";
 import { currentOrgConfig } from "../context";
 import { bridgeFee as irisBridgeFee, EXPECTED_BRIDGE_SECONDS, type BridgeFee } from "../circle/cctp";
@@ -1228,6 +1230,8 @@ async function decideApPayable(
     addressHistory?: (counterpartyId: string) => AddressHistoryFact | null;
     /** Why the follow-up reopened this payable this cycle, when a fresh quote cleared what held it (FX re-evaluation F6). */
     reevaluation?: (invoiceId: string) => ApReevaluation | null;
+    /** In a live workspace, whether this is the first payment to the address and who stands behind it (new payee check N1–N3). */
+    newPayee?: (counterparty: { id: string; address: string | null }) => ReturnType<typeof newPayeeCheck>;
   }
 ): Promise<{ status: string; scheduledFor: string | null; operatingBalance: number | null; line: CycleLogLine }> {
   const { db, provider, operating, operatingBalance, history, metrics } = ctx;
@@ -1239,6 +1243,9 @@ async function decideApPayable(
   const limit = counterparty.payment_limit == null ? null : num(counterparty.payment_limit);
   // The business's rule for this counterparty, which the model is told and code enforces (three-way match design M2–M4).
   const purchaseOrderRequired = counterparty.purchase_order_required !== false;
+  // A first payment to this address, and who stands behind it; null in a sandbox, or with no address (new payee check).
+  const newPayee = ctx.newPayee?.({ id: counterparty.id, address: counterparty.address }) ?? null;
+  const firstPayment = newPayee?.firstPayment === true ? newPayee : null;
   // A EURC payable (EURC invoices design): weighed at its USDC value from a
   // Circle quote (E2, E3), timed and paid with the wallet's EURC (E5, P1). No
   // quote leaves it with no USDC value, which the guardrails hold (E4). A
@@ -1608,6 +1615,7 @@ async function decideApPayable(
     addressChangedAt: counterparty.address_changed_at,
     addressConfirmedAt: counterparty.address_confirmed_at,
     match: { poReference: invoice.po_reference, goodsReceived: invoice.goods_received, purchaseOrderRequired },
+    newPayee: firstPayment ? { twoParties: firstPayment.twoParties } : null,
     currency,
     fxAvailable: !isEurc || fx !== null,
     bridge: crossChain ? { feePercent: isEurc ? 0 : feeRatioPercent, unsupportedToken: isEurc, route, gatewayShort } : null,
@@ -1801,6 +1809,10 @@ async function decideApPayable(
         goodsReceived: invoice.goods_received,
         // The business's rule the match was weighed under: the follow-up reopens on its relaxing (three-way match design M5).
         purchaseOrderRequired,
+        // Who stood behind the address for its first payment (new payee check N6).
+        ...(firstPayment
+          ? { newPayee: { addressBy: firstPayment.addressBy, confirmedBy: firstPayment.confirmedBy, twoParties: firstPayment.twoParties } }
+          : {}),
         ...(ctx.addressHistory?.(counterparty.id) ? { addressHistory: ctx.addressHistory(counterparty.id) } : {}),
         operatingBalance: operatingBalanceAfter ?? operatingBalance,
         addressUnconfirmed: addressUnconfirmed(counterparty.address_changed_at, counterparty.address_confirmed_at),
@@ -1893,6 +1905,11 @@ export interface ApStageInput {
   addressHistory?: Map<string, AddressHistoryFact>;
   /** The payables the follow-up stage reopened this cycle because a fresh quote cleared what held them (FX re-evaluation F6). */
   reevaluations?: Map<string, ApReevaluation>;
+  /**
+   * The check before the first payment to an address, wherever payments are real (new payee check N3, N5). Absent where
+   * payments are simulated, and then no payment is checked: the cycle passes it with a live provider (tests/new-payee-cycle.test.ts).
+   */
+  newPayee?: { load: (counterpartyIds: string[]) => Promise<NewPayeeFacts> };
 }
 
 /** At most this many EURC payables held for FX get a fresh quote in one cycle, the oldest decided first (FX re-evaluation F9). */
@@ -2028,6 +2045,8 @@ export async function runApStage(input: ApStageInput): Promise<number> {
   // falls due first, and in the cycle's treasury buffer, but not decided
   // before then.
   const payables = loaded.filter((row) => dueForDecision(row, now));
+  // Read once for the stage, in a live workspace: which addresses were paid before, and who stands behind the others.
+  const newPayeeFacts = input.newPayee && payables.length > 0 ? await input.newPayee.load([...new Set(payables.map((row) => row.counterparty_id))]) : null;
 
   // The whole payable book, settled rows included, because a duplicate is only
   // detectable against what came before it — and the invoice that matters most
@@ -2155,6 +2174,10 @@ export async function runApStage(input: ApStageInput): Promise<number> {
       onChainLimit,
       addressHistory: (counterpartyId) => input.addressHistory?.get(counterpartyId) ?? null,
       reevaluation: (invoiceId) => input.reevaluations?.get(invoiceId) ?? null,
+      newPayee: (counterparty) =>
+        newPayeeFacts
+          ? newPayeeCheck({ address: counterparty.address, paidTo: newPayeeFacts.paidTo, entries: newPayeeFacts.entries.get(counterparty.id) ?? [] })
+          : null,
     });
     if (decided.operatingBalance !== null) operatingBalance = decided.operatingBalance;
     record(invoice.id, decided.status, decided.scheduledFor);
@@ -2949,7 +2972,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     await db
       .from("invoices")
       .select(
-        "id, status, amount, currency, due_date, decided_at, escalated_at, po_reference, goods_received, counterparties(risk_level, payment_limit, address_changed_at, address_confirmed_at, purchase_order_required)"
+        "id, status, amount, currency, due_date, decided_at, escalated_at, po_reference, goods_received, counterparty_id, counterparties(risk_level, payment_limit, address, address_changed_at, address_confirmed_at, purchase_order_required)"
       )
       .eq("direction", "payable")
       .in("status", ["held", "awaiting_info", "flagged"])
@@ -2964,9 +2987,11 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     escalated_at: string | null;
     po_reference: string | null;
     goods_received: boolean;
+    counterparty_id?: string;
     counterparties: {
       risk_level: string;
       payment_limit: string | null;
+      address?: string | null;
       address_changed_at: string | null;
       address_confirmed_at: string | null;
       purchase_order_required?: boolean;
@@ -3018,7 +3043,24 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
         purchaseOrderRequired: typeof observed.purchaseOrderRequired === "boolean" ? observed.purchaseOrderRequired : undefined,
         // Held for a EURC rate, a swap, the swap's cost or the value at the rate: a fresh quote may clear it (F1).
         fxHold: fxHoldOf({ seq: entry.seq, detail: entry.detail }),
+        // Held as the first payment to an address one party alone stood behind (new payee check N7).
+        newPayeeHeld: entry.detail.guardrailRule === "counterparty.new_payee",
       });
+    }
+    // Who stands behind those addresses now, read once, wherever payments are real (N5, N7).
+    const newPayeeHeldIds = [
+      ...new Set(frozenRows.filter((row) => factsByInvoice.get(row.id)?.newPayeeHeld && row.counterparty_id).map((row) => row.counterparty_id as string)),
+    ];
+    const newPayeeFacts = provider.mode === "live" && newPayeeHeldIds.length > 0 ? await loadNewPayeeFacts(db, newPayeeHeldIds) : null;
+    const newPayeeNow = new Map<string, { addressPaid: boolean; twoParties: boolean }>();
+    for (const row of frozenRows) {
+      if (!newPayeeFacts || !row.counterparty_id || !factsByInvoice.get(row.id)?.newPayeeHeld) continue;
+      const check = newPayeeCheck({
+        address: row.counterparties.address ?? null,
+        paidTo: newPayeeFacts.paidTo,
+        entries: newPayeeFacts.entries.get(row.counterparty_id) ?? [],
+      });
+      if (check) newPayeeNow.set(row.id, { addressPaid: !check.firstPayment, twoParties: check.twoParties });
     }
     // The cash the operating wallet and the reserve hold now, read only when something waits on it (R4).
     const cashHeld = [...factsByInvoice.values()].some((facts) => facts.heldForCash != null);
@@ -3067,6 +3109,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           addressUnconfirmed: addressUnconfirmed(row.counterparties.address_changed_at, row.counterparties.address_confirmed_at),
           purchaseOrderRequired: row.counterparties.purchase_order_required,
           ...(fxNow.has(row.id) ? { fx: fxNow.get(row.id) } : {}),
+          ...(newPayeeNow.has(row.id) ? { newPayee: newPayeeNow.get(row.id) } : {}),
         },
         factsByInvoice.get(row.id) ?? null,
         now,
@@ -3173,6 +3216,8 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     onChainLimit,
     addressHistory,
     reevaluations,
+    // Two parties before the first payment to an address, wherever payments are real (new payee check N3, N5).
+    ...(provider.mode === "live" ? { newPayee: { load: (ids: string[]) => loadNewPayeeFacts(db, ids) } } : {}),
   });
 
   });
@@ -3215,12 +3260,22 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
   const releasesInFlight = await existingMilestoneIntents(db, milestones);
 
   type ContractorGuardrailRule =
+    | "counterparty.new_payee"
     | "counterparty.high_risk"
     | "counterparty.unscreened"
     | "counterparty.payment_limit"
     | "workspace.outflow_budget"
     | "workspace.onchain_limit"
     | "workspace.onchain_limit_route";
+  // Two parties before the first release to an address, wherever payments are real (new payee check N3, N5): read once.
+  const newPayeeFacts =
+    provider.mode === "live" && milestones.length > 0 ? await loadNewPayeeFacts(db, [...new Set(milestones.map((m) => m.contractor_id))]) : null;
+  const firstReleaseTo = (contractor: { id: string; address: string | null }) => {
+    const check = newPayeeFacts
+      ? newPayeeCheck({ address: contractor.address, paidTo: newPayeeFacts.paidTo, entries: newPayeeFacts.entries.get(contractor.id) ?? [] })
+      : null;
+    return check?.firstPayment ? check : null;
+  };
   type Decided = {
     milestone: (typeof milestones)[number];
     amount: number;
@@ -3239,6 +3294,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     const { milestone, amount, limit, guardrailBlocked, guardrailRule, outflowBudget, onChainLimit: onChainCheck, outcome } = entry;
     const { value: decision, mode, reference, agreedWithReference } = entry.decided;
     const contractor = milestone.counterparties;
+    const firstRelease = firstReleaseTo(contractor);
     const status = outcome?.status ?? "held";
     const txRef = outcome?.txRef ?? null;
     const paymentExecution = outcome?.paymentExecution ?? null;
@@ -3288,6 +3344,8 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           verificationSource: milestone.verification_source,
           verification: milestoneVerification(milestone),
           ...(addressHistory.get(contractor.id) ? { addressHistory: addressHistory.get(contractor.id) } : {}),
+          // Who stood behind the address for its first payment (new payee check N6).
+          ...(firstRelease ? { newPayee: { addressBy: firstRelease.addressBy, confirmedBy: firstRelease.confirmedBy, twoParties: firstRelease.twoParties } } : {}),
         },
         execution: {
           txRef,
@@ -3422,13 +3480,16 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     let onChainCheck: OnChainLimitDecisionCheck | null = null;
 
     if (decision.action === "release") {
+      // The first release to an address one party alone stands behind is code's to refuse (new payee check N3).
+      const firstRelease = firstReleaseTo(contractor);
+      const newPayeeHeld = firstRelease !== null && !firstRelease.twoParties;
       // The spending limit, after the contractor's own checks (outflow budget spec R4).
-      outflowBudget = highRisk || unscreened || overLimit ? null : await budget.room();
+      outflowBudget = highRisk || unscreened || overLimit || newPayeeHeld ? null : await budget.room();
       // The same limit on Arc (onchain spending limit R3, R5, R7): asked for a release not from escrow, whose money
       // left the treasury when a person locked it.
       const escrowed = ["funded", "funding"].includes(String((milestone as { escrow_state?: string | null }).escrow_state ?? ""));
       onChainCheck =
-        highRisk || unscreened || overLimit || escrowed ? null : await onChainLimit.check({ sourceType: "milestone", sourceId: milestone.id, to: contractor.address, amount });
+        highRisk || unscreened || overLimit || newPayeeHeld || escrowed ? null : await onChainLimit.check({ sourceType: "milestone", sourceId: milestone.id, to: contractor.address, amount });
       const onChainHold = onChainLimitHold(onChainCheck, reasoning);
       if (highRisk || unscreened || overLimit) {
         guardrailBlocked = true;
@@ -3438,6 +3499,10 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           : unscreened
             ? " [guardrail override: contractor has not been screened yet — release refused; decided again once screening gives a verdict]"
             : ` [guardrail override: amount exceeds the ${limit} USDC limit — release refused]`;
+      } else if (newPayeeHeld) {
+        guardrailBlocked = true;
+        guardrailRule = "counterparty.new_payee";
+        reasoning += " [guardrail override: this is the first payment to this address, and only one person stands behind it — release refused; another person approves it]";
       } else if (exceedsBudget(amount, outflowBudget)) {
         guardrailBlocked = true;
         guardrailRule = "workspace.outflow_budget";

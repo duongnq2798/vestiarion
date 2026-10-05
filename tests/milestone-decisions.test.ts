@@ -123,6 +123,14 @@ describe("what a held milestone waits for", () => {
     expect(heldReason(facts())).toMatchObject({ kind: "agent_held", override: true, canPay: true });
   });
 
+  it("names the hold of a first payment to an address one person alone stands behind, which someone else may pay (new payee check)", () => {
+    const reason = heldReason(facts({ lastEntry: { action: "milestone_release", detail: { guardrailBlocked: true, guardrailRule: "counterparty.new_payee" } } }));
+    expect(reason).toMatchObject({ kind: "new_payee", hint: "First payment to a new address", canPay: true, canClose: true, override: true });
+    expect(reason.text).toBe(
+      "This would be the first payment to Puka Hotel's address, and only one person stands behind it. Someone other than whoever gave the address pays it now; after that, the agent pays this address on its own."
+    );
+  });
+
   it("repeats an escrow hold's note", () => {
     const reason = heldReason(facts({ agentReasoning: "Release. [not paid: it is being locked in escrow; verify it again once the lock has finished]" }));
     expect(reason).toMatchObject({ kind: "escrow", text: "Not paid: it is being locked in escrow; verify it again once the lock has finished." });
@@ -182,8 +190,13 @@ function world(options: {
   claim?: () => FakeReply;
   /** `sole_approver`'s reply (migration 0061); unset falls through to the default `[]`, which is not `true`. */
   soleApprover?: FakeReply;
+  /** The contractor's entries that set or confirmed its address, newest first (new payee check N2); none by default. */
+  addressEntries?: Array<Record<string, unknown>>;
 } = {}) {
   const fake = fakeSupabase((request: RecordedRequest) => {
+    // What the new payee check reads (N1, N2): the confirmed payments' addresses, and the address's entries.
+    if (request.path === "/rest/v1/payment_intents" && request.params.get("status") === "eq.confirmed") return { body: [] };
+    if (request.path === "/rest/v1/ledger_entries" && request.params.has("detail->>counterpartyId")) return { body: options.addressEntries ?? [] };
     if (request.path === "/rest/v1/orgs") return { body: orgRow() };
     if (request.path === "/rest/v1/milestones" && request.method === "GET") return { body: milestoneRow(options.milestone) };
     if (request.path === "/rest/v1/milestones" && request.method === "PATCH") return { body: [{ id: MILESTONE }] };
@@ -334,3 +347,29 @@ describe("Close without paying", () => {
     expect(await refusal(locked.run(() => closeMilestone({ actorId: ACTOR, milestoneId: MILESTONE, reason: "Not needed" })))).toBe("escrow_locked");
   });
 });
+
+describe("Pay now and the first payment to an address (new payee check N4)", () => {
+  const heldAsNewPayee = entryRow("milestone_release", { guardrailBlocked: true, guardrailRule: "counterparty.new_payee" });
+  const gaveAddress = (by: string) => [{ action: "create_counterparty", detail: { by, counterpartyId: CONTRACTOR, address: ADDRESS } }];
+  const live = () => getChainProviderMock.mockReturnValue({ mode: "live", earnMode: "simulate", estimatedFeeUsd: 0.003 });
+
+  it("refuses the person who gave the contractor's address, before any claim", async () => {
+    live();
+    const { run, claimed } = world({ intent: null, last: heldAsNewPayee, addressEntries: gaveAddress(ACTOR) });
+    expect(await refusal(run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE })))).toBe("new_payee_self");
+    expect(claimed()).toBe(false);
+    expect(releaseHeldMilestoneMock).not.toHaveBeenCalled();
+  });
+
+  it("lets the workspace's only approver, or anyone else, pay it, and records that it was the address's first payment", async () => {
+    live();
+    releaseHeldMilestoneMock.mockResolvedValue(PAID);
+    const alone = world({ intent: null, last: heldAsNewPayee, addressEntries: gaveAddress(ACTOR), soleApprover: { body: true } });
+    expect((await alone.run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }))).status).toBe("paid");
+    expect(alone.ledger()[0].p_detail).toMatchObject({ firstPayment: true, heldFor: "new_payee" });
+
+    const other = world({ intent: null, last: heldAsNewPayee, addressEntries: gaveAddress(CREATOR) });
+    expect((await other.run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }))).status).toBe("paid");
+  });
+});
+

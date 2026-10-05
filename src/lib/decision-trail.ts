@@ -89,6 +89,11 @@ function checksOf(detail: Record<string, unknown>, paying: boolean): string[] {
           : `✗ ${po ? `Purchase order ${po} on file, but the goods not marked received` : "No purchase order on file"}`
     );
   }
+  // The first payment to an address, and whether two people stood behind it (new payee check N6).
+  const newPayee = record(observed.newPayee);
+  if (newPayee) {
+    notes.push(newPayee.twoParties === true ? "✓ First payment to this address, with two people behind it" : "✗ First payment to this address, and only one person stands behind it");
+  }
   const risk = text(observed.riskLevel);
   if (risk) notes.push(risk === "clear" ? "✓ Counterparty screened clear" : `${risk === "high" ? "✗" : "·"} Counterparty screened ${risk}`);
   const limit = number(observed.paymentLimit);
