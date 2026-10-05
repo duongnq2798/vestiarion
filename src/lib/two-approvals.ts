@@ -38,6 +38,9 @@ export function parseTwoApprovalsForm(raw: string): { ok: true; above: number | 
   return { ok: true, above: value };
 }
 
+/** What an approval says when it is the first of two and sends nothing (T8). */
+export const APPROVAL_RECORDED = "Approved. One more approval, by another person, pays it.";
+
 /** The rule in a sentence, as the card and the settings say it. */
 export function twoApprovalsSentence(above: number): string {
   return `Payments above ${above} USDC need two approvals.`;

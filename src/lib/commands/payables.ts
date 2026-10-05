@@ -5,6 +5,7 @@ import { accessOf, cycleEventOf, provenanceOf, type Actor } from "./actor";
 import { checkChatDecision, type ShownCard } from "./chat-decisions";
 import { done, refused, TRY_AGAIN, type CommandOutcome, type Refused } from "./outcome";
 import { gate } from "./policy";
+import { APPROVAL_RECORDED } from "../two-approvals";
 
 /**
  * A person's decisions on a payable the agent stopped (integrations design §9, Phase 0): the console's Approvals
@@ -39,9 +40,6 @@ export function heldMessage(note: string): string {
   const reason = match ? match[1] : note.trim();
   return `The transfer failed: ${reason}. The invoice is held.`;
 }
-
-/** What an approval says when it is the first of two and sends nothing (two approvals T8). */
-export const APPROVAL_RECORDED = "Approved. One more approval, by another person, pays it.";
 
 export async function approvePayable(
   actor: Actor,
