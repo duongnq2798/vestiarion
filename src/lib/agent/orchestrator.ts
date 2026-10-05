@@ -2972,7 +2972,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     await db
       .from("invoices")
       .select(
-        "id, status, amount, currency, due_date, decided_at, escalated_at, po_reference, goods_received, counterparties(risk_level, payment_limit, address_changed_at, address_confirmed_at, purchase_order_required)"
+        "id, status, amount, currency, due_date, decided_at, escalated_at, po_reference, goods_received, counterparty_id, counterparties(risk_level, payment_limit, address, address_changed_at, address_confirmed_at, purchase_order_required)"
       )
       .eq("direction", "payable")
       .in("status", ["held", "awaiting_info", "flagged"])
@@ -2987,9 +2987,11 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     escalated_at: string | null;
     po_reference: string | null;
     goods_received: boolean;
+    counterparty_id?: string;
     counterparties: {
       risk_level: string;
       payment_limit: string | null;
+      address?: string | null;
       address_changed_at: string | null;
       address_confirmed_at: string | null;
       purchase_order_required?: boolean;
@@ -3041,7 +3043,24 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
         purchaseOrderRequired: typeof observed.purchaseOrderRequired === "boolean" ? observed.purchaseOrderRequired : undefined,
         // Held for a EURC rate, a swap, the swap's cost or the value at the rate: a fresh quote may clear it (F1).
         fxHold: fxHoldOf({ seq: entry.seq, detail: entry.detail }),
+        // Held as the first payment to an address one party alone stood behind (new payee check N7).
+        newPayeeHeld: entry.detail.guardrailRule === "counterparty.new_payee",
       });
+    }
+    // Who stands behind those addresses now, read once, wherever payments are real (N5, N7).
+    const newPayeeHeldIds = [
+      ...new Set(frozenRows.filter((row) => factsByInvoice.get(row.id)?.newPayeeHeld && row.counterparty_id).map((row) => row.counterparty_id as string)),
+    ];
+    const newPayeeFacts = provider.mode === "live" && newPayeeHeldIds.length > 0 ? await loadNewPayeeFacts(db, newPayeeHeldIds) : null;
+    const newPayeeNow = new Map<string, { addressPaid: boolean; twoParties: boolean }>();
+    for (const row of frozenRows) {
+      if (!newPayeeFacts || !row.counterparty_id || !factsByInvoice.get(row.id)?.newPayeeHeld) continue;
+      const check = newPayeeCheck({
+        address: row.counterparties.address ?? null,
+        paidTo: newPayeeFacts.paidTo,
+        entries: newPayeeFacts.entries.get(row.counterparty_id) ?? [],
+      });
+      if (check) newPayeeNow.set(row.id, { addressPaid: !check.firstPayment, twoParties: check.twoParties });
     }
     // The cash the operating wallet and the reserve hold now, read only when something waits on it (R4).
     const cashHeld = [...factsByInvoice.values()].some((facts) => facts.heldForCash != null);
@@ -3090,6 +3109,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           addressUnconfirmed: addressUnconfirmed(row.counterparties.address_changed_at, row.counterparties.address_confirmed_at),
           purchaseOrderRequired: row.counterparties.purchase_order_required,
           ...(fxNow.has(row.id) ? { fx: fxNow.get(row.id) } : {}),
+          ...(newPayeeNow.has(row.id) ? { newPayee: newPayeeNow.get(row.id) } : {}),
         },
         factsByInvoice.get(row.id) ?? null,
         now,

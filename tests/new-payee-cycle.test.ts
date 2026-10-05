@@ -24,3 +24,17 @@ describe("the cycle and the first payment to a new payee", () => {
     expect(contractors).toMatch(/newPayee: \{ addressBy: firstRelease\.addressBy, confirmedBy: firstRelease\.confirmedBy, twoParties: firstRelease\.twoParties \}/);
   });
 });
+
+describe("the follow-up and a payable held as a new payee (new payee check N7)", () => {
+  const followUp = source.slice(source.indexOf("const frozenRows = unwrap("), source.indexOf("followUpHeldMilestones(db, budget)"));
+
+  it("reads the payee's address with each frozen payable, and which decisions held it as a new payee", () => {
+    expect(followUp).toMatch(/"id, status, amount, currency, due_date, decided_at, escalated_at, po_reference, goods_received, counterparty_id, counterparties\([^)]*address,/);
+    expect(followUp).toContain('newPayeeHeld: entry.detail.guardrailRule === "counterparty.new_payee",');
+  });
+
+  it("asks who stands behind those addresses now, wherever payments are real, and hands it to the plan", () => {
+    expect(followUp).toContain('provider.mode === "live" && newPayeeHeldIds.length > 0 ? await loadNewPayeeFacts(db, newPayeeHeldIds) : null');
+    expect(followUp).toContain("...(newPayeeNow.has(row.id) ? { newPayee: newPayeeNow.get(row.id) } : {}),");
+  });
+});
