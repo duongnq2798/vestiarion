@@ -1,3 +1,5 @@
+import { utcMinute } from "./copy";
+
 /**
  * Two approvals above a limit (docs/superpowers/specs/2026-10-05-two-approvals-design.md T1, T2): the workspace's
  * figure, in USDC, above which no payment to a payee leaves on one approval. Pure, so the console's forms, the agent's
@@ -51,6 +53,31 @@ export interface TwoApprovalsFacts {
 
 /** What an approval says when it is the first of two and sends nothing (T8). */
 export const APPROVAL_RECORDED = "Approved. One more approval, by another person, pays it.";
+
+/**
+ * What a card says of a payment above the figure (T8): the rule, and who approved it so far, by email; the viewer is
+ * "You".
+ */
+export function twoApprovalsLine(facts: TwoApprovalsFacts, viewerId: string, emails: Record<string, string> = {}): string {
+  const head = `Payments above ${facts.above} USDC need two approvals.`;
+  const first = facts.approvals[0];
+  if (!first) return `${head} No one has approved it yet.`;
+  const who = first.by === viewerId ? "You" : (emails[first.by] ?? "Another member");
+  return `${head} ${who} approved it on ${utcMinute(first.at)}. One more approval, by another person, pays it.`;
+}
+
+/** What a card says to the workspace's only approver of a payment above the figure: one person cannot give two approvals. */
+export function onlyApproverOfTwo(above: number): string {
+  return `You are the only person in this workspace who can approve payments, and payments above ${above} USDC need two approvals, so it cannot be paid until the figure is raised in Settings or another person who can approve joins.`;
+}
+
+/** What the confirmation of a first approval says it does (T8). */
+export function approveFirstDescription(above: number): string {
+  return `Payments above ${above} USDC need two approvals. This records your approval and sends nothing; another person's approval pays it.`;
+}
+
+/** The paying confirmation's added sentence when it is the second of two approvals. */
+export const SECOND_APPROVAL_PAYS = "Yours is the second of two approvals, so it pays.";
 
 /** The rule in a sentence, as the card and the settings say it. */
 export function twoApprovalsSentence(above: number): string {

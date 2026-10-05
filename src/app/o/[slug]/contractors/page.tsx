@@ -22,7 +22,9 @@ import { StatTile } from "@/components/vx/StatTile";
 import { milestoneDecision } from "@/components/vx/map";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { sectionTitle } from "@/components/vx/nav";
+import { transferExists } from "@/lib/agent/approvals";
 import { heldReason, milestoneIntents } from "@/lib/agent/milestone-decisions";
+import { twoApprovalsFacts } from "@/lib/agent/second-approval";
 import { isSoleApprover } from "@/lib/agent/sole-approver";
 import { viewerCan } from "@/lib/auth/authorize";
 import { requireMembership } from "@/lib/auth/membership";
@@ -33,6 +35,7 @@ import { inOrg } from "@/lib/dal/scope";
 import { listLedgerEntries, listLedgerEntriesForTargets } from "@/lib/ledger";
 import { orgHref } from "@/lib/auth/org-paths";
 import { utcDay } from "@/lib/copy";
+import { listMembers } from "@/lib/platform/members";
 import { listCounterparties, listMilestones, stats, type MilestoneRow } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
@@ -72,6 +75,25 @@ export default async function ContractorsPage({ params, searchParams }: { params
       canDecide && held.some((milestone) => milestone.created_by === access.user.id) ? isSoleApprover(access.user.id) : Promise.resolve(false),
     ]);
     const contractorsById = new Map(counterparties.map((counterparty) => [counterparty.id, counterparty]));
+    // Held milestones above the figure for two approvals: who approved each so far, and whether whoever added it may give
+    // one (two approvals T8); the approvers' emails are read only when someone has approved.
+    const twoApprovals = await twoApprovalsFacts(
+      "milestone",
+      held.map((milestone) => ({
+        id: milestone.id,
+        payment: { amount: milestone.amount, currency: "USDC", address: contractorsById.get(milestone.contractor_id)?.address ?? null },
+        weighed: milestone.amount,
+        excluded: [milestone.created_by],
+        sent: transferExists(intents.get(milestone.id) ?? null),
+      }))
+    );
+    const approverIds = new Set([...twoApprovals.values()].flatMap((facts) => facts.approvals.map((approval) => approval.by)));
+    const memberEmails: Record<string, string> =
+      approverIds.size > 0
+        ? Object.fromEntries(
+            (await listMembers(access.membership.orgId)).filter((member) => approverIds.has(member.userId)).map((member) => [member.userId, member.email])
+          )
+        : {};
     // What a verified milestone waits for before the agent pays it: an address to confirm, or one to add.
     const waitingOf = (milestone: MilestoneRow) => {
       const contractor = contractorsById.get(milestone.contractor_id);
@@ -193,6 +215,9 @@ export default async function ContractorsPage({ params, searchParams }: { params
             selfAdded={Boolean(milestone.created_by) && milestone.created_by === access.user.id}
             soleApprover={soleApprover}
             sandbox={!live}
+            twoApprovals={twoApprovals.get(milestone.id)}
+            viewerId={access.user.id}
+            memberEmails={memberEmails}
           />
         ),
       };

@@ -17,6 +17,7 @@ import { fmt } from "@/components/vx/Primitives";
 import { withSuccessToast } from "@/components/withSuccessToast";
 import type { HeldReason } from "@/lib/agent/milestone-decisions";
 import { orgHref } from "@/lib/auth/org-paths";
+import { approveFirstDescription, onlyApproverOfTwo, SECOND_APPROVAL_PAYS, twoApprovalsLine, type TwoApprovalsFacts } from "@/lib/two-approvals";
 
 const INITIAL: ActionResult = { ok: false, message: "" };
 
@@ -32,6 +33,9 @@ const close = withSuccessToast(closeMilestoneAction);
  * person's two decisions on it, Pay now and Close without paying. Only someone who may approve a held payable
  * sees the decisions. Overriding the agent's own hold needs someone other than whoever added the milestone,
  * unless they are the workspace's sole approver, and then the row says so (sole approver R5).
+ *
+ * Above the workspace's figure for two approvals (`twoApprovals`), the row says who approved it so far, and Pay now
+ * reads Approve until the viewer's approval would be the second, which pays it (two approvals T8).
  */
 /**
  * What Pay now's confirmation says will happen: a transfer to record is only checked; one Circle never answered is
@@ -52,6 +56,9 @@ export function HeldMilestoneActions({
   selfAdded,
   sandbox,
   soleApprover = false,
+  twoApprovals,
+  viewerId,
+  memberEmails = {},
 }: {
   orgSlug: string;
   milestone: { id: string; title: string; amount: number; contractorName: string };
@@ -62,13 +69,25 @@ export function HeldMilestoneActions({
   sandbox: boolean;
   /** The viewer is the only member of the workspace who may approve payments: they may override a hold on what they added. */
   soleApprover?: boolean;
+  /** Above the workspace's figure for two approvals: the figure, the approvals given, and whether whoever added it may give one. */
+  twoApprovals?: TwoApprovalsFacts;
+  /** Who is looking, to tell their own approval from another person's. */
+  viewerId?: string;
+  /** The emails of the members who approved it, by user id. */
+  memberEmails?: Record<string, string>;
 }) {
   const payForm = useActionForm(pay, INITIAL);
   const payId = `pay-held-${milestone.id}`;
   const blockedId = `${payId}-blocked`;
+  const two = twoApprovals ?? null;
+  // Above the figure: the viewer's approval pays it only when someone else approved it first (two approvals T8).
+  const viewerApproved = two?.approvals.some((approval) => approval.by === viewerId) ?? false;
+  const willPay = !two || two.approvals.some((approval) => approval.by !== viewerId);
   const ownOverride = reason.canPay && reason.override && selfAdded;
-  const selfBlocked = ownOverride && !soleApprover;
-  const ownEntry = ownOverride && soleApprover;
+  // Whoever added it gives one of two approvals only when too few others can; one person never pays it alone.
+  const selfBlocked = two ? selfAdded && !two.fewApprovers : ownOverride && !soleApprover;
+  const ownEntry = !two && ownOverride && soleApprover;
+  const blocked = viewerApproved ? "You approved it" : selfBlocked ? "You added this milestone, so someone else must approve paying it." : null;
 
   return (
     <Callout tone="held" title="What it waits for">
@@ -83,6 +102,8 @@ export function HeldMilestoneActions({
           </>
         )}
       </p>
+      {two && <p className="mt-2">{twoApprovalsLine(two, viewerId ?? "", memberEmails)}</p>}
+      {two && canDecide && soleApprover && <p className="mt-2">{onlyApproverOfTwo(two.above)}</p>}
       {canDecide ? (
         (reason.canPay || reason.canClose) && (
           <div className="mt-3">
@@ -97,20 +118,30 @@ export function HeldMilestoneActions({
                     formId={payId}
                     tone="primary"
                     trigger={
-                      <Button size="sm" icon={<Banknote />} loading={payForm.pending} disabled={selfBlocked} aria-describedby={selfBlocked ? blockedId : undefined}>
-                        Pay now
+                      <Button size="sm" icon={<Banknote />} loading={payForm.pending} disabled={blocked !== null} aria-describedby={blocked ? blockedId : undefined}>
+                        {willPay ? "Pay now" : "Approve"}
                       </Button>
                     }
-                    title={`Pay ${fmt(milestone.amount)} USDC to ${milestone.contractorName} now?${sandbox ? " (simulated)" : ""}`}
-                    description={`${payNowDescription(reason.kind)}${ownEntry ? ` ${OWN_MILESTONE_RECORDED}` : ""}`}
-                    confirmLabel="Pay now"
+                    title={
+                      willPay
+                        ? `Pay ${fmt(milestone.amount)} USDC to ${milestone.contractorName} now?${sandbox ? " (simulated)" : ""}`
+                        : `Approve paying ${fmt(milestone.amount)} USDC to ${milestone.contractorName}?`
+                    }
+                    description={
+                      willPay
+                        ? `${payNowDescription(reason.kind)}${ownEntry ? ` ${OWN_MILESTONE_RECORDED}` : ""}${two ? ` ${SECOND_APPROVAL_PAYS}` : ""}`
+                        : two
+                          ? approveFirstDescription(two.above)
+                          : ""
+                    }
+                    confirmLabel={willPay ? "Pay now" : "Approve"}
                   />
                 </>
               )}
               {reason.canClose && <CloseDialog orgSlug={orgSlug} milestone={milestone} />}
-              {selfBlocked && (
+              {blocked && (
                 <p id={blockedId} className="text-xs text-ink-3">
-                  You added this milestone, so someone else must approve paying it.
+                  {blocked}
                 </p>
               )}
             </div>

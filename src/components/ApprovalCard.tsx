@@ -25,7 +25,7 @@ import { agentResumes, CASH_SHORTFALL, counterpartyPath, ruleNextStep } from "@/
 import { amountToPay } from "@/lib/agent/payment-timing";
 import { utcDay, utcMinute } from "@/lib/copy";
 import { paidAcrossChains, payeeChain } from "@/lib/payee-chains";
-import type { TwoApprovalsFacts } from "@/lib/two-approvals";
+import { approveFirstDescription, onlyApproverOfTwo, SECOND_APPROVAL_PAYS, twoApprovalsLine } from "@/lib/two-approvals";
 
 const INITIAL: ActionResult = { ok: false, message: "" };
 const approve = withSuccessToast(approveInvoiceAction);
@@ -79,34 +79,10 @@ export function payConfirmDescription(payable: Pick<WaitingPayable, "paymentSent
   return `The transfer starts as soon as you confirm, and the ledger records who approved it.${own}`;
 }
 
-/**
- * What the card says of a payment above the workspace's figure for two approvals (two approvals T8): the rule, and who
- * approved it so far, by email; the viewer is "You".
- */
-export function twoApprovalsLine(facts: TwoApprovalsFacts, viewerId: string, emails: Record<string, string> = {}): string {
-  const head = `Payments above ${facts.above} USDC need two approvals.`;
-  const first = facts.approvals[0];
-  if (!first) return `${head} No one has approved it yet.`;
-  const who = first.by === viewerId ? "You" : (emails[first.by] ?? "Another member");
-  return `${head} ${who} approved it on ${utcMinute(first.at)}. One more approval, by another person, pays it.`;
-}
-
-/** What the card says to the workspace's only approver of a payment above the figure: one person cannot give two approvals. */
-export function onlyApproverOfTwo(above: number): string {
-  return `You are the only person in this workspace who can approve payments, and payments above ${above} USDC need two approvals, so it cannot be paid until the figure is raised in Settings or another person who can approve joins.`;
-}
-
 /** The confirmation of an approval that pays nothing yet, the first of two (two approvals T8). */
 export function approveFirstTitle(payable: Pick<WaitingPayable, "amount" | "counterpartyName"> & Partial<Pick<WaitingPayable, "currency">>): string {
   return `Approve paying ${fmt(payable.amount)} ${payable.currency ?? "USDC"} to ${payable.counterpartyName}?`;
 }
-
-export function approveFirstDescription(above: number): string {
-  return `Payments above ${above} USDC need two approvals. This records your approval and sends nothing; another person's approval pays it.`;
-}
-
-/** The paying confirmation's added sentence when it is the second of two approvals. */
-export const SECOND_APPROVAL_PAYS = "Yours is the second of two approvals, so it pays.";
 
 /** The confirm dialog's added sentence when a sole approver approves what they entered themselves. */
 export const OWN_ENTRY_RECORDED = "It also records that you entered it yourself, as the workspace's only approver.";

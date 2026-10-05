@@ -4,17 +4,15 @@ import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import ApprovalCard, {
-  approveFirstDescription,
   approveFirstTitle,
   HIGH_RISK_EXPLAINED,
-  onlyApproverOfTwo,
   OWN_ENTRY_RECORDED,
   OWN_INVOICE_NOTE,
   payConfirmDescription,
   payConfirmTitle,
-  SECOND_APPROVAL_PAYS,
   SELF_APPROVAL_EXPLAINED,
 } from "@/components/ApprovalCard";
+import { approveFirstDescription, onlyApproverOfTwo, SECOND_APPROVAL_PAYS } from "@/lib/two-approvals";
 import { agentResumes, CASH_SHORTFALL } from "@/lib/next-step";
 import { WAITING_FOR_A_DECISION, WaitingPayableAction } from "@/components/WaitingPayableAction";
 import { ActivityToastBody } from "@/components/AgentActivity";
