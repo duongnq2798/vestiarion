@@ -148,3 +148,33 @@ export function lastFxReopenAt(entries: ReadonlyArray<{ ts: string; action: stri
   );
   return reopened?.ts ?? null;
 }
+
+/** An invoice's ledger entries as a re-check reads them, newest first. */
+export type RecheckEntry = { seq?: number; ts: string; action: string; detail: Record<string, unknown> };
+
+/**
+ * The held EURC payables a re-check asks about (F3, F5, F9): each still `held`, held for FX by its latest decision (the
+ * newest entry recording `observed`), and not reopened for FX within the last 30 minutes; the oldest decided first, at
+ * most `max`.
+ */
+export function fxRecheckCandidates(
+  rows: ReadonlyArray<{ id: string; status: string; decidedAt: string | null }>,
+  entriesByInvoice: ReadonlyMap<string, ReadonlyArray<RecheckEntry>>,
+  now: number,
+  max: number
+): Array<{ id: string; hold: FxHold }> {
+  const candidates: Array<{ id: string; hold: FxHold; decidedAt: string }> = [];
+  for (const row of rows) {
+    if (row.status !== "held") continue;
+    const entries = entriesByInvoice.get(row.id) ?? [];
+    const latest = entries.find((entry) => entry.detail.observed !== undefined && typeof entry.seq === "number");
+    if (!latest) continue;
+    const hold = fxHoldOf({ seq: latest.seq as number, detail: latest.detail });
+    if (!hold || !fxRecheckDue(lastFxReopenAt(entries), now)) continue;
+    candidates.push({ id: row.id, hold, decidedAt: row.decidedAt ?? "" });
+  }
+  return candidates
+    .sort((a, b) => a.decidedAt.localeCompare(b.decidedAt))
+    .slice(0, max)
+    .map(({ id, hold }) => ({ id, hold }));
+}

@@ -1,6 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { FxQuoteError } from "@/lib/fx/errors";
-import { probeFx } from "@/lib/fx/probe";
+import { onceQuotes, probeFx } from "@/lib/fx/probe";
+import { resetFxQuotesForTests } from "@/lib/fx/quote";
 import type { FxHold } from "@/lib/fx/recheck";
 
 /**
@@ -82,3 +83,31 @@ describe("probeFx", () => {
     await expect(probeFx(hold({}), { quoteRate, now: NOW })).resolves.toMatchObject({ rate: null, usdcValue: null });
   });
 });
+
+describe("onceQuotes: the quotes a re-check asks with (F9)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    resetFxQuotesForTests();
+  });
+  const noRoute = () => new Response(JSON.stringify({ code: 331001, message: "No route available" }), { status: 404 });
+
+  it("asks Circle once for the rate, from the operating wallet's address", async () => {
+    const fetch = vi.fn().mockImplementation(async () => noRoute());
+    vi.stubGlobal("fetch", fetch);
+    const quotes = onceQuotes({ operatingAddress: "0xbd4e5a44b211cc1171d925241a797df434139433", canSwap: true, apiKey: null });
+    await expect(quotes.quoteRate(0.5)).rejects.toMatchObject({ code: "no_route" });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(String(fetch.mock.calls[0][0])).toContain("fromAddress=0xbd4e5a44b211cc1171d925241a797df434139433");
+  });
+
+  it("asks once for a swap where one can be made, and offers no swap quote where none can", async () => {
+    const fetch = vi.fn().mockImplementation(async () => noRoute());
+    vi.stubGlobal("fetch", fetch);
+    const live = onceQuotes({ operatingAddress: "0xbd4e5a44b211cc1171d925241a797df434139433", canSwap: true, apiKey: null });
+    await expect(live.quoteSwap?.(0.63)).rejects.toMatchObject({ code: "no_route" });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(onceQuotes({ operatingAddress: "0xbd4e5a44b211cc1171d925241a797df434139433", canSwap: false, apiKey: null }).quoteSwap).toBeUndefined();
+    expect(onceQuotes({ operatingAddress: null, canSwap: true, apiKey: null }).quoteSwap).toBeUndefined();
+  });
+});
+

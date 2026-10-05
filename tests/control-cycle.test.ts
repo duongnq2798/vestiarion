@@ -128,6 +128,27 @@ describe("applyFollowUp — the follow-up stage's write is a compare-and-set", (
     expect(append.p_summary).toBe("Reopened held invoice for 150 EURC: evidence changed");
   });
 
+  it("records what a fresh quote changed for a EURC payable, and hands back the reopen's entry (FX re-evaluation F6)", async () => {
+    const { fake, run } = cycleFake((r) => (r.path === "/rest/v1/invoices" && r.method === "PATCH" ? { body: [{ id: INVOICE_ID }] } : undefined));
+    const reevaluation = {
+      trigger: "rate_available" as const,
+      previousDecision: { seq: 1434, action: "hold", guardrailRule: null },
+      before: { rate: null, usdcValue: null, swapCostPercent: null },
+      after: { rate: 1.215262, usdcValue: 0.607631, swapCostPercent: null, quotedAt: "2026-10-05T02:00:00.000Z" },
+    };
+    const reopened: number[] = [];
+
+    await run(() =>
+      applyFollowUp(db(), { id: INVOICE_ID, status: "held", amount: 0.5, currency: "EURC" }, { ...reopen, reevaluation }, FOLLOW_UP_CONFIG, Date.now(), (seq) =>
+        reopened.push(seq)
+      )
+    );
+
+    const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect((append.p_detail as Record<string, unknown>).reevaluation).toEqual(reevaluation);
+    expect(reopened).toEqual([1]);
+  });
+
   it("clears notified_at on reopen, so a re-held payable is news again", async () => {
     const { fake, run } = cycleFake((r) => (r.path === "/rest/v1/invoices" && r.method === "PATCH" ? { body: [{ id: INVOICE_ID }] } : undefined));
 

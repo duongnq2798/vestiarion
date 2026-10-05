@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FX_RECHECK_COOLDOWN_MS, fxChange, fxHoldOf, fxRecheckDue, lastFxReopenAt, type FxHold, type FxNow } from "@/lib/fx/recheck";
+import { FX_RECHECK_COOLDOWN_MS, fxChange, fxHoldOf, fxRecheckCandidates, fxRecheckDue, lastFxReopenAt, type FxHold, type FxNow } from "@/lib/fx/recheck";
 import { SWAP_COST_CAP_PERCENT } from "@/lib/fx/swap-limits";
 
 /**
@@ -182,3 +182,32 @@ describe("the wait after a reopen for FX (F5)", () => {
     expect(lastFxReopenAt(entries.slice(0, 2))).toBeNull();
   });
 });
+
+describe("fxRecheckCandidates: which held payables a re-check asks about (F3, F5, F9)", () => {
+  const at = Date.parse("2026-10-05T02:00:00.000Z");
+  const held = (id: string, decidedAt: string, status = "held") => ({ id, status, decidedAt });
+  const entries = (seq: number, extra: Array<{ ts: string; action: string; detail: Record<string, unknown> }> = []) => [
+    ...extra,
+    { ...decision(), seq, ts: "2026-10-05T01:00:00.000Z", action: "ap_hold" },
+  ];
+
+  it("takes the payables a decision held for FX, oldest decided first, up to the bound", () => {
+    const rows = [held("b", "2026-10-05T01:30:00.000Z"), held("a", "2026-10-05T01:00:00.000Z"), held("c", "2026-10-05T01:45:00.000Z")];
+    const byInvoice = new Map([["a", entries(10)], ["b", entries(11)], ["c", entries(12)]]);
+    expect(fxRecheckCandidates(rows, byInvoice, at, 2).map((candidate) => [candidate.id, candidate.hold.decisionSeq])).toEqual([["a", 10], ["b", 11]]);
+  });
+
+  it("skips one no longer held, one held for something else, one with no decision, and one reopened for FX within 30 minutes", () => {
+    const rows = [held("flagged", "2026-10-05T01:00:00.000Z", "flagged"), held("other", "2026-10-05T01:00:00.000Z"), held("none", "2026-10-05T01:00:00.000Z"), held("recent", "2026-10-05T01:00:00.000Z")];
+    const otherRule = [{ ...decision({ guardrailBlocked: true, guardrailRule: "counterparty.high_risk" }), ts: "2026-10-05T01:00:00.000Z", action: "ap_pay" }];
+    const reopenedRecently = entries(13, [{ ts: "2026-10-05T01:50:00.000Z", action: "invoice_reopened", detail: { reevaluation: { trigger: "rate_available" } } }]);
+    const byInvoice = new Map<string, Array<{ seq?: number; ts: string; action: string; detail: Record<string, unknown> }>>([
+      ["flagged", entries(14)],
+      ["other", otherRule],
+      ["none", []],
+      ["recent", reopenedRecently],
+    ]);
+    expect(fxRecheckCandidates(rows, byInvoice, at, 5)).toEqual([]);
+  });
+});
+

@@ -1,6 +1,21 @@
-import type { EurcQuote } from "./quote";
+import { ARC_TESTNET_EURC, quoteEurcInUsdc, type EurcQuote } from "./quote";
 import type { FxHold, FxNow } from "./recheck";
-import { sizeSwap, type SwapQuote } from "./swap-service";
+import { quoteUsdcForEurc, sizeSwap, type SwapQuote } from "./swap-service";
+
+/**
+ * The quotes a re-check asks with, each asked once (F9): the rate from the operating wallet's address, as the AP stage
+ * asks it, and a swap only where one can be made (a live workspace with an operating wallet that can swap).
+ */
+export function onceQuotes(input: { operatingAddress: string | null; canSwap: boolean; apiKey: string | null }): {
+  quoteRate: (amountEurc: number) => Promise<EurcQuote>;
+  quoteSwap?: (usdcIn: number) => Promise<SwapQuote>;
+} {
+  const address = input.operatingAddress;
+  return {
+    quoteRate: (amountEurc) => quoteEurcInUsdc(amountEurc, { fromAddress: address ?? ARC_TESTNET_EURC, once: true }),
+    ...(input.canSwap && address ? { quoteSwap: (usdcIn: number) => quoteUsdcForEurc(usdcIn, { fromAddress: address, apiKey: input.apiKey, once: true }) } : {}),
+  };
+}
 
 /**
  * The fresh quote a EURC payable held for FX is re-checked with (FX re-evaluation F2, F9): the rate for its amount, and,

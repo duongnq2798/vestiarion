@@ -55,6 +55,8 @@ import { OPEN_PAYABLE_STATUSES, summarizePayableObligations, sumUsdcAmounts } fr
 import { ARC_TESTNET_EURC, quoteEurcInUsdc, type EurcQuote } from "../fx/quote";
 import { quoteUsdcForEurc, sizeSwap, SWAP_COST_CAP_PERCENT, SWAP_NOT_QUOTED, type SwapOffer, type SwapQuote } from "../fx/swap-service";
 import { resumeOpenSwaps, swapForPayment, type SwapOutcome, type SwapSweep } from "../fx/swap";
+import { onceQuotes, probeFx } from "../fx/probe";
+import { fxHoldOf, fxRecheckCandidates, type FxNow } from "../fx/recheck";
 import { currentOrgConfig } from "../context";
 import { bridgeFee as irisBridgeFee, EXPECTED_BRIDGE_SECONDS, type BridgeFee } from "../circle/cctp";
 import { EXPECTED_GATEWAY_SECONDS } from "../circle/gateway";
@@ -297,7 +299,9 @@ export async function applyFollowUp(
   row: { id: string; status: string; amount: number; currency?: string },
   plan: FollowUpPlan,
   followUp: FollowUpConfig,
-  now: number
+  now: number,
+  /** Told the reopen's ledger entry, for the AP stage to cite (FX re-evaluation F6). */
+  onReopened?: (seq: number) => void
 ): Promise<CycleLogLine | null> {
   if (plan.action === "wait") return null;
 
@@ -314,7 +318,7 @@ export async function applyFollowUp(
   ) as Array<{ id: string }>;
   if (changed.length === 0) return null;
 
-  await appendLedgerEntry({
+  const entry = await appendLedgerEntry({
     actor: "agent",
     domain: "ap",
     action: plan.action === "reopen" ? "invoice_reopened" : "invoice_escalated",
@@ -333,8 +337,11 @@ export async function applyFollowUp(
         staleAfterDays: followUp.staleAfterDays,
       },
       previousStatus: row.status,
+      // What a fresh quote cleared, with the decision it reopens and the quote before and after (FX re-evaluation F6).
+      ...(plan.reevaluation ? { reevaluation: plan.reevaluation } : {}),
     },
   });
+  if (plan.action === "reopen") onReopened?.(entry.seq);
 
   return {
     domain: "ap",
@@ -1219,6 +1226,8 @@ async function decideApPayable(
     onChainLimit: OnChainLimitGate;
     /** The payment history the agent bought for a counterparty's address within 7 days, if any (x402 payee history R6). */
     addressHistory?: (counterpartyId: string) => AddressHistoryFact | null;
+    /** Why the follow-up reopened this payable this cycle, when a fresh quote cleared what held it (FX re-evaluation F6). */
+    reevaluation?: (invoiceId: string) => ApReevaluation | null;
   }
 ): Promise<{ status: string; scheduledFor: string | null; operatingBalance: number | null; line: CycleLogLine }> {
   const { db, provider, operating, operatingBalance, history, metrics } = ctx;
@@ -1773,6 +1782,8 @@ async function decideApPayable(
       terms,
       // The day an earlier cycle scheduled this invoice for, now decided again.
       ...(previouslyScheduledFor ? { scheduledFor: previouslyScheduledFor } : {}),
+      // Decided again because a fresh quote cleared what held it: the reopen, its trigger and the decision it follows (F6).
+      ...(ctx.reevaluation?.(invoice.id) ? { reevaluation: ctx.reevaluation(invoice.id) } : {}),
       // What the transfer carried and what the discount took off it; null
       // when nothing went out.
       ...(decision.action === "pay"
@@ -1880,6 +1891,21 @@ export interface ApStageInput {
   onChainLimit?: OnChainLimitGate;
   /** Payment histories the `services` stage bought, by counterparty (x402 payee history R6). */
   addressHistory?: Map<string, AddressHistoryFact>;
+  /** The payables the follow-up stage reopened this cycle because a fresh quote cleared what held them (FX re-evaluation F6). */
+  reevaluations?: Map<string, ApReevaluation>;
+}
+
+/** At most this many EURC payables held for FX get a fresh quote in one cycle, the oldest decided first (FX re-evaluation F9). */
+const FX_RECHECKS_PER_CYCLE = 5;
+
+/** What an AP decision records when it follows a reopen for FX (FX re-evaluation F6). */
+export interface ApReevaluation {
+  /** The `invoice_reopened` entry. */
+  reopenedSeq: number;
+  trigger: string;
+  /** The decision that held it. */
+  previousDecisionSeq: number;
+  previousAction: string | null;
 }
 
 /** Makes a swap to fund one EURC payment (src/lib/fx/swap.ts `swapForPayment`, bound to the stage's wallet). */
@@ -2128,6 +2154,7 @@ export async function runApStage(input: ApStageInput): Promise<number> {
       budget,
       onChainLimit,
       addressHistory: (counterpartyId) => input.addressHistory?.get(counterpartyId) ?? null,
+      reevaluation: (invoiceId) => input.reevaluations?.get(invoiceId) ?? null,
     });
     if (decided.operatingBalance !== null) operatingBalance = decided.operatingBalance;
     record(invoice.id, decided.status, decided.scheduledFor);
@@ -2904,6 +2931,9 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
   // The same limit enforced on Arc (onchain spending limit R3): read once, on first use, by both stages.
   const onChainLimit = onChainLimitGate();
 
+  // The payables the follow-up reopens because a fresh quote cleared what held them, for the AP stage to cite (FX re-evaluation F6).
+  const reevaluations = new Map<string, ApReevaluation>();
+
   await stage("follow_up", async () => {
   // ------------------------------------------------------- 1b. follow up
   // Runs after screening and before AP on purpose: a risk tier that moved this
@@ -2949,11 +2979,18 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     const priorEntries = unwrap(
       await db
         .from("ledger_entries")
-        .select("detail")
+        .select("seq, ts, action, detail")
         .eq("domain", "ap")
         .in("detail->>invoiceId", frozenRows.map((row) => row.id))
         .order("seq", { ascending: false })
-    ) as Array<{ detail: Record<string, unknown> }>;
+    ) as Array<{ seq: number; ts: string; action: string; detail: Record<string, unknown> }>;
+
+    // Each invoice's entries, newest first: its latest decision and its last reopen for FX (FX re-evaluation F1, F5).
+    const entriesByInvoice = new Map<string, Array<{ seq: number; ts: string; action: string; detail: Record<string, unknown> }>>();
+    for (const entry of priorEntries) {
+      const invoiceId = entry.detail.invoiceId as string | undefined;
+      if (invoiceId) entriesByInvoice.set(invoiceId, [...(entriesByInvoice.get(invoiceId) ?? []), entry]);
+    }
 
     const factsByInvoice = new Map<string, DecisionFacts>();
     for (const entry of priorEntries) {
@@ -2976,6 +3013,8 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
         // Decided while the counterparty needed a purchase order: once paid without them, decided again (three-way
         // match design M5). Absent for a decision recorded before the setting, when every counterparty needed one.
         purchaseOrderRequired: typeof observed.purchaseOrderRequired === "boolean" ? observed.purchaseOrderRequired : undefined,
+        // Held for a EURC rate, a swap, the swap's cost or the value at the rate: a fresh quote may clear it (F1).
+        fxHold: fxHoldOf({ seq: entry.seq, detail: entry.detail }),
       });
     }
     // The cash the operating wallet and the reserve hold now, read only when something waits on it (R4).
@@ -2986,6 +3025,25 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     const room = budgetHeld ? await budget.room() : undefined;
 
     const now = Date.now();
+    // A fresh quote, asked once, for the EURC payables held for FX that are due a re-check (FX re-evaluation F3, F9).
+    const fxNow = new Map<string, FxNow>();
+    const fxDue = fxRecheckCandidates(
+      frozenRows.map((row) => ({ id: row.id, status: row.status, decidedAt: row.decided_at })),
+      entriesByInvoice,
+      now,
+      FX_RECHECKS_PER_CYCLE
+    );
+    if (fxDue.length > 0) {
+      const operatingAddress =
+        (unwrap(await db.from("accounts").select("address").eq("kind", "operating").limit(1)) as Array<{ address: string | null }>)[0]?.address ?? null;
+      const quotes = onceQuotes({
+        operatingAddress,
+        canSwap: provider.mode === "live" && typeof provider.swapForEurc === "function",
+        apiKey: currentOrgConfig().chain.circleApiKey ?? null,
+      });
+      for (const candidate of fxDue) fxNow.set(candidate.id, await probeFx(candidate.hold, quotes));
+    }
+
     for (const row of frozenRows) {
       const plan = planFollowUp(
         {
@@ -3005,6 +3063,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           ...(cash !== undefined ? { cash } : {}),
           addressUnconfirmed: addressUnconfirmed(row.counterparties.address_changed_at, row.counterparties.address_confirmed_at),
           purchaseOrderRequired: row.counterparties.purchase_order_required,
+          ...(fxNow.has(row.id) ? { fx: fxNow.get(row.id) } : {}),
         },
         factsByInvoice.get(row.id) ?? null,
         now,
@@ -3013,7 +3072,25 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
 
       if (plan.action === "wait") continue;
 
-      const line = await applyFollowUp(db, { id: row.id, status: row.status, amount: num(row.amount), currency: invoiceCurrency(row.currency) }, plan, followUp, now);
+      const reevaluation = plan.reevaluation;
+      const line = await applyFollowUp(
+        db,
+        { id: row.id, status: row.status, amount: num(row.amount), currency: invoiceCurrency(row.currency) },
+        plan,
+        followUp,
+        now,
+        // The AP stage decides it next, citing the reopen and the decision it follows (F6).
+        (seq) => {
+          if (reevaluation) {
+            reevaluations.set(row.id, {
+              reopenedSeq: seq,
+              trigger: reevaluation.trigger,
+              previousDecisionSeq: reevaluation.previousDecision.seq,
+              previousAction: reevaluation.previousDecision.action,
+            });
+          }
+        }
+      );
       if (line) lines.push(line);
     }
   }
@@ -3092,6 +3169,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     budget,
     onChainLimit,
     addressHistory,
+    reevaluations,
   });
 
   });
