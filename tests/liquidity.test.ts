@@ -11,10 +11,12 @@ import {
   HELD_FOR_CASH,
   milestonesToRelease,
   payablesDueToday,
+  cctpFeeCushion,
   recentPersonCashBack,
   reserveCover,
 } from "@/lib/agent/liquidity";
 import { heldForCash } from "@/lib/next-step";
+import { UsycNotConfirmedError } from "@/lib/circle/usyc";
 import { fakeSupabase, orgTestContext, type RecordedRequest } from "./support/fake-supabase";
 
 /**
@@ -261,6 +263,13 @@ describe("what the reserve covers of a person's payment (approval cash R1, R2)",
     expect(asked.params.get("kind")).toBe("eq.reserve");
   });
 
+  it("covers a cushion on top when asked, and says how much of it is cushion", async () => {
+    // A fifth more of the 0.135342 USDC CCTP fee, which is read again just before the burn (review finding 2).
+    expect(cctpFeeCushion(0.135342)).toBe(0.027069);
+    const { cover } = await run(fake({ accounts }), () => reserveCover(db(), { neededUsdc: 0.535342, operatingBalance: 0.184239, cushionUsdc: 0.027069 }));
+    expect(cover).toEqual({ reserveAccountId: "reserve-1", reserveBalance: 151.8501, amount: 0.378172, neededUsdc: 0.535342, cushionUsdc: 0.027069, operatingBalance: 0.184239 });
+  });
+
   it.each([
     ["the reserve holds less than the payment lacks", [operating, { id: "reserve-1", kind: "reserve", balance: "0.1" }], 0.1],
     ["the reserve is empty", [operating, { id: "reserve-1", kind: "reserve", balance: "0" }], 0],
@@ -283,7 +292,8 @@ describe("the redemption a person's payment needs (approval cash R1, R3, R4)", (
 
     expect(provider.withdrawCalls).toHaveLength(1);
     expect(provider.withdrawCalls[0]).toMatchObject({ accountId: "operating-1", reserveAccountId: "reserve-1", amount: 0.215761 });
-    expect(provider.withdrawCalls[0].key).toMatch(/^approval\/invoice\/inv-1\/[0-9a-f-]{36}\/redeem_from_usyc$/);
+    // One key for this payment, amount and reserve: asking again finds the same redemption at Circle (review finding 1).
+    expect(provider.withdrawCalls[0].key).toBe("approval/invoice/inv-1/0.215761/151.8501/redeem_from_usyc");
     expect(client.requests.some((r) => r.path === "/rest/v1/rpc/agent_paused")).toBe(false);
     const action = client.requests.find((r) => r.path === "/rest/v1/treasury_actions" && r.method === "POST")!;
     expect(action.body).toMatchObject({
@@ -298,7 +308,7 @@ describe("the redemption a person's payment needs (approval cash R1, R3, R4)", (
       domain: "treasury",
       action: "cash_brought_back",
       summary: "Brought 0.215761 USDC back from the reserve to pay Centronex",
-      detail: { by: USER, reason: "approval", invoiceId: "inv-1", amount: 0.215761, neededUsdc: 0.4, operatingBalance: 0.184239, reserveBalance: 151.8501, earnMode: "simulate" },
+      detail: { by: USER, reason: "approval", invoiceId: "inv-1", amount: 0.215761, neededUsdc: 0.4, operatingBalance: 0.184239, reserveBalance: 151.8501, earnMode: "simulate", executed: true },
     });
   });
 
@@ -308,7 +318,7 @@ describe("the redemption a person's payment needs (approval cash R1, R3, R4)", (
     expect(bestEffortMock.mock.calls[0][1].detail).not.toHaveProperty("invoiceId");
   });
 
-  it("throws, recording nothing, when nothing came back", async () => {
+  it("throws when nothing came back, and records the attempt and why", async () => {
     const provider = new ReserveProvider();
     provider.withdrawFromEarn = async () => {
       throw new Error("redeem failed (FAILED) on Arc testnet");
@@ -316,8 +326,52 @@ describe("the redemption a person's payment needs (approval cash R1, R3, R4)", (
     const client = fake();
 
     await expect(bring(client, provider)).rejects.toEqual(new CashBackError("not_moved", "Nothing came back from the reserve: execution failed: redeem failed (FAILED) on Arc testnet."));
-    expect(bestEffortMock).not.toHaveBeenCalled();
+    expect(bestEffortMock).toHaveBeenCalledWith(ORG, {
+      actor: "human",
+      domain: "treasury",
+      action: "cash_brought_back",
+      summary: "Could not bring 0.215761 USDC back from the reserve to pay Centronex",
+      detail: {
+        by: USER,
+        reason: "approval",
+        invoiceId: "inv-1",
+        amount: 0.215761,
+        neededUsdc: 0.4,
+        operatingBalance: 0.184239,
+        reserveBalance: 151.8501,
+        earnMode: "simulate",
+        executed: false,
+        executionNote: "execution failed: redeem failed (FAILED) on Arc testnet",
+      },
+    });
     expect(client.requests.some((r) => r.path === "/rest/v1/treasury_actions")).toBe(false);
+  });
+
+  it("says a redemption Arc testnet has not confirmed yet may still land, and asks for the same one again (review finding 1)", async () => {
+    const provider = new ReserveProvider();
+    provider.withdrawFromEarn = async (params) => {
+      provider.withdrawCalls.push(params);
+      throw new UsycNotConfirmedError("redeem did not confirm in time on Arc testnet");
+    };
+    const client = fake();
+
+    await expect(bring(client, provider)).rejects.toEqual(
+      new CashBackError(
+        "not_confirmed",
+        "The reserve's redemption has not confirmed on Arc testnet yet, so nothing was paid. Try again in a minute: once it lands, the cash is in the operating wallet."
+      )
+    );
+    await expect(bring(client, provider)).rejects.toMatchObject({ code: "not_confirmed" });
+    // The same payment, amount and reserve: the same redemption at Circle, never a second one.
+    expect(provider.withdrawCalls).toHaveLength(2);
+    expect(provider.withdrawCalls[1].key).toBe(provider.withdrawCalls[0].key);
+    expect(bestEffortMock.mock.calls[0][1]).toMatchObject({ detail: { executed: false, executionNote: "execution failed: redeem did not confirm in time on Arc testnet" } });
+  });
+
+  it("records the fee cushion it brought back with a CCTP payout", async () => {
+    const withCushion = { ...cover, amount: 0.378172, neededUsdc: 0.535342, cushionUsdc: 0.027069 };
+    await run(fake(), () => bringCashForApproval({ actorId: USER, cover: withCushion, operatingAccountId: "operating-1", provider: new ReserveProvider(), source: { type: "invoice", id: "inv-1" }, payee: "STM" }));
+    expect(bestEffortMock.mock.calls[0][1].detail).toMatchObject({ amount: 0.378172, neededUsdc: 0.535342, feeCushionUsdc: 0.027069 });
   });
 
   it("brings nothing back while payments are switched off (payment safety S4)", async () => {

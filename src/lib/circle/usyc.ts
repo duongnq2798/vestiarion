@@ -187,6 +187,17 @@ export class UsycSubscriptionsClosedError extends Error {
   }
 }
 
+/**
+ * A USYC call Circle took that Arc testnet had not confirmed within the wait: it may still land. Asking again under the
+ * same key finds the same call rather than sending a second one (approval cash review finding 1).
+ */
+export class UsycNotConfirmedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "UsycNotConfirmedError";
+  }
+}
+
 /** The decimal price, for the ledger and the console: 1.138897 USDC per USYC. */
 export function priceValue(price: bigint): number {
   return Number(price / 10n ** 12n) / UNITS;

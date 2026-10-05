@@ -7,7 +7,7 @@ import { listLedgerEntriesForTargets } from "../ledger";
 import { explainPayable, presentReasoning } from "../reasoning-copy";
 import { isTerminalFailure, settleUnknownSend, type UnknownSendAnswer } from "../payments";
 import { MAY_HAVE_BEEN_ACCEPTED } from "../circle/settlement";
-import { PAYMENTS_OFF, paymentsDisabled } from "../payments-switch";
+import { PAYMENTS_OFF, paymentsDisabled, PaymentsDisabledError } from "../payments-switch";
 import { payInvoice, syncOperatingBalance } from "./pay";
 import { invoiceDiscount, type InvoiceDiscount } from "./payment-timing";
 import { paidAcrossChains, payeeChain } from "../payee-chains";
@@ -21,7 +21,7 @@ import { firstPaymentCheck, loadNewPayeeFacts } from "../new-payee-facts";
 import { addedSince, latestDecision, recordedFacts, type AddedDetails } from "../added-details";
 import { heldForCash } from "../next-step";
 import type { Provenance } from "../provenance";
-import { amountFromReserve, bringCashForApproval, CashBackError, cashShortMessage, reserveCover, type ReserveCover } from "./liquidity";
+import { amountFromReserve, bringCashForApproval, CashBackError, cashShortMessage, cctpFeeCushion, reserveCover, type ReserveCover } from "./liquidity";
 import { approversBesides, readTwoApprovalsAbove } from "../approval-policy";
 import { needsSecondApprover, needsTwoApprovals, type TwoApprovalsFacts } from "../two-approvals";
 import {
@@ -529,9 +529,12 @@ export async function listWaitingPayables(
     const quote = quotes.get(row.id) ?? null;
     const pinned = intent?.payout_route === "gateway" || intent?.payout_route === "cctp" ? intent.payout_route : null;
     const payoutRoute = quote ? choosePayoutRoute({ amount: num(row.amount), pinned, cctpFeeUsdc: quote.cctpFeeUsdc, gateway: quote.gateway }) : null;
-    // A new USDC payment from the operating wallet, with a CCTP payout's fee on top, as Approve and pay counts it (R5).
-    const fromOperating = currencyOf(row.currency) === "USDC" && payoutRoute !== "gateway" && !transferExists(intent) && !transferUnknown(intent);
-    const needs = num(row.amount) + (payoutRoute === "cctp" ? (quote?.cctpFeeUsdc ?? 0) : 0);
+    // A new USDC payment from the operating wallet, with a CCTP payout's fee and its cushion on top, as Approve and pay
+    // counts it (R5, review finding 2); a CCTP payout whose fee was not read has no figure, as it would not be covered.
+    const cctpFee = payoutRoute === "cctp" ? (quote?.cctpFeeUsdc ?? null) : null;
+    const fromOperating =
+      currencyOf(row.currency) === "USDC" && payoutRoute !== "gateway" && !(payoutRoute === "cctp" && cctpFee === null) && !transferExists(intent) && !transferUnknown(intent);
+    const needs = num(row.amount) + (cctpFee !== null ? cctpFee + cctpFeeCushion(cctpFee) : 0);
     const fromReserveUsdc = balances && fromOperating ? amountFromReserve(needs, balances.operating, balances.reserve) : null;
     const onFile = { poReference: row.po_reference ?? null, goodsReceived: row.goods_received === true };
     // The decision is explained from the facts it recorded, not from details a person added since (R6).
@@ -855,7 +858,12 @@ export async function approveAndPay(
       const fee = route === "cctp" ? (quotes?.cctpFeeUsdc ?? null) : null;
       const short = payoutFundsShort({ route: "cctp", amount: invoice.amount, operatingUsdc: balance, cctpFeeUsdc: fee, gateway: null });
       if (short) {
-        const read = await reserveCover(db(), { neededUsdc: short.needs ?? invoice.amount, operatingBalance: balance });
+        // A CCTP payout brings back a cushion on its fee, which is read again before the burn; one whose fee CCTP did not
+        // give needs what no one knows, and is not covered (review finding 2).
+        const read =
+          route === "cctp" && fee === null
+            ? { cover: null, reserveBalance: null }
+            : await reserveCover(db(), { neededUsdc: short.needs ?? invoice.amount, operatingBalance: balance, cushionUsdc: fee !== null ? cctpFeeCushion(fee) : 0 });
         if (!read.cover) throw new ApprovalError("insufficient_funds", cashShortMessage({ operatingUsdc: balance, reserveUsdc: read.reserveBalance, feeUsdc: fee, what: "invoice" }));
         fromReserve = read.cover;
       }
@@ -885,8 +893,11 @@ export async function approveAndPay(
     try {
       fromReserveUsdc = (await bringCashForApproval({ actorId: input.actorId, cover: fromReserve, operatingAccountId: operating.id, provider, source, payee: invoice.counterpartyName })).amount;
     } catch (error) {
-      await giveBackAfterClaim(invoice, `cash not brought back from the reserve: ${(error as Error).message}`);
+      // Given back as it was before the claim: nothing was paid, so a flagged or awaiting payable stays so (review finding 3).
+      await giveBackAfterClaim(invoice, `cash not brought back from the reserve: ${(error as Error).message}`, invoice.status === "processing" ? "held" : invoice.status);
+      if (error instanceof PaymentsDisabledError) raise("payments_off");
       if (!(error instanceof CashBackError)) throw error;
+      if (error.code === "not_confirmed") throw new ApprovalError("insufficient_funds", error.message);
       const fee = route === "cctp" ? (quotes?.cctpFeeUsdc ?? null) : null;
       throw new ApprovalError(
         "insufficient_funds",
@@ -1082,16 +1093,19 @@ async function clearApprovalsAfter(invoiceId: string): Promise<void> {
   }
 }
 
-/** Gives a claimed payable back to the waiting queue, as held, when what follows the claim did not happen. Best effort. */
-async function giveBackAfterClaim(invoice: Pick<LoadedInvoice, "id" | "agentReasoning">, why: string): Promise<void> {
+/**
+ * Gives a claimed payable back to the waiting queue when what follows the claim did not happen: as held, or as it was
+ * when nothing was paid (approval cash review finding 3). Best effort.
+ */
+async function giveBackAfterClaim(invoice: Pick<LoadedInvoice, "id" | "agentReasoning">, why: string, status: string = "held"): Promise<void> {
   try {
     const rollback = await db()
       .from("invoices")
-      .update({ status: "held", agent_reasoning: `${invoice.agentReasoning ?? ""} [approval interrupted: ${why}]` })
+      .update({ status, agent_reasoning: `${invoice.agentReasoning ?? ""} [approval interrupted: ${why}]` })
       .eq("id", invoice.id);
-    if (rollback.error) console.error("approval: rollback to held failed after the claim", invoice.id, rollback.error.message);
+    if (rollback.error) console.error(`approval: rollback to ${status} failed after the claim`, invoice.id, rollback.error.message);
   } catch (rollbackError) {
-    console.error("approval: rollback to held failed after the claim", invoice.id, (rollbackError as Error).message);
+    console.error(`approval: rollback to ${status} failed after the claim`, invoice.id, (rollbackError as Error).message);
   }
 }
 

@@ -43,6 +43,7 @@ import {
   USYC_TELLER,
   usycStepKey,
   usycSubscriptionsOpen,
+  UsycNotConfirmedError,
   UsycSubscriptionsClosedError,
 } from "./usyc";
 
@@ -819,7 +820,9 @@ export class LiveProvider implements ChainProvider {
     const { status, transaction } = await awaitSettlement(this.client, txId);
     if (status !== "confirmed" || !transaction?.txHash) {
       const name = call.abiFunctionSignature.split("(")[0];
-      throw new Error(`${name} ${status === "failed" ? `failed (${transaction?.state ?? "unknown"})` : "did not confirm in time"} on Arc testnet`);
+      if (status === "failed") throw new Error(`${name} failed (${transaction?.state ?? "unknown"}) on Arc testnet`);
+      // Taken but not confirmed within the wait: it may still land, and the same key finds it again.
+      throw new UsycNotConfirmedError(`${name} did not confirm in time on Arc testnet`);
     }
     return transaction.txHash;
   }

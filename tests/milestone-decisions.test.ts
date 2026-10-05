@@ -707,6 +707,33 @@ describe("Pay now on a held milestone the operating wallet cannot cover, with th
     expect(withdrawFromEarn).not.toHaveBeenCalled();
   });
 
+  it("brings nothing back for a milestone whose escrow is being funded: its release waits for the escrow", async () => {
+    const { run } = world({ intent: null, last: READY, balance: "0.2", reserve: RESERVE, milestone: { escrow_state: "funding" } });
+
+    await run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE })).catch(() => null);
+    expect(withdrawFromEarn).not.toHaveBeenCalled();
+  });
+
+  it("brings nothing back on the first of two approvals, which sends nothing", async () => {
+    const twoHeld = entryRow("milestone_release", { guardrailBlocked: true, guardrailRule: "workspace.two_approvals", observed: { amount: 0.3, twoApprovalsAbove: 0.2 } });
+    const { run } = world({ intent: null, last: twoHeld, twoApprovals: 0.2, balance: "0.2", reserve: RESERVE });
+
+    expect((await run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }))).status).toBe("approved");
+    expect(withdrawFromEarn).not.toHaveBeenCalled();
+  });
+
+  it("leaves both approvals standing when nothing came back", async () => {
+    withdrawFromEarn.mockRejectedValue(new Error("redeem failed (FAILED) on Arc testnet"));
+    const OTHER = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000c3";
+    const twoHeld = entryRow("milestone_release", { guardrailBlocked: true, guardrailRule: "workspace.two_approvals", observed: { amount: 0.3, twoApprovalsAbove: 0.2 } });
+    const approval = { id: "appr-c3", approved_by: OTHER, approved_at: "2026-10-05T08:00:00.000Z", amount: "0.300000", currency: "USDC", address: ADDRESS };
+    const { fake, run } = world({ intent: null, last: twoHeld, twoApprovals: 0.2, approvals: [approval], balance: "0.2", reserve: RESERVE });
+
+    expect(await refusal(run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE })))).toBe("insufficient_funds");
+    expect(fake.requests.filter((r) => r.path === "/rest/v1/payment_approvals" && r.method === "PATCH")).toHaveLength(0);
+    expect(releaseHeldMilestoneMock).not.toHaveBeenCalled();
+  });
+
   it("lets go of the milestone, sending nothing, when nothing came back", async () => {
     withdrawFromEarn.mockRejectedValue(new Error("redeem failed (FAILED) on Arc testnet"));
     const { run, patch } = world({ intent: null, last: READY, balance: "0.2", reserve: RESERVE });

@@ -22,7 +22,7 @@ import { HELD_FOR_BUDGET } from "./outflow-budget";
 import { payoutAddress, syncOperatingBalance } from "./pay";
 import { HELD_BECAUSE_PAUSED } from "./pause";
 import { isSoleApprover } from "./sole-approver";
-import { PAYMENTS_OFF, paymentsDisabled } from "../payments-switch";
+import { PAYMENTS_OFF, paymentsDisabled, PaymentsDisabledError } from "../payments-switch";
 import { approversBesides, readTwoApprovalsAbove } from "../approval-policy";
 import { needsSecondApprover, TWO_APPROVALS_RULE, type TwoApprovalsFacts } from "../two-approvals";
 import { SECOND_OF_TWO_NOTE } from "./approvals";
@@ -582,7 +582,11 @@ export async function payHeldMilestone(input: {
   if (!alreadySent && !unknown && milestone.escrowState !== "funded") {
     const balance = provider.mode === "live" ? await syncOperatingBalance(operatingId) : num(operating.balance);
     if (balance < milestone.amount) {
-      const read = await reserveCover(db(), { neededUsdc: milestone.amount, operatingBalance: balance });
+      // Not for one whose escrow is being funded: its release waits for the escrow, and the cash would sit (review finding 6).
+      const read =
+        milestone.escrowState === "funding"
+          ? { cover: null, reserveBalance: null }
+          : await reserveCover(db(), { neededUsdc: milestone.amount, operatingBalance: balance });
       if (!read.cover) raise("insufficient_funds", cashShortMessage({ operatingUsdc: balance, reserveUsdc: read.reserveBalance, feeUsdc: null, what: "milestone" }));
       fromReserve = read.cover;
     }
@@ -600,7 +604,9 @@ export async function payHeldMilestone(input: {
     } catch (error) {
       const released = await db().from("milestones").update(RELEASED).eq("id", milestone.id);
       if (released.error) console.error("milestone decision: claim not released", milestone.id, released.error.message);
+      if (error instanceof PaymentsDisabledError) raise("payments_off");
       if (!(error instanceof CashBackError)) throw error;
+      if (error.code === "not_confirmed") raise("insufficient_funds", error.message);
       raise("insufficient_funds", `${error.message} ${cashShortMessage({ operatingUsdc: fromReserve.operatingBalance, reserveUsdc: null, feeUsdc: null, what: "milestone" })}`);
     }
   }

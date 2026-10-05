@@ -28,7 +28,8 @@ Two gaps:
   its fee.
   - When the operating wallet cannot cover the payment and the reserve can cover the rest, the difference is brought
     back from the reserve first, rounded up to the next micro-USDC. Then it pays.
-  - Nothing beyond what the payment lacks moves.
+  - Nothing beyond what the payment lacks moves, but for a CCTP payout's cushion: a fifth of its fee, which is read
+    again just before the burn and may have risen. A CCTP payout whose fee could not be read is not covered.
   - Not affected: a Gateway payout (paid from the Gateway balance), a EURC payable, a held milestone released from
     escrow, and a transfer already sent.
 - **R2 — what cannot be covered is refused, naming both.** When the operating wallet and the reserve together cannot
@@ -41,13 +42,21 @@ Two gaps:
   - A redemption that fails gives the claim back, as any interrupted approval does, and refuses: "Nothing came back
     from the reserve: *why*. The operating account holds X USDC, less than this invoice."
   - It works while the agent is paused, as a person's own cash back does (reserve cash back R2). Nothing moves while
-    payments are switched off.
+    payments are switched off, and the refusal says payments are off.
+  - The payable is given back as it was before the claim (flagged, awaiting information or held): nothing was paid.
+  - Its key is the payment's, the amount's and the reserve's as read. A redemption Arc testnet had not confirmed within
+    the wait may still land: the refusal says so ("The reserve's redemption has not confirmed on Arc testnet yet, so
+    nothing was paid. Try again in a minute: once it lands, the cash is in the operating wallet."), and asking again
+    before anything changed finds the same redemption at Circle rather than sending a second one.
 - **R4 — the ledger says so.**
   - A redemption records `cash_brought_back`, actor `human`, domain `treasury`, with `{ by, reason: "approval",
     invoiceId | milestoneId, amount, neededUsdc, operatingBalance, reserveBalance, earnMode, execution? }`, and a
     `treasury_actions` row `redeem_from_usyc`.
   - The payment's `approval_paid` or `milestone_approval_paid` entry carries `fromReserveUsdc`.
-  - The person is told, for example: "Paid. 0.215761 USDC came back from the USYC reserve first."
+  - The person is told, for example: "Paid. 0.215761 USDC came back from the USYC reserve first." When the transfer then
+    fails, they are told the cash stays in the operating wallet.
+  - A redemption that did not move is recorded too: "Could not bring …", with `executed: false` and `executionNote`.
+    A CCTP payout's cushion is recorded as `feeCushionUsdc`.
 - **R5 — the card says so before.** On Approvals, take a payable that the stored operating balance cannot cover and the
   reserve can. Its confirmation says: "The operating wallet holds X USDC, so about Y USDC comes back from the USYC reserve
   first."
@@ -59,7 +68,8 @@ Two gaps:
   - The model is told until when, as `bounds.noSweepUntil`.
   - Redemptions are unaffected.
   - Cash brought back for an approval (R1) leaves with the payment, and does not count.
-- **R7 — held milestones too.** A held milestone a person pays now follows R1–R4.
+- **R7 — held milestones too.** A held milestone a person pays now follows R1–R4, except one whose USDC is being
+  locked in escrow: its release waits for the escrow, so nothing is brought back for it.
 
 ## 3. What does not change
 
@@ -70,7 +80,15 @@ Two gaps:
 ## 4. Known limits
 
 - The card reads stored balances, so it says "about". The approval reads the live balance.
-- A transfer that fails after a redemption leaves the cash in the operating wallet. The next approval uses it.
+- A transfer that fails after a redemption leaves the cash in the operating wallet. The next approval uses it, unless a
+  treasury sweep takes it back first; a sweep takes only cash above the buffer, and only when it pays for itself.
+- Two approvals at once, of two bills, each count the same operating balance. The second may then fail at Circle after
+  its redemption, and its cash stays in the operating wallet. A lock per workspace around redeem-and-pay is left for
+  later.
+- An early-payment discount sends less than the amount, but the redemption covers the whole amount, as the funds check
+  does. What is left stays in the operating wallet.
+- `recentPersonCashBack` reads the ledger each cycle by action and actor. A partial index on `ledger_entries` for it is
+  left for a later migration.
 - R6 holds sweeps for a fixed 24 hours, whatever the person brought the cash back for.
 
 ## 5. Tests
