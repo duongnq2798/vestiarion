@@ -74,6 +74,16 @@ describe("payMilestoneNow", () => {
     });
   });
 
+  it("says the cash brought back from the reserve stays in the operating wallet when it was then not paid", async () => {
+    mocks.payHeldMilestone.mockResolvedValueOnce({ status: "held", txRef: null, note: " [transfer failed: ESTIMATION_ERROR]", fromReserveUsdc: 0.1 });
+    expect(await run(() => payMilestoneNow(approver(), { milestoneId: MILESTONE }))).toEqual({
+      ok: false,
+      code: "not_paid",
+      message: "Not paid: ESTIMATION_ERROR. The milestone is still held. 0.1 USDC came back from the USYC reserve first and stays in the operating wallet.",
+      changed: true,
+    });
+  });
+
   it("says only that it was not paid when the note gives no reason", async () => {
     mocks.payHeldMilestone.mockResolvedValueOnce({ status: "held", txRef: null, note: "" });
     expect(await run(() => payMilestoneNow(approver(), { milestoneId: MILESTONE }))).toMatchObject({

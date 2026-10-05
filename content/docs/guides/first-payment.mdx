@@ -360,9 +360,10 @@ If every page says "Payments are switched off for every workspace right now.", w
 - **Before you confirm,** the dialog says so, for example "The operating wallet holds 0.184239 USDC, so about 0.215761 USDC comes back from the USYC reserve first." It reads the balances last recorded; the approval reads them again.
 - **After paying,** it says "Paid. 0.215761 USDC came back from the USYC reserve first." The audit log records the move as `cash_brought_back`, by you, before the `approval_paid` entry.
 - **When the two together fall short,** nothing moves, and the card says what each holds.
-- **If nothing came back from the reserve,** nothing is sent. The payable waits in **Approvals** again, and any approval already given still stands.
+- **If nothing came back from the reserve,** nothing is sent. The payable waits in **Approvals** as it was, and any approval already given still stands. When Arc testnet has not confirmed the redemption yet, it says so, and asking again a minute later finds that same redemption rather than sending a second one.
+- **A payout to another chain through CCTP** brings back a fifth more of the CCTP fee as well, since the fee is read again just before the transfer; what is left of it stays in the operating wallet. One whose fee could not be read is not covered.
 
-**Pay now** on a held milestone works the same way. A Gateway payout is paid from the Gateway balance, which the reserve does not fund.
+**Pay now** on a held milestone works the same way, except for one whose USDC is being locked in escrow. A Gateway payout is paid from the Gateway balance, which the reserve does not fund.
 
 ### Two approvals above a figure
 

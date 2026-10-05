@@ -87,6 +87,16 @@ describe("approvePayable", () => {
     expect(mocks.sendNoticesSoon).not.toHaveBeenCalled();
   });
 
+  it("says the cash brought back from the reserve stays in the operating wallet when the transfer then failed", async () => {
+    mocks.approveAndPay.mockResolvedValueOnce({ status: "held", txRef: null, note: " [transfer failed: insufficient allowance]", fromReserveUsdc: 0.215761 });
+    expect(await run(() => approvePayable(approver(), { invoiceId: INVOICE }))).toEqual({
+      ok: false,
+      code: "transfer_failed",
+      message: "The transfer failed: insufficient allowance. The invoice is held. 0.215761 USDC came back from the USYC reserve first and stays in the operating wallet.",
+      changed: true,
+    });
+  });
+
   it("refuses a held transfer, marked changed, in the provider's words", async () => {
     mocks.approveAndPay.mockResolvedValueOnce({ status: "held", txRef: null, note: " [transfer failed: insufficient allowance]" });
     const outcome = await run(() => approvePayable(approver(), { invoiceId: INVOICE }));

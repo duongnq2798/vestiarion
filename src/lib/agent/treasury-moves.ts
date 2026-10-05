@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import type { ChainProvider } from "../circle";
 import type { UsycExecution } from "../circle/types";
-import { UsycSubscriptionsClosedError } from "../circle/usyc";
+import { UsycNotConfirmedError, UsycSubscriptionsClosedError } from "../circle/usyc";
 import type { OrgDb } from "../dal";
 import { pausedTreasuryNote } from "./pause";
 import type { TreasuryDecision } from "./treasury";
@@ -21,6 +21,8 @@ export interface TreasuryMoveOutcome {
   heldBecausePaused: boolean;
   /** A real USYC move's transactions (USYC live design R7); absent for a simulated one. */
   execution?: UsycExecution;
+  /** Not executed because Arc testnet had not confirmed it within the wait: it may still land (approval cash review finding 1). */
+  unconfirmed?: boolean;
 }
 
 /**
@@ -92,6 +94,7 @@ export async function moveTreasuryIfNotPaused(
     return { executed: true, executionNote: null, heldBecausePaused: false, ...(execution ? { execution } : {}) };
   } catch (err) {
     if (err instanceof UsycSubscriptionsClosedError) return { executed: false, executionNote: err.message, heldBecausePaused: false };
+    if (err instanceof UsycNotConfirmedError) return { executed: false, executionNote: `execution failed: ${err.message}`, heldBecausePaused: false, unconfirmed: true };
     return { executed: false, executionNote: `execution failed: ${(err as Error).message}`, heldBecausePaused: false };
   }
 }

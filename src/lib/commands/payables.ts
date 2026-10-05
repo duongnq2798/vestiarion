@@ -1,6 +1,6 @@
 import { addInvoiceDetails, approveAndPay, ApprovalError, rejectInvoice, returnInvoice } from "../agent/approvals";
 import { runCycleSoon } from "../agent/cycle-soon";
-import { fromReserveNote } from "../agent/liquidity";
+import { fromReserveNote, fromReserveStaysNote } from "../agent/liquidity";
 import { sendNoticesSoon } from "../payment-notices-soon";
 import { accessOf, cycleEventOf, provenanceOf, type Actor } from "./actor";
 import { checkChatDecision, type ShownCard } from "./chat-decisions";
@@ -58,7 +58,8 @@ export async function approvePayable(
     return approvalRefusal(error);
   }
   // A failed transfer leaves the invoice held with the provider's reason: something changed, and it is still a failure.
-  if (result.status === "held") return refused("transfer_failed", heldMessage(result.note), { changed: true });
+  // Cash brought back from the reserve for it stays in the operating wallet, which is said too (review finding 8).
+  if (result.status === "held") return refused("transfer_failed", `${heldMessage(result.note)}${fromReserveStaysNote(result.fromReserveUsdc)}`, { changed: true });
   // Above the workspace's figure, the first of two approvals is recorded and sends nothing (two approvals T4, T8).
   if (result.status === "approved") return done(APPROVAL_RECORDED, { status: "approved", txRef: null });
   // A confirmed payment's payee hears of it now, not at the next cycle (payment notices R5).

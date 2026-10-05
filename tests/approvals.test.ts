@@ -17,6 +17,7 @@ import {
 } from "@/lib/agent/approvals";
 import type { BalanceSnapshot, ChainProvider, EarnResult, TransferParams, TransferResult } from "@/lib/circle";
 import { paymentIdempotencyKey, type PaymentExecution } from "@/lib/payments";
+import { UsycNotConfirmedError } from "@/lib/circle/usyc";
 import { encryptSecret, parseMasterKeys } from "@/lib/secrets";
 import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 
@@ -2452,13 +2453,66 @@ describe("approveAndPay when the operating wallet falls short and the reserve co
     expect(paid).toMatchObject({ p_action: "approval_paid", p_detail: { fromReserveUsdc: 0.215761 } });
   });
 
-  it("brings back a CCTP payout's fee with it", async () => {
-    const { run } = short({ invoice: bill({ counterparties: ON_ARB }) });
+  it("brings back a CCTP payout's fee with it, and a fifth more of the fee, which is read again before the burn", async () => {
+    const { fake, run } = short({ invoice: bill({ counterparties: ON_ARB }) });
 
     await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }, { bridgeFee: cctpFee(), gatewayQuote: vi.fn(async () => null) }));
 
-    expect(withdrawFromEarn.mock.calls[0][0].amount).toBe(0.351103);
+    // 0.4 + 0.135342 + 0.027069 - 0.184239 (review finding 2).
+    expect(withdrawFromEarn.mock.calls[0][0].amount).toBe(0.378172);
     expect(payInvoiceMock.mock.calls[0][0]).toMatchObject({ route: "cctp" });
+    const [brought] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(brought.p_detail).toMatchObject({ neededUsdc: 0.535342, feeCushionUsdc: 0.027069, amount: 0.378172 });
+  });
+
+  it("covers no CCTP payout whose fee CCTP did not give: what it needs is not known", async () => {
+    const { run } = short({ invoice: bill({ counterparties: ON_ARB }) });
+    const noFee = vi.fn(async () => {
+      throw new Error("Iris did not answer");
+    });
+
+    await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }, { bridgeFee: noFee, gatewayQuote: vi.fn(async () => null) }))).rejects.toThrow(
+      "The operating account holds 0.184239 USDC, less than this invoice."
+    );
+    expect(withdrawFromEarn).not.toHaveBeenCalled();
+  });
+
+  it("brings nothing back for a EURC payable, which is paid from EURC", async () => {
+    const { run } = short({ invoice: bill({ currency: "EURC" }) });
+
+    await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+
+    expect(withdrawFromEarn).not.toHaveBeenCalled();
+    expect(payInvoiceMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("brings nothing back for a transfer already sent, which is only recorded", async () => {
+    const { run } = short({ intents: [{ source_id: INVOICE_ID, status: "confirmed", provider_tx_id: "circle-tx-1", last_error: null }] });
+
+    await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+
+    expect(withdrawFromEarn).not.toHaveBeenCalled();
+  });
+
+  it("gives a flagged payable back as flagged when nothing came back, not as held", async () => {
+    withdrawFromEarn.mockRejectedValue(new Error("redeem failed (FAILED) on Arc testnet"));
+    const { fake, run } = short({ invoice: bill({ status: "flagged" }) });
+
+    await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).rejects.toMatchObject({ code: "insufficient_funds" });
+    expect(patchBodies(fake.requests, "/rest/v1/invoices")).toEqual([expect.objectContaining({ status: "flagged" })]);
+  });
+
+  it("says a redemption Arc testnet has not confirmed yet may still land, sending nothing", async () => {
+    withdrawFromEarn.mockRejectedValue(new UsycNotConfirmedError("redeem did not confirm in time on Arc testnet"));
+    const { fake, run } = short();
+
+    const attempt = run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+    await expect(attempt).rejects.toMatchObject({ code: "insufficient_funds" });
+    await expect(attempt).rejects.toThrow(
+      "The reserve's redemption has not confirmed on Arc testnet yet, so nothing was paid. Try again in a minute: once it lands, the cash is in the operating wallet."
+    );
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+    expect(patchBodies(fake.requests, "/rest/v1/invoices")).toEqual([expect.objectContaining({ status: "held" })]);
   });
 
   it("brings nothing back for a Gateway payout, which the Gateway balance pays", async () => {
@@ -2507,7 +2561,9 @@ describe("approveAndPay when the operating wallet falls short and the reserve co
     expect(payInvoiceMock).not.toHaveBeenCalled();
     expect(patchBodies(fake.requests, "/rest/v1/invoices")).toEqual([expect.objectContaining({ status: "held" })]);
     expect(fake.requests.filter((r) => r.path === "/rest/v1/payment_approvals" && r.method === "PATCH")).toHaveLength(0);
-    expect(rpcBodies(fake.requests, "append_ledger_entry")).toEqual([]);
+    // Only the attempt is recorded: nothing was paid.
+    expect(rpcBodies(fake.requests, "append_ledger_entry").map((body) => body.p_action)).toEqual(["cash_brought_back"]);
+    expect(rpcBodies(fake.requests, "append_ledger_entry")[0].p_detail).toMatchObject({ executed: false });
   });
 
   it("brings nothing back on the first of two approvals, which sends nothing", async () => {
@@ -2525,6 +2581,16 @@ describe("approveAndPay when the operating wallet falls short and the reserve co
     const [lacking, covered] = await short({ invoice: listed(rows) }).run(() => listWaitingPayables());
     expect(lacking.fromReserve).toEqual({ operatingUsdc: 0.184239, amountUsdc: 0.215761 });
     expect(covered).not.toHaveProperty("fromReserve");
+
+    // A CCTP payout's figure counts the fee and its cushion; one whose fee CCTP did not give has none.
+    const onArb = [invoiceRow({ amount: "0.4", counterparties: ON_ARB })];
+    const [cctp] = await short({ invoice: listed(onArb) }).run(() => listWaitingPayables({ bridgeFee: cctpFee(), gatewayQuote: vi.fn(async () => null) }));
+    expect(cctp.fromReserve).toEqual({ operatingUsdc: 0.184239, amountUsdc: 0.378172 });
+    const noFee = vi.fn(async () => {
+      throw new Error("Iris did not answer");
+    });
+    const [unknownFee] = await short({ invoice: listed(onArb) }).run(() => listWaitingPayables({ bridgeFee: noFee, gatewayQuote: vi.fn(async () => null) }));
+    expect(unknownFee).not.toHaveProperty("fromReserve");
 
     // Nothing to say when the reserve could not cover it either, or there is none.
     const [uncovered] = await short({ invoice: listed(rows.slice(0, 1)), reserve: { ...RESERVE, balance: "0.1" } }).run(() => listWaitingPayables());

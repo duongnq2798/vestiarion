@@ -1,5 +1,5 @@
 import { runCycleSoon } from "../agent/cycle-soon";
-import { fromReserveNote } from "../agent/liquidity";
+import { fromReserveNote, fromReserveStaysNote } from "../agent/liquidity";
 import { closeMilestone, MilestoneDecisionError, payHeldMilestone } from "../agent/milestone-decisions";
 import { currentConfig } from "../context";
 import type { MilestoneInput } from "../intake-validation";
@@ -44,7 +44,9 @@ export async function payMilestoneNow(
   // Above the workspace's figure, the first of two approvals is recorded and sends nothing (two approvals T4, T8).
   if (result.status === "approved") return done(APPROVAL_RECORDED, { status: result.status, txRef: null });
   const reason = /\[(?:transfer|execution) failed:\s*(.+?)\]\s*$/.exec(result.note)?.[1] ?? /\[not paid:\s*(.+?)\]\s*$/.exec(result.note)?.[1];
-  return refused("not_paid", reason ? `Not paid: ${reason}. The milestone is still held.` : "Not paid. The milestone is still held.", { changed: true });
+  // Cash brought back from the reserve for it stays in the operating wallet, which is said too (review finding 8).
+  const stays = fromReserveStaysNote(result.fromReserveUsdc);
+  return refused("not_paid", reason ? `Not paid: ${reason}. The milestone is still held.${stays}` : `Not paid. The milestone is still held.${stays}`, { changed: true });
 }
 
 export async function closeMilestoneUnpaid(actor: Actor, input: { milestoneId: string; reason: string }): Promise<CommandOutcome> {

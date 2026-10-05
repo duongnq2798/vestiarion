@@ -159,32 +159,50 @@ export async function bringCashForTodaysPayments(input: {
 export interface ReserveCover {
   reserveAccountId: string;
   reserveBalance: number;
-  /** What the payment needs beyond the operating wallet, up to the next micro-USDC. */
+  /** What the payment needs beyond the operating wallet, its cushion included, up to the next micro-USDC. */
   amount: number;
   neededUsdc: number;
+  /** Brought back on top of what the payment needs: a fifth of a CCTP fee, which can rise before the burn. Absent when none. */
+  cushionUsdc?: number;
   operatingBalance: number;
 }
 
 /**
- * Whether the reserve covers what a person's payment needs beyond the operating wallet (approval cash R1, R2): `cover`
- * when it does, and what the reserve holds either way, null when the workspace has none. A payment the wallet covers on
- * its own needs no cover.
+ * Whether the reserve covers what a person's payment needs beyond the operating wallet, with any cushion (approval cash
+ * R1, R2): `cover` when it does, and what the reserve holds either way, null when the workspace has none. A payment the
+ * wallet covers on its own needs no cover.
  */
 export async function reserveCover(
   orgDb: OrgDb,
-  input: { neededUsdc: number; operatingBalance: number }
+  input: { neededUsdc: number; operatingBalance: number; cushionUsdc?: number }
 ): Promise<{ cover: ReserveCover | null; reserveBalance: number | null }> {
   const read = await orgDb.from("accounts").select("id, balance").eq("kind", "reserve").maybeSingle();
   if (read.error) throw new Error(read.error.message);
   const reserve = read.data as { id: string; balance: string | number } | null;
   if (!reserve) return { cover: null, reserveBalance: null };
   const reserveBalance = num(reserve.balance);
-  const amount = amountFromReserve(input.neededUsdc, input.operatingBalance, reserveBalance);
+  const cushion = input.cushionUsdc ?? 0;
+  const amount = amountFromReserve(input.neededUsdc + cushion, input.operatingBalance, reserveBalance);
   if (amount === null) return { cover: null, reserveBalance };
   return {
-    cover: { reserveAccountId: reserve.id, reserveBalance, amount, neededUsdc: input.neededUsdc, operatingBalance: input.operatingBalance },
+    cover: {
+      reserveAccountId: reserve.id,
+      reserveBalance,
+      amount,
+      neededUsdc: input.neededUsdc,
+      ...(cushion > 0 ? { cushionUsdc: cushion } : {}),
+      operatingBalance: input.operatingBalance,
+    },
     reserveBalance,
   };
+}
+
+/**
+ * The cushion brought back with a CCTP payout's fee (approval cash review finding 2): a fifth of the fee, up to the next
+ * micro-USDC. The fee is read again just before the burn, which comes after the redemption, and may have risen.
+ */
+export function cctpFeeCushion(feeUsdc: number): number {
+  return upToUnits(feeUsdc * 0.2);
 }
 
 /**
@@ -209,8 +227,12 @@ export function cashShortMessage(input: { operatingUsdc: number; reserveUsdc: nu
 /**
  * The redemption a person's payment needs (approval cash R1, R3, R4): what `cover` says, from the reserve to the
  * operating wallet, now, while the agent is paused too, since the pause holds the agent and not a person. Recorded as
- * `cash_brought_back` by them, with reason `approval` and what it pays. Nothing came back: a `CashBackError`, and nothing
- * recorded.
+ * `cash_brought_back` by them, with reason `approval` and what it pays, whether it moved or not. Nothing came back: a
+ * `CashBackError`, `not_confirmed` when Arc testnet had not confirmed it within the wait, as it may still land.
+ *
+ * Its key is the payment's, the amount's and the reserve's as read (review finding 1): asking again before anything
+ * changed finds the same redemption at Circle rather than sending a second one. Once it lands the operating wallet
+ * covers the payment, and nothing more is brought back.
  */
 export async function bringCashForApproval(input: {
   actorId: string;
@@ -234,33 +256,49 @@ export async function bringCashForApproval(input: {
     reserveBalance: cover.reserveBalance,
     amount: cover.amount,
     reasoning: `A person's approval brought ${AMOUNT.format(cover.amount)} USDC back from the reserve to pay ${input.payee}.`,
-    moveKey: `approval/${source.type}/${source.id}/${crypto.randomUUID()}`,
+    moveKey: `approval/${source.type}/${source.id}/${cover.amount}/${cover.reserveBalance}`,
     byPerson: true,
   });
-  if (!outcome.executed) throw new CashBackError("not_moved", `Nothing came back from the reserve: ${outcome.executionNote ?? "the redemption did not go through"}.`);
   await appendLedgerEntryBestEffort(orgId, {
     actor: "human",
     domain: "treasury",
     action: "cash_brought_back",
-    summary: `Brought ${AMOUNT.format(cover.amount)} USDC back from the reserve to pay ${input.payee}`,
+    summary: outcome.executed
+      ? `Brought ${AMOUNT.format(cover.amount)} USDC back from the reserve to pay ${input.payee}`
+      : `Could not bring ${AMOUNT.format(cover.amount)} USDC back from the reserve to pay ${input.payee}`,
     detail: {
       by: input.actorId,
       reason: "approval",
       ...(source.type === "invoice" ? { invoiceId: source.id } : { milestoneId: source.id }),
       amount: cover.amount,
       neededUsdc: cover.neededUsdc,
+      ...(cover.cushionUsdc ? { feeCushionUsdc: cover.cushionUsdc } : {}),
       operatingBalance: cover.operatingBalance,
       reserveBalance: cover.reserveBalance,
       earnMode: input.provider.earnMode,
+      executed: outcome.executed,
+      ...(outcome.executed ? {} : { executionNote: outcome.executionNote }),
       ...(outcome.execution ? { execution: outcome.execution } : {}),
     },
   });
+  if (outcome.unconfirmed) {
+    throw new CashBackError(
+      "not_confirmed",
+      "The reserve's redemption has not confirmed on Arc testnet yet, so nothing was paid. Try again in a minute: once it lands, the cash is in the operating wallet."
+    );
+  }
+  if (!outcome.executed) throw new CashBackError("not_moved", `Nothing came back from the reserve: ${outcome.executionNote ?? "the redemption did not go through"}.`);
   return { amount: cover.amount, execution: outcome.execution ?? null };
 }
 
 /** What a person is told after paying, when cash came back from the reserve first (approval cash R4); empty otherwise. */
 export function fromReserveNote(amount: number | undefined): string {
   return amount === undefined ? "" : ` ${amount} USDC came back from the USYC reserve first.`;
+}
+
+/** What a person is told when the transfer failed after cash came back from the reserve: where that cash is now. */
+export function fromReserveStaysNote(amount: number | undefined): string {
+  return amount === undefined ? "" : ` ${amount} USDC came back from the USYC reserve first and stays in the operating wallet.`;
 }
 
 /** How long the treasury stage sweeps nothing after a person brings cash back (approval cash R6). */
@@ -291,7 +329,7 @@ export async function recentPersonCashBack(orgDb: OrgDb, now: number): Promise<{
 
 export class CashBackError extends Error {
   constructor(
-    readonly code: "no_reserve" | "empty" | "too_much" | "not_moved",
+    readonly code: "no_reserve" | "empty" | "too_much" | "not_moved" | "not_confirmed",
     message: string
   ) {
     super(message);
