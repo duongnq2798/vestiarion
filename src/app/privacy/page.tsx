@@ -116,6 +116,9 @@ export default function PrivacyPage() {
           </li>
           <li>
             <strong>Circle</strong> creates the wallets and moves the payments, through Developer-Controlled Wallets, CCTP, Gateway and its Smart Contract Platform, so it receives wallet addresses and payment amounts. Its Stablecoin Service quotes EURC in USDC and builds the swaps of USDC for EURC, so it receives the operating wallet&apos;s address and the amounts. Gateway also verifies and settles the x402 payments for payee history, so it receives each signed payment: the paying wallet, the payee and the amount.
+            For a payee who creates a wallet with a passkey on a payee link, Circle&apos;s Modular Wallets receive the passkey&apos;s public key, its
+            credential id and the name it is saved under, and later the wallet&apos;s transfers, whose gas Circle&apos;s Gas Station pays. The passkey&apos;s
+            private key stays on the payee&apos;s device or in their password manager and is never sent anywhere. Vestiarion keeps nothing of it.
           </li>
           <li>
             <strong>Resend</strong> sends transactional email: invitations to a workspace, digests of the payments waiting for a decision, the link a payee

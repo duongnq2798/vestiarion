@@ -1,4 +1,5 @@
 import { ArrowUpRight, CircleCheck, Clock3 } from "lucide-react";
+import Link from "next/link";
 import type { ReactNode } from "react";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import PayeeAddressForm from "@/components/PayeeAddressForm";
@@ -9,6 +10,7 @@ import { Hash, Money } from "@/components/vx/Primitives";
 import { utcDay, utcMinute } from "@/lib/copy";
 import { amountsLine, maskAddress, payeeStage, paymentState, type PayeeLinkStatus, type PayeePayment, type PaymentTone, type PayeeStage } from "@/lib/payee-journey";
 import { payeeChain } from "@/lib/payee-chains";
+import { passkeyWalletConfig, passkeyWalletOffered } from "@/lib/passkey-wallet";
 import { PayeeSteps } from "./PayeeSteps";
 
 /**
@@ -56,6 +58,8 @@ function Footnote({ children }: { children: ReactNode }) {
 function AddressStep({ token, status }: { token: string; status: PayeeLinkStatus }) {
   const chain = payeeChain(status.chain).label;
   const owed = amountsLine(status.payments);
+  // A passkey wallet, the secondary way, for a payee paid on Arc testnet when Modular Wallets are set up (P1, P6).
+  const passkey = passkeyWalletOffered(status.chain, passkeyWalletConfig()) ? { payeeName: status.payeeName } : undefined;
   return (
     <>
       <Heading>
@@ -70,6 +74,7 @@ function AddressStep({ token, status }: { token: string; status: PayeeLinkStatus
           token={token}
           chainLabel={chain}
           orgName={status.orgName}
+          passkey={passkey}
           intro={
             <ol className="mb-2 grid gap-2 text-sm leading-6 text-ink-2">
               <HowStep n={1}>Add the wallet address you want to be paid at.</HowStep>
@@ -193,6 +198,16 @@ function PaidStep({ status }: { status: PayeeLinkStatus }) {
         {onArc
           ? "A payment on Arc testnet is final within seconds; the transaction above is the record that it was sent."
           : `It was sent from Arc testnet and arrives on ${chain} a few minutes later; the transaction above is the record that it was sent.`}
+        {passkeyWalletOffered(status.chain, passkeyWalletConfig()) && (
+          <>
+            {" "}
+            Made your wallet with a passkey on this page?{" "}
+            <Link href="/wallet" className="font-medium text-agent underline-offset-4 hover:underline">
+              Open your wallet
+            </Link>
+            .
+          </>
+        )}
       </Footnote>
     </>
   );
