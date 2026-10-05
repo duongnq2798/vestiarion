@@ -219,6 +219,8 @@ function world(options: {
   entries?: Array<ReturnType<typeof entryRow>>;
   /** The reply to marking approvals used; success by default. */
   approvalsPatch?: FakeReply;
+  /** The workspace's reserve account, `{ id, balance }` (approval cash R7); none by default. */
+  reserve?: Record<string, unknown> | null;
 } = {}) {
   let intentRow: Record<string, unknown> | null = options.intent === undefined ? FAILED_INTENT : options.intent;
   const fake = fakeSupabase((request: RecordedRequest) => {
@@ -234,6 +236,7 @@ function world(options: {
     }
     if (request.path === "/rest/v1/payment_intents") return { body: intentRow };
     if (request.path === "/rest/v1/rpc/ledger_entries_for_targets") return { body: options.entries ?? [options.last ?? entryRow("milestone_release", {})] };
+    if (request.path === "/rest/v1/accounts" && request.params.get("kind") === "eq.reserve") return { body: options.reserve ?? null };
     if (request.path === "/rest/v1/accounts") return { body: { id: "acct-1", balance: options.balance ?? "8" } };
     if (request.path === "/rest/v1/rpc/claim_milestone_decision") return options.claim ? options.claim() : { body: milestoneRow() };
     if (request.path === "/rest/v1/rpc/sole_approver" && options.soleApprover) return options.soleApprover;
@@ -660,5 +663,60 @@ describe("heldMilestonesTwoApprovals (two approvals T8)", () => {
     expect((await run(() => heldMilestonesTwoApprovals([HELD_ROW], CONTRACTORS, new Map()))).size).toBe(0);
     // Besides the workspace's own row, which the scope reads.
     expect(fake.requests.map((r) => r.path).filter((p) => p !== "/rest/v1/orgs")).toEqual(["/rest/v1/approval_policies"]);
+  });
+});
+
+describe("Pay now on a held milestone the operating wallet cannot cover, with the reserve (approval cash R7)", () => {
+  const RESERVE = { id: "acct-reserve", balance: "151.850100" };
+  const READY = entryRow("milestone_hold", { guardrailBlocked: false });
+  const withdrawFromEarn = vi.fn();
+  beforeEach(() => {
+    withdrawFromEarn.mockReset().mockResolvedValue({ txRef: "sim_redeem_1", positionValue: 151.75, apy: 0 });
+    getChainProviderMock.mockReturnValue({ mode: "simulate", earnMode: "simulate", estimatedFeeUsd: 0.01, withdrawFromEarn });
+  });
+
+  it("brings back what it lacks once claimed, then releases it, and records both", async () => {
+    releaseHeldMilestoneMock.mockResolvedValue(PAID);
+    const { fake, run, ledger } = world({ intent: null, last: READY, balance: "0.2", reserve: RESERVE });
+
+    const result = await run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }));
+
+    expect(result).toMatchObject({ status: "paid", fromReserveUsdc: 0.1 });
+    expect(withdrawFromEarn.mock.calls[0][0]).toMatchObject({ accountId: "acct-1", reserveAccountId: "acct-reserve", amount: 0.1 });
+    const claimedAt = fake.requests.findIndex((r) => r.path === "/rest/v1/rpc/claim_milestone_decision");
+    const movedAt = fake.requests.findIndex((r) => r.path === "/rest/v1/treasury_actions");
+    expect(claimedAt).toBeGreaterThanOrEqual(0);
+    expect(movedAt).toBeGreaterThan(claimedAt);
+    expect(withdrawFromEarn.mock.invocationCallOrder[0]).toBeLessThan(releaseHeldMilestoneMock.mock.invocationCallOrder[0]);
+    const [brought, paid] = ledger();
+    expect(brought).toMatchObject({
+      p_action: "cash_brought_back",
+      p_summary: "Brought 0.10 USDC back from the reserve to pay Puka Hotel",
+      p_detail: { by: ACTOR, reason: "approval", milestoneId: MILESTONE, amount: 0.1, neededUsdc: 0.3, operatingBalance: 0.2 },
+    });
+    expect(paid).toMatchObject({ p_action: "milestone_approval_paid", p_detail: { fromReserveUsdc: 0.1 } });
+  });
+
+  it("refuses before any claim when the wallet and the reserve together fall short, naming both", async () => {
+    const { run, claimed } = world({ intent: null, last: READY, balance: "0.2", reserve: { ...RESERVE, balance: "0.05" } });
+
+    const attempt = run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }));
+    expect(await refusal(attempt)).toBe("insufficient_funds");
+    await expect(attempt).rejects.toThrow("The operating account holds 0.2 USDC and the USYC reserve 0.05 USDC, less than this milestone.");
+    expect(claimed()).toBe(false);
+    expect(withdrawFromEarn).not.toHaveBeenCalled();
+  });
+
+  it("lets go of the milestone, sending nothing, when nothing came back", async () => {
+    withdrawFromEarn.mockRejectedValue(new Error("redeem failed (FAILED) on Arc testnet"));
+    const { run, patch } = world({ intent: null, last: READY, balance: "0.2", reserve: RESERVE });
+
+    const attempt = run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }));
+    expect(await refusal(attempt)).toBe("insufficient_funds");
+    await expect(attempt).rejects.toThrow(
+      "Nothing came back from the reserve: execution failed: redeem failed (FAILED) on Arc testnet. The operating account holds 0.2 USDC, less than this milestone."
+    );
+    expect(releaseHeldMilestoneMock).not.toHaveBeenCalled();
+    expect(patch()?.body).toEqual({ decision_claimed_by: null, decision_claimed_at: null });
   });
 });

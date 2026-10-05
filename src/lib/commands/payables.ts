@@ -1,5 +1,6 @@
 import { addInvoiceDetails, approveAndPay, ApprovalError, rejectInvoice, returnInvoice } from "../agent/approvals";
 import { runCycleSoon } from "../agent/cycle-soon";
+import { fromReserveNote } from "../agent/liquidity";
 import { sendNoticesSoon } from "../payment-notices-soon";
 import { accessOf, cycleEventOf, provenanceOf, type Actor } from "./actor";
 import { checkChatDecision, type ShownCard } from "./chat-decisions";
@@ -62,7 +63,9 @@ export async function approvePayable(
   if (result.status === "approved") return done(APPROVAL_RECORDED, { status: "approved", txRef: null });
   // A confirmed payment's payee hears of it now, not at the next cycle (payment notices R5).
   if (result.status === "paid") sendNoticesSoon(accessOf(actor));
-  return done(result.status === "paid" ? "Paid." : "Payment submitted; waiting for confirmation.", { status: result.status, txRef: result.txRef });
+  // Cash brought back from the reserve to pay it is said too (approval cash R4).
+  const message = result.status === "paid" ? "Paid." : "Payment submitted; waiting for confirmation.";
+  return done(`${message}${fromReserveNote(result.fromReserveUsdc)}`, { status: result.status, txRef: result.txRef });
 }
 
 export async function rejectPayable(actor: Actor, input: { invoiceId: string; reason: string; card?: ShownCard }): Promise<CommandOutcome> {

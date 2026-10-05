@@ -21,6 +21,7 @@ import { firstPaymentCheck, loadNewPayeeFacts } from "../new-payee-facts";
 import { addedSince, latestDecision, recordedFacts, type AddedDetails } from "../added-details";
 import { heldForCash } from "../next-step";
 import type { Provenance } from "../provenance";
+import { amountFromReserve, bringCashForApproval, CashBackError, cashShortMessage, reserveCover, type ReserveCover } from "./liquidity";
 import { approversBesides, readTwoApprovalsAbove } from "../approval-policy";
 import { needsSecondApprover, needsTwoApprovals, type TwoApprovalsFacts } from "../two-approvals";
 import {
@@ -408,6 +409,12 @@ export interface WaitingPayable {
   /** Held because the cash it needs was not there, which the agent decides again once cash comes in (reserve cash back R4). */
   heldForCash?: boolean;
   /**
+   * A new USDC payment from the operating wallet that the wallet's stored balance cannot cover, and the reserve's can:
+   * what the wallet holds, and about what Approve and pay brings back from the reserve first (approval cash R5). Absent
+   * otherwise.
+   */
+  fromReserve?: { operatingUsdc: number; amountUsdc: number };
+  /**
    * Present when paying it would be the first payment to its address, where payments are real: who gave the address, a
    * member's id, "payee", or null when not known (new payee check N4). That member may not approve it unless they
    * decide alone.
@@ -510,6 +517,9 @@ export async function listWaitingPayables(
     })
   );
 
+  // The stored balances, for what Approve and pay would bring back from the reserve first (approval cash R5).
+  const balances = rows.length > 0 ? await storedBalances() : null;
+
   const now = Date.now();
   return rows.map((row) => {
     const intent = intents.get(row.id) ?? null;
@@ -519,6 +529,10 @@ export async function listWaitingPayables(
     const quote = quotes.get(row.id) ?? null;
     const pinned = intent?.payout_route === "gateway" || intent?.payout_route === "cctp" ? intent.payout_route : null;
     const payoutRoute = quote ? choosePayoutRoute({ amount: num(row.amount), pinned, cctpFeeUsdc: quote.cctpFeeUsdc, gateway: quote.gateway }) : null;
+    // A new USDC payment from the operating wallet, with a CCTP payout's fee on top, as Approve and pay counts it (R5).
+    const fromOperating = currencyOf(row.currency) === "USDC" && payoutRoute !== "gateway" && !transferExists(intent) && !transferUnknown(intent);
+    const needs = num(row.amount) + (payoutRoute === "cctp" ? (quote?.cctpFeeUsdc ?? 0) : 0);
+    const fromReserveUsdc = balances && fromOperating ? amountFromReserve(needs, balances.operating, balances.reserve) : null;
     const onFile = { poReference: row.po_reference ?? null, goodsReceived: row.goods_received === true };
     // The decision is explained from the facts it recorded, not from details a person added since (R6).
     const recorded = recordedFacts(decision);
@@ -560,6 +574,7 @@ export async function listWaitingPayables(
       addedSinceDecision: addedSince(recorded, onFile),
       guardrailRule: decision?.detail.guardrailBlocked === true && typeof decision.detail.guardrailRule === "string" ? decision.detail.guardrailRule : null,
       ...(row.status === "held" && heldForCash(decision?.detail) ? { heldForCash: true } : {}),
+      ...(balances && fromReserveUsdc !== null ? { fromReserve: { operatingUsdc: balances.operating, amountUsdc: fromReserveUsdc } } : {}),
       ...(newPayee?.firstPayment ? { firstPaymentAddressBy: newPayee.addressBy } : {}),
       ...(twoApprovals.has(row.id) ? { twoApprovals: twoApprovals.get(row.id) } : {}),
     };
@@ -650,6 +665,14 @@ async function firstPaymentTo(invoice: Pick<LoadedInvoice, "counterpartyId" | "a
   return getChainProvider().mode === "live" ? firstPaymentCheck(db(), { id: invoice.counterpartyId, address: invoice.address }) : null;
 }
 
+/** The stored operating and reserve balances (approval cash R5); null unless the workspace has both. */
+async function storedBalances(): Promise<{ operating: number; reserve: number } | null> {
+  const [operating, reserve] = await Promise.all([operatingAccount(), db().from("accounts").select("balance").eq("kind", "reserve").maybeSingle()]);
+  if (reserve.error) throw new Error(reserve.error.message);
+  const row = reserve.data as { balance: string | number } | null;
+  return operating && row ? { operating: operating.balance, reserve: num(row.balance) } : null;
+}
+
 /** The operating account, or `null` when the workspace has none configured yet. */
 async function operatingAccount(): Promise<{ id: string; balance: number } | null> {
   const result = await db().from("accounts").select("id, balance").eq("kind", "operating").maybeSingle();
@@ -709,7 +732,7 @@ export async function approveAndPay(
     bridgeFee?: (chain: string, amount: number) => Promise<BridgeFee>;
     gatewayQuote?: (chain: string, amount: number) => Promise<GatewayQuote | null>;
   } = {}
-): Promise<{ status: "paid" | "matched" | "held" | "approved"; txRef: string | null; note: string }> {
+): Promise<{ status: "paid" | "matched" | "held" | "approved"; txRef: string | null; note: string; fromReserveUsdc?: number }> {
   const orgId = currentOrgId();
   const invoice = await loadWaitingPayable(input.invoiceId);
   const intent = await paymentIntentOf(invoice.id);
@@ -820,7 +843,9 @@ export async function approveAndPay(
   const route = quotes ? choosePayoutRoute({ amount: invoice.amount, pinned, cctpFeeUsdc: quotes.cctpFeeUsdc, gateway: quotes.gateway }) : null;
 
   // What leaves, counted where it leaves from (P2): a Gateway payout from the Gateway balance, which the operating wallet
-  // does not touch; anything else from the operating wallet, a CCTP payout with its fee on top.
+  // does not touch; anything else from the operating wallet, a CCTP payout with its fee on top. What the operating wallet
+  // lacks comes back from the reserve once the decision is claimed, when the reserve holds it (approval cash R1, R2).
+  let fromReserve: ReserveCover | null = null;
   if (!mayExist && invoice.currency === "USDC") {
     if (route === "gateway") {
       const short = payoutFundsShort({ route, amount: invoice.amount, operatingUsdc: 0, cctpFeeUsdc: null, gateway: quotes?.gateway ?? null });
@@ -828,13 +853,11 @@ export async function approveAndPay(
     } else {
       const balance = provider.mode === "live" ? await syncOperatingBalance(operating.id) : operating.balance;
       const fee = route === "cctp" ? (quotes?.cctpFeeUsdc ?? null) : null;
-      if (payoutFundsShort({ route: "cctp", amount: invoice.amount, operatingUsdc: balance, cctpFeeUsdc: fee, gateway: null })) {
-        throw new ApprovalError(
-          "insufficient_funds",
-          fee !== null
-            ? `The operating account holds ${balance} USDC, less than this invoice and its ${fee} USDC CCTP fee.`
-            : `The operating account holds ${balance} USDC, less than this invoice.`
-        );
+      const short = payoutFundsShort({ route: "cctp", amount: invoice.amount, operatingUsdc: balance, cctpFeeUsdc: fee, gateway: null });
+      if (short) {
+        const read = await reserveCover(db(), { neededUsdc: short.needs ?? invoice.amount, operatingBalance: balance });
+        if (!read.cover) throw new ApprovalError("insufficient_funds", cashShortMessage({ operatingUsdc: balance, reserveUsdc: read.reserveBalance, feeUsdc: fee, what: "invoice" }));
+        fromReserve = read.cover;
       }
     }
   }
@@ -854,6 +877,23 @@ export async function approveAndPay(
     .rpc("claim_invoice_decision", { p_invoice_id: invoice.id, p_by: input.actorId, p_decision: "approve" })
     .single();
   if (claim.error) raiseFromClaim(claim.error);
+
+  // What the operating wallet lacks comes back from the reserve now that the decision is claimed, so a second click never
+  // brings it back twice, and before any approval is used, so one that fails leaves them standing (approval cash R3).
+  let fromReserveUsdc: number | null = null;
+  if (fromReserve) {
+    try {
+      fromReserveUsdc = (await bringCashForApproval({ actorId: input.actorId, cover: fromReserve, operatingAccountId: operating.id, provider, source, payee: invoice.counterpartyName })).amount;
+    } catch (error) {
+      await giveBackAfterClaim(invoice, `cash not brought back from the reserve: ${(error as Error).message}`);
+      if (!(error instanceof CashBackError)) throw error;
+      const fee = route === "cctp" ? (quotes?.cctpFeeUsdc ?? null) : null;
+      throw new ApprovalError(
+        "insufficient_funds",
+        `${error.message} ${cashShortMessage({ operatingUsdc: fromReserve.operatingBalance, reserveUsdc: null, feeUsdc: fee, what: "invoice" })}`
+      );
+    }
+  }
 
   // The approvals that let it through are used by this payment, or nothing is sent (T6): approvals left open could send
   // it again on one approval after a failed transfer.
@@ -973,11 +1013,13 @@ export async function approveAndPay(
       // Above the figure: the two approvals, the earlier first (two approvals T7).
       ...(approvals.length > 0 ? { approvals: approvals.map((approval) => ({ by: approval.by, at: approval.at })), twoApprovalsAbove: above } : {}),
       ...(fewApprovers ? { fewApprovers: true } : {}),
+      // What came back from the reserve first, recorded in its own `cash_brought_back` entry (approval cash R4).
+      ...(fromReserveUsdc !== null ? { fromReserveUsdc } : {}),
       ...input.provenance,
     },
   });
 
-  return { status: result.status, txRef: result.txRef, note: result.note };
+  return { status: result.status, txRef: result.txRef, note: result.note, ...(fromReserveUsdc !== null ? { fromReserveUsdc } : {}) };
 }
 
 /** Both routes' figures for a payout to another chain, read now: CCTP's fee, and Gateway's fee with its balance. */

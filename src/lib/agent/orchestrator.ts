@@ -84,9 +84,9 @@ import {
   type PaymentTiming,
   type PaymentTimingInput,
 } from "./payment-timing";
-import { boundTreasuryDecision, planTreasury, sameTreasuryDecision, treasuryBounds, treasuryUserPrompt, type TreasuryDecision } from "./treasury";
+import { boundTreasuryDecision, keepPersonCashBack, planTreasury, sameTreasuryDecision, treasuryBounds, treasuryUserPrompt, type TreasuryDecision } from "./treasury";
 import { moveTreasuryIfNotPaused } from "./treasury-moves";
-import { bringCashForTodaysPayments, HELD_FOR_CASH } from "./liquidity";
+import { bringCashForTodaysPayments, HELD_FOR_CASH, recentPersonCashBack } from "./liquidity";
 import { plural, utcDay } from "../copy";
 import { REASONING_RULE, REASONING_SHAPE } from "../reasoning-copy";
 
@@ -3690,12 +3690,15 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
         console.error("treasury: USYC window not read", error instanceof Error ? error.message : error);
       }
     }
+    // Cash a person brought back stays in the operating wallet for 24 hours (approval cash R6): nothing is swept until then.
+    const personCashBack = await recentPersonCashBack(db, Date.now());
+    const kept = keepPersonCashBack(plan.decision, personCashBack);
     const referencePlan: TreasuryDecision =
-      subscriptionsOpen === false && plan.decision.action === "sweep_to_usyc"
-        ? { action: "hold", amount: 0, reasoning: `${plan.decision.reasoning} USYC cannot be bought until its next daily price update, so the cash stays liquid until then.` }
-        : plan.decision;
+      subscriptionsOpen === false && kept.action === "sweep_to_usyc"
+        ? { action: "hold", amount: 0, reasoning: `${kept.reasoning} USYC cannot be bought until its next daily price update, so the cash stays liquid until then.` }
+        : kept;
 
-    const boundFacts = { operatingBalance, reserveBalance, obligationsDue14d, plan, reference: referencePlan };
+    const boundFacts = { operatingBalance, reserveBalance, obligationsDue14d, plan, reference: referencePlan, noSweepUntil: personCashBack?.until ?? null };
     const bounds = treasuryBounds(boundFacts);
     const { value: modelDecision, mode, reference } = await decide<TreasuryDecision>({
       systemPrompt: SYSTEM_PROMPT,
@@ -3767,6 +3770,8 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
         // A real move's transactions, shares and price (R7), and whether USYC could be bought (R4).
         ...(moveOutcome.execution ? { execution: moveOutcome.execution } : {}),
         ...(provider.earnMode === "live" ? { usycSubscriptionsOpen: subscriptionsOpen } : {}),
+        // A person's cash back that holds sweeps until `until` (approval cash R6).
+        ...(personCashBack ? { personCashBack } : {}),
         observed: {
           operatingBalance,
           reserveBalance,

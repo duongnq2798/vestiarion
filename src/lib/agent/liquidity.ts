@@ -152,6 +152,143 @@ export async function bringCashForTodaysPayments(input: {
   };
 }
 
+/**
+ * What a person's payment lacks in the operating wallet, when the reserve holds it (approval cash R1): the amount that
+ * comes back, and the figures it was worked out from.
+ */
+export interface ReserveCover {
+  reserveAccountId: string;
+  reserveBalance: number;
+  /** What the payment needs beyond the operating wallet, up to the next micro-USDC. */
+  amount: number;
+  neededUsdc: number;
+  operatingBalance: number;
+}
+
+/**
+ * Whether the reserve covers what a person's payment needs beyond the operating wallet (approval cash R1, R2): `cover`
+ * when it does, and what the reserve holds either way, null when the workspace has none. A payment the wallet covers on
+ * its own needs no cover.
+ */
+export async function reserveCover(
+  orgDb: OrgDb,
+  input: { neededUsdc: number; operatingBalance: number }
+): Promise<{ cover: ReserveCover | null; reserveBalance: number | null }> {
+  const read = await orgDb.from("accounts").select("id, balance").eq("kind", "reserve").maybeSingle();
+  if (read.error) throw new Error(read.error.message);
+  const reserve = read.data as { id: string; balance: string | number } | null;
+  if (!reserve) return { cover: null, reserveBalance: null };
+  const reserveBalance = num(reserve.balance);
+  const amount = amountFromReserve(input.neededUsdc, input.operatingBalance, reserveBalance);
+  if (amount === null) return { cover: null, reserveBalance };
+  return {
+    cover: { reserveAccountId: reserve.id, reserveBalance, amount, neededUsdc: input.neededUsdc, operatingBalance: input.operatingBalance },
+    reserveBalance,
+  };
+}
+
+/**
+ * What a payment needing `neededUsdc` lacks beyond what the operating wallet holds, up to the next micro-USDC, when the
+ * reserve holds that much (approval cash R1); null when nothing is lacking, or the reserve cannot cover it.
+ */
+export function amountFromReserve(neededUsdc: number, operatingBalance: number, reserveBalance: number): number | null {
+  const amount = upToUnits(neededUsdc - operatingBalance);
+  return amount > 0 && amount <= reserveBalance + 0.0000005 ? amount : null;
+}
+
+/**
+ * Why a person's payment from the operating wallet is refused (approval cash R2): what the wallet holds, and what the
+ * reserve holds when it holds anything, against the payment and, for a CCTP payout, its fee.
+ */
+export function cashShortMessage(input: { operatingUsdc: number; reserveUsdc: number | null; feeUsdc: number | null; what: "invoice" | "milestone" }): string {
+  const reserve = input.reserveUsdc !== null && input.reserveUsdc > 0 ? ` and the USYC reserve ${input.reserveUsdc} USDC` : "";
+  const fee = input.feeUsdc !== null ? ` and its ${input.feeUsdc} USDC CCTP fee` : "";
+  return `The operating account holds ${input.operatingUsdc} USDC${reserve}, less than this ${input.what}${fee}.`;
+}
+
+/**
+ * The redemption a person's payment needs (approval cash R1, R3, R4): what `cover` says, from the reserve to the
+ * operating wallet, now, while the agent is paused too, since the pause holds the agent and not a person. Recorded as
+ * `cash_brought_back` by them, with reason `approval` and what it pays. Nothing came back: a `CashBackError`, and nothing
+ * recorded.
+ */
+export async function bringCashForApproval(input: {
+  actorId: string;
+  cover: ReserveCover;
+  operatingAccountId: string;
+  provider: ChainProvider;
+  source: { type: "invoice" | "milestone"; id: string };
+  /** Who the payment goes to, for the entry's summary. */
+  payee: string;
+}): Promise<{ amount: number; execution: UsycExecution | null }> {
+  // Nothing moves while the platform has payments switched off (payment safety S4).
+  await assertPaymentsEnabled();
+  const orgId = currentOrgId();
+  const { cover, source } = input;
+  const outcome = await redeem({
+    db: tenantDb(),
+    provider: input.provider,
+    operatingAccountId: input.operatingAccountId,
+    reserveAccountId: cover.reserveAccountId,
+    operatingBalance: cover.operatingBalance,
+    reserveBalance: cover.reserveBalance,
+    amount: cover.amount,
+    reasoning: `A person's approval brought ${AMOUNT.format(cover.amount)} USDC back from the reserve to pay ${input.payee}.`,
+    moveKey: `approval/${source.type}/${source.id}/${crypto.randomUUID()}`,
+    byPerson: true,
+  });
+  if (!outcome.executed) throw new CashBackError("not_moved", `Nothing came back from the reserve: ${outcome.executionNote ?? "the redemption did not go through"}.`);
+  await appendLedgerEntryBestEffort(orgId, {
+    actor: "human",
+    domain: "treasury",
+    action: "cash_brought_back",
+    summary: `Brought ${AMOUNT.format(cover.amount)} USDC back from the reserve to pay ${input.payee}`,
+    detail: {
+      by: input.actorId,
+      reason: "approval",
+      ...(source.type === "invoice" ? { invoiceId: source.id } : { milestoneId: source.id }),
+      amount: cover.amount,
+      neededUsdc: cover.neededUsdc,
+      operatingBalance: cover.operatingBalance,
+      reserveBalance: cover.reserveBalance,
+      earnMode: input.provider.earnMode,
+      ...(outcome.execution ? { execution: outcome.execution } : {}),
+    },
+  });
+  return { amount: cover.amount, execution: outcome.execution ?? null };
+}
+
+/** What a person is told after paying, when cash came back from the reserve first (approval cash R4); empty otherwise. */
+export function fromReserveNote(amount: number | undefined): string {
+  return amount === undefined ? "" : ` ${amount} USDC came back from the USYC reserve first.`;
+}
+
+/** How long the treasury stage sweeps nothing after a person brings cash back (approval cash R6). */
+const PERSON_CASH_BACK_STAYS_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * A person's latest Bring cash back within the last 24 hours (approval cash R6): what came back, when, and until when
+ * the treasury stage sweeps nothing. Null when there is none. Cash brought back for an approval does not count: it left
+ * with the payment.
+ */
+export async function recentPersonCashBack(orgDb: OrgDb, now: number): Promise<{ amount: number; at: string; until: string } | null> {
+  const rows = unwrap(
+    await orgDb
+      .from("ledger_entries")
+      .select("ts, detail")
+      .eq("action", "cash_brought_back")
+      .eq("actor", "human")
+      .eq("detail->>reason", "person")
+      .gte("ts", new Date(now - PERSON_CASH_BACK_STAYS_MS).toISOString())
+      .order("seq", { ascending: false })
+      .limit(1)
+  ) as Array<{ ts: string; detail: { amount?: unknown } | null }>;
+  const latest = rows[0];
+  if (!latest) return null;
+  const at = Date.parse(latest.ts);
+  return { amount: num(latest.detail?.amount), at: new Date(at).toISOString(), until: new Date(at + PERSON_CASH_BACK_STAYS_MS).toISOString() };
+}
+
 export class CashBackError extends Error {
   constructor(
     readonly code: "no_reserve" | "empty" | "too_much" | "not_moved",

@@ -41,6 +41,16 @@ describe("payMilestoneNow", () => {
     expect(mocks.sendNoticesSoon).toHaveBeenCalledTimes(1);
   });
 
+  it("says what came back from the reserve to pay it (approval cash R7)", async () => {
+    mocks.payHeldMilestone.mockResolvedValueOnce({ status: "paid", txRef: "0xabc", note: "", fromReserveUsdc: 0.1 });
+    expect(await run(() => payMilestoneNow(approver(), { milestoneId: MILESTONE }))).toEqual({
+      ok: true,
+      message: "Paid. 0.1 USDC came back from the USYC reserve first.",
+      status: "paid",
+      txRef: "0xabc",
+    });
+  });
+
   it("says an approval was recorded and one more pays it, telling no payee (two approvals T8)", async () => {
     mocks.payHeldMilestone.mockResolvedValueOnce({ status: "approved", txRef: null, note: "" });
     expect(await run(() => payMilestoneNow(approver(), { milestoneId: MILESTONE }))).toEqual({

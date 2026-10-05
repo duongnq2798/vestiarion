@@ -1,5 +1,16 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-05: Approve and pay draws on the USYC reserve, and a person's cash back stays
+
+- **Approve and pay brings back what the operating wallet lacks.** A person's paying approval of a new USDC payment from the operating wallet, on Arc testnet or through CCTP with its fee, may now first bring cash back from the reserve. It does so when the wallet cannot cover the payment and the reserve can cover the rest. It brings back the difference, rounded up to the next micro-USDC. **Pay now** on a held milestone does the same.
+  - A new kind of `cash_brought_back` entry: actor `human`, with `detail` `{ by, reason: "approval", invoiceId | milestoneId, amount, neededUsdc, operatingBalance, reserveBalance, earnMode, execution? }`. It comes before the payment's own entry.
+  - `approval_paid` and `milestone_approval_paid` then carry `fromReserveUsdc`.
+  - When the wallet and the reserve together fall short, Approve and pay refuses, as before, before anything moves. No ledger entry is written for a refusal.
+- **A person's Bring cash back stays for 24 hours.** For 24 hours after a `cash_brought_back` entry with `reason: "person"`, the agent's treasury decisions sweep nothing.
+  - Their entries (`sweep_to_usyc`, `redeem_from_usyc` or `hold`) then carry `personCashBack: { amount, at, until }`.
+  - A sweep the model chose anyway is recorded as a `hold`, with what it chose in `boundedByCode`.
+- Nothing changes in `/api/v1`.
+
 ## 2026-10-05: A person's payout to another chain takes the agent's route
 
 - An `approval_paid` entry for a new payment to another chain can now carry `payout.route: "gateway"`, with `gatewayBalanceUsdc`, on a person's first attempt. A person's Approve and pay now chooses the route as the agent does: Gateway when the workspace's Gateway balance covers the amount and Gateway's fee, and Gateway costs no more than CCTP; CCTP otherwise. Before, a person's first attempt always went through CCTP.

@@ -3,7 +3,17 @@ import type { BalanceSnapshot, ChainProvider, EarnDepositParams, EarnResult, Tra
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { db } from "@/lib/dal";
-import { bringCashBackByPerson, bringCashForTodaysPayments, CashBackError, HELD_FOR_CASH, milestonesToRelease, payablesDueToday } from "@/lib/agent/liquidity";
+import {
+  bringCashBackByPerson,
+  bringCashForApproval,
+  bringCashForTodaysPayments,
+  CashBackError,
+  HELD_FOR_CASH,
+  milestonesToRelease,
+  payablesDueToday,
+  recentPersonCashBack,
+  reserveCover,
+} from "@/lib/agent/liquidity";
 import { heldForCash } from "@/lib/next-step";
 import { fakeSupabase, orgTestContext, type RecordedRequest } from "./support/fake-supabase";
 
@@ -56,7 +66,10 @@ function fake(
     if (request.path === "/rest/v1/invoices") return { body: options.invoices ?? [] };
     if (request.path === "/rest/v1/milestones") return { body: options.milestones ?? [] };
     if (request.path === "/rest/v1/accounts" && request.method === "GET") {
-      return { body: options.accounts ?? [{ id: "operating-1", kind: "operating", balance: "0.119389" }, { id: "reserve-1", kind: "reserve", balance: "60.691351" }] };
+      const rows = options.accounts ?? [{ id: "operating-1", kind: "operating", balance: "0.119389" }, { id: "reserve-1", kind: "reserve", balance: "60.691351" }];
+      // One kind asked for is one row, or none.
+      const kind = request.params.get("kind")?.replace(/^eq\./, "");
+      return { body: kind ? (rows.find((row) => row.kind === kind) ?? null) : rows };
     }
     return { body: [] };
   });
@@ -228,5 +241,117 @@ describe("a person's Bring cash back (R2)", () => {
     const client = fake({ accounts: "accounts" in options ? [...options.accounts] : undefined });
     await expect(run(client, () => bringCashBackByPerson({ actorId: USER, amount: options.amount, provider }))).rejects.toEqual(new CashBackError(code, message));
     expect(provider.withdrawCalls).toEqual([]);
+  });
+});
+
+describe("what the reserve covers of a person's payment (approval cash R1, R2)", () => {
+  // testnet-2, 2026-10-05 09:08 UTC: 0.184239 USDC in the operating wallet, 151.8501 USDC in the reserve, a 0.40 USDC bill.
+  const operating = { id: "operating-1", kind: "operating", balance: "0.184239" };
+  const accounts = [operating, { id: "reserve-1", kind: "reserve", balance: "151.850100" }];
+
+  it("covers what the payment lacks beyond the operating wallet, up to the next micro-USDC", async () => {
+    const client = fake({ accounts });
+    expect(await run(client, () => reserveCover(db(), { neededUsdc: 0.4, operatingBalance: 0.184239 }))).toEqual({
+      cover: { reserveAccountId: "reserve-1", reserveBalance: 151.8501, amount: 0.215761, neededUsdc: 0.4, operatingBalance: 0.184239 },
+      reserveBalance: 151.8501,
+    });
+    // A CCTP payout's fee on top: 0.4 + 0.135342 - 0.184239, without a float leaving it a micro-USDC short.
+    expect((await run(client, () => reserveCover(db(), { neededUsdc: 0.535342, operatingBalance: 0.184239 }))).cover?.amount).toBe(0.351103);
+    const asked = client.requests.find((r) => r.path === "/rest/v1/accounts")!;
+    expect(asked.params.get("kind")).toBe("eq.reserve");
+  });
+
+  it.each([
+    ["the reserve holds less than the payment lacks", [operating, { id: "reserve-1", kind: "reserve", balance: "0.1" }], 0.1],
+    ["the reserve is empty", [operating, { id: "reserve-1", kind: "reserve", balance: "0" }], 0],
+    ["there is no reserve", [operating], null],
+  ])("covers nothing when %s, and says what the reserve holds", async (_label, rows, reserveBalance) => {
+    expect(await run(fake({ accounts: rows }), () => reserveCover(db(), { neededUsdc: 0.4, operatingBalance: 0.184239 }))).toEqual({ cover: null, reserveBalance });
+  });
+});
+
+describe("the redemption a person's payment needs (approval cash R1, R3, R4)", () => {
+  const cover = { reserveAccountId: "reserve-1", reserveBalance: 151.8501, amount: 0.215761, neededUsdc: 0.4, operatingBalance: 0.184239 };
+  const bring = (client: ReturnType<typeof fakeSupabase>, provider: ChainProvider, source: { type: "invoice" | "milestone"; id: string } = { type: "invoice", id: "inv-1" }) =>
+    run(client, () => bringCashForApproval({ actorId: USER, cover, operatingAccountId: "operating-1", provider, source, payee: "Centronex" }));
+
+  it("brings back what the payment lacks now, even while the agent is paused, and records who brought it back and for what", async () => {
+    const provider = new ReserveProvider();
+    const client = fake({ paused: true });
+
+    expect(await bring(client, provider)).toEqual({ amount: 0.215761, execution: null });
+
+    expect(provider.withdrawCalls).toHaveLength(1);
+    expect(provider.withdrawCalls[0]).toMatchObject({ accountId: "operating-1", reserveAccountId: "reserve-1", amount: 0.215761 });
+    expect(provider.withdrawCalls[0].key).toMatch(/^approval\/invoice\/inv-1\/[0-9a-f-]{36}\/redeem_from_usyc$/);
+    expect(client.requests.some((r) => r.path === "/rest/v1/rpc/agent_paused")).toBe(false);
+    const action = client.requests.find((r) => r.path === "/rest/v1/treasury_actions" && r.method === "POST")!;
+    expect(action.body).toMatchObject({
+      action: "redeem_from_usyc",
+      amount: 0.215761,
+      from_account: "reserve-1",
+      to_account: "operating-1",
+      reasoning: "A person's approval brought 0.215761 USDC back from the reserve to pay Centronex.",
+    });
+    expect(bestEffortMock).toHaveBeenCalledWith(ORG, {
+      actor: "human",
+      domain: "treasury",
+      action: "cash_brought_back",
+      summary: "Brought 0.215761 USDC back from the reserve to pay Centronex",
+      detail: { by: USER, reason: "approval", invoiceId: "inv-1", amount: 0.215761, neededUsdc: 0.4, operatingBalance: 0.184239, reserveBalance: 151.8501, earnMode: "simulate" },
+    });
+  });
+
+  it("names the milestone it pays", async () => {
+    await bring(fake(), new ReserveProvider(), { type: "milestone", id: "ms-1" });
+    expect(bestEffortMock.mock.calls[0][1].detail).toMatchObject({ reason: "approval", milestoneId: "ms-1" });
+    expect(bestEffortMock.mock.calls[0][1].detail).not.toHaveProperty("invoiceId");
+  });
+
+  it("throws, recording nothing, when nothing came back", async () => {
+    const provider = new ReserveProvider();
+    provider.withdrawFromEarn = async () => {
+      throw new Error("redeem failed (FAILED) on Arc testnet");
+    };
+    const client = fake();
+
+    await expect(bring(client, provider)).rejects.toEqual(new CashBackError("not_moved", "Nothing came back from the reserve: execution failed: redeem failed (FAILED) on Arc testnet."));
+    expect(bestEffortMock).not.toHaveBeenCalled();
+    expect(client.requests.some((r) => r.path === "/rest/v1/treasury_actions")).toBe(false);
+  });
+
+  it("brings nothing back while payments are switched off (payment safety S4)", async () => {
+    const provider = new ReserveProvider();
+    const client = fake();
+    const off = runWith(orgTestContext({ config: { ...config, paymentsDisabled: true }, client: client.client, orgId: ORG, userId: USER }), () =>
+      bringCashForApproval({ actorId: USER, cover, operatingAccountId: "operating-1", provider, source: { type: "invoice", id: "inv-1" }, payee: "Centronex" })
+    );
+    await expect(off).rejects.toThrow("Payments are switched off for every workspace right now.");
+    expect(provider.withdrawCalls).toHaveLength(0);
+  });
+});
+
+describe("a person's cash back the agent leaves alone (approval cash R6)", () => {
+  const ledger = (rows: Array<Record<string, unknown>>) => fakeSupabase((request) => (request.path === "/rest/v1/ledger_entries" ? { body: rows } : { body: [] }));
+  // testnet-2, 2026-10-05: a person brought 152.21 USDC back at 09:05:30 (#1541); the cycle it started ran at 09:06:07.
+  const now = Date.parse("2026-10-05T09:06:07Z");
+
+  it("is the latest Bring cash back by a person within 24 hours, with until when nothing is swept", async () => {
+    const client = ledger([{ ts: "2026-10-05T09:05:30.123+00:00", detail: { by: USER, reason: "person", amount: 152.211756, all: true } }]);
+
+    expect(await run(client, () => recentPersonCashBack(db(), now))).toEqual({ amount: 152.211756, at: "2026-10-05T09:05:30.123Z", until: "2026-10-06T09:05:30.123Z" });
+
+    const asked = client.requests.find((r) => r.path === "/rest/v1/ledger_entries")!;
+    expect(asked.params.get("action")).toBe("eq.cash_brought_back");
+    expect(asked.params.get("actor")).toBe("eq.human");
+    // Cash brought back for an approval left with the payment, so only a person's own Bring cash back counts.
+    expect(asked.params.get("detail->>reason")).toBe("eq.person");
+    expect(asked.params.get("ts")).toBe("gte.2026-10-04T09:06:07.000Z");
+    expect(asked.params.get("order")).toBe("seq.desc");
+    expect(asked.params.get("limit")).toBe("1");
+  });
+
+  it("is null when no person brought cash back within 24 hours", async () => {
+    expect(await run(ledger([]), () => recentPersonCashBack(db(), now))).toBeNull();
   });
 });

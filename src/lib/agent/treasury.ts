@@ -225,16 +225,46 @@ export interface TreasuryBoundFacts {
   /** The written policy's decision, which a redemption never falls short of. */
   reference: TreasuryDecision;
   bufferRatio?: number;
+  /** Until when nothing is swept, 24 hours after a person brought cash back (approval cash R6); null or absent otherwise. */
+  noSweepUntil?: string | null;
 }
 
-/** The most a sweep may take, and the most and least a redemption may bring back (treasury bounds R1–R3). */
-export function treasuryBounds(facts: TreasuryBoundFacts): { sweepAtMost: number; redeemAtMost: number; redeemAtLeast: number } {
+/** What a person brought back from the reserve, and when (approval cash R6), as `recentPersonCashBack` reads it. */
+export interface PersonCashBack {
+  amount: number;
+  at: string;
+  until: string;
+}
+
+/** "2026-10-06 09:05 UTC": a time to the minute, as a person reads it. */
+function utcMinute(iso: string): string {
+  return `${iso.slice(0, 16).replace("T", " ")} UTC`;
+}
+
+/**
+ * The written policy's decision while a person's cash back stands (approval cash R6): a sweep becomes a hold, saying
+ * until when; anything else stands as it is.
+ */
+export function keepPersonCashBack(decision: TreasuryDecision, cashBack: PersonCashBack | null): TreasuryDecision {
+  if (!cashBack || decision.action !== "sweep_to_usyc") return decision;
+  return {
+    action: "hold",
+    amount: 0,
+    reasoning: `${decision.reasoning} A person brought ${cashBack.amount} USDC back from the reserve at ${utcMinute(cashBack.at)}, so the agent sweeps nothing until ${utcMinute(cashBack.until)}.`,
+  };
+}
+
+/**
+ * The most a sweep may take, and the most and least a redemption may bring back (treasury bounds R1–R3). Nothing is
+ * swept while a person's cash back stands (approval cash R6).
+ */
+export function treasuryBounds(facts: TreasuryBoundFacts): { sweepAtMost: number; redeemAtMost: number; redeemAtLeast: number; noSweepUntil?: string } {
   const ratio = facts.bufferRatio ?? 1.15;
-  const sweepAtMost = toUsdc(Math.min(Math.max(0, facts.plan.idle), facts.operatingBalance));
+  const sweepAtMost = facts.noSweepUntil ? 0 : toUsdc(Math.min(Math.max(0, facts.plan.idle), facts.operatingBalance));
   const need = toUsdc(Math.max(0, facts.obligationsDue14d * ratio - facts.operatingBalance));
   const redeemAtLeast = facts.reference.action === "redeem_from_usyc" ? facts.reference.amount : 0;
   const redeemAtMost = toUsdc(Math.min(facts.reserveBalance, Math.max(need, redeemAtLeast)));
-  return { sweepAtMost, redeemAtMost, redeemAtLeast };
+  return { sweepAtMost, redeemAtMost, redeemAtLeast, ...(facts.noSweepUntil ? { noSweepUntil: facts.noSweepUntil } : {}) };
 }
 
 /**
@@ -254,6 +284,9 @@ export function boundTreasuryDecision(model: TreasuryDecision, facts: TreasuryBo
   const bounds = treasuryBounds(facts);
   if (model.action === "sweep_to_usyc") {
     const allowed = bounds.sweepAtMost;
+    if (bounds.noSweepUntil) {
+      return limitedTo({ action: "hold", amount: 0, reasoning: "" }, `a person brought cash back from the reserve, so nothing is swept until ${utcMinute(bounds.noSweepUntil)}`);
+    }
     if (allowed <= 0) {
       return limitedTo({ action: "hold", amount: 0, reasoning: "" }, `a sweep of ${model.amount} USDC would take the operating wallet below its ${facts.plan.buffer} USDC buffer, so nothing was swept`);
     }
@@ -309,7 +342,7 @@ export interface TreasuryPromptFacts {
   plan: TreasuryPlan;
   /** A real USYC reserve, and whether USYC can be bought now (null when the read failed); null while it is simulated. */
   usyc: { subscriptionsOpen: boolean | null } | null;
-  bounds: { sweepAtMost: number; redeemAtMost: number; redeemAtLeast: number };
+  bounds: { sweepAtMost: number; redeemAtMost: number; redeemAtLeast: number; noSweepUntil?: string };
 }
 
 /** The treasury stage's question to the model: the figures, where payments come from, the economics and code's bounds. */
@@ -347,7 +380,15 @@ export function treasuryUserPrompt(facts: TreasuryPromptFacts): string {
       sweepAtMostUsdc: bounds.sweepAtMost,
       redeemAtMostUsdc: bounds.redeemAtMost,
       redeemAtLeastUsdc: bounds.redeemAtLeast,
-      note: "Code moves no more than these: a sweep never takes the operating wallet below its 7-day buffer, and a redemption brings back at most what falls due within 14 days needs, with its 15% cushion.",
+      // Until when nothing is swept, after a person brought cash back (approval cash R6).
+      ...(bounds.noSweepUntil
+        ? {
+            noSweepUntil: bounds.noSweepUntil,
+          }
+        : {}),
+      note:
+        "Code moves no more than these: a sweep never takes the operating wallet below its 7-day buffer, and a redemption brings back at most what falls due within 14 days needs, with its 15% cushion." +
+        (bounds.noSweepUntil ? " A person brought cash back from the reserve: code sweeps nothing until noSweepUntil." : ""),
     },
     responseShape: {
       action: "sweep_to_usyc | redeem_from_usyc | hold",

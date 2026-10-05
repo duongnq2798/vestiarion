@@ -1,4 +1,5 @@
 import { runCycleSoon } from "../agent/cycle-soon";
+import { fromReserveNote } from "../agent/liquidity";
 import { closeMilestone, MilestoneDecisionError, payHeldMilestone } from "../agent/milestone-decisions";
 import { currentConfig } from "../context";
 import type { MilestoneInput } from "../intake-validation";
@@ -33,11 +34,13 @@ export async function payMilestoneNow(
   } catch (error) {
     return decisionRefusal(error);
   }
+  // Cash brought back from the reserve to pay it is said too (approval cash R7).
+  const fromReserve = fromReserveNote(result.fromReserveUsdc);
   if (result.status === "paid") {
     sendNoticesSoon(accessOf(actor));
-    return done("Paid.", { status: result.status, txRef: result.txRef });
+    return done(`Paid.${fromReserve}`, { status: result.status, txRef: result.txRef });
   }
-  if (result.status === "verified") return done("Payment submitted; waiting for Circle to confirm it.", { status: result.status, txRef: result.txRef });
+  if (result.status === "verified") return done(`Payment submitted; waiting for Circle to confirm it.${fromReserve}`, { status: result.status, txRef: result.txRef });
   // Above the workspace's figure, the first of two approvals is recorded and sends nothing (two approvals T4, T8).
   if (result.status === "approved") return done(APPROVAL_RECORDED, { status: result.status, txRef: null });
   const reason = /\[(?:transfer|execution) failed:\s*(.+?)\]\s*$/.exec(result.note)?.[1] ?? /\[not paid:\s*(.+?)\]\s*$/.exec(result.note)?.[1];

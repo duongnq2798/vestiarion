@@ -36,11 +36,13 @@ const giveBack = withSuccessToast(returnInvoiceAction);
  * What Approve and pay asks before it pays: the amount that will leave, which
  * is the discounted one while an early-payment discount still applies (the
  * same `amountToPay` rule `payInvoice` pays by), naming the discount; a
- * sandbox's payment is simulated, and says so.
+ * sandbox's payment is simulated, and says so. What the operating wallet lacks
+ * comes back from the USYC reserve first, and it says about how much (approval
+ * cash R5).
  */
 export function payConfirmTitle(
   payable: Pick<WaitingPayable, "amount" | "counterpartyName" | "discount"> &
-    Partial<Pick<WaitingPayable, "currency" | "payeeChain" | "bridgeFeeUsdc" | "payoutRoute">>,
+    Partial<Pick<WaitingPayable, "currency" | "payeeChain" | "bridgeFeeUsdc" | "payoutRoute" | "fromReserve">>,
   sandbox: boolean,
   now: Date = new Date()
 ): string {
@@ -59,7 +61,10 @@ export function payConfirmTitle(
       : gateway
         ? " A Gateway fee comes on top, from the Gateway balance."
         : " A CCTP fee comes on top.";
-  return `Pay ${fmt(amountPaid)} ${payable.currency ?? "USDC"} to ${payable.counterpartyName}${elsewhere} now?${discount}${sandbox ? " (simulated)" : ""}${fee}`;
+  const reserve = payable.fromReserve
+    ? ` The operating wallet holds ${payable.fromReserve.operatingUsdc} USDC, so about ${payable.fromReserve.amountUsdc} USDC comes back from the USYC reserve first.`
+    : "";
+  return `Pay ${fmt(amountPaid)} ${payable.currency ?? "USDC"} to ${payable.counterpartyName}${elsewhere} now?${discount}${sandbox ? " (simulated)" : ""}${fee}${reserve}`;
 }
 
 /**

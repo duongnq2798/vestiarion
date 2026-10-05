@@ -59,6 +59,20 @@ describe("approvePayable", () => {
     expect(mocks.sendNoticesSoon).toHaveBeenCalledWith({ user: { id: USER }, membership: { orgId: ORG, mode: "live" } });
   });
 
+  it("says what came back from the reserve to pay it (approval cash R4)", async () => {
+    mocks.approveAndPay.mockResolvedValueOnce({ status: "paid", txRef: "0xabc", note: "", fromReserveUsdc: 0.215761 });
+    expect(await run(() => approvePayable(approver(), { invoiceId: INVOICE }))).toEqual({
+      ok: true,
+      message: "Paid. 0.215761 USDC came back from the USYC reserve first.",
+      status: "paid",
+      txRef: "0xabc",
+    });
+    mocks.approveAndPay.mockResolvedValueOnce({ status: "matched", txRef: "0xabc", note: "", fromReserveUsdc: 0.215761 });
+    expect((await run(() => approvePayable(approver(), { invoiceId: INVOICE }))).message).toBe(
+      "Payment submitted; waiting for confirmation. 0.215761 USDC came back from the USYC reserve first."
+    );
+  });
+
   it("says an approval was recorded and one more pays it, telling no payee (two approvals T8)", async () => {
     mocks.approveAndPay.mockResolvedValueOnce({ status: "approved", txRef: null, note: "" });
     const outcome = await run(() => approvePayable(approver(), { invoiceId: INVOICE }));
