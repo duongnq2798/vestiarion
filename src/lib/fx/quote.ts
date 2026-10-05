@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { FxQuoteError } from "./errors";
+import { askAgain } from "./retry";
 
 /**
  * The EURC→USDC rate for an EURC invoice (docs/superpowers/specs/2026-10-01-eurc-invoices-design.md, E2).
@@ -31,18 +33,8 @@ export interface EurcQuote {
   quotedAt: string;
 }
 
-export class FxQuoteError extends Error {
-  constructor(readonly code: "unavailable" | "no_route" | "malformed") {
-    super(
-      code === "no_route"
-        ? "No EURC→USDC route on Arc testnet right now"
-        : code === "malformed"
-          ? "The EURC→USDC quote could not be read"
-          : "The EURC→USDC quote service did not answer"
-    );
-    this.name = "FxQuoteError";
-  }
-}
+// The error and the asking again live beside this module, for the swap service to share (src/lib/fx/retry.ts).
+export { FxQuoteError };
 
 const baseUnits = z.string().regex(/^\d+$/);
 const answerSchema = z.object({ quote: z.object({ estimatedAmount: baseUnits, minAmount: baseUnits }) });
@@ -71,20 +63,10 @@ export async function quoteEurcInUsdc(
   const held = cache.get(amount);
   if (held && now - held.at <= CACHE_MS) return held.value;
 
-  // Arc testnet's route comes and goes: on 2026-10-01 the same 1.9 EURC was
-  // answered "No route available" and, a second later, quoted at 2.310362 USDC.
-  // So a no-route or failed answer is asked for once more before the payable
-  // is held for want of a rate (E4). An answer that cannot be read is not.
-  try {
-    return await askForQuote(amount, options.fromAddress, now, options.fetch);
-  } catch (error) {
-    if (!(error instanceof FxQuoteError) || error.code === "malformed") throw error;
-    await new Promise((resolve) => setTimeout(resolve, options.retryDelayMs ?? RETRY_DELAY_MS));
-    return askForQuote(amount, options.fromAddress, now, options.fetch);
-  }
+  // Arc testnet's route comes and goes, so a no-route or failed answer is asked
+  // again before the payable is held for want of a rate (E4; src/lib/fx/retry.ts).
+  return askAgain(() => askForQuote(amount, options.fromAddress, now, options.fetch), { delayMs: options.retryDelayMs });
 }
-
-const RETRY_DELAY_MS = 750;
 
 /** One request to the Stablecoin Service for `amount` base units of EURC, cached when it answers. */
 async function askForQuote(amount: string, fromAddress: string, now: number, fetchImpl: typeof fetch | undefined): Promise<EurcQuote> {

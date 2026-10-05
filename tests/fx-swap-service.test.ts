@@ -58,9 +58,17 @@ describe("quoteUsdcForEurc", () => {
     expect(quote.eurcEstimated).toBe(0.822815);
   });
 
-  it("says there is no route when the second answer is the same", async () => {
+  it("asks up to four times, as the route answered only on the third ask on 2026-10-05", async () => {
+    const fetch = vi.fn().mockResolvedValueOnce(noRoute()).mockResolvedValueOnce(noRoute()).mockResolvedValueOnce(quoteAnswer("996690", "966789"));
+    const quote = await quoteUsdcForEurc(1, { fromAddress: FROM, fetch, retryDelayMs: 0 });
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(quote.eurcEstimated).toBe(0.99669);
+  });
+
+  it("says there is no route when all four answers are the same", async () => {
     const fetch = vi.fn().mockImplementation(async () => noRoute());
     await expect(quoteUsdcForEurc(1, { fromAddress: FROM, fetch, retryDelayMs: 0 })).rejects.toMatchObject({ code: "no_route" });
+    expect(fetch).toHaveBeenCalledTimes(4);
   });
 
   it("calls a rate limit unavailable", async () => {
@@ -174,10 +182,10 @@ describe("createSwapTransaction", () => {
     await expect(createSwapTransaction(1, { fromAddress: FROM, fetch })).rejects.toMatchObject({ code: "malformed" });
   });
 
-  it("asks once more when there is no route", async () => {
-    const fetch = vi.fn().mockResolvedValueOnce(noRoute()).mockResolvedValueOnce(swapAnswer());
+  it("asks again when there is no route, up to four times", async () => {
+    const fetch = vi.fn().mockResolvedValueOnce(noRoute()).mockResolvedValueOnce(noRoute()).mockResolvedValueOnce(swapAnswer());
     await createSwapTransaction(1, { fromAddress: FROM, fetch, retryDelayMs: 0 });
-    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch).toHaveBeenCalledTimes(3);
   });
 });
 

@@ -2,6 +2,7 @@ import { ArcTestnet } from "@circle-fin/app-kit/chains";
 import { encodeFunctionData, type Hex } from "viem";
 import { z } from "zod";
 import { ARC_TESTNET_EURC, ARC_TESTNET_USDC, FxQuoteError, fromBaseUnits, toBaseUnits } from "./quote";
+import { askAgain } from "./retry";
 import { SWAP_SLIPPAGE_BPS } from "./swap-limits";
 
 export { SWAP_COST_CAP_PERCENT, SWAP_SLIPPAGE_BPS } from "./swap-limits";
@@ -20,7 +21,6 @@ export { SWAP_COST_CAP_PERCENT, SWAP_SLIPPAGE_BPS } from "./swap-limits";
 const QUOTE_URL = "https://api.circle.com/v1/stablecoinKits/quote";
 const SWAP_URL = "https://api.circle.com/v1/stablecoinKits/swap";
 const DEADLINE_MS = 10_000;
-const RETRY_DELAY_MS = 750;
 const NO_ROUTE = 331001;
 
 /** The Adapter contract on Arc testnet, from App Kit's own chain definition. */
@@ -152,15 +152,9 @@ async function ask(url: string, init: RequestInit, options: AskOptions): Promise
   return body;
 }
 
-/** Arc testnet's route comes and goes (src/lib/fx/quote.ts): a missing route or a failed request is asked once more. */
-async function once<T>(work: () => Promise<T>, retryDelayMs: number | undefined): Promise<T> {
-  try {
-    return await work();
-  } catch (error) {
-    if (!(error instanceof FxQuoteError) || error.code === "malformed") throw error;
-    await new Promise((resolve) => setTimeout(resolve, retryDelayMs ?? RETRY_DELAY_MS));
-    return work();
-  }
+/** Arc testnet's route comes and goes (src/lib/fx/retry.ts): a missing route or a failed request is asked again. */
+function once<T>(work: () => Promise<T>, retryDelayMs: number | undefined): Promise<T> {
+  return askAgain(work, { delayMs: retryDelayMs });
 }
 
 const baseUnits = z.string().regex(/^\d+$/);
