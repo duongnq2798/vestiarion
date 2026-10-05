@@ -19,6 +19,8 @@ import { syncOnChainBalances, type BalanceSync } from "./balances";
 import { CycleRunningError, hasRunningCycle } from "./cycle-running";
 import { decide, type DecideResult } from "./decide";
 import { budgetClause, enforceApGuardrails, onChainLimitHold } from "./guardrails";
+import { readTwoApprovalsAbove } from "../approval-policy";
+import { TWO_APPROVALS_RULE } from "../two-approvals";
 import { usycSubscriptionsOpen } from "../circle/usyc";
 import { arcRpcUrl } from "../circle/arcFees";
 import { budgetGate, countedUsdc, exceedsBudget, HELD_FOR_BUDGET, type BudgetGate, type BudgetRoom } from "./outflow-budget";
@@ -51,6 +53,7 @@ import {
   type FollowUpConfig,
   type FollowUpPlan,
   type MilestoneDecisionFacts,
+  twoApprovalsHeldValue,
 } from "./follow-up";
 import { OPEN_PAYABLE_STATUSES, summarizePayableObligations, sumUsdcAmounts } from "./obligations";
 import { ARC_TESTNET_EURC, quoteEurcInUsdc, type EurcQuote } from "../fx/quote";
@@ -410,11 +413,16 @@ export async function followUpHeldMilestones(orgDb: OrgDb, budget?: BudgetGate):
       verificationSource: (observed.verificationSource as string | null | undefined) ?? null,
       heldBecausePaused: execution?.heldBecause === HELD_BECAUSE_PAUSED,
       heldForBudget: execution?.heldBecause === HELD_FOR_BUDGET,
+      // Held for two approvals: decided again once the figure no longer covers it (two approvals T3).
+      heldForTwoApprovals: detail.guardrailRule === TWO_APPROVALS_RULE,
     });
   }
   // What the limit leaves now, read only when a milestone waits on it.
   const budgetHeld = [...factsByMilestone.values()].some((facts) => facts.heldForBudget);
   const room = budgetHeld ? await (budget ?? budgetGate(orgDb)).room() : undefined;
+  // The figure for two approvals now, read only when a milestone waits on it.
+  const heldForTwoApprovalsIds = new Set([...factsByMilestone].filter(([, facts]) => facts.heldForTwoApprovals).map(([id]) => id));
+  const twoApprovalsNow = held.some((row) => heldForTwoApprovalsIds.has(row.id)) ? await readTwoApprovalsAbove(orgDb) : undefined;
 
   const lines: CycleLogLine[] = [];
   for (const row of held) {
@@ -428,6 +436,7 @@ export async function followUpHeldMilestones(orgDb: OrgDb, budget?: BudgetGate):
         paymentLimit: row.counterparties.payment_limit == null ? null : num(row.counterparties.payment_limit),
         verificationSource: row.verification_source,
         ...(room !== undefined ? { budgetRoom: room === null ? null : room.remaining } : {}),
+        ...(twoApprovalsNow !== undefined ? { twoApprovalsAbove: twoApprovalsNow } : {}),
       },
       factsByMilestone.get(row.id) ?? null
     );
@@ -1233,6 +1242,8 @@ async function decideApPayable(
     reevaluation?: (invoiceId: string) => ApReevaluation | null;
     /** In a live workspace, whether this is the first payment to the address and who stands behind it (new payee check N1–N3). */
     newPayee?: (counterparty: { id: string; address: string | null }) => ReturnType<typeof newPayeeCheck>;
+    /** The figure above which a payment needs two people's approval, null when none is set (two approvals T3). */
+    twoApprovalsAbove?: number | null;
   }
 ): Promise<{ status: string; scheduledFor: string | null; operatingBalance: number | null; line: CycleLogLine }> {
   const { db, provider, operating, operatingBalance, history, metrics } = ctx;
@@ -1631,6 +1642,7 @@ async function decideApPayable(
         : null,
     outflowBudget,
     onChainLimit,
+    twoApprovalsAbove: ctx.twoApprovalsAbove ?? null,
   });
   const heldForBudget = guardrail.rule === "workspace.outflow_budget";
   // Held because the cash it needs is not there (`timing.shortfall`), and nothing else stopped it: decided again once
@@ -1810,6 +1822,9 @@ async function decideApPayable(
         goodsReceived: invoice.goods_received,
         // The business's rule the match was weighed under: the follow-up reopens on its relaxing (three-way match design M5).
         purchaseOrderRequired,
+        // The figure above which two people approve a payment, when the workspace set one: the follow-up reopens a payment
+        // it held once the figure no longer covers it (two approvals T3).
+        ...(ctx.twoApprovalsAbove != null ? { twoApprovalsAbove: ctx.twoApprovalsAbove } : {}),
         // Who stood behind the address for its first payment (new payee check N6).
         ...(firstPayment
           ? { newPayee: { addressBy: firstPayment.addressBy, confirmedBy: firstPayment.confirmedBy, twoParties: firstPayment.twoParties } }
@@ -1911,6 +1926,8 @@ export interface ApStageInput {
    * payments are simulated, and then no payment is checked: the cycle passes it with a live provider (tests/new-payee-cycle.test.ts).
    */
   newPayee?: { load: (counterpartyIds: string[]) => Promise<NewPayeeFacts> };
+  /** The figure above which a payment needs two people's approval (two approvals T3); read from the workspace when absent. */
+  twoApprovalsAbove?: number | null;
 }
 
 /** At most this many EURC payables held for FX get a fresh quote in one cycle, the oldest decided first (FX re-evaluation F9). */
@@ -2048,6 +2065,8 @@ export async function runApStage(input: ApStageInput): Promise<number> {
   const payables = loaded.filter((row) => dueForDecision(row, now));
   // Read once for the stage, in a live workspace: which addresses were paid before, and who stands behind the others.
   const newPayeeFacts = input.newPayee && payables.length > 0 ? await input.newPayee.load([...new Set(payables.map((row) => row.counterparty_id))]) : null;
+  // The figure above which a payment needs two people (two approvals T3): read once for the stage, when anything is decided.
+  const twoApprovalsAbove = input.twoApprovalsAbove !== undefined ? input.twoApprovalsAbove : payables.length > 0 ? await readTwoApprovalsAbove(db) : null;
 
   // The whole payable book, settled rows included, because a duplicate is only
   // detectable against what came before it — and the invoice that matters most
@@ -2179,6 +2198,7 @@ export async function runApStage(input: ApStageInput): Promise<number> {
         newPayeeFacts
           ? newPayeeCheck({ address: counterparty.address, paidTo: newPayeeFacts.paidTo, entries: newPayeeFacts.entries.get(counterparty.id) ?? [] })
           : null,
+      twoApprovalsAbove,
     });
     if (decided.operatingBalance !== null) operatingBalance = decided.operatingBalance;
     record(invoice.id, decided.status, decided.scheduledFor);
@@ -3049,8 +3069,13 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
         fxHold: fxHoldOf({ seq: entry.seq, detail: entry.detail }),
         // Held as the first payment to an address one party alone stood behind (new payee check N7).
         newPayeeHeld: entry.detail.guardrailRule === "counterparty.new_payee",
+        // Held for two approvals: the value and the figure it was weighed at (two approvals T3).
+        heldForTwoApprovals: twoApprovalsHeldValue(entry),
       });
     }
+    // The figure for two approvals now, read only when a payable waits on it (T3).
+    const twoApprovalsHeldIds = frozenRows.filter((row) => factsByInvoice.get(row.id)?.heldForTwoApprovals).map((row) => row.id);
+    const twoApprovalsNow = twoApprovalsHeldIds.length > 0 ? await readTwoApprovalsAbove(db) : undefined;
     // Who stands behind those addresses now, read once, wherever payments are real (N5, N7).
     const newPayeeHeldIds = [
       ...new Set(frozenRows.filter((row) => factsByInvoice.get(row.id)?.newPayeeHeld && row.counterparty_id).map((row) => row.counterparty_id as string)),
@@ -3114,6 +3139,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           purchaseOrderRequired: row.counterparties.purchase_order_required,
           ...(fxNow.has(row.id) ? { fx: fxNow.get(row.id) } : {}),
           ...(newPayeeNow.has(row.id) ? { newPayee: newPayeeNow.get(row.id) } : {}),
+          ...(twoApprovalsNow !== undefined ? { twoApprovalsAbove: twoApprovalsNow } : {}),
         },
         factsByInvoice.get(row.id) ?? null,
         now,
@@ -3268,12 +3294,15 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     | "counterparty.high_risk"
     | "counterparty.unscreened"
     | "counterparty.payment_limit"
+    | typeof TWO_APPROVALS_RULE
     | "workspace.outflow_budget"
     | "workspace.onchain_limit"
     | "workspace.onchain_limit_route";
   // Two parties before the first release to an address, wherever payments are real (new payee check N3, N5): read once.
   const newPayeeFacts =
     provider.mode === "live" && milestones.length > 0 ? await loadNewPayeeFacts(db, [...new Set(milestones.map((m) => m.contractor_id))]) : null;
+  // The figure above which a release needs two people (two approvals T3): read once for the stage, when anything is decided.
+  const twoApprovalsAbove = milestones.length > 0 ? await readTwoApprovalsAbove(db) : null;
   const firstReleaseTo = (contractor: { id: string; address: string | null }) => {
     const check = newPayeeFacts
       ? newPayeeCheck({ address: contractor.address, paidTo: newPayeeFacts.paidTo, entries: newPayeeFacts.entries.get(contractor.id) ?? [] })
@@ -3350,6 +3379,8 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           ...(addressHistory.get(contractor.id) ? { addressHistory: addressHistory.get(contractor.id) } : {}),
           // Who stood behind the address for its first payment (new payee check N6).
           ...(firstRelease ? { newPayee: { addressBy: firstRelease.addressBy, confirmedBy: firstRelease.confirmedBy, twoParties: firstRelease.twoParties } } : {}),
+          // The figure above which two people approve a release, when the workspace set one (two approvals T3).
+          ...(twoApprovalsAbove != null ? { twoApprovalsAbove } : {}),
         },
         execution: {
           txRef,
@@ -3487,13 +3518,16 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
       // The first release to an address one party alone stands behind is code's to refuse (new payee check N3).
       const firstRelease = firstReleaseTo(contractor);
       const newPayeeHeld = firstRelease !== null && !firstRelease.twoParties;
+      // Two people's approval above the workspace's figure (two approvals T3): after the contractor's own checks and the
+      // new payee check, before the spending limit and the contract on Arc.
+      const twoApprovalsHeld = twoApprovalsAbove !== null && amount > twoApprovalsAbove;
       // The spending limit, after the contractor's own checks (outflow budget spec R4).
-      outflowBudget = highRisk || unscreened || overLimit || newPayeeHeld ? null : await budget.room();
+      outflowBudget = highRisk || unscreened || overLimit || newPayeeHeld || twoApprovalsHeld ? null : await budget.room();
       // The same limit on Arc (onchain spending limit R3, R5, R7): asked for a release not from escrow, whose money
       // left the treasury when a person locked it.
       const escrowed = ["funded", "funding"].includes(String((milestone as { escrow_state?: string | null }).escrow_state ?? ""));
       onChainCheck =
-        highRisk || unscreened || overLimit || newPayeeHeld || escrowed ? null : await onChainLimit.check({ sourceType: "milestone", sourceId: milestone.id, to: contractor.address, amount });
+        highRisk || unscreened || overLimit || newPayeeHeld || twoApprovalsHeld || escrowed ? null : await onChainLimit.check({ sourceType: "milestone", sourceId: milestone.id, to: contractor.address, amount });
       const onChainHold = onChainLimitHold(onChainCheck, reasoning);
       if (highRisk || unscreened || overLimit) {
         guardrailBlocked = true;
@@ -3507,6 +3541,10 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
         guardrailBlocked = true;
         guardrailRule = "counterparty.new_payee";
         reasoning += " [guardrail override: this is the first payment to this address, and only one person stands behind it — release refused; another person approves it]";
+      } else if (twoApprovalsHeld) {
+        guardrailBlocked = true;
+        guardrailRule = TWO_APPROVALS_RULE;
+        reasoning += ` [guardrail override: payments above ${twoApprovalsAbove} USDC need two people's approval in this workspace — release refused; two people approve it on Contractors]`;
       } else if (exceedsBudget(amount, outflowBudget)) {
         guardrailBlocked = true;
         guardrailRule = "workspace.outflow_budget";

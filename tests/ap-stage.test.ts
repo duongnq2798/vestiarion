@@ -184,11 +184,14 @@ function apFake(options: {
   reevaluations?: Map<string, { reopenedSeq: number; trigger: string; previousDecisionSeq: number; previousAction: string | null }>;
   /** A live workspace's new payee facts (new payee check N1, N2); unchecked when absent, as in a sandbox. */
   newPayee?: { paidTo: Set<string>; entries: Map<string, Array<{ action: string; detail: Record<string, unknown> }>> };
+  /** The workspace's figure above which a payment needs two approvals (two approvals T1); none when absent. */
+  twoApprovals?: number;
 }) {
   const intents = paymentIntentsBackend(ORG);
   const fake = fakeSupabase((request) => {
     if (request.path === "/rest/v1/orgs") return { body: orgRow() };
     if (request.path === "/rest/v1/agent_budgets") return { body: options.budget ? [options.budget] : [] };
+    if (request.path === "/rest/v1/approval_policies") return { body: options.twoApprovals ? [{ two_approvals_above: String(options.twoApprovals) }] : [] };
     // The spending limit's read of the agent's payments (filtered by actor), not the ledger's own head read.
     if (request.path === "/rest/v1/ledger_entries" && request.method === "GET" && request.params.has("actor")) return { body: options.agentPayments ?? [] };
     if (request.path === "/rest/v1/rpc/append_ledger_entry") return { body: LEDGER_ROW };
@@ -1486,3 +1489,62 @@ describe("the AP stage and the first payment to a new payee (new payee check)", 
   });
 });
 
+
+describe("the AP stage and two approvals above the workspace's figure (two approvals T3)", () => {
+  const plain = { early_pay_discount_pct: null, discount_due_date: null };
+  const northwind = () => payable({ amount: "300", ...plain });
+  const contoso = () =>
+    payable({
+      id: OTHER_INVOICE_ID, amount: "250", memo: "Hosting", po_reference: "PO-2001", counterparty_id: CONTOSO, ...plain,
+      counterparties: counterparty({ id: CONTOSO, name: "Contoso", address: "0xcontoso" }),
+    });
+  const payNow = () => model(() => ({ action: "pay", reasoning: "Matched and within the limit; paying now.", confidence: 0.9 }));
+
+  it("holds a payment above the figure for two people, and sends nothing", async () => {
+    today("2026-10-02T09:00:00.000Z");
+    payNow();
+    const { fake, chain, stage } = apFake({ book: [northwind()], twoApprovals: 250 });
+
+    await stage();
+
+    expect(chain.transfers).toEqual([]);
+    const [held] = invoicePatches(fake.requests);
+    expect(held.body).toMatchObject({ status: "held" });
+    expect((held.body as Record<string, string>).agent_reasoning).toContain(
+      "[guardrail override: payments above 250 USDC need two people's approval in this workspace — payment refused before execution; two people approve it in Approvals]"
+    );
+    const [entry] = ledger(fake.requests);
+    expect(entry.p_detail).toMatchObject({
+      guardrailBlocked: true,
+      guardrailRule: "workspace.two_approvals",
+      observed: { twoApprovalsAbove: 250 },
+      execution: { resultingStatus: "held" },
+    });
+  });
+
+  it("pays one under the figure, reading the figure once for the stage", async () => {
+    today("2026-10-02T09:00:00.000Z");
+    payNow();
+    const { fake, chain, stage } = apFake({ book: [contoso(), northwind()], twoApprovals: 280 });
+
+    await stage();
+
+    expect(chain.transfers.map((t) => t.amount)).toEqual([250]);
+    const entries = ledger(fake.requests);
+    // Decided in the order they were submitted: Northwind's 300 USDC first, held; Contoso's 250 USDC paid.
+    expect(entries.map((entry) => (entry.p_detail as Record<string, unknown>).guardrailRule)).toEqual(["workspace.two_approvals", null]);
+    expect((entries[1].p_detail as { observed: Record<string, unknown> }).observed.twoApprovalsAbove).toBe(280);
+    expect(fake.requests.filter((r) => r.path === "/rest/v1/approval_policies")).toHaveLength(1);
+  });
+
+  it("records no figure where the workspace set none", async () => {
+    today("2026-10-02T09:00:00.000Z");
+    payNow();
+    const { fake, stage } = apFake({ book: [northwind()] });
+
+    await stage();
+
+    const [entry] = ledger(fake.requests);
+    expect((entry.p_detail as { observed: Record<string, unknown> }).observed).not.toHaveProperty("twoApprovalsAbove");
+  });
+});

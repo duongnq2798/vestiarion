@@ -5,6 +5,7 @@ import { BRIDGE_FEE_CAP_PERCENT } from "../payee-chains";
 import { SWAP_COST_CAP_PERCENT } from "../fx/swap-limits";
 import { exceedsBudget, type BudgetRoom } from "./outflow-budget";
 import type { SpendingLimitVerdict } from "../spending-limit/onchain";
+import { TWO_APPROVALS_RULE } from "../two-approvals";
 
 export interface ApGuardrailInput {
   action: "pay" | "schedule" | "hold" | "flag_fraud" | "request_info";
@@ -72,6 +73,11 @@ export interface ApGuardrailInput {
    * behind the address (new payee check N3). Null or absent for a payment that is not a first, or in a sandbox.
    */
   newPayee?: { twoParties: boolean } | null;
+  /**
+   * The workspace's figure above which a payment needs two people's approval (two approvals T3), in USDC; null or absent
+   * when none is set. `amount` is weighed against it, a EURC payment's USDC value included.
+   */
+  twoApprovalsAbove?: number | null;
 }
 
 /** What the spending limit contract says about one payment the agent would make now. */
@@ -98,6 +104,7 @@ export type ApGuardrailRule =
   | "bridge.fee_unavailable"
   | "bridge.fee_above_cap"
   | "bridge.gateway_balance_short"
+  | typeof TWO_APPROVALS_RULE
   | "workspace.outflow_budget"
   | "workspace.onchain_limit_route"
   | "workspace.onchain_limit";
@@ -303,6 +310,18 @@ export function enforceApGuardrails(input: ApGuardrailInput): ApGuardrailResult 
       status: "held",
       rule: "bridge.gateway_balance_short",
       reasoning: `${input.reasoning} [guardrail override: an earlier attempt went through Gateway, and the Gateway balance, ${input.bridge.gatewayShort.balanceUsdc} USDC, does not cover the ${input.bridge.gatewayShort.neededUsdc} USDC this payout needs with its fee — ${verb} refused; held for a person to check the earlier transfer with Circle]`,
+    };
+  }
+  // Two people's approval above the workspace's figure (two approvals T3): the agent never pays it, now or on a date. After
+  // the payment's own checks, and ahead of the spending limit and any EURC swap, so no room is used and no swap is made
+  // for a payment the agent may not make.
+  const above = input.twoApprovalsAbove ?? null;
+  if (above !== null && input.amount > above) {
+    return {
+      blocked: true,
+      status: "held",
+      rule: TWO_APPROVALS_RULE,
+      reasoning: `${input.reasoning} [guardrail override: payments above ${above} USDC need two people's approval in this workspace — ${verb} refused before execution; two people approve it in Approvals]`,
     };
   }
   // The agent's spending limit (outflow budget spec R4): what it may pay on its own today and in 7
