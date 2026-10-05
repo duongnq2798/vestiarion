@@ -45,7 +45,9 @@ export type CycleEventKind =
   | "agent_resumed"
   | "sample_loaded"
   /** A pull request a milestone waits on was merged (bounties B13). */
-  | "pull_request_merged";
+  | "pull_request_merged"
+  /** A fresh quote cleared what held a EURC payable; started by the FX watch, not by a person (FX re-evaluation F4). */
+  | "fx_changed";
 
 export interface CycleEvent {
   orgId: string;

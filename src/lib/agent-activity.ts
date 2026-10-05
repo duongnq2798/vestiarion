@@ -87,6 +87,14 @@ const AFTER: Record<(typeof TRIGGER_ACTIONS)[number], string> = {
   approval_returned: "after it was returned",
 };
 
+/** What came back, for a decision that followed a reopen because a fresh quote cleared what held it (FX re-evaluation F6). */
+const DECIDED_AGAIN: Record<string, string> = {
+  rate_available: " · decided again once a EURC rate was quoted",
+  swap_available: " · decided again once a USDC→EURC swap was quoted",
+  swap_cost_within_cap: " · decided again once a swap cost within its cap",
+  value_within_limit: " · decided again once the rate brought it within the limit",
+};
+
 /** " · 26 s after it was added": from the latest person's action on the invoice before the decision, within an hour. */
 export function afterTrigger(entry: ActivityEntry, triggers: ReadonlyArray<{ seq: number; ts: string; action: string }> | undefined): string {
   if (!entry.ts || !triggers) return "";
@@ -182,7 +190,7 @@ function invoiceItem(
 ): ActivityItem {
   const blocked = entry.detail.guardrailBlocked === true;
   const amount = activityAmount(invoice.amount, invoice.currency);
-  const after = afterTrigger(entry, refs.triggers?.get(id));
+  const after = DECIDED_AGAIN[text(record(entry.detail.reevaluation)?.trigger) ?? ""] ?? afterTrigger(entry, refs.triggers?.get(id));
   const how = { path: `/invoices#trail-${id}`, pathLabel: "How it decided" };
 
   if (entry.action === "ar_received") {
