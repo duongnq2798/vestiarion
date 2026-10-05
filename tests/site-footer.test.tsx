@@ -3,7 +3,7 @@ import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { COMPACT_FOOTER_LINKS, FOOTER_COLUMNS, LANDING_SECTIONS, SiteFooter } from "@/components/vx/SiteChrome";
-import { GITHUB_URL, ISSUES_URL, LICENSE_URL, X_HANDLE, X_URL } from "@/lib/site-links";
+import { GITHUB_URL, ISSUES_URL, LICENSE_URL, PRODUCT_HUNT_BADGE, PRODUCT_HUNT_URL, X_HANDLE, X_URL } from "@/lib/site-links";
 
 /**
  * The site footer (spec §2, F1, F3): its columns, where each link goes, and
@@ -57,13 +57,14 @@ describe("the full footer's columns", () => {
     ]);
   });
 
-  it("put the open numbers, the two guides, Support (GitHub Issues) and X under Resources", () => {
+  it("put the open numbers, the two guides, Support (GitHub Issues), X and Product Hunt under Resources", () => {
     expect(FOOTER_COLUMNS[2].links).toEqual([
       { href: "/open", label: "Open numbers" },
       { href: "/docs/guides/go-live", label: "Go live guide" },
       { href: "/docs/guides/first-payment", label: "First payment guide" },
       { href: ISSUES_URL, label: "Support" },
       { href: X_URL, label: "Updates on X" },
+      { href: PRODUCT_HUNT_URL, label: "Product Hunt" },
     ]);
   });
 
@@ -184,6 +185,20 @@ describe("the GitHub addresses", () => {
   it("are written only in src/lib/site-links.ts, so they change in one place", () => {
     for (const file of ["src/components/vx/SiteChrome.tsx", "src/app/terms/page.tsx", "src/app/privacy/page.tsx", "src/components/vx/LegalPage.tsx"]) {
       expect(readFileSync(path.join(process.cwd(), file), "utf8"), file).not.toContain("github.com/duongnq2798");
+    }
+  });
+});
+
+describe("the Product Hunt page", () => {
+  it("is Vestiarion's product page, and the badge links to it with Product Hunt's tags", () => {
+    expect(PRODUCT_HUNT_URL).toBe("https://www.producthunt.com/products/vestiarion");
+    expect(PRODUCT_HUNT_BADGE.href.startsWith(`${PRODUCT_HUNT_URL}?embed=true&`)).toBe(true);
+    expect(PRODUCT_HUNT_BADGE.src).toBe("https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1269583&theme=neutral");
+  });
+
+  it("is written only in src/lib/site-links.ts", () => {
+    for (const file of ["src/components/vx/SiteChrome.tsx", "src/components/landing/Hero.tsx"]) {
+      expect(readFileSync(path.join(process.cwd(), file), "utf8"), file).not.toContain("producthunt.com");
     }
   });
 });

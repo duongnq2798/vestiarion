@@ -2,6 +2,8 @@
 
 An autonomous treasury agent for a small business, settled in USDC on Arc.
 
+<a href="https://www.producthunt.com/products/vestiarion?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-vestiarion"><img alt="Vestiarion on Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1269583&theme=neutral"></a>
+
 ## Try it
 
 - **The app:** [www.vestiarion.xyz](https://www.vestiarion.xyz). The five-minute path, with no wallet and no keys, is in [Try it in 5 minutes](https://www.vestiarion.xyz/docs/guides/try-it):

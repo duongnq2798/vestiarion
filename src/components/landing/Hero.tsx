@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { ProvenanceBar, type ProvenanceLeg } from "@/components/vx/Provenance";
+import { PRODUCT_HUNT_BADGE } from "@/lib/site-links";
 import { EvidenceReplay, type ChainHeadEntry } from "./hero/EvidenceReplay";
 
 /**
@@ -39,6 +40,11 @@ export function Hero({ provenance, head, hostedAvailable }: { provenance: Proven
               ? "Email sign-in, a workspace of your own, and an Arc testnet wallet in one click. Fund it with USDC from Circle's faucet, and the agent pays from it."
               : "Email sign-in, then a workspace of your own. Connect your Circle account from Settings to pay on Arc testnet."}
           </p>
+          <a href={PRODUCT_HUNT_BADGE.href} target="_blank" rel="noopener noreferrer" className="mt-5 inline-flex rounded-lg">
+            {/* Product Hunt draws the badge with its live upvote count, so it stays their image. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={PRODUCT_HUNT_BADGE.src} alt={PRODUCT_HUNT_BADGE.alt} width={PRODUCT_HUNT_BADGE.width} height={PRODUCT_HUNT_BADGE.height} decoding="async" />
+          </a>
           <div className="mt-8 border-t border-line/80 pt-5">
             <p className="mb-2.5 font-mono text-xs uppercase tracking-[0.14em] text-ink-3">What runs live right now</p>
             <ProvenanceBar legs={provenance} />
