@@ -159,6 +159,8 @@ function approvalsFake(options: {
   ledgerTargets?: Array<Record<string, unknown>>;
   /** `sole_approver`'s reply (migration 0061); unset falls through to the default `[]`, which is not `true`. */
   soleApprover?: FakeReply;
+  /** The counterparty's entries that set or confirmed its address, newest first (new payee check N2); none by default. */
+  addressEntries?: Array<Record<string, unknown>>;
 } = {}) {
   const intents = options.intents ?? [];
   const eq = (request: RecordedRequest, column: string) => request.params.get(column)?.match(/^eq\.(.+)$/)?.[1];
@@ -237,6 +239,9 @@ function approvalsFake(options: {
       return { body: { ...invoiceRow(), status: "processing", reviewed_by: body.p_by, reviewed_at: "2026-09-29T00:00:00Z" } };
     }
     if (request.path === "/rest/v1/rpc/ledger_entries_for_targets") return { body: options.ledgerTargets ?? [] };
+    if (request.path === "/rest/v1/ledger_entries" && request.method === "GET" && request.params.has("detail->>counterpartyId")) {
+      return { body: options.addressEntries ?? [] };
+    }
     if (request.path === "/rest/v1/rpc/sole_approver" && options.soleApprover) return options.soleApprover;
     if (request.path === "/rest/v1/rpc/append_ledger_entry") {
       if (options.ledgerFails) return { status: 500, body: { message: "ledger unavailable" } };
@@ -1810,3 +1815,74 @@ describe("approveAndPay and the address the person was shown", () => {
     await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID, shownAddress: "" }))).resolves.toMatchObject({ status: "paid" });
   });
 });
+
+describe("approveAndPay and the first payment to an address (new payee check N4)", () => {
+  const gaveAddress = (by: string) => [{ action: "create_counterparty", detail: { by, counterpartyId: COUNTERPARTY_ID, address: "0xdead" } }];
+  const live = () => getChainProviderMock.mockReturnValue({ mode: "live", earnMode: "simulate", estimatedFeeUsd: 0.003 });
+
+  it("refuses the person who gave the payee's address, before any claim, unless they are the only approver", async () => {
+    live();
+    const { fake, run } = approvalsFake({ addressEntries: gaveAddress(ACTOR) });
+
+    await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).rejects.toThrow(
+      "You gave this payee's address, so someone else must approve its first payment."
+    );
+    expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+    const read = fake.requests.find((request) => request.path === "/rest/v1/ledger_entries" && request.params.has("detail->>counterpartyId"));
+    expect(read?.params.get("detail->>counterpartyId")).toBe(`in.(${COUNTERPARTY_ID})`);
+  });
+
+  it("lets the workspace's only approver pay it, and records that it was the address's first payment", async () => {
+    live();
+    payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", operatingBalance: 0 });
+    const { fake, run } = approvalsFake({ addressEntries: gaveAddress(ACTOR), soleApprover: { body: true } });
+
+    expect((await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).status).toBe("paid");
+    expect(rpcBodies(fake.requests, "append_ledger_entry")[0].p_detail).toMatchObject({ firstPayment: true });
+  });
+
+  it("lets someone other than whoever gave the address pay it", async () => {
+    live();
+    payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", operatingBalance: 0 });
+    const { fake, run } = approvalsFake({ addressEntries: gaveAddress("0b6c1c9e-4a4f-4a7e-9b1e-0000000000c3") });
+
+    expect((await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).status).toBe("paid");
+    expect(rpcBodies(fake.requests, "sole_approver")).toHaveLength(0);
+    expect(rpcBodies(fake.requests, "append_ledger_entry")[0].p_detail).toMatchObject({ firstPayment: true });
+  });
+
+  it("asks nothing where payments are simulated", async () => {
+    payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", operatingBalance: 0 });
+    const { fake, run } = approvalsFake({ addressEntries: gaveAddress(ACTOR) });
+
+    await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+    const addressRead = (request: RecordedRequest) => request.path === "/rest/v1/ledger_entries" && request.params.has("detail->>counterpartyId");
+    expect(fake.requests.some(addressRead)).toBe(false);
+    expect(rpcBodies(fake.requests, "append_ledger_entry")[0].p_detail).not.toHaveProperty("firstPayment");
+  });
+});
+
+describe("listWaitingPayables and the first payment to an address (new payee check N4)", () => {
+  it("says who gave the address of a payable whose payment would be its first, where payments are real", async () => {
+    getChainProviderMock.mockReturnValue({ mode: "live", earnMode: "simulate", estimatedFeeUsd: 0.003 });
+    const { run } = approvalsFake({ addressEntries: [{ action: "create_counterparty", detail: { by: ACTOR, counterpartyId: COUNTERPARTY_ID, address: "0xdead" } }] });
+
+    const [row] = await run(() => listWaitingPayables());
+    expect(row.firstPaymentAddressBy).toBe(ACTOR);
+  });
+
+  it("says nothing of the kind for an address paid before, or where payments are simulated", async () => {
+    getChainProviderMock.mockReturnValue({ mode: "live", earnMode: "simulate", estimatedFeeUsd: 0.003 });
+    const paid = approvalsFake({
+      intents: [intentRow({ status: "confirmed", destination: "0xdead" })],
+      addressEntries: [{ action: "create_counterparty", detail: { by: ACTOR, counterpartyId: COUNTERPARTY_ID, address: "0xdead" } }],
+    });
+    expect((await paid.run(() => listWaitingPayables()))[0]).not.toHaveProperty("firstPaymentAddressBy");
+
+    getChainProviderMock.mockReturnValue({ mode: "simulate", earnMode: "simulate", estimatedFeeUsd: 0.01 });
+    const simulated = approvalsFake({ addressEntries: [{ action: "create_counterparty", detail: { by: ACTOR, counterpartyId: COUNTERPARTY_ID, address: "0xdead" } }] });
+    expect((await simulated.run(() => listWaitingPayables()))[0]).not.toHaveProperty("firstPaymentAddressBy");
+  });
+});
+
