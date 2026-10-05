@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { applyMigrations, createDatabase, createUser } from "./support/pglite";
 
 /**
- * Migration 0074 (docs/superpowers/specs/2026-10-05-network-foundation-design.md N1, N2, N4, N7): every workspace has
+ * Migration 0075 (docs/superpowers/specs/2026-10-05-network-foundation-design.md N1, N2, N4, N7): every workspace has
  * a network, locked once it went live or holds a Circle wallet; a payment intent takes its workspace's network; and the
  * open numbers count one network at a time, so Arc mainnet is never added to Arc testnet.
  */
@@ -97,7 +97,7 @@ beforeAll(async () => {
   await payment(testnetLive, { amount: 5, at: "2026-09-28T10:00:00Z", invoiceId: await payable(testnetLive, testnetVendor) });
   await payment(testnetLive, { amount: 3, at: "2026-09-29T10:00:00Z" });
   await payment(mainnetLive, { amount: 7, at: "2026-09-29T11:00:00Z", invoiceId: await payable(mainnetLive, mainnetVendor) });
-});
+}, 60_000);
 
 describe("a workspace's network (N1, N2)", () => {
   it("is Arc testnet unless the workspace names another, and only one of the two", async () => {

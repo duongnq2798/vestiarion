@@ -22,7 +22,7 @@ begin
 end $$;
 
 comment on column public.orgs.network is
-  'The network the workspace pays on: arc-testnet or arc-mainnet. Locked once it went live or holds a Circle wallet (0074).';
+  'The network the workspace pays on: arc-testnet or arc-mainnet. Locked once it went live or holds a Circle wallet (0075).';
 
 -- N2: a workspace keeps the network it went live on, or holds a wallet on.
 create or replace function public.orgs_network_locked() returns trigger
@@ -55,7 +55,7 @@ begin
 end $$;
 
 comment on column public.payment_intents.network is
-  'The network of the workspace that made the payment, taken from orgs.network when the intent is inserted (0074).';
+  'The network of the workspace that made the payment, taken from orgs.network when the intent is inserted (0075).';
 
 -- N4: an intent's network is its workspace's, whatever the insert says.
 create or replace function public.payment_intents_network() returns trigger

@@ -20,7 +20,7 @@ changing how anything runs on testnet.
 ## Global constraints
 
 - Network ids are `arc-testnet` and `arc-mainnet`; the default everywhere is `arc-testnet`.
-- Migration `0074_network.sql` is idempotent: `scripts/migrate.ts` re-runs every file.
+- Migration `0075_network.sql` is idempotent: `scripts/migrate.ts` re-runs every file.
 - No value used on Arc testnet today changes.
 - Copy says "Arc testnet" and "Arc mainnet" plainly, with no disclaimers.
 - The migration is the partner's to run, before the merge.
@@ -35,9 +35,9 @@ changing how anything runs on testnet.
 
 ---
 
-### Task 1: Migration 0074 (N1, N2, N4, N7 SQL)
+### Task 1: Migration 0075 (N1, N2, N4, N7 SQL)
 
-**Files:** Create `supabase/migrations/0074_network.sql`, `tests/network-migration.test.ts`.
+**Files:** Create `supabase/migrations/0075_network.sql`, `tests/network-migration.test.ts`.
 
 - [ ] Write PGlite tests:
   - the default and the check;

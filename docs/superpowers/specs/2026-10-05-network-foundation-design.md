@@ -93,7 +93,7 @@ of its own). The partner's brief of 2026-10-05 asked for this: keep Arc testnet 
 
 ## 5. Rollout
 
-- Migration `0074_network.sql`, run by the partner before the merge. The code reads `orgs.network` with every
+- Migration `0075_network.sql`, run by the partner before the merge. The code reads `orgs.network` with every
   workspace's settings, as it read `usyc_live_at` after 0054.
 - It is additive: a column with a default on two tables, a trigger for each, and three new functions. The one-argument
   open functions stay.
