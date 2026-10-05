@@ -229,13 +229,14 @@ function gatewayFailed(intent: IntentState): boolean {
  * moved rather than send one: a confirmed intent, or a provider id whose
  * attempt Circle did not end in a terminal failure. A terminally failed one
  * is sent again on approval, so it is a new payment and the balance is
- * checked for it. One Circle never answered (`transferUnknown`) is sent again
- * under its own key, which returns the transfer Circle may hold: the balance,
- * which that transfer may already have lowered, is not the question either.
+ * checked for it. One Circle never answered (`transferUnknown`) is not a
+ * transfer that exists: sent again under its key, it is a new payment when
+ * Circle never had it, so it is checked as one, all but the balance, which
+ * the transfer Circle may hold could already have lowered (payment safety R3).
  */
 export function transferExists(intent: IntentState | null): boolean {
   if (intent === null) return false;
-  return intent.status === "confirmed" || (intent.provider_tx_id !== null && !failedTerminally(intent)) || transferUnknown(intent);
+  return intent.status === "confirmed" || (intent.provider_tx_id !== null && !failedTerminally(intent));
 }
 
 /** What the approval card says about the last payment attempt (see `WaitingPayable.lastAttempt`). */
@@ -645,7 +646,10 @@ export async function approveAndPay(
   const provider = getChainProvider();
   const intent = await paymentIntentOf(invoice.id);
   const alreadySent = transferExists(intent);
-  if (!alreadySent && invoice.currency === "USDC") {
+  // A send Circle never answered may have lowered the balance already (payment safety R3): only the funds check is
+  // skipped for it, since sending it again under its key may still be a new payment.
+  const mayExist = alreadySent || transferUnknown(intent);
+  if (!mayExist && invoice.currency === "USDC") {
     const balance = provider.mode === "live" ? await syncOperatingBalance(operating.id) : operating.balance;
     if (balance < invoice.amount) {
       throw new ApprovalError("insufficient_funds", `The operating account holds ${balance} USDC, less than this invoice.`);
@@ -653,7 +657,7 @@ export async function approveAndPay(
   }
   // A EURC payable is paid from the wallet's EURC, read from the chain. A
   // sandbox simulates its payments and has no EURC balance to check (E7).
-  if (!alreadySent && invoice.currency === "EURC" && provider.mode === "live" && provider.getTokenBalance) {
+  if (!mayExist && invoice.currency === "EURC" && provider.mode === "live" && provider.getTokenBalance) {
     const { balance } = await provider.getTokenBalance(operating.id, "EURC");
     if (balance < invoice.amount) {
       throw new ApprovalError("insufficient_funds", `The operating wallet holds ${balance} EURC, less than this invoice.`);
@@ -715,7 +719,7 @@ export async function approveAndPay(
       // now report a terminal failure, that is recorded, the invoice is held
       // again, and the next approval sends it. executePayment still reads
       // Circle before any retry.
-      { provider, operating: { id: operating.id }, retryTerminalFailure: !alreadySent }
+      { provider, operating: { id: operating.id }, retryTerminalFailure: !mayExist }
     );
   } catch (err) {
     // The claim went through, but nothing about the payment itself is known.

@@ -389,6 +389,10 @@ export async function payHeldMilestone(input: {
 
   const reason = heldReason(milestone.facts);
   const alreadySent = transferExists(milestone.facts.intent);
+  // A send Circle never answered is sent again under its key, which may be a new payment (payment safety R3): it is
+  // judged as one, by what would hold it if no transfer existed, and only the funds check is skipped.
+  const unknown = transferUnknown(milestone.facts.intent);
+  const blocking = unknown ? heldReason({ ...milestone.facts, intent: null }) : reason;
   let soleApprover = false;
   // A transfer that already exists is recorded whatever stands in the way now: nothing new can move.
   if (!alreadySent) {
@@ -399,9 +403,9 @@ export async function payHeldMilestone(input: {
       no_address: "no_address",
       address_unconfirmed: "address_unconfirmed",
     };
-    const code = blocked[reason.kind];
+    const code = blocked[blocking.kind];
     if (code) raise(code);
-    if (reason.override && milestone.createdBy === input.actorId) {
+    if (blocking.override && milestone.createdBy === input.actorId) {
       if (!(await isSoleApprover(input.actorId))) raise("self_approval");
       soleApprover = true;
     }
@@ -417,7 +421,7 @@ export async function payHeldMilestone(input: {
   if (!operating) raise("no_operating_account");
   const operatingId = operating.id;
   // A release from escrow is paid by the hold, not the operating account.
-  if (!alreadySent && milestone.escrowState !== "funded") {
+  if (!alreadySent && !unknown && milestone.escrowState !== "funded") {
     const balance = provider.mode === "live" ? await syncOperatingBalance(operatingId) : num(operating.balance);
     if (balance < milestone.amount) raise("insufficient_funds", `The operating account holds ${balance} USDC, less than this milestone.`);
   }

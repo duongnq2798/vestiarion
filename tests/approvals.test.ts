@@ -1326,12 +1326,14 @@ function unanswered(overrides: Record<string, unknown> = {}) {
 }
 
 describe("a payment Circle never answered (payment safety R1)", () => {
-  it("may exist under its key: possibly sent, a transfer to look for rather than send anew, and its own last attempt", () => {
+  it("may exist under its key, so it is possibly sent, with its own last attempt; but sending it again may be a new payment", () => {
     const intent = unanswered();
 
     expect(transferUnknown(intent)).toBe(true);
     expect(paymentWasSent(intent)).toBe(true);
-    expect(transferExists(intent)).toBe(true);
+    // Not a transfer that exists: sent again under its key, it is a new payment when Circle never had it, and is
+    // checked as one, all but the balance it may already have lowered.
+    expect(transferExists(intent)).toBe(false);
     expect(lastAttemptOf(intent)).toEqual({ state: "unanswered" });
   });
 
@@ -1390,6 +1392,18 @@ describe("a payment Circle never answered (payment safety R1)", () => {
     await run(() => rejectInvoice({ actorId: ACTOR, invoiceId: INVOICE_ID }));
 
     expect(patchBodies(fake.requests, "/rest/v1/invoices")[0].status).toBe("rejected");
+  });
+
+  it("confirms the shown address it pays to, since sending it again may be a new payment", async () => {
+    payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: execution(), note: "", operatingBalance: 0 });
+    const { fake, run } = approvalsFake({
+      intents: [unanswered()],
+      counterparty: { id: COUNTERPARTY_ID, name: "Acme Supplies", address: "0xdead", address_changed_at: "2026-09-30T12:00:00+00:00", address_confirmed_at: null },
+    });
+
+    await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID, shownAddress: "0xdead" }));
+
+    expect(fake.requests.filter((r) => r.path === "/rest/v1/counterparties" && r.method === "PATCH")).toHaveLength(1);
   });
 
   it("approves it without the balance check, which the transfer may already have lowered, and never as a retry of a failure", async () => {

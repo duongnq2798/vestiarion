@@ -76,8 +76,9 @@ fixes have run for days before any mainnet workspace exists:
 - **R3. What a person sees and can do.**
   - Reject, Return and Add details refuse with `payment_unknown`, saying why.
   - The card says Circle may have taken the transfer, and that approving asks Circle again under the same key.
-  - Approving skips the balance check, as for any transfer that may exist: Circle's idempotency returns the original
-    transfer when it holds one, and sends it when it does not.
+  - Approving skips only the balance check, which the transfer Circle may hold could already have lowered. Circle's
+    idempotency returns the original transfer when it holds one, and sends it when it does not. So every other check
+    still applies, as to a new payment: risk, limit, an unconfirmed address, the new payee check, who may approve.
   - A held milestone cannot be closed, and its card says the same.
   - Cost if wrong: a person who changed their mind after approving cannot reject until Circle answers. Approving then
     completes the payment they approved.

@@ -285,6 +285,32 @@ describe("Pay now", () => {
     expect(releaseHeldMilestoneMock).not.toHaveBeenCalled();
   });
 
+  describe("over a transfer Circle never answered (payment safety R1)", () => {
+    const UNKNOWN = { status: "failed", provider_tx_id: null, last_error: "Circle did not answer createTransaction within 20000 ms; the transfer may or may not have been accepted", provider_state: null, failure_reason: null };
+
+    it("refuses what the agent's release refuses, since sending it again may be a new payment", async () => {
+      const cases: Array<[Record<string, unknown>, string]> = [
+        [{ risk_level: "high" }, "high_risk"],
+        [{ payment_limit: "0.25", risk_notes: "Matched a politically exposed person" }, "above_limit"],
+        [{ address_changed_at: "2026-10-02T09:00:00Z" }, "address_unconfirmed"],
+      ];
+      for (const [contractor, code] of cases) {
+        const { run, claimed } = world({ intent: UNKNOWN, milestone: { counterparties: { ...milestoneRow().counterparties, ...contractor } } });
+        expect(await refusal(run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }))), code).toBe(code);
+        expect(claimed()).toBe(false);
+      }
+      expect(releaseHeldMilestoneMock).not.toHaveBeenCalled();
+    });
+
+    it("sends it again under its key without the balance check, which the transfer may already have lowered", async () => {
+      releaseHeldMilestoneMock.mockResolvedValue(PAID);
+      const { run } = world({ intent: UNKNOWN, balance: "0" });
+
+      await expect(run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }))).resolves.toMatchObject({ status: "paid" });
+      expect(releaseHeldMilestoneMock).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it("needs someone other than whoever added it to override the agent's own hold", async () => {
     const { run, claimed } = world({ milestone: { created_by: ACTOR }, intent: null, last: entryRow("milestone_hold", { guardrailBlocked: false }) });
     expect(await refusal(run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE })))).toBe("self_approval");
