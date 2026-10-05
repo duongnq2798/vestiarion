@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 import { configFromEnv } from "@/lib/config";
-import { currentConfig, currentOrgConfig, currentOrgId, currentOrgMode, currentSecretWarnings, currentUserId, runWith } from "@/lib/context";
+import { currentConfig, currentOrgConfig, currentOrgId, currentSecretWarnings, currentUserId, runWith } from "@/lib/context";
 import { FOUNDING_ORG_ID } from "@/lib/dal/org-config";
 import { inOrg, withFoundingOrg, withOrg, withOrgSlug } from "@/lib/dal/scope";
 import { encryptSecret, parseMasterKeys } from "@/lib/secrets";
@@ -67,12 +67,6 @@ describe("withOrg", () => {
   it("carries the user and the secret warnings into the scope", async () => {
     const { run } = inPlatform(() => withOrg(ORG, async () => [currentUserId(), currentSecretWarnings()], { userId: "user-1" }));
     expect(await run()).toEqual(["user-1", []]);
-  });
-
-  it("carries whether the organization is a sandbox or live into the scope, and none outside one (new payee check N5)", async () => {
-    const { run } = inPlatform(() => withOrg(ORG, async () => currentOrgMode()));
-    expect(await run()).toBe("sandbox");
-    expect(currentOrgMode()).toBeNull();
   });
 
   it("fails for an organization that does not exist, and runs nothing", async () => {

@@ -182,6 +182,8 @@ function apFake(options: {
   onChainLimit?: OnChainLimitGate;
   /** Payables the follow-up reopened this cycle because a fresh quote cleared what held them (FX re-evaluation F6). */
   reevaluations?: Map<string, { reopenedSeq: number; trigger: string; previousDecisionSeq: number; previousAction: string | null }>;
+  /** A live workspace's new payee facts (new payee check N1, N2); unchecked when absent, as in a sandbox. */
+  newPayee?: { paidTo: Set<string>; entries: Map<string, Array<{ action: string; detail: Record<string, unknown> }>> };
 }) {
   const intents = paymentIntentsBackend(ORG);
   const fake = fakeSupabase((request) => {
@@ -221,6 +223,7 @@ function apFake(options: {
           lines,
           onChainLimit: options.onChainLimit ?? onChainLimitGate({ read: async () => null }),
           reevaluations: options.reevaluations,
+          ...(options.newPayee ? { newPayee: { load: async () => options.newPayee! } } : {}),
         })
       )
     );
@@ -1426,3 +1429,60 @@ describe("the AP stage and a payable reopened because a fresh quote cleared what
     expect(ledger(fake.requests)[0].p_detail).not.toHaveProperty("reevaluation");
   });
 });
+
+/**
+ * Two parties before the first payment to an address (docs/superpowers/specs/2026-10-05-new-payee-check-design.md N3,
+ * N6): in a live workspace, the agent's first payment to an address one member alone stands behind is held by code.
+ */
+describe("the AP stage and the first payment to a new payee (new payee check)", () => {
+  const dueToday = { due_date: "2026-10-01T12:00:00+00:00", early_pay_discount_pct: null, discount_due_date: null };
+  const typedIn = { action: "create_counterparty", detail: { by: "member-anna", counterpartyId: NORTHWIND, address: "0xnorth" } };
+  const confirmedBy = (by: string) => ({ action: "counterparty_address_confirmed", detail: { by, counterpartyId: NORTHWIND, address: "0xnorth" } });
+  const facts = (paidTo: string[], entries: Array<{ action: string; detail: Record<string, unknown> }>) => ({
+    paidTo: new Set(paidTo),
+    entries: new Map([[NORTHWIND, entries]]),
+  });
+
+  it("holds the first payment to an address one member typed in, and records who stands behind it", async () => {
+    today("2026-10-01T09:00:00.000Z");
+    model(() => ({ action: "pay", payOn: null, reasoning: "Due today and within the limit; paying it.", confidence: 0.9 }));
+    const { fake, chain, stage } = apFake({ book: [payable(dueToday)], newPayee: facts([], [typedIn]) });
+
+    await stage();
+
+    expect(chain.transfers).toEqual([]);
+    expect(invoicePatches(fake.requests)[0].body).toMatchObject({ status: "held", paid_amount: null });
+    expect(ledger(fake.requests)[0].p_detail).toMatchObject({
+      guardrailBlocked: true,
+      guardrailRule: "counterparty.new_payee",
+      observed: { newPayee: { addressBy: "member-anna", confirmedBy: null, twoParties: false } },
+      execution: { resultingStatus: "held" },
+    });
+  });
+
+  it("pays it when another member confirmed the address", async () => {
+    today("2026-10-01T09:00:00.000Z");
+    model(() => ({ action: "pay", payOn: null, reasoning: "Due today and within the limit; paying it.", confidence: 0.9 }));
+    const { fake, chain, stage } = apFake({ book: [payable(dueToday)], newPayee: facts([], [confirmedBy("member-bao"), typedIn]) });
+
+    await stage();
+
+    expect(chain.transfers.map((transfer) => transfer.amount)).toEqual([400]);
+    expect(ledger(fake.requests)[0].p_detail).toMatchObject({
+      guardrailBlocked: false,
+      observed: { newPayee: { addressBy: "member-anna", confirmedBy: "member-bao", twoParties: true } },
+    });
+  });
+
+  it("pays an address it has paid before, as before, recording nothing about a new payee", async () => {
+    today("2026-10-01T09:00:00.000Z");
+    model(() => ({ action: "pay", payOn: null, reasoning: "Due today and within the limit; paying it.", confidence: 0.9 }));
+    const { fake, chain, stage } = apFake({ book: [payable(dueToday)], newPayee: facts(["0xnorth"], [typedIn]) });
+
+    await stage();
+
+    expect(chain.transfers).toHaveLength(1);
+    expect((ledger(fake.requests)[0].p_detail as { observed: Record<string, unknown> }).observed).not.toHaveProperty("newPayee");
+  });
+});
+

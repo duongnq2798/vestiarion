@@ -45,8 +45,12 @@ Addresses that come from outside the console already wait for a person: one sent
     milestone, unless they are the workspace's sole approver (as for an invoice they entered).
   - The card says why: "You gave this payee's address, so someone else must approve its first payment."
   - Cost if wrong: in a two-person workspace, the other person approves the first payment to a vendor one of them added.
-- **N5. Live workspaces only.** In a sandbox nothing real moves, so the check does not apply, and sample data keeps its
-  one-minute demonstration.
+- **N5. Wherever payments are real.**
+  - The check applies when the workspace's payments go through Circle: its chain provider is live.
+  - Payments are real in a live workspace, and also in a sandbox that has connected Circle but not yet gone live. Real
+    payments are switched on by readable Circle credentials, not by `orgs.mode` (mainnet readiness review §1).
+  - In a simulated workspace nothing real moves, so the check does not apply, and sample data keeps its one-minute
+    demonstration.
 - **N6. The ledger.**
   - A decision on a first payment records `observed.newPayee: { addressBy, confirmedBy, twoParties }`.
   - `addressBy` is a member id, `"payee"`, or null when not known.

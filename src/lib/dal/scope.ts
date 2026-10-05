@@ -84,7 +84,6 @@ function contextFor(platformConfig: VestiarionConfig, org: OrgRow, userId: strin
     userId,
     secretWarnings: warnings,
     platformConfig,
-    orgMode: org.mode,
   };
 }
 
