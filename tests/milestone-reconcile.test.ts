@@ -502,3 +502,47 @@ describe("reconcileMilestone — a verified milestone with a release in flight",
     expect(executePaymentMock).not.toHaveBeenCalled();
   });
 });
+
+describe("reconcileMilestone — a release the agent never sent, above the figure for two approvals (payment integrity I4)", () => {
+  const FIRST = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000e1";
+  const SECOND = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000e2";
+  const used = (by: string) => ({ approved_by: by, amount: "250.000000", currency: "USDC", address: "0xbeef", used_at: "2026-10-05T08:00:00.000Z" });
+  const world = (approvals: Array<Record<string, unknown>>) =>
+    cycleFake((r) => {
+      if (r.path === "/rest/v1/counterparties" && r.method === "GET") return { body: { risk_level: "low" } };
+      if (r.path === "/rest/v1/rpc/agent_paused") return { body: false };
+      if (r.path === "/rest/v1/payment_approvals" && r.method === "GET") return { body: approvals };
+      return undefined;
+    });
+
+  it("holds it for two people rather than releasing it again on its own", async () => {
+    const { fake, run } = world([]);
+
+    const outcome = await run(() =>
+      reconcileMilestone({ ...milestone, txRef: null }, neverSubmitted, { db: db(), provider, operating: { id: ACCOUNT_ID }, twoApprovalsAbove: 200 })
+    );
+
+    expect(executePaymentMock).not.toHaveBeenCalled();
+    expect(outcome.status).toBe("held");
+    expect(outcome.line.message).toBe("Lena Ortiz: not resubmitted, payments above 200 USDC need two approvals (250 USDC)");
+    const body = milestonePatches(fake.requests)[0].body as Record<string, unknown>;
+    expect(body.agent_reasoning).toBe(`${milestone.reasoning} [not resubmitted: payments above 200 USDC need two approvals — held for two people to approve]`);
+    const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(append.p_detail).toMatchObject({ notResubmittedBecause: "workspace.two_approvals", execution: { resultingStatus: "held" } });
+    const [asked] = fake.requests.filter((r) => r.path === "/rest/v1/payment_approvals");
+    expect(asked.params.get("source_type")).toBe("eq.milestone");
+  });
+
+  it("releases it again when two people's approvals of it paid it", async () => {
+    executePaymentMock.mockResolvedValue(execution({ status: "confirmed", txHash: "0xhash", txRef: "0xhash", reconciled: false }));
+    syncMock.mockResolvedValue(200);
+    const { run } = world([used(FIRST), used(SECOND)]);
+
+    const outcome = await run(() =>
+      reconcileMilestone({ ...milestone, txRef: null }, neverSubmitted, { db: db(), provider, operating: { id: ACCOUNT_ID }, twoApprovalsAbove: 200 })
+    );
+
+    expect(executePaymentMock).toHaveBeenCalledTimes(1);
+    expect(outcome.status).toBe("paid");
+  });
+});

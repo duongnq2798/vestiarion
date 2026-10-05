@@ -730,3 +730,102 @@ describe("reconcileApInvoice — a matched payable with a payment in flight", ()
     expect((append.p_detail as { execution: Record<string, unknown> }).execution.heldBecause).toBe("agent_paused");
   });
 });
+
+describe("reconcileApInvoice — a payment the agent never sent, above the figure for two approvals (payment integrity I4)", () => {
+  const provider = { mode: "live", earnMode: "simulate", estimatedFeeUsd: 0.003 } as unknown as ChainProvider;
+  const FIRST = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000e1";
+  const SECOND = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000e2";
+  const invoice = {
+    id: INVOICE_ID,
+    amount: 150,
+    counterpartyId: COUNTERPARTY_ID,
+    counterpartyName: "Acme Supplies",
+    address: "0xdead",
+    reasoning: "Paid 150 USDC to Acme Supplies.",
+    txRef: null,
+  };
+  const neverSent = { providerTxId: null, status: "submitting" };
+  const used = (by: string, over: Record<string, unknown> = {}) => ({
+    approved_by: by, amount: "150.000000", currency: "USDC", address: "0xDEAD", used_at: "2026-10-05T08:00:00.000Z", ...over,
+  });
+  const world = (approvals: Array<Record<string, unknown>>) =>
+    cycleFake((r) => {
+      if (r.path === "/rest/v1/counterparties" && r.method === "GET") return { body: { risk_level: "low" } };
+      if (r.path === "/rest/v1/rpc/agent_paused") return { body: false };
+      if (r.path === "/rest/v1/payment_approvals" && r.method === "GET") return { body: approvals };
+      return undefined;
+    });
+  const paid = () => payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", operatingBalance: 200 });
+
+  it("holds it for two people rather than sending it again on its own", async () => {
+    const { fake, run } = world([]);
+
+    const outcome = await run(() => reconcileApInvoice(invoice, neverSent, { db: db(), provider, operating: { id: ACCOUNT_ID }, twoApprovalsAbove: 100 }));
+
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+    expect(outcome.status).toBe("held");
+    expect(outcome.line.message).toBe("Acme Supplies: not resubmitted, payments above 100 USDC need two approvals (150 USDC)");
+    const body = invoicePatches(fake.requests)[0].body as Record<string, unknown>;
+    expect(body.status).toBe("held");
+    expect(body.agent_reasoning).toBe(`${invoice.reasoning} [not resubmitted: payments above 100 USDC need two approvals — held for two people to approve]`);
+    const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(append.p_detail).toMatchObject({ notResubmittedBecause: "workspace.two_approvals", execution: { resultingStatus: "held" } });
+    // What it asked: the approvals used to pay this payable.
+    const [asked] = fake.requests.filter((r) => r.path === "/rest/v1/payment_approvals");
+    expect(asked.params.get("source_type")).toBe("eq.invoice");
+    expect(asked.params.get("source_id")).toBe(`eq.${INVOICE_ID}`);
+    expect(asked.params.get("used_at")).toBe("not.is.null");
+  });
+
+  it("sends it again when two people's approvals of this payment paid it", async () => {
+    paid();
+    const { run } = world([used(FIRST), used(SECOND)]);
+
+    const outcome = await run(() => reconcileApInvoice(invoice, neverSent, { db: db(), provider, operating: { id: ACCOUNT_ID }, twoApprovalsAbove: 100 }));
+
+    expect(payInvoiceMock).toHaveBeenCalledTimes(1);
+    expect(outcome.status).toBe("paid");
+  });
+
+  it("counts neither one person twice nor an approval of another amount or address", async () => {
+    for (const approvals of [[used(FIRST), used(FIRST)], [used(FIRST), used(SECOND, { amount: "90.000000" })], [used(FIRST), used(SECOND, { address: "0xbeef" })]]) {
+      payInvoiceMock.mockClear();
+      const { run } = world(approvals);
+      const outcome = await run(() => reconcileApInvoice(invoice, neverSent, { db: db(), provider, operating: { id: ACCOUNT_ID }, twoApprovalsAbove: 100 }));
+      expect(outcome.status).toBe("held");
+      expect(payInvoiceMock).not.toHaveBeenCalled();
+    }
+  });
+
+  it("weighs a EURC payment at the USDC value its decision recorded, and holds one whose value is not known", async () => {
+    paid();
+    const decided = cycleFake((r) => {
+      if (r.path === "/rest/v1/counterparties" && r.method === "GET") return { body: { risk_level: "low" } };
+      if (r.path === "/rest/v1/rpc/agent_paused") return { body: false };
+      if (r.path === "/rest/v1/payment_approvals" && r.method === "GET") return { body: [] };
+      if (r.path === "/rest/v1/rpc/ledger_entries_for_targets") {
+        return { body: [{ seq: 9, id: "e9", ts: "2026-10-05T08:00:00Z", actor: "agent", domain: "ap", action: "ap_pay", summary: "", detail: { invoiceId: INVOICE_ID, decision: { action: "pay" }, observed: {}, usdcValue: 175.5 }, body_hash: "00", signature: "00", prev_hash: "00", hash: "00", signing_key_id: null }] };
+      }
+      return undefined;
+    });
+    // 150 EURC weighed at 175.5 USDC: under a 1000 USDC figure it goes again on its own, above a 100 USDC one it waits.
+    expect((await decided.run(() => reconcileApInvoice({ ...invoice, currency: "EURC" }, neverSent, { db: db(), provider, operating: { id: ACCOUNT_ID }, twoApprovalsAbove: 1000 }))).status).toBe("paid");
+    expect((await decided.run(() => reconcileApInvoice({ ...invoice, currency: "EURC" }, neverSent, { db: db(), provider, operating: { id: ACCOUNT_ID }, twoApprovalsAbove: 100 }))).status).toBe("held");
+
+    const { run } = world([]);
+    const outcome = await run(() =>
+      reconcileApInvoice({ ...invoice, currency: "EURC" }, neverSent, { db: db(), provider, operating: { id: ACCOUNT_ID }, twoApprovalsAbove: 1000 })
+    );
+    expect(outcome.status).toBe("held");
+  });
+
+  it("sends it again as before under the figure, or with none, without asking", async () => {
+    paid();
+    for (const twoApprovalsAbove of [500, null]) {
+      const { fake, run } = world([]);
+      await run(() => reconcileApInvoice(invoice, neverSent, { db: db(), provider, operating: { id: ACCOUNT_ID }, twoApprovalsAbove }));
+      expect(fake.requests.some((r) => r.path === "/rest/v1/payment_approvals")).toBe(false);
+    }
+    expect(payInvoiceMock).toHaveBeenCalledTimes(2);
+  });
+});

@@ -554,7 +554,8 @@ describe("a held milestone above the workspace's figure for two approvals (two a
     expect(result.status).toBe("paid");
     expect(claimed()).toBe(true);
     expect(approvalRequests(fake.requests, "PATCH")).toHaveLength(1);
-    expect(approvalRequests(fake.requests, "POST")).toHaveLength(0);
+    // Only the approval that paid it is stored, as used, once the claim was made (payment integrity I4).
+    expect(approvalRequests(fake.requests, "POST").map((r) => (r.body as Record<string, unknown>).approved_by)).toEqual([ACTOR]);
     const [entry] = ledger();
     expect(entry.p_action).toBe("milestone_approval_paid");
     expect(entry.p_summary).toBe('Paid milestone "Clean service" to Puka Hotel now: 0.3 USDC (the second of two approvals)');
@@ -605,6 +606,18 @@ describe("a held milestone above the figure, after review (two approvals T4–T6
 
     expect((await run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }))).status).toBe("paid");
     expect(ledger()[0].p_detail).toMatchObject({ heldFor: "two_approvals" });
+  });
+
+  it("stores the approval that pays it as used, after the claim, so two people's approvals of it are on record (payment integrity I4)", async () => {
+    releaseHeldMilestoneMock.mockResolvedValue({ ...PAID, paymentExecution: null });
+    const { fake, run } = world({ intent: null, entries: [GIVEN, HELD], twoApprovals: 0.2, approvals: [approval(OTHER)] });
+
+    await run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }));
+
+    const stored = approvalRequests(fake.requests, "POST");
+    expect(stored).toHaveLength(1);
+    expect(stored[0].body).toMatchObject({ source_type: "milestone", source_id: MILESTONE, approved_by: ACTOR, amount: 0.3, currency: "USDC", used_at: expect.any(String) });
+    expect(fake.requests.indexOf(stored[0])).toBeGreaterThan(fake.requests.findIndex((r) => r.path === "/rest/v1/rpc/claim_milestone_decision"));
   });
 
   it("keeps no approval when the payment it would have made is refused", async () => {

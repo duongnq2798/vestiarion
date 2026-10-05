@@ -376,6 +376,7 @@ An owner can make larger payments need two people. In **Settings**, under **Two 
 - **An approval is of one payment.** It holds the amount, the currency and the payee's address. If any of them changes, or the person who gave it can no longer approve payments, it no longer counts. **Reject**, **Return to agent** and **Close without paying** clear it. A transfer that fails needs two approvals again.
 - **Who gives them.** As many of the two approvals as can must come from people who neither entered the payment nor gave a new payee's address. Those two people give the rest only when no one else can approve. In a workspace with one person who can approve, the button is disabled with "Needs a second approver" beside it: nothing above the figure is paid until the figure is raised or someone else can approve.
 - **Raising it or turning it off** brings payments held for two approvals back to the agent within a minute. **Turn off** asks first: "Turn off two approvals?"
+- **A payment Circle never took** is sent again by the agent only when one approval may pay it, or two people's approvals of it paid it. Otherwise it waits in **Approvals**, or on **Contractors**, for two people. This covers a figure set or lowered after the first send. Raising the figure does not bring such a payment back: two people approve it, or one returns it to the agent.
 - **In Slack**, a card keeps its buttons after the first approval, with who approved it, so a second person can approve it there.
 
 ### Add what the agent was missing

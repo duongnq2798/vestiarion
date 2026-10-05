@@ -1,5 +1,11 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-05: The agent sends again on its own only what one approval may pay
+
+- An `ap_reconcile` or `milestone_reconcile` entry can now carry `notResubmittedBecause: "workspace.two_approvals"`, with `execution.resultingStatus: "held"`. The payment was never sent and is above the workspace's figure for two approvals. Two people's approvals of it had not been used to pay it, so the agent held it rather than sending it again.
+- Every ledger entry is still appended the same way, and its shape does not change.
+- Nothing changes in `/api/v1`.
+
 ## 2026-10-05: Approve and pay draws on the USYC reserve, and a person's cash back stays
 
 - **Approve and pay brings back what the operating wallet lacks.** A person's paying approval of a new USDC payment from the operating wallet, on Arc testnet or through CCTP with its fee, may now first bring cash back from the reserve. It does so when the wallet cannot cover the payment and the reserve can cover the rest. It brings back the difference, rounded up to the next micro-USDC, with a fifth more of a CCTP fee, which is read again just before the burn. A CCTP payout whose fee could not be read is not covered. **Pay now** on a held milestone does the same.

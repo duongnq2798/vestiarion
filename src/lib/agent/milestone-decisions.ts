@@ -612,10 +612,11 @@ export async function payHeldMilestone(input: {
   }
 
   // The approvals that let it through are used by this payment, or nothing is sent (T6): approvals left open could send
-  // it again on one approval after a failed transfer. The milestone is let go for the next decision.
+  // it again on one approval after a failed transfer. The milestone is let go for the next decision. This approval, which
+  // pays it, is stored with them, as used (payment integrity I4).
   if (approvals.length > 0) {
     try {
-      await markApprovalsUsed(source);
+      await markApprovalsUsed(source, { by: input.actorId, payment });
     } catch (error) {
       const released = await db().from("milestones").update(RELEASED).eq("id", milestone.id);
       if (released.error) console.error("milestone decision: claim not released", milestone.id, released.error.message);
