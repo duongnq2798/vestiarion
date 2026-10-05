@@ -25,6 +25,7 @@ import { agentResumes, CASH_SHORTFALL, counterpartyPath, ruleNextStep } from "@/
 import { amountToPay } from "@/lib/agent/payment-timing";
 import { utcDay, utcMinute } from "@/lib/copy";
 import { paidAcrossChains, payeeChain } from "@/lib/payee-chains";
+import type { TwoApprovalsFacts } from "@/lib/two-approvals";
 
 const INITIAL: ActionResult = { ok: false, message: "" };
 const approve = withSuccessToast(approveInvoiceAction);
@@ -78,6 +79,35 @@ export function payConfirmDescription(payable: Pick<WaitingPayable, "paymentSent
   return `The transfer starts as soon as you confirm, and the ledger records who approved it.${own}`;
 }
 
+/**
+ * What the card says of a payment above the workspace's figure for two approvals (two approvals T8): the rule, and who
+ * approved it so far, by email; the viewer is "You".
+ */
+export function twoApprovalsLine(facts: TwoApprovalsFacts, viewerId: string, emails: Record<string, string> = {}): string {
+  const head = `Payments above ${facts.above} USDC need two approvals.`;
+  const first = facts.approvals[0];
+  if (!first) return `${head} No one has approved it yet.`;
+  const who = first.by === viewerId ? "You" : (emails[first.by] ?? "Another member");
+  return `${head} ${who} approved it on ${utcMinute(first.at)}. One more approval, by another person, pays it.`;
+}
+
+/** What the card says to the workspace's only approver of a payment above the figure: one person cannot give two approvals. */
+export function onlyApproverOfTwo(above: number): string {
+  return `You are the only person in this workspace who can approve payments, and payments above ${above} USDC need two approvals, so it cannot be paid until the figure is raised in Settings or another person who can approve joins.`;
+}
+
+/** The confirmation of an approval that pays nothing yet, the first of two (two approvals T8). */
+export function approveFirstTitle(payable: Pick<WaitingPayable, "amount" | "counterpartyName"> & Partial<Pick<WaitingPayable, "currency">>): string {
+  return `Approve paying ${fmt(payable.amount)} ${payable.currency ?? "USDC"} to ${payable.counterpartyName}?`;
+}
+
+export function approveFirstDescription(above: number): string {
+  return `Payments above ${above} USDC need two approvals. This records your approval and sends nothing; another person's approval pays it.`;
+}
+
+/** The paying confirmation's added sentence when it is the second of two approvals. */
+export const SECOND_APPROVAL_PAYS = "Yours is the second of two approvals, so it pays.";
+
 /** The confirm dialog's added sentence when a sole approver approves what they entered themselves. */
 export const OWN_ENTRY_RECORDED = "It also records that you entered it yourself, as the workspace's only approver.";
 
@@ -113,6 +143,10 @@ const UNFINISHED: { label: string; tone: BadgeProps["tone"] } = { label: "Unfini
  * may approve what they entered (`soleApprover`: the viewer is the only
  * member who may approve payments), and the card says that instead.
  *
+ * Above the workspace's figure for two approvals (`payable.twoApprovals`), the card says who approved it so far, by
+ * the email in `memberEmails`, and Approve and pay reads Approve until the viewer's approval would be the second one,
+ * which pays it. Whoever gave the first approval cannot give the second (two approvals T8).
+ *
  * An owner or admin (`canEdit`) may instead add what the payable is missing —
  * its purchase order, or its goods marked received — while it waits and no
  * payment was sent for it; the agent then decides it again, and until it does
@@ -126,6 +160,7 @@ export default function ApprovalCard({
   sandbox,
   soleApprover = false,
   canEdit = false,
+  memberEmails = {},
 }: {
   orgSlug: string;
   payable: WaitingPayable;
@@ -136,11 +171,15 @@ export default function ApprovalCard({
   soleApprover?: boolean;
   /** The viewer may enter records (`records.write`: owners and admins), so may add what the payable is missing. */
   canEdit?: boolean;
+  /** The emails of the members who approved a payment above the figure for two approvals, by user id. */
+  memberEmails?: Record<string, string>;
 }) {
   const unfinished = payable.status === "processing" && payable.reclaimable;
-  const ownEntry = soleApprover && payable.createdBy === viewerId;
+  // Above the figure for two approvals: one person, sole approver or not, never pays it alone (two approvals T5).
+  const two = payable.twoApprovals ?? null;
+  const ownEntry = !two && soleApprover && payable.createdBy === viewerId;
   // A sole approver paying the first payment to an address they gave themselves (new payee check N4).
-  const ownAddress = soleApprover && payable.firstPaymentAddressBy === viewerId;
+  const ownAddress = !two && soleApprover && payable.firstPaymentAddressBy === viewerId;
   const status = unfinished ? UNFINISHED : STATUS[payable.status];
   const processing = payable.status === "processing" && !payable.reclaimable;
   const canAddDetails =
@@ -175,6 +214,12 @@ export default function ApprovalCard({
             {payable.address ? <span className="font-mono text-ink-2">{payable.address}</span> : "no address set"}
             {paidAcrossChains(payable.payeeChain) && ` on ${payeeChain(payable.payeeChain).label}`}
           </p>
+          {two && <p className="mt-2 text-sm text-ink-2">{twoApprovalsLine(two, viewerId, memberEmails)}</p>}
+          {two && canDecide && soleApprover && (
+            <Callout tone="held" className="mt-2">
+              {onlyApproverOfTwo(two.above)}
+            </Callout>
+          )}
           {payable.addedSinceDecision && (
             <Callout tone="agent" className="mt-2">
               {addedDetailsSentence(payable.addedSinceDecision)}
@@ -191,7 +236,13 @@ export default function ApprovalCard({
           )}
           {canDecide && !processing && ownEntry && payable.riskLevel !== "high" && <p className="mt-2 text-sm text-ink-2">{OWN_INVOICE_NOTE}</p>}
           {canDecide && !processing && (
-            <ApprovalGuidance orgSlug={orgSlug} payable={payable} selfEntered={payable.createdBy === viewerId && !ownEntry} canEdit={canEdit} />
+            <ApprovalGuidance
+              orgSlug={orgSlug}
+              payable={payable}
+              // Above the figure, whoever entered it gives one of the two approvals when too few others can.
+              selfEntered={payable.createdBy === viewerId && !ownEntry && !two?.fewApprovers}
+              canEdit={canEdit}
+            />
           )}
           {payable.lastAttempt?.state === "failed" && (
             <Callout tone="refused" className="mt-2">
@@ -262,8 +313,21 @@ function Decisions({
   const [last, setLast] = useState<"approve" | "return" | null>(null);
   const shown = last === "approve" ? approveForm.state : last === "return" ? returnForm.state : INITIAL;
 
-  const blocked =
-    payable.createdBy === viewerId && !ownEntry
+  // Above the figure for two approvals: the viewer's approval pays it only when someone else approved it first (T8).
+  const two = payable.twoApprovals ?? null;
+  const viewerApproved = two?.approvals.some((approval) => approval.by === viewerId) ?? false;
+  const willPay = !two || two.approvals.some((approval) => approval.by !== viewerId);
+  const blocked = two
+    ? viewerApproved
+      ? "You approved it"
+      : payable.createdBy === viewerId && !two.fewApprovers
+        ? "You created this invoice"
+        : payable.firstPaymentAddressBy === viewerId && !two.fewApprovers
+          ? "You gave this payee's address"
+          : payable.riskLevel === "high"
+            ? "Screened high risk"
+            : null
+    : payable.createdBy === viewerId && !ownEntry
       ? "You created this invoice"
       : payable.firstPaymentAddressBy === viewerId && !ownAddress
         ? "You gave this payee's address"
@@ -300,12 +364,14 @@ function Decisions({
           tone="primary"
           trigger={
             <Button size="sm" icon={<Banknote />} loading={approveForm.pending} disabled={blocked !== null} aria-describedby={blocked ? blockedId : undefined}>
-              Approve and pay
+              {willPay ? "Approve and pay" : "Approve"}
             </Button>
           }
-          title={payConfirmTitle(payable, sandbox)}
-          description={payConfirmDescription(payable, ownEntry)}
-          confirmLabel="Pay now"
+          title={willPay ? payConfirmTitle(payable, sandbox) : approveFirstTitle(payable)}
+          description={
+            willPay ? `${payConfirmDescription(payable, ownEntry)}${two ? ` ${SECOND_APPROVAL_PAYS}` : ""}` : two ? approveFirstDescription(two.above) : ""
+          }
+          confirmLabel={willPay ? "Pay now" : "Approve"}
         />
         {canAddDetails && <AddDetailsDialog orgSlug={orgSlug} payable={payable} />}
         {(!payable.paymentSent || payable.lastAttempt?.state === "unanswered") && payable.lastAttempt?.state !== "in_flight" && (

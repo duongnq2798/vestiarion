@@ -1,7 +1,8 @@
 import { currentOrgId } from "../context";
 import { sameAddress } from "../counterparty-address";
 import { db, unwrap } from "../dal";
-import { approversBesides } from "../approval-policy";
+import { approversBesides, readTwoApprovalsAbove } from "../approval-policy";
+import type { TwoApprovalsFacts } from "../two-approvals";
 
 /**
  * The approvals people give a payment above the workspace's figure (docs/superpowers/specs/2026-10-05-two-approvals-design.md
@@ -114,6 +115,8 @@ export async function clearApprovals(source: PaymentSource): Promise<void> {
 
 const MEMBER_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+const memberIds = (ids: Array<string | null | undefined>) => [...new Set(ids.filter((id): id is string => typeof id === "string" && MEMBER_ID.test(id)))];
+
 /**
  * Whether this person may give one of a payment's two approvals (T5): anyone who may approve payments, except whoever
  * entered it and, for a first payment to an address, whoever gave the address, unless fewer than two others can. Whether
@@ -121,7 +124,67 @@ const MEMBER_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
  */
 export async function mayGiveApproval(input: { actorId: string; excluded: Array<string | null | undefined> }): Promise<boolean> {
   // Members only: a first payment's address may have been given by the payee ("payee"), who is no one here.
-  const excluded = [...new Set(input.excluded.filter((id): id is string => typeof id === "string" && MEMBER_ID.test(id)))];
+  const excluded = memberIds(input.excluded);
   if (!excluded.includes(input.actorId)) return true;
   return (await approversBesides(excluded)) < 2;
+}
+
+/** A payment waiting for a person, as a page lists it, for `twoApprovalsFacts`. */
+export interface WaitingPayment {
+  id: string;
+  payment: ApprovedPayment;
+  /** What it is weighed at against the figure, in USDC; null when its value is not known (T2). */
+  weighed: number | null;
+  /** Whoever entered it, and whoever gave a first payment's address. */
+  excluded: Array<string | null | undefined>;
+  /** A transfer for it was already sent: approving it only records it, on one approval (T6). */
+  sent: boolean;
+}
+
+/**
+ * For the payments a page lists, those above the workspace's figure: the approvals given that still count, and whether
+ * whoever is left out may give one (two approvals T8). A handful of reads for the whole page: the figure, then only
+ * when one is above it, their open approvals, who of their givers may still approve, and the count for each set of
+ * people left out.
+ */
+export async function twoApprovalsFacts(type: PaymentSource["type"], items: WaitingPayment[]): Promise<Map<string, TwoApprovalsFacts>> {
+  const facts = new Map<string, TwoApprovalsFacts>();
+  if (items.length === 0) return facts;
+  const above = await readTwoApprovalsAbove(db());
+  if (above === null) return facts;
+  const needing = items.filter((item) => !item.sent && (item.weighed === null || item.weighed > above));
+  if (needing.length === 0) return facts;
+
+  const rows = unwrap(
+    await db()
+      .from("payment_approvals")
+      .select(`source_id, ${COLUMNS}`)
+      .eq("source_type", type)
+      .in("source_id", needing.map((item) => item.id))
+      .is("used_at", null)
+      .order("approved_at", { ascending: true })
+  ) as Array<ApprovalRow & { source_id: string }>;
+  const agreeing = new Map<string, GivenApproval[]>();
+  for (const item of needing) {
+    agreeing.set(
+      item.id,
+      rows.filter((row) => row.source_id === item.id).map(given).filter((approval) => approvalAgrees(approval, item.payment))
+    );
+  }
+  const givers = [...new Set([...agreeing.values()].flat().map((approval) => approval.by))];
+  const approvers = givers.length > 0 ? await approversAmong(givers) : new Set<string>();
+
+  // One count per set of people left out, however many payments share it.
+  const counts = new Map<string, number>();
+  for (const item of needing) {
+    const excluded = memberIds(item.excluded);
+    const key = [...excluded].sort().join(",");
+    if (excluded.length > 0 && !counts.has(key)) counts.set(key, await approversBesides(excluded));
+    facts.set(item.id, {
+      above,
+      approvals: (agreeing.get(item.id) ?? []).filter((approval) => approvers.has(approval.by)).map((approval) => ({ by: approval.by, at: approval.at })),
+      fewApprovers: excluded.length > 0 && (counts.get(key) ?? 2) < 2,
+    });
+  }
+  return facts;
 }

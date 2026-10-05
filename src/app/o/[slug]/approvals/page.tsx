@@ -13,6 +13,7 @@ import { requireMembership } from "@/lib/auth/membership";
 import { can } from "@/lib/auth/roles";
 import { chainModes } from "@/lib/circle";
 import { inOrg } from "@/lib/dal/scope";
+import { listMembers } from "@/lib/platform/members";
 import { listOpenProposals } from "@/lib/policy-proposals";
 import { stats } from "@/lib/queries";
 
@@ -37,6 +38,12 @@ export default async function ApprovalsPage({ params }: { params: Promise<{ slug
       // Whether this person may approve what they entered themselves (sole approver R5).
       canDecide ? isSoleApprover(user.id) : Promise.resolve(false),
     ]);
+    // Who approved a payment above the figure for two approvals, by email (two approvals T8): read only when someone has.
+    const approverIds = new Set(waiting.flatMap((payable) => payable.twoApprovals?.approvals.map((approval) => approval.by) ?? []));
+    const memberEmails: Record<string, string> =
+      approverIds.size > 0
+        ? Object.fromEntries((await listMembers(membership.orgId)).filter((member) => approverIds.has(member.userId)).map((member) => [member.userId, member.email]))
+        : {};
 
     return (
       <ProductShell day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()}>
@@ -76,6 +83,7 @@ export default async function ApprovalsPage({ params }: { params: Promise<{ slug
                 sandbox={membership.mode === "sandbox"}
                 soleApprover={soleApprover}
                 canEdit={can(membership.role, "records.write")}
+                memberEmails={memberEmails}
               />
             ))}
           </div>

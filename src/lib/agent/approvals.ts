@@ -20,8 +20,17 @@ import { addedSince, latestDecision, recordedFacts, type AddedDetails } from "..
 import { heldForCash } from "../next-step";
 import type { Provenance } from "../provenance";
 import { readTwoApprovalsAbove } from "../approval-policy";
-import { needsTwoApprovals } from "../two-approvals";
-import { clearApprovals, giveApproval, mayGiveApproval, standingApprovals, useApprovals, type GivenApproval, type PaymentSource } from "./second-approval";
+import { needsTwoApprovals, type TwoApprovalsFacts } from "../two-approvals";
+import {
+  clearApprovals,
+  giveApproval,
+  mayGiveApproval,
+  standingApprovals,
+  twoApprovalsFacts,
+  useApprovals,
+  type GivenApproval,
+  type PaymentSource,
+} from "./second-approval";
 
 export type { AddedDetails };
 
@@ -393,6 +402,12 @@ export interface WaitingPayable {
    * decide alone.
    */
   firstPaymentAddressBy?: string | null;
+  /**
+   * Above the workspace's figure for two approvals (two approvals T8): the figure, the approvals given that still count,
+   * and whether whoever entered it, or gave its address, may give one. Absent when one approval pays it, or its transfer
+   * was already sent.
+   */
+  twoApprovals?: TwoApprovalsFacts;
 }
 
 
@@ -462,12 +477,32 @@ export async function listWaitingPayables(
   const newPayeeFacts =
     rows.length > 0 && getChainProvider().mode === "live" ? await loadNewPayeeFacts(db(), [...new Set(rows.map((row) => row.counterparty_id))]) : null;
 
+  const newPayeeOf = (row: (typeof rows)[number]) =>
+    newPayeeFacts
+      ? newPayeeCheck({ address: row.counterparties?.address ?? null, paidTo: newPayeeFacts.paidTo, entries: newPayeeFacts.entries.get(row.counterparty_id) ?? [] })
+      : null;
+
+  // Above the workspace's figure: the approvals given, and whether those left out may give one (two approvals T8).
+  const twoApprovals = await twoApprovalsFacts(
+    "invoice",
+    rows.map((row) => {
+      const currency = currencyOf(row.currency);
+      const usdcValue = latestDecision(entries, row.id)?.detail.usdcValue;
+      const newPayee = newPayeeOf(row);
+      return {
+        id: row.id,
+        payment: { amount: num(row.amount), currency, address: row.counterparties?.address ?? null },
+        weighed: currency === "USDC" ? num(row.amount) : typeof usdcValue === "number" ? usdcValue : null,
+        excluded: [row.created_by, newPayee?.firstPayment ? newPayee.addressBy : null],
+        sent: transferExists(intents.get(row.id) ?? null),
+      };
+    })
+  );
+
   const now = Date.now();
   return rows.map((row) => {
     const intent = intents.get(row.id) ?? null;
-    const newPayee = newPayeeFacts
-      ? newPayeeCheck({ address: row.counterparties?.address ?? null, paidTo: newPayeeFacts.paidTo, entries: newPayeeFacts.entries.get(row.counterparty_id) ?? [] })
-      : null;
+    const newPayee = newPayeeOf(row);
     const decision = latestDecision(entries, row.id);
     const onFile = { poReference: row.po_reference ?? null, goodsReceived: row.goods_received === true };
     // The decision is explained from the facts it recorded, not from details a person added since (R6).
@@ -510,6 +545,7 @@ export async function listWaitingPayables(
       guardrailRule: decision?.detail.guardrailBlocked === true && typeof decision.detail.guardrailRule === "string" ? decision.detail.guardrailRule : null,
       ...(row.status === "held" && heldForCash(decision?.detail) ? { heldForCash: true } : {}),
       ...(newPayee?.firstPayment ? { firstPaymentAddressBy: newPayee.addressBy } : {}),
+      ...(twoApprovals.has(row.id) ? { twoApprovals: twoApprovals.get(row.id) } : {}),
     };
   });
 }

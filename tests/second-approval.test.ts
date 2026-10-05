@@ -8,6 +8,7 @@ import {
   mayGiveApproval,
   openApprovals,
   standingApprovals,
+  twoApprovalsFacts,
   useApprovals,
 } from "@/lib/agent/second-approval";
 import { fakeSupabase, orgTestContext, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
@@ -160,5 +161,58 @@ describe("mayGiveApproval", () => {
     fake = fakeSupabase(workspace({ besides: 1 }));
     expect(await run(() => mayGiveApproval({ actorId: ANNA, excluded: ["payee", ANNA] }))).toBe(true);
     expect(fake.requests.find((r) => r.path === "/rest/v1/rpc/approvers_besides")?.body).toEqual({ p_org_id: ORG, p_excluded: [ANNA] });
+  });
+});
+
+describe("twoApprovalsFacts", () => {
+  const item = (id: string, over: Record<string, unknown> = {}) => ({
+    id,
+    payment: { amount: 120, currency: "USDC", address: PAYMENT.address },
+    weighed: 120 as number | null,
+    excluded: [] as Array<string | null>,
+    sent: false,
+    ...over,
+  });
+
+  function listing(over: { above?: number | null; open?: unknown[]; besides?: number } = {}) {
+    return (r: RecordedRequest): FakeReply => {
+      if (r.path === "/rest/v1/approval_policies") return { body: over.above === null || over.above === undefined ? [] : [{ two_approvals_above: String(over.above) }] };
+      if (r.path === "/rest/v1/payment_approvals") return { body: over.open ?? [] };
+      if (r.path === "/rest/v1/rpc/approvers_among") return { body: (r.body as { p_users: string[] }).p_users };
+      if (r.path === "/rest/v1/rpc/approvers_besides") return { body: over.besides ?? 2 };
+      return { body: [] };
+    };
+  }
+
+  it("is empty, after one read, with no figure set", async () => {
+    fake = fakeSupabase(listing({ above: null }));
+    expect((await run(() => twoApprovalsFacts("invoice", [item(INVOICE)]))).size).toBe(0);
+    expect(fake.requests.map((r) => r.path)).toEqual(["/rest/v1/approval_policies"]);
+  });
+
+  it("gives each payment above the figure its standing approvals, and whether those left out may approve", async () => {
+    const second = "22222222-2222-4333-8444-555555555555";
+    const third = "33333333-2222-4333-8444-555555555555";
+    fake = fakeSupabase(listing({ above: 100, open: [{ ...row(ANNA), source_id: INVOICE }, { ...row(BAO, { amount: "1" }), source_id: INVOICE }], besides: 1 }));
+
+    const facts = await run(() =>
+      twoApprovalsFacts("invoice", [
+        item(INVOICE, { excluded: [BAO] }),
+        item(second, { weighed: 90 }),
+        item(third, { sent: true }),
+      ])
+    );
+
+    expect([...facts.keys()]).toEqual([INVOICE]);
+    expect(facts.get(INVOICE)).toEqual({ above: 100, approvals: [{ by: ANNA, at: "2026-10-05T08:00:00.000Z" }], fewApprovers: true });
+    const read = fake.requests.find((r) => r.path === "/rest/v1/payment_approvals")!;
+    expect(read.params.get("source_id")).toBe(`in.(${INVOICE})`);
+    expect(fake.requests.find((r) => r.path === "/rest/v1/rpc/approvers_besides")?.body).toEqual({ p_org_id: ORG, p_excluded: [BAO] });
+  });
+
+  it("counts a payment whose value is not known as above the figure", async () => {
+    fake = fakeSupabase(listing({ above: 100 }));
+    const facts = await run(() => twoApprovalsFacts("milestone", [item(INVOICE, { weighed: null })]));
+    expect(facts.get(INVOICE)).toEqual({ above: 100, approvals: [], fewApprovers: false });
   });
 });

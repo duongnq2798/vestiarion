@@ -4,11 +4,15 @@ import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import ApprovalCard, {
+  approveFirstDescription,
+  approveFirstTitle,
   HIGH_RISK_EXPLAINED,
+  onlyApproverOfTwo,
   OWN_ENTRY_RECORDED,
   OWN_INVOICE_NOTE,
   payConfirmDescription,
   payConfirmTitle,
+  SECOND_APPROVAL_PAYS,
   SELF_APPROVAL_EXPLAINED,
 } from "@/components/ApprovalCard";
 import { agentResumes, CASH_SHORTFALL } from "@/lib/next-step";
@@ -939,5 +943,70 @@ describe("ApprovalCard for a EURC payable (EURC invoices design E4)", () => {
       <ApprovalCard orgSlug="acme" payable={payable({ currency: "EURC" })} canDecide viewerId={VIEWER} sandbox={false} />
     );
     expect(markup).toMatch(/1,250\.00<\/span><span[^>]*>EURC<\/span>/);
+  });
+});
+
+describe("ApprovalCard above the figure for two approvals (two approvals T8)", () => {
+  const OTHER = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000d4";
+  const AT = "2026-10-05T08:00:00.000Z";
+  const plain = (markup: string) => markup.replace(/<[^>]+>/g, " ").replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/\s+/g, " ").trim();
+  const two = (approvals: Array<{ by: string; at: string }> = [], fewApprovers = false): Partial<WaitingPayable> => ({
+    twoApprovals: { above: 1000, approvals, fewApprovers },
+  });
+  const named = (overrides: Partial<WaitingPayable>, props: Partial<{ viewerId: string; soleApprover: boolean }> = {}) =>
+    html(
+      <ApprovalCard
+        orgSlug="acme"
+        payable={payable(overrides)}
+        canDecide
+        viewerId={props.viewerId ?? VIEWER}
+        sandbox={false}
+        soleApprover={props.soleApprover ?? false}
+        memberEmails={{ [OTHER]: "linh@acme.test" }}
+      />
+    );
+  /** A button whose label, after its icon, is exactly Approve; disabled or not. */
+  const approveButton = (disabled: boolean) =>
+    new RegExp(`<button[^>]*${disabled ? 'disabled=""' : ""}[^>]*>(?:(?!</button>).)*>Approve</button>`);
+
+  it("says no one approved it yet, and offers Approve, which pays nothing", () => {
+    const markup = card(two());
+    expect(plain(markup)).toContain("Payments above 1000 USDC need two approvals. No one has approved it yet.");
+    expect(markup).toMatch(approveButton(false));
+    expect(markup).not.toContain("Approve and pay");
+  });
+
+  it("names who approved it, and offers Approve and pay to someone else", () => {
+    const markup = named(two([{ by: OTHER, at: AT }]));
+    expect(plain(markup)).toContain("linh@acme.test approved it on Oct 5, 2026, 08:00 UTC. One more approval, by another person, pays it.");
+    expect(markup).toContain("Approve and pay");
+  });
+
+  it("keeps a second approval from whoever gave the first", () => {
+    const markup = named(two([{ by: VIEWER, at: AT }]));
+    expect(plain(markup)).toContain("You approved it on Oct 5, 2026, 08:00 UTC.");
+    expect(markup).toMatch(approveButton(true));
+    expect(plain(markup)).toContain("You approved it");
+  });
+
+  it("keeps it from whoever entered it while two others can approve, and lets them give one when fewer can", () => {
+    expect(card(two(), { viewerId: CREATOR })).toMatch(approveButton(true));
+    expect(plain(card(two(), { viewerId: CREATOR }))).toContain("You created this invoice");
+    const few = card(two([], true), { viewerId: CREATOR });
+    expect(few).toMatch(approveButton(false));
+    expect(plain(few)).not.toContain("You entered this invoice");
+  });
+
+  it("tells the only approver it cannot be paid until the figure is raised or someone else can approve", () => {
+    expect(plain(card(two(), { soleApprover: true }))).toContain(onlyApproverOfTwo(1000));
+    expect(plain(card({}, { soleApprover: true }))).not.toContain("need two approvals");
+  });
+
+  it("says what the first approval does, and what the second does, in their confirmations", () => {
+    expect(approveFirstTitle(payable())).toBe("Approve paying 1,250.00 USDC to Northwind Supply?");
+    expect(approveFirstDescription(1000)).toBe(
+      "Payments above 1000 USDC need two approvals. This records your approval and sends nothing; another person's approval pays it."
+    );
+    expect(SECOND_APPROVAL_PAYS).toBe("Yours is the second of two approvals, so it pays.");
   });
 });

@@ -38,6 +38,17 @@ export function parseTwoApprovalsForm(raw: string): { ok: true; above: number | 
   return { ok: true, above: value };
 }
 
+/**
+ * A payment above the figure, as the pages that decide it show it (T8): the figure, the approvals given that still count
+ * (the earlier first), and whether whoever entered it, or gave its address, may give one because fewer than two others
+ * can approve.
+ */
+export interface TwoApprovalsFacts {
+  above: number;
+  approvals: Array<{ by: string; at: string }>;
+  fewApprovers: boolean;
+}
+
 /** What an approval says when it is the first of two and sends nothing (T8). */
 export const APPROVAL_RECORDED = "Approved. One more approval, by another person, pays it.";
 

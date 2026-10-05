@@ -2228,3 +2228,27 @@ describe("Reject and Return end the approvals given (two approvals T6)", () => {
     }
   });
 });
+
+describe("listWaitingPayables above the figure for two approvals (two approvals T8)", () => {
+  const OTHER = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000c3";
+
+  it("gives a payable above the figure its approvals, and whether whoever entered it may give one", async () => {
+    const { fake, run } = approvalsFake({
+      twoApprovals: 100,
+      approversBesides: 1,
+      approvals: [{ source_id: INVOICE_ID, id: "appr-c3", approved_by: OTHER, approved_at: "2026-10-05T08:00:00.000Z", amount: "150", currency: "USDC", address: "0xdead" }],
+    });
+
+    const [row] = await run(() => listWaitingPayables());
+
+    expect(row.twoApprovals).toEqual({ above: 100, approvals: [{ by: OTHER, at: "2026-10-05T08:00:00.000Z" }], fewApprovers: true });
+    expect(rpcBodies(fake.requests, "approvers_besides")).toEqual([{ p_org_id: ORG, p_excluded: [CREATOR] }]);
+  });
+
+  it("gives none at or under the figure, or with none set", async () => {
+    const under = approvalsFake({ twoApprovals: 150 });
+    expect((await under.run(() => listWaitingPayables()))[0]).not.toHaveProperty("twoApprovals");
+    const none = approvalsFake();
+    expect((await none.run(() => listWaitingPayables()))[0]).not.toHaveProperty("twoApprovals");
+  });
+});
