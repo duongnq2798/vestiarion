@@ -33,11 +33,15 @@ export class ApprovalPolicyError extends Error {
 
 const numeric = (value: string | number | null | undefined) => (value == null ? null : Number(value));
 
-/** The workspace's figure, or null when none is set or it is turned off. */
+/**
+ * The workspace's figure, or null when none is set or it is turned off. Before migration 0076 has run there is no table,
+ * and so no figure: PostgREST's "no such table" (PGRST205) or Postgres's (42P01) reads as none, so a deploy that comes
+ * before the migration leaves payments as they always were. Any other error is thrown.
+ */
 export async function readTwoApprovalsAbove(orgDb: OrgDb): Promise<number | null> {
-  const rows = unwrap(await orgDb.from("approval_policies").select("two_approvals_above").limit(1)) as Array<{
-    two_approvals_above: string | number | null;
-  }>;
+  const result = await orgDb.from("approval_policies").select("two_approvals_above").limit(1);
+  if (result.error && (result.error.code === "PGRST205" || result.error.code === "42P01")) return null;
+  const rows = unwrap(result) as Array<{ two_approvals_above: string | number | null }>;
   return numeric(rows[0]?.two_approvals_above);
 }
 

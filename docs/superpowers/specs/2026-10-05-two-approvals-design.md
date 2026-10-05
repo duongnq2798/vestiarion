@@ -127,7 +127,8 @@ and the signed ledger shows who stood behind each payment.
 
 ## 4. Rollout
 
-- Migration `0076_two_approvals.sql` (the partner runs it before the merge).
+- Migration `0076_two_approvals.sql` (the partner runs it before the merge). Until it has run there is no table, and the
+  figure reads as none, so a deploy that comes first leaves payments as they were.
 - Proof in testnet-2, with a second member who may approve:
   - an owner sets Two approvals above 1 USDC;
   - a 2 USDC payable: the agent holds it as `workspace.two_approvals`;
