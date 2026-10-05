@@ -237,6 +237,18 @@ describe("ApprovalCard", () => {
     expect(markup).not.toContain("Return to agent");
   });
 
+  it("says Circle never answered the payment's send, and offers only Approve and pay, which asks again under the same key (payment safety R1)", () => {
+    const markup = card({ paymentSent: true, lastAttempt: { state: "unanswered" } });
+    expect(markup).toContain(
+      "Circle did not answer when this payment was sent, so it may have taken the transfer. Approving asks Circle again under the same key, so nothing is sent twice; it cannot be rejected or returned until then."
+    );
+    expect(markup).not.toContain("A payment was already sent; Approve and pay records it.");
+    expect(markup).toContain("Approve and pay");
+    expect(markup).not.toMatch(APPROVE_DISABLED);
+    expect(markup).not.toContain("Reject");
+    expect(markup).not.toContain("Return to agent");
+  });
+
   it("shows the in-flight line instead of the sent-payment line when a payment already sent is in flight", () => {
     const markup = card({ paymentSent: true, lastAttempt: { state: "in_flight" } });
     expect(markup).not.toContain("A payment was already sent; Approve and pay records it.");
@@ -361,6 +373,12 @@ describe("ApprovalCard", () => {
   it("says nothing new is sent for a transfer still in flight", () => {
     expect(payConfirmDescription(payable({ lastAttempt: { state: "in_flight" } }))).toBe(
       "Nothing new is sent: Vestiarion checks the transfer already made with Circle, and the ledger records who approved it."
+    );
+  });
+
+  it("says a payment Circle never answered is sent again under the same key, which returns the transfer Circle took (payment safety R1)", () => {
+    expect(payConfirmDescription(payable({ paymentSent: true, lastAttempt: { state: "unanswered" } }))).toBe(
+      "It is sent again under the same key: if Circle took the first send, Circle returns that transfer, so nothing is sent twice. The ledger records who approved it."
     );
   });
 
@@ -571,6 +589,12 @@ describe("the new control screens, as source", () => {
 
   it("the pay confirmation says a new transfer starts after a failed attempt", () => {
     expect(read("src/components/ApprovalCard.tsx")).toContain("A new transfer starts as soon as you confirm, and the ledger records who approved it.");
+  });
+
+  it("the pay confirmation says a payment Circle never answered is sent again under the same key", () => {
+    expect(read("src/components/ApprovalCard.tsx")).toContain(
+      "It is sent again under the same key: if Circle took the first send, Circle returns that transfer, so nothing is sent twice. The ledger records who approved it."
+    );
   });
 
   it("the pay confirmation says nothing new is sent for a transfer already made", () => {

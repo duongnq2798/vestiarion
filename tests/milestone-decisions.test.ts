@@ -87,6 +87,13 @@ describe("what a held milestone waits for", () => {
     expect(reason.text).toBe("Circle did not send it: Circle could not prepare the transaction (Circle: ESTIMATION_ERROR). Nothing moved. Pay now sends it again.");
   });
 
+  it("says Circle never answered its transfer's send, which Pay now asks again under the same key, and never closes over it (payment safety R1)", () => {
+    const intent = { status: "failed", provider_tx_id: null, last_error: "Circle did not answer createTransaction within 20000 ms; the transfer may or may not have been accepted", provider_state: null, failure_reason: null };
+    const reason = heldReason(facts({ intent, lastEntry: { action: "milestone_release", detail: {} } }));
+    expect(reason).toMatchObject({ kind: "in_flight", canPay: true, canClose: false, override: false });
+    expect(reason.text).toBe("Circle did not answer when its transfer was sent, so it may have taken it. Pay now asks Circle again under the same key; nothing is sent twice.");
+  });
+
   it("records a transfer that went out, or may still, and never closes over it", () => {
     for (const intent of [
       { ...FAILED_INTENT, status: "pending", provider_state: "SENT", failure_reason: null },
@@ -343,6 +350,9 @@ describe("Close without paying", () => {
     const sending = world({ intent: { ...FAILED_INTENT, status: "pending", provider_state: "SENT", failure_reason: null } });
     expect(await refusal(sending.run(() => closeMilestone({ actorId: ACTOR, milestoneId: MILESTONE, reason: "Not needed" })))).toBe("payment_in_flight");
     expect(sending.claimed()).toBe(false);
+    const unknown = world({ intent: { ...FAILED_INTENT, provider_tx_id: null, provider_state: null, failure_reason: null, last_error: "Circle did not answer createTransaction within 20000 ms; the transfer may or may not have been accepted" } });
+    expect(await refusal(unknown.run(() => closeMilestone({ actorId: ACTOR, milestoneId: MILESTONE, reason: "Not needed" })))).toBe("payment_in_flight");
+    expect(unknown.claimed()).toBe(false);
     const locked = world({ milestone: { escrow_state: "funded" }, intent: null });
     expect(await refusal(locked.run(() => closeMilestone({ actorId: ACTOR, milestoneId: MILESTONE, reason: "Not needed" })))).toBe("escrow_locked");
   });

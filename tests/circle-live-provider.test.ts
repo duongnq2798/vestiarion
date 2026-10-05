@@ -93,6 +93,63 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+/**
+ * A send that ends with no word from Circle on what became of it (payment safety R1): the error says the transfer may
+ * or may not have been accepted, which Reject and Return read, so nothing closes over a transfer Circle may hold. The
+ * SDK's errors carry an HTTP `status` when Circle answered, and a network `code` when it did not.
+ */
+describe("a send Circle never answered says so (payment safety R1)", () => {
+  const failing = (error: unknown) =>
+    fakeClient({ createTransaction: vi.fn(async () => { throw error; }) as unknown as LiveProviderClient["createTransaction"] });
+
+  it.each([
+    [
+      "the connection dropped after the request left",
+      Object.assign(new Error("Connection reset"), { code: "ECONNRESET" }),
+      "Circle did not answer createTransaction (ECONNRESET); the transfer may or may not have been accepted",
+    ],
+    [
+      "Circle answered 5xx",
+      Object.assign(new Error("Internal Server Error"), { status: 500, code: -1 }),
+      "Circle answered createTransaction with HTTP 500, which does not say what became of it; the transfer may or may not have been accepted",
+    ],
+  ])("when %s", async (_label, error, message) => {
+    const provider = new LiveProvider(CHAIN, { client: failing(error) });
+
+    await expect(provider.transfer(TRANSFER)).rejects.toThrow(message);
+  });
+
+  it.each([
+    ["Circle refused it", Object.assign(new Error("the asset amount owned by the wallet is insufficient"), { status: 400, code: 155201 })],
+    ["the connection was never made", Object.assign(new Error("Connection refused"), { code: "ECONNREFUSED" })],
+    ["the error is not an HTTP one", new Error("Circle rejected createTransaction")],
+  ])("keeps the error's own words when %s", async (_label, error) => {
+    const provider = new LiveProvider(CHAIN, { client: failing(error) });
+
+    await expect(provider.transfer(TRANSFER)).rejects.toBe(error);
+  });
+
+  it("says so when Circle answers with no transaction id", async () => {
+    const client = fakeClient({ createTransaction: vi.fn(async () => ({ data: {} })) as unknown as LiveProviderClient["createTransaction"] });
+
+    await expect(new LiveProvider(CHAIN, { client }).transfer(TRANSFER)).rejects.toThrow(
+      "Circle answered createTransaction with no transaction id; the transfer may or may not have been accepted"
+    );
+  });
+
+  it("says so for a release from escrow too", async () => {
+    const createContractExecutionTransaction = vi.fn(async () => {
+      throw Object.assign(new Error("Request timeout"), { code: "ECONNABORTED" });
+    });
+    const client = fakeClient({ createContractExecutionTransaction } as unknown as Partial<LiveProviderClient>);
+    const release = { ...TRANSFER, route: "escrow" as const, escrow: { contract: "0x2222222222222222222222222222222222222222", holdId: `0x${"ab".repeat(32)}` } };
+
+    await expect(new LiveProvider(CHAIN, { client }).transfer(release)).rejects.toThrow(
+      "Circle did not answer the escrow release (ECONNABORTED); it may or may not have been accepted"
+    );
+  });
+});
+
 describe("LiveProvider Circle request deadlines", () => {
   it("rejects a hung createTransaction after 20 seconds with an unknown-outcome message", async () => {
     const createTransaction = vi.fn(never);

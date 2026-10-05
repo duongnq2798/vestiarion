@@ -53,6 +53,23 @@ fixes have run for days before any mainnet workspace exists:
     Circle, which is what a timeout leaves. The card says that Circle may have taken the transfer, and that approving
     checks it, sending nothing twice.
   - A failure Circle answered (a refusal with a reason) still allows Reject.
+- **R2. What counts as no answer.** Circle never said what became of the send:
+  - the 20-second deadline ran out;
+  - the connection dropped after the request left (any network error but a connection never made: refused, DNS,
+    unreachable);
+  - Circle answered 5xx;
+  - or it answered with no transaction id.
+  - Gateway's transfer is the same: no answer, a 5xx, or no transfer id.
+  - The provider writes "may or may not have been accepted" into the error, and that phrase is what the rule reads, so
+    no migration is needed.
+- **R3. What a person sees and can do.**
+  - Reject, Return and Add details refuse with `payment_unknown`, saying why.
+  - The card says Circle may have taken the transfer, and that approving asks Circle again under the same key.
+  - Approving skips the balance check, as for any transfer that may exist: Circle's idempotency returns the original
+    transfer when it holds one, and sends it when it does not.
+  - A held milestone cannot be closed, and its card says the same.
+  - Cost if wrong: a person who changed their mind after approving cannot reject until Circle answers. Approving then
+    completes the payment they approved.
 - **K1. A live workspace screens for real.**
   - Where the deployment has no `OPENSANCTIONS_API_URL`, a live workspace's counterparties are not screened "clear" by
     the demo list. They stay `unscreened`, and the agent pays them nothing (the unscreened hold).

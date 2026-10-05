@@ -6,7 +6,7 @@ import { firstPaymentCheck } from "../new-payee-facts";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { listLedgerEntriesForTargets } from "../ledger";
 import type { Provenance } from "../provenance";
-import { lastAttemptOf, paymentWasSent, SOLE_APPROVER_NOTE, transferExists, type IntentState } from "./approvals";
+import { lastAttemptOf, paymentWasSent, SOLE_APPROVER_NOTE, transferExists, transferUnknown, type IntentState } from "./approvals";
 import { releaseHeldMilestone } from "./orchestrator";
 import { HELD_FOR_BUDGET } from "./outflow-budget";
 import { payoutAddress, syncOperatingBalance } from "./pay";
@@ -163,6 +163,17 @@ function reasonOf(facts: HeldFacts): Omit<HeldReason, "hint"> {
   // A transfer that went out, or may still: recorded, never sent twice, and never closed over.
   if (intent?.status === "confirmed") {
     return { kind: "in_flight", text: "Its transfer went through, but it is not marked paid yet. Pay now records it; nothing is sent twice.", link: null, canPay: true, canClose: false, override: false };
+  }
+  // Circle never answered its send (payment safety R1): it may hold the transfer, which the same key returns.
+  if (transferUnknown(intent)) {
+    return {
+      kind: "in_flight",
+      text: "Circle did not answer when its transfer was sent, so it may have taken it. Pay now asks Circle again under the same key; nothing is sent twice.",
+      link: null,
+      canPay: true,
+      canClose: false,
+      override: false,
+    };
   }
   if (paymentWasSent(intent)) {
     return { kind: "in_flight", text: "A transfer for it is on its way. Pay now records it once Circle confirms it; nothing is sent twice.", link: null, canPay: true, canClose: false, override: false };
