@@ -2,7 +2,8 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import CounterpartyPurchaseOrdersEdit, { purchaseOrdersLabel } from "@/components/intake/CounterpartyPurchaseOrdersEdit";
+import CounterpartyPurchaseOrdersEdit from "@/components/intake/CounterpartyPurchaseOrdersEdit";
+import { purchaseOrdersLabel } from "@/lib/counterparty-purchase-orders";
 
 /**
  * Whether a counterparty needs purchase orders, on its card on Counterparties (three-way match design M2): what the

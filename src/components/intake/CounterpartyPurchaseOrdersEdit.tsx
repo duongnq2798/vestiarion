@@ -12,11 +12,6 @@ import { withSuccessToast } from "@/components/withSuccessToast";
 const INITIAL: IntakeActionResult = { ok: false, message: "" };
 const update = withSuccessToast(updateCounterpartyPurchaseOrdersAction);
 
-/** What a counterparty's card says about its purchase orders. */
-export function purchaseOrdersLabel(required: boolean): string {
-  return required ? "Needed before the agent pays" : "Not needed · goods received still is";
-}
-
 /**
  * "Change" beside whether a counterparty needs purchase orders, for owners and admins (three-way match design M2).
  * Every counterparty needs one by default; one marked paid without them is paid on the goods or services received

@@ -14,6 +14,11 @@ import { appendLedgerEntryBestEffort } from "./ledger-best-effort";
  * payables, and the next cycle decides with the change.
  */
 
+/** What a counterparty's card on Counterparties says about its purchase orders. */
+export function purchaseOrdersLabel(required: boolean): string {
+  return required ? "Needed before the agent pays" : "Not needed · goods received still is";
+}
+
 export type CounterpartyPurchaseOrdersErrorCode = "unchanged" | "conflict" | "not_found";
 
 export class CounterpartyPurchaseOrdersError extends Error {
