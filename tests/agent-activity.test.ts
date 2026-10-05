@@ -50,6 +50,18 @@ describe("what the agent did, in words", () => {
     });
   });
 
+  it("says the goods were checked, with no purchase order needed, for a counterparty paid without them (three-way match design M4)", () => {
+    const paid = entry("ap_pay", {
+      decisionMode: "deepseek",
+      agreedWithReference: true,
+      observed: { riskLevel: "clear", paymentLimit: 30, poReference: null, goodsReceived: true, purchaseOrderRequired: false },
+      execution: { txRef: TX, resultingStatus: "paid" },
+    });
+    expect(activityItem(paid, refs())?.detail).toBe(
+      "DeepSeek decided, as the written policy would. Checks passed: goods received, with no purchase order needed, the 30.00 USDC limit, screening."
+    );
+  });
+
   it("says how long after the person's action the agent decided", () => {
     const paid = { ...entry("ap_pay", { execution: { txRef: TX, resultingStatus: "paid" } }), ts: "2026-10-03T02:20:53Z" };
     const withTriggers = (action: string, ts: string) => ({ ...refs(), triggers: new Map([[INVOICE, [{ seq: 968, ts, action }]]]) });
