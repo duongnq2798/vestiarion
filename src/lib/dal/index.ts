@@ -37,14 +37,14 @@ export const TENANT_TABLES = [
   "accounts", "counterparties", "invoices", "milestones", "treasury_actions", "compliance_checks",
   "forecasts", "ledger_entries", "payment_intents", "cycle_runs", "cycle_snapshots", "sim_clock", "gateway_signers", "payment_receipts", "escrow_contracts",
   "fx_swaps", "screening_dismissals", "receivable_links", "incoming_transfers", "agent_budgets", "recurring_payables", "policy_proposals",
-  "service_purchases", "spending_limit_contracts", "ar_reminders", "inbox_emails",
+  "service_purchases", "spending_limit_contracts", "ar_reminders", "inbox_emails", "approval_policies", "payment_approvals",
 ] as const;
 export type TenantTable = (typeof TENANT_TABLES)[number];
 
 export const TENANT_RPCS = [
   "append_ledger_entry", "advance_sim_day", "claim_payment_intent", "ledger_entries_for_targets",
   "begin_cycle_run", "agent_paused", "claim_invoice_decision", "begin_payment_retry", "claim_milestone_decision",
-  "sole_approver",
+  "sole_approver", "approvers_besides", "approvers_among",
 ] as const;
 export type TenantRpc = (typeof TENANT_RPCS)[number];
 
