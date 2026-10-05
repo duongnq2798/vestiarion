@@ -1,3 +1,4 @@
+import { addressProblem } from "./address-checksum";
 import { z } from "zod";
 import { PAYEE_CHAIN_IDS } from "./payee-chains";
 
@@ -87,7 +88,15 @@ export const counterpartyInputSchema = z.object({
   name: z.string().trim().min(2).max(160),
   noticeEmail: noticeEmailSchema.optional().transform((value) => value ?? null),
   role: z.enum(["vendor", "client", "contractor"]),
-  address: optionalText(200),
+  // An Arc address, checked where it enters (payment safety A1): a mistyped character is money sent to no one.
+  address: z
+    .string()
+    .trim()
+    .superRefine((value, context) => {
+      const problem = value === "" ? null : addressProblem(value);
+      if (problem) context.addIssue({ code: "custom", message: problem });
+    })
+    .transform((value) => value || null),
   chain: payeeChainSchema,
   jurisdiction: optionalText(80),
   paymentLimit: z.string().trim(),

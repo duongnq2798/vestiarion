@@ -12,6 +12,23 @@ describe("USDC intake precision", () => {
   });
 });
 
+describe("counterparty intake: the address (payment safety A1)", () => {
+  const base = { name: "Example Supplier", role: "vendor", chain: "ARC-TESTNET", jurisdiction: "US", paymentLimit: "5000.00" };
+
+  it("keeps a valid address and an empty one as none", () => {
+    expect(counterpartyInputSchema.parse({ ...base, address: " 0x840de234Bfc3F66fA380888A0a8204D9487D60d4 " }).address).toBe("0x840de234Bfc3F66fA380888A0a8204D9487D60d4");
+    expect(counterpartyInputSchema.parse({ ...base, address: "" }).address).toBeNull();
+  });
+
+  it("refuses anything that is not an Arc address, and a checksum that does not match, before anything is saved", () => {
+    for (const address of ["0x1234", "vitalik.eth", "0x840De234Bfc3F66fA380888A0a8204D9487D60d4"]) {
+      const result = counterpartyInputSchema.safeParse({ ...base, address });
+      expect(result.success, address).toBe(false);
+      expect(result.error?.issues[0]?.path).toEqual(["address"]);
+    }
+  });
+});
+
 describe("counterparty intake", () => {
   const base = { name: "Example Supplier", role: "vendor", address: "", chain: "ARC-TESTNET", jurisdiction: "US", paymentLimit: "5000.00" };
 

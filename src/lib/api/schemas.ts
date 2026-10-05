@@ -1,3 +1,4 @@
+import { CHECKSUM_MISMATCH, checksumMatches } from "@/lib/address-checksum";
 import { z } from "zod";
 import type { ApiErrorCode } from "@/lib/api/contract";
 import { COUNTERPARTY_RISK_LEVELS, COUNTERPARTY_ROLES } from "@/lib/api/counterparties";
@@ -388,6 +389,8 @@ export const CreateCounterpartyBodySchema = z
     address: z
       .string()
       .regex(EVM_ADDRESS, "Use a 0x address of 40 hex characters")
+      // Its capital letters, when it mixes them, must be its EIP-55 checksum (payment safety A1).
+      .refine(checksumMatches, CHECKSUM_MISMATCH)
       .optional()
       .describe(
         "Where the agent pays it. An address added through the API waits for a person in the workspace to confirm it on Counterparties; until then the agent pays nothing to it."
