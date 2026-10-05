@@ -73,6 +73,16 @@ describe("askAgain", () => {
     expect(broken).toHaveBeenCalledTimes(1);
   });
 
+  it("asks once and gives its refusal when told to, as a re-check of a held payable does (FX re-evaluation F9)", async () => {
+    const time = clock(0);
+    const work = vi.fn(time.ask(() => {
+      throw noRoute();
+    }));
+    await expect(askAgain(work, { once: true, now: time.now, sleep: time.sleep })).rejects.toMatchObject({ code: "no_route" });
+    expect(work).toHaveBeenCalledTimes(1);
+    expect(time.sleep).not.toHaveBeenCalled();
+  });
+
   it("waits the one delay given instead, as tests ask for none", async () => {
     const time = clock(0);
     const work = vi.fn(time.ask(() => {

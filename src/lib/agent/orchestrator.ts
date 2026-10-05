@@ -53,7 +53,7 @@ import {
 } from "./follow-up";
 import { OPEN_PAYABLE_STATUSES, summarizePayableObligations, sumUsdcAmounts } from "./obligations";
 import { ARC_TESTNET_EURC, quoteEurcInUsdc, type EurcQuote } from "../fx/quote";
-import { quoteUsdcForEurc, sizeSwap, SWAP_COST_CAP_PERCENT, type SwapOffer, type SwapQuote } from "../fx/swap-service";
+import { quoteUsdcForEurc, sizeSwap, SWAP_COST_CAP_PERCENT, SWAP_NOT_QUOTED, type SwapOffer, type SwapQuote } from "../fx/swap-service";
 import { resumeOpenSwaps, swapForPayment, type SwapOutcome, type SwapSweep } from "../fx/swap";
 import { currentOrgConfig } from "../context";
 import { bridgeFee as irisBridgeFee, EXPECTED_BRIDGE_SECONDS, type BridgeFee } from "../circle/cctp";
@@ -1345,7 +1345,7 @@ async function decideApPayable(
         else swapUnavailable = sized.reason;
       } catch (error) {
         console.error("ap: no USDC→EURC quote", invoice.id, error instanceof Error ? error.message : error);
-        swapUnavailable = "The USDC→EURC swap could not be quoted.";
+        swapUnavailable = SWAP_NOT_QUOTED;
       }
     }
   }

@@ -55,7 +55,7 @@ const cache = new Map<string, { at: number; value: EurcQuote }>();
  */
 export async function quoteEurcInUsdc(
   amountEurc: number,
-  options: { fromAddress: string; now?: number; fetch?: typeof fetch; retryDelayMs?: number }
+  options: { fromAddress: string; now?: number; fetch?: typeof fetch; retryDelayMs?: number; once?: boolean }
 ): Promise<EurcQuote> {
   if (!Number.isFinite(amountEurc) || amountEurc <= 0) throw new RangeError("An EURC amount to quote must be positive");
   const now = options.now ?? Date.now();
@@ -65,7 +65,7 @@ export async function quoteEurcInUsdc(
 
   // Arc testnet's route comes and goes, so a no-route or failed answer is asked
   // again before the payable is held for want of a rate (E4; src/lib/fx/retry.ts).
-  return askAgain(() => askForQuote(amount, options.fromAddress, now, options.fetch), { delayMs: options.retryDelayMs });
+  return askAgain(() => askForQuote(amount, options.fromAddress, now, options.fetch), { delayMs: options.retryDelayMs, once: options.once });
 }
 
 /** One request to the Stablecoin Service for `amount` base units of EURC, cached when it answers. */

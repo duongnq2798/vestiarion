@@ -97,6 +97,12 @@ describe("quoteEurcInUsdc", () => {
     await expect(quoteEurcInUsdc(11, { fromAddress: FROM, now: NOW, fetch: slow, retryDelayMs: 0 })).rejects.toBeInstanceOf(FxQuoteError);
   });
 
+  it("asks only once when told to (FX re-evaluation F9)", async () => {
+    const fetch = vi.fn().mockImplementation(async () => noRoute());
+    await expect(quoteEurcInUsdc(12, { fromAddress: FROM, now: NOW, fetch, retryDelayMs: 0, once: true })).rejects.toMatchObject({ code: "no_route" });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
   it("refuses an answer of the wrong shape, or with no USDC out", async () => {
     const malformed = vi.fn().mockResolvedValue(new Response(JSON.stringify({ quote: {} }), { status: 200 }));
     await expect(quoteEurcInUsdc(10, { fromAddress: FROM, now: NOW, fetch: malformed })).rejects.toMatchObject({ code: "malformed" });

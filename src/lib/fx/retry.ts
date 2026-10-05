@@ -8,6 +8,9 @@ import { FxQuoteError } from "./errors";
  * So a no-route or failed answer is asked again, up to four times in all, waiting 0.75 s, then 1.5 s, then 3 s. Asking
  * stops once the next wait would pass a 15 s budget, so a service that hangs (each ask times out at 10 s) holds a cycle
  * for two asks, not four. An answer that cannot be read is not asked again, and neither is any other error.
+ *
+ * A re-check of a payable already held for want of a quote asks once (FX re-evaluation F9): it runs every few minutes,
+ * and the decision that follows a positive answer asks again in full.
  */
 
 export const ROUTE_RETRY_DELAYS_MS = [750, 1_500, 3_000] as const;
@@ -18,11 +21,17 @@ export async function askAgain<T>(
   options: {
     /** One wait used between every ask instead of the growing ones: tests pass 0. */
     delayMs?: number;
+    /** Ask once, and give its refusal. */
+    once?: boolean;
     now?: () => number;
     sleep?: (ms: number) => Promise<void>;
   } = {}
 ): Promise<T> {
-  const delays = options.delayMs === undefined ? ROUTE_RETRY_DELAYS_MS : ROUTE_RETRY_DELAYS_MS.map(() => options.delayMs as number);
+  const delays: readonly number[] = options.once
+    ? []
+    : options.delayMs === undefined
+      ? ROUTE_RETRY_DELAYS_MS
+      : ROUTE_RETRY_DELAYS_MS.map(() => options.delayMs as number);
   const now = options.now ?? Date.now;
   const sleep = options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   const started = now();
