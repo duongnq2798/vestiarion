@@ -1,4 +1,4 @@
-import { currentConfig, currentContext } from "./context";
+import { currentConfig } from "./context";
 import { platformDb } from "./dal";
 
 /**
@@ -32,7 +32,13 @@ export interface PaymentsSwitchState {
 
 /** How long a read of the database's switch is kept (S7): a switch thrown takes at most this long to reach every instance. */
 const SWITCH_TTL_MS = 10_000;
-const held = new WeakMap<object, { at: number; state: PaymentsSwitchState }>();
+/** The last read of the database's switch: one database per deployment, so one value. */
+let held: { at: number; state: PaymentsSwitchState } | null = null;
+
+/** Forgets the last read, so the next check reads the database: after a change, and between tests. */
+export function forgetPaymentsSwitch(): void {
+  held = null;
+}
 
 /** PostgREST's "no such table" (PGRST205) or Postgres's (42P01): the switch's migration has not run here yet. */
 function missingTable(error: { code?: string; message?: string }): boolean {
@@ -41,10 +47,7 @@ function missingTable(error: { code?: string; message?: string }): boolean {
 
 /** The database's half, read at most every 10 seconds per database. A table not created yet reads as on. Throws when it cannot be read. */
 async function readSwitch(now: number): Promise<PaymentsSwitchState> {
-  // Kept per service-role client: platformDb() wraps the same one afresh on every call.
-  const key = currentContext().db;
-  const kept = held.get(key);
-  if (kept && now - kept.at <= SWITCH_TTL_MS) return kept.state;
+  if (held && now - held.at <= SWITCH_TTL_MS) return held.state;
   const result = await platformDb().from("platform_controls").select("payments_disabled_at, payments_disabled_reason").maybeSingle();
   if (result.error) {
     if (missingTable(result.error)) return { off: false, reason: null };
@@ -52,7 +55,7 @@ async function readSwitch(now: number): Promise<PaymentsSwitchState> {
   }
   const row = result.data as { payments_disabled_at: string | null; payments_disabled_reason: string | null } | null;
   const state = { off: Boolean(row?.payments_disabled_at), reason: row?.payments_disabled_reason ?? null };
-  held.set(key, { at: now, state });
+  held = { at: now, state };
   return state;
 }
 
@@ -92,6 +95,8 @@ export async function paymentsSwitchForPages(): Promise<PaymentsSwitchState> {
 /** Either half, as it is now: for `npm run payments`. Throws when the database's switch cannot be read. */
 export async function readPaymentsSwitch(): Promise<PaymentsSwitchState> {
   if (currentConfig().paymentsDisabled === true) return { off: true, reason: "PAYMENTS_DISABLED is set" };
+  // A status read is always fresh.
+  forgetPaymentsSwitch();
   return readSwitch(Date.now());
 }
 
@@ -107,5 +112,5 @@ export async function setPaymentsSwitch(off: boolean, reason: string | null): Pr
     })
     .eq("id", true);
   if (update.error) throw new Error(update.error.message);
-  held.delete(currentContext().db);
+  forgetPaymentsSwitch();
 }

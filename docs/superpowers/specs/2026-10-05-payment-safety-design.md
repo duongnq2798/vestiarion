@@ -166,3 +166,8 @@ deployment. These rulings replace the parts of R1–R3 and S1 they name.
 - **S9. The agent's purchases from its service budget (x402) check the switch too.**
 - **A3. A checksum failure says so** on the address edit, the payee link and `/payto`, instead of a message about the
   address's length.
+- **R10. Unknown is in flight.** The execution of an intent whose send Circle never answered is pending, never failed.
+  So the agent's decision leaves the invoice `matched`, and the cycle's reconciliation looks for it again.
+- **Rollout of section 5.** Migration `0074_payments_switch.sql`, run by the partner before the merge. Before it runs,
+  the database's switch reads as on, and `sent_wallet_id` is absent, so a send through the spending limit contract
+  could not record its wallet; the order matters for that one.

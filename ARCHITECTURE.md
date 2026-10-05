@@ -200,25 +200,39 @@ payment to an address.
 
 **Payment safety** (`docs/superpowers/specs/2026-10-05-payment-safety-design.md`) closes four gaps that real money
 would find.
-- **A stop switch for the platform:** `PAYMENTS_DISABLED` on the deployment becomes `paymentsDisabled` in the
-  config (`src/lib/payments-switch.ts`).
+- **A stop switch for the platform** (`src/lib/payments-switch.ts`), with two halves; either one stops payments.
+  - `PAYMENTS_DISABLED` on the deployment becomes `paymentsDisabled` in the config.
+  - `platform_controls.payments_disabled_at` (migration 0074) is set and cleared with `npm run payments`. Every
+    check reads it, cached for 10 seconds, so every running deployment stops at once, with no redeploy. That
+    includes one a console tab is pinned to by skew protection.
+  - A read that fails stops money, never a page, and a table not yet created reads as on.
   - The live provider's money methods refuse before reading an account; `getChainProvider` hands it the switch.
   - So do the direct Circle writers: escrow holds and setup, Gateway funding, and enforcing or changing the spending
     limit. Turning the limit off stays allowed, since it only takes the agent's power to pay away.
   - `runAgentCycle` refuses first. The schedule and the FX watcher skip every workspace as `payments_off`, and
     event cycles drop quietly.
-  - Approve and pay, Pay now and Bring cash back refuse before anything is read, and the workspace layout draws
-    `PaymentsOffBanner`.
+  - Approve and pay, Pay now and Bring cash back refuse before any claim, and the workspace layout draws
+    `PaymentsOffBanner` with the recorded reason.
+  - Approve and pay, and Pay now, still record a transfer already sent; that only reads Circle.
+  - The agent's purchases from its service budget check the switch too.
 - **Addresses checked where they enter:** the console's forms and `POST /api/v1/counterparties` refuse an address
   that mixes cases against its EIP-55 checksum (`src/lib/address-checksum.ts`).
 - **No rejection over an unknown transfer:**
   - A send can end without Circle saying what became of it: the deadline, a connection dropped after the request
     left, a 5xx, or an answer with no id. The live provider's `sendToCircle` then writes "may or may not have been
     accepted" into the error, and Gateway's transfer the same (`src/lib/circle/gateway.ts`).
-  - `transferUnknown` (`src/lib/agent/approvals.ts`) reads that on a failed intent with no provider id. Reject,
-    Return and Add details refuse with `payment_unknown`, and a held milestone cannot be closed.
-  - Approve and pay sends it again under the same key, skipping the funds check, and Circle's idempotency returns
-    the transfer it holds.
+  - `unknownSend` (`src/lib/payments.ts`) reads that on a failed intent with no provider id. It also reads a send
+    left `submitting` for more than 2 minutes. The execution of such an intent is pending, never failed.
+  - `executePayment` looks for it before sending anything again. `findTransferByRef` searches by the payment's
+    memo (`paymentMemo`), in the wallet it went from (`payment_intents.sent_wallet_id`, written before each
+    send), around the send, and leaves out earlier attempts.
+    - Found: recorded.
+    - Not listed 15 minutes after the send: recorded as never taken (`NO_EARLIER_SEND`), and sent as new.
+    - Otherwise: nothing is sent, and the payment stays in flight.
+  - Gateway and CCTP are not looked up. They keep their own safety, and their marker survives a later failure.
+  - Reject, Return, Add details and a milestone's Close run the same lookup first (`settleUnknownSend`). A held
+    milestone shows an `unknown` state.
+  - A bridge's approve, and a Gateway connection never made, are not marked.
 - **Screening that fails closed:** `orgConfig` marks a live workspace on a deployment with no screening service
   (`compliance.serviceRequired`). `screenName` then gives no verdict rather than the bundled list's, so its
   counterparties stay `unscreened`.

@@ -1,8 +1,9 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv, type VestiarionConfig } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import {
   assertPaymentsEnabled,
+  forgetPaymentsSwitch,
   paymentsDisabled,
   PaymentsDisabledError,
   paymentsSwitchForPages,
@@ -27,6 +28,8 @@ function database(row: FakeReply | { payments_disabled_at: string | null; paymen
 function inScope<T>(fake: ReturnType<typeof fakeSupabase>, fn: () => Promise<T>, config: VestiarionConfig = base): Promise<T> {
   return runWith({ config, db: fake.client, fetch: fake.fetch }, fn);
 }
+
+beforeEach(() => forgetPaymentsSwitch());
 
 const reads = (fake: ReturnType<typeof fakeSupabase>) => fake.requests.filter((request) => request.path === "/rest/v1/platform_controls" && request.method === "GET").length;
 
