@@ -10,10 +10,10 @@ An autonomous treasury agent for a small business, settled in USDC on Arc.
   3. watch the agent decide within a minute;
   4. approve a payment yourself;
   5. verify the signed ledger.
-- **Research:** [When the model and the policy disagree](https://www.vestiarion.xyz/docs/research/model-vs-policy). In its first week the agent made 141 decisions, and 127 were recorded beside the written policy's answer to the same facts. On payables, the model chose the policy's action 32 times in 39. Of the 7 differences:
-  - 3 stopped a payment the policy would have made;
-  - 3 stopped it by a different action than the policy's;
-  - 1 would have paid over a limit, and code refused it.
+- **Research:** [When the model and the policy disagree](https://www.vestiarion.xyz/docs/research/model-vs-policy). Over three weeks, 336 of the agent's decisions were recorded beside the written policy's answer to the same facts. The model chose the policy's action 305 times (90.8%), and 73 times in 88 on payables. Code refused 11 payments it chose.
+  - In weeks one and two its departures were mostly extra caution, and people overruled all three stops only the model made.
+  - In week three, with the treasury moving real USYC, it once redeemed far more than was due; code now bounds every move.
+  - It also paid or scheduled four invoices with no purchase order, which nothing in code checked. That rule is moving into code.
 - **Live numbers:** [www.vestiarion.xyz/open](https://www.vestiarion.xyz/open) shows the payments, payees and decisions, read from the production database, with our own workspaces counted apart from customers'.
 - **Updates:** [@vestiarionhq](https://x.com/vestiarionhq) on X, where what ships is posted with its receipts.
 - **Real transactions on Arc testnet**, made by the agent in production:
