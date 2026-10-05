@@ -1,4 +1,3 @@
-import { ARC_TESTNET_USDC } from "../circle/cctp";
 import { ARC_TESTNET } from "../network";
 
 /**
@@ -43,7 +42,7 @@ export function payeeHistoryRequirements(): X402Requirements {
   return {
     scheme: "exact",
     network: X402_NETWORK,
-    asset: ARC_TESTNET_USDC,
+    asset: ARC_TESTNET.tokens.USDC,
     amount: PAYEE_HISTORY_PRICE_UNITS,
     payTo: VESTIARION_SELLER,
     maxTimeoutSeconds: MAX_TIMEOUT_SECONDS,

@@ -263,17 +263,52 @@ mainnet plan).
     own.
   - `payment_intents.network` is filled from the workspace when an intent is inserted, so no caller can mislabel one.
 - **The profile:** `src/lib/network.ts` holds each network's facts.
-  - These are its name in copy, Circle's blockchain name, chain id, RPC, explorer, tokens, CCTP, Gateway, USYC and
-    the swap's chain, plus whether hosted wallets are offered.
-  - Today's testnet constants read their values from the testnet profile.
-  - `tests/network-ratchet.test.ts` fails on any new hard-coded testnet identifier outside it.
+  - Its name in copy, Circle's blockchain name, chain id, RPC, explorer and tokens.
+  - The chains a payee can be paid on, its own first (each with its CCTP domain, USDC, RPC and explorer).
+  - CCTP (domain, Iris, TokenMessenger), Gateway (API, facilitator, wallet, minter), USYC, and the swap's chain and
+    Adapter.
+  - Whether hosted wallets and passkey wallets are offered.
 - **Mainnet pays nothing yet:**
-  - `orgConfig` carries the network (`currentNetwork()`) and gives a workspace on Arc mainnet no Circle
-    credentials, with the reason, so its provider refuses.
+  - `orgConfig` carries the network and gives a workspace on Arc mainnet no Circle credentials, with the reason, so
+    its provider refuses.
   - Go live refuses a Circle key whose prefix names another network.
 - **`/open`:** one section per network, Arc mainnet first.
   - `open_numbers`, `open_first_payments` and `open_outcomes` take `(p_since, p_network)` and count one network.
   - Their one-argument versions stay for older code.
+
+**Every module on its workspace's network** (`docs/superpowers/specs/2026-10-05-network-threading-design.md`,
+phase 1b).
+- **Where the network comes from:**
+  - Code acting for a workspace reads `workspaceNetwork()` (`src/lib/workspace-network.ts`). It throws outside a
+    workspace's scope; there is no default.
+  - Code holding a record reads the record's network: a payment intent's `network`, or the network a chain id
+    belongs to (`networkOfChain`).
+  - Pages read it in scope and pass it down: `Decision.network`, and a `network` prop on the panels that link.
+- **One provider per network:** `getChainProvider()` builds the live and simulated providers for the workspace's
+  profile (`provider.network`). Every chain fact they use comes from it: transfers, batches, fees, CCTP, Gateway,
+  USYC and the swap.
+- **Payee chains** (`src/lib/payee-chains.ts`):
+  - `homeChain`, `chainsOn` and `chainOn` read a network's list. No chain is the network's own chain, and a chain
+    from another network is refused in plain words.
+  - `paidAcrossChains` is true for any network's other chains.
+  - Links are `txUrl(network, hash)` and `addressUrl(network, address)`.
+- **Wallets** (escrow, the spending limit, Gateway funding, a new workspace's accounts) are created on the profile's
+  blockchain.
+- **A feature a network lacks** refuses by name (`FeatureOffError`: "… does not run on Arc mainnet yet") and never
+  falls back to testnet values. This covers CCTP, Gateway, the USYC reserve, the EURC swap, x402 buying and passkey
+  wallets.
+- **Two ratchets:**
+  - `tests/network-ratchet.test.ts` counts hard-coded testnet identifiers.
+  - `tests/network-constants-ratchet.test.ts` counts readers of the testnet profile.
+  - Both end at the files kept on Arc testnet on purpose, each with its reason: demo data, `/open`, the platform's
+    x402 offer, the passkey wallet, and the public API's chain enum.
+- **`tests/network-mainnet-dry-run.test.ts`** builds the modules with Arc mainnet's profile and checks each asks for
+  mainnet's facts or refuses by name.
+- **Still Arc testnet:**
+  - The database's chain check and two link functions (0044, 0050, 0053).
+  - The copy that says "Arc testnet".
+  - The API's chain enum.
+  - All of these move in phase 2.
 
 **Payment safety** (`docs/superpowers/specs/2026-10-05-payment-safety-design.md`) closes four gaps that real money
 would find.

@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { ARC_MAINNET, ARC_TESTNET, NETWORKS, networkOf, networkProfile } from "@/lib/network";
-import { arcAddressUrl, arcTxUrl, PAYEE_CHAINS } from "@/lib/payee-chains";
-import { ARC_TESTNET_CHAIN_ID, ARC_TESTNET_RPC_URL } from "@/lib/circle/arcFees";
+import { ARC_MAINNET, ARC_TESTNET, networkOf, networkProfile, NETWORKS } from "@/lib/network";
 import { GATEWAY_FACILITATOR_URL, X402_NETWORK } from "@/lib/x402/offer";
+import { addressUrl, txUrl } from "@/lib/payee-chains";
 
 /**
  * One profile per network (docs/superpowers/specs/2026-10-05-network-foundation-design.md N6): each network's facts in
@@ -41,13 +40,11 @@ describe("the Arc testnet profile", () => {
     });
   });
 
-  it("is where today's constants read their values from", () => {
-    expect(arcTxUrl("0xabc")).toBe(`${ARC_TESTNET.explorer}/tx/0xabc`);
-    expect(arcAddressUrl("0xdef")).toBe(`${ARC_TESTNET.explorer}/address/0xdef`);
-    expect(PAYEE_CHAINS[0]).toMatchObject({ id: ARC_TESTNET.circleBlockchain, label: ARC_TESTNET.label, domain: ARC_TESTNET.cctp.domain });
+  it("is where links, payee chains and the platform's x402 offer read Arc testnet's values", () => {
+    expect(txUrl("arc-testnet", "0xabc")).toBe(`${ARC_TESTNET.explorer}/tx/0xabc`);
+    expect(addressUrl("arc-testnet", "0xdef")).toBe(`${ARC_TESTNET.explorer}/address/0xdef`);
+    expect(ARC_TESTNET.payeeChains[0]).toMatchObject({ id: ARC_TESTNET.circleBlockchain, label: ARC_TESTNET.label, domain: ARC_TESTNET.cctp.domain });
     expect(GATEWAY_FACILITATOR_URL).toBe(ARC_TESTNET.gateway.facilitator);
-    expect(ARC_TESTNET_RPC_URL).toBe(ARC_TESTNET.rpcUrl);
-    expect(ARC_TESTNET_CHAIN_ID).toBe(ARC_TESTNET.chainId);
     expect(X402_NETWORK).toBe(ARC_TESTNET.caip2);
   });
 });

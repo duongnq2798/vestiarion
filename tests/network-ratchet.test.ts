@@ -14,11 +14,18 @@ const IDENTIFIER =
   /ARC-TESTNET|rpc\.testnet\.arc|explorer\.testnet\.arc\.io|5042002|gateway-api-testnet|iris-api-sandbox|0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a|Arc_Testnet|ArcTestnet/g;
 const PROFILE = "src/lib/network.ts";
 
-/** The files that still hold a testnet identifier, and how many: lower these as they move into the profile. */
+/**
+ * The files that hold a testnet identifier on purpose (network threading P7), and how many: demo data that exists only on
+ * Arc testnet, and the public API's description of its default chain. A count that goes down is written down here.
+ */
 const ALLOWED: Record<string, number> = {
+  // The design page's fixtures: Arc testnet's demo data.
   "src/app/design/fixtures.ts": 4,
+  // The guides' screenshots: Arc testnet's demo data.
   "src/app/docs-shots/shots.tsx": 3,
+  // The public API says its default chain is `ARC-TESTNET`, its enum's first until phase 2.
   "src/lib/api/schemas.ts": 1,
+  // The founding workspace's seed, on Arc testnet.
   "src/lib/seed.ts": 9,
 };
 

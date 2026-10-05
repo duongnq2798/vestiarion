@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { chainOn, homeChain } from "../payee-chains";
-import { ARC_TESTNET, FeatureOffError, type NetworkProfile } from "../network";
+import { FeatureOffError, type NetworkProfile } from "../network";
 
 /**
  * CCTP V2 from Arc testnet, with Circle's Forwarding Service
@@ -11,8 +11,6 @@ import { ARC_TESTNET, FeatureOffError, type NetworkProfile } from "../network";
  * (R1). Iris, Circle's attestation API, quotes the fee and reports the mint.
  */
 
-/** Arc's USDC ERC-20 interface: 6 decimals, the native USDC's balance. */
-export const ARC_TESTNET_USDC = ARC_TESTNET.tokens.USDC;
 /** `depositForBurnWithHook`'s hook data asking the Forwarding Service to submit the mint ("cctp-forward"). */
 export const CCTP_FORWARD_HOOK = "0x636374702d666f72776172640000000000000000000000000000000000000000";
 /** Fast transfer: attested at "confirmed" finality, in seconds rather than minutes. */

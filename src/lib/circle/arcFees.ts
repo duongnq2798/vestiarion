@@ -1,5 +1,5 @@
 import { currentConfig } from "../context";
-import { ARC_TESTNET, type NetworkProfile } from "../network";
+import type { NetworkProfile } from "../network";
 
 /**
  * Reads what a transfer actually cost, from Arc itself.
@@ -29,10 +29,6 @@ import { ARC_TESTNET, type NetworkProfile } from "../network";
  * three times more reluctant to sweep than the economics warranted. Numbers
  * you assert about your own system drift; numbers you read do not.
  */
-
-/** Arc testnet, chain id 5042002. Matches viem's `arcTestnet` definition. */
-export const ARC_TESTNET_RPC_URL = ARC_TESTNET.rpcUrl;
-export const ARC_TESTNET_CHAIN_ID = ARC_TESTNET.chainId;
 
 /** Arc's gas token is USDC at 18 decimals, so wei convert straight to dollars. */
 const ARC_NATIVE_DECIMALS = 18n;
@@ -88,16 +84,6 @@ async function arcRpc(
   const body = (await response.json()) as { result?: unknown; error?: { message?: string } };
   if (body.error) throw new Error(`Arc RPC ${method}: ${body.error.message ?? "unknown error"}`);
   return body.result;
-}
-
-/**
- * The node to read receipts from. `LiveProvider` passes its configured URL
- * explicitly; this is the fallback for a direct caller, and it reads the
- * running scope rather than the process environment so that two businesses
- * pointed at different nodes do not silently share one.
- */
-export function arcRpcUrl(): string {
-  return currentConfig().chain.arcRpcUrl || ARC_TESTNET_RPC_URL;
 }
 
 /**

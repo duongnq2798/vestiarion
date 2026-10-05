@@ -1,11 +1,7 @@
 import { describe, expect, it } from "vitest";
-import {
-  ARC_TESTNET_CHAIN_ID,
-  feeUsdFromReceipt,
-  receiptReverted,
-  type ArcReceipt,
-} from "@/lib/circle/arcFees";
+import { feeUsdFromReceipt, receiptReverted, type ArcReceipt } from "@/lib/circle/arcFees";
 import { ARC_FEE_USD, ARC_SETTLEMENT_MS_MAX, ARC_SETTLEMENT_MS_MIN } from "@/lib/circle/types";
+import { ARC_TESTNET } from "@/lib/network";
 
 /**
  * Receipts as Arc testnet actually returned them for the first four transfers
@@ -89,7 +85,7 @@ describe("receiptReverted", () => {
 
 describe("measured Arc constants", () => {
   it("pins the chain the fees were read from", () => {
-    expect(ARC_TESTNET_CHAIN_ID).toBe(5042002);
+    expect(ARC_TESTNET.chainId).toBe(5042002);
   });
 
   it("keeps the fallback fee at the measured order of magnitude", () => {

@@ -3,7 +3,6 @@ import { decodeFunctionData, parseAbi, type Hex } from "viem";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { batchCalls, BatchNotSentError, MAX_BATCH_SIZE, SCA_EXECUTE_BATCH } from "@/lib/circle/batch";
-import { ARC_TESTNET_USDC } from "@/lib/circle/cctp";
 import {
   BATCH_LOOKUP_GRACE_MS,
   batchIdempotencyKey,
@@ -178,7 +177,7 @@ describe("batchCalls", () => {
     expect(SCA_EXECUTE_BATCH).toBe("executeBatch((address,uint256,bytes)[])");
     expect(calls).toHaveLength(2);
     for (const [target, value] of calls) {
-      expect(target).toBe(ARC_TESTNET_USDC);
+      expect(target).toBe(ARC_TESTNET.tokens.USDC);
       expect(value).toBe("0");
     }
     const [to, units] = decodeFunctionData({ abi: erc20, data: calls[0][2] as Hex }).args;

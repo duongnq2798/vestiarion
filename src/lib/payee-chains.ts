@@ -7,32 +7,17 @@ import { ARC_TESTNET, NETWORK_IDS, networkProfile, type Network, type PayeeChain
  * built here, for the network it is on (P6). Pure data, safe in client components.
  */
 
-const ARC_EXPLORER = ARC_TESTNET.explorer;
-
-/** Arc testnet's payee chains, as every module read them before each read its workspace's network. */
-export const PAYEE_CHAINS = ARC_TESTNET.payeeChains;
-
-export type PayeeChain = (typeof PAYEE_CHAINS)[number]["id"];
-
-export const PAYEE_CHAIN_IDS = PAYEE_CHAINS.map((chain) => chain.id) as [PayeeChain, ...PayeeChain[]];
+/**
+ * Arc testnet's payee chains, the public API's `chain` enum until Arc mainnet joins it in phase 2 (network threading P7,
+ * §3): a mainnet workspace leaves `chain` out and is paid on its own chain.
+ */
+export const TESTNET_PAYEE_CHAIN_IDS = ARC_TESTNET.payeeChains.map((chain) => chain.id) as [
+  (typeof ARC_TESTNET.payeeChains)[number]["id"],
+  ...(typeof ARC_TESTNET.payeeChains)[number]["id"][],
+];
 
 /** The most a CCTP fee may be, as a percent of the invoice, before a payout waits for a person (CCTP payouts R4). */
 export const BRIDGE_FEE_CAP_PERCENT = 10;
-
-/** The chain's entry, or Arc testnet's for a value that is not one of them (a row from before 0044). */
-export function payeeChain(value: string | null | undefined) {
-  return PAYEE_CHAINS.find((chain) => chain.id === value) ?? PAYEE_CHAINS[0];
-}
-
-/** A transaction on Arc testnet, on its explorer. */
-export function arcTxUrl(hash: string): string {
-  return `${ARC_EXPLORER}/tx/${hash}`;
-}
-
-/** A wallet or a contract on Arc testnet, on its explorer. */
-export function arcAddressUrl(address: string): string {
-  return `${ARC_EXPLORER}/address/${address}`;
-}
 
 const EVERY_CHAIN = NETWORK_IDS.flatMap((network) => networkProfile(network).payeeChains.map((chain) => ({ network, chain })));
 const OWN_CHAINS = new Set(NETWORK_IDS.map((network) => networkProfile(network).payeeChains[0].id));

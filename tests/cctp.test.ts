@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { ARC_TESTNET } from "@/lib/network";
-import { ARC_TESTNET_USDC, BridgeFeeError, bridgeFee, burnCalls, CCTP_FORWARD_HOOK, forwardedMint, toBytes32 } from "@/lib/circle/cctp";
+import { BridgeFeeError, bridgeFee, burnCalls, CCTP_FORWARD_HOOK, forwardedMint, toBytes32 } from "@/lib/circle/cctp";
 
 /**
  * CCTP V2 from Arc testnet with the Forwarding Service (docs/superpowers/specs/2026-10-01-cctp-payouts-design.md
@@ -44,7 +44,7 @@ describe("burnCalls", () => {
   it("approves TokenMessengerV2 for the amount and the fee, then burns both with the forwarding hook", () => {
     const [approve, burn] = burnCalls({ amount: 1.5, maxFeeUnits: BigInt(54613), domain: 6, recipient: "0xAbC0000000000000000000000000000000000dEf", usdc: ARC_TESTNET.tokens.USDC, tokenMessenger: ARC_TESTNET.cctp.tokenMessenger });
     expect(approve).toEqual({
-      contractAddress: ARC_TESTNET_USDC,
+      contractAddress: ARC_TESTNET.tokens.USDC,
       abiFunctionSignature: "approve(address,uint256)",
       abiParameters: [ARC_TESTNET.cctp.tokenMessenger, "1554613"],
     });
@@ -55,7 +55,7 @@ describe("burnCalls", () => {
         "1554613",
         "6",
         "0x000000000000000000000000abc0000000000000000000000000000000000def",
-        ARC_TESTNET_USDC,
+        ARC_TESTNET.tokens.USDC,
         `0x${"0".repeat(64)}`,
         "54613",
         "1000",

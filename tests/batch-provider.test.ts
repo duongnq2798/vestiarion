@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 import { BatchNotSentError, SCA_EXECUTE_BATCH } from "@/lib/circle/batch";
-import { ARC_TESTNET_USDC } from "@/lib/circle/cctp";
 import { LiveProvider, type LiveProviderClient } from "@/lib/circle/liveProvider";
 import { SimulateProvider } from "@/lib/circle/simulateProvider";
 import type { ChainConfig } from "@/lib/config";
@@ -76,8 +75,8 @@ describe("LiveProvider.batchTransfer", () => {
     expect(created[0]).toMatchObject({ walletId: "wallet-op", contractAddress: `0x${"9".repeat(40)}`, abiFunctionSignature: SCA_EXECUTE_BATCH, idempotencyKey: KEY, refId: KEY });
     const [calls] = created[0].abiParameters as [Array<[string, string, string]>];
     expect(calls.map(([target, value, data]) => [target, value, data.slice(0, 10)])).toEqual([
-      [ARC_TESTNET_USDC, "0", "0xa9059cbb"],
-      [ARC_TESTNET_USDC, "0", "0xa9059cbb"],
+      [ARC_TESTNET.tokens.USDC, "0", "0xa9059cbb"],
+      [ARC_TESTNET.tokens.USDC, "0", "0xa9059cbb"],
     ]);
     expect(result).toMatchObject({ providerTxId: "tx-batch", status: "confirmed", txHash: `0x${"c".repeat(64)}`, feeUsd: 0.009, feeSource: "chain_reported", settledInMs: 2000 });
   });

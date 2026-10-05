@@ -1,7 +1,7 @@
 # Every module on its workspace's network: phase 1b of the mainnet plan
 
-Date: 2026-10-05. Status: designed under the standing autonomy grant, on the partner's "okay merge xong đi rồi triển khai
-viết spec luôn". This is phase 1b of the mainnet plan. It follows:
+Date: 2026-10-05. Status: implemented on `feat/network-circle-modules`. Designed under the standing autonomy grant, on
+the partner's "okay merge xong đi rồi triển khai viết spec luôn". This is phase 1b of the mainnet plan. It follows:
 
 - the network foundation (#207, `2026-10-05-network-foundation-design.md`);
 - two approvals (#208);
