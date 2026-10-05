@@ -1,20 +1,7 @@
 import { decodeFunctionData, encodeAbiParameters, parseAbi, toFunctionSelector, type Hex } from "viem";
 import { describe, expect, it } from "vitest";
-import {
-  ARC_TESTNET_USYC,
-  fromUnits,
-  priceValue,
-  readUsycApy,
-  readUsycPrice,
-  readUsycShares,
-  sharesToRedeem,
-  sharesValue,
-  toUnits,
-  USYC_ENTITLEMENTS,
-  USYC_TELLER,
-  usycEntitlements,
-  usycSubscriptionsOpen,
-} from "@/lib/circle/usyc";
+import { fromUnits, priceValue, readUsycApy, readUsycPrice, readUsycShares, sharesToRedeem, sharesValue, toUnits, usycEntitlements, usycSubscriptionsOpen } from "@/lib/circle/usyc";
+import { ARC_TESTNET } from "@/lib/network";
 
 /** USYC on Arc testnet, read with eth_call (docs/superpowers/specs/2026-10-02-usyc-live-design.md §2, R1, R4, R5). */
 
@@ -64,33 +51,33 @@ function node(state: { mintPrice?: bigint; shares?: bigint; allowed?: string[]; 
 describe("reading USYC on Arc testnet", () => {
   it("reads the price from the oracle the Teller names", async () => {
     const arc = node();
-    expect(await readUsycPrice({ fetch: arc.fetch })).toBe(PRICE);
-    expect(arc.calls.map((c) => [c.to, c.fn])).toEqual([[USYC_TELLER, "oracle"], [ORACLE, "latestRoundData"]]);
+    expect(await readUsycPrice({ network: ARC_TESTNET, rpcUrl: ARC_TESTNET.rpcUrl, fetch: arc.fetch })).toBe(PRICE);
+    expect(arc.calls.map((c) => [c.to, c.fn])).toEqual([[ARC_TESTNET.usyc.teller, "oracle"], [ORACLE, "latestRoundData"]]);
   });
 
   it("knows subscriptions are open only while the Teller has a mint price (R4)", async () => {
-    expect(await usycSubscriptionsOpen({ fetch: node({ mintPrice: PRICE }).fetch })).toBe(true);
-    expect(await usycSubscriptionsOpen({ fetch: node({ mintPrice: 0n }).fetch })).toBe(false);
+    expect(await usycSubscriptionsOpen({ network: ARC_TESTNET, rpcUrl: ARC_TESTNET.rpcUrl, fetch: node({ mintPrice: PRICE }).fetch })).toBe(true);
+    expect(await usycSubscriptionsOpen({ network: ARC_TESTNET, rpcUrl: ARC_TESTNET.rpcUrl, fetch: node({ mintPrice: 0n }).fetch })).toBe(false);
   });
 
   it("reads an address's USYC", async () => {
     const arc = node({ shares: 5_000_000n });
-    expect(await readUsycShares(RESERVE, { fetch: arc.fetch })).toBe(5_000_000n);
-    expect(arc.calls[0]).toMatchObject({ to: ARC_TESTNET_USYC, fn: "balanceOf" });
+    expect(await readUsycShares(RESERVE, { network: ARC_TESTNET, rpcUrl: ARC_TESTNET.rpcUrl, fetch: arc.fetch })).toBe(5_000_000n);
+    expect(arc.calls[0]).toMatchObject({ to: ARC_TESTNET.usyc.token, fn: "balanceOf" });
   });
 
   it("asks the Entitlements contract whether operating may deposit and reserve may redeem (R1)", async () => {
     const deposit = toFunctionSelector("deposit(uint256,address)");
     const redeem = toFunctionSelector("redeem(uint256,address,address)");
     const both = node({ allowed: [`${OPERATING}:${deposit}`, `${RESERVE}:${redeem}`] });
-    expect(await usycEntitlements({ operating: OPERATING, reserve: RESERVE }, { fetch: both.fetch })).toEqual({ operating: true, reserve: true });
-    expect(both.calls.every((c) => c.to === USYC_ENTITLEMENTS && (c.args as string[])[1] === USYC_TELLER)).toBe(true);
+    expect(await usycEntitlements({ operating: OPERATING, reserve: RESERVE }, { network: ARC_TESTNET, rpcUrl: ARC_TESTNET.rpcUrl, fetch: both.fetch })).toEqual({ operating: true, reserve: true });
+    expect(both.calls.every((c) => c.to === ARC_TESTNET.usyc.entitlements && (c.args as string[])[1] === ARC_TESTNET.usyc.teller)).toBe(true);
     const onlyOperating = node({ allowed: [`${OPERATING}:${deposit}`] });
-    expect(await usycEntitlements({ operating: OPERATING, reserve: RESERVE }, { fetch: onlyOperating.fetch })).toEqual({ operating: true, reserve: false });
+    expect(await usycEntitlements({ operating: OPERATING, reserve: RESERVE }, { network: ARC_TESTNET, rpcUrl: ARC_TESTNET.rpcUrl, fetch: onlyOperating.fetch })).toEqual({ operating: true, reserve: false });
   });
 
   it("throws when Arc does not answer, rather than reading a zero", async () => {
-    await expect(readUsycShares(RESERVE, { fetch: node({ fail: true }).fetch })).rejects.toThrow(/did not answer a USYC read: execution reverted/);
+    await expect(readUsycShares(RESERVE, { network: ARC_TESTNET, rpcUrl: ARC_TESTNET.rpcUrl, fetch: node({ fail: true }).fetch })).rejects.toThrow(/did not answer a USYC read: execution reverted/);
   });
 });
 
@@ -145,11 +132,11 @@ describe("readUsycApy", () => {
 
   it("annualizes the latest price against the newest round old enough, skipping a bad print", async () => {
     // 1.138897 over 1.138263 in six days is about 3.4% a year.
-    expect(await readUsycApy({ fetch: oracleNode(ROUNDS) })).toBe(0.0345);
+    expect(await readUsycApy({ network: ARC_TESTNET, rpcUrl: ARC_TESTNET.rpcUrl, fetch: oracleNode(ROUNDS) })).toBe(0.0345);
   });
 
   it("is null when no round is old enough, so the stored yield stands", async () => {
     const recent = { "159": ROUNDS["159"], "158": ROUNDS["158"], "157": ROUNDS["157"] };
-    expect(await readUsycApy({ fetch: oracleNode(recent) })).toBeNull();
+    expect(await readUsycApy({ network: ARC_TESTNET, rpcUrl: ARC_TESTNET.rpcUrl, fetch: oracleNode(recent) })).toBeNull();
   });
 });

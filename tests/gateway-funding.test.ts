@@ -270,3 +270,15 @@ describe("funding Gateway while payments are switched off (payment safety S2)", 
     expect(client).not.toHaveBeenCalled();
   });
 });
+
+describe("funding Gateway on a network without it (network threading P5)", () => {
+  it("refuses by name, for payouts and for services, before calling Circle", async () => {
+    const fake = fakeSupabase((request) => (request.path === "/rest/v1/platform_controls" ? { body: null } : { body: [] }));
+    const client = vi.fn();
+    const run = <T>(fn: () => Promise<T>) => runWith(orgTestContext({ config: { ...config, network: "arc-mainnet" }, client: fake.client, orgId: ORG, userId: USER }), fn);
+
+    await expect(run(() => fundGateway({ actorId: USER, amount: 1, requestId: "req-mainnet" }, { client }))).rejects.toThrow("Paying through Gateway does not run on Arc mainnet yet");
+    await expect(run(() => fundServiceBudget({ actorId: USER, amount: 1, requestId: "req-mainnet" }, { client }))).rejects.toThrow("Paying through Gateway does not run on Arc mainnet yet");
+    expect(client).not.toHaveBeenCalled();
+  });
+});

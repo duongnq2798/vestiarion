@@ -3,6 +3,7 @@ import { bridgeFee, burnCalls, cctpOf } from "@/lib/circle/cctp";
 import { gatewayOf } from "@/lib/circle/gateway";
 import { batchCalls } from "@/lib/circle/batch";
 import { SimulateProvider } from "@/lib/circle/simulateProvider";
+import { readUsycPrice, usycOf } from "@/lib/circle/usyc";
 import { ARC_MAINNET, ARC_TESTNET } from "@/lib/network";
 
 /**
@@ -40,5 +41,12 @@ describe("CCTP and Gateway read the profile", () => {
     expect(approve.contractAddress).toBe(ARC_TESTNET.tokens.USDC);
     const calls = batchCalls([{ toAddress: PAYEE, amount: 1 }, { toAddress: PAYEE, amount: 2 }], ARC_MAINNET.tokens.USDC);
     expect(calls.map(([token]) => token)).toEqual([ARC_MAINNET.tokens.USDC, ARC_MAINNET.tokens.USDC]);
+  });
+});
+
+describe("the USYC reserve reads the profile", () => {
+  it("gives Arc testnet's contracts, and refuses on a network without a reserve before any request", async () => {
+    expect(usycOf(ARC_TESTNET).teller).toBe("0x9fdF14c5B14173D74C08Af27AebFf39240dC105A");
+    await expect(readUsycPrice({ network: ARC_MAINNET, rpcUrl: ARC_MAINNET.rpcUrl, fetch: noRequest })).rejects.toThrow("The USYC reserve does not run on Arc mainnet yet");
   });
 });

@@ -35,7 +35,7 @@ interface Row {
   deploy_tx_hash: string | null;
 }
 
-function database(start: Partial<Row> | null = null, operating = OPERATING) {
+function database(start: Partial<Row> | null = null, operating = OPERATING, settings: VestiarionConfig = config) {
   let row: Row | null = start ? { id: "esc-1", address: null, circle_contract_id: null, deployer_wallet_id: null, deployer_address: null, gas_tx_id: null, deploy_tx_hash: null, ...start } : null;
   const fake = fakeSupabase((request: RecordedRequest): FakeReply => {
     // The platform's payment switch (payment safety S7): on.
@@ -60,7 +60,7 @@ function database(start: Partial<Row> | null = null, operating = OPERATING) {
     }
     throw new Error(`unexpected request ${request.method} ${request.path}`);
   });
-  const run = <T>(fn: () => Promise<T>) => runWith(orgTestContext({ config, client: fake.client, orgId: ORG, userId: USER }), fn);
+  const run = <T>(fn: () => Promise<T>) => runWith(orgTestContext({ config: settings, client: fake.client, orgId: ORG, userId: USER }), fn);
   return { fake, run, row: () => row };
 }
 
@@ -101,6 +101,14 @@ const setUp = (db: ReturnType<typeof database>, c: ReturnType<typeof circle>, wa
 beforeEach(() => appendLedgerEntry.mockClear());
 
 describe("setting up escrow", () => {
+  it("asks Circle for the deployer and the contract on the workspace's network's own chain (network threading P4)", async () => {
+    const db = database(null, OPERATING, { ...config, network: "arc-mainnet" });
+    const c = circle();
+    await setUp(db, c);
+    expect(c.calls[0]).toMatchObject({ method: "createWallets", input: { blockchains: ["ARC"] } });
+    expect(c.calls[2]).toMatchObject({ method: "deployContract", input: { blockchain: "ARC" } });
+  });
+
   it("creates the deployer, gives it gas from the operating wallet, deploys the contract for the operating wallet, and stores its address", async () => {
     const db = database();
     const c = circle();

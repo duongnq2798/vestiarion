@@ -1,3 +1,4 @@
+import { workspaceNetwork } from "../workspace-network";
 import crypto from "node:crypto";
 import { initiateDeveloperControlledWalletsClient, type CircleDeveloperControlledWalletsClient } from "@circle-fin/developer-controlled-wallets";
 import { initiateSmartContractPlatformClient, type CircleSmartContractPlatformClient } from "@circle-fin/smart-contract-platform";
@@ -5,7 +6,6 @@ import { currentOrgConfig, currentOrgId } from "../context";
 import { db, unwrap } from "../dal";
 import artifact from "../escrow/artifact.json";
 import { appendLedgerEntry } from "../ledger";
-import { ARC_TESTNET_USDC } from "./cctp";
 import { circleCall, CircleCallFailed, treasuryWalletSetId, walletIdempotencyKey } from "./provision";
 import { awaitSettlement } from "./settlement";
 import { assertPaymentsEnabled } from "../payments-switch";
@@ -132,7 +132,7 @@ export async function setUpEscrow(
       "createWallets",
       async () =>
         wallets.createWallets({
-          blockchains: ["ARC-TESTNET"],
+          blockchains: [workspaceNetwork().circleBlockchain as never],
           count: 1,
           walletSetId: await treasuryWalletSetId(wallets),
           accountType: "EOA",
@@ -153,7 +153,7 @@ export async function setUpEscrow(
       () =>
         wallets.createContractExecutionTransaction({
           walletId: operating.walletId,
-          contractAddress: ARC_TESTNET_USDC,
+          contractAddress: workspaceNetwork().tokens.USDC,
           abiFunctionSignature: "transfer(address,uint256)",
           abiParameters: [row!.deployer_address as string, GAS_UNITS],
           idempotencyKey: escrowStepKey(`${orgId}/${row!.id}/gas`),
@@ -182,10 +182,10 @@ export async function setUpEscrow(
           name: "VestiarionEscrow",
           description: "Vestiarion milestone escrow",
           walletId: row!.deployer_wallet_id as string,
-          blockchain: "ARC-TESTNET",
+          blockchain: workspaceNetwork().circleBlockchain as never,
           abiJson: JSON.stringify(artifact.abi),
           bytecode: artifact.bytecode,
-          constructorParameters: [ARC_TESTNET_USDC, operating.address],
+          constructorParameters: [workspaceNetwork().tokens.USDC, operating.address],
           fee: { type: "level", config: { feeLevel: "MEDIUM" } },
           idempotencyKey: escrowStepKey(`${orgId}/${row!.id}/deploy`),
         }),

@@ -4,7 +4,6 @@ import { arcAddressUrl, arcTxUrl, PAYEE_CHAINS } from "@/lib/payee-chains";
 import { ARC_TESTNET_USDC } from "@/lib/circle/cctp";
 import { ARC_TESTNET_EURC, ARC_TESTNET_USDC as QUOTE_USDC } from "@/lib/fx/quote";
 import { ARC_TESTNET_CHAIN_ID, ARC_TESTNET_RPC_URL } from "@/lib/circle/arcFees";
-import { ARC_TESTNET_USYC, USYC_ENTITLEMENTS, USYC_TELLER } from "@/lib/circle/usyc";
 import { GATEWAY_FACILITATOR_URL, X402_NETWORK } from "@/lib/x402/offer";
 
 /**
@@ -54,7 +53,6 @@ describe("the Arc testnet profile", () => {
     expect(GATEWAY_FACILITATOR_URL).toBe(ARC_TESTNET.gateway.facilitator);
     expect(ARC_TESTNET_RPC_URL).toBe(ARC_TESTNET.rpcUrl);
     expect(ARC_TESTNET_CHAIN_ID).toBe(ARC_TESTNET.chainId);
-    expect([ARC_TESTNET_USYC, USYC_TELLER, USYC_ENTITLEMENTS]).toEqual([ARC_TESTNET.usyc.token, ARC_TESTNET.usyc.teller, ARC_TESTNET.usyc.entitlements]);
     expect(X402_NETWORK).toBe(ARC_TESTNET.caip2);
   });
 });

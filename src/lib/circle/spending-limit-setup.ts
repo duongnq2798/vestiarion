@@ -1,3 +1,4 @@
+import { workspaceNetwork } from "../workspace-network";
 import crypto from "node:crypto";
 import { initiateDeveloperControlledWalletsClient, type CircleDeveloperControlledWalletsClient } from "@circle-fin/developer-controlled-wallets";
 import { initiateSmartContractPlatformClient, type CircleSmartContractPlatformClient } from "@circle-fin/smart-contract-platform";
@@ -7,7 +8,6 @@ import { db, unwrap } from "../dal";
 import { appendLedgerEntry } from "../ledger";
 import artifact from "../spending-limit/artifact.json";
 import { readSpendingLimit, SET_LIMITS_SIGNATURE, usdcUnits, type SpendingLimitReading } from "../spending-limit/onchain";
-import { ARC_TESTNET_USDC } from "./cctp";
 import { circleCall, CircleCallFailed, createScaWallet, treasuryWalletSetId, walletIdempotencyKey } from "./provision";
 import { awaitSettlement } from "./settlement";
 import { assertPaymentsEnabled } from "../payments-switch";
@@ -232,7 +232,7 @@ export async function enforceSpendingLimit(input: { actorId: string }, options: 
       "createWallets",
       async () =>
         wallets.createWallets({
-          blockchains: ["ARC-TESTNET"],
+          blockchains: [workspaceNetwork().circleBlockchain as never],
           count: 1,
           walletSetId: await treasuryWalletSetId(wallets),
           accountType: "EOA",
@@ -253,7 +253,7 @@ export async function enforceSpendingLimit(input: { actorId: string }, options: 
       () =>
         wallets.createContractExecutionTransaction({
           walletId: operating.walletId,
-          contractAddress: ARC_TESTNET_USDC,
+          contractAddress: workspaceNetwork().tokens.USDC,
           abiFunctionSignature: "transfer(address,uint256)",
           abiParameters: [row!.deployer_address as string, GAS_UNITS],
           idempotencyKey: spendingLimitStepKey(`${orgId}/${row!.id}/gas`),
@@ -275,7 +275,7 @@ export async function enforceSpendingLimit(input: { actorId: string }, options: 
 
   // 3. The agent's own wallet: a smart account with no USDC, the only address the contract lets pay.
   if (!row.agent_wallet_id || !row.agent_address) {
-    const agent = await createScaWallet(wallets, await treasuryWalletSetId(wallets), "ARC-TESTNET", walletIdempotencyKey(orgId, "spending-limit-agent"));
+    const agent = await createScaWallet(wallets, await treasuryWalletSetId(wallets), workspaceNetwork().circleBlockchain, walletIdempotencyKey(orgId, "spending-limit-agent"));
     await record(row.id, { agent_wallet_id: agent.id, agent_address: agent.address });
     row = { ...row, agent_wallet_id: agent.id, agent_address: agent.address };
   }
@@ -290,10 +290,10 @@ export async function enforceSpendingLimit(input: { actorId: string }, options: 
             name: "VestiarionSpendingLimit",
             description: "Vestiarion agent spending limit",
             walletId: row!.deployer_wallet_id as string,
-            blockchain: "ARC-TESTNET",
+            blockchain: workspaceNetwork().circleBlockchain as never,
             abiJson: JSON.stringify(artifact.abi),
             bytecode: artifact.bytecode,
-            constructorParameters: [ARC_TESTNET_USDC, operating.address, row!.agent_address as string, ...figures(budget)],
+            constructorParameters: [workspaceNetwork().tokens.USDC, operating.address, row!.agent_address as string, ...figures(budget)],
             fee: { type: "level", config: { feeLevel: "MEDIUM" } },
             idempotencyKey: spendingLimitStepKey(`${orgId}/${row!.id}/deploy`),
           }),
@@ -347,7 +347,7 @@ export async function enforceSpendingLimit(input: { actorId: string }, options: 
     wallets,
     {
       walletId: operating.walletId,
-      contractAddress: ARC_TESTNET_USDC,
+      contractAddress: workspaceNetwork().tokens.USDC,
       abiFunctionSignature: "approve(address,uint256)",
       abiParameters: [contract, MAX_ALLOWANCE],
       idempotencyKey: crypto.randomUUID(),
@@ -386,7 +386,7 @@ export async function turnOffSpendingLimit(input: { actorId: string }, options: 
     wallets,
     {
       walletId: operating.walletId,
-      contractAddress: ARC_TESTNET_USDC,
+      contractAddress: workspaceNetwork().tokens.USDC,
       abiFunctionSignature: "approve(address,uint256)",
       abiParameters: [row.address, "0"],
       idempotencyKey: crypto.randomUUID(),

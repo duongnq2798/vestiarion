@@ -1,7 +1,7 @@
 import { decodeFunctionData, encodeAbiParameters, parseAbi, type Hex } from "viem";
 import { describe, expect, it, vi } from "vitest";
 import { LiveProvider, type LiveProviderClient } from "@/lib/circle/liveProvider";
-import { usycStepKey, USYC_TELLER, UsycSubscriptionsClosedError } from "@/lib/circle/usyc";
+import { usycStepKey, UsycSubscriptionsClosedError } from "@/lib/circle/usyc";
 import type { ChainConfig } from "@/lib/config";
 import { ARC_TESTNET_USDC } from "@/lib/fx/quote";
 import { ARC_TESTNET } from "@/lib/network";
@@ -90,12 +90,12 @@ describe("LiveProvider: a sweep into USYC", () => {
       walletId: "wallet-op",
       contractAddress: ARC_TESTNET_USDC,
       abiFunctionSignature: "approve(address,uint256)",
-      abiParameters: [USYC_TELLER, "10000000"],
+      abiParameters: [ARC_TESTNET.usyc.teller, "10000000"],
       idempotencyKey: usycStepKey("cycle-7/sweep_to_usyc/approve"),
     });
     expect(c.created[1]).toMatchObject({
       walletId: "wallet-op",
-      contractAddress: USYC_TELLER,
+      contractAddress: ARC_TESTNET.usyc.teller,
       abiFunctionSignature: "deposit(uint256,address)",
       abiParameters: ["10000000", ACCOUNTS["reserve-1"].address],
       idempotencyKey: usycStepKey("cycle-7/sweep_to_usyc/deposit"),
@@ -136,7 +136,7 @@ describe("LiveProvider: a redemption from USYC", () => {
     expect(c.created).toEqual([
       expect.objectContaining({
         walletId: "wallet-res",
-        contractAddress: USYC_TELLER,
+        contractAddress: ARC_TESTNET.usyc.teller,
         abiFunctionSignature: "redeem(uint256,address,address)",
         abiParameters: ["4390210", ACCOUNTS["operating-1"].address, ACCOUNTS["reserve-1"].address],
         idempotencyKey: usycStepKey("cycle-8/redeem_from_usyc/redeem"),

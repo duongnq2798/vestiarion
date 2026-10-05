@@ -1,5 +1,7 @@
-import { arcRpcUrl } from "../circle/arcFees";
-import { usycEntitlements, type UsycReadOptions } from "../circle/usyc";
+import { networkRpcUrl } from "../circle/arcFees";
+import { usycEntitlements, type UsycRead } from "../circle/usyc";
+import { FeatureOffError } from "../network";
+import { workspaceNetwork } from "../workspace-network";
 import { db, platformDb, unwrap } from "../dal";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 
@@ -64,10 +66,13 @@ export async function usycReserveStatus(orgId: string): Promise<UsycReserveStatu
 
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 
-export async function enableUsycReserve(input: { orgId: string; actorId: string; read?: UsycReadOptions }): Promise<{ liveAt: string; operatingAddress: string; reserveAddress: string }> {
+export async function enableUsycReserve(input: { orgId: string; actorId: string; read?: UsycRead }): Promise<{ liveAt: string; operatingAddress: string; reserveAddress: string }> {
   const status = await usycReserveStatus(input.orgId);
   if (status.liveAt) throw new UsycReserveError("already_live", "The USYC reserve is already on.");
   if (status.mode !== "live") throw new UsycReserveError("not_live", "Take the workspace live first: only a live workspace's wallets can hold USYC.");
+  // The real reserve runs only where its network offers USYC (network threading P5).
+  const network = workspaceNetwork();
+  if (!network.usyc) throw new UsycReserveError("not_live", `${new FeatureOffError("The USYC reserve", network).message}.`);
   const operating = status.operatingAddress;
   const reserve = status.reserveAddress;
   if (!operating || !reserve || !ADDRESS.test(operating) || !ADDRESS.test(reserve)) {
@@ -82,13 +87,13 @@ export async function enableUsycReserve(input: { orgId: string; actorId: string;
 
   let allowed: { operating: boolean; reserve: boolean };
   try {
-    allowed = await usycEntitlements({ operating, reserve }, input.read ?? { rpcUrl: arcRpcUrl() });
+    allowed = await usycEntitlements({ operating, reserve }, input.read ?? { network, rpcUrl: networkRpcUrl(network) });
   } catch {
-    throw new UsycReserveError("unreachable", "Arc testnet did not answer the allowlist check. Try again in a moment.");
+    throw new UsycReserveError("unreachable", `${network.label} did not answer the allowlist check. Try again in a moment.`);
   }
   const missing = [!allowed.operating ? `the operating wallet (${operating}), to buy USYC` : null, !allowed.reserve ? `the reserve wallet (${reserve}), to sell it` : null].filter(Boolean);
   if (missing.length > 0) {
-    throw new UsycReserveError("not_allowlisted", `Circle has not allowlisted ${missing.join(", nor ")}. Ask Circle Support to allowlist it for USYC on Arc testnet, then try again.`);
+    throw new UsycReserveError("not_allowlisted", `Circle has not allowlisted ${missing.join(", nor ")}. Ask Circle Support to allowlist it for USYC on ${network.label}, then try again.`);
   }
 
   const result = await platformDb().rpc("enable_usyc_reserve", { p_org_id: input.orgId, p_actor: input.actorId }).single<string>();

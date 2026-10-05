@@ -1,10 +1,11 @@
+import { workspaceNetwork } from "../workspace-network";
 import { initiateDeveloperControlledWalletsClient, type CircleDeveloperControlledWalletsClient } from "@circle-fin/developer-controlled-wallets";
 import { currentOrgConfig, currentOrgId } from "../context";
 import { addressUnconfirmed } from "../counterparty-address";
 import { db, unwrap } from "../dal";
 import { appendLedgerEntry } from "../ledger";
-import { ARC_TESTNET_RPC_URL } from "./arcFees";
-import { ARC_TESTNET_USDC } from "./cctp";
+import { networkRpcUrl } from "./arcFees";
+import { homeChain } from "../payee-chains";
 import { escrowStepKey, readEscrowContract } from "./escrow-setup";
 import { circleCall, CircleCallFailed } from "./provision";
 import { awaitSettlement } from "./settlement";
@@ -48,9 +49,9 @@ const units = (amount: number) => BigInt(Math.round(amount * 1_000_000)).toStrin
 export async function readHold(
   escrow: string,
   id: string,
-  options: { fetch?: typeof fetch; rpcUrl?: string } = {}
+  options: { fetch?: typeof fetch; rpcUrl: string }
 ): Promise<{ payee: string; refundAfter: number; state: HoldState; amountUnits: bigint }> {
-  const response = await (options.fetch ?? fetch)(options.rpcUrl ?? ARC_TESTNET_RPC_URL, {
+  const response = await (options.fetch ?? fetch)(options.rpcUrl, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_call", params: [{ to: escrow, data: `${HOLDS_SELECTOR}${id.slice(2)}` }, "latest"] }),
@@ -126,7 +127,9 @@ export async function lockMilestone(
   // Locked before the work is verified: once it is, the agent may be paying it (review I1).
   if (milestone.status !== "pending") throw new EscrowHoldError("Only a milestone not yet verified can be locked in escrow.");
   if (!contractor?.address) throw new EscrowHoldError(`${contractor?.name ?? "The contractor"} has no Arc testnet address to lock this milestone for.`);
-  if ((contractor.chain ?? "ARC-TESTNET") !== "ARC-TESTNET") throw new EscrowHoldError(`Escrow pays on Arc testnet; ${contractor.name} is paid on another chain.`);
+  const network = workspaceNetwork();
+  const own = homeChain(network.id).id;
+  if ((contractor.chain ?? own) !== own) throw new EscrowHoldError(`Escrow pays on ${network.label}; ${contractor.name} is paid on another chain.`);
   // A hold pays one address for good: never one no one has confirmed (review C1).
   if (addressUnconfirmed(contractor.address_changed_at ?? null, contractor.address_confirmed_at ?? null)) {
     throw new EscrowHoldError(`${contractor.name}'s address changed and no one has confirmed it. Confirm it on Counterparties before locking a milestone for it.`);
@@ -145,7 +148,7 @@ export async function lockMilestone(
   const amount = Number(milestone.amount);
   const operating = await operatingWallet();
   const id = holdId(milestone.id);
-  const chainOptions = { fetch: options.fetch, rpcUrl: options.rpcUrl };
+  const chainOptions = { fetch: options.fetch, rpcUrl: options.rpcUrl ?? networkRpcUrl(workspaceNetwork()) };
 
   // What is recorded is the hold as it is: the chain's payee, date and amount when it was found there (review M1).
   const record = async (hold: { payee: string; refundAfter: Date; amount: number }, fundTxHash: string | null) => {
@@ -200,7 +203,7 @@ export async function lockMilestone(
   const approved = await execute(
     client,
     operating.walletId,
-    { contractAddress: ARC_TESTNET_USDC, abiFunctionSignature: "approve(address,uint256)", abiParameters: [escrow.address, units(amount)] },
+    { contractAddress: workspaceNetwork().tokens.USDC, abiFunctionSignature: "approve(address,uint256)", abiParameters: [escrow.address, units(amount)] },
     escrowStepKey(`${seed}/approve`)
   );
   if (!approved.ok) {
@@ -255,7 +258,7 @@ export async function refundMilestone(
 
   const amount = Number(milestone.escrow_amount ?? milestone.amount);
   const id = holdId(milestone.id);
-  const chainOptions = { fetch: options.fetch, rpcUrl: options.rpcUrl };
+  const chainOptions = { fetch: options.fetch, rpcUrl: options.rpcUrl ?? networkRpcUrl(workspaceNetwork()) };
   const record = async (state: "refunded" | "released", refundTxHash: string | null) => {
     const saved = await db()
       .from("milestones")

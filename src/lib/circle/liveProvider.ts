@@ -41,7 +41,7 @@ import {
   sharesToRedeem,
   sharesValue,
   toUnits as usycUnits,
-  USYC_TELLER,
+  usycOf,
   usycStepKey,
   usycSubscriptionsOpen,
   UsycNotConfirmedError,
@@ -765,11 +765,11 @@ export class LiveProvider implements ChainProvider {
   async depositToEarn(params: EarnDepositParams): Promise<EarnResult> {
     await this.refuseWhilePaymentsOff();
     const { operating, reserve, key } = await this.usycAccounts(params);
-    const read = { rpcUrl: this.rpcUrl, fetch: this.fetch };
+    const read = { network: this.network, rpcUrl: this.rpcUrl, fetch: this.fetch };
     if (!(await usycSubscriptionsOpen(read))) throw new UsycSubscriptionsClosedError();
     const units = usycUnits(params.amount).toString();
-    const approve = await this.usycCall(operating.walletId, { contractAddress: this.network.tokens.USDC, abiFunctionSignature: "approve(address,uint256)", abiParameters: [USYC_TELLER, units] }, `${key}/approve`);
-    const deposit = await this.usycCall(operating.walletId, { contractAddress: USYC_TELLER, abiFunctionSignature: "deposit(uint256,address)", abiParameters: [units, reserve.address] }, `${key}/deposit`);
+    const approve = await this.usycCall(operating.walletId, { contractAddress: this.network.tokens.USDC, abiFunctionSignature: "approve(address,uint256)", abiParameters: [usycOf(this.network).teller, units] }, `${key}/approve`);
+    const deposit = await this.usycCall(operating.walletId, { contractAddress: usycOf(this.network).teller, abiFunctionSignature: "deposit(uint256,address)", abiParameters: [units, reserve.address] }, `${key}/deposit`);
     const price = await readUsycPrice(read);
     const shares = (BigInt(units) * 10n ** 18n) / price;
     return {
@@ -787,13 +787,13 @@ export class LiveProvider implements ChainProvider {
   async withdrawFromEarn(params: EarnDepositParams): Promise<EarnResult> {
     await this.refuseWhilePaymentsOff();
     const { operating, reserve, key } = await this.usycAccounts(params);
-    const read = { rpcUrl: this.rpcUrl, fetch: this.fetch };
+    const read = { network: this.network, rpcUrl: this.rpcUrl, fetch: this.fetch };
     const [price, held] = await Promise.all([readUsycPrice(read), readUsycShares(reserve.address, read)]);
     if (held === 0n) throw new Error("The reserve wallet holds no USYC to redeem");
     const shares = sharesToRedeem(usycUnits(params.amount), price, held);
     const redeem = await this.usycCall(
       reserve.walletId,
-      { contractAddress: USYC_TELLER, abiFunctionSignature: "redeem(uint256,address,address)", abiParameters: [shares.toString(), operating.address, reserve.address] },
+      { contractAddress: usycOf(this.network).teller, abiFunctionSignature: "redeem(uint256,address,address)", abiParameters: [shares.toString(), operating.address, reserve.address] },
       `${key}/redeem`
     );
     return {
@@ -808,7 +808,7 @@ export class LiveProvider implements ChainProvider {
   async getEarnPosition(reserveAccountId: string): Promise<EarnPosition> {
     const reserve = await this.account(reserveAccountId);
     if (!reserve.address) throw new Error(`Account ${reserveAccountId} has no address`);
-    const read = { rpcUrl: this.rpcUrl, fetch: this.fetch };
+    const read = { network: this.network, rpcUrl: this.rpcUrl, fetch: this.fetch };
     const [price, shares, apy] = await Promise.all([readUsycPrice(read), readUsycShares(reserve.address, read), readUsycApy(read).catch(() => null)]);
     return { shares: fromUnits(shares), valueUsdc: fromUnits(sharesValue(shares, price)), price: priceValue(price), apy };
   }

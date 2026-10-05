@@ -1,6 +1,7 @@
+import { workspaceNetwork } from "../workspace-network";
 import { createHash } from "node:crypto";
 import { decodeErrorResult, decodeFunctionResult, encodeFunctionData, getAddress, type Abi, type Hex } from "viem";
-import { ARC_TESTNET_RPC_URL, arcRpcUrl } from "../circle/arcFees";
+import { networkRpcUrl } from "../circle/arcFees";
 import artifact from "./artifact.json";
 
 /**
@@ -56,12 +57,9 @@ export function checksummed(address: string): Hex {
   return getAddress(address.toLowerCase());
 }
 
+/** The workspace's network's RPC (network threading P1, P2): read in its scope, with no other network to fall back to. */
 function defaultRpcUrl(): string {
-  try {
-    return arcRpcUrl();
-  } catch {
-    return ARC_TESTNET_RPC_URL;
-  }
+  return networkRpcUrl(workspaceNetwork());
 }
 
 type CallOutcome = { ok: true; result: Hex } | { ok: false; revert: Hex | null; reason: string };

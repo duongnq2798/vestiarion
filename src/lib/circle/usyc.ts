@@ -1,7 +1,6 @@
 import crypto from "node:crypto";
 import { decodeFunctionResult, encodeFunctionData, parseAbi, toFunctionSelector, type Hex } from "viem";
-import { ARC_TESTNET_RPC_URL } from "./arcFees";
-import { ARC_TESTNET } from "../network";
+import { FeatureOffError, type NetworkProfile } from "../network";
 
 /**
  * USYC on Arc testnet (docs/superpowers/specs/2026-10-02-usyc-live-design.md): Circle's tokenized
@@ -10,9 +9,14 @@ import { ARC_TESTNET } from "../network";
  * have 6 decimals, and the oracle's price has 18.
  */
 
-export const ARC_TESTNET_USYC = ARC_TESTNET.usyc.token;
-export const USYC_TELLER = ARC_TESTNET.usyc.teller;
-export const USYC_ENTITLEMENTS = ARC_TESTNET.usyc.entitlements;
+/**
+ * USYC on a network (docs/superpowers/specs/2026-10-05-network-threading-design.md P2, P5): its token, Teller and
+ * entitlements. A network without the real reserve refuses by name, before any read.
+ */
+export function usycOf(network: NetworkProfile): { token: string; teller: string; entitlements: string } {
+  if (!network.usyc) throw new FeatureOffError("The USYC reserve", network);
+  return network.usyc;
+}
 
 const PRICE_SCALE = 10n ** 18n;
 const UNITS = 1_000_000;
@@ -33,13 +37,15 @@ const ENTITLEMENTS_ABI = parseAbi(["function canCall(address user, address targe
 export const DEPOSIT_SIGNATURE = "deposit(uint256,address)";
 export const REDEEM_SIGNATURE = "redeem(uint256,address,address)";
 
-export interface UsycReadOptions {
+/** Where a USYC read goes: the network's contracts, at its RPC. */
+export interface UsycRead {
+  network: NetworkProfile;
+  rpcUrl: string;
   fetch?: typeof fetch;
-  rpcUrl?: string;
 }
 
-async function call(to: string, data: Hex, options: UsycReadOptions): Promise<Hex> {
-  const response = await (options.fetch ?? fetch)(options.rpcUrl ?? ARC_TESTNET_RPC_URL, {
+async function call(to: string, data: Hex, options: UsycRead): Promise<Hex> {
+  const response = await (options.fetch ?? fetch)(options.rpcUrl, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_call", params: [{ to, data }, "latest"] }),
@@ -48,13 +54,13 @@ async function call(to: string, data: Hex, options: UsycReadOptions): Promise<He
   });
   const answer = (await response.json().catch(() => ({}))) as { result?: unknown; error?: { message?: string } };
   if (!response.ok || typeof answer.result !== "string" || !answer.result.startsWith("0x")) {
-    throw new Error(`Arc testnet did not answer a USYC read${answer.error?.message ? `: ${answer.error.message}` : ""}`);
+    throw new Error(`${options.network.label} did not answer a USYC read${answer.error?.message ? `: ${answer.error.message}` : ""}`);
   }
   return answer.result as Hex;
 }
 
 /** USYC's latest price in USDC, as the oracle the Teller reads it from has it (18 decimals). */
-export async function readUsycPrice(options: UsycReadOptions = {}): Promise<bigint> {
+export async function readUsycPrice(options: UsycRead): Promise<bigint> {
   const oracle = await oracleAddress(options);
   const round = decodeFunctionResult({
     abi: ORACLE_ABI,
@@ -66,11 +72,12 @@ export async function readUsycPrice(options: UsycReadOptions = {}): Promise<bigi
   return price;
 }
 
-async function oracleAddress(options: UsycReadOptions): Promise<Hex> {
+async function oracleAddress(options: UsycRead): Promise<Hex> {
+  const { teller } = usycOf(options.network);
   return decodeFunctionResult({
     abi: TELLER_ABI,
     functionName: "oracle",
-    data: await call(USYC_TELLER, encodeFunctionData({ abi: TELLER_ABI, functionName: "oracle" }), options),
+    data: await call(teller, encodeFunctionData({ abi: TELLER_ABI, functionName: "oracle" }), options),
   });
 }
 
@@ -82,7 +89,7 @@ const DAY_SECONDS = 86_400n;
  * print (Arc testnet's oracle once posted 154 USDC for a day). Null when no round fits; the reserve
  * then keeps the yield it had. It replaces a configured figure, which for a hosted workspace was 0.
  */
-export async function readUsycApy(options: UsycReadOptions & { minDays?: number; maxRounds?: number } = {}): Promise<number | null> {
+export async function readUsycApy(options: UsycRead & { minDays?: number; maxRounds?: number }): Promise<number | null> {
   const oracle = await oracleAddress(options);
   const latest = decodeFunctionResult({
     abi: ORACLE_ABI,
@@ -113,38 +120,42 @@ export async function readUsycApy(options: UsycReadOptions & { minDays?: number;
  * Whether USYC can be bought now (R4). The Teller mints at the day's price only between the oracle's
  * daily update and 14:00 New York time; outside that, its mint price is 0 and a deposit reverts.
  */
-export async function usycSubscriptionsOpen(options: UsycReadOptions = {}): Promise<boolean> {
+export async function usycSubscriptionsOpen(options: UsycRead): Promise<boolean> {
+  const { teller } = usycOf(options.network);
   const price = decodeFunctionResult({
     abi: TELLER_ABI,
     functionName: "mintPrice",
-    data: await call(USYC_TELLER, encodeFunctionData({ abi: TELLER_ABI, functionName: "mintPrice" }), options),
+    data: await call(teller, encodeFunctionData({ abi: TELLER_ABI, functionName: "mintPrice" }), options),
   });
   return price > 0n;
 }
 
 /** The USYC an address holds, in base units. */
-export async function readUsycShares(address: string, options: UsycReadOptions = {}): Promise<bigint> {
+export async function readUsycShares(address: string, options: UsycRead): Promise<bigint> {
+  const { token } = usycOf(options.network);
   return decodeFunctionResult({
     abi: ERC20_ABI,
     functionName: "balanceOf",
-    data: await call(ARC_TESTNET_USYC, encodeFunctionData({ abi: ERC20_ABI, functionName: "balanceOf", args: [address as Hex] }), options),
+    data: await call(token, encodeFunctionData({ abi: ERC20_ABI, functionName: "balanceOf", args: [address as Hex] }), options),
   });
 }
 
-async function canCall(user: string, signature: string, options: UsycReadOptions): Promise<boolean> {
+async function canCall(user: string, signature: string, options: UsycRead): Promise<boolean> {
+  const { entitlements, teller } = usycOf(options.network);
   return decodeFunctionResult({
     abi: ENTITLEMENTS_ABI,
     functionName: "canCall",
     data: await call(
-      USYC_ENTITLEMENTS,
-      encodeFunctionData({ abi: ENTITLEMENTS_ABI, functionName: "canCall", args: [user as Hex, USYC_TELLER, toFunctionSelector(signature)] }),
+      entitlements,
+      encodeFunctionData({ abi: ENTITLEMENTS_ABI, functionName: "canCall", args: [user as Hex, teller as Hex, toFunctionSelector(signature)] }),
       options
     ),
   });
 }
 
 /** Whether Circle has allowlisted the wallets for their part (R1): the operating one to buy, the reserve one to sell. */
-export async function usycEntitlements(wallets: { operating: string; reserve: string }, options: UsycReadOptions = {}): Promise<{ operating: boolean; reserve: boolean }> {
+export async function usycEntitlements(wallets: { operating: string; reserve: string }, options: UsycRead): Promise<{ operating: boolean; reserve: boolean }> {
+  usycOf(options.network);
   const [operating, reserve] = await Promise.all([canCall(wallets.operating, DEPOSIT_SIGNATURE, options), canCall(wallets.reserve, REDEEM_SIGNATURE, options)]);
   return { operating, reserve };
 }

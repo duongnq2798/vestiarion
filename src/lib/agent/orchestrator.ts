@@ -24,7 +24,7 @@ import { choosePayoutRoute } from "../payout-route";
 import { needsTwoApprovals, TWO_APPROVALS_RULE } from "../two-approvals";
 import { approvedByTwo, usdcValueOfLatestDecision, type PaymentSource } from "./second-approval";
 import { usycSubscriptionsOpen } from "../circle/usyc";
-import { arcRpcUrl } from "../circle/arcFees";
+import { networkRpcUrl } from "../circle/arcFees";
 import { budgetGate, countedUsdc, exceedsBudget, HELD_FOR_BUDGET, type BudgetGate, type BudgetRoom } from "./outflow-budget";
 import { sendPaymentNotices } from "../payment-notices";
 import { sendAgentDecisions } from "../telegram/notify";
@@ -3754,7 +3754,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     let subscriptionsOpen: boolean | null = null;
     if (provider.earnMode === "live") {
       try {
-        subscriptionsOpen = await usycSubscriptionsOpen({ rpcUrl: arcRpcUrl() });
+        subscriptionsOpen = await usycSubscriptionsOpen({ network: provider.network, rpcUrl: networkRpcUrl(provider.network) });
       } catch (error) {
         console.error("treasury: USYC window not read", error instanceof Error ? error.message : error);
       }

@@ -2,6 +2,7 @@ import { decodeFunctionData, encodeErrorResult, encodeFunctionResult, type Abi, 
 import { describe, expect, it } from "vitest";
 import artifact from "@/lib/spending-limit/artifact.json";
 import { readSpendingLimit, spendingLimitRef, spendingLimitVerdict, usdcUnits } from "@/lib/spending-limit/onchain";
+import { ARC_TESTNET } from "@/lib/network";
 
 /**
  * Reading the spending limit contract without sending anything (docs/superpowers/specs/2026-10-03-onchain-spending-limit-design.md
@@ -68,7 +69,7 @@ describe("spendingLimitVerdict", () => {
 
   it("reads a refusal past the daily or 7-day figure with what was paid, the amount and the figure, in USDC", async () => {
     const daily = node(() => reverted(encodeErrorResult({ abi, errorName: "OverDailyLimit", args: [4_000_000n, 1_500_000n, 5_000_000n] })));
-    expect(await spendingLimitVerdict({ contract: CONTRACT, agent: AGENT, to: PAYEE, amount: 1.5, ref: REF }, { fetch: daily.fetch })).toEqual({
+    expect(await spendingLimitVerdict({ contract: CONTRACT, agent: AGENT, to: PAYEE, amount: 1.5, ref: REF }, { fetch: daily.fetch, rpcUrl: ARC_TESTNET.rpcUrl })).toEqual({
       state: "refused",
       error: "OverDailyLimit",
       spent: 4,
@@ -76,7 +77,7 @@ describe("spendingLimitVerdict", () => {
       limit: 5,
     });
     const weekly = node(() => reverted(encodeErrorResult({ abi, errorName: "OverWeeklyLimit", args: [20_000_000n, 1_000_000n, 20_000_000n] })));
-    expect(await spendingLimitVerdict({ contract: CONTRACT, agent: AGENT, to: PAYEE, amount: 1, ref: REF }, { fetch: weekly.fetch })).toEqual({
+    expect(await spendingLimitVerdict({ contract: CONTRACT, agent: AGENT, to: PAYEE, amount: 1, ref: REF }, { fetch: weekly.fetch, rpcUrl: ARC_TESTNET.rpcUrl })).toEqual({
       state: "refused",
       error: "OverWeeklyLimit",
       spent: 20,
@@ -87,12 +88,12 @@ describe("spendingLimitVerdict", () => {
 
   it("reads a payment already made through the contract, and any other refusal by name", async () => {
     const again = node(() => reverted(encodeErrorResult({ abi, errorName: "AlreadyPaid", args: [REF] })));
-    expect(await spendingLimitVerdict({ contract: CONTRACT, agent: AGENT, to: PAYEE, amount: 1, ref: REF }, { fetch: again.fetch })).toEqual({
+    expect(await spendingLimitVerdict({ contract: CONTRACT, agent: AGENT, to: PAYEE, amount: 1, ref: REF }, { fetch: again.fetch, rpcUrl: ARC_TESTNET.rpcUrl })).toEqual({
       state: "refused",
       error: "AlreadyPaid",
     });
     const stranger = node(() => reverted(encodeErrorResult({ abi, errorName: "NotAgent" })));
-    expect(await spendingLimitVerdict({ contract: CONTRACT, agent: AGENT, to: PAYEE, amount: 1, ref: REF }, { fetch: stranger.fetch })).toEqual({
+    expect(await spendingLimitVerdict({ contract: CONTRACT, agent: AGENT, to: PAYEE, amount: 1, ref: REF }, { fetch: stranger.fetch, rpcUrl: ARC_TESTNET.rpcUrl })).toEqual({
       state: "refused",
       error: "NotAgent",
     });
@@ -100,15 +101,15 @@ describe("spendingLimitVerdict", () => {
 
   it("says unreadable, never allowed, when the node does not answer or the revert cannot be named", async () => {
     const down = node(() => ({ status: 502, json: {} }));
-    expect((await spendingLimitVerdict({ contract: CONTRACT, agent: AGENT, to: PAYEE, amount: 1, ref: REF }, { fetch: down.fetch })).state).toBe("unreadable");
+    expect((await spendingLimitVerdict({ contract: CONTRACT, agent: AGENT, to: PAYEE, amount: 1, ref: REF }, { fetch: down.fetch, rpcUrl: ARC_TESTNET.rpcUrl })).state).toBe("unreadable");
     const plain = node(() => ({ json: { jsonrpc: "2.0", id: 1, error: { code: -32000, message: "header not found" } } }));
-    expect((await spendingLimitVerdict({ contract: CONTRACT, agent: AGENT, to: PAYEE, amount: 1, ref: REF }, { fetch: plain.fetch })).state).toBe("unreadable");
+    expect((await spendingLimitVerdict({ contract: CONTRACT, agent: AGENT, to: PAYEE, amount: 1, ref: REF }, { fetch: plain.fetch, rpcUrl: ARC_TESTNET.rpcUrl })).state).toBe("unreadable");
     const strange = node(() => reverted("0xdeadbeef"));
-    expect((await spendingLimitVerdict({ contract: CONTRACT, agent: AGENT, to: PAYEE, amount: 1, ref: REF }, { fetch: strange.fetch })).state).toBe("unreadable");
+    expect((await spendingLimitVerdict({ contract: CONTRACT, agent: AGENT, to: PAYEE, amount: 1, ref: REF }, { fetch: strange.fetch, rpcUrl: ARC_TESTNET.rpcUrl })).state).toBe("unreadable");
     const thrown = (async () => {
       throw new Error("socket hang up");
     }) as unknown as typeof globalThis.fetch;
-    expect((await spendingLimitVerdict({ contract: CONTRACT, agent: AGENT, to: PAYEE, amount: 1, ref: REF }, { fetch: thrown })).state).toBe("unreadable");
+    expect((await spendingLimitVerdict({ contract: CONTRACT, agent: AGENT, to: PAYEE, amount: 1, ref: REF }, { fetch: thrown, rpcUrl: ARC_TESTNET.rpcUrl })).state).toBe("unreadable");
   });
 });
 
@@ -120,11 +121,11 @@ describe("readSpendingLimit", () => {
       const { functionName } = decodeFunctionData({ abi, data: call.data as Hex });
       return { json: { jsonrpc: "2.0", id: 1, result: encodeFunctionResult({ abi, functionName, result: values[functionName] }) } };
     });
-    expect(await readSpendingLimit(CONTRACT, { fetch })).toEqual({ state: "read", dailyUsdc: 5, weeklyUsdc: null, spentToday: 1.2, spentThisWeek: 3.7 });
+    expect(await readSpendingLimit(CONTRACT, { fetch, rpcUrl: ARC_TESTNET.rpcUrl })).toEqual({ state: "read", dailyUsdc: 5, weeklyUsdc: null, spentToday: 1.2, spentThisWeek: 3.7 });
   });
 
   it("says unreadable when any of it cannot be read", async () => {
     const { fetch } = node(() => ({ status: 500, json: {} }));
-    expect(await readSpendingLimit(CONTRACT, { fetch })).toEqual({ state: "unreadable" });
+    expect(await readSpendingLimit(CONTRACT, { fetch, rpcUrl: ARC_TESTNET.rpcUrl })).toEqual({ state: "unreadable" });
   });
 });
