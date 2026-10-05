@@ -153,7 +153,8 @@ export async function payInvoice(
   if (result.status === "failed") {
     note = ` [transfer failed: ${result.error ?? "provider reported failure"}]`;
   } else if (result.status === "pending") {
-    note = " [transfer submitted; awaiting provider confirmation]";
+    // A send Circle never answered is pending too, with what the lookup said (payment safety R4).
+    note = result.error ? ` [${result.error}]` : " [transfer submitted; awaiting provider confirmation]";
   } else if ((input.currency ?? "USDC") === "USDC") {
     // The transfer is already confirmed — status, txRef and execution below
     // are real regardless of what happens next. A sync failure here must not

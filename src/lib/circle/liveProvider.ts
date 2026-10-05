@@ -384,15 +384,22 @@ export class LiveProvider implements ChainProvider {
   }
 
   /**
-   * A batch whose answer was lost, found by its refId among the account's transactions created within the
-   * window, and read again (batch payouts R5). It sends nothing. Circle lists 50 at most: a full page without
-   * it cannot say the batch is not there, so that throws rather than answer null.
+   * A send whose answer was lost, found by its refId among the wallet's transactions created within the window,
+   * and read again: a batch (batch payouts R5), or one payment (payment safety R4). It sends nothing. The wallet is
+   * the account's unless `walletId` names another, and `exclude` leaves out transactions already known. Circle
+   * lists 50 at most: a full page without it cannot say the send is not there, so that throws rather than answer null.
    */
-  async findTransferByRef(fromAccountId: string, refId: string, window: { from: string; to: string }): Promise<TransferResult | null> {
-    const account = await this.account(fromAccountId);
+  async findTransferByRef(
+    fromAccountId: string,
+    refId: string,
+    window: { from: string; to: string },
+    options: { walletId?: string; exclude?: string[] } = {}
+  ): Promise<TransferResult | null> {
+    const walletId = options.walletId ?? (await this.account(fromAccountId)).walletId;
+    const excluded = new Set(options.exclude ?? []);
     const listed = await withDeadline(
       this.client.listTransactions({
-        walletIds: [account.walletId],
+        walletIds: [walletId],
         from: window.from,
         to: window.to,
         pageSize: 50,
@@ -401,7 +408,7 @@ export class LiveProvider implements ChainProvider {
       `no answer from Circle listTransactions within ${BALANCE_READ_DEADLINE_MS} ms`
     );
     const transactions = listed.data?.transactions ?? [];
-    const found = transactions.find((transaction) => transaction.refId === refId);
+    const found = transactions.find((transaction) => transaction.refId === refId && !excluded.has(transaction.id));
     if (found) return this.reconcileTransfer(found.id);
     if (transactions.length >= 50) throw new Error("Circle listed 50 transactions around the batch without it; it could not be looked for in full");
     return null;

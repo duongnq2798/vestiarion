@@ -228,9 +228,16 @@ export interface ChainProvider {
   batchTransfer?(params: BatchTransferParams): Promise<TransferResult>;
   /**
    * The account's transaction with this refId, created within the window, read again; null when Circle lists
-   * none there (batch payouts R5). It sends nothing. Throws when the window holds too many to be sure.
+   * none there (batch payouts R5, payment safety R4). It sends nothing. Throws when the window holds too many to be
+   * sure. `walletId` looks in another wallet (the agent's, for the spending limit contract), and `exclude` leaves
+   * out transactions already known, such as earlier attempts'.
    */
-  findTransferByRef?(fromAccountId: string, refId: string, window: { from: string; to: string }): Promise<TransferResult | null>;
+  findTransferByRef?(
+    fromAccountId: string,
+    refId: string,
+    window: { from: string; to: string },
+    options?: { walletId?: string; exclude?: string[] }
+  ): Promise<TransferResult | null>;
   depositToEarn(params: EarnDepositParams): Promise<EarnResult>;
   withdrawFromEarn(params: EarnDepositParams): Promise<EarnResult>;
   /** The real reserve's position, read from the chain; only a provider whose `earnMode` is live has one (R3). */

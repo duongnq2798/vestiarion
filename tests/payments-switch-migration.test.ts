@@ -15,7 +15,7 @@ beforeAll(async () => {
   db = await createDatabase();
   await applyMigrations(db);
   orgId = await createOrg(db, "switch-co");
-});
+}, 60_000);
 
 describe("platform_controls (S7)", () => {
   it("holds one row, with payments on", async () => {

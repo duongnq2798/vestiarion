@@ -197,6 +197,18 @@ describe("payInvoice", () => {
     expect(result.operatingBalance).toBeNull();
   });
 
+  it("reports a send Circle never answered as matched, in flight, in Circle's words: never a failure to close over (payment safety R4)", async () => {
+    const provider = new FakeProvider();
+    provider.transferResults.push(new Error("Circle did not answer createTransaction within 20000 ms; the transfer may or may not have been accepted"));
+    const backend = paymentIntentsBackend();
+
+    const result = await inOrg(backend.respond, () => payInvoice(input, { provider, operating: { id: OPERATING_ACCOUNT_ID } }));
+
+    expect(result.status).toBe("matched");
+    expect(result.execution?.status).toBe("pending");
+    expect(result.note).toBe(" [Circle did not answer createTransaction within 20000 ms; the transfer may or may not have been accepted]");
+  });
+
   it("reports matched, awaiting confirmation, on a pending transfer — without syncing a balance", async () => {
     const provider = new FakeProvider();
     provider.transferResults.push(transferResult("pending"));

@@ -57,8 +57,13 @@ class HybridProvider implements ChainProvider {
     return this.live.batchTransfer(params);
   }
 
-  findTransferByRef(fromAccountId: string, refId: string, window: { from: string; to: string }): Promise<TransferResult | null> {
-    return this.live.findTransferByRef(fromAccountId, refId, window);
+  findTransferByRef(
+    fromAccountId: string,
+    refId: string,
+    window: { from: string; to: string },
+    options?: { walletId?: string; exclude?: string[] }
+  ): Promise<TransferResult | null> {
+    return this.live.findTransferByRef(fromAccountId, refId, window, options);
   }
 
   getBalance(accountId: string): Promise<BalanceSnapshot> {

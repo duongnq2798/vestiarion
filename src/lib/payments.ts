@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { ChainProvider, Stablecoin, TransferResult } from "./circle";
 import type { PayoutRoute, SpendingLimitPayment } from "./circle/types";
 import { BatchNotSentError, MAX_BATCH_SIZE } from "./circle/batch";
-import { FAILED_STATES } from "./circle/settlement";
+import { FAILED_STATES, MAY_HAVE_BEEN_ACCEPTED } from "./circle/settlement";
 import { db, unwrap } from "./dal";
 import { paidAcrossChains } from "./payee-chains";
 
@@ -58,6 +58,11 @@ export interface PaymentIntent {
   batchKey?: string | null;
   batchSize?: number | null;
   batchSentAt?: string | null;
+  /**
+   * The Circle wallet a send under the current key went from, when it was not the account's own: the agent's, through
+   * the spending limit contract (0074). A send Circle never answered is looked for there (payment safety R5).
+   */
+  sentWalletId?: string | null;
 }
 
 interface PaymentIntentRow {
@@ -92,6 +97,7 @@ interface PaymentIntentRow {
   batch_key?: string | null;
   batch_size?: number | null;
   batch_sent_at?: string | null;
+  sent_wallet_id?: string | null;
 }
 
 export interface PaymentIntentStore {
@@ -108,6 +114,10 @@ export interface PaymentIntentStore {
    * it is not retryable).
    */
   beginRetry(intent: PaymentIntent): Promise<PaymentIntent | null>;
+  /** Records the wallet a send under the current key goes from, before it is sent (payment safety R5). */
+  markSending?(idempotencyKey: string, sentWalletId: string | null): Promise<void>;
+  /** The source's intent, or null: a read that never creates one (payment safety R6). */
+  findBySource?(sourceType: PaymentSourceType, sourceId: string): Promise<PaymentIntent | null>;
 }
 
 /** What a batch needs from the store beyond one intent (batch payouts R4, R5). */
@@ -260,6 +270,7 @@ function fromRow(row: PaymentIntentRow): PaymentIntent {
     batchKey: row.batch_key ?? null,
     batchSize: row.batch_size ?? null,
     batchSentAt: row.batch_sent_at ?? null,
+    sentWalletId: row.sent_wallet_id ?? null,
   };
 }
 
@@ -365,6 +376,17 @@ export class SupabasePaymentIntentStore implements PaymentIntentStore, PaymentBa
     return this.get(idempotencyKey);
   }
 
+  async markSending(idempotencyKey: string, sentWalletId: string | null): Promise<void> {
+    const update = await db().from("payment_intents").update({ sent_wallet_id: sentWalletId }).eq("idempotency_key", idempotencyKey);
+    if (update.error) throw new Error(update.error.message);
+  }
+
+  async findBySource(sourceType: PaymentSourceType, sourceId: string): Promise<PaymentIntent | null> {
+    const result = await db().from("payment_intents").select("*").eq("source_type", sourceType).eq("source_id", sourceId).maybeSingle<PaymentIntentRow>();
+    if (result.error) throw new Error(result.error.message);
+    return result.data ? fromRow(result.data) : null;
+  }
+
   async beginRetry(intent: PaymentIntent): Promise<PaymentIntent | null> {
     const result = await db()
       .rpc("begin_payment_retry", {
@@ -414,8 +436,31 @@ export class SupabasePaymentIntentStore implements PaymentIntentStore, PaymentBa
 /** A batch member Circle has no id for may have gone out with its batch: in flight until it is found, or known never sent (R5). */
 const inLostBatch = (intent: PaymentIntent) => Boolean(intent.batchKey) && intent.transferAttempt === 1 && !intent.providerTxId && intent.status !== "confirmed";
 
+/** How long Circle may take to list a transaction it took (payment safety R4): a send not listed after this was never taken. */
+export const UNKNOWN_SEND_GRACE_MS = 15 * 60_000;
+
+/** How long a claimed send may run before it is claimed again (claim_payment_intent, 0004): one older is unknown too. */
+const STALE_SUBMISSION_MS = 2 * 60_000;
+
+/**
+ * Whether the intent's current attempt was sent and Circle never said what became of it (payment safety R1, R4): it
+ * failed with no provider id and the provider's words for that, or its send has run longer than a claim may, so the
+ * request may have reached Circle with its answer lost. Such a send may exist under the attempt's key: it is looked
+ * for, never sent again blind, and nothing closes over it.
+ */
+export function unknownSend(intent: Pick<PaymentIntent, "status" | "providerTxId" | "lastError" | "updatedAt">, now: number = Date.now()): boolean {
+  if (intent.providerTxId) return false;
+  if (intent.status === "failed") return intent.lastError?.includes(MAY_HAVE_BEEN_ACCEPTED) ?? false;
+  return intent.status === "submitting" && now - Date.parse(intent.updatedAt) > STALE_SUBMISSION_MS;
+}
+
+/** What an intent records once Circle has listed nothing for its unknown send after the grace period (R4). */
+export const NO_EARLIER_SEND = "Circle has no transfer for this payment's earlier send; nothing was sent.";
+
 function execution(intent: PaymentIntent, reconciled: boolean, retriedAfter: RetriedAfter | null = null): PaymentExecution {
-  const status = intent.status === "confirmed" ? "confirmed" : intent.status === "failed" && !inLostBatch(intent) ? "failed" : "pending";
+  // A send Circle never answered may have moved money: it is in flight until it is found or known never taken (R4).
+  const status =
+    intent.status === "confirmed" ? "confirmed" : intent.status === "failed" && !inLostBatch(intent) && !unknownSend(intent) ? "failed" : "pending";
   return {
     idempotencyKey: intent.idempotencyKey,
     providerTxId: intent.providerTxId,
@@ -522,9 +567,10 @@ function sameGatewayPayout(intent: PaymentIntent, request: PaymentRequest): bool
  */
 export async function executePayment(
   request: PaymentRequest,
-  dependencies: { provider: ChainProvider; store?: PaymentIntentStore; retryTerminalFailure?: boolean }
+  dependencies: { provider: ChainProvider; store?: PaymentIntentStore; retryTerminalFailure?: boolean; now?: number }
 ): Promise<PaymentExecution> {
   const store = dependencies.store ?? new SupabasePaymentIntentStore();
+  const now = dependencies.now ?? Date.now();
   let intent = await store.ensure({
     ...request,
     idempotencyKey: paymentIdempotencyKey(request.sourceType, request.sourceId),
@@ -573,6 +619,20 @@ export async function executePayment(
     intent = next;
   }
 
+  // A send Circle never answered is looked for before anything is sent again (payment safety R4): found, it is
+  // recorded; still being listed, or not asked, nothing is sent; never taken, it goes below as a new payment. A route
+  // Circle cannot look up this way keeps its own safety, and is sent again as before.
+  let unknownBefore = unknownSend(intent, now);
+  if (unknownBefore) {
+    const looked = await lookForUnknownSend(intent, request, dependencies.provider, store, now);
+    if (looked === NOT_SENT) {
+      intent = await store.get(intent.idempotencyKey);
+      unknownBefore = false;
+    } else if (looked) {
+      return looked;
+    }
+  }
+
   const idempotencyKey = intent.idempotencyKey;
   const claim = await store.claim(idempotencyKey);
   if (!claim) {
@@ -580,7 +640,62 @@ export async function executePayment(
     // second provider call; the next cycle will reconcile its recorded ID.
     return execution(await store.get(idempotencyKey), false, retriedAfter);
   }
-  return sendClaimed(intent, request, dependencies.provider, store, retriedAfter);
+  return sendClaimed(intent, request, dependencies.provider, store, retriedAfter, unknownBefore);
+}
+
+const NOT_SENT = "not_sent" as const;
+
+/** HH:MM UTC, for when an unknown send is looked for again. */
+function utcClock(at: number): string {
+  return new Date(at).toISOString().slice(11, 16);
+}
+
+/**
+ * Looks for a send Circle never answered, sending nothing (payment safety R4, R5): by the payment's reference, in the
+ * wallet the send went from (the agent's for the spending limit contract, else the account's), around the send, leaving
+ * out the transactions of earlier attempts.
+ * - Found: recorded, and its execution returned.
+ * - Not listed 15 minutes after the send: Circle never took it. Recorded as such, and `NOT_SENT` lets the caller send
+ *   it as a new payment.
+ * - Not listed yet, or Circle could not be asked: a pending execution saying when it is looked for again. Nothing is
+ *   written, so the intent stays unknown.
+ * - A route Circle cannot look up this way: null. Gateway's transfer is the same spec spent once; CCTP's steps are the
+ *   same keys on the same wallet.
+ */
+async function lookForUnknownSend(
+  intent: PaymentIntent,
+  request: PaymentRequest,
+  provider: ChainProvider,
+  store: PaymentIntentStore,
+  now: number
+): Promise<PaymentExecution | typeof NOT_SENT | null> {
+  if (intent.route === "gateway" || intent.route === "cctp" || paidAcrossChains(request.destinationChain)) return null;
+  if (!provider.findTransferByRef) return null;
+  const sentAt = Date.parse(intent.updatedAt);
+  const undecided = (error: string): PaymentExecution => ({ ...execution(intent, true), status: "pending", error });
+  let found: TransferResult | null;
+  try {
+    found = await provider.findTransferByRef(
+      request.fromAccountId,
+      request.memo,
+      { from: new Date(sentAt - 10 * 60_000).toISOString(), to: new Date(sentAt + 2 * UNKNOWN_SEND_GRACE_MS).toISOString() },
+      {
+        ...(intent.sentWalletId ? { walletId: intent.sentWalletId } : {}),
+        exclude: intent.previousAttempts.map((attempt) => attempt.providerTxId).filter((id): id is string => Boolean(id)),
+      }
+    );
+  } catch (error) {
+    const reason = error instanceof Error ? error.message.replace(/\.$/, "") : "the lookup failed";
+    return undecided(`Circle could not be asked about this payment's earlier send (${reason}); it is looked for again, and sent only if Circle has none.`);
+  }
+  if (found) return execution(await store.recordResult(intent.idempotencyKey, found), true);
+  if (now - sentAt < UNKNOWN_SEND_GRACE_MS) {
+    return undecided(
+      `Circle has not listed this payment's earlier send yet; it is looked for again from ${utcClock(sentAt + UNKNOWN_SEND_GRACE_MS)} UTC, and sent only if Circle has none.`
+    );
+  }
+  await store.recordError(intent.idempotencyKey, NO_EARLIER_SEND);
+  return NOT_SENT;
 }
 
 /** A claimed attempt, sent alone under its own key: `executePayment`'s send, and a batch member's when it cannot go in a batch. */
@@ -589,9 +704,11 @@ async function sendClaimed(
   request: PaymentRequest,
   provider: ChainProvider,
   store: PaymentIntentStore,
-  retriedAfter: RetriedAfter | null
+  retriedAfter: RetriedAfter | null,
+  unknownBefore = false
 ): Promise<PaymentExecution> {
   const idempotencyKey = intent.idempotencyKey;
+  let result: TransferResult;
   try {
     // A Gateway transfer is refused again only when its whole spec repeats: the same
     // salt with another amount (a discount that lapsed), payee or chain would be a
@@ -613,7 +730,10 @@ async function sendClaimed(
         "This payout was first sent through Gateway with another amount, payee or chain; nothing was sent. Check with Circle whether the first transfer was made before paying it again."
       );
     }
-    const result = await provider.transfer({
+    // The wallet the send goes from, recorded first, so a send whose answer is lost is looked for there (R5).
+    const sentWalletId = request.spendingLimit?.agentWalletId ?? null;
+    if (store.markSending && sentWalletId !== (intent.sentWalletId ?? null)) await store.markSending(idempotencyKey, sentWalletId);
+    result = await provider.transfer({
       fromAccountId: request.fromAccountId,
       toAddress: request.destination,
       amount: request.amount,
@@ -627,9 +747,22 @@ async function sendClaimed(
       ...(route === "escrow" && request.escrow ? { escrow: request.escrow } : {}),
       ...(request.spendingLimit ? { spendingLimit: request.spendingLimit } : {}),
     });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Transfer failed";
+    // An earlier send under this key that Circle never answered stays unknown until Circle says what became of it (R7).
+    const kept = unknownBefore && !message.includes(MAY_HAVE_BEEN_ACCEPTED) ? `${message} (an earlier send under this key ${MAY_HAVE_BEEN_ACCEPTED})` : message;
+    return execution(await store.recordError(idempotencyKey, kept), false, retriedAfter);
+  }
+  try {
     return execution(await store.recordResult(idempotencyKey, result), false, retriedAfter);
   } catch (error) {
-    return execution(await store.recordError(idempotencyKey, error instanceof Error ? error.message : "Transfer failed"), false, retriedAfter);
+    // Circle took it, but it could not be recorded: it is looked for and found, never closed over (R9).
+    const reason = error instanceof Error ? error.message : "the write failed";
+    return execution(
+      await store.recordError(idempotencyKey, `Circle took this transfer (${result.providerTxId}), but it could not be recorded (${reason}); it ${MAY_HAVE_BEEN_ACCEPTED}`),
+      false,
+      retriedAfter
+    );
   }
 }
 

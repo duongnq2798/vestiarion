@@ -101,6 +101,13 @@ describe("LiveProvider.findTransferByRef", () => {
     expect(created).toEqual([]);
   });
 
+  it("looks in another wallet when told, and leaves out the transactions it is told to (payment safety R4, R5)", async () => {
+    const { client, listings } = circle([{ id: "tx-earlier", refId: "Invoice 1" }, { id: "tx-current", refId: "Invoice 1" }]);
+    const found = await new LiveProvider(CHAIN, { client }).findTransferByRef("operating-1", "Invoice 1", window, { walletId: "wallet-agent", exclude: ["tx-earlier"] });
+    expect(listings[0]).toMatchObject({ walletIds: ["wallet-agent"] });
+    expect(found).toMatchObject({ providerTxId: "tx-current" });
+  });
+
   it("says none when the window holds no such transaction, and cannot say when the page is full", async () => {
     expect(await new LiveProvider(CHAIN, { client: circle([{ id: "tx-other" }]).client }).findTransferByRef("operating-1", KEY, window)).toBeNull();
     const full = Array.from({ length: 50 }, (_, i) => ({ id: `tx-${i}` }));
