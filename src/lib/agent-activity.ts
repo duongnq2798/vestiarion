@@ -6,6 +6,8 @@
  */
 import { deciderName } from "./decision-trail";
 import { ruleInBrief } from "./next-step";
+import type { Network } from "./network";
+import { txUrl } from "./payee-chains";
 
 /** The agent's ledger actions a person is told about as they happen. A treasury hold, every cycle, is not news. */
 export const ACTIVITY_ACTIONS = [
@@ -37,8 +39,10 @@ export interface ActivityItem {
   path: string;
   /** What that link says. */
   pathLabel: string;
-  /** The Arc testnet transaction, when one went out. */
+  /** The transaction, when one went out. */
   txHash: string | null;
+  /** Its link on the explorer of the workspace's network (network threading P6): chats and pages use this one. */
+  txUrl: string | null;
   /** The payable a person decides, on an item that sends them to Approvals: what a chat's card is about (Slack design S8). */
   invoiceId?: string;
 }
@@ -57,6 +61,8 @@ export interface ActivityRefs {
   milestones: ReadonlyMap<string, { name: string; title: string; amount: number; txRef: string | null }>;
   /** Each invoice's people's actions that gave the agent work (`TRIGGER_ACTIONS`), any order. */
   triggers?: ReadonlyMap<string, ReadonlyArray<{ seq: number; ts: string; action: string }>>;
+  /** The workspace's network, for each transaction's link. */
+  network: Network;
 }
 
 const text = (value: unknown) => (typeof value === "string" && value.length > 0 ? value : null);
@@ -150,6 +156,11 @@ const joined = (...parts: Array<string | null>) => parts.filter((part): part is 
 
 /** One entry in words, or null when it is not one a person is told about, or what it is about is gone. */
 export function activityItem(entry: ActivityEntry, refs: ActivityRefs): ActivityItem | null {
+  const item = itemOf(entry, refs);
+  return item ? { ...item, txUrl: item.txHash ? txUrl(refs.network, item.txHash) : null } : null;
+}
+
+function itemOf(entry: ActivityEntry, refs: ActivityRefs): Omit<ActivityItem, "txUrl"> | null {
   if (!(ACTIVITY_ACTIONS as readonly string[]).includes(entry.action)) return null;
   const blocked = entry.detail.guardrailBlocked === true;
 
@@ -187,7 +198,7 @@ function invoiceItem(
   refs: ActivityRefs,
   id: string,
   invoice: ActivityRefs["invoices"] extends ReadonlyMap<string, infer V> ? V : never
-): ActivityItem {
+): Omit<ActivityItem, "txUrl"> {
   const blocked = entry.detail.guardrailBlocked === true;
   const amount = activityAmount(invoice.amount, invoice.currency);
   const after = DECIDED_AGAIN[text(record(entry.detail.reevaluation)?.trigger) ?? ""] ?? afterTrigger(entry, refs.triggers?.get(id));

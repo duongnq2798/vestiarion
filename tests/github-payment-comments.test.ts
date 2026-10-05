@@ -81,7 +81,7 @@ describe("sendPullRequestComments", () => {
     const [token, ref, body] = mocks.comment.mock.calls[0];
     expect(token).toBe("ghs_installation");
     expect(ref).toEqual({ owner: "acme", repo: "app", number: 42, url: PR });
-    expect(body).toBe(pullRequestCommentBody({ amount: "0.10", token: "USDC", orgName: "testnet-2", txHash: TX, origin: "https://www.vestiarion.xyz" }));
+    expect(body).toBe(pullRequestCommentBody({ amount: "0.10", token: "USDC", orgName: "testnet-2", txHash: TX, origin: "https://www.vestiarion.xyz", network: "arc-testnet" }));
     // Claimed first, and its link kept once posted.
     expect(patches()[0]).toEqual({ pr_comment_at: new Date(NOW).toISOString() });
     expect(patches()[1]).toEqual({ pr_comment_url: `${PR}#issuecomment-7` });
@@ -174,7 +174,7 @@ describe("sendPullRequestComments", () => {
 
 describe("pullRequestCommentBody", () => {
   it("says the amount, the network, who paid and the transaction, and never the payee", () => {
-    const body = pullRequestCommentBody({ amount: "0.10", token: "USDC", orgName: "testnet-2", txHash: TX, origin: "https://www.vestiarion.xyz" });
+    const body = pullRequestCommentBody({ amount: "0.10", token: "USDC", orgName: "testnet-2", txHash: TX, origin: "https://www.vestiarion.xyz", network: "arc-testnet" });
     expect(body).toContain("0.10 USDC on Arc testnet");
     expect(body).toContain("testnet\\-2");
     expect(body).toContain(`https://explorer.testnet.arc.io/tx/${TX}`);
@@ -182,13 +182,13 @@ describe("pullRequestCommentBody", () => {
   });
 
   it("keeps a workspace's name from becoming a link, a mention or HTML", () => {
-    const body = pullRequestCommentBody({ amount: "1.00", token: "USDC", orgName: "[x](https://evil.example) @team <b>", txHash: TX, origin: "https://www.vestiarion.xyz" });
+    const body = pullRequestCommentBody({ amount: "1.00", token: "USDC", orgName: "[x](https://evil.example) @team <b>", txHash: TX, origin: "https://www.vestiarion.xyz", network: "arc-testnet" });
     expect(body).toContain("\\[x\\]\\(https\\:\\/\\/evil\\.example\\) \\@\u2060team \\<b\\>");
     expect(body).not.toContain("[x](https://evil.example)");
   });
 
   it("keeps a workspace's name from mentioning anyone or pointing at an issue: GitHub finds both in the rendered text", () => {
-    const body = pullRequestCommentBody({ amount: "1.00", token: "USDC", orgName: "Team #42 @acme", txHash: TX, origin: "https://www.vestiarion.xyz" });
+    const body = pullRequestCommentBody({ amount: "1.00", token: "USDC", orgName: "Team #42 @acme", txHash: TX, origin: "https://www.vestiarion.xyz", network: "arc-testnet" });
     expect(body).toContain("\\#\u206042");
     expect(body).toContain("\\@\u2060acme");
     expect(body).not.toMatch(/@acme|#42/);

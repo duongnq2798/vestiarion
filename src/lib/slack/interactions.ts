@@ -12,6 +12,7 @@ import { linkOf, slackActor, type SlackLink } from "./links";
 import type { SlackSettings } from "./settings";
 import { readCard } from "./state";
 import { slackRequestOf, verifySlackRequest } from "./verify";
+import { workspaceNetwork } from "../workspace-network";
 
 /**
  * Clicks and shortcuts from Slack (Slack design S9, S10, S15). Verified before anything is read; answered at once
@@ -106,7 +107,7 @@ async function decide(click: Click, deps: InteractionDeps): Promise<SlackMessage
             ? await rejectPayable(actor, { invoiceId: card.invoice, reason: "", card: shown })
             : await returnPayable(actor, { invoiceId: card.invoice, card: shown });
       if (!outcome.ok && !outcome.changed) return toClicker(mrkdwn(outcome.message));
-      const line = outcomeLine(click.decision, click.slackUserId, outcome);
+      const line = outcomeLine(click.decision, click.slackUserId, outcome, workspaceNetwork().id);
       // The first of two approvals sends nothing: the card keeps its buttons for the second (two approvals T8).
       const firstOfTwo = outcome.ok && "status" in outcome && outcome.status === "approved";
       return {

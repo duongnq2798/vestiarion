@@ -15,10 +15,13 @@ const WORKSPACE = { name: "Northstar & Co", slug: "northstar" };
 const INVOICE = "1b6c1c9e-4a4f-4a7e-9b1e-0000000000a1";
 const TX = `0x${"a".repeat(64)}`;
 
-const item = (fields: Partial<ActivityItem> = {}): ActivityItem => ({
+const item = (fields: Partial<ActivityItem> = {}): ActivityItem => {
+  const base = {
   seq: 100, text: "Paid Centronex 0.30 USDC.", detail: "DeepSeek decided to pay it; checks passed.", tone: "done",
   path: `/invoices#trail-${INVOICE}`, pathLabel: "How it decided", txHash: TX, ...fields,
-});
+  } as ActivityItem;
+  return { ...base, txUrl: fields.txUrl !== undefined ? fields.txUrl : base.txHash ? `https://explorer.testnet.arc.io/tx/${base.txHash}` : null };
+};
 const held = (fields: Partial<ActivityItem> = {}) =>
   item({ text: "Held Jiren 0.50 USDC for you.", detail: "No purchase order is on file.", tone: "stopped", path: `/approvals#payable-${INVOICE}`, pathLabel: "Decide in Approvals", txHash: null, invoiceId: INVOICE, ...fields });
 const card = (fields: Partial<CardView> = {}): CardView => ({
@@ -117,20 +120,20 @@ describe("a decided card", () => {
   });
 
   it("says each outcome, with the transaction when one went out on Arc", () => {
-    expect(outcomeLine("approve", "U0LINH", { ok: true, message: "Paid.", status: "paid", txRef: TX })).toBe(
+    expect(outcomeLine("approve", "U0LINH", { ok: true, message: "Paid.", status: "paid", txRef: TX }, "arc-testnet")).toBe(
       `Approved and paid by <@U0LINH>. <https://explorer.testnet.arc.io/tx/${TX}|Arc testnet transaction>`
     );
-    expect(outcomeLine("approve", "U0LINH", { ok: true, message: "", status: "matched", txRef: null })).toBe(
+    expect(outcomeLine("approve", "U0LINH", { ok: true, message: "", status: "matched", txRef: null }, "arc-testnet")).toBe(
       "Approved by <@U0LINH>. The payment was sent; Arc testnet is confirming it."
     );
-    expect(outcomeLine("approve", "U0LINH", { ok: false, code: "transfer_failed", message: "The transfer failed: x. The invoice is held.", changed: true })).toBe(
+    expect(outcomeLine("approve", "U0LINH", { ok: false, code: "transfer_failed", message: "The transfer failed: x. The invoice is held.", changed: true }, "arc-testnet")).toBe(
       "<@U0LINH> approved it. The transfer failed: x. The invoice is held."
     );
-    expect(outcomeLine("approve", "U0LINH", { ok: true, message: "", status: "approved", txRef: null })).toBe(
+    expect(outcomeLine("approve", "U0LINH", { ok: true, message: "", status: "approved", txRef: null }, "arc-testnet")).toBe(
       "Approved by <@U0LINH>. One more approval, by another person, pays it."
     );
-    expect(outcomeLine("reject", "U0LINH", { ok: true, message: "Rejected." })).toBe("Rejected by <@U0LINH>.");
-    expect(outcomeLine("return", "U0LINH", { ok: true, message: "" })).toBe("Returned to the agent by <@U0LINH>. It usually decides it again within a minute.");
+    expect(outcomeLine("reject", "U0LINH", { ok: true, message: "Rejected." }, "arc-testnet")).toBe("Rejected by <@U0LINH>.");
+    expect(outcomeLine("return", "U0LINH", { ok: true, message: "" }, "arc-testnet")).toBe("Returned to the agent by <@U0LINH>. It usually decides it again within a minute.");
   });
 });
 

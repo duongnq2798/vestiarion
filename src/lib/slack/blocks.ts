@@ -4,7 +4,8 @@ import type { CommandOutcome } from "../commands/outcome";
 import { READER_NAMES } from "../invoice-document/chat-draft";
 import type { InvoiceDraftRead } from "../invoice-document/draft";
 import type { VerificationResult } from "../ledger";
-import { arcTxUrl } from "../payee-chains";
+import { txUrl } from "../payee-chains";
+import type { Network } from "../network";
 import { shortenAddresses } from "../telegram/messages";
 import type { TodayFacts, WaitingFact } from "../telegram/today";
 import type { SlackMessage } from "./api";
@@ -72,7 +73,7 @@ function itemBlocks(item: ActivityItem, workspace: { slug: string }, origin: str
   if (item.detail) blocks.push(context(mrkdwn(item.detail)));
   const open = urlButton("vx_open", item.pathLabel, orgUrl(origin, workspace.slug, item.path));
   if (!card) {
-    const buttons = item.txHash ? [urlButton("vx_tx", "Arc testnet transaction", arcTxUrl(item.txHash)), open] : [open];
+    const buttons = item.txUrl ? [urlButton("vx_tx", "Arc testnet transaction", item.txUrl ?? ""), open] : [open];
     blocks.push({ type: "actions", elements: buttons });
     return blocks;
   }
@@ -159,14 +160,15 @@ const VERB: Record<"approve" | "reject" | "return", string> = { approve: "approv
 export function outcomeLine(
   decision: "approve" | "reject" | "return",
   slackUserId: string,
-  outcome: CommandOutcome<{ status?: string; txRef?: string | null }>
+  outcome: CommandOutcome<{ status?: string; txRef?: string | null }>,
+  network: Network
 ): string {
   const who = `<@${slackUserId}>`;
   if (!outcome.ok) return `${who} ${VERB[decision]}. ${mrkdwn(outcome.message)}`;
   if (decision === "reject") return `Rejected by ${who}.`;
   if (decision === "return") return `Returned to the agent by ${who}. It usually decides it again within a minute.`;
   if (outcome.status === "paid") {
-    const tx = outcome.txRef && /^0x[0-9a-fA-F]{64}$/.test(outcome.txRef) ? ` ${link(arcTxUrl(outcome.txRef), "Arc testnet transaction")}` : "";
+    const tx = outcome.txRef && /^0x[0-9a-fA-F]{64}$/.test(outcome.txRef) ? ` ${link(txUrl(network, outcome.txRef), "Arc testnet transaction")}` : "";
     return `Approved and paid by ${who}.${tx}`;
   }
   if (outcome.status === "approved") return `Approved by ${who}. One more approval, by another person, pays it.`;

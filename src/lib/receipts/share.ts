@@ -20,7 +20,7 @@ export class ReceiptError extends Error {
 }
 
 const INTENT_COLUMNS =
-  "status, provider_mode, token, amount, destination, tx_hash, chain, destination_chain, mint_tx_hash, bridge_fee, payout_route, confirmed_at";
+  "status, provider_mode, token, amount, destination, tx_hash, chain, destination_chain, mint_tx_hash, bridge_fee, payout_route, confirmed_at, network";
 
 interface ReceiptRow {
   id: string;

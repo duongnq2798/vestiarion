@@ -5,7 +5,7 @@ import { Disclosure } from "@/components/ui/Disclosure";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { Hash } from "@/components/vx/Primitives";
 import { canonicalJson } from "@/lib/canonical-json";
-import { payeeChain } from "@/lib/payee-chains";
+import { chainById, homeChain, networkOfChain } from "@/lib/payee-chains";
 import type { ReceiptView as ReceiptViewData } from "@/lib/platform/receipts";
 import type { ReceiptFacts } from "@/lib/receipts/facts";
 import type { EntryCheck } from "@/lib/receipts/verify";
@@ -57,7 +57,7 @@ function sentence(check: EntryCheck, passed: string): string {
 
 export function ReceiptView({ view }: { view: ReceiptViewData }) {
   const { facts, entry, checks } = view;
-  const chain = payeeChain(facts.chain);
+  const chain = chainById(facts.chain);
   // Three answers, not two: every check passes; one did not pass; or one could not be made just now (review #10).
   const failed = checks.signed.ok === false || checks.recorded.ok === false || checks.onChain.state === "mismatch";
   const unchecked = [checks.signed.ok === null, checks.recorded.ok === null, checks.onChain.state === "unreadable"].filter(Boolean).length;
@@ -96,7 +96,7 @@ export function ReceiptView({ view }: { view: ReceiptViewData }) {
             <>
               <dt className="mt-2 text-ink-3 first:mt-0 sm:mt-0">Burn on Arc testnet</dt>
               <dd>
-                <Hash value={facts.sourceTxHash} href={`${payeeChain("ARC-TESTNET").explorerTx}${facts.sourceTxHash}`} />
+                <Hash value={facts.sourceTxHash} href={`${homeChain(networkOfChain(facts.chain)).explorerTx}${facts.sourceTxHash}`} />
               </dd>
             </>
           )}
