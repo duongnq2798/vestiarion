@@ -355,6 +355,15 @@ Sometimes Circle does not answer a payment at all, and Circle may still have tak
 
 If every page says "Payments are switched off for every workspace right now.", whoever runs this deployment has stopped all payments. The agent runs no cycle, and **Approve and pay** says the same, until they turn payments back on. Everything else still reads as usual.
 
+**When the operating wallet falls short.** A payment leaves from the operating wallet, with a CCTP payout's fee on top. When the wallet holds less, and the USYC reserve holds the rest, **Approve and pay** brings the difference back from the reserve first, then pays:
+
+- **Before you confirm,** the dialog says so, for example "The operating wallet holds 0.184239 USDC, so about 0.215761 USDC comes back from the USYC reserve first." It reads the balances last recorded; the approval reads them again.
+- **After paying,** it says "Paid. 0.215761 USDC came back from the USYC reserve first." The audit log records the move as `cash_brought_back`, by you, before the `approval_paid` entry.
+- **When the two together fall short,** nothing moves, and the card says what each holds.
+- **If nothing came back from the reserve,** nothing is sent. The payable waits in **Approvals** again, and any approval already given still stands.
+
+**Pay now** on a held milestone works the same way. A Gateway payout is paid from the Gateway balance, which the reserve does not fund.
+
 ### Two approvals above a figure
 
 An owner can make larger payments need two people. In **Settings**, under **Two approvals**, fill in **Payments above (USDC)** and choose **Save**. The section then says, for example, "Payments above 500 USDC need two approvals." Turning it on, or lowering it, needs two people who can approve payments. With fewer, it says "Two approvals need two people who can approve payments. Add an approver on Members first." Each change is signed in the audit log as `approval_policy_changed`.

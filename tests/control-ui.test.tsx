@@ -343,6 +343,12 @@ describe("ApprovalCard", () => {
     expect(payConfirmTitle(payable(), true)).toBe("Pay 1,250.00 USDC to Northwind Supply now? (simulated)");
   });
 
+  it("says before paying what comes back from the USYC reserve first, when the operating wallet falls short (approval cash R5)", () => {
+    expect(payConfirmTitle(payable({ amount: 0.4, counterpartyName: "Centronex", fromReserve: { operatingUsdc: 0.184239, amountUsdc: 0.215761 } }), false)).toBe(
+      "Pay 0.40 USDC to Centronex now? The operating wallet holds 0.184239 USDC, so about 0.215761 USDC comes back from the USYC reserve first."
+    );
+  });
+
   it("asks to pay the amount that will leave while an early-payment discount still applies, and names the discount", () => {
     const discounted = payable({ amount: 400, discount: { pct: 2, deadline: "2026-10-11T12:00:00+00:00" } });
     const before = new Date("2026-10-05T09:00:00Z");

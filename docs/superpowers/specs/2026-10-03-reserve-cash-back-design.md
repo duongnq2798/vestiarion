@@ -59,6 +59,7 @@ treasury policy wants while nothing is due, but three things then went wrong for
 ## 3. What does not change
 
 - The treasury stage, its buffer (1.15 times what falls due within 7 days) and its sweeps.
+  - Changed on 2026-10-05 (`2026-10-05-approval-cash-from-reserve-design.md` R6): for 24 hours after a person's Bring cash back, the treasury stage sweeps nothing. Approve and pay, and Pay now, bring back what their payment lacks (R1, R7).
 - What counts toward a later day's payment: the operating balance and the reserve, as before.
 - The AP stage's shortfall rule: a payment due today still counts only the operating balance, which the liquidity step
   has already topped up.

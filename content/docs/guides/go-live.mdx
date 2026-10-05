@@ -139,6 +139,10 @@ Every cycle, the agent decides whether idle USDC should earn in a reserve or com
 
 **To bring cash back yourself**, an owner or admin opens **Settings** → **USYC reserve**, enters an amount in **Amount (USDC)**, or leaves it empty for everything, and chooses **Bring cash back**. The reserve wallet sells that much USYC at its latest price, at any hour, and the USDC comes back to the operating wallet. The audit log records it as `cash_brought_back`, by you. Vestiarion then runs a cycle, so payments waiting for cash are made within a minute, unless the agent is paused.
 
+The agent then sweeps nothing back into USYC for 24 hours, so the cash stays in the operating wallet for what you brought it back for. Its treasury decisions say so, for example "A person brought 152.211756 USDC back from the reserve at 2026-10-05 09:05 UTC, so the agent sweeps nothing until 2026-10-06 09:05 UTC." Redemptions for what falls due go on as before.
+
+**A person's payment draws on the reserve too.** When **Approve and pay**, or **Pay now** on a held milestone, needs more than the operating wallet holds, it brings the difference back from the reserve first, then pays. You do not need to bring cash back yourself for it.
+
 <Screenshot
   src="/docs/guides/go-live-usyc.png"
   alt="The USYC reserve section of Settings, turned on. The badge reads Live. The text reads On since Oct 2, 2026, 14:05 UTC, then The reserve is worth 60.69 USDC at USYC's latest price. Below, the line Leave the amount empty to bring everything back, an Amount (USDC) field, optional, with the placeholder All, and a Bring cash back button beside it."

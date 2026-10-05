@@ -26,6 +26,7 @@ import { PAYMENTS_OFF, paymentsDisabled } from "../payments-switch";
 import { approversBesides, readTwoApprovalsAbove } from "../approval-policy";
 import { needsSecondApprover, TWO_APPROVALS_RULE, type TwoApprovalsFacts } from "../two-approvals";
 import { SECOND_OF_TWO_NOTE } from "./approvals";
+import { bringCashForApproval, CashBackError, cashShortMessage, reserveCover, type ReserveCover } from "./liquidity";
 import {
   clearApprovals,
   giveApproval,
@@ -468,16 +469,17 @@ const RELEASED = { decision_claimed_by: null, decision_claimed_at: null };
 
 /**
  * Pays a held milestone now, as a person's decision: refused before any claim when the contractor is screened
- * high risk, above its limit, or has no confirmed address, or when the operating account holds too little for a
- * new transfer; then released as the agent releases it (from escrow when it is locked there). A transfer that
- * already exists is only reconciled. `provenance`, when given, names the surface the person acted from
+ * high risk, above its limit, or has no confirmed address, or when the operating account and the reserve together
+ * hold too little for a new transfer; what the operating account lacks comes back from the reserve once the decision
+ * is claimed (approval cash R7); then released as the agent releases it (from escrow when it is locked there). A
+ * transfer that already exists is only reconciled. `provenance`, when given, names the surface the person acted from
  * (integrations design R3); the console gives none.
  */
 export async function payHeldMilestone(input: {
   actorId: string;
   milestoneId: string;
   provenance?: Provenance;
-}): Promise<{ status: string; txRef: string | null; note: string }> {
+}): Promise<{ status: string; txRef: string | null; note: string; fromReserveUsdc?: number }> {
   const orgId = currentOrgId();
   const provider = getChainProvider();
   const milestone = await loadMilestone(input.milestoneId, provider.mode === "live");
@@ -574,13 +576,34 @@ export async function payHeldMilestone(input: {
   const operating = operatingRead.data as { id: string; balance: string } | null;
   if (!operating) raise("no_operating_account");
   const operatingId = operating.id;
-  // A release from escrow is paid by the hold, not the operating account.
+  // A release from escrow is paid by the hold, not the operating account. What the operating account lacks comes back
+  // from the reserve once the decision is claimed, when the reserve holds it (approval cash R7).
+  let fromReserve: ReserveCover | null = null;
   if (!alreadySent && !unknown && milestone.escrowState !== "funded") {
     const balance = provider.mode === "live" ? await syncOperatingBalance(operatingId) : num(operating.balance);
-    if (balance < milestone.amount) raise("insufficient_funds", `The operating account holds ${balance} USDC, less than this milestone.`);
+    if (balance < milestone.amount) {
+      const read = await reserveCover(db(), { neededUsdc: milestone.amount, operatingBalance: balance });
+      if (!read.cover) raise("insufficient_funds", cashShortMessage({ operatingUsdc: balance, reserveUsdc: read.reserveBalance, feeUsdc: null, what: "milestone" }));
+      fromReserve = read.cover;
+    }
   }
 
   await claim(milestone.id, input.actorId);
+
+  // The cash comes back now that the decision is claimed, and before any approval is used (approval cash R3, R7).
+  let fromReserveUsdc: number | null = null;
+  if (fromReserve) {
+    try {
+      fromReserveUsdc = (
+        await bringCashForApproval({ actorId: input.actorId, cover: fromReserve, operatingAccountId: operatingId, provider, source, payee: milestone.facts.contractor.name })
+      ).amount;
+    } catch (error) {
+      const released = await db().from("milestones").update(RELEASED).eq("id", milestone.id);
+      if (released.error) console.error("milestone decision: claim not released", milestone.id, released.error.message);
+      if (!(error instanceof CashBackError)) throw error;
+      raise("insufficient_funds", `${error.message} ${cashShortMessage({ operatingUsdc: fromReserve.operatingBalance, reserveUsdc: null, feeUsdc: null, what: "milestone" })}`);
+    }
+  }
 
   // The approvals that let it through are used by this payment, or nothing is sent (T6): approvals left open could send
   // it again on one approval after a failed transfer. The milestone is let go for the next decision.
@@ -653,11 +676,13 @@ export async function payHeldMilestone(input: {
       // Above the figure: the two approvals, the earlier first (two approvals T7).
       ...(approvals.length > 0 ? { approvals: approvals.map((approval) => ({ by: approval.by, at: approval.at })), twoApprovalsAbove: above } : {}),
       ...(fewApprovers ? { fewApprovers: true } : {}),
+      // What came back from the reserve first, recorded in its own `cash_brought_back` entry (approval cash R4, R7).
+      ...(fromReserveUsdc !== null ? { fromReserveUsdc } : {}),
       ...input.provenance,
     },
   });
 
-  return { status: outcome.status, txRef: outcome.txRef, note: outcome.reasoningSuffix };
+  return { status: outcome.status, txRef: outcome.txRef, note: outcome.reasoningSuffix, ...(fromReserveUsdc !== null ? { fromReserveUsdc } : {}) };
 }
 
 /**

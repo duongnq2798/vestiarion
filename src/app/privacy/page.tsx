@@ -166,7 +166,8 @@ export default function PrivacyPage() {
                 for a treasury move: the operating and reserve balances, the reserve&apos;s yield, the obligations due in the next 7 and 14 days, the total open
                 obligations and the days until the next one is due, and the sweep&apos;s economics worked out from those: the cash above the required buffer, how
                 long it could stay swept, the projected yield and the cost of the transfers; the most a sweep may take, and the most and least a redemption
-                may bring back; and, for a real USYC reserve, that it is real and whether USYC can be bought now.
+                may bring back; for 24 hours after a person brings cash back from the reserve, until when nothing is swept; and, for a real USYC reserve,
+                that it is real and whether USYC can be bought now.
               </li>
             </ul>
             A performance score comes with the counts it is computed from: payments paid without intervention, information requests, holds and flags,

@@ -204,6 +204,15 @@ balance covers the amount and its fee and it costs no more than CCTP, CCTP other
 is kept. `payoutFundsShort` counts what leaves from where it leaves: a CCTP payout's amount and fee from the operating
 wallet, a Gateway payout's from the Gateway balance. The Approvals card names the route and its fee.
 
+**A person's payment draws on the reserve, and a person's cash back stays**
+(`docs/superpowers/specs/2026-10-05-approval-cash-from-reserve-design.md`).
+- **Approve and pay, and Pay now on a milestone:** a new USDC payment from the operating wallet that the wallet cannot
+  cover brings the difference back from the reserve first (`reserveCover`, `bringCashForApproval` in
+  `src/lib/agent/liquidity.ts`). It runs after the decision is claimed and before approvals are used. It is recorded as
+  `cash_brought_back` with reason `approval`.
+- **The treasury stage:** for 24 hours after a person's own Bring cash back it sweeps nothing (`recentPersonCashBack`,
+  `keepPersonCashBack`, and `noSweepUntil` in `treasuryBounds`).
+
 **Two approvals above a figure** (`docs/superpowers/specs/2026-10-05-two-approvals-design.md`, phase 2 of the mainnet
 plan, on Arc testnet).
 - **The figure:** `approval_policies.two_approvals_above`, one per workspace, an owner's to set (`approval.policy`),

@@ -230,6 +230,7 @@ describe("the privacy page", () => {
       sweepAtMostUsdc: "the most a sweep may take",
       redeemAtMostUsdc: "the most and least a redemption",
       redeemAtLeastUsdc: "the most and least a redemption",
+      noSweepUntil: "until when nothing is swept",
     };
 
     it("finds the three prompts: an invoice, a milestone and a treasury move", () => {

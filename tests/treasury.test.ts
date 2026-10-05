@@ -1,6 +1,9 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   expectedHoldDays,
+  keepPersonCashBack,
   planTreasury,
   toUsdc,
   type TreasuryInputs,
@@ -322,5 +325,66 @@ describe("what the treasury model is told (treasury cash facts)", () => {
     });
     expect(JSON.parse(treasuryUserPrompt({ ...facts, usyc: null })).usyc).toBeUndefined();
     expect(JSON.parse(treasuryUserPrompt({ ...facts, daysUntilNextObligation: Infinity })).daysUntilNextObligation).toBeNull();
+  });
+});
+
+describe("a person's cash back stays for 24 hours (approval cash R6)", () => {
+  // testnet-2, 2026-10-05 09:06 UTC (#1546): a person brought 152.21 USDC back at 09:05:30 (#1541), and the cycle that
+  // started swept 151.90 USDC straight back into USYC.
+  const plan = planTreasury({
+    operatingBalance: 154.311757,
+    reserveBalance: 0,
+    apy: 0.0345,
+    obligationsDue7d: 2.1,
+    daysUntilNextObligation: 0,
+    obligationSchedule: [{ days: 0, amount: 2.1 }, { days: 9.6, amount: 3.5 }, { days: 12.6, amount: 1.2 }],
+    roundTripCostUsd: 0.00638,
+  });
+  const cashBack = { amount: 152.211756, at: "2026-10-05T09:05:30.123Z", until: "2026-10-06T09:05:30.123Z" };
+  const facts = { operatingBalance: 154.311757, reserveBalance: 0, obligationsDue14d: 6.8, plan, reference: plan.decision, noSweepUntil: cashBack.until };
+  const move = (action: "sweep_to_usyc" | "redeem_from_usyc" | "hold", amount: number) => ({ action, amount, reasoning: "The model's reasons." });
+  const promptFacts = { operatingBalance: 154.311757, reserveBalance: 0, apy: 0.0345, obligationsDue7d: 2.1, obligationsDue14d: 6.8, obligationsOpenTotal: 7.6, daysUntilNextObligation: 0, plan, usyc: null };
+
+  it("lets no sweep through, whatever the model decides, and says why", () => {
+    expect(plan.decision).toMatchObject({ action: "sweep_to_usyc", amount: 151.896757 });
+    expect(treasuryBounds(facts)).toEqual({ sweepAtMost: 0, redeemAtMost: 0, redeemAtLeast: 0, noSweepUntil: cashBack.until });
+    const bounded = boundTreasuryDecision(move("sweep_to_usyc", 151.896757), facts);
+    expect(bounded.decision).toMatchObject({ action: "hold", amount: 0 });
+    expect(bounded.limited).toBe("a person brought cash back from the reserve, so nothing is swept until 2026-10-06 09:05 UTC");
+  });
+
+  it("leaves redemptions as they were", () => {
+    const short = { ...facts, operatingBalance: 0, reserveBalance: 50 };
+    expect(treasuryBounds(short).redeemAtMost).toBeGreaterThan(7.8);
+    expect(treasuryBounds(short).redeemAtMost).toBe(treasuryBounds({ ...short, noSweepUntil: null }).redeemAtMost);
+  });
+
+  it("holds in the written policy, saying until when, and leaves any other decision as it is", () => {
+    expect(keepPersonCashBack(plan.decision, cashBack)).toEqual({
+      action: "hold",
+      amount: 0,
+      reasoning: `${plan.decision.reasoning} A person brought 152.211756 USDC back from the reserve at 2026-10-05 09:05 UTC, so the agent sweeps nothing until 2026-10-06 09:05 UTC.`,
+    });
+    const redeem = move("redeem_from_usyc", 1);
+    expect(keepPersonCashBack(redeem, cashBack)).toBe(redeem);
+    expect(keepPersonCashBack(plan.decision, null)).toBe(plan.decision);
+  });
+
+  it("tells the model until when, and says nothing of it otherwise", () => {
+    const told = JSON.parse(treasuryUserPrompt({ ...promptFacts, bounds: treasuryBounds(facts) }));
+    expect(told.bounds).toMatchObject({ sweepAtMostUsdc: 0, noSweepUntil: "2026-10-06T09:05:30.123Z" });
+    expect(told.bounds.note).toContain("A person brought cash back from the reserve: code sweeps nothing until noSweepUntil.");
+    const untold = JSON.parse(treasuryUserPrompt({ ...promptFacts, bounds: treasuryBounds({ ...facts, noSweepUntil: null }) }));
+    expect(untold.bounds).not.toHaveProperty("noSweepUntil");
+    expect(untold.bounds.note).not.toContain("A person brought cash back");
+  });
+
+  it("is read by the treasury stage, which holds its written policy and its bounds to it", () => {
+    const source = readFileSync(path.join(process.cwd(), "src", "lib", "agent", "orchestrator.ts"), "utf8");
+    const stage = source.slice(source.indexOf('await stage("treasury"'), source.indexOf("// --------------------------------------------------- closing balances"));
+    expect(stage).toContain("const personCashBack = await recentPersonCashBack(db, Date.now());");
+    expect(stage).toContain("keepPersonCashBack(plan.decision, personCashBack)");
+    expect(stage).toContain("noSweepUntil: personCashBack?.until ?? null");
+    expect(stage).toContain("...(personCashBack ? { personCashBack } : {})");
   });
 });

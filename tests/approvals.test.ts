@@ -175,6 +175,8 @@ function approvalsFake(options: {
   approversBesides?: number | ((excluded: string[]) => number);
   /** The reply to marking approvals used; success by default. */
   approvalsPatch?: FakeReply;
+  /** The workspace's reserve account, `{ id, balance }` (approval cash R1); none by default. */
+  reserve?: Record<string, unknown> | null;
 } = {}) {
   const intents = options.intents ?? [];
   const eq = (request: RecordedRequest, column: string) => request.params.get(column)?.match(/^eq\.(.+)$/)?.[1];
@@ -241,6 +243,7 @@ function approvalsFake(options: {
       });
       return { body: { ...row } };
     }
+    if (request.path === "/rest/v1/accounts" && request.method === "GET" && request.params.get("kind") === "eq.reserve") return { body: options.reserve ?? null };
     if (request.path === "/rest/v1/accounts" && request.method === "GET") {
       const failure = options.account?.(request);
       if (failure) return failure;
@@ -2400,5 +2403,133 @@ describe("approveAndPay above the figure, after review (two approvals T4–T6)",
       "Payments above 100 USDC need two approvals, and only one person in this workspace can approve payments. Raise the figure in Settings, or add an approver on Members."
     );
     expect(approvalRequests(fake.requests, "POST")).toHaveLength(0);
+  });
+});
+
+describe("approveAndPay when the operating wallet falls short and the reserve covers it (approval cash R1–R5)", () => {
+  // testnet-2, 2026-10-05 09:08 UTC: the approver chose Approve and pay on a 0.40 USDC Centronex bill with 0.184239 USDC in
+  // the operating wallet and 151.8501 USDC in the reserve, and was refused.
+  const OTHER = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000c3";
+  const RESERVE = { id: "018f8ce0-1557-7b54-a931-4d777f6bca01", balance: "151.850100" };
+  const CENTRONEX = { name: "Centronex", risk_level: "medium", address: "0xdead" };
+  const ON_ARB = { ...CENTRONEX, chain: "ARB-SEPOLIA" };
+  const withdrawFromEarn = vi.fn();
+  const bill = (over: Record<string, unknown> = {}) => (r: RecordedRequest) =>
+    r.params.get("id") ? { body: invoiceRow({ amount: "0.4", counterparties: CENTRONEX, ...over }) } : undefined;
+  const short = (options: Parameters<typeof approvalsFake>[0] = {}) =>
+    approvalsFake({ invoice: bill(), account: () => ({ body: accountRow("0.184239") }), reserve: RESERVE, ...options });
+  const approval = (by: string) => ({ id: `appr-${by.slice(-2)}`, approved_by: by, approved_at: "2026-10-05T08:00:00.000Z", amount: "0.400000", currency: "USDC", address: "0xdead" });
+  const cctpFee = () => vi.fn(async () => ({ feeUsdc: 0.135342, maxFeeUnits: BigInt(135342), domain: 3 }));
+
+  beforeEach(() => {
+    withdrawFromEarn.mockReset().mockResolvedValue({ txRef: "sim_redeem_1", positionValue: 151.634339, apy: 0 });
+    getChainProviderMock.mockReturnValue({ mode: "simulate", earnMode: "simulate", estimatedFeeUsd: 0.01, withdrawFromEarn });
+    payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", amountPaid: 0.4, discountTaken: 0, operatingBalance: 0 });
+  });
+
+  it("brings back what the payment lacks once the decision is claimed, then pays, and records both", async () => {
+    const { fake, run } = short();
+
+    const result = await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+
+    expect(result).toEqual({ status: "paid", txRef: "0xhash", note: "", fromReserveUsdc: 0.215761 });
+    expect(withdrawFromEarn).toHaveBeenCalledTimes(1);
+    expect(withdrawFromEarn.mock.calls[0][0]).toMatchObject({ accountId: ACCOUNT_ID, reserveAccountId: RESERVE.id, amount: 0.215761 });
+    // Claimed first, so a second click never brings cash back twice; paid after.
+    const claimedAt = fake.requests.findIndex((r) => r.path === "/rest/v1/rpc/claim_invoice_decision");
+    const movedAt = fake.requests.findIndex((r) => r.path === "/rest/v1/treasury_actions");
+    expect(claimedAt).toBeGreaterThanOrEqual(0);
+    expect(movedAt).toBeGreaterThan(claimedAt);
+    expect(withdrawFromEarn.mock.invocationCallOrder[0]).toBeLessThan(payInvoiceMock.mock.invocationCallOrder[0]);
+    const [brought, paid] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(brought).toMatchObject({
+      p_actor: "human",
+      p_domain: "treasury",
+      p_action: "cash_brought_back",
+      p_summary: "Brought 0.215761 USDC back from the reserve to pay Centronex",
+      p_detail: { by: ACTOR, reason: "approval", invoiceId: INVOICE_ID, amount: 0.215761, neededUsdc: 0.4, operatingBalance: 0.184239, reserveBalance: 151.8501, earnMode: "simulate" },
+    });
+    expect(paid).toMatchObject({ p_action: "approval_paid", p_detail: { fromReserveUsdc: 0.215761 } });
+  });
+
+  it("brings back a CCTP payout's fee with it", async () => {
+    const { run } = short({ invoice: bill({ counterparties: ON_ARB }) });
+
+    await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }, { bridgeFee: cctpFee(), gatewayQuote: vi.fn(async () => null) }));
+
+    expect(withdrawFromEarn.mock.calls[0][0].amount).toBe(0.351103);
+    expect(payInvoiceMock.mock.calls[0][0]).toMatchObject({ route: "cctp" });
+  });
+
+  it("brings nothing back for a Gateway payout, which the Gateway balance pays", async () => {
+    const { run } = short({ invoice: bill({ counterparties: ON_ARB }) });
+
+    await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }, { bridgeFee: cctpFee(), gatewayQuote: vi.fn(async () => ({ feeUsdc: 0.105944, balanceUsdc: 50 })) }));
+
+    expect(withdrawFromEarn).not.toHaveBeenCalled();
+    expect(payInvoiceMock.mock.calls[0][0]).toMatchObject({ route: "gateway" });
+  });
+
+  it("brings nothing back when the operating wallet covers the payment", async () => {
+    const { run } = short({ account: () => ({ body: accountRow("5") }) });
+
+    expect(await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).toEqual({ status: "paid", txRef: "0xhash", note: "" });
+    expect(withdrawFromEarn).not.toHaveBeenCalled();
+  });
+
+  it("refuses before any claim when the wallet and the reserve together fall short, naming both", async () => {
+    const { fake, run } = short({ reserve: { ...RESERVE, balance: "0.1" } });
+
+    const attempt = run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+    await expect(attempt).rejects.toMatchObject({ code: "insufficient_funds" });
+    await expect(attempt).rejects.toThrow("The operating account holds 0.184239 USDC and the USYC reserve 0.1 USDC, less than this invoice.");
+    expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
+    expect(withdrawFromEarn).not.toHaveBeenCalled();
+  });
+
+  it("names the CCTP fee too when the two fall short of a payout to another chain", async () => {
+    const { run } = short({ invoice: bill({ counterparties: ON_ARB }), reserve: { ...RESERVE, balance: "0.1" } });
+
+    await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }, { bridgeFee: cctpFee(), gatewayQuote: vi.fn(async () => null) }))).rejects.toThrow(
+      "The operating account holds 0.184239 USDC and the USYC reserve 0.1 USDC, less than this invoice and its 0.135342 USDC CCTP fee."
+    );
+  });
+
+  it("gives the payable back, sending nothing, when nothing came back, and leaves both approvals standing", async () => {
+    withdrawFromEarn.mockRejectedValue(new Error("redeem failed (FAILED) on Arc testnet"));
+    const { fake, run } = short({ twoApprovals: 0.1, approvals: [approval(OTHER)] });
+
+    const attempt = run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+    await expect(attempt).rejects.toMatchObject({ code: "insufficient_funds" });
+    await expect(attempt).rejects.toThrow(
+      "Nothing came back from the reserve: execution failed: redeem failed (FAILED) on Arc testnet. The operating account holds 0.184239 USDC, less than this invoice."
+    );
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+    expect(patchBodies(fake.requests, "/rest/v1/invoices")).toEqual([expect.objectContaining({ status: "held" })]);
+    expect(fake.requests.filter((r) => r.path === "/rest/v1/payment_approvals" && r.method === "PATCH")).toHaveLength(0);
+    expect(rpcBodies(fake.requests, "append_ledger_entry")).toEqual([]);
+  });
+
+  it("brings nothing back on the first of two approvals, which sends nothing", async () => {
+    const { run } = short({ twoApprovals: 0.1 });
+
+    expect((await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).status).toBe("approved");
+    expect(withdrawFromEarn).not.toHaveBeenCalled();
+  });
+
+  it("tells the card what would come back first, from the stored balances (R5)", async () => {
+    const SMALL = "018f8ce0-1557-7b54-a931-4d777f6bcb01";
+    const listed = (rows: Array<Record<string, unknown>>) => (r: RecordedRequest) => (r.params.get("id") ? undefined : { body: rows });
+    const rows = [invoiceRow({ amount: "0.4", counterparties: CENTRONEX }), invoiceRow({ id: SMALL, amount: "0.1", counterparties: CENTRONEX })];
+
+    const [lacking, covered] = await short({ invoice: listed(rows) }).run(() => listWaitingPayables());
+    expect(lacking.fromReserve).toEqual({ operatingUsdc: 0.184239, amountUsdc: 0.215761 });
+    expect(covered).not.toHaveProperty("fromReserve");
+
+    // Nothing to say when the reserve could not cover it either, or there is none.
+    const [uncovered] = await short({ invoice: listed(rows.slice(0, 1)), reserve: { ...RESERVE, balance: "0.1" } }).run(() => listWaitingPayables());
+    expect(uncovered).not.toHaveProperty("fromReserve");
+    const [noReserve] = await short({ invoice: listed(rows.slice(0, 1)), reserve: null }).run(() => listWaitingPayables());
+    expect(noReserve).not.toHaveProperty("fromReserve");
   });
 });
