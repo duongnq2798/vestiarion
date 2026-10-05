@@ -2,6 +2,7 @@ import { currentOrgId } from "../context";
 import { db } from "../dal";
 import { getChainProvider } from "../circle";
 import { payeeNotReady } from "../counterparty-address";
+import { firstPaymentCheck } from "../new-payee-facts";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { listLedgerEntriesForTargets } from "../ledger";
 import type { Provenance } from "../provenance";
@@ -36,6 +37,7 @@ export type MilestoneDecisionErrorCode =
   | "already_claimed"
   | "not_verified"
   | "self_approval"
+  | "new_payee_self"
   | "high_risk"
   | "above_limit"
   | "no_address"
@@ -52,6 +54,7 @@ const MESSAGES: Record<MilestoneDecisionErrorCode, string> = {
   already_claimed: "Someone is deciding this milestone right now. Reload the page in a minute.",
   not_verified: "This milestone is not verified. Verify the work first.",
   self_approval: "You added this milestone, so someone else must approve paying it.",
+  new_payee_self: "You gave this payee's address, so someone else must approve its first payment.",
   high_risk: "This contractor is screened high risk. Review the match on Counterparties first.",
   above_limit: "This milestone is above the contractor's limit. Raise the limit, or review the match, on Counterparties first.",
   no_address: "This contractor has no address to pay yet. Add it on Counterparties first.",
@@ -90,6 +93,7 @@ export type HeldReasonKind =
   | "escrow"
   | "paused"
   | "outflow_budget"
+  | "new_payee"
   | "agent_held";
 
 export interface HeldReason {
@@ -141,6 +145,7 @@ const HINTS: Record<HeldReasonKind, string> = {
   escrow: "Escrow hold to check",
   paused: "Held while the agent was paused",
   outflow_budget: "Past the agent's spending limit",
+  new_payee: "First payment to a new address",
   agent_held: "The agent held it",
 };
 const usdc = (value: number) => `${value} USDC`;
@@ -217,6 +222,17 @@ function reasonOf(facts: HeldFacts): Omit<HeldReason, "hint"> {
           ? "The spending limit contract on Arc would have refused it. Pay now pays it; a person's payment does not go through that contract."
           : "The agent's spending limit is enforced on Arc, and this release cannot go through its contract. Pay now pays it.",
       link: { label: "Spending limit on Treasury", path: "/console" },
+      canPay: true,
+      canClose: true,
+      override: true,
+    };
+  }
+  // The first payment to an address one person alone stands behind (new payee check N3): someone else pays it now.
+  if (detail.guardrailRule === "counterparty.new_payee") {
+    return {
+      kind: "new_payee",
+      text: `This would be the first payment to ${name}'s address, and only one person stands behind it. Someone other than whoever gave the address pays it now; after that, the agent pays this address on its own.`,
+      link: COUNTERPARTIES,
       canPay: true,
       canClose: true,
       override: true,
@@ -374,6 +390,10 @@ export async function payHeldMilestone(input: {
       soleApprover = true;
     }
   }
+  // A first payment to an address needs someone other than whoever gave it, unless they decide alone (new payee check N4).
+  const firstPayment =
+    !alreadySent && provider.mode === "live" ? await firstPaymentCheck(db(), { id: milestone.contractorId, address: milestone.facts.contractor.address }) : null;
+  if (firstPayment?.addressBy === input.actorId && !(await isSoleApprover(input.actorId))) raise("new_payee_self");
 
   const operatingRead = await db().from("accounts").select("id, balance").eq("kind", "operating").maybeSingle();
   if (operatingRead.error) throw new Error(operatingRead.error.message);
@@ -442,6 +462,8 @@ export async function payHeldMilestone(input: {
       ...(execution?.retriedAfter ? { retriedAfter: execution.retriedAfter } : {}),
       // The person who added it overrode the hold, as the workspace's only approver.
       ...(soleApprover ? { soleApprover: true } : {}),
+      // The address's first payment, which this person stood behind beside whoever gave the address (new payee check N4).
+      ...(firstPayment ? { firstPayment: true } : {}),
       ...input.provenance,
     },
   });

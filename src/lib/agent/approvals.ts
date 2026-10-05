@@ -13,7 +13,7 @@ import { bridgeFee, type BridgeFee } from "../circle/cctp";
 import { gatewayQuoter, type GatewayQuote } from "../circle/gateway-quote";
 import { isSoleApprover } from "./sole-approver";
 import { newPayeeCheck } from "../new-payee";
-import { loadNewPayeeFacts } from "../new-payee-facts";
+import { firstPaymentCheck, loadNewPayeeFacts } from "../new-payee-facts";
 import { addedSince, latestDecision, recordedFacts, type AddedDetails } from "../added-details";
 import { heldForCash } from "../next-step";
 import type { Provenance } from "../provenance";
@@ -532,10 +532,7 @@ async function loadWaitingPayable(invoiceId: string): Promise<LoadedInvoice> {
  * payments are real (new payee check N1, N2, N5); null otherwise.
  */
 async function firstPaymentTo(invoice: Pick<LoadedInvoice, "counterpartyId" | "address">): Promise<ReturnType<typeof newPayeeCheck>> {
-  if (getChainProvider().mode !== "live" || !invoice.address) return null;
-  const facts = await loadNewPayeeFacts(db(), [invoice.counterpartyId]);
-  const check = newPayeeCheck({ address: invoice.address, paidTo: facts.paidTo, entries: facts.entries.get(invoice.counterpartyId) ?? [] });
-  return check?.firstPayment ? check : null;
+  return getChainProvider().mode === "live" ? firstPaymentCheck(db(), { id: invoice.counterpartyId, address: invoice.address }) : null;
 }
 
 /** The operating account, or `null` when the workspace has none configured yet. */
