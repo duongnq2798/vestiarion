@@ -4,7 +4,7 @@ import { AddDetailsDialog } from "@/components/AddDetailsDialog";
 import { Button } from "@/components/ui/Button";
 import { addDetailsPrompt, addedDetailsSentence, missingDetails, type AddedDetails, type OnFile } from "@/lib/added-details";
 import { approvalAnchor, orgHref } from "@/lib/auth/org-paths";
-import { ruleNextStep } from "@/lib/next-step";
+import { MATCH_INCOMPLETE, ruleNextStep } from "@/lib/next-step";
 
 /** What the card says when the payable lacks nothing a person can add here: it waits for a decision. */
 export const WAITING_FOR_A_DECISION = "Waiting for a person's decision.";
@@ -40,12 +40,25 @@ export function WaitingPayableAction({
   canFix?: boolean;
 }) {
   const step = ruleNextStep(rule, { id: invoice.counterpartyId ?? "", name: invoice.counterpartyName });
-  const fix = step?.fix && canFix && (invoice.counterpartyId || !step.fix.path.startsWith("/counterparties")) ? step.fix : null;
   const missing = missingDetails(invoice);
-  // What code stopped it on comes first: details would not change that decision.
-  const offerDetails = canAddDetails && missing !== null && step === null;
+  // An incomplete three-way match is completed by the details it lacks, or, for a missing purchase order, by marking
+  // the counterparty as paid without them (three-way match design M7).
+  const matchIncomplete = rule === MATCH_INCOMPLETE;
+  const fixable = step?.fix && canFix && (invoice.counterpartyId || !step.fix.path.startsWith("/counterparties"));
+  const fix = fixable && (!matchIncomplete || missing?.poReference) ? step.fix : null;
+  // What code stopped it on comes first: details would not change that decision, unless they are what it lacked.
+  const offerDetails = canAddDetails && missing !== null && (step === null || matchIncomplete);
   if (!offerDetails && !fix && !canDecide && !added) return null;
-  const sentence = added ? addedDetailsSentence(added) : step ? step.sentence : offerDetails ? addDetailsPrompt(missing) : WAITING_FOR_A_DECISION;
+  const detailsPrompt = offerDetails
+    ? addDetailsPrompt(missing) + (matchIncomplete && fix ? ` Or, if ${invoice.counterpartyName} is paid without purchase orders, mark it so.` : "")
+    : null;
+  const sentence = added
+    ? addedDetailsSentence(added)
+    : matchIncomplete && detailsPrompt
+      ? detailsPrompt
+      : step
+        ? step.sentence
+        : (detailsPrompt ?? WAITING_FOR_A_DECISION);
 
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

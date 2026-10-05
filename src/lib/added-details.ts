@@ -15,6 +15,8 @@ export interface AddedDetails {
 export interface OnFile {
   poReference: string | null;
   goodsReceived: boolean;
+  /** Whether its counterparty needs a purchase order (three-way match design M2); needed when absent, as by default. */
+  purchaseOrderRequired?: boolean;
 }
 
 /** The purchase order and goods receipt a decision's entry recorded in `observed`, each only when it recorded one. */
@@ -44,9 +46,9 @@ export function latestDecision<Entry extends { detail: Record<string, unknown> }
   return entries.find((entry) => entry.detail.invoiceId === invoiceId && entry.detail.observed !== undefined) ?? null;
 }
 
-/** What is missing for the three-way match, or null when both are on file. */
+/** What is missing for the three-way match, or null when nothing is: a purchase order only from a counterparty that needs one. */
 export function missingDetails(onFile: OnFile): { poReference: boolean; goodsReceived: boolean } | null {
-  const missing = { poReference: onFile.poReference === null, goodsReceived: !onFile.goodsReceived };
+  const missing = { poReference: onFile.poReference === null && onFile.purchaseOrderRequired !== false, goodsReceived: !onFile.goodsReceived };
   return missing.poReference || missing.goodsReceived ? missing : null;
 }
 

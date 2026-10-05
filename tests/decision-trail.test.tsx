@@ -75,6 +75,19 @@ describe("the decision trail", () => {
     expect(trailStep(JIREN[3])!.notes).toEqual(["· Purchase order PO-131 has since been supplied", "· Goods have since been confirmed received"]);
   });
 
+  it("says no purchase order was needed for a counterparty paid without them (three-way match design M4)", () => {
+    const decided = (goodsReceived: boolean) =>
+      trailStep(
+        step(980, "02:40:00", "agent", "ap_pay", {
+          decisionMode: "deepseek",
+          decision: { action: "pay" },
+          observed: { riskLevel: "clear", paymentLimit: 30, poReference: null, goodsReceived, purchaseOrderRequired: false, amount: 0.3 },
+        })
+      )!.notes[0];
+    expect(decided(true)).toBe("✓ The goods received; no purchase order needed for this counterparty");
+    expect(decided(false)).toBe("✗ The goods not marked received; no purchase order needed for this counterparty");
+  });
+
   it("says when code refused what the model decided, and sends nothing", () => {
     const refused = trailStep(step(977, "02:23:07", "agent", "ap_pay", { decisionMode: "deepseek", guardrailBlocked: true, guardrailRule: "bridge.fee_above_cap", execution: { txRef: null } }))!;
     expect(refused).toMatchObject({ tone: "stopped", txHash: null });
