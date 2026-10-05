@@ -1,6 +1,6 @@
 # A payee with no wallet creates one with a passkey
 
-Date: 2026-10-05. Status: implemented on `feat/payee-passkey-wallet`. Roadmap T7. On Arc testnet, with Circle Modular
+Date: 2026-10-05. Status: live since 2026-10-05 (#215, with the name fix #216), proven on Arc testnet (§6). Roadmap T7. On Arc testnet, with Circle Modular
 Wallets and Gas Station. The partner's direction: the address a payee enters stays the main path, and creating a
 passkey wallet is the secondary one.
 
@@ -84,7 +84,7 @@ Station pays that gas.
 - Recovery: a lost passkey loses the wallet. Passkeys synced by the payee's platform (iCloud Keychain, Google Password
   Manager) survive a lost device. A recovery phrase (the SDK's BIP-39 module) is left for later.
 - Only Arc testnet: a payee paid on another chain sees no passkey option.
-- The live test needs the partner's Modular Wallets client key; until then the option stays hidden in production.
+- Not yet tried on iOS Safari, where the passkey prompt must follow the tap closely.
 
 ## 5. Tests
 
@@ -108,3 +108,36 @@ Station pays that gas.
   - only on Arc testnet and when configured;
   - the wallet page with and without configuration.
 - `tests/docs-guides.test.ts`: the get-paid guide quotes the new copy.
+
+## 6. Rollout record
+
+The client key and client URL were set in Vercel on 2026-10-05, for the passkey domain www.vestiarion.xyz.
+
+- **First try (about 13:15 UTC):** "That did not work". Circle's registration refused the passkey's name
+  "testnet-2 (Vestiarion …)" with `-32025`, before any prompt.
+- **Circle's rules, probed with the production key:** 5 to 50 of letters, digits and _@.:+-, ASCII only. A name is kept
+  once asked for, and `-32024` refuses it after.
+- **The rest checked out:** registration and login options for rp www.vestiarion.xyz, and `circle_getAddress` on
+  `arcTestnet` (chain `0x4cef52`). The same passkey gives the same address on every call.
+- **The fix, #216 (live 14:21 UTC):** the business's name in those characters, then eight hex characters (P2).
+
+Proof in testnet-2, the partner's own test workspace, on Arc testnet:
+
+- **14:24:17 UTC:** the "Passkey test" payee link sent a passkey wallet, `0xab57ad9719ca4c43ec351a10d17bf1b110a85406`.
+  Ledger `counterparty_address_changed` (#1564).
+- **14:24:53:** a person confirmed it, `counterparty_address_confirmed` (#1565).
+- **The agent, next:**
+  - bought the address's payment history over x402, for 0.001 USDC (#1567);
+  - brought 1.10 USDC back from the reserve (#1568);
+  - released the 1.00 USDC milestone (#1569).
+- **14:25:34:** paid on Arc testnet, 41 seconds after the confirmation. Transaction
+  `0xbafa8c5d495a8304b5bb7211eb5524970f2135d6d0f0aa49fa7f553f64b08e5f`, 1.00 USDC from the operating wallet.
+- **15:12:54, from `/wallet`:** the payee sent 0.10 USDC back to the operating wallet in one user operation, which also
+  deployed the smart account. Transaction `0x2398ed51f38633d847942ad3fb5f9a2d0ba454a25b88b2535ed4cb726ec3fbbc`:
+  - bundler `0xd664d5469b21b26c0341ca53fba7c5dc053f58aa`, EntryPoint v0.7;
+  - factory `0x0000000DF7E6c9Dc387cAFc5eCBfa6c3a6179AdD`;
+  - paymaster `0x03dF76C8c30A88f424CF3CBBC36A1Ca02763103b`.
+  
+  The paymaster paid the 0.0379 USDC of gas, and the wallet holds exactly 0.90 USDC.
+
+Still to try: the prompt on iOS Safari, and "Already made one here? Use my passkey wallet" from a second link.
