@@ -475,6 +475,23 @@ describe("connectCircle", () => {
     expect(appends(fake)).toEqual([]);
   });
 
+  it("refuses a Circle key for Arc mainnet on an Arc testnet workspace, before calling Circle or storing anything (network foundation N5)", async () => {
+    const { fake, inScope } = database(sandbox());
+    const fakeCircle = circle();
+    const check = vi.fn();
+
+    const error = await refusal(
+      inScope(() => connectCircle({ orgId: ORG, actorId: ACTOR, apiKey: "LIVE_API_KEY:live-key-id:live-key-secret", entitySecret: ENTITY_SECRET, check, client: fakeCircle.factory }))
+    );
+
+    expect(error.code).toBe("key_network");
+    expect(error.message).toBe("This Circle API key is for Arc mainnet (LIVE_API_KEY). This workspace is on Arc testnet: paste a test key (TEST_API_KEY).");
+    expect(check).not.toHaveBeenCalled();
+    expect(fakeCircle.factory).not.toHaveBeenCalled();
+    expect(orgPatches(fake)).toEqual([]);
+    expect(appends(fake)).toEqual([]);
+  });
+
   it("accepts values of exactly 512 characters", async () => {
     const { fake, inScope } = database(sandbox());
     await inScope(() =>
