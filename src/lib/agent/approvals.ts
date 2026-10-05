@@ -19,6 +19,9 @@ import { firstPaymentCheck, loadNewPayeeFacts } from "../new-payee-facts";
 import { addedSince, latestDecision, recordedFacts, type AddedDetails } from "../added-details";
 import { heldForCash } from "../next-step";
 import type { Provenance } from "../provenance";
+import { readTwoApprovalsAbove } from "../approval-policy";
+import { needsTwoApprovals } from "../two-approvals";
+import { clearApprovals, giveApproval, mayGiveApproval, standingApprovals, useApprovals, type GivenApproval, type PaymentSource } from "./second-approval";
 
 export type { AddedDetails };
 
@@ -61,6 +64,10 @@ export type { AddedDetails };
  * when the approval began; an approval that finds a sent transfer has failed
  * records that, and leaves the new transfer to the next approval.
  *
+ * Above the workspace's figure for two approvals (docs/superpowers/specs/2026-10-05-two-approvals-design.md T4–T6),
+ * Approve and pay records a first approval and sends nothing; a second approval, by another person, pays. Reject and
+ * Return clear the approvals given.
+ *
  * The ledger entry written after a decision commits is best effort, through
  * `appendLedgerEntryBestEffort` as `src/lib/platform/members.ts` uses it: the
  * decision has already happened and must be reported as done even if the
@@ -81,7 +88,8 @@ export type ApprovalErrorCode =
   | "address_changed"
   | "bridge_unsupported_token"
   | "nothing_to_add"
-  | "invoice_changed";
+  | "invoice_changed"
+  | "already_approved";
 
 /** Every message except `insufficient_funds`, whose text names the actual balance. */
 const MESSAGES: Record<Exclude<ApprovalErrorCode, "insufficient_funds">, string> = {
@@ -99,6 +107,7 @@ const MESSAGES: Record<Exclude<ApprovalErrorCode, "insufficient_funds">, string>
   bridge_unsupported_token: "Only USDC crosses chains. This invoice is in EURC, and its payee is paid on another chain.",
   nothing_to_add: "Enter a PO reference or tick Goods or services received.",
   invoice_changed: "This invoice changed a moment ago. Reload the page to see it.",
+  already_approved: "You approved this already. Another person who can approve payments must approve it to pay.",
 };
 
 export class ApprovalError extends Error {
@@ -604,12 +613,13 @@ function approvalPaidSummary(
   name: string,
   payment: { amountPaid: number; discountTaken: number },
   currency: Stablecoin = "USDC",
-  soleApprover = false
+  soleApprover = false,
+  secondOfTwo = false
 ): string {
   const discounted = payment.discountTaken > 0;
   const sent = discounted ? payment.amountPaid : amount;
   const less = discounted ? ` (${amount} ${currency} less a ${payment.discountTaken} ${currency} early-payment discount)` : "";
-  const own = soleApprover ? ` ${SOLE_APPROVER_NOTE}` : "";
+  const own = soleApprover ? ` ${SOLE_APPROVER_NOTE}` : secondOfTwo ? ` ${SECOND_OF_TWO_NOTE}` : "";
   if (status === "paid") return `Approved and paid ${sent} ${currency} to ${name}${less}${own}`;
   if (status === "matched") return `Approved; payment of ${sent} ${currency} to ${name} submitted${less}${own}`;
   return `Approved; payment of ${sent} ${currency} to ${name} failed${less}${own}`;
@@ -617,6 +627,16 @@ function approvalPaidSummary(
 
 /** How a ledger summary marks an approval by the person who entered the record, as the workspace's only approver (sole approver R4). */
 export const SOLE_APPROVER_NOTE = "(entered and approved by the workspace's only approver)";
+
+/** How a ledger summary marks the approval that paid a payment two people approved (two approvals T7). */
+export const SECOND_OF_TWO_NOTE = "(the second of two approvals)";
+
+/** A EURC payable's USDC value as the agent last weighed it (its latest decision's `usdcValue`), null when it has none (two approvals T2). */
+async function usdcValueOfLatestDecision(invoiceId: string): Promise<number | null> {
+  const decision = latestDecision(await listLedgerEntriesForTargets({ invoiceIds: [invoiceId] }), invoiceId);
+  const value = decision?.detail.usdcValue;
+  return typeof value === "number" ? value : null;
+}
 
 /**
  * `shownAddress` is the counterparty address the approval card showed the
@@ -633,18 +653,38 @@ export async function approveAndPay(
     bridgeFee?: (chain: string, amount: number) => Promise<BridgeFee>;
     gatewayQuote?: (chain: string, amount: number) => Promise<GatewayQuote | null>;
   } = {}
-): Promise<{ status: "paid" | "matched" | "held"; txRef: string | null; note: string }> {
+): Promise<{ status: "paid" | "matched" | "held" | "approved"; txRef: string | null; note: string }> {
   const orgId = currentOrgId();
   const invoice = await loadWaitingPayable(input.invoiceId);
+  const intent = await paymentIntentOf(invoice.id);
+  // A transfer that already exists is reconciled, never sent again.
+  const alreadySent = transferExists(intent);
+  const firstPayment = await firstPaymentTo(invoice);
+  // Above the workspace's figure a payment needs two people's approval (two approvals T4); a transfer already sent is
+  // only recorded, on one approval (T6).
+  const above = alreadySent ? null : await readTwoApprovalsAbove(db());
+  const usdcValue = above !== null && invoice.currency === "EURC" ? await usdcValueOfLatestDecision(invoice.id) : null;
+  const twoNeeded = above !== null && needsTwoApprovals({ amount: invoice.amount, currency: invoice.currency, usdcValue }, above);
+  // Whoever entered it, and whoever gave a first payment's address (new payee check N4).
+  const excluded = [invoice.createdBy, firstPayment?.addressBy ?? null];
 
   // Early refusals, before any claim — none of these contend for the row.
-  // Whoever entered the invoice may approve it only as the workspace's sole
-  // approver; the claim asks the database the same question again.
-  const soleApprover = invoice.createdBy === input.actorId;
-  if (soleApprover && !(await isSoleApprover(input.actorId))) raise("self_approval");
-  // A first payment to an address needs someone other than whoever gave it, unless they decide alone (new payee check N4).
-  const firstPayment = await firstPaymentTo(invoice);
-  if (firstPayment?.addressBy === input.actorId && !(await isSoleApprover(input.actorId))) raise("new_payee_self");
+  let soleApprover = false;
+  let fewApprovers = false;
+  if (twoNeeded) {
+    // Either of them gives one of the two approvals only when fewer than two others can (T5).
+    if (excluded.includes(input.actorId)) {
+      if (!(await mayGiveApproval({ actorId: input.actorId, excluded }))) raise(invoice.createdBy === input.actorId ? "self_approval" : "new_payee_self");
+      fewApprovers = true;
+    }
+  } else {
+    // Whoever entered the invoice may approve it only as the workspace's sole
+    // approver; the claim asks the database the same question again.
+    soleApprover = invoice.createdBy === input.actorId;
+    if (soleApprover && !(await isSoleApprover(input.actorId))) raise("self_approval");
+    // A first payment to an address needs someone other than whoever gave it, unless they decide alone (new payee check N4).
+    if (firstPayment?.addressBy === input.actorId && !(await isSoleApprover(input.actorId))) raise("new_payee_self");
+  }
   if (invoice.riskLevel === "high") raise("high_risk");
   const shownAddress = input.shownAddress?.trim();
   if (shownAddress !== undefined && !sameAddress(invoice.address, shownAddress === "" ? null : shownAddress)) {
@@ -662,14 +702,50 @@ export async function approveAndPay(
   // Circle ended in a terminal failure moved nothing and is sent again, so it
   // is checked like any new payment.
   const provider = getChainProvider();
-  const intent = await paymentIntentOf(invoice.id);
-  const alreadySent = transferExists(intent);
   // A send Circle never answered may have lowered the balance already (payment safety R3): only the funds check is
   // skipped for it, since sending it again under its key may still be a new payment.
   const mayExist = alreadySent || transferUnknown(intent);
   // Nothing new is paid while the platform has payments switched off (payment safety S4), but a transfer already sent
   // is still recorded: that only reads Circle, and the provider refuses any send (S8).
   if (!alreadySent && (await paymentsDisabled())) raise("payments_off");
+
+  // Two approvals (T4): the first is recorded and sends nothing; the second, by another person, pays.
+  const source: PaymentSource = { type: "invoice", id: invoice.id };
+  let approvals: GivenApproval[] = [];
+  if (twoNeeded) {
+    const payment = { amount: invoice.amount, currency: invoice.currency, address: invoice.address };
+    const standing = await standingApprovals(source, payment);
+    const other = standing.find((approval) => approval.by !== input.actorId);
+    if (!other) {
+      if (standing.some((approval) => approval.by === input.actorId)) raise("already_approved");
+      await giveApproval(source, input.actorId, payment);
+      await appendLedgerEntryBestEffort(orgId, {
+        actor: "human",
+        domain: "ap",
+        action: "approval_given",
+        summary: `Approved ${invoice.amount} ${invoice.currency} to ${invoice.counterpartyName}; one more approval pays it (payments above ${above} USDC need two)`,
+        detail: {
+          by: input.actorId,
+          invoiceId: invoice.id,
+          counterpartyId: invoice.counterpartyId,
+          amount: invoice.amount,
+          currency: invoice.currency,
+          address: invoice.address,
+          ...(invoice.currency === "EURC" ? { usdcValue } : {}),
+          twoApprovalsAbove: above,
+          // Given by whoever entered it, or gave its address, as fewer than two others can approve (T5).
+          ...(fewApprovers ? { fewApprovers: true } : {}),
+          ...input.provenance,
+        },
+      });
+      return { status: "approved", txRef: null, note: "" };
+    }
+    // Another person's approval stands, so this one pays. It is recorded beside it, and both are used once the
+    // payment is claimed (T6).
+    const mine = standing.find((approval) => approval.by === input.actorId) ?? (await giveApproval(source, input.actorId, payment));
+    approvals = [other, mine];
+    if (excluded.includes(other.by)) fewApprovers = true;
+  }
   if (!mayExist && invoice.currency === "USDC") {
     const balance = provider.mode === "live" ? await syncOperatingBalance(operating.id) : operating.balance;
     if (balance < invoice.amount) {
@@ -699,6 +775,15 @@ export async function approveAndPay(
     .rpc("claim_invoice_decision", { p_invoice_id: invoice.id, p_by: input.actorId, p_decision: "approve" })
     .single();
   if (claim.error) raiseFromClaim(claim.error);
+
+  // The approvals that let it through are used by this payment (T6). Best effort: the claim already holds the row.
+  if (approvals.length > 0) {
+    try {
+      await useApprovals(source);
+    } catch (error) {
+      console.error("approval: approvals not marked used", invoice.id, (error as Error).message);
+    }
+  }
 
   // A transfer already sent went wherever it went; recording it confirms nothing
   // about the address the counterparty has now. A new payment, a retry
@@ -789,7 +874,7 @@ export async function approveAndPay(
     actor: "human",
     domain: "ap",
     action: "approval_paid",
-    summary: approvalPaidSummary(result.status, invoice.amount, invoice.counterpartyName, result, invoice.currency, soleApprover),
+    summary: approvalPaidSummary(result.status, invoice.amount, invoice.counterpartyName, result, invoice.currency, soleApprover, approvals.length > 0),
     detail: {
       by: input.actorId,
       invoiceId: invoice.id,
@@ -813,6 +898,9 @@ export async function approveAndPay(
       ...(soleApprover ? { soleApprover: true } : {}),
       // The address's first payment, which this person stood behind beside whoever gave the address (new payee check N4).
       ...(firstPayment ? { firstPayment: true } : {}),
+      // Above the figure: the two approvals, the earlier first (two approvals T7).
+      ...(approvals.length > 0 ? { approvals: approvals.map((approval) => ({ by: approval.by, at: approval.at })), twoApprovalsAbove: above } : {}),
+      ...(fewApprovers ? { fewApprovers: true } : {}),
       ...input.provenance,
     },
   });
@@ -853,6 +941,18 @@ async function payoutEvidence(
   };
 }
 
+/**
+ * A decision that ends the question clears the approvals given for it (two approvals T6). Best effort: the decision
+ * stands, and an approval left behind agrees with nothing once the payable is decided again on other facts.
+ */
+async function clearApprovalsAfter(invoiceId: string): Promise<void> {
+  try {
+    await clearApprovals({ type: "invoice", id: invoiceId });
+  } catch (error) {
+    console.error("approval: approvals not cleared", invoiceId, (error as Error).message);
+  }
+}
+
 /** `provenance`, when given, names the surface the person acted from (integrations design R3); the console gives none. */
 export async function rejectInvoice(input: { actorId: string; invoiceId: string; reason?: string; provenance?: Provenance }): Promise<void> {
   const orgId = currentOrgId();
@@ -870,6 +970,7 @@ export async function rejectInvoice(input: { actorId: string; invoiceId: string;
     logAfterClaim(input.invoiceId, "reject");
     throw new Error(update.error.message);
   }
+  await clearApprovalsAfter(input.invoiceId);
 
   const reason = trimReason(input.reason);
   await appendLedgerEntryBestEffort(orgId, {
@@ -900,6 +1001,7 @@ export async function returnInvoice(input: { actorId: string; invoiceId: string;
     logAfterClaim(input.invoiceId, "return");
     throw new Error(update.error.message);
   }
+  await clearApprovalsAfter(input.invoiceId);
 
   await appendLedgerEntryBestEffort(orgId, {
     actor: "human",

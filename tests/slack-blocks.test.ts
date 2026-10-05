@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ActivityItem } from "@/lib/agent-activity";
 import {
-  connectAnswer, decisionsMessage, helpAnswer, ITEMS_SHOWN, ledgerAnswer, mrkdwn, outcomeLine, todayAnswer, waitingAnswer, withOutcome, type CardView,
+  connectAnswer, decisionsMessage, helpAnswer, ITEMS_SHOWN, ledgerAnswer, mrkdwn, outcomeLine, todayAnswer, waitingAnswer, withApprovalGiven, withOutcome, type CardView,
 } from "@/lib/slack/blocks";
 
 /**
@@ -87,6 +87,24 @@ describe("decisionsMessage", () => {
   });
 });
 
+describe("a card one person approved, of a payment that needs two (two approvals T8)", () => {
+  it("keeps its buttons for the second approval, with who approved just above them", () => {
+    const original = blocksOf(decisionsMessage(WORKSPACE, [held(), item()], ORIGIN, new Map([[INVOICE, card()]])));
+    const once = withApprovalGiven(original, INVOICE, "Approved by <@U0LINH>. One more approval, by another person, pays it.") as Block[];
+    const at = once.findIndex((block) => block.block_id === `approved-${INVOICE}`);
+    expect(once[at]).toEqual({
+      type: "context", block_id: `approved-${INVOICE}`, elements: [{ type: "mrkdwn", text: "Approved by <@U0LINH>. One more approval, by another person, pays it." }],
+    });
+    expect(once[at + 1].block_id).toBe(`payable-${INVOICE}`);
+    expect(once.length).toBe(original.length + 1);
+    // A later approval that still did not pay replaces the line rather than adding one.
+    const twice = withApprovalGiven(once, INVOICE, "Approved by <@U0BAO>. One more approval, by another person, pays it.") as Block[];
+    expect(twice.length).toBe(once.length);
+    expect(JSON.stringify(twice)).toContain("U0BAO");
+    expect(JSON.stringify(twice)).not.toContain("Approved by <@U0LINH>");
+  });
+});
+
 describe("a decided card", () => {
   it("replaces the payable's buttons, and the reason Approve was missing, with who did what", () => {
     const original = blocksOf(decisionsMessage(WORKSPACE, [held(), item()], ORIGIN, new Map([[INVOICE, card({ approveRefusal: "why" })]])));
@@ -107,6 +125,9 @@ describe("a decided card", () => {
     );
     expect(outcomeLine("approve", "U0LINH", { ok: false, code: "transfer_failed", message: "The transfer failed: x. The invoice is held.", changed: true })).toBe(
       "<@U0LINH> approved it. The transfer failed: x. The invoice is held."
+    );
+    expect(outcomeLine("approve", "U0LINH", { ok: true, message: "", status: "approved", txRef: null })).toBe(
+      "Approved by <@U0LINH>. One more approval, by another person, pays it."
     );
     expect(outcomeLine("reject", "U0LINH", { ok: true, message: "Rejected." })).toBe("Rejected by <@U0LINH>.");
     expect(outcomeLine("return", "U0LINH", { ok: true, message: "" })).toBe("Returned to the agent by <@U0LINH>. It usually decides it again within a minute.");

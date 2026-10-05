@@ -40,10 +40,13 @@ export function heldMessage(note: string): string {
   return `The transfer failed: ${reason}. The invoice is held.`;
 }
 
+/** What an approval says when it is the first of two and sends nothing (two approvals T8). */
+export const APPROVAL_RECORDED = "Approved. One more approval, by another person, pays it.";
+
 export async function approvePayable(
   actor: Actor,
   input: { invoiceId: string; shownAddress?: string; card?: ShownCard }
-): Promise<CommandOutcome<{ status: "paid" | "matched"; txRef: string | null }>> {
+): Promise<CommandOutcome<{ status: "paid" | "matched" | "approved"; txRef: string | null }>> {
   const refusal = gate(actor, "payable.approve");
   if (refusal) return refusal;
   let result: Awaited<ReturnType<typeof approveAndPay>>;
@@ -57,6 +60,8 @@ export async function approvePayable(
   }
   // A failed transfer leaves the invoice held with the provider's reason: something changed, and it is still a failure.
   if (result.status === "held") return refused("transfer_failed", heldMessage(result.note), { changed: true });
+  // Above the workspace's figure, the first of two approvals is recorded and sends nothing (two approvals T4, T8).
+  if (result.status === "approved") return done(APPROVAL_RECORDED, { status: "approved", txRef: null });
   // A confirmed payment's payee hears of it now, not at the next cycle (payment notices R5).
   if (result.status === "paid") sendNoticesSoon(accessOf(actor));
   return done(result.status === "paid" ? "Paid." : "Payment submitted; waiting for confirmation.", { status: result.status, txRef: result.txRef });

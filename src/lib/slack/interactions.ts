@@ -4,7 +4,7 @@ import { withOrg } from "../dal/scope";
 import { takeSlackUserToken } from "../rate-limit";
 import { masterKeysFromEnv, type MasterKey } from "../secrets";
 import { postToResponseUrl, type SlackMessage } from "./api";
-import { DRAFT_USED, mrkdwn, outcomeLine, withOutcome } from "./blocks";
+import { DRAFT_USED, mrkdwn, outcomeLine, withApprovalGiven, withOutcome } from "./blocks";
 import { NOT_INSTALLED, workspaceOf } from "./commands";
 import { installOfTeam, type SlackInstall } from "./installs";
 import { addChosenDraft, cancelChosenDraft, readChosenInvoice, type ChosenMessage } from "./intake";
@@ -106,10 +106,13 @@ async function decide(click: Click, deps: InteractionDeps): Promise<SlackMessage
             ? await rejectPayable(actor, { invoiceId: card.invoice, reason: "", card: shown })
             : await returnPayable(actor, { invoiceId: card.invoice, card: shown });
       if (!outcome.ok && !outcome.changed) return toClicker(mrkdwn(outcome.message));
+      const line = outcomeLine(click.decision, click.slackUserId, outcome);
+      // The first of two approvals sends nothing: the card keeps its buttons for the second (two approvals T8).
+      const firstOfTwo = outcome.ok && "status" in outcome && outcome.status === "approved";
       return {
         replace_original: true,
         text: click.messageText || "The agent's decisions",
-        blocks: withOutcome(click.blocks, card.invoice, outcomeLine(click.decision, click.slackUserId, outcome)),
+        blocks: firstOfTwo ? withApprovalGiven(click.blocks, card.invoice, line) : withOutcome(click.blocks, card.invoice, line),
       };
     },
     { userId: link.userId }
