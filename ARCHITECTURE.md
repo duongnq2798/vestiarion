@@ -198,6 +198,26 @@ payment to an address.
 - **Afterwards:** the follow-up reopens a payable held this way once its address is paid, or two parties stand behind
   it.
 
+**Two approvals above a figure** (`docs/superpowers/specs/2026-10-05-two-approvals-design.md`, phase 2 of the mainnet
+plan, on Arc testnet).
+- **The figure:** `approval_policies.two_approvals_above`, one per workspace, an owner's to set (`approval.policy`),
+  off by default (migration 0076). Turning it on or lowering it needs two people who can approve payments. Each change is
+  signed as `approval_policy_changed`.
+- **The rule** (`src/lib/two-approvals.ts`): strictly above the figure, weighing a EURC payment at its USDC value, and
+  one with none as above.
+- **The agent's side:** the AP and contractor stages read the figure once and hold a payment above it as
+  `workspace.two_approvals`, after the payment's own checks and before the spending limit, the contract on Arc and any
+  swap. The follow-up reopens it once the figure no longer covers it.
+- **A person's side** (`src/lib/agent/second-approval.ts`):
+  - Approve and pay and Pay now record a first approval in `payment_approvals`, bound to the amount, currency and address,
+    and send nothing (`approval_given`).
+  - A second approval by another person pays it, and the open approvals are marked used.
+  - An approval stops counting once the payment changes, or its giver can no longer approve (`approvers_among`).
+  - Whoever entered the payment, or gave a first payment's address, gives one of the two only when fewer than two others
+    can (`approvers_besides`). `claim_invoice_decision` lets them claim the second approval when another person's is
+    on file.
+  - Reject, Return and Close clear the approvals; a transfer already sent is recorded on one approval.
+
 **A network for every workspace** (`docs/superpowers/specs/2026-10-05-network-foundation-design.md`, phase 1 of the
 mainnet plan).
 - **The column:** `orgs.network` is `arc-testnet` or `arc-mainnet`, Arc testnet by default (migration 0075).

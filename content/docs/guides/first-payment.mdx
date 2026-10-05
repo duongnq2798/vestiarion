@@ -355,6 +355,19 @@ Sometimes Circle does not answer a payment at all, and Circle may still have tak
 
 If every page says "Payments are switched off for every workspace right now.", whoever runs this deployment has stopped all payments. The agent runs no cycle, and **Approve and pay** says the same, until they turn payments back on. Everything else still reads as usual.
 
+### Two approvals above a figure
+
+An owner can make larger payments need two people. In **Settings**, under **Two approvals**, fill in **Payments above (USDC)** and choose **Save**. The section then says, for example, "Payments above 500 USDC need two approvals." Turning it on, or lowering it, needs two people who can approve payments. With fewer, it says "Two approvals need two people who can approve payments. Add an approver on Members first." Each change is signed in the audit log as `approval_policy_changed`.
+
+- **The agent never pays above it.** Code holds a payable the agent would pay or schedule above the figure, or a milestone it would release, before anything is sent. The rule is `workspace.two_approvals`. A EURC payment counts at its value in USDC.
+- **The first approval sends nothing.** A card above the figure says "No one has approved it yet.", and its button reads **Approve**. Choosing it records your approval, signed as `approval_given` (`milestone_approval_given` for a milestone), and says "Approved. One more approval, by another person, pays it."
+- **The second approval pays.** Another owner, admin or approver sees who approved it, and **Approve and pay**. Their approval pays it, and the `approval_paid` entry names both approvals. One person cannot give both: the button is disabled, with "You approved it" beside it.
+- **On Contractors**, a held milestone above the figure says the same, and **Pay now** reads **Approve** until the approval that pays it.
+- **An approval is of one payment.** It holds the amount, the currency and the payee's address. If any of them changes, or the person who gave it can no longer approve payments, it no longer counts. **Reject**, **Return to agent** and **Close without paying** clear it. A transfer that fails needs two approvals again.
+- **Who gives them.** Whoever entered the payment, or gave a new payee's address, gives one of the two only when fewer than two others can approve. In a workspace with one person who can approve, nothing above the figure is paid until it is raised or someone else can approve.
+- **Raising it or turning it off** brings payments held for two approvals back to the agent within a minute. **Turn off** asks first: "Turn off two approvals?"
+- **In Slack**, a card keeps its buttons after the first approval, with who approved it, so a second person can approve it there.
+
 ### Add what the agent was missing
 
 The agent pays an invoice on its own only when its three-way match is complete: the goods or services received and, unless its counterparty is paid without them, a purchase order on file. Without them it asks for more information, and the card is marked **Awaiting information**. If the model chooses to pay or schedule it anyway, code refuses, and the card waits the same way. When you have what it asked for, you do not need to approve the payment yourself: give the agent the facts, and it decides again.

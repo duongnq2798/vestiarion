@@ -1,5 +1,16 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-05: Two approvals above a figure the workspace sets
+
+- **A new guardrail rule**, `workspace.two_approvals`. Above the figure a workspace's owner sets, the agent never pays or schedules a payable, or releases a milestone: code holds it for two people. Its entry carries `guardrailBlocked: true`, `execution.resultingStatus: "held"` and `observed.twoApprovalsAbove`, the figure it was weighed against. A EURC payable is weighed at its `usdcValue`.
+- **New ledger actions**, each with actor `human`:
+  - `approval_given` (domain `ap`) and `milestone_approval_given` (domain `contractor`): the first of two approvals, which sends nothing. Its `detail` is `{ by, invoiceId | milestoneId, counterpartyId, amount, currency, address, usdcValue?, twoApprovalsAbove, fewApprovers? }`.
+  - `approval_policy_changed` (domain `system`): an owner set, raised, lowered or turned off the figure. Its `detail` is `{ by, from, to }`, each a figure in USDC or null for off.
+- **`approval_paid` and `milestone_approval_paid`** gain `approvals: [{ by, at }, …]`, the earlier first, and `twoApprovalsAbove` when two people approved the payment. Their `summary` then ends "(the second of two approvals)".
+  - They also carry `fewApprovers: true` when whoever entered the payment, or gave its address, gave one of the two because fewer than two others could approve.
+- An `invoice_reopened` entry's `followUp.changes` can say that two approvals were turned off, or the figure raised to cover the payment. A `milestone_reopened` entry's can say the same.
+- Nothing changes in `/api/v1`.
+
 ## 2026-10-05: A payment Circle did not answer is looked for, never sent again blind
 
 - **A payment whose send Circle did not answer is now in flight, not held.** Its decision's `execution.resultingStatus` is `matched`, as for any payment Circle is still settling.
