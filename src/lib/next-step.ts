@@ -66,6 +66,12 @@ export function ruleNextStep(rule: string | null | undefined, counterparty: { id
       };
     case "invoice.duplicate_of_settled":
       return { sentence: "It repeats an invoice already paid, being paid or scheduled. Reject it in Approvals if it is a duplicate.", fix: null };
+    case "counterparty.new_payee":
+      // Two people before the first payment to an address (new payee check N3, N4): the second one decides in Approvals.
+      return {
+        sentence: `It is the first payment to ${counterparty.name}'s address, and only one person stands behind it. Someone other than whoever gave the address approves it in Approvals; after that, the agent pays this address on its own.`,
+        fix: null,
+      };
     case MATCH_INCOMPLETE:
       // The counterparty's row says whether it needs purchase orders, and an owner or admin changes it there (M2, M7).
       return {
@@ -123,6 +129,8 @@ export function agentResumes(rule: string | null | undefined): string | null {
       return "The agent decides it again on its own once screening gives a verdict.";
     case MATCH_INCOMPLETE:
       return "The agent decides it again on its own once an owner or admin adds what the match lacks, or marks the counterparty as paid without purchase orders.";
+    case "counterparty.new_payee":
+      return "The agent decides it again on its own once another payment to this address goes through.";
     case CASH_SHORTFALL:
       return "The agent decides it again on its own once cash comes in: USDC added to the operating wallet, or brought back from the reserve.";
     default:
@@ -147,6 +155,8 @@ export function ruleInBrief(rule: string | null | undefined): string | null {
       return "it repeats an invoice already paid";
     case MATCH_INCOMPLETE:
       return "its three-way match is incomplete";
+    case "counterparty.new_payee":
+      return "it would be the first payment to an address only one person stands behind";
     case "workspace.outflow_budget":
       return "the agent's spending limit has no room today, and the agent pays it once there is";
     case "workspace.onchain_limit":

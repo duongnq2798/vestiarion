@@ -221,6 +221,9 @@ export function explainPayable(facts: PayableFacts): string[] {
     lines.push(balance >= facts.amount ? "The operating wallet holds enough USDC to pay it." : `The operating wallet held ${usdc(balance)}, less than this invoice.`);
   }
   if (observed.addressUnconfirmed === true) lines.push("Its payment address changed and no one has confirmed it yet.");
+  // The first payment to an address one person alone stood behind (new payee check N6).
+  const newPayee = record(observed.newPayee);
+  if (newPayee && newPayee.twoParties === false) lines.push(`This is the first payment to ${facts.name}'s address, and only one person stands behind it.`);
   const duplicates = num(record(observed.duplicateCheck)?.matchesTotal);
   if (duplicates != null) {
     lines.push(

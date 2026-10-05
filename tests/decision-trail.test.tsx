@@ -75,6 +75,19 @@ describe("the decision trail", () => {
     expect(trailStep(JIREN[3])!.notes).toEqual(["· Purchase order PO-131 has since been supplied", "· Goods have since been confirmed received"]);
   });
 
+  it("says whether two people stood behind the address of a first payment (new payee check N6)", () => {
+    const decided = (twoParties: boolean) =>
+      trailStep(
+        step(981, "02:41:00", "agent", "ap_pay", {
+          decisionMode: "deepseek",
+          decision: { action: "pay" },
+          observed: { riskLevel: "clear", paymentLimit: 30, poReference: "PO-1", goodsReceived: true, amount: 0.3, newPayee: { addressBy: "m1", confirmedBy: twoParties ? "m2" : null, twoParties } },
+        })
+      )!.notes;
+    expect(decided(false)).toContain("✗ First payment to this address, and only one person stands behind it");
+    expect(decided(true)).toContain("✓ First payment to this address, with two people behind it");
+  });
+
   it("says no purchase order was needed for a counterparty paid without them (three-way match design M4)", () => {
     const decided = (goodsReceived: boolean) =>
       trailStep(
