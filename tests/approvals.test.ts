@@ -2510,6 +2510,18 @@ describe("approveAndPay when the operating wallet falls short and the reserve co
     expect(rpcBodies(fake.requests, "append_ledger_entry")).toEqual([]);
   });
 
+  it("brings nothing back from a simulated reserve where payments are real: it would move nothing on chain", async () => {
+    getChainProviderMock.mockReturnValue({ mode: "live", earnMode: "simulate", estimatedFeeUsd: 0.003, withdrawFromEarn });
+    syncOperatingBalanceMock.mockResolvedValue(0.184239);
+    const { fake, run } = short();
+
+    const attempt = run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+    await expect(attempt).rejects.toMatchObject({ code: "insufficient_funds" });
+    await expect(attempt).rejects.toThrow("The operating account holds 0.184239 USDC, less than this invoice.");
+    expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
+    expect(withdrawFromEarn).not.toHaveBeenCalled();
+  });
+
   it("brings nothing back on the first of two approvals, which sends nothing", async () => {
     const { run } = short({ twoApprovals: 0.1 });
 
@@ -2531,5 +2543,9 @@ describe("approveAndPay when the operating wallet falls short and the reserve co
     expect(uncovered).not.toHaveProperty("fromReserve");
     const [noReserve] = await short({ invoice: listed(rows.slice(0, 1)), reserve: null }).run(() => listWaitingPayables());
     expect(noReserve).not.toHaveProperty("fromReserve");
+    // Nor from a simulated reserve where payments are real.
+    getChainProviderMock.mockReturnValue({ mode: "live", earnMode: "simulate", estimatedFeeUsd: 0.003, withdrawFromEarn });
+    const [simulated] = await short({ invoice: listed(rows.slice(0, 1)) }).run(() => listWaitingPayables({ gatewayQuote: vi.fn(async () => null) }));
+    expect(simulated).not.toHaveProperty("fromReserve");
   });
 });

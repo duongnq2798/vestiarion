@@ -2,7 +2,7 @@ Changes to the API and webhooks that affect an integration, newest first. Change
 
 ## 2026-10-05: Approve and pay draws on the USYC reserve, and a person's cash back stays
 
-- **Approve and pay brings back what the operating wallet lacks.** A person's paying approval of a new USDC payment from the operating wallet, on Arc testnet or through CCTP with its fee, may now first bring cash back from the reserve. It does so when the wallet cannot cover the payment and the reserve can cover the rest. It brings back the difference, rounded up to the next micro-USDC. **Pay now** on a held milestone does the same.
+- **Approve and pay brings back what the operating wallet lacks.** A person's paying approval of a new USDC payment from the operating wallet, on Arc testnet or through CCTP with its fee, may now first bring cash back from the reserve. It does so when the wallet cannot cover the payment and the reserve can cover the rest: a real USYC reserve where payments are real, or any reserve in a sandbox. It brings back the difference, rounded up to the next micro-USDC. **Pay now** on a held milestone does the same.
   - A new kind of `cash_brought_back` entry: actor `human`, with `detail` `{ by, reason: "approval", invoiceId | milestoneId, amount, neededUsdc, operatingBalance, reserveBalance, earnMode, execution? }`. It comes before the payment's own entry.
   - `approval_paid` and `milestone_approval_paid` then carry `fromReserveUsdc`.
   - When the wallet and the reserve together fall short, Approve and pay refuses, as before, before anything moves. No ledger entry is written for a refusal.

@@ -707,6 +707,18 @@ describe("Pay now on a held milestone the operating wallet cannot cover, with th
     expect(withdrawFromEarn).not.toHaveBeenCalled();
   });
 
+  it("brings nothing back from a simulated reserve where payments are real", async () => {
+    getChainProviderMock.mockReturnValue({ mode: "live", earnMode: "simulate", estimatedFeeUsd: 0.003, withdrawFromEarn });
+    syncOperatingBalanceMock.mockResolvedValue(0.2);
+    const { run, claimed } = world({ intent: null, last: READY, balance: "0.2", reserve: RESERVE });
+
+    const attempt = run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }));
+    expect(await refusal(attempt)).toBe("insufficient_funds");
+    await expect(attempt).rejects.toThrow("The operating account holds 0.2 USDC, less than this milestone.");
+    expect(claimed()).toBe(false);
+    expect(withdrawFromEarn).not.toHaveBeenCalled();
+  });
+
   it("lets go of the milestone, sending nothing, when nothing came back", async () => {
     withdrawFromEarn.mockRejectedValue(new Error("redeem failed (FAILED) on Arc testnet"));
     const { run, patch } = world({ intent: null, last: READY, balance: "0.2", reserve: RESERVE });

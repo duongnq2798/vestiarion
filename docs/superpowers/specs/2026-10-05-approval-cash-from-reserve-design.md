@@ -31,6 +31,9 @@ Two gaps:
   - Nothing beyond what the payment lacks moves.
   - Not affected: a Gateway payout (paid from the Gateway balance), a EURC payable, a held milestone released from
     escrow, and a transfer already sent.
+  - Only a reserve as real as the payment stands behind it: a real USYC reserve where payments are real, any reserve in
+    a sandbox. A simulated reserve in a workspace that pays for real holds a figure only. Redeeming it moves nothing on
+    chain, so the payment would fail at Circle; the refusal reads as with no reserve (`reserveFundsPayments`).
 - **R2 — what cannot be covered is refused, naming both.** When the operating wallet and the reserve together cannot
   cover the payment, it is refused before anything moves: "The operating account holds X USDC and the USYC reserve Y
   USDC, less than this invoice." For a CCTP payout the sentence ends "less than this invoice and its F USDC CCTP fee."

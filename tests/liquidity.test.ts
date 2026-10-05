@@ -13,6 +13,7 @@ import {
   payablesDueToday,
   recentPersonCashBack,
   reserveCover,
+  reserveFundsPayments,
 } from "@/lib/agent/liquidity";
 import { heldForCash } from "@/lib/next-step";
 import { fakeSupabase, orgTestContext, type RecordedRequest } from "./support/fake-supabase";
@@ -267,6 +268,15 @@ describe("what the reserve covers of a person's payment (approval cash R1, R2)",
     ["there is no reserve", [operating], null],
   ])("covers nothing when %s, and says what the reserve holds", async (_label, rows, reserveBalance) => {
     expect(await run(fake({ accounts: rows }), () => reserveCover(db(), { neededUsdc: 0.4, operatingBalance: 0.184239 }))).toEqual({ cover: null, reserveBalance });
+  });
+});
+
+describe("which reserve can fund a person's payment (approval cash R1)", () => {
+  it("is a real USYC reserve where payments are real, and any reserve in a sandbox", () => {
+    expect(reserveFundsPayments({ mode: "live", earnMode: "live" })).toBe(true);
+    expect(reserveFundsPayments({ mode: "simulate", earnMode: "simulate" })).toBe(true);
+    // A simulated reserve's figure moves nothing on chain, so it never stands behind a real payment.
+    expect(reserveFundsPayments({ mode: "live", earnMode: "simulate" })).toBe(false);
   });
 });
 
