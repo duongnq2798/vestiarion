@@ -1,6 +1,5 @@
 import { encodeFunctionData, getAddress, parseAbi, type Hex } from "viem";
 import { toBaseUnits } from "../fx/quote";
-import { ARC_TESTNET_USDC } from "./cctp";
 import type { BatchTransfer } from "./types";
 
 /**
@@ -32,7 +31,7 @@ export class BatchNotSentError extends Error {
  * `[USDC, "0", transfer(payee, amount)]` per payment, in order. Amounts in USDC's 6-decimal base units,
  * never by a float multiply.
  */
-export function batchCalls(transfers: BatchTransfer[]): Array<[string, string, Hex]> {
+export function batchCalls(transfers: BatchTransfer[], usdc: string): Array<[string, string, Hex]> {
   if (transfers.length < 2 || transfers.length > MAX_BATCH_SIZE) {
     throw new BatchNotSentError(`A batch carries 2 to ${MAX_BATCH_SIZE} transfers, not ${transfers.length}`);
   }
@@ -41,6 +40,6 @@ export function batchCalls(transfers: BatchTransfer[]): Array<[string, string, H
     if (!(transfer.amount > 0)) throw new BatchNotSentError(`A batch transfer must be more than 0 USDC, not ${transfer.amount}`);
     // Lowercased first: a stored address in mixed case with a wrong checksum is still the same address.
     const data = encodeFunctionData({ abi: ERC20, functionName: "transfer", args: [getAddress(transfer.toAddress.toLowerCase()), BigInt(toBaseUnits(transfer.amount))] });
-    return [ARC_TESTNET_USDC, "0", data];
+    return [usdc, "0", data];
   });
 }

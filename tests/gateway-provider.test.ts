@@ -4,6 +4,7 @@ import { SimulateProvider } from "@/lib/circle/simulateProvider";
 import { BridgeFeeError } from "@/lib/circle/cctp";
 import { burnIntentTypedData, gatewaySalt } from "@/lib/circle/gateway";
 import type { ChainConfig } from "@/lib/config";
+import { ARC_TESTNET } from "@/lib/network";
 
 /**
  * The live provider paying a payee on another chain from the workspace's Gateway balance
@@ -81,7 +82,7 @@ describe("LiveProvider: a release from the workspace's escrow (milestone escrow 
     const getTransaction = vi.fn(async () => ({ data: { transaction: { id: "circle-release-1", state: "COMPLETE", txHash: `0x${"3".repeat(64)}` } } }));
     Object.assign(c.raw, { createContractExecutionTransaction: execute, getTransaction });
     const escrow = { contract: `0x${"e5".repeat(20)}`, holdId: `0x${"1".repeat(64)}` };
-    const result = await new LiveProvider(CHAIN, { client: c.client, fetch: gateway().fetch }).transfer({
+    const result = await new LiveProvider(CHAIN, { network: ARC_TESTNET, client: c.client, fetch: gateway().fetch }).transfer({
       fromAccountId: "account-1", toAddress: PAYEE, amount: 2, memo: "Milestone m-1", idempotencyKey: KEY, route: "escrow", escrow,
     });
     expect(execute).toHaveBeenCalledWith(
@@ -96,7 +97,7 @@ describe("LiveProvider: a payout from the Gateway balance", () => {
   it("signs a burn intent salted by the attempt with the signer, sends it with forwarding, and is paid on the mint", async () => {
     const c = circle();
     const g = gateway();
-    const result = await new LiveProvider(CHAIN, { client: c.client, fetch: g.fetch, bridgeMintWaitMs: 0 }).transfer(TRANSFER);
+    const result = await new LiveProvider(CHAIN, { network: ARC_TESTNET, client: c.client, fetch: g.fetch, bridgeMintWaitMs: 0 }).transfer(TRANSFER);
 
     const signed = c.raw.signTypedData.mock.calls[0][0];
     expect(signed.walletId).toBe("wallet-signer");
@@ -123,19 +124,19 @@ describe("LiveProvider: a payout from the Gateway balance", () => {
   });
 
   it("is in flight while Gateway has not minted yet", async () => {
-    const result = await new LiveProvider(CHAIN, { client: circle().client, fetch: gateway({ status: "pending" }).fetch, bridgeMintWaitMs: 0 }).transfer(TRANSFER);
+    const result = await new LiveProvider(CHAIN, { network: ARC_TESTNET, client: circle().client, fetch: gateway({ status: "pending" }).fetch, bridgeMintWaitMs: 0 }).transfer(TRANSFER);
     expect(result).toMatchObject({ providerTxId: "gateway:tr-1", status: "pending", txHash: null, txRef: "gateway:tr-1", mintTxHash: null });
   });
 
   it("keeps the transfer it sent when the status read right after fails: in flight, never 'not sent' (review I1)", async () => {
-    const result = await new LiveProvider(CHAIN, { client: circle().client, fetch: gateway({ statusDown: true }).fetch, bridgeMintWaitMs: 0 }).transfer(TRANSFER);
+    const result = await new LiveProvider(CHAIN, { network: ARC_TESTNET, client: circle().client, fetch: gateway({ statusDown: true }).fetch, bridgeMintWaitMs: 0 }).transfer(TRANSFER);
     expect(result).toMatchObject({ providerTxId: "gateway:tr-1", status: "pending", mintTxHash: null, route: "gateway", destinationChain: "BASE-SEPOLIA", chain: "BASE-SEPOLIA" });
   });
 
   it("weighs the fee it signs, not only the fee Gateway quotes (review M2)", async () => {
     const c = circle();
     await expect(
-      new LiveProvider(CHAIN, { client: c.client, fetch: gateway({ fee: "0.05", maxFee: "200000" }).fetch, bridgeMintWaitMs: 0 }).transfer({ ...TRANSFER, maxBridgeFeeUsdc: 0.1 })
+      new LiveProvider(CHAIN, { network: ARC_TESTNET, client: c.client, fetch: gateway({ fee: "0.05", maxFee: "200000" }).fetch, bridgeMintWaitMs: 0 }).transfer({ ...TRANSFER, maxBridgeFeeUsdc: 0.1 })
     ).rejects.toThrow(BridgeFeeError);
     expect(c.raw.signTypedData).not.toHaveBeenCalled();
   });
@@ -143,7 +144,7 @@ describe("LiveProvider: a payout from the Gateway balance", () => {
   it("sends nothing when Gateway's fee is above what the payment may pay", async () => {
     const c = circle();
     const g = gateway({ fee: "0.5" });
-    await expect(new LiveProvider(CHAIN, { client: c.client, fetch: g.fetch, bridgeMintWaitMs: 0 }).transfer({ ...TRANSFER, maxBridgeFeeUsdc: 0.1 })).rejects.toThrow(
+    await expect(new LiveProvider(CHAIN, { network: ARC_TESTNET, client: c.client, fetch: g.fetch, bridgeMintWaitMs: 0 }).transfer({ ...TRANSFER, maxBridgeFeeUsdc: 0.1 })).rejects.toThrow(
       new BridgeFeeError("The Gateway fee to Base Sepolia, 0.5 USDC, is above the 0.1 USDC this payment may pay; nothing was sent.")
     );
     expect(c.raw.signTypedData).not.toHaveBeenCalled();
@@ -153,14 +154,14 @@ describe("LiveProvider: a payout from the Gateway balance", () => {
   it("sends nothing from a workspace with no Gateway signer", async () => {
     signer.current = null;
     const g = gateway();
-    await expect(new LiveProvider(CHAIN, { client: circle().client, fetch: g.fetch, bridgeMintWaitMs: 0 }).transfer(TRANSFER)).rejects.toThrow(
+    await expect(new LiveProvider(CHAIN, { network: ARC_TESTNET, client: circle().client, fetch: g.fetch, bridgeMintWaitMs: 0 }).transfer(TRANSFER)).rejects.toThrow(
       "This workspace has no Gateway balance yet: an owner or admin funds one on Treasury."
     );
     expect(g.raw).not.toHaveBeenCalled();
   });
 
   it("records an expired transfer as Circle's FAILED, which may be paid again, and a failed one as GATEWAY_FAILED, which is never re-sent (review I2)", async () => {
-    const reconcile = (status: string) => new LiveProvider(CHAIN, { client: circle().client, fetch: gateway({ status }).fetch }).reconcileTransfer("gateway:tr-1");
+    const reconcile = (status: string) => new LiveProvider(CHAIN, { network: ARC_TESTNET, client: circle().client, fetch: gateway({ status }).fetch }).reconcileTransfer("gateway:tr-1");
     // An expired attestation can no longer be minted: no money left the Gateway balance, so a new attempt may pay it.
     expect(await reconcile("expired")).toMatchObject({ status: "failed", providerState: "FAILED", failureReason: "Gateway's attestation expired before the mint", mintTxHash: null });
     // A failed one may still be minted with its attestation: no new attempt is opened for it.
@@ -170,7 +171,7 @@ describe("LiveProvider: a payout from the Gateway balance", () => {
   it("reconciles a Gateway payout by reading the transfer: never signing or sending", async () => {
     const c = circle();
     const g = gateway();
-    const result = await new LiveProvider(CHAIN, { client: c.client, fetch: g.fetch }).reconcileTransfer("gateway:tr-1");
+    const result = await new LiveProvider(CHAIN, { network: ARC_TESTNET, client: c.client, fetch: g.fetch }).reconcileTransfer("gateway:tr-1");
     expect(result).toMatchObject({ providerTxId: "gateway:tr-1", status: "confirmed", mintTxHash: "0xmint", txHash: "0xmint", chain: "BASE-SEPOLIA", destinationChain: "BASE-SEPOLIA" });
     expect(c.raw.signTypedData).not.toHaveBeenCalled();
     expect(g.posted).toEqual([]);
@@ -178,14 +179,14 @@ describe("LiveProvider: a payout from the Gateway balance", () => {
 
   it("pays through CCTP when the route is not Gateway, as before", async () => {
     const c = circle();
-    await expect(new LiveProvider(CHAIN, { client: c.client, fetch: gateway().fetch, bridgeMintWaitMs: 0 }).transfer({ ...TRANSFER, route: "cctp" })).rejects.toThrow();
+    await expect(new LiveProvider(CHAIN, { network: ARC_TESTNET, client: c.client, fetch: gateway().fetch, bridgeMintWaitMs: 0 }).transfer({ ...TRANSFER, route: "cctp" })).rejects.toThrow();
     expect(c.raw.signTypedData).not.toHaveBeenCalled();
   });
 });
 
 describe("SimulateProvider: a Gateway payout in a sandbox", () => {
   it("is simulated like any payout across chains, and names its route", async () => {
-    const result = await new SimulateProvider().transfer(TRANSFER);
+    const result = await new SimulateProvider(ARC_TESTNET).transfer(TRANSFER);
     expect(result).toMatchObject({ status: "confirmed", destinationChain: "BASE-SEPOLIA", mintTxHash: `sim_mint_${KEY}`, route: "gateway" });
   });
 });

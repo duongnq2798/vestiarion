@@ -1,11 +1,11 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { ARC_TESTNET_USDC, TOKEN_MESSENGER_V2 } from "@/lib/circle/cctp";
-import { GATEWAY_MINTER, GATEWAY_WALLET, USDC_BY_CHAIN } from "@/lib/circle/gateway";
+import { ARC_TESTNET_USDC } from "@/lib/circle/cctp";
 import { ARC_TESTNET_USYC, USYC_ENTITLEMENTS, USYC_TELLER } from "@/lib/circle/usyc";
 import { ARC_TESTNET_EURC } from "@/lib/fx/quote";
 import { arcAddressUrl } from "@/lib/payee-chains";
+import { ARC_TESTNET } from "@/lib/network";
 
 /**
  * The contract addresses the docs and the README publish are the ones the code calls, so neither goes stale when
@@ -17,7 +17,7 @@ import { arcAddressUrl } from "@/lib/payee-chains";
 const ROOT = process.cwd();
 const PAGE = readFileSync(path.join(ROOT, "content", "docs", "contracts.mdx"), "utf8");
 const README = readFileSync(path.join(ROOT, "README.md"), "utf8");
-const ARC_CONTRACTS = [ARC_TESTNET_USDC, ARC_TESTNET_EURC, ARC_TESTNET_USYC, USYC_TELLER, USYC_ENTITLEMENTS, GATEWAY_WALLET, GATEWAY_MINTER, TOKEN_MESSENGER_V2];
+const ARC_CONTRACTS = [ARC_TESTNET_USDC, ARC_TESTNET_EURC, ARC_TESTNET_USYC, USYC_TELLER, USYC_ENTITLEMENTS, ARC_TESTNET.gateway.wallet, ARC_TESTNET.gateway.minter, ARC_TESTNET.cctp.tokenMessenger];
 const DEPLOYED = ["0x74af203fec3f121ff1cd3a763092d1211487702b", "0x9da3c47f73ea9399ac566806a189b0bf47b7d4ba"];
 const arcscan = (address: string) => `](${arcAddressUrl(address)})`;
 
@@ -28,7 +28,7 @@ describe("Contracts on Arc testnet", () => {
   });
 
   it("lists the USDC of every other chain a payee is paid on", () => {
-    for (const [chain, address] of Object.entries(USDC_BY_CHAIN)) {
+    for (const [chain, address] of ARC_TESTNET.payeeChains.map((entry) => [entry.id, entry.usdc])) {
       if (chain === "ARC-TESTNET") continue;
       expect(PAGE, chain).toContain(address);
     }

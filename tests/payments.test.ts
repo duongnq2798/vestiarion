@@ -18,6 +18,7 @@ import type {
   TransferResult,
 } from "@/lib/circle";
 import { fakeSupabase, orgTestContext, type RecordedRequest } from "./support/fake-supabase";
+import { ARC_TESTNET } from "@/lib/network";
 
 const request: PaymentRequest = {
   sourceType: "invoice",
@@ -177,6 +178,7 @@ class MemoryStore implements PaymentIntentStore {
 }
 
 class FakeProvider implements ChainProvider {
+  readonly network = ARC_TESTNET;
   readonly mode = "live" as const;
   readonly earnMode = "simulate" as const;
   readonly estimatedFeeUsd = 0.01;

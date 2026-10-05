@@ -21,6 +21,7 @@ const { chainModesMock, getChainProviderMock } = vi.hoisted(() => ({
 vi.mock("@/lib/circle", () => ({ chainModes: chainModesMock, getChainProvider: getChainProviderMock }));
 
 import { BALANCE_REFRESH_COOLDOWN_MS, CIRCLE_UNREACHABLE, refreshOnChainBalances } from "@/lib/agent/balances";
+import { ARC_TESTNET } from "@/lib/network";
 
 const ORG = "0b6c1c9e-4a4f-4a7e-9b1e-000000000c0c";
 const config = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k" });
@@ -43,6 +44,7 @@ const bridge = (): Row => ({
 });
 
 class FakeChain implements ChainProvider {
+  readonly network = ARC_TESTNET;
   readonly mode = "live" as const;
   readonly earnMode = "simulate" as const;
   readonly estimatedFeeUsd = 0.01;

@@ -2230,7 +2230,7 @@ export async function runApStage(input: ApStageInput): Promise<number> {
       metrics,
       obligationsBy: (targetOn, today, currency) => obligationsDueBy(book, { excludeId: invoice.id, by: targetOn, today, milestones, currency }),
       eurc,
-      bridgeFee: input.bridgeFee ?? ((chain, amount) => irisBridgeFee(chain, amount)),
+      bridgeFee: input.bridgeFee ?? ((chain, amount) => irisBridgeFee(provider.network, chain, amount)),
       gatewayQuote: gatewayQuote ??= input.gatewayQuote ?? gatewayQuoter(provider, db),
       swap: swaps ? { quote: quoteSwap, run: swaps.run } : null,
       budget,

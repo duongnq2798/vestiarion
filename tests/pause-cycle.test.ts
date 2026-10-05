@@ -20,6 +20,7 @@ import {
 } from "@/lib/agent/orchestrator";
 import type { BalanceSnapshot, ChainProvider, EarnDepositParams, EarnResult, TransferParams, TransferResult } from "@/lib/circle";
 import { fakeSupabase, orgTestContext, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
+import { ARC_TESTNET } from "@/lib/network";
 
 /**
  * `pausedPaymentNote()` is the one branch the AP and contractor stages both
@@ -142,6 +143,7 @@ describe("heldBecausePausedDetail — the ledger marker (D6)", () => {
  * they throw immediately.
  */
 class SpyProvider implements ChainProvider {
+  readonly network = ARC_TESTNET;
   readonly mode = "simulate" as const;
   readonly earnMode: "simulate" | "live" = "simulate";
   readonly estimatedFeeUsd = 0.01;
@@ -262,6 +264,7 @@ function confirmedTransferResult(): TransferResult {
 /** A `ChainProvider` whose `transfer` always confirms, for the "a real
  * payment happened, then something else failed" tests below. */
 class ConfirmingProvider implements ChainProvider {
+  readonly network = ARC_TESTNET;
   readonly mode = "live" as const;
   readonly earnMode: "simulate" | "live" = "simulate";
   readonly estimatedFeeUsd = 0.01;
@@ -505,6 +508,7 @@ describe("moveTreasuryIfNotPaused — a real USYC reserve", () => {
   const EXECUTION = { approveTxHash: "0xa", depositTxHash: "0xd", shares: 263.4, price: 1.138897 };
 
   class LiveEarn extends SpyProvider {
+  readonly network = ARC_TESTNET;
     readonly earnMode = "live" as const;
     constructor(private readonly closed = false) {
       super();

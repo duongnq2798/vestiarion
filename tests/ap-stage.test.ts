@@ -15,6 +15,7 @@ import type { BalanceSnapshot, ChainProvider, EarnResult, TransferParams, Transf
 import { encryptSecret, parseMasterKeys } from "@/lib/secrets";
 import { fakeSupabase, type RecordedRequest } from "./support/fake-supabase";
 import { paymentIntentsBackend } from "./support/payment-intents";
+import { ARC_TESTNET } from "@/lib/network";
 
 /**
  * The AP stage (`runApStage`, src/lib/agent/orchestrator.ts) deciding *when*
@@ -127,6 +128,7 @@ function scheduledPayable(overrides: Record<string, unknown> = {}) {
 }
 
 class Chain implements ChainProvider {
+  readonly network = ARC_TESTNET;
   readonly mode = "live" as const;
   readonly earnMode = "simulate" as const;
   readonly estimatedFeeUsd = 0.003;

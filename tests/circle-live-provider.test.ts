@@ -3,6 +3,7 @@ import { LiveProvider, type LiveProviderClient } from "@/lib/circle/liveProvider
 import { BatchNotSentError } from "@/lib/circle/batch";
 import { PaymentsDisabledError } from "@/lib/payments-switch";
 import type { ChainConfig } from "@/lib/config";
+import { ARC_TESTNET } from "@/lib/network";
 
 vi.mock("server-only", () => ({}));
 
@@ -116,7 +117,7 @@ describe("a send Circle never answered says so (payment safety R1)", () => {
       "Circle answered createTransaction with HTTP 500, which does not say what became of it; the transfer may or may not have been accepted",
     ],
   ])("when %s", async (_label, error, message) => {
-    const provider = new LiveProvider(CHAIN, { client: failing(error) });
+    const provider = new LiveProvider(CHAIN, { network: ARC_TESTNET, client: failing(error) });
 
     await expect(provider.transfer(TRANSFER)).rejects.toThrow(message);
   });
@@ -126,7 +127,7 @@ describe("a send Circle never answered says so (payment safety R1)", () => {
     ["the connection was never made", Object.assign(new Error("Connection refused"), { code: "ECONNREFUSED" })],
     ["the error is not an HTTP one", new Error("Circle rejected createTransaction")],
   ])("keeps the error's own words when %s", async (_label, error) => {
-    const provider = new LiveProvider(CHAIN, { client: failing(error) });
+    const provider = new LiveProvider(CHAIN, { network: ARC_TESTNET, client: failing(error) });
 
     await expect(provider.transfer(TRANSFER)).rejects.toBe(error);
   });
@@ -134,7 +135,7 @@ describe("a send Circle never answered says so (payment safety R1)", () => {
   it("says so when Circle answers with no transaction id", async () => {
     const client = fakeClient({ createTransaction: vi.fn(async () => ({ data: {} })) as unknown as LiveProviderClient["createTransaction"] });
 
-    await expect(new LiveProvider(CHAIN, { client }).transfer(TRANSFER)).rejects.toThrow(
+    await expect(new LiveProvider(CHAIN, { network: ARC_TESTNET, client }).transfer(TRANSFER)).rejects.toThrow(
       "Circle answered createTransaction with no transaction id; the transfer may or may not have been accepted"
     );
   });
@@ -146,7 +147,7 @@ describe("a send Circle never answered says so (payment safety R1)", () => {
     const client = fakeClient({ createContractExecutionTransaction } as unknown as Partial<LiveProviderClient>);
     const release = { ...TRANSFER, route: "escrow" as const, escrow: { contract: "0x2222222222222222222222222222222222222222", holdId: `0x${"ab".repeat(32)}` } };
 
-    await expect(new LiveProvider(CHAIN, { client }).transfer(release)).rejects.toThrow(
+    await expect(new LiveProvider(CHAIN, { network: ARC_TESTNET, client }).transfer(release)).rejects.toThrow(
       "Circle did not answer the escrow release (ECONNABORTED); it may or may not have been accepted"
     );
   });
@@ -156,7 +157,7 @@ describe("a send Circle never answered says so (payment safety R1)", () => {
 describe("a live provider with payments switched off (payment safety S2)", () => {
   it("refuses every way of moving money, before reading an account or calling Circle", async () => {
     const client = fakeClient({});
-    const provider = new LiveProvider(CHAIN, { client, paymentsDisabled: true });
+    const provider = new LiveProvider(CHAIN, { network: ARC_TESTNET, client, paymentsDisabled: true });
     const earn = { accountId: "account-1", amount: 1, reserveAccountId: "account-2", key: "move-1" };
 
     await expect(provider.transfer(TRANSFER)).rejects.toBeInstanceOf(PaymentsDisabledError);
@@ -175,7 +176,7 @@ describe("a live provider with payments switched off (payment safety S2)", () =>
   it("still reads a balance", async () => {
     const getWalletTokenBalance = vi.fn(async () => ({ data: { tokenBalances: [{ token: { id: "usdc-token-id", symbol: "USDC" }, amount: "12.5" }] } }));
     const client = fakeClient({ getWalletTokenBalance } as unknown as Partial<LiveProviderClient>);
-    const provider = new LiveProvider(CHAIN, { client, paymentsDisabled: true });
+    const provider = new LiveProvider(CHAIN, { network: ARC_TESTNET, client, paymentsDisabled: true });
 
     await expect(provider.getBalance("account-1")).resolves.toMatchObject({ balance: 12.5 });
   });
@@ -187,7 +188,7 @@ describe("LiveProvider Circle request deadlines", () => {
     const client = fakeClient({
       createTransaction: createTransaction as unknown as LiveProviderClient["createTransaction"],
     });
-    const provider = new LiveProvider(CHAIN, { client });
+    const provider = new LiveProvider(CHAIN, { network: ARC_TESTNET, client });
 
     await expectDeadline(
       provider.transfer(TRANSFER),
@@ -207,7 +208,7 @@ describe("LiveProvider Circle request deadlines", () => {
     const client = fakeClient({
       createTransaction: createTransaction as unknown as LiveProviderClient["createTransaction"],
     });
-    const provider = new LiveProvider(CHAIN, { client });
+    const provider = new LiveProvider(CHAIN, { network: ARC_TESTNET, client });
 
     await expect(provider.transfer(TRANSFER)).rejects.toThrow("Circle rejected createTransaction");
     expect(vi.getTimerCount()).toBe(0);
@@ -218,7 +219,7 @@ describe("LiveProvider Circle request deadlines", () => {
     const client = fakeClient({
       getWalletTokenBalance: getWalletTokenBalance as unknown as LiveProviderClient["getWalletTokenBalance"],
     });
-    const provider = new LiveProvider({ ...CHAIN, usdcTokenId: undefined }, { client });
+    const provider = new LiveProvider({ ...CHAIN, usdcTokenId: undefined }, { network: ARC_TESTNET, client });
 
     await expectDeadline(
       provider.transfer(TRANSFER),
@@ -238,7 +239,7 @@ describe("LiveProvider Circle request deadlines", () => {
     const client = fakeClient({
       getWalletTokenBalance: getWalletTokenBalance as unknown as LiveProviderClient["getWalletTokenBalance"],
     });
-    const provider = new LiveProvider(CHAIN, { client });
+    const provider = new LiveProvider(CHAIN, { network: ARC_TESTNET, client });
 
     await expect(provider.getBalance("account-1")).resolves.toMatchObject({ balance: 12.5 });
     expect(vi.getTimerCount()).toBe(0);
@@ -249,7 +250,7 @@ describe("LiveProvider Circle request deadlines", () => {
     const client = fakeClient({
       getWalletTokenBalance: getWalletTokenBalance as unknown as LiveProviderClient["getWalletTokenBalance"],
     });
-    const provider = new LiveProvider(CHAIN, { client });
+    const provider = new LiveProvider(CHAIN, { network: ARC_TESTNET, client });
 
     await expectDeadline(
       provider.getBalance("account-1"),
@@ -264,7 +265,7 @@ describe("LiveProvider Circle request deadlines", () => {
     const client = fakeClient({
       getTransaction: getTransaction as unknown as LiveProviderClient["getTransaction"],
     });
-    const provider = new LiveProvider(CHAIN, { client });
+    const provider = new LiveProvider(CHAIN, { network: ARC_TESTNET, client });
 
     await expectDeadline(
       provider.reconcileTransfer("tx-1"),
@@ -290,7 +291,7 @@ describe("LiveProvider reports Circle's state and failure reason", () => {
   }
 
   function provider(getTransaction: LiveProviderClient["getTransaction"], createTransaction?: LiveProviderClient["createTransaction"]): LiveProvider {
-    return new LiveProvider(CHAIN, {
+    return new LiveProvider(CHAIN, { network: ARC_TESTNET,
       client: fakeClient({
         createTransaction: createTransaction ?? (vi.fn(async () => ({ data: { id: "tx-1" } })) as unknown as LiveProviderClient["createTransaction"]),
         getTransaction,
@@ -367,7 +368,7 @@ describe("LiveProvider reports Circle's state and failure reason", () => {
 describe("LiveProvider refusals name the fix in the product, not a script", () => {
   it("a counterparty without an address points to the Counterparties page", async () => {
     const createTransaction = vi.fn();
-    const provider = new LiveProvider(CHAIN, { client: fakeClient({ createTransaction: createTransaction as unknown as LiveProviderClient["createTransaction"] }) });
+    const provider = new LiveProvider(CHAIN, { network: ARC_TESTNET, client: fakeClient({ createTransaction: createTransaction as unknown as LiveProviderClient["createTransaction"] }) });
 
     const error = (await provider.transfer({ ...TRANSFER, toAddress: "sim:acme-supplies" }).then(() => undefined, (e: unknown) => e)) as Error;
 
@@ -382,7 +383,7 @@ describe("LiveProvider refusals name the fix in the product, not a script", () =
       error: null,
     });
     const createTransaction = vi.fn();
-    const provider = new LiveProvider(CHAIN, { client: fakeClient({ createTransaction: createTransaction as unknown as LiveProviderClient["createTransaction"] }) });
+    const provider = new LiveProvider(CHAIN, { network: ARC_TESTNET, client: fakeClient({ createTransaction: createTransaction as unknown as LiveProviderClient["createTransaction"] }) });
 
     const error = (await provider.transfer(TRANSFER).then(() => undefined, (e: unknown) => e)) as Error;
 

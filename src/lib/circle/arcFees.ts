@@ -121,12 +121,12 @@ export function networkRpcUrl(network: NetworkProfile): string {
  */
 export async function fetchArcFeeUsd(
   txHash: string,
-  options: { url?: string; timeoutMs?: number } = {}
+  options: { url: string; timeoutMs?: number }
 ): Promise<number | null> {
   if (!/^0x[0-9a-fA-F]{64}$/.test(txHash)) return null;
   try {
     const receipt = (await arcRpc("eth_getTransactionReceipt", [txHash], {
-      url: options.url ?? arcRpcUrl(),
+      url: options.url,
       timeoutMs: options.timeoutMs ?? 15_000,
     })) as ArcReceipt | null;
     return feeUsdFromReceipt(receipt);

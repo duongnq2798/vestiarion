@@ -1,3 +1,4 @@
+import { workspaceNetwork } from "../workspace-network";
 import { initiateDeveloperControlledWalletsClient, type CircleDeveloperControlledWalletsClient } from "@circle-fin/developer-controlled-wallets";
 import { currentOrgConfig, currentOrgId } from "../context";
 import { db, unwrap } from "../dal";
@@ -5,7 +6,7 @@ import { appendLedgerEntry } from "../ledger";
 import { encodeFunctionData, getAddress, parseAbi } from "viem";
 import { SCA_EXECUTE_BATCH } from "./batch";
 import { ARC_TESTNET_USDC } from "./cctp";
-import { GATEWAY_WALLET, gatewayBalance, gatewayStepKey } from "./gateway";
+import { gatewayBalance, gatewayOf, gatewayStepKey } from "./gateway";
 import { circleCall, CircleCallFailed, treasuryWalletSetId, walletIdempotencyKey } from "./provision";
 import { awaitSettlement } from "./settlement";
 import { assertPaymentsEnabled } from "../payments-switch";
@@ -110,7 +111,7 @@ async function execute(
 /** Reads the Gateway balance, or null when Gateway does not answer. */
 async function readBalance(depositor: string, fetcher: typeof fetch | undefined): Promise<number | null> {
   try {
-    return await gatewayBalance(depositor, { fetch: fetcher });
+    return await gatewayBalance(workspaceNetwork(), depositor, { fetch: fetcher });
   } catch {
     return null;
   }
@@ -198,7 +199,7 @@ export async function fundGateway(
       delegated = await execute(
         client,
         operating.walletId,
-        { contractAddress: GATEWAY_WALLET, abiFunctionSignature: "addDelegate(address,address)", abiParameters: [ARC_TESTNET_USDC, signer.address] },
+        { contractAddress: gatewayOf(workspaceNetwork()).wallet, abiFunctionSignature: "addDelegate(address,address)", abiParameters: [ARC_TESTNET_USDC, signer.address] },
         gatewayStepKey(failedBefore ? `${orgId}/delegate/after/${failedBefore}` : `${orgId}/delegate`),
         "delegate on Gateway"
       );
@@ -227,14 +228,14 @@ export async function fundGateway(
   const approved = await execute(
     client,
     operating.walletId,
-    { contractAddress: ARC_TESTNET_USDC, abiFunctionSignature: "approve(address,uint256)", abiParameters: [GATEWAY_WALLET, units] },
+    { contractAddress: ARC_TESTNET_USDC, abiFunctionSignature: "approve(address,uint256)", abiParameters: [gatewayOf(workspaceNetwork()).wallet, units] },
     gatewayStepKey(`${orgId}/fund/${input.requestId}/approve`),
     "approval for Gateway"
   );
   const deposited = await execute(
     client,
     operating.walletId,
-    { contractAddress: GATEWAY_WALLET, abiFunctionSignature: "deposit(address,uint256)", abiParameters: [ARC_TESTNET_USDC, units] },
+    { contractAddress: gatewayOf(workspaceNetwork()).wallet, abiFunctionSignature: "deposit(address,uint256)", abiParameters: [ARC_TESTNET_USDC, units] },
     gatewayStepKey(`${orgId}/fund/${input.requestId}/deposit`),
     "deposit into Gateway"
   );
@@ -275,7 +276,7 @@ export async function readGatewayState(options: { fetch?: typeof fetch } = {}): 
   if (!signer) return { signerAddress: null, balanceUsdc: null };
   try {
     const operating = await operatingWallet();
-    return { signerAddress: signer.address, balanceUsdc: await gatewayBalance(operating.address, { fetch: options.fetch }) };
+    return { signerAddress: signer.address, balanceUsdc: await gatewayBalance(workspaceNetwork(), operating.address, { fetch: options.fetch }) };
   } catch {
     return { signerAddress: signer.address, balanceUsdc: null };
   }
@@ -332,8 +333,8 @@ export async function fundServiceBudget(
       abiFunctionSignature: SCA_EXECUTE_BATCH,
       abiParameters: [
         [
-          [ARC_TESTNET_USDC, "0", encodeFunctionData({ abi: FUNDING_ABI, functionName: "approve", args: [getAddress(GATEWAY_WALLET), units] })],
-          [GATEWAY_WALLET, "0", encodeFunctionData({ abi: FUNDING_ABI, functionName: "depositFor", args: [getAddress(ARC_TESTNET_USDC), getAddress(signer.address), units] })],
+          [ARC_TESTNET_USDC, "0", encodeFunctionData({ abi: FUNDING_ABI, functionName: "approve", args: [getAddress(gatewayOf(workspaceNetwork()).wallet), units] })],
+          [gatewayOf(workspaceNetwork()).wallet, "0", encodeFunctionData({ abi: FUNDING_ABI, functionName: "depositFor", args: [getAddress(ARC_TESTNET_USDC), getAddress(signer.address), units] })],
         ],
       ],
     },

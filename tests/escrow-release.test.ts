@@ -7,6 +7,7 @@ import { paymentIdempotencyKey } from "@/lib/payments";
 import type { BalanceSnapshot, ChainProvider, EarnResult, TransferParams, TransferResult } from "@/lib/circle";
 import { fakeSupabase, orgTestContext, type RecordedRequest } from "./support/fake-supabase";
 import { paymentIntentsBackend } from "./support/payment-intents";
+import { ARC_TESTNET } from "@/lib/network";
 
 /**
  * The agent paying a milestone locked in escrow (docs/superpowers/specs/2026-10-01-milestone-escrow-design.md
@@ -21,6 +22,7 @@ const PAYEE = "0x67C8000000000000000000000000000000000504";
 const config = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k" });
 
 class Chain implements ChainProvider {
+  readonly network = ARC_TESTNET;
   readonly mode = "live" as const;
   readonly earnMode = "simulate" as const;
   readonly estimatedFeeUsd = 0.01;

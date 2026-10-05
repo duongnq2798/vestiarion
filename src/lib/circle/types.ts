@@ -1,3 +1,4 @@
+import type { NetworkProfile } from "../network";
 /**
  * Arc's transfer cost, as measured rather than asserted.
  *
@@ -212,6 +213,8 @@ export interface InboundTransfer {
 export interface ChainProvider {
   readonly mode: "simulate" | "live";
   readonly earnMode: "simulate" | "live";
+  /** The network it pays on (docs/superpowers/specs/2026-10-05-network-threading-design.md P2): every chain fact it uses is this profile's. */
+  readonly network: NetworkProfile;
   /**
    * Typical cost of one transfer, in USD. Arc is ~$0.01. The treasury policy
    * prices a sweep-and-redeem round trip from this rather than a constant, so

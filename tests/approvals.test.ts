@@ -20,6 +20,7 @@ import { paymentIdempotencyKey, type PaymentExecution } from "@/lib/payments";
 import { UsycNotConfirmedError } from "@/lib/circle/usyc";
 import { encryptSecret, parseMasterKeys } from "@/lib/secrets";
 import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
+import { ARC_TESTNET } from "@/lib/network";
 
 /**
  * `src/lib/agent/approvals.ts` against a real supabase-js client whose
@@ -989,6 +990,7 @@ describe("approveAndPay after Circle ended the last attempt in a terminal failur
  */
 describe("approveAndPay on a transfer Circle is found to have failed", () => {
   class Circle implements ChainProvider {
+    readonly network = ARC_TESTNET;
     readonly mode = "live" as const;
     readonly earnMode = "simulate" as const;
     readonly estimatedFeeUsd = 0.003;
@@ -1114,6 +1116,7 @@ describe("approveAndPay with an early-payment discount", () => {
   const withTerms = (r: RecordedRequest) => (r.params.get("id") ? { body: invoiceRow(TERMS) } : undefined);
 
   class Circle implements ChainProvider {
+    readonly network = ARC_TESTNET;
     readonly mode = "live" as const;
     readonly earnMode = "simulate" as const;
     readonly estimatedFeeUsd = 0.003;

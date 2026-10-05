@@ -1,8 +1,7 @@
 import { createHash } from "node:crypto";
-import { PAYEE_CHAINS, payeeChain, type PayeeChain } from "../payee-chains";
-import { ARC_TESTNET_DOMAIN, ARC_TESTNET_USDC } from "./cctp";
+import { chainOn, chainsOn, homeChain } from "../payee-chains";
 import { MAY_HAVE_BEEN_ACCEPTED } from "./settlement";
-import { ARC_TESTNET } from "../network";
+import { FeatureOffError, type NetworkProfile } from "../network";
 
 /**
  * Circle Gateway from Arc testnet (docs/superpowers/specs/2026-10-01-gateway-payouts-design.md).
@@ -14,20 +13,23 @@ import { ARC_TESTNET } from "../network";
  * or order makes every signature invalid.
  */
 
-/** GatewayWallet and GatewayMinter: the same addresses on every EVM testnet, Arc's included. */
-export const GATEWAY_WALLET = "0x0077777d7EBA4688BDeF3E311b846F25870A19B9";
-export const GATEWAY_MINTER = "0x0022222ABE238Cc2C7Bb1f21003F0a260052475B";
-export const GATEWAY_API = ARC_TESTNET.gateway.api;
+/**
+ * Gateway on a network (network threading P2, P5): its API, Circle's x402 facilitator, and GatewayWallet and
+ * GatewayMinter. A network without Gateway refuses by name, before any request.
+ */
+export function gatewayOf(network: NetworkProfile): { api: string; facilitator: string; wallet: string; minter: string } {
+  if (!network.gateway) throw new FeatureOffError("Paying through Gateway", network);
+  return network.gateway;
+}
+
+/** Gateway's domain for a network's own chain, which is CCTP's numbering. */
+function sourceDomain(network: NetworkProfile): number {
+  const domain = homeChain(network.id).domain;
+  if (domain === null) throw new FeatureOffError("Paying through Gateway", network);
+  return domain;
+}
 /** What a forwarded Gateway payout takes: the attestation is instant, and the mint is the next block on the payee's chain. */
 export const EXPECTED_GATEWAY_SECONDS = 5;
-
-/** USDC on each chain a payee can be paid on, as Circle lists it for testnets. */
-export const USDC_BY_CHAIN: Record<PayeeChain, string> = {
-  "ARC-TESTNET": ARC_TESTNET_USDC,
-  "BASE-SEPOLIA": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
-  "ARB-SEPOLIA": "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d",
-  "ETH-SEPOLIA": "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
-};
 
 const GATEWAY_DEADLINE_MS = 10_000;
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
@@ -87,7 +89,7 @@ export interface GatewayPayout {
   signer: string;
   /** The payee, on `chain`. */
   recipient: string;
-  chain: PayeeChain | string;
+  chain: string;
   amount: number;
   salt: `0x${string}`;
 }
@@ -113,17 +115,19 @@ export interface BurnIntent {
   };
 }
 
-function transferSpec(payout: GatewayPayout): BurnIntent["spec"] {
-  const target = payeeChain(payout.chain);
-  if (target.id === "ARC-TESTNET") throw new GatewayError("A payee on Arc testnet is paid directly, not through Gateway");
+function transferSpec(network: NetworkProfile, payout: GatewayPayout): BurnIntent["spec"] {
+  const gateway = gatewayOf(network);
+  const target = chainOn(network.id, payout.chain);
+  if (target.id === homeChain(network.id).id) throw new GatewayError(`A payee on ${network.label} is paid directly, not through Gateway`);
+  if (target.domain === null) throw new GatewayError(`Gateway has no domain for ${target.label}`);
   return {
     version: 1,
-    sourceDomain: ARC_TESTNET_DOMAIN,
+    sourceDomain: sourceDomain(network),
     destinationDomain: target.domain,
-    sourceContract: toBytes32(GATEWAY_WALLET),
-    destinationContract: toBytes32(GATEWAY_MINTER),
-    sourceToken: toBytes32(ARC_TESTNET_USDC),
-    destinationToken: toBytes32(USDC_BY_CHAIN[target.id]),
+    sourceContract: toBytes32(gateway.wallet),
+    destinationContract: toBytes32(gateway.minter),
+    sourceToken: toBytes32(network.tokens.USDC),
+    destinationToken: toBytes32(target.usdc),
     sourceDepositor: toBytes32(payout.depositor),
     destinationRecipient: toBytes32(payout.recipient),
     sourceSigner: toBytes32(payout.signer),
@@ -134,8 +138,8 @@ function transferSpec(payout: GatewayPayout): BurnIntent["spec"] {
   };
 }
 
-export function burnIntent(input: GatewayPayout & { maxFee: bigint; maxBlockHeight: string }): BurnIntent {
-  return { maxBlockHeight: input.maxBlockHeight, maxFee: input.maxFee.toString(), spec: transferSpec(input) };
+export function burnIntent(network: NetworkProfile, input: GatewayPayout & { maxFee: bigint; maxBlockHeight: string }): BurnIntent {
+  return { maxBlockHeight: input.maxBlockHeight, maxFee: input.maxFee.toString(), spec: transferSpec(network, input) };
 }
 
 const EIP712_TYPES = {
@@ -193,8 +197,8 @@ const post = (body: unknown): RequestInit => ({ method: "POST", headers: { "cont
  * sign it with: Gateway's estimate covers its base fee and the Forwarding
  * Service's fee for minting on the payee's chain.
  */
-export async function estimateGateway(payout: GatewayPayout, options: { fetch?: typeof fetch } = {}): Promise<{ maxFee: bigint; maxBlockHeight: string; feeUsdc: number }> {
-  const answer = (await call("fee estimate", `${GATEWAY_API}/estimate?enableForwarder=true`, post([{ spec: transferSpec(payout) }]), options.fetch ?? fetch)) as {
+export async function estimateGateway(network: NetworkProfile, payout: GatewayPayout, options: { fetch?: typeof fetch } = {}): Promise<{ maxFee: bigint; maxBlockHeight: string; feeUsdc: number }> {
+  const answer = (await call("fee estimate", `${gatewayOf(network).api}/estimate?enableForwarder=true`, post([{ spec: transferSpec(network, payout) }]), options.fetch ?? fetch)) as {
     body?: Array<{ burnIntent?: { maxFee?: string; maxBlockHeight?: string } }>;
     fees?: { total?: string };
   } | null;
@@ -207,8 +211,8 @@ export async function estimateGateway(payout: GatewayPayout, options: { fetch?: 
 }
 
 /** The depositor's unified Gateway balance in USDC, over every domain Gateway answers for. */
-export async function gatewayBalance(depositor: string, options: { fetch?: typeof fetch } = {}): Promise<number> {
-  const answer = (await call("balance read", `${GATEWAY_API}/balances`, post({ token: "USDC", sources: [{ domain: ARC_TESTNET_DOMAIN, depositor }] }), options.fetch ?? fetch)) as {
+export async function gatewayBalance(network: NetworkProfile, depositor: string, options: { fetch?: typeof fetch } = {}): Promise<number> {
+  const answer = (await call("balance read", `${gatewayOf(network).api}/balances`, post({ token: "USDC", sources: [{ domain: sourceDomain(network), depositor }] }), options.fetch ?? fetch)) as {
     balances?: Array<{ balance?: string }>;
   } | null;
   const total = (answer?.balances ?? []).reduce((sum, row) => sum + (Number(row.balance) || 0), 0);
@@ -221,10 +225,11 @@ export async function gatewayBalance(depositor: string, options: { fetch?: typeo
  * 5xx, or an answer with no id — the error says it may or may not have been accepted (payment safety R1): GatewayWallet
  * may hold it, and the same intent sent again is spent once. A refusal (4xx) keeps Gateway's own words.
  */
-export async function submitGatewayTransfer(intent: BurnIntent, signature: string, options: { fetch?: typeof fetch } = {}): Promise<string> {
+export async function submitGatewayTransfer(network: NetworkProfile, intent: BurnIntent, signature: string, options: { fetch?: typeof fetch } = {}): Promise<string> {
+  const api = gatewayOf(network).api;
   let answer: { transferId?: unknown } | null;
   try {
-    answer = (await call("transfer", `${GATEWAY_API}/transfer?enableForwarder=true`, post([{ burnIntent: intent, signature }]), options.fetch ?? fetch)) as { transferId?: unknown } | null;
+    answer = (await call("transfer", `${api}/transfer?enableForwarder=true`, post([{ burnIntent: intent, signature }]), options.fetch ?? fetch)) as { transferId?: unknown } | null;
   } catch (error) {
     if (error instanceof GatewayError && (error.neverSent || (error.status !== undefined && error.status < 500))) throw error;
     throw new GatewayError(`${(error as Error).message}; it ${MAY_HAVE_BEEN_ACCEPTED}`);
@@ -244,18 +249,19 @@ export interface GatewayTransferStatus {
   mintTxHash: string | null;
   failureReason: string | null;
   /** The payee's chain, from the transfer's destination domain; null when Gateway did not say. */
-  destinationChain: PayeeChain | null;
+  destinationChain: string | null;
 }
 
 /** A transfer's state, read again: it sends nothing. */
-export async function gatewayTransferStatus(transferId: string, options: { fetch?: typeof fetch } = {}): Promise<GatewayTransferStatus> {
-  const answer = (await call("status read", `${GATEWAY_API}/transfer/${encodeURIComponent(transferId)}`, { method: "GET" }, options.fetch ?? fetch)) as {
+export async function gatewayTransferStatus(network: NetworkProfile, transferId: string, options: { fetch?: typeof fetch } = {}): Promise<GatewayTransferStatus> {
+  const answer = (await call("status read", `${gatewayOf(network).api}/transfer/${encodeURIComponent(transferId)}`, { method: "GET" }, options.fetch ?? fetch)) as {
     status?: string;
     destinationDomain?: number;
     transactionHash?: string;
     forwardingDetails?: { failureReason?: string };
   } | null;
-  const destinationChain = PAYEE_CHAINS.find((chain) => chain.domain === answer?.destinationDomain && chain.id !== "ARC-TESTNET")?.id ?? null;
+  const own = homeChain(network.id).id;
+  const destinationChain = chainsOn(network.id).find((chain) => chain.domain === answer?.destinationDomain && chain.id !== own)?.id ?? null;
   const status = answer?.status;
   if (status === "confirmed" || status === "finalized") {
     return { status: "confirmed", state: status, mintTxHash: typeof answer?.transactionHash === "string" ? answer.transactionHash : null, failureReason: null, destinationChain };

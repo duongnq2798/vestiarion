@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ARC_MAINNET, ARC_TESTNET, NETWORKS, networkOf, networkProfile } from "@/lib/network";
 import { arcAddressUrl, arcTxUrl, PAYEE_CHAINS } from "@/lib/payee-chains";
-import { ARC_TESTNET_DOMAIN, ARC_TESTNET_USDC } from "@/lib/circle/cctp";
-import { GATEWAY_API } from "@/lib/circle/gateway";
+import { ARC_TESTNET_USDC } from "@/lib/circle/cctp";
 import { ARC_TESTNET_EURC, ARC_TESTNET_USDC as QUOTE_USDC } from "@/lib/fx/quote";
 import { ARC_TESTNET_CHAIN_ID, ARC_TESTNET_RPC_URL } from "@/lib/circle/arcFees";
 import { ARC_TESTNET_USYC, USYC_ENTITLEMENTS, USYC_TELLER } from "@/lib/circle/usyc";
@@ -49,11 +48,9 @@ describe("the Arc testnet profile", () => {
     expect(arcTxUrl("0xabc")).toBe(`${ARC_TESTNET.explorer}/tx/0xabc`);
     expect(arcAddressUrl("0xdef")).toBe(`${ARC_TESTNET.explorer}/address/0xdef`);
     expect(PAYEE_CHAINS[0]).toMatchObject({ id: ARC_TESTNET.circleBlockchain, label: ARC_TESTNET.label, domain: ARC_TESTNET.cctp.domain });
-    expect(ARC_TESTNET_DOMAIN).toBe(ARC_TESTNET.cctp.domain);
     expect(ARC_TESTNET_USDC).toBe(ARC_TESTNET.tokens.USDC);
     expect(QUOTE_USDC).toBe(ARC_TESTNET.tokens.USDC);
     expect(ARC_TESTNET_EURC).toBe(ARC_TESTNET.tokens.EURC);
-    expect(GATEWAY_API).toBe(ARC_TESTNET.gateway.api);
     expect(GATEWAY_FACILITATOR_URL).toBe(ARC_TESTNET.gateway.facilitator);
     expect(ARC_TESTNET_RPC_URL).toBe(ARC_TESTNET.rpcUrl);
     expect(ARC_TESTNET_CHAIN_ID).toBe(ARC_TESTNET.chainId);

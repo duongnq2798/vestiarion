@@ -6,6 +6,7 @@ import { liveOperatingBalance, syncOnChainBalances } from "@/lib/agent/balances"
 import { reconcileLines, type CycleLogLine } from "@/lib/agent/orchestrator";
 import type { BalanceSnapshot, ChainProvider, EarnResult, TransferResult } from "@/lib/circle";
 import { fakeSupabase, orgTestContext, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
+import { ARC_TESTNET } from "@/lib/network";
 
 /**
  * `syncOnChainBalances` is the reconcile stage's balance read, pulled out of
@@ -29,6 +30,7 @@ const PAYROLL: Row = { id: "acct-pay", name: "Payroll", kind: "chain", balance: 
 const BRIDGE: Row = { id: "acct-br", name: "Bridge", kind: "chain", balance: "0.000000", circle_wallet_id: null };
 
 class FakeChain implements ChainProvider {
+  readonly network = ARC_TESTNET;
   readonly mode = "live" as const;
   readonly estimatedFeeUsd = 0.01;
   readonly reads: string[] = [];
@@ -312,6 +314,7 @@ describe("the reconcile stage — unchanged by the extraction, in its lines and 
 describe("syncOnChainBalances — a real USYC reserve (USYC live design R3)", () => {
   const LIVE_RESERVE: Row = { id: "acct-res", name: "USYC reserve", kind: "reserve", balance: "30.000000", circle_wallet_id: "w-res" };
   class UsycChain extends FakeChain {
+  readonly network = ARC_TESTNET;
     constructor(private readonly position: { shares: number; valueUsdc: number; price: number; apy?: number | null } | Error) {
       super({ "acct-op": 150 }, "live");
     }

@@ -1,3 +1,4 @@
+import { workspaceNetwork } from "../workspace-network";
 import { initiateDeveloperControlledWalletsClient } from "@circle-fin/developer-controlled-wallets";
 import { currentOrgConfig } from "../context";
 import { unwrap, type OrgDb } from "../dal";
@@ -128,7 +129,7 @@ export async function buyPayeeHistories(input: {
     .filter((row) => row.status === "paid" && row.created_at.slice(0, 10) === day(now))
     .reduce((sum, row) => sum + Number(row.price_usdc ?? 0), 0);
   let purse: number | null = null;
-  const readPurse = input.purse ?? (() => gatewayBalance((signer as { address: string }).address));
+  const readPurse = input.purse ?? (() => gatewayBalance(workspaceNetwork(), (signer as { address: string }).address));
   const buy = input.buy ?? payeeHistoryBuyer(signer as { circle_wallet_id: string; address: string });
 
   for (const candidate of due.slice(0, SERVICE_MAX_PER_CYCLE)) {

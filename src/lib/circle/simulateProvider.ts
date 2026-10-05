@@ -1,3 +1,4 @@
+import type { NetworkProfile } from "../network";
 import { db, unwrap } from "../dal";
 import type {
   BalanceSnapshot,
@@ -36,6 +37,9 @@ export class SimulateProvider implements ChainProvider {
   readonly mode = "simulate" as const;
   readonly earnMode = "simulate" as const;
   readonly estimatedFeeUsd = ARC_FEE_USD;
+
+  /** The network it stands in for (network threading P2): its transfers settle on that network's own chain. */
+  constructor(readonly network: NetworkProfile) {}
 
   private async account(id: string): Promise<AccountRow> {
     return unwrap(
@@ -121,7 +125,7 @@ export class SimulateProvider implements ChainProvider {
       providerTxId,
       txHash: providerTxId,
       txRef: providerTxId,
-      chain: "ARC-TESTNET",
+      chain: this.network.circleBlockchain,
       status: "confirmed",
       feeUsd: ARC_FEE_USD,
       feeSource: "simulated_profile",

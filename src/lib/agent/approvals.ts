@@ -470,7 +470,7 @@ export async function listWaitingPayables(
   // Both routes' figures for a payee on another chain, read now, so the person approving sees the route Approve and pay
   // takes and what leaves (CCTP payouts, review I2; approval payout route P4). A figure that cannot be read is null.
   const read = {
-    bridgeFee: options.bridgeFee ?? ((chain: string, amount: number) => bridgeFee(chain, amount)),
+    bridgeFee: options.bridgeFee ?? ((chain: string, amount: number) => bridgeFee(getChainProvider().network, chain, amount)),
     gatewayQuote: options.gatewayQuote ?? gatewayQuoter(getChainProvider(), db()),
   };
   const quotes = new Map<string, PayoutQuotes>();
@@ -834,7 +834,7 @@ export async function approveAndPay(
   const crossChain = !alreadySent && invoice.currency === "USDC" && paidAcrossChains(invoice.destinationChain);
   const quotes = crossChain
     ? await readPayoutQuotes(invoice.destinationChain as string, invoice.amount, {
-        bridgeFee: options.bridgeFee ?? ((chain, amount) => bridgeFee(chain, amount)),
+        bridgeFee: options.bridgeFee ?? ((chain, amount) => bridgeFee(provider.network, chain, amount)),
         gatewayQuote: options.gatewayQuote ?? gatewayQuoter(provider, db()),
       })
     : null;

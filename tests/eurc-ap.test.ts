@@ -12,6 +12,7 @@ import { FxQuoteError, type EurcQuote } from "@/lib/fx/quote";
 import { encryptSecret, parseMasterKeys } from "@/lib/secrets";
 import { fakeSupabase, type RecordedRequest } from "./support/fake-supabase";
 import { paymentIntentsBackend } from "./support/payment-intents";
+import { ARC_TESTNET } from "@/lib/network";
 
 /**
  * The AP stage deciding a EURC payable (docs/superpowers/specs/2026-10-01-eurc-invoices-design.md
@@ -83,6 +84,7 @@ function payable(overrides: Record<string, unknown> = {}) {
 }
 
 class Chain implements ChainProvider {
+  readonly network = ARC_TESTNET;
   readonly earnMode = "simulate" as const;
   readonly estimatedFeeUsd = 0.003;
   transfers: TransferParams[] = [];

@@ -5,6 +5,7 @@ import { releaseMilestones } from "@/lib/agent/orchestrator";
 import type { PaymentExecution, PaymentRequest } from "@/lib/payments";
 import type { BalanceSnapshot, ChainProvider, EarnResult, TransferResult } from "@/lib/circle";
 import { fakeSupabase, orgTestContext, type RecordedRequest } from "./support/fake-supabase";
+import { ARC_TESTNET } from "@/lib/network";
 
 /**
  * The contractor stage's releases, once every milestone is decided
@@ -32,6 +33,7 @@ const RELEASES = [1, 2, 3].map((n) => ({ milestoneId: `0b6c1c9e-4a4f-4a7e-9b1e-0
 function chain(canBatch = true): ChainProvider {
   const base = {
     mode: "live" as const,
+    network: ARC_TESTNET,
     earnMode: "simulate" as const,
     estimatedFeeUsd: 0.003,
     transfer: async (): Promise<TransferResult> => {

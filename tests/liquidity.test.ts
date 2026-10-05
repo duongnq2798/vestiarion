@@ -18,6 +18,7 @@ import {
 import { heldForCash } from "@/lib/next-step";
 import { UsycNotConfirmedError } from "@/lib/circle/usyc";
 import { fakeSupabase, orgTestContext, type RecordedRequest } from "./support/fake-supabase";
+import { ARC_TESTNET } from "@/lib/network";
 
 /**
  * Cash back from the reserve (docs/superpowers/specs/2026-10-03-reserve-cash-back-design.md): the cycle brings back
@@ -38,6 +39,7 @@ beforeEach(() => {
 });
 
 class ReserveProvider implements ChainProvider {
+  readonly network = ARC_TESTNET;
   readonly mode = "simulate" as const;
   readonly earnMode = "simulate" as const;
   readonly estimatedFeeUsd = 0.01;

@@ -17,6 +17,7 @@ import { LiveProvider } from "./liveProvider";
 import { currentOrgConfig } from "../context";
 import type { VestiarionConfig } from "../config";
 import { paymentsDisabled } from "../payments-switch";
+import { networkOf, networkProfile, type NetworkProfile } from "../network";
 
 /**
  * Payments settle on Arc testnet through Circle's Developer-Controlled
@@ -29,6 +30,7 @@ class HybridProvider implements ChainProvider {
   readonly mode = "live" as const;
   readonly earnMode: "live" | "simulate";
   readonly estimatedFeeUsd: number;
+  readonly network: NetworkProfile;
 
   constructor(
     private readonly live: LiveProvider,
@@ -38,6 +40,7 @@ class HybridProvider implements ChainProvider {
     // Payments are the real leg, so the real leg's fee is the one that prices
     // a round trip.
     this.estimatedFeeUsd = live.estimatedFeeUsd;
+    this.network = live.network;
     this.earnMode = usycLive ? "live" : "simulate";
   }
 
@@ -132,10 +135,12 @@ export function getChainProvider(): ChainProvider {
       `This organization's Circle credentials are stored but could not be read (${credentialsUnreadable}); refusing to fall back to simulated payments`
     );
   }
+  // Built for the workspace's network (network threading P2): every chain fact the provider uses is its profile's.
+  const network = networkProfile(networkOf(config.network));
   const provider: ChainProvider =
     circleApiKey && circleEntitySecret
-      ? new HybridProvider(new LiveProvider(config.chain, { paymentsDisabled: () => paymentsDisabled() }), new SimulateProvider(), config.chain.usycLive === true)
-      : new SimulateProvider();
+      ? new HybridProvider(new LiveProvider(config.chain, { network, paymentsDisabled: () => paymentsDisabled() }), new SimulateProvider(network), config.chain.usycLive === true)
+      : new SimulateProvider(network);
 
   providers.set(config, provider);
   return provider;

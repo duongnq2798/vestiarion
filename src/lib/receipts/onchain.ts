@@ -1,5 +1,5 @@
 import { ARC_TESTNET_RPC_URL } from "../circle/arcFees";
-import { USDC_BY_CHAIN } from "../circle/gateway";
+import { chainById } from "../payee-chains";
 import { ARC_TESTNET_EURC } from "../fx/quote";
 import { payeeChain, type PayeeChain } from "../payee-chains";
 import type { ReceiptFacts } from "./facts";
@@ -63,8 +63,8 @@ function remember(key: string, receipt: TxReceipt): void {
 function tokenContracts(facts: ReceiptFacts): Array<{ address: string; decimals: number }> {
   const chain = payeeChain(facts.chain).id;
   if (facts.token === "EURC") return chain === "ARC-TESTNET" ? [{ address: ARC_TESTNET_EURC, decimals: 6 }] : [];
-  if (chain === "ARC-TESTNET") return [{ address: ARC_NATIVE_USDC, decimals: 18 }, { address: USDC_BY_CHAIN["ARC-TESTNET"], decimals: 6 }];
-  return [{ address: USDC_BY_CHAIN[chain], decimals: 6 }];
+  if (chain === "ARC-TESTNET") return [{ address: ARC_NATIVE_USDC, decimals: 18 }, { address: chainById(chain).usdc, decimals: 6 }];
+  return [{ address: chainById(chain).usdc, decimals: 6 }];
 }
 
 function units(amount: number, decimals: number): bigint {

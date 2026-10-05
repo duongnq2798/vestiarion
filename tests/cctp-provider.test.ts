@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { LiveProvider, type LiveProviderClient } from "@/lib/circle/liveProvider";
 import { SimulateProvider } from "@/lib/circle/simulateProvider";
-import { TOKEN_MESSENGER_V2 } from "@/lib/circle/cctp";
 import type { ChainConfig } from "@/lib/config";
+import { ARC_TESTNET } from "@/lib/network";
 
 /**
  * The live provider paying a payee on another chain through CCTP V2 with the Forwarding Service
@@ -72,7 +72,7 @@ function circle() {
 describe("LiveProvider: a payee on another chain", () => {
   it("approves, then burns with the forwarding hook, each under its own key derived from the attempt", async () => {
     const { client, executions } = circle();
-    const provider = new LiveProvider(CHAIN, { client, fetch: iris("0xmint"), bridgeMintWaitMs: 0 });
+    const provider = new LiveProvider(CHAIN, { network: ARC_TESTNET, client, fetch: iris("0xmint"), bridgeMintWaitMs: 0 });
 
     const result = await provider.transfer(TRANSFER);
 
@@ -80,7 +80,7 @@ describe("LiveProvider: a payee on another chain", () => {
       "approve(address,uint256)",
       "depositForBurnWithHook(uint256,uint32,bytes32,address,bytes32,uint256,uint32,bytes)",
     ]);
-    expect(executions[0]).toMatchObject({ walletId: "wallet-1", abiParameters: [TOKEN_MESSENGER_V2, "1554613"] });
+    expect(executions[0]).toMatchObject({ walletId: "wallet-1", abiParameters: [ARC_TESTNET.cctp.tokenMessenger, "1554613"] });
     expect((executions[1].abiParameters as string[])[1]).toBe("6");
     const [approveKey, burnKey] = executions.map((call) => call.idempotencyKey as string);
     expect(new Set([approveKey, burnKey, KEY]).size).toBe(3);
@@ -102,7 +102,7 @@ describe("LiveProvider: a payee on another chain", () => {
       throw Object.assign(new Error("Connection reset"), { code: "ECONNRESET" });
     });
 
-    const sent = new LiveProvider(CHAIN, { client, fetch: iris("0xmint"), bridgeMintWaitMs: 0 }).transfer(TRANSFER);
+    const sent = new LiveProvider(CHAIN, { network: ARC_TESTNET, client, fetch: iris("0xmint"), bridgeMintWaitMs: 0 }).transfer(TRANSFER);
 
     await expect(sent).rejects.toThrow("Circle did not answer the approve for the bridge (ECONNRESET); it moved no money");
     await expect(sent).rejects.not.toThrow(/may or may not have been accepted/);
@@ -116,28 +116,28 @@ describe("LiveProvider: a payee on another chain", () => {
         throw Object.assign(new Error("Connection reset"), { code: "ECONNRESET" });
       });
 
-    const sent = new LiveProvider(CHAIN, { client, fetch: iris("0xmint"), bridgeMintWaitMs: 0 }).transfer(TRANSFER);
+    const sent = new LiveProvider(CHAIN, { network: ARC_TESTNET, client, fetch: iris("0xmint"), bridgeMintWaitMs: 0 }).transfer(TRANSFER);
 
     await expect(sent).rejects.toThrow("Circle did not answer createContractExecutionTransaction (ECONNRESET); it may or may not have been accepted");
   });
 
   it("is in flight, not paid, while the mint has not been forwarded", async () => {
     const { client } = circle();
-    const provider = new LiveProvider(CHAIN, { client, fetch: iris(null), bridgeMintWaitMs: 0 });
+    const provider = new LiveProvider(CHAIN, { network: ARC_TESTNET, client, fetch: iris(null), bridgeMintWaitMs: 0 });
     expect(await provider.transfer(TRANSFER)).toMatchObject({ providerTxId: "cctp:burn-tx", txHash: BURN_HASH, status: "pending", mintTxHash: null });
   });
 
   it("uses the same keys when the same attempt is sent again, so Circle creates neither call twice", async () => {
     const first = circle();
-    await new LiveProvider(CHAIN, { client: first.client, fetch: iris(null), bridgeMintWaitMs: 0 }).transfer(TRANSFER);
+    await new LiveProvider(CHAIN, { network: ARC_TESTNET, client: first.client, fetch: iris(null), bridgeMintWaitMs: 0 }).transfer(TRANSFER);
     const second = circle();
-    await new LiveProvider(CHAIN, { client: second.client, fetch: iris(null), bridgeMintWaitMs: 0 }).transfer(TRANSFER);
+    await new LiveProvider(CHAIN, { network: ARC_TESTNET, client: second.client, fetch: iris(null), bridgeMintWaitMs: 0 }).transfer(TRANSFER);
     expect(second.executions.map((call) => call.idempotencyKey)).toEqual(first.executions.map((call) => call.idempotencyKey));
   });
 
   it("refuses EURC across chains, before anything is sent (X6)", async () => {
     const { client, executions } = circle();
-    const provider = new LiveProvider(CHAIN, { client, fetch: iris(null), bridgeMintWaitMs: 0 });
+    const provider = new LiveProvider(CHAIN, { network: ARC_TESTNET, client, fetch: iris(null), bridgeMintWaitMs: 0 });
     await expect(provider.transfer({ ...TRANSFER, token: "EURC" })).rejects.toThrow(/Only USDC/);
     expect(executions).toEqual([]);
   });
@@ -147,7 +147,7 @@ describe("LiveProvider: a payee on another chain", () => {
     raw.getTransaction.mockImplementation((async ({ id }: { id: string }) => ({
       data: { transaction: { id, state: "FAILED", errorReason: "INSUFFICIENT_TOKEN", blockchain: "ARC-TESTNET", createDate: "2026-10-01T00:00:00Z" } },
     })) as never);
-    const provider = new LiveProvider(CHAIN, { client, fetch: iris(null), bridgeMintWaitMs: 0 });
+    const provider = new LiveProvider(CHAIN, { network: ARC_TESTNET, client, fetch: iris(null), bridgeMintWaitMs: 0 });
     const result = await provider.transfer(TRANSFER);
     expect(executions).toHaveLength(1);
     expect(result).toMatchObject({ status: "failed", providerTxId: "cctp-approve:approve-tx" });
@@ -155,7 +155,7 @@ describe("LiveProvider: a payee on another chain", () => {
 
   it("sends nothing when the fee read now is above the most this payment may pay (review I4)", async () => {
     const { client, executions } = circle();
-    const provider = new LiveProvider(CHAIN, { client, fetch: iris(null), bridgeMintWaitMs: 0 });
+    const provider = new LiveProvider(CHAIN, { network: ARC_TESTNET, client, fetch: iris(null), bridgeMintWaitMs: 0 });
     await expect(provider.transfer({ ...TRANSFER, maxBridgeFeeUsdc: 0.05 })).rejects.toThrow(/above the 0.05 USDC/);
     expect(executions).toEqual([]);
   });
@@ -165,7 +165,7 @@ describe("LiveProvider: a payee on another chain", () => {
     raw.getTransaction.mockImplementation((async ({ id }: { id: string }) => ({
       data: { transaction: { id, state: "SENT", blockchain: "ARC-TESTNET", createDate: "2026-10-01T00:00:00Z" } },
     })) as never);
-    const provider = new LiveProvider(CHAIN, { client, fetch: iris(null), bridgeMintWaitMs: 0 });
+    const provider = new LiveProvider(CHAIN, { network: ARC_TESTNET, client, fetch: iris(null), bridgeMintWaitMs: 0 });
     await expect(provider.transfer(TRANSFER)).rejects.toThrow(/nothing was burned/);
     expect(executions.map((call) => call.abiFunctionSignature)).toEqual(["approve(address,uint256)"]);
   });
@@ -179,7 +179,7 @@ describe("LiveProvider: a payee on another chain", () => {
           : { id, state: "COMPLETE", txHash: "0xapprove", blockchain: "ARC-TESTNET", createDate: "2026-10-01T00:00:00Z" },
       },
     })) as never);
-    const result = await new LiveProvider(CHAIN, { client, fetch: iris(null), bridgeMintWaitMs: 0 }).transfer(TRANSFER);
+    const result = await new LiveProvider(CHAIN, { network: ARC_TESTNET, client, fetch: iris(null), bridgeMintWaitMs: 0 }).transfer(TRANSFER);
     expect(result).toMatchObject({ status: "failed", providerTxId: "cctp:burn-tx", failureReason: "FAILED_ON_CHAIN" });
   });
 
@@ -188,7 +188,7 @@ describe("LiveProvider: a payee on another chain", () => {
     raw.getTransaction.mockImplementation((async ({ id }: { id: string }) => ({
       data: { transaction: { id, state: "FAILED", errorReason: "INSUFFICIENT_TOKEN", blockchain: "ARC-TESTNET", createDate: "2026-10-01T00:00:00Z" } },
     })) as never);
-    const result = await new LiveProvider(CHAIN, { client, fetch: iris(null), bridgeMintWaitMs: 0 }).reconcileTransfer("cctp-approve:approve-tx");
+    const result = await new LiveProvider(CHAIN, { network: ARC_TESTNET, client, fetch: iris(null), bridgeMintWaitMs: 0 }).reconcileTransfer("cctp-approve:approve-tx");
     expect(result).toMatchObject({ status: "failed", providerTxId: "cctp-approve:approve-tx" });
     expect(executions).toEqual([]);
   });
@@ -199,16 +199,16 @@ describe("LiveProvider: a payee on another chain", () => {
   });
 
   it("refuses a simulated EURC bridge too: only USDC crosses (review M11)", async () => {
-    const provider = new SimulateProvider();
+    const provider = new SimulateProvider(ARC_TESTNET);
     vi.spyOn(provider as unknown as { account: (id: string) => Promise<unknown> }, "account").mockResolvedValue({ id: "account-1", chain: "ARC-TESTNET", token: "USDC", balance: "100" });
     await expect(provider.transfer({ ...TRANSFER, token: "EURC" })).rejects.toThrow(/Only USDC/);
   });
 
   it("reconciles a bridge by its burn and the mint Iris reports, and sends nothing", async () => {
     const { client, executions } = circle();
-    const pending = await new LiveProvider(CHAIN, { client, fetch: iris(null), bridgeMintWaitMs: 0 }).reconcileTransfer("cctp:burn-tx");
+    const pending = await new LiveProvider(CHAIN, { network: ARC_TESTNET, client, fetch: iris(null), bridgeMintWaitMs: 0 }).reconcileTransfer("cctp:burn-tx");
     expect(pending).toMatchObject({ status: "pending", txHash: BURN_HASH, mintTxHash: null });
-    const done = await new LiveProvider(CHAIN, { client, fetch: iris("0xmint"), bridgeMintWaitMs: 0 }).reconcileTransfer("cctp:burn-tx");
+    const done = await new LiveProvider(CHAIN, { network: ARC_TESTNET, client, fetch: iris("0xmint"), bridgeMintWaitMs: 0 }).reconcileTransfer("cctp:burn-tx");
     expect(done).toMatchObject({ status: "confirmed", providerTxId: "cctp:burn-tx", txHash: BURN_HASH, mintTxHash: "0xmint" });
     expect(executions).toEqual([]);
   });
@@ -216,7 +216,7 @@ describe("LiveProvider: a payee on another chain", () => {
 
 describe("SimulateProvider: a payee on another chain (X10)", () => {
   it("confirms a simulated bridge at once, with a simulated burn and mint", async () => {
-    const provider = new SimulateProvider();
+    const provider = new SimulateProvider(ARC_TESTNET);
     const account = vi.spyOn(provider as unknown as { account: (id: string) => Promise<unknown> }, "account");
     account.mockResolvedValue({ id: "account-1", chain: "ARC-TESTNET", token: "USDC", balance: "100" });
     const addBalance = vi

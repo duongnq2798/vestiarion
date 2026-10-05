@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LiveProvider, type LiveProviderClient } from "@/lib/circle/liveProvider";
 import type { ChainConfig } from "@/lib/config";
+import { ARC_TESTNET } from "@/lib/network";
 
 vi.mock("server-only", () => ({}));
 
@@ -53,7 +54,7 @@ function provider(listTransactions: ReturnType<typeof vi.fn>) {
     getWalletTokenBalance: vi.fn().mockResolvedValue(TOKENS),
     listTransactions,
   } as unknown as LiveProviderClient;
-  return new LiveProvider(CHAIN, { client });
+  return new LiveProvider(CHAIN, { network: ARC_TESTNET, client });
 }
 
 beforeEach(() => {
