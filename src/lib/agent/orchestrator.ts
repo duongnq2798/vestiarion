@@ -3489,9 +3489,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
       // left the treasury when a person locked it.
       const escrowed = ["funded", "funding"].includes(String((milestone as { escrow_state?: string | null }).escrow_state ?? ""));
       onChainCheck =
-        highRisk || unscreened || overLimit || newPayeeHeld || escrowed
-          ? null
-          : await onChainLimit.check({ sourceType: "milestone", sourceId: milestone.id, to: contractor.address, amount });
+        highRisk || unscreened || overLimit || newPayeeHeld || escrowed ? null : await onChainLimit.check({ sourceType: "milestone", sourceId: milestone.id, to: contractor.address, amount });
       const onChainHold = onChainLimitHold(onChainCheck, reasoning);
       if (highRisk || unscreened || overLimit) {
         guardrailBlocked = true;
