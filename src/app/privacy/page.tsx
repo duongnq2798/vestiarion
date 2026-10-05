@@ -213,6 +213,10 @@ export default function PrivacyPage() {
           <li>
             <strong>Google Analytics</strong> receives page views, as described below.
           </li>
+          <li>
+            <strong>Product Hunt</strong> serves the badge on the home page, so your browser loads that image from Product Hunt, which sees your IP
+            address and browser like any site an image comes from. Nothing else is sent to it.
+          </li>
         </ul>
       </LegalSection>
 

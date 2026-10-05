@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/components/ui/cn";
 import { Eyebrow } from "@/components/ui/Eyebrow";
-import { GITHUB_URL, ISSUES_URL, LICENSE_URL, X_URL } from "@/lib/site-links";
+import { GITHUB_URL, ISSUES_URL, LICENSE_URL, PRODUCT_HUNT_URL, X_URL } from "@/lib/site-links";
 import { BrandMark } from "./Brand";
 import { SiteMenu } from "./SiteMenu";
 
@@ -133,6 +133,7 @@ export const FOOTER_COLUMNS: ReadonlyArray<{ title: string; links: readonly Foot
       { href: "/docs/guides/first-payment", label: "First payment guide" },
       { href: ISSUES_URL, label: "Support" },
       { href: X_URL, label: "Updates on X" },
+      { href: PRODUCT_HUNT_URL, label: "Product Hunt" },
     ],
   },
   {

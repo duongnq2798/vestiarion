@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { FinalCta } from "@/components/landing/FinalCta";
 import { Hero } from "@/components/landing/Hero";
 import { TooltipProvider } from "@/components/ui/Tooltip";
+import { PRODUCT_HUNT_BADGE } from "@/lib/site-links";
 
 /**
  * The landing page's promise, as the server renders it (hosted wallets H8).
@@ -38,6 +39,18 @@ describe("the landing hero", () => {
   it.each([true, false])("never talks the product down (hosted: %s)", (hostedAvailable) => {
     const words = hero(hostedAvailable);
     for (const phrase of DISCLAIMERS) expect(words).not.toMatch(phrase);
+  });
+
+  it("shows Product Hunt's badge, opening Vestiarion's page there in a new tab", () => {
+    const markup = renderToStaticMarkup(<TooltipProvider><Hero provenance={[]} head={[]} hostedAvailable /></TooltipProvider>).replace(/&amp;/g, "&");
+    const badge = [...markup.matchAll(/<a\b([^>]*)>\s*<img\b([^>]*)>/g)].find((match) => match[1].includes(`href="${PRODUCT_HUNT_BADGE.href}"`));
+    expect(badge, "a link holding the badge image").toBeDefined();
+    expect(badge?.[1]).toContain('target="_blank"');
+    expect(badge?.[1]).toContain('rel="noopener noreferrer"');
+    expect(badge?.[2]).toContain(`src="${PRODUCT_HUNT_BADGE.src}"`);
+    expect(badge?.[2]).toContain(`alt="${PRODUCT_HUNT_BADGE.alt}"`);
+    expect(badge?.[2]).toContain('width="250"');
+    expect(badge?.[2]).toContain('height="54"');
   });
 });
 
