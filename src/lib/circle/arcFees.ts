@@ -96,7 +96,10 @@ export function rpcUrlFor(network: NetworkProfile, override: string | undefined)
 
 /** `rpcUrlFor` with the running configuration's ARC_RPC_URL. */
 export function networkRpcUrl(network: NetworkProfile): string {
-  return rpcUrlFor(network, currentConfig().chain.arcRpcUrl);
+  const chain = currentConfig().chain;
+  // ARC_MAINNET_RPC_URL replaces Arc mainnet's, as ARC_RPC_URL does Arc testnet's (wallet treasury W13).
+  if (network.id === "arc-mainnet") return chain.arcMainnetRpcUrl ?? network.rpcUrl;
+  return rpcUrlFor(network, chain.arcRpcUrl);
 }
 
 /**

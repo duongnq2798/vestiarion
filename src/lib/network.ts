@@ -99,6 +99,11 @@ export interface NetworkProfile {
    */
   goLiveOpen: boolean;
   /**
+   * Whether a workspace may pay from a wallet its owner holds, through its spending limit contract (wallet treasury W2):
+   * Arc mainnet for now. Arc testnet's reserve, escrow, Gateway and swap would each need to tell such a treasury apart.
+   */
+  walletTreasury: boolean;
+  /**
    * Where people get this network's test tokens: Circle's faucet on Arc testnet, none on Arc mainnet, where USDC is real
    * (phase 2c C2). Copy that would send someone to a faucet reads this, so a mainnet workspace is never sent to one.
    */
@@ -179,6 +184,7 @@ export const ARC_TESTNET = {
   spendingLimitContract: true,
   usdcIsNative: true,
   goLiveOpen: true,
+  walletTreasury: false,
   faucet: "https://faucet.circle.com",
   stuckAfterMinutes: 15,
 } as const satisfies NetworkProfile;
@@ -219,6 +225,7 @@ export const ARC_MAINNET = {
   spendingLimitContract: false,
   usdcIsNative: true,
   goLiveOpen: true,
+  walletTreasury: true,
   faucet: null,
   stuckAfterMinutes: 15,
 } as const satisfies NetworkProfile;

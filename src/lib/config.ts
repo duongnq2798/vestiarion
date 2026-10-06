@@ -23,6 +23,8 @@
  * something does need to say what is configured.
  */
 
+import type { NetworkProfile } from "./network";
+
 /** Anything shaped like an environment: process.env, a .env parse, a test fixture. */
 export type EnvLike = Record<string, string | undefined>;
 
@@ -63,6 +65,17 @@ export interface ChainConfig {
    */
   hostedCircleApiKey?: string;
   hostedCircleEntitySecret?: string;
+  /**
+   * Vestiarion's own Circle account on Arc mainnet, which holds only agent wallets (wallet treasury W4):
+   * MAINNET_AGENT_CIRCLE_API_KEY, a production key, and MAINNET_AGENT_CIRCLE_ENTITY_SECRET. `orgConfig` gives it to
+   * a workspace only when that workspace's own row says `wallet_host = 'external'`, as it does the hosted pair.
+   */
+  mainnetAgentCircleApiKey?: string;
+  mainnetAgentCircleEntitySecret?: string;
+  /** Whether this deployment can offer a wallet treasury on Arc mainnet: set only by `orgConfig`, a boolean only. */
+  walletTreasuryAvailable?: boolean;
+  /** Replaces the public Arc mainnet RPC for the server's reads (ARC_MAINNET_RPC_URL), as ARC_RPC_URL does Arc testnet's. */
+  arcMainnetRpcUrl?: string;
   /**
    * Whether this deployment has the hosted pair, so the hosted choice can be
    * offered. Set only by `orgConfig`: an organization's configuration never
@@ -285,6 +298,9 @@ export function configFromEnv(env: EnvLike = process.env): VestiarionConfig {
       arcRpcUrl: trimmed(env.ARC_RPC_URL),
       hostedCircleApiKey: trimmed(env.HOSTED_CIRCLE_API_KEY),
       hostedCircleEntitySecret: trimmed(env.HOSTED_CIRCLE_ENTITY_SECRET),
+      mainnetAgentCircleApiKey: trimmed(env.MAINNET_AGENT_CIRCLE_API_KEY),
+      mainnetAgentCircleEntitySecret: trimmed(env.MAINNET_AGENT_CIRCLE_ENTITY_SECRET),
+      arcMainnetRpcUrl: trimmed(env.ARC_MAINNET_RPC_URL),
     },
     llm,
     compliance: {
@@ -338,6 +354,18 @@ export function configFromEnv(env: EnvLike = process.env): VestiarionConfig {
 export function hostedWalletsAvailable(config: VestiarionConfig): boolean {
   const { hostedCircleApiKey, hostedCircleEntitySecret, hostedAvailable } = config.chain;
   return Boolean(hostedAvailable || (hostedCircleApiKey && hostedCircleEntitySecret));
+}
+
+/**
+ * Whether a workspace on `network` may pay from its owner's own wallet (wallet treasury W2, W4): its profile allows it,
+ * and this deployment holds Vestiarion's agent account there, a production key with its secret. An organization's
+ * configuration never carries that pair, only `walletTreasuryAvailable`.
+ */
+export function walletTreasuryAvailable(config: VestiarionConfig, network: NetworkProfile): boolean {
+  if (!network.walletTreasury) return false;
+  if (config.chain.walletTreasuryAvailable !== undefined) return config.chain.walletTreasuryAvailable && network.id === "arc-mainnet";
+  const { mainnetAgentCircleApiKey: key, mainnetAgentCircleEntitySecret: secret } = config.chain;
+  return network.id === "arc-mainnet" && Boolean(key?.startsWith(network.circleKeyPrefix) && secret);
 }
 
 export function describeConfig(config: VestiarionConfig): Record<string, unknown> {
