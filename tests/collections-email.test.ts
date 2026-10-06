@@ -12,6 +12,7 @@ const base = {
   dueOn: "Oct 10, 2026",
   payUrl: "https://www.vestiarion.xyz/pay/vxr_abc",
   origin: "https://www.vestiarion.xyz",
+  network: "arc-testnet" as const,
 };
 
 describe("the reminder email", () => {
@@ -30,6 +31,15 @@ describe("the reminder email", () => {
     const final = receivableReminderEmail({ ...base, daysFromDue: 10, tone: "final" });
     expect(final.subject).toBe("Final reminder: 12.50 USDC to Mai Studio, due Oct 10, 2026");
     expect(final.text).toContain("This is the last reminder Vestiarion sends for it. After this, Mai Studio follows up with you directly.");
+  });
+
+  it("tells the client to pay on the workspace's network: Arc mainnet for a workspace there (mainnet copy C1)", () => {
+    const email = receivableReminderEmail({ ...base, network: "arc-mainnet", daysFromDue: 0, tone: "friendly" });
+    for (const part of [email.text, email.html]) {
+      expect(part).toContain("Pay it on Arc mainnet from any wallet");
+      expect(part).toContain("Pay on Arc mainnet");
+      expect(part).not.toContain("Arc testnet");
+    }
   });
 
   it("carries the pay link, says who asked for it, and escapes what the workspace typed", () => {

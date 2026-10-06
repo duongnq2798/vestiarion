@@ -84,8 +84,8 @@ function model(answer?: Record<string, unknown>) {
 }
 
 const sendMock = vi.fn<(message: EmailMessage) => Promise<SendResult>>(async () => ({ sent: true, id: "email-1" }));
-const run = (client: ReturnType<typeof fakeSupabase>, over: { now?: number } = {}) =>
-  runWith(orgTestContext({ config, client: client.client, orgId: ORG }), () =>
+const run = (client: ReturnType<typeof fakeSupabase>, over: { now?: number; network?: "arc-testnet" | "arc-mainnet" } = {}) =>
+  runWith(orgTestContext({ config: { ...config, network: over.network ?? config.network }, client: client.client, orgId: ORG }), () =>
     sendReceivableReminders(db(), { now: over.now ?? NOW, send: sendMock, origin: "https://www.vestiarion.xyz", keys: KEYS })
   );
 
@@ -123,6 +123,13 @@ describe("a reminder the agent sends", () => {
       })
     );
     expect(lines).toEqual([{ domain: "ar", message: "Reminded Acme by email: 12.50 USDC due Oct 10, 2026 (friendly)" }]);
+  });
+
+  it("tells the client to pay on the workspace's network: Arc mainnet for a workspace there (mainnet copy C1)", async () => {
+    await run(world(), { network: "arc-mainnet" });
+    const email = sendMock.mock.calls[0][0];
+    expect(email.text).toContain("Pay on Arc mainnet:");
+    expect(email.text).not.toContain("Arc testnet");
   });
 
   it("goes out no firmer than code allows, and the entry says what the model chose (R5)", async () => {

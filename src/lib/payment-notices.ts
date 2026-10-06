@@ -153,6 +153,7 @@ export async function sendPaymentNotices(
       // The explorer of the network the payment was made on, read from the record, never the scope (network threading P1).
       txUrl: txUrl(networkOf(intent.network), intent.tx_hash as string),
       origin,
+      network: networkOf(intent.network),
     });
     let result: SendResult;
     try {

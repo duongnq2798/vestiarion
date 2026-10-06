@@ -250,8 +250,23 @@ describe("the payee's page", () => {
     expect(page).toContain("From Acme");
     expect(page).toContain("For 10 social posts");
     expect(page).toContain("Paid on Oct 2, 2026, 09:05 UTC");
-    expect(page).toContain("View on Arcscan");
+    expect(page).toContain("View the transaction");
+    expect(page).not.toContain("Arcscan");
     expect(markup).toContain(`href="https://explorer.testnet.arc.io/tx/0x${"ab".repeat(32)}"`);
+  });
+
+  it("paid on Arc mainnet: names it, footer included, and links its explorer (mainnet copy C1, C6)", async () => {
+    lib.payeeLinkStatus.mockResolvedValue(
+      status({
+        chain: "ARC", linkState: "used", address: ADDRESS, addressConfirmed: true,
+        payments: [{ kind: "milestone", title: "10 social posts", amount: 25, currency: "USDC", status: "paid", txRef: `0x${"ab".repeat(32)}`, settledAt: "2026-10-02T09:05:00Z", scheduledFor: null }],
+      })
+    );
+    const markup = await render();
+    expect(text(markup)).toContain("A payment on Arc mainnet is final within seconds");
+    expect(text(markup)).toContain("Signed decisions on Arc mainnet");
+    expect(text(markup)).not.toContain("Arc testnet");
+    expect(markup).toContain(`href="https://explorer.arc.io/tx/0x${"ab".repeat(32)}"`);
   });
 
   it("says the same neutral thing for any unusable link, naming no one", async () => {

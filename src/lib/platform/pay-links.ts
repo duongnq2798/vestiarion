@@ -8,6 +8,8 @@ import { currentOrgId } from "../context";
 import { db, platformDb, unwrap } from "../dal";
 import { withOrg } from "../dal/scope";
 import { appendLedgerEntry } from "../ledger";
+import type { Network } from "../network";
+import { networkOfChain } from "../payee-chains";
 import { publicOrigin } from "../public-origin";
 import { takePayCheckToken } from "../rate-limit";
 import { decryptSecret, encryptSecret, masterKeysFromEnv, type MasterKey, type SecretEnvelope } from "../secrets";
@@ -251,15 +253,23 @@ export async function previewPayLink(token: string): Promise<PayLinkPreview | nu
   return result.data == null ? null : previewSchema.parse(result.data);
 }
 
+/** What "I have paid" found, and the link's network to name in the answer: null only for a link that is not one. */
+export interface PayLinkCheck {
+  outcome: "received" | "not_yet" | "wait" | "invalid";
+  network: Network | null;
+}
+
 /**
  * "I have paid": reads the workspace's inbound transfers now and says whether the receivable is
  * received (R5). `wait` when this link was checked too often just now; `invalid` for a dead link.
  */
-export async function checkPayLink(token: string, now: number = Date.now()): Promise<"received" | "not_yet" | "wait" | "invalid"> {
+export async function checkPayLink(token: string, now: number = Date.now()): Promise<PayLinkCheck> {
   const before = await previewPayLink(token);
-  if (!before) return "invalid";
-  if (before.status === "received") return "received";
-  if (!takePayCheckToken(before.invoiceId, now)) return "wait";
+  if (!before) return { outcome: "invalid", network: null };
+  // The link's own network, from its chain: the answer names it (mainnet copy C1).
+  const network = networkOfChain(before.chain);
+  if (before.status === "received") return { outcome: "received", network };
+  if (!takePayCheckToken(before.invoiceId, now)) return { outcome: "wait", network };
 
   await withOrg(before.orgId, async () => {
     const operating = (unwrap(await db().from("accounts").select("id").eq("kind", "operating").limit(1)) as Array<{ id: string }>)[0];
@@ -267,8 +277,8 @@ export async function checkPayLink(token: string, now: number = Date.now()): Pro
   });
 
   const after = await previewPayLink(token);
-  if (after?.status !== "received") return "not_yet";
+  if (after?.status !== "received") return { outcome: "not_yet", network };
   // Cash arrived: the agent decides with it within a minute rather than at the next scheduled cycle.
   if (after.createdBy) runCycleSoon({ orgId: after.orgId, userId: after.createdBy, sandbox: false, kind: "payment_received" });
-  return "received";
+  return { outcome: "received", network };
 }

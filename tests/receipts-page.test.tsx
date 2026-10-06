@@ -61,6 +61,12 @@ describe("a receipt", () => {
     expect(markup).toContain("A transfer on Arc testnet");
   });
 
+  it("says a direct payment on Arc mainnet is a transfer there (mainnet copy C1)", () => {
+    const markup = text(renderToStaticMarkup(<ReceiptView view={view({ facts: { ...view().facts, chain: "ARC", route: "direct", feeUsdc: undefined } })} />));
+    expect(markup).toContain("A transfer on Arc mainnet");
+    expect(markup).not.toContain("Arc testnet");
+  });
+
   it("gives each check its result, and says all three pass", () => {
     const markup = text(renderToStaticMarkup(<ReceiptView view={view()} />));
     expect(markup).toContain("All three checks pass");

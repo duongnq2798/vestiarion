@@ -143,6 +143,20 @@ describe("sending payment notices", () => {
     expect(entry.p_detail).toEqual({ invoiceId: INVOICE, counterpartyId: VENDOR, to: "li***@example.com", amount: 12.5, token: "USDC", txHash: TX });
   });
 
+  it("names the network the payment was made on: Arc mainnet for one made there (mainnet copy C1)", async () => {
+    const client = fake({ intents: [intent({ network: "arc-mainnet", chain: "ARC" })] });
+    const send = vi.fn().mockResolvedValue({ sent: true, id: "re_1" });
+
+    await run(client, () => sendPaymentNotices({ now: NOW, send, origin: "https://www.vestiarion.xyz" }));
+
+    const message = send.mock.calls[0][0];
+    for (const part of [message.text, message.html]) {
+      expect(part).toContain("Northstar paid you 12.50 USDC on Arc mainnet");
+      expect(part).not.toContain("Arc testnet");
+    }
+    expect(message.text).toContain(`https://explorer.arc.io/tx/${TX}`);
+  });
+
   it("names a milestone by its title, under the contractor's domain", async () => {
     const client = fake({ intents: [intent({ source_type: "milestone", source_id: MILESTONE, amount: "1" })] });
     const send = vi.fn().mockResolvedValue({ sent: true, id: "re_2" });
@@ -270,6 +284,7 @@ describe("the payment notice email", () => {
       paidAt: "Oct 3, 2026, 03:27 UTC",
       txUrl: `https://explorer.testnet.arc.io/tx/${TX}`,
       origin: "https://www.vestiarion.xyz",
+      network: "arc-testnet",
     });
     expect(email.subject).toBe("Acme <Ops> paid you 12.50 USDC");
     expect(email.html).toContain("Acme &lt;Ops&gt;");

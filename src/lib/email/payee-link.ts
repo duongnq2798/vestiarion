@@ -1,3 +1,4 @@
+import { networkProfile, type Network } from "../network";
 import { escapeHtml } from "./html";
 import { actionEmailHtml } from "./layout";
 
@@ -15,11 +16,14 @@ export function payeeLinkEmail(input: {
   link: string;
   expiresAt: Date;
   origin: string;
+  /** The paying workspace's network, named in the email (mainnet copy C1). */
+  network: Network;
 }): { subject: string; html: string; text: string } {
   const { orgName, payeeName, work, amount, link, expiresAt, origin } = input;
+  const { label } = networkProfile(input.network);
   const expiry = `The link takes your address once, before ${expiresAt.toISOString().slice(0, 10)} (UTC). After that, the same link shows your payment's status, step by step, for 30 days.`;
   const subject = `${orgName} wants to pay you ${amount} USDC`;
-  const lead = `${orgName} wants to pay you ${amount} USDC on Arc testnet for: ${work}.`;
+  const lead = `${orgName} wants to pay you ${amount} USDC on ${label} for: ${work}.`;
   const how = "Add the address you want to be paid at. Any EVM wallet address works, such as one from MetaMask.";
 
   const html = actionEmailHtml({
@@ -28,7 +32,7 @@ export function payeeLinkEmail(input: {
     eyebrow: "Payment for your work",
     heading: `Hi ${payeeName}, you have a payment waiting`,
     paragraphsHtml: [
-      `<strong style="color:#18211c;">${escapeHtml(orgName)}</strong> wants to pay you <strong style="color:#18211c;">${escapeHtml(amount)} USDC</strong> on Arc testnet for: ${escapeHtml(work)}.`,
+      `<strong style="color:#18211c;">${escapeHtml(orgName)}</strong> wants to pay you <strong style="color:#18211c;">${escapeHtml(amount)} USDC</strong> on ${escapeHtml(label)} for: ${escapeHtml(work)}.`,
       escapeHtml(how),
     ],
     button: { label: "Add my address", link },

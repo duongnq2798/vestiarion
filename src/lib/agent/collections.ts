@@ -11,6 +11,7 @@ import { maskEmail } from "../payment-notices";
 import { payLinkToken, payLinkUrl } from "../platform/pay-links";
 import { REASONING_RULE, REASONING_SHAPE } from "../reasoning-copy";
 import type { MasterKey } from "../secrets";
+import { workspaceNetwork } from "../workspace-network";
 import { decide } from "./decide";
 import type { CycleLogLine } from "./orchestrator";
 import { agentPaused } from "./pause";
@@ -232,6 +233,7 @@ export async function sendReceivableReminders(
       tone: bounded.tone,
       payUrl: payLinkUrl(token),
       origin,
+      network: workspaceNetwork().id,
     });
     let result: SendResult;
     try {

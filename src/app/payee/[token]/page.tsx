@@ -3,6 +3,7 @@ import { CloudOff, Unlink } from "lucide-react";
 import { PayeeJourney } from "@/components/payee/PayeeJourney";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
+import { homeChain, networkOfChain } from "@/lib/payee-chains";
 import { payeeLinkStatus } from "@/lib/platform/payee-links";
 import type { PayeeLinkStatus } from "@/lib/payee-journey";
 
@@ -49,7 +50,7 @@ export default async function PayeePage({ params }: PayeePageProps) {
           )}
         </div>
       </main>
-      <SiteFooter compact />
+      <SiteFooter compact networkLabel={status ? homeChain(networkOfChain(status.chain)).label : undefined} />
     </div>
   );
 }

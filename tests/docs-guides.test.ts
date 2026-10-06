@@ -396,7 +396,8 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["Remind the client by email", PAY_LINK_CONTROL],
     ["Add billing email", PAY_LINK_CONTROL],
     ["Turn off reminders", PAY_LINK_CONTROL],
-    ["Pay on Arc testnet", "src/lib/email/receivable-reminder.ts"],
+    // The button names the workspace's network, "Pay on Arc testnet" there (mainnet copy C1).
+    ["Pay on", "src/lib/email/receivable-reminder.ts"],
     ["ar_reminder_sent", "src/lib/agent/collections.ts"],
     ["ar_reminder_deferred", "src/lib/agent/collections.ts"],
     ["ar_reminders_on", "src/lib/platform/pay-links.ts"],
@@ -474,7 +475,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["Edit address", PAYEE_FORM],
     ["Address sent", PAYEE_JOURNEY],
     ["Your address is confirmed", PAYEE_JOURNEY],
-    ["View on Arcscan", PAYEE_JOURNEY],
+    ["View the transaction", PAYEE_JOURNEY],
     ["to approve the work", PAYEE_STATES],
     ["Being prepared", PAYEE_STATES],
     ["Scheduled for", PAYEE_STATES],
