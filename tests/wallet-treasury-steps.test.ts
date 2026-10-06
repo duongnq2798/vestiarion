@@ -274,3 +274,55 @@ describe("WalletTreasuryError", () => {
   });
 });
 
+
+describe("recording the same transaction twice (Review Focus 1)", () => {
+  const OTHER_APPROVE_TX = `0x${"a2".repeat(32)}` as Hex;
+
+  it("records a deployment once: the same hash again answers verified, and writes and appends nothing", async () => {
+    const state = world({ ...chosen, contract: agentRow() });
+    const { inScope } = database(state);
+    const onChain = chain({ receipts: { [DEPLOY_TX]: deployedAt(CONTRACT) }, code: { [CONTRACT.toLowerCase()]: ourCode } });
+    expect(await inScope(() => recordDeployment({ orgId: ORG, actorId: ACTOR, txHash: DEPLOY_TX }, { chain: onChain }))).toBe("verified");
+    const recorded = state.ledger.length;
+    expect(recorded).toBeGreaterThan(0);
+    // A lost answer, a second tab or a reload asks again, in any case.
+    const shouted = `0x${DEPLOY_TX.slice(2).toUpperCase()}`;
+    expect(await inScope(() => recordDeployment({ orgId: ORG, actorId: ACTOR, txHash: shouted }, { chain: onChain }))).toBe("verified");
+    expect(state.ledger).toHaveLength(recorded);
+    // Once the contract is approved, asking about the deployment that was recorded is still an answer, not a refusal.
+    state.contract = { ...state.contract!, approve_tx_hash: APPROVE_TX, enforced: true };
+    expect(await inScope(() => recordDeployment({ orgId: ORG, actorId: ACTOR, txHash: DEPLOY_TX }, { chain: onChain }))).toBe("verified");
+    expect(state.ledger).toHaveLength(recorded);
+  });
+
+  it("records an approval once, and refuses another for a contract already approved", async () => {
+    const state = world({ ...chosen, contract: agentRow({ address: CONTRACT, deploy_tx_hash: DEPLOY_TX }) });
+    const { inScope } = database(state);
+    const onChain = chain({ receipts: { [APPROVE_TX]: approvedOnUsdc, [OTHER_APPROVE_TX]: approvedOnUsdc }, allowance: 2n ** 256n - 1n });
+    expect(await inScope(() => recordApproval({ orgId: ORG, actorId: ACTOR, txHash: APPROVE_TX }, { chain: onChain }))).toBe("verified");
+    expect(await inScope(() => recordApproval({ orgId: ORG, actorId: ACTOR, txHash: APPROVE_TX }, { chain: onChain }))).toBe("verified");
+    await expect(inScope(() => recordApproval({ orgId: ORG, actorId: ACTOR, txHash: OTHER_APPROVE_TX }, { chain: onChain }))).rejects.toMatchObject({
+      code: "wrong_step",
+    });
+    expect(state.ledger.map((entry) => entry.action)).toEqual(["spending_limit_enforced"]);
+    expect(state.contract).toMatchObject({ approve_tx_hash: APPROVE_TX });
+  });
+
+  it("records nothing when another approval was recorded while this one was being read", async () => {
+    const state = world({ ...chosen, contract: agentRow({ address: CONTRACT, deploy_tx_hash: DEPLOY_TX }) });
+    const { inScope } = database(state);
+    const onChain: TreasuryChain = {
+      ...chain({ receipts: { [APPROVE_TX]: approvedOnUsdc } }),
+      allowance: async () => {
+        // Another tab records its approval meanwhile.
+        state.contract = { ...state.contract!, approve_tx_hash: OTHER_APPROVE_TX, enforced: true };
+        return 2n ** 256n - 1n;
+      },
+    };
+    await expect(inScope(() => recordApproval({ orgId: ORG, actorId: ACTOR, txHash: APPROVE_TX }, { chain: onChain }))).rejects.toMatchObject({
+      code: "wrong_step",
+    });
+    expect(state.ledger).toEqual([]);
+    expect(state.contract).toMatchObject({ approve_tx_hash: OTHER_APPROVE_TX });
+  });
+});

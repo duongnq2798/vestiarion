@@ -389,6 +389,8 @@ export async function recordDeployment(input: { orgId: string; actorId: string; 
   const hash = txHash(input.txHash);
   return inScopeOf(input.orgId, input.actorId, async () => {
     const { wallet, row, network } = await setup({ agent: true });
+    // The deployment already recorded, asked about again (a lost answer, a second tab, a reload): answered, not recorded twice.
+    if (row?.address && row.deploy_tx_hash === hash) return "verified";
     if (!row || row.approve_tx_hash) throw new WalletTreasuryError("wrong_step", "The contract is approved already; it cannot be replaced.");
     const chain = deps.chain ?? treasuryChain(network);
     const check = await readOrRefuse(() => verifyDeployment(chain, { txHash: hash, usdc: network.tokens.USDC, treasury: wallet, agent: row.agent_address as string }));
@@ -442,13 +444,25 @@ export async function recordApproval(input: { orgId: string; actorId: string; tx
   const hash = txHash(input.txHash);
   return inScopeOf(input.orgId, input.actorId, async () => {
     const { wallet, row, network } = await setup({ agent: true, contract: true });
+    // The approval already recorded is answered again, never recorded twice; another one is refused (Review Focus 1).
+    if (row?.approve_tx_hash === hash && row.enforced) return "verified";
+    if (row?.approve_tx_hash) throw new WalletTreasuryError("wrong_step", "The contract is approved already.");
     const contract = row?.address as string;
     const chain = deps.chain ?? treasuryChain(network);
     const check = await readOrRefuse(() => verifyApproval(chain, { txHash: hash, usdc: network.tokens.USDC, treasury: wallet, contract, minimumUnits: 1n }));
     if (check.state === "pending") return "pending";
     if (check.state === "refused") throw new WalletTreasuryError("chain_refused", check.reason);
-    const written = await db().from("spending_limit_contracts").update({ approve_tx_hash: hash, enforced: true }).eq("id", (row as ContractRow).id).eq("address", contract);
-    if (written.error) throw new Error(written.error.message);
+    // Only while no approval is recorded: one recorded meanwhile, from another tab, wins, and nothing is appended here.
+    const written = unwrap(
+      await db()
+        .from("spending_limit_contracts")
+        .update({ approve_tx_hash: hash, enforced: true })
+        .eq("id", (row as ContractRow).id)
+        .eq("address", contract)
+        .is("approve_tx_hash", null)
+        .select("id")
+    ) as Array<{ id: string }>;
+    if (written.length === 0) throw new WalletTreasuryError("wrong_step", "The contract is approved already.");
     // The contract's figures, which its deployment made the workspace's spending limit.
     const figures = await readOutflowBudget(db());
     await record(input.orgId, input.actorId, {
