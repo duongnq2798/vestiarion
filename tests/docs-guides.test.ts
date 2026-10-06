@@ -159,6 +159,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Get started", CHECKLIST],
   ],
   "guides/go-live": [
+    ["Circle shows it stuck.", "src/lib/agent-activity.ts"],
     ["boundedByCode", "src/lib/agent/orchestrator.ts"],
     ["USYC reserve", "src/components/UsycReservePanel.tsx"],
     ["Turn on", "src/components/UsycReservePanel.tsx"],
@@ -909,6 +910,6 @@ describe("the way into the guides", () => {
   it("is linked from the docs Overview and from the API Quickstart", () => {
     expect(readSource("")).toContain('href="/docs/guides/go-live"');
     expect(readSource("")).toContain('href="/docs/guides/try-it"');
-    expect(readSource("get-started/quickstart")).toContain("Using the app rather than the API? Start with [Go live on Arc testnet](/docs/guides/go-live).");
+    expect(readSource("get-started/quickstart")).toContain("Using the app rather than the API? Start with [Go live](/docs/guides/go-live).");
   });
 });

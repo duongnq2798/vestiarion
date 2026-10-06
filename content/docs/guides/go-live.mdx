@@ -1,4 +1,4 @@
-A workspace starts in sandbox. Going live gives it treasury wallets on Arc testnet, funded with testnet USDC from Circle's faucet, and sets the agent to pay from them on its own schedule. This page takes you through it, from **Settings** to the confirmation.
+A workspace starts in sandbox. Going live gives it treasury wallets on its network and sets the agent to pay from them on its own schedule. On Arc testnet they are funded with testnet USDC from Circle's faucet. On Arc mainnet they hold real USDC, and [On Arc mainnet](#on-arc-mainnet) says what differs there. This page takes you through it, from **Settings** to the confirmation.
 
 Only an **owner** of the workspace can take it live. Everyone else sees the workspace's status in the same place, with the line "An owner can connect Circle and take this workspace live from here."
 
@@ -133,7 +133,8 @@ A deployment can open Arc mainnet to the people on its allowlist, or to everyone
 - **Two people above 100 USDC.** A workspace on Arc mainnet starts with two approvals above 100 USDC, under **Settings > Security**. An owner can raise the figure but not turn it off there. With only one person who can approve payments, nothing above it is paid until the figure is raised or another approver is added.
 - **It never simulates.** It has no sample data and no simulated balance, and nothing moves until an owner takes it live.
 - **Step 1 takes a live key.** Paste a live API key, which starts with `LIVE_API_KEY`, and the entity secret registered for it. They come from your Circle account once it is upgraded to production. A test key is refused there, as a live key is refused on Arc testnet. Hosted wallets do not run on Arc mainnet.
-- **Step 2 creates one wallet.** It is an EOA on Arc mainnet, which pays its own gas in USDC, so the agent keeps 0.10 USDC of it aside for gas.
+- **Step 2 creates one wallet.** It is an EOA on Arc mainnet, which pays its own gas in USDC, so the agent keeps 0.10 USDC of it aside for gas. A milestone release the rest cannot cover is held, and decided again once cash comes in.
+- **A stuck payment holds back the ones after it.** An EOA sends its payments in order, and one whose network fee was too low waits until it is resolved. Vestiarion tells you of a payment that has not confirmed 15 minutes after it was sent, as [Your first payment](/docs/guides/first-payment) describes. When the console says "Circle shows it stuck.", accelerate or cancel that transaction with Circle's API, under your own Circle account. Accelerating sends it again with a higher fee. Once it confirms or is cancelled, the later payments go out.
 - **Step 3 has no faucet.** Send USDC on Arc mainnet to the operating wallet's address. To go live, type `mainnet` in **Type mainnet to confirm**, then confirm **Go live**. From then on the agent's payments, and the ones people approve, move real USDC.
 - **Every page and message names Arc mainnet.** Emails to payees and clients, the pay link, the payee's page, receipts, Slack, Telegram and pull request comments name the workspace's network. The USYC reserve, escrow and Gateway, which Arc mainnet does not have, are not shown.
 - **Each step needs a person Arc mainnet is open to.** Anyone else is told "Arc mainnet is not open to this account yet."
@@ -182,8 +183,8 @@ A failed step shows one of these messages under its button. You can repeat any s
 | Message | What to do |
 | --- | --- |
 | Paste both the API key and the entity secret. | Both fields are required. Paste each value in full. |
-| Circle did not accept this API key. | Check that you copied the whole key, that it is still active in the Circle console, and that it is a testnet key. |
-| This Circle API key is for Arc mainnet (LIVE_API_KEY). This workspace is on Arc testnet: paste a test key (TEST_API_KEY). | Vestiarion runs on Arc testnet. In the Circle console, copy an API key from the testnet side: it starts with `TEST_API_KEY`. |
+| Circle did not accept this API key. | Check that you copied the whole key and that it is still active in the Circle console. It must be for the workspace's network: a test key on Arc testnet, a live key on Arc mainnet. |
+| This Circle API key is for Arc mainnet (LIVE_API_KEY). This workspace is on Arc testnet: paste a test key (TEST_API_KEY). | A workspace on Arc testnet takes a test key. In the Circle console, copy an API key from the testnet side: it starts with `TEST_API_KEY`. |
 | Could not reach Circle; try again. | Circle did not answer in time. Try the step again in a moment. |
 | This workspace's wallets belong to the connected Circle account; use its credentials. | The credentials belong to a different Circle account from the one that holds the wallets. Use that account's API key and entity secret. |
 | Connect Circle first. | Step 1 is not done. Choose the hosted wallet, or connect your Circle account. |
