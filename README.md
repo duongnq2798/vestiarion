@@ -534,9 +534,9 @@ It also starts with two approvals above 100 USDC, which an owner can raise but n
 
 Its three steps take a live Circle key (`LIVE_API_KEY`) and create one EOA wallet on `ARC`. That
 wallet pays its own gas in USDC, so 0.10 USDC is kept aside. Going live needs the word `mainnet`
-typed, and stays closed until the copy that still names Arc testnet moves (`goLiveOpen` in the
-network profile). Until a workspace is live, and whenever the deployment switches Arc mainnet off,
-nothing moves: the stop switch's gates refuse with the reason.
+typed. Every page and message of the workspace names Arc mainnet, from the network profile's label,
+and a panel for a feature Arc mainnet lacks is not drawn. Until a workspace is live, and whenever
+the deployment switches Arc mainnet off, nothing moves: the stop switch's gates refuse with the reason.
 
 Stablecoins are chosen by contract, never by symbol, on both networks. Chats cannot approve a
 mainnet payment. See `docs/superpowers/specs/2026-10-06-mainnet-go-live-design.md`.

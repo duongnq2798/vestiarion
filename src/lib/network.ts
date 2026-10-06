@@ -92,9 +92,10 @@ export interface NetworkProfile {
   /** Whether the chain's native currency is USDC (M7): Arc's is, so Circle's native entry for a wallet is USDC. */
   usdcIsNative: boolean;
   /**
-   * Whether a workspace on this network may go live (final review I3): Arc mainnet's waits for its approval limits
-   * (phase 2b, in) and for the copy that still names Arc testnet (phase 2c), so nothing moves money there before then,
-   * by construction rather than by procedure.
+   * Whether a workspace on this network may go live (final review I3). A network opens once what a workspace there
+   * needs is in, by construction rather than by procedure: Arc mainnet opened with its approval limits (phase 2b) and
+   * the copy that names it (phase 2c, mainnet copy C13). Its other gates stay: the deployment's switch, the allowlist,
+   * the typed word, and the workspace's own Circle account with a live key.
    */
   goLiveOpen: boolean;
   /**
@@ -210,7 +211,7 @@ export const ARC_MAINNET = {
   escrow: false,
   spendingLimitContract: false,
   usdcIsNative: true,
-  goLiveOpen: false,
+  goLiveOpen: true,
   faucet: null,
 } as const satisfies NetworkProfile;
 

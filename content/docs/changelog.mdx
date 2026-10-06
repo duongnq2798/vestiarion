@@ -6,6 +6,7 @@ Changes to the API and webhooks that affect an integration, newest first. Change
 - `provenance.yield` is `unavailable` on a network with no yield reserve. Arc mainnet has none, so a live workspace there answers `payments: "live"` and `yield: "unavailable"`; it used to answer `yield: "simulate"`.
 - An invoice's `txHash` is described as on the workspace's network, not on Arc testnet. Its value does not change.
 - A received payment's `ar_received` entry and a new `pay_link_created` entry name the workspace's network in `summary`. Entries already written stay as they are.
+- A workspace on Arc mainnet can now go live, on a deployment that has Arc mainnet switched on. Its `workspace_went_live` entry carries `detail.network: "arc-mainnet"`, as `org_created` does.
 - The TypeScript SDK 0.3.2 carries the new descriptions. Nothing else changes in `/api/v1`, and no entry changes shape.
 
 ## 2026-10-06: Two approvals from the start on Arc mainnet, and its status said plainly

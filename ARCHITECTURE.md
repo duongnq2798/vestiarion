@@ -351,9 +351,8 @@ phase 1b).
   USDC entries for an Arc wallet; its order is kept. The platform's `CIRCLE_USDC_TOKEN_ID` is Arc testnet's alone.
 - **Receipts** read a native USDC transfer from Arc's system emitter `0xffff…fffE` (EIP-7708) on both networks.
 - **Going live:** each step needs `mayUseMainnet` for the person. A test key is refused on mainnet, naming both
-  networks. Go live needs the word `mainnet` typed, and the profile's `goLiveOpen`: false on Arc mainnet until the
-  copy that still names Arc testnet moves (phase 2c), so nothing moves money there before then ("Going live does not
-  run on Arc mainnet yet").
+  networks. Go live needs the word `mainnet` typed, and the profile's `goLiveOpen`. Arc mainnet's opened with the copy
+  that names it (phase 2c); the check stays, so a network added later goes live only once it is opened by name.
   `workspace_went_live` and `org_created` record the network.
 - **Elsewhere:**
   - Chats refuse a mainnet payment ("approved in Vestiarion").
