@@ -2,6 +2,7 @@ import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import type { RefreshBalanceResult } from "@/app/actions/treasury";
+import type { WalletHost } from "@/lib/config";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -24,9 +25,14 @@ export { StatTile };
  */
 export function balanceTileMode(
   chainMode: "live" | "simulate",
-  accounts: ReadonlyArray<{ kind: string; circle_wallet_id?: string | null }>
+  accounts: ReadonlyArray<{ kind: string; circle_wallet_id?: string | null; address?: string | null }>,
+  walletHost?: WalletHost | null
 ): "sandbox" | "live" {
-  const operatingHasWallet = accounts.some((account) => account.kind === "operating" && !!account.circle_wallet_id);
+  // A workspace paying from its owner's own wallet: its operating account has the wallet's address and no Circle wallet
+  // (wallet treasury W12).
+  const operatingHasWallet = accounts.some(
+    (account) => account.kind === "operating" && (!!account.circle_wallet_id || (walletHost === "external" && !!account.address))
+  );
   return chainMode === "live" && operatingHasWallet ? "live" : "sandbox";
 }
 

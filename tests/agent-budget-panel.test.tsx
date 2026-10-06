@@ -26,7 +26,7 @@ const ENFORCED: OnChainLimitView = {
   reading: { dailyUsdc: 5, weeklyUsdc: 20, spentToday: 1.2, spentThisWeek: 3 },
 };
 
-const render = (props: { view?: AgentBudgetView; canEdit?: boolean; live?: boolean; onChain?: OnChainLimitView | null; network?: "arc-testnet" | "arc-mainnet" }) =>
+const render = (props: { view?: AgentBudgetView; canEdit?: boolean; live?: boolean; onChain?: OnChainLimitView | null; network?: "arc-testnet" | "arc-mainnet"; walletTreasury?: boolean }) =>
   renderToStaticMarkup(
     <AgentBudgetPanel
       network={props.network ?? "arc-testnet"}
@@ -35,6 +35,7 @@ const render = (props: { view?: AgentBudgetView; canEdit?: boolean; live?: boole
       canEdit={props.canEdit ?? true}
       live={props.live ?? true}
       onChain={props.onChain ?? null}
+      walletTreasury={props.walletTreasury}
     />
   );
 
@@ -105,5 +106,15 @@ describe("the spending limit's On Arc section, only where its contract runs (fin
   it("offers it on Arc testnet, as before", () => {
     expect(text(render({ network: "arc-testnet", live: false }))).toContain(ON_ARC_COPY.sandbox);
     expect(text(render({ network: "arc-testnet" }))).toContain(ON_ARC_COPY.explain);
+  });
+});
+
+describe("the spending limit's On Arc section for a workspace paying from its owner's own wallet (wallet treasury W14)", () => {
+  it("shows the wallet's contract and its own count on Arc mainnet, and offers nothing a person here could change", () => {
+    const markup = text(render({ network: "arc-mainnet", onChain: ENFORCED, walletTreasury: true }));
+    expect(markup).toContain(ON_ARC_COPY.wallet);
+    expect(markup).toContain("Paid through it today");
+    expect(markup).not.toContain("Turn off on Arc");
+    expect(markup).not.toContain("Enforce on Arc");
   });
 });

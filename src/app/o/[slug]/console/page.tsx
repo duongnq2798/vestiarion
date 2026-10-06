@@ -41,6 +41,8 @@ import { latestForecast, listAccounts, listCounterparties, listInvoices, listMil
 import { offerSampleData } from "@/lib/sample-data-offer";
 import { workspaceNetwork } from "@/lib/workspace-network";
 import { networkProfile } from "@/lib/network";
+import { currentOrgConfig } from "@/lib/context";
+import { walletTreasuryAvailable } from "@/lib/config";
 
 export const dynamic = "force-dynamic";
 
@@ -90,6 +92,8 @@ export default async function DashboardPage({
     // Modes, not the provider: the page must still render when the
     // organization's Circle credentials cannot be read (R12).
     const modes = chainModes();
+    // A workspace paying from its owner's own wallet (wallet treasury W12): its operating account is that wallet's address.
+    const walletHost = currentOrgConfig().chain.walletHost ?? null;
     const counterpartiesById = new Map(counterparties.map((counterparty) => [counterparty.id, counterparty]));
     const accounts: Account[] = accountsRows.map((account) => ({
       ...account,
@@ -195,6 +199,8 @@ export default async function DashboardPage({
           onchainPayments: dashboardStats.onchainTransfers,
           waitingCount: needsReview,
           network,
+          walletHost,
+          walletTreasuryAvailable: walletTreasuryAvailable(currentOrgConfig(), networkProfile(network)),
         })
       : null;
     // Sample data (sample-data design §1): offered in an empty simulated sandbox, and called out while it is loaded.
@@ -237,10 +243,10 @@ export default async function DashboardPage({
         <div className="mb-8 grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 xl:grid-cols-4">
           <BalanceTile
             accounts={accounts}
-            mode={balanceTileMode(modes.mode, accountsRows)}
+            mode={balanceTileMode(modes.mode, accountsRows, walletHost)}
             orgSlug={slug}
             refreshAction={refreshOnChainBalanceAction}
-            syncedAt={accountsRows.find((account) => account.kind === "operating" && account.circle_wallet_id)?.balance_synced_at ?? null}
+            syncedAt={accountsRows.find((account) => account.kind === "operating" && (account.circle_wallet_id || (walletHost === "external" && account.address)))?.balance_synced_at ?? null}
           />
           {/* The figure; how it is reached, and the 30 days behind it, are the Next 30 days section below. */}
           <StatTile label="Safe to spend today" tone={outlook.safeToSpend < 0 ? "held" : "default"} href="#cash-outlook" sub={outlook.reserve > 0 ? "After everything already owed, the USYC reserve included" : "After everything already owed"}>
@@ -298,6 +304,7 @@ export default async function DashboardPage({
           <aside className="min-w-0 space-y-6 md:grid md:grid-cols-2 md:items-start md:gap-6 md:space-y-0 xl:block xl:space-y-6">
             {budget && (
               <AgentBudgetPanel
+                walletTreasury={walletHost === "external"}
                 network={network}
                 orgSlug={slug}
                 canEdit={can(role, "agent.budget")}

@@ -49,6 +49,8 @@ export const ON_ARC_COPY = {
   needsFigure: "Set a daily or 7-day figure to enforce it on Arc.",
   sandbox: "A live workspace can enforce it on Arc.",
   unreadable: "The contract's figures could not be read just now.",
+  wallet:
+    "Your wallet's contract carries every payment Vestiarion makes from it, and refuses anything past its figures. Only your wallet can change the figures, or stop it.",
   turnOffDescription:
     "The agent's payments are then checked against the limit in code only. The contract stays on Arc, and the operating wallet's approval goes to 0, so it can draw nothing.",
 } as const;
@@ -75,6 +77,7 @@ export function AgentBudgetPanel({
   live = false,
   onChain = null,
   network,
+  walletTreasury = false,
 }: {
   /** The workspace's network: its explorer links what this shows (network threading P6). */
   network: Network;
@@ -85,6 +88,8 @@ export function AgentBudgetPanel({
   live?: boolean;
   /** The limit on Arc; null when it was never set up. */
   onChain?: OnChainLimitView | null;
+  /** The workspace pays from its owner's own wallet, whose contract only that wallet changes (wallet treasury W14). */
+  walletTreasury?: boolean;
 }) {
   const unset = view.dailyUsdc === null && view.weeklyUsdc === null;
   return (
@@ -112,12 +117,48 @@ export function AgentBudgetPanel({
           </p>
           {canEdit && <BudgetDialog orgSlug={orgSlug} view={view} unset={unset} network={network} />}
           {/* Only where the network runs the spending-limit contract: Arc mainnet does not (final review I1, mainnet copy C3). */}
-          {networkProfile(network).spendingLimitContract && (
-            <OnArc orgSlug={orgSlug} onChain={onChain} canEdit={canEdit} live={live} unset={unset} network={network} />
+          {walletTreasury ? (
+            <OnArcWallet onChain={onChain} network={network} />
+          ) : (
+            networkProfile(network).spendingLimitContract && (
+              <OnArc orgSlug={orgSlug} onChain={onChain} canEdit={canEdit} live={live} unset={unset} network={network} />
+            )
           )}
         </CardContent>
       </section>
     </Card>
+  );
+}
+
+/** The owner's own wallet's contract (wallet treasury W14): what it holds and has paid; nothing here changes it. */
+function OnArcWallet({ onChain, network }: { onChain: OnChainLimitView | null; network: Network }) {
+  const reading = onChain?.reading ?? null;
+  return (
+    <div className="mt-4 space-y-2 border-t border-line pt-4 text-[0.8125rem]">
+      <p className="flex items-center gap-1.5 font-medium text-ink">
+        <ShieldCheck aria-hidden className={cn("size-4", onChain?.state === "enforced" ? "text-agent" : "text-ink-3")} />
+        On Arc
+      </p>
+      <p className="leading-5 text-ink-2">{ON_ARC_COPY.wallet}</p>
+      <dl className="space-y-1">
+        {onChain?.contract && (
+          <div className="flex items-baseline justify-between gap-3">
+            <dt className="text-ink-2">Contract</dt>
+            <dd>
+              <Hash value={onChain.contract} href={addressUrl(network, onChain.contract)} />
+            </dd>
+          </div>
+        )}
+        {reading ? (
+          <>
+            <OnChainCount label="Paid through it today" spent={reading.spentToday} limit={reading.dailyUsdc} />
+            <OnChainCount label="In the last 7 days" spent={reading.spentThisWeek} limit={reading.weeklyUsdc} />
+          </>
+        ) : (
+          onChain?.contract && <p className="text-xs text-ink-3">{ON_ARC_COPY.unreadable}</p>
+        )}
+      </dl>
+    </div>
   );
 }
 

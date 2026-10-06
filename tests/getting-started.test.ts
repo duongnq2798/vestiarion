@@ -230,3 +230,22 @@ describe("sample rows (sample-data design §1)", () => {
     }
   });
 });
+
+describe("getting started with the owner's own wallet (wallet treasury W1, W12)", () => {
+  const owned = { kind: "operating", circle_wallet_id: null, balance: 0, address: "0xb0b0" };
+
+  it("offers the owner's own wallet where the deployment has it", () => {
+    const wallet = gettingStarted(input({ network: "arc-mainnet", walletTreasuryAvailable: true })).steps.find((step) => step.id === "wallet");
+    expect(wallet?.body).toBe("Use a wallet you hold, such as MetaMask, as the workspace's treasury on Arc mainnet, or connect your own Circle account.");
+  });
+
+  it("counts the owner's wallet as the workspace's, and asks for USDC in it", () => {
+    const steps = gettingStarted(input({ network: "arc-mainnet", walletHost: "external", accounts: [owned] })).steps;
+    expect(steps.find((step) => step.id === "wallet")?.done).toBe(true);
+    const fund = steps.find((step) => step.id === "fund");
+    expect(fund?.done).toBe(false);
+    expect(fund?.body).toBe("Add USDC on Arc mainnet to your own wallet, the workspace's treasury. Settings reads what the agent can move from the chain.");
+    const funded = gettingStarted(input({ network: "arc-mainnet", walletHost: "external", accounts: [{ ...owned, balance: 5 }] })).steps;
+    expect(funded.find((step) => step.id === "fund")?.done).toBe(true);
+  });
+});
