@@ -5,6 +5,7 @@ import "server-only";
 import { redirect } from "next/navigation";
 import { orgHref } from "@/lib/auth/org-paths";
 import { getSessionUser } from "@/lib/auth/session";
+import { MAINNET_NOT_OPEN, mayUseMainnet } from "@/lib/mainnet";
 import { createWorkspace, WorkspaceLimitError } from "@/lib/platform/workspace";
 
 export interface CreateWorkspaceResult {
@@ -23,9 +24,13 @@ export async function createWorkspaceAction(_previous: CreateWorkspaceResult, fo
   if (!user) return { ok: false, message: "Your session has ended. Sign in again." };
   const name = formData.get("name");
   if (typeof name !== "string" || !name.trim()) return { ok: false, message: "Give the workspace a name." };
+  // Arc mainnet only for a person on the allowlist while it is on, checked here whatever the form sent (mainnet go-live
+  // M1, M2); any other value is Arc testnet.
+  const network = formData.get("network") === "arc-mainnet" ? "arc-mainnet" : "arc-testnet";
+  if (network === "arc-mainnet" && !mayUseMainnet(user.email)) return { ok: false, message: MAINNET_NOT_OPEN };
   let slug: string;
   try {
-    ({ slug } = await createWorkspace({ userId: user.id, name }));
+    ({ slug } = await createWorkspace({ userId: user.id, name, network }));
   } catch (error) {
     if (error instanceof WorkspaceLimitError) return { ok: false, message: error.message };
     console.error("workspace creation failed", error);

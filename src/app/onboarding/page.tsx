@@ -14,6 +14,7 @@ import { HOME_PATH } from "@/components/vx/nav";
 import { membershipsOf } from "@/lib/auth/membership";
 import { orgHref } from "@/lib/auth/org-paths";
 import { verifySession } from "@/lib/auth/session";
+import { mayUseMainnet } from "@/lib/mainnet";
 import { pendingInvitationsFor } from "@/lib/platform/members";
 
 export const metadata: Metadata = { title: "Workspaces" };
@@ -53,6 +54,8 @@ export default async function OnboardingPage({ searchParams }: OnboardingPagePro
   if (memberships.length === 1 && query.new === undefined && invitations.length === 0) {
     redirect(orgHref(memberships[0].slug, HOME_PATH));
   }
+  // Arc mainnet is offered only to a person on the deployment's allowlist while it is on (mainnet go-live M1, M2).
+  const mainnetOffered = mayUseMainnet(user.email);
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -104,6 +107,7 @@ export default async function OnboardingPage({ searchParams }: OnboardingPagePro
                           <span className="block truncate font-medium">{membership.name}</span>
                           <span className="block font-mono text-xs capitalize text-ink-3">
                             {membership.role} · {membership.mode}
+                            {membership.network === "arc-mainnet" && <span className="normal-case"> · Arc mainnet</span>}
                           </span>
                         </span>
                         <ChevronRight aria-hidden className="size-4 shrink-0 text-ink-3 transition-transform duration-150 ease-standard group-hover:translate-x-0.5 group-hover:text-agent" />
@@ -116,14 +120,14 @@ export default async function OnboardingPage({ searchParams }: OnboardingPagePro
                 Create another workspace
               </h2>
               <div className="mt-4">
-                <CreateWorkspaceForm />
+                <CreateWorkspaceForm mainnetOffered={mainnetOffered} />
               </div>
             </>
           ) : (
             <>
               <p className="mt-3 text-sm leading-relaxed text-ink-3">Create a workspace to run Vestiarion. An owner adds an Arc testnet wallet from Settings, and the agent pays from it. A teammate can also invite you to theirs.</p>
               <div id="create-workspace" className="mt-6 scroll-mt-24">
-                <CreateWorkspaceForm />
+                <CreateWorkspaceForm mainnetOffered={mainnetOffered} />
               </div>
             </>
           )}

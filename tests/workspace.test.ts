@@ -83,6 +83,11 @@ function workspaceFake(options: {
       if (created && request.params.get("id") === `eq.${created.id}`) return { body: created };
       return { status: 406, body: { code: "PGRST116", message: "JSON object requested, multiple (or no) rows returned" } };
     }
+    // The network a mainnet workspace is set to, right after create_org (mainnet go-live M2).
+    if (request.method === "PATCH" && request.path === "/rest/v1/orgs" && created && request.params.get("id") === `eq.${created.id}`) {
+      Object.assign(created, request.body as Record<string, unknown>);
+      return { body: [{ id: created.id }] };
+    }
     if (request.path === "/rest/v1/rpc/append_ledger_entry") {
       return {
         body: { seq: 1, id: "e1", ts: "2026-09-28T00:00:00Z", actor: "human", domain: "system", action: "org_created", summary: "", detail: {}, body_hash: "00", signature: "00", prev_hash: null, hash: "00", signing_key_id: null },
@@ -312,5 +317,54 @@ describe("a workspace whose setup fails", () => {
       },
     });
     await expect(run(() => createWorkspace({ userId: USER, name: "Northstar Studio" }))).rejects.toThrow("append failed");
+  });
+});
+
+describe("a workspace on Arc mainnet (mainnet go-live M2, M9)", () => {
+  const mainnetOn = { ...config, mainnetEnabled: true };
+
+  it("is set to Arc mainnet before its first account, with one empty operating account on ARC and the agent's tight limit", async () => {
+    const { fake, run } = workspaceFake({ config: mainnetOn });
+    await run(() => createWorkspace({ userId: USER, name: "Acme Mainnet", network: "arc-mainnet" }));
+
+    const patchAt = fake.requests.findIndex((request) => request.method === "PATCH" && request.path === "/rest/v1/orgs");
+    const accountsAt = fake.requests.findIndex((request) => request.method === "POST" && request.path === "/rest/v1/accounts");
+    expect(patchAt).toBeGreaterThan(-1);
+    expect(fake.requests[patchAt].body).toEqual({ network: "arc-mainnet" });
+    expect(patchAt).toBeLessThan(accountsAt);
+    expect(fake.requests[accountsAt].body).toMatchObject([{ name: "Operating", kind: "operating", chain: "ARC", balance: 0 }]);
+    const budget = fake.requests.find((request) => request.method === "POST" && request.path === "/rest/v1/agent_budgets");
+    expect(budget?.body).toMatchObject({ daily_usdc: 50, weekly_usdc: 150, updated_by: USER });
+    const created = rpcBodies(fake.requests, "append_ledger_entry")[0];
+    expect(created.p_detail).toMatchObject({ network: "arc-mainnet", mode: "sandbox" });
+  });
+
+  it("leaves Arc testnet as it was: no network written, the two simulated accounts, no limit", async () => {
+    const { fake, run } = workspaceFake({ config: mainnetOn });
+    await run(() => createWorkspace({ userId: USER, name: "Acme" }));
+    expect(fake.requests.some((request) => request.method === "PATCH" && request.path === "/rest/v1/orgs")).toBe(false);
+    const accounts = fake.requests.find((request) => request.method === "POST" && request.path === "/rest/v1/accounts");
+    expect(accounts?.body).toMatchObject([
+      { name: "Operating (simulated)", kind: "operating", chain: "ARC-TESTNET", balance: 10000 },
+      { name: "Reserve (simulated)", kind: "reserve", chain: "ARC-TESTNET", balance: 0 },
+    ]);
+    expect(fake.requests.some((request) => request.path === "/rest/v1/agent_budgets")).toBe(false);
+    expect(rpcBodies(fake.requests, "append_ledger_entry")[0].p_detail).toMatchObject({ network: "arc-testnet" });
+  });
+
+  it("is refused while the deployment has Arc mainnet off, before anything is created", async () => {
+    const { fake, run } = workspaceFake();
+    await expect(run(() => createWorkspace({ userId: USER, name: "Acme Mainnet", network: "arc-mainnet" }))).rejects.toThrow("Arc mainnet is switched off on this deployment.");
+    expect(rpcBodies(fake.requests, "create_org")).toEqual([]);
+  });
+
+  it("rolls the workspace back when its network cannot be set", async () => {
+    const { fake, run } = workspaceFake({
+      config: mainnetOn,
+      fail: (request) => (request.method === "PATCH" && request.path === "/rest/v1/orgs" ? DB_ERROR("boom") : undefined),
+    });
+    await expect(run(() => createWorkspace({ userId: USER, name: "Acme Mainnet", network: "arc-mainnet" }))).rejects.toThrow();
+    expect(deletes(fake.requests).some(([table]) => table === "/rest/v1/orgs")).toBe(true);
+    expect(fake.requests.some((request) => request.method === "POST" && request.path === "/rest/v1/accounts")).toBe(false);
   });
 });

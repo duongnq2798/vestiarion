@@ -4,6 +4,7 @@ import { cache } from "react";
 import { platformDb, unwrap } from "@/lib/dal";
 import { touchOrgActivity } from "@/lib/platform/activity";
 import { isValidSlug } from "./org-paths";
+import { networkOf, type Network } from "@/lib/network";
 import type { OrgRole } from "./roles";
 import { verifySession, type SessionUser } from "./session";
 
@@ -13,17 +14,19 @@ export interface OrgMembership {
   name: string;
   mode: "sandbox" | "live";
   role: OrgRole;
+  /** The network it pays on (0075), chosen when it was created (mainnet go-live M2). */
+  network: Network;
 }
 
 type MembershipRow = {
   role: OrgRole;
-  orgs: { id: string; slug: string; name: string; mode: "sandbox" | "live" };
+  orgs: { id: string; slug: string; name: string; mode: "sandbox" | "live"; network?: string | null };
 };
 
-const SELECT = "role, orgs!inner(id, slug, name, mode)";
+const SELECT = "role, orgs!inner(id, slug, name, mode, network)";
 
 function toMembership(row: MembershipRow): OrgMembership {
-  return { orgId: row.orgs.id, slug: row.orgs.slug, name: row.orgs.name, mode: row.orgs.mode, role: row.role };
+  return { orgId: row.orgs.id, slug: row.orgs.slug, name: row.orgs.name, mode: row.orgs.mode, role: row.role, network: networkOf(row.orgs.network) };
 }
 
 /**

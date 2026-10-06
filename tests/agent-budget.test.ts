@@ -155,3 +155,23 @@ describe("agentBudgetStatus", () => {
     expect(await run(() => agentBudgetStatus())).toEqual({ budget: null, spent: { today: 12.5, week: 12.5 }, room: null });
   });
 });
+
+describe("changeAgentBudget on Arc mainnet (mainnet go-live M9)", () => {
+  const mainnet = { ...config, network: "arc-mainnet" as const };
+  const onMainnet = <T,>(fn: () => Promise<T>) => runWith(orgTestContext({ config: mainnet, client: fake.client, orgId: ORG, userId: ACTOR }), fn);
+
+  it("keeps a figure: removing both is refused, before anything is written", async () => {
+    fake = fakeSupabase(workspace({ budget: [{ daily_usdc: "50", weekly_usdc: "150" }] }));
+    const attempt = onMainnet(() => changeAgentBudget({ actorId: ACTOR, daily: "", weekly: "" }));
+    await expect(attempt).rejects.toMatchObject({ code: "mainnet_needs_figure" });
+    await expect(attempt).rejects.toThrow("A workspace on Arc mainnet keeps a daily or 7-day limit.");
+    expect(fake.requests.some((r) => r.path === "/rest/v1/agent_budgets" && r.method === "POST")).toBe(false);
+  });
+
+  it("still changes a figure, or keeps one of the two", async () => {
+    fake = fakeSupabase(workspace({ budget: [{ daily_usdc: "50", weekly_usdc: "150" }] }));
+    await onMainnet(() => changeAgentBudget({ actorId: ACTOR, daily: "", weekly: "100" }));
+    const post = fake.requests.find((r) => r.path === "/rest/v1/agent_budgets" && r.method === "POST");
+    expect(post?.body).toMatchObject({ daily_usdc: null, weekly_usdc: 100 });
+  });
+});

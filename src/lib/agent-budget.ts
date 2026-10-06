@@ -4,6 +4,7 @@ import { agentSpent, budgetRoom, parseBudgetForm, readOutflowBudget, type Budget
 import { currentOrgId } from "./context";
 import { db, unwrap } from "./dal";
 import { appendLedgerEntryBestEffort } from "./ledger-best-effort";
+import { workspaceNetwork } from "./workspace-network";
 
 /**
  * Setting the agent's spending limit (docs/superpowers/specs/2026-10-02-outflow-budget-design.md R7),
@@ -18,12 +19,13 @@ import { appendLedgerEntryBestEffort } from "./ledger-best-effort";
  * refused then, since the contract always holds one.
  */
 
-export type AgentBudgetErrorCode = "invalid" | "unchanged" | "cycle_running" | "enforced_needs_figure" | "onchain";
+export type AgentBudgetErrorCode = "invalid" | "unchanged" | "cycle_running" | "enforced_needs_figure" | "onchain" | "mainnet_needs_figure";
 
 const MESSAGES: Record<Exclude<AgentBudgetErrorCode, "invalid" | "onchain">, string> = {
   unchanged: "That is already the agent's spending limit.",
   cycle_running: "A cycle is running. Try again in a minute, once it has finished.",
   enforced_needs_figure: "Keep a daily or 7-day figure while the limit is enforced on Arc, or turn that off first.",
+  mainnet_needs_figure: "A workspace on Arc mainnet keeps a daily or 7-day limit.",
 };
 
 export class AgentBudgetError extends Error {
@@ -65,6 +67,8 @@ export async function changeAgentBudget(input: {
   const parsed = parseBudgetForm({ daily: input.daily, weekly: input.weekly });
   if (!parsed.ok) throw new AgentBudgetError("invalid", parsed.message);
   const to = parsed.budget;
+  // On Arc mainnet the agent always pays within a figure (mainnet go-live M9).
+  if (to.dailyUsdc === null && to.weeklyUsdc === null && workspaceNetwork().id === "arc-mainnet") throw new AgentBudgetError("mainnet_needs_figure");
 
   const from = (await readOutflowBudget(db())) ?? NONE;
   if (from.dailyUsdc === to.dailyUsdc && from.weeklyUsdc === to.weeklyUsdc) throw new AgentBudgetError("unchanged");
