@@ -55,12 +55,16 @@ organization's row.
 A person creates their own workspace at `/onboarding` (`createWorkspaceAction` ->
 `createWorkspace`, `src/lib/platform/workspace.ts`, spec §6). The server generates the
 organization's id and a fresh Ed25519 ledger key before calling `create_org(p_org_id, p_user_id,
-p_name, p_slug, p_ledger_key_enc)` (migration `0020`) — the key's ciphertext is bound to the id, so
-the id has to exist first. `create_org` is `service_role`-only (`anon`, `authenticated`, and
-`vestiarion_tenant` cannot call it); in one transaction, under an advisory lock keyed to the
-caller so two concurrent requests cannot both slip past the limit, it enforces at most 3
-organizations per `created_by`, inserts the organization in `sandbox` mode, and makes the caller
-its `owner`. `createWorkspace` then seeds two accounts — `Operating (simulated)` at 10,000 USDC and
+p_name, p_slug, p_ledger_key_enc, p_network)` (migrations `0020`, `0081`) — the key's ciphertext is
+bound to the id, so the id has to exist first. `create_org` is `service_role`-only (`anon`,
+`authenticated`, and `vestiarion_tenant` cannot call it); in one transaction, under an advisory lock
+keyed to the caller so two concurrent requests cannot both slip past the limit, it enforces at most 3
+organizations per `created_by` on each network, inserts the organization in `sandbox` mode on that
+network, and makes the caller its `owner`. The limit bounds what one person can spend of the
+platform's model calls; counted per network, three workspaces on Arc testnet never keep a person off
+Arc mainnet. The five-argument `create_org` from `0020` stays as it was for code from before `0081`,
+counting every network, since that code moves a new row to Arc mainnet after creating it on Arc
+testnet; no other count would hold it. `createWorkspace` then seeds two accounts — `Operating (simulated)` at 10,000 USDC and
 an empty `Reserve (simulated)` — and appends the first ledger entry, `org_created`, signed with the
 new key; a failure at this stage is rolled back (accounts deleted, then the organization row) —
 unless its first ledger entry already committed, in which case the chain, and the workspace, stay.
@@ -345,8 +349,8 @@ phase 1b).
   for everyone), read into the config. `mayUseMainnet(email)` (`src/lib/mainnet.ts`) is both: on, and listed, or `*`
   listed. `*` is never implied, so a deployment that forgets the allowlist opens Arc mainnet to no one.
 - **Created on mainnet, never moved there.** The onboarding form offers Arc mainnet only to an allowed person, and the
-  action checks again. `createWorkspace({ network })` sets the row's network before the first account; 0078's lock
-  then refuses any change once an account exists.
+  action checks again. `createWorkspace({ network })` has `create_org` write the row's network on insert (0081),
+  before the first account; 0078's lock then refuses any change once an account exists.
   - A mainnet workspace starts with one empty "Operating" account on `ARC`, no reserve, and an agent spending limit
     of 50 USDC a day and 150 USDC in 7 days. `changeAgentBudget` keeps a figure there.
   - It also starts with two approvals above 100 USDC (`approval_policies`, phase 2b), which `changeTwoApprovals` keeps
