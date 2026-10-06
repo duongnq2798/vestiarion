@@ -3,7 +3,7 @@ import path from "node:path";
 import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { DeleteAccountBody, DeleteAccountButton } from "@/components/DeleteAccountDialog";
+import { DeleteAccountBody } from "@/components/DeleteAccountDialog";
 import { Dialog } from "@/components/ui/Dialog";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import type { AccountDeletionPlan } from "@/lib/platform/delete-account";
@@ -120,30 +120,26 @@ describe("DeleteAccountBody", () => {
   });
 });
 
-describe("DeleteAccountButton", () => {
-  it("renders a button that opens the dialog", () => {
-    const markup = html(<DeleteAccountButton />);
-    expect(markup).toContain('aria-haspopup="dialog"');
-    expect(text(markup)).toBe("Delete account");
-  });
-});
-
 describe("where Delete account lives (A1)", () => {
-  it("is in the account menu, beside Sign out, for every signed-in person", () => {
-    const nav = source("src/components/vx/AppNav.tsx");
-    const menu = nav.slice(nav.indexOf("export function AccountMenu"), nav.indexOf("function SearchButton"));
-    expect(menu).toContain("Delete account");
-    expect(menu).toContain("Sign out");
+  it("is the account menu's last item, below Sign out, for every signed-in person", () => {
+    const file = source("src/components/vx/AccountMenu.tsx");
+    const menu = file.slice(file.indexOf("<DropdownMenuContent"));
     expect(menu).toContain("<DeleteAccountDialog");
+    expect(menu.lastIndexOf("<DropdownMenuItem")).toBeLessThan(menu.indexOf("Delete account"));
+    expect(menu.indexOf("Sign out")).toBeGreaterThan(-1);
+    expect(menu.indexOf("Delete account")).toBeGreaterThan(menu.indexOf("Sign out"));
     // Unconditional: no role, flag or prop decides whether it is offered.
     const item = menu.slice(0, menu.indexOf("Delete account"));
     expect(item.slice(item.lastIndexOf("<DropdownMenuItem"))).not.toMatch(/&&|\?\s*</);
+    // The only danger row: Sign out is an ordinary way out, not a red one.
+    expect(menu.match(/tone="danger"/g)).toHaveLength(1);
   });
 
-  it("is on /onboarding, beside Sign out", () => {
+  it("is reached from the workspace sidebar and from the /onboarding header", () => {
+    expect(source("src/components/vx/AppNav.tsx")).toContain('<AccountMenu email={email} placement="sidebar">');
     const onboarding = source("src/app/onboarding/page.tsx");
-    expect(onboarding).toContain("<DeleteAccountButton");
-    expect(onboarding.indexOf("<DeleteAccountButton")).toBeLessThan(onboarding.indexOf("Sign out"));
+    expect(onboarding).toContain('<AccountMenu email={user.email} placement="header" />');
+    expect(onboarding).not.toContain("Delete account");
   });
 
   it("the dialog is an alertdialog guarded against dismissal while pending", () => {

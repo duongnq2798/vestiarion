@@ -224,16 +224,3 @@ export function DeleteAccountDialog({ open, onOpenChange, trigger }: DeleteAccou
     </Dialog>
   );
 }
-
-/** For pages without the account menu (/onboarding): a button beside Sign out. */
-export function DeleteAccountButton() {
-  return (
-    <DeleteAccountDialog
-      trigger={
-        <Button variant="ghost" icon={<Trash2 />} className="text-refused hover:text-refused">
-          Delete account
-        </Button>
-      }
-    />
-  );
-}

@@ -154,7 +154,7 @@ windows); otherwise, in one transaction, it writes a tombstone to the service-ro
 `signing_key_id`), deletes every tenant table in `delete_sandbox_org`'s order, and deletes the org
 row, which cascades to memberships, invitations, API keys and webhooks.
 
-**Deleting your account** (spec §6) is in the account menu and on `/onboarding`, gated by the
+**Deleting your account** (spec §6) is the last item of `AccountMenu` (`src/components/vx/AccountMenu.tsx`: the workspace sidebar and the `/onboarding` header), gated by the
 session alone (`src/app/account/actions.ts`, never a user id from the form). `accountDeletionPlan`
 (`src/lib/platform/delete-account.ts`) blocks it while the person is the last owner of a workspace
 with other members or of the founding workspace; `deleteAccount` then runs `delete_org` on each
