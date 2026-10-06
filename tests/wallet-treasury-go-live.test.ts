@@ -72,6 +72,6 @@ describe("goLive for a wallet treasury", () => {
     });
     await inScope(() => goLive({ orgId: ORG, actorId: ACTOR, actorEmail: OWNER_EMAIL, confirmation: "mainnet", walletTreasury: { chain: fundedChain() } }));
     expect(state.org.mode).toBe("live");
-    expect(state.ledger).toEqual([{ action: "workspace_went_live", detail: { by: ACTOR, network: "arc-mainnet", treasury: "external" } }]);
+    expect(state.ledger).toEqual([{ action: "workspace_went_live", detail: { by: ACTOR, network: "arc-mainnet", walletHost: "external" } }]);
   });
 });

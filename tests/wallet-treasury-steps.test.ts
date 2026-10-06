@@ -185,14 +185,30 @@ describe("approving the contract", () => {
     expect(decodeFunctionData({ abi: erc20Abi, data: capped.data as Hex }).args).toEqual([CONTRACT, 250_000_000n]);
   });
 
-  it("enforces the contract once the approval is read on chain", async () => {
-    const state = world({ ...chosen, contract: agentRow({ address: CONTRACT }) });
+  it("enforces the contract once the approval is read on chain, recorded in the shape a Circle wallet's enforcement has", async () => {
+    const state = world({ ...chosen, contract: agentRow({ address: CONTRACT, deploy_tx_hash: DEPLOY_TX }) });
     const { inScope } = database(state);
     const onChain = chain({ receipts: { [APPROVE_TX]: approvedOnUsdc }, allowance: 2n ** 256n - 1n });
     expect(await inScope(() => recordApproval({ orgId: ORG, actorId: ACTOR, txHash: APPROVE_TX }, { chain: onChain }))).toBe("verified");
     expect(state.contract).toMatchObject({ approve_tx_hash: APPROVE_TX, enforced: true });
     expect(state.ledger).toEqual([
-      { action: "spending_limit_enforced", detail: { by: ACTOR, contract: CONTRACT, approveTxHash: APPROVE_TX, treasury: "external", allowanceUsdc: null } },
+      {
+        action: "spending_limit_enforced",
+        detail: {
+          by: ACTOR,
+          contract: CONTRACT,
+          agent: AGENT,
+          // The treasury is the owner's wallet, as it is the operating wallet's address for a Circle wallet.
+          treasury: WALLET,
+          walletHost: "external",
+          dailyUsdc: 50,
+          weeklyUsdc: 150,
+          deployTxHash: DEPLOY_TX,
+          approveTxHash: APPROVE_TX,
+          setLimitsTxHash: null,
+          allowanceUsdc: null,
+        },
+      },
     ]);
   });
 

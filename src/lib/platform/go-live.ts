@@ -520,7 +520,7 @@ export async function goLive(input: {
         await record(input.orgId, input.actorId, {
           action: "workspace_went_live",
           summary: "The workspace went live, paying from its owner's own wallet",
-          detail: { by: input.actorId, network, treasury: "external" },
+          detail: { by: input.actorId, network, walletHost: "external" },
         });
       },
       { userId: input.actorId }

@@ -74,7 +74,7 @@ From then on:
   - The owner's wallet approves the contract on USDC (`0x3600…`).
   - The default is unlimited, because the contract's figures bound each day and week; the owner may set a cap.
   - The receipt must be a successful call from the owner's wallet to USDC, and `allowance(owner, contract)` must be at least 1 USDC.
-  - The row gets `approve_tx_hash` and `enforced: true`, and the ledger records `spending_limit_enforced` with `treasury: "external"`.
+  - The row gets `approve_tx_hash` and `enforced: true`, and the ledger records `spending_limit_enforced` in the shape a Circle wallet's enforcement has: `treasury` is the owner's wallet, with `walletHost: "external"` and `allowanceUsdc`. `workspace_went_live` carries `walletHost: "external"` too.
 - **W10. The agent's gas on Arc mainnet.**
   - The owner sends the agent 0.50 USDC: a plain send from their wallet, which the page builds.
   - Going live needs the agent to hold at least the profile's `gasReserveUsdc` (0.10).

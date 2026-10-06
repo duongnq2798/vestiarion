@@ -117,4 +117,10 @@ describe("the spending limit's On Arc section for a workspace paying from its ow
     expect(markup).not.toContain("Turn off on Arc");
     expect(markup).not.toContain("Enforce on Arc");
   });
+
+  it("offers no figures to change once the wallet deployed its contract: only that wallet can change them", () => {
+    expect(text(render({ network: "arc-mainnet", onChain: ENFORCED, walletTreasury: true }))).not.toContain("Change limit");
+    // Before the contract exists, the figures it will be deployed with can still be set here.
+    expect(text(render({ network: "arc-mainnet", onChain: null, walletTreasury: true }))).toContain("Change limit");
+  });
 });

@@ -449,14 +449,23 @@ export async function recordApproval(input: { orgId: string; actorId: string; tx
     if (check.state === "refused") throw new WalletTreasuryError("chain_refused", check.reason);
     const written = await db().from("spending_limit_contracts").update({ approve_tx_hash: hash, enforced: true }).eq("id", (row as ContractRow).id).eq("address", contract);
     if (written.error) throw new Error(written.error.message);
+    // The contract's figures, which its deployment made the workspace's spending limit.
+    const figures = await readOutflowBudget(db());
     await record(input.orgId, input.actorId, {
       action: "spending_limit_enforced",
       summary: "The owner's wallet approved its spending limit contract, which now carries every payment",
+      // The shape a Circle wallet's enforcement records, so one reader reads both: the treasury is the owner's wallet.
       detail: {
         by: input.actorId,
         contract: asAddress(contract),
+        agent: asAddress(row?.agent_address as string),
+        treasury: wallet,
+        walletHost: "external",
+        dailyUsdc: figures?.dailyUsdc ?? null,
+        weeklyUsdc: figures?.weeklyUsdc ?? null,
+        deployTxHash: row?.deploy_tx_hash ?? null,
         approveTxHash: hash,
-        treasury: "external",
+        setLimitsTxHash: null,
         allowanceUsdc: check.allowanceUnits >= UNLIMITED ? null : Number(check.allowanceUnits) / 1_000_000,
       },
     });

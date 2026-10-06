@@ -115,7 +115,8 @@ export function AgentBudgetPanel({
               ? "Set a daily or 7-day figure, and a payment past it waits for you in Approvals."
               : "A payment past it waits for you in Approvals. What a person approves does not count."}
           </p>
-          {canEdit && <BudgetDialog orgSlug={orgSlug} view={view} unset={unset} network={network} />}
+          {/* Once the owner's wallet deployed its contract, only that wallet changes the figures (wallet treasury W14). */}
+          {canEdit && !(walletTreasury && onChain?.contract) && <BudgetDialog orgSlug={orgSlug} view={view} unset={unset} network={network} />}
           {/* Only where the network runs the spending-limit contract: Arc mainnet does not (final review I1, mainnet copy C3). */}
           {walletTreasury ? (
             <OnArcWallet onChain={onChain} network={network} />
