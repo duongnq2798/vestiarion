@@ -6,8 +6,9 @@ import AcceptInvitationByIdForm from "@/components/AcceptInvitationByIdForm";
 import CreateWorkspaceForm from "@/components/CreateWorkspaceForm";
 import { Avatar } from "@/components/ui/Avatar";
 import { Card } from "@/components/ui/Card";
+import { cn } from "@/components/ui/cn";
 import { AccountMenu } from "@/components/vx/AccountMenu";
-import { SiteFooter, SiteHeader, SiteHeaderLink } from "@/components/vx/SiteChrome";
+import { SITE_COLUMN, SiteFooter, SiteHeader, SiteHeaderLink } from "@/components/vx/SiteChrome";
 import { WorkspaceMeta } from "@/components/vx/WorkspaceMeta";
 import { HOME_PATH } from "@/components/vx/nav";
 import { membershipsOf } from "@/lib/auth/membership";
@@ -59,12 +60,12 @@ export default async function OnboardingPage({ searchParams }: OnboardingPagePro
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <SiteHeader>
+      <SiteHeader width="column">
         <SiteHeaderLink href="/docs">Docs</SiteHeaderLink>
         <AccountMenu email={user.email} placement="header" />
       </SiteHeader>
       <main id="main" className="flex flex-1 items-center justify-center px-4 py-12 sm:py-16">
-        <div className="w-full max-w-md">
+        <div className={cn("w-full", SITE_COLUMN)}>
           <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">{memberships.length ? "Choose a workspace" : "No workspace yet"}</h1>
           {invitations.length > 0 && (
             <section aria-labelledby="invitations-title" className="mt-6">
