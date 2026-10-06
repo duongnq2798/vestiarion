@@ -127,7 +127,7 @@ describe("gettingStarted", () => {
     expect(words).not.toMatch(/faucet|hosted|Arc testnet/i);
     expect(step(result, "wallet").body).toContain("Arc mainnet");
     expect(step(result, "fund").body).toContain("Send USDC on Arc mainnet");
-    expect(step(result, "fund").body).toContain("0.1 USDC");
+    expect(step(result, "fund").body).toContain("0.10 USDC");
     expect(step(result, "payee").body).toContain("their address on Arc mainnet");
     expect(step(result, "payment").title).toBe("First payment on Arc mainnet");
     const live = gettingStarted(input({ network: "arc-mainnet", mode: "live", accounts: [{ kind: "operating", circle_wallet_id: "w-1", balance: 0 }] }));

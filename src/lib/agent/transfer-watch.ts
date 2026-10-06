@@ -99,9 +99,12 @@ export interface StuckDetail {
 
 export async function watchStuckTransfers(deps: WatchDeps = {}): Promise<TransferWatchResult[]> {
   const now = (deps.now ?? Date.now)();
-  // Every workspace, live or not: a sandbox with a hosted wallet pays for real when a person runs a cycle, and a payment
-  // already sent can be stuck whatever the workspace's mode (D4). Payments in flight are read in each one's own scope.
-  const orgs = unwrap(await platformDb().from("orgs").select("id, slug").order("slug")) as Array<{ id: string; slug: string }>;
+  // Every workspace that can hold a live payment, live or not: one with a hosted wallet or its own Circle credentials
+  // (mainnet polish E6). A sandbox with a hosted wallet pays for real when a person runs a cycle, and a payment already
+  // sent can be stuck whatever the workspace's mode (D4). Payments in flight are read in each one's own scope.
+  const orgs = unwrap(
+    await platformDb().from("orgs").select("id, slug").or("wallet_host.not.is.null,circle_api_key_enc.not.is.null").order("slug")
+  ) as Array<{ id: string; slug: string }>;
   const results: TransferWatchResult[] = [];
   for (const org of orgs) {
     try {
@@ -180,13 +183,16 @@ async function tellStuck(slug: string, inFlight: InFlight[], now: number, deps: 
       const sendAnswered = row.provider_tx_id !== null;
       let circleAsked = false;
       let providerState: string | null = null;
-      if (sendAnswered && provider) {
+      let answeredTx: string | null = null;
+      // Only a live provider is asked: a simulator would answer "confirmed" for any payment (mainnet polish E7).
+      if (sendAnswered && provider && provider.mode === "live") {
         try {
           const answer = await provider.reconcileTransfer(row.provider_tx_id as string);
           // Settled by now, one way or the other: nothing to tell, and the next cycle records it (D10).
           if (answer.status !== "pending") continue;
           circleAsked = true;
           providerState = answer.providerState ?? null;
+          answeredTx = answer.txHash ?? null;
         } catch {
           // Circle did not answer this read: told from the age alone, rather than skipped forever (Review Focus 3).
           circleAsked = false;
@@ -210,7 +216,8 @@ async function tellStuck(slug: string, inFlight: InFlight[], now: number, deps: 
         circleAsked,
         sendAnswered,
         providerState,
-        txHash: row.tx_hash,
+        // Circle's answer, when the row has no hash yet (E7).
+        txHash: row.tx_hash ?? answeredTx,
         network,
       };
       await appendLedgerEntry({

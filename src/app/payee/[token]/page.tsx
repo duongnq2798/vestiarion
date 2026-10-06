@@ -6,12 +6,15 @@ import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
 import { homeChain, networkOfChain } from "@/lib/payee-chains";
 import { payeeLinkStatus } from "@/lib/platform/payee-links";
 import type { PayeeLinkStatus } from "@/lib/payee-journey";
+import { linkSocialMetadata } from "@/lib/link-previews";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Your payment",
   robots: { index: false, follow: false },
+  // This page's own card, rendered at build time and naming nothing of the link (mainnet polish E1).
+  ...linkSocialMetadata("payee"),
 };
 
 type PayeePageProps = {

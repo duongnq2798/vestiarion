@@ -16,6 +16,7 @@ import { bringCashBackByPerson, CashBackError } from "@/lib/agent/liquidity";
 import { raiseCycleEvent } from "@/lib/agent/cycle-soon";
 import { agentPaused } from "@/lib/agent/pause";
 import { getChainProvider } from "@/lib/circle";
+import { FeatureOffError, networkOf, networkProfile } from "@/lib/network";
 import { PaymentsDisabledError } from "@/lib/payments-switch";
 
 export interface RefreshBalanceResult {
@@ -71,6 +72,12 @@ export interface FundGatewayResult {
 
 const requestIdSchema = z.string().uuid();
 
+/** Gateway on a network that has none is refused by name, before the mode: going live would not bring it (mainnet polish E5). */
+function gatewayOffHere(network: string | null | undefined): string | null {
+  const profile = networkProfile(networkOf(network));
+  return profile.gateway ? null : new FeatureOffError("Paying through Gateway", profile).message;
+}
+
 /**
  * Funds the workspace's Gateway balance from its operating wallet (Gateway
  * payouts G1): an owner's or admin's deliberate move of treasury cash, never
@@ -80,6 +87,8 @@ const requestIdSchema = z.string().uuid();
 export async function fundGatewayAction(_previous: FundGatewayResult, formData: FormData): Promise<FundGatewayResult> {
   const auth = await authorize(formData.get("orgSlug"), "treasury.manage");
   if (!auth.ok) return { ok: false, message: auth.message };
+  const gatewayOff = gatewayOffHere(auth.membership.network);
+  if (gatewayOff) return { ok: false, message: gatewayOff };
   if (auth.membership.mode !== "live") {
     return { ok: false, message: "Gateway is for a live workspace on Arc testnet. Take this workspace live first." };
   }
@@ -122,6 +131,8 @@ export async function fundGatewayAction(_previous: FundGatewayResult, formData: 
 export async function fundServiceBudgetAction(_previous: FundGatewayResult, formData: FormData): Promise<FundGatewayResult> {
   const auth = await authorize(formData.get("orgSlug"), "treasury.manage");
   if (!auth.ok) return { ok: false, message: auth.message };
+  const gatewayOff = gatewayOffHere(auth.membership.network);
+  if (gatewayOff) return { ok: false, message: gatewayOff };
   if (auth.membership.mode !== "live") {
     return { ok: false, message: "The service budget is for a live workspace on Arc testnet. Take this workspace live first." };
   }

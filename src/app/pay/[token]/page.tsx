@@ -7,12 +7,15 @@ import { Eyebrow } from "@/components/ui/Eyebrow";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
 import { homeChain, networkOfChain } from "@/lib/payee-chains";
 import { previewPayLink, type PayLinkPreview } from "@/lib/platform/pay-links";
+import { linkSocialMetadata } from "@/lib/link-previews";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Pay an invoice",
   robots: { index: false, follow: false },
+  // This page's own card, rendered at build time and naming nothing of the link (mainnet polish E1).
+  ...linkSocialMetadata("pay"),
 };
 
 type PayPageProps = {

@@ -66,7 +66,7 @@ describe("docs social images", () => {
 describe("proxy matcher", () => {
   const matches = (path: string) => unstable_doesMiddlewareMatch({ config: proxyConfig, url: path });
 
-  it.each(["/opengraph-image", "/twitter-image", "/og/docs", "/og/docs/api/get-status"])("skips the social image %s", (path) => {
+  it.each(["/opengraph-image", "/twitter-image", "/og/docs", "/og/docs/api/get-status", "/og/link/pay"])("skips the social image %s", (path) => {
     expect(matches(path)).toBe(false);
   });
 

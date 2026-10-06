@@ -129,6 +129,14 @@ describe("the CSV import's preview (review M2)", () => {
   });
 });
 
+describe("the counterparty form's chain help (mainnet polish E2)", () => {
+  it("says another chain is paid through CCTP where the network has it, and that Arc mainnet pays on its own chain only", async () => {
+    const { chainHelp } = await import("@/components/intake/CounterpartyIntake");
+    expect(chainHelp("arc-testnet")).toBe("Another chain is paid from Arc through CCTP, for a fee");
+    expect(chainHelp("arc-mainnet")).toBe("Arc mainnet pays on its own chain only");
+  });
+});
+
 describe("the counterparty form's chain (CCTP payouts X1)", () => {
   it("offers the chains its workspace's network pays on, that network's own first (network threading P3)", async () => {
     const { readFileSync } = await import("node:fs");

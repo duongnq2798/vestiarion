@@ -174,7 +174,8 @@ transaction, so it holds across serverless instances rather than resetting per c
 `docs/superpowers/specs/2026-10-06-stuck-transfer-alert-design.md`) runs every 5 minutes from
 `.github/workflows/transfer-watch.yml` with the same bearer token. It tells a workspace's people about a live payment
 not confirmed after its network's `stuckAfterMinutes` (15):
-- in every workspace, live or not, it reads the live payment intents still in flight by `submitted_at`, which migration
+- in every workspace that can hold a live payment (a hosted wallet, or Circle credentials stored), live or not, it
+  reads the live payment intents still in flight by `submitted_at`, which migration
   0080's trigger stamps whenever a row becomes `submitting`, and those recorded `failed` in the last week that
   `paymentWasSent` says may have moved (a send whose answer was lost, a transfer whose last read failed);
 - it asks Circle again, read-only (`reconcileTransfer`); one Circle now shows settled is left to the next cycle;
@@ -999,6 +1000,16 @@ set, falling back to the same canonical origin when it is absent. Authentication
 links retain the separate, stricter `siteOrigin()` policy. The proxy excludes
 both metadata image paths and `og/`, so a crawler fetching a preview never
 performs a Supabase session refresh.
+
+The pay, payee and receipt link pages have cards of their own
+(`docs/superpowers/specs/2026-10-06-mainnet-polish-design.md` E1), so a link
+pasted into a chat does not show the platform's "Arc testnet" card whatever the
+link's network. Like the docs images they are served under `og/`, by
+`src/app/og/link/[page]/route.ts`: one card per kind of link, rendered at build
+time, with the page's badge and words and "Arc" in the footer. They read nothing
+of any link, so no token reaches an image's address. Each page points its Open
+Graph and X metadata at its card with `linkSocialMetadata` (`src/lib/link-previews.ts`),
+which repeats the site-wide fields a page's `openGraph` replaces.
 
 Each docs page has its own image: its title, its summary, and either its
 section or, on a reference page, its request line, beside a card of the docs'

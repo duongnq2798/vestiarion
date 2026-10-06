@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { ImageResponse } from "next/og";
 import type { ReactNode } from "react";
 import { COLOR } from "@/components/ui/tokens";
+import { LINK_PREVIEWS, type LinkPage } from "@/lib/link-previews";
 
 const OG_ASSET_DIR = join(process.cwd(), "src", "app", "_og");
 
@@ -49,9 +50,21 @@ const statusChips = [
 /**
  * The frame every social image shares: the paper ground, the agent-blue rule,
  * the mark and wordmark with a badge, and the footer line. `children` fills
- * the middle, and `footer` names where the page lives.
+ * the middle, `footer` names where the page lives, and `network` the line beside
+ * it: the platform's card says Arc testnet; a link page's says only Arc
+ * (mainnet polish E1).
  */
-export function renderSocialImage({ badge, footer, children }: { badge: string; footer: string; children: ReactNode }): ImageResponse {
+export function renderSocialImage({
+  badge,
+  footer,
+  children,
+  network = "Arc testnet",
+}: {
+  badge: string;
+  footer: string;
+  children: ReactNode;
+  network?: string;
+}): ImageResponse {
   return new ImageResponse(
     (
       <div
@@ -112,7 +125,7 @@ export function renderSocialImage({ badge, footer, children }: { badge: string; 
         <div style={{ display: "flex", alignItems: "center", color: COLOR.ink3, fontSize: 18 }}>
           <div style={{ display: "flex" }}>{footer}</div>
           <div style={{ display: "flex", margin: "0 12px", color: COLOR.lineStrong }}>·</div>
-          <div style={{ display: "flex" }}>Arc testnet</div>
+          <div style={{ display: "flex" }}>{network}</div>
           <div style={{ display: "flex", flex: 1, height: 1, marginLeft: 20, backgroundColor: COLOR.line }} />
         </div>
       </div>
@@ -236,6 +249,23 @@ export function socialPreviewImage(): ImageResponse {
             ))}
           </div>
         </div>
+      </div>
+    ),
+  });
+}
+
+
+/** A link page's card: the platform's frame, the page's badge and words, and no network named beyond Arc (E1). */
+export function linkPreviewImage(page: LinkPage): ImageResponse {
+  const { badge, title, line } = LINK_PREVIEWS[page];
+  return renderSocialImage({
+    badge,
+    footer: "vestiarion.xyz",
+    network: "Arc",
+    children: (
+      <div style={{ display: "flex", flex: 1, flexDirection: "column", justifyContent: "center", marginTop: 26 }}>
+        <div style={{ display: "flex", fontFamily: "Geist", fontSize: 64, fontWeight: 600, letterSpacing: -1.6, color: COLOR.ink }}>{title}</div>
+        <div style={{ display: "flex", marginTop: 20, fontSize: 28, color: COLOR.ink2 }}>{line}</div>
       </div>
     ),
   });

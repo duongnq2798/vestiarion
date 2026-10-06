@@ -62,6 +62,14 @@ describe("SafeToSpendPanel", () => {
     expect(page).toContain("The wallet runs short on Oct 11, 2026");
   });
 
+  it("names the USYC reserve on a short day only when it holds something (mainnet polish E3)", () => {
+    const none = text(renderToStaticMarkup(<SafeToSpendPanel outlook={{ ...OUTLOOK, safeToSpend: -18, shortOn: "2026-10-11" }} />));
+    expect(none).toContain("That is before any receivable arrives. Fund the operating wallet, or the agent holds what it cannot cover.");
+    expect(none).not.toContain("USYC reserve brought back");
+    const some = text(renderToStaticMarkup(<SafeToSpendPanel outlook={{ ...OUTLOOK, reserve: 5, safeToSpend: -18, shortOn: "2026-10-11" }} />));
+    expect(some).toContain("That is before any receivable arrives, with the USYC reserve brought back.");
+  });
+
   it("says EURC owed is paid from EURC, apart from this figure", () => {
     expect(text(renderToStaticMarkup(<SafeToSpendPanel outlook={{ ...OUTLOOK, eurcLeftOut: 17 }} />))).toContain("paid from the EURC balance, so it is left out");
   });
