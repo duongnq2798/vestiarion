@@ -1,5 +1,11 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-06: A cycle can start when Circle says a payment settled
+
+- A `cycle_complete` entry's `events` can include `payment_settled`. Circle said a transfer in flight settled or failed, and that cycle recorded which. Circle's notification started it, not a person, so its `by` is absent.
+- A `cycle_complete` entry's `events` can include `payment_received` without a person too, when Circle said money arrived in one of the workspace's wallets. Its `by` is then absent.
+- The `ap_reconcile`, `ar_received` and other entries such a cycle writes are the ones the schedule writes. Nothing else in `/api/v1` changes.
+
 ## 2026-10-06: Webhook retries go out every 10 minutes
 
 - The schedule that sends webhook retries, and anything still queued, now runs every 10 minutes. It ran on GitHub Actions, which started it only a few times a day, so a retry could wait hours past its backoff step. A delivery's body, headers and backoff steps do not change.

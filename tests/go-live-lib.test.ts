@@ -266,6 +266,9 @@ function circle(options: {
   getWalletSet?: (id: string) => Promise<unknown>;
   listWalletSets?: () => Promise<unknown>;
   createWallets?: () => Promise<unknown>;
+  /** The endpoints the account is already subscribed to (Circle notifications N6). */
+  subscriptions?: string[];
+  createSubscription?: () => Promise<unknown>;
 } = {}) {
   const credentials: Array<{ apiKey: string; entitySecret: string }> = [];
   let walletCalls = 0;
@@ -296,12 +299,14 @@ function circle(options: {
           return { data: { walletSet } };
         }
   );
-  const client = { listWalletSets, createWalletSet, createWallets, getWallet, getWalletSet } as unknown as CircleClient;
+  const listSubscriptions = vi.fn(async () => ({ data: (options.subscriptions ?? []).map((endpoint, index) => ({ id: `sub-${index}`, endpoint })) }));
+  const createSubscription = vi.fn(options.createSubscription ?? (async () => ({ data: { id: "sub-new" } })));
+  const client = { listWalletSets, createWalletSet, createWallets, getWallet, getWalletSet, listSubscriptions, createSubscription } as unknown as CircleClient;
   const factory = vi.fn((given: { apiKey: string; entitySecret: string }) => {
     credentials.push(given);
     return client;
   }) as unknown as CircleClientFactory;
-  return { factory, credentials, listWalletSets, createWalletSet, createWallets, getWallet, getWalletSet };
+  return { factory, credentials, listWalletSets, createWalletSet, createWallets, getWallet, getWalletSet, listSubscriptions, createSubscription };
 }
 
 /** The same Circle entity as the one the fixtures' wallets were created in: its operating wallet, in its treasury set. */
@@ -443,6 +448,40 @@ describe("connectCircle", () => {
     expect(entries).toHaveLength(1);
     expect(entries[0]).toMatchObject({ p_org_id: ORG, p_action: "circle_connected", p_domain: "system", p_actor: "human" });
     expect(entries[0].p_detail).toEqual({ by: ACTOR });
+  });
+
+  it("subscribes the account to Circle's transaction notifications once its credentials are stored (Circle notifications N6)", async () => {
+    const { fake, inScope } = database(sandbox());
+    const fakeCircle = circle({
+      // The account is subscribed only after the credentials are written, and with them.
+      createSubscription: async () => {
+        expect(orgPatches(fake)).toHaveLength(1);
+        return { data: { id: "sub-new" } };
+      },
+    });
+    await inScope(() => connectCircle({ orgId: ORG, actorId: ACTOR, apiKey: API_KEY, entitySecret: ENTITY_SECRET, client: fakeCircle.factory }));
+    expect(fakeCircle.createSubscription).toHaveBeenCalledWith({
+      endpoint: "https://www.vestiarion.xyz/api/circle/notifications",
+      notificationTypes: ["transactions.outbound", "transactions.inbound"],
+    });
+    expect(fakeCircle.credentials.every((given) => given.apiKey === API_KEY && given.entitySecret === ENTITY_SECRET)).toBe(true);
+  });
+
+  it("leaves an account already subscribed, as on a reconnect", async () => {
+    const fakeCircle = circle({ subscriptions: ["https://www.vestiarion.xyz/api/circle/notifications"] });
+    const { inScope } = database(connected());
+    await inScope(() => connectCircle({ orgId: ORG, actorId: ACTOR, apiKey: API_KEY, entitySecret: ENTITY_SECRET, client: fakeCircle.factory }));
+    expect(fakeCircle.createSubscription).not.toHaveBeenCalled();
+  });
+
+  it("still connects when Circle refuses the subscription: the schedule settles payments without it", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { fake, inScope } = database(sandbox());
+    const fakeCircle = circle({ createSubscription: async () => Promise.reject(new Error("subscription limit reached")) });
+    await inScope(() => connectCircle({ orgId: ORG, actorId: ACTOR, apiKey: API_KEY, entitySecret: ENTITY_SECRET, client: fakeCircle.factory }));
+    expect(appends(fake).map((entry) => entry.p_action)).toEqual(["circle_connected"]);
+    expect(warn).toHaveBeenCalledWith("Circle notifications not subscribed for", ORG, "subscription limit reached");
+    warn.mockRestore();
   });
 
   it("records circle_reconnected when credentials were already stored", async () => {

@@ -194,6 +194,23 @@ payment not confirmed after its network's `stuckAfterMinutes` (15):
 - it runs whatever the pause and the stop switch say, tells from the age alone where Circle cannot be asked, and never
   sends, retries, settles or holds a payment.
 
+**Circle notifications** (`POST /api/circle/notifications`, `src/lib/circle/notify.ts`,
+`docs/superpowers/specs/2026-10-06-circle-notifications-design.md`) start a payment's settling within seconds of Circle,
+instead of at the next cycle:
+- Circle posts a signed notification when a transfer's state changes. The route answers 401 without a valid ECDSA P-256
+  signature (`X-Circle-Signature`, against the key `X-Circle-Key-Id` names), and 503 when that key cannot be fetched, so
+  Circle sends it again.
+- It looks in every workspace that can hold a live payment, as the transfer watch lists them, for a payment intent in
+  flight whose `provider_tx_id` is an outbound transfer now `COMPLETE`, `FAILED`, `DENIED` or `CANCELLED`, or for the
+  account whose `circle_wallet_id` received an inbound transfer now `COMPLETE`. It verifies the signature in that
+  workspace's scope, with the key fetched from its own Circle account (`getNotificationSignature`, cached by key id).
+- It then raises an event cycle, `payment_settled` or `payment_received`, through `runCycleSoon`, with no person behind it.
+  Nothing from the body is recorded: the cycle's reconcile reads Circle back, as on the schedule. A payment confirmed
+  inside its own sending cycle's 45-second wait is no longer in flight, so its notification starts nothing.
+- Each Circle account has one subscription to that endpoint, found or made (`ensureNotificationSubscription`). Connect
+  Circle makes it for a workspace's own account, best effort. `npm run circle:subscribe` makes it for the platform's
+  hosted account and for accounts connected before; the operator runs it once per deployment.
+
 **The FX watch** (`POST /api/agent/fx-watch`, `src/lib/agent/fx-watch.ts`,
 `docs/superpowers/specs/2026-10-05-fx-reevaluation-design.md`) runs every 5 minutes from Supabase Cron, with the same
 bearer token, and by hand from `.github/workflows/fx-watch.yml`. It decides again, without a person, a EURC payable a
