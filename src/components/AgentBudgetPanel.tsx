@@ -16,7 +16,8 @@ import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm, type ActionResult } from "@/components/ui/useActionForm";
 import { fmt, Hash, Money } from "@/components/vx/Primitives";
 import { withSuccessToast } from "@/components/withSuccessToast";
-import { arcAddressUrl } from "@/lib/payee-chains";
+import { addressUrl } from "@/lib/payee-chains";
+import type { Network } from "@/lib/network";
 
 const INITIAL: ActionResult = { ok: false, message: "" };
 const save = withSuccessToast(setAgentBudgetAction);
@@ -67,7 +68,10 @@ export function AgentBudgetPanel({
   canEdit,
   live = false,
   onChain = null,
+  network,
 }: {
+  /** The workspace's network: its explorer links what this shows (network threading P6). */
+  network: Network;
   orgSlug: string;
   view: AgentBudgetView;
   canEdit: boolean;
@@ -101,7 +105,7 @@ export function AgentBudgetPanel({
               : "A payment past it waits for you in Approvals. What a person approves does not count."}
           </p>
           {canEdit && <BudgetDialog orgSlug={orgSlug} view={view} unset={unset} />}
-          <OnArc orgSlug={orgSlug} onChain={onChain} canEdit={canEdit} live={live} unset={unset} />
+          <OnArc orgSlug={orgSlug} onChain={onChain} canEdit={canEdit} live={live} unset={unset} network={network} />
         </CardContent>
       </section>
     </Card>
@@ -183,7 +187,7 @@ function BudgetDialog({ orgSlug, view, unset }: { orgSlug: string; view: AgentBu
 }
 
 /** The limit on Arc (onchain spending limit §4): what the contract counts, or the action that puts it there. */
-function OnArc({ orgSlug, onChain, canEdit, live, unset }: { orgSlug: string; onChain: OnChainLimitView | null; canEdit: boolean; live: boolean; unset: boolean }) {
+function OnArc({ orgSlug, onChain, canEdit, live, unset, network }: { orgSlug: string; onChain: OnChainLimitView | null; canEdit: boolean; live: boolean; unset: boolean; network: Network }) {
   const enforced = onChain?.state === "enforced";
   const enforceForm = useActionForm(enforce, INITIAL);
   const offForm = useActionForm(turnOff, INITIAL);
@@ -204,7 +208,7 @@ function OnArc({ orgSlug, onChain, canEdit, live, unset }: { orgSlug: string; on
               <div className="flex items-baseline justify-between gap-3">
                 <dt className="text-ink-2">Contract</dt>
                 <dd>
-                  <Hash value={onChain.contract} href={arcAddressUrl(onChain.contract)} />
+                  <Hash value={onChain.contract} href={addressUrl(network, onChain.contract)} />
                 </dd>
               </div>
             )}
@@ -212,7 +216,7 @@ function OnArc({ orgSlug, onChain, canEdit, live, unset }: { orgSlug: string; on
               <div className="flex items-baseline justify-between gap-3">
                 <dt className="text-ink-2">Agent&apos;s wallet</dt>
                 <dd>
-                  <Hash value={onChain.agent} href={arcAddressUrl(onChain.agent)} />
+                  <Hash value={onChain.agent} href={addressUrl(network, onChain.agent)} />
                 </dd>
               </div>
             )}

@@ -8,7 +8,8 @@ import { SectionHeader } from "@/components/ui/SectionHeader";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
 import { Hash } from "@/components/vx/Primitives";
-import { arcAddressUrl } from "@/lib/payee-chains";
+import { addressUrl } from "@/lib/payee-chains";
+import type { Network } from "@/lib/network";
 
 const INITIAL: EscrowActionResult = { ok: false, message: "" };
 
@@ -23,7 +24,10 @@ export function EscrowPanel({
   deploying,
   canSetUp,
   bare = false,
+  network,
 }: {
+  /** The workspace's network: its explorer links what this shows (network threading P6). */
+  network: Network;
   orgSlug: string;
   address: string | null;
   deploying: boolean;
@@ -42,7 +46,7 @@ export function EscrowPanel({
       </p>
       {address ? (
         <p className="flex flex-wrap items-center gap-2 text-sm text-ink-2">
-          Contract <Hash value={address} href={arcAddressUrl(address)} />
+          Contract <Hash value={address} href={addressUrl(network, address)} />
         </p>
       ) : deploying ? (
         <p className="text-sm text-ink-2">A setup was started and has not finished.</p>

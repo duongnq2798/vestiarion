@@ -3,7 +3,6 @@ import { decodeFunctionData, parseAbi, type Hex } from "viem";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { batchCalls, BatchNotSentError, MAX_BATCH_SIZE, SCA_EXECUTE_BATCH } from "@/lib/circle/batch";
-import { ARC_TESTNET_USDC } from "@/lib/circle/cctp";
 import {
   BATCH_LOOKUP_GRACE_MS,
   batchIdempotencyKey,
@@ -18,6 +17,7 @@ import {
 } from "@/lib/payments";
 import type { BalanceSnapshot, BatchTransferParams, ChainProvider, EarnResult, TransferParams, TransferResult } from "@/lib/circle";
 import { fakeSupabase, orgTestContext, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
+import { ARC_TESTNET } from "@/lib/network";
 
 /**
  * Batch payouts (docs/superpowers/specs/2026-10-02-batch-payouts-design.md): payments never sent go out
@@ -46,6 +46,7 @@ function transferResult(over: Partial<TransferResult> = {}): TransferResult {
 }
 
 class Chain implements ChainProvider {
+  readonly network = ARC_TESTNET;
   readonly mode = "live" as const;
   readonly earnMode = "simulate" as const;
   readonly estimatedFeeUsd = 0.003;
@@ -172,11 +173,11 @@ describe("batchCalls", () => {
     const calls = batchCalls([
       { toAddress: "0x67C8000000000000000000000000000000000504", amount: 1.5 },
       { toAddress: "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd", amount: 0.000001 },
-    ]);
+    ], ARC_TESTNET.tokens.USDC);
     expect(SCA_EXECUTE_BATCH).toBe("executeBatch((address,uint256,bytes)[])");
     expect(calls).toHaveLength(2);
     for (const [target, value] of calls) {
-      expect(target).toBe(ARC_TESTNET_USDC);
+      expect(target).toBe(ARC_TESTNET.tokens.USDC);
       expect(value).toBe("0");
     }
     const [to, units] = decodeFunctionData({ abi: erc20, data: calls[0][2] as Hex }).args;
@@ -186,11 +187,11 @@ describe("batchCalls", () => {
 
   it("refuses fewer than two, more than the most, an address not on Arc, and nothing to send, before anything is sent", () => {
     const one = { toAddress: `0x${"1".repeat(40)}`, amount: 1 };
-    expect(() => batchCalls([one])).toThrow(BatchNotSentError);
-    expect(() => batchCalls([one])).toThrow(/2 to 20/);
-    expect(() => batchCalls(Array.from({ length: MAX_BATCH_SIZE + 1 }, () => one))).toThrow(/2 to 20/);
-    expect(() => batchCalls([one, { toAddress: "sim:cp-1", amount: 1 }])).toThrow(/Arc address/);
-    expect(() => batchCalls([one, { ...one, amount: 0 }])).toThrow(/more than 0.*nothing was sent/);
+    expect(() => batchCalls([one], ARC_TESTNET.tokens.USDC)).toThrow(BatchNotSentError);
+    expect(() => batchCalls([one], ARC_TESTNET.tokens.USDC)).toThrow(/2 to 20/);
+    expect(() => batchCalls(Array.from({ length: MAX_BATCH_SIZE + 1 }, () => one), ARC_TESTNET.tokens.USDC)).toThrow(/2 to 20/);
+    expect(() => batchCalls([one, { toAddress: "sim:cp-1", amount: 1 }], ARC_TESTNET.tokens.USDC)).toThrow(/Arc address/);
+    expect(() => batchCalls([one, { ...one, amount: 0 }], ARC_TESTNET.tokens.USDC)).toThrow(/more than 0.*nothing was sent/);
   });
 });
 

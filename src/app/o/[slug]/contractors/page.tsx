@@ -35,6 +35,8 @@ import { orgHref } from "@/lib/auth/org-paths";
 import { utcDay } from "@/lib/copy";
 import { listMembers } from "@/lib/platform/members";
 import { listCounterparties, listMilestones, stats, type MilestoneRow } from "@/lib/queries";
+import { workspaceNetwork } from "@/lib/workspace-network";
+import { paidAcrossChains } from "@/lib/payee-chains";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +49,7 @@ export default async function ContractorsPage({ params, searchParams }: { params
   const { slug } = await params;
   const access = await requireMembership(slug);
   return inOrg(access, async () => {
+    const network = workspaceNetwork().id;
     const showAllPaid = (await searchParams).history === "all";
     const live = access.membership.mode === "live";
     const [milestones, counterparties, headEntries, dashboardStats, canWrite, canManageTreasury, canDecide, escrow] = await Promise.all([
@@ -89,7 +92,7 @@ export default async function ContractorsPage({ params, searchParams }: { params
       return milestone.status === "verified" && contractor ? payeeNotReady(contractor, live) : null;
     };
     const decisions = milestones.map((milestone) =>
-      milestoneDecision(milestone, entries, { riskLevel: contractorsById.get(milestone.contractor_id)?.risk_level ?? null, waiting: waitingOf(milestone) })
+      milestoneDecision(milestone, entries, { network, riskLevel: contractorsById.get(milestone.contractor_id)?.risk_level ?? null, waiting: waitingOf(milestone) })
     );
     const milestonesById = new Map(milestones.map((milestone) => [milestone.id, milestone]));
     // Made here, not in the browser, so the server's markup and the browser's agree (as the Gateway form's id is).
@@ -109,6 +112,7 @@ export default async function ContractorsPage({ params, searchParams }: { params
         {canWrite && milestone.status !== "paid" && milestone.status !== "closed" && <MilestoneVerification orgSlug={slug} milestoneId={milestone.id} verified={milestone.verified} />}
         {live && (
           <MilestoneEscrow
+            network={network}
             orgSlug={slug}
             milestoneId={milestone.id}
             requestId={crypto.randomUUID()}
@@ -122,7 +126,7 @@ export default async function ContractorsPage({ params, searchParams }: { params
               return (
                 milestone.status === "pending" &&
                 Boolean(contractor?.address) &&
-                (contractor?.chain ?? "ARC-TESTNET") === "ARC-TESTNET" &&
+                !paidAcrossChains(contractor?.chain) &&
                 !addressUnconfirmed(contractor?.address_changed_at ?? null, contractor?.address_confirmed_at ?? null)
               );
             })()}
@@ -293,7 +297,7 @@ export default async function ContractorsPage({ params, searchParams }: { params
               </span>
             }
           >
-            <EscrowPanel orgSlug={slug} address={escrow?.address ?? null} deploying={Boolean(escrow && !escrow.address)} canSetUp={canManageTreasury} bare />
+            <EscrowPanel network={network} orgSlug={slug} address={escrow?.address ?? null} deploying={Boolean(escrow && !escrow.address)} canSetUp={canManageTreasury} bare />
           </Disclosure>
         )}
 

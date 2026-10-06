@@ -8,6 +8,8 @@ import { isHttpsLink, usdcAmountSchema } from "./intake-validation";
 import { appendLedgerEntry } from "./ledger";
 import { createPayeeLink } from "./platform/payee-links";
 import { publicOrigin } from "./public-origin";
+import { homeChain } from "./payee-chains";
+import { workspaceNetwork } from "./workspace-network";
 
 /**
  * Paying a freelancer in one step
@@ -80,7 +82,7 @@ export async function setUpFreelancerPayment(
         name: input.name,
         role: "contractor",
         address: null,
-        chain: "ARC-TESTNET",
+        chain: homeChain(workspaceNetwork().id).id,
         baseline_payment_limit: input.amount,
         payment_limit: null,
         // The email the link goes to is where they hear they were paid (payment notices R1).
@@ -98,7 +100,7 @@ export async function setUpFreelancerPayment(
       by: input.actorId,
       counterpartyId: counterparty.id,
       role: "contractor",
-      chain: "ARC-TESTNET",
+      chain: homeChain(workspaceNetwork().id).id,
       address: null,
       jurisdiction: null,
       baselinePaymentLimit: input.amount,

@@ -98,7 +98,7 @@ describe("the milestone's escrow on its card", () => {
   };
 
   it("offers to lock an unlocked milestone, with a refund date, to an owner or admin", () => {
-    const markup = renderToStaticMarkup(<MilestoneEscrow {...base} hold={null} />);
+    const markup = renderToStaticMarkup(<MilestoneEscrow network="arc-testnet" {...base} hold={null} />);
     expect(text(markup)).toContain("Lock in escrow");
     // What will be locked, for whom, and the dates the app accepts (review C1, M4).
     expect(text(markup)).toContain("Locks 2 USDC for 0x67C8000000000000000000000000000000000504");
@@ -109,31 +109,31 @@ describe("the milestone's escrow on its card", () => {
   });
 
   it("offers nothing when escrow is not set up, to someone who may not manage treasury, or for a paid milestone", () => {
-    expect(renderToStaticMarkup(<MilestoneEscrow {...base} escrowReady={false} hold={null} />)).toBe("");
-    expect(renderToStaticMarkup(<MilestoneEscrow {...base} canManage={false} hold={null} />)).toBe("");
-    expect(renderToStaticMarkup(<MilestoneEscrow {...base} paid hold={null} />)).toBe("");
+    expect(renderToStaticMarkup(<MilestoneEscrow network="arc-testnet" {...base} escrowReady={false} hold={null} />)).toBe("");
+    expect(renderToStaticMarkup(<MilestoneEscrow network="arc-testnet" {...base} canManage={false} hold={null} />)).toBe("");
+    expect(renderToStaticMarkup(<MilestoneEscrow network="arc-testnet" {...base} paid hold={null} />)).toBe("");
     // A milestone that cannot be locked says why, rather than failing after the press (review M4).
-    expect(text(renderToStaticMarkup(<MilestoneEscrow {...base} lockable={false} hold={null} />))).toContain(
+    expect(text(renderToStaticMarkup(<MilestoneEscrow network="arc-testnet" {...base} lockable={false} hold={null} />))).toContain(
       "It can be locked while it is not yet verified, for a contractor with a confirmed Arc testnet address."
     );
   });
 
   it("offers to refund a hold from its refund date, to an owner or admin, for a milestone not paid", () => {
     const hold = { state: "funded" as const, refundAfter: "2026-10-31T00:00:00Z", amount: 2, fundTxHash: FUND, releaseTxHash: null, refundTxHash: null };
-    expect(text(renderToStaticMarkup(<MilestoneEscrow {...base} refundable hold={hold} />))).toContain("Refund from escrow");
-    expect(text(renderToStaticMarkup(<MilestoneEscrow {...base} refundable={false} hold={hold} />))).not.toContain("Refund from escrow");
-    expect(text(renderToStaticMarkup(<MilestoneEscrow {...base} refundable canManage={false} hold={hold} />))).not.toContain("Refund from escrow");
+    expect(text(renderToStaticMarkup(<MilestoneEscrow network="arc-testnet" {...base} refundable hold={hold} />))).toContain("Refund from escrow");
+    expect(text(renderToStaticMarkup(<MilestoneEscrow network="arc-testnet" {...base} refundable={false} hold={hold} />))).not.toContain("Refund from escrow");
+    expect(text(renderToStaticMarkup(<MilestoneEscrow network="arc-testnet" {...base} refundable canManage={false} hold={hold} />))).not.toContain("Refund from escrow");
     // Whatever the milestone's status: the chain decides whether the hold is still there (review I1).
-    expect(text(renderToStaticMarkup(<MilestoneEscrow {...base} refundable paid hold={hold} />))).toContain("Refund from escrow");
+    expect(text(renderToStaticMarkup(<MilestoneEscrow network="arc-testnet" {...base} refundable paid hold={hold} />))).toContain("Refund from escrow");
   });
 
   it("says a hold is locked until its date, released or refunded, with its transaction", () => {
-    const funded = text(renderToStaticMarkup(<MilestoneEscrow {...base} hold={{ state: "funded", refundAfter: "2026-10-31T00:00:00Z", amount: 2, fundTxHash: FUND, releaseTxHash: null, refundTxHash: null }} />));
+    const funded = text(renderToStaticMarkup(<MilestoneEscrow network="arc-testnet" {...base} hold={{ state: "funded", refundAfter: "2026-10-31T00:00:00Z", amount: 2, fundTxHash: FUND, releaseTxHash: null, refundTxHash: null }} />));
     expect(funded).toContain("2 USDC locked in escrow for 0x67C8…0504 until 31 Oct 2026");
-    const released = renderToStaticMarkup(<MilestoneEscrow {...base} paid hold={{ state: "released", refundAfter: "2026-10-31T00:00:00Z", amount: 2, fundTxHash: FUND, releaseTxHash: `0x${"3".repeat(64)}`, refundTxHash: null }} />);
+    const released = renderToStaticMarkup(<MilestoneEscrow network="arc-testnet" {...base} paid hold={{ state: "released", refundAfter: "2026-10-31T00:00:00Z", amount: 2, fundTxHash: FUND, releaseTxHash: `0x${"3".repeat(64)}`, refundTxHash: null }} />);
     expect(text(released)).toContain("Released from escrow");
     expect(released).toContain(`href="https://explorer.testnet.arc.io/tx/0x${"3".repeat(64)}"`);
-    expect(text(renderToStaticMarkup(<MilestoneEscrow {...base} hold={{ state: "refunded", refundAfter: "2026-10-31T00:00:00Z", amount: 2, fundTxHash: FUND, releaseTxHash: null, refundTxHash: `0x${"4".repeat(64)}` }} />))).toContain(
+    expect(text(renderToStaticMarkup(<MilestoneEscrow network="arc-testnet" {...base} hold={{ state: "refunded", refundAfter: "2026-10-31T00:00:00Z", amount: 2, fundTxHash: FUND, releaseTxHash: null, refundTxHash: `0x${"4".repeat(64)}` }} />))).toContain(
       "Refunded from escrow"
     );
   });

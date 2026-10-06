@@ -3,7 +3,8 @@ import { currentOrgId } from "../context";
 import { db, platformDb, unwrap } from "../dal";
 import { parseGitHubPullRequestUrl, type GitHubPullRequestRef } from "../github-verification";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
-import { arcTxUrl } from "../payee-chains";
+import { homeChain, txUrl } from "../payee-chains";
+import { networkOf, networkProfile, type Network } from "../network";
 import { createPullRequestComment, installationToken, repositoryInstallationId } from "./app";
 import { githubInstallations } from "./installs";
 import { literal } from "./markdown";
@@ -29,12 +30,12 @@ const AMOUNT = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximu
 const TX_HASH = /^0x[0-9a-fA-F]{64}$/;
 
 /** The comment: what was paid, on which network, by whom, and the transaction. Never the payee (G4). */
-export function pullRequestCommentBody(input: { amount: string; token: "USDC" | "EURC"; orgName: string; txHash: string; origin: string }): string {
+export function pullRequestCommentBody(input: { amount: string; token: "USDC" | "EURC"; orgName: string; txHash: string; origin: string; network: Network }): string {
   const short = `${input.txHash.slice(0, 10)}…${input.txHash.slice(-8)}`;
   return [
-    `**Paid: ${input.amount} ${input.token} on Arc testnet** for this pull request, by ${literal(input.orgName)}.`,
+    `**Paid: ${input.amount} ${input.token} on ${networkProfile(input.network).label}** for this pull request, by ${literal(input.orgName)}.`,
     "",
-    `Transaction: [${short}](${arcTxUrl(input.txHash)})`,
+    `Transaction: [${short}](${txUrl(input.network, input.txHash)})`,
     "",
     `<sub>Posted by [Vestiarion](${input.origin}) once the payment was confirmed. The payment is a signed entry in the payer's ledger.</sub>`,
   ].join("\n");
@@ -54,6 +55,8 @@ interface DueIntent {
   chain: string | null;
   confirmed_at: string | null;
   payout_route: string | null;
+  /** The network the payment was made on (0075); null on a row from before it, which is Arc testnet. */
+  network: string | null;
 }
 
 const where = (ref: GitHubPullRequestRef) => `${ref.owner}/${ref.repo}#${ref.number}`;
@@ -79,7 +82,7 @@ export async function sendPullRequestComments(
     unwrap(
       await db()
         .from("payment_intents")
-        .select("id, source_id, amount, token, tx_hash, chain, confirmed_at, payout_route")
+        .select("id, source_id, amount, token, tx_hash, chain, confirmed_at, payout_route, network")
         .eq("source_type", "milestone")
         .eq("status", "confirmed")
         .eq("provider_mode", "live")
@@ -91,7 +94,7 @@ export async function sendPullRequestComments(
     ) as DueIntent[]
   )
     // Paid on Arc testnet, with its transaction: the comment links it.
-    .filter((intent) => (intent.chain ?? "ARC-TESTNET") === "ARC-TESTNET" && !intent.payout_route && TX_HASH.test(intent.tx_hash ?? ""));
+    .filter((intent) => (intent.chain ?? homeChain(networkOf(intent.network)).id) === homeChain(networkOf(intent.network)).id && !intent.payout_route && TX_HASH.test(intent.tx_hash ?? ""));
   if (due.length === 0) return [];
 
   const milestones = unwrap(
@@ -140,7 +143,7 @@ export async function sendPullRequestComments(
       comment = await createPullRequestComment(
         installation,
         ref,
-        pullRequestCommentBody({ amount, token, orgName: org.name, txHash: intent.tx_hash as string, origin }),
+        pullRequestCommentBody({ amount, token, orgName: org.name, txHash: intent.tx_hash as string, origin, network: networkOf(intent.network) }),
         deps
       );
     } catch (error) {

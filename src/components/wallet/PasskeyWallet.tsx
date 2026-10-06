@@ -8,7 +8,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Field } from "@/components/ui/Field";
 import { FormMessage } from "@/components/ui/FormMessage";
 import { Input } from "@/components/ui/Input";
-import { arcAddressUrl, arcTxUrl } from "@/lib/payee-chains";
+import { addressUrl, txUrl } from "@/lib/payee-chains";
 import { maskAddress } from "@/lib/payee-journey";
 import { PASSKEY_WALLET_NETWORK, passkeyFailure, passkeyWalletConfig } from "@/lib/passkey-wallet";
 import { openPasskeyWallet, sendProblem, usdcText, usdcUnits, type OpenPasskeyWallet } from "@/lib/passkey-wallet-send";
@@ -145,7 +145,7 @@ export function PasskeyWallet({ configured }: { configured: boolean }) {
       {wallet && screen.kind !== "closed" && (
         <dl className="mt-5 grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-2.5 text-sm">
           <Row term="Address">
-            <a href={arcAddressUrl(wallet.address)} target="_blank" rel="noreferrer" className="font-mono text-agent underline-offset-4 hover:underline">
+            <a href={addressUrl(PASSKEY_WALLET_NETWORK.id, wallet.address)} target="_blank" rel="noreferrer" className="font-mono text-agent underline-offset-4 hover:underline">
               {wallet.address}
               <span className="sr-only"> (opens in a new tab)</span>
             </a>
@@ -242,7 +242,7 @@ export function PasskeyWallet({ configured }: { configured: boolean }) {
 function TransactionLink({ txHash }: { txHash: string }) {
   return (
     <Button asChild variant="secondary">
-      <a href={arcTxUrl(txHash)} target="_blank" rel="noreferrer">
+      <a href={txUrl(PASSKEY_WALLET_NETWORK.id, txHash)} target="_blank" rel="noreferrer">
         View the transaction
         <ArrowUpRight aria-hidden />
         <span className="sr-only">(opens in a new tab)</span>

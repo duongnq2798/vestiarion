@@ -7,7 +7,8 @@ import { encryptSecret, masterKeysFromEnv } from "../secrets";
 import { getChainProvider, type ChainProvider } from "../circle";
 import { hasSampleData } from "../sample-data";
 import { checkCircleApiKey, defaultCircleClient, type CircleClient, type CircleClientFactory } from "../circle/check";
-import { NETWORK_IDS, networkOf, networkProfile } from "../network";
+import { FeatureOffError, NETWORK_IDS, networkOf, networkProfile } from "../network";
+import { workspaceNetwork } from "../workspace-network";
 import {
   circleCall,
   CircleCallFailed,
@@ -73,7 +74,8 @@ export type GoLiveErrorCode =
   | "hosted_limit_reached"
   | "hosted_has_wallets"
   | "sample_data_loaded"
-  | "key_network";
+  | "key_network"
+  | "hosted_network";
 
 const MESSAGES: Record<GoLiveErrorCode, string> = {
   invalid: "Paste both the API key and the entity secret.",
@@ -93,11 +95,16 @@ const MESSAGES: Record<GoLiveErrorCode, string> = {
   hosted_has_wallets: "This workspace's wallets are hosted by Vestiarion; start a new workspace to use your own Circle account.",
   sample_data_loaded: "Remove the sample data first. It exists only to try the agent with simulated payments.",
   key_network: "This Circle API key is for Arc mainnet (LIVE_API_KEY). This workspace is on Arc testnet: paste a test key (TEST_API_KEY).",
+  hosted_network: "A hosted wallet does not run on this workspace's network yet.",
 };
 
 export class GoLiveError extends Error {
-  constructor(readonly code: GoLiveErrorCode) {
-    super(MESSAGES[code]);
+  constructor(
+    readonly code: GoLiveErrorCode,
+    /** Words naming what refused, when the code's own are not enough: a network, by name (network threading P5). */
+    message?: string
+  ) {
+    super(message ?? MESSAGES[code]);
     this.name = "GoLiveError";
   }
 }
@@ -511,7 +518,8 @@ export async function goLiveStatus(orgId: string): Promise<GoLiveStatus> {
       step,
       connected,
       host: state.walletHost,
-      hostedAvailable: Boolean(chain.hostedAvailable),
+      // Offered only where the workspace's network has hosted wallets (network threading P5).
+      hostedAvailable: Boolean(chain.hostedAvailable) && workspaceNetwork().hostedWallets,
       wallets,
       liveSince: latest[0]?.ts ?? null,
       credentialsUnreadable: Boolean(chain.credentialsUnreadable),
@@ -535,8 +543,10 @@ export async function goLiveStatus(orgId: string): Promise<GoLiveStatus> {
 export async function chooseHostedWallet(input: { orgId: string; actorId: string }): Promise<void> {
   const platform = await inScopeOf(input.orgId, input.actorId, async () => {
     const config = currentOrgConfig();
-    return { available: Boolean(config.chain.hostedAvailable), limit: config.hostedWorkspaceLimit };
+    return { available: Boolean(config.chain.hostedAvailable), limit: config.hostedWorkspaceLimit, network: workspaceNetwork() };
   });
+  // Hosted wallets are the platform's testnet account's: a network without them refuses by name (network threading P5).
+  if (!platform.network.hostedWallets) throw new GoLiveError("hosted_network", new FeatureOffError("A hosted wallet", platform.network).message);
   if (!platform.available) throw new GoLiveError("hosted_unavailable");
   if (await inScopeOf(input.orgId, input.actorId, hasSampleData)) throw new GoLiveError("sample_data_loaded");
 

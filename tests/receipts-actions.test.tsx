@@ -129,7 +129,7 @@ describe("which payables offer a receipt", () => {
 
   it("gives the control a full-width row of its own, never the hashes' cluster, so a long link cannot push it out of the card", () => {
     const decision = {
-      id: INVOICE, domain: "ap", action: "Pay", subject: "STM", amount: 2, token: "USDC", outcome: "recorded", outcomeLabel: "Paid",
+      id: INVOICE, network: "arc-testnet", domain: "ap", action: "Pay", subject: "STM", amount: 2, token: "USDC", outcome: "recorded", outcomeLabel: "Paid",
       reasoning: "Due today.", evidence: [], txHash: `0x${"1".repeat(64)}`, auditSeq: 586, at: "2026-10-01T08:28:28Z",
     } as unknown as Decision;
     const markup = renderToStaticMarkup(<DecisionCard decision={decision} orgSlug="testnet-2" footerAction={<span>RECEIPT-ACTION</span>} />);
@@ -155,7 +155,7 @@ describe("which payables offer a receipt", () => {
 
   it("shows the control in the card's footer", () => {
     const decision = {
-      id: INVOICE, domain: "ap", action: "Pay", subject: "STM", amount: 2, token: "USDC", outcome: "recorded", outcomeLabel: "Paid",
+      id: INVOICE, network: "arc-testnet", domain: "ap", action: "Pay", subject: "STM", amount: 2, token: "USDC", outcome: "recorded", outcomeLabel: "Paid",
       reasoning: "Due today.", evidence: [], txHash: `0x${"1".repeat(64)}`, at: "2026-10-01T08:28:28Z",
     } as unknown as Decision;
     const markup = text(renderToStaticMarkup(<DecisionCard decision={decision} orgSlug="testnet-2" footerAction={<ReceiptControl orgSlug="testnet-2" invoiceId={INVOICE} shared={false} />} />));

@@ -15,7 +15,7 @@ const WORKSPACE = { name: "Acme & Sons", slug: "acme" };
 const TX = `0x${"ab".repeat(32)}`;
 
 function item(overrides: Partial<ActivityItem> = {}): ActivityItem {
-  return {
+  const base = {
     seq: 41,
     text: "Paid Centronex 0.35 USDC · 26 s after it was added",
     detail: "DeepSeek decided, as the written policy would.",
@@ -24,7 +24,8 @@ function item(overrides: Partial<ActivityItem> = {}): ActivityItem {
     pathLabel: "See it on AP / AR",
     txHash: TX,
     ...overrides,
-  };
+  } as ActivityItem;
+  return { ...base, txUrl: overrides.txUrl !== undefined ? overrides.txUrl : base.txHash ? `https://explorer.testnet.arc.io/tx/${base.txHash}` : null };
 }
 
 describe("decisionsMessage", () => {

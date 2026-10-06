@@ -139,6 +139,15 @@ const enforce = (db: ReturnType<typeof database>, c: ReturnType<typeof circle>) 
 beforeEach(() => appendLedgerEntry.mockClear());
 
 describe("enforcing the spending limit on Arc", () => {
+  it("asks Circle for every wallet and the contract on the workspace's network's own chain (network threading P4)", async () => {
+    const db = database(null, { config: { ...config, network: "arc-mainnet" } });
+    const c = circle();
+    await enforce(db, c);
+    expect(c.calls[0].input).toMatchObject({ blockchains: ["ARC"] });
+    expect(c.calls[2].input).toMatchObject({ blockchains: ["ARC"], accountType: "SCA" });
+    expect(c.calls[3].input).toMatchObject({ blockchain: "ARC" });
+  });
+
   it("creates the deployer and its gas, the agent's wallet, the contract with the figures, and the operating wallet's approval", async () => {
     const db = database();
     const c = circle();

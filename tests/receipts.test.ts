@@ -5,6 +5,7 @@ import { db } from "@/lib/dal";
 import { matchTransfer, recordIncomingTransfers, type OpenReceivable } from "@/lib/agent/receipts";
 import type { ChainProvider, InboundTransfer } from "@/lib/circle/types";
 import { fakeSupabase, orgTestContext, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
+import { ARC_TESTNET } from "@/lib/network";
 
 /**
  * Money in, matched to what was owed (docs/superpowers/specs/2026-10-01-receivables-on-arc-design.md):
@@ -68,7 +69,7 @@ describe("recordIncomingTransfers", () => {
   let fake: ReturnType<typeof fakeSupabase>;
   const run = <T,>(fn: () => Promise<T>) => runWith(orgTestContext({ config, client: fake.client, orgId: ORG }), fn);
   const provider = (transfers: InboundTransfer[]) =>
-    ({ mode: "live", listInboundTransfers: vi.fn().mockResolvedValue(transfers) }) as unknown as ChainProvider;
+    ({ mode: "live", network: ARC_TESTNET, listInboundTransfers: vi.fn().mockResolvedValue(transfers) }) as unknown as ChainProvider;
 
   const UNMATCHED = [{ id: "row-1", circle_tx_id: "circle-1", tx_hash: "0xabc", from_address: CLIENT, amount: "12.500000", token: "USDC", received_at: "2026-10-01T15:00:05Z" }];
   const OPEN = [{
@@ -101,7 +102,7 @@ describe("recordIncomingTransfers", () => {
   });
 
   it("does nothing for a provider with no real wallet (R4)", async () => {
-    const simulated = { mode: "simulate" } as unknown as ChainProvider;
+    const simulated = { mode: "simulate", network: ARC_TESTNET } as unknown as ChainProvider;
     expect(await run(() => recordIncomingTransfers(db(), simulated, "operating"))).toEqual({ recorded: 0, matched: 0, lines: [] });
     expect(fake.requests).toEqual([]);
   });

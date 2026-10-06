@@ -9,13 +9,14 @@ import { Input } from "@/components/ui/Input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
-import { PAYEE_CHAINS } from "@/lib/payee-chains";
+import { chainsOn, homeChain } from "@/lib/payee-chains";
+import type { Network } from "@/lib/network";
 
 const INITIAL: IntakeActionResult = { ok: false, message: "" };
 
 /** A new counterparty is screened the moment it is saved; the toast carries the verdict. */
 /** `framed={false}` inside a section that already frames it (Counterparties folds it under Add counterparty). */
-export default function CounterpartyIntake({ orgSlug, framed = true }: { orgSlug: string; framed?: boolean }) {
+export default function CounterpartyIntake({ orgSlug, framed = true, network }: { orgSlug: string; framed?: boolean; network: Network }) {
   const { state, formProps } = useActionForm(createCounterpartyAction, INITIAL, { resetOnSuccess: true, toastOnSuccess: true });
 
   return (
@@ -42,12 +43,12 @@ export default function CounterpartyIntake({ orgSlug, framed = true }: { orgSlug
             <Input name="paymentLimit" inputMode="decimal" placeholder="5000.00" />
           </Field>
           <Field id="cp-chain" label="Chain" description="Another chain is paid from Arc through CCTP, for a fee">
-            <Select name="chain" defaultValue="ARC-TESTNET">
+            <Select name="chain" defaultValue={homeChain(network).id}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {PAYEE_CHAINS.map((chain) => (
+                {chainsOn(network).map((chain) => (
                   <SelectItem key={chain.id} value={chain.id}>
                     {chain.label}
                   </SelectItem>

@@ -1,6 +1,7 @@
 import { db, unwrap } from "./dal";
 import { CYCLE_IN_PROGRESS_MS } from "./agent/balances";
 import { ACTIVITY_ACTIONS, activityItems, TRIGGER_ACTIONS, type ActivityEntry, type ActivityItem, type ActivityRefs } from "./agent-activity";
+import { workspaceNetwork } from "./workspace-network";
 
 /** What the agent is doing in the workspace in scope, and what it decided after `since` (agent activity). */
 export interface AgentActivity {
@@ -89,6 +90,7 @@ export async function readAgentActivity(since: number | null, now: number = Date
     triggers.set(row.invoiceId, [...(triggers.get(row.invoiceId) ?? []), { seq: row.seq, ts: row.ts, action: row.action }]);
   }
   const refs: ActivityRefs = {
+    network: workspaceNetwork().id,
     invoices: new Map(
       (unwrap(invoiceRows) as unknown as Array<{
         id: string;

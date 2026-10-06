@@ -3,6 +3,7 @@ import { FxQuoteError } from "@/lib/fx/errors";
 import { onceQuotes, probeFx } from "@/lib/fx/probe";
 import { resetFxQuotesForTests } from "@/lib/fx/quote";
 import type { FxHold } from "@/lib/fx/recheck";
+import { ARC_TESTNET } from "@/lib/network";
 
 /**
  * The fresh quote a held EURC payable is re-checked with (FX re-evaluation F2, F9): the rate for its amount, and, when
@@ -94,7 +95,7 @@ describe("onceQuotes: the quotes a re-check asks with (F9)", () => {
   it("asks Circle once for the rate, from the operating wallet's address", async () => {
     const fetch = vi.fn().mockImplementation(async () => noRoute());
     vi.stubGlobal("fetch", fetch);
-    const quotes = onceQuotes({ operatingAddress: "0xbd4e5a44b211cc1171d925241a797df434139433", canSwap: true, apiKey: null });
+    const quotes = onceQuotes({ network: ARC_TESTNET, operatingAddress: "0xbd4e5a44b211cc1171d925241a797df434139433", canSwap: true, apiKey: null });
     await expect(quotes.quoteRate(0.5)).rejects.toMatchObject({ code: "no_route" });
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(String(fetch.mock.calls[0][0])).toContain("fromAddress=0xbd4e5a44b211cc1171d925241a797df434139433");
@@ -103,11 +104,11 @@ describe("onceQuotes: the quotes a re-check asks with (F9)", () => {
   it("asks once for a swap where one can be made, and offers no swap quote where none can", async () => {
     const fetch = vi.fn().mockImplementation(async () => noRoute());
     vi.stubGlobal("fetch", fetch);
-    const live = onceQuotes({ operatingAddress: "0xbd4e5a44b211cc1171d925241a797df434139433", canSwap: true, apiKey: null });
+    const live = onceQuotes({ network: ARC_TESTNET, operatingAddress: "0xbd4e5a44b211cc1171d925241a797df434139433", canSwap: true, apiKey: null });
     await expect(live.quoteSwap?.(0.63)).rejects.toMatchObject({ code: "no_route" });
     expect(fetch).toHaveBeenCalledTimes(1);
-    expect(onceQuotes({ operatingAddress: "0xbd4e5a44b211cc1171d925241a797df434139433", canSwap: false, apiKey: null }).quoteSwap).toBeUndefined();
-    expect(onceQuotes({ operatingAddress: null, canSwap: true, apiKey: null }).quoteSwap).toBeUndefined();
+    expect(onceQuotes({ network: ARC_TESTNET, operatingAddress: "0xbd4e5a44b211cc1171d925241a797df434139433", canSwap: false, apiKey: null }).quoteSwap).toBeUndefined();
+    expect(onceQuotes({ network: ARC_TESTNET, operatingAddress: null, canSwap: true, apiKey: null }).quoteSwap).toBeUndefined();
   });
 });
 

@@ -1,16 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  GATEWAY_MINTER,
-  GATEWAY_WALLET,
-  GatewayError,
-  burnIntent,
-  burnIntentTypedData,
-  estimateGateway,
-  gatewayBalance,
-  gatewaySalt,
-  gatewayTransferStatus,
-  submitGatewayTransfer,
-} from "@/lib/circle/gateway";
+import { ARC_TESTNET } from "@/lib/network";
+import { GatewayError, burnIntent, burnIntentTypedData, estimateGateway, gatewayBalance, gatewaySalt, gatewayTransferStatus, submitGatewayTransfer } from "@/lib/circle/gateway";
 
 /**
  * Circle Gateway from Arc testnet (docs/superpowers/specs/2026-10-01-gateway-payouts-design.md G3):
@@ -36,7 +26,7 @@ describe("the salt of a Gateway transfer", () => {
 });
 
 describe("the burn intent", () => {
-  const intent = burnIntent({ depositor: DEPOSITOR, signer: SIGNER, recipient: PAYEE, chain: "BASE-SEPOLIA", amount: 1.25, salt: gatewaySalt("k"), maxFee: BigInt(56724), maxBlockHeight: "66288611" });
+  const intent = burnIntent(ARC_TESTNET, { depositor: DEPOSITOR, signer: SIGNER, recipient: PAYEE, chain: "BASE-SEPOLIA", amount: 1.25, salt: gatewaySalt("k"), maxFee: BigInt(56724), maxBlockHeight: "66288611" });
 
   it("burns on Arc testnet from the depositor and mints to the payee on its chain", () => {
     expect(intent).toEqual({
@@ -46,8 +36,8 @@ describe("the burn intent", () => {
         version: 1,
         sourceDomain: 26,
         destinationDomain: 6,
-        sourceContract: b32(GATEWAY_WALLET),
-        destinationContract: b32(GATEWAY_MINTER),
+        sourceContract: b32(ARC_TESTNET.gateway.wallet),
+        destinationContract: b32(ARC_TESTNET.gateway.minter),
         sourceToken: b32("0x3600000000000000000000000000000000000000"),
         destinationToken: b32("0x036CbD53842c5426634e7929541eC2318f3dCF7e"),
         sourceDepositor: b32(DEPOSITOR),
@@ -80,7 +70,7 @@ describe("the burn intent", () => {
   });
 
   it("refuses a payee chain Gateway cannot mint on from here", () => {
-    expect(() => burnIntent({ depositor: DEPOSITOR, signer: SIGNER, recipient: PAYEE, chain: "ARC-TESTNET", amount: 1, salt: gatewaySalt("k"), maxFee: BigInt(1), maxBlockHeight: "1" })).toThrow(GatewayError);
+    expect(() => burnIntent(ARC_TESTNET, { depositor: DEPOSITOR, signer: SIGNER, recipient: PAYEE, chain: "ARC-TESTNET", amount: 1, salt: gatewaySalt("k"), maxFee: BigInt(1), maxBlockHeight: "1" })).toThrow(GatewayError);
   });
 });
 
@@ -89,7 +79,7 @@ describe("the Gateway API", () => {
     const fetch = vi.fn<typeof globalThis.fetch>(async () =>
       respond(200, { body: [{ burnIntent: { maxBlockHeight: "66288611", maxFee: "56724" } }], fees: { token: "USDC", total: "0.056724", forwardingFee: "0.053224" } })
     );
-    const estimate = await estimateGateway({ depositor: DEPOSITOR, signer: SIGNER, recipient: PAYEE, chain: "BASE-SEPOLIA", amount: 1, salt: gatewaySalt("k") }, { fetch });
+    const estimate = await estimateGateway(ARC_TESTNET, { depositor: DEPOSITOR, signer: SIGNER, recipient: PAYEE, chain: "BASE-SEPOLIA", amount: 1, salt: gatewaySalt("k") }, { fetch });
     expect(estimate).toEqual({ maxFee: BigInt(56724), maxBlockHeight: "66288611", feeUsdc: 0.056724 });
     expect(String(fetch.mock.calls[0][0])).toBe("https://gateway-api-testnet.circle.com/v1/estimate?enableForwarder=true");
     const sent = JSON.parse(String((fetch.mock.calls[0][1] as RequestInit).body)) as Array<{ spec: { destinationDomain: number; value: string } }>;
@@ -98,19 +88,19 @@ describe("the Gateway API", () => {
 
   it("reads the depositor's Gateway balance, summed over the domains it answers for", async () => {
     const fetch = vi.fn(async () => respond(200, { token: "USDC", balances: [{ domain: 26, depositor: DEPOSITOR, balance: "2.5" }, { domain: 6, depositor: DEPOSITOR, balance: "0.25" }] }));
-    expect(await gatewayBalance(DEPOSITOR, { fetch })).toBe(2.75);
+    expect(await gatewayBalance(ARC_TESTNET, DEPOSITOR, { fetch })).toBe(2.75);
   });
 
   it("submits a signed burn intent with forwarding, and returns the transfer id", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>(async () => respond(201, { transferId: "tr-1" }));
-    const intent = burnIntent({ depositor: DEPOSITOR, signer: SIGNER, recipient: PAYEE, chain: "BASE-SEPOLIA", amount: 1, salt: gatewaySalt("k"), maxFee: BigInt(56724), maxBlockHeight: "66288611" });
-    expect(await submitGatewayTransfer(intent, "0xsig", { fetch })).toBe("tr-1");
+    const intent = burnIntent(ARC_TESTNET, { depositor: DEPOSITOR, signer: SIGNER, recipient: PAYEE, chain: "BASE-SEPOLIA", amount: 1, salt: gatewaySalt("k"), maxFee: BigInt(56724), maxBlockHeight: "66288611" });
+    expect(await submitGatewayTransfer(ARC_TESTNET, intent, "0xsig", { fetch })).toBe("tr-1");
     expect(String(fetch.mock.calls[0][0])).toBe("https://gateway-api-testnet.circle.com/v1/transfer?enableForwarder=true");
     expect(JSON.parse(String((fetch.mock.calls[0][1] as RequestInit).body))).toEqual([{ burnIntent: intent, signature: "0xsig" }]);
   });
 
   it("reads a transfer's status: the mint on the payee's chain once confirmed or finalized; failed when it failed or expired", async () => {
-    const read = (body: unknown) => gatewayTransferStatus("tr-1", { fetch: (async () => respond(200, body)) as unknown as typeof globalThis.fetch });
+    const read = (body: unknown) => gatewayTransferStatus(ARC_TESTNET, "tr-1", { fetch: (async () => respond(200, body)) as unknown as typeof globalThis.fetch });
     expect(await read({ status: "pending", destinationDomain: 6 })).toEqual({ status: "pending", state: "pending", mintTxHash: null, failureReason: null, destinationChain: "BASE-SEPOLIA" });
     expect(await read({ status: "confirmed", destinationDomain: 3, transactionHash: "0xmint" })).toEqual({ status: "confirmed", state: "confirmed", mintTxHash: "0xmint", failureReason: null, destinationChain: "ARB-SEPOLIA" });
     expect(await read({ status: "finalized", transactionHash: "0xmint" })).toMatchObject({ status: "confirmed", state: "finalized", mintTxHash: "0xmint", destinationChain: null });
@@ -121,41 +111,41 @@ describe("the Gateway API", () => {
   });
 
   it("says a transfer Gateway never answered, answered 5xx, or took with no id may or may not have been accepted (payment safety R1)", async () => {
-    const intent = burnIntent({ depositor: DEPOSITOR, signer: SIGNER, recipient: PAYEE, chain: "BASE-SEPOLIA", amount: 1, salt: gatewaySalt("k"), maxFee: BigInt(1), maxBlockHeight: "1" });
+    const intent = burnIntent(ARC_TESTNET, { depositor: DEPOSITOR, signer: SIGNER, recipient: PAYEE, chain: "BASE-SEPOLIA", amount: 1, salt: gatewaySalt("k"), maxFee: BigInt(1), maxBlockHeight: "1" });
     const down = (async () => {
       throw new Error("ECONNRESET");
     }) as unknown as typeof globalThis.fetch;
     const failing = (async () => respond(503, { message: "Service Unavailable" })) as unknown as typeof globalThis.fetch;
     const noId = (async () => respond(200, {})) as unknown as typeof globalThis.fetch;
 
-    await expect(submitGatewayTransfer(intent, "0xsig", { fetch: down })).rejects.toThrow(
+    await expect(submitGatewayTransfer(ARC_TESTNET, intent, "0xsig", { fetch: down })).rejects.toThrow(
       new GatewayError("Gateway did not answer the transfer; it may or may not have been accepted")
     );
-    await expect(submitGatewayTransfer(intent, "0xsig", { fetch: failing })).rejects.toThrow(
+    await expect(submitGatewayTransfer(ARC_TESTNET, intent, "0xsig", { fetch: failing })).rejects.toThrow(
       new GatewayError("Gateway answered 503 to the transfer: Service Unavailable; it may or may not have been accepted")
     );
-    await expect(submitGatewayTransfer(intent, "0xsig", { fetch: noId })).rejects.toThrow(
+    await expect(submitGatewayTransfer(ARC_TESTNET, intent, "0xsig", { fetch: noId })).rejects.toThrow(
       new GatewayError("Gateway answered the transfer with no transfer id; it may or may not have been accepted")
     );
   });
 
   it("never says a transfer whose connection was never made may have been accepted: nothing left (payment safety R8)", async () => {
-    const intent = burnIntent({ depositor: DEPOSITOR, signer: SIGNER, recipient: PAYEE, chain: "BASE-SEPOLIA", amount: 1, salt: gatewaySalt("k"), maxFee: BigInt(1), maxBlockHeight: "1" });
+    const intent = burnIntent(ARC_TESTNET, { depositor: DEPOSITOR, signer: SIGNER, recipient: PAYEE, chain: "BASE-SEPOLIA", amount: 1, salt: gatewaySalt("k"), maxFee: BigInt(1), maxBlockHeight: "1" });
     const refused = (async () => {
       throw Object.assign(new TypeError("fetch failed"), { cause: { code: "ECONNREFUSED" } });
     }) as unknown as typeof globalThis.fetch;
 
-    await expect(submitGatewayTransfer(intent, "0xsig", { fetch: refused })).rejects.toThrow(/^Gateway did not answer the transfer$/);
+    await expect(submitGatewayTransfer(ARC_TESTNET, intent, "0xsig", { fetch: refused })).rejects.toThrow(/^Gateway did not answer the transfer$/);
   });
 
   it("turns an HTTP error or no answer into a GatewayError, with Gateway's own message", async () => {
     const refused = (async () => respond(400, { message: "Insufficient balance for depositor" })) as unknown as typeof globalThis.fetch;
-    await expect(submitGatewayTransfer(burnIntent({ depositor: DEPOSITOR, signer: SIGNER, recipient: PAYEE, chain: "BASE-SEPOLIA", amount: 1, salt: gatewaySalt("k"), maxFee: BigInt(1), maxBlockHeight: "1" }), "0xsig", { fetch: refused })).rejects.toThrow(
+    await expect(submitGatewayTransfer(ARC_TESTNET, burnIntent(ARC_TESTNET, { depositor: DEPOSITOR, signer: SIGNER, recipient: PAYEE, chain: "BASE-SEPOLIA", amount: 1, salt: gatewaySalt("k"), maxFee: BigInt(1), maxBlockHeight: "1" }), "0xsig", { fetch: refused })).rejects.toThrow(
       new GatewayError("Gateway answered 400 to the transfer: Insufficient balance for depositor", 400)
     );
     const down = (async () => {
       throw new Error("ECONNRESET");
     }) as unknown as typeof globalThis.fetch;
-    await expect(gatewayBalance(DEPOSITOR, { fetch: down })).rejects.toThrow(new GatewayError("Gateway did not answer the balance read"));
+    await expect(gatewayBalance(ARC_TESTNET, DEPOSITOR, { fetch: down })).rejects.toThrow(new GatewayError("Gateway did not answer the balance read"));
   });
 });

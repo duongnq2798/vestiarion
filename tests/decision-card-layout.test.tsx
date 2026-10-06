@@ -10,7 +10,7 @@ import type { Decision } from "@/components/vx/types";
  */
 
 const decision = {
-  id: "inv-1", domain: "ap", action: "Pay", subject: "Centronex", amount: 2, token: "USDC", outcome: "recorded", outcomeLabel: "Settled on Arc",
+  id: "inv-1", network: "arc-testnet", domain: "ap", action: "Pay", subject: "Centronex", amount: 2, token: "USDC", outcome: "recorded", outcomeLabel: "Settled on Arc",
   reasoning: "Centronex invoice for 2 USDC against PO-103 has goods received.",
   evidence: [{ label: "PO", value: "PO-103", state: "ok" }, { label: "Risk", value: "clear", state: "neutral" }],
   txHash: `0x${"1".repeat(64)}`, auditSeq: 586, at: "2026-10-01T08:50:00Z",

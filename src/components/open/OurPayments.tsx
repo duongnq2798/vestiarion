@@ -1,7 +1,7 @@
 import { Hash } from "@/components/vx/Primitives";
 import { utcMinute } from "@/lib/copy";
 import type { NetworkProfile } from "@/lib/network";
-import { paidAcrossChains, payeeChain } from "@/lib/payee-chains";
+import { chainById, paidAcrossChains } from "@/lib/payee-chains";
 import type { OurPayment } from "@/lib/platform/open-numbers";
 import { formatFigure } from "./OpenNumbersTable";
 
@@ -33,7 +33,7 @@ export function OurPayments({ payments, network }: { payments: OurPayment[]; net
                 {formatFigure(payment.amount, "usdc")} {payment.token ?? "USDC"}
               </span>
               {/* A Gateway payout's hash is its mint on the payee's chain (Gateway payouts G5); everything else is on this network. */}
-              <Hash value={payment.txHash} href={paidAcrossChains(payment.chain) ? `${payeeChain(payment.chain).explorerTx}${payment.txHash}` : `${network.explorer}/tx/${payment.txHash}`} />
+              <Hash value={payment.txHash} href={paidAcrossChains(payment.chain) ? `${chainById(payment.chain as string).explorerTx}${payment.txHash}` : `${network.explorer}/tx/${payment.txHash}`} />
             </li>
           ))}
         </ul>

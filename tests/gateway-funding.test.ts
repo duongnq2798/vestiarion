@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv, type VestiarionConfig } from "@/lib/config";
 import { runWith } from "@/lib/context";
-import { GATEWAY_WALLET, gatewayStepKey } from "@/lib/circle/gateway";
+import { gatewayStepKey } from "@/lib/circle/gateway";
 import { fundGateway, fundServiceBudget, GatewayStepFailed, readGatewayState, type GatewayFundingClient } from "@/lib/circle/gateway-funding";
 import { decodeFunctionData, parseAbi, type Hex } from "viem";
 import { TREASURY_WALLET_SET, walletIdempotencyKey } from "@/lib/circle/provision";
 import { fakeSupabase, orgTestContext, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
+import { ARC_TESTNET } from "@/lib/network";
 
 /**
  * Funding a workspace's Gateway balance (docs/superpowers/specs/2026-10-01-gateway-payouts-design.md G1):
@@ -129,9 +130,9 @@ describe("funding a Gateway balance", () => {
       input: { blockchains: ["ARC-TESTNET"], count: 1, walletSetId: "set-1", accountType: "EOA", idempotencyKey: walletIdempotencyKey(ORG, "gateway-signer") },
     });
     expect(c.calls.slice(1).map((call) => [call.input.walletId, call.input.contractAddress, call.input.abiFunctionSignature, call.input.abiParameters, call.input.idempotencyKey])).toEqual([
-      ["wallet-op", GATEWAY_WALLET, "addDelegate(address,address)", ["0x3600000000000000000000000000000000000000", SIGNER_ADDRESS], gatewayStepKey(`${ORG}/delegate`)],
-      ["wallet-op", "0x3600000000000000000000000000000000000000", "approve(address,uint256)", [GATEWAY_WALLET, "3000000"], gatewayStepKey(`${ORG}/fund/req-1/approve`)],
-      ["wallet-op", GATEWAY_WALLET, "deposit(address,uint256)", ["0x3600000000000000000000000000000000000000", "3000000"], gatewayStepKey(`${ORG}/fund/req-1/deposit`)],
+      ["wallet-op", ARC_TESTNET.gateway.wallet, "addDelegate(address,address)", ["0x3600000000000000000000000000000000000000", SIGNER_ADDRESS], gatewayStepKey(`${ORG}/delegate`)],
+      ["wallet-op", "0x3600000000000000000000000000000000000000", "approve(address,uint256)", [ARC_TESTNET.gateway.wallet, "3000000"], gatewayStepKey(`${ORG}/fund/req-1/approve`)],
+      ["wallet-op", ARC_TESTNET.gateway.wallet, "deposit(address,uint256)", ["0x3600000000000000000000000000000000000000", "3000000"], gatewayStepKey(`${ORG}/fund/req-1/deposit`)],
     ]);
     expect(db.signer()).toMatchObject({ circle_wallet_id: "wallet-signer", address: SIGNER_ADDRESS, delegate_tx_id: "tx-1", delegate_tx_hash: "0xhash1" });
     expect(appendLedgerEntry.mock.calls.map(([entry]) => entry.action)).toEqual(["gateway_signer_created", "gateway_delegate_added", "gateway_deposit"]);
@@ -244,8 +245,8 @@ describe("adding to the agent's service budget (x402 payee history R4)", () => {
     expect(input).toMatchObject({ walletId: "wallet-op", contractAddress: OPERATING.address, abiFunctionSignature: "executeBatch((address,uint256,bytes)[])", idempotencyKey: gatewayStepKey(`${ORG}/service-budget/req-sb`) });
     const [[approve, deposit]] = input.abiParameters as [Array<[string, string, Hex]>];
     expect([approve[0], approve[1]]).toEqual(["0x3600000000000000000000000000000000000000", "0"]);
-    expect(decodeFunctionData({ abi: ABI, data: approve[2] }).args).toEqual([GATEWAY_WALLET, 50_000n]);
-    expect([deposit[0], deposit[1]]).toEqual([GATEWAY_WALLET, "0"]);
+    expect(decodeFunctionData({ abi: ABI, data: approve[2] }).args).toEqual([ARC_TESTNET.gateway.wallet, 50_000n]);
+    expect([deposit[0], deposit[1]]).toEqual([ARC_TESTNET.gateway.wallet, "0"]);
     const depositArgs = decodeFunctionData({ abi: ABI, data: deposit[2] }).args as readonly [string, string, bigint];
     expect([depositArgs[0].toLowerCase(), depositArgs[1].toLowerCase(), depositArgs[2]]).toEqual(["0x3600000000000000000000000000000000000000", SIGNER_ADDRESS.toLowerCase(), 50_000n]);
     expect(appendLedgerEntry).toHaveBeenCalledWith(expect.objectContaining({ action: "service_budget_funded", detail: expect.objectContaining({ amountUsdc: 0.05, signer: SIGNER_ADDRESS, txHash: "0xhash1", balanceUsdc: 0.05 }) }));
@@ -266,6 +267,18 @@ describe("funding Gateway while payments are switched off (payment safety S2)", 
     await expect(run(() => fundGateway({ actorId: USER, amount: 1, requestId: "req-off" }, { client }))).rejects.toThrow("Payments are switched off for every workspace right now.");
     await expect(run(() => fundServiceBudget({ actorId: USER, amount: 1, requestId: "req-off" }, { client }))).rejects.toThrow("Payments are switched off for every workspace right now.");
     expect(fake.requests).toHaveLength(0);
+    expect(client).not.toHaveBeenCalled();
+  });
+});
+
+describe("funding Gateway on a network without it (network threading P5)", () => {
+  it("refuses by name, for payouts and for services, before calling Circle", async () => {
+    const fake = fakeSupabase((request) => (request.path === "/rest/v1/platform_controls" ? { body: null } : { body: [] }));
+    const client = vi.fn();
+    const run = <T>(fn: () => Promise<T>) => runWith(orgTestContext({ config: { ...config, network: "arc-mainnet" }, client: fake.client, orgId: ORG, userId: USER }), fn);
+
+    await expect(run(() => fundGateway({ actorId: USER, amount: 1, requestId: "req-mainnet" }, { client }))).rejects.toThrow("Paying through Gateway does not run on Arc mainnet yet");
+    await expect(run(() => fundServiceBudget({ actorId: USER, amount: 1, requestId: "req-mainnet" }, { client }))).rejects.toThrow("Paying through Gateway does not run on Arc mainnet yet");
     expect(client).not.toHaveBeenCalled();
   });
 });

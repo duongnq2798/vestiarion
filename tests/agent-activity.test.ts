@@ -25,6 +25,7 @@ const MILESTONE = "6b1f3a2e-8c1b-4f7a-9e6d-0000000000aa";
 const TX = `0x${"79".repeat(32)}`;
 
 const refs = (invoice: Partial<{ status: string; txRef: string | null; scheduledFor: string | null; currency: string }> = {}): ActivityRefs => ({
+  network: "arc-testnet",
   invoices: new Map([[INVOICE, { name: "Jiren", amount: 0.3, currency: "USDC", status: "paid", txRef: TX, scheduledFor: null, ...invoice }]]),
   milestones: new Map([[MILESTONE, { name: "Puka Hotel", title: "Landing page", amount: 1, txRef: TX }]]),
 });
@@ -47,6 +48,7 @@ describe("what the agent did, in words", () => {
       path: `/invoices#trail-${INVOICE}`,
       pathLabel: "How it decided",
       txHash: TX,
+      txUrl: `https://explorer.testnet.arc.io/tx/${TX}`,
     });
   });
 
@@ -331,7 +333,7 @@ describe("reading the agent's activity", () => {
     const client = fake([{ seq: 972, ts: "2026-10-03T02:20:53Z", action: "ap_pay", detail: { invoiceId: INVOICE, execution: { txRef: TX, resultingStatus: "paid" } } }]);
     const activity = await read(client, 967);
     expect(activity.items).toEqual([
-      { seq: 972, text: "Paid Jiren 0.30 USDC · 28 s after details were added.", detail: null, tone: "done", path: `/invoices#trail-${INVOICE}`, pathLabel: "How it decided", txHash: TX },
+      { seq: 972, text: "Paid Jiren 0.30 USDC · 28 s after details were added.", detail: null, tone: "done", path: `/invoices#trail-${INVOICE}`, pathLabel: "How it decided", txHash: TX, txUrl: `https://explorer.testnet.arc.io/tx/${TX}` },
     ]);
     const triggers = client.requests.find((r) => r.path === "/rest/v1/ledger_entries" && (r.params.get("select") ?? "").includes("invoiceId"))!;
     expect(triggers.params.get("actor")).toBe("eq.human");

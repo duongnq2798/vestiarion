@@ -24,7 +24,7 @@ import { choosePayoutRoute } from "../payout-route";
 import { needsTwoApprovals, TWO_APPROVALS_RULE } from "../two-approvals";
 import { approvedByTwo, usdcValueOfLatestDecision, type PaymentSource } from "./second-approval";
 import { usycSubscriptionsOpen } from "../circle/usyc";
-import { arcRpcUrl } from "../circle/arcFees";
+import { networkRpcUrl } from "../circle/arcFees";
 import { budgetGate, countedUsdc, exceedsBudget, HELD_FOR_BUDGET, type BudgetGate, type BudgetRoom } from "./outflow-budget";
 import { sendPaymentNotices } from "../payment-notices";
 import { sendAgentDecisions } from "../telegram/notify";
@@ -58,7 +58,7 @@ import {
   twoApprovalsHeldValue,
 } from "./follow-up";
 import { OPEN_PAYABLE_STATUSES, summarizePayableObligations, sumUsdcAmounts } from "./obligations";
-import { ARC_TESTNET_EURC, quoteEurcInUsdc, type EurcQuote } from "../fx/quote";
+import { quoteEurcInUsdc, type EurcQuote } from "../fx/quote";
 import { quoteUsdcForEurc, sizeSwap, SWAP_COST_CAP_PERCENT, SWAP_NOT_QUOTED, type SwapOffer, type SwapQuote } from "../fx/swap-service";
 import { resumeOpenSwaps, swapForPayment, type SwapOutcome, type SwapSweep } from "../fx/swap";
 import { onceQuotes, probeFx } from "../fx/probe";
@@ -74,7 +74,7 @@ import { gatewayQuoter, type GatewayQuote } from "../circle/gateway-quote";
 
 export type { GatewayQuote };
 import type { CrossChainRoute, PayoutRoute, SpendingLimitPayment } from "../circle/types";
-import { BRIDGE_FEE_CAP_PERCENT, payeeChain } from "../payee-chains";
+import { BRIDGE_FEE_CAP_PERCENT, chainOn, paidAcrossChains } from "../payee-chains";
 import {
   amountToPay,
   boundPayOn,
@@ -1324,8 +1324,8 @@ async function decideApPayable(
   // A payee on another chain is paid from Arc through CCTP (CCTP payouts X2–X7):
   // the fee, read now, is weighed by the model, bounded by code, and paid on
   // top of the invoice out of the operating USDC. Only USDC crosses.
-  const destination = payeeChain(counterparty.chain);
-  const crossChain = destination.id !== "ARC-TESTNET";
+  const destination = chainOn(ctx.provider.network.id, counterparty.chain);
+  const crossChain = paidAcrossChains(destination.id);
   let fee: BridgeFee | null = null;
   let gateway: GatewayQuote | null = null;
   if (crossChain && !isEurc) {
@@ -2025,7 +2025,7 @@ export async function runApStage(input: ApStageInput): Promise<number> {
   let eurcHeld: number | null | undefined;
   const eurc: EurcFunds = {
     // Any address will do for a quote, which moves nothing: the wallet's own when it has one.
-    quote: input.quoteEurc ?? ((amountEurc) => quoteEurcInUsdc(amountEurc, { fromAddress: input.operatingAddress ?? ARC_TESTNET_EURC })),
+    quote: input.quoteEurc ?? ((amountEurc) => quoteEurcInUsdc(amountEurc, { network: provider.network, fromAddress: input.operatingAddress ?? provider.network.tokens.EURC })),
     balance: async () => {
       if (provider.mode !== "live" || !provider.getTokenBalance || !operating) return null;
       if (eurcHeld === undefined) {
@@ -2087,7 +2087,7 @@ export async function runApStage(input: ApStageInput): Promise<number> {
   }
   const swaps = swapper && swapsAvailable ? swapper : null;
   const quoteSwap =
-    input.quoteSwap ?? ((usdcIn: number) => quoteUsdcForEurc(usdcIn, { fromAddress: swapAddress as string, apiKey: currentOrgConfig().chain.circleApiKey ?? null }));
+    input.quoteSwap ?? ((usdcIn: number) => quoteUsdcForEurc(usdcIn, { network: provider.network, fromAddress: swapAddress as string, apiKey: currentOrgConfig().chain.circleApiKey ?? null }));
 
   // In the order they were submitted (id breaks a tie), so each cycle decides
   // them in the same order: of two identical invoices, the one submitted
@@ -2198,7 +2198,7 @@ export async function runApStage(input: ApStageInput): Promise<number> {
           txRef: invoice.tx_ref,
           discount: invoiceDiscount(invoice),
           currency: invoiceCurrency(invoice.currency),
-          ...(payeeChain(counterparty.chain).id !== "ARC-TESTNET" ? { destinationChain: payeeChain(counterparty.chain).id } : {}),
+          ...(paidAcrossChains(counterparty.chain) ? { destinationChain: chainOn(provider.network.id, counterparty.chain).id } : {}),
           decidedAt: invoice.decided_at ?? null,
         },
         intent,
@@ -2230,7 +2230,7 @@ export async function runApStage(input: ApStageInput): Promise<number> {
       metrics,
       obligationsBy: (targetOn, today, currency) => obligationsDueBy(book, { excludeId: invoice.id, by: targetOn, today, milestones, currency }),
       eurc,
-      bridgeFee: input.bridgeFee ?? ((chain, amount) => irisBridgeFee(chain, amount)),
+      bridgeFee: input.bridgeFee ?? ((chain, amount) => irisBridgeFee(provider.network, chain, amount)),
       gatewayQuote: gatewayQuote ??= input.gatewayQuote ?? gatewayQuoter(provider, db),
       swap: swaps ? { quote: quoteSwap, run: swaps.run } : null,
       budget,
@@ -3179,6 +3179,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
       const operatingAddress =
         (unwrap(await db.from("accounts").select("address").eq("kind", "operating").limit(1)) as Array<{ address: string | null }>)[0]?.address ?? null;
       const quotes = onceQuotes({
+        network: provider.network,
         operatingAddress,
         canSwap: provider.mode === "live" && typeof provider.swapForEurc === "function",
         apiKey: currentOrgConfig().chain.circleApiKey ?? null,
@@ -3754,7 +3755,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     let subscriptionsOpen: boolean | null = null;
     if (provider.earnMode === "live") {
       try {
-        subscriptionsOpen = await usycSubscriptionsOpen({ rpcUrl: arcRpcUrl() });
+        subscriptionsOpen = await usycSubscriptionsOpen({ network: provider.network, rpcUrl: networkRpcUrl(provider.network) });
       } catch (error) {
         console.error("treasury: USYC window not read", error instanceof Error ? error.message : error);
       }

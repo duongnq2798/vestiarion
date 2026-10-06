@@ -179,14 +179,14 @@ describe("previewPayeeLink", () => {
     expect(fake.requests[0].body).toEqual({ p_token_hash: HASH });
   });
 
-  it("names the chain the payee is paid on, and takes Arc testnet when that cannot be read (review I3)", async () => {
+  it("names the chain the payee is paid on, and none when that cannot be read rather than assume one (review I3; network threading P3)", async () => {
     const preview = [{ org_name: "Acme", counterparty_name: "Northwind", expires_at: "2026-10-07T12:00:00+00:00" }];
     const onBase = platform(() => previewPayeeLink(TOKEN), (request) => (rpc(request, "payee_link_chain") ? { body: "BASE-SEPOLIA" } : { body: preview }));
     expect(await onBase.result).toMatchObject({ chain: "BASE-SEPOLIA" });
     const unreadable = platform(() => previewPayeeLink(TOKEN), (request) =>
       rpc(request, "payee_link_chain") ? { status: 404, body: { message: "function payee_link_chain does not exist" } } : { body: preview }
     );
-    expect(await unreadable.result).toMatchObject({ chain: "ARC-TESTNET" });
+    expect(await unreadable.result).toMatchObject({ chain: null });
   });
 
   it("is null for an unusable link, and asks nothing for a malformed token", async () => {

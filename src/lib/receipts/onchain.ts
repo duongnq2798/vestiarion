@@ -1,7 +1,5 @@
-import { ARC_TESTNET_RPC_URL } from "../circle/arcFees";
-import { USDC_BY_CHAIN } from "../circle/gateway";
-import { ARC_TESTNET_EURC } from "../fx/quote";
-import { payeeChain, type PayeeChain } from "../payee-chains";
+import { chainById, homeChain, networkOfChain } from "../payee-chains";
+import { networkProfile } from "../network";
 import type { ReceiptFacts } from "./facts";
 
 /**
@@ -24,22 +22,14 @@ export interface TxReceipt {
 export type OnChainCheck = { state: "matches"; block: number } | { state: "mismatch"; reason: string } | { state: "unreadable" };
 
 const TRANSFER = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
-const ARC_NATIVE_USDC = "0xfffffffffffffffffffffffffffffffffffffffe";
 const RPC_TIMEOUT_MS = 4_000;
 
 /**
  * The public RPC of each payee chain. Arc testnet's too: an anonymous page view never spends the
  * deployment's own node, which the agent reads fees through (review #5).
  */
-const PUBLIC_RPC: Record<PayeeChain, string> = {
-  "ARC-TESTNET": ARC_TESTNET_RPC_URL,
-  "BASE-SEPOLIA": "https://sepolia.base.org",
-  "ARB-SEPOLIA": "https://sepolia-rollup.arbitrum.io/rpc",
-  "ETH-SEPOLIA": "https://ethereum-sepolia-rpc.publicnode.com",
-};
-
 export function receiptRpcUrl(chain: string): string {
-  return PUBLIC_RPC[payeeChain(chain).id];
+  return chainById(chain).rpcUrl;
 }
 
 /**
@@ -61,10 +51,11 @@ function remember(key: string, receipt: TxReceipt): void {
 
 /** The contracts that log a transfer of the token on the chain, with their decimals. */
 function tokenContracts(facts: ReceiptFacts): Array<{ address: string; decimals: number }> {
-  const chain = payeeChain(facts.chain).id;
-  if (facts.token === "EURC") return chain === "ARC-TESTNET" ? [{ address: ARC_TESTNET_EURC, decimals: 6 }] : [];
-  if (chain === "ARC-TESTNET") return [{ address: ARC_NATIVE_USDC, decimals: 18 }, { address: USDC_BY_CHAIN["ARC-TESTNET"], decimals: 6 }];
-  return [{ address: USDC_BY_CHAIN[chain], decimals: 6 }];
+  // The receipt's chain, by its own id: its network is the one it is on (network threading P1).
+  const chain = chainById(facts.chain);
+  const network = networkOfChain(chain.id);
+  if (facts.token === "EURC") return chain.id === homeChain(network).id ? [{ address: networkProfile(network).tokens.EURC, decimals: 6 }] : [];
+  return [...(chain.nativeUsdc ? [{ address: chain.nativeUsdc, decimals: 18 }] : []), { address: chain.usdc, decimals: 6 }];
 }
 
 function units(amount: number, decimals: number): bigint {
@@ -112,7 +103,7 @@ export async function readOnChain(
   facts: ReceiptFacts,
   options: { fetch?: typeof fetch; rpcUrl?: (chain: string) => string; timeoutMs?: number } = {}
 ): Promise<OnChainCheck> {
-  const key = `${payeeChain(facts.chain).id}:${facts.txHash.toLowerCase()}`;
+  const key = `${chainById(facts.chain).id}:${facts.txHash.toLowerCase()}`;
   const known = MINED.get(key);
   if (known) return matchTransfer(facts, known);
   let answer: { result?: TxReceipt | null; error?: unknown };

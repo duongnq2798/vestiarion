@@ -4,6 +4,8 @@ import { db, unwrap } from "../dal";
 import type { counterpartyInputSchema } from "../intake-validation";
 import { appendLedgerEntry } from "../ledger";
 import { maskEmail } from "../payment-notices";
+import { chainOn } from "../payee-chains";
+import { workspaceNetwork } from "../workspace-network";
 
 /** A counterparty as the form's schema accepts it. */
 export type CounterpartyInput = z.output<typeof counterpartyInputSchema>;
@@ -34,6 +36,8 @@ export async function createCounterparty(input: {
   now?: () => string;
 }): Promise<CreatedCounterparty> {
   const { actorId, counterparty, via, apiKeyId, github } = input;
+  // The workspace's own chain when none is given; one its network does not pay on is refused here too (network threading P3).
+  const chain = chainOn(workspaceNetwork().id, counterparty.chain).id;
   // An address that came from outside the console waits for a person, whatever brought it.
   const addressNeedsConfirmation = via !== undefined && counterparty.address !== null;
 
@@ -44,7 +48,7 @@ export async function createCounterparty(input: {
         name: counterparty.name,
         role: counterparty.role,
         address: counterparty.address,
-        chain: counterparty.chain,
+        chain,
         jurisdiction: counterparty.jurisdiction,
         baseline_payment_limit: counterparty.paymentLimit || null,
         payment_limit: null,
@@ -64,7 +68,7 @@ export async function createCounterparty(input: {
       by: actorId,
       counterpartyId: row.id,
       role: counterparty.role,
-      chain: counterparty.chain,
+      chain,
       address: counterparty.address,
       jurisdiction: counterparty.jurisdiction,
       baselinePaymentLimit: counterparty.paymentLimit || null,

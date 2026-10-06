@@ -20,6 +20,7 @@ import { paymentIdempotencyKey, type PaymentExecution } from "@/lib/payments";
 import { UsycNotConfirmedError } from "@/lib/circle/usyc";
 import { encryptSecret, parseMasterKeys } from "@/lib/secrets";
 import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
+import { ARC_MAINNET, ARC_TESTNET } from "@/lib/network";
 
 /**
  * `src/lib/agent/approvals.ts` against a real supabase-js client whose
@@ -65,7 +66,7 @@ beforeEach(() => {
   payInvoiceMock.mockReset();
   syncOperatingBalanceMock.mockReset();
   getChainProviderMock.mockReset();
-  getChainProviderMock.mockReturnValue({ mode: "simulate", earnMode: "simulate", estimatedFeeUsd: 0.01 });
+  getChainProviderMock.mockReturnValue({ mode: "simulate", network: ARC_TESTNET, earnMode: "simulate", estimatedFeeUsd: 0.01 });
 });
 afterEach(() => {
   if (savedMasterKeys === undefined) delete process.env.VESTIARION_MASTER_KEYS;
@@ -466,7 +467,7 @@ describe("approveAndPay", () => {
   });
 
   it("reads the live balance from syncOperatingBalance rather than the stored value, in live mode", async () => {
-    getChainProviderMock.mockReturnValue({ mode: "live", earnMode: "simulate", estimatedFeeUsd: 0.003 });
+    getChainProviderMock.mockReturnValue({ mode: "live", network: ARC_TESTNET, earnMode: "simulate", estimatedFeeUsd: 0.003 });
     syncOperatingBalanceMock.mockResolvedValue(30);
     const { run } = approvalsFake({ account: () => ({ body: accountRow("999") }) });
 
@@ -670,7 +671,7 @@ describe("approveAndPay", () => {
 
     it("in live mode, checks the wallet's EURC, not its USDC, and refuses a short one before any claim", async () => {
       const getTokenBalance = vi.fn(async () => ({ accountId: ACCOUNT_ID, chain: "ARC-TESTNET", token: "EURC", balance: 100 }));
-      getChainProviderMock.mockReturnValue({ mode: "live", earnMode: "simulate", estimatedFeeUsd: 0.003, getTokenBalance });
+      getChainProviderMock.mockReturnValue({ mode: "live", network: ARC_TESTNET, earnMode: "simulate", estimatedFeeUsd: 0.003, getTokenBalance });
       const { fake, run } = approvalsFake({ invoice: eurcInvoice, account: () => ({ body: accountRow("999") }) });
 
       const attempt = run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
@@ -703,7 +704,7 @@ describe("approveAndPay", () => {
     // A person's approval is the one caller that may send a terminally failed payment again.
     expect(payInvoiceMock).toHaveBeenCalledWith(
       { invoiceId: INVOICE_ID, counterpartyId: COUNTERPARTY_ID, address: "0xdead", amount: 150, discount: null, currency: "USDC" },
-      { provider: { mode: "simulate", earnMode: "simulate", estimatedFeeUsd: 0.01 }, operating: { id: ACCOUNT_ID }, retryTerminalFailure: true }
+      { provider: { mode: "simulate", network: ARC_TESTNET, earnMode: "simulate", estimatedFeeUsd: 0.01 }, operating: { id: ACCOUNT_ID }, retryTerminalFailure: true }
     );
 
     const [update] = patchBodies(fake.requests, "/rest/v1/invoices");
@@ -852,6 +853,28 @@ describe("approveAndPay", () => {
   });
 });
 
+describe("a payee whose stored chain is another network's (network threading P3, final review)", () => {
+  it("is refused by Approve and pay, in plain words and before any claim, never paid on the workspace's own chain", async () => {
+    getChainProviderMock.mockReturnValue({ mode: "live", network: ARC_MAINNET, earnMode: "simulate", estimatedFeeUsd: 0.003 });
+    const { fake, run } = approvalsFake({
+      invoice: (r) => (r.params.get("id") ? { body: invoiceRow({ counterparties: { name: "Acme", risk_level: "low", address: "0xdead", chain: "ARC-TESTNET" } }) } : undefined),
+    });
+    const attempt = run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+    await expect(attempt).rejects.toThrow("ARC-TESTNET is not a chain this workspace pays on");
+    expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+  });
+
+  it("is listed with its own chain, rather than failing the Approvals page", async () => {
+    getChainProviderMock.mockReturnValue({ mode: "simulate", network: ARC_MAINNET, earnMode: "simulate", estimatedFeeUsd: 0.01 });
+    const { run } = approvalsFake({
+      invoice: (r) => (r.params.get("id") ? undefined : { body: [invoiceRow({ counterparties: { name: "Acme", risk_level: "low", address: "0xdead", chain: "ARB-SEPOLIA" } })] }),
+    });
+    const [listed] = await run(() => listWaitingPayables({ bridgeFee: vi.fn(async () => ({ feeUsdc: 0.1, maxFeeUnits: BigInt(100000), domain: 3 })), gatewayQuote: vi.fn(async () => null) }));
+    expect(listed).toMatchObject({ payeeChain: "ARB-SEPOLIA" });
+  });
+});
+
 describe("approveAndPay while payments are switched off (payment safety S4)", () => {
   it("refuses a new payment before any claim", async () => {
     const { fake } = approvalsFake();
@@ -939,7 +962,7 @@ describe("approveAndPay after Circle ended the last attempt in a terminal failur
   });
 
   it("reads the live balance for a retry in live mode", async () => {
-    getChainProviderMock.mockReturnValue({ mode: "live", earnMode: "simulate", estimatedFeeUsd: 0.003 });
+    getChainProviderMock.mockReturnValue({ mode: "live", network: ARC_TESTNET, earnMode: "simulate", estimatedFeeUsd: 0.003 });
     syncOperatingBalanceMock.mockResolvedValue(30);
     const { run } = approvalsFake({ account: () => ({ body: accountRow("999") }), intents: [terminallyFailed()] });
 
@@ -989,6 +1012,7 @@ describe("approveAndPay after Circle ended the last attempt in a terminal failur
  */
 describe("approveAndPay on a transfer Circle is found to have failed", () => {
   class Circle implements ChainProvider {
+    readonly network = ARC_TESTNET;
     readonly mode = "live" as const;
     readonly earnMode = "simulate" as const;
     readonly estimatedFeeUsd = 0.003;
@@ -1114,6 +1138,7 @@ describe("approveAndPay with an early-payment discount", () => {
   const withTerms = (r: RecordedRequest) => (r.params.get("id") ? { body: invoiceRow(TERMS) } : undefined);
 
   class Circle implements ChainProvider {
+    readonly network = ARC_TESTNET;
     readonly mode = "live" as const;
     readonly earnMode = "simulate" as const;
     readonly estimatedFeeUsd = 0.003;
@@ -1422,7 +1447,7 @@ function unanswered(overrides: Record<string, unknown> = {}) {
 /** A live provider that can look a send up (payment safety R4): `found` is what Circle lists for it. */
 function lookingProvider(found: TransferResult | null) {
   const findTransferByRef = vi.fn(async () => found);
-  getChainProviderMock.mockReturnValue({ mode: "live", earnMode: "simulate", estimatedFeeUsd: 0.003, findTransferByRef });
+  getChainProviderMock.mockReturnValue({ mode: "live", network: ARC_TESTNET, earnMode: "simulate", estimatedFeeUsd: 0.003, findTransferByRef });
   return findTransferByRef;
 }
 
@@ -2081,7 +2106,7 @@ describe("approveAndPay and the first payment to an address (new payee check N4)
   const gaveAddress = (by: string) => [{ action: "create_counterparty", detail: { by, counterpartyId: COUNTERPARTY_ID, address: "0xdead" } }];
   // A live workspace whose operating wallet, read from the chain, holds enough for the bill.
   const live = () => {
-    getChainProviderMock.mockReturnValue({ mode: "live", earnMode: "simulate", estimatedFeeUsd: 0.003 });
+    getChainProviderMock.mockReturnValue({ mode: "live", network: ARC_TESTNET, earnMode: "simulate", estimatedFeeUsd: 0.003 });
     syncOperatingBalanceMock.mockResolvedValue(500);
   };
 
@@ -2130,7 +2155,7 @@ describe("approveAndPay and the first payment to an address (new payee check N4)
 
 describe("listWaitingPayables and the first payment to an address (new payee check N4)", () => {
   it("says who gave the address of a payable whose payment would be its first, where payments are real", async () => {
-    getChainProviderMock.mockReturnValue({ mode: "live", earnMode: "simulate", estimatedFeeUsd: 0.003 });
+    getChainProviderMock.mockReturnValue({ mode: "live", network: ARC_TESTNET, earnMode: "simulate", estimatedFeeUsd: 0.003 });
     const { run } = approvalsFake({ addressEntries: [{ action: "create_counterparty", detail: { by: ACTOR, counterpartyId: COUNTERPARTY_ID, address: "0xdead" } }] });
 
     const [row] = await run(() => listWaitingPayables());
@@ -2138,14 +2163,14 @@ describe("listWaitingPayables and the first payment to an address (new payee che
   });
 
   it("says nothing of the kind for an address paid before, or where payments are simulated", async () => {
-    getChainProviderMock.mockReturnValue({ mode: "live", earnMode: "simulate", estimatedFeeUsd: 0.003 });
+    getChainProviderMock.mockReturnValue({ mode: "live", network: ARC_TESTNET, earnMode: "simulate", estimatedFeeUsd: 0.003 });
     const paid = approvalsFake({
       intents: [intentRow({ status: "confirmed", destination: "0xdead" })],
       addressEntries: [{ action: "create_counterparty", detail: { by: ACTOR, counterpartyId: COUNTERPARTY_ID, address: "0xdead" } }],
     });
     expect((await paid.run(() => listWaitingPayables()))[0]).not.toHaveProperty("firstPaymentAddressBy");
 
-    getChainProviderMock.mockReturnValue({ mode: "simulate", earnMode: "simulate", estimatedFeeUsd: 0.01 });
+    getChainProviderMock.mockReturnValue({ mode: "simulate", network: ARC_TESTNET, earnMode: "simulate", estimatedFeeUsd: 0.01 });
     const simulated = approvalsFake({ addressEntries: [{ action: "create_counterparty", detail: { by: ACTOR, counterpartyId: COUNTERPARTY_ID, address: "0xdead" } }] });
     expect((await simulated.run(() => listWaitingPayables()))[0]).not.toHaveProperty("firstPaymentAddressBy");
   });
@@ -2343,7 +2368,7 @@ describe("approveAndPay above the figure, after review (two approvals T4–T6)",
   const approvalRequests = (requests: RecordedRequest[], method: string) => requests.filter((r) => r.path === "/rest/v1/payment_approvals" && r.method === method);
   /** A live workspace where the payable would be the first payment to an address GAVE gave. */
   const live = () => {
-    getChainProviderMock.mockReturnValue({ mode: "live", earnMode: "simulate", estimatedFeeUsd: 0.003 });
+    getChainProviderMock.mockReturnValue({ mode: "live", network: ARC_TESTNET, earnMode: "simulate", estimatedFeeUsd: 0.003 });
     syncOperatingBalanceMock.mockResolvedValue(500);
     return { addressEntries: [{ action: "create_counterparty", detail: { by: GAVE, counterpartyId: COUNTERPARTY_ID, address: "0xdead" } }] };
   };
@@ -2428,7 +2453,7 @@ describe("approveAndPay when the operating wallet falls short and the reserve co
 
   beforeEach(() => {
     withdrawFromEarn.mockReset().mockResolvedValue({ txRef: "sim_redeem_1", positionValue: 151.634339, apy: 0 });
-    getChainProviderMock.mockReturnValue({ mode: "simulate", earnMode: "simulate", estimatedFeeUsd: 0.01, withdrawFromEarn });
+    getChainProviderMock.mockReturnValue({ mode: "simulate", network: ARC_TESTNET, earnMode: "simulate", estimatedFeeUsd: 0.01, withdrawFromEarn });
     payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", amountPaid: 0.4, discountTaken: 0, operatingBalance: 0 });
   });
 

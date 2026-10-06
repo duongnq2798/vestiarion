@@ -3,7 +3,7 @@ import { LiveProvider, type LiveProviderClient } from "@/lib/circle/liveProvider
 import { SimulateProvider } from "@/lib/circle/simulateProvider";
 import type { ChainProvider } from "@/lib/circle";
 import type { ChainConfig } from "@/lib/config";
-import { ARC_TESTNET_USDC } from "@/lib/fx/quote";
+import { ARC_TESTNET } from "@/lib/network";
 
 /**
  * The live provider's two calls for a USDC→EURC swap (docs/superpowers/specs/2026-10-01-eurc-swap-design.md
@@ -29,9 +29,8 @@ vi.mock("@/lib/dal", () => ({
 }));
 
 const CHAIN: ChainConfig = { circleApiKey: "test-api-key", circleEntitySecret: "test-entity-secret", usdcTokenId: "usdc-token-id" };
-const ADAPTER = "0xBBD70b01a1CAbc96d5b7b129Ae1AAabdf50dd40b";
 const CALL = `0xaa3e079c${"00".repeat(64)}`;
-const SWAP = { fromAccountId: "account-1", adapter: ADAPTER, usdcIn: 2.507384, callData: CALL, approveKey: "k-approve", executeKey: "k-execute" };
+const SWAP = { fromAccountId: "account-1", adapter: ARC_TESTNET.swapAdapter, usdcIn: 2.507384, callData: CALL, approveKey: "k-approve", executeKey: "k-execute" };
 
 function circle(states: Record<string, string>) {
   const created: Array<Record<string, unknown>> = [];
@@ -53,17 +52,17 @@ function circle(states: Record<string, string>) {
 describe("LiveProvider.swapForEurc", () => {
   it("approves the Adapter for the USDC, then sends it the swap's call, each under its own key", async () => {
     const c = circle({});
-    const result = await new LiveProvider(CHAIN, { client: c.client }).swapForEurc!(SWAP);
+    const result = await new LiveProvider(CHAIN, { network: ARC_TESTNET, client: c.client }).swapForEurc!(SWAP);
 
     expect(c.created).toHaveLength(2);
     expect(c.created[0]).toMatchObject({
       walletId: "wallet-op",
-      contractAddress: ARC_TESTNET_USDC,
+      contractAddress: ARC_TESTNET.tokens.USDC,
       abiFunctionSignature: "approve(address,uint256)",
-      abiParameters: [ADAPTER, "2507384"],
+      abiParameters: [ARC_TESTNET.swapAdapter, "2507384"],
       idempotencyKey: "k-approve",
     });
-    expect(c.created[1]).toMatchObject({ walletId: "wallet-op", contractAddress: ADAPTER, callData: CALL, idempotencyKey: "k-execute" });
+    expect(c.created[1]).toMatchObject({ walletId: "wallet-op", contractAddress: ARC_TESTNET.swapAdapter, callData: CALL, idempotencyKey: "k-execute" });
     expect(c.created[1]).not.toHaveProperty("abiFunctionSignature");
     expect(c.raw.createTransaction).not.toHaveBeenCalled();
     expect(result).toEqual({
@@ -74,20 +73,20 @@ describe("LiveProvider.swapForEurc", () => {
 
   it("sends no swap when the approval failed", async () => {
     const c = circle({ "tx-k-approve": "FAILED" });
-    const result = await new LiveProvider(CHAIN, { client: c.client }).swapForEurc!(SWAP);
+    const result = await new LiveProvider(CHAIN, { network: ARC_TESTNET, client: c.client }).swapForEurc!(SWAP);
     expect(c.created).toHaveLength(1);
     expect(result).toEqual({ approve: { status: "failed", txId: "tx-k-approve", txHash: null, state: "FAILED" }, execute: null });
   });
 
   it("reports a swap Circle failed as failed, with its state", async () => {
     const c = circle({ "tx-k-execute": "FAILED" });
-    const result = await new LiveProvider(CHAIN, { client: c.client }).swapForEurc!(SWAP);
+    const result = await new LiveProvider(CHAIN, { network: ARC_TESTNET, client: c.client }).swapForEurc!(SWAP);
     expect(result.execute).toEqual({ status: "failed", txId: "tx-k-execute", txHash: null, state: "FAILED" });
   });
 });
 
 describe("SimulateProvider", () => {
   it("has no swap, so a sandbox is never offered one", () => {
-    expect((new SimulateProvider() as ChainProvider).swapForEurc).toBeUndefined();
+    expect((new SimulateProvider(ARC_TESTNET) as ChainProvider).swapForEurc).toBeUndefined();
   });
 });

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import { payeeChain, type PayeeChain } from "../payee-chains";
-import { ARC_TESTNET } from "../network";
+import { chainOn, homeChain } from "../payee-chains";
+import { FeatureOffError, type NetworkProfile } from "../network";
 
 /**
  * CCTP V2 from Arc testnet, with Circle's Forwarding Service
@@ -11,11 +11,6 @@ import { ARC_TESTNET } from "../network";
  * (R1). Iris, Circle's attestation API, quotes the fee and reports the mint.
  */
 
-export const ARC_TESTNET_DOMAIN = ARC_TESTNET.cctp.domain;
-/** TokenMessengerV2: the same address on every CCTP testnet, Arc's included. */
-export const TOKEN_MESSENGER_V2 = "0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA";
-/** Arc's USDC ERC-20 interface: 6 decimals, the native USDC's balance. */
-export const ARC_TESTNET_USDC = ARC_TESTNET.tokens.USDC;
 /** `depositForBurnWithHook`'s hook data asking the Forwarding Service to submit the mint ("cctp-forward"). */
 export const CCTP_FORWARD_HOOK = "0x636374702d666f72776172640000000000000000000000000000000000000000";
 /** Fast transfer: attested at "confirmed" finality, in seconds rather than minutes. */
@@ -23,9 +18,17 @@ export const FAST_FINALITY = 1000;
 /** What a fast forwarded transfer takes end to end, as Circle documents it (8–20 s), rounded up. */
 export const EXPECTED_BRIDGE_SECONDS = 30;
 
-const IRIS = ARC_TESTNET.cctp.iris;
 const IRIS_DEADLINE_MS = 10_000;
 const ZERO_BYTES32 = `0x${"0".repeat(64)}`;
+
+/**
+ * CCTP on a network (network threading P2, P5): its domain, Iris and the TokenMessenger a burn goes through. A network
+ * without CCTP refuses by name, before any request.
+ */
+export function cctpOf(network: NetworkProfile): { domain: number; iris: string; tokenMessenger: string } {
+  if (!network.cctp) throw new FeatureOffError("Paying through CCTP", network);
+  return network.cctp;
+}
 
 export class BridgeFeeError extends Error {
   constructor(message: string) {
@@ -51,12 +54,15 @@ const fromUnits = (units: bigint) => Number(units) / 1_000_000;
  * Iris now: the forwarding fee (the high estimate, R3) plus the protocol's
  * minimum fee, in basis points of the amount.
  */
-export async function bridgeFee(chain: PayeeChain | string, amount: number, options: { fetch?: typeof fetch } = {}): Promise<BridgeFee> {
-  const target = payeeChain(chain);
-  if (target.id === "ARC-TESTNET") throw new Error("A payee on Arc testnet is not paid across chains");
+export async function bridgeFee(network: NetworkProfile, chain: string, amount: number, options: { fetch?: typeof fetch } = {}): Promise<BridgeFee> {
+  const cctp = cctpOf(network);
+  const target = chainOn(network.id, chain);
+  if (target.id === homeChain(network.id).id) throw new Error(`A payee on ${network.label} is not paid across chains`);
+  const domain = target.domain;
+  if (domain === null) throw new BridgeFeeError(`CCTP has no domain for ${target.label}`);
   let rows: unknown;
   try {
-    const response = await (options.fetch ?? fetch)(`${IRIS}/v2/burn/USDC/fees/${ARC_TESTNET_DOMAIN}/${target.domain}?forward=true`, {
+    const response = await (options.fetch ?? fetch)(`${cctp.iris}/v2/burn/USDC/fees/${cctp.domain}/${domain}?forward=true`, {
       signal: AbortSignal.timeout(IRIS_DEADLINE_MS),
       cache: "no-store",
     });
@@ -76,7 +82,7 @@ export async function bridgeFee(chain: PayeeChain | string, amount: number, opti
   const bps = typeof fast.minimumFee === "number" && fast.minimumFee > 0 ? fast.minimumFee : 0;
   const protocolUnits = (toUnits(amount) * BigInt(Math.round(bps * 100))) / BigInt(1_000_000);
   const maxFeeUnits = BigInt(Math.round(forward)) + protocolUnits;
-  return { feeUsdc: fromUnits(maxFeeUnits), maxFeeUnits, domain: target.domain };
+  return { feeUsdc: fromUnits(maxFeeUnits), maxFeeUnits, domain };
 }
 
 /**
@@ -110,18 +116,18 @@ export interface ContractCall {
  * plus the fee, then burn both with the forwarding hook. The payee is minted
  * the amount; any part of `maxFee` not charged is minted to them too (R3).
  */
-export function burnCalls(input: { amount: number; maxFeeUnits: bigint; domain: number; recipient: string }): [ContractCall, ContractCall] {
+export function burnCalls(input: { amount: number; maxFeeUnits: bigint; domain: number; recipient: string; usdc: string; tokenMessenger: string }): [ContractCall, ContractCall] {
   const total = (toUnits(input.amount) + input.maxFeeUnits).toString();
   return [
-    { contractAddress: ARC_TESTNET_USDC, abiFunctionSignature: "approve(address,uint256)", abiParameters: [TOKEN_MESSENGER_V2, total] },
+    { contractAddress: input.usdc, abiFunctionSignature: "approve(address,uint256)", abiParameters: [input.tokenMessenger, total] },
     {
-      contractAddress: TOKEN_MESSENGER_V2,
+      contractAddress: input.tokenMessenger,
       abiFunctionSignature: "depositForBurnWithHook(uint256,uint32,bytes32,address,bytes32,uint256,uint32,bytes)",
       abiParameters: [
         total,
         String(input.domain),
         toBytes32(input.recipient),
-        ARC_TESTNET_USDC,
+        input.usdc,
         ZERO_BYTES32,
         input.maxFeeUnits.toString(),
         String(FAST_FINALITY),
@@ -136,9 +142,10 @@ export function burnCalls(input: { amount: number; maxFeeUnits: bigint; domain: 
  * transaction hash; null while there is none yet, or when Iris cannot say
  * (not found, an error, no answer): the payment then stays in flight (X8).
  */
-export async function forwardedMint(burnTxHash: string, options: { fetch?: typeof fetch } = {}): Promise<{ mintTxHash: string } | null> {
+export async function forwardedMint(network: NetworkProfile, burnTxHash: string, options: { fetch?: typeof fetch } = {}): Promise<{ mintTxHash: string } | null> {
+  const cctp = cctpOf(network);
   try {
-    const response = await (options.fetch ?? fetch)(`${IRIS}/v2/messages/${ARC_TESTNET_DOMAIN}?transactionHash=${burnTxHash}`, {
+    const response = await (options.fetch ?? fetch)(`${cctp.iris}/v2/messages/${cctp.domain}?transactionHash=${burnTxHash}`, {
       signal: AbortSignal.timeout(IRIS_DEADLINE_MS),
       cache: "no-store",
     });

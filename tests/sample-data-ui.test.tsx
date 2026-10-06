@@ -68,7 +68,7 @@ describe("the pages", () => {
 
   it("the counterparty book marks sample counterparties", () => {
     // Each row of the book is a CounterpartyRow, which draws the badge.
-    expect(read("counterparties", "page.tsx")).toContain("<CounterpartyRow counterparty={counterparty}>");
+    expect(read("counterparties", "page.tsx")).toContain("<CounterpartyRow counterparty={counterparty} network={network}>");
     expect(readFileSync(path.join(process.cwd(), "src", "components", "CounterpartyRow.tsx"), "utf8")).toMatch(/counterparty\.sample && <Badge[^>]*>Sample<\/Badge>/);
   });
 });

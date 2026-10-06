@@ -6,6 +6,7 @@ import { withOrg } from "@/lib/dal/scope";
 import { closeMilestone, heldMilestonesTwoApprovals, heldReason, MilestoneDecisionError, payHeldMilestone, type HeldFacts } from "@/lib/agent/milestone-decisions";
 import { encryptSecret, parseMasterKeys } from "@/lib/secrets";
 import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
+import { ARC_TESTNET } from "@/lib/network";
 
 /**
  * A person decides a held milestone (docs/superpowers/specs/2026-10-02-held-milestone-actions-design.md): what
@@ -48,7 +49,7 @@ beforeEach(() => {
   releaseHeldMilestoneMock.mockReset();
   syncOperatingBalanceMock.mockReset();
   getChainProviderMock.mockReset();
-  getChainProviderMock.mockReturnValue({ mode: "simulate", earnMode: "simulate", estimatedFeeUsd: 0.01 });
+  getChainProviderMock.mockReturnValue({ mode: "simulate", network: ARC_TESTNET, earnMode: "simulate", estimatedFeeUsd: 0.01 });
 });
 afterEach(() => {
   if (savedMasterKeys === undefined) delete process.env.VESTIARION_MASTER_KEYS;
@@ -285,7 +286,7 @@ describe("Close over a transfer Circle never answered (payment safety R6)", () =
     updated_at: new Date(Date.now() - minutesAgo * 60_000).toISOString(),
   });
   const looking = () =>
-    getChainProviderMock.mockReturnValue({ mode: "live", earnMode: "simulate", estimatedFeeUsd: 0.003, findTransferByRef: vi.fn(async () => null) });
+    getChainProviderMock.mockReturnValue({ mode: "live", network: ARC_TESTNET, earnMode: "simulate", estimatedFeeUsd: 0.003, findTransferByRef: vi.fn(async () => null) });
 
   it("looks for it first, and refuses, saying when to try again, while Circle has not listed it", async () => {
     looking();
@@ -481,7 +482,7 @@ describe("Close without paying", () => {
 describe("Pay now and the first payment to an address (new payee check N4)", () => {
   const heldAsNewPayee = entryRow("milestone_release", { guardrailBlocked: true, guardrailRule: "counterparty.new_payee" });
   const gaveAddress = (by: string) => [{ action: "create_counterparty", detail: { by, counterpartyId: CONTRACTOR, address: ADDRESS } }];
-  const live = () => getChainProviderMock.mockReturnValue({ mode: "live", earnMode: "simulate", estimatedFeeUsd: 0.003 });
+  const live = () => getChainProviderMock.mockReturnValue({ mode: "live", network: ARC_TESTNET, earnMode: "simulate", estimatedFeeUsd: 0.003 });
 
   it("refuses the person who gave the contractor's address, before any claim", async () => {
     live();
@@ -657,7 +658,7 @@ describe("heldMilestonesTwoApprovals (two approvals T8)", () => {
   const CONTRACTORS = new Map([[CONTRACTOR, { address: ADDRESS }]]);
 
   it("leaves out whoever added it and, for a first payment where payments are real, whoever gave the address", async () => {
-    getChainProviderMock.mockReturnValue({ mode: "live", earnMode: "simulate", estimatedFeeUsd: 0.003 });
+    getChainProviderMock.mockReturnValue({ mode: "live", network: ARC_TESTNET, earnMode: "simulate", estimatedFeeUsd: 0.003 });
     const { run } = world({
       twoApprovals: 0.2,
       addressEntries: [{ action: "create_counterparty", detail: { by: GAVE, counterpartyId: CONTRACTOR, address: ADDRESS } }],
@@ -670,7 +671,7 @@ describe("heldMilestonesTwoApprovals (two approvals T8)", () => {
   });
 
   it("reads nothing more than the figure when none is set", async () => {
-    getChainProviderMock.mockReturnValue({ mode: "live", earnMode: "simulate", estimatedFeeUsd: 0.003 });
+    getChainProviderMock.mockReturnValue({ mode: "live", network: ARC_TESTNET, earnMode: "simulate", estimatedFeeUsd: 0.003 });
     const { fake, run } = world({});
 
     expect((await run(() => heldMilestonesTwoApprovals([HELD_ROW], CONTRACTORS, new Map()))).size).toBe(0);
@@ -685,7 +686,7 @@ describe("Pay now on a held milestone the operating wallet cannot cover, with th
   const withdrawFromEarn = vi.fn();
   beforeEach(() => {
     withdrawFromEarn.mockReset().mockResolvedValue({ txRef: "sim_redeem_1", positionValue: 151.75, apy: 0 });
-    getChainProviderMock.mockReturnValue({ mode: "simulate", earnMode: "simulate", estimatedFeeUsd: 0.01, withdrawFromEarn });
+    getChainProviderMock.mockReturnValue({ mode: "simulate", network: ARC_TESTNET, earnMode: "simulate", estimatedFeeUsd: 0.01, withdrawFromEarn });
   });
 
   it("brings back what it lacks once claimed, then releases it, and records both", async () => {

@@ -24,7 +24,7 @@ import { approvalAnchor, orgHref } from "@/lib/auth/org-paths";
 import { agentResumes, CASH_SHORTFALL, counterpartyPath, ruleNextStep } from "@/lib/next-step";
 import { amountToPay } from "@/lib/agent/payment-timing";
 import { utcDay, utcMinute } from "@/lib/copy";
-import { paidAcrossChains, payeeChain } from "@/lib/payee-chains";
+import { chainById, paidAcrossChains } from "@/lib/payee-chains";
 import { approveFirstDescription, mayApproveNow, onlyApproverOfTwo, SECOND_APPROVAL_PAYS, twoApprovalsLine } from "@/lib/two-approvals";
 
 const INITIAL: ActionResult = { ok: false, message: "" };
@@ -50,7 +50,7 @@ export function payConfirmTitle(
   const discount = discountTaken > 0 && payable.discount ? ` (${payable.discount.pct}% discount through ${utcDay(payable.discount.deadline)})` : "";
   // A payee on another chain: where the money goes, and the fee of the route it takes on top of it (CCTP payouts,
   // review I2; approval payout route P4). A Gateway payout is paid from the Gateway balance.
-  const elsewhere = paidAcrossChains(payable.payeeChain) ? ` on ${payeeChain(payable.payeeChain).label}` : "";
+  const elsewhere = paidAcrossChains(payable.payeeChain) ? ` on ${chainById(payable.payeeChain as string).label}` : "";
   const gateway = payable.payoutRoute === "gateway";
   const fee = !elsewhere
     ? ""
@@ -199,7 +199,7 @@ export default function ApprovalCard({
           <p className="mt-2 min-w-0 truncate text-xs text-ink-3" title={payable.address ?? undefined}>
             Pays to{" "}
             {payable.address ? <span className="font-mono text-ink-2">{payable.address}</span> : "no address set"}
-            {paidAcrossChains(payable.payeeChain) && ` on ${payeeChain(payable.payeeChain).label}`}
+            {paidAcrossChains(payable.payeeChain) && ` on ${chainById(payable.payeeChain as string).label}`}
           </p>
           {two && <p className="mt-2 text-sm text-ink-2">{twoApprovalsLine(two, viewerId, memberEmails)}</p>}
           {two && canDecide && two.approvers < 2 && (

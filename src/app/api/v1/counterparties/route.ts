@@ -17,7 +17,8 @@ import { withIdempotency } from "@/lib/api/idempotency";
 import { CreateCounterpartyBodySchema } from "@/lib/api/schemas";
 import { invalidBody, readJsonBody } from "@/lib/api/write";
 import { createCounterparty } from "@/lib/counterparties/create";
-import { counterpartyInputSchema } from "@/lib/intake-validation";
+import { counterpartyInputSchema, counterpartyChainProblem } from "@/lib/intake-validation";
+import { workspaceNetwork } from "@/lib/workspace-network";
 
 export const dynamic = "force-dynamic";
 
@@ -98,7 +99,7 @@ export async function POST(request: Request) {
     name: shape.data.name,
     role: shape.data.role,
     address: shape.data.address ?? "",
-    chain: shape.data.chain ?? "ARC-TESTNET",
+    chain: shape.data.chain,
     jurisdiction: shape.data.jurisdiction ?? "",
     paymentLimit: shape.data.paymentLimit === undefined ? "" : String(shape.data.paymentLimit),
     noticeEmail: shape.data.noticeEmail ?? "",
@@ -107,6 +108,9 @@ export async function POST(request: Request) {
 
   return withIdempotency(request, guard.key, body.raw, () =>
     handleApiRequest("POST /api/v1/counterparties", guard.key, async () => {
+      // A chain the workspace's network does not pay on is refused, in its scope, before anything is written (network threading P3).
+      const chainProblem = counterpartyChainProblem(workspaceNetwork().id, parsed.data.chain);
+      if (chainProblem) return apiError("invalid_request", chainProblem);
       const created = await createCounterparty({ actorId: guard.actor.userId, counterparty: parsed.data, via: "api", apiKeyId: guard.key.keyId });
       const row = unwrap(await db().from("counterparties").select(SELECT).eq("id", created.id).single()) as Record<string, unknown>;
       return NextResponse.json({ data: mapCounterparty(row) }, { status: 201 });

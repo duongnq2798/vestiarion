@@ -20,14 +20,15 @@ import type {
   SpendingLimitPayment,
 } from "./types";
 import { ARC_FEE_USD } from "./types";
-import { fetchArcFeeUsd } from "./arcFees";
+import { fetchArcFeeUsd, rpcUrlFor } from "./arcFees";
+import type { NetworkProfile } from "../network";
 import { awaitSettlement, FAILED_STATES, MAY_HAVE_BEEN_ACCEPTED, withDeadline, type Settlement } from "./settlement";
 import { circleHttpStatus } from "./check";
 import { batchCalls, BatchNotSentError, SCA_EXECUTE_BATCH } from "./batch";
 import { PAYMENTS_OFF, PaymentsDisabledError } from "../payments-switch";
-import { ARC_TESTNET_USDC, BridgeFeeError, bridgeFee, bridgeStepKey, burnCalls, forwardedMint, type ContractCall } from "./cctp";
+import { BridgeFeeError, bridgeFee, bridgeStepKey, burnCalls, cctpOf, forwardedMint, type ContractCall } from "./cctp";
 import { burnIntent, burnIntentTypedData, estimateGateway, gatewaySalt, gatewayTransferStatus, submitGatewayTransfer, type GatewayTransferStatus } from "./gateway";
-import { payeeChain, paidAcrossChains } from "../payee-chains";
+import { chainOn, paidAcrossChains } from "../payee-chains";
 import { toBaseUnits } from "../fx/quote";
 import { PAY_SIGNATURE, usdcUnits } from "../spending-limit/onchain";
 import type { ChainConfig } from "../config";
@@ -40,7 +41,7 @@ import {
   sharesToRedeem,
   sharesValue,
   toUnits as usycUnits,
-  USYC_TELLER,
+  usycOf,
   usycStepKey,
   usycSubscriptionsOpen,
   UsycNotConfirmedError,
@@ -137,7 +138,7 @@ function reportedFeeUsd(value: string | undefined): number | null {
  * estimate last, and the caller records which of the three it got.
  */
 async function resolveFee(
-  rpcUrl: string | undefined,
+  rpcUrl: string,
   circleReported: string | undefined,
   txHash: string | undefined
 ): Promise<{ feeUsd: number; feeSource: TransferResult["feeSource"] }> {
@@ -172,7 +173,10 @@ export class LiveProvider implements ChainProvider {
   /** EURC's token id in each wallet, as Circle's token list names it; read once per wallet. */
   private readonly eurcTokenIds = new Map<string, string>();
 
-  private readonly arcRpcUrl?: string;
+  /** The network it pays on (network threading P2): every chain fact below is this profile's. */
+  readonly network: NetworkProfile;
+  /** Its network's RPC; ARC_RPC_URL replaces Arc testnet's only. */
+  private readonly rpcUrl: string;
   /** Iris, for a bridge's fee and its mint. */
   private readonly fetch?: typeof fetch;
   private readonly bridgeMintWaitMs: number;
@@ -191,11 +195,12 @@ export class LiveProvider implements ChainProvider {
   constructor(
     chain: ChainConfig,
     options: {
+      network: NetworkProfile;
       client?: LiveProviderClient;
       fetch?: typeof fetch;
       bridgeMintWaitMs?: number;
       paymentsDisabled?: boolean | (() => Promise<boolean>);
-    } = {}
+    }
   ) {
     if (!chain.circleApiKey || !chain.circleEntitySecret) {
       throw new Error("LiveProvider requires a Circle API key and entity secret");
@@ -205,7 +210,8 @@ export class LiveProvider implements ChainProvider {
       entitySecret: chain.circleEntitySecret,
     });
     this.usdcTokenId = chain.usdcTokenId;
-    this.arcRpcUrl = chain.arcRpcUrl;
+    this.network = options.network;
+    this.rpcUrl = rpcUrlFor(this.network, chain.arcRpcUrl);
     this.fetch = options.fetch;
     this.bridgeMintWaitMs = options.bridgeMintWaitMs ?? BRIDGE_MINT_WAIT_MS;
     const off = options.paymentsDisabled;
@@ -309,7 +315,7 @@ export class LiveProvider implements ChainProvider {
     let feeSource: TransferResult["feeSource"] = "provider_estimate";
     let settledInMs: number | null = null;
     if (transaction) {
-      const resolved = await resolveFee(this.arcRpcUrl, transaction.networkFeeInUSD, txHash);
+      const resolved = await resolveFee(this.rpcUrl, transaction.networkFeeInUSD, txHash);
       feeUsd = resolved.feeUsd;
       feeSource = resolved.feeSource;
       settledInMs = measuredSettlementMs(transaction);
@@ -346,7 +352,7 @@ export class LiveProvider implements ChainProvider {
     if (unpaid) {
       throw new BatchNotSentError(`Counterparty has no on-chain address (${unpaid.toAddress}). Add this counterparty's Arc address on the Counterparties page`);
     }
-    const calls = batchCalls(params.transfers);
+    const calls = batchCalls(params.transfers, this.network.tokens.USDC);
     let account: AccountRow & { walletId: string };
     try {
       account = await this.account(params.fromAccountId);
@@ -370,7 +376,7 @@ export class LiveProvider implements ChainProvider {
     );
     const { status, transaction } = await awaitSettlement(this.client, txId);
     const txHash = transaction?.txHash ?? null;
-    const fee = transaction ? await resolveFee(this.arcRpcUrl, transaction.networkFeeInUSD, txHash ?? undefined) : { feeUsd: ARC_FEE_USD, feeSource: "provider_estimate" as const };
+    const fee = transaction ? await resolveFee(this.rpcUrl, transaction.networkFeeInUSD, txHash ?? undefined) : { feeUsd: ARC_FEE_USD, feeSource: "provider_estimate" as const };
     return {
       providerTxId: txId,
       txHash,
@@ -442,12 +448,12 @@ export class LiveProvider implements ChainProvider {
     );
     const { status, transaction } = await awaitSettlement(this.client, txId);
     const txHash = transaction?.txHash ?? null;
-    const fee = transaction ? await resolveFee(this.arcRpcUrl, transaction.networkFeeInUSD, txHash ?? undefined) : { feeUsd: ARC_FEE_USD, feeSource: "provider_estimate" as const };
+    const fee = transaction ? await resolveFee(this.rpcUrl, transaction.networkFeeInUSD, txHash ?? undefined) : { feeUsd: ARC_FEE_USD, feeSource: "provider_estimate" as const };
     return {
       providerTxId: txId,
       txHash,
       txRef: txHash ?? txId,
-      chain: "ARC-TESTNET",
+      chain: this.network.circleBlockchain,
       status,
       feeUsd: fee.feeUsd,
       feeSource: fee.feeSource,
@@ -481,7 +487,7 @@ export class LiveProvider implements ChainProvider {
     );
     const { status, transaction } = await awaitSettlement(this.client, txId);
     const txHash = transaction?.txHash ?? null;
-    const fee = transaction ? await resolveFee(this.arcRpcUrl, transaction.networkFeeInUSD, txHash ?? undefined) : { feeUsd: ARC_FEE_USD, feeSource: "provider_estimate" as const };
+    const fee = transaction ? await resolveFee(this.rpcUrl, transaction.networkFeeInUSD, txHash ?? undefined) : { feeUsd: ARC_FEE_USD, feeSource: "provider_estimate" as const };
     return {
       providerTxId: txId,
       txHash,
@@ -510,8 +516,8 @@ export class LiveProvider implements ChainProvider {
     if ((params.token ?? "USDC") !== "USDC") {
       throw new Error("Only USDC crosses chains through CCTP; a EURC payment is paid on Arc testnet only.");
     }
-    const chain = payeeChain(params.destinationChain);
-    const fee = await bridgeFee(chain.id, params.amount, { fetch: this.fetch });
+    const chain = chainOn(this.network.id, params.destinationChain);
+    const fee = await bridgeFee(this.network, chain.id, params.amount, { fetch: this.fetch });
     // The fee is read again here, just before the burn; one above what this
     // payment may pay sends nothing (review I4).
     if (params.maxBridgeFeeUsdc != null && fee.feeUsdc > params.maxBridgeFeeUsdc) {
@@ -519,7 +525,7 @@ export class LiveProvider implements ChainProvider {
         `The CCTP fee to ${chain.label}, ${fee.feeUsdc} USDC, is above the ${params.maxBridgeFeeUsdc} USDC this payment may pay; nothing was sent.`
       );
     }
-    const [approve, burn] = burnCalls({ amount: params.amount, maxFeeUnits: fee.maxFeeUnits, domain: fee.domain, recipient: params.toAddress });
+    const [approve, burn] = burnCalls({ amount: params.amount, maxFeeUnits: fee.maxFeeUnits, domain: fee.domain, recipient: params.toAddress, usdc: this.network.tokens.USDC, tokenMessenger: cctpOf(this.network).tokenMessenger });
     const started = Date.now();
     const base = { chain: account.chain, providerMode: "live" as const, destinationChain: chain.id, bridgeFeeUsdc: fee.feeUsdc };
 
@@ -556,7 +562,7 @@ export class LiveProvider implements ChainProvider {
     if ((params.token ?? "USDC") !== "USDC") {
       throw new Error("Only USDC crosses chains through Gateway; a EURC payment is paid on Arc testnet only.");
     }
-    const chain = payeeChain(params.destinationChain);
+    const chain = chainOn(this.network.id, params.destinationChain);
     const found = await db().from("gateway_signers").select("circle_wallet_id, address").maybeSingle();
     if (found.error) throw new Error(found.error.message);
     const signer = found.data as { circle_wallet_id: string; address: string } | null;
@@ -564,7 +570,7 @@ export class LiveProvider implements ChainProvider {
     if (!account.address) throw new Error("The operating wallet has no address; nothing was sent.");
 
     const payout = { depositor: account.address, signer: signer.address, recipient: params.toAddress, chain: chain.id, amount: params.amount, salt: gatewaySalt(params.idempotencyKey) };
-    const estimate = await estimateGateway(payout, { fetch: this.fetch });
+    const estimate = await estimateGateway(this.network, payout, { fetch: this.fetch });
     // The fee is read here, just before the payout; one above what this payment may pay sends nothing.
     // Weighed as the larger of the fee Gateway quotes and the fee the intent is signed to allow (review M2).
     const signedFeeUsdc = Math.max(estimate.feeUsdc, Number(estimate.maxFee) / 1_000_000);
@@ -573,7 +579,7 @@ export class LiveProvider implements ChainProvider {
         `The Gateway fee to ${chain.label}, ${signedFeeUsdc} USDC, is above the ${params.maxBridgeFeeUsdc} USDC this payment may pay; nothing was sent.`
       );
     }
-    const intent = burnIntent({ ...payout, maxFee: estimate.maxFee, maxBlockHeight: estimate.maxBlockHeight });
+    const intent = burnIntent(this.network, { ...payout, maxFee: estimate.maxFee, maxBlockHeight: estimate.maxBlockHeight });
     const signed = await withDeadline(
       this.client.signTypedData({ walletId: signer.circle_wallet_id, data: JSON.stringify(burnIntentTypedData(intent)), memo: params.memo }),
       CREATE_TRANSACTION_DEADLINE_MS,
@@ -583,7 +589,7 @@ export class LiveProvider implements ChainProvider {
     if (!signature) throw new Error("Circle returned no signature for the Gateway transfer; nothing was sent");
 
     const started = Date.now();
-    const transferId = await submitGatewayTransfer(intent, signature, { fetch: this.fetch });
+    const transferId = await submitGatewayTransfer(this.network, intent, signature, { fetch: this.fetch });
     // From here the transfer exists: a status read that fails leaves it in flight, for
     // reconciliation to read, never recorded as not sent (review I1).
     let status: GatewayTransferStatus;
@@ -599,7 +605,7 @@ export class LiveProvider implements ChainProvider {
   private async awaitGatewayMint(transferId: string): Promise<GatewayTransferStatus> {
     const deadline = Date.now() + this.bridgeMintWaitMs;
     for (;;) {
-      const status = await gatewayTransferStatus(transferId, { fetch: this.fetch });
+      const status = await gatewayTransferStatus(this.network, transferId, { fetch: this.fetch });
       if (status.status !== "pending" || Date.now() + BRIDGE_MINT_POLL_MS > deadline) return status;
       await new Promise((resolve) => setTimeout(resolve, BRIDGE_MINT_POLL_MS));
     }
@@ -656,7 +662,7 @@ export class LiveProvider implements ChainProvider {
   private async awaitMint(burnTxHash: string): Promise<string | null> {
     const deadline = Date.now() + this.bridgeMintWaitMs;
     for (;;) {
-      const mint = await forwardedMint(burnTxHash, { fetch: this.fetch });
+      const mint = await forwardedMint(this.network, burnTxHash, { fetch: this.fetch });
       if (mint) return mint.mintTxHash;
       if (Date.now() + BRIDGE_MINT_POLL_MS > deadline) return null;
       await new Promise((resolve) => setTimeout(resolve, BRIDGE_MINT_POLL_MS));
@@ -672,7 +678,7 @@ export class LiveProvider implements ChainProvider {
   ): Promise<TransferResult> {
     const transaction = settlement.transaction;
     const txHash = transaction?.txHash ?? null;
-    const fee = await resolveFee(this.arcRpcUrl, transaction?.networkFeeInUSD, txHash ?? undefined);
+    const fee = await resolveFee(this.rpcUrl, transaction?.networkFeeInUSD, txHash ?? undefined);
     // Paid once the payee has the money: on the mint, not on the burn (R5).
     const status = settlement.status === "failed" ? "failed" : settlement.status === "confirmed" && mintTxHash ? "confirmed" : "pending";
     return {
@@ -694,7 +700,7 @@ export class LiveProvider implements ChainProvider {
     if (providerTxId.startsWith(BURN_ID) || providerTxId.startsWith(APPROVE_ID)) return this.reconcileBridge(providerTxId);
     // A Gateway payout, read again: it signs and sends nothing (G4).
     if (providerTxId.startsWith(GATEWAY_ID)) {
-      const status = await gatewayTransferStatus(providerTxId.slice(GATEWAY_ID.length), { fetch: this.fetch });
+      const status = await gatewayTransferStatus(this.network, providerTxId.slice(GATEWAY_ID.length), { fetch: this.fetch });
       return this.gatewayResult(providerTxId, status, null, null, null);
     }
     const started = Date.now();
@@ -711,7 +717,7 @@ export class LiveProvider implements ChainProvider {
     const txHash = transaction.txHash ?? null;
     // Reconciliation is also the backfill path: a transfer that settled before
     // its receipt was readable gets its real fee on the next pass.
-    const fee = await resolveFee(this.arcRpcUrl, transaction.networkFeeInUSD, txHash ?? undefined);
+    const fee = await resolveFee(this.rpcUrl, transaction.networkFeeInUSD, txHash ?? undefined);
     return {
       providerTxId,
       txHash,
@@ -747,7 +753,7 @@ export class LiveProvider implements ChainProvider {
     // An approve that confirmed while its burn was never sent is still in
     // flight: only a person's approval, sending the same attempt, burns.
     if (!isBurn) return this.bridgeResult(providerTxId, settlement.status === "failed" ? settlement : { status: "pending", transaction }, { chain: transaction.blockchain, providerMode: "live", destinationChain: null, bridgeFeeUsdc: null }, null, started);
-    const mint = confirmed && transaction.txHash ? await forwardedMint(transaction.txHash, { fetch: this.fetch }) : null;
+    const mint = confirmed && transaction.txHash ? await forwardedMint(this.network, transaction.txHash, { fetch: this.fetch }) : null;
     return this.bridgeResult(providerTxId, settlement, { chain: transaction.blockchain, providerMode: "live", destinationChain: null, bridgeFeeUsdc: null }, mint?.mintTxHash ?? null, started);
   }
 
@@ -759,11 +765,11 @@ export class LiveProvider implements ChainProvider {
   async depositToEarn(params: EarnDepositParams): Promise<EarnResult> {
     await this.refuseWhilePaymentsOff();
     const { operating, reserve, key } = await this.usycAccounts(params);
-    const read = { rpcUrl: this.arcRpcUrl, fetch: this.fetch };
+    const read = { network: this.network, rpcUrl: this.rpcUrl, fetch: this.fetch };
     if (!(await usycSubscriptionsOpen(read))) throw new UsycSubscriptionsClosedError();
     const units = usycUnits(params.amount).toString();
-    const approve = await this.usycCall(operating.walletId, { contractAddress: ARC_TESTNET_USDC, abiFunctionSignature: "approve(address,uint256)", abiParameters: [USYC_TELLER, units] }, `${key}/approve`);
-    const deposit = await this.usycCall(operating.walletId, { contractAddress: USYC_TELLER, abiFunctionSignature: "deposit(uint256,address)", abiParameters: [units, reserve.address] }, `${key}/deposit`);
+    const approve = await this.usycCall(operating.walletId, { contractAddress: this.network.tokens.USDC, abiFunctionSignature: "approve(address,uint256)", abiParameters: [usycOf(this.network).teller, units] }, `${key}/approve`);
+    const deposit = await this.usycCall(operating.walletId, { contractAddress: usycOf(this.network).teller, abiFunctionSignature: "deposit(uint256,address)", abiParameters: [units, reserve.address] }, `${key}/deposit`);
     const price = await readUsycPrice(read);
     const shares = (BigInt(units) * 10n ** 18n) / price;
     return {
@@ -781,13 +787,13 @@ export class LiveProvider implements ChainProvider {
   async withdrawFromEarn(params: EarnDepositParams): Promise<EarnResult> {
     await this.refuseWhilePaymentsOff();
     const { operating, reserve, key } = await this.usycAccounts(params);
-    const read = { rpcUrl: this.arcRpcUrl, fetch: this.fetch };
+    const read = { network: this.network, rpcUrl: this.rpcUrl, fetch: this.fetch };
     const [price, held] = await Promise.all([readUsycPrice(read), readUsycShares(reserve.address, read)]);
     if (held === 0n) throw new Error("The reserve wallet holds no USYC to redeem");
     const shares = sharesToRedeem(usycUnits(params.amount), price, held);
     const redeem = await this.usycCall(
       reserve.walletId,
-      { contractAddress: USYC_TELLER, abiFunctionSignature: "redeem(uint256,address,address)", abiParameters: [shares.toString(), operating.address, reserve.address] },
+      { contractAddress: usycOf(this.network).teller, abiFunctionSignature: "redeem(uint256,address,address)", abiParameters: [shares.toString(), operating.address, reserve.address] },
       `${key}/redeem`
     );
     return {
@@ -802,7 +808,7 @@ export class LiveProvider implements ChainProvider {
   async getEarnPosition(reserveAccountId: string): Promise<EarnPosition> {
     const reserve = await this.account(reserveAccountId);
     if (!reserve.address) throw new Error(`Account ${reserveAccountId} has no address`);
-    const read = { rpcUrl: this.arcRpcUrl, fetch: this.fetch };
+    const read = { network: this.network, rpcUrl: this.rpcUrl, fetch: this.fetch };
     const [price, shares, apy] = await Promise.all([readUsycPrice(read), readUsycShares(reserve.address, read), readUsycApy(read).catch(() => null)]);
     return { shares: fromUnits(shares), valueUsdc: fromUnits(sharesValue(shares, price)), price: priceValue(price), apy };
   }
@@ -858,7 +864,7 @@ export class LiveProvider implements ChainProvider {
     };
     // In base units the way the swap's call was built (src/lib/fx/swap-service.ts), never by a float multiply (review #10).
     const units = toBaseUnits(params.usdcIn);
-    const approve = await send({ contractAddress: ARC_TESTNET_USDC, abiFunctionSignature: "approve(address,uint256)", abiParameters: [params.adapter, units] }, params.approveKey);
+    const approve = await send({ contractAddress: this.network.tokens.USDC, abiFunctionSignature: "approve(address,uint256)", abiParameters: [params.adapter, units] }, params.approveKey);
     if (approve.status !== "confirmed") return { approve, execute: null };
     const execute = await send({ contractAddress: params.adapter, callData: params.callData }, params.executeKey);
     return { approve, execute };

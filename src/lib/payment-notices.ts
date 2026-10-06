@@ -5,7 +5,8 @@ import { db, platformDb, unwrap } from "./dal";
 import { paymentNoticeEmail } from "./email/payment-notice";
 import { emailSettingsFromEnv, sendEmail, type EmailMessage, type SendResult } from "./email/send";
 import { appendLedgerEntryBestEffort } from "./ledger-best-effort";
-import { arcTxUrl } from "./payee-chains";
+import { homeChain, txUrl } from "./payee-chains";
+import { networkOf } from "./network";
 
 /**
  * Payment notices (docs/superpowers/specs/2026-10-03-payment-notices-design.md): once a payment to a counterparty is
@@ -30,6 +31,12 @@ export function maskEmail(email: string): string {
 
 const AMOUNT = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 });
 
+/** A payment made on its network's own chain: the one a notice links, as a payment across chains is the mint's. */
+function paidOnItsOwnChain(intent: { chain: string | null; network: string | null }): boolean {
+  const own = homeChain(networkOf(intent.network)).id;
+  return (intent.chain ?? own) === own;
+}
+
 interface DueIntent {
   id: string;
   source_type: string;
@@ -41,6 +48,8 @@ interface DueIntent {
   destination: string | null;
   confirmed_at: string | null;
   payout_route: string | null;
+  /** The network the payment was made on (0075); null on a row from before it, which is Arc testnet. */
+  network: string | null;
 }
 
 /** One line of what the run did, as a cycle logs it. */
@@ -84,7 +93,7 @@ export async function sendPaymentNotices(
   const due = (unwrap(
     await db()
       .from("payment_intents")
-      .select("id, source_type, source_id, amount, token, tx_hash, chain, destination, confirmed_at, payout_route")
+      .select("id, source_type, source_id, amount, token, tx_hash, chain, destination, confirmed_at, payout_route, network")
       .eq("status", "confirmed")
       .eq("provider_mode", "live")
       .is("notice_sent_at", null)
@@ -94,7 +103,7 @@ export async function sendPaymentNotices(
       .limit(NOTICES_PER_RUN * 5)
   ) as DueIntent[])
     // Payments made on Arc testnet, with their transaction: a payout to another chain gets none yet (R3).
-    .filter((intent) => (intent.chain ?? "ARC-TESTNET") === "ARC-TESTNET" && !intent.payout_route && /^0x[0-9a-fA-F]{64}$/.test(intent.tx_hash ?? ""));
+    .filter((intent) => paidOnItsOwnChain(intent) && !intent.payout_route && /^0x[0-9a-fA-F]{64}$/.test(intent.tx_hash ?? ""));
   if (due.length === 0) return [];
 
   const invoiceIds = due.filter((intent) => intent.source_type === "invoice").map((intent) => intent.source_id);
@@ -141,7 +150,8 @@ export async function sendPaymentNotices(
       what: source.what,
       address: intent.destination ?? "your address",
       paidAt: utcMinute(intent.confirmed_at ?? new Date(now).toISOString()),
-      txUrl: arcTxUrl(intent.tx_hash as string),
+      // The explorer of the network the payment was made on, read from the record, never the scope (network threading P1).
+      txUrl: txUrl(networkOf(intent.network), intent.tx_hash as string),
       origin,
     });
     let result: SendResult;

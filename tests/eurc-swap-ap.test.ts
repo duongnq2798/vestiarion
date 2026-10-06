@@ -15,6 +15,7 @@ import type { SwapOffer, SwapQuote } from "@/lib/fx/swap-service";
 import { encryptSecret, parseMasterKeys } from "@/lib/secrets";
 import { fakeSupabase, type RecordedRequest } from "./support/fake-supabase";
 import { paymentIntentsBackend } from "./support/payment-intents";
+import { ARC_TESTNET } from "@/lib/network";
 
 /**
  * The AP stage paying a EURC payable the wallet's EURC is short of (docs/superpowers/specs/2026-10-01-eurc-swap-design.md
@@ -93,6 +94,7 @@ function payable(overrides: Record<string, unknown> = {}) {
 }
 
 class Chain implements ChainProvider {
+  readonly network = ARC_TESTNET;
   readonly earnMode = "simulate" as const;
   readonly estimatedFeeUsd = 0.003;
   transfers: TransferParams[] = [];

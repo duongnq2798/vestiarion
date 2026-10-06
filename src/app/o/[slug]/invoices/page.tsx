@@ -40,6 +40,7 @@ import { payLinkStates, type PayLinkState } from "@/lib/platform/pay-links";
 import { listRecurringPayables } from "@/lib/recurring-payables";
 import { receiptShareable } from "@/lib/receipts/facts";
 import { sharedReceipts } from "@/lib/receipts/share";
+import { workspaceNetwork } from "@/lib/workspace-network";
 
 export const dynamic = "force-dynamic";
 
@@ -67,6 +68,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
   const { slug } = await params;
   const access = await requireMembership(slug);
   return inOrg(access, async () => {
+    const network = workspaceNetwork().id;
     const query = await searchParams;
     const [invoices, counterparties, headEntries, dashboardStats, canWrite, canDecide, schedules, deciding, emailed] = await Promise.all([
       listInvoices(),
@@ -94,7 +96,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
     const filter = typeof query.status === "string" ? query.status : undefined;
     const shown = filter ? invoices.filter((invoice) => invoice.status === filter) : invoices;
     const counterpartiesById = new Map(counterparties.map((counterparty) => [counterparty.id, counterparty]));
-    const decisions = shown.map((invoice) => invoiceDecision(invoice, counterpartiesById.get(invoice.counterparty_id), entries, { deciding }));
+    const decisions = shown.map((invoice) => invoiceDecision(invoice, counterpartiesById.get(invoice.counterparty_id), entries, { network, deciding }));
     const payables = decisions.filter((decision) => decision.domain === "ap");
     const receivables = decisions.filter((decision) => decision.domain === "ar");
     const ordinaryPayables = payables.filter((decision) => decision.outcome !== "refused");

@@ -14,39 +14,18 @@ const IDENTIFIER =
   /ARC-TESTNET|rpc\.testnet\.arc|explorer\.testnet\.arc\.io|5042002|gateway-api-testnet|iris-api-sandbox|0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a|Arc_Testnet|ArcTestnet/g;
 const PROFILE = "src/lib/network.ts";
 
-/** The files that still hold a testnet identifier, and how many: lower these as they move into the profile. */
+/**
+ * The files that hold a testnet identifier on purpose (network threading P7), and how many: demo data that exists only on
+ * Arc testnet, and the public API's description of its default chain. A count that goes down is written down here.
+ */
 const ALLOWED: Record<string, number> = {
-  "src/app/api/v1/counterparties/route.ts": 1,
+  // The design page's fixtures: Arc testnet's demo data.
   "src/app/design/fixtures.ts": 4,
+  // The guides' screenshots: Arc testnet's demo data.
   "src/app/docs-shots/shots.tsx": 3,
-  "src/app/o/[slug]/contractors/page.tsx": 2,
-  "src/components/intake/CounterpartyIntake.tsx": 1,
-  "src/components/payee/PayeeJourney.tsx": 2,
-  "src/components/receipt/ReceiptView.tsx": 1,
-  "src/components/vx/map.ts": 1,
-  "src/lib/agent/orchestrator.ts": 2,
-  "src/lib/agent/receipts.ts": 1,
+  // The public API says its default chain is `ARC-TESTNET`, its enum's first until phase 2.
   "src/lib/api/schemas.ts": 1,
-  "src/lib/circle/cctp.ts": 1,
-  "src/lib/circle/escrow-holds.ts": 2,
-  "src/lib/circle/escrow-setup.ts": 2,
-  "src/lib/circle/gateway-funding.ts": 1,
-  "src/lib/circle/gateway.ts": 3,
-  "src/lib/circle/liveProvider.ts": 1,
-  "src/lib/circle/simulateProvider.ts": 1,
-  "src/lib/circle/spending-limit-setup.ts": 3,
-  "src/lib/fx/swap-service.ts": 2,
-  "src/lib/github/bounties.ts": 1,
-  "src/lib/github/payment-comments.ts": 2,
-  "src/lib/intake-validation.ts": 1,
-  "src/lib/pay-freelancer.ts": 2,
-  "src/lib/payee-chains.ts": 1,
-  "src/lib/payment-notices.ts": 2,
-  "src/lib/platform/payee-links.ts": 1,
-  "src/lib/platform/workspace.ts": 2,
-  "src/lib/receipts/facts.ts": 2,
-  "src/lib/receipts/onchain.ts": 4,
-  "src/lib/sample-data.ts": 1,
+  // The founding workspace's seed, on Arc testnet.
   "src/lib/seed.ts": 9,
 };
 

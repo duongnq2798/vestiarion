@@ -31,7 +31,7 @@ function milestone(overrides: Partial<MilestoneRow> = {}): MilestoneRow {
   };
 }
 
-const evidenceRow = (row: MilestoneRow) => milestoneDecision(row, []).evidence.find((item) => item.label === "Evidence");
+const evidenceRow = (row: MilestoneRow) => milestoneDecision(row, [], { network: "arc-testnet" }).evidence.find((item) => item.label === "Evidence");
 
 describe("milestoneDecision: evidence link", () => {
   it("links an https evidence link by its host", () => {
@@ -44,7 +44,7 @@ describe("milestoneDecision: evidence link", () => {
   });
 
   it("leaves a pull request to the Verified by row, which already links it", () => {
-    const decision = milestoneDecision(milestone({ verification_source: "https://github.com/acme/widgets/pull/42" }), []);
+    const decision = milestoneDecision(milestone({ verification_source: "https://github.com/acme/widgets/pull/42" }), [], { network: "arc-testnet" });
     expect(decision.evidence.find((item) => item.label === "Evidence")).toBeUndefined();
     expect(decision.evidence.find((item) => item.label === "Verified by")?.href).toBe("https://github.com/acme/widgets/pull/42");
   });
@@ -63,7 +63,7 @@ describe("milestoneDecision: a release held for the agent's spending limit (outf
         outflowBudget: { dailyUsdc: 20, weeklyUsdc: null, spentToday: 15, spentThisWeek: 15, remaining: 5, binding: "day" },
       },
     } as unknown as LedgerEntry;
-    const decision = milestoneDecision(milestone({ status: "held", verified: true }), [entry]);
+    const decision = milestoneDecision(milestone({ status: "held", verified: true }), [entry], { network: "arc-testnet" });
     expect(decision.guardrail).toEqual({ rule: "workspace.outflow_budget", attempted: 12.5, attemptedToken: "USDC", limit: 5, limitToken: "USDC", note: "left of the 20.00 USDC daily spending limit; 15.00 USDC already paid today" });
   });
 });
@@ -72,7 +72,7 @@ describe("milestoneDecision: a milestone the agent has not paid yet says what it
   const verified = milestone({ status: "verified", verified: true, verification_method: "manual", verification_status: "verified", contractor_name: "Mr Pop", amount: 1 });
 
   it("waits on a person to confirm the payee's new address: held for them, never Scheduled, with the contractor's own screening", () => {
-    const decision = milestoneDecision(verified, [], { riskLevel: "clear", waiting: "unconfirmed" });
+    const decision = milestoneDecision(verified, [], { network: "arc-testnet", riskLevel: "clear", waiting: "unconfirmed" });
     expect(decision.outcome).toBe("held");
     expect(decision.outcomeLabel).toBe("Address to confirm");
     expect(decision.reasoning).toBe(
@@ -82,13 +82,13 @@ describe("milestoneDecision: a milestone the agent has not paid yet says what it
   });
 
   it("waits for the payee to add an address, or for the agent's decision", () => {
-    expect(milestoneDecision(verified, [], { waiting: "no_address" })).toMatchObject({ outcomeLabel: "Waiting for an address" });
-    const deciding = milestoneDecision(verified, []);
+    expect(milestoneDecision(verified, [], { network: "arc-testnet", waiting: "no_address" })).toMatchObject({ outcomeLabel: "Waiting for an address" });
+    const deciding = milestoneDecision(verified, [], { network: "arc-testnet" });
     expect(deciding).toMatchObject({ outcomeLabel: "Being decided", reasoning: "Verified. The agent decides on pay within a minute." });
     expect(deciding.outcome).not.toBe("held");
   });
 
   it("waits for verification while pending", () => {
-    expect(milestoneDecision(milestone(), [])).toMatchObject({ outcomeLabel: "Awaiting verification", reasoning: "The agent is waiting for milestone verification." });
+    expect(milestoneDecision(milestone(), [], { network: "arc-testnet" })).toMatchObject({ outcomeLabel: "Awaiting verification", reasoning: "The agent is waiting for milestone verification." });
   });
 });

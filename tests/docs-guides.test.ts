@@ -2,8 +2,8 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { readSource } from "@/lib/docs/content";
-import { arcTxUrl } from "@/lib/payee-chains";
 import { GoLiveError, type GoLiveErrorCode } from "@/lib/platform/go-live";
+import { txUrl } from "@/lib/payee-chains";
 
 /**
  * The user guides quote the app: every button, field, heading and message
@@ -794,6 +794,7 @@ const GO_LIVE_ERRORS: Record<GoLiveErrorCode, true> = {
   hosted_has_wallets: true,
   sample_data_loaded: true,
   key_network: true,
+  hosted_network: true,
 };
 
 /** Copy for real users on Arc testnet names the network plainly; it never hedges it away. */
@@ -861,7 +862,7 @@ describe("the first-payment guide's steps", () => {
   });
 
   it("gives the explorer link a settled card opens, as the app builds it", () => {
-    expect(guide).toContain(`at \`${arcTxUrl("")}\` followed by the hash`);
+    expect(guide).toContain(`at \`${txUrl("arc-testnet", "")}\` followed by the hash`);
   });
 });
 

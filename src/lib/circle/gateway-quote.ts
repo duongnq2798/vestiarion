@@ -17,7 +17,8 @@ export interface GatewayQuote {
 export function gatewayQuoter(provider: ChainProvider, db: OrgDb): (chain: string, amount: number) => Promise<GatewayQuote | null> {
   let parties: Promise<{ signer: string; depositor: string } | null> | undefined;
   return async (chain, amount) => {
-    if (provider.mode !== "live") return null;
+    // No quote in a sandbox, or on a network without Gateway (network threading P5): the payout goes another way or waits.
+    if (provider.mode !== "live" || provider.network.gateway === null) return null;
     parties ??= (async () => {
       const signer = await db.from("gateway_signers").select("address").maybeSingle();
       if (signer.error || !signer.data) return null;
@@ -28,8 +29,8 @@ export function gatewayQuoter(provider: ChainProvider, db: OrgDb): (chain: strin
     const known = await parties;
     if (!known) return null;
     const [estimate, balanceUsdc] = await Promise.all([
-      estimateGateway({ depositor: known.depositor, signer: known.signer, recipient: known.depositor, chain, amount, salt: gatewaySalt("quote") }),
-      gatewayBalance(known.depositor),
+      estimateGateway(provider.network, { depositor: known.depositor, signer: known.signer, recipient: known.depositor, chain, amount, salt: gatewaySalt("quote") }),
+      gatewayBalance(provider.network, known.depositor),
     ]);
     return { feeUsdc: estimate.feeUsdc, balanceUsdc };
   };

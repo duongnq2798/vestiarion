@@ -531,7 +531,7 @@ describe("the new control screens, as source", () => {
   it("AP / AR says which payables a running cycle is deciding", () => {
     const invoices = read("src/app/o/[slug]/invoices/page.tsx");
     expect(invoices).toContain("hasRunningCycle().catch(() => false)");
-    expect(invoices).toContain("entries, { deciding })");
+    expect(invoices).toContain("entries, { network, deciding })");
   });
 
   it("every page's frame shows the agent's live state, and a successful form tells it to watch closely", () => {
@@ -918,7 +918,7 @@ describe("why Approve and pay is off, and what to do instead (approval guidance)
 describe("a toast for what the agent decided", () => {
   it("puts its button and transaction under its words, so the words take the toast's width", () => {
     const markup = html(
-      <ActivityToastBody detail="DeepSeek decided to pay it; code stopped it: the payout fee is above 10% of the invoice." action="Decide in Approvals" txHash={null} primary onAction={() => {}} />
+      <ActivityToastBody detail="DeepSeek decided to pay it; code stopped it: the payout fee is above 10% of the invoice." action="Decide in Approvals" txUrl={null} primary onAction={() => {}} />
     );
     // One column: the reason, then a row of what to do. No button beside the words.
     expect(markup).toMatch(/^<span class="mt-1 grid gap-2.5"><span>DeepSeek decided to pay it; code stopped it: the payout fee is above 10% of the invoice\.<\/span><span class="flex flex-wrap/);
@@ -927,7 +927,7 @@ describe("a toast for what the agent decided", () => {
   });
 
   it("links a payment's transaction beside its quiet button", () => {
-    const markup = html(<ActivityToastBody detail={null} action="How it decided" txHash={`0x${"ab".repeat(32)}`} primary={false} onAction={() => {}} />);
+    const markup = html(<ActivityToastBody detail={null} action="How it decided" txUrl={`https://explorer.testnet.arc.io/tx/0x${"ab".repeat(32)}`} primary={false} onAction={() => {}} />);
     expect(markup).toContain("How it decided");
     expect(markup).toContain(`href="https://explorer.testnet.arc.io/tx/0x${"ab".repeat(32)}"`);
     expect(markup).toContain("View on Arcscan");

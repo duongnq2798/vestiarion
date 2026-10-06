@@ -2,11 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import type { ChainProvider, SwapCallParams, SwapCallResult, SwapStep } from "@/lib/circle";
-import { ARC_TESTNET_EURC } from "@/lib/fx/quote";
 import { resumeOpenSwaps, swapForPayment, swapStepKey } from "@/lib/fx/swap";
 import type { SwapOffer } from "@/lib/fx/swap-service";
 import answer from "./fixtures/stablecoin-swap-answer.json";
 import { fakeSupabase, orgTestContext, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
+import { ARC_TESTNET } from "@/lib/network";
 
 /**
  * A swap made to pay a EURC invoice (docs/superpowers/specs/2026-10-01-eurc-swap-design.md S6, S7): the
@@ -22,7 +22,6 @@ const ORG = "0b6c1c9e-4a4f-4a7e-9b1e-0000000005a9";
 const INVOICE = "0b6c1c9e-4a4f-4a7e-9b1e-0000000001ec";
 // The captured answer's beneficiary: the wallet the swap pays back into.
 const WALLET = "0x1111111111111111111111111111111111111111";
-const ADAPTER = "0xBBD70b01a1CAbc96d5b7b129Ae1AAabdf50dd40b";
 const TRANSFER = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
 const SWAP_HASH = `0x${"5a".repeat(32)}`;
 const config = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k" });
@@ -63,7 +62,7 @@ const step = (status: SwapStep["status"], txId: string, txHash: string | null = 
 
 function provider(result: (params: SwapCallParams) => SwapCallResult) {
   const swapForEurc = vi.fn(async (params: SwapCallParams) => result(params));
-  return { provider: { mode: "live", swapForEurc } as unknown as ChainProvider, swapForEurc };
+  return { provider: { mode: "live", network: ARC_TESTNET, swapForEurc } as unknown as ChainProvider, swapForEurc };
 }
 
 const confirmed = () => ({ approve: step("confirmed", "tx-approve", "0xa11"), execute: step("confirmed", "tx-swap", SWAP_HASH) });
@@ -89,8 +88,8 @@ function network(options: { stopLimit?: string; estimated?: string; noRoute?: bo
             blockNumber: "0x3dfa001",
             logs: [
               // The USDC that went in, and the EURC that came back to the wallet.
-              { address: "0x3600000000000000000000000000000000000000", topics: [TRANSFER, to, `0x${ADAPTER.slice(2).padStart(64, "0")}`], data: `0x${(1_000_000).toString(16).padStart(64, "0")}` },
-              { address: ARC_TESTNET_EURC.toLowerCase(), topics: [TRANSFER, `0x${ADAPTER.slice(2).padStart(64, "0")}`, to], data: `0x${BigInt(options.received ?? "822900").toString(16).padStart(64, "0")}` },
+              { address: "0x3600000000000000000000000000000000000000", topics: [TRANSFER, to, `0x${ARC_TESTNET.swapAdapter.slice(2).padStart(64, "0")}`], data: `0x${(1_000_000).toString(16).padStart(64, "0")}` },
+              { address: ARC_TESTNET.tokens.EURC.toLowerCase(), topics: [TRANSFER, `0x${ARC_TESTNET.swapAdapter.slice(2).padStart(64, "0")}`, to], data: `0x${BigInt(options.received ?? "822900").toString(16).padStart(64, "0")}` },
             ],
           },
         }),
@@ -128,7 +127,7 @@ describe("swapForPayment", () => {
       usdc_per_eurc: 1.216081,
       cost_percent: 0.06,
       provider: "lifi",
-      adapter: ADAPTER,
+      adapter: ARC_TESTNET.swapAdapter,
     });
     expect(String(row.call_data).slice(0, 10)).toBe("0xaa3e079c");
     // Nothing is sent until the row that resumes it exists.
@@ -137,7 +136,7 @@ describe("swapForPayment", () => {
     const swapId = row.id as string;
     expect(p.swapForEurc).toHaveBeenCalledWith({
       fromAccountId: "acct-op",
-      adapter: ADAPTER,
+      adapter: ARC_TESTNET.swapAdapter,
       usdcIn: 1,
       callData: row.call_data,
       approveKey: swapStepKey(`${ORG}/swap/${INVOICE}/${swapId}/approve`),
@@ -170,7 +169,7 @@ describe("swapForPayment", () => {
         usdcPerEurc: 1.216081,
         costPercent: 0.06,
         provider: "lifi",
-        adapter: ADAPTER,
+        adapter: ARC_TESTNET.swapAdapter,
         approveTxHash: "0xa11",
         swapTxHash: SWAP_HASH,
         failure: null,
@@ -250,7 +249,7 @@ it("swapForPayment leaves a swap in flight, to be resumed, when a call throws af
   const swapForEurc = vi.fn(async () => {
     throw new Error("Circle did not answer a swap call within 20000 ms; it may or may not have been accepted");
   });
-  const outcome = await d.run(() => swapForPayment(input, deps({ mode: "live", swapForEurc } as unknown as ChainProvider, network())));
+  const outcome = await d.run(() => swapForPayment(input, deps({ mode: "live", network: ARC_TESTNET, swapForEurc } as unknown as ChainProvider, network())));
   const swapId = (d.fake.requests.find((r) => r.method === "POST")!.body as { id: string }).id;
   expect(d.rows.get(swapId)).toMatchObject({ state: "submitted" });
   expect(outcome).toEqual({
@@ -272,7 +271,7 @@ it("swapForPayment makes no swap, and throws nothing, before the swaps table exi
 describe("resumeOpenSwaps", () => {
   const OPEN = {
     id: "0b6c1c9e-4a4f-4a7e-9b1e-0000000055aa", invoice_id: INVOICE, state: "submitted", usdc_in: "1", eurc_minimum: "0.798131", eurc_estimated: "0.822815",
-    usdc_per_eurc: "1.216081", cost_percent: "0.06", provider: "lifi", adapter: ADAPTER, call_data: "0xaa3e079c00", deadline: "2026-10-01T12:10:00Z",
+    usdc_per_eurc: "1.216081", cost_percent: "0.06", provider: "lifi", adapter: ARC_TESTNET.swapAdapter, call_data: "0xaa3e079c00", deadline: "2026-10-01T12:10:00Z",
     invoices: { counterparties: { name: "Atelier Lumière" } },
   };
 
@@ -283,7 +282,7 @@ describe("resumeOpenSwaps", () => {
 
     expect(p.swapForEurc).toHaveBeenCalledWith({
       fromAccountId: "acct-op",
-      adapter: ADAPTER,
+      adapter: ARC_TESTNET.swapAdapter,
       usdcIn: 1,
       callData: "0xaa3e079c00",
       approveKey: swapStepKey(`${ORG}/swap/${INVOICE}/${OPEN.id}/approve`),
@@ -314,7 +313,7 @@ describe("resumeOpenSwaps", () => {
     const swapForEurc = vi.fn(async () => {
       throw new Error("Circle answered 400");
     });
-    const sweep = await d.run(() => resumeOpenSwaps(deps({ mode: "live", swapForEurc } as unknown as ChainProvider, network())));
+    const sweep = await d.run(() => resumeOpenSwaps(deps({ mode: "live", network: ARC_TESTNET, swapForEurc } as unknown as ChainProvider, network())));
     expect(sweep.outcomes).toEqual([{ invoiceId: INVOICE, outcome: { ok: false, pending: true, swapId: OPEN.id, reason: "The swap's outcome is not known yet (Circle answered 400)." } }]);
     expect(d.rows.get(OPEN.id)).toMatchObject({ state: "submitted" });
   });

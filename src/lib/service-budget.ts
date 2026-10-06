@@ -1,3 +1,4 @@
+import { workspaceNetwork } from "./workspace-network";
 import { SERVICE_DAILY_CAP_USDC } from "./agent/services";
 import { gatewayBalance } from "./circle/gateway";
 import { db, unwrap } from "./dal";
@@ -39,7 +40,7 @@ export async function readServiceBudget(options: { fetch?: typeof fetch; now?: D
       .select("id, address, status, price_usdc, result, reason, created_at, counterparties(name)")
       .order("created_at", { ascending: false })
       .limit(20),
-    gatewayBalance(signer.address, { fetch: options.fetch }).catch(() => null),
+    gatewayBalance(workspaceNetwork(), signer.address, { fetch: options.fetch }).catch(() => null),
   ]);
   // Before migration 0058 there is no table: the budget shows with no purchases.
   const purchases = (rows.error?.code === "42P01" ? [] : unwrap(rows)) as unknown as Array<{

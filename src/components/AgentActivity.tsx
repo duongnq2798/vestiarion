@@ -8,7 +8,6 @@ import { toast } from "@/components/ui/Toaster";
 import { AGENT_EXPECTED_EVENT, EXPECT_AGENT_MS, nextPollMs, TOLD_ONE_BY_ONE, workingLabel, type ActivityItem } from "@/lib/agent-activity";
 import { isValidSlug, orgHref } from "@/lib/auth/org-paths";
 import { utcMinute } from "@/lib/copy";
-import { arcTxUrl } from "@/lib/payee-chains";
 
 /** The route's answer (src/app/api/agent/activity/route.ts). */
 interface ActivityAnswer {
@@ -127,13 +126,13 @@ export function AgentActivity({ lastCycleAt: initialLastCycleAt }: { lastCycleAt
 export function ActivityToastBody({
   detail,
   action,
-  txHash,
+  txUrl,
   primary,
   onAction,
 }: {
   detail: string | null;
   action: string;
-  txHash: string | null;
+  txUrl: string | null;
   /** The person's next step (a stop) is the toast's main button; a look at what happened is a quiet one. */
   primary: boolean;
   onAction: () => void;
@@ -145,8 +144,8 @@ export function ActivityToastBody({
         <Button size="sm" variant={primary ? "primary" : "secondary"} onClick={onAction}>
           {action}
         </Button>
-        {txHash && (
-          <a href={arcTxUrl(txHash)} target="_blank" rel="noreferrer" className="text-xs font-medium text-agent underline-offset-2 hover:underline">
+        {txUrl && (
+          <a href={txUrl} target="_blank" rel="noreferrer" className="text-xs font-medium text-agent underline-offset-2 hover:underline">
             View on Arcscan
           </a>
         )}
@@ -166,7 +165,7 @@ function tell(items: ActivityItem[], since: number, go: (path: string) => void) 
         <ActivityToastBody
           detail={waiting > 0 ? `${waiting} of them ${waiting === 1 ? "waits" : "wait"} for you.` : null}
           action="See them"
-          txHash={null}
+          txUrl={null}
           primary={waiting > 0}
           onAction={() => {
             toast.dismiss(id);
@@ -186,7 +185,7 @@ function tell(items: ActivityItem[], since: number, go: (path: string) => void) 
         <ActivityToastBody
           detail={item.detail}
           action={item.pathLabel}
-          txHash={item.txHash}
+          txUrl={item.txUrl}
           primary={item.tone === "stopped"}
           onAction={() => {
             toast.dismiss(id);

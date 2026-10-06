@@ -5,6 +5,8 @@ import { requireOrgScopeSettings, withOrg } from "../dal/scope";
 import { appendLedgerEntry } from "../ledger";
 import { ledgerKeyId } from "../ledger-keys";
 import { encryptSecret, masterKeysFromEnv } from "../secrets";
+import { homeChain } from "../payee-chains";
+import { workspaceNetwork } from "../workspace-network";
 
 /**
  * Self-serve workspaces: a person names one, and gets a sandbox organization
@@ -15,11 +17,13 @@ const MAX_NAME = 80;
 const MAX_BASE_SLUG = 36;
 const ATTEMPTS = 5;
 
-/** The two accounts every new sandbox starts with, and nothing else. */
-const SIMULATED_ACCOUNTS = [
-  { name: "Operating (simulated)", kind: "operating", chain: "ARC-TESTNET", balance: 10000 },
-  { name: "Reserve (simulated)", kind: "reserve", chain: "ARC-TESTNET", balance: 0 },
-];
+/** The two accounts every new sandbox starts with, and nothing else, on its network's own chain (network threading P4). */
+function simulatedAccounts(chain: string) {
+  return [
+    { name: "Operating (simulated)", kind: "operating", chain, balance: 10000 },
+    { name: "Reserve (simulated)", kind: "reserve", chain, balance: 0 },
+  ];
+}
 
 /** `create_org` refuses a fourth workspace for the same person (migration 0020). */
 export class WorkspaceLimitError extends Error {
@@ -110,7 +114,7 @@ export async function createWorkspace(input: {
     await withOrg(
       orgId,
       async () => {
-        const inserted = await db().from("accounts").insert(SIMULATED_ACCOUNTS);
+        const inserted = await db().from("accounts").insert(simulatedAccounts(homeChain(workspaceNetwork().id).id));
         if (inserted.error) throw new Error(inserted.error.message);
         await appendLedgerEntry({
           actor: "human",

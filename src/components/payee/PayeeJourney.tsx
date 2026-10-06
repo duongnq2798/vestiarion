@@ -9,7 +9,7 @@ import { Callout } from "@/components/ui/Callout";
 import { Hash, Money } from "@/components/vx/Primitives";
 import { utcDay, utcMinute } from "@/lib/copy";
 import { amountsLine, maskAddress, payeeStage, paymentState, type PayeeLinkStatus, type PayeePayment, type PaymentTone, type PayeeStage } from "@/lib/payee-journey";
-import { payeeChain } from "@/lib/payee-chains";
+import { chainById, homeChain, networkOfChain, paidAcrossChains } from "@/lib/payee-chains";
 import { passkeyWalletConfig, passkeyWalletOffered } from "@/lib/passkey-wallet";
 import { PayeeSteps } from "./PayeeSteps";
 
@@ -25,7 +25,6 @@ export const PAYEE_REFRESH_MS = 30_000;
 
 export const NO_SECRETS = "Vestiarion only needs your address. It never asks for your recovery phrase or private key.";
 
-const ARC_EXPLORER = payeeChain("ARC-TESTNET").explorerTx;
 
 const TONE: Record<PaymentTone, "neutral" | "agent" | "held" | "proof"> = { waiting: "neutral", progress: "agent", review: "held", done: "proof" };
 
@@ -56,7 +55,7 @@ function Footnote({ children }: { children: ReactNode }) {
 }
 
 function AddressStep({ token, status }: { token: string; status: PayeeLinkStatus }) {
-  const chain = payeeChain(status.chain).label;
+  const chain = chainById(status.chain).label;
   const owed = amountsLine(status.payments);
   // A passkey wallet, the secondary way, for a payee paid on Arc testnet when Modular Wallets are set up (P1, P6).
   const passkey = passkeyWalletOffered(status.chain, passkeyWalletConfig());
@@ -138,7 +137,7 @@ function PayingStep({ status }: { status: PayeeLinkStatus }) {
     <>
       <Heading>Your address is confirmed</Heading>
       <p className="mt-3 text-sm leading-6 text-ink-2">
-        {status.orgName} pays you at <span className="font-mono">{maskAddress(status.address ?? "")}</span> on {payeeChain(status.chain).label}.
+        {status.orgName} pays you at <span className="font-mono">{maskAddress(status.address ?? "")}</span> on {chainById(status.chain).label}.
       </p>
       {status.payments.length > 0 ? (
         <PaymentList payments={status.payments} orgName={status.orgName} withState />
@@ -158,8 +157,10 @@ function PayingStep({ status }: { status: PayeeLinkStatus }) {
 function PaidStep({ status }: { status: PayeeLinkStatus }) {
   const paid = [...status.payments].sort((a, b) => (a.settledAt ?? "").localeCompare(b.settledAt ?? ""));
   const latest = paid[paid.length - 1];
-  const chain = payeeChain(status.chain).label;
-  const onArc = payeeChain(status.chain).id === "ARC-TESTNET";
+  const chain = chainById(status.chain).label;
+  const onArc = !paidAcrossChains(status.chain);
+  // The link's chain is on one network, whose explorer shows the payment (network threading P1, P6).
+  const explorerTx = homeChain(networkOfChain(status.chain)).explorerTx;
   const latestTx = latest?.txRef?.startsWith("0x") ? latest.txRef : null;
   return (
     <>
@@ -179,14 +180,14 @@ function PaidStep({ status }: { status: PayeeLinkStatus }) {
         {paid.map((payment, index) =>
           payment.txRef?.startsWith("0x") ? (
             <ReceiptRow key={index} term={paid.length > 1 ? `Transaction ${index + 1}` : "Transaction"}>
-              <Hash value={payment.txRef} href={`${ARC_EXPLORER}${payment.txRef}`} />
+              <Hash value={payment.txRef} href={`${explorerTx}${payment.txRef}`} />
             </ReceiptRow>
           ) : null
         )}
       </dl>
       {latestTx && (
         <Button asChild className="mt-6 w-full">
-          <a href={`${ARC_EXPLORER}${latestTx}`} target="_blank" rel="noreferrer">
+          <a href={`${explorerTx}${latestTx}`} target="_blank" rel="noreferrer">
             View on Arcscan
             <ArrowUpRight aria-hidden />
             <span className="sr-only">(opens in a new tab)</span>

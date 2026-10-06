@@ -1,5 +1,5 @@
 import { currentConfig } from "../context";
-import { ARC_TESTNET } from "../network";
+import type { NetworkProfile } from "../network";
 
 /**
  * Reads what a transfer actually cost, from Arc itself.
@@ -29,10 +29,6 @@ import { ARC_TESTNET } from "../network";
  * three times more reluctant to sweep than the economics warranted. Numbers
  * you assert about your own system drift; numbers you read do not.
  */
-
-/** Arc testnet, chain id 5042002. Matches viem's `arcTestnet` definition. */
-export const ARC_TESTNET_RPC_URL = ARC_TESTNET.rpcUrl;
-export const ARC_TESTNET_CHAIN_ID = ARC_TESTNET.chainId;
 
 /** Arc's gas token is USDC at 18 decimals, so wei convert straight to dollars. */
 const ARC_NATIVE_DECIMALS = 18n;
@@ -91,13 +87,16 @@ async function arcRpc(
 }
 
 /**
- * The node to read receipts from. `LiveProvider` passes its configured URL
- * explicitly; this is the fallback for a direct caller, and it reads the
- * running scope rather than the process environment so that two businesses
- * pointed at different nodes do not silently share one.
+ * The RPC for a network's own chain (docs/superpowers/specs/2026-10-05-network-threading-design.md P2): ARC_RPC_URL,
+ * a keyed endpoint, replaces Arc testnet's only, never another network's.
  */
-export function arcRpcUrl(): string {
-  return currentConfig().chain.arcRpcUrl || ARC_TESTNET_RPC_URL;
+export function rpcUrlFor(network: NetworkProfile, override: string | undefined): string {
+  return network.id === "arc-testnet" && override ? override : network.rpcUrl;
+}
+
+/** `rpcUrlFor` with the running configuration's ARC_RPC_URL. */
+export function networkRpcUrl(network: NetworkProfile): string {
+  return rpcUrlFor(network, currentConfig().chain.arcRpcUrl);
 }
 
 /**
@@ -108,12 +107,12 @@ export function arcRpcUrl(): string {
  */
 export async function fetchArcFeeUsd(
   txHash: string,
-  options: { url?: string; timeoutMs?: number } = {}
+  options: { url: string; timeoutMs?: number }
 ): Promise<number | null> {
   if (!/^0x[0-9a-fA-F]{64}$/.test(txHash)) return null;
   try {
     const receipt = (await arcRpc("eth_getTransactionReceipt", [txHash], {
-      url: options.url ?? arcRpcUrl(),
+      url: options.url,
       timeoutMs: options.timeoutMs ?? 15_000,
     })) as ArcReceipt | null;
     return feeUsdFromReceipt(receipt);

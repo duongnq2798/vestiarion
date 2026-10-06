@@ -12,6 +12,7 @@ import { decisionsMessage, type CardView } from "./blocks";
 import { installFor, moveCursor, webhookUrlOf, type SlackInstall } from "./installs";
 import { slackSettingsFromEnv, type SlackSettings } from "./settings";
 import { cardToken } from "./state";
+import { workspaceNetwork } from "../workspace-network";
 
 /**
  * The cycle's `slack` stage (Slack design S7, S8): the install's channel is told the agent's decisions after its
@@ -61,6 +62,7 @@ async function cardViews(items: ActivityItem[], install: SlackInstall, keys: Mas
     const currency = row.currency ?? "USDC";
     const refusal = approveRefusal(
       {
+        network: workspaceNetwork().id,
         amount: row.amount,
         currency,
         chain: payee?.chain ?? null,

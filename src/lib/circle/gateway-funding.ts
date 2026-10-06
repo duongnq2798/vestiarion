@@ -1,11 +1,11 @@
+import { workspaceNetwork } from "../workspace-network";
 import { initiateDeveloperControlledWalletsClient, type CircleDeveloperControlledWalletsClient } from "@circle-fin/developer-controlled-wallets";
 import { currentOrgConfig, currentOrgId } from "../context";
 import { db, unwrap } from "../dal";
 import { appendLedgerEntry } from "../ledger";
 import { encodeFunctionData, getAddress, parseAbi } from "viem";
 import { SCA_EXECUTE_BATCH } from "./batch";
-import { ARC_TESTNET_USDC } from "./cctp";
-import { GATEWAY_WALLET, gatewayBalance, gatewayStepKey } from "./gateway";
+import { gatewayBalance, gatewayOf, gatewayStepKey } from "./gateway";
 import { circleCall, CircleCallFailed, treasuryWalletSetId, walletIdempotencyKey } from "./provision";
 import { awaitSettlement } from "./settlement";
 import { assertPaymentsEnabled } from "../payments-switch";
@@ -110,7 +110,7 @@ async function execute(
 /** Reads the Gateway balance, or null when Gateway does not answer. */
 async function readBalance(depositor: string, fetcher: typeof fetch | undefined): Promise<number | null> {
   try {
-    return await gatewayBalance(depositor, { fetch: fetcher });
+    return await gatewayBalance(workspaceNetwork(), depositor, { fetch: fetcher });
   } catch {
     return null;
   }
@@ -144,6 +144,8 @@ export async function fundGateway(
   // Nothing moves while the platform has payments switched off (payment safety S2).
   await assertPaymentsEnabled();
   if (!Number.isFinite(input.amount) || input.amount <= 0) throw new Error("Enter an amount greater than zero.");
+  const network = workspaceNetwork();
+  gatewayOf(network);
   const chain = currentOrgConfig().chain;
   if (chain.credentialsUnreadable) throw new Error("This workspace's Circle credentials are stored but could not be read.");
   if (!chain.circleApiKey || !chain.circleEntitySecret) throw new Error("This workspace has no Circle credentials.");
@@ -164,7 +166,7 @@ export async function fundGateway(
       "createWallets",
       () =>
         client.createWallets({
-          blockchains: ["ARC-TESTNET"],
+          blockchains: [workspaceNetwork().circleBlockchain as never],
           count: 1,
           walletSetId,
           accountType: "EOA",
@@ -198,7 +200,7 @@ export async function fundGateway(
       delegated = await execute(
         client,
         operating.walletId,
-        { contractAddress: GATEWAY_WALLET, abiFunctionSignature: "addDelegate(address,address)", abiParameters: [ARC_TESTNET_USDC, signer.address] },
+        { contractAddress: gatewayOf(workspaceNetwork()).wallet, abiFunctionSignature: "addDelegate(address,address)", abiParameters: [workspaceNetwork().tokens.USDC, signer.address] },
         gatewayStepKey(failedBefore ? `${orgId}/delegate/after/${failedBefore}` : `${orgId}/delegate`),
         "delegate on Gateway"
       );
@@ -227,14 +229,14 @@ export async function fundGateway(
   const approved = await execute(
     client,
     operating.walletId,
-    { contractAddress: ARC_TESTNET_USDC, abiFunctionSignature: "approve(address,uint256)", abiParameters: [GATEWAY_WALLET, units] },
+    { contractAddress: workspaceNetwork().tokens.USDC, abiFunctionSignature: "approve(address,uint256)", abiParameters: [gatewayOf(workspaceNetwork()).wallet, units] },
     gatewayStepKey(`${orgId}/fund/${input.requestId}/approve`),
     "approval for Gateway"
   );
   const deposited = await execute(
     client,
     operating.walletId,
-    { contractAddress: GATEWAY_WALLET, abiFunctionSignature: "deposit(address,uint256)", abiParameters: [ARC_TESTNET_USDC, units] },
+    { contractAddress: gatewayOf(workspaceNetwork()).wallet, abiFunctionSignature: "deposit(address,uint256)", abiParameters: [workspaceNetwork().tokens.USDC, units] },
     gatewayStepKey(`${orgId}/fund/${input.requestId}/deposit`),
     "deposit into Gateway"
   );
@@ -275,7 +277,7 @@ export async function readGatewayState(options: { fetch?: typeof fetch } = {}): 
   if (!signer) return { signerAddress: null, balanceUsdc: null };
   try {
     const operating = await operatingWallet();
-    return { signerAddress: signer.address, balanceUsdc: await gatewayBalance(operating.address, { fetch: options.fetch }) };
+    return { signerAddress: signer.address, balanceUsdc: await gatewayBalance(workspaceNetwork(), operating.address, { fetch: options.fetch }) };
   } catch {
     return { signerAddress: signer.address, balanceUsdc: null };
   }
@@ -311,6 +313,8 @@ export async function fundServiceBudget(
   if (input.amount > SERVICE_BUDGET_MAX_DEPOSIT_USDC) {
     throw new Error(`Add at most ${SERVICE_BUDGET_MAX_DEPOSIT_USDC} USDC at a time: the budget pays for lookups of a thousandth of a USDC.`);
   }
+  const network = workspaceNetwork();
+  gatewayOf(network);
   const chain = currentOrgConfig().chain;
   if (chain.credentialsUnreadable) throw new Error("This workspace's Circle credentials are stored but could not be read.");
   if (!chain.circleApiKey || !chain.circleEntitySecret) throw new Error("This workspace has no Circle credentials.");
@@ -332,8 +336,8 @@ export async function fundServiceBudget(
       abiFunctionSignature: SCA_EXECUTE_BATCH,
       abiParameters: [
         [
-          [ARC_TESTNET_USDC, "0", encodeFunctionData({ abi: FUNDING_ABI, functionName: "approve", args: [getAddress(GATEWAY_WALLET), units] })],
-          [GATEWAY_WALLET, "0", encodeFunctionData({ abi: FUNDING_ABI, functionName: "depositFor", args: [getAddress(ARC_TESTNET_USDC), getAddress(signer.address), units] })],
+          [workspaceNetwork().tokens.USDC, "0", encodeFunctionData({ abi: FUNDING_ABI, functionName: "approve", args: [getAddress(gatewayOf(workspaceNetwork()).wallet), units] })],
+          [gatewayOf(workspaceNetwork()).wallet, "0", encodeFunctionData({ abi: FUNDING_ABI, functionName: "depositFor", args: [getAddress(workspaceNetwork().tokens.USDC), getAddress(signer.address), units] })],
         ],
       ],
     },

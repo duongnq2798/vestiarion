@@ -1,5 +1,6 @@
 import type { LedgerEntry } from "../ledger";
-import { payeeChain } from "../payee-chains";
+import { chainById, homeChain } from "../payee-chains";
+import { networkOf } from "../network";
 
 /**
  * What a shared receipt states (docs/superpowers/specs/2026-10-01-payment-receipts-design.md P1, P2):
@@ -42,6 +43,8 @@ export interface ReceiptIntent {
   bridge_fee: string | number | null;
   payout_route: string | null;
   confirmed_at: string | null;
+  /** The network the payment was made on (0075); absent or null on a row from before it, which is Arc testnet. */
+  network?: string | null;
 }
 
 export type BuiltReceipt = { ok: true; facts: ReceiptFacts; records: { seq: number; hash: string } } | { ok: false; reason: string };
@@ -63,7 +66,9 @@ export function buildReceipt(input: {
   if (invoice.status !== "paid" || !intent || intent.status !== "confirmed") return refuse("This invoice is not paid yet.");
   if (intent.provider_mode !== "live") return refuse("A simulated payment has nothing on chain to show.");
 
-  const crossChain = intent.destination_chain !== null && intent.destination_chain !== "ARC-TESTNET";
+  // The intent's own network (network threading P1): its home chain is the one a direct payment was made on.
+  const own = homeChain(networkOf(intent.network)).id;
+  const crossChain = intent.destination_chain !== null && intent.destination_chain !== own;
   const route: ReceiptRoute = intent.payout_route === "gateway" ? "gateway" : crossChain ? "cctp" : "direct";
   // The payee is paid by the mint on their chain, once there is one; a CCTP burn alone is not their payment (R4).
   if (route === "cctp" && !intent.mint_tx_hash) return refuse("The payee's chain has not minted this payout yet.");
@@ -82,7 +87,7 @@ export function buildReceipt(input: {
     token: intent.token === "EURC" ? "EURC" : "USDC",
     paidAt: intent.confirmed_at ?? "",
     payee: intent.destination,
-    chain: route === "direct" ? (intent.chain ?? "ARC-TESTNET") : (intent.destination_chain as string),
+    chain: route === "direct" ? (intent.chain ?? own) : (intent.destination_chain as string),
     txHash,
     route,
     ...(sourceTxHash ? { sourceTxHash } : {}),
@@ -113,5 +118,5 @@ export function receiptShareable(invoice: { status: string; direction: string },
 
 /** The receipt entry's summary: the amount and the chain, and no names. */
 export function receiptSummary(facts: ReceiptFacts): string {
-  return `Receipt: ${facts.amount} ${facts.token} paid on ${payeeChain(facts.chain).label}`;
+  return `Receipt: ${facts.amount} ${facts.token} paid on ${chainById(facts.chain).label}`;
 }

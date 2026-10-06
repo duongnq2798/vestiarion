@@ -1,5 +1,6 @@
 export type Domain = "ap" | "ar" | "contractor" | "treasury" | "compliance" | "system";
 import type { TrailStep } from "@/lib/decision-trail";
+import type { Network } from "@/lib/network";
 
 /** `deciding`: a payable not yet decided while a cycle runs, which is deciding it (decision trail R1). */
 export type Outcome = "settled" | "scheduled" | "held" | "refused" | "simulated" | "recorded" | "deciding";
@@ -24,6 +25,8 @@ export interface Guardrail {
 
 export interface Decision {
   id: string;
+  /** The workspace's network (network threading P6): the card and its trail link transactions on its explorer. */
+  network: Network;
   domain: Domain;
   action: string;
   subject: string;

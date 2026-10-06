@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { LiveProvider, type LiveProviderClient } from "@/lib/circle/liveProvider";
 import type { ChainConfig } from "@/lib/config";
 import { PAY_SIGNATURE, spendingLimitRef } from "@/lib/spending-limit/onchain";
+import { ARC_TESTNET } from "@/lib/network";
 
 /**
  * The live provider paying through the workspace's spending limit contract
@@ -47,7 +48,7 @@ function circle(state = "COMPLETE") {
 describe("LiveProvider: a payment through the spending limit contract", () => {
   it("calls pay(address,uint256,bytes32) from the agent's wallet, in token units, under the attempt's key, and transfers nothing", async () => {
     const c = circle();
-    const result = await new LiveProvider(CHAIN, { client: c.client }).transfer({
+    const result = await new LiveProvider(CHAIN, { network: ARC_TESTNET, client: c.client }).transfer({
       fromAccountId: "account-1",
       toAddress: PAYEE,
       amount: 1.2,
@@ -71,7 +72,7 @@ describe("LiveProvider: a payment through the spending limit contract", () => {
 
   it("reports a call Circle failed as a failed transfer, with Circle's reason", async () => {
     const c = circle("FAILED");
-    const result = await new LiveProvider(CHAIN, { client: c.client }).transfer({
+    const result = await new LiveProvider(CHAIN, { network: ARC_TESTNET, client: c.client }).transfer({
       fromAccountId: "account-1",
       toAddress: PAYEE,
       amount: 9,
@@ -90,7 +91,7 @@ describe("LiveProvider: a payment through the spending limit contract", () => {
       { route: "escrow" as const, escrow: { contract: `0x${"e5".repeat(20)}`, holdId: `0x${"1".repeat(64)}` } },
     ]) {
       const c = circle();
-      await expect(new LiveProvider(CHAIN, { client: c.client }).transfer({ ...base, ...extra })).rejects.toThrow(/nothing was sent/);
+      await expect(new LiveProvider(CHAIN, { network: ARC_TESTNET, client: c.client }).transfer({ ...base, ...extra })).rejects.toThrow(/nothing was sent/);
       expect(c.raw.createContractExecutionTransaction).not.toHaveBeenCalled();
       expect(c.raw.createTransaction).not.toHaveBeenCalled();
     }

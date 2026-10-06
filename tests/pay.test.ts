@@ -6,6 +6,7 @@ import { paymentIdempotencyKey } from "@/lib/payments";
 import type { BalanceSnapshot, ChainProvider, EarnResult, TransferParams, TransferResult } from "@/lib/circle";
 import { fakeSupabase, orgTestContext, type RecordedRequest, type FakeReply } from "./support/fake-supabase";
 import { paymentIntentsBackend as sharedPaymentIntentsBackend } from "./support/payment-intents";
+import { ARC_TESTNET } from "@/lib/network";
 
 /**
  * `payInvoice` is the AP stage's pay branch, moved verbatim so a person
@@ -31,6 +32,7 @@ const input: PayInvoiceInput = {
 };
 
 class FakeProvider implements ChainProvider {
+  readonly network = ARC_TESTNET;
   readonly mode = "live" as const;
   readonly earnMode = "simulate" as const;
   readonly estimatedFeeUsd = 0.01;

@@ -1,5 +1,3 @@
-import { ARC_TESTNET_USDC } from "../circle/cctp";
-import { GATEWAY_WALLET } from "../circle/gateway";
 import { ARC_TESTNET } from "../network";
 
 /**
@@ -12,7 +10,7 @@ import { ARC_TESTNET } from "../network";
 export const X402_NETWORK = ARC_TESTNET.caip2;
 
 /** Circle Gateway's batched settlement: the buyer signs against GatewayWallet, not USDC (Gateway nanopayments). */
-export const GATEWAY_BATCHING = { name: "GatewayWalletBatched", version: "1", verifyingContract: GATEWAY_WALLET } as const;
+export const GATEWAY_BATCHING = { name: "GatewayWalletBatched", version: "1", verifyingContract: ARC_TESTNET.gateway.wallet } as const;
 
 /** Circle's x402 facilitator for testnets: verifies and settles Gateway-batched payments. */
 export const GATEWAY_FACILITATOR_URL = ARC_TESTNET.gateway.facilitator;
@@ -44,7 +42,7 @@ export function payeeHistoryRequirements(): X402Requirements {
   return {
     scheme: "exact",
     network: X402_NETWORK,
-    asset: ARC_TESTNET_USDC,
+    asset: ARC_TESTNET.tokens.USDC,
     amount: PAYEE_HISTORY_PRICE_UNITS,
     payTo: VESTIARION_SELLER,
     maxTimeoutSeconds: MAX_TIMEOUT_SECONDS,

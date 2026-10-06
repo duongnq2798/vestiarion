@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { cn } from "@/components/ui/cn";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { orgHref } from "@/lib/auth/org-paths";
-import { arcTxUrl } from "@/lib/payee-chains";
+import { txUrl } from "@/lib/payee-chains";
 import { CollapsibleReasoning } from "./CollapsibleReasoning";
 import { DecisionTrail } from "./DecisionTrail";
 import { DOMAIN_NAME, DomainGlyph } from "./Glyphs";
@@ -110,7 +110,7 @@ export function DecisionCard({
         </div>
 
         {/* How it was decided, step by step from the signed entries: folded until opened (decision trail R2). */}
-        {decision.trail && decision.trail.length > 0 && <DecisionTrail id={decision.id} steps={decision.trail} orgSlug={orgSlug} />}
+        {decision.trail && decision.trail.length > 0 && <DecisionTrail id={decision.id} steps={decision.trail} orgSlug={orgSlug} network={decision.network} />}
 
         {hasFooter && (
           <footer className="border-t border-line bg-ground/40">
@@ -127,7 +127,7 @@ export function DecisionCard({
                     </Link>
                   )}
                   {decision.txHash ? (
-                    <Hash value={decision.txHash} href={arcTxUrl(decision.txHash)} />
+                    <Hash value={decision.txHash} href={txUrl(decision.network, decision.txHash)} />
                   ) : refused ? (
                     <span className="font-mono text-xs text-refused">no transaction sent</span>
                   ) : null}

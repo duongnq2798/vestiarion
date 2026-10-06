@@ -10,7 +10,8 @@ import { MAY_HAVE_BEEN_ACCEPTED } from "../circle/settlement";
 import { PAYMENTS_OFF, paymentsDisabled, PaymentsDisabledError } from "../payments-switch";
 import { payInvoice, syncOperatingBalance } from "./pay";
 import { invoiceDiscount, type InvoiceDiscount } from "./payment-timing";
-import { paidAcrossChains, payeeChain } from "../payee-chains";
+import { chainById, homeChain, paidAcrossChains } from "../payee-chains";
+import { counterpartyChainProblem } from "../intake-validation";
 import { bridgeFee, type BridgeFee } from "../circle/cctp";
 import { gatewayQuoter, type GatewayQuote } from "../circle/gateway-quote";
 import { choosePayoutRoute, payoutFundsShort, type GatewayFigures } from "../payout-route";
@@ -103,10 +104,14 @@ export type ApprovalErrorCode =
   | "nothing_to_add"
   | "invoice_changed"
   | "already_approved"
-  | "needs_second_approver";
+  | "needs_second_approver"
+  | "chain_off_network";
 
-/** Every message except `insufficient_funds` and `needs_second_approver`, whose texts name the balance and the figure. */
-const MESSAGES: Record<Exclude<ApprovalErrorCode, "insufficient_funds" | "needs_second_approver">, string> = {
+/**
+ * Every message except `insufficient_funds` and `needs_second_approver`, whose texts name the balance and the figure,
+ * and `chain_off_network`, whose text names the chain.
+ */
+const MESSAGES: Record<Exclude<ApprovalErrorCode, "insufficient_funds" | "needs_second_approver" | "chain_off_network">, string> = {
   already_decided: "Someone else decided this invoice a moment ago.",
   self_approval: "You created this invoice, so someone else must approve it.",
   new_payee_self: "You gave this payee's address, so someone else must approve its first payment.",
@@ -134,7 +139,7 @@ export class ApprovalError extends Error {
   }
 }
 
-function raise(code: Exclude<ApprovalErrorCode, "insufficient_funds" | "needs_second_approver">): never {
+function raise(code: Exclude<ApprovalErrorCode, "insufficient_funds" | "needs_second_approver" | "chain_off_network">): never {
   throw new ApprovalError(code, MESSAGES[code]);
 }
 
@@ -469,15 +474,17 @@ export async function listWaitingPayables(
 
   // Both routes' figures for a payee on another chain, read now, so the person approving sees the route Approve and pay
   // takes and what leaves (CCTP payouts, review I2; approval payout route P4). A figure that cannot be read is null.
+  // The payees' chains are on the workspace's network, as its provider is (network threading P3).
+  const network = getChainProvider().network;
   const read = {
-    bridgeFee: options.bridgeFee ?? ((chain: string, amount: number) => bridgeFee(chain, amount)),
+    bridgeFee: options.bridgeFee ?? ((chain: string, amount: number) => bridgeFee(network, chain, amount)),
     gatewayQuote: options.gatewayQuote ?? gatewayQuoter(getChainProvider(), db()),
   };
   const quotes = new Map<string, PayoutQuotes>();
   await Promise.all(
     rows
       .filter((row) => paidAcrossChains(row.counterparties?.chain) && currencyOf(row.currency) === "USDC")
-      .map(async (row) => quotes.set(row.id, await readPayoutQuotes(payeeChain(row.counterparties?.chain).id, num(row.amount), read)))
+      .map(async (row) => quotes.set(row.id, await readPayoutQuotes(row.counterparties?.chain as string, num(row.amount), read)))
   );
 
   const intents = new Map<string, IntentState>();
@@ -570,7 +577,8 @@ export async function listWaitingPayables(
       lastAttempt: lastAttemptOf(intent, currencyOf(row.currency)),
       discount: invoiceDiscount(row),
       currency: currencyOf(row.currency),
-      payeeChain: payeeChain(row.counterparties?.chain).id,
+      // Its own chain, as stored: a list shows a payable whatever its chain, and Approve and pay refuses one off the network.
+      payeeChain: row.counterparties?.chain ?? homeChain(network.id).id,
       bridgeFeeUsdc: quote ? (payoutRoute === "gateway" ? (quote.gateway?.feeUsdc ?? null) : quote.cctpFeeUsdc) : null,
       ...(payoutRoute ? { payoutRoute } : {}),
       poReference: onFile.poReference,
@@ -777,6 +785,11 @@ export async function approveAndPay(
     raise("address_changed");
   }
 
+  // A payee's chain must be one the workspace's network pays on (network threading P3): refused in plain words, before
+  // any claim, and never paid on the workspace's own chain instead.
+  const chainProblem = counterpartyChainProblem(getChainProvider().network.id, invoice.destinationChain);
+  if (chainProblem) throw new ApprovalError("chain_off_network", chainProblem);
+
   // Only USDC crosses chains (CCTP payouts X6): refused before any claim.
   if (invoice.currency !== "USDC" && paidAcrossChains(invoice.destinationChain)) raise("bridge_unsupported_token");
 
@@ -834,7 +847,7 @@ export async function approveAndPay(
   const crossChain = !alreadySent && invoice.currency === "USDC" && paidAcrossChains(invoice.destinationChain);
   const quotes = crossChain
     ? await readPayoutQuotes(invoice.destinationChain as string, invoice.amount, {
-        bridgeFee: options.bridgeFee ?? ((chain, amount) => bridgeFee(chain, amount)),
+        bridgeFee: options.bridgeFee ?? ((chain, amount) => bridgeFee(provider.network, chain, amount)),
         gatewayQuote: options.gatewayQuote ?? gatewayQuoter(provider, db()),
       })
     : null;
@@ -1063,7 +1076,7 @@ function payoutRecord(chain: string, route: CrossChainRoute, quotes: PayoutQuote
   return {
     chain,
     route,
-    domain: payeeChain(chain).domain,
+    domain: chainById(chain).domain,
     feeUsdc: route === "gateway" ? (quotes.gateway?.feeUsdc ?? null) : quotes.cctpFeeUsdc,
     ...(route === "gateway" && quotes.gateway ? { gatewayBalanceUsdc: quotes.gateway.balanceUsdc } : {}),
     quotes: { cctpFeeUsdc: quotes.cctpFeeUsdc, gatewayFeeUsdc: quotes.gateway?.feeUsdc ?? null },
