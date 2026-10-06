@@ -1,5 +1,11 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-06: A milestone release waits for its cash
+
+- The agent no longer sends a milestone release that the operating wallet cannot cover, counting the releases before it in the same cycle. Its `milestone_release` entry has `execution.resultingStatus: "held"` and `execution.heldBecause: "cash_shortfall"`. It also carries `execution.cashNeededUsdc`, the milestone's amount, and `execution.cashSeen: { operating, reserve }`: what the operating wallet had left for it, and the reserve. An AP decision held for want of cash has the same fields.
+- Once cash has come in since and covers it, the next cycle reopens the milestone with a `milestone_reopened` entry whose `followUp.changes` reads "the cash it needs is there now (… USDC in the operating wallet and the reserve)", and decides it again.
+- A release from escrow is not affected. Nothing else in `/api/v1` changes, and no other entry changes shape.
+
 ## 2026-10-06: A cycle can start when Circle says a payment settled
 
 - A `cycle_complete` entry's `events` can include `payment_settled`. Circle said a transfer in flight settled or failed, and that cycle recorded which. Circle's notification started it, so its `by` is absent, unless a person's event started the same cycle.

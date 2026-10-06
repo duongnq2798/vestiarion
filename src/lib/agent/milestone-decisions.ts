@@ -26,7 +26,7 @@ import { PAYMENTS_OFF, PaymentsDisabledError, paymentsHold } from "../payments-s
 import { approversBesides, readTwoApprovalsAbove } from "../approval-policy";
 import { needsSecondApprover, TWO_APPROVALS_RULE, type TwoApprovalsFacts } from "../two-approvals";
 import { SECOND_OF_TWO_NOTE } from "./approvals";
-import { bringCashForApproval, CashBackError, cashShortMessage, reserveCover, type ReserveCover } from "./liquidity";
+import { bringCashForApproval, CashBackError, cashShortMessage, HELD_FOR_CASH, reserveCover, type ReserveCover } from "./liquidity";
 import {
   clearApprovals,
   giveApproval,
@@ -130,6 +130,7 @@ export type HeldReasonKind =
   | "transfer_failed"
   | "escrow"
   | "paused"
+  | "cash_shortfall"
   | "outflow_budget"
   | "new_payee"
   | "two_approvals"
@@ -184,6 +185,7 @@ const HINTS: Record<HeldReasonKind, string> = {
   transfer_failed: "Circle did not send it",
   escrow: "Escrow hold to check",
   paused: "Held while the agent was paused",
+  cash_shortfall: "Waiting for cash",
   outflow_budget: "Past the agent's spending limit",
   new_payee: "First payment to a new address",
   two_approvals: "Needs two approvals",
@@ -268,6 +270,22 @@ function reasonOf(facts: HeldFacts): Omit<HeldReason, "hint"> {
   const execution = (detail.execution ?? {}) as Record<string, unknown>;
   if (execution.heldBecause === HELD_BECAUSE_PAUSED) {
     return { kind: "paused", text: "The agent decided to pay it while it was paused, so nothing was sent. Pay now sends it.", link: null, canPay: true, canClose: true, override: false };
+  }
+  // The operating wallet lacked its cash when the agent released it (mainnet pre-flight): the agent's own choice was to pay.
+  if (execution.heldBecause === HELD_FOR_CASH) {
+    const seen = (execution.cashSeen ?? {}) as Record<string, unknown>;
+    const lacked =
+      typeof seen.operating === "number"
+        ? `The operating wallet had ${usdc(seen.operating)} for it when the agent released it, less than its ${usdc(facts.amount)}`
+        : `The operating wallet did not hold its ${usdc(facts.amount)} when the agent released it`;
+    return {
+      kind: "cash_shortfall",
+      text: `${lacked}, so nothing was sent. The agent decides it again on its own once cash comes in. Pay now pays it.`,
+      link: null,
+      canPay: true,
+      canClose: true,
+      override: false,
+    };
   }
   // The same limit on Arc (onchain spending limit §4): a person's Pay now is a plain transfer, not through the contract.
   if (detail.guardrailRule === "workspace.onchain_limit" || detail.guardrailRule === "workspace.onchain_limit_route") {

@@ -156,6 +156,15 @@ describe("what a held milestone waits for", () => {
     );
   });
 
+  it("names a release the operating wallet lacked the cash for, which the agent decides again once cash comes in (mainnet pre-flight)", () => {
+    const execution = { resultingStatus: "held", heldBecause: "cash_shortfall", cashNeededUsdc: 5, cashSeen: { operating: 2, reserve: 0 } };
+    const reason = heldReason(facts({ amount: 5, lastEntry: { action: "milestone_release", detail: { guardrailBlocked: false, guardrailRule: null, execution } } }));
+    expect(reason).toMatchObject({ kind: "cash_shortfall", hint: "Waiting for cash", link: null, canPay: true, canClose: true, override: false });
+    expect(reason.text).toBe(
+      "The operating wallet had 2 USDC for it when the agent released it, less than its 5 USDC, so nothing was sent. The agent decides it again on its own once cash comes in. Pay now pays it."
+    );
+  });
+
   it("repeats an escrow hold's note", () => {
     const reason = heldReason(facts({ agentReasoning: "Release. [not paid: it is being locked in escrow; verify it again once the lock has finished]" }));
     expect(reason).toMatchObject({ kind: "escrow", text: "Not paid: it is being locked in escrow; verify it again once the lock has finished." });

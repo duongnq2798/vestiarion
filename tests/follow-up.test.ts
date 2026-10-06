@@ -337,6 +337,33 @@ describe("follow-up — held for want of cash (reserve cash back R4)", () => {
   it("never reopens a payable held for another reason because cash came in", () => {
     expect(planFollowUp(cashHeld({ cash: { operating: 1000, reserve: 0 } }), facts, NOW, config).action).toBe("wait");
   });
+
+  // A milestone release the operating wallet could not cover, after the releases before it in its cycle (mainnet pre-flight).
+  const milestoneAtDecision: MilestoneDecisionFacts = {
+    riskLevel: "clear",
+    paymentLimit: 10,
+    verificationSource: "PR #84",
+    heldBecausePaused: false,
+    heldForCash: { needed: 5, operating: 2, reserve: 0 },
+  };
+  const heldMilestone = (over: Partial<HeldMilestone> = {}): HeldMilestone => ({
+    id: "ms-1", title: "Launch", amount: 5, riskLevel: "clear", paymentLimit: 10, verificationSource: "PR #84", ...over,
+  });
+
+  it("reopens a milestone held for want of cash once cash came in and covers it, and waits until then", () => {
+    expect(planMilestoneFollowUp(heldMilestone({ cash: { operating: 5, reserve: 0 } }), milestoneAtDecision)).toMatchObject({
+      action: "reopen",
+      changes: ["the cash it needs is there now (5 USDC in the operating wallet and the reserve)"],
+    });
+    expect(planMilestoneFollowUp(heldMilestone({ cash: { operating: 2, reserve: 4 } }), milestoneAtDecision).action).toBe("reopen");
+    expect(planMilestoneFollowUp(heldMilestone({ cash: { operating: 2, reserve: 0 } }), milestoneAtDecision).action).toBe("wait");
+    expect(planMilestoneFollowUp(heldMilestone({ cash: { operating: 4.99, reserve: 0 } }), milestoneAtDecision).action).toBe("wait");
+    expect(planMilestoneFollowUp(heldMilestone(), milestoneAtDecision).action).toBe("wait");
+  });
+
+  it("never reopens a milestone held for another reason because cash came in", () => {
+    expect(planMilestoneFollowUp(heldMilestone({ cash: { operating: 1000, reserve: 0 } }), { ...milestoneAtDecision, heldForCash: null }).action).toBe("wait");
+  });
 });
 
 describe("follow-up — held while the counterparty's new address waited for a person", () => {
