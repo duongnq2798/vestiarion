@@ -39,6 +39,16 @@ export function takeFxWatchToken(key: string, now = Date.now()): boolean {
   return take(fxWatchBuckets, key, 2, 60_000, now);
 }
 
+const transferWatchBuckets = new Map<string, Bucket>();
+
+/**
+ * Two transfer watches a minute per client (stuck-transfer alert D3), in their own bucket so a watch never takes the
+ * tick's or the FX watch's token. Single-instance, like the cycle guard.
+ */
+export function takeTransferWatchToken(key: string, now = Date.now()): boolean {
+  return take(transferWatchBuckets, key, 2, 60_000, now);
+}
+
 const documentBuckets = new Map<string, Bucket>();
 
 /**

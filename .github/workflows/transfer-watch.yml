@@ -1,0 +1,33 @@
+name: Vestiarion transfer watch
+
+# Tells a workspace's people about a live payment not confirmed 15 minutes after it was sent, once per attempt
+# (docs/superpowers/specs/2026-10-06-stuck-transfer-alert-design.md D3). It reads and tells: it never sends, retries or
+# settles a payment. One run at a time, so an attempt is told once.
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: transfer-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger the protected transfer watch
+        env:
+          VESTIARION_URL: ${{ secrets.VESTIARION_URL }}
+          AGENT_API_TOKEN: ${{ secrets.AGENT_API_TOKEN }}
+        run: |
+          test -n "$VESTIARION_URL"
+          test -n "$AGENT_API_TOKEN"
+          curl --fail-with-body --silent --show-error \
+            --max-time 330 \
+            --request POST \
+            --header "Authorization: Bearer $AGENT_API_TOKEN" \
+            "${VESTIARION_URL%/}/api/agent/transfer-watch"
