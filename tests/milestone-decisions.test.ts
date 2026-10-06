@@ -848,4 +848,14 @@ describe("Pay now from a workspace paying from its owner's own wallet (wallet tr
     expect(claimed()).toBe(false);
     expect(releaseHeldMilestoneMock).not.toHaveBeenCalled();
   });
+
+  it("refuses by name while the wallet has not approved its contract, or no longer has it carry payments, and claims nothing (Review Focus 4)", async () => {
+    for (const spendingLimit of [null, { ...external.spendingLimit, enforced: false }]) {
+      const { fake, claimed } = world({ ...external, spendingLimit });
+      await expect(pay(fake)).rejects.toThrow("This workspace's wallet has not approved its spending limit contract, so nothing can be paid from it.");
+      expect(claimed()).toBe(false);
+    }
+    expect(releaseHeldMilestoneMock).not.toHaveBeenCalled();
+    expect(verdictMock).not.toHaveBeenCalled();
+  });
 });

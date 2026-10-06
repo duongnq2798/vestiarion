@@ -2713,9 +2713,15 @@ describe("approveAndPay from a workspace paying from its owner's own wallet (wal
     expect(fake.requests.some((request) => request.path === "/rest/v1/rpc/claim_invoice_decision")).toBe(false);
   });
 
-  it("refuses while the wallet has not approved its contract", async () => {
-    const { run } = approvalsFake({ ...external, spendingLimit: null });
-    await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).rejects.toMatchObject({ code: "payments_off" });
+  it("refuses by name while the wallet has not approved its contract, or no longer has it carry payments, and claims nothing (Review Focus 4)", async () => {
+    for (const spendingLimit of [null, { ...external.spendingLimit, enforced: false }]) {
+      const { fake, run } = approvalsFake({ ...external, spendingLimit });
+      await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).rejects.toMatchObject({
+        code: "payments_off",
+        message: "This workspace's wallet has not approved its spending limit contract, so nothing can be paid from it.",
+      });
+      expect(fake.requests.some((request) => request.path === "/rest/v1/rpc/claim_invoice_decision")).toBe(false);
+    }
     expect(payInvoiceMock).not.toHaveBeenCalled();
   });
 });
