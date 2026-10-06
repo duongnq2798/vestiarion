@@ -60,6 +60,17 @@ describe("POST /api/agent/transfer-watch", () => {
     expect(third.headers.get("retry-after")).toBe("60");
   });
 
+  it("answers 500 when the watch failed in a workspace, naming none (final review M4)", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    watchStuckTransfers.mockResolvedValueOnce([
+      { slug: "acme", inFlight: 0, told: 0, error: "column payment_intents.submitted_at does not exist" },
+      { slug: "beta", inFlight: 1, told: 1 },
+    ]);
+    const response = await post();
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ ok: false, error: "The transfer watch failed in 1 workspace." });
+  });
+
   it("says the watch failed, without the error's detail, when it throws", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     watchStuckTransfers.mockRejectedValueOnce(new Error("relation payment_intents has no column submitted_at"));
@@ -77,6 +88,10 @@ describe("the transfer watch's workflow", () => {
     expect(workflow).toContain("group: transfer-watch");
     expect(workflow).toContain("cancel-in-progress: false");
     expect(workflow).toContain('--header "Authorization: Bearer $AGENT_API_TOKEN"');
+    // The repository is public: the log shows the status only, never which workspace has a payment stuck.
+    expect(workflow).toContain("--output /dev/null");
+    expect(workflow).toContain('--write-out "%{http_code}');
+    expect(workflow).not.toContain("--fail-with-body");
     expect(workflow).toContain('"${VESTIARION_URL%/}/api/agent/transfer-watch"');
   });
 });

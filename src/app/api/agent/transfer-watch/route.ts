@@ -23,7 +23,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Rate limit exceeded" }, { status: 429, headers: { "Retry-After": "60" } });
   }
   try {
-    return NextResponse.json({ ok: true, organizations: await watchStuckTransfers() });
+    const organizations = await watchStuckTransfers();
+    // A workspace the watch could not read is one whose people may not be told: the run fails, so the workflow shows it
+    // red rather than green (final review M4). Which workspaces stays in the server log, never in the answer.
+    const failed = organizations.filter((organization) => organization.error);
+    if (failed.length > 0) {
+      console.error("transfer watch failed in", failed.map((organization) => organization.slug));
+      return NextResponse.json({ ok: false, error: `The transfer watch failed in ${failed.length} workspace${failed.length === 1 ? "" : "s"}.` }, { status: 500 });
+    }
+    return NextResponse.json({ ok: true, organizations });
   } catch (error) {
     // Never echo more than that it failed: the error's detail stays in the server log.
     console.error("transfer watch failed", error instanceof Error ? error.message : String(error));

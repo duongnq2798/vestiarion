@@ -240,7 +240,8 @@ describe("a reconcile, as it found the payment (stuck-transfer alert D8)", () =>
   it("says confirmed only when the payment was paid", () => {
     expect(trailStep(reconcile("paid"))).toMatchObject({ who: "agent", tone: "done", text: "The agent confirmed the payment on Arc testnet.", txHash: TX });
     expect(trailStep(reconcile("matched"))).toMatchObject({ tone: "neutral", text: "The agent checked the payment: still in flight on Arc testnet." });
-    expect(trailStep(reconcile("held"))).toMatchObject({ tone: "stopped", text: "The agent checked the payment: it did not go through, and the invoice is held." });
+    // Held for a person, never "did not go through": a payout across chains is held with its USDC already sent.
+    expect(trailStep(reconcile("held"))).toMatchObject({ tone: "stopped", text: "The agent checked the payment and held the invoice for a person." });
     expect(trailStep(reconcile())).toMatchObject({ tone: "neutral", text: "The agent checked the payment on Arc testnet." });
   });
 

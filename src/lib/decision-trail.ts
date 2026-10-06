@@ -189,9 +189,9 @@ export function trailStep(entry: TrailEntry, network: Network = "arc-testnet"): 
       const resulting = text(execution?.resultingStatus);
       if (resulting === "paid") return { ...base, who: "agent", tone: "done", text: `The agent confirmed the payment on ${label}.`, txHash: tx };
       if (resulting === "matched") return { ...base, who: "agent", tone: "neutral", text: `The agent checked the payment: still in flight on ${label}.`, txHash: tx };
-      if (resulting === "held") {
-        return { ...base, who: "agent", tone: "stopped", text: "The agent checked the payment: it did not go through, and the invoice is held.", txHash: tx };
-      }
+      // Held for a person, never "did not go through": a payout across chains is held with its USDC already sent (final
+      // review M3), and saying otherwise could prompt a second payment.
+      if (resulting === "held") return { ...base, who: "agent", tone: "stopped", text: "The agent checked the payment and held the invoice for a person.", txHash: tx };
       return { ...base, who: "agent", tone: "neutral", text: `The agent checked the payment on ${label}.`, txHash: tx };
     }
     case "payment_stuck":

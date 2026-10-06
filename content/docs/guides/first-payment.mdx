@@ -314,11 +314,11 @@ The agent pays for each answer itself, 0.001 USDC over **x402**, the HTTP paymen
 
 A payment usually confirms on Arc within seconds of being sent. If one has not confirmed 15 minutes after it was sent, Vestiarion tells the workspace's people, once for each attempt:
 
-- **In the console, Slack and Telegram**: "Payment of 12.50 USDC to Jiren has not confirmed 18 min after it was sent on Arc testnet.", with what Circle says, such as "Circle shows it stuck.", and the transaction.
-- **By email**, to every owner, admin and approver with email notices on: "A payment of 12.50 USDC to Jiren has not confirmed".
+- **In the console, Slack and Telegram**, within minutes, without waiting for a cycle: "Payment of 12.50 USDC to Jiren has not confirmed 18 min after it was sent on Arc testnet.", with what Circle says, such as "Circle shows it stuck.", and the transaction.
+- **By email**, to every owner, admin and approver with email notices on: one message listing each payment, such as "A payment of 12.50 USDC to Jiren has not confirmed".
 - **In the audit log**, as a signed `payment_stuck` entry, which every webhook endpoint receives too.
 
-Vestiarion sends nothing again while the payment may still settle, and the next cycle checks it again. The invoice's **How the agent decided** says "Not confirmed 18 minutes after it was sent; the workspace's people were told.", and each later check says what it found: "still in flight", or that it confirmed. If Circle shows the transfer stuck, check it in Circle's console, or contact Circle support. The watch runs every 5 minutes whether the agent is paused or payments are stopped: a payment already sent can be stuck either way.
+A payment Vestiarion recorded as failed is told too when it may still have moved: a send Circle never answered, or a transfer Circle was asked about and did not answer. Vestiarion sends nothing again while the payment may still settle, and the next cycle checks it again. The invoice's **How the agent decided** says "Not confirmed 18 minutes after it was sent; the workspace's people were told.", and each later check says what it found: "still in flight", or that it confirmed. If Circle shows the transfer stuck, check it in Circle's console, or contact Circle support. The watch runs every 5 minutes whether the agent is paused or payments are stopped: a payment already sent can be stuck either way.
 
 ## 6. Approve a held payment
 

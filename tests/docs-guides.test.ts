@@ -434,7 +434,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["payment_stuck", "src/lib/agent/transfer-watch.ts"],
     ["Circle shows it stuck.", "src/lib/agent-activity.ts"],
     ["the workspace's people were told.", "src/lib/decision-trail.ts"],
-    ["A payment of 12.50 USDC to Jiren has not confirmed", "src/lib/email/payment-stuck.ts", "A payment of ${money} to ${input.payeeName} has not confirmed"],
+    ["A payment of 12.50 USDC to Jiren has not confirmed", "src/lib/email/payment-stuck.ts", "A payment of ${first.amount} ${first.currency} to ${first.payeeName} has not confirmed"],
     [
       "Payment of 12.50 USDC to Jiren has not confirmed 18 min after it was sent on Arc testnet.",
       "src/lib/agent-activity.ts",

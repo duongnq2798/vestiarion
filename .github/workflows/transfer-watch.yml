@@ -2,7 +2,8 @@ name: Vestiarion transfer watch
 
 # Tells a workspace's people about a live payment not confirmed 15 minutes after it was sent, once per attempt
 # (docs/superpowers/specs/2026-10-06-stuck-transfer-alert-design.md D3). It reads and tells: it never sends, retries or
-# settles a payment. One run at a time, so an attempt is told once.
+# settles a payment. One run at a time, so an attempt is told once. The repository is public, so the log shows the
+# status only, never which workspace has a payment stuck; a run that failed in any workspace answers 500 and shows red.
 on:
   schedule:
     - cron: "*/5 * * * *"
@@ -26,7 +27,9 @@ jobs:
         run: |
           test -n "$VESTIARION_URL"
           test -n "$AGENT_API_TOKEN"
-          curl --fail-with-body --silent --show-error \
+          curl --fail --silent --show-error \
+            --output /dev/null \
+            --write-out "%{http_code}\n" \
             --max-time 330 \
             --request POST \
             --header "Authorization: Bearer $AGENT_API_TOKEN" \

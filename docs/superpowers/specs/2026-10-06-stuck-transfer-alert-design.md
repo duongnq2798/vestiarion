@@ -32,7 +32,8 @@ phase 2c (#221, every workspace names its network and going live opens on Arc ma
 - **D1. What is stuck.**
   - A payment is stuck when all four hold:
     - it is a live payment intent (`provider_mode = 'live'`);
-    - it is `submitting` or `pending`;
+    - it is `submitting` or `pending`, or it was recorded `failed` in the last 7 days though `paymentWasSent` says it may
+      have moved: a send whose answer was lost, or a transfer whose last read failed (final review I2);
     - its current attempt was sent more than the network's `stuckAfterMinutes` ago;
     - Circle, asked again, does not show it confirmed or failed.
   - `stuckAfterMinutes` is a new network profile field: 15 on Arc testnet and on Arc mainnet.
@@ -66,10 +67,13 @@ phase 2c (#221, every workspace names its network and going live opens on Arc ma
   - The watch runs one at a time (the workflow's concurrency group), so checking the ledger is enough to tell once.
   - *Cost if wrong:* two watches at once could tell twice. The workflow's concurrency rules that out.
 - **D6. Who is told.**
-  - `payment_stuck` joins the activity actions. So the console's toasts, Telegram and Slack carry it, as they carry the
-    agent's decisions, and every webhook endpoint gets it as `ledger.appended`.
-  - Owners, admins and approvers with email notices on get an email, one each, up to 25. These are the email digest's
-    recipients.
+  - `payment_stuck` joins the activity actions. So the console's toasts carry it, and every webhook endpoint gets it as
+    `ledger.appended`.
+  - The watch posts it to the workspace's Telegram chats and Slack channel at once, from their own cursors, rather than
+    leaving it for the next cycle, which may be hours away or never come (final review I1).
+  - Owners, admins and approvers with email notices on get one email each run, listing every payment told, up to 25
+    recipients. These are the email digest's recipients (final review M1).
+  - A payment whose entry cannot be written is logged, and the rest are still told and emailed (final review I3).
   - An email that fails to send is logged and not retried. The entry and the chats still carry the alert.
   - *Cost if wrong:* someone with email notices off, and no chat linked, sees it only in the console.
 - **D7. What it says.**
@@ -81,7 +85,8 @@ phase 2c (#221, every workspace names its network and going live opens on Arc ma
 - **D8. The trail tells a reconcile as what it found.**
   - **Paid:** "The agent confirmed the payment on *network*."
   - **Still pending:** "The agent checked the payment: still in flight on *network*."
-  - **Held:** "The agent checked the payment: it did not go through, and the invoice is held."
+  - **Held:** "The agent checked the payment and held the invoice for a person." Never "did not go through": a payout
+    across chains is held with its USDC already sent (final review M3).
   - `payment_stuck` shows as "Not confirmed *N* minutes after it was sent; the workspace's people were told."
 - **D9. Only live payments.** A simulated payment confirms when it is made, and is never watched.
 - **D10. A payment confirmed by the time the watch asks is not told.** The watch settles nothing: the next cycle records

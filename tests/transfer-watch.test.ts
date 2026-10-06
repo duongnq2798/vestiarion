@@ -12,8 +12,10 @@ import { fakeSupabase, type RecordedRequest } from "./support/fake-supabase";
  * settles and holds nothing.
  */
 
-const { ledgerMock } = vi.hoisted(() => ({ ledgerMock: vi.fn() }));
+const { ledgerMock, telegramMock, slackMock } = vi.hoisted(() => ({ ledgerMock: vi.fn(), telegramMock: vi.fn(), slackMock: vi.fn() }));
 vi.mock("@/lib/ledger", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/ledger")>()), appendLedgerEntry: ledgerMock }));
+vi.mock("@/lib/telegram/notify", () => ({ sendAgentDecisions: telegramMock }));
+vi.mock("@/lib/slack/notify", () => ({ sendSlackDecisions: slackMock }));
 
 const { watchStuckTransfers } = await import("@/lib/agent/transfer-watch");
 
@@ -54,13 +56,17 @@ interface World {
   intents?: Array<Record<string, unknown>>;
   told?: Array<Record<string, unknown>>;
   orgs?: Array<{ id: string; slug: string; network?: string }>;
+  /** A workspace whose payee names cannot be read. */
   failNamesFor?: string;
+  /** A workspace whose payments in flight cannot be read. */
+  failReadFor?: string;
 }
 
 function world(input: World = {}) {
   const orgs = input.orgs ?? [{ id: A, slug: "acme" }];
   return fakeSupabase((request: RecordedRequest) => {
     if (request.path === "/rest/v1/payment_intents" && request.method === "GET") {
+      if (input.failReadFor && request.params.get("org_id") === `eq.${input.failReadFor}`) return { status: 500, body: { message: "read failed" } };
       // A tenant read, in one workspace's scope.
       return { body: (input.intents ?? [intent()]).filter((row) => request.params.get("org_id") === `eq.${row.org_id}`) };
     }
@@ -96,6 +102,8 @@ const writes = (fake: ReturnType<typeof fakeSupabase>) =>
 
 beforeEach(() => {
   ledgerMock.mockReset().mockResolvedValue(undefined);
+  telegramMock.mockReset().mockResolvedValue([]);
+  slackMock.mockReset().mockResolvedValue([]);
   process.env.SITE_URL = "https://www.vestiarion.xyz";
 });
 afterEach(() => vi.restoreAllMocks());
@@ -105,7 +113,8 @@ describe("the transfer watch (stuck-transfer alert)", () => {
     const fake = world({ intents: [] });
     expect(await run(fake, { provider: provider().provider })).toEqual([]);
     const read = fake.requests.find((request) => request.path === "/rest/v1/payment_intents")!;
-    expect(read.params.get("status")).toBe("in.(submitting,pending)");
+    // In flight, or recorded failed in the last 7 days but possibly moved (final review I2): the watch keeps those.
+    expect(read.params.get("or")).toBe(`(status.in.(submitting,pending),and(status.eq.failed,submitted_at.gt.${minutesAgo(7 * 24 * 60)}))`);
     expect(read.params.get("provider_mode")).toBe("eq.live");
     expect(read.params.get("submitted_at")).toBe(`lt.${minutesAgo(15)}`);
   });
@@ -158,7 +167,8 @@ describe("the transfer watch (stuck-transfer alert)", () => {
   });
 
   it("tells a retried payment's new attempt, though its first was told (Review Focus 1)", async () => {
-    const fake = world({ intents: [intent({ idempotency_key: "pay-invoice-1-attempt-2", transfer_attempt: 2 })], told: [] });
+    // Attempt 1's entry is in the ledger; attempt 2, under its own key, is told all the same.
+    const fake = world({ intents: [intent({ idempotency_key: "pay-invoice-1-attempt-2", transfer_attempt: 2 })], told: [{ detail: { idempotencyKey: "pay-invoice-1" } }] });
     await run(fake, { provider: provider().provider });
     expect(appended().map((entry) => [entry.detail.idempotencyKey, entry.detail.attempt])).toEqual([["pay-invoice-1-attempt-2", 2]]);
   });
@@ -199,11 +209,11 @@ describe("the transfer watch (stuck-transfer alert)", () => {
     const fake = world({
       intents: [intent({ org_id: A }), intent({ org_id: B, idempotency_key: "pay-b-1" })],
       orgs: [{ id: A, slug: "acme" }, { id: B, slug: "beta" }],
-      failNamesFor: A,
+      failReadFor: A,
     });
     const results = await run(fake, { provider: provider().provider });
     expect(results).toEqual([
-      { slug: "acme", inFlight: 1, told: 0, error: expect.any(String) },
+      { slug: "acme", inFlight: 0, told: 0, error: expect.any(String) },
       { slug: "beta", inFlight: 1, told: 1 },
     ]);
   });
@@ -212,7 +222,7 @@ describe("the transfer watch (stuck-transfer alert)", () => {
 describe("the email (stuck-transfer alert D6)", () => {
   const settings = { apiKey: "re_test", from: "Vestiarion <no-reply@vestiarion.xyz>" };
 
-  it("emails each deciding member with email notices on, once for each payment told", async () => {
+  it("emails each deciding member with email notices on, one message each", async () => {
     const send = vi.fn(async () => ({ sent: true as const, id: "re_1" }));
     const recipients = vi.fn(async () => [{ email: "owner@acme.test" }, { email: "approver@acme.test" }]);
     await run(world(), { provider: provider().provider, mail: { settings, send, recipients } });
@@ -238,5 +248,86 @@ describe("the email (stuck-transfer alert D6)", () => {
     const results = await run(world(), { provider: provider().provider, mail: { settings, send, recipients: async () => [{ email: "owner@acme.test" }] } });
     expect(results).toEqual([{ slug: "acme", inFlight: 1, told: 1 }]);
     expect(warn).toHaveBeenCalled();
+  });
+});
+
+describe("what may have moved though recorded failed (final review I2)", () => {
+  it("tells a send whose answer was lost, recorded failed with no transaction id, as never answered", async () => {
+    const circle = provider();
+    await run(world({ intents: [intent({ status: "failed", provider_tx_id: null, tx_hash: null, provider_state: null, last_error: "Circle createTransaction may or may not have been accepted: timeout" })] }), {
+      provider: circle.provider,
+    });
+    expect(circle.reconcileTransfer).not.toHaveBeenCalled();
+    expect(appended()[0].detail).toMatchObject({ circleAsked: false, sendAnswered: false });
+  });
+
+  it("asks Circle about a transfer whose last read failed, and tells it while it is still pending", async () => {
+    const circle = provider({ status: "pending", providerState: "STUCK" });
+    await run(world({ intents: [intent({ status: "failed", provider_state: "SENT", last_error: "no answer from Circle getTransaction" })] }), { provider: circle.provider });
+    expect(circle.reconcileTransfer).toHaveBeenCalledWith("circle-tx-1");
+    expect(appended()[0].detail).toMatchObject({ circleAsked: true, providerState: "STUCK" });
+  });
+
+  it("does not tell a transfer Circle ended in a terminal failure, nor a send that failed before Circle took it", async () => {
+    const circle = provider();
+    await run(world({ intents: [intent({ status: "failed", provider_state: "FAILED", last_error: "Circle says FAILED" })] }), { provider: circle.provider });
+    await run(world({ intents: [intent({ status: "failed", provider_tx_id: null, tx_hash: null, provider_state: null, last_error: "insufficient funds" })] }), { provider: circle.provider });
+    expect(circle.reconcileTransfer).not.toHaveBeenCalled();
+    expect(appended()).toEqual([]);
+  });
+});
+
+describe("telling every payment, whatever fails along the way (final review I3)", () => {
+  it("tells with the payee unnamed when names cannot be read", async () => {
+    const results = await run(world({ failNamesFor: A }), { provider: provider().provider });
+    expect(results).toEqual([{ slug: "acme", inFlight: 1, told: 1 }]);
+    expect(appended()[0].summary).toBe("Payment of 12.5 USDC to the payee not confirmed 20 min after it was sent on Arc testnet");
+  });
+
+  it("goes on past a payment whose entry could not be written, and emails what was signed", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    ledgerMock.mockReset().mockRejectedValueOnce(new Error("append failed")).mockResolvedValue(undefined);
+    const send = vi.fn(async () => ({ sent: true as const, id: "re_1" }));
+    const intents = [intent({ idempotency_key: "pay-a" }), intent({ idempotency_key: "pay-b", source_type: "milestone", source_id: MILESTONE })];
+    const results = await run(world({ intents }), {
+      provider: provider().provider,
+      mail: { settings: { apiKey: "re_test", from: "Vestiarion <no-reply@vestiarion.xyz>" }, send, recipients: async () => [{ email: "owner@acme.test" }] },
+    });
+    expect(results).toEqual([{ slug: "acme", inFlight: 2, told: 1, error: "append failed" }]);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect((send.mock.calls[0] as unknown as [{ text: string }])[0].text).toContain("sent 20 minutes ago");
+  });
+});
+
+describe("the chats (final review I1)", () => {
+  it("posts what was told to Telegram and Slack at once, not at the next cycle", async () => {
+    await run(world(), { provider: provider().provider });
+    expect(telegramMock).toHaveBeenCalledTimes(1);
+    expect(slackMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("posts nothing when nothing was told, and a chat that fails is its own", async () => {
+    await run(world({ intents: [intent({ submitted_at: minutesAgo(10) })] }), { provider: provider().provider });
+    expect(telegramMock).not.toHaveBeenCalled();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    telegramMock.mockRejectedValueOnce(new Error("telegram down"));
+    expect(await run(world(), { provider: provider().provider })).toEqual([{ slug: "acme", inFlight: 1, told: 1 }]);
+    expect(slackMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("one message to each person, however many payments (final review M1)", () => {
+  it("lists every payment told this run in one email to each deciding member", async () => {
+    const send = vi.fn(async () => ({ sent: true as const, id: "re_1" }));
+    const intents = [intent({ idempotency_key: "pay-a" }), intent({ idempotency_key: "pay-b", source_type: "milestone", source_id: MILESTONE })];
+    await run(world({ intents }), {
+      provider: provider().provider,
+      mail: { settings: { apiKey: "re_test", from: "Vestiarion <no-reply@vestiarion.xyz>" }, send, recipients: async () => [{ email: "owner@acme.test" }, { email: "approver@acme.test" }] },
+    });
+    expect(send).toHaveBeenCalledTimes(2);
+    const message = (send.mock.calls[0] as unknown as [{ subject: string; text: string }])[0];
+    expect(message.subject).toBe("2 payments have not confirmed");
+    expect(message.text).toContain(`https://www.vestiarion.xyz/o/acme/invoices#trail-${INVOICE}`);
+    expect(message.text).toContain("https://www.vestiarion.xyz/o/acme/contractors");
   });
 });
