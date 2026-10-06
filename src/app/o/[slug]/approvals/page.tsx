@@ -11,7 +11,7 @@ import { listWaitingPayables } from "@/lib/agent/approvals";
 import { isSoleApprover } from "@/lib/agent/sole-approver";
 import { requireMembership } from "@/lib/auth/membership";
 import { can } from "@/lib/auth/roles";
-import { chainModes } from "@/lib/circle";
+import { shellModes } from "@/lib/circle";
 import { inOrg } from "@/lib/dal/scope";
 import { listMembers } from "@/lib/platform/members";
 import { listOpenProposals } from "@/lib/policy-proposals";
@@ -46,7 +46,7 @@ export default async function ApprovalsPage({ params }: { params: Promise<{ slug
         : {};
 
     return (
-      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()}>
+      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={shellModes()}>
         <PageHead
           title={sectionTitle("approvals")}
           sub={

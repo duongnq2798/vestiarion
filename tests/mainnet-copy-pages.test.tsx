@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import GitHubPanel from "@/components/GitHubPanel";
 import { noticeEmailDescription } from "@/components/intake/CounterpartyNoticeEmailEdit";
+import { ProvenanceBar } from "@/components/vx/Provenance";
 import { chainLegs, shellFooterLine } from "@/components/vx/Shell";
 import { AccountsList } from "@/components/vx/Treasury";
 
@@ -22,7 +23,7 @@ const squash = (text: string) => text.replace(/\s+/g, " ");
 const text = (markup: string) => markup.replace(/<[^>]+>/g, " ").replace(/&#x27;/g, "'").replace(/\s+/g, " ").trim();
 
 describe("the shell on the workspace's network (mainnet copy C1, C3)", () => {
-  const modes = { mode: "live" as const, earnMode: "simulate" as const };
+  const modes = { mode: "live" as const, earnMode: "simulate" as const, held: false };
 
   it("names Arc testnet, beside the USYC reserve's Yield leg, as before", () => {
     expect(chainLegs("arc-testnet", modes)).toEqual([
@@ -35,6 +36,29 @@ describe("the shell on the workspace's network (mainnet copy C1, C3)", () => {
   it("names Arc mainnet, with no Yield leg where the network has no reserve", () => {
     expect(chainLegs("arc-mainnet", modes)).toEqual([{ label: "Payments", detail: "Arc mainnet", live: true }]);
     expect(shellFooterLine("arc-mainnet")).toBe("Hash-chained decisions · Ed25519 signed · Arc mainnet");
+  });
+
+  it("says Held, not Live or Simulated, when nothing can pay: the status API's unavailable (final review I2, mainnet copy C12)", () => {
+    // Arc mainnet connected but not live, with no Circle account, or switched off: chainModes() reads live or simulate.
+    for (const mode of ["live", "simulate"] as const) {
+      expect(chainLegs("arc-mainnet", { mode, earnMode: "simulate", held: true })).toEqual([{ label: "Payments", detail: "Arc mainnet", live: false, held: true }]);
+    }
+    // Credentials that cannot be read hold Arc testnet too, both legs.
+    expect(chainLegs("arc-testnet", { mode: "simulate", earnMode: "simulate", held: true })).toEqual([
+      { label: "Payments", detail: "Arc testnet", live: false, held: true },
+      { label: "Yield", detail: "USYC reserve", live: false, held: true },
+    ]);
+    const markup = text(renderToStaticMarkup(<ProvenanceBar legs={chainLegs("arc-mainnet", { mode: "live", earnMode: "simulate", held: true })} />));
+    expect(markup).toContain("Held");
+    expect(markup).not.toMatch(/Live|Simulated/);
+  });
+
+  it.each(PAGES)("is handed whether nothing can pay by the %s page", (name) => {
+    expect(squash(page(name))).toMatch(/<ProductShell [^>]*chainModes=\{(shellModes\(\)|\{ \.\.\.modes, held: paymentsHeld\(\) \})\}/);
+  });
+
+  it("reads Held from the rule the status API reads", () => {
+    expect(squash(source("src/app/api/v1/status/route.ts"))).toContain("const noPayments = paymentsHeld(config);");
   });
 
   it.each(PAGES)("is handed the workspace's network by the %s page", (name) => {
@@ -86,6 +110,13 @@ describe("workspace text names the workspace's network (mainnet copy C1, C8)", (
     expect(text(renderToStaticMarkup(<AccountsList accounts={accounts("ARC-TESTNET")} />))).toContain("Arc testnet · USDC");
     // A chain no network lists is shown as stored rather than dropped.
     expect(text(renderToStaticMarkup(<AccountsList accounts={accounts("SOMEWHERE")} />))).toContain("SOMEWHERE · USDC");
+  });
+});
+
+describe("the docs say going live on Arc mainnet is open (final review I3, mainnet copy C13)", () => {
+  it("drops the go-live guide's answer for a closed network, and ARCHITECTURE's copy still to move", () => {
+    expect(source("content/docs/guides/go-live.mdx")).not.toContain("Going live on Arc mainnet is not open yet");
+    expect(source("ARCHITECTURE.md")).not.toContain("which moves in phase 2c");
   });
 });
 

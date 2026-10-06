@@ -317,8 +317,8 @@ phase 1b).
     pages, demo data, features only Arc testnet has, and branches that run only there.
 - **`tests/network-mainnet-dry-run.test.ts`** builds the modules with Arc mainnet's profile and checks each asks for
   mainnet's facts or refuses by name.
-- **Still Arc testnet:** the copy that says "Arc testnet", which moves in phase 2c. The database's chain check, the
-  two link functions and the API's chain enum moved in phase 2a.
+- **Moved since:** the database's chain check, the two link functions and the API's chain enum in phase 2a; the copy
+  that named Arc testnet whatever the network in phase 2c (below).
 
 **Arc mainnet behind a switch** (`docs/superpowers/specs/2026-10-06-mainnet-go-live-design.md`, phase 2a).
 - **Two settings:** `MAINNET_ENABLED` (only `1`, `true` or `yes`) and `MAINNET_ALLOWLIST` (email addresses), read

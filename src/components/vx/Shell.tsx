@@ -30,7 +30,8 @@ export function ProductShell({
   day: number;
   clockMode: CycleClockMode;
   lastCycleAt: string | null;
-  chainModes: { mode: "live" | "simulate"; earnMode: "live" | "simulate" };
+  /** The page's modes, and whether nothing can pay now (`shellModes()`), which the shell says as Held (final review I2). */
+  chainModes: { mode: "live" | "simulate"; earnMode: "live" | "simulate"; held: boolean };
   /** The workspace's network, which the shell names (mainnet copy C1). */
   network: Network;
   children: ReactNode;
@@ -62,13 +63,15 @@ export function ProductShell({
 
 /**
  * The shell's Payments and Yield legs on the workspace's network (mainnet copy C1, C3): Payments names the network, and
- * Yield shows only where the network has a reserve to earn in.
+ * Yield shows only where the network has a reserve to earn in. When nothing can pay now, both say Held rather than Live
+ * or Simulated, as the status API says `unavailable` (final review I2).
  */
-export function chainLegs(network: Network, modes: { mode: "live" | "simulate"; earnMode: "live" | "simulate" }): ProvenanceLeg[] {
+export function chainLegs(network: Network, modes: { mode: "live" | "simulate"; earnMode: "live" | "simulate"; held: boolean }): ProvenanceLeg[] {
   const profile = networkProfile(network);
+  const held = modes.held ? { held: true } : {};
   return [
-    { label: "Payments", detail: profile.label, live: modes.mode === "live" },
-    ...(profile.usyc ? [{ label: "Yield", detail: "USYC reserve", live: modes.earnMode === "live" }] : []),
+    { label: "Payments", detail: profile.label, live: !modes.held && modes.mode === "live", ...held },
+    ...(profile.usyc ? [{ label: "Yield", detail: "USYC reserve", live: !modes.held && modes.earnMode === "live", ...held }] : []),
   ];
 }
 

@@ -26,7 +26,7 @@ import { decisionEntryOf, heldMilestonesTwoApprovals, heldReason, milestoneInten
 import { isSoleApprover } from "@/lib/agent/sole-approver";
 import { viewerCan } from "@/lib/auth/authorize";
 import { requireMembership } from "@/lib/auth/membership";
-import { chainModes } from "@/lib/circle";
+import { shellModes } from "@/lib/circle";
 import { readEscrowContract } from "@/lib/circle/escrow-setup";
 import { addressUnconfirmed, payeeNotReady } from "@/lib/counterparty-address";
 import { inOrg } from "@/lib/dal/scope";
@@ -233,7 +233,7 @@ export default async function ContractorsPage({ params, searchParams }: { params
     const paidTotal = milestones.filter((milestone) => milestone.status === "paid").reduce((sum, milestone) => sum + Number(milestone.amount), 0);
 
     return (
-      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()}>
+      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={shellModes()}>
         <PageHead
           title={sectionTitle("contractors")}
           sub="Milestone pay follows verified work instead of a Net-30 calendar. Every release still passes risk and authority guardrails."

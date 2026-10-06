@@ -1,6 +1,6 @@
 import { describeConfig, type VestiarionConfig } from "@/lib/config";
 import { currentConfig } from "@/lib/context";
-import { chainModes, hasNoProvider } from "@/lib/circle";
+import { chainModes, paymentsHeld } from "@/lib/circle";
 import { networkOf, networkProfile } from "@/lib/network";
 import { screeningMode } from "@/lib/compliance";
 import { stats } from "@/lib/queries";
@@ -71,8 +71,8 @@ export async function GET(request: Request) {
     // never come.
     // Nothing pays while the workspace has no provider, or while its network
     // holds it (Arc mainnet switched off, or the workspace not live there):
-    // mainnet copy C12.
-    const noPayments = hasNoProvider(config) || Boolean(config.chain.networkHold);
+    // mainnet copy C12. The shell reads the same rule and says Held.
+    const noPayments = paymentsHeld(config);
     // A network with no yield reserve has nothing to earn in, live or not.
     const noReserve = !networkProfile(networkOf(config.network)).usyc;
     const modes = chainModes();

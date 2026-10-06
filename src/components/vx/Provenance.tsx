@@ -5,6 +5,8 @@ export interface ProvenanceLeg {
   label: string;
   detail: string;
   live: boolean;
+  /** Nothing can happen on this leg now, neither live nor simulated: a workspace held by its network (mainnet copy C12). */
+  held?: boolean;
 }
 
 /**
@@ -19,7 +21,7 @@ export function ProvenanceBar({ legs, compact = false }: { legs: ProvenanceLeg[]
       {legs.map((leg) => (
         <li key={leg.label}>
           <Badge
-            tone={leg.live ? "proof" : "simulated"}
+            tone={leg.held ? "held" : leg.live ? "proof" : "simulated"}
             size={compact ? "sm" : "md"}
             dot
             className={cn("gap-2 font-medium text-ink", compact ? "text-xs" : "text-[0.8125rem]")}
@@ -28,8 +30,8 @@ export function ProvenanceBar({ legs, compact = false }: { legs: ProvenanceLeg[]
               {leg.label}{" "}
               <span className={cn("font-normal text-ink-2", compact && "hidden md:inline")}>· {leg.detail}</span>
             </span>
-            <span className={cn("font-mono text-[0.6875rem] font-semibold uppercase tracking-[0.1em]", leg.live ? "text-proof" : "text-ink-2")}>
-              {leg.live ? "Live" : "Simulated"}
+            <span className={cn("font-mono text-[0.6875rem] font-semibold uppercase tracking-[0.1em]", leg.held ? "text-held" : leg.live ? "text-proof" : "text-ink-2")}>
+              {leg.held ? "Held" : leg.live ? "Live" : "Simulated"}
             </span>
           </Badge>
         </li>

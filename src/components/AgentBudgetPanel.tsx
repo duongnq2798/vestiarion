@@ -17,7 +17,7 @@ import { useActionForm, type ActionResult } from "@/components/ui/useActionForm"
 import { fmt, Hash, Money } from "@/components/vx/Primitives";
 import { withSuccessToast } from "@/components/withSuccessToast";
 import { addressUrl } from "@/lib/payee-chains";
-import type { Network } from "@/lib/network";
+import { networkProfile, type Network } from "@/lib/network";
 
 /** What the limit dialog says a figure is, and what leaving one blank does: on Arc mainnet a figure stays (mainnet copy C11). */
 export function budgetDialogDescription(network: Network): string {
@@ -111,7 +111,10 @@ export function AgentBudgetPanel({
               : "A payment past it waits for you in Approvals. What a person approves does not count."}
           </p>
           {canEdit && <BudgetDialog orgSlug={orgSlug} view={view} unset={unset} network={network} />}
-          <OnArc orgSlug={orgSlug} onChain={onChain} canEdit={canEdit} live={live} unset={unset} network={network} />
+          {/* Only where the network runs the spending-limit contract: Arc mainnet does not (final review I1, mainnet copy C3). */}
+          {networkProfile(network).spendingLimitContract && (
+            <OnArc orgSlug={orgSlug} onChain={onChain} canEdit={canEdit} live={live} unset={unset} network={network} />
+          )}
         </CardContent>
       </section>
     </Card>

@@ -28,7 +28,7 @@ import { CASH_SHORTFALL } from "@/lib/next-step";
 import { requireMembership } from "@/lib/auth/membership";
 import { orgHref } from "@/lib/auth/org-paths";
 import { can } from "@/lib/auth/roles";
-import { chainModes } from "@/lib/circle";
+import { chainModes, paymentsHeld } from "@/lib/circle";
 import { readGatewayState } from "@/lib/circle/gateway-funding";
 import { spendingLimitStatus } from "@/lib/circle/spending-limit-setup";
 import { readServiceBudget } from "@/lib/service-budget";
@@ -208,7 +208,7 @@ export default async function DashboardPage({
     const sampleLoaded = counterparties.some((counterparty) => counterparty.sample);
 
     return (
-      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={modes}>
+      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={{ ...modes, held: paymentsHeld() }}>
         <PageHead
           title={sectionTitle("treasury")}
           sub="What the agent holds, what it decided, and why."

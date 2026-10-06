@@ -152,8 +152,10 @@ Date: 2026-10-06. Status: designed on `feat/mainnet-copy`. Designed under the st
     - the deployment's switch on.
   - Production does not change: `MAINNET_ENABLED` is unset there.
   - *Cost if wrong:* on a deployment with Arc mainnet switched on, an allowed owner can take a workspace live, and its
-    payments move real USDC within the 2a and 2b bounds: 50 USDC a day, 150 USDC in 7 days, and two approvals above
-    100 USDC. That is the plan's phase 3, behind the partner's switch.
+    payments move real USDC within the figures the workspace keeps. They start at 50 USDC a day, 150 USDC in 7 days, and
+    two approvals above 100 USDC, and an owner can raise them, though not remove them (2a, 2b L2). So the bound is what
+    the owner sets, not the starting figures (final review's note). That is the plan's phase 3, behind the partner's
+    switch.
 - **C14. No required limit for each payee.** 2a's section 3 listed it for 2b, which did not rule on it.
   - The agent's caps and two approvals above 100 USDC already bound every payment.
   - Approve and pay skips payee limits by design (#208).

@@ -16,7 +16,7 @@ import { sectionTitle } from "@/components/vx/nav";
 import { twoApprovalsStatus } from "@/lib/approval-policy";
 import { requireMembership } from "@/lib/auth/membership";
 import { can } from "@/lib/auth/roles";
-import { chainModes } from "@/lib/circle";
+import { shellModes } from "@/lib/circle";
 import { platformDb, unwrap } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
 import { inboxFor } from "@/lib/email-inbox/inboxes";
@@ -238,7 +238,7 @@ export default async function SettingsPage({
     ];
 
     return (
-      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()}>
+      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={shellModes()}>
         <PageHead
           title={sectionTitle("settings")}
           sub="Your own notifications, and how this workspace goes live, connects to other tools, approves payments and signs its ledger. An owner takes it live, sets two approvals, rotates the ledger signing key or deletes it; an owner or admin manages API keys, webhooks and integrations."
