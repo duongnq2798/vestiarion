@@ -166,6 +166,70 @@ describe("deleteAbandonedSandboxes — hosted sandboxes (R6, hosted wallets H6)"
   });
 });
 
+describe("deleteAbandonedSandboxes — sandboxes paying from their owner's own wallet (wallet treasury)", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  const DEPLOYED = "5d0f3a2e-8c1b-4f7a-9e6d-000000000f01";
+  const BARE = "5d0f3a2e-8c1b-4f7a-9e6d-000000000f02";
+  const UNCHECKABLE = "5d0f3a2e-8c1b-4f7a-9e6d-000000000f03";
+
+  const orgOf = (request: RecordedRequest) => request.params.get("id")?.replace(/^eq\./, "");
+
+  function externalDatabase(request: RecordedRequest): FakeReply {
+    if (request.path === "/rest/v1/orgs" && !request.params.get("id")) {
+      return { body: [
+        { id: DEPLOYED, wallet_host: "external" },
+        { id: BARE, wallet_host: "external" },
+        { id: UNCHECKABLE, wallet_host: "external" },
+      ] };
+    }
+    if (request.path === "/rest/v1/orgs") {
+      // The check: the org, only once its owner's wallet deployed the workspace's contract.
+      if (orgOf(request) === UNCHECKABLE) return { status: 500, body: { message: "check failed" } };
+      return { body: orgOf(request) === DEPLOYED ? [{ id: DEPLOYED }] : [] };
+    }
+    if (request.path === "/rest/v1/rpc/delete_sandbox_org") return { body: true };
+    return { body: [] };
+  }
+
+  async function run() {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const fake = fakeSupabase(externalDatabase);
+    const result = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => deleteAbandonedSandboxes(NOW));
+    const checks = fake.requests.filter((request) => request.path === "/rest/v1/orgs" && request.params.get("id"));
+    const deletes = fake.requests
+      .filter((request) => request.path === "/rest/v1/rpc/delete_sandbox_org")
+      .map((request) => (request.body as { p_org_id: string }).p_org_id);
+    return { result, log, error, checks, deletes };
+  }
+
+  it("keeps one whose owner's wallet deployed its contract, uncounted, without calling delete: its wallet may still approve it", async () => {
+    const { result, log, deletes } = await run();
+    expect(deletes).not.toContain(DEPLOYED);
+    expect(log).toHaveBeenCalledWith("kept abandoned sandbox with its wallet's contract", DEPLOYED);
+    expect(deletes).toContain(BARE);
+    expect(result).toMatchObject({ deleted: 1, failed: 1 });
+  });
+
+  it("checks each one's contract through the orgs table, by id, for a deployed address only", async () => {
+    const { checks } = await run();
+    expect(checks.map(orgOf)).toEqual([DEPLOYED, BARE, UNCHECKABLE]);
+    for (const check of checks) {
+      expect(check.method).toBe("GET");
+      expect(check.params.get("select")).toBe("id,spending_limit_contracts!inner(id)");
+      expect(check.params.get("spending_limit_contracts.address")).toBe("not.is.null");
+      expect(check.params.get("limit")).toBe("1");
+    }
+  });
+
+  it("counts one whose check fails as failed, and does not delete it", async () => {
+    const { error, deletes } = await run();
+    expect(deletes).not.toContain(UNCHECKABLE);
+    expect(error).toHaveBeenCalledWith("could not check abandoned sandbox for its wallet's contract", UNCHECKABLE, "check failed");
+  });
+});
+
 describe("deleteAbandonedSandboxes — the hosted count against the limit (hosted wallets H5)", () => {
   afterEach(() => vi.restoreAllMocks());
 

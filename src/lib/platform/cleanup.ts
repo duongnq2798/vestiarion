@@ -27,6 +27,21 @@ async function hasWallet(orgId: string): Promise<{ wallet: boolean; error?: stri
 }
 
 /**
+ * Whether the owner's own wallet deployed the workspace's contract (wallet treasury): the wallet may approve it, or
+ * have approved it without the approval being recorded, so the sandbox is kept rather than deleted.
+ */
+async function hasDeployedContract(orgId: string): Promise<{ deployed: boolean; error?: string }> {
+  const { data, error } = await platformDb()
+    .from("orgs")
+    .select("id, spending_limit_contracts!inner(id)")
+    .eq("id", orgId)
+    .not("spending_limit_contracts.address", "is", null)
+    .limit(1);
+  if (error) return { deployed: false, error: error.message };
+  return { deployed: (data ?? []).length > 0 };
+}
+
+/**
  * Counts only. The response is printed into the scheduled workflow's log, and
  * sandbox slugs derive from people's workspace names, so per-organization
  * detail goes to the server log, by organization id.
@@ -72,6 +87,12 @@ async function countHosted(): Promise<number | null> {
  * `delete_sandbox_org`'s own `has_hosted_wallet` refusal stays the authority
  * for a wallet created between the check and the delete.
  *
+ * A sandbox paying from its owner's own wallet is checked the same way for a
+ * contract that wallet deployed: one is kept without a call, since the wallet
+ * may have approved it, and `delete_sandbox_org` would refuse a recorded
+ * approval anyway (`has_wallet_approval`, migration 0082), failing the run
+ * every day. One whose check fails is counted in `failed`.
+ *
  * Last, it counts the hosted workspaces left, so the run reports how close
  * the platform is to its hosted limit, freed slots included.
  */
@@ -101,6 +122,18 @@ export async function deleteAbandonedSandboxes(now: Date = new Date()): Promise<
       }
       if (check.wallet) {
         console.log("kept abandoned hosted sandbox with wallets", org.id);
+        continue;
+      }
+    }
+    if (org.wallet_host === "external") {
+      const check = await hasDeployedContract(org.id);
+      if (check.error) {
+        failed += 1;
+        console.error("could not check abandoned sandbox for its wallet's contract", org.id, check.error);
+        continue;
+      }
+      if (check.deployed) {
+        console.log("kept abandoned sandbox with its wallet's contract", org.id);
         continue;
       }
     }
