@@ -79,13 +79,6 @@ describe("orgConfig", () => {
     expect(orgConfig(base, { ...row(OTHER_ORG), network: "arc-mainnet" }, keys).config.network).toBe("arc-mainnet");
   });
 
-  it("gives a workspace on Arc mainnet no Circle credentials, and says why, so it pays nothing yet (N3)", () => {
-    const { config, warnings } = orgConfig(base, { ...row(OTHER_ORG, { apiKey: "org-key", entity: "org-secret" }), network: "arc-mainnet" }, keys);
-    expect(config.chain.circleApiKey).toBeUndefined();
-    expect(config.chain.circleEntitySecret).toBeUndefined();
-    expect(config.chain.credentialsUnreadable).toBe("this workspace is on Arc mainnet, where Vestiarion does not move money yet");
-    expect(warnings).toContain("this workspace is on Arc mainnet, where Vestiarion does not move money yet");
-  });
 
   it("refuses a network it does not know rather than guess one", () => {
     expect(() => orgConfig(base, { ...row(OTHER_ORG), network: "arc-sepolia" as never }, keys)).toThrow('"arc-sepolia" is not a network Vestiarion knows');
@@ -509,5 +502,61 @@ describe("orgConfig — screening by workspace mode (docs/superpowers/specs/2026
   it("changes nothing for a sandbox when no screening service is configured", () => {
     const { config } = orgConfig(base, { ...row(OTHER_ORG), mode: "sandbox" }, keys);
     expect(config.compliance).toEqual(base.compliance);
+  });
+});
+
+describe("a workspace on Arc mainnet (mainnet go-live M4, M5)", () => {
+  const sealed = { apiKey: "LIVE_API_KEY:org-key", entity: "org-secret" };
+  const mainnet = (mode: "sandbox" | "live", withKeys = true): OrgRow => ({ ...row(OTHER_ORG, withKeys ? sealed : {}), mode, network: "arc-mainnet" });
+  const on = { ...base, mainnetEnabled: true };
+
+  it("gets no Circle credentials while the deployment has Arc mainnet off, and is held with the reason", () => {
+    const { config, warnings } = orgConfig(base, mainnet("live"), keys);
+    expect(config.chain.circleApiKey).toBeUndefined();
+    expect(config.chain.circleEntitySecret).toBeUndefined();
+    expect(config.chain.credentialsUnreadable).toBe("Arc mainnet is switched off on this deployment.");
+    expect(config.chain.networkHold).toBe("Arc mainnet is switched off on this deployment.");
+    expect(warnings).toContain("Arc mainnet is switched off on this deployment.");
+  });
+
+  it("opens its own credentials once Arc mainnet is on, and holds it until it is live", () => {
+    const sandbox = orgConfig(on, mainnet("sandbox"), keys).config;
+    expect(sandbox.chain.circleApiKey).toBe("LIVE_API_KEY:org-key");
+    expect(sandbox.chain.circleEntitySecret).toBe("org-secret");
+    expect(sandbox.chain.credentialsUnreadable).toBeUndefined();
+    expect(sandbox.chain.networkHold).toBe("This workspace is on Arc mainnet and not live yet. Nothing moves until an owner takes it live.");
+    const live = orgConfig(on, mainnet("live"), keys).config;
+    expect(live.chain.circleApiKey).toBe("LIVE_API_KEY:org-key");
+    expect(live.chain.networkHold).toBeUndefined();
+  });
+
+  it("with no Circle account connected, has nothing stored that could not be read, and no warning", () => {
+    const { config, warnings } = orgConfig(on, mainnet("sandbox", false), keys);
+    expect(config.chain.circleApiKey).toBeUndefined();
+    expect(config.chain.credentialsUnreadable).toBeUndefined();
+    expect(warnings).toEqual([]);
+  });
+
+  it("keeps a stored credential it could not open reported as such, not as unconnected", () => {
+    const { config } = orgConfig(on, { ...row(OTHER_ORG, sealed, strangerKeys), mode: "live", network: "arc-mainnet" }, keys);
+    expect(config.chain.circleApiKey).toBeUndefined();
+    expect(config.chain.credentialsUnreadable).toBeTruthy();
+    expect(config.chain.credentialsUnreadable).not.toBe("Arc mainnet is switched off on this deployment.");
+  });
+
+  it("never takes the platform's hosted testnet pair", () => {
+    const hostedBase = { ...on, chain: { ...on.chain, hostedCircleApiKey: "TEST_API_KEY:hosted", hostedCircleEntitySecret: "hosted-secret" } };
+    const { config } = orgConfig(hostedBase, { ...row(OTHER_ORG, {}, keys, OTHER_ORG, "hosted"), network: "arc-mainnet" }, keys);
+    expect(config.chain.circleApiKey).toBeUndefined();
+    expect(config.chain.credentialsUnreadable).toBe("A hosted wallet does not run on Arc mainnet yet");
+  });
+
+  it("leaves a testnet workspace exactly as before, whether or not Arc mainnet is on", () => {
+    for (const platform of [base, on]) {
+      const { config } = orgConfig(platform, row(OTHER_ORG, sealed), keys);
+      expect(config.chain.circleApiKey).toBe("LIVE_API_KEY:org-key");
+      expect(config.chain.networkHold).toBeUndefined();
+      expect(config.chain.credentialsUnreadable).toBeUndefined();
+    }
   });
 });

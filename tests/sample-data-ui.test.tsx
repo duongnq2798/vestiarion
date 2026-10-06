@@ -60,8 +60,8 @@ describe("the pages", () => {
 
   it("the console offers the sample from rows it already reads", () => {
     const page = read("console", "page.tsx");
-    expect(page).toContain(
-      "offerSampleData({ canWrite: can(role, \"records.write\"), mode: access.membership.mode, chainMode: modes.mode, counterpartyCount: counterparties.length })"
+    expect(page).toMatch(
+      /offerSampleData\(\{\s*canWrite: can\(role, "records\.write"\),\s*mode: access\.membership\.mode,\s*chainMode: modes\.mode,\s*counterpartyCount: counterparties\.length,\s*network: access\.membership\.network,\s*\}\)/
     );
     expect(page).toContain("counterparties.some((counterparty) => counterparty.sample)");
   });

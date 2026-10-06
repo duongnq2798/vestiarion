@@ -74,6 +74,8 @@ export interface ApprovalFacts {
  * is the reason alone, as a card says it after "Approve it in Vestiarion:"; a click adds what to do (`ADVICE`).
  */
 export function approveRefusal(facts: ApprovalFacts, limit: number | null, where: string): Refused | null {
+  // Real money on Arc mainnet is approved in the console only (mainnet go-live M10, mainnet plan step 8).
+  if (facts.network === "arc-mainnet") return refused("open_in_console", "It is on Arc mainnet, where payments are approved in Vestiarion.");
   if (facts.currency === "EURC") return refused("open_in_console", "This payable is in EURC.");
   const chainProblem = counterpartyChainProblem(facts.network, facts.chain);
   if (chainProblem) return refused("open_in_console", `${chainProblem}.`);

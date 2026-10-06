@@ -174,7 +174,7 @@ describe("connectCircleAction", () => {
 
     const result = await run(() => connectCircleAction(INITIAL, connectForm()));
 
-    expect(connectCircleMock).toHaveBeenCalledWith({ orgId: ORG, actorId: USER, apiKey: API_KEY, entitySecret: ENTITY_SECRET });
+    expect(connectCircleMock).toHaveBeenCalledWith({ orgId: ORG, actorId: USER, actorEmail: null, apiKey: API_KEY, entitySecret: ENTITY_SECRET });
     expect(result).toEqual({ ok: true, message: "Circle is connected." });
     expect(logged).toEqual([]);
   });
@@ -185,7 +185,7 @@ describe("connectCircleAction", () => {
 
     const result = await run(() => connectCircleAction(INITIAL, form()));
 
-    expect(connectCircleMock).toHaveBeenCalledWith({ orgId: ORG, actorId: USER, apiKey: "", entitySecret: "" });
+    expect(connectCircleMock).toHaveBeenCalledWith({ orgId: ORG, actorId: USER, actorEmail: null, apiKey: "", entitySecret: "" });
     expect(result).toEqual({ ok: false, message: "Paste both the API key and the entity secret." });
   });
 
@@ -207,7 +207,7 @@ describe("createWalletsAction", () => {
     authorizeMock.mockResolvedValueOnce(owner());
     createWalletsMock.mockResolvedValueOnce({ created: 2, skipped: 0 });
     const result = await run(() => createWalletsAction(INITIAL, form()));
-    expect(createWalletsMock).toHaveBeenCalledWith({ orgId: ORG, actorId: USER });
+    expect(createWalletsMock).toHaveBeenCalledWith({ orgId: ORG, actorId: USER, actorEmail: null });
     expect(result).toEqual({ ok: true, message: "Treasury wallets created: 2." });
   });
 
@@ -241,8 +241,15 @@ describe("goLiveAction", () => {
     authorizeMock.mockResolvedValueOnce(owner());
     goLiveMock.mockResolvedValueOnce(undefined);
     const result = await run(() => goLiveAction(INITIAL, form()));
-    expect(goLiveMock).toHaveBeenCalledWith({ orgId: ORG, actorId: USER });
+    expect(goLiveMock).toHaveBeenCalledWith({ orgId: ORG, actorId: USER, actorEmail: null, confirmation: "" });
     expect(result).toEqual({ ok: true, message: "This workspace is live." });
+  });
+
+  it("passes the session's address and the typed word for Arc mainnet's checks (mainnet go-live M8)", async () => {
+    authorizeMock.mockResolvedValueOnce({ ...owner(), user: { id: USER, email: "owner@acme.test" } });
+    goLiveMock.mockResolvedValueOnce(undefined);
+    await run(() => goLiveAction(INITIAL, form({ confirmation: "mainnet" })));
+    expect(goLiveMock).toHaveBeenCalledWith({ orgId: ORG, actorId: USER, actorEmail: "owner@acme.test", confirmation: "mainnet" });
   });
 
   it.each([

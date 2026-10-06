@@ -51,6 +51,7 @@ export async function connectCircleAction(_previous: GoLiveActionResult, formDat
       await connectCircle({
         orgId: auth.membership.orgId,
         actorId: auth.user.id,
+        actorEmail: auth.user.email,
         apiKey: formString(formData, "apiKey"),
         entitySecret: formString(formData, "entitySecret"),
       });
@@ -87,7 +88,7 @@ export async function createWalletsAction(_previous: GoLiveActionResult, formDat
   if (!auth.ok) return { ok: false, message: auth.message };
   return inOrg(auth, async () => {
     try {
-      const { created } = await createWallets({ orgId: auth.membership.orgId, actorId: auth.user.id });
+      const { created } = await createWallets({ orgId: auth.membership.orgId, actorId: auth.user.id, actorEmail: auth.user.email });
       return {
         ok: true,
         message: created > 0 ? `Treasury wallets created: ${created}.` : "Every account already has a wallet.",
@@ -107,7 +108,12 @@ export async function goLiveAction(_previous: GoLiveActionResult, formData: Form
   if (!auth.ok) return { ok: false, message: auth.message };
   return inOrg(auth, async () => {
     try {
-      await goLive({ orgId: auth.membership.orgId, actorId: auth.user.id });
+      await goLive({
+        orgId: auth.membership.orgId,
+        actorId: auth.user.id,
+        actorEmail: auth.user.email,
+        confirmation: formString(formData, "confirmation"),
+      });
       revalidateOrgPages();
       return { ok: true, message: "This workspace is live." };
     } catch (error) {

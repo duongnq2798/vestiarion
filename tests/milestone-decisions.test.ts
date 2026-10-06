@@ -25,7 +25,14 @@ vi.mock("@/lib/agent/pay", () => ({
   payoutAddress: (address: string | null, id: string) => address ?? `sim:${id}`,
 }));
 const { getChainProviderMock } = vi.hoisted(() => ({ getChainProviderMock: vi.fn() }));
-vi.mock("@/lib/circle", () => ({ getChainProvider: getChainProviderMock }));
+vi.mock("@/lib/circle", () => ({
+  getChainProvider: getChainProviderMock,
+  // The page's modes, as the real chainModes reads them from the provider (final review I2).
+  chainModes: () => {
+    const provider = getChainProviderMock() as { mode: "live" | "simulate"; earnMode: "live" | "simulate" };
+    return { mode: provider.mode, earnMode: provider.earnMode };
+  },
+}));
 
 const ORG = "5d0f3a2e-8c1b-4f7a-9e6d-00000000c0de";
 const ACTOR = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000a1";
@@ -155,7 +162,7 @@ describe("what a held milestone waits for", () => {
   });
 });
 
-function orgRow() {
+function orgRow(fields: Record<string, unknown> = {}) {
   return {
     id: ORG,
     slug: "northstar",
@@ -164,6 +171,7 @@ function orgRow() {
     ledger_signing_key_enc: encryptSecret(LEDGER_PEM, { orgId: ORG, column: "ledger_signing_key_enc" }, parseMasterKeys(MASTER_KEYS)),
     circle_api_key_enc: null,
     circle_entity_secret_enc: null,
+    ...fields,
   };
 }
 
@@ -222,13 +230,15 @@ function world(options: {
   approvalsPatch?: FakeReply;
   /** The workspace's reserve account, `{ id, balance }` (approval cash R7); none by default. */
   reserve?: Record<string, unknown> | null;
+  /** Columns of the organization's row in place of a testnet sandbox's: its network, say (mainnet go-live M4). */
+  org?: Record<string, unknown>;
 } = {}) {
   let intentRow: Record<string, unknown> | null = options.intent === undefined ? FAILED_INTENT : options.intent;
   const fake = fakeSupabase((request: RecordedRequest) => {
     // What the new payee check reads (N1, N2): the confirmed payments' addresses, and the address's entries.
     if (request.path === "/rest/v1/payment_intents" && request.params.get("status") === "eq.confirmed") return { body: [] };
     if (request.path === "/rest/v1/ledger_entries" && request.params.has("detail->>counterpartyId")) return { body: options.addressEntries ?? [] };
-    if (request.path === "/rest/v1/orgs") return { body: orgRow() };
+    if (request.path === "/rest/v1/orgs") return { body: orgRow(options.org) };
     if (request.path === "/rest/v1/milestones" && request.method === "GET") return { body: milestoneRow(options.milestone) };
     if (request.path === "/rest/v1/milestones" && request.method === "PATCH") return { body: [{ id: MILESTONE }] };
     if (request.path === "/rest/v1/payment_intents" && request.method === "PATCH") {
@@ -327,6 +337,20 @@ describe("Pay now while payments are switched off (payment safety S4)", () => {
 
     expect(claimed()).toBe(true);
     expect(releaseHeldMilestoneMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Pay now on a workspace Arc mainnet holds (mainnet go-live M4)", () => {
+  it("refuses with the hold's reason before any claim, even with no Circle account connected", async () => {
+    const { fake, claimed } = world({ org: { network: "arc-mainnet" } });
+
+    const attempt = runWith({ config: { ...config, mainnetEnabled: true }, db: fake.client, fetch: fake.fetch }, () =>
+      withOrg(ORG, () => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }))
+    );
+    expect(await refusal(attempt)).toBe("payments_off");
+    await expect(attempt).rejects.toThrow("This workspace is on Arc mainnet and not live yet. Nothing moves until an owner takes it live.");
+    expect(claimed()).toBe(false);
+    expect(releaseHeldMilestoneMock).not.toHaveBeenCalled();
   });
 });
 

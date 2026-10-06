@@ -6,6 +6,7 @@ import {
   forgetPaymentsSwitch,
   paymentsDisabled,
   PaymentsDisabledError,
+  paymentsHold,
   paymentsSwitchForPages,
   PAYMENTS_OFF,
   readPaymentsSwitch,
@@ -127,5 +128,39 @@ describe("reading the switch for npm run payments", () => {
       reason: "Incident 7",
     });
     await expect(inScope(database({ status: 500, body: { message: "connection reset" } }), () => readPaymentsSwitch())).rejects.toThrow("connection reset");
+  });
+});
+
+describe("a workspace's network hold (mainnet go-live M4)", () => {
+  const NOT_LIVE = "This workspace is on Arc mainnet and not live yet. Nothing moves until an owner takes it live.";
+  const held = { ...base, chain: { ...base.chain, networkHold: NOT_LIVE } };
+
+  it("refuses with the hold's reason, before reading the database's switch", async () => {
+    const fake = database({ payments_disabled_at: null, payments_disabled_reason: null });
+    await inScope(
+      fake,
+      async () => {
+        expect(await paymentsHold()).toBe(NOT_LIVE);
+        expect(await paymentsDisabled()).toBe(true);
+        await expect(assertPaymentsEnabled()).rejects.toThrow(NOT_LIVE);
+        await expect(assertPaymentsEnabled()).rejects.toBeInstanceOf(PaymentsDisabledError);
+      },
+      held
+    );
+    expect(reads(fake)).toBe(0);
+  });
+
+  it("is the platform's reason when there is no hold, and nothing when payments are on", async () => {
+    const off = database({ payments_disabled_at: "2026-10-05T05:00:00Z", payments_disabled_reason: "Incident 7" });
+    await inScope(off, async () => expect(await paymentsHold()).toBe(PAYMENTS_OFF));
+    forgetPaymentsSwitch();
+    const on = database({ payments_disabled_at: null, payments_disabled_reason: null });
+    await inScope(on, async () => expect(await paymentsHold()).toBeNull());
+    await inScope(on, async () => expect(await paymentsHold()).toBe(PAYMENTS_OFF), { ...base, paymentsDisabled: true });
+  });
+
+  it("keeps the platform's message for an error built without a reason", () => {
+    expect(new PaymentsDisabledError().message).toBe(PAYMENTS_OFF);
+    expect(new PaymentsDisabledError(NOT_LIVE).message).toBe(NOT_LIVE);
   });
 });

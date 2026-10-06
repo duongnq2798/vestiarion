@@ -260,7 +260,7 @@ plan, on Arc testnet).
 mainnet plan).
 - **The column:** `orgs.network` is `arc-testnet` or `arc-mainnet`, Arc testnet by default (migration 0075).
   - A trigger locks it once the workspace went live or holds a Circle wallet, so mainnet is always a workspace of its
-    own.
+    own. Since 0078, any account locks it: the network is chosen when the workspace is created.
   - `payment_intents.network` is filled from the workspace when an intent is inserted, so no caller can mislabel one.
 - **The profile:** `src/lib/network.ts` holds each network's facts.
   - Its name in copy, Circle's blockchain name, chain id, RPC, explorer and tokens.
@@ -268,9 +268,9 @@ mainnet plan).
   - CCTP (domain, Iris, TokenMessenger), Gateway (API, facilitator, wallet, minter), USYC, and the swap's chain and
     Adapter.
   - Whether hosted wallets and passkey wallets are offered.
-- **Mainnet pays nothing yet:**
-  - `orgConfig` carries the network and gives a workspace on Arc mainnet no Circle credentials, with the reason, so
-    its provider refuses.
+- **Mainnet pays nothing unless a deployment opens it** (phase 2a, below):
+  - `orgConfig` carries the network. While Arc mainnet is off, a workspace on it gets no Circle credentials, with the
+    reason, so its provider refuses.
   - Go live refuses a Circle key whose prefix names another network.
 - **`/open`:** one section per network, Arc mainnet first.
   - `open_numbers`, `open_first_payments` and `open_outcomes` take `(p_since, p_network)` and count one network.
@@ -304,14 +304,48 @@ phase 1b).
   - `tests/network-ratchet.test.ts` counts hard-coded testnet identifiers.
   - `tests/network-constants-ratchet.test.ts` counts readers of the testnet profile.
   - Both end at the files kept on Arc testnet on purpose, each with its reason: demo data, `/open`, the platform's
-    x402 offer, the passkey wallet, and the public API's chain enum.
+    x402 offer and the passkey wallet.
 - **`tests/network-mainnet-dry-run.test.ts`** builds the modules with Arc mainnet's profile and checks each asks for
   mainnet's facts or refuses by name.
-- **Still Arc testnet:**
-  - The database's chain check and two link functions (0044, 0050, 0053).
-  - The copy that says "Arc testnet".
-  - The API's chain enum.
-  - All of these move in phase 2.
+- **Still Arc testnet:** the copy that says "Arc testnet", which moves in phase 2c. The database's chain check, the
+  two link functions and the API's chain enum moved in phase 2a.
+
+**Arc mainnet behind a switch** (`docs/superpowers/specs/2026-10-06-mainnet-go-live-design.md`, phase 2a).
+- **Two settings:** `MAINNET_ENABLED` (only `1`, `true` or `yes`) and `MAINNET_ALLOWLIST` (email addresses), read
+  into the config. `mayUseMainnet(email)` (`src/lib/mainnet.ts`) is both: on, and listed.
+- **Created on mainnet, never moved there.** The onboarding form offers Arc mainnet only to an allowed person, and the
+  action checks again. `createWorkspace({ network })` sets the row's network before the first account; 0078's lock
+  then refuses any change once an account exists.
+  - A mainnet workspace starts with one empty "Operating" account on `ARC`, no reserve, and an agent spending limit
+    of 50 USDC a day and 150 USDC in 7 days. `changeAgentBudget` keeps a figure there.
+- **Held until live.** `orgConfig` sets `chain.networkHold`: `MAINNET_OFF` while the deployment has it off (and the
+  credentials are withheld), `MAINNET_NOT_LIVE` until the workspace is live.
+  - `paymentsHold()` (`src/lib/payments-switch.ts`) reads the hold before the platform's switch, and
+    `PaymentsDisabledError` carries the reason. Every gate the stop switch built refuses with it: the live provider's
+    money methods, the direct Circle writers, the agent's cycle, and a person's payments.
+  - Approve and pay, and Pay now, refuse a network hold first, before the provider is built.
+- **Never simulated.** `getChainProvider` refuses a mainnet workspace with no Circle credentials
+  (`MAINNET_NOT_CONNECTED`) rather than hand it the simulator, and `chainModes` reads it as a page safely. Sample
+  data is refused there. The hybrid provider's simulated reserve refuses where the network has no USYC.
+- **EOA wallets.** The profile's `walletAccountType` is `EOA` on mainnet, which pays its own gas.
+  - `createTreasuryWallets` asks for that type, on a chain the network pays on; an account on another network's
+    chain is refused.
+  - The operating balance keeps `gasReserveUsdc` (0.10) aside.
+  - A batch is never tried on an EOA network, and the provider refuses one.
+  - Escrow and enforcing the spending limit in a contract are off there (`escrow`, `spendingLimitContract`), by name.
+- **Stablecoins by contract** (`src/lib/circle/stablecoins.ts`): USDC is Arc's native token or the ERC-20 at the
+  profile's address, and EURC the ERC-20 at its address. This applies to the token a transfer sends, the balance and
+  money in. Circle lists both USDC entries for an Arc wallet; its order is kept.
+- **Going live:** each step needs `mayUseMainnet` for the person. A test key is refused on mainnet, naming both
+  networks. Go live needs the word `mainnet` typed, and the profile's `goLiveOpen`: false on Arc mainnet until phase
+  2b's approval limits ship ("Going live does not run on Arc mainnet yet"), so nothing moves money there before them.
+  `workspace_went_live` and `org_created` record the network.
+- **Elsewhere:**
+  - Chats refuse a mainnet payment ("approved in Vestiarion").
+  - The API's `chain` enum is every network's chains, and SDK 0.3.0 types it.
+  - The workspace layout shows `MainnetBanner`.
+  - 0078 accepts `ARC` in `counterparties_chain_check` (0044's rewrite keeps it) and names the home chain in both
+    link functions.
 
 **Payment safety** (`docs/superpowers/specs/2026-10-05-payment-safety-design.md`) closes four gaps that real money
 would find.

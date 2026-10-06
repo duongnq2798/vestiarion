@@ -81,6 +81,11 @@ export interface ChainConfig {
    * (USYC live design R1).
    */
   usycLive?: boolean;
+  /**
+   * Why the organization cannot move money now because of its network (mainnet go-live M4): set only by `orgConfig`.
+   * The platform's stop switch reads it first, so every gate that switch built refuses with it.
+   */
+  networkHold?: string;
 }
 
 export interface LlmConfig {
@@ -161,6 +166,10 @@ export interface VestiarionConfig {
    * `src/lib/payments-switch.ts` reads it; `orgConfig` carries it into each organization unchanged.
    */
   paymentsDisabled?: boolean;
+  /** Arc mainnet is on for this deployment (MAINNET_ENABLED; mainnet go-live M1). Off, a mainnet workspace moves nothing. */
+  mainnetEnabled?: boolean;
+  /** Who may open a mainnet workspace and take one live (MAINNET_ALLOWLIST): lower-cased email addresses. */
+  mainnetAllowlist?: readonly string[];
 }
 
 /** Reads a positive number, falling back when absent or nonsense. */
@@ -307,6 +316,12 @@ export function configFromEnv(env: EnvLike = process.env): VestiarionConfig {
     hostedWorkspaceLimit: nonNegativeInteger(env.HOSTED_WORKSPACE_LIMIT, 100),
     // Only a plain yes switches payments off: a value it cannot read leaves them on, as unset does.
     paymentsDisabled: ["1", "true", "yes"].includes(trimmed(env.PAYMENTS_DISABLED)?.toLowerCase() ?? ""),
+    // Read as PAYMENTS_DISABLED is: only a plain yes turns Arc mainnet on (mainnet go-live M1).
+    mainnetEnabled: ["1", "true", "yes"].includes(trimmed(env.MAINNET_ENABLED)?.toLowerCase() ?? ""),
+    mainnetAllowlist: (env.MAINNET_ALLOWLIST ?? "")
+      .split(/[\s,;]+/)
+      .map((address) => address.trim().toLowerCase())
+      .filter(Boolean),
   };
 }
 

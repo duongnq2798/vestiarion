@@ -16,8 +16,9 @@ import { SimulateProvider } from "./simulateProvider";
 import { LiveProvider } from "./liveProvider";
 import { currentOrgConfig } from "../context";
 import type { VestiarionConfig } from "../config";
-import { paymentsDisabled } from "../payments-switch";
-import { networkOf, networkProfile, type NetworkProfile } from "../network";
+import { paymentsHold } from "../payments-switch";
+import { FeatureOffError, networkOf, networkProfile, type NetworkProfile } from "../network";
+import { MAINNET_NOT_CONNECTED } from "../mainnet";
 
 /**
  * Payments settle on Arc testnet through Circle's Developer-Controlled
@@ -92,11 +93,21 @@ class HybridProvider implements ChainProvider {
   }
 
   depositToEarn(params: EarnDepositParams): Promise<EarnResult> {
+    if (this.earnMode !== "live" && !this.network.usyc) return Promise.reject(this.noReserve());
     return this.earnMode === "live" ? this.live.depositToEarn(params) : this.simulated.depositToEarn(params);
   }
 
   withdrawFromEarn(params: EarnDepositParams): Promise<EarnResult> {
+    if (this.earnMode !== "live" && !this.network.usyc) return Promise.reject(this.noReserve());
     return this.earnMode === "live" ? this.live.withdrawFromEarn(params) : this.simulated.withdrawFromEarn(params);
+  }
+
+  /**
+   * Where the network has no USYC, the reserve is not simulated beside real payments (mainnet go-live M5): a sweep of
+   * real money into a reserve that does not exist would only be pretended.
+   */
+  private noReserve(): FeatureOffError {
+    return new FeatureOffError("The USYC reserve", this.network);
   }
 
   /** Only a real reserve has a position on chain to read. */
@@ -137,9 +148,12 @@ export function getChainProvider(): ChainProvider {
   }
   // Built for the workspace's network (network threading P2): every chain fact the provider uses is its profile's.
   const network = networkProfile(networkOf(config.network));
+  // Arc mainnet never simulates (mainnet go-live M5): with no Circle account of its own, a mainnet workspace gets no
+  // provider at all, rather than the simulator a testnet sandbox gets.
+  if (network.id === "arc-mainnet" && !(circleApiKey && circleEntitySecret)) throw new Error(MAINNET_NOT_CONNECTED);
   const provider: ChainProvider =
     circleApiKey && circleEntitySecret
-      ? new HybridProvider(new LiveProvider(config.chain, { network, paymentsDisabled: () => paymentsDisabled() }), new SimulateProvider(network), config.chain.usycLive === true)
+      ? new HybridProvider(new LiveProvider(config.chain, { network, paymentsDisabled: () => paymentsHold() }), new SimulateProvider(network), config.chain.usycLive === true)
       : new SimulateProvider(network);
 
   providers.set(config, provider);
@@ -152,7 +166,12 @@ export function chainModes(): { mode: "live" | "simulate"; earnMode: "live" | "s
   // credentials could not be read (R12) — a page must still render, and the
   // warning already reaches it through ledgerReadWarnings(), so this reports
   // the safe simulate/simulate default rather than propagating that throw.
-  if (currentOrgConfig().chain.credentialsUnreadable) return { mode: "simulate", earnMode: "simulate" };
+  const config = currentOrgConfig();
+  if (config.chain.credentialsUnreadable) return { mode: "simulate", earnMode: "simulate" };
+  // A mainnet workspace with no Circle account connected has no provider either (mainnet go-live M5).
+  if (networkOf(config.network) === "arc-mainnet" && !(config.chain.circleApiKey && config.chain.circleEntitySecret)) {
+    return { mode: "simulate", earnMode: "simulate" };
+  }
   const provider = getChainProvider();
   return { mode: provider.mode, earnMode: provider.earnMode };
 }

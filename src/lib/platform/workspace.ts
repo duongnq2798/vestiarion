@@ -5,25 +5,40 @@ import { requireOrgScopeSettings, withOrg } from "../dal/scope";
 import { appendLedgerEntry } from "../ledger";
 import { ledgerKeyId } from "../ledger-keys";
 import { encryptSecret, masterKeysFromEnv } from "../secrets";
+import { currentConfig } from "../context";
+import { MAINNET_OFF } from "../mainnet";
+import type { Network } from "../network";
 import { homeChain } from "../payee-chains";
 import { workspaceNetwork } from "../workspace-network";
 
 /**
  * Self-serve workspaces: a person names one, and gets a sandbox organization
- * with its own ledger key, two simulated accounts, and themselves as owner.
+ * with its own ledger key, its starting accounts, and themselves as owner. On
+ * Arc testnet it starts with two simulated accounts; on Arc mainnet, which only
+ * the onboarding action's allowlist reaches, with one empty operating account
+ * and a tight spending limit for the agent (mainnet go-live M2, M9).
  */
 
 const MAX_NAME = 80;
 const MAX_BASE_SLUG = 36;
 const ATTEMPTS = 5;
 
-/** The two accounts every new sandbox starts with, and nothing else, on its network's own chain (network threading P4). */
-function simulatedAccounts(chain: string) {
+/**
+ * The accounts a new workspace starts with, on its network's own chain (network threading P4): Arc testnet's two
+ * simulated ones, or Arc mainnet's one operating account, empty, with no reserve, since USYC does not run there and a
+ * mainnet workspace never simulates (mainnet go-live M2).
+ */
+function startingAccounts(network: Network) {
+  const chain = homeChain(network).id;
+  if (network === "arc-mainnet") return [{ name: "Operating", kind: "operating", chain, balance: 0 }];
   return [
     { name: "Operating (simulated)", kind: "operating", chain, balance: 10000 },
     { name: "Reserve (simulated)", kind: "reserve", chain, balance: 0 },
   ];
 }
+
+/** The agent's spending limit a mainnet workspace starts with (mainnet go-live M9): tight, and a figure always stays. */
+export const MAINNET_STARTING_BUDGET = { dailyUsdc: 50, weeklyUsdc: 150 } as const;
 
 /** `create_org` refuses a fourth workspace for the same person (migration 0020). */
 export class WorkspaceLimitError extends Error {
@@ -61,13 +76,17 @@ function isSlugClash(error: { code?: string; message: string; details?: string |
 export async function createWorkspace(input: {
   userId: string;
   name: string;
+  /** Arc testnet unless the caller, which checked the person against the allowlist, asks for Arc mainnet (M2). */
+  network?: Network;
   random?: () => string;
 }): Promise<{ orgId: string; slug: string }> {
-  const { userId, random = () => crypto.randomBytes(2).toString("hex") } = input;
+  const { userId, network = "arc-testnet", random = () => crypto.randomBytes(2).toString("hex") } = input;
   const name = input.name.trim();
   if (name.length < 1 || name.length > MAX_NAME) {
     throw new Error(`A workspace name must be 1 to ${MAX_NAME} characters.`);
   }
+  // Never on Arc mainnet while the deployment has it off, whoever asks (mainnet go-live M1): refused before anything.
+  if (network === "arc-mainnet" && !currentConfig().mainnetEnabled) throw new Error(MAINNET_OFF);
   // A deployment that could not enter the new organization, or could not
   // store its ledger key, must fail here, before anything is created: an
   // organization it cannot set up would still count against the person's limit.
@@ -111,17 +130,33 @@ export async function createWorkspace(input: {
 
   const { orgId, slug, publicKey } = created;
   try {
+    // The network is chosen here, before the first account exists: once one does, it never changes (0078, M3). The
+    // scope below then reads it from the row, as every later scope does.
+    if (network !== "arc-testnet") {
+      const set = await platformDb().from("orgs").update({ network }).eq("id", orgId).select("id");
+      if (set.error) throw new Error(set.error.message);
+      if (!set.data || set.data.length === 0) throw new Error("the new workspace's network was not set");
+    }
     await withOrg(
       orgId,
       async () => {
-        const inserted = await db().from("accounts").insert(simulatedAccounts(homeChain(workspaceNetwork().id).id));
+        const own = workspaceNetwork().id;
+        const inserted = await db().from("accounts").insert(startingAccounts(own));
         if (inserted.error) throw new Error(inserted.error.message);
+        if (own === "arc-mainnet") {
+          const budget = await db().from("agent_budgets").insert({
+            daily_usdc: MAINNET_STARTING_BUDGET.dailyUsdc,
+            weekly_usdc: MAINNET_STARTING_BUDGET.weeklyUsdc,
+            updated_by: userId,
+          });
+          if (budget.error) throw new Error(budget.error.message);
+        }
         await appendLedgerEntry({
           actor: "human",
           domain: "system",
           action: "org_created",
           summary: `Workspace created: ${name}`,
-          detail: { by: userId, slug, mode: "sandbox", ledgerKeyId: ledgerKeyId(publicKey) },
+          detail: { by: userId, slug, mode: "sandbox", network: own, ledgerKeyId: ledgerKeyId(publicKey) },
         });
       },
       { userId }

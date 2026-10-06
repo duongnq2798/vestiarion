@@ -13,9 +13,13 @@ const num = (v: unknown) => (typeof v === "number" ? v : Number(v ?? 0));
  * amount: a reserve larger than the money that exists (a simulated one
  * carried over, or funds moved out of the wallet) never claims more than is
  * there.
+ *
+ * `gasReserve` is the USDC an EOA keeps for its own gas (mainnet go-live M6):
+ * it comes off first, so a payment never leaves the wallet unable to pay its
+ * gas. It is 0 where gas is sponsored, which changes nothing.
  */
-export function liveOperatingBalance(onChain: number, notionalReserve: number): { spendable: number; reserve: number } {
-  const available = Math.max(0, onChain);
+export function liveOperatingBalance(onChain: number, notionalReserve: number, gasReserve = 0): { spendable: number; reserve: number } {
+  const available = Math.max(0, Number((onChain - Math.max(0, gasReserve)).toFixed(6)));
   const reserve = Math.min(Math.max(0, notionalReserve), available);
   return { spendable: Number((available - reserve).toFixed(6)), reserve };
 }
@@ -120,7 +124,11 @@ export async function syncOnChainBalances(provider: ChainProvider, orgDb: OrgDb,
     try {
       const snapshot = await provider.getBalance(account.id);
       const carvesReserve = account.kind === "operating";
-      const { spendable, reserve: carveOut } = liveOperatingBalance(snapshot.balance, carvesReserve ? notionalReserve : 0);
+      const { spendable, reserve: carveOut } = liveOperatingBalance(
+        snapshot.balance,
+        carvesReserve ? notionalReserve : 0,
+        carvesReserve ? provider.network.gasReserveUsdc : 0
+      );
       const stored = num(account.balance);
       if (Math.abs(spendable - stored) < 0.000001) {
         outcomes.push({ kind: "unchanged", accountId: account.id, name: account.name, balance: stored });

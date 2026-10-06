@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ChainProvider, TransferParams, TransferResult } from "@/lib/circle";
+import { ARC_TESTNET } from "@/lib/network";
 import { executePayment, executePaymentBatch, type PaymentBatchStore, type PaymentIntent, type PaymentIntentStore, type PaymentRequest } from "@/lib/payments";
 import { spendingLimitRef } from "@/lib/spending-limit/onchain";
 
@@ -81,6 +82,7 @@ function provider() {
     mode: "live",
     earnMode: "simulate",
     estimatedFeeUsd: 0.003,
+    network: ARC_TESTNET,
     transfer: vi.fn(async (params: TransferParams) => {
       transfers.push(params);
       return result({ providerTxId: `circle-${transfers.length}` });

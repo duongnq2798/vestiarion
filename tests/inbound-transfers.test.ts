@@ -25,9 +25,11 @@ const CHAIN: ChainConfig = { circleApiKey: "k", circleEntitySecret: "s", usdcTok
 const TOKENS = {
   data: {
     tokenBalances: [
-      { token: { id: "usdc-id", symbol: "USDC" }, amount: "20" },
-      { token: { id: "eurc-id", symbol: "EURC" }, amount: "3" },
+      { token: { id: "usdc-id", symbol: "USDC", isNative: true }, amount: "20" },
+      { token: { id: "eurc-id", symbol: "EURC", tokenAddress: ARC_TESTNET.tokens.EURC }, amount: "3" },
       { token: { id: "other-id", symbol: "WETH" }, amount: "1" },
+      // A token anyone could deploy and name "USDC" (mainnet go-live M7).
+      { token: { id: "spoof-id", symbol: "USDC", tokenAddress: "0x1111111111111111111111111111111111111111", isNative: false }, amount: "1000000" },
     ],
   },
 };
@@ -83,11 +85,12 @@ describe("LiveProvider.listInboundTransfers", () => {
     ]);
   });
 
-  it("leaves out another token, a transfer not complete or not inbound, and one with no amount", async () => {
+  it("leaves out another token, one that only calls itself USDC, a transfer not complete or not inbound, and one with no amount", async () => {
     const list = vi.fn().mockResolvedValue({
       data: {
         transactions: [
           tx({ id: "weth", tokenId: "other-id" }),
+          tx({ id: "spoof", tokenId: "spoof-id", amounts: ["1000000"] }),
           tx({ id: "pending", state: "CONFIRMED" }),
           tx({ id: "outbound", transactionType: "OUTBOUND" }),
           tx({ id: "empty", amounts: [] }),

@@ -3,7 +3,7 @@ import { LiveProvider, type LiveProviderClient } from "@/lib/circle/liveProvider
 import { BatchNotSentError } from "@/lib/circle/batch";
 import { PaymentsDisabledError } from "@/lib/payments-switch";
 import type { ChainConfig } from "@/lib/config";
-import { ARC_TESTNET } from "@/lib/network";
+import { ARC_MAINNET, ARC_TESTNET } from "@/lib/network";
 
 vi.mock("server-only", () => ({}));
 
@@ -174,11 +174,47 @@ describe("a live provider with payments switched off (payment safety S2)", () =>
   });
 
   it("still reads a balance", async () => {
-    const getWalletTokenBalance = vi.fn(async () => ({ data: { tokenBalances: [{ token: { id: "usdc-token-id", symbol: "USDC" }, amount: "12.5" }] } }));
+    const getWalletTokenBalance = vi.fn(async () => ({ data: { tokenBalances: [{ token: { id: "usdc-token-id", symbol: "USDC", isNative: true }, amount: "12.5" }] } }));
     const client = fakeClient({ getWalletTokenBalance } as unknown as Partial<LiveProviderClient>);
     const provider = new LiveProvider(CHAIN, { network: ARC_TESTNET, client, paymentsDisabled: true });
 
     await expect(provider.getBalance("account-1")).resolves.toMatchObject({ balance: 12.5 });
+  });
+});
+
+describe("a stablecoin chosen by its contract (mainnet go-live M7)", () => {
+  it("reads USDC by its contract, never a token that only calls itself USDC", async () => {
+    const getWalletTokenBalance = vi.fn(async () => ({
+      data: {
+        tokenBalances: [
+          { token: { id: "spoof", symbol: "USDC", tokenAddress: "0x1111111111111111111111111111111111111111", isNative: false }, amount: "999999" },
+          { token: { id: "usdc-token-id", symbol: "USDC", tokenAddress: null, isNative: true }, amount: "12.5" },
+        ],
+      },
+    }));
+    const client = fakeClient({ getWalletTokenBalance } as unknown as Partial<LiveProviderClient>);
+    const provider = new LiveProvider(CHAIN, { network: ARC_TESTNET, client, paymentsDisabled: true });
+
+    await expect(provider.getBalance("account-1")).resolves.toMatchObject({ balance: 12.5 });
+  });
+
+  it("sends the real USDC's token id, never a spoof listed first, when it must find it", async () => {
+    const getWalletTokenBalance = vi.fn(async () => ({
+      data: {
+        tokenBalances: [
+          { token: { id: "spoof", symbol: "USDC", tokenAddress: "0x1111111111111111111111111111111111111111", isNative: false }, amount: "999999" },
+          { token: { id: "usdc-erc20", symbol: "USDC", tokenAddress: "0x3600000000000000000000000000000000000000", isNative: false }, amount: "12.5" },
+        ],
+      },
+    }));
+    const createTransaction = vi.fn(async () => {
+      throw new Error("stop after the request");
+    });
+    const client = fakeClient({ getWalletTokenBalance, createTransaction } as unknown as Partial<LiveProviderClient>);
+    const provider = new LiveProvider({ ...CHAIN, usdcTokenId: undefined }, { network: ARC_TESTNET, client });
+
+    await expect(provider.transfer(TRANSFER)).rejects.toThrow("stop after the request");
+    expect(createTransaction).toHaveBeenCalledWith(expect.objectContaining({ tokenId: "usdc-erc20" }));
   });
 });
 
@@ -233,7 +269,7 @@ describe("LiveProvider Circle request deadlines", () => {
   it("clears the getWalletTokenBalance deadline when Circle resolves before it", async () => {
     const getWalletTokenBalance = vi.fn(async () => ({
       data: {
-        tokenBalances: [{ amount: "12.5", token: { symbol: "USDC" } }],
+        tokenBalances: [{ amount: "12.5", token: { symbol: "USDC", isNative: true } }],
       },
     }));
     const client = fakeClient({
@@ -390,5 +426,35 @@ describe("LiveProvider refusals name the fix in the product, not a script", () =
     expect(error.message).toBe("Account account-1 has no Circle wallet. Create the treasury wallets in Settings → Go live.");
     expect(error.message).not.toContain("bootstrap");
     expect(createTransaction).not.toHaveBeenCalled();
+  });
+});
+
+describe("a batch on a network whose wallets are EOAs (mainnet go-live M6)", () => {
+  it("refuses before calling Circle, so each payment goes alone", async () => {
+    const createContractExecutionTransaction = vi.fn();
+    const client = fakeClient({ createContractExecutionTransaction } as unknown as Partial<LiveProviderClient>);
+    const provider = new LiveProvider(CHAIN, { network: ARC_MAINNET, client, paymentsDisabled: false });
+    const batch = provider.batchTransfer({ fromAccountId: "account-1", transfers: [{ toAddress: TRANSFER.toAddress, amount: 1 }, { toAddress: TRANSFER.toAddress, amount: 2 }], idempotencyKey: "batch-1" });
+    await expect(batch).rejects.toBeInstanceOf(BatchNotSentError);
+    await expect(batch).rejects.toThrow("Paying in one batch does not run on Arc mainnet yet");
+    expect(createContractExecutionTransaction).not.toHaveBeenCalled();
+    expect(accountSingle).not.toHaveBeenCalled();
+  });
+});
+
+describe("a wallet on Base Sepolia in an Arc testnet workspace (final review I1)", () => {
+  it("reads its USDC by Base's USDC address, never its native ETH", async () => {
+    accountSingle.mockResolvedValue({ data: { id: "base", chain: "BASE-SEPOLIA", token: "USDC", circle_wallet_id: "w-base", address: "0xabc" }, error: null });
+    const getWalletTokenBalance = vi.fn(async () => ({
+      data: {
+        tokenBalances: [
+          { token: { id: "eth", symbol: "ETH-SEPOLIA", tokenAddress: null, isNative: true }, amount: "0.25" },
+          { token: { id: "usdc-base", symbol: "USDC", tokenAddress: "0x036CbD53842c5426634e7929541eC2318f3dCF7e", isNative: false }, amount: "6200" },
+        ],
+      },
+    }));
+    const client = fakeClient({ getWalletTokenBalance } as unknown as Partial<LiveProviderClient>);
+    const provider = new LiveProvider(CHAIN, { network: ARC_TESTNET, client, paymentsDisabled: true });
+    await expect(provider.getBalance("base")).resolves.toMatchObject({ balance: 6200, chain: "BASE-SEPOLIA" });
   });
 });

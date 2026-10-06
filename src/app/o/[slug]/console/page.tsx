@@ -194,7 +194,13 @@ export default async function DashboardPage({
         })
       : null;
     // Sample data (sample-data design §1): offered in an empty simulated sandbox, and called out while it is loaded.
-    const sampleOffered = offerSampleData({ canWrite: can(role, "records.write"), mode: access.membership.mode, chainMode: modes.mode, counterpartyCount: counterparties.length });
+    const sampleOffered = offerSampleData({
+      canWrite: can(role, "records.write"),
+      mode: access.membership.mode,
+      chainMode: modes.mode,
+      counterpartyCount: counterparties.length,
+      network: access.membership.network,
+    });
     const sampleLoaded = counterparties.some((counterparty) => counterparty.sample);
 
     return (

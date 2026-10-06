@@ -795,6 +795,9 @@ const GO_LIVE_ERRORS: Record<GoLiveErrorCode, true> = {
   sample_data_loaded: true,
   key_network: true,
   hosted_network: true,
+  mainnet_not_open: true,
+  mainnet_confirmation: true,
+  go_live_network: true,
 };
 
 /** Copy for real users on Arc testnet names the network plainly; it never hedges it away. */

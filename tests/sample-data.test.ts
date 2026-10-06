@@ -40,6 +40,8 @@ interface OrgState {
   mode: "sandbox" | "live";
   wallet_host: "own" | "hosted" | null;
   api_key_iv: string | null;
+  /** Its network (0075); absent is Arc testnet. */
+  network?: "arc-testnet" | "arc-mainnet";
 }
 
 function orgRow(state: OrgState) {
@@ -50,6 +52,7 @@ function orgRow(state: OrgState) {
     mode: state.mode,
     wallet_host: state.wallet_host,
     api_key_iv: state.api_key_iv,
+    ...(state.network ? { network: state.network } : {}),
     ledger_signing_key_enc: encryptSecret(LEDGER_PEM, { orgId: ORG, column: "ledger_signing_key_enc" }, parseMasterKeys(MASTER_KEYS)),
     circle_api_key_enc: null,
     circle_entity_secret_enc: null,
@@ -247,6 +250,7 @@ describe("loadSampleData", () => {
     [{ wallet_host: "hosted" as const }, "connected"],
     [{ wallet_host: "own" as const }, "connected"],
     [{ api_key_iv: "iv-1" }, "connected"],
+    [{ network: "arc-mainnet" as const }, "mainnet"],
   ])("refuses a workspace that is %j, before writing anything", async (org, code) => {
     const { fake, run } = sampleFake({ org });
 
@@ -254,6 +258,12 @@ describe("loadSampleData", () => {
 
     expect(error.code).toBe(code);
     expect(fake.requests.filter((request) => request.method !== "GET" && request.path !== "/rest/v1/orgs")).toEqual([]);
+  });
+
+  it("says a workspace on Arc mainnet never simulates payments (mainnet go-live M5)", async () => {
+    const { run } = sampleFake({ org: { network: "arc-mainnet" } });
+    const error = await refusal(run(() => loadSampleData({ actorId: ACTOR, now: NOW })));
+    expect(error.message).toBe("Sample data runs on Arc testnet only: a workspace on Arc mainnet never simulates payments.");
   });
 
   it("answers already_loaded when the one-sample-set index refuses the insert", async () => {

@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { AgentPausedBanner, pausedBanner } from "@/components/AgentPausedBanner";
+import { MainnetBanner } from "@/components/MainnetBanner";
 import { PaymentsOffBanner } from "@/components/PaymentsOffBanner";
 import { AppFrame } from "@/components/vx/AppFrame";
 import type { WorkspaceSummary } from "@/components/vx/workspace";
 import { membershipFor, membershipsOf, requireMembership, type OrgMembership } from "@/lib/auth/membership";
 import { getSessionUser } from "@/lib/auth/session";
+import { currentConfig } from "@/lib/context";
 import { paymentsSwitchForPages } from "@/lib/payments-switch";
 
 type OrgLayoutProps = {
@@ -56,6 +58,8 @@ function summary(membership: OrgMembership): WorkspaceSummary {
  * The paused banner is platform data too: the pause lives on the
  * organization row, and the pauser's address comes from its member list. The
  * payments-off banner reads only the platform's switch (payment safety S5, S7).
+ * The Arc mainnet banner reads the membership's network and mode, and the
+ * deployment's switch (mainnet go-live M13).
  */
 export default async function OrgLayout({ children, params }: OrgLayoutProps) {
   const { slug } = await params;
@@ -64,6 +68,7 @@ export default async function OrgLayout({ children, params }: OrgLayoutProps) {
 
   return (
     <AppFrame workspace={summary(membership)} workspaces={memberships.map(summary)} email={user.email}>
+      {membership.network === "arc-mainnet" && <MainnetBanner mode={membership.mode} enabled={currentConfig().mainnetEnabled === true} />}
       {payments.off && <PaymentsOffBanner reason={payments.reason} />}
       {paused && <AgentPausedBanner pause={paused.pause} members={paused.members} />}
       {children}

@@ -1,4 +1,5 @@
 import { workspaceNetwork } from "../workspace-network";
+import { FeatureOffError } from "../network";
 import crypto from "node:crypto";
 import { initiateDeveloperControlledWalletsClient, type CircleDeveloperControlledWalletsClient } from "@circle-fin/developer-controlled-wallets";
 import { initiateSmartContractPlatformClient, type CircleSmartContractPlatformClient } from "@circle-fin/smart-contract-platform";
@@ -98,6 +99,9 @@ export async function setUpEscrow(
     waitMs?: number;
   } = {}
 ): Promise<{ address: string; alreadySetUp: boolean }> {
+  // Escrow deploys a contract per workspace, outside Arc mainnet's first scope (mainnet go-live M6): refused by name.
+  const network = workspaceNetwork();
+  if (!network.escrow) throw new FeatureOffError("Escrow", network);
   // Nothing moves while the platform has payments switched off (payment safety S2).
   await assertPaymentsEnabled();
   const existing = await readEscrowContract();

@@ -53,8 +53,8 @@ beforeEach(() => {
 
 describe("the live provider", () => {
   const WALLET = [
-    { amount: "40", token: { id: "usdc-token-id", symbol: "USDC" } },
-    { amount: "25.5", token: { id: "eurc-token-id", symbol: "EURC" } },
+    { amount: "40", token: { id: "usdc-token-id", symbol: "USDC", isNative: true } },
+    { amount: "25.5", token: { id: "eurc-token-id", symbol: "EURC", tokenAddress: ARC_TESTNET.tokens.EURC } },
   ];
 
   it("pays EURC with the wallet's EURC token id", async () => {

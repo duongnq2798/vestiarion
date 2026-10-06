@@ -821,7 +821,7 @@ describe("goLive", () => {
     // Bound to the envelope that was proven: its nonce, which every re-encryption changes.
     expect(update.params.get("circle_api_key_enc->>iv")).toBe(`eq.${state.org.circle_api_key_enc!.iv}`);
     expect(state.org.mode).toBe("live");
-    expect(appends(fake).map((entry) => [entry.p_action, entry.p_detail])).toEqual([["workspace_went_live", { by: ACTOR }]]);
+    expect(appends(fake).map((entry) => [entry.p_action, entry.p_detail])).toEqual([["workspace_went_live", { by: ACTOR, network: "arc-testnet" }]]);
   });
 
   it("proves with credentials replaced a moment earlier, even from a scope entered before they were", async () => {
@@ -952,7 +952,7 @@ describe("goLiveStatus", () => {
   it("starts a new sandbox at connect", async () => {
     const { fake, inScope } = database(sandbox());
     await expect(inScope(() => goLiveStatus(ORG))).resolves.toEqual({
-      step: "connect", connected: false, host: null, hostedAvailable: false, wallets: [], liveSince: null, credentialsUnreadable: false,
+      step: "connect", connected: false, host: null, hostedAvailable: false, wallets: [], liveSince: null, credentialsUnreadable: false, network: "arc-testnet", mainnetOff: false,
     });
     // Only whether credentials are stored is read, never the envelopes themselves.
     const statusRead = fake.requests.filter((request) => request.path === "/rest/v1/orgs" && request.params.get("select")?.includes("->>"));
@@ -976,7 +976,7 @@ describe("goLiveStatus", () => {
         { accountName: "Reserve", kind: "reserve", address: "0x" + "cd".repeat(20) },
       ],
       liveSince: null,
-      credentialsUnreadable: false,
+      credentialsUnreadable: false, network: "arc-testnet", mainnetOff: false,
     });
     expect(JSON.stringify(status)).not.toContain("wallet-operating");
   });
@@ -1012,7 +1012,7 @@ describe("goLiveStatus", () => {
         { accountName: "Reserve", kind: "reserve", address: "0x" + "cd".repeat(20) },
       ],
       liveSince: null,
-      credentialsUnreadable: false,
+      credentialsUnreadable: false, network: "arc-testnet", mainnetOff: false,
     });
   });
 
@@ -1437,7 +1437,7 @@ describe("hosted testnet wallets (hosted wallets H1, H3, H4)", () => {
       expect(update.params.get("wallet_host")).toBe("eq.hosted");
       expect(update.params.get("circle_api_key_enc->>iv")).toBeNull();
       expect(state.org.mode).toBe("live");
-      expect(appends(fake).map((entry) => [entry.p_action, entry.p_detail])).toEqual([["workspace_went_live", { by: ACTOR }]]);
+      expect(appends(fake).map((entry) => [entry.p_action, entry.p_detail])).toEqual([["workspace_went_live", { by: ACTOR, network: "arc-testnet" }]]);
     });
 
     it("refuses a hosted workspace whose operating account has no wallet", async () => {
@@ -1535,13 +1535,13 @@ describe("hosted testnet wallets (hosted wallets H1, H3, H4)", () => {
   describe("goLiveStatus", () => {
     it("offers the choice to a fresh sandbox on a deployment with the pair", async () => {
       await expect(database(sandbox(), { platform: hostedConfig }).inScope(() => goLiveStatus(ORG))).resolves.toEqual({
-        step: "connect", connected: false, host: null, hostedAvailable: true, wallets: [], liveSince: null, credentialsUnreadable: false,
+        step: "connect", connected: false, host: null, hostedAvailable: true, wallets: [], liveSince: null, credentialsUnreadable: false, network: "arc-testnet", mainnetOff: false,
       });
     });
 
     it("puts a hosted workspace with no wallets at wallets: the choice was its connect step", async () => {
       await expect(database(hosted(), { platform: hostedConfig }).inScope(() => goLiveStatus(ORG))).resolves.toEqual({
-        step: "wallets", connected: false, host: "hosted", hostedAvailable: true, wallets: [], liveSince: null, credentialsUnreadable: false,
+        step: "wallets", connected: false, host: "hosted", hostedAvailable: true, wallets: [], liveSince: null, credentialsUnreadable: false, network: "arc-testnet", mainnetOff: false,
       });
     });
 
@@ -1574,5 +1574,96 @@ describe("hosted testnet wallets (hosted wallets H1, H3, H4)", () => {
         expect(typeof status.hostedAvailable).toBe("boolean");
       }
     });
+  });
+});
+
+describe("Arc mainnet (mainnet go-live M8)", () => {
+  const OWNER = "owner@acme.test";
+  const LIVE_KEY = "LIVE_API_KEY:main-key-id:main-key-secret-value";
+  const mainnetPlatform: VestiarionConfig = { ...config, mainnetEnabled: true, mainnetAllowlist: [OWNER] };
+  /** The workspace on Arc mainnet: its one operating account on ARC, as createWorkspace makes it (M2). */
+  const onMainnet = (state: State): State => {
+    state.org.network = "arc-mainnet";
+    state.accounts = state.accounts.filter((account) => account.kind === "operating").map((account) => ({ ...account, name: "Operating", chain: "ARC" }));
+    return state;
+  };
+  const okKey = async () => "ok" as const;
+
+  it("refuses someone not on the allowlist at every step, before Circle is asked", async () => {
+    for (const email of ["other@acme.test", null, undefined]) {
+      const { inScope } = database(onMainnet(sandbox()), { platform: mainnetPlatform });
+      const c = circle();
+      const connect = await refusal(inScope(() => connectCircle({ orgId: ORG, actorId: ACTOR, actorEmail: email, apiKey: LIVE_KEY, entitySecret: ENTITY_SECRET, client: c.factory, check: okKey })));
+      expect(connect).toMatchObject({ code: "mainnet_not_open", message: "Arc mainnet is not open to this account yet." });
+      const wallets = database(onMainnet(connected({ circle_api_key_enc: seal(LIVE_KEY, "circle_api_key_enc") })), { platform: mainnetPlatform });
+      await expect(refusal(wallets.inScope(() => createWallets({ orgId: ORG, actorId: ACTOR, actorEmail: email, client: c.factory })))).resolves.toMatchObject({ code: "mainnet_not_open" });
+      expect(c.factory).not.toHaveBeenCalled();
+    }
+  });
+
+  it("refuses everyone while the deployment has Arc mainnet off", async () => {
+    const { inScope } = database(onMainnet(sandbox()), { platform: { ...mainnetPlatform, mainnetEnabled: false } });
+    await expect(
+      refusal(inScope(() => connectCircle({ orgId: ORG, actorId: ACTOR, actorEmail: OWNER, apiKey: LIVE_KEY, entitySecret: ENTITY_SECRET, check: okKey })))
+    ).resolves.toMatchObject({ code: "mainnet_not_open" });
+  });
+
+  it("refuses a test key on a mainnet workspace, naming both networks, as a live key is refused on a testnet one", async () => {
+    const { inScope } = database(onMainnet(sandbox()), { platform: mainnetPlatform });
+    const error = await refusal(inScope(() => connectCircle({ orgId: ORG, actorId: ACTOR, actorEmail: OWNER, apiKey: API_KEY, entitySecret: ENTITY_SECRET, check: okKey })));
+    expect(error.code).toBe("key_network");
+    expect(error.message).toBe("This Circle API key is for Arc testnet (TEST_API_KEY). This workspace is on Arc mainnet: paste a live key (LIVE_API_KEY).");
+    const testnet = database(sandbox(), { platform: mainnetPlatform });
+    const live = await refusal(testnet.inScope(() => connectCircle({ orgId: ORG, actorId: ACTOR, apiKey: LIVE_KEY, entitySecret: ENTITY_SECRET, check: okKey })));
+    expect(live.message).toBe("This Circle API key is for Arc mainnet (LIVE_API_KEY). This workspace is on Arc testnet: paste a test key (TEST_API_KEY).");
+  });
+
+  it("connects a live key and creates one EOA on ARC: the dry run, with nothing sent", async () => {
+    const state = onMainnet(sandbox());
+    const { inScope } = database(state, { platform: mainnetPlatform });
+    const c = circle({ sets: [{ id: "set-treasury", name: TREASURY_WALLET_SET }] });
+    await inScope(() => connectCircle({ orgId: ORG, actorId: ACTOR, actorEmail: OWNER, apiKey: LIVE_KEY, entitySecret: ENTITY_SECRET, client: c.factory, check: okKey }));
+    expect(await inScope(() => createWallets({ orgId: ORG, actorId: ACTOR, actorEmail: OWNER, client: c.factory }))).toEqual({ created: 1, skipped: 0 });
+    expect(c.createWallets).toHaveBeenCalledTimes(1);
+    expect((c.createWallets.mock.calls as unknown as Array<[Record<string, unknown>]>)[0][0]).toMatchObject({ blockchains: ["ARC"], accountType: "EOA" });
+    expect(state.org.mode).toBe("sandbox");
+  });
+
+  it("asks for the word typed, then refuses going live by name while Arc mainnet's approval limits are not in (final review I3)", async () => {
+    const state = onMainnet(withWallets(connected({ circle_api_key_enc: seal(LIVE_KEY, "circle_api_key_enc") })));
+    const { fake, inScope } = database(state, { platform: mainnetPlatform });
+    const c = circle(SAME_ENTITY);
+    for (const word of [undefined, "", "main net", "testnet", "mainnet!"]) {
+      await expect(refusal(inScope(() => goLive({ orgId: ORG, actorId: ACTOR, actorEmail: OWNER, confirmation: word, client: c.factory })))).resolves.toMatchObject({
+        code: "mainnet_confirmation",
+        message: "Type mainnet to confirm that this workspace pays real USDC.",
+      });
+    }
+    await expect(refusal(inScope(() => goLive({ orgId: ORG, actorId: ACTOR, actorEmail: OWNER, confirmation: "  Mainnet ", client: c.factory })))).resolves.toMatchObject({
+      code: "go_live_network",
+      message: "Going live does not run on Arc mainnet yet",
+    });
+    expect(state.org.mode).toBe("sandbox");
+    expect(orgPatches(fake)).toEqual([]);
+    expect(appends(fake)).toEqual([]);
+    expect(c.getWallet).not.toHaveBeenCalled();
+  });
+
+  it("does not take the word from someone not on the allowlist", async () => {
+    const state = onMainnet(withWallets(connected({ circle_api_key_enc: seal(LIVE_KEY, "circle_api_key_enc") })));
+    const { inScope } = database(state, { platform: mainnetPlatform });
+    await expect(refusal(inScope(() => goLive({ orgId: ORG, actorId: ACTOR, actorEmail: "other@acme.test", confirmation: "mainnet", client: circle(SAME_ENTITY).factory })))).resolves.toMatchObject({
+      code: "mainnet_not_open",
+    });
+    expect(state.org.mode).toBe("sandbox");
+  });
+
+  it("reports the network, and Arc mainnet switched off rather than credentials it cannot read", async () => {
+    const off = database(onMainnet(connected({ circle_api_key_enc: seal(LIVE_KEY, "circle_api_key_enc") })), { platform: config });
+    await expect(off.inScope(() => goLiveStatus(ORG))).resolves.toMatchObject({ network: "arc-mainnet", mainnetOff: true, credentialsUnreadable: false });
+    const fresh = database(onMainnet(sandbox()), { platform: mainnetPlatform });
+    await expect(fresh.inScope(() => goLiveStatus(ORG))).resolves.toMatchObject({ network: "arc-mainnet", mainnetOff: false, credentialsUnreadable: false, step: "connect" });
+    const testnet = database(sandbox(), { platform: mainnetPlatform });
+    await expect(testnet.inScope(() => goLiveStatus(ORG))).resolves.toMatchObject({ network: "arc-testnet", mainnetOff: false });
   });
 });

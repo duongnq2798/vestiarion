@@ -5,7 +5,7 @@ import { COUNTERPARTY_RISK_LEVELS, COUNTERPARTY_ROLES } from "@/lib/api/counterp
 import { INVOICE_DIRECTIONS } from "@/lib/api/invoices";
 import { MILESTONE_STATUSES } from "@/lib/api/milestones";
 import { INVOICE_CURRENCIES } from "@/lib/intake-validation";
-import { TESTNET_PAYEE_CHAIN_IDS } from "@/lib/payee-chains";
+import { ALL_PAYEE_CHAIN_IDS } from "@/lib/payee-chains";
 
 /**
  * A Zod schema for every payload `/api/v1` returns.
@@ -396,9 +396,11 @@ export const CreateCounterpartyBodySchema = z
         "Where the agent pays it. An address added through the API waits for a person in the workspace to confirm it on Counterparties; until then the agent pays nothing to it."
       ),
     chain: z
-      .enum(TESTNET_PAYEE_CHAIN_IDS)
+      .enum(ALL_PAYEE_CHAIN_IDS)
       .optional()
-      .describe("The chain the address receives on. Defaults to `ARC-TESTNET`; only a vendor can be paid on another chain."),
+      .describe(
+        "The chain the address receives on. Defaults to the workspace's own chain: `ARC-TESTNET` on Arc testnet, `ARC` on Arc mainnet. Only a chain the workspace's network pays on is accepted, and only a vendor can be paid on another chain than the workspace's own."
+      ),
     jurisdiction: z.string().optional().describe("Where it is based, up to 80 characters; screening uses it."),
     paymentLimit: z
       .union([z.string(), z.number()])

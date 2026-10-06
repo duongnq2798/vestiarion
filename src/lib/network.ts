@@ -6,9 +6,11 @@
  * record's (docs/superpowers/specs/2026-10-05-network-threading-design.md P1, P2).
  *
  * Arc testnet's values are the ones every module used before this file existed; those modules now read them from here.
- * Arc mainnet's come from docs.arc.io and developers.circle.com as read on 2026-10-04, and are checked again before
- * phase 2 uses them. A feature not verified there is null, and is off there: USYC (institutional only), Gateway, CCTP,
- * the Stablecoin Service's swap, and hosted wallets.
+ * Arc mainnet's come from docs.arc.io and developers.circle.com as read on 2026-10-04; the dry run with a live Circle
+ * key checks them again before any mainnet workspace goes live. A feature not verified there is null, and is off there: USYC (institutional only), Gateway, CCTP,
+ * the Stablecoin Service's swap, and hosted wallets. Its wallets are EOAs that pay their own gas, and the per-workspace
+ * contracts (escrow, the spending limit) are off there too (docs/superpowers/specs/2026-10-06-mainnet-go-live-design.md
+ * M6).
  */
 
 export const NETWORK_IDS = ["arc-testnet", "arc-mainnet"] as const;
@@ -75,6 +77,25 @@ export interface NetworkProfile {
    * do not run.
    */
   modularWallets: { chain: string } | null;
+  /**
+   * The account type of the workspace's treasury wallets (mainnet go-live M6): a smart account whose gas Circle Gas
+   * Station pays, or an EOA that pays its own gas in USDC. Circle bills Gas Station on mainnet and refuses an SCA there
+   * until a paymaster policy exists, so Arc mainnet's are EOAs.
+   */
+  walletAccountType: "SCA" | "EOA";
+  /** USDC the operating wallet keeps aside for its own gas (M6): 0 where gas is sponsored. */
+  gasReserveUsdc: number;
+  /** Whether a milestone's USDC can be locked in the per-workspace escrow contract (M6). */
+  escrow: boolean;
+  /** Whether the agent's spending limit can be enforced by its per-workspace contract (M6). */
+  spendingLimitContract: boolean;
+  /** Whether the chain's native currency is USDC (M7): Arc's is, so Circle's native entry for a wallet is USDC. */
+  usdcIsNative: boolean;
+  /**
+   * Whether a workspace on this network may go live (final review I3): Arc mainnet's waits for its approval limits
+   * (phase 2b), so nothing in phase 2a moves money there, by construction rather than by procedure.
+   */
+  goLiveOpen: boolean;
 }
 
 export const ARC_TESTNET = {
@@ -139,6 +160,12 @@ export const ARC_TESTNET = {
   hostedWallets: true,
   circleKeyPrefix: "TEST_API_KEY:",
   modularWallets: { chain: "arcTestnet" },
+  walletAccountType: "SCA",
+  gasReserveUsdc: 0,
+  escrow: true,
+  spendingLimitContract: true,
+  usdcIsNative: true,
+  goLiveOpen: true,
 } as const satisfies NetworkProfile;
 
 export const ARC_MAINNET = {
@@ -168,6 +195,12 @@ export const ARC_MAINNET = {
   hostedWallets: false,
   circleKeyPrefix: "LIVE_API_KEY:",
   modularWallets: null,
+  walletAccountType: "EOA",
+  gasReserveUsdc: 0.1,
+  escrow: false,
+  spendingLimitContract: false,
+  usdcIsNative: true,
+  goLiveOpen: false,
 } as const satisfies NetworkProfile;
 
 export const NETWORKS: Record<Network, NetworkProfile> = { "arc-testnet": ARC_TESTNET, "arc-mainnet": ARC_MAINNET };

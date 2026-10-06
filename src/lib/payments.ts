@@ -838,7 +838,8 @@ export async function executePaymentBatch(
   const results: PaymentExecution[] = new Array(requests.length);
   const claimed: Claimed[] = [];
   for (const [index, request] of requests.entries()) {
-    if (!provider.batchTransfer || requests.length < 2 || !batchable(request)) {
+    // A batch needs a smart account (mainnet go-live M6): on a network whose wallets are EOAs each payment goes alone.
+    if (!provider.batchTransfer || provider.network.walletAccountType !== "SCA" || requests.length < 2 || !batchable(request)) {
       results[index] = await executePayment(request, { provider, store });
       continue;
     }

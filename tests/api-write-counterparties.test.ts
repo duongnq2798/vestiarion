@@ -140,3 +140,14 @@ describe("POST /api/v1/counterparties", () => {
     expect(requestsTo(fake.requests, "/rest/v1/counterparties")).toEqual([]);
   });
 });
+
+describe("the chain a counterparty is paid on (mainnet go-live M12)", () => {
+  it("takes ARC into the API, and refuses it on Arc testnet in plain words, writing nothing", async () => {
+    const { fake, send } = workspace();
+    const response = await send(JSON.stringify({ ...valid, chain: "ARC" }), { "idempotency-key": "cp-arc" });
+    expect(response.status).toBe(400);
+    const answer = (await response.json()) as { error: { code: string; message: string } };
+    expect(answer.error).toMatchObject({ code: "invalid_request", message: "ARC is not a chain this workspace pays on" });
+    expect(requestsTo(fake.requests, "/rest/v1/counterparties").filter((sent) => sent.method === "POST")).toEqual([]);
+  });
+});

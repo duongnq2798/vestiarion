@@ -1,17 +1,18 @@
-import { currentOrgId } from "../context";
+import { currentConfig, currentOrgId } from "../context";
 import { db, unwrap } from "../dal";
-import { getChainProvider, type Stablecoin } from "../circle";
+import { chainModes, getChainProvider, type Stablecoin } from "../circle";
 import { confirmCounterpartyAddress, sameAddress } from "../counterparty-address";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { listLedgerEntriesForTargets } from "../ledger";
 import { explainPayable, presentReasoning } from "../reasoning-copy";
 import { isTerminalFailure, settleUnknownSend, type UnknownSendAnswer } from "../payments";
 import { MAY_HAVE_BEEN_ACCEPTED } from "../circle/settlement";
-import { PAYMENTS_OFF, paymentsDisabled, PaymentsDisabledError } from "../payments-switch";
+import { PAYMENTS_OFF, PaymentsDisabledError, paymentsHold } from "../payments-switch";
 import { payInvoice, syncOperatingBalance } from "./pay";
 import { invoiceDiscount, type InvoiceDiscount } from "./payment-timing";
 import { chainById, homeChain, paidAcrossChains } from "../payee-chains";
 import { counterpartyChainProblem } from "../intake-validation";
+import { workspaceNetwork } from "../workspace-network";
 import { bridgeFee, type BridgeFee } from "../circle/cctp";
 import { gatewayQuoter, type GatewayQuote } from "../circle/gateway-quote";
 import { choosePayoutRoute, payoutFundsShort, type GatewayFigures } from "../payout-route";
@@ -474,11 +475,14 @@ export async function listWaitingPayables(
 
   // Both routes' figures for a payee on another chain, read now, so the person approving sees the route Approve and pay
   // takes and what leaves (CCTP payouts, review I2; approval payout route P4). A figure that cannot be read is null.
-  // The payees' chains are on the workspace's network, as its provider is (network threading P3).
-  const network = getChainProvider().network;
+  // The payees' chains are on the workspace's network (network threading P3). The list itself needs no provider: a
+  // workspace on Arc mainnet with no Circle account, or while Arc mainnet is switched off, has none, and its pages still
+  // read (mainnet go-live, final review I2). Gateway's quote builds one only for a row paid across chains.
+  const network = workspaceNetwork();
+  let quoter: ReturnType<typeof gatewayQuoter> | undefined;
   const read = {
     bridgeFee: options.bridgeFee ?? ((chain: string, amount: number) => bridgeFee(network, chain, amount)),
-    gatewayQuote: options.gatewayQuote ?? gatewayQuoter(getChainProvider(), db()),
+    gatewayQuote: options.gatewayQuote ?? ((chain: string, amount: number) => (quoter ??= gatewayQuoter(getChainProvider(), db()))(chain, amount)),
   };
   const quotes = new Map<string, PayoutQuotes>();
   await Promise.all(
@@ -501,7 +505,7 @@ export async function listWaitingPayables(
 
   // Whose address a first payment would go to, where payments are real (new payee check N4): read once for the list.
   const newPayeeFacts =
-    rows.length > 0 && getChainProvider().mode === "live" ? await loadNewPayeeFacts(db(), [...new Set(rows.map((row) => row.counterparty_id))]) : null;
+    rows.length > 0 && chainModes().mode === "live" ? await loadNewPayeeFacts(db(), [...new Set(rows.map((row) => row.counterparty_id))]) : null;
 
   const newPayeeOf = (row: (typeof rows)[number]) =>
     newPayeeFacts
@@ -674,7 +678,7 @@ async function loadWaitingPayable(invoiceId: string): Promise<LoadedInvoice> {
  * payments are real (new payee check N1, N2, N5); null otherwise.
  */
 async function firstPaymentTo(invoice: Pick<LoadedInvoice, "counterpartyId" | "address">): Promise<ReturnType<typeof newPayeeCheck>> {
-  return getChainProvider().mode === "live" ? firstPaymentCheck(db(), { id: invoice.counterpartyId, address: invoice.address }) : null;
+  return chainModes().mode === "live" ? firstPaymentCheck(db(), { id: invoice.counterpartyId, address: invoice.address }) : null;
 }
 
 /** The stored operating and reserve balances (approval cash R5); null unless the workspace has both. */
@@ -757,6 +761,11 @@ export async function approveAndPay(
   const payment = { amount: invoice.amount, currency: invoice.currency, address: invoice.address };
 
   // Early refusals, before any claim — none of these contend for the row.
+  // A workspace its network holds moves nothing, and has nothing sent to record (mainnet go-live M4): Arc mainnet
+  // switched off withholds its Circle credentials, and a mainnet workspace not live yet has sent nothing. First, since
+  // such a workspace may have no provider at all.
+  const networkHeld = currentConfig().chain.networkHold;
+  if (networkHeld) throw new ApprovalError("payments_off", networkHeld);
   let soleApprover = false;
   let fewApprovers = false;
   let standing: GivenApproval[] = [];
@@ -806,7 +815,10 @@ export async function approveAndPay(
   const mayExist = alreadySent || transferUnknown(intent);
   // Nothing new is paid while the platform has payments switched off (payment safety S4), but a transfer already sent
   // is still recorded: that only reads Circle, and the provider refuses any send (S8).
-  if (!alreadySent && (await paymentsDisabled())) raise("payments_off");
+  if (!alreadySent) {
+    const hold = await paymentsHold();
+    if (hold) throw new ApprovalError("payments_off", hold);
+  }
 
   // Two approvals (T4): the first is recorded and sends nothing; the second, by another person, pays.
   let approvals: Array<{ by: string; at: string }> = [];
@@ -904,7 +916,7 @@ export async function approveAndPay(
     } catch (error) {
       // Given back as it was before the claim: nothing was paid, so a flagged or awaiting payable stays so (review finding 3).
       await giveBackAfterClaim(invoice, `cash not brought back from the reserve: ${(error as Error).message}`, invoice.status === "processing" ? "held" : invoice.status);
-      if (error instanceof PaymentsDisabledError) raise("payments_off");
+      if (error instanceof PaymentsDisabledError) throw new ApprovalError("payments_off", error.message);
       if (!(error instanceof CashBackError)) throw error;
       if (error.code === "not_confirmed") throw new ApprovalError("insufficient_funds", error.message);
       const fee = route === "cctp" ? (quotes?.cctpFeeUsdc ?? null) : null;

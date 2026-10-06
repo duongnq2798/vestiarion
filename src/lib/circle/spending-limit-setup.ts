@@ -1,4 +1,5 @@
 import { workspaceNetwork } from "../workspace-network";
+import { FeatureOffError } from "../network";
 import crypto from "node:crypto";
 import { initiateDeveloperControlledWalletsClient, type CircleDeveloperControlledWalletsClient } from "@circle-fin/developer-controlled-wallets";
 import { initiateSmartContractPlatformClient, type CircleSmartContractPlatformClient } from "@circle-fin/smart-contract-platform";
@@ -190,6 +191,10 @@ const figures = (budget: OutflowBudget): [string, string] => [
 ];
 
 export async function enforceSpendingLimit(input: { actorId: string }, options: Options = {}): Promise<{ contract: string; agent: string; alreadyEnforced: boolean }> {
+  // The limit's contract is deployed per workspace, outside Arc mainnet's first scope (mainnet go-live M6): refused by
+  // name, before anything is read.
+  const network = workspaceNetwork();
+  if (!network.spendingLimitContract) throw new FeatureOffError("Enforcing the spending limit in a contract", network);
   // Nothing moves while the platform has payments switched off (payment safety S2).
   await assertPaymentsEnabled();
   const existing = await readSpendingLimitContract();

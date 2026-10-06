@@ -20,7 +20,6 @@ const ALLOWED: Record<string, { count: number; why: string }> = {
   "src/lib/passkey-wallet-sdk.ts": { count: 5, why: "the passkey wallet's chain for viem, Arc testnet" },
   "src/lib/passkey-wallet-send.ts": { count: 3, why: "the passkey wallet's sends, on Arc testnet" },
   "src/lib/passkey-wallet.ts": { count: 6, why: "Modular Wallets run on Arc testnet only; a link offers one when its chain is Arc testnet's" },
-  "src/lib/payee-chains.ts": { count: 4, why: "TESTNET_PAYEE_CHAIN_IDS, the public API's chain enum until phase 2" },
   "src/lib/x402/offer.ts": { count: 5, why: "the platform's own x402 service sells on Arc testnet" },
 };
 

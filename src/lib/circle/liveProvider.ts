@@ -21,10 +21,11 @@ import type {
 } from "./types";
 import { ARC_FEE_USD } from "./types";
 import { fetchArcFeeUsd, rpcUrlFor } from "./arcFees";
-import type { NetworkProfile } from "../network";
+import { FeatureOffError, type NetworkProfile } from "../network";
 import { awaitSettlement, FAILED_STATES, MAY_HAVE_BEEN_ACCEPTED, withDeadline, type Settlement } from "./settlement";
 import { circleHttpStatus } from "./check";
 import { batchCalls, BatchNotSentError, SCA_EXECUTE_BATCH } from "./batch";
+import { stablecoinEntry, stablecoinOf } from "./stablecoins";
 import { PAYMENTS_OFF, PaymentsDisabledError } from "../payments-switch";
 import { BridgeFeeError, bridgeFee, bridgeStepKey, burnCalls, cctpOf, forwardedMint, type ContractCall } from "./cctp";
 import { burnIntent, burnIntentTypedData, estimateGateway, gatewaySalt, gatewayTransferStatus, submitGatewayTransfer, type GatewayTransferStatus } from "./gateway";
@@ -187,10 +188,11 @@ export class LiveProvider implements ChainProvider {
    * that consulted `process.env` made impossible.
    */
   /**
-   * The platform's stop switch (payment safety S2, S7): every way of moving money refuses, before an account is read.
-   * `getChainProvider` hands it the switch to read at each call; a test may hand it a fixed answer.
+   * The platform's stop switch (payment safety S2, S7), and the workspace's network hold (mainnet go-live M4): every
+   * way of moving money refuses, with the reason, before an account is read. `getChainProvider` hands it the hold to
+   * read at each call; a test may hand it a fixed answer.
    */
-  private readonly paymentsDisabled: () => Promise<boolean>;
+  private readonly paymentsHold: () => Promise<string | null>;
 
   constructor(
     chain: ChainConfig,
@@ -199,7 +201,8 @@ export class LiveProvider implements ChainProvider {
       client?: LiveProviderClient;
       fetch?: typeof fetch;
       bridgeMintWaitMs?: number;
-      paymentsDisabled?: boolean | (() => Promise<boolean>);
+      /** True, or the reason as words, while payments may not move; a function is read at each call. */
+      paymentsDisabled?: boolean | (() => Promise<boolean | string | null>);
     }
   ) {
     if (!chain.circleApiKey || !chain.circleEntitySecret) {
@@ -215,11 +218,14 @@ export class LiveProvider implements ChainProvider {
     this.fetch = options.fetch;
     this.bridgeMintWaitMs = options.bridgeMintWaitMs ?? BRIDGE_MINT_WAIT_MS;
     const off = options.paymentsDisabled;
-    this.paymentsDisabled = typeof off === "function" ? off : async () => off === true;
+    const reasonOf = (answer: boolean | string | null | undefined): string | null =>
+      typeof answer === "string" ? answer : answer === true ? PAYMENTS_OFF : null;
+    this.paymentsHold = typeof off === "function" ? async () => reasonOf(await off()) : async () => reasonOf(off);
   }
 
   private async refuseWhilePaymentsOff(): Promise<void> {
-    if (await this.paymentsDisabled()) throw new PaymentsDisabledError();
+    const hold = await this.paymentsHold();
+    if (hold) throw new PaymentsDisabledError(hold);
   }
 
   private async account(accountId: string): Promise<AccountRow & { walletId: string }> {
@@ -238,26 +244,25 @@ export class LiveProvider implements ChainProvider {
     return { ...row, walletId: row.circle_wallet_id };
   }
 
-  private async resolveUsdcTokenId(walletId: string): Promise<string> {
+  private async resolveUsdcTokenId(walletId: string, chain: string): Promise<string> {
     if (this.usdcTokenId) return this.usdcTokenId;
     const balances = await withDeadline(
       this.client.getWalletTokenBalance({ id: walletId }),
       BALANCE_READ_DEADLINE_MS,
       `no answer from Circle getWalletTokenBalance within ${BALANCE_READ_DEADLINE_MS} ms`
     );
-    const usdc = balances.data?.tokenBalances?.find((b) => b.token?.symbol === "USDC");
+    // By its contract, never its symbol (mainnet go-live M7): a token anyone named "USDC" is never sent.
+    const usdc = stablecoinEntry(balances.data?.tokenBalances, "USDC", this.network, chain);
     if (!usdc?.token?.id) {
-      throw new Error(
-        `Could not resolve the USDC token id from wallet ${walletId}. Fund it with testnet USDC first (see README).`
-      );
+      throw new Error(`Could not resolve the USDC token id from wallet ${walletId}. Fund it with USDC on ${this.network.label} first (see README).`);
     }
     this.usdcTokenId = usdc.token.id;
     return this.usdcTokenId;
   }
 
   /** The token id for a transfer: USDC's as before; EURC's from the wallet's own token list. */
-  private async resolveTokenId(walletId: string, token: Stablecoin): Promise<string> {
-    if (token === "USDC") return this.resolveUsdcTokenId(walletId);
+  private async resolveTokenId(walletId: string, token: Stablecoin, chain: string): Promise<string> {
+    if (token === "USDC") return this.resolveUsdcTokenId(walletId, chain);
     const known = this.eurcTokenIds.get(walletId);
     if (known) return known;
     const balances = await withDeadline(
@@ -265,7 +270,7 @@ export class LiveProvider implements ChainProvider {
       BALANCE_READ_DEADLINE_MS,
       `no answer from Circle getWalletTokenBalance within ${BALANCE_READ_DEADLINE_MS} ms`
     );
-    const eurc = balances.data?.tokenBalances?.find((b) => b.token?.symbol === "EURC");
+    const eurc = stablecoinEntry(balances.data?.tokenBalances, "EURC", this.network, chain);
     if (!eurc?.token?.id) {
       throw new Error(`Wallet ${walletId} has never held EURC. Fund it with EURC from Circle's faucet first.`);
     }
@@ -287,7 +292,7 @@ export class LiveProvider implements ChainProvider {
     if (paidAcrossChains(params.destinationChain)) {
       return params.route === "gateway" ? this.gatewayPayout(params, account) : this.bridge(params, account);
     }
-    const tokenId = await this.resolveTokenId(account.walletId, params.token ?? "USDC");
+    const tokenId = await this.resolveTokenId(account.walletId, params.token ?? "USDC", account.chain);
     const started = Date.now();
 
     const txId = await sendToCircle(
@@ -347,7 +352,10 @@ export class LiveProvider implements ChainProvider {
    */
   async batchTransfer(params: BatchTransferParams): Promise<TransferResult> {
     // Nothing leaves: the batch is undone and each payment sent alone, which `transfer` refuses in turn (R4).
-    if (await this.paymentsDisabled()) throw new BatchNotSentError(PAYMENTS_OFF.replace(/\.$/, ""));
+    const hold = await this.paymentsHold();
+    if (hold) throw new BatchNotSentError(hold.replace(/\.$/, ""));
+    // A batch is the smart account's own executeBatch, which an EOA does not have (mainnet go-live M6).
+    if (this.network.walletAccountType !== "SCA") throw new BatchNotSentError(new FeatureOffError("Paying in one batch", this.network).message);
     const unpaid = params.transfers.find((transfer) => transfer.toAddress.startsWith("sim:"));
     if (unpaid) {
       throw new BatchNotSentError(`Counterparty has no on-chain address (${unpaid.toAddress}). Add this counterparty's Arc address on the Counterparties page`);
@@ -883,9 +891,10 @@ export class LiveProvider implements ChainProvider {
       `no answer from Circle getWalletTokenBalance within ${BALANCE_READ_DEADLINE_MS} ms`
     );
     const tokens = new Map<string, Stablecoin>();
+    // Money in is USDC or EURC by its contract (mainnet go-live M7): a token that only calls itself so is not money received.
     for (const balance of balances.data?.tokenBalances ?? []) {
-      const symbol = balance.token?.symbol;
-      if (balance.token?.id && (symbol === "USDC" || symbol === "EURC")) tokens.set(balance.token.id, symbol);
+      const coin = stablecoinOf(balance.token, this.network, account.chain);
+      if (balance.token?.id && coin) tokens.set(balance.token.id, coin);
     }
     const listed = await withDeadline(
       this.client.listTransactions({
@@ -923,7 +932,7 @@ export class LiveProvider implements ChainProvider {
       BALANCE_READ_DEADLINE_MS,
       `no answer from Circle getWalletTokenBalance within ${BALANCE_READ_DEADLINE_MS} ms`
     );
-    const held = balances.data?.tokenBalances?.find((b) => b.token?.symbol === token);
+    const held = stablecoinEntry(balances.data?.tokenBalances, token, this.network, account.chain);
     return {
       accountId,
       chain: account.chain,

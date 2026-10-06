@@ -5,6 +5,7 @@ import { chainModes, getChainProvider } from "@/lib/circle";
 import { LiveProvider } from "@/lib/circle/liveProvider";
 import type { SwapCallParams } from "@/lib/circle/types";
 import { fakeSupabase, orgTestContext } from "./support/fake-supabase";
+import { MAINNET_OFF } from "@/lib/mainnet";
 
 /**
  * R12: an organization's Circle credentials can be *stored* but unreadable —
@@ -50,11 +51,11 @@ describe("getChainProvider — the platform's payment switch (payment safety S2)
   });
 });
 
-describe("getChainProvider — a workspace on Arc mainnet (network foundation N3)", () => {
+describe("getChainProvider — a workspace on Arc mainnet while the deployment has it off (mainnet go-live M4)", () => {
   it("refuses to pay from it, and its pages read as simulated", () => {
-    const mainnet = { ...config, network: "arc-mainnet" as const, chain: { ...config.chain, credentialsUnreadable: "this workspace is on Arc mainnet, where Vestiarion does not move money yet" } };
+    const mainnet = { ...config, network: "arc-mainnet" as const, chain: { ...config.chain, credentialsUnreadable: MAINNET_OFF } };
     runWith({ ...orgTestContext({ config, client: fakeSupabase().client, orgId: ORG }), config: mainnet }, () => {
-      expect(() => getChainProvider()).toThrow(/this workspace is on Arc mainnet, where Vestiarion does not move money yet/);
+      expect(() => getChainProvider()).toThrow(MAINNET_OFF);
       expect(chainModes()).toEqual({ mode: "simulate", earnMode: "simulate" });
     });
   });

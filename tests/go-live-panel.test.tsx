@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
-import GoLivePanel, { GO_LIVE_CONSEQUENCES, type GoLivePanelProps } from "@/components/GoLivePanel";
+import GoLivePanel, { GO_LIVE_CONSEQUENCES, goLiveConsequences, type GoLivePanelProps } from "@/components/GoLivePanel";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import type { GoLiveStatus } from "@/lib/platform/go-live";
 
@@ -388,5 +388,52 @@ describe("GoLivePanel's props", () => {
     expectTypeOf<DeepKeys<GoLivePanelProps>>().toEqualTypeOf<
       "orgSlug" | "status" | "canAdminister" | "sampleBalance" | keyof GoLiveStatus | keyof GoLiveStatus["wallets"][number]
     >();
+  });
+});
+
+describe("GoLivePanel, on a workspace on Arc mainnet (mainnet go-live M8)", () => {
+  const main = (overrides: Partial<GoLiveStatus> = {}) => status({ network: "arc-mainnet", mainnetOff: false, ...overrides });
+  const MAIN_WALLET: GoLiveStatus["wallets"] = [{ accountName: "Operating", kind: "operating", address: OPERATING }];
+
+  it("connect: asks for a live key from Circle's production console, with no hosted wallet and no simulation", () => {
+    const words = text(panel(main()));
+    expect(words).toContain("LIVE_API_KEY");
+    expect(words).toContain("Not live · Arc mainnet");
+    expect(words).not.toContain("simulated");
+    expect(words).not.toContain("Vestiarion testnet wallet");
+  });
+
+  it("wallets: one wallet, an EOA that pays its own gas in USDC", () => {
+    const words = text(panel(main({ step: "wallets", connected: true })));
+    expect(words).toContain("One wallet on Arc mainnet, an EOA that pays its own gas in USDC, in a wallet set in your own Circle account.");
+    expect(words).toContain("Arc mainnet address");
+    expect(words).not.toContain("Arc testnet");
+  });
+
+  it("go_live: no faucet, real USDC to fund it with, and the word to type", () => {
+    const markup = panel(main({ step: "go_live", connected: true, wallets: MAIN_WALLET }));
+    const words = text(markup);
+    expect(markup).not.toContain('href="https://faucet.circle.com"');
+    expect(words).toContain("Send USDC on Arc mainnet to this address");
+    expect(markup).toMatch(/<input[^>]*name="confirmation"/);
+    expect(words).toContain("Type mainnet to confirm");
+    expect(words).toContain("Not live · nothing moves until an owner takes it live");
+  });
+
+  it("go_live: the confirmation says real USDC moves", () => {
+    expect(text(html(<>{goLiveConsequences("arc-mainnet")}</>))).toContain("Real USDC moves when the agent pays.");
+    expect(text(html(<>{goLiveConsequences("arc-testnet")}</>))).toBe(text(html(<>{GO_LIVE_CONSEQUENCES}</>)));
+  });
+
+  it("live: paying on Arc mainnet", () => {
+    expect(text(panel(main({ step: "live", connected: true, wallets: MAIN_WALLET, liveSince: "2026-10-06T09:00:00Z" })))).toContain("Live · paying on Arc mainnet");
+  });
+
+  it("says when the deployment has Arc mainnet switched off, rather than offer any step", () => {
+    const markup = panel(main({ mainnetOff: true, step: "go_live", connected: true, wallets: MAIN_WALLET }));
+    const words = text(markup);
+    expect(words).toContain("Arc mainnet is switched off on this deployment.");
+    expect(markup).not.toContain('id="go-live-form"');
+    expect(words).not.toContain("Replace Circle credentials");
   });
 });

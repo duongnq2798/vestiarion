@@ -354,8 +354,8 @@ export interface CreateCounterpartyInput {
   role: "vendor" | "client" | "contractor";
   /** Where the agent pays it. An address added through the API waits for a person in the workspace to confirm it on Counterparties; until then the agent pays nothing to it. */
   address?: string;
-  /** The chain the address receives on. Defaults to `ARC-TESTNET`; only a vendor can be paid on another chain. */
-  chain?: "ARC-TESTNET" | "BASE-SEPOLIA" | "ARB-SEPOLIA" | "ETH-SEPOLIA";
+  /** The chain the address receives on. Defaults to the workspace's own chain: `ARC-TESTNET` on Arc testnet, `ARC` on Arc mainnet. Only a chain the workspace's network pays on is accepted, and only a vendor can be paid on another chain than the workspace's own. */
+  chain?: "ARC-TESTNET" | "BASE-SEPOLIA" | "ARB-SEPOLIA" | "ETH-SEPOLIA" | "ARC";
   /** Where it is based, up to 80 characters; screening uses it. */
   jurisdiction?: string;
   /** The most the agent pays it in one payment, in USDC, with up to 6 decimal places. Required for a vendor or a contractor. */

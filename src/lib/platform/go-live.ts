@@ -1,4 +1,4 @@
-import { currentOrgConfig, currentOrgId, NoOrgScopeError } from "../context";
+import { currentConfig, currentOrgConfig, currentOrgId, NoOrgScopeError } from "../context";
 import { db, platformDb, unwrap } from "../dal";
 import { withOrg } from "../dal/scope";
 import type { LedgerEntryInput } from "../ledger";
@@ -7,7 +7,8 @@ import { encryptSecret, masterKeysFromEnv } from "../secrets";
 import { getChainProvider, type ChainProvider } from "../circle";
 import { hasSampleData } from "../sample-data";
 import { checkCircleApiKey, defaultCircleClient, type CircleClient, type CircleClientFactory } from "../circle/check";
-import { FeatureOffError, NETWORK_IDS, networkOf, networkProfile } from "../network";
+import { MAINNET_NOT_OPEN, MAINNET_OFF, mayUseMainnet } from "../mainnet";
+import { FeatureOffError, NETWORK_IDS, networkOf, networkProfile, type Network, type NetworkProfile } from "../network";
 import { workspaceNetwork } from "../workspace-network";
 import {
   circleCall,
@@ -54,7 +55,12 @@ export interface GoLiveStatus {
   wallets: Array<{ accountName: string; kind: string; address: string }>;
   /** When `workspace_went_live` was recorded; null before, and for the founding workspace, which predates it. */
   liveSince: string | null;
+  /** Stored Circle credentials this deployment cannot read; never Arc mainnet switched off, which `mainnetOff` says. */
   credentialsUnreadable: boolean;
+  /** The workspace's network (mainnet go-live M8); absent is Arc testnet. */
+  network?: Network;
+  /** A workspace on Arc mainnet while the deployment has it switched off: nothing moves, and no step is offered. */
+  mainnetOff?: boolean;
 }
 
 export type GoLiveErrorCode =
@@ -75,7 +81,10 @@ export type GoLiveErrorCode =
   | "hosted_has_wallets"
   | "sample_data_loaded"
   | "key_network"
-  | "hosted_network";
+  | "hosted_network"
+  | "mainnet_not_open"
+  | "mainnet_confirmation"
+  | "go_live_network";
 
 const MESSAGES: Record<GoLiveErrorCode, string> = {
   invalid: "Paste both the API key and the entity secret.",
@@ -96,7 +105,28 @@ const MESSAGES: Record<GoLiveErrorCode, string> = {
   sample_data_loaded: "Remove the sample data first. It exists only to try the agent with simulated payments.",
   key_network: "This Circle API key is for Arc mainnet (LIVE_API_KEY). This workspace is on Arc testnet: paste a test key (TEST_API_KEY).",
   hosted_network: "A hosted wallet does not run on this workspace's network yet.",
+  mainnet_not_open: MAINNET_NOT_OPEN,
+  mainnet_confirmation: "Type mainnet to confirm that this workspace pays real USDC.",
+  go_live_network: "Going live does not run on this workspace's network yet.",
 };
+
+/**
+ * Why a key for one network is refused on a workspace on another (network foundation N5), naming both, so the owner
+ * knows which key to paste. On Arc testnet it says what it always said.
+ */
+function keyNetworkMessage(key: NetworkProfile, workspace: NetworkProfile): string {
+  const prefix = (profile: NetworkProfile) => profile.circleKeyPrefix.replace(/:$/, "");
+  const kind = workspace.id === "arc-mainnet" ? "a live key" : "a test key";
+  return `This Circle API key is for ${key.label} (${prefix(key)}). This workspace is on ${workspace.label}: paste ${kind} (${prefix(workspace)}).`;
+}
+
+/**
+ * Arc mainnet is opened, and taken live, only by a person on the deployment's allowlist while it is on (mainnet
+ * go-live M1, M8): checked first, at each step, before Circle is asked anything.
+ */
+function requireMainnetAccess(state: OrgState, actorEmail: string | null | undefined): void {
+  if (networkOf(state.network) === "arc-mainnet" && !mayUseMainnet(actorEmail, currentConfig())) throw new GoLiveError("mainnet_not_open");
+}
 
 export class GoLiveError extends Error {
   constructor(
@@ -276,6 +306,8 @@ function validSecret(value: string): boolean {
 export async function connectCircle(input: {
   orgId: string;
   actorId: string;
+  /** The person's address, for Arc mainnet's allowlist (M8). */
+  actorEmail?: string | null;
   apiKey: string;
   entitySecret: string;
   check?: typeof checkCircleApiKey;
@@ -284,19 +316,20 @@ export async function connectCircle(input: {
   const apiKey = input.apiKey.trim();
   const entitySecret = input.entitySecret.trim();
   if (!validSecret(apiKey) || !validSecret(entitySecret)) throw new GoLiveError("invalid");
+  const state = await orgState(input.orgId);
+  requireMainnetAccess(state, input.actorEmail);
   // A sample counterparty has no address: with credentials stored, the agent would try to pay it for real (sample-data S1).
   if (await inScopeOf(input.orgId, input.actorId, hasSampleData)) throw new GoLiveError("sample_data_loaded");
 
   const keys = masterKeysFromEnv();
-  const state = await orgState(input.orgId);
   const factory = input.client ?? defaultCircleClient;
 
   // The key is for the workspace's network (network foundation N5): a key whose prefix names another network is
-  // refused before Circle is asked or anything is stored, so a mainnet key never reaches a testnet workspace.
+  // refused before Circle is asked or anything is stored, so a mainnet key never reaches a testnet workspace, nor a
+  // test key a mainnet one.
   const network = networkOf(state.network);
-  if (NETWORK_IDS.some((other) => other !== network && apiKey.startsWith(networkProfile(other).circleKeyPrefix))) {
-    throw new GoLiveError("key_network");
-  }
+  const keyNetwork = NETWORK_IDS.find((other) => other !== network && apiKey.startsWith(networkProfile(other).circleKeyPrefix));
+  if (keyNetwork) throw new GoLiveError("key_network", keyNetworkMessage(networkProfile(keyNetwork), networkProfile(network)));
 
   if (isHosted(state)) {
     const hostedAccounts = await inScopeOf(input.orgId, input.actorId, walletAccounts);
@@ -361,9 +394,12 @@ export async function connectCircle(input: {
 export async function createWallets(input: {
   orgId: string;
   actorId: string;
+  /** The person's address, for Arc mainnet's allowlist (M8). */
+  actorEmail?: string | null;
   client?: CircleClientFactory;
 }): Promise<ProvisionResult> {
   const state = await orgState(input.orgId);
+  requireMainnetAccess(state, input.actorEmail);
   if (!isHosted(state) && !isConnected(state)) throw new GoLiveError("not_connected");
 
   return withOrg(
@@ -419,9 +455,25 @@ export async function createWallets(input: {
  * 'hosted'` instead of an envelope it does not have, so a workspace that
  * switched to its own account meanwhile does not go live on it unproven.
  */
-export async function goLive(input: { orgId: string; actorId: string; client?: CircleClientFactory }): Promise<void> {
+export async function goLive(input: {
+  orgId: string;
+  actorId: string;
+  /** The person's address, for Arc mainnet's allowlist (M8). */
+  actorEmail?: string | null;
+  /** What the person typed to confirm: "mainnet", on Arc mainnet (M8). */
+  confirmation?: string;
+  client?: CircleClientFactory;
+}): Promise<void> {
   const state = await orgState(input.orgId);
+  requireMainnetAccess(state, input.actorEmail);
   if (state.mode === "live") throw new GoLiveError("already_live");
+  const network = networkOf(state.network);
+  // Real money is a typed word away, never a click (mainnet go-live M8).
+  if (network === "arc-mainnet" && (input.confirmation ?? "").trim().toLowerCase() !== "mainnet") throw new GoLiveError("mainnet_confirmation");
+  // A network whose approval limits are not in yet takes no workspace live, by name (final review I3): Arc mainnet's
+  // wait for phase 2b, so nothing moves money there before them.
+  const profile = networkProfile(network);
+  if (!profile.goLiveOpen) throw new GoLiveError("go_live_network", new FeatureOffError("Going live", profile).message);
   const hosted = isHosted(state);
   if (!hosted && !isConnected(state)) throw new GoLiveError("not_connected");
 
@@ -457,7 +509,7 @@ export async function goLive(input: { orgId: string; actorId: string; client?: C
       await record(input.orgId, input.actorId, {
         action: "workspace_went_live",
         summary: "The workspace went live",
-        detail: { by: input.actorId },
+        detail: { by: input.actorId, network },
       });
     },
     { userId: input.actorId }
@@ -514,6 +566,8 @@ export async function goLiveStatus(orgId: string): Promise<GoLiveStatus> {
             : "go_live";
 
     const chain = currentOrgConfig().chain;
+    // Arc mainnet switched off withholds the credentials (M4): that is said as itself, not as credentials unread.
+    const mainnetOff = chain.networkHold === MAINNET_OFF;
     return {
       step,
       connected,
@@ -522,7 +576,9 @@ export async function goLiveStatus(orgId: string): Promise<GoLiveStatus> {
       hostedAvailable: Boolean(chain.hostedAvailable) && workspaceNetwork().hostedWallets,
       wallets,
       liveSince: latest[0]?.ts ?? null,
-      credentialsUnreadable: Boolean(chain.credentialsUnreadable),
+      credentialsUnreadable: Boolean(chain.credentialsUnreadable) && !mainnetOff,
+      network: workspaceNetwork().id,
+      mainnetOff,
     };
   });
 }

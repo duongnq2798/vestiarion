@@ -1,4 +1,4 @@
-import { ARC_TESTNET, NETWORK_IDS, networkProfile, type Network, type PayeeChainEntry } from "./network";
+import { NETWORK_IDS, networkProfile, type Network, type PayeeChainEntry } from "./network";
 
 /**
  * The chains a payee can be paid on, read from each network's profile (docs/superpowers/specs/2026-10-01-cctp-payouts-design.md
@@ -7,23 +7,20 @@ import { ARC_TESTNET, NETWORK_IDS, networkProfile, type Network, type PayeeChain
  * built here, for the network it is on (P6). Pure data, safe in client components.
  */
 
-/**
- * Arc testnet's payee chains, the public API's `chain` enum until Arc mainnet joins it in phase 2 (network threading P7,
- * §3): a mainnet workspace leaves `chain` out and is paid on its own chain.
- */
-export const TESTNET_PAYEE_CHAIN_IDS = ARC_TESTNET.payeeChains.map((chain) => chain.id) as [
-  (typeof ARC_TESTNET.payeeChains)[number]["id"],
-  ...(typeof ARC_TESTNET.payeeChains)[number]["id"][],
-];
-
 /** The most a CCTP fee may be, as a percent of the invoice, before a payout waits for a person (CCTP payouts R4). */
 export const BRIDGE_FEE_CAP_PERCENT = 10;
 
 const EVERY_CHAIN = NETWORK_IDS.flatMap((network) => networkProfile(network).payeeChains.map((chain) => ({ network, chain })));
 const OWN_CHAINS = new Set(NETWORK_IDS.map((network) => networkProfile(network).payeeChains[0].id));
 
-/** Every chain a payee can be paid on, across the networks: which of them a workspace pays on is checked in its scope. */
+/**
+ * Every chain a payee can be paid on, across the networks: which of them a workspace pays on is checked in its scope.
+ * It is also the public API's `chain` enum (mainnet go-live M12).
+ */
 export const ALL_PAYEE_CHAIN_IDS = EVERY_CHAIN.map((entry) => entry.chain.id) as [string, ...string[]];
+
+/** Every payee chain's name as copy says it, in the same order: "Arc testnet, …, or Arc mainnet". */
+export const ALL_PAYEE_CHAIN_LABELS = EVERY_CHAIN.map((entry) => entry.chain.label);
 
 /** A chain a workspace's network does not pay on (P3). */
 export class ChainNotOnNetworkError extends Error {
