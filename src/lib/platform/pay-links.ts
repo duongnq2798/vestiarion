@@ -13,6 +13,7 @@ import { networkOfChain } from "../payee-chains";
 import { publicOrigin } from "../public-origin";
 import { takePayCheckToken } from "../rate-limit";
 import { decryptSecret, encryptSecret, masterKeysFromEnv, type MasterKey, type SecretEnvelope } from "../secrets";
+import { workspaceNetwork } from "../workspace-network";
 
 /**
  * Pay links (docs/superpowers/specs/2026-10-01-receivables-on-arc-design.md §2).
@@ -121,7 +122,7 @@ export async function createPayLink(input: { actorId: string; invoiceId: string;
     actor: "human",
     domain: "ar",
     action: "pay_link_created",
-    summary: "Created a link for a client to pay a receivable on Arc testnet",
+    summary: `Created a link for a client to pay a receivable on ${workspaceNetwork().label}`,
     detail: { by: input.actorId, invoiceId: invoice.id, linkId: link.id },
   });
   return { token, linkId: link.id, kept: tokenEnc !== null };

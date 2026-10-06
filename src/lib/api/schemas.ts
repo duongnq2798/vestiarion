@@ -147,7 +147,7 @@ export const InvoiceSchema = z
     txHash: z
       .string()
       .nullable()
-      .describe("An on-chain hash once the payment settled, else null: on Arc testnet, or for a payout from a Gateway balance the mint on the payee's chain."),
+      .describe("An on-chain hash once the payment settled, else null: on the workspace's network, or for a payout from a Gateway balance the mint on the payee's chain."),
     paidAmount: z
       .number()
       .nullable()

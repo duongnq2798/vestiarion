@@ -58,22 +58,37 @@ function deepSeekAnswering(...contents: string[]) {
 
 describe("routeText", () => {
   it("lets the keywords decide when no model is configured", async () => {
-    expect(await runWithConfig(config, () => routeText("có khoản nào đang chờ duyệt không"))).toEqual({ intent: "waiting", mode: "heuristic" });
+    expect(await runWithConfig(config, () => routeText("có khoản nào đang chờ duyệt không", "arc-testnet"))).toEqual({ intent: "waiting", mode: "heuristic" });
   });
 
   it("takes the model's choice of the five", async () => {
     deepSeekAnswering('{"intent":"ledger"}');
-    expect(await runWithConfig(withDeepSeek, () => routeText("has anyone changed our records?"))).toEqual({ intent: "ledger", mode: "deepseek" });
+    expect(await runWithConfig(withDeepSeek, () => routeText("has anyone changed our records?", "arc-testnet"))).toEqual({ intent: "ledger", mode: "deepseek" });
   });
 
   it("falls back to the keywords when the model answers outside the five", async () => {
     deepSeekAnswering('{"intent":"pay_now"}');
-    expect(await runWithConfig(withDeepSeek, () => routeText("what is held?"))).toEqual({ intent: "waiting", mode: "heuristic" });
+    expect(await runWithConfig(withDeepSeek, () => routeText("what is held?", "arc-testnet"))).toEqual({ intent: "waiting", mode: "heuristic" });
+  });
+
+  it("tells the model the workspace's network: Arc mainnet for a workspace there (mainnet copy C1)", async () => {
+    const systems: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        const body = JSON.parse(String(init.body)) as { messages: Array<{ role: string; content: string }> };
+        systems.push(body.messages.find((message) => message.role === "system")?.content ?? "");
+        return new Response(JSON.stringify({ choices: [{ message: { content: '{"intent":"today"}' } }] }), { status: 200 });
+      })
+    );
+    await runWithConfig(withDeepSeek, () => routeText("what is our balance?", "arc-mainnet"));
+    expect(systems[0]).toContain("pays a business's invoices in USDC on Arc mainnet");
+    expect(systems[0]).not.toContain("Arc testnet");
   });
 
   it("shows the model at most 4,000 characters of a long message", async () => {
     const prompts = deepSeekAnswering('{"intent":"invoice"}');
-    await runWithConfig(withDeepSeek, () => routeText(`${INVOICE_TEXT}\n${"line item 10.00 USDC\n".repeat(400)}`));
+    await runWithConfig(withDeepSeek, () => routeText(`${INVOICE_TEXT}\n${"line item 10.00 USDC\n".repeat(400)}`, "arc-testnet"));
     expect(prompts[0].length).toBeLessThan(4_600);
     expect(prompts[0]).toContain("INV-2207");
   });

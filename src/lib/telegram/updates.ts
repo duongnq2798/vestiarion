@@ -13,6 +13,7 @@ import {
 import { escapeHtml, helpMessage, ledgerMessage, orgUrl, PRIVATE_ONLY, todayMessage, waitingMessage } from "./messages";
 import { routeText } from "./route-text";
 import { todayFacts, waitingFacts } from "./today";
+import { workspaceNetwork } from "../workspace-network";
 
 /**
  * One update from Telegram, routed (Telegram bot design R3–R11). Only a private chat is served. `/start <code>`
@@ -113,7 +114,7 @@ async function handleMessage(message: Message, deps: UpdateDeps): Promise<void> 
       if (message.photo) return void (await client.sendMessage(chatId, PHOTO));
       if (!text) return void (await client.sendMessage(chatId, helpMessage(true, workspace.name)));
 
-      const { intent } = await routeText(text);
+      const { intent } = await routeText(text, workspaceNetwork().id);
       if (intent === "invoice") return readDraftForChat(link, { text }, intake);
       if (intent === "help") return void (await client.sendMessage(chatId, helpMessage(true, workspace.name)));
       return answer(intent, chatId, workspace, deps);

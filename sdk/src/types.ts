@@ -91,7 +91,7 @@ export interface Invoice {
   escalatedAt: string | null;
   /** Why the agent ruled as it did, verbatim from the decision. */
   agentReasoning: string | null;
-  /** An on-chain hash once the payment settled, else null: on Arc testnet, or for a payout from a Gateway balance the mint on the payee's chain. */
+  /** An on-chain hash once the payment settled, else null: on the workspace's network, or for a payout from a Gateway balance the mint on the payee's chain. */
   txHash: string | null;
   /** What actually left once this invoice was paid; null otherwise, even while a submitted transfer already carries an amount. */
   paidAmount: number | null;

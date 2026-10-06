@@ -441,6 +441,13 @@ describe("invoiceDecision: a receivable (receivables on Arc)", () => {
     expect(decision.evidence).toContainEqual({ label: "Matched by", value: "the client's address", state: "ok" });
   });
 
+  it("names the viewed workspace's network in a receivable's reasoning: Arc mainnet there (mainnet copy C1, C4)", () => {
+    expect(invoiceDecision(receivable({ status: "received", tx_ref: "0xabc" }), undefined, [received as unknown as LedgerEntry], { network: "arc-mainnet" }).reasoning).toContain("on Arc mainnet");
+    const waiting = invoiceDecision(receivable({ status: "pending" }), undefined, [], { network: "arc-mainnet" }).reasoning;
+    expect(waiting).toContain("operating wallet on Arc mainnet");
+    expect(waiting).not.toContain("Arc testnet");
+  });
+
   it("waits on the client while it is open, with nothing of a payable's", () => {
     const decision = invoiceDecision(receivable({ status: "pending" }), undefined, [], { network: "arc-testnet" });
     expect(decision.outcomeLabel).toBe("Awaiting payment");

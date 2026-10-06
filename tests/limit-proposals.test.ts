@@ -145,6 +145,15 @@ describe("proposeLimitChanges", () => {
     decideMock.mockReset();
   });
 
+  it("tells the model the workspace's network: Arc mainnet for a workspace there (mainnet copy C1)", async () => {
+    fake = fakeSupabase(workspace());
+    model({ action: "propose", newLimit: 6, reasoning: "Three approvals above the 2 USDC limit, up to 5 USDC." });
+    await runWith(orgTestContext({ config: { ...config, network: "arc-mainnet" }, client: fake.client, orgId: ORG }), () => proposeLimitChanges(db(), NOW));
+    const system = (decideMock.mock.calls[0][0] as DecideParams<unknown>).systemPrompt;
+    expect(system).toContain("in USDC and EURC on Arc mainnet");
+    expect(system).not.toContain("Arc testnet");
+  });
+
   it("opens the proposal the model makes within bounds, and signs it", async () => {
     fake = fakeSupabase(workspace());
     model({ action: "propose", newLimit: 6, reasoning: "Three approvals above the 2 USDC limit, up to 5 USDC." });

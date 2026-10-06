@@ -64,6 +64,14 @@ describe("createPayLink", () => {
     return { body: [] };
   };
 
+  it("records a link on the workspace's network: Arc mainnet for a workspace there (mainnet copy C1)", async () => {
+    fake = fakeSupabase(workspace({ id: INVOICE, direction: "receivable", status: "pending" }));
+    await runWith(orgTestContext({ config: { ...config, network: "arc-mainnet" }, client: fake.client, orgId: ORG, userId: USER }), () =>
+      createPayLink({ actorId: USER, invoiceId: INVOICE })
+    );
+    expect(ledgerMock).toHaveBeenCalledWith(expect.objectContaining({ summary: "Created a link for a client to pay a receivable on Arc mainnet" }));
+  });
+
   it("stores a new link's hash for an open receivable, replacing any earlier link, and records it", async () => {
     fake = fakeSupabase(workspace({ id: INVOICE, direction: "receivable", status: "pending" }));
     const { token } = await inOrg(() => createPayLink({ actorId: USER, invoiceId: INVOICE }));
@@ -72,6 +80,7 @@ describe("createPayLink", () => {
     expect(post.params.get("on_conflict")).toBe("org_id,invoice_id");
     expect(post.body).toMatchObject({ org_id: ORG, invoice_id: INVOICE, token_hash: payLinkHash(token), created_by: USER, revoked_at: null });
     expect(ledgerMock).toHaveBeenCalledWith(expect.objectContaining({ actor: "human", domain: "ar", action: "pay_link_created", detail: { by: USER, invoiceId: INVOICE, linkId: "link-1" } }));
+    expect(ledgerMock).toHaveBeenCalledWith(expect.objectContaining({ summary: "Created a link for a client to pay a receivable on Arc testnet" }));
   });
 
   it("refuses a payable, a missing invoice, or a receivable already settled", async () => {

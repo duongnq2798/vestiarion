@@ -4,6 +4,7 @@ import { appendLedgerEntry } from "../ledger";
 import { decide } from "./decide";
 import type { CycleLogLine } from "./orchestrator";
 import { REASONING_RULE, REASONING_SHAPE } from "../reasoning-copy";
+import { workspaceNetwork } from "../workspace-network";
 
 /**
  * The cycle's proposals stage (docs/superpowers/specs/2026-10-02-limit-proposals-design.md): when
@@ -171,7 +172,9 @@ export function limitCandidates(input: {
   return candidates;
 }
 
-const SYSTEM_PROMPT = `You are the treasury agent of a business that pays its vendors and contractors in USDC and EURC on Arc testnet. You hold a payment for a person to decide when it is above the counterparty's payment limit, and people decide those in an approvals inbox.
+/** The model's instructions, naming the workspace's network (mainnet copy C1). */
+function systemPrompt(network: string): string {
+  return `You are the treasury agent of a business that pays its vendors and contractors in USDC and EURC on ${network}. You hold a payment for a person to decide when it is above the counterparty's payment limit, and people decide those in an approvals inbox.
 
 Now decide whether people's decisions show that a counterparty's payment limit is too low, and if so propose a new one. A person must accept your proposal before anything changes; you are not changing it yourself.
 
@@ -181,6 +184,7 @@ Now decide whether people's decisions show that a counterparty's payment limit i
 - ${REASONING_RULE}
 
 Respond with ONLY a single JSON object in the requested shape. No prose outside the JSON.`;
+}
 
 const proposalSchema = z.object({
   action: z.enum(["propose", "no_change"]),
@@ -245,7 +249,7 @@ export async function proposeLimitChanges(orgDb: OrgDb, now: Date = new Date()):
   for (const candidate of candidates) {
     const reference = referenceDecision(candidate);
     const { value, mode, agreedWithReference } = await decide<ProposalDecision>({
-      systemPrompt: SYSTEM_PROMPT,
+      systemPrompt: systemPrompt(workspaceNetwork().label),
       userPrompt: JSON.stringify({
         task: "Decide whether to propose raising this counterparty's payment limit, given what people approved above it.",
         counterparty: { name: candidate.name, paymentLimit: candidate.currentLimit, riskLevel: "clear", performanceScore: candidate.performanceScore },

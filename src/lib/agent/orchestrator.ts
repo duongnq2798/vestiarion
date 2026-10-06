@@ -1674,11 +1674,12 @@ async function decideApPayable(
     fxAvailable: !isEurc || fx !== null,
     bridge: crossChain ? { feePercent: isEurc ? 0 : feeRatioPercent, unsupportedToken: isEurc, route, gatewayShort } : null,
     eurcShort: eurcUnreadable
-      ? { balance: null, needed: eurcNeeded }
+      ? { balance: null, needed: eurcNeeded, faucet: Boolean(ctx.provider.network.faucet) }
       : isEurc && eurcBalance !== null && eurcBalance < eurcNeeded
         ? {
             balance: eurcBalance,
             needed: eurcNeeded,
+            faucet: Boolean(ctx.provider.network.faucet),
             swap: { requested: decision.fundWithSwap === true, offer: swapOffer, usdcBalance: operatingBalance, usdcDueWithin7Days },
           }
         : null,
