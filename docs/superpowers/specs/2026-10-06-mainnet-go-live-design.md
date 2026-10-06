@@ -94,9 +94,13 @@ Nothing in this phase moves money on Arc mainnet, and nothing uses real funds. R
     - **Arc mainnet: `EOA`.** It pays its own gas in USDC, so there is no Gas Station bill.
   - `createTreasuryWallets` asks Circle for the profile's account type, on the workspace's own chain.
     - An account stored on another chain is refused: it is never given a wallet.
-  - What needs a smart account refuses, by name, on a network whose operating wallet is an EOA:
-    - **A batch** throws `BatchNotSentError`, so each payment goes alone, as today when a batch cannot be built.
-    - **Escrow and the spending-limit contract** throw `FeatureOffError` at setup.
+  - Two things refuse by name on Arc mainnet:
+    - **A batch.** It runs as the smart account's own `executeBatch`, which an EOA does not have. It is not tried on
+      such a network, and the provider refuses one anyway (`BatchNotSentError`), so each payment goes alone, as today
+      when a batch cannot be built.
+    - **Escrow and the spending-limit contract.** They are outside the mainnet MVP: each deploys a contract per
+      workspace, not yet proven on mainnet. The profile turns each off (`escrow`, `spendingLimitContract`), and setup
+      throws `FeatureOffError`, whose message the action shows.
   - **Gas.** The operating balance that the agent and people spend from keeps the profile's `gasReserveUsdc` aside, so
     a payment never leaves the wallet unable to pay its gas.
     - Arc mainnet keeps 0.10 USDC. Arc testnet keeps 0, since its gas is sponsored.
@@ -148,9 +152,9 @@ Nothing in this phase moves money on Arc mainnet, and nothing uses real funds. R
   - On a mainnet workspace, the workspace's layout shows a banner:
     - **Live:** "Arc mainnet: payments here move real USDC."
     - **Held:** the hold's reason.
-  - In the shell, the Payments line names the network. The Yield line shows only on a network with USYC.
   - The workspace list marks a mainnet workspace.
-  - Other copy that names Arc testnet moves in phase 2c.
+  - Other copy that names Arc testnet moves in phase 2c, the shell's Payments and Yield lines included: every page
+    passes the shell its modes, so the network goes there with the rest of the copy.
 
 ## 3. Not in this phase
 
