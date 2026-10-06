@@ -94,3 +94,16 @@ describe("a counterparty's address through the API (payment safety A1)", () => {
     expect(result.error?.issues[0]?.message).toBe("This address's capital letters do not match its checksum, so a character is likely wrong.");
   });
 });
+
+describe("CreateCounterpartyBodySchema's chain (mainnet go-live M12)", () => {
+  it("accepts every network's chains, ARC included, and names the default per network", async () => {
+    const { CreateCounterpartyBodySchema } = await import("@/lib/api/schemas");
+    for (const chain of ["ARC-TESTNET", "ARC", "BASE-SEPOLIA", "ARB-SEPOLIA", "ETH-SEPOLIA"]) {
+      expect(CreateCounterpartyBodySchema.safeParse({ name: "Quill Studio", role: "vendor", paymentLimit: "5", chain }).success, chain).toBe(true);
+    }
+    expect(CreateCounterpartyBodySchema.safeParse({ name: "Quill Studio", role: "vendor", paymentLimit: "5", chain: "ARC-SEPOLIA" }).success).toBe(false);
+    const description = CreateCounterpartyBodySchema.shape.chain.description ?? "";
+    expect(description).toContain("`ARC` on Arc mainnet");
+    expect(description).toContain("`ARC-TESTNET` on Arc testnet");
+  });
+});

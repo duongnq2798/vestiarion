@@ -135,7 +135,18 @@ describe("a payee whose stored chain is another network's (final review)", () =>
   it("is refused from a chat, in plain words, rather than paid on the workspace's own chain", async () => {
     const { approveRefusal } = await import("@/lib/commands/chat-decisions");
     const facts = { amount: 1, currency: "USDC", chain: "ARC-TESTNET", address: "0x840de234Bfc3F66fA380888A0a8204D9487D60d4", addressChangedAt: null, addressConfirmedAt: null };
-    expect(approveRefusal({ ...facts, network: "arc-mainnet" }, 10, "Slack")).toMatchObject({ code: "open_in_console", message: "ARC-TESTNET is not a chain this workspace pays on." });
+    expect(approveRefusal({ ...facts, network: "arc-testnet", chain: "ARC" }, 10, "Slack")).toMatchObject({ code: "open_in_console", message: "ARC is not a chain this workspace pays on." });
     expect(approveRefusal({ ...facts, network: "arc-testnet" }, 10, "Slack")).toBeNull();
+  });
+
+  it("never approves a payable on Arc mainnet from a chat, whatever its chain or the chat's limit (mainnet go-live M10)", async () => {
+    const { approveRefusal } = await import("@/lib/commands/chat-decisions");
+    const facts = { amount: 1, currency: "USDC", chain: "ARC", address: "0x840de234Bfc3F66fA380888A0a8204D9487D60d4", addressChangedAt: null, addressConfirmedAt: null };
+    for (const where of ["Slack", "Telegram"]) {
+      expect(approveRefusal({ ...facts, network: "arc-mainnet" }, 1000, where)).toMatchObject({
+        code: "open_in_console",
+        message: "It is on Arc mainnet, where payments are approved in Vestiarion.",
+      });
+    }
   });
 });

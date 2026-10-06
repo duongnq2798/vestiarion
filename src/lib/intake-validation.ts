@@ -1,6 +1,6 @@
 import { addressProblem } from "./address-checksum";
 import { z } from "zod";
-import { ALL_PAYEE_CHAIN_IDS, ChainNotOnNetworkError, chainOn, paidAcrossChains } from "./payee-chains";
+import { ALL_PAYEE_CHAIN_IDS, ALL_PAYEE_CHAIN_LABELS, ChainNotOnNetworkError, chainOn, paidAcrossChains } from "./payee-chains";
 import type { Network } from "./network";
 
 const USDC_PATTERN = /^(?:0|[1-9]\d{0,13})(?:\.\d{1,6})?$/;
@@ -75,7 +75,11 @@ const optionalCsvText = (max: number) => z.string().trim().max(max).nullish().tr
 const payeeChainSchema = z
   .string()
   .transform((value) => value.trim().toUpperCase())
-  .pipe(z.enum(ALL_PAYEE_CHAIN_IDS, { message: "Choose a chain Vestiarion can pay on: Arc testnet, Base Sepolia, Arbitrum Sepolia or Ethereum Sepolia." }));
+  .pipe(
+    z.enum(ALL_PAYEE_CHAIN_IDS, {
+      message: `Choose a chain Vestiarion can pay on: ${ALL_PAYEE_CHAIN_LABELS.slice(0, -1).join(", ")} or ${ALL_PAYEE_CHAIN_LABELS.at(-1)}.`,
+    })
+  );
 
 /** An address for payment notices as a form gives it: trimmed, empty for none, shaped like an email address (payment notices R1). */
 export const noticeEmailSchema = z

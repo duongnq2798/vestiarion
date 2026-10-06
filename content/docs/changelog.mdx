@@ -1,5 +1,13 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-06: `chain` accepts `ARC`, and two entries name their network
+
+- `POST /api/v1/counterparties` accepts `chain: "ARC"`, Arc mainnet's chain, for a workspace on Arc mainnet. Leaving `chain` out gives the workspace's own chain: `ARC` there, and `ARC-TESTNET` on Arc testnet, as before.
+- A chain the workspace's network does not pay on is refused with `invalid_request`, naming it: `ARC` on Arc testnet, or a Sepolia chain on Arc mainnet.
+- `org_created` and `workspace_went_live` entries now carry `detail.network`, `arc-testnet` or `arc-mainnet`.
+- The TypeScript SDK 0.3.0 types `chain` with `ARC` too.
+- Nothing else changes in `/api/v1`, and no other entry changes shape.
+
 ## 2026-10-05: The agent sends again on its own only what one approval may pay
 
 - An `ap_reconcile` or `milestone_reconcile` entry can now carry `notResubmittedBecause: "workspace.two_approvals"`, with `execution.resultingStatus: "held"`. The payment was never sent and is above the workspace's figure for two approvals. Two people's approvals of it had not been used to pay it, so the agent held it rather than sending it again.

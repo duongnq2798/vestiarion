@@ -16,7 +16,7 @@ npm install @vestiarion/sdk
 ```
 
 pnpm, Yarn and Bun install it the same way. The package is ESM only. Each version is also served as a tarball, such as
-`https://www.vestiarion.xyz/sdk/vestiarion-sdk-0.2.0.tgz`, which `npm install` takes as it is.
+`https://www.vestiarion.xyz/sdk/vestiarion-sdk-0.3.0.tgz`, which `npm install` takes as it is.
 
 ## Read
 

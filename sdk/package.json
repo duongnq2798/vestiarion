@@ -1,6 +1,6 @@
 {
   "name": "@vestiarion/sdk",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A typed client for the Vestiarion API and its signed webhooks.",
   "license": "MIT",
   "type": "module",
