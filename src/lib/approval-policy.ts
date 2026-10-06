@@ -3,6 +3,7 @@ import { currentOrgId } from "./context";
 import { db, unwrap, type OrgDb } from "./dal";
 import { appendLedgerEntryBestEffort } from "./ledger-best-effort";
 import { parseTwoApprovalsForm } from "./two-approvals";
+import { workspaceNetwork } from "./workspace-network";
 
 /**
  * The figure above which a payment needs two approvals (docs/superpowers/specs/2026-10-05-two-approvals-design.md T1):
@@ -14,11 +15,12 @@ import { parseTwoApprovalsForm } from "./two-approvals";
  * is: the cycle read the figure when it began.
  */
 
-export type ApprovalPolicyErrorCode = "invalid" | "unchanged" | "cycle_running" | "too_few_approvers";
+export type ApprovalPolicyErrorCode = "invalid" | "unchanged" | "cycle_running" | "too_few_approvers" | "mainnet_keeps_figure";
 
 const MESSAGES: Record<Exclude<ApprovalPolicyErrorCode, "invalid" | "unchanged">, string> = {
   cycle_running: "A cycle is running. Try again in a minute, once it has finished.",
   too_few_approvers: "Two approvals need two people who can approve payments. Add an approver on Members first.",
+  mainnet_keeps_figure: "A workspace on Arc mainnet keeps two approvals above a figure.",
 };
 
 export class ApprovalPolicyError extends Error {
@@ -64,6 +66,8 @@ export async function changeTwoApprovals(input: { actorId: string; value: string
   const parsed = parseTwoApprovalsForm(input.value);
   if (!parsed.ok) throw new ApprovalPolicyError("invalid", parsed.message);
   const to = parsed.above;
+  // On Arc mainnet a person's payment above a figure always needs a second person (mainnet limits L2): raised, never off.
+  if (to === null && workspaceNetwork().id === "arc-mainnet") throw new ApprovalPolicyError("mainnet_keeps_figure");
 
   const from = await readTwoApprovalsAbove(db());
   if (from === to) {

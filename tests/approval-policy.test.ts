@@ -148,3 +148,24 @@ describe("who changes it", () => {
     for (const role of ["admin", "approver", "viewer"] as const) expect(can(role, "approval.policy")).toBe(false);
   });
 });
+
+describe("changeTwoApprovals on Arc mainnet (mainnet limits L2)", () => {
+  const onMainnet = <T,>(fn: () => Promise<T>) =>
+    runWith(orgTestContext({ config: { ...config, network: "arc-mainnet" }, client: fake.client, orgId: ORG, userId: OWNER }), fn);
+
+  it("keeps a figure: turning it off is refused, and nothing is written", async () => {
+    fake = fakeSupabase(workspace({ policy: [{ two_approvals_above: "100" }] }));
+    const attempt = onMainnet(() => changeTwoApprovals({ actorId: OWNER, value: "" }));
+    await expect(attempt).rejects.toBeInstanceOf(ApprovalPolicyError);
+    await expect(attempt).rejects.toMatchObject({ code: "mainnet_keeps_figure", message: "A workspace on Arc mainnet keeps two approvals above a figure." });
+    expect(posted()).toEqual([]);
+    expect(ledgerMock).not.toHaveBeenCalled();
+  });
+
+  it("still raises it, and records the change", async () => {
+    fake = fakeSupabase(workspace({ policy: [{ two_approvals_above: "100" }] }));
+    await onMainnet(() => changeTwoApprovals({ actorId: OWNER, value: "500" }));
+    expect(posted()[0].body).toMatchObject({ two_approvals_above: 500 });
+    expect(ledgerMock).toHaveBeenCalledTimes(1);
+  });
+});
