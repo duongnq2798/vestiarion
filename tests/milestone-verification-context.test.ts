@@ -94,7 +94,10 @@ describe("the contractor stage and the spending limit enforced on Arc (onchain s
   const release = stage.slice(stage.indexOf('if (decision.action === "release") {'), stage.indexOf("await writeDecision({"));
 
   it("asks the contract about a release not from escrow, after the contractor's own checks", () => {
-    expect(release).toContain('["funded", "funding"].includes(String((milestone as { escrow_state?: string | null }).escrow_state ?? ""))');
+    expect(stage).toContain(
+      'const escrowedRelease = (milestone: (typeof milestones)[number]) => ["funded", "funding"].includes(String((milestone as { escrow_state?: string | null }).escrow_state ?? ""));'
+    );
+    expect(release).toContain("const escrowed = escrowedRelease(milestone);");
     expect(release).toContain('highRisk || unscreened || overLimit || newPayeeHeld || twoApprovalsHeld || escrowed ? null : await onChainLimit.check({ sourceType: "milestone", sourceId: milestone.id, to: contractor.address, amount })');
   });
 

@@ -161,8 +161,21 @@ describe("what a held milestone waits for", () => {
     const reason = heldReason(facts({ amount: 5, lastEntry: { action: "milestone_release", detail: { guardrailBlocked: false, guardrailRule: null, execution } } }));
     expect(reason).toMatchObject({ kind: "cash_shortfall", hint: "Waiting for cash", link: null, canPay: true, canClose: true, override: false });
     expect(reason.text).toBe(
-      "The operating wallet had 2 USDC for it when the agent released it, less than its 5 USDC, so nothing was sent. The agent decides it again on its own once cash comes in. Pay now pays it."
+      "When the agent released it, the operating wallet had 2 USDC for it, less than its 5 USDC, so nothing was sent. The agent decides it again on its own once cash comes in. Pay now pays it once the wallet holds it, or the reserve covers what it lacks."
     );
+  });
+
+  it("says what the wallet keeps for gas, where it keeps some, so the figure matches what was funded (review R3)", () => {
+    const execution = { resultingStatus: "held", heldBecause: "cash_shortfall", cashNeededUsdc: 5, cashSeen: { operating: 4.9, reserve: 0, gasKeptUsdc: 0.1 } };
+    const reason = heldReason(facts({ amount: 5, lastEntry: { action: "milestone_release", detail: { guardrailBlocked: false, guardrailRule: null, execution } } }));
+    expect(reason.text).toContain("When the agent released it, the operating wallet had 4.9 USDC for it, after the 0.1 USDC it keeps for gas, less than its 5 USDC, so nothing was sent.");
+  });
+
+  it("tells the current hold for cash rather than an earlier attempt Circle never sent (review finding 6)", () => {
+    const execution = { resultingStatus: "held", heldBecause: "cash_shortfall", cashNeededUsdc: 5, cashSeen: { operating: 2, reserve: 0 } };
+    const earlierAttempt = { status: "failed", provider_tx_id: null, last_error: "Circle: the request was refused", provider_state: null };
+    const reason = heldReason(facts({ amount: 5, intent: earlierAttempt, lastEntry: { action: "milestone_release", detail: { guardrailBlocked: false, guardrailRule: null, execution } } }));
+    expect(reason.kind).toBe("cash_shortfall");
   });
 
   it("repeats an escrow hold's note", () => {

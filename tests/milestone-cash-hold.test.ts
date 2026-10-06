@@ -33,21 +33,36 @@ describe("the contractor stage and the cash in the operating wallet", () => {
   const release = stage.slice(stage.indexOf('if (decision.action === "release") {'), stage.indexOf("await writeDecision({"));
 
   it("weighs a release against what the wallet holds less the releases planned before it, after every guardrail and before it is planned", () => {
-    expect(release).toContain("releaseCashShort({ amount, operatingBalance, plannedUsdc: planned.reduce((sum, entry) => sum + (entry.fromEscrow ? 0 : entry.amount), 0) })");
+    expect(release).toContain("const plannedUsdc = inFlightUsdc + planned.reduce((sum, entry) => sum + (entry.fromEscrow ? 0 : entry.amount), 0);");
+    expect(release).toContain("releaseCashShort({ amount, operatingBalance, plannedUsdc })");
     expect(release.indexOf("releaseCashShort(")).toBeGreaterThan(release.indexOf("} else if (onChainHold) {"));
     expect(release.indexOf("releaseCashShort(")).toBeLessThan(release.indexOf("budget.spend(amount);"));
     expect(release.indexOf("releaseCashShort(")).toBeLessThan(release.indexOf("planned.push("));
   });
 
-  it("leaves a release from escrow to the escrow, and plans it as one", () => {
-    expect(release).toContain("escrowed ? null : releaseCashShort(");
+  it("counts a release from the wallet still in flight from an earlier cycle against what the wallet holds (review finding 3)", () => {
+    // A transfer not yet mined has not left the balance; one queued behind it on an EOA would fail on chain.
+    const reconciled = stage.slice(stage.indexOf("const reconciled = await reconcileMilestone("), stage.indexOf("// A contractor whose address a person changed"));
+    expect(reconciled).toContain('if (reconciled.status === "verified" && !escrowedRelease(milestone)) inFlightUsdc += amount;');
+  });
+
+  it("leaves a release from escrow to the escrow, and one Circle never answered to its own lookup, and plans each as before", () => {
+    // A send Circle never answered may already have moved the money: sending it again under its key finds it (review finding 2).
+    expect(release).toContain("escrowed || unanswered.has(milestone.id) ? null : releaseCashShort(");
     expect(release).toContain("fromEscrow: escrowed");
+    expect(stage).toContain("const unanswered = await unansweredMilestoneSends(db, milestones);");
   });
 
   it("records why it held, what it needed and the cash it saw, for the follow-up stage", () => {
     const entry = stage.slice(stage.indexOf("action: `milestone_${decision.action}`"));
     expect(entry).toContain(
-      "...(heldForCash ? { heldBecause: HELD_FOR_CASH, cashNeededUsdc: heldForCash.needed, cashSeen: { operating: heldForCash.available, reserve: reserveBalance } } : {}),"
+      "...(heldForCash ? { heldBecause: HELD_FOR_CASH, cashNeededUsdc: heldForCash.needed, cashSeen: { operating: heldForCash.available, reserve: reserveBalance, ...(gasKeptUsdc > 0 ? { gasKeptUsdc } : {}) } } : {}),"
     );
+  });
+
+  it("passes the hold to the entry it writes, so the follow-up stage can reopen it (review: test gap)", () => {
+    const afterRelease = stage.slice(stage.indexOf('if (decision.action === "release") {'));
+    const held = afterRelease.slice(afterRelease.indexOf("await writeDecision({"), afterRelease.indexOf("});", afterRelease.indexOf("await writeDecision({")));
+    expect(held).toContain("heldForCash,");
   });
 });

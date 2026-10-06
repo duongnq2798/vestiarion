@@ -160,7 +160,7 @@ describe("buyPayeeHistories", () => {
     await result;
     expect(buy).not.toHaveBeenCalled();
     expect(inserts()).toEqual([]);
-    // Said on every cycle, a feature no one asked for reads as a fault; a person who asks for it is refused by name.
+    // Said on every cycle, a feature no one asked for reads as a fault: where Gateway does not run, the agent leaves it out.
     expect(lines).toEqual([]);
   });
 

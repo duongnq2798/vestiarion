@@ -2,7 +2,9 @@ Changes to the API and webhooks that affect an integration, newest first. Change
 
 ## 2026-10-06: A milestone release waits for its cash
 
-- The agent no longer sends a milestone release that the operating wallet cannot cover, counting the releases before it in the same cycle. Its `milestone_release` entry has `execution.resultingStatus: "held"` and `execution.heldBecause: "cash_shortfall"`. It also carries `execution.cashNeededUsdc`, the milestone's amount, and `execution.cashSeen: { operating, reserve }`: what the operating wallet had left for it, and the reserve. An AP decision held for want of cash has the same fields.
+- The agent no longer sends a milestone release that the operating wallet cannot cover, counting the releases before it in the same cycle and those still in flight. Its `milestone_release` entry has `execution.resultingStatus: "held"` and `execution.heldBecause: "cash_shortfall"`, as an AP decision held for want of cash has.
+- On a milestone, `execution.cashNeededUsdc` is the milestone's amount, and `execution.cashSeen.operating` is what the operating wallet had left for it after those releases. `cashSeen.reserve` is the reserve, and `cashSeen.gasKeptUsdc`, on Arc mainnet, is the USDC the wallet keeps for its own gas. On an AP decision, `cashNeededUsdc` also counts the payables due before it, and `cashSeen.operating` is the whole balance.
+- A release whose last send Circle never answered is not held for cash. It goes out again under the same key, which finds the transfer at Circle if the money already moved.
 - Once cash has come in since and covers it, the next cycle reopens the milestone with a `milestone_reopened` entry whose `followUp.changes` reads "the cash it needs is there now (… USDC in the operating wallet and the reserve)", and decides it again.
 - A release from escrow is not affected. Nothing else in `/api/v1` changes, and no other entry changes shape.
 

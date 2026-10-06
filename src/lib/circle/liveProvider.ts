@@ -423,6 +423,8 @@ export class LiveProvider implements ChainProvider {
     const listed = await withDeadline(
       this.client.listTransactions({
         walletIds: [walletId],
+        // Every token, as the balance reads do (mainnet pre-flight).
+        includeAll: true,
         from: window.from,
         to: window.to,
         pageSize: 50,
@@ -901,6 +903,7 @@ export class LiveProvider implements ChainProvider {
     const listed = await withDeadline(
       this.client.listTransactions({
         walletIds: [account.walletId],
+        includeAll: true,
         txType: "INBOUND",
         state: "COMPLETE",
         ...(since ? { from: since } : {}),

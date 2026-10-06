@@ -254,6 +254,27 @@ function reasonOf(facts: HeldFacts): Omit<HeldReason, "hint"> {
   if (waiting === "unconfirmed") return blocked("address_unconfirmed", `${name}'s address changed and no one has confirmed it. Confirm it on Counterparties.`);
   if (waiting === "no_address") return blocked("no_address", `${name} has no address to pay yet. Add it on Counterparties.`);
 
+  const detail = facts.lastEntry?.detail ?? {};
+  const execution = (detail.execution ?? {}) as Record<string, unknown>;
+  // The operating wallet lacked its cash when the agent last released it (mainnet pre-flight): the agent's own choice was
+  // to pay. Newer than any attempt before it, so it is told ahead of one Circle did not send (review finding 6).
+  if (execution.heldBecause === HELD_FOR_CASH) {
+    const seen = (execution.cashSeen ?? {}) as Record<string, unknown>;
+    const gas = typeof seen.gasKeptUsdc === "number" && seen.gasKeptUsdc > 0 ? `, after the ${usdc(seen.gasKeptUsdc)} it keeps for gas` : "";
+    const lacked =
+      typeof seen.operating === "number"
+        ? `When the agent released it, the operating wallet had ${usdc(seen.operating)} for it${gas}, less than its ${usdc(facts.amount)}`
+        : `When the agent released it, the operating wallet did not hold its ${usdc(facts.amount)}`;
+    return {
+      kind: "cash_shortfall",
+      text: `${lacked}, so nothing was sent. The agent decides it again on its own once cash comes in. Pay now pays it once the wallet holds it, or the reserve covers what it lacks.`,
+      link: null,
+      canPay: true,
+      canClose: true,
+      override: false,
+    };
+  }
+
   const attempt = lastAttemptOf(intent);
   if (attempt?.state === "failed") {
     return { kind: "transfer_failed", text: `Circle did not send it: ${attempt.reason}. Nothing moved. Pay now sends it again.`, link: null, canPay: true, canClose: true, override: false };
@@ -266,26 +287,8 @@ function reasonOf(facts: HeldFacts): Omit<HeldReason, "hint"> {
   const escrow = /\[not paid: ([^\]]+)\]\s*$/.exec(facts.agentReasoning ?? "")?.[1];
   if (escrow) return { kind: "escrow", text: `Not paid: ${escrow}.`, link: null, canPay: true, canClose: true, override: false };
 
-  const detail = facts.lastEntry?.detail ?? {};
-  const execution = (detail.execution ?? {}) as Record<string, unknown>;
   if (execution.heldBecause === HELD_BECAUSE_PAUSED) {
     return { kind: "paused", text: "The agent decided to pay it while it was paused, so nothing was sent. Pay now sends it.", link: null, canPay: true, canClose: true, override: false };
-  }
-  // The operating wallet lacked its cash when the agent released it (mainnet pre-flight): the agent's own choice was to pay.
-  if (execution.heldBecause === HELD_FOR_CASH) {
-    const seen = (execution.cashSeen ?? {}) as Record<string, unknown>;
-    const lacked =
-      typeof seen.operating === "number"
-        ? `The operating wallet had ${usdc(seen.operating)} for it when the agent released it, less than its ${usdc(facts.amount)}`
-        : `The operating wallet did not hold its ${usdc(facts.amount)} when the agent released it`;
-    return {
-      kind: "cash_shortfall",
-      text: `${lacked}, so nothing was sent. The agent decides it again on its own once cash comes in. Pay now pays it.`,
-      link: null,
-      canPay: true,
-      canClose: true,
-      override: false,
-    };
   }
   // The same limit on Arc (onchain spending limit §4): a person's Pay now is a plain transfer, not through the contract.
   if (detail.guardrailRule === "workspace.onchain_limit" || detail.guardrailRule === "workspace.onchain_limit_route") {
