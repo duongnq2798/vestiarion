@@ -77,6 +77,9 @@ describe("handleCircleNotification", () => {
     const { deps, raised } = world();
     const raw = body("webhooks.test", { hello: "world" });
     expect(await handleCircleNotification(raw, signed(raw), deps)).toEqual({ status: 200 });
+    // A subscription is made only if the endpoint answers 2xx: the test notification is answered whatever its headers,
+    // since it starts nothing.
+    expect(await handleCircleNotification(raw, { signature: null, keyId: null }, deps)).toEqual({ status: 200 });
     expect(raised).toEqual([]);
   });
 

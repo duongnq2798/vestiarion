@@ -31,7 +31,8 @@ notification can at worst start a cycle that finds nothing to do.
 **N2. One endpoint.** `POST /api/circle/notifications`, for every Circle account Vestiarion subscribes:
 - the body is read raw, at most 64 KB, and parsed as Circle's envelope (`subscriptionId`, `notificationId`,
   `notificationType`, `notification`, `timestamp`, `version`);
-- `webhooks.test` (sent when a subscription is made) answers 200 and does nothing;
+- `webhooks.test` (sent when a subscription is made, which Circle makes only once the endpoint answers it with a 2xx)
+  answers 200 and does nothing, before the headers are looked at;
 - the signature is verified before anything is started: ECDSA P-256 with SHA-256 over the raw body, `X-Circle-Signature`
   (base64 DER) against the public key Circle names in `X-Circle-Key-Id`, fetched with the matching Circle account's
   client (`getNotificationSignature`) and cached by key id for the life of the instance (Circle says a key id's key never

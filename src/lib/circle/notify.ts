@@ -43,9 +43,12 @@ export async function handleCircleNotification(
   headers: { signature: string | null; keyId: string | null },
   deps: NotifyDeps = {}
 ): Promise<NotifyOutcome> {
+  const envelope = parseCircleNotification(raw);
+  // Circle makes a subscription only once the endpoint answers its test notification with a 2xx; it starts nothing, so
+  // it is answered before the headers are looked at.
+  if (envelope?.notificationType === "webhooks.test") return { status: 200 };
   const { signature, keyId } = headers;
   if (!signature || !keyId) return { status: 401 };
-  const envelope = parseCircleNotification(raw);
   if (!envelope) return { status: 400 };
   const kind = eventFor(envelope);
   // Circle's test notification, another type, a state before settling: acknowledged, nothing to start.
