@@ -19,6 +19,12 @@ import { withSuccessToast } from "@/components/withSuccessToast";
 import { addressUrl } from "@/lib/payee-chains";
 import type { Network } from "@/lib/network";
 
+/** What the limit dialog says a figure is, and what leaving one blank does: on Arc mainnet a figure stays (mainnet copy C11). */
+export function budgetDialogDescription(network: Network): string {
+  const rule = "What the agent may pay on its own, in USDC, counted from 00:00 UTC. A payment past either figure is held for a person in Approvals; one a person approves does not count.";
+  return network === "arc-mainnet" ? `${rule} A workspace on Arc mainnet keeps a daily or 7-day limit.` : `${rule} Leave a figure blank for no limit.`;
+}
+
 const INITIAL: ActionResult = { ok: false, message: "" };
 const save = withSuccessToast(setAgentBudgetAction);
 const enforce = withSuccessToast(enforceSpendingLimitAction);
@@ -104,7 +110,7 @@ export function AgentBudgetPanel({
               ? "Set a daily or 7-day figure, and a payment past it waits for you in Approvals."
               : "A payment past it waits for you in Approvals. What a person approves does not count."}
           </p>
-          {canEdit && <BudgetDialog orgSlug={orgSlug} view={view} unset={unset} />}
+          {canEdit && <BudgetDialog orgSlug={orgSlug} view={view} unset={unset} network={network} />}
           <OnArc orgSlug={orgSlug} onChain={onChain} canEdit={canEdit} live={live} unset={unset} network={network} />
         </CardContent>
       </section>
@@ -149,7 +155,7 @@ function Usage({ label, spent, limit }: { label: string; spent: number; limit: n
   );
 }
 
-function BudgetDialog({ orgSlug, view, unset }: { orgSlug: string; view: AgentBudgetView; unset: boolean }) {
+function BudgetDialog({ orgSlug, view, unset, network }: { orgSlug: string; view: AgentBudgetView; unset: boolean; network: Network }) {
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
   const { state, formProps } = useActionForm(save, INITIAL, { onSuccess: close });
@@ -163,7 +169,7 @@ function BudgetDialog({ orgSlug, view, unset }: { orgSlug: string; view: AgentBu
       </DialogTrigger>
       <DialogContent
         title="Agent spending limit"
-        description="What the agent may pay on its own, in USDC, counted from 00:00 UTC. A payment past either figure is held for a person in Approvals; one a person approves does not count. Leave a figure blank for no limit."
+        description={budgetDialogDescription(network)}
       >
         <form {...formProps} className="grid gap-5">
           <input type="hidden" name="orgSlug" value={orgSlug} />

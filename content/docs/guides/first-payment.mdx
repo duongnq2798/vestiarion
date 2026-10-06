@@ -272,7 +272,7 @@ Above the button, the form reads the schedule back as you fill it in, for exampl
 
 ### Cap what the agent pays on its own
 
-The console's **Agent spending limit** panel shows what the agent has paid on its own today (UTC) and in the last 7 days. To cap it, an owner or admin chooses **Set limit** and fills in **Per day (USDC)**, **Per 7 days (USDC)**, or both, then **Save limit**. A blank figure means no limit. Each change is recorded in the audit log as `agent_budget_changed`.
+The console's **Agent spending limit** panel shows what the agent has paid on its own today (UTC) and in the last 7 days. To cap it, an owner or admin chooses **Set limit** and fills in **Per day (USDC)**, **Per 7 days (USDC)**, or both, then **Save limit**. A blank figure means no limit. On Arc mainnet a workspace keeps a daily or 7-day figure: it starts at 50 and 150 USDC, and the dialog says "A workspace on Arc mainnet keeps a daily or 7-day limit." Each change is recorded in the audit log as `agent_budget_changed`.
 
 - **Past the limit, a payment waits.** A payment or milestone release that would take the agent past either figure is held before anything is sent. Its card's "Blocked by code, not by the model" band names the rule, `workspace.outflow_budget`, with the amount attempted and what the limit had left.
 - **A person's approval does not count.** A held payable waits in **Approvals**, and what you approve there is never stopped by the limit, nor counted against it.
@@ -376,6 +376,7 @@ An owner can make larger payments need two people. In **Settings**, under **Two 
 - **An approval is of one payment.** It holds the amount, the currency and the payee's address. If any of them changes, or the person who gave it can no longer approve payments, it no longer counts. **Reject**, **Return to agent** and **Close without paying** clear it. A transfer that fails needs two approvals again.
 - **Who gives them.** As many of the two approvals as can must come from people who neither entered the payment nor gave a new payee's address. Those two people give the rest only when no one else can approve. In a workspace with one person who can approve, the button is disabled with "Needs a second approver" beside it: nothing above the figure is paid until the figure is raised or someone else can approve.
 - **Raising it or turning it off** brings payments held for two approvals back to the agent within a minute. **Turn off** asks first: "Turn off two approvals?"
+- **On Arc mainnet** a workspace starts with two approvals above 100 USDC and keeps a figure: the section offers no **Turn off**, and says "A workspace on Arc mainnet keeps two approvals above a figure. Raise it to let one person pay more."
 - **A payment Circle never took** is sent again by the agent only when one approval may pay it, or two people's approvals of it paid it. Otherwise it waits in **Approvals**, or on **Contractors**, for two people. This covers a figure set or lowered after the first send. Raising the figure does not bring such a payment back: two people approve it, or one returns it to the agent.
 - **In Slack**, a card keeps its buttons after the first approval, with who approved it, so a second person can approve it there.
 

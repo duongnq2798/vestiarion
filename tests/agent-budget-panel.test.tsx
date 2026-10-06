@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { AgentBudgetPanel, ON_ARC_COPY, type AgentBudgetView, type OnChainLimitView } from "@/components/AgentBudgetPanel";
+import { AgentBudgetPanel, budgetDialogDescription, ON_ARC_COPY, type AgentBudgetView, type OnChainLimitView } from "@/components/AgentBudgetPanel";
 
 /**
  * The console's spending limit panel with its "On Arc" part (docs/superpowers/specs/2026-10-03-onchain-spending-limit-design.md
@@ -73,5 +73,13 @@ describe("the spending limit panel, on Arc", () => {
 
   it("offers to enforce it again once turned off", () => {
     expect(text(render({ onChain: { ...ENFORCED, state: "off" } }))).toContain("Enforce on Arc");
+  });
+});
+
+describe("the spending limit's dialog on each network (mainnet copy C11)", () => {
+  it("lets Arc testnet leave a figure blank, and says Arc mainnet keeps one", () => {
+    const rule = "What the agent may pay on its own, in USDC, counted from 00:00 UTC. A payment past either figure is held for a person in Approvals; one a person approves does not count.";
+    expect(budgetDialogDescription("arc-testnet")).toBe(`${rule} Leave a figure blank for no limit.`);
+    expect(budgetDialogDescription("arc-mainnet")).toBe(`${rule} A workspace on Arc mainnet keeps a daily or 7-day limit.`);
   });
 });

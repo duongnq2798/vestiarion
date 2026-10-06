@@ -59,6 +59,12 @@ describe("a panel for a feature the workspace's network lacks is not drawn (main
   });
 });
 
+describe("Settings on Arc mainnet says what stays (mainnet copy C11)", () => {
+  it("tells the two-approvals panel when the workspace keeps its figure", () => {
+    expect(squash(page("settings"))).toMatch(/<TwoApprovalsPanel [^>]*keepsFigure=\{membership\.network === "arc-mainnet"\}/);
+  });
+});
+
 describe("workspace text names the workspace's network (mainnet copy C1, C8)", () => {
   it("tells a payee's billing contact the network its payments are confirmed on", () => {
     expect(noticeEmailDescription("vendor", "arc-testnet")).toBe(

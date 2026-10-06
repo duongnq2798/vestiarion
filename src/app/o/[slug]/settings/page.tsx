@@ -213,7 +213,12 @@ export default async function SettingsPage({
           {
             id: "two-approvals-title",
             title: "Two approvals",
-            content: twoApprovals ? <TwoApprovalsPanel orgSlug={slug} status={twoApprovals} canChange={can(membership.role, "approval.policy")} /> : null,
+            content: twoApprovals ? <TwoApprovalsPanel
+                orgSlug={slug}
+                status={twoApprovals}
+                canChange={can(membership.role, "approval.policy")}
+                keepsFigure={membership.network === "arc-mainnet"}
+              /> : null,
           },
           { id: "ledger-key-title", title: "Ledger signing key", content: <LedgerKeyPanel orgSlug={slug} status={ledgerKey} canAdminister={canAdminister} /> },
         ],

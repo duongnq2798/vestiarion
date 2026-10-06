@@ -16,8 +16,15 @@ vi.mock("@/app/actions/approval-policy", () => ({ setTwoApprovalsAction: vi.fn()
 
 const html = (node: ReactElement) => renderToStaticMarkup(<TooltipProvider>{node}</TooltipProvider>);
 const text = (markup: string) => markup.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").replace(/&#x27;/g, "'").trim();
-const panel = (above: number | null, options: { approvers?: number; canChange?: boolean } = {}) =>
-  html(<TwoApprovalsPanel orgSlug="northstar" status={{ above, approvers: options.approvers ?? 3 }} canChange={options.canChange ?? true} />);
+const panel = (above: number | null, options: { approvers?: number; canChange?: boolean; keepsFigure?: boolean } = {}) =>
+  html(
+    <TwoApprovalsPanel
+      orgSlug="northstar"
+      status={{ above, approvers: options.approvers ?? 3 }}
+      canChange={options.canChange ?? true}
+      keepsFigure={options.keepsFigure ?? false}
+    />
+  );
 
 describe("TwoApprovalsPanel", () => {
   it("is a section titled Two approvals", () => {
@@ -44,6 +51,13 @@ describe("TwoApprovalsPanel", () => {
     expect(markup).toMatch(/<input[^>]*name="above"[^>]*value="250"/);
     expect(text(markup)).toContain("Save");
     expect(text(markup)).toContain("Turn off");
+  });
+
+  it("offers no Turn off on Arc mainnet, says the figure stays, and still lets an owner raise it (mainnet copy C11)", () => {
+    const markup = text(panel(100, { keepsFigure: true }));
+    expect(markup).not.toContain("Turn off");
+    expect(markup).toContain("A workspace on Arc mainnet keeps two approvals above a figure. Raise it to let one person pay more.");
+    expect(markup).toContain("Save");
   });
 
   it("offers an owner no Turn off while it is off", () => {
