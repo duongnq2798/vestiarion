@@ -282,6 +282,28 @@ function HostedChoice({ orgSlug }: { orgSlug: string }) {
   );
 }
 
+/**
+ * The two steps after the first, named under step 1, so a person sees where the wallets are made before connecting
+ * (partner asked 2026-10-06, on Arc mainnet: "where is the wallet created?"). Every figure from the network's profile.
+ */
+function StepsAhead({ network }: { network: Network }) {
+  const profile = networkProfile(network);
+  return (
+    <ol aria-label="After this step" className="space-y-1 border-t border-line pt-3 text-xs leading-relaxed text-ink-3">
+      <li>
+        <span className="font-medium text-ink-2">Step 2, Create treasury wallets:</span>{" "}
+        {profile.usyc ? `one wallet on ${profile.label} for each of this workspace's accounts.` : `one wallet on ${profile.label}, in your own Circle account.`}
+      </li>
+      <li>
+        <span className="font-medium text-ink-2">Step 3, Fund and go live:</span>{" "}
+        {profile.faucet
+          ? "add USDC from the faucet to the operating wallet, then go live."
+          : `send USDC on ${profile.label} to the operating wallet, keeping ${profile.gasReserveUsdc.toFixed(2)} USDC for its gas, then go live.`}
+      </li>
+    </ol>
+  );
+}
+
 function ConnectStep({ orgSlug, hostedAvailable, network }: { orgSlug: string; hostedAvailable: boolean; network: Network }) {
   if (!hostedAvailable) {
     return (
@@ -289,6 +311,7 @@ function ConnectStep({ orgSlug, hostedAvailable, network }: { orgSlug: string; h
         <StepHeading n={1}>Connect your Circle account</StepHeading>
         <ConnectIntro network={network} />
         <ConnectForm orgSlug={orgSlug} idPrefix="go-live-connect" replacing={false} />
+        <StepsAhead network={network} />
       </Card>
     );
   }
@@ -302,6 +325,7 @@ function ConnectStep({ orgSlug, hostedAvailable, network }: { orgSlug: string; h
           <ConnectForm orgSlug={orgSlug} idPrefix="go-live-connect" replacing={false} />
         </div>
       </Disclosure>
+      <StepsAhead network={network} />
     </Card>
   );
 }
