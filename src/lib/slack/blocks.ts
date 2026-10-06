@@ -5,7 +5,7 @@ import { READER_NAMES } from "../invoice-document/chat-draft";
 import type { InvoiceDraftRead } from "../invoice-document/draft";
 import type { VerificationResult } from "../ledger";
 import { txUrl } from "../payee-chains";
-import type { Network } from "../network";
+import { networkProfile, type Network } from "../network";
 import { shortenAddresses } from "../telegram/messages";
 import type { TodayFacts, WaitingFact } from "../telegram/today";
 import type { SlackMessage } from "./api";
@@ -73,7 +73,7 @@ function itemBlocks(item: ActivityItem, workspace: { slug: string }, origin: str
   if (item.detail) blocks.push(context(mrkdwn(item.detail)));
   const open = urlButton("vx_open", item.pathLabel, orgUrl(origin, workspace.slug, item.path));
   if (!card) {
-    const buttons = item.txUrl ? [urlButton("vx_tx", "Arc testnet transaction", item.txUrl ?? ""), open] : [open];
+    const buttons = item.txUrl ? [urlButton("vx_tx", `${networkProfile(item.network).label} transaction`, item.txUrl ?? ""), open] : [open];
     blocks.push({ type: "actions", elements: buttons });
     return blocks;
   }
@@ -168,11 +168,11 @@ export function outcomeLine(
   if (decision === "reject") return `Rejected by ${who}.`;
   if (decision === "return") return `Returned to the agent by ${who}. It usually decides it again within a minute.`;
   if (outcome.status === "paid") {
-    const tx = outcome.txRef && /^0x[0-9a-fA-F]{64}$/.test(outcome.txRef) ? ` ${link(txUrl(network, outcome.txRef), "Arc testnet transaction")}` : "";
+    const tx = outcome.txRef && /^0x[0-9a-fA-F]{64}$/.test(outcome.txRef) ? ` ${link(txUrl(network, outcome.txRef), `${networkProfile(network).label} transaction`)}` : "";
     return `Approved and paid by ${who}.${tx}`;
   }
   if (outcome.status === "approved") return `Approved by ${who}. One more approval, by another person, pays it.`;
-  return `Approved by ${who}. The payment was sent; Arc testnet is confirming it.`;
+  return `Approved by ${who}. The payment was sent; ${networkProfile(network).label} is confirming it.`;
 }
 
 /** An answer only the person who asked sees, unless it is for the channel. `text` is mrkdwn already. */

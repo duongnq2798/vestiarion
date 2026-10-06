@@ -6,7 +6,7 @@
  */
 import { deciderName } from "./decision-trail";
 import { ruleInBrief } from "./next-step";
-import type { Network } from "./network";
+import { networkProfile, type Network } from "./network";
 import { txUrl } from "./payee-chains";
 
 /** The agent's ledger actions a person is told about as they happen. A treasury hold, every cycle, is not news. */
@@ -43,6 +43,8 @@ export interface ActivityItem {
   txHash: string | null;
   /** Its link on the explorer of the workspace's network (network threading P6): chats and pages use this one. */
   txUrl: string | null;
+  /** The workspace's network, which chats name beside the transaction (mainnet copy C1). */
+  network: Network;
   /** The payable a person decides, on an item that sends them to Approvals: what a chat's card is about (Slack design S8). */
   invoiceId?: string;
 }
@@ -157,10 +159,10 @@ const joined = (...parts: Array<string | null>) => parts.filter((part): part is 
 /** One entry in words, or null when it is not one a person is told about, or what it is about is gone. */
 export function activityItem(entry: ActivityEntry, refs: ActivityRefs): ActivityItem | null {
   const item = itemOf(entry, refs);
-  return item ? { ...item, txUrl: item.txHash ? txUrl(refs.network, item.txHash) : null } : null;
+  return item ? { ...item, txUrl: item.txHash ? txUrl(refs.network, item.txHash) : null, network: refs.network } : null;
 }
 
-function itemOf(entry: ActivityEntry, refs: ActivityRefs): Omit<ActivityItem, "txUrl"> | null {
+function itemOf(entry: ActivityEntry, refs: ActivityRefs): Omit<ActivityItem, "txUrl" | "network"> | null {
   if (!(ACTIVITY_ACTIONS as readonly string[]).includes(entry.action)) return null;
   const blocked = entry.detail.guardrailBlocked === true;
 
@@ -198,7 +200,7 @@ function invoiceItem(
   refs: ActivityRefs,
   id: string,
   invoice: ActivityRefs["invoices"] extends ReadonlyMap<string, infer V> ? V : never
-): Omit<ActivityItem, "txUrl"> {
+): Omit<ActivityItem, "txUrl" | "network"> {
   const blocked = entry.detail.guardrailBlocked === true;
   const amount = activityAmount(invoice.amount, invoice.currency);
   const after = DECIDED_AGAIN[text(record(entry.detail.reevaluation)?.trigger) ?? ""] ?? afterTrigger(entry, refs.triggers?.get(id));
@@ -239,7 +241,7 @@ function invoiceItem(
         return { seq: entry.seq, text: `Tried to pay ${invoice.name} ${amount}; it is held for you.`, detail: deciderLine(entry.detail), tone: "stopped", ...decide, txHash: null };
       }
       const tx = arcTx(text(execution?.txRef)) ?? arcTx(invoice.txRef);
-      const sent = resulting === "matched" ? `Sent ${amount} to ${invoice.name}${after}; Arc testnet is confirming it.` : `Paid ${invoice.name} ${amount}${after}.`;
+      const sent = resulting === "matched" ? `Sent ${amount} to ${invoice.name}${after}; ${networkProfile(refs.network).label} is confirming it.` : `Paid ${invoice.name} ${amount}${after}.`;
       return { seq: entry.seq, text: sent, detail: joined(deciderLine(entry.detail), checksLine(entry.detail)), tone: "done", ...how, txHash: tx };
     }
     case "ap_schedule": {

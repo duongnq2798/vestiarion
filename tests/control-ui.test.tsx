@@ -250,6 +250,12 @@ describe("ApprovalCard", () => {
     expect(markup).toContain("Return to agent");
   });
 
+  it("names the payable's network when a payment is in flight: Arc mainnet for a payee there (mainnet copy C1)", () => {
+    const markup = card({ payeeChain: "ARC", lastAttempt: { state: "in_flight" } });
+    expect(markup).toContain("The payment is still in flight on Arc mainnet.");
+    expect(markup).not.toContain("Arc testnet");
+  });
+
   it("shows the in-flight line instead of the sent-payment line when a payment already sent is in flight", () => {
     const markup = card({ paymentSent: true, lastAttempt: { state: "in_flight" } });
     expect(markup).not.toContain("A payment was already sent; Approve and pay records it.");
@@ -923,14 +929,14 @@ describe("a toast for what the agent decided", () => {
     // One column: the reason, then a row of what to do. No button beside the words.
     expect(markup).toMatch(/^<span class="mt-1 grid gap-2.5"><span>DeepSeek decided to pay it; code stopped it: the payout fee is above 10% of the invoice\.<\/span><span class="flex flex-wrap/);
     expect(markup).toContain("Decide in Approvals");
-    expect(markup).not.toContain("View on Arcscan");
+    expect(markup).not.toContain("View the transaction");
   });
 
   it("links a payment's transaction beside its quiet button", () => {
     const markup = html(<ActivityToastBody detail={null} action="How it decided" txUrl={`https://explorer.testnet.arc.io/tx/0x${"ab".repeat(32)}`} primary={false} onAction={() => {}} />);
     expect(markup).toContain("How it decided");
     expect(markup).toContain(`href="https://explorer.testnet.arc.io/tx/0x${"ab".repeat(32)}"`);
-    expect(markup).toContain("View on Arcscan");
+    expect(markup).toContain("View the transaction");
   });
 });
 

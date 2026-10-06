@@ -78,7 +78,7 @@ async function cardViews(items: ActivityItem[], install: SlackInstall, keys: Mas
       invoiceId: row.id,
       token: cardToken({ org: install.orgId, invoice: row.id, decidedAt: row.decided_at, addressHash: addressHash(address) }, keys, now),
       approveRefusal: refusal ? refusal.message : null,
-      confirmText: `Pays ${AMOUNT.format(Number(row.amount))} ${currency} to ${payee?.name ?? "the payee"} on Arc testnet, to ${address ? shortenAddresses(address) : "no address"}.${discount}`,
+      confirmText: `Pays ${AMOUNT.format(Number(row.amount))} ${currency} to ${payee?.name ?? "the payee"} on ${workspaceNetwork().label}, to ${address ? shortenAddresses(address) : "no address"}.${discount}`,
     });
   }
   return views;

@@ -49,6 +49,7 @@ describe("what the agent did, in words", () => {
       pathLabel: "How it decided",
       txHash: TX,
       txUrl: `https://explorer.testnet.arc.io/tx/${TX}`,
+      network: "arc-testnet",
     });
   });
 
@@ -84,6 +85,13 @@ describe("what the agent did, in words", () => {
     // More than an hour later is not news of speed; neither is an action after the decision.
     expect(activityItem(paid, withTriggers("create_invoice", "2026-10-03T00:00:00Z"))?.text).toBe("Paid Jiren 0.30 USDC.");
     expect(afterTrigger(paid, [{ seq: 990, ts: "2026-10-03T02:30:00Z", action: "approval_returned" }])).toBe("");
+  });
+
+  it("names the workspace's network: Arc mainnet is confirming a payment there, and its item says so (mainnet copy C1)", () => {
+    const sent = activityItem(entry("ap_pay", { execution: { txRef: TX, resultingStatus: "matched" } }), { ...refs(), network: "arc-mainnet" });
+    expect(sent?.text).toBe("Sent 0.30 USDC to Jiren; Arc mainnet is confirming it.");
+    expect(sent?.network).toBe("arc-mainnet");
+    expect(sent?.txUrl).toBe(`https://explorer.arc.io/tx/${TX}`);
   });
 
   it("says a payment still confirming, and one that did not go out", () => {
@@ -333,7 +341,7 @@ describe("reading the agent's activity", () => {
     const client = fake([{ seq: 972, ts: "2026-10-03T02:20:53Z", action: "ap_pay", detail: { invoiceId: INVOICE, execution: { txRef: TX, resultingStatus: "paid" } } }]);
     const activity = await read(client, 967);
     expect(activity.items).toEqual([
-      { seq: 972, text: "Paid Jiren 0.30 USDC · 28 s after details were added.", detail: null, tone: "done", path: `/invoices#trail-${INVOICE}`, pathLabel: "How it decided", txHash: TX, txUrl: `https://explorer.testnet.arc.io/tx/${TX}` },
+      { seq: 972, text: "Paid Jiren 0.30 USDC · 28 s after details were added.", detail: null, tone: "done", path: `/invoices#trail-${INVOICE}`, pathLabel: "How it decided", txHash: TX, txUrl: `https://explorer.testnet.arc.io/tx/${TX}`, network: "arc-testnet" },
     ]);
     const triggers = client.requests.find((r) => r.path === "/rest/v1/ledger_entries" && (r.params.get("select") ?? "").includes("invoiceId"))!;
     expect(triggers.params.get("actor")).toBe("eq.human");

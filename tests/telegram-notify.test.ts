@@ -35,7 +35,7 @@ const linkRow = (id: string, chatId: number, seq: number) => ({
   id, org_id: ORG, user_id: `0b6c1c9e-4a4f-4a7e-9b1e-0000000000${id.slice(-2)}`, chat_id: chatId, username: null, active: true, notified_seq: seq, linked_at: "2026-10-03T08:00:00Z",
 });
 const PAID: ActivityItem = {
-  seq: 52, text: "Paid Centronex 0.35 USDC", detail: null, tone: "done", path: "/invoices", pathLabel: "AP / AR", txHash: null, txUrl: null,
+  seq: 52, text: "Paid Centronex 0.35 USDC", detail: null, tone: "done", path: "/invoices", pathLabel: "AP / AR", txHash: null, txUrl: null, network: "arc-testnet",
 };
 const activity = (items: ActivityItem[], through: number): AgentActivity => ({ running: null, head: through, lastCycleAt: null, items, through });
 
