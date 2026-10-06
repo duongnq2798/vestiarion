@@ -642,12 +642,15 @@ deployment's origin in place of `https://www.vestiarion.xyz`. Its header lists w
 enable `pg_cron` and `pg_net`, and add `AGENT_API_TOKEN` to Vault as `agent_api_token`. Each job's
 workflow (`fx-watch.yml`, `transfer-watch.yml`, `webhooks.yml`) stays for a manual run.
 
-Circle also tells the deployment when a transfer settles, at `POST /api/circle/notifications`, so a
-payment confirmed after the agent stopped waiting for it is recorded within seconds rather than at the
-next cycle. A workspace that connects its own Circle account subscribes it there as it connects. Run
-`npm run circle:subscribe` once per deployment for the platform's hosted Circle account (from
-`HOSTED_CIRCLE_API_KEY` and `HOSTED_CIRCLE_ENTITY_SECRET`) and for accounts connected before; it
-finds or makes one subscription per account and prints each result, never a key.
+Circle also tells the deployment when a transfer settles, at `POST /api/circle/notifications`. On a
+subscribed account, while the agent runs, a payment confirmed after the agent stopped waiting for it
+is recorded within seconds rather than at the next cycle; money arriving in an operating wallet is
+read at once, and starts a cycle only when it paid a receivable. On the production deployment
+(`VERCEL_ENV=production`), a workspace that connects its own Circle account subscribes it as it
+connects. Once that deployment is live, run `npm run circle:subscribe` once for the platform's hosted
+Circle account (from `HOSTED_CIRCLE_API_KEY` and `HOSTED_CIRCLE_ENTITY_SECRET`) and for accounts
+connected before: Circle makes a subscription only after the endpoint answers its test notification.
+It finds or makes one subscription per account and prints each result, never a key.
 
 For automatic contractor evidence, put a full `https://github.com/<owner>/<repo>/pull/<number>` URL
 in `verification_source` and configure a read-only `GITHUB_TOKEN`. A merged response verifies the

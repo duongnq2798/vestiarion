@@ -6,8 +6,9 @@ import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { encryptSecret, masterKeysFromEnv } from "../secrets";
 import { getChainProvider, type ChainProvider } from "../circle";
 import { hasSampleData } from "../sample-data";
-import { checkCircleApiKey, defaultCircleClient, type CircleClient, type CircleClientFactory } from "../circle/check";
+import { checkCircleApiKey, circleFailureLabel, defaultCircleClient, type CircleClient, type CircleClientFactory } from "../circle/check";
 import { ensureNotificationSubscription } from "../circle/notifications";
+import { withDeadline } from "../circle/settlement";
 import { MAINNET_NOT_OPEN, MAINNET_OFF, mayUseMainnet } from "../mainnet";
 import { FeatureOffError, NETWORK_IDS, networkOf, networkProfile, type Network, type NetworkProfile } from "../network";
 import { workspaceNetwork } from "../workspace-network";
@@ -374,13 +375,21 @@ export async function connectCircle(input: {
   });
 
   // Circle tells Vestiarion when a transfer settles, so a payment is recorded within seconds (Circle notifications N6).
-  // Best effort: the connect stands without it, since the schedule still settles every payment.
-  try {
-    await ensureNotificationSubscription(factory({ apiKey, entitySecret }));
-  } catch (error) {
-    console.warn("Circle notifications not subscribed for", input.orgId, error instanceof Error ? error.message : String(error));
+  // From the production deployment only: a preview or a developer's machine would subscribe the account to an address
+  // that is not where its payments are recorded (final review M5). Best effort, and bounded, since Circle answers only
+  // once its own test notification to the endpoint is answered (M4): the connect stands without it, as the schedule
+  // still settles every payment. Only a label of Circle's failure is logged (M10).
+  if (process.env.VERCEL_ENV === "production") {
+    try {
+      await withDeadline(ensureNotificationSubscription(factory({ apiKey, entitySecret })), SUBSCRIBE_DEADLINE_MS, "Circle did not answer the subscription");
+    } catch (error) {
+      console.warn("Circle notifications not subscribed for", input.orgId, circleFailureLabel(error));
+    }
   }
 }
+
+/** How long Connect Circle waits for Circle to make the notification subscription. */
+const SUBSCRIBE_DEADLINE_MS = 10_000;
 
 /**
  * Step 2: a Circle wallet for every account that has none, in the

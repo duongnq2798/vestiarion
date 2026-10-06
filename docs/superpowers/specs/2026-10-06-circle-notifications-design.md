@@ -96,3 +96,32 @@ the subscription in Settings; a platform function in place of the loop.
 - `ensureNotificationSubscription`: creates when missing, leaves an existing one, asks for the two notification types.
 - Connect Circle calls it after storing the credentials, and still connects when it throws.
 - `runCycleSoon` accepts an event without a person.
+
+## Final review (2026-10-06), after #230 merged
+
+A fresh review of the whole branch found one critical and one important issue, fixed with tests in the follow-up:
+
+- **C1.** The route allowed 60 seconds, but the event cycle it starts runs after the answer in the same invocation,
+  bounded by the route's duration: a cycle cut short leaves its run row `running` and blocks the workspace's cycles for
+  15 minutes. The route allows 300 seconds, as every route that starts a cycle; so does the GitHub App's webhook, whose
+  deferred work raises the same cycles.
+- **I2.** Any inbound `COMPLETE` to any of a workspace's wallets started a full cycle, so dust sent again and again,
+  funding transfers and the agent's own moves each cost one. N3 and N4 now match the operating account only, read its
+  inbound transfers at once (`recordIncomingTransfers`, as the pay page's check does), at most once in 15 seconds per
+  workspace, and raise `payment_received` only when a receivable was paid.
+
+And these minor ones:
+- **M4.** The subscription at Connect Circle has a 10-second deadline.
+- **M5.** It is made from the production deployment only, never from a preview or a developer's machine.
+- **M7.** An intent recorded `failed` that may still move is matched too. A workspace that cannot be read, with none
+  matched, answers 503 so Circle retries.
+- **M8.** The operator script goes on past a failing account, and says to run after the deploy is live.
+- **M9.** The docs say when "within seconds" holds, and that `by` is absent unless a person's event joined the cycle.
+- **M10.** Only `circleFailureLabel` of a Circle failure is logged.
+
+Deferred:
+- **M3.** The candidate loop reads before it verifies. The per-client limit is keyed on Circle's few sending addresses,
+  which another account subscribed to this endpoint can fill. Needs a platform function mapping a transaction or wallet
+  to its workspace, which is a migration.
+- **M6.** "Exists" ignores a subscription's `enabled` and types, and list-then-create can race.
+- **M7b.** A `COMPLETE` landing between the settlement re-read and `recordResult` is left to the schedule.

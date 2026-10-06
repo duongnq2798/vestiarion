@@ -450,6 +450,10 @@ describe("connectCircle", () => {
     expect(entries[0].p_detail).toEqual({ by: ACTOR });
   });
 
+  describe("on the production deployment, the account's Circle notifications (Circle notifications N6)", () => {
+    beforeEach(() => vi.stubEnv("VERCEL_ENV", "production"));
+    afterEach(() => vi.unstubAllEnvs());
+
   it("subscribes the account to Circle's transaction notifications once its credentials are stored (Circle notifications N6)", async () => {
     const { fake, inScope } = database(sandbox());
     const fakeCircle = circle({
@@ -474,14 +478,42 @@ describe("connectCircle", () => {
     expect(fakeCircle.createSubscription).not.toHaveBeenCalled();
   });
 
-  it("still connects when Circle refuses the subscription: the schedule settles payments without it", async () => {
+  it("still connects when Circle refuses the subscription, logging only a label for it: the schedule settles payments without it", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const { fake, inScope } = database(sandbox());
-    const fakeCircle = circle({ createSubscription: async () => Promise.reject(new Error("subscription limit reached")) });
+    const fakeCircle = circle({ createSubscription: async () => Promise.reject(new Error("subscription limit reached for entity 1234")) });
     await inScope(() => connectCircle({ orgId: ORG, actorId: ACTOR, apiKey: API_KEY, entitySecret: ENTITY_SECRET, client: fakeCircle.factory }));
     expect(appends(fake).map((entry) => entry.p_action)).toEqual(["circle_connected"]);
-    expect(warn).toHaveBeenCalledWith("Circle notifications not subscribed for", ORG, "subscription limit reached");
+    // The SDK's message is never logged (circleFailureLabel; final review M10).
+    expect(warn).toHaveBeenCalledWith("Circle notifications not subscribed for", ORG, "no answer");
     warn.mockRestore();
+  });
+
+  it("gives up on Circle's answer after 10 seconds, and the connect stands (final review M4)", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.useFakeTimers();
+    try {
+      const { fake, inScope } = database(sandbox());
+      // Circle makes the subscription only once its own test notification to the endpoint is answered: it can wait.
+      const fakeCircle = circle({ createSubscription: () => new Promise(() => {}) });
+      const connecting = inScope(() => connectCircle({ orgId: ORG, actorId: ACTOR, apiKey: API_KEY, entitySecret: ENTITY_SECRET, client: fakeCircle.factory }));
+      await vi.advanceTimersByTimeAsync(10_000);
+      await connecting;
+      expect(appends(fake).map((entry) => entry.p_action)).toEqual(["circle_connected"]);
+      expect(warn).toHaveBeenCalledWith("Circle notifications not subscribed for", ORG, "no answer");
+    } finally {
+      vi.useRealTimers();
+      warn.mockRestore();
+    }
+  });
+  });
+
+  it("does not subscribe outside the production deployment: a preview, or a developer's machine (final review M5)", async () => {
+    const { inScope } = database(sandbox());
+    const fakeCircle = circle();
+    await inScope(() => connectCircle({ orgId: ORG, actorId: ACTOR, apiKey: API_KEY, entitySecret: ENTITY_SECRET, client: fakeCircle.factory }));
+    expect(fakeCircle.listSubscriptions).not.toHaveBeenCalled();
+    expect(fakeCircle.createSubscription).not.toHaveBeenCalled();
   });
 
   it("records circle_reconnected when credentials were already stored", async () => {

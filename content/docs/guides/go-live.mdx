@@ -61,7 +61,7 @@ Then, in **Go live**:
 
 The entity secret itself is checked in step 2, when the wallets are created. To change either value later, open **Replace Circle credentials**. The new values must belong to the same Circle account, because the workspace's wallets are in it.
 
-Connecting also adds a webhook to your Circle account, at `https://www.vestiarion.xyz/api/circle/notifications`, for transfers out and in. You can see it under **Webhooks** in Circle's console. Circle uses it to tell Vestiarion when a transfer settles, so a payment is recorded within seconds. Vestiarion reads the transfer back from Circle before it records anything. Removing the webhook only slows that down: the agent's cycles still settle every payment.
+Connecting also adds a webhook to your Circle account, at `https://www.vestiarion.xyz/api/circle/notifications`, for transfers out and in. You can see it under **Webhooks** in Circle's console. Circle uses it to tell Vestiarion when a transfer settles, so a payment it confirms after the agent stopped waiting is recorded within seconds instead of at the next cycle, while the agent runs. Vestiarion reads the transfer back from Circle before it records anything. Removing the webhook only slows that down: the agent's cycles still settle every payment.
 
 ## 2. Create the treasury wallets
 

@@ -312,7 +312,7 @@ The agent pays for each answer itself, 0.001 USDC over **x402**, the HTTP paymen
 
 ### When a payment does not confirm
 
-A payment usually confirms on Arc within seconds of being sent. Circle tells Vestiarion when it settles, so a payment that confirms after the agent stopped waiting for it is still recorded within seconds: the invoice shows paid and the payee's notice goes out, without waiting for the next cycle. If one has not confirmed 15 minutes after it was sent, Vestiarion tells the workspace's people, once for each attempt:
+A payment usually confirms on Arc within seconds of being sent. One that confirms after the agent stopped waiting for it is recorded within seconds too, when the workspace's Circle account sends Vestiarion its notifications and the agent is running: Circle tells Vestiarion, and a cycle starts at once to record it, with the notices the schedule would send. Otherwise the next scheduled cycle records it. If one has not confirmed 15 minutes after it was sent, Vestiarion tells the workspace's people, once for each attempt:
 
 - **In the console, Slack and Telegram**, within minutes, without waiting for a cycle: "Payment of 12.50 USDC to Jiren has not confirmed 18 min after it was sent on Arc testnet.", with what Circle says, such as "Circle shows it stuck.", and the transaction.
 - **By email**, to every owner, admin and approver with email notices on: one message listing each payment, such as "A payment of 12.50 USDC to Jiren has not confirmed".
