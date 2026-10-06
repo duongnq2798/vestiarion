@@ -246,13 +246,21 @@ export class LiveProvider implements ChainProvider {
     return { ...row, walletId: row.circle_wallet_id };
   }
 
-  private async resolveUsdcTokenId(walletId: string, chain: string): Promise<string> {
-    if (this.usdcTokenId) return this.usdcTokenId;
-    const balances = await withDeadline(
-      this.client.getWalletTokenBalance({ id: walletId }),
+  /**
+   * The wallet's token balances: every token, whatever the Circle account monitors (mainnet pre-flight). An account whose
+   * monitored tokens leave Arc's USDC out would otherwise read a funded wallet as empty.
+   */
+  private walletTokenBalances(walletId: string) {
+    return withDeadline(
+      this.client.getWalletTokenBalance({ id: walletId, includeAll: true }),
       BALANCE_READ_DEADLINE_MS,
       `no answer from Circle getWalletTokenBalance within ${BALANCE_READ_DEADLINE_MS} ms`
     );
+  }
+
+  private async resolveUsdcTokenId(walletId: string, chain: string): Promise<string> {
+    if (this.usdcTokenId) return this.usdcTokenId;
+    const balances = await this.walletTokenBalances(walletId);
     // By its contract, never its symbol (mainnet go-live M7): a token anyone named "USDC" is never sent.
     const usdc = stablecoinEntry(balances.data?.tokenBalances, "USDC", this.network, chain);
     if (!usdc?.token?.id) {
@@ -267,11 +275,7 @@ export class LiveProvider implements ChainProvider {
     if (token === "USDC") return this.resolveUsdcTokenId(walletId, chain);
     const known = this.eurcTokenIds.get(walletId);
     if (known) return known;
-    const balances = await withDeadline(
-      this.client.getWalletTokenBalance({ id: walletId }),
-      BALANCE_READ_DEADLINE_MS,
-      `no answer from Circle getWalletTokenBalance within ${BALANCE_READ_DEADLINE_MS} ms`
-    );
+    const balances = await this.walletTokenBalances(walletId);
     const eurc = stablecoinEntry(balances.data?.tokenBalances, "EURC", this.network, chain);
     if (!eurc?.token?.id) {
       throw new Error(`Wallet ${walletId} has never held EURC. ${this.network.faucet ? "Fund it with EURC from Circle's faucet first." : "Fund it with EURC first."}`);
@@ -887,11 +891,7 @@ export class LiveProvider implements ChainProvider {
    */
   async listInboundTransfers(accountId: string, since: string | null): Promise<InboundTransfer[]> {
     const account = await this.account(accountId);
-    const balances = await withDeadline(
-      this.client.getWalletTokenBalance({ id: account.walletId }),
-      BALANCE_READ_DEADLINE_MS,
-      `no answer from Circle getWalletTokenBalance within ${BALANCE_READ_DEADLINE_MS} ms`
-    );
+    const balances = await this.walletTokenBalances(account.walletId);
     const tokens = new Map<string, Stablecoin>();
     // Money in is USDC or EURC by its contract (mainnet go-live M7): a token that only calls itself so is not money received.
     for (const balance of balances.data?.tokenBalances ?? []) {
@@ -929,11 +929,7 @@ export class LiveProvider implements ChainProvider {
 
   async getTokenBalance(accountId: string, token: Stablecoin): Promise<BalanceSnapshot> {
     const account = await this.account(accountId);
-    const balances = await withDeadline(
-      this.client.getWalletTokenBalance({ id: account.walletId }),
-      BALANCE_READ_DEADLINE_MS,
-      `no answer from Circle getWalletTokenBalance within ${BALANCE_READ_DEADLINE_MS} ms`
-    );
+    const balances = await this.walletTokenBalances(account.walletId);
     const held = stablecoinEntry(balances.data?.tokenBalances, token, this.network, account.chain);
     return {
       accountId,
