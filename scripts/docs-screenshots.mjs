@@ -17,9 +17,11 @@
  *    else that route is a 404 (src/app/docs-shots/[shot]/page.tsx).
  * 2. Starts headless Edge with a throwaway profile (never the user's own) and
  *    drives it over the DevTools protocol: a fixed 1200 px viewport, reduced
- *    motion, analytics blocked. Each shot is loaded, prepared (a disclosure
- *    opened, a form filled, a dialog opened, Verify answered), and clipped to
- *    its frame, `[data-docs-shot]`.
+ *    motion, analytics blocked, and a stand-in browser wallet that answers
+ *    nothing, so the own-wallet steps show as they do where a wallet is
+ *    installed. Each shot is loaded, prepared (a disclosure opened, a form
+ *    filled, a dialog opened, Verify answered), and clipped to its frame,
+ *    `[data-docs-shot]`.
  * 3. Stops the server and Edge it started, and nothing else, then deletes
  *    .next/types so tsc does not read the build's route types.
  *
@@ -65,6 +67,11 @@ const SHOTS = {
     await page.click(`[...document.querySelectorAll("[data-docs-shot] button")].find((b) => b.textContent.trim() === "Go live")`);
     await page.waitFor(`document.querySelector("[role=alertdialog]")?.textContent.includes("Take this workspace live?")`);
   },
+  "go-live-own-wallet": async () => {},
+  "go-live-wallet-deploy": async (page) => {
+    await page.fill({ "wallet-treasury-daily": "50", "wallet-treasury-weekly": "200" });
+  },
+  "go-live-wallet-ready": async () => {},
   "go-live-live": async () => {},
   "go-live-usyc": async () => {},
   "first-payment-counterparty": async (page) => {
@@ -363,6 +370,8 @@ async function main() {
     await page.send("Runtime.enable");
     await page.send("Network.enable");
     await page.send("Network.setBlockedURLs", { urls: ["*googletagmanager.com*", "*google-analytics.com*"] });
+    // A wallet that never answers: the pages find one, and nothing a shot does asks it anything.
+    await page.send("Page.addScriptToEvaluateOnNewDocument", { source: "window.ethereum = { request: () => new Promise(() => {}) };" });
     await page.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }, { name: "prefers-color-scheme", value: "light" }] });
 
     mkdirSync(OUT_DIR, { recursive: true });

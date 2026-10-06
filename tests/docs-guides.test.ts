@@ -28,6 +28,12 @@ type GuideSlug =
   | "guides/audit-export";
 
 const PANEL = "src/components/GoLivePanel.tsx";
+const WALLET_STEPS = "src/components/treasury/WalletTreasurySteps.tsx";
+const WALLET_ACTIONS = "src/app/actions/wallet-treasury.ts";
+const WALLET_TREASURY = "src/lib/treasury/wallet-treasury.ts";
+const WALLET_VERIFY = "src/lib/treasury/verify.ts";
+const BROWSER_WALLET = "src/lib/browser-wallet.ts";
+const PERSON_PAYMENT = "src/lib/treasury/person-payment.ts";
 const GO_LIVE_ACTIONS = "src/app/actions/go-live.ts";
 const SAMPLE_PANEL = "src/components/SampleDataPanel.tsx";
 const GO_LIVE_LIBRARY = "src/lib/platform/go-live.ts";
@@ -214,6 +220,38 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Resume agent", PAUSE],
     ["Could not read the balance from Circle; try again.", GO_LIVE_ACTIONS],
     ["Something went wrong; try again.", GO_LIVE_ACTIONS],
+    // Path C, the owner's own wallet (wallet treasury W1, W3, W5-W11).
+    ["Choose where the treasury lives", PANEL],
+    ["Your own wallet", WALLET_STEPS],
+    ["Connect your wallet", WALLET_STEPS],
+    ["Your wallet is this workspace's treasury. Create the agent's wallet next.", WALLET_ACTIONS],
+    ["Set up your wallet as the treasury", WALLET_STEPS],
+    ["Create the agent's wallet", WALLET_STEPS, "Create the agent&apos;s wallet"],
+    ["Daily figure (USDC)", WALLET_STEPS],
+    ["7-day figure (USDC)", WALLET_STEPS],
+    ["Deploy from your wallet", WALLET_STEPS],
+    ["Approve from your wallet", WALLET_STEPS],
+    ["Cap (USDC)", WALLET_STEPS],
+    ["Send 0.50 USDC for gas", WALLET_STEPS],
+    ["Check your wallet, then go live", PANEL],
+    ["Type mainnet to confirm", PANEL],
+    ["Sent. Waiting for Arc mainnet to confirm it…", WALLET_STEPS, "Sent. Waiting for ${networkLabel} to confirm it…"],
+    ["Your wallet", WALLET_STEPS],
+    ["Approve and pay", APPROVAL_CARD],
+    ["would pass the contract's daily limit of", PERSON_PAYMENT, "would pass the contract's ${which} limit of"],
+    ["USDC paid so far.", PERSON_PAYMENT],
+    ["can be paid from your wallet's contract.", PERSON_PAYMENT],
+    ["Paying from your own wallet is not available for this workspace on this deployment.", WALLET_TREASURY],
+    ["No wallet was found in this browser. Install a wallet such as MetaMask or Rabby, then reload the page.", WALLET_STEPS],
+    ["You declined it in your wallet.", BROWSER_WALLET],
+    ["The signature is too old; sign again.", WALLET_VERIFY],
+    ["The message was signed by another wallet.", WALLET_VERIFY],
+    ["That address is a contract, not a wallet in your browser. Use a wallet such as MetaMask or Rabby.", WALLET_TREASURY],
+    ["first: it is this workspace's treasury.", WALLET_STEPS],
+    ["Set a daily figure, a 7-day figure, or both, above 0 USDC. The 7-day figure cannot be below the daily one.", WALLET_TREASURY],
+    ["That deployment was not sent from this workspace's wallet.", WALLET_VERIFY],
+    ["The chain could not be read just now; nothing was recorded. Try again in a moment.", WALLET_TREASURY],
+    ["Circle did not create the agent's wallet; nothing was recorded. Try again in a moment.", WALLET_TREASURY],
   ],
   "guides/first-payment": [
     ["Money you owe", "src/components/intake/InvoiceIntake.tsx"],

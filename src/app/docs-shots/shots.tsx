@@ -103,6 +103,47 @@ const CHOOSING: GoLiveStatus = {
 /** Circle's faucet sends 20 testnet USDC a request. */
 const FAUCET_BALANCE = 20;
 
+const OWNER_WALLET = `0x${"0a1e".repeat(10)}`;
+const AGENT_WALLET = `0x${"a9e7".repeat(10)}`;
+const CONTRACT_ADDRESS = `0x${"c0de".repeat(10)}`;
+
+/** An Arc mainnet sandbox on a deployment with Vestiarion's agent account, before anything is chosen (wallet treasury W1). */
+const OWN_WALLET_CHOOSING: GoLiveStatus = { ...CHOOSING, hostedAvailable: false, network: "arc-mainnet", walletTreasuryAvailable: true };
+
+/** The owner's wallet, proven, with the agent's wallet created: the contract is next (W5, W6). */
+const OWN_WALLET_DEPLOY: GoLiveStatus = {
+  ...OWN_WALLET_CHOOSING,
+  step: "wallets",
+  host: "external",
+  walletTreasury: {
+    step: "deploy",
+    wallet: OWNER_WALLET,
+    agent: AGENT_WALLET,
+    contract: null,
+    dailyUsdc: null,
+    weeklyUsdc: null,
+    walletUsdc: 250,
+    spendableUsdc: null,
+    agentGasUsdc: 0,
+    agentGasMinimumUsdc: 0.1,
+  },
+};
+
+/** Deployed, approved without a cap, and the agent holds its gas: going live is all that is left (W10). */
+const OWN_WALLET_READY: GoLiveStatus = {
+  ...OWN_WALLET_DEPLOY,
+  step: "go_live",
+  walletTreasury: {
+    ...OWN_WALLET_DEPLOY.walletTreasury!,
+    step: "ready",
+    contract: CONTRACT_ADDRESS,
+    dailyUsdc: 50,
+    weeklyUsdc: 200,
+    spendableUsdc: 250,
+    agentGasUsdc: 0.5,
+  },
+};
+
 function goLive(status: GoLiveStatus, sampleBalance?: number): () => ReactNode {
   return function GoLiveShot() {
     return <GoLivePanel orgSlug={SLUG} status={status} canAdminister sampleBalance={sampleBalance} />;
@@ -494,6 +535,9 @@ export const DOCS_SHOTS = {
   "go-live-create-wallets": { guide: "go-live", page: "settings", render: goLive({ ...CHOOSING, step: "wallets", host: "hosted" }) },
   "go-live-fund": { guide: "go-live", page: "settings", render: goLive({ ...CHOOSING, step: "go_live", host: "hosted", wallets: WALLETS }, FAUCET_BALANCE) },
   "go-live-confirm": { guide: "go-live", page: "settings", render: goLive({ ...CHOOSING, step: "go_live", host: "hosted", wallets: WALLETS }, FAUCET_BALANCE) },
+  "go-live-own-wallet": { guide: "go-live", page: "settings", render: goLive(OWN_WALLET_CHOOSING) },
+  "go-live-wallet-deploy": { guide: "go-live", page: "settings", render: goLive(OWN_WALLET_DEPLOY) },
+  "go-live-wallet-ready": { guide: "go-live", page: "settings", render: goLive(OWN_WALLET_READY) },
   "go-live-live": {
     guide: "go-live",
     page: "settings",

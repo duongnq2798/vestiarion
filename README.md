@@ -540,6 +540,17 @@ typed. Every page and message of the workspace names Arc mainnet, from the netwo
 and a panel for a feature Arc mainnet lacks is not drawn. Until a workspace is live, and whenever
 the deployment switches Arc mainnet off, nothing moves: the stop switch's gates refuse with the reason.
 
+**Paying from the owner's own wallet.** Where the deployment sets `MAINNET_AGENT_CIRCLE_API_KEY` (a
+production key, `LIVE_API_KEY:…`) and `MAINNET_AGENT_CIRCLE_ENTITY_SECRET`, step 1 of an Arc mainnet
+workspace offers **Your own wallet** first. The owner's browser wallet (MetaMask, Rabby…) signs a proof,
+deploys the workspace's spending limit contract, approves it on USDC, and sends 0.50 USDC of gas to an
+agent wallet Vestiarion creates for the workspace in that Circle account. The agent wallet holds only
+gas: every payment, the agent's and the ones people approve, goes through the contract from it, within
+the figures the owner's wallet set. Vestiarion never holds the customer's USDC, and the customer needs
+no Circle account. Use a Circle production account kept for agent wallets alone, with its Wallets
+product unlocked. `ARC_MAINNET_RPC_URL`, optional, points the server's chain reads at a keyed RPC. See
+`docs/superpowers/specs/2026-10-07-wallet-treasury-design.md` and the Go live guide's path C.
+
 Stablecoins are chosen by contract, never by symbol, on both networks. Chats cannot approve a
 mainnet payment. See `docs/superpowers/specs/2026-10-06-mainnet-go-live-design.md`.
 
@@ -648,8 +659,9 @@ is recorded within seconds rather than at the next cycle; money arriving in an o
 read at once, and starts a cycle only when it paid a receivable. On the production deployment
 (`VERCEL_ENV=production`), a workspace that connects its own Circle account subscribes it as it
 connects. Once that deployment is live, run `npm run circle:subscribe` once for the platform's hosted
-Circle account (from `HOSTED_CIRCLE_API_KEY` and `HOSTED_CIRCLE_ENTITY_SECRET`) and for accounts
-connected before: Circle makes a subscription only after the endpoint answers its test notification.
+Circle account (from `HOSTED_CIRCLE_API_KEY` and `HOSTED_CIRCLE_ENTITY_SECRET`), for the Arc
+mainnet agent account (from `MAINNET_AGENT_CIRCLE_API_KEY` and `MAINNET_AGENT_CIRCLE_ENTITY_SECRET`)
+and for accounts connected before: Circle makes a subscription only after the endpoint answers its test notification.
 It finds or makes one subscription per account and prints each result, never a key.
 
 For automatic contractor evidence, put a full `https://github.com/<owner>/<repo>/pull/<number>` URL

@@ -1,5 +1,17 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-07: A workspace on Arc mainnet can pay from its owner's own wallet
+
+- A workspace on Arc mainnet can keep its treasury in a wallet its owner holds. It pays from that wallet only through its spending limit contract, from an agent wallet Vestiarion creates for it. Its setup writes three new ledger entries, each with actor `human` and domain `system`, and each sent to webhook endpoints as `ledger.appended`:
+  - `treasury_wallet_proven`: the owner's wallet proved it is theirs. Its `detail` is `{ by, address, message, signature, network }`: the wallet's address, and the message it signed with the signature, which anyone can check again.
+  - `agent_wallet_created`: `{ by, address }`, where `address` is the agent's wallet, the only one that can pay through the contract.
+  - `spending_limit_deployed`: `{ by, contract, txHash, dailyUsdc, weeklyUsdc }`, the contract the owner's wallet deployed, its transaction and its figures, `null` for a figure not set.
+- `spending_limit_enforced` for such a workspace has the fields it has for a Circle wallet. `treasury` is the owner's wallet and `setLimitsTxHash` is `null`, and two fields are added: `walletHost: "external"`, and `allowanceUsdc`, the approval the owner's wallet gave the contract, `null` when it has no cap.
+- `agent_budget_changed` is written when the deployed figures differ from the workspace's spending limit, with `onChain.txHash` the deployment.
+- `workspace_went_live` for such a workspace carries `detail.walletHost: "external"`.
+- In `GET /api/v1/treasury`, its operating account's `address` is the owner's wallet, and its `balance` is what the contract can move: the wallet's USDC, or the approval if that is less.
+- The agent's payment decisions carry `onChainLimit`, as they do wherever a limit is enforced on Arc. A person's payment goes through the contract too, and its entries do not change. Nothing else in `/api/v1` changes.
+
 ## 2026-10-06: A milestone release waits for its cash
 
 - The agent no longer sends a milestone release that the operating wallet cannot cover, counting the releases before it in the same cycle and those still in flight. Its `milestone_release` entry has `execution.resultingStatus: "held"` and `execution.heldBecause: "cash_shortfall"`, as an AP decision held for want of cash has.
