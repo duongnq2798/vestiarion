@@ -25,6 +25,7 @@ import type { NetworkProfile } from "../network";
 import { awaitSettlement, FAILED_STATES, MAY_HAVE_BEEN_ACCEPTED, withDeadline, type Settlement } from "./settlement";
 import { circleHttpStatus } from "./check";
 import { batchCalls, BatchNotSentError, SCA_EXECUTE_BATCH } from "./batch";
+import { stablecoinEntry, stablecoinOf } from "./stablecoins";
 import { PAYMENTS_OFF, PaymentsDisabledError } from "../payments-switch";
 import { BridgeFeeError, bridgeFee, bridgeStepKey, burnCalls, cctpOf, forwardedMint, type ContractCall } from "./cctp";
 import { burnIntent, burnIntentTypedData, estimateGateway, gatewaySalt, gatewayTransferStatus, submitGatewayTransfer, type GatewayTransferStatus } from "./gateway";
@@ -245,11 +246,10 @@ export class LiveProvider implements ChainProvider {
       BALANCE_READ_DEADLINE_MS,
       `no answer from Circle getWalletTokenBalance within ${BALANCE_READ_DEADLINE_MS} ms`
     );
-    const usdc = balances.data?.tokenBalances?.find((b) => b.token?.symbol === "USDC");
+    // By its contract, never its symbol (mainnet go-live M7): a token anyone named "USDC" is never sent.
+    const usdc = stablecoinEntry(balances.data?.tokenBalances, "USDC", this.network);
     if (!usdc?.token?.id) {
-      throw new Error(
-        `Could not resolve the USDC token id from wallet ${walletId}. Fund it with testnet USDC first (see README).`
-      );
+      throw new Error(`Could not resolve the USDC token id from wallet ${walletId}. Fund it with USDC on ${this.network.label} first (see README).`);
     }
     this.usdcTokenId = usdc.token.id;
     return this.usdcTokenId;
@@ -265,7 +265,7 @@ export class LiveProvider implements ChainProvider {
       BALANCE_READ_DEADLINE_MS,
       `no answer from Circle getWalletTokenBalance within ${BALANCE_READ_DEADLINE_MS} ms`
     );
-    const eurc = balances.data?.tokenBalances?.find((b) => b.token?.symbol === "EURC");
+    const eurc = stablecoinEntry(balances.data?.tokenBalances, "EURC", this.network);
     if (!eurc?.token?.id) {
       throw new Error(`Wallet ${walletId} has never held EURC. Fund it with EURC from Circle's faucet first.`);
     }
@@ -883,9 +883,10 @@ export class LiveProvider implements ChainProvider {
       `no answer from Circle getWalletTokenBalance within ${BALANCE_READ_DEADLINE_MS} ms`
     );
     const tokens = new Map<string, Stablecoin>();
+    // Money in is USDC or EURC by its contract (mainnet go-live M7): a token that only calls itself so is not money received.
     for (const balance of balances.data?.tokenBalances ?? []) {
-      const symbol = balance.token?.symbol;
-      if (balance.token?.id && (symbol === "USDC" || symbol === "EURC")) tokens.set(balance.token.id, symbol);
+      const coin = stablecoinOf(balance.token, this.network);
+      if (balance.token?.id && coin) tokens.set(balance.token.id, coin);
     }
     const listed = await withDeadline(
       this.client.listTransactions({
@@ -923,7 +924,7 @@ export class LiveProvider implements ChainProvider {
       BALANCE_READ_DEADLINE_MS,
       `no answer from Circle getWalletTokenBalance within ${BALANCE_READ_DEADLINE_MS} ms`
     );
-    const held = balances.data?.tokenBalances?.find((b) => b.token?.symbol === token);
+    const held = stablecoinEntry(balances.data?.tokenBalances, token, this.network);
     return {
       accountId,
       chain: account.chain,

@@ -174,11 +174,47 @@ describe("a live provider with payments switched off (payment safety S2)", () =>
   });
 
   it("still reads a balance", async () => {
-    const getWalletTokenBalance = vi.fn(async () => ({ data: { tokenBalances: [{ token: { id: "usdc-token-id", symbol: "USDC" }, amount: "12.5" }] } }));
+    const getWalletTokenBalance = vi.fn(async () => ({ data: { tokenBalances: [{ token: { id: "usdc-token-id", symbol: "USDC", isNative: true }, amount: "12.5" }] } }));
     const client = fakeClient({ getWalletTokenBalance } as unknown as Partial<LiveProviderClient>);
     const provider = new LiveProvider(CHAIN, { network: ARC_TESTNET, client, paymentsDisabled: true });
 
     await expect(provider.getBalance("account-1")).resolves.toMatchObject({ balance: 12.5 });
+  });
+});
+
+describe("a stablecoin chosen by its contract (mainnet go-live M7)", () => {
+  it("reads USDC by its contract, never a token that only calls itself USDC", async () => {
+    const getWalletTokenBalance = vi.fn(async () => ({
+      data: {
+        tokenBalances: [
+          { token: { id: "spoof", symbol: "USDC", tokenAddress: "0x1111111111111111111111111111111111111111", isNative: false }, amount: "999999" },
+          { token: { id: "usdc-token-id", symbol: "USDC", tokenAddress: null, isNative: true }, amount: "12.5" },
+        ],
+      },
+    }));
+    const client = fakeClient({ getWalletTokenBalance } as unknown as Partial<LiveProviderClient>);
+    const provider = new LiveProvider(CHAIN, { network: ARC_TESTNET, client, paymentsDisabled: true });
+
+    await expect(provider.getBalance("account-1")).resolves.toMatchObject({ balance: 12.5 });
+  });
+
+  it("sends the real USDC's token id, never a spoof listed first, when it must find it", async () => {
+    const getWalletTokenBalance = vi.fn(async () => ({
+      data: {
+        tokenBalances: [
+          { token: { id: "spoof", symbol: "USDC", tokenAddress: "0x1111111111111111111111111111111111111111", isNative: false }, amount: "999999" },
+          { token: { id: "usdc-erc20", symbol: "USDC", tokenAddress: "0x3600000000000000000000000000000000000000", isNative: false }, amount: "12.5" },
+        ],
+      },
+    }));
+    const createTransaction = vi.fn(async () => {
+      throw new Error("stop after the request");
+    });
+    const client = fakeClient({ getWalletTokenBalance, createTransaction } as unknown as Partial<LiveProviderClient>);
+    const provider = new LiveProvider({ ...CHAIN, usdcTokenId: undefined }, { network: ARC_TESTNET, client });
+
+    await expect(provider.transfer(TRANSFER)).rejects.toThrow("stop after the request");
+    expect(createTransaction).toHaveBeenCalledWith(expect.objectContaining({ tokenId: "usdc-erc20" }));
   });
 });
 
@@ -233,7 +269,7 @@ describe("LiveProvider Circle request deadlines", () => {
   it("clears the getWalletTokenBalance deadline when Circle resolves before it", async () => {
     const getWalletTokenBalance = vi.fn(async () => ({
       data: {
-        tokenBalances: [{ amount: "12.5", token: { symbol: "USDC" } }],
+        tokenBalances: [{ amount: "12.5", token: { symbol: "USDC", isNative: true } }],
       },
     }));
     const client = fakeClient({
