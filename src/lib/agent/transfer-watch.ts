@@ -1,9 +1,15 @@
+import { siteOrigin } from "../auth/env";
 import { getChainProvider } from "../circle";
 import type { ChainProvider } from "../circle/types";
+import { currentOrgId } from "../context";
 import { db, platformDb, unwrap } from "../dal";
 import { withOrg } from "../dal/scope";
+import { paymentStuckEmail } from "../email/payment-stuck";
+import { emailSettingsFromEnv, sendEmail, type EmailMessage, type SendResult } from "../email/send";
 import { appendLedgerEntry } from "../ledger";
 import { NETWORK_IDS, networkOf, networkProfile } from "../network";
+import { DIGEST_MAX_RECIPIENTS, decidingRecipients } from "../notifications/waiting";
+import { txUrl } from "../payee-chains";
 
 /**
  * The transfer watch (docs/superpowers/specs/2026-10-06-stuck-transfer-alert-design.md): every 5 minutes it finds the
@@ -33,6 +39,18 @@ interface WatchDeps {
   now?: () => number;
   /** The workspace's chain provider; `getChainProvider` unless a test passes its own. A throw means Circle cannot be asked. */
   provider?: () => ChainProvider;
+  /** How the deciding members are emailed (D6); the platform's email settings, Resend and the digest's recipients by default. */
+  mail?: {
+    settings?: { apiKey: string; from: string } | null;
+    send?: (message: EmailMessage, settings: { apiKey: string; from: string }) => Promise<SendResult>;
+    recipients?: (orgId: string) => Promise<Array<{ email: string }>>;
+  };
+}
+
+/** One payment told this run, as its email words it. */
+interface Told {
+  detail: StuckDetail;
+  payeeName: string;
 }
 
 interface InFlight {
@@ -141,7 +159,7 @@ async function tellStuck(inFlight: InFlight[], now: number, deps: WatchDeps): Pr
     provider = null;
   }
 
-  let told = 0;
+  const told: Told[] = [];
   for (const row of untold) {
     const sendAnswered = row.provider_tx_id !== null;
     let circleAsked = false;
@@ -186,10 +204,59 @@ async function tellStuck(inFlight: InFlight[], now: number, deps: WatchDeps): Pr
       summary: `Payment of ${amount} ${currency} to ${payee.name} not confirmed ${minutes} min after it was sent on ${networkProfile(network).label}`,
       detail: { ...detail },
     });
-    told += 1;
+    told.push({ detail, payeeName: payee.name });
   }
-  return told;
+  await emailTold(told, deps);
+  return told.length;
 }
+
+/**
+ * Emails each deciding member with email notices on, one message for each payment told (D6): the digest's recipients,
+ * at most as many. A failed send is logged and not retried: the signed entry, and the chats that carry it, still tell.
+ * Never throws: the entries are written either way.
+ */
+async function emailTold(told: Told[], deps: WatchDeps): Promise<void> {
+  if (told.length === 0) return;
+  const settings = deps.mail && "settings" in deps.mail ? (deps.mail.settings ?? null) : emailSettingsFromEnv();
+  const orgId = currentOrgId();
+  if (!settings) {
+    console.log("transfer watch: email not configured", orgId);
+    return;
+  }
+  try {
+    const recipients = (await (deps.mail?.recipients ?? decidingRecipients)(orgId)).slice(0, DIGEST_MAX_RECIPIENTS);
+    if (recipients.length === 0) return;
+    const org = unwrap(await platformDb().from("orgs").select("name, slug").eq("id", orgId).single()) as { name: string; slug: string };
+    const origin = siteOrigin();
+    const send = deps.mail?.send ?? ((message: EmailMessage, with_: { apiKey: string; from: string }) => sendEmail(message, with_));
+    for (const { detail, payeeName } of told) {
+      const network = networkOf(detail.network);
+      const email = paymentStuckEmail({
+        orgName: org.name,
+        payeeName,
+        amount: AMOUNT.format(detail.amount),
+        currency: detail.currency,
+        minutes: detail.minutes,
+        network,
+        circleAsked: detail.circleAsked,
+        sendAnswered: detail.sendAnswered,
+        providerState: detail.providerState,
+        txUrl: detail.txHash ? txUrl(network, detail.txHash) : null,
+        link: detail.invoiceId ? `${origin}/o/${org.slug}/invoices#trail-${detail.invoiceId}` : `${origin}/o/${org.slug}/contractors`,
+        origin,
+      });
+      for (const recipient of recipients) {
+        const result = await send({ to: recipient.email, ...email }, settings);
+        // Say that a send failed, never to whom (as the digest does).
+        if (!result.sent) console.warn("transfer watch: send failed", orgId, result.reason);
+      }
+    }
+  } catch (error) {
+    console.error("transfer watch: email failed", orgId, error instanceof Error ? error.message : String(error));
+  }
+}
+
+const AMOUNT = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6, useGrouping: false });
 
 /** Each payment's payee, by `source_type:source_id`: an invoice's counterparty, or a milestone's contractor. */
 async function payeeNames(rows: InFlight[]): Promise<Map<string, { name: string; counterpartyId: string | null }>> {

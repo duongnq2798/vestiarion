@@ -192,3 +192,13 @@ describe("todayAnswer's wallet line", () => {
     expect(JSON.stringify(todayAnswer("testnet-2", { ...base, reserve: 0 }, "https://www.vestiarion.xyz/o/testnet-2/console"))).not.toContain("USYC reserve");
   });
 });
+
+describe("a payment that has not confirmed (stuck-transfer alert D6)", () => {
+  it("shows its transaction and its page, with no card to decide", () => {
+    const stuck = item({ text: "Payment of 0.30 USDC to Jiren has not confirmed 18 min after it was sent on Arc testnet.", detail: "Circle shows it stuck.", tone: "stopped" });
+    const message = JSON.stringify(decisionsMessage(WORKSPACE, [stuck], ORIGIN, new Map()));
+    expect(message).toContain("has not confirmed 18 min after it was sent");
+    expect(message).toContain("Arc testnet transaction");
+    expect(message).not.toContain("vx_approve");
+  });
+});

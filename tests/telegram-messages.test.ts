@@ -190,3 +190,15 @@ describe("wallet addresses", () => {
     expect(draft).toContain("0xAbAb…AbAb");
   });
 });
+
+describe("a payment that has not confirmed (stuck-transfer alert D6)", () => {
+  it("is posted as a stopped decision, with its transaction and its page", () => {
+    const message = decisionsMessage(
+      { name: "Acme", slug: "acme" },
+      [item({ text: "Payment of 0.30 USDC to Jiren has not confirmed 18 min after it was sent on Arc testnet.", detail: "Circle shows it stuck.", tone: "stopped" })],
+      "https://www.vestiarion.xyz"
+    );
+    expect(message).toContain("⏸ Payment of 0.30 USDC to Jiren has not confirmed 18 min after it was sent on Arc testnet.");
+    expect(message).toContain("Arc testnet transaction");
+  });
+});

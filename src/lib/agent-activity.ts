@@ -20,6 +20,8 @@ export const ACTIVITY_ACTIONS = [
   "milestone_hold",
   "ar_received",
   "ar_reminder_sent",
+  // A payment that has not confirmed, told by the transfer watch (stuck-transfer alert D6).
+  "payment_stuck",
 ] as const;
 
 /** The people's actions on an invoice that give the agent something to decide: how long after one it decided is told. */
@@ -164,6 +166,7 @@ export function activityItem(entry: ActivityEntry, refs: ActivityRefs): Activity
 
 function itemOf(entry: ActivityEntry, refs: ActivityRefs): Omit<ActivityItem, "txUrl" | "network"> | null {
   if (!(ACTIVITY_ACTIONS as readonly string[]).includes(entry.action)) return null;
+  if (entry.action === "payment_stuck") return stuckItem(entry, refs);
   const blocked = entry.detail.guardrailBlocked === true;
 
   if (entry.action.startsWith("milestone_")) {
@@ -192,6 +195,35 @@ function itemOf(entry: ActivityEntry, refs: ActivityRefs): Omit<ActivityItem, "t
   const item = invoiceItem(entry, refs, id, invoice);
   // A stopped payable is what a person decides: a chat's card names it (Slack design S8).
   return item.tone === "stopped" ? { ...item, invoiceId: id } : item;
+}
+
+/**
+ * A payment that has not confirmed (stuck-transfer alert D6, D7): stopped, with what Circle said, and the payment's page.
+ * It is not a decision to make, so it carries no `invoiceId`, and a chat draws no card to approve it.
+ */
+function stuckItem(entry: ActivityEntry, refs: ActivityRefs): Omit<ActivityItem, "txUrl" | "network"> | null {
+  const invoiceId = text(entry.detail.invoiceId);
+  const milestoneId = text(entry.detail.milestoneId);
+  const payee = invoiceId ? refs.invoices.get(invoiceId)?.name : milestoneId ? refs.milestones.get(milestoneId)?.name : undefined;
+  if (!payee) return null;
+  const amount = activityAmount(number(entry.detail.amount) ?? 0, text(entry.detail.currency) ?? "USDC");
+  return {
+    seq: entry.seq,
+    text: `Payment of ${amount} to ${payee} has not confirmed ${number(entry.detail.minutes) ?? 0} min after it was sent on ${networkProfile(refs.network).label}.`,
+    detail: stuckCircleLine(entry.detail),
+    tone: "stopped",
+    path: invoiceId ? `/invoices#trail-${invoiceId}` : "/contractors",
+    pathLabel: invoiceId ? "How it decided" : "Contractors",
+    txHash: arcTx(text(entry.detail.txHash)),
+  };
+}
+
+/** What Circle said of a payment that has not confirmed, or that it was not asked, or never answered the send. */
+function stuckCircleLine(detail: Record<string, unknown>): string {
+  if (detail.sendAnswered === false) return "Circle never answered the send.";
+  if (detail.circleAsked !== true) return "Circle could not be asked just now.";
+  const state = text(detail.providerState);
+  return state === "STUCK" ? "Circle shows it stuck." : `Circle shows it as ${state ?? "pending"}.`;
 }
 
 /** An invoice's decision, in words. */

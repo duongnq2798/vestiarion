@@ -96,6 +96,7 @@ const writes = (fake: ReturnType<typeof fakeSupabase>) =>
 
 beforeEach(() => {
   ledgerMock.mockReset().mockResolvedValue(undefined);
+  process.env.SITE_URL = "https://www.vestiarion.xyz";
 });
 afterEach(() => vi.restoreAllMocks());
 
@@ -205,5 +206,37 @@ describe("the transfer watch (stuck-transfer alert)", () => {
       { slug: "acme", inFlight: 1, told: 0, error: expect.any(String) },
       { slug: "beta", inFlight: 1, told: 1 },
     ]);
+  });
+});
+
+describe("the email (stuck-transfer alert D6)", () => {
+  const settings = { apiKey: "re_test", from: "Vestiarion <no-reply@vestiarion.xyz>" };
+
+  it("emails each deciding member with email notices on, once for each payment told", async () => {
+    const send = vi.fn(async () => ({ sent: true as const, id: "re_1" }));
+    const recipients = vi.fn(async () => [{ email: "owner@acme.test" }, { email: "approver@acme.test" }]);
+    await run(world(), { provider: provider().provider, mail: { settings, send, recipients } });
+    expect(recipients).toHaveBeenCalledWith(A);
+    expect(send.mock.calls.map((call) => (call as unknown as [{ to: string; subject: string; text: string }])[0].to)).toEqual(["owner@acme.test", "approver@acme.test"]);
+    const message = (send.mock.calls[0] as unknown as [{ subject: string; text: string }])[0];
+    expect(message.subject).toBe("A payment of 12.50 USDC to Jiren has not confirmed");
+    expect(message.text).toContain(`https://www.vestiarion.xyz/o/acme/invoices#trail-${INVOICE}`);
+    expect(message.text).toContain(`https://explorer.testnet.arc.io/tx/${TX}`);
+  });
+
+  it("sends none when no one is to be told, or email is not set up, and the entry stands (Review Focus 5)", async () => {
+    const send = vi.fn(async () => ({ sent: true as const, id: "re_1" }));
+    await run(world(), { provider: provider().provider, mail: { settings, send, recipients: async () => [] } });
+    await run(world(), { provider: provider().provider, mail: { settings: null, send, recipients: async () => [{ email: "owner@acme.test" }] } });
+    expect(send).not.toHaveBeenCalled();
+    expect(appended()).toHaveLength(2);
+  });
+
+  it("logs a failed send, and goes on", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const send = vi.fn(async () => ({ sent: false as const, reason: "resend 500" }));
+    const results = await run(world(), { provider: provider().provider, mail: { settings, send, recipients: async () => [{ email: "owner@acme.test" }] } });
+    expect(results).toEqual([{ slug: "acme", inFlight: 1, told: 1 }]);
+    expect(warn).toHaveBeenCalled();
   });
 });

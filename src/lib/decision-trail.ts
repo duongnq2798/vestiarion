@@ -185,8 +185,23 @@ export function trailStep(entry: TrailEntry, network: Network = "arc-testnet"): 
     case "ap_reconcile": {
       const execution = record(detail.execution);
       const tx = arcTx(execution?.txRef) ?? arcTx(detail.txRef);
-      return { ...base, who: "agent", tone: "done", text: `The agent confirmed the payment on ${label}.`, txHash: tx };
+      // As it found the payment (stuck-transfer alert D8): confirmed only when it was paid.
+      const resulting = text(execution?.resultingStatus);
+      if (resulting === "paid") return { ...base, who: "agent", tone: "done", text: `The agent confirmed the payment on ${label}.`, txHash: tx };
+      if (resulting === "matched") return { ...base, who: "agent", tone: "neutral", text: `The agent checked the payment: still in flight on ${label}.`, txHash: tx };
+      if (resulting === "held") {
+        return { ...base, who: "agent", tone: "stopped", text: "The agent checked the payment: it did not go through, and the invoice is held.", txHash: tx };
+      }
+      return { ...base, who: "agent", tone: "neutral", text: `The agent checked the payment on ${label}.`, txHash: tx };
     }
+    case "payment_stuck":
+      return {
+        ...base,
+        who: "agent",
+        tone: "stopped",
+        text: `Not confirmed ${number(detail.minutes) ?? 0} minutes after it was sent; the workspace's people were told.`,
+        txHash: arcTx(detail.txHash),
+      };
     case "approval_paid":
       return {
         ...base,

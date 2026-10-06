@@ -61,7 +61,9 @@ describe("the decision trail", () => {
 
   it("names the viewed workspace's network in each step that reached the chain: Arc mainnet there (mainnet copy C1, C4)", () => {
     expect(trailStep(JIREN[4], "arc-mainnet")!.notes).toContain("✓ Sent on Arc mainnet");
-    expect(trailStep(step(1, "02:00:00", "agent", "ap_reconcile", { invoiceId: INVOICE, txRef: TX }), "arc-mainnet")!.text).toBe("The agent confirmed the payment on Arc mainnet.");
+    expect(trailStep(step(1, "02:00:00", "agent", "ap_reconcile", { invoiceId: INVOICE, execution: { txRef: TX, resultingStatus: "paid" } }), "arc-mainnet")!.text).toBe(
+      "The agent confirmed the payment on Arc mainnet."
+    );
     expect(trailStep(step(2, "02:00:00", "agent", "ar_received", { invoiceId: INVOICE, txHash: TX }), "arc-mainnet")!.text).toBe("The agent matched the payment received on Arc mainnet.");
     const steps = invoiceTrail([...JIREN].reverse(), INVOICE, "arc-mainnet");
     expect(JSON.stringify(steps)).not.toContain("Arc testnet");
@@ -228,5 +230,26 @@ describe("a payable's card", () => {
     expect(invoiceDecision(pending, undefined, [], { network: "arc-testnet" })).toMatchObject({ outcome: "scheduled", outcomeLabel: "Not yet decided" });
     // A decided payable stays as it was.
     expect(invoiceDecision(row(), undefined, ledger(JIREN), { network: "arc-testnet", deciding: true }).outcome).toBe("settled");
+  });
+});
+
+describe("a reconcile, as it found the payment (stuck-transfer alert D8)", () => {
+  const reconcile = (resultingStatus?: string) =>
+    step(995, "08:00:00", "agent", "ap_reconcile", { execution: { txRef: TX, ...(resultingStatus ? { resultingStatus } : {}) } });
+
+  it("says confirmed only when the payment was paid", () => {
+    expect(trailStep(reconcile("paid"))).toMatchObject({ who: "agent", tone: "done", text: "The agent confirmed the payment on Arc testnet.", txHash: TX });
+    expect(trailStep(reconcile("matched"))).toMatchObject({ tone: "neutral", text: "The agent checked the payment: still in flight on Arc testnet." });
+    expect(trailStep(reconcile("held"))).toMatchObject({ tone: "stopped", text: "The agent checked the payment: it did not go through, and the invoice is held." });
+    expect(trailStep(reconcile())).toMatchObject({ tone: "neutral", text: "The agent checked the payment on Arc testnet." });
+  });
+
+  it("shows a payment that has not confirmed, and that the workspace's people were told", () => {
+    expect(trailStep(step(996, "08:05:00", "agent", "payment_stuck", { minutes: 18, txHash: TX }))).toMatchObject({
+      who: "agent",
+      tone: "stopped",
+      text: "Not confirmed 18 minutes after it was sent; the workspace's people were told.",
+      txHash: TX,
+    });
   });
 });

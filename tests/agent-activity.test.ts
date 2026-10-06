@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import {
+  ACTIVITY_ACTIONS,
   activityAmount,
   activityItem,
   activityItems,
@@ -368,5 +369,61 @@ describe("reading the agent's activity", () => {
     expect((await read(client, 974)).through).toBe(974);
     expect((await read(client, 974)).items).toEqual([]);
     expect(client.requests.some((r) => r.path === "/rest/v1/invoices")).toBe(false);
+  });
+});
+
+describe("a payment that has not confirmed (stuck-transfer alert D6, D7)", () => {
+  const stuck = (detail: Record<string, unknown> = {}) =>
+    entry("payment_stuck", { amount: 0.3, currency: "USDC", minutes: 18, circleAsked: true, sendAnswered: true, providerState: "STUCK", txHash: TX, network: "arc-testnet", ...detail }, 990);
+
+  it("is one of the actions a person is told about as it happens", () => {
+    expect(ACTIVITY_ACTIONS).toContain("payment_stuck");
+  });
+
+  it("tells it as stopped, with Circle's state and the transaction, and no card to approve", () => {
+    const item = activityItem(stuck(), refs());
+    expect(item).toMatchObject({
+      seq: 990,
+      text: "Payment of 0.30 USDC to Jiren has not confirmed 18 min after it was sent on Arc testnet.",
+      detail: "Circle shows it stuck.",
+      tone: "stopped",
+      path: `/invoices#trail-${INVOICE}`,
+      pathLabel: "How it decided",
+      txHash: TX,
+      txUrl: `https://explorer.testnet.arc.io/tx/${TX}`,
+    });
+    expect(item).not.toHaveProperty("invoiceId");
+  });
+
+  it("names Arc mainnet for a workspace there, and says what Circle said, or that it was not asked or never answered", () => {
+    expect(activityItem(stuck({ circleAsked: false, providerState: null }), { ...refs(), network: "arc-mainnet" })).toMatchObject({
+      text: "Payment of 0.30 USDC to Jiren has not confirmed 18 min after it was sent on Arc mainnet.",
+      detail: "Circle could not be asked just now.",
+    });
+    expect(activityItem(stuck({ circleAsked: false, sendAnswered: false, providerState: null, txHash: null }), refs())).toMatchObject({
+      detail: "Circle never answered the send.",
+      txHash: null,
+      txUrl: null,
+    });
+    expect(activityItem(stuck({ providerState: "SENT" }), refs())?.detail).toBe("Circle shows it as SENT.");
+  });
+
+  it("tells a milestone's on Contractors", () => {
+    const milestone: ActivityEntry = {
+      seq: 991,
+      action: "payment_stuck",
+      detail: { milestoneId: MILESTONE, amount: 1, currency: "USDC", minutes: 16, circleAsked: true, sendAnswered: true, providerState: "QUEUED", txHash: null, network: "arc-testnet" },
+    };
+    expect(activityItem(milestone, refs())).toMatchObject({
+      text: "Payment of 1.00 USDC to Puka Hotel has not confirmed 16 min after it was sent on Arc testnet.",
+      detail: "Circle shows it as QUEUED.",
+      tone: "stopped",
+      path: "/contractors",
+      pathLabel: "Contractors",
+    });
+  });
+
+  it("says nothing of a payment whose invoice is gone", () => {
+    expect(activityItem(stuck({ invoiceId: "00000000-0000-4000-8000-000000000000" }), refs())).toBeNull();
   });
 });
