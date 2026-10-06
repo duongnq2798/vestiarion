@@ -89,7 +89,12 @@ export async function verifyDeployment(
     chain.code(contract),
     chain.simulateDeploy({ from: asAddress(input.treasury), data: deploymentData({ usdc: input.usdc, treasury: input.treasury, agent: input.agent, dailyUnits: 1n, weeklyUnits: 1n }) }),
   ]);
-  if (code === "0x" || !same(code, expected)) {
+  // A node with no creation calls cannot check a deployment: unreadable, so the owner's deployment is asked about again
+  // once it can be, and never refused as someone else's after they paid its gas.
+  if (!expected || expected === "0x") throw new Error("The node gave no code for a creation call; it cannot check a deployment.");
+  // A successful deployment whose code a node does not show yet is one it has not caught up with.
+  if (code === "0x") return { state: "pending" };
+  if (!same(code, expected)) {
     return { state: "refused", reason: "The contract it deployed is not Vestiarion's spending limit contract for this wallet and agent." };
   }
   const figure = async (functionName: "dailyLimit" | "weeklyLimit") =>

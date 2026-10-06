@@ -95,6 +95,17 @@ describe("verifyDeployment", () => {
     expect(outcome).toMatchObject({ state: "refused" });
   });
 
+  it("waits for a node that shows the receipt but not yet the code it deployed", async () => {
+    // A load-balanced RPC can answer the receipt from one node and the code from another, behind it.
+    expect(await check(fakeChain({ receipts: { [DEPLOY_TX]: receipt({}) } }))).toEqual({ state: "pending" });
+  });
+
+  it("cannot check a deployment where the node simulates no creation, and never calls the contract someone else's", async () => {
+    // An RPC without creation calls would otherwise refuse every deployment the owner paid gas for.
+    const blind: TreasuryChain = { ...fakeChain({ receipts: { [DEPLOY_TX]: receipt({}) }, deployedWith: deployed }), simulateDeploy: async () => "0x" };
+    await expect(check(blind)).rejects.toThrow("The node gave no code for a creation call");
+  });
+
   it("verifies Vestiarion's contract, with its figures", async () => {
     expect(await check(fakeChain({ receipts: { [DEPLOY_TX]: receipt({ from: WALLET.toLowerCase() as Hex }) }, deployedWith: deployed }))).toEqual({
       state: "verified",
