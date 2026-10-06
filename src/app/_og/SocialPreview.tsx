@@ -49,9 +49,21 @@ const statusChips = [
 /**
  * The frame every social image shares: the paper ground, the agent-blue rule,
  * the mark and wordmark with a badge, and the footer line. `children` fills
- * the middle, and `footer` names where the page lives.
+ * the middle, `footer` names where the page lives, and `network` the line beside
+ * it: the platform's card says Arc testnet; a link page's says only Arc
+ * (mainnet polish E1).
  */
-export function renderSocialImage({ badge, footer, children }: { badge: string; footer: string; children: ReactNode }): ImageResponse {
+export function renderSocialImage({
+  badge,
+  footer,
+  children,
+  network = "Arc testnet",
+}: {
+  badge: string;
+  footer: string;
+  children: ReactNode;
+  network?: string;
+}): ImageResponse {
   return new ImageResponse(
     (
       <div
@@ -112,7 +124,7 @@ export function renderSocialImage({ badge, footer, children }: { badge: string; 
         <div style={{ display: "flex", alignItems: "center", color: COLOR.ink3, fontSize: 18 }}>
           <div style={{ display: "flex" }}>{footer}</div>
           <div style={{ display: "flex", margin: "0 12px", color: COLOR.lineStrong }}>·</div>
-          <div style={{ display: "flex" }}>Arc testnet</div>
+          <div style={{ display: "flex" }}>{network}</div>
           <div style={{ display: "flex", flex: 1, height: 1, marginLeft: 20, backgroundColor: COLOR.line }} />
         </div>
       </div>
@@ -236,6 +248,32 @@ export function socialPreviewImage(): ImageResponse {
             ))}
           </div>
         </div>
+      </div>
+    ),
+  });
+}
+
+/**
+ * What a link page's card says (docs/superpowers/specs/2026-10-06-mainnet-polish-design.md E1): which kind of page it is,
+ * and nothing of the link itself, since a card is shown to whoever the link is pasted to.
+ */
+export const LINK_PREVIEWS = {
+  pay: { badge: "Pay an invoice", title: "An invoice to pay in USDC", line: "Open the link to see who asks, how much, and where to send it.", alt: "Vestiarion — an invoice to pay in USDC" },
+  payee: { badge: "Your payment", title: "A payment for your work", line: "Open the link to add your address and follow your payment.", alt: "Vestiarion — a payment for your work" },
+  receipt: { badge: "Payment receipt", title: "A signed payment receipt", line: "Open the link to see the payment and check its signatures.", alt: "Vestiarion — a signed payment receipt" },
+} as const;
+
+/** A link page's card: the platform's frame, the page's badge and words, and no network named beyond Arc (E1). */
+export function linkPreviewImage(page: keyof typeof LINK_PREVIEWS): ImageResponse {
+  const { badge, title, line } = LINK_PREVIEWS[page];
+  return renderSocialImage({
+    badge,
+    footer: "vestiarion.xyz",
+    network: "Arc",
+    children: (
+      <div style={{ display: "flex", flex: 1, flexDirection: "column", justifyContent: "center", marginTop: 26 }}>
+        <div style={{ display: "flex", fontFamily: "Geist", fontSize: 64, fontWeight: 600, letterSpacing: -1.6, color: COLOR.ink }}>{title}</div>
+        <div style={{ display: "flex", marginTop: 20, fontSize: 28, color: COLOR.ink2 }}>{line}</div>
       </div>
     ),
   });
