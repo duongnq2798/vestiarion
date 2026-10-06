@@ -176,6 +176,8 @@ describe("the OpenAPI document", () => {
       expect(text).toMatch(/credentials are stored but (cannot|could not) be read/);
       expect(text).toMatch(/Arc mainnet (with|and has) no Circle account connected yet/);
       expect(text).toMatch(/Arc mainnet (is )?switched off/);
+      expect(text).toMatch(/not live yet/);
+      expect(text).toMatch(/no yield reserve/);
     }
   });
 });

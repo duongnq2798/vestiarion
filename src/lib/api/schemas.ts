@@ -56,7 +56,7 @@ export const StatusSchema = z
         screening: z.enum(["live", "simulate"]),
       })
       .describe(
-        "Payments and yield differ and are reported separately, as in the UI. `unavailable` means nothing can pay in the workspace now: its Circle credentials are stored but could not be read, or it is on Arc mainnet with no Circle account connected yet, or Arc mainnet is switched off on this deployment. Cycles refuse to pay then rather than simulate, so neither leg is live or simulated."
+        "Payments and yield differ and are reported separately, as in the UI. `unavailable` means nothing can pay in the workspace now: its Circle credentials are stored but could not be read; or it is on Arc mainnet with no Circle account connected yet, or not live yet; or Arc mainnet is switched off on this deployment. Cycles refuse to pay then rather than simulate, so neither leg is live or simulated. Yield is also `unavailable` on a network with no yield reserve, such as Arc mainnet."
       ),
     clock: z
       .object({

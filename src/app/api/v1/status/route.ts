@@ -1,6 +1,7 @@
 import { describeConfig, type VestiarionConfig } from "@/lib/config";
 import { currentConfig } from "@/lib/context";
 import { chainModes, hasNoProvider } from "@/lib/circle";
+import { networkOf, networkProfile } from "@/lib/network";
 import { screeningMode } from "@/lib/compliance";
 import { stats } from "@/lib/queries";
 import { guardApiRequest, handleApiRequest } from "@/lib/api/guard";
@@ -24,10 +25,12 @@ export interface StatusPayload {
   /**
    * Payments and yield differ and are reported separately, as in the UI.
    * `unavailable` means nothing can pay in the workspace now: its Circle
-   * credentials are stored but could not be read (R12), or it is on Arc
-   * mainnet with no Circle account connected yet, or Arc mainnet is switched
-   * off on this deployment (mainnet limits L7). Cycles refuse to pay then
-   * rather than simulate, so neither leg is live or simulated.
+   * credentials are stored but could not be read (R12); or it is on Arc
+   * mainnet with no Circle account connected yet, or not live yet; or Arc
+   * mainnet is switched off on this deployment (mainnet limits L7, mainnet
+   * copy C12). Cycles refuse to pay then rather than simulate, so neither leg
+   * is live or simulated. Yield is also `unavailable` on a network with no
+   * yield reserve.
    */
   provenance: {
     payments: "live" | "simulate" | "unavailable";
@@ -66,7 +69,12 @@ export async function GET(request: Request) {
     // reports simulate/simulate then so pages render, but nothing pays in
     // either state, so a client told `simulate` would wait for settlements that
     // never come.
-    const unreadable = hasNoProvider(config);
+    // Nothing pays while the workspace has no provider, or while its network
+    // holds it (Arc mainnet switched off, or the workspace not live there):
+    // mainnet copy C12.
+    const noPayments = hasNoProvider(config) || Boolean(config.chain.networkHold);
+    // A network with no yield reserve has nothing to earn in, live or not.
+    const noReserve = !networkProfile(networkOf(config.network)).usyc;
     const modes = chainModes();
     const snapshot = await stats();
 
@@ -74,8 +82,8 @@ export async function GET(request: Request) {
       data: {
         businessName: config.businessName,
         provenance: {
-          payments: unreadable ? "unavailable" : modes.mode,
-          yield: unreadable ? "unavailable" : modes.earnMode,
+          payments: noPayments ? "unavailable" : modes.mode,
+          yield: noPayments || noReserve ? "unavailable" : modes.earnMode,
           screening: screeningMode(),
         },
         clock: {

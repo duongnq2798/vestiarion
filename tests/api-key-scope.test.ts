@@ -509,6 +509,35 @@ describe("GET /api/v1/status", () => {
     expect((await provenance(true)).payments).toBe("live");
   });
 
+  it("reports unavailable for a connected mainnet workspace that is held, and yield unavailable where there is no reserve (mainnet copy C12)", async () => {
+    const current = `current:${crypto.randomBytes(32).toString("base64")}`;
+    process.env.VESTIARION_MASTER_KEYS = current;
+    const provenance = async (mode: "sandbox" | "live") => {
+      const row = orgRow(ORG_A, {
+        network: "arc-mainnet",
+        mode,
+        wallet_host: "own",
+        circle_api_key_enc: encryptSecret("circle-key", { orgId: ORG_A, column: "circle_api_key_enc" }, parseMasterKeys(current)),
+        circle_entity_secret_enc: encryptSecret("entity-secret", { orgId: ORG_A, column: "circle_entity_secret_enc" }, parseMasterKeys(current)),
+      });
+      vi.mocked(authenticateApiKey).mockResolvedValueOnce(KEY_A);
+      const fake = fakeSupabase(database({}, { [ORG_A]: row }));
+      const request = new Request("https://vestiarion.invalid/api/v1/status", { headers: { authorization: `Bearer ${PRESENTED}` } });
+      const response = await runWith({ config: { ...config, mainnetEnabled: true }, db: fake.client, fetch: fake.fetch }, () => getStatus(request));
+      return ((await response.json()) as { data: { provenance: Record<string, string> } }).data.provenance;
+    };
+
+    // Switched on and connected, but not live yet: the network holds it, so nothing pays.
+    expect(await provenance("sandbox")).toEqual({ payments: "unavailable", yield: "unavailable", screening: "simulate" });
+    // Live: its payments are real, and Arc mainnet has no reserve to earn in.
+    expect(await provenance("live")).toEqual({ payments: "live", yield: "unavailable", screening: "simulate" });
+  });
+
+  it("reports a sandbox on Arc testnet as simulated, as before (mainnet copy C12, Review Focus 3)", async () => {
+    const { body } = await status(orgRow(ORG_A, { mode: "sandbox" }));
+    expect(body.data.provenance).toEqual({ payments: "simulate", yield: "simulate", screening: "simulate" });
+  });
+
   it("reports the key's own workspace, and simulate when it has no Circle credentials stored", async () => {
     const { body } = await status(orgRow(ORG_A));
     expect(body.data.businessName).toBe("Org A");
