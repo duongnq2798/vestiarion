@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import type { VestiarionConfig } from "../config";
 import { decryptSecret, type MasterKey, type SecretEnvelope } from "../secrets";
-import { MAINNET_NOT_CONNECTED, MAINNET_OFF, networkHold } from "../mainnet";
+import { MAINNET_OFF, networkHold } from "../mainnet";
 import { ARC_MAINNET, FeatureOffError, networkOf, type Network } from "../network";
 
 export const FOUNDING_ORG_ID = "00000000-0000-4000-8000-000000000001";
@@ -173,10 +173,10 @@ export function orgConfig(
     circleEntitySecret = openCircleSecret("circle_entity_secret_enc");
   }
 
-  // Arc mainnet behind a switch (mainnet go-live M4, M5). Off, a mainnet workspace gets no Circle credentials at all,
-  // as network foundation N3 kept every one; on, its own credentials open, and its hold stands until it is live. It
-  // never takes the platform's hosted testnet pair, and with no Circle account of its own it gets no provider: never
-  // the simulator. A stored credential it could not open stays reported as that.
+  // Arc mainnet behind a switch (mainnet go-live M4). Off, a mainnet workspace gets no Circle credentials at all, as
+  // network foundation N3 kept every one; on, its own credentials open, and its hold stands until it is live. It never
+  // takes the platform's hosted testnet pair. One with no Circle account of its own has nothing here that could not be
+  // read: `getChainProvider` refuses it, so it is never given the simulator (M5).
   const network = networkOf(org.network);
   const hold = networkHold(network, org.mode, base) ?? undefined;
   if (network === "arc-mainnet") {
@@ -186,8 +186,6 @@ export function orgConfig(
       circleEntitySecret = undefined;
       credentialsUnreadable = withheld;
       warnings.push(withheld);
-    } else if (!circleApiKey || !circleEntitySecret) {
-      credentialsUnreadable ??= MAINNET_NOT_CONNECTED;
     }
   }
 

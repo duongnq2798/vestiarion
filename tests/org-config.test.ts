@@ -530,18 +530,18 @@ describe("a workspace on Arc mainnet (mainnet go-live M4, M5)", () => {
     expect(live.chain.networkHold).toBeUndefined();
   });
 
-  it("is never given the simulator: with no Circle account connected, its provider refuses, quietly", () => {
+  it("with no Circle account connected, has nothing stored that could not be read, and no warning", () => {
     const { config, warnings } = orgConfig(on, mainnet("sandbox", false), keys);
     expect(config.chain.circleApiKey).toBeUndefined();
-    expect(config.chain.credentialsUnreadable).toBe("This workspace on Arc mainnet has no Circle account connected yet.");
-    expect(warnings).not.toContain("This workspace on Arc mainnet has no Circle account connected yet.");
+    expect(config.chain.credentialsUnreadable).toBeUndefined();
+    expect(warnings).toEqual([]);
   });
 
   it("keeps a stored credential it could not open reported as such, not as unconnected", () => {
     const { config } = orgConfig(on, { ...row(OTHER_ORG, sealed, strangerKeys), mode: "live", network: "arc-mainnet" }, keys);
     expect(config.chain.circleApiKey).toBeUndefined();
-    expect(config.chain.credentialsUnreadable).not.toBe("This workspace on Arc mainnet has no Circle account connected yet.");
     expect(config.chain.credentialsUnreadable).toBeTruthy();
+    expect(config.chain.credentialsUnreadable).not.toBe("Arc mainnet is switched off on this deployment.");
   });
 
   it("never takes the platform's hosted testnet pair", () => {

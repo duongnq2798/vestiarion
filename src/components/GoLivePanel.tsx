@@ -29,6 +29,8 @@ import { useActionForm } from "@/components/ui/useActionForm";
 import { fmt } from "@/components/vx/Primitives";
 import { utcMinute } from "@/lib/copy";
 import { FUNDING_WATCH_INTERVAL_MS, shouldReadBalanceAgain } from "@/lib/funding-watch";
+import { MAINNET_OFF } from "@/lib/mainnet";
+import { networkProfile, type Network } from "@/lib/network";
 import type { GoLiveStatus } from "@/lib/platform/go-live";
 
 /**
@@ -61,15 +63,20 @@ const BALANCE_INITIAL: BalanceActionResult = { ok: false, message: "", balance: 
 const FAUCET = "https://faucet.circle.com";
 const CIRCLE_CONSOLE = "https://console.circle.com";
 
-/** What confirming Go live changes (spec §2, step 3). */
-export const GO_LIVE_CONSEQUENCES = (
-  <>
-    <span className="block">Real testnet USDC moves when the agent pays.</span>
-    <span className="block">The agent runs every 6 hours on its own.</span>
-    <span className="block">The workspace is no longer deleted when inactive.</span>
-    <span className="mt-2 block">To stop it later, pause the agent from the console.</span>
-  </>
-);
+/** What confirming Go live changes (spec §2, step 3), on the workspace's network (mainnet go-live M8). */
+export function goLiveConsequences(network: Network): ReactNode {
+  return (
+    <>
+      <span className="block">{network === "arc-mainnet" ? "Real USDC moves when the agent pays." : "Real testnet USDC moves when the agent pays."}</span>
+      <span className="block">The agent runs every 6 hours on its own.</span>
+      <span className="block">The workspace is no longer deleted when inactive.</span>
+      <span className="mt-2 block">To stop it later, pause the agent from the console.</span>
+    </>
+  );
+}
+
+/** What confirming Go live changes on Arc testnet. */
+export const GO_LIVE_CONSEQUENCES = goLiveConsequences("arc-testnet");
 
 /**
  * The secret inputs are masked, and marked for password managers to leave
@@ -114,6 +121,16 @@ const STATUS_LINE: Record<GoLiveStatus["step"], { tone: StatusTone; label: strin
   live: { tone: "proof", label: "Live · paying on Arc testnet" },
 };
 
+/** On Arc mainnet nothing is simulated, and nothing moves before Go live (mainnet go-live M4, M5). */
+const MAINNET_STATUS_LINE: Record<GoLiveStatus["step"], { tone: StatusTone; label: string }> = {
+  connect: { tone: "simulated", label: "Not live · Arc mainnet" },
+  wallets: { tone: "held", label: "Not live · nothing moves until an owner takes it live" },
+  go_live: { tone: "held", label: "Not live · nothing moves until an owner takes it live" },
+  live: { tone: "proof", label: "Live · paying on Arc mainnet" },
+};
+
+const onMainnet = (status: GoLiveStatus) => status.network === "arc-mainnet";
+
 /**
  * A hosted sandbox pays through the hosted pair once its wallets exist, as a
  * connected one does through its own; before, there is nothing to pay from.
@@ -127,7 +144,11 @@ function hostedStatusLine(status: GoLiveStatus): { tone: StatusTone; label: stri
 }
 
 function StatusLine({ status }: { status: GoLiveStatus }) {
-  const { tone, label } = status.host === "hosted" && status.step !== "connect" ? hostedStatusLine(status) : STATUS_LINE[status.step];
+  const { tone, label } = onMainnet(status)
+    ? MAINNET_STATUS_LINE[status.step]
+    : status.host === "hosted" && status.step !== "connect"
+      ? hostedStatusLine(status)
+      : STATUS_LINE[status.step];
   return (
     // A long line wraps inside the badge at 360 px instead of overflowing the header.
     <Badge tone={tone} size="sm" dot className={cn(label.length > 30 && "whitespace-normal rounded-lg text-left")}>
@@ -212,7 +233,16 @@ function ReplaceCredentials({ orgSlug, status }: { orgSlug: string; status: GoLi
   );
 }
 
-function ConnectIntro() {
+function ConnectIntro({ network = "arc-testnet" }: { network?: Network }) {
+  if (network === "arc-mainnet") {
+    return (
+      <p className="text-sm leading-relaxed text-ink-2">
+        Paste a live API key (it starts with LIVE_API_KEY) and the entity secret registered for it, from your Circle account once it is upgraded to
+        production (<ExternalLink href={CIRCLE_CONSOLE}>console.circle.com</ExternalLink>). Circle checks the key first; both values are then encrypted and never
+        shown again.
+      </p>
+    );
+  }
   return (
     <p className="text-sm leading-relaxed text-ink-2">
       Paste an API key and your entity secret from the Circle developer console (<ExternalLink href={CIRCLE_CONSOLE}>console.circle.com</ExternalLink>). Circle
@@ -250,12 +280,12 @@ function HostedChoice({ orgSlug }: { orgSlug: string }) {
   );
 }
 
-function ConnectStep({ orgSlug, hostedAvailable }: { orgSlug: string; hostedAvailable: boolean }) {
+function ConnectStep({ orgSlug, hostedAvailable, network }: { orgSlug: string; hostedAvailable: boolean; network: Network }) {
   if (!hostedAvailable) {
     return (
       <Card className="space-y-4 p-5">
         <StepHeading n={1}>Connect your Circle account</StepHeading>
-        <ConnectIntro />
+        <ConnectIntro network={network} />
         <ConnectForm orgSlug={orgSlug} idPrefix="go-live-connect" replacing={false} />
       </Card>
     );
@@ -296,13 +326,16 @@ function HostedOwnAccount({ orgSlug, status }: { orgSlug: string; status: GoLive
 
 function WalletsStep({ orgSlug, status }: { orgSlug: string; status: GoLiveStatus }) {
   const { state, formProps } = useActionForm(createWalletsAction, INITIAL, { toastOnSuccess: true });
+  const network = networkProfile(status.network ?? "arc-testnet");
   return (
     <Card className="space-y-4 p-5">
       <StepHeading n={2}>Create treasury wallets</StepHeading>
       <p className="text-sm leading-relaxed text-ink-2">
-        {status.host === "hosted"
-          ? "One wallet on Arc testnet for each of this workspace's accounts, created in Vestiarion's testnet account, in a wallet set of this workspace's own."
-          : "One wallet on Arc testnet for each of this workspace's accounts, in a wallet set in your own Circle account. Creating them also proves the entity secret."}
+        {onMainnet(status)
+          ? "One wallet on Arc mainnet, an EOA that pays its own gas in USDC, in a wallet set in your own Circle account. Creating it also proves the entity secret."
+          : status.host === "hosted"
+            ? "One wallet on Arc testnet for each of this workspace's accounts, created in Vestiarion's testnet account, in a wallet set of this workspace's own."
+            : "One wallet on Arc testnet for each of this workspace's accounts, in a wallet set in your own Circle account. Creating them also proves the entity secret."}
       </p>
       {status.wallets.length > 0 && <WalletList wallets={status.wallets} />}
       <form {...formProps} className="grid gap-3">
@@ -315,7 +348,7 @@ function WalletsStep({ orgSlug, status }: { orgSlug: string; status: GoLiveStatu
         <FormMessage tone={state.message && !state.ok ? "error" : "neutral"}>{state.ok ? null : state.message}</FormMessage>
       </form>
       <Callout title="Counterparties are paid only at a real address.">
-        Set each one&apos;s Arc testnet address on the{" "}
+        Set each one&apos;s {network.label} address on the{" "}
         <Link href={`/o/${orgSlug}/counterparties`} className="font-medium text-agent underline-offset-4 hover:underline">
           Counterparties
         </Link>{" "}
@@ -391,6 +424,7 @@ function BalanceLine({ orgSlug, sampleBalance }: { orgSlug: string; sampleBalanc
 function GoLiveStep({ orgSlug, status, sampleBalance }: { orgSlug: string; status: GoLiveStatus; sampleBalance?: number }) {
   const { state, pending, formProps } = useActionForm(goLiveAction, INITIAL, { toastOnSuccess: true });
   const operating = status.wallets.find((wallet) => wallet.kind === "operating");
+  const mainnet = onMainnet(status);
   return (
     <Card className="space-y-5 p-5">
       <StepHeading n={3}>Fund the operating wallet, then go live</StepHeading>
@@ -399,7 +433,13 @@ function GoLiveStep({ orgSlug, status, sampleBalance }: { orgSlug: string; statu
           <p className="text-sm font-medium text-ink">Operating wallet</p>
           <Address value={operating.address} label="Copy the operating wallet address" />
           <p className="text-sm leading-relaxed text-ink-2">
-            Get testnet USDC at <ExternalLink href={FAUCET}>faucet.circle.com</ExternalLink>: select Arc Testnet, and paste this address.
+            {mainnet ? (
+              "Send USDC on Arc mainnet to this address. Keep a little more than you plan to pay: the wallet pays its own gas in USDC."
+            ) : (
+              <>
+                Get testnet USDC at <ExternalLink href={FAUCET}>faucet.circle.com</ExternalLink>: select Arc Testnet, and paste this address.
+              </>
+            )}
           </p>
           <BalanceLine orgSlug={orgSlug} sampleBalance={sampleBalance} />
         </div>
@@ -407,6 +447,11 @@ function GoLiveStep({ orgSlug, status, sampleBalance }: { orgSlug: string; statu
       <form id="go-live-form" {...formProps} className="grid gap-3 border-t border-line pt-4">
         <input type="hidden" name="orgSlug" value={orgSlug} />
         <p className="text-sm leading-relaxed text-ink-2">Going live cannot be undone from here; pausing the agent stops it paying.</p>
+        {mainnet && (
+          <Field id="go-live-confirmation" label="Type mainnet to confirm" description="This workspace then pays real USDC on Arc mainnet.">
+            <Input id="go-live-confirmation" name="confirmation" autoComplete="off" spellCheck={false} required />
+          </Field>
+        )}
         <div>
           <ConfirmDialog
             formId="go-live-form"
@@ -417,7 +462,7 @@ function GoLiveStep({ orgSlug, status, sampleBalance }: { orgSlug: string; statu
               </Button>
             }
             title="Take this workspace live?"
-            description={GO_LIVE_CONSEQUENCES}
+            description={goLiveConsequences(status.network ?? "arc-testnet")}
             confirmLabel="Go live"
           />
         </div>
@@ -451,7 +496,14 @@ export default function GoLivePanel({ orgSlug, status, canAdminister, sampleBala
   const hosted = status.host === "hosted";
 
   let body: ReactNode;
-  if (status.credentialsUnreadable && hosted) {
+  if (status.mainnetOff) {
+    // Arc mainnet switched off on this deployment (mainnet go-live M4): nothing moves, and no step is offered.
+    body = (
+      <Callout tone="held" title={MAINNET_OFF}>
+        Nothing moves on this workspace until it is switched back on. Every page still reads as usual.
+      </Callout>
+    );
+  } else if (status.credentialsUnreadable && hosted) {
     // Nothing to reconnect: the hosted pair is the deployment's, not the workspace's (hosted wallets H1).
     body = (
       <Callout tone="refused" title="Hosted testnet wallet unavailable">
@@ -474,7 +526,7 @@ export default function GoLivePanel({ orgSlug, status, canAdminister, sampleBala
       </p>
     );
   } else if (status.step === "connect") {
-    body = <ConnectStep orgSlug={orgSlug} hostedAvailable={status.hostedAvailable} />;
+    body = <ConnectStep orgSlug={orgSlug} hostedAvailable={status.hostedAvailable} network={status.network ?? "arc-testnet"} />;
   } else if (status.step === "wallets") {
     body = <WalletsStep orgSlug={orgSlug} status={status} />;
   } else {
@@ -484,7 +536,7 @@ export default function GoLivePanel({ orgSlug, status, canAdminister, sampleBala
   // With unreadable credentials the warning asks an owner to reconnect, so the
   // form is offered then too; the new pair still has to pass the same checks.
   // A hosted workspace has no credentials of its own to replace.
-  const canReplace = canAdminister && !hosted && (status.credentialsUnreadable || status.step !== "connect");
+  const canReplace = canAdminister && !hosted && !status.mainnetOff && (status.credentialsUnreadable || status.step !== "connect");
 
   return (
     <section aria-labelledby="go-live-title">

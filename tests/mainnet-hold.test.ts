@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
-import { getChainProvider } from "@/lib/circle";
+import { chainModes, getChainProvider } from "@/lib/circle";
 import { BatchNotSentError } from "@/lib/circle/batch";
-import { MAINNET_NOT_LIVE, MAINNET_OFF } from "@/lib/mainnet";
+import { MAINNET_NOT_CONNECTED, MAINNET_NOT_LIVE, MAINNET_OFF } from "@/lib/mainnet";
 import { forgetPaymentsSwitch, PaymentsDisabledError } from "@/lib/payments-switch";
 import { fakeSupabase, orgTestContext } from "./support/fake-supabase";
 
@@ -55,6 +55,15 @@ describe("a mainnet workspace's provider (mainnet go-live M4)", () => {
     await inMainnet({}, async () => {
       await expect(getChainProvider().depositToEarn(EARN)).rejects.toThrow("The USYC reserve does not run on Arc mainnet yet");
       await expect(getChainProvider().withdrawFromEarn(EARN)).rejects.toThrow("The USYC reserve does not run on Arc mainnet yet");
+    }).result;
+  });
+});
+
+describe("a mainnet workspace with no Circle account connected (mainnet go-live M5)", () => {
+  it("gets no provider, never the simulator, and its pages read safely", async () => {
+    await inMainnet({ circleApiKey: undefined, circleEntitySecret: undefined, networkHold: MAINNET_NOT_LIVE }, async () => {
+      expect(() => getChainProvider()).toThrow(MAINNET_NOT_CONNECTED);
+      expect(chainModes()).toEqual({ mode: "simulate", earnMode: "simulate" });
     }).result;
   });
 });
