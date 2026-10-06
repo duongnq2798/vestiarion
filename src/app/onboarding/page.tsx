@@ -1,15 +1,13 @@
 import type { Metadata } from "next";
-import { ChevronRight, LogOut } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { signOut } from "@/app/login/actions";
 import AcceptInvitationByIdForm from "@/components/AcceptInvitationByIdForm";
-import { DeleteAccountButton } from "@/components/DeleteAccountDialog";
 import CreateWorkspaceForm from "@/components/CreateWorkspaceForm";
 import { Avatar } from "@/components/ui/Avatar";
 import { Card } from "@/components/ui/Card";
-import { SubmitButton } from "@/components/ui/SubmitButton";
-import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
+import { AccountMenu } from "@/components/vx/AccountMenu";
+import { SiteFooter, SiteHeader, SiteHeaderLink } from "@/components/vx/SiteChrome";
 import { HOME_PATH } from "@/components/vx/nav";
 import { membershipsOf } from "@/lib/auth/membership";
 import { orgHref } from "@/lib/auth/org-paths";
@@ -61,13 +59,8 @@ export default async function OnboardingPage({ searchParams }: OnboardingPagePro
   return (
     <div className="flex min-h-dvh flex-col">
       <SiteHeader>
-        {user.email && <span className="hidden max-w-[16rem] truncate text-sm text-ink-3 sm:block">{user.email}</span>}
-        <DeleteAccountButton />
-        <form action={signOut}>
-          <SubmitButton variant="ghost" icon={<LogOut />} pendingLabel="Signing out…">
-            Sign out
-          </SubmitButton>
-        </form>
+        <SiteHeaderLink href="/docs">Docs</SiteHeaderLink>
+        <AccountMenu email={user.email} placement="header" />
       </SiteHeader>
       <main id="main" className="flex flex-1 items-center justify-center px-4 py-12 sm:py-16">
         <div className="w-full max-w-md">
