@@ -12,6 +12,12 @@ export const MAINNET_OFF = "Arc mainnet is switched off on this deployment.";
 export const MAINNET_NOT_LIVE = "This workspace is on Arc mainnet and not live yet. Nothing moves until an owner takes it live.";
 export const MAINNET_NOT_CONNECTED = "This workspace on Arc mainnet has no Circle account connected yet.";
 
+/**
+ * The figure above which a payment on Arc mainnet needs two people (mainnet limits L1, L2): written when a mainnet
+ * workspace is created, and read in place of a missing or empty figure there, so a figure always stands on mainnet.
+ */
+export const MAINNET_STARTING_TWO_APPROVALS = 100;
+
 /** Arc mainnet is on, and this address is on the allowlist (M1). No address is never allowed. */
 export function mayUseMainnet(email: string | null | undefined, config: Pick<VestiarionConfig, "mainnetEnabled" | "mainnetAllowlist">): boolean {
   if (!config.mainnetEnabled || !email) return false;

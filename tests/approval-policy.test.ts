@@ -169,3 +169,34 @@ describe("changeTwoApprovals on Arc mainnet (mainnet limits L2)", () => {
     expect(ledgerMock).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("a mainnet workspace with no figure stored (final review I1)", () => {
+  const onMainnet = <T,>(fn: () => Promise<T>) =>
+    runWith(orgTestContext({ config: { ...config, network: "arc-mainnet" }, client: fake.client, orgId: ORG, userId: OWNER }), fn);
+
+  it("reads the mainnet starting figure, so one approval never pays any amount there", async () => {
+    fake = fakeSupabase(workspace());
+    expect(await onMainnet(() => readTwoApprovalsAbove(db()))).toBe(100);
+    fake = fakeSupabase(workspace({ policy: [{ two_approvals_above: null }] }));
+    expect(await onMainnet(() => readTwoApprovalsAbove(db()))).toBe(100);
+    fake = fakeSupabase(workspace({ policy: [{ two_approvals_above: "250.000000" }] }));
+    expect(await onMainnet(() => readTwoApprovalsAbove(db()))).toBe(250);
+  });
+
+  it("lets its owner raise that figure alone, and never turn it off", async () => {
+    fake = fakeSupabase(workspace({ approvers: 1 }));
+    expect(await onMainnet(() => changeTwoApprovals({ actorId: OWNER, value: "500" }))).toEqual({ from: 100, to: 500 });
+    fake = fakeSupabase(workspace({ approvers: 1 }));
+    await expect(onMainnet(() => changeTwoApprovals({ actorId: OWNER, value: "" }))).rejects.toMatchObject({ code: "mainnet_keeps_figure" });
+  });
+
+  it("still lowers it only with two approvers, as on Arc testnet", async () => {
+    fake = fakeSupabase(workspace({ policy: [{ two_approvals_above: "100" }], approvers: 1 }));
+    await expect(onMainnet(() => changeTwoApprovals({ actorId: OWNER, value: "50" }))).rejects.toMatchObject({ code: "too_few_approvers" });
+  });
+
+  it("leaves Arc testnet reading no figure when none is stored", async () => {
+    fake = fakeSupabase(workspace());
+    expect(await run(() => readTwoApprovalsAbove(db()))).toBeNull();
+  });
+});

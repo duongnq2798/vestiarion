@@ -6,7 +6,7 @@ import { appendLedgerEntry } from "../ledger";
 import { ledgerKeyId } from "../ledger-keys";
 import { encryptSecret, masterKeysFromEnv } from "../secrets";
 import { currentConfig } from "../context";
-import { MAINNET_OFF } from "../mainnet";
+import { MAINNET_OFF, MAINNET_STARTING_TWO_APPROVALS } from "../mainnet";
 import type { Network } from "../network";
 import { homeChain } from "../payee-chains";
 import { workspaceNetwork } from "../workspace-network";
@@ -44,7 +44,7 @@ export const MAINNET_STARTING_BUDGET = { dailyUsdc: 50, weeklyUsdc: 150 } as con
  * The figure above which a payment on a mainnet workspace needs two people, from the start (mainnet limits L1): the
  * platform's default, written at creation, so it needs no second approver to set; on Arc mainnet it is never off (L2).
  */
-export const MAINNET_STARTING_TWO_APPROVALS = 100;
+export { MAINNET_STARTING_TWO_APPROVALS };
 
 /** `create_org` refuses a fourth workspace for the same person (migration 0020). */
 export class WorkspaceLimitError extends Error {
