@@ -487,6 +487,28 @@ describe("GET /api/v1/status", () => {
     expect(body.data.provenance).toEqual({ payments: "unavailable", yield: "unavailable", screening: "simulate" });
   });
 
+  it("reports payments and yield as unavailable for a live, connected workspace on Arc mainnet while the deployment has it switched off (mainnet limits L7)", async () => {
+    const current = `current:${crypto.randomBytes(32).toString("base64")}`;
+    process.env.VESTIARION_MASTER_KEYS = current;
+    const row = orgRow(ORG_A, {
+      network: "arc-mainnet",
+      wallet_host: "own",
+      circle_api_key_enc: encryptSecret("circle-key", { orgId: ORG_A, column: "circle_api_key_enc" }, parseMasterKeys(current)),
+      circle_entity_secret_enc: encryptSecret("entity-secret", { orgId: ORG_A, column: "circle_entity_secret_enc" }, parseMasterKeys(current)),
+    });
+    const provenance = async (mainnetEnabled: boolean) => {
+      vi.mocked(authenticateApiKey).mockResolvedValueOnce(KEY_A);
+      const fake = fakeSupabase(database({}, { [ORG_A]: row }));
+      const request = new Request("https://vestiarion.invalid/api/v1/status", { headers: { authorization: `Bearer ${PRESENTED}` } });
+      const response = await runWith({ config: { ...config, mainnetEnabled }, db: fake.client, fetch: fake.fetch }, () => getStatus(request));
+      return ((await response.json()) as { data: { provenance: Record<string, string> } }).data.provenance;
+    };
+
+    expect(await provenance(false)).toEqual({ payments: "unavailable", yield: "unavailable", screening: "simulate" });
+    // The same workspace with the switch on pays live, so it is the switch that holds it.
+    expect((await provenance(true)).payments).toBe("live");
+  });
+
   it("reports the key's own workspace, and simulate when it has no Circle credentials stored", async () => {
     const { body } = await status(orgRow(ORG_A));
     expect(body.data.businessName).toBe("Org A");
