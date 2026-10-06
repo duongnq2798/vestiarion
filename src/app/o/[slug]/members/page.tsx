@@ -32,7 +32,7 @@ export default async function MembersPage({ params }: { params: Promise<{ slug: 
     const assignable = ORG_ROLES.filter((role) => canAssignRole(membership.role, role));
 
     return (
-      <ProductShell day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()}>
+      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()}>
         <PageHead
           title={sectionTitle("members")}
           sub="Everyone in this workspace, and the invitations still open. Anyone may leave on their own; an owner or admin invites, changes roles and removes."

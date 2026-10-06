@@ -15,6 +15,7 @@ function checklist(overrides: Partial<GettingStartedInput> = {}) {
     payableCount: 0,
     onchainPayments: 0,
     waitingCount: 0,
+    network: "arc-testnet",
     ...overrides,
   });
 }
@@ -74,7 +75,7 @@ describe("the console's checklist", () => {
 
   it("uses the rows the console already reads, with no extra query", () => {
     expect(page.replace(/\s+/g, " ")).toContain(
-      "gettingStarted({ mode: access.membership.mode, accounts: accountsRows, counterparties, payableCount: ownPayableCount(invoices, counterparties), onchainPayments: dashboardStats.onchainTransfers, waitingCount: needsReview, })"
+      "gettingStarted({ mode: access.membership.mode, accounts: accountsRows, counterparties, payableCount: ownPayableCount(invoices, counterparties), onchainPayments: dashboardStats.onchainTransfers, waitingCount: needsReview, network, })"
     );
   });
 });

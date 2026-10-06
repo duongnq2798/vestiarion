@@ -129,6 +129,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
       const client = counterpartiesById.get(invoice.counterparty_id);
       return (
         <PayLinkControl
+          network={network}
           orgSlug={slug}
           invoiceId={decision.id}
           view={linkStates.get(decision.id) ?? null}
@@ -197,7 +198,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
     const waitingCount = openPayables.filter((invoice) => WAITING.has(invoice.status)).length;
 
     return (
-      <ProductShell day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()}>
+      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()}>
         <PageHead
           title={sectionTitle("invoices")}
           sub="Three-way match, counterparty risk, and payment authority — with the agent’s complete reasoning on every line."

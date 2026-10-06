@@ -46,7 +46,7 @@ export default async function ApprovalsPage({ params }: { params: Promise<{ slug
         : {};
 
     return (
-      <ProductShell day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()}>
+      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()}>
         <PageHead
           title={sectionTitle("approvals")}
           sub={

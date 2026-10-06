@@ -190,7 +190,7 @@ describe("PayLinkControl", () => {
   const control = (props: Partial<Parameters<typeof PayLinkControl>[0]> = {}) =>
     renderToStaticMarkup(
       <TooltipProvider>
-        <PayLinkControl orgSlug="mai" invoiceId={INVOICE} dueDate="2026-10-10T12:00:00+00:00" client={CLIENT} {...props} />
+        <PayLinkControl orgSlug="mai" invoiceId={INVOICE} dueDate="2026-10-10T12:00:00+00:00" client={CLIENT} network="arc-testnet" {...props} />
       </TooltipProvider>
     );
   const VIEW = { url: "https://www.vestiarion.xyz/pay/vxr_" + "a".repeat(43), legacy: false, remindersOnAt: null, deferredUntil: null, sent: [] };
@@ -206,6 +206,12 @@ describe("PayLinkControl", () => {
     expect(markup).toContain(`value="${VIEW.url}"`);
     expect(text(markup)).toContain("Copy link");
     expect(text(markup)).toContain("Make a new link");
+  });
+
+  it("tells the person the client pays on the workspace's network: Arc mainnet there (mainnet copy C1)", () => {
+    const markup = text(control({ view: VIEW, network: "arc-mainnet" }));
+    expect(markup).toContain("They pay the exact amount on Arc mainnet");
+    expect(markup).not.toContain("Arc testnet");
   });
 
   it("says a link made before links were kept cannot be shown again", () => {

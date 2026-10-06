@@ -74,7 +74,7 @@ export default async function AuditPage({ params, searchParams }: AuditPageProps
     const retiredKeys = exportKeys(ledgerVerificationKeyring()).filter((key) => key.status === "retired");
 
     return (
-      <ProductShell day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()}>
+      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()}>
         <PageHead
           title={sectionTitle("audit")}
           sub="Every decision is appended here, hash-linked to the one before it and signed with Ed25519. The summary stays readable; raw detail and cryptographic material remain inspectable."

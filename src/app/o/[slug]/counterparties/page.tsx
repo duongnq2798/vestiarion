@@ -60,7 +60,7 @@ export default async function CounterpartiesPage({ params }: { params: Promise<{
     });
 
     return (
-      <ProductShell day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()}>
+      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()}>
         <PageHead
           title={sectionTitle("counterparties")}
           sub="Add the people and businesses Vestiarion may invoice or pay. Each new record is screened immediately."
@@ -134,6 +134,7 @@ export default async function CounterpartiesPage({ params }: { params: Promise<{
                             {counterparty.notice_email ?? "None"}
                             {canWrite && (
                               <CounterpartyNoticeEmailEdit
+                                network={network}
                                 orgSlug={slug}
                                 counterparty={{ id: counterparty.id, name: counterparty.name, role: counterparty.role, noticeEmail: counterparty.notice_email ?? null }}
                               />
