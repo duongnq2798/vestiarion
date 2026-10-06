@@ -60,6 +60,11 @@ describe("lockMilestoneAction", () => {
     expect(lib.lockMilestone).not.toHaveBeenCalled();
   });
 
+  it("refuses a refund by name on Arc mainnet, where escrow does not run (mainnet polish E5, final review M6)", async () => {
+    authorizeMock.mockResolvedValue({ ...access("sandbox"), membership: { ...access("sandbox").membership, network: "arc-mainnet" } });
+    expect(await refundMilestoneAction(empty, form())).toEqual({ ok: false, message: "Escrow does not run on Arc mainnet yet" });
+  });
+
   it("says payments are switched off, for a lock and for a refund (payment safety S4)", async () => {
     authorizeMock.mockResolvedValue(access("live"));
     lib.lockMilestone.mockRejectedValueOnce(new PaymentsDisabledError());

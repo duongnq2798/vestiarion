@@ -5,12 +5,15 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
 import { homeChain, networkOfChain } from "@/lib/payee-chains";
 import { readReceipt, type ReceiptView as ReceiptViewData } from "@/lib/platform/receipts";
+import { linkSocialMetadata } from "@/lib/link-previews";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Payment receipt",
   robots: { index: false, follow: false },
+  // This page's own card, rendered at build time and naming nothing of the link (mainnet polish E1).
+  ...linkSocialMetadata("receipt"),
 };
 
 type ReceiptPageProps = {

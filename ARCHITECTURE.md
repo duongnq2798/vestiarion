@@ -1001,6 +1001,16 @@ links retain the separate, stricter `siteOrigin()` policy. The proxy excludes
 both metadata image paths and `og/`, so a crawler fetching a preview never
 performs a Supabase session refresh.
 
+The pay, payee and receipt link pages have cards of their own
+(`docs/superpowers/specs/2026-10-06-mainnet-polish-design.md` E1), so a link
+pasted into a chat does not show the platform's "Arc testnet" card whatever the
+link's network. Like the docs images they are served under `og/`, by
+`src/app/og/link/[page]/route.ts`: one card per kind of link, rendered at build
+time, with the page's badge and words and "Arc" in the footer. They read nothing
+of any link, so no token reaches an image's address. Each page points its Open
+Graph and X metadata at its card with `linkSocialMetadata` (`src/lib/link-previews.ts`),
+which repeats the site-wide fields a page's `openGraph` replaces.
+
 Each docs page has its own image: its title, its summary, and either its
 section or, on a reference page, its request line, beside a card of the docs'
 sections with its own marked (`src/app/_og/DocsPreview.tsx`, in the same

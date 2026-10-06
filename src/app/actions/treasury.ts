@@ -5,7 +5,6 @@ import "server-only";
 import { z } from "zod";
 import { refreshOnChainBalances, syncWalletBalances } from "@/lib/agent/balances";
 import { authorize } from "@/lib/auth/authorize";
-import { FeatureOffError, networkOf, networkProfile } from "@/lib/network";
 import { revalidateOrgPages } from "@/lib/auth/revalidate";
 import { fundGateway, fundServiceBudget, GatewayStepFailed } from "@/lib/circle/gateway-funding";
 import { CIRCLE_UNREACHABLE } from "@/lib/copy";
@@ -17,6 +16,7 @@ import { bringCashBackByPerson, CashBackError } from "@/lib/agent/liquidity";
 import { raiseCycleEvent } from "@/lib/agent/cycle-soon";
 import { agentPaused } from "@/lib/agent/pause";
 import { getChainProvider } from "@/lib/circle";
+import { FeatureOffError, networkOf, networkProfile } from "@/lib/network";
 import { PaymentsDisabledError } from "@/lib/payments-switch";
 
 export interface RefreshBalanceResult {

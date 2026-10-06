@@ -14,14 +14,14 @@ import { networkProfile, type Network } from "@/lib/network";
 
 const INITIAL: IntakeActionResult = { ok: false, message: "" };
 
-/** A new counterparty is screened the moment it is saved; the toast carries the verdict. */
-/** `framed={false}` inside a section that already frames it (Counterparties folds it under Add counterparty). */
 /** What the Chain field offers on the workspace's network (mainnet polish E2): other chains through CCTP, or its own only. */
 export function chainHelp(network: Network): string {
   const profile = networkProfile(network);
   return profile.cctp ? "Another chain is paid from Arc through CCTP, for a fee" : `${profile.label} pays on its own chain only`;
 }
 
+/** A new counterparty is screened the moment it is saved; the toast carries the verdict. */
+/** `framed={false}` inside a section that already frames it (Counterparties folds it under Add counterparty). */
 export default function CounterpartyIntake({ orgSlug, framed = true, network }: { orgSlug: string; framed?: boolean; network: Network }) {
   const { state, formProps } = useActionForm(createCounterpartyAction, INITIAL, { resetOnSuccess: true, toastOnSuccess: true });
 

@@ -24,7 +24,7 @@ vi.mock("@/lib/circle/gateway-funding", () => ({
   GatewayStepFailed: class GatewayStepFailed extends Error {},
 }));
 
-import { fundGatewayAction } from "@/app/actions/treasury";
+import { fundGatewayAction, fundServiceBudgetAction } from "@/app/actions/treasury";
 import { GatewayStepFailed } from "@/lib/circle/gateway-funding";
 import { PaymentsDisabledError } from "@/lib/payments-switch";
 
@@ -110,6 +110,16 @@ describe("fundGatewayAction", () => {
     authorizeMock.mockResolvedValue({ ...access("sandbox"), membership: { ...access("sandbox").membership, network: "arc-mainnet" } });
     expect(await fundGatewayAction({ ok: false, message: "" }, form("3"))).toEqual({ ok: false, message: "Paying through Gateway does not run on Arc mainnet yet" });
     expect(fundGateway).not.toHaveBeenCalled();
+  });
+
+  it("refuses the service budget by name on Arc mainnet, and tells an Arc testnet sandbox to go live (mainnet polish E5, final review M6)", async () => {
+    authorizeMock.mockResolvedValue({ ...access("sandbox"), membership: { ...access("sandbox").membership, network: "arc-mainnet" } });
+    expect(await fundServiceBudgetAction({ ok: false, message: "" }, form("3"))).toEqual({ ok: false, message: "Paying through Gateway does not run on Arc mainnet yet" });
+    authorizeMock.mockResolvedValue(access("sandbox"));
+    expect(await fundServiceBudgetAction({ ok: false, message: "" }, form("3"))).toEqual({
+      ok: false,
+      message: "The service budget is for a live workspace on Arc testnet. Take this workspace live first.",
+    });
   });
 
   it("refuses a sandbox: its payments are simulated, and Gateway is on Arc testnet", async () => {

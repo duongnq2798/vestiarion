@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { ImageResponse } from "next/og";
 import type { ReactNode } from "react";
 import { COLOR } from "@/components/ui/tokens";
+import { LINK_PREVIEWS, type LinkPage } from "@/lib/link-previews";
 
 const OG_ASSET_DIR = join(process.cwd(), "src", "app", "_og");
 
@@ -253,18 +254,9 @@ export function socialPreviewImage(): ImageResponse {
   });
 }
 
-/**
- * What a link page's card says (docs/superpowers/specs/2026-10-06-mainnet-polish-design.md E1): which kind of page it is,
- * and nothing of the link itself, since a card is shown to whoever the link is pasted to.
- */
-export const LINK_PREVIEWS = {
-  pay: { badge: "Pay an invoice", title: "An invoice to pay in USDC", line: "Open the link to see who asks, how much, and where to send it.", alt: "Vestiarion — an invoice to pay in USDC" },
-  payee: { badge: "Your payment", title: "A payment for your work", line: "Open the link to add your address and follow your payment.", alt: "Vestiarion — a payment for your work" },
-  receipt: { badge: "Payment receipt", title: "A signed payment receipt", line: "Open the link to see the payment and check its signatures.", alt: "Vestiarion — a signed payment receipt" },
-} as const;
 
 /** A link page's card: the platform's frame, the page's badge and words, and no network named beyond Arc (E1). */
-export function linkPreviewImage(page: keyof typeof LINK_PREVIEWS): ImageResponse {
+export function linkPreviewImage(page: LinkPage): ImageResponse {
   const { badge, title, line } = LINK_PREVIEWS[page];
   return renderSocialImage({
     badge,

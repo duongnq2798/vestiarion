@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -6,9 +6,10 @@ import { describe, expect, it, vi } from "vitest";
 
 /**
  * A link page's own preview card (docs/superpowers/specs/2026-10-06-mainnet-polish-design.md E1): `/pay`, `/payee` and
- * `/receipt` each have an Open Graph and a Twitter image, so a link pasted into a chat no longer shows the platform's
- * card, whose footer says "Arc testnet". The card names no network and reads nothing of the link: no amount, no name.
- * `ImageResponse` is stubbed to keep the element it is given, which is rendered here as markup.
+ * `/receipt` point their Open Graph and X metadata at one card per kind of link, served from `/og/link/<page>`. Like the
+ * docs pages' images, each is rendered at build time and skipped by the proxy, so a crawler's fetch costs nothing and
+ * never refreshes a session (final review I2). The card names no network beyond Arc, no currency (I1), and reads
+ * nothing of the link: no token reaches the image's address. `ImageResponse` is stubbed to keep the element it is given.
  */
 
 vi.mock("next/og", () => ({
@@ -20,38 +21,56 @@ vi.mock("next/og", () => ({
   },
 }));
 
-const payOg = await import("@/app/pay/[token]/opengraph-image");
-const payTw = await import("@/app/pay/[token]/twitter-image");
-const payeeOg = await import("@/app/payee/[token]/opengraph-image");
-const payeeTw = await import("@/app/payee/[token]/twitter-image");
-const receiptOg = await import("@/app/receipt/[token]/opengraph-image");
-const receiptTw = await import("@/app/receipt/[token]/twitter-image");
+const route = await import("@/app/og/link/[page]/route");
+const { LINK_PREVIEWS, linkImagePath, linkSocialMetadata } = await import("@/lib/link-previews");
 
-type Route = { default: () => unknown; alt: string; contentType: string };
-const ROUTES = [
-  ["pay", "Pay an invoice", [payOg, payTw]],
-  ["payee", "Your payment", [payeeOg, payeeTw]],
-  ["receipt", "Payment receipt", [receiptOg, receiptTw]],
-] as const satisfies ReadonlyArray<readonly [string, string, readonly Route[]]>;
+const PAGES = [
+  ["pay", "Pay an invoice"],
+  ["payee", "Your payment"],
+  ["receipt", "Payment receipt"],
+] as const;
+const source = (file: string) => readFileSync(path.join(process.cwd(), file), "utf8");
 const text = (markup: string) => markup.replace(/<[^>]+>/g, " ").replace(/&#x27;/g, "'").replace(/\s+/g, " ").trim();
+const card = async (page: string) => (await route.GET(new Request(`https://vestiarion.invalid/og/link/${page}`), { params: Promise.resolve({ page }) })) as unknown;
 
 describe("a link page's preview card (mainnet polish E1)", () => {
-  it.each(ROUTES)("/%s has its own Open Graph and Twitter image, with its badge and no network named", (_page, badge, routes) => {
-    for (const route of routes) {
-      const card = text(renderToStaticMarkup((route.default() as unknown as { element: ReactElement }).element));
-      expect(card).toContain(badge);
-      expect(card).toContain("Arc");
-      expect(card).not.toContain("Arc testnet");
-      expect(card).not.toContain("Arc mainnet");
-      expect(route.contentType).toBe("image/png");
-      expect(route.alt).toMatch(/^Vestiarion/);
-    }
+  it("renders one card per kind of link at build time, and no other", () => {
+    expect(route.generateStaticParams()).toEqual([{ page: "pay" }, { page: "payee" }, { page: "receipt" }]);
+    expect(route.dynamicParams).toBe(false);
+    expect(linkImagePath("pay")).toBe("/og/link/pay");
   });
 
-  it.each(ROUTES)("/%s's card reads nothing of the link", (page) => {
-    for (const kind of ["opengraph-image", "twitter-image"]) {
-      const source = readFileSync(path.join(process.cwd(), "src/app", page, "[token]", `${kind}.tsx`), "utf8");
-      expect(source).not.toMatch(/params|pay-links|payee-links|receipts|token\b/);
+  it.each(PAGES)("draws /%s's card with its badge and no network named beyond Arc", async (page, badge) => {
+    const drawn = text(renderToStaticMarkup(((await card(page)) as { element: ReactElement }).element));
+    expect(drawn).toContain(badge);
+    expect(drawn).toContain("Arc");
+    expect(drawn).not.toContain("Arc testnet");
+    expect(drawn).not.toContain("Arc mainnet");
+  });
+
+  it("answers 404 for a page that is not a link's", async () => {
+    expect(((await card("invoices")) as Response).status).toBe(404);
+  });
+
+  it("names no currency on the pay card, as an invoice may be in EURC (final review I1)", () => {
+    expect(LINK_PREVIEWS.pay.title).toBe("An invoice to pay");
+    for (const preview of Object.values(LINK_PREVIEWS)) expect(`${preview.title} ${preview.line} ${preview.alt}`).not.toMatch(/USDC|EURC/);
+  });
+
+  it.each(PAGES)("points /%s's Open Graph and X metadata at its card, with the site-wide fields a page's openGraph replaces", (page) => {
+    const social = linkSocialMetadata(page);
+    const image = { url: `/og/link/${page}`, width: 1200, height: 630, type: "image/png", alt: LINK_PREVIEWS[page].alt };
+    expect(social.openGraph).toMatchObject({ siteName: "Vestiarion", type: "website", locale: "en_US", images: [image] });
+    expect(social.twitter).toMatchObject({ card: "summary_large_image", site: "@vestiarionhq", images: [image] });
+    const pageSource = source(`src/app/${page}/[token]/page.tsx`);
+    expect(pageSource).toContain(`...linkSocialMetadata("${page}")`);
+    expect(pageSource).toContain("robots: { index: false, follow: false }");
+  });
+
+  it("reads nothing of any link, and keeps tokens out of the image's address", () => {
+    expect(source("src/app/og/link/[page]/route.ts")).not.toMatch(/pay-links|payee-links|receipts|token/);
+    for (const page of ["pay", "payee", "receipt"]) {
+      for (const kind of ["opengraph-image", "twitter-image"]) expect(existsSync(path.join(process.cwd(), "src/app", page, "[token]", `${kind}.tsx`))).toBe(false);
     }
   });
 
