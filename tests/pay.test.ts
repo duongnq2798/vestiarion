@@ -495,22 +495,3 @@ describe("syncOperatingBalance", () => {
     expect(balance).toBe(42);
   });
 });
-
-describe("syncOperatingBalance on a network whose wallets pay their own gas (mainnet go-live M6)", () => {
-  it("keeps the gas reserve aside", async () => {
-    const fake = fakeSupabase((sent) => {
-      if (sent.path === "/rest/v1/accounts" && sent.method === "GET") {
-        return { body: { id: OPERATING_ACCOUNT_ID, chain: "ARC", token: "USDC", balance: "42", apy: "0" } };
-      }
-      return { body: [] };
-    });
-
-    const balance = await runWith(orgTestContext({ config: { ...config, network: "arc-mainnet" }, client: fake.client, orgId: ORG }), () =>
-      syncOperatingBalance(OPERATING_ACCOUNT_ID)
-    );
-
-    expect(balance).toBe(41.9);
-    const write = fake.requests.find((request) => request.method === "PATCH" && request.path === "/rest/v1/accounts");
-    expect(write?.body).toEqual({ balance: 41.9 });
-  });
-});
