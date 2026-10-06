@@ -91,3 +91,18 @@ describe("treasuryChain", () => {
     await expect(chain.read(CONTRACT, "0x12345678")).rejects.toThrow();
   });
 });
+
+describe("a node that fails", () => {
+  it("is asked once and read as unreadable at once, never retried while a page waits", async () => {
+    // viem retries a failed call three times by default: with Settings reading in three stages, a failing node held the
+    // page for minutes. Callers already treat a failed read as unreadable, and the setup's page asks again itself.
+    const calls: string[] = [];
+    const fetchFn = (async (_url: string | URL | Request, init?: RequestInit) => {
+      calls.push((JSON.parse(String(init?.body)) as Call).method);
+      return new Response("unavailable", { status: 503 });
+    }) as typeof fetch;
+    const chain = treasuryChain(ARC_MAINNET, { rpcUrl: "https://rpc.test.invalid", fetch: fetchFn });
+    await expect(chain.usdcBalance(WALLET)).rejects.toThrow();
+    expect(calls).toEqual(["eth_call"]);
+  });
+});

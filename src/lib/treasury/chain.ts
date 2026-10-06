@@ -43,7 +43,8 @@ export function asAddress(address: string): Hex {
 /** The chain reads for `network`, over its RPC (ARC_MAINNET_RPC_URL when set) unless `rpcUrl` names another. */
 export function treasuryChain(network: NetworkProfile, options: { rpcUrl?: string; fetch?: typeof fetch } = {}): TreasuryChain {
   const client = createPublicClient({
-    transport: http(options.rpcUrl ?? networkRpcUrl(network), { timeout: RPC_TIMEOUT_MS, ...(options.fetch ? { fetchFn: options.fetch } : {}) }),
+    // One try: a failed read is unreadable to every caller, and a page waiting on three stages of retries hung for minutes.
+    transport: http(options.rpcUrl ?? networkRpcUrl(network), { timeout: RPC_TIMEOUT_MS, retryCount: 0, ...(options.fetch ? { fetchFn: options.fetch } : {}) }),
   });
   const usdc = asAddress(network.tokens.USDC);
   const ethCall = (call: { from?: Hex; to?: Hex; data: Hex }) => client.request({ method: "eth_call", params: [call, "latest"] }) as Promise<Hex>;
