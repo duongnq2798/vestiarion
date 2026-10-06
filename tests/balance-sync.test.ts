@@ -6,7 +6,7 @@ import { liveOperatingBalance, syncOnChainBalances } from "@/lib/agent/balances"
 import { reconcileLines, type CycleLogLine } from "@/lib/agent/orchestrator";
 import type { BalanceSnapshot, ChainProvider, EarnResult, TransferResult } from "@/lib/circle";
 import { fakeSupabase, orgTestContext, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
-import { ARC_TESTNET } from "@/lib/network";
+import { ARC_MAINNET, ARC_TESTNET, type NetworkProfile } from "@/lib/network";
 
 /**
  * `syncOnChainBalances` is the reconcile stage's balance read, pulled out of
@@ -30,7 +30,7 @@ const PAYROLL: Row = { id: "acct-pay", name: "Payroll", kind: "chain", balance: 
 const BRIDGE: Row = { id: "acct-br", name: "Bridge", kind: "chain", balance: "0.000000", circle_wallet_id: null };
 
 class FakeChain implements ChainProvider {
-  readonly network = ARC_TESTNET;
+  readonly network: NetworkProfile = ARC_TESTNET;
   readonly mode = "live" as const;
   readonly estimatedFeeUsd = 0.01;
   readonly reads: string[] = [];
@@ -360,5 +360,41 @@ describe("the gas an EOA keeps (mainnet go-live M6)", () => {
     expect(liveOperatingBalance(2, 5, 0.1)).toEqual({ spendable: 0, reserve: 1.9 });
     expect(liveOperatingBalance(10, 2)).toEqual({ spendable: 8, reserve: 2 });
     expect(liveOperatingBalance(10, 2, 0)).toEqual({ spendable: 8, reserve: 2 });
+  });
+});
+
+describe("the gas reserve in the books (mainnet limits L8)", () => {
+  /** liveOperatingBalance as it was before the gas reserve (2a): Arc testnet's figures must stay byte-identical. */
+  function before(onChain: number, notionalReserve: number): { spendable: number; reserve: number } {
+    const available = Math.max(0, onChain);
+    const reserve = Math.min(Math.max(0, notionalReserve), available);
+    return { spendable: Number((available - reserve).toFixed(6)), reserve };
+  }
+
+  it("rounds nothing more where there is no gas reserve, across 18-decimal balances", () => {
+    let seed = 42;
+    const next = () => ((seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31);
+    for (let i = 0; i < 10_000; i += 1) {
+      const onChain = Number((next() * 1000).toFixed(18 - 3));
+      const reserve = i % 3 === 0 ? 0 : Number((next() * 500).toFixed(6));
+      expect(liveOperatingBalance(onChain, reserve, 0), String(onChain)).toEqual(before(onChain, reserve));
+      expect(liveOperatingBalance(onChain, reserve), String(onChain)).toEqual(before(onChain, reserve));
+    }
+    // An exact tie at the 7th decimal, where rounding twice would differ.
+    expect(liveOperatingBalance(1.0000005, 0.5)).toEqual(before(1.0000005, 0.5));
+  });
+
+  it("names the gas reserve it kept aside in the reconcile line", async () => {
+    const chain = new (class extends FakeChain {
+      readonly network: NetworkProfile = ARC_MAINNET;
+    })({ "acct-op": 5 });
+    const fake = fakeSupabase((request: RecordedRequest): FakeReply => {
+      if (request.path === "/rest/v1/accounts" && request.method === "GET") return { body: [{ ...OPERATING, balance: "0.000000" }] };
+      return { body: [] };
+    });
+    const sync = await runWith(orgTestContext({ config, client: fake.client, orgId: ORG }), () => syncOnChainBalances(chain, db()));
+    const changed = sync.outcomes.find((outcome) => outcome.kind === "changed") as { note: string | null; to: number } | undefined;
+    expect(changed?.to).toBe(4.9);
+    expect(changed?.note).toBe("on-chain 5 less 0.1 gas reserve");
   });
 });

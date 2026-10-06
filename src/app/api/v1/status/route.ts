@@ -1,6 +1,6 @@
 import { describeConfig, type VestiarionConfig } from "@/lib/config";
 import { currentConfig } from "@/lib/context";
-import { chainModes } from "@/lib/circle";
+import { chainModes, hasNoProvider } from "@/lib/circle";
 import { screeningMode } from "@/lib/compliance";
 import { stats } from "@/lib/queries";
 import { guardApiRequest, handleApiRequest } from "@/lib/api/guard";
@@ -59,11 +59,12 @@ export async function GET(request: Request) {
   return handleApiRequest("GET /api/v1/status", guard.key, async (): Promise<ApiResource<StatusPayload>> => {
     const config = currentConfig();
     // Modes, not the provider: status must still answer when the
-    // organization's Circle credentials cannot be read (R12). chainModes()
-    // reports simulate/simulate then so pages render, but a cycle refuses to
-    // pay in that state, so a client told `simulate` would wait for
-    // settlements that never come.
-    const unreadable = !!config.chain.credentialsUnreadable;
+    // organization's Circle credentials cannot be read (R12), or when it is on
+    // Arc mainnet with no Circle account yet (mainnet limits L7). chainModes()
+    // reports simulate/simulate then so pages render, but nothing pays in
+    // either state, so a client told `simulate` would wait for settlements that
+    // never come.
+    const unreadable = hasNoProvider(config);
     const modes = chainModes();
     const snapshot = await stats();
 

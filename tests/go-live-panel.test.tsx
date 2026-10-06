@@ -429,6 +429,12 @@ describe("GoLivePanel, on a workspace on Arc mainnet (mainnet go-live M8)", () =
     expect(text(panel(main({ step: "live", connected: true, wallets: MAIN_WALLET, liveSince: "2026-10-06T09:00:00Z" })))).toContain("Live · paying on Arc mainnet");
   });
 
+  it("badges a live mainnet workspace as switched off while the deployment has it off (mainnet limits L7)", () => {
+    const words = text(panel(main({ mainnetOff: true, step: "live", connected: true, wallets: MAIN_WALLET, liveSince: "2026-10-06T09:00:00Z" })));
+    expect(words).toContain("Arc mainnet switched off");
+    expect(words).not.toContain("Live · paying on Arc mainnet");
+  });
+
   it("says when the deployment has Arc mainnet switched off, rather than offer any step", () => {
     const markup = panel(main({ mainnetOff: true, step: "go_live", connected: true, wallets: MAIN_WALLET }));
     const words = text(markup);

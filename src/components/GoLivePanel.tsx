@@ -144,7 +144,10 @@ function hostedStatusLine(status: GoLiveStatus): { tone: StatusTone; label: stri
 }
 
 function StatusLine({ status }: { status: GoLiveStatus }) {
-  const { tone, label } = onMainnet(status)
+  // Arc mainnet switched off holds every mainnet workspace, a live one included (mainnet limits L7).
+  const { tone, label } = status.mainnetOff
+    ? { tone: "held" as const, label: "Arc mainnet switched off" }
+    : onMainnet(status)
     ? MAINNET_STATUS_LINE[status.step]
     : status.host === "hosted" && status.step !== "connect"
       ? hostedStatusLine(status)

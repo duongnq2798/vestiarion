@@ -117,3 +117,10 @@ describe("the payment links on Arc mainnet (M11)", () => {
     expect((await db.query<{ s: { chain: string } }>("select public.payee_link_status($1) as s", [hash("d")])).rows[0].s.chain).toBe("ARC-TESTNET");
   });
 });
+
+describe("the network column's comment (mainnet limits L8, 0079)", () => {
+  it("says the network is fixed once the workspace has an account", async () => {
+    const row = await db.query<{ comment: string }>("select col_description('public.orgs'::regclass, (select attnum from pg_attribute where attrelid = 'public.orgs'::regclass and attname = 'network')) as comment");
+    expect(row.rows[0].comment).toContain("once it has an account");
+  });
+});
