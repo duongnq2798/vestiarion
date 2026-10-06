@@ -2,10 +2,9 @@ name: Vestiarion FX watch
 
 # Decides again, without a person, a EURC payable held because Circle quoted no rate or no swap, or one above its cap
 # or limit, once a fresh quote clears it (docs/superpowers/specs/2026-10-05-fx-reevaluation-design.md F4). A run with
-# nothing to re-check asks no quote and starts no cycle.
+# nothing to re-check asks no quote and starts no cycle. Supabase Cron calls the route every 5 minutes
+# (supabase/cron/watches.sql), as GitHub started this schedule only a few times a day; this workflow is its manual run.
 on:
-  schedule:
-    - cron: "*/5 * * * *"
   workflow_dispatch:
 
 permissions:

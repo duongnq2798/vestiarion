@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 /**
- * `POST /api/platform/webhooks`, run every 10 minutes by
+ * `POST /api/platform/webhooks`, run every 10 minutes by Supabase Cron
+ * (`supabase/cron/watches.sql`, tests/supabase-cron.test.ts) and by hand from
  * `.github/workflows/webhooks.yml` (webhooks design W3). The dispatcher is
  * stubbed (its behaviour is covered by `tests/webhook-deliver.test.ts`), so
  * these pin only the bearer check and the counts-only response.

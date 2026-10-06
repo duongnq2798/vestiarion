@@ -2,11 +2,11 @@ name: Vestiarion transfer watch
 
 # Tells a workspace's people about a live payment not confirmed 15 minutes after it was sent, once per attempt
 # (docs/superpowers/specs/2026-10-06-stuck-transfer-alert-design.md D3). It reads and tells: it never sends, retries or
-# settles a payment. One run at a time, so an attempt is told once. The repository is public, so the log shows the
-# status only, never which workspace has a payment stuck; a run that failed in any workspace answers 500 and shows red.
+# settles a payment. Supabase Cron calls the route every 5 minutes (supabase/cron/watches.sql), as GitHub started this
+# schedule only a few times a day; this workflow is its manual run. One run at a time, so an attempt is told once. The
+# repository is public, so the log shows the status only, never which workspace has a payment stuck; a run that failed
+# in any workspace answers 500 and shows red.
 on:
-  schedule:
-    - cron: "*/5 * * * *"
   workflow_dispatch:
 
 permissions:

@@ -3,8 +3,12 @@ import { watchStuckTransfers } from "@/lib/agent/transfer-watch";
 import { hasValidAgentBearer } from "@/lib/agent-security";
 import { takeTransferWatchToken } from "@/lib/rate-limit";
 
-/** A watch reads each workspace's payments in flight and asks Circle about the few past their wait (stuck-transfer alert D3). */
-export const maxDuration = 300;
+/**
+ * A watch reads each workspace's payments in flight and asks Circle about the few past their wait (stuck-transfer alert
+ * D3). Supabase Cron posts every 5 minutes without waiting for the last answer, and the watch reads which attempts were
+ * told before telling the rest, so a run ends within half that period: two runs never tell the same payment.
+ */
+export const maxDuration = 120;
 
 function clientIp(request: Request): string {
   return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || request.headers.get("x-real-ip") || "unknown";
@@ -12,8 +16,9 @@ function clientIp(request: Request): string {
 
 /**
  * Tells the workspace's people about a live payment that has not confirmed (docs/superpowers/specs/2026-10-06-stuck-
- * transfer-alert-design.md). Called every 5 minutes by .github/workflows/transfer-watch.yml with the agent's bearer
- * token, like the FX watch. It reads and tells; it never sends, retries or settles a payment.
+ * transfer-alert-design.md). Called every 5 minutes by Supabase Cron (supabase/cron/watches.sql), and by hand from
+ * .github/workflows/transfer-watch.yml, with the agent's bearer token, like the FX watch. It reads and tells; it never
+ * sends, retries or settles a payment.
  */
 export async function POST(request: Request) {
   if (!hasValidAgentBearer(request.headers.get("authorization"), process.env.AGENT_API_TOKEN)) {

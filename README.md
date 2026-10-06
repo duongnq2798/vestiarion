@@ -622,13 +622,23 @@ stop the others. Configure repository secrets `VESTIARION_URL` (the deployment o
 `AGENT_API_TOKEN` (the same server secret used by the app). GitHub Actions schedules can be delayed,
 so the ledger timestamp—not the nominal cron minute—is the source of truth for when a cycle ran.
 Sandbox workspaces are never in this list; their cycles run from the console, one **Run cycle**
-click at a time, up to the daily cap above. `.github/workflows/fx-watch.yml` calls
-`POST /api/agent/fx-watch` every 5 minutes with the same secrets: a EURC payable held because
-Circle quoted no rate or no swap, or one above its swap cap or limit, is decided again once a fresh
-quote clears it, with no one pressing anything. A run with nothing to re-check starts no cycle.
-`.github/workflows/transfer-watch.yml` calls `POST /api/agent/transfer-watch` every 5 minutes with the
-same secrets: a live payment not confirmed 15 minutes after it was sent is told to the workspace's
-people, once per attempt, in the console, Slack, Telegram, webhooks and by email. It sends nothing.
+click at a time, up to the daily cap above.
+
+Three jobs must run on the minute, which GitHub's schedules do not do: they started a 5-minute
+schedule only a few times a day. Supabase Cron runs them from the database instead:
+
+- `POST /api/agent/fx-watch`, every 5 minutes: a EURC payable held because Circle quoted no rate or
+  no swap, or one above its swap cap or limit, is decided again once a fresh quote clears it, with no
+  one pressing anything. A run with nothing to re-check starts no cycle.
+- `POST /api/agent/transfer-watch`, every 5 minutes: a live payment not confirmed 15 minutes after it
+  was sent is told to the workspace's people, once per attempt, in the console, Slack, Telegram,
+  webhooks and by email. It sends nothing.
+- `POST /api/platform/webhooks`, every 10 minutes: webhook retries and anything still queued.
+
+To set them up, run `supabase/cron/watches.sql` once in the Supabase SQL editor, with your
+deployment's origin in place of `https://www.vestiarion.xyz`. Its header lists what comes first:
+enable `pg_cron` and `pg_net`, and add `AGENT_API_TOKEN` to Vault as `agent_api_token`. Each job's
+workflow (`fx-watch.yml`, `transfer-watch.yml`, `webhooks.yml`) stays for a manual run.
 
 For automatic contractor evidence, put a full `https://github.com/<owner>/<repo>/pull/<number>` URL
 in `verification_source` and configure a read-only `GITHUB_TOKEN`. A merged response verifies the

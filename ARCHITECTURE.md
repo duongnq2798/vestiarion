@@ -171,9 +171,9 @@ opens the `cycle_runs` row under a per-organization lock and counts the day's ru
 transaction, so it holds across serverless instances rather than resetting per cold start.
 
 **The transfer watch** (`POST /api/agent/transfer-watch`, `src/lib/agent/transfer-watch.ts`,
-`docs/superpowers/specs/2026-10-06-stuck-transfer-alert-design.md`) runs every 5 minutes from
-`.github/workflows/transfer-watch.yml` with the same bearer token. It tells a workspace's people about a live payment
-not confirmed after its network's `stuckAfterMinutes` (15):
+`docs/superpowers/specs/2026-10-06-stuck-transfer-alert-design.md`) runs every 5 minutes from Supabase Cron, with the
+same bearer token, and by hand from `.github/workflows/transfer-watch.yml`. It tells a workspace's people about a live
+payment not confirmed after its network's `stuckAfterMinutes` (15):
 - in every workspace that can hold a live payment (a hosted wallet, or Circle credentials stored), live or not, it
   reads the live payment intents still in flight by `submitted_at`, which migration
   0080's trigger stamps whenever a row becomes `submitting`, and those recorded `failed` in the last week that
@@ -185,12 +185,14 @@ not confirmed after its network's `stuckAfterMinutes` (15):
   cannot be written is logged and the rest are still told;
 - a run that failed in any workspace answers 500 without naming it, and the workflow logs only the status code, because
   the repository is public;
+- a run ends within 120 seconds, half the schedule's period: Supabase Cron posts without waiting for the last answer,
+  and the watch reads which attempts were told before telling the rest, so two runs must never overlap;
 - it runs whatever the pause and the stop switch say, tells from the age alone where Circle cannot be asked, and never
   sends, retries, settles or holds a payment.
 
 **The FX watch** (`POST /api/agent/fx-watch`, `src/lib/agent/fx-watch.ts`,
-`docs/superpowers/specs/2026-10-05-fx-reevaluation-design.md`) runs every 5 minutes from
-`.github/workflows/fx-watch.yml` with the same bearer token. It decides again, without a person, a EURC payable a
+`docs/superpowers/specs/2026-10-05-fx-reevaluation-design.md`) runs every 5 minutes from Supabase Cron, with the same
+bearer token, and by hand from `.github/workflows/fx-watch.yml`. It decides again, without a person, a EURC payable a
 decision held for FX:
 - what held it is read from that decision's own entry (`fxHoldOf`, `src/lib/fx/recheck.ts`): no rate, no swap,
   a swap above the 3% cap, or a value above the limit;
@@ -924,8 +926,9 @@ enqueue error raises a warning and the entry is still appended. A dispatcher
 (`deliverPendingWebhooks`, `src/lib/webhooks/deliver.ts`) claims due rows and
 sends each one HMAC-signed. It runs right after the request that appended
 an entry (`dispatchWebhooksSoon` schedules it with `after()` from
-`appendSigned`, one per burst), right after every scheduled tick, and on a
-10-minute schedule (`POST /api/platform/webhooks`) that sweeps up retries. A
+`appendSigned`, one per burst), right after every scheduled tick, and every
+10 minutes from Supabase Cron (`POST /api/platform/webhooks`), which sweeps up
+retries. A
 destination's host is resolved once, at connect time, and every address must
 pass the same public-only rule as when the endpoint was added; the connection
 is pinned to the addresses checked, which closes the DNS-rebinding gap a
