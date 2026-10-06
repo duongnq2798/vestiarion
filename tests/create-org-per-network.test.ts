@@ -5,9 +5,8 @@ import { applyMigrations, createDatabase, createUser } from "./support/pglite";
 
 /**
  * Migration 0081: at most 3 workspaces per person on each network, where 0020 allowed 3 in all, so a person with three
- * on Arc testnet can still open one on Arc mainnet. create_org takes the network and writes it on insert. The
- * five-argument create_org, kept for a deployment still running the code from before 0081, creates on Arc testnet
- * under the same count.
+ * on Arc testnet can still open one on Arc mainnet. create_org takes the network and writes it on insert. 0020's
+ * five-argument create_org is left as it was for the code from before 0081, which counts every network.
  */
 
 interface Created {
@@ -27,6 +26,16 @@ async function create(userId: string, slug: string, network?: string): Promise<C
       ? await db.query<Created>("select * from public.create_org($1, $2, $3, $4, $5::jsonb)", args)
       : await db.query<Created>("select * from public.create_org($1, $2, $3, $4, $5::jsonb, $6)", [...args, network]);
   return result.rows[0];
+}
+
+async function createOrgFunctions(): Promise<Array<{ args: string; defaults: number; language: string }>> {
+  const result = await db.query<{ args: string; defaults: number; language: string }>(
+    `select pg_get_function_identity_arguments(p.oid) as args, p.pronargdefaults::int as defaults, l.lanname as language
+       from pg_proc p join pg_language l on l.oid = p.prolang
+      where p.proname = 'create_org' and p.pronamespace = 'public'::regnamespace
+      order by p.pronargs`
+  );
+  return result.rows;
 }
 
 beforeAll(async () => {
@@ -52,10 +61,32 @@ describe("create_org on a network (0081)", () => {
     await expect(create(erin, "erin-test-4", "arc-testnet")).rejects.toThrow("org_limit_reached: at most 3 workspaces per person on arc-testnet");
   });
 
-  it("keeps the five-argument create_org for code from before 0081: Arc testnet, under the same count", async () => {
-    // Dana's one workspace is on Arc mainnet, so none of her three on Arc testnet is counted against it.
-    for (const n of [1, 2, 3]) expect((await create(dana, `dana-test-${n}`)).network).toBe("arc-testnet");
-    await expect(create(dana, "dana-test-4")).rejects.toThrow("org_limit_reached");
+  it("leaves 0020's five-argument create_org to the code from before 0081, counting every network", async () => {
+    // That code creates on Arc testnet and moves the row to Arc mainnet after (final review I1). Counted on Arc testnet
+    // alone, its count would never grow, and a tab still on the old deployment could open mainnet workspaces without
+    // end; counted across networks, it stops at 3 in all, as before 0081.
+    const gale = await createUser(db, "gale@example.com");
+    for (const n of [1, 2, 3]) {
+      const row = await create(gale, `gale-old-${n}`);
+      await db.query("update public.orgs set network = 'arc-mainnet' where id = $1", [row.id]);
+    }
+    await expect(create(gale, "gale-old-4")).rejects.toThrow("org_limit_reached");
+  });
+
+  it("keeps exactly two create_org functions, neither with a default, so PostgREST matches a call by its keys alone", async () => {
+    expect(await createOrgFunctions()).toEqual([
+      { args: "p_org_id uuid, p_user_id uuid, p_name text, p_slug text, p_ledger_key_enc jsonb", defaults: 0, language: "plpgsql" },
+      { args: "p_org_id uuid, p_user_id uuid, p_name text, p_slug text, p_ledger_key_enc jsonb, p_network text", defaults: 0, language: "plpgsql" },
+    ]);
+  });
+
+  it("ends in the same state after db:migrate replays every file", async () => {
+    await applyMigrations(db);
+    expect(await createOrgFunctions()).toHaveLength(2);
+    const hana = await createUser(db, "hana@example.com");
+    for (const n of [1, 2, 3]) await create(hana, `hana-test-${n}`, "arc-testnet");
+    expect((await create(hana, "hana-main-1", "arc-mainnet")).network).toBe("arc-mainnet");
+    await expect(create(hana, "hana-old-1")).rejects.toThrow("org_limit_reached");
   });
 
   it("refuses a network that is not one", async () => {

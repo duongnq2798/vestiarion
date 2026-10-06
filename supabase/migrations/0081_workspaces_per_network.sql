@@ -2,13 +2,18 @@
 -- spend of the platform's model calls, since every workspace has its own agent. Counted across networks, it kept a
 -- person with three workspaces on Arc testnet from opening any on Arc mainnet.
 --
--- create_org gains p_network, with no default, so PostgREST never has to choose between two overloads. The workspace's
--- network is written on insert, before its first account exists; 0075's trigger keeps it fixed after that. The
--- five-argument create_org that 0020 made stays, for a deployment still running the code before this migration, and
--- now creates on Arc testnet under the same count.
+-- create_org gains p_network, with no default, so PostgREST never has to choose between two overloads: a call is
+-- matched by its keys alone. The workspace's network is written on insert, before its first account exists; 0075's
+-- trigger keeps it fixed after that. createWorkspace no longer sets it right after create_org, as 0078 describes.
 --
--- Idempotent throughout: scripts/migrate.ts re-runs every migration each time, in order, so 0020's body is replaced
--- here again on every run.
+-- 0020's five-argument create_org is left as it was, counting every network. The code from before this migration still
+-- calls it, until the deploy and from any tab Vercel keeps on an older deployment, and that code moves the new row to
+-- Arc mainnet after creating it: counted on Arc testnet alone, its count would never grow (final review I1).
+--
+-- Idempotent throughout: scripts/migrate.ts re-runs every migration each time.
+--
+-- Rollback (by hand, never by migrate.ts): deploy the code from before this migration, then
+--   drop function public.create_org(uuid, uuid, text, text, jsonb, text);
 
 create or replace function public.create_org(
   p_org_id          uuid,
@@ -45,18 +50,4 @@ $$;
 revoke execute on function public.create_org(uuid, uuid, text, text, jsonb, text) from public, anon, authenticated;
 grant execute on function public.create_org(uuid, uuid, text, text, jsonb, text) to service_role;
 
-create or replace function public.create_org(
-  p_org_id          uuid,
-  p_user_id         uuid,
-  p_name            text,
-  p_slug            text,
-  p_ledger_key_enc  jsonb
-) returns public.orgs
-language sql
-set search_path = ''
-as $$
-  select public.create_org(p_org_id, p_user_id, p_name, p_slug, p_ledger_key_enc, 'arc-testnet');
-$$;
-
-revoke execute on function public.create_org(uuid, uuid, text, text, jsonb) from public, anon, authenticated;
-grant execute on function public.create_org(uuid, uuid, text, text, jsonb) to service_role;
+notify pgrst, 'reload schema';
