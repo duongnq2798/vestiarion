@@ -1,6 +1,6 @@
 import { describeConfig, type VestiarionConfig } from "@/lib/config";
 import { currentConfig } from "@/lib/context";
-import { chainModes } from "@/lib/circle";
+import { chainModes, hasNoProvider } from "@/lib/circle";
 import { screeningMode } from "@/lib/compliance";
 import { stats } from "@/lib/queries";
 import { guardApiRequest, handleApiRequest } from "@/lib/api/guard";
@@ -23,9 +23,11 @@ export interface StatusPayload {
   businessName: string;
   /**
    * Payments and yield differ and are reported separately, as in the UI.
-   * `unavailable` means the organization's Circle credentials are stored but
-   * could not be read: cycles refuse to pay then rather than simulate (R12),
-   * so neither leg is live or simulated.
+   * `unavailable` means nothing can pay in the workspace now: its Circle
+   * credentials are stored but could not be read (R12), or it is on Arc
+   * mainnet with no Circle account connected yet, or Arc mainnet is switched
+   * off on this deployment (mainnet limits L7). Cycles refuse to pay then
+   * rather than simulate, so neither leg is live or simulated.
    */
   provenance: {
     payments: "live" | "simulate" | "unavailable";
@@ -59,11 +61,12 @@ export async function GET(request: Request) {
   return handleApiRequest("GET /api/v1/status", guard.key, async (): Promise<ApiResource<StatusPayload>> => {
     const config = currentConfig();
     // Modes, not the provider: status must still answer when the
-    // organization's Circle credentials cannot be read (R12). chainModes()
-    // reports simulate/simulate then so pages render, but a cycle refuses to
-    // pay in that state, so a client told `simulate` would wait for
-    // settlements that never come.
-    const unreadable = !!config.chain.credentialsUnreadable;
+    // organization's Circle credentials cannot be read (R12), or when it is on
+    // Arc mainnet with no Circle account yet (mainnet limits L7). chainModes()
+    // reports simulate/simulate then so pages render, but nothing pays in
+    // either state, so a client told `simulate` would wait for settlements that
+    // never come.
+    const unreadable = hasNoProvider(config);
     const modes = chainModes();
     const snapshot = await stats();
 

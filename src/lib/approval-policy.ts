@@ -3,6 +3,8 @@ import { currentOrgId } from "./context";
 import { db, unwrap, type OrgDb } from "./dal";
 import { appendLedgerEntryBestEffort } from "./ledger-best-effort";
 import { parseTwoApprovalsForm } from "./two-approvals";
+import { workspaceNetwork } from "./workspace-network";
+import { MAINNET_STARTING_TWO_APPROVALS } from "./mainnet";
 
 /**
  * The figure above which a payment needs two approvals (docs/superpowers/specs/2026-10-05-two-approvals-design.md T1):
@@ -10,15 +12,17 @@ import { parseTwoApprovalsForm } from "./two-approvals";
  * runs inside an organization scope; who may change it (`approval.policy`, owners) is the caller's check.
  *
  * Turning it on, or lowering it, needs two members who may approve payments, or nothing above it could ever be paid.
- * Raising it or turning it off is always allowed. A change is refused while a cycle runs, as the agent's spending limit
- * is: the cycle read the figure when it began.
+ * Raising it is always allowed, and so is turning it off, except on Arc mainnet, where a figure always stands
+ * (mainnet limits L2). A change is refused while a cycle runs, as the agent's spending limit is: the cycle read the
+ * figure when it began.
  */
 
-export type ApprovalPolicyErrorCode = "invalid" | "unchanged" | "cycle_running" | "too_few_approvers";
+export type ApprovalPolicyErrorCode = "invalid" | "unchanged" | "cycle_running" | "too_few_approvers" | "mainnet_keeps_figure";
 
 const MESSAGES: Record<Exclude<ApprovalPolicyErrorCode, "invalid" | "unchanged">, string> = {
   cycle_running: "A cycle is running. Try again in a minute, once it has finished.",
   too_few_approvers: "Two approvals need two people who can approve payments. Add an approver on Members first.",
+  mainnet_keeps_figure: "A workspace on Arc mainnet keeps two approvals above a figure.",
 };
 
 export class ApprovalPolicyError extends Error {
@@ -41,7 +45,11 @@ export async function readTwoApprovalsAbove(orgDb: OrgDb): Promise<number | null
   const result = await orgDb.from("approval_policies").select("two_approvals_above").limit(1);
   if (result.error) throw new Error(`approval_policies not read: ${result.error.message}`);
   const rows = (result.data ?? []) as Array<{ two_approvals_above: string | number | null }>;
-  return numeric(rows[0]?.two_approvals_above);
+  const stored = numeric(rows[0]?.two_approvals_above);
+  // On Arc mainnet a figure always stands (mainnet limits L1, L2): a workspace whose row is missing, created before it
+  // was written or left without it, reads the starting figure, never none (final review I1).
+  if (stored === null && workspaceNetwork().id === "arc-mainnet") return MAINNET_STARTING_TWO_APPROVALS;
+  return stored;
 }
 
 /** How many members may approve payments, leaving out those named (`approvers_besides`, migration 0076). */
@@ -64,6 +72,8 @@ export async function changeTwoApprovals(input: { actorId: string; value: string
   const parsed = parseTwoApprovalsForm(input.value);
   if (!parsed.ok) throw new ApprovalPolicyError("invalid", parsed.message);
   const to = parsed.above;
+  // On Arc mainnet a person's payment above a figure always needs a second person (mainnet limits L2): raised, never off.
+  if (to === null && workspaceNetwork().id === "arc-mainnet") throw new ApprovalPolicyError("mainnet_keeps_figure");
 
   const from = await readTwoApprovalsAbove(db());
   if (from === to) {

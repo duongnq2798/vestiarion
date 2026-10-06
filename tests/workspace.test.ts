@@ -335,8 +335,11 @@ describe("a workspace on Arc mainnet (mainnet go-live M2, M9)", () => {
     expect(fake.requests[accountsAt].body).toMatchObject([{ name: "Operating", kind: "operating", chain: "ARC", balance: 0 }]);
     const budget = fake.requests.find((request) => request.method === "POST" && request.path === "/rest/v1/agent_budgets");
     expect(budget?.body).toMatchObject({ daily_usdc: 50, weekly_usdc: 150, updated_by: USER });
+    // Two people above 100 USDC from the start (mainnet limits L1), and every starting figure on record (L4).
+    const policy = fake.requests.find((request) => request.method === "POST" && request.path === "/rest/v1/approval_policies");
+    expect(policy?.body).toMatchObject({ two_approvals_above: 100, updated_by: USER });
     const created = rpcBodies(fake.requests, "append_ledger_entry")[0];
-    expect(created.p_detail).toMatchObject({ network: "arc-mainnet", mode: "sandbox" });
+    expect(created.p_detail).toMatchObject({ network: "arc-mainnet", mode: "sandbox", startingLimits: { dailyUsdc: 50, weeklyUsdc: 150, twoApprovalsAbove: 100 } });
   });
 
   it("leaves Arc testnet as it was: no network written, the two simulated accounts, no limit", async () => {
@@ -349,7 +352,9 @@ describe("a workspace on Arc mainnet (mainnet go-live M2, M9)", () => {
       { name: "Reserve (simulated)", kind: "reserve", chain: "ARC-TESTNET", balance: 0 },
     ]);
     expect(fake.requests.some((request) => request.path === "/rest/v1/agent_budgets")).toBe(false);
+    expect(fake.requests.some((request) => request.path === "/rest/v1/approval_policies")).toBe(false);
     expect(rpcBodies(fake.requests, "append_ledger_entry")[0].p_detail).toMatchObject({ network: "arc-testnet" });
+    expect(rpcBodies(fake.requests, "append_ledger_entry")[0].p_detail).not.toHaveProperty("startingLimits");
   });
 
   it("is refused while the deployment has Arc mainnet off, before anything is created", async () => {

@@ -318,6 +318,8 @@ phase 1b).
   then refuses any change once an account exists.
   - A mainnet workspace starts with one empty "Operating" account on `ARC`, no reserve, and an agent spending limit
     of 50 USDC a day and 150 USDC in 7 days. `changeAgentBudget` keeps a figure there.
+  - It also starts with two approvals above 100 USDC (`approval_policies`, phase 2b), which `changeTwoApprovals` keeps
+    on there. `org_created` records the starting limits.
 - **Held until live.** `orgConfig` sets `chain.networkHold`: `MAINNET_OFF` while the deployment has it off (and the
   credentials are withheld), `MAINNET_NOT_LIVE` until the workspace is live.
   - `paymentsHold()` (`src/lib/payments-switch.ts`) reads the hold before the platform's switch, and
@@ -333,12 +335,15 @@ phase 1b).
   - The operating balance keeps `gasReserveUsdc` (0.10) aside.
   - A batch is never tried on an EOA network, and the provider refuses one.
   - Escrow and enforcing the spending limit in a contract are off there (`escrow`, `spendingLimitContract`), by name.
-- **Stablecoins by contract** (`src/lib/circle/stablecoins.ts`): USDC is Arc's native token or the ERC-20 at the
-  profile's address, and EURC the ERC-20 at its address. This applies to the token a transfer sends, the balance and
-  money in. Circle lists both USDC entries for an Arc wallet; its order is kept.
+- **Stablecoins by contract** (`src/lib/circle/stablecoins.ts`): on the network's own chain, USDC is Arc's native
+  token or the ERC-20 at the profile's address, and EURC the ERC-20 at its address. On another payee chain, USDC is
+  only that chain's own USDC. This applies to the token a transfer sends, the balance and money in. Circle lists both
+  USDC entries for an Arc wallet; its order is kept. The platform's `CIRCLE_USDC_TOKEN_ID` is Arc testnet's alone.
+- **Receipts** read a native USDC transfer from Arc's system emitter `0xffff…fffE` (EIP-7708) on both networks.
 - **Going live:** each step needs `mayUseMainnet` for the person. A test key is refused on mainnet, naming both
-  networks. Go live needs the word `mainnet` typed, and the profile's `goLiveOpen`: false on Arc mainnet until phase
-  2b's approval limits ship ("Going live does not run on Arc mainnet yet"), so nothing moves money there before them.
+  networks. Go live needs the word `mainnet` typed, and the profile's `goLiveOpen`: false on Arc mainnet until the
+  copy that still names Arc testnet moves (phase 2c), so nothing moves money there before then ("Going live does not
+  run on Arc mainnet yet").
   `workspace_went_live` and `org_created` record the network.
 - **Elsewhere:**
   - Chats refuse a mainnet payment ("approved in Vestiarion").

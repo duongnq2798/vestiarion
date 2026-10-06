@@ -6,7 +6,7 @@ import { appendLedgerEntry } from "../ledger";
 import { ledgerKeyId } from "../ledger-keys";
 import { encryptSecret, masterKeysFromEnv } from "../secrets";
 import { currentConfig } from "../context";
-import { MAINNET_OFF } from "../mainnet";
+import { MAINNET_OFF, MAINNET_STARTING_TWO_APPROVALS } from "../mainnet";
 import type { Network } from "../network";
 import { homeChain } from "../payee-chains";
 import { workspaceNetwork } from "../workspace-network";
@@ -39,6 +39,12 @@ function startingAccounts(network: Network) {
 
 /** The agent's spending limit a mainnet workspace starts with (mainnet go-live M9): tight, and a figure always stays. */
 export const MAINNET_STARTING_BUDGET = { dailyUsdc: 50, weeklyUsdc: 150 } as const;
+
+/**
+ * The figure above which a payment on a mainnet workspace needs two people, from the start (mainnet limits L1): the
+ * platform's default, written at creation, so it needs no second approver to set; on Arc mainnet it is never off (L2).
+ */
+export { MAINNET_STARTING_TWO_APPROVALS };
 
 /** `create_org` refuses a fourth workspace for the same person (migration 0020). */
 export class WorkspaceLimitError extends Error {
@@ -150,13 +156,25 @@ export async function createWorkspace(input: {
             updated_by: userId,
           });
           if (budget.error) throw new Error(budget.error.message);
+          const policy = await db().from("approval_policies").insert({ two_approvals_above: MAINNET_STARTING_TWO_APPROVALS, updated_by: userId });
+          if (policy.error) throw new Error(policy.error.message);
         }
         await appendLedgerEntry({
           actor: "human",
           domain: "system",
           action: "org_created",
           summary: `Workspace created: ${name}`,
-          detail: { by: userId, slug, mode: "sandbox", network: own, ledgerKeyId: ledgerKeyId(publicKey) },
+          detail: {
+            by: userId,
+            slug,
+            mode: "sandbox",
+            network: own,
+            // Every figure a mainnet workspace starts with, on record (mainnet limits L4).
+            ...(own === "arc-mainnet"
+              ? { startingLimits: { dailyUsdc: MAINNET_STARTING_BUDGET.dailyUsdc, weeklyUsdc: MAINNET_STARTING_BUDGET.weeklyUsdc, twoApprovalsAbove: MAINNET_STARTING_TWO_APPROVALS } }
+              : {}),
+            ledgerKeyId: ledgerKeyId(publicKey),
+          },
         });
       },
       { userId }

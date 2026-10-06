@@ -11,7 +11,7 @@ export type ApiErrorCode = (typeof API_ERROR_CODES)[number];
 export interface Status {
   /** The workspace's name. */
   businessName: string;
-  /** Payments and yield differ and are reported separately, as in the UI. `unavailable` means the workspace's Circle credentials are stored but could not be read: cycles refuse to pay then rather than simulate, so neither leg is live or simulated. */
+  /** Payments and yield differ and are reported separately, as in the UI. `unavailable` means nothing can pay in the workspace now: its Circle credentials are stored but could not be read, or it is on Arc mainnet with no Circle account connected yet, or Arc mainnet is switched off on this deployment. Cycles refuse to pay then rather than simulate, so neither leg is live or simulated. */
   provenance: {
     payments: "live" | "simulate" | "unavailable";
     yield: "live" | "simulate" | "unavailable";

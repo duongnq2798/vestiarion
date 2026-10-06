@@ -1629,7 +1629,7 @@ describe("Arc mainnet (mainnet go-live M8)", () => {
     expect(state.org.mode).toBe("sandbox");
   });
 
-  it("asks for the word typed, then refuses going live by name while Arc mainnet's approval limits are not in (final review I3)", async () => {
+  it("asks for the word typed, then refuses going live by name while going live on Arc mainnet is not open (final review I3)", async () => {
     const state = onMainnet(withWallets(connected({ circle_api_key_enc: seal(LIVE_KEY, "circle_api_key_enc") })));
     const { fake, inScope } = database(state, { platform: mainnetPlatform });
     const c = circle(SAME_ENTITY);

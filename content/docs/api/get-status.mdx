@@ -8,7 +8,13 @@
 | `yield` | `live`, `simulate`, `unavailable` | The same, for moves to and from the yield reserve. |
 | `screening` | `live`, `simulate` | Whether this workspace's counterparties are screened against a live sanctions source (OpenSanctions) or the bundled, simulated watchlist. A sandbox always uses the bundled watchlist. |
 
-`unavailable` means the workspace's Circle credentials are stored but cannot be read, for example because they are sealed under a master key this deployment does not hold. A cycle refuses to pay in that state rather than fall back to simulation, so status does not report it as `simulate`. Check `provenance.payments` before you treat a `paid` invoice as money that moved.
+`unavailable` means nothing can pay in this workspace now, for one of three reasons:
+
+- Its Circle credentials are stored but cannot be read, for example because they are sealed under a master key this deployment does not hold.
+- It is on Arc mainnet and has no Circle account connected yet.
+- It is on Arc mainnet, and this deployment has Arc mainnet switched off.
+
+A cycle refuses to pay in each of them rather than fall back to simulation, so status does not report them as `simulate`. Check `provenance.payments` before you treat a `paid` invoice as money that moved.
 
 ### Configuration
 

@@ -212,7 +212,9 @@ export class LiveProvider implements ChainProvider {
       apiKey: chain.circleApiKey,
       entitySecret: chain.circleEntitySecret,
     });
-    this.usdcTokenId = chain.usdcTokenId;
+    // CIRCLE_USDC_TOKEN_ID names a token in the platform's Arc testnet account: a provider on another network looks
+    // USDC up by contract (mainnet limits L6), as ARC_RPC_URL reaches Arc testnet only.
+    this.usdcTokenId = options.network.id === "arc-testnet" ? chain.usdcTokenId : undefined;
     this.network = options.network;
     this.rpcUrl = rpcUrlFor(this.network, chain.arcRpcUrl);
     this.fetch = options.fetch;

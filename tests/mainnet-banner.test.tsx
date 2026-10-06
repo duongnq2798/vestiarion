@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { MainnetBanner } from "@/components/MainnetBanner";
-import { MAINNET_NOT_LIVE, MAINNET_OFF } from "@/lib/mainnet";
+import { MAINNET_NOT_LIVE, MAINNET_OFF, networkHold } from "@/lib/mainnet";
 
 /** What every page of a workspace on Arc mainnet says above its content (docs/superpowers/specs/2026-10-06-mainnet-go-live-design.md M13). */
 
@@ -16,5 +16,17 @@ describe("MainnetBanner", () => {
     expect(text(renderToStaticMarkup(<MainnetBanner mode="sandbox" enabled />))).toContain(MAINNET_NOT_LIVE);
     expect(text(renderToStaticMarkup(<MainnetBanner mode="live" enabled={false} />))).toContain(MAINNET_OFF);
     expect(text(renderToStaticMarkup(<MainnetBanner mode="sandbox" enabled={false} />))).toContain(MAINNET_OFF);
+  });
+});
+
+describe("MainnetBanner and the gates (mainnet limits L7)", () => {
+  it.each([
+    ["sandbox", true],
+    ["live", true],
+    ["sandbox", false],
+    ["live", false],
+  ] as const)("says what networkHold says for a %s workspace with Arc mainnet on: %s", (mode, enabled) => {
+    const words = text(renderToStaticMarkup(<MainnetBanner mode={mode} enabled={enabled} />));
+    expect(words).toContain(networkHold("arc-mainnet", mode, { mainnetEnabled: enabled }) ?? "Arc mainnet: payments here move real USDC.");
   });
 });

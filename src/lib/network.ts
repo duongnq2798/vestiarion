@@ -93,7 +93,8 @@ export interface NetworkProfile {
   usdcIsNative: boolean;
   /**
    * Whether a workspace on this network may go live (final review I3): Arc mainnet's waits for its approval limits
-   * (phase 2b), so nothing in phase 2a moves money there, by construction rather than by procedure.
+   * (phase 2b, in) and for the copy that still names Arc testnet (phase 2c), so nothing moves money there before then,
+   * by construction rather than by procedure.
    */
   goLiveOpen: boolean;
 }
@@ -185,6 +186,9 @@ export const ARC_MAINNET = {
       usdc: "0x3600000000000000000000000000000000000000",
       rpcUrl: "https://rpc.mainnet.arc.io",
       explorerTx: "https://explorer.arc.io/tx/",
+      // Arc's native USDC system emitter (EIP-7708), which mainnet has used since genesis (docs.arc.io, USDC system
+      // events): a receipt reads a native transfer from it, as on Arc testnet (mainnet limits L5).
+      nativeUsdc: "0xfffffffffffffffffffffffffffffffffffffffe",
     },
   ],
   cctp: null,

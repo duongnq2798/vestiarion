@@ -19,9 +19,16 @@ const num = (v: unknown) => (typeof v === "number" ? v : Number(v ?? 0));
  * gas. It is 0 where gas is sponsored, which changes nothing.
  */
 export function liveOperatingBalance(onChain: number, notionalReserve: number, gasReserve = 0): { spendable: number; reserve: number } {
-  const available = Math.max(0, Number((onChain - Math.max(0, gasReserve)).toFixed(6)));
+  // Rounded only where gas is kept aside, so a network without a gas reserve reads exactly as before (mainnet limits L8).
+  const available = gasReserve > 0 ? Math.max(0, Number((onChain - gasReserve).toFixed(6))) : Math.max(0, onChain);
   const reserve = Math.min(Math.max(0, notionalReserve), available);
   return { spendable: Number((available - reserve).toFixed(6)), reserve };
+}
+
+/** What a change kept aside, in words: "on-chain 150 less 30 notional reserve", "on-chain 5 less 0.1 gas reserve" (L8). */
+function balanceNote(onChain: number, notionalReserve: number, gasReserve: number): string | null {
+  const kept = [notionalReserve > 0 ? `${notionalReserve} notional reserve` : null, gasReserve > 0 ? `${gasReserve} gas reserve` : null].filter(Boolean);
+  return kept.length > 0 ? `on-chain ${onChain} less ${kept.join(" and ")}` : null;
 }
 
 export interface BalanceChange {
@@ -165,7 +172,7 @@ export async function syncOnChainBalances(provider: ChainProvider, orgDb: OrgDb,
         name: account.name,
         from: stored,
         to: spendable,
-        note: carveOut > 0 ? `on-chain ${snapshot.balance} less ${carveOut} notional reserve` : null,
+        note: balanceNote(snapshot.balance, carveOut, carvesReserve ? provider.network.gasReserveUsdc : 0),
       });
     } catch (err) {
       outcomes.push({ kind: "failed", accountId: account.id, name: account.name, message: (err as Error).message });

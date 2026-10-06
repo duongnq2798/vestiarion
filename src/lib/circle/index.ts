@@ -160,18 +160,24 @@ export function getChainProvider(): ChainProvider {
   return provider;
 }
 
+/**
+ * Whether the organization has no provider: its stored Circle credentials cannot be read (R12), or it is on Arc mainnet
+ * with no Circle account connected, which never gets the simulator (mainnet go-live M5). Pages then read safely, and the
+ * status API says `unavailable` (mainnet limits L7).
+ */
+export function hasNoProvider(config: VestiarionConfig = currentOrgConfig()): boolean {
+  if (config.chain.credentialsUnreadable) return true;
+  return networkOf(config.network) === "arc-mainnet" && !(config.chain.circleApiKey && config.chain.circleEntitySecret);
+}
+
 /** What a page shows about payments and yield, computed inside the organization's scope. */
 export function chainModes(): { mode: "live" | "simulate"; earnMode: "live" | "simulate" } {
   // getChainProvider() refuses outright when the organization's stored Circle
   // credentials could not be read (R12) — a page must still render, and the
   // warning already reaches it through ledgerReadWarnings(), so this reports
   // the safe simulate/simulate default rather than propagating that throw.
-  const config = currentOrgConfig();
-  if (config.chain.credentialsUnreadable) return { mode: "simulate", earnMode: "simulate" };
-  // A mainnet workspace with no Circle account connected has no provider either (mainnet go-live M5).
-  if (networkOf(config.network) === "arc-mainnet" && !(config.chain.circleApiKey && config.chain.circleEntitySecret)) {
-    return { mode: "simulate", earnMode: "simulate" };
-  }
+  // No provider (unreadable credentials, or a mainnet workspace with no Circle account): the safe default.
+  if (hasNoProvider()) return { mode: "simulate", earnMode: "simulate" };
   const provider = getChainProvider();
   return { mode: provider.mode, earnMode: provider.earnMode };
 }
