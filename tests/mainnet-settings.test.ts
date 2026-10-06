@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { configFromEnv } from "@/lib/config";
-import { runWithConfig } from "@/lib/context";
+import { currentConfig, runWithConfig } from "@/lib/context";
 import { MAINNET_NOT_LIVE, MAINNET_OFF, mayUseMainnet, networkHold } from "@/lib/mainnet";
 
 /**
@@ -51,10 +51,10 @@ describe("mayUseMainnet (M1)", () => {
     expect(mayUseMainnet("owner@acme.test", { ...on, mainnetEnabled: false })).toBe(false);
   });
 
-  it("reads the deployment's settings when none are given", () => {
+  it("reads the deployment's settings as configFromEnv gives them", () => {
     const config = configFromEnv({ ...env, MAINNET_ENABLED: "1", MAINNET_ALLOWLIST: "owner@acme.test" });
-    expect(runWithConfig(config, () => mayUseMainnet("owner@acme.test"))).toBe(true);
-    expect(runWithConfig(configFromEnv(env), () => mayUseMainnet("owner@acme.test"))).toBe(false);
+    expect(runWithConfig(config, () => mayUseMainnet("owner@acme.test", currentConfig()))).toBe(true);
+    expect(runWithConfig(configFromEnv(env), () => mayUseMainnet("owner@acme.test", currentConfig()))).toBe(false);
   });
 });
 

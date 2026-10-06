@@ -14,6 +14,7 @@ import { HOME_PATH } from "@/components/vx/nav";
 import { membershipsOf } from "@/lib/auth/membership";
 import { orgHref } from "@/lib/auth/org-paths";
 import { verifySession } from "@/lib/auth/session";
+import { currentConfig } from "@/lib/context";
 import { mayUseMainnet } from "@/lib/mainnet";
 import { pendingInvitationsFor } from "@/lib/platform/members";
 
@@ -55,7 +56,7 @@ export default async function OnboardingPage({ searchParams }: OnboardingPagePro
     redirect(orgHref(memberships[0].slug, HOME_PATH));
   }
   // Arc mainnet is offered only to a person on the deployment's allowlist while it is on (mainnet go-live M1, M2).
-  const mainnetOffered = mayUseMainnet(user.email);
+  const mainnetOffered = mayUseMainnet(user.email, currentConfig());
 
   return (
     <div className="flex min-h-dvh flex-col">

@@ -1,10 +1,10 @@
-import { currentConfig } from "./context";
 import type { VestiarionConfig } from "./config";
 import type { Network } from "./network";
 
 /**
  * Arc mainnet behind a switch (docs/superpowers/specs/2026-10-06-mainnet-go-live-design.md M1, M4): who may open and
- * take live a mainnet workspace, and why one cannot move money now. Pure apart from reading the deployment's settings.
+ * take live a mainnet workspace, and why one cannot move money now. Pure, so client components can read its words:
+ * a server caller hands it the deployment's settings (`currentConfig()`).
  */
 
 export const MAINNET_NOT_OPEN = "Arc mainnet is not open to this account yet.";
@@ -13,10 +13,7 @@ export const MAINNET_NOT_LIVE = "This workspace is on Arc mainnet and not live y
 export const MAINNET_NOT_CONNECTED = "This workspace on Arc mainnet has no Circle account connected yet.";
 
 /** Arc mainnet is on, and this address is on the allowlist (M1). No address is never allowed. */
-export function mayUseMainnet(
-  email: string | null | undefined,
-  config: Pick<VestiarionConfig, "mainnetEnabled" | "mainnetAllowlist"> = currentConfig()
-): boolean {
+export function mayUseMainnet(email: string | null | undefined, config: Pick<VestiarionConfig, "mainnetEnabled" | "mainnetAllowlist">): boolean {
   if (!config.mainnetEnabled || !email) return false;
   return (config.mainnetAllowlist ?? []).includes(email.trim().toLowerCase());
 }

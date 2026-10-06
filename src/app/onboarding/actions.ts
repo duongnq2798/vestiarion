@@ -5,6 +5,7 @@ import "server-only";
 import { redirect } from "next/navigation";
 import { orgHref } from "@/lib/auth/org-paths";
 import { getSessionUser } from "@/lib/auth/session";
+import { currentConfig } from "@/lib/context";
 import { MAINNET_NOT_OPEN, mayUseMainnet } from "@/lib/mainnet";
 import { createWorkspace, WorkspaceLimitError } from "@/lib/platform/workspace";
 
@@ -27,7 +28,7 @@ export async function createWorkspaceAction(_previous: CreateWorkspaceResult, fo
   // Arc mainnet only for a person on the allowlist while it is on, checked here whatever the form sent (mainnet go-live
   // M1, M2); any other value is Arc testnet.
   const network = formData.get("network") === "arc-mainnet" ? "arc-mainnet" : "arc-testnet";
-  if (network === "arc-mainnet" && !mayUseMainnet(user.email)) return { ok: false, message: MAINNET_NOT_OPEN };
+  if (network === "arc-mainnet" && !mayUseMainnet(user.email, currentConfig())) return { ok: false, message: MAINNET_NOT_OPEN };
   let slug: string;
   try {
     ({ slug } = await createWorkspace({ userId: user.id, name, network }));

@@ -1,4 +1,4 @@
-import { currentOrgConfig, currentOrgId, NoOrgScopeError } from "../context";
+import { currentConfig, currentOrgConfig, currentOrgId, NoOrgScopeError } from "../context";
 import { db, platformDb, unwrap } from "../dal";
 import { withOrg } from "../dal/scope";
 import type { LedgerEntryInput } from "../ledger";
@@ -123,7 +123,7 @@ function keyNetworkMessage(key: NetworkProfile, workspace: NetworkProfile): stri
  * go-live M1, M8): checked first, at each step, before Circle is asked anything.
  */
 function requireMainnetAccess(state: OrgState, actorEmail: string | null | undefined): void {
-  if (networkOf(state.network) === "arc-mainnet" && !mayUseMainnet(actorEmail)) throw new GoLiveError("mainnet_not_open");
+  if (networkOf(state.network) === "arc-mainnet" && !mayUseMainnet(actorEmail, currentConfig())) throw new GoLiveError("mainnet_not_open");
 }
 
 export class GoLiveError extends Error {
