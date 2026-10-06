@@ -343,7 +343,8 @@ phase 1b).
   blockchain.
 - **A feature a network lacks** refuses by name (`FeatureOffError`: "… does not run on Arc mainnet yet") and never
   falls back to testnet values. This covers CCTP, Gateway, the USYC reserve, the EURC swap, x402 buying and hosted
-  wallets, which the Go live panel leaves out there too. Passkey wallets are simply not offered off Arc testnet.
+  wallets, which the Go live panel leaves out there too. The agent's cycle leaves x402 buying out without a line, so a
+  mainnet cycle's log does not repeat it. Passkey wallets are simply not offered off Arc testnet.
 - **Display reads the record's chain; decisions read the workspace's.** A row, a list or a receipt labels a payee by its
   own stored chain and never fails for one off the network. Approve and pay, and a chat's Approve, refuse such a chain
   in plain words before any claim.

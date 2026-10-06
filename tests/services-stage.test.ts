@@ -153,14 +153,15 @@ describe("buyPayeeHistories", () => {
     expect(inserts()).toEqual([]);
   });
 
-  it("buys nothing on a network without Gateway, and says why (network threading P5)", async () => {
+  it("buys nothing on a network without Gateway, and leaves it out of every cycle's log (network threading P5, mainnet pre-flight)", async () => {
     const buy = vi.fn<BuyHistory>(async (address) => bought(address));
     world();
     const { result, lines } = run(buy, { network: "arc-mainnet" });
     await result;
     expect(buy).not.toHaveBeenCalled();
     expect(inserts()).toEqual([]);
-    expect(lines).toContainEqual({ domain: "compliance", message: "Buying services over x402 does not run on Arc mainnet yet" });
+    // Said on every cycle, a feature no one asked for reads as a fault; a person who asks for it is refused by name.
+    expect(lines).toEqual([]);
   });
 
   it("names a refusal's rule only for a refusal", () => {
