@@ -38,22 +38,17 @@ function failed(action: string, error: unknown): WalletTreasuryActionResult {
   return { ok: false, message: GENERIC };
 }
 
-/** The workspace's owner, in its scope, or the refusal as a result. */
-async function asOwner<T extends WalletTreasuryActionResult>(
-  orgSlug: string,
-  refused: Omit<T, keyof WalletTreasuryActionResult>,
-  run: (access: { orgId: string; actorId: string; actorEmail: string | null }) => Promise<T>
-): Promise<T> {
-  const auth = await authorize(orgSlug, "org.administer");
-  if (!auth.ok) return { ok: false, message: auth.message, ...refused } as T;
-  return inOrg(auth, () => run({ orgId: auth.membership.orgId, actorId: auth.user.id, actorEmail: auth.user.email ?? null }));
-}
+/** The person and the workspace an authorized call acts for. */
+type Authorized = Extract<Awaited<ReturnType<typeof authorize>>, { ok: true }>;
+const actor = (auth: Authorized) => ({ orgId: auth.membership.orgId, actorId: auth.user.id, actorEmail: auth.user.email ?? null });
 
 /** The message the owner's wallet signs to prove it is theirs (W3). */
 export async function proofMessageAction(orgSlug: string, address: string): Promise<WalletTreasuryActionResult & { text: string | null }> {
-  return asOwner(orgSlug, { text: null }, async ({ orgId }) => {
+  const auth = await authorize(orgSlug, "org.administer");
+  if (!auth.ok) return { ok: false, message: auth.message, text: null };
+  return inOrg(auth, async () => {
     try {
-      return { ok: true, message: "", text: await proofMessage({ orgId, address }) };
+      return { ok: true, message: "", text: await proofMessage({ orgId: auth.membership.orgId, address }) };
     } catch (error) {
       return { ...failed("proofMessageAction", error), text: null };
     }
@@ -65,9 +60,11 @@ export async function chooseWalletTreasuryAction(
   orgSlug: string,
   proof: { address: string; message: string; signature: string }
 ): Promise<WalletTreasuryActionResult> {
-  return asOwner(orgSlug, {}, async ({ orgId, actorId, actorEmail }) => {
+  const auth = await authorize(orgSlug, "org.administer");
+  if (!auth.ok) return { ok: false, message: auth.message };
+  return inOrg(auth, async () => {
     try {
-      await chooseWalletTreasury({ orgId, actorId, actorEmail, ...proof });
+      await chooseWalletTreasury({ ...actor(auth), ...proof });
       revalidateOrgPages();
       return { ok: true, message: "Your wallet is this workspace's treasury. Create the agent's wallet next." };
     } catch (error) {
@@ -78,9 +75,11 @@ export async function chooseWalletTreasuryAction(
 
 /** Vestiarion creates the agent's wallet, which pays through the contract and holds only gas (W5). */
 export async function createAgentWalletAction(orgSlug: string): Promise<WalletTreasuryActionResult> {
-  return asOwner(orgSlug, {}, async ({ orgId, actorId, actorEmail }) => {
+  const auth = await authorize(orgSlug, "org.administer");
+  if (!auth.ok) return { ok: false, message: auth.message };
+  return inOrg(auth, async () => {
     try {
-      await createAgentWallet({ orgId, actorId, actorEmail });
+      await createAgentWallet(actor(auth));
       revalidateOrgPages();
       return { ok: true, message: "The agent's wallet is created. Deploy the contract from your wallet next." };
     } catch (error) {
@@ -107,9 +106,11 @@ function recordFailed(action: string, error: unknown): RecordActionResult {
 
 /** The deployment for the owner's wallet to send (W6). */
 export async function prepareDeploymentAction(orgSlug: string, figures: { dailyUsdc: number | null; weeklyUsdc: number | null }): Promise<PreparedActionResult> {
-  return asOwner(orgSlug, { transaction: null }, async ({ orgId }) => {
+  const auth = await authorize(orgSlug, "org.administer");
+  if (!auth.ok) return { ok: false, message: auth.message, transaction: null };
+  return inOrg(auth, async () => {
     try {
-      return { ok: true, message: "", transaction: await prepareDeployment({ orgId, ...figures }) };
+      return { ok: true, message: "", transaction: await prepareDeployment({ orgId: auth.membership.orgId, ...figures }) };
     } catch (error) {
       return { ...failed("prepareDeploymentAction", error), transaction: null };
     }
@@ -118,9 +119,11 @@ export async function prepareDeploymentAction(orgSlug: string, figures: { dailyU
 
 /** The deployment the owner's wallet sent, recorded once the chain shows it (W8). */
 export async function recordDeploymentAction(orgSlug: string, txHash: string): Promise<RecordActionResult> {
-  return asOwner(orgSlug, { state: null }, async ({ orgId, actorId }) => {
+  const auth = await authorize(orgSlug, "org.administer");
+  if (!auth.ok) return { ok: false, message: auth.message, state: null };
+  return inOrg(auth, async () => {
     try {
-      const state = await recordDeployment({ orgId, actorId, txHash });
+      const state = await recordDeployment({ orgId: auth.membership.orgId, actorId: auth.user.id, txHash });
       if (state === "verified") revalidateOrgPages();
       return { ok: true, message: "", state };
     } catch (error) {
@@ -131,9 +134,11 @@ export async function recordDeploymentAction(orgSlug: string, txHash: string): P
 
 /** The approval for the owner's wallet to send on USDC (W9). */
 export async function prepareApprovalAction(orgSlug: string, input: { capUsdc: number | null }): Promise<PreparedActionResult> {
-  return asOwner(orgSlug, { transaction: null }, async ({ orgId }) => {
+  const auth = await authorize(orgSlug, "org.administer");
+  if (!auth.ok) return { ok: false, message: auth.message, transaction: null };
+  return inOrg(auth, async () => {
     try {
-      return { ok: true, message: "", transaction: await prepareApproval({ orgId, capUsdc: input.capUsdc }) };
+      return { ok: true, message: "", transaction: await prepareApproval({ orgId: auth.membership.orgId, capUsdc: input.capUsdc }) };
     } catch (error) {
       return { ...failed("prepareApprovalAction", error), transaction: null };
     }
@@ -142,9 +147,11 @@ export async function prepareApprovalAction(orgSlug: string, input: { capUsdc: n
 
 /** The approval the owner's wallet sent, recorded once the chain shows it (W9). */
 export async function recordApprovalAction(orgSlug: string, txHash: string): Promise<RecordActionResult> {
-  return asOwner(orgSlug, { state: null }, async ({ orgId, actorId }) => {
+  const auth = await authorize(orgSlug, "org.administer");
+  if (!auth.ok) return { ok: false, message: auth.message, state: null };
+  return inOrg(auth, async () => {
     try {
-      const state = await recordApproval({ orgId, actorId, txHash });
+      const state = await recordApproval({ orgId: auth.membership.orgId, actorId: auth.user.id, txHash });
       if (state === "verified") revalidateOrgPages();
       return { ok: true, message: "", state };
     } catch (error) {
@@ -155,9 +162,11 @@ export async function recordApprovalAction(orgSlug: string, txHash: string): Pro
 
 /** The gas for the owner's wallet to send the agent (W10). */
 export async function prepareAgentGasAction(orgSlug: string): Promise<PreparedActionResult> {
-  return asOwner(orgSlug, { transaction: null }, async ({ orgId }) => {
+  const auth = await authorize(orgSlug, "org.administer");
+  if (!auth.ok) return { ok: false, message: auth.message, transaction: null };
+  return inOrg(auth, async () => {
     try {
-      return { ok: true, message: "", transaction: await prepareAgentGas({ orgId }) };
+      return { ok: true, message: "", transaction: await prepareAgentGas({ orgId: auth.membership.orgId }) };
     } catch (error) {
       return { ...failed("prepareAgentGasAction", error), transaction: null };
     }
