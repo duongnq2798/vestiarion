@@ -81,7 +81,7 @@ You need a wallet in your browser holding USDC on Arc mainnet: 0.50 USDC for the
 1. **Prove the wallet is yours.** Choose **Connect your wallet**. If your browser has several wallets, choose one first. Your wallet asks you to connect, then to sign a message that names the workspace, Arc mainnet and your wallet's address. Signing sends nothing. The page confirms: "Your wallet is this workspace's treasury. Create the agent's wallet next."
 2. **Step 2 of 3, "Set up your wallet as the treasury".** It shows what is set up so far, read from the chain, then the next of four steps:
    - **Create the agent's wallet.** Choose **Create the agent's wallet**. Vestiarion creates the only wallet that can pay through your contract, in its own Circle account. It holds only gas, never your USDC.
-   - **Deploy your contract.** Enter a **Daily figure (USDC)** and a **7-day figure (USDC)**, or leave either empty to use the agent's spending limit. Then choose **Deploy from your wallet** and confirm in your wallet. Once the chain shows the contract, Vestiarion checks that it is its spending limit contract for your wallet and the agent, then records it.
+   - **Deploy your contract.** Enter a **Daily figure (USDC)** and a **7-day figure (USDC)**, or leave either empty to use that figure of the agent's spending limit. Then choose **Deploy from your wallet** and confirm in your wallet. Once the chain shows the contract, Vestiarion checks that it is its spending limit contract for your wallet and the agent, then records it.
    - **Approve your contract.** Choose **Approve from your wallet** and confirm. This lets the contract move your wallet's USDC, and it still pays nothing past its figures. Leave **Cap (USDC)** empty to approve without a cap, or enter one.
    - **Give the agent its gas.** On Arc mainnet the agent pays its own gas in USDC. Choose **Send 0.50 USDC for gas** and confirm. Each payment costs it well under 0.01 USDC, and going live needs it to hold at least 0.10 USDC.
 3. **Step 3 of 3, "Check your wallet, then go live".** It shows your wallet and the USDC in it, the agent's wallet and its gas, your contract and its figures, and what the agent can move: your wallet's USDC, or the approval if that is less. Type `mainnet` in **Type mainnet to confirm**, then confirm **Go live**, as in [step 4](#4-go-live).
@@ -92,7 +92,7 @@ You need a wallet in your browser holding USDC on Arc mainnet: 0.50 USDC for the
   caption="Step 2, at the contract: your wallet and the agent's, then the figures to deploy it with."
 />
 
-While Arc mainnet confirms a transaction, the page says "Sent. Waiting for Arc mainnet to confirm it…". If you reload or close the page before then, it checks the same transaction when you come back, so you do not send it twice.
+While Arc mainnet confirms a transaction, the page says "Sent. Waiting for Arc mainnet to confirm it…". If you reload or close the page before the deployment or the approval is recorded, it checks the same transaction when you come back, so you do not send it twice.
 
 <Screenshot
   src="/docs/guides/go-live-wallet-ready.png"

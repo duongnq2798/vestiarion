@@ -64,7 +64,7 @@ From then on:
   - The figures start at the workspace's agent spending limit. On Arc mainnet that is 50 USDC a day and 150 in 7 days unless changed, and the owner may change them before deploying.
   - **Deploying from the owner's wallet** keeps the contract theirs from its first block. It needs no Smart Contract Platform on Vestiarion's side, and the deployment costs cents of the owner's gas.
 - **W7. The server builds every transaction; the browser wallet signs and sends it; the server checks the result on chain.**
-  - Each step's action returns `{ to?, data, value? }`. The page asks the wallet to send it, then hands the transaction hash back. The server reads the receipt from the network's RPC, waiting up to 45 seconds, and answers `pending` when it is not mined yet.
+  - Each step's action returns `{ to?, data, value? }`. The page asks the wallet to send it, then hands the transaction hash back. The server reads the receipt from the network's RPC and answers `pending` when it is not mined yet; the page asks again every few seconds, keeping the hash in the browser until it is recorded, so a reload asks about the same transaction. Asking again about a recorded transaction answers it without recording it twice.
   - **Why:** the browser carries no ABI or bytecode, and nothing the page could alter is trusted.
 - **W8. A deployment is checked before it is trusted.** The receipt must be successful, from the owner's wallet, and creating a contract.
   - The code at that address must equal what the network's RPC returns for the same deployment simulated: `eth_call` with no `to`, the artifact's creation code, and USDC, the owner's wallet and the workspace's agent as arguments. Both Arc RPCs answer this (checked 2026-10-07).
@@ -73,7 +73,7 @@ From then on:
 - **W9. The approval is checked on chain.**
   - The owner's wallet approves the contract on USDC (`0x3600…`).
   - The default is unlimited, because the contract's figures bound each day and week; the owner may set a cap.
-  - The receipt must be a successful call from the owner's wallet to USDC, and `allowance(owner, contract)` must be at least 1 USDC.
+  - The receipt must be a successful call from the owner's wallet to USDC, and `allowance(owner, contract)` must be at least one unit of USDC: the record step does not know the cap the owner chose, and the balance Vestiarion counts is the smaller of the wallet's USDC and the allowance, so a dust approval only leaves nothing to pay with.
   - The row gets `approve_tx_hash` and `enforced: true`, and the ledger records `spending_limit_enforced` in the shape a Circle wallet's enforcement has: `treasury` is the owner's wallet, with `walletHost: "external"` and `allowanceUsdc`. `workspace_went_live` carries `walletHost: "external"` too.
 - **W10. The agent's gas on Arc mainnet.**
   - The owner sends the agent 0.50 USDC: a plain send from their wallet, which the page builds.
