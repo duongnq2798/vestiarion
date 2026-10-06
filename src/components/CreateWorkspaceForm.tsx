@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/Card";
 import { Field } from "@/components/ui/Field";
 import { FormMessage } from "@/components/ui/FormMessage";
 import { Input } from "@/components/ui/Input";
+import { RadioGroup } from "@/components/ui/RadioGroup";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
 
@@ -32,26 +33,7 @@ export default function CreateWorkspaceForm({ mainnetOffered = false }: { mainne
         <Field id="workspace-name" label="Workspace name" description={mainnetOffered ? undefined : SANDBOX}>
           <Input name="name" type="text" required maxLength={80} autoComplete="organization" />
         </Field>
-        {mainnetOffered && (
-          <fieldset className="grid gap-3">
-            <legend className="mb-1 text-sm font-medium text-ink">Network</legend>
-            {NETWORKS.map((network) => (
-              <label key={network.value} className="flex cursor-pointer items-start gap-3">
-                <input
-                  type="radio"
-                  name="network"
-                  value={network.value}
-                  defaultChecked={network.value === "arc-testnet"}
-                  className="mt-1 size-4 shrink-0 cursor-pointer accent-agent"
-                />
-                <span className="grid gap-0.5">
-                  <span className="text-sm leading-6 text-ink">{network.label}</span>
-                  <span className="text-xs text-ink-3">{network.description}</span>
-                </span>
-              </label>
-            ))}
-          </fieldset>
-        )}
+        {mainnetOffered && <RadioGroup legend="Network" name="network" defaultValue="arc-testnet" options={NETWORKS} />}
         <SubmitButton icon={<Plus />} pendingLabel="Creating…" className="w-full">
           Create workspace
         </SubmitButton>

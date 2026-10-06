@@ -13,7 +13,7 @@ describe("CreateWorkspaceForm", () => {
   it("offers a choice of network, Arc testnet first and chosen, when Arc mainnet is open to this person", () => {
     const markup = renderToStaticMarkup(<CreateWorkspaceForm mainnetOffered />);
     expect(text(markup)).toContain("Network");
-    const choices = (markup.match(/<input[^>]*name="network"[^>]*>/g) ?? []).map((tag) => ({ value: /value="([^"]+)"/.exec(tag)?.[1], checked: tag.includes('checked=""') }));
+    const choices = (markup.match(/<button[^>]*role="radio"[^>]*>/g) ?? []).map((tag) => ({ value: /value="([^"]+)"/.exec(tag)?.[1], checked: tag.includes('aria-checked="true"') }));
     expect(choices).toEqual([
       { value: "arc-testnet", checked: true },
       { value: "arc-mainnet", checked: false },
@@ -23,7 +23,8 @@ describe("CreateWorkspaceForm", () => {
 
   it("offers no network otherwise, as before", () => {
     const markup = renderToStaticMarkup(<CreateWorkspaceForm />);
-    expect(markup).not.toContain('name="network"');
+    expect(markup).not.toContain('role="radio"');
+    expect(text(markup)).not.toContain("Network");
     expect(text(markup)).toContain("It starts as a sandbox: the money in it is simulated.");
   });
 });
