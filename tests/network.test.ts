@@ -46,6 +46,8 @@ describe("the Arc testnet profile", () => {
       goLiveOpen: true,
       // Circle's faucet hands out Arc testnet's tokens (mainnet copy C2).
       faucet: "https://faucet.circle.com",
+      // A transfer not confirmed 15 minutes after it was sent is told to a person (stuck-transfer alert D1).
+      stuckAfterMinutes: 15,
     });
   });
 
@@ -88,6 +90,7 @@ describe("the Arc mainnet profile", () => {
       goLiveOpen: true,
       // No faucet hands out real USDC (mainnet copy C2).
       faucet: null,
+      stuckAfterMinutes: 15,
     });
   });
 });

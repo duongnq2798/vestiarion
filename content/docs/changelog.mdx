@@ -1,5 +1,11 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-06: A payment that has not confirmed is told
+
+- A new ledger entry, `payment_stuck`, is written when a live payment has not confirmed 15 minutes after its attempt was sent, once for each attempt. Its actor is `agent`, and its domain `ap` for an invoice or `contractor` for a milestone.
+- Its `detail`: `invoiceId` or `milestoneId`, `counterpartyId`, `amount`, `currency`, `idempotencyKey`, `attempt`, `submittedAt`, `minutes`, `circleAsked` (whether Circle was asked this time), `sendAnswered` (false for a send Circle never answered), `providerState` (Circle's state when asked, such as `STUCK`), `txHash` and `network`.
+- Every webhook endpoint receives it as `ledger.appended`, and `GET /api/v1/ledger` lists it. Nothing else changes in `/api/v1`, and no other entry changes shape.
+
 ## 2026-10-06: Status says when an Arc mainnet workspace cannot pay yet, and a txHash on any network
 
 - `GET /api/v1/status` answers `provenance.payments` and `provenance.yield` as `unavailable` for a workspace on Arc mainnet that has its Circle account connected but is not live yet. Nothing pays there until it goes live, so `live` would have been wrong.

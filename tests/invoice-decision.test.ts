@@ -289,6 +289,15 @@ describe("invoiceDecision: a payout code held (review I1, M3, M14)", () => {
     expect(card).toMatchObject({ auditSeq: 580, at: "2026-10-01T08:28:28.000Z", decisionMode: "heuristic" });
   });
 
+  it("keeps the card on the payment's decision when a payment_stuck alert is newer (final review M7)", () => {
+    const decision = { seq: 580, id: "e580", ts: "2026-10-01T08:28:28.000Z", actor: "agent", domain: "ap", action: "ap_pay", summary: "",
+      detail: { invoiceId: "inv-1", decisionMode: "heuristic", observed: { paymentLimit: 5, riskLevel: "clear" } } } as unknown as LedgerEntry;
+    const stuck = { seq: 701, id: "e701", ts: "2026-10-01T08:45:00.000Z", actor: "agent", domain: "ap", action: "payment_stuck", summary: "",
+      detail: { invoiceId: "inv-1", minutes: 16, circleAsked: true, sendAnswered: true, providerState: "STUCK" } } as unknown as LedgerEntry;
+    const card = invoiceDecision(invoice({ status: "matched", tx_ref: `0x${"1".repeat(64)}` }), { payment_limit: 50, chain: "ARC-TESTNET" } as never, [stuck, decision], { network: "arc-testnet" });
+    expect(card).toMatchObject({ auditSeq: 580, at: "2026-10-01T08:28:28.000Z", decisionMode: "heuristic" });
+  });
+
   const decided = (route: string) =>
     ({ seq: 20, id: "e20", ts: "2026-10-01T09:00:00.000Z", actor: "agent", domain: "ap", action: "ap_pay", summary: "",
       detail: { invoiceId: "inv-1", payout: { chain: "BASE-SEPOLIA", route, domain: 6, feeUsdc: 0.05 } } }) as unknown as LedgerEntry;

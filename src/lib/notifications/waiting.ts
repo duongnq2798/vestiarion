@@ -122,7 +122,7 @@ interface Recipient {
  * The members who can decide and have the email switched on (N5, N6): owners,
  * then admins, then approvers, by address within a role. The caller caps the list.
  */
-async function decidingRecipients(orgId: string): Promise<Recipient[]> {
+export async function decidingRecipients(orgId: string): Promise<Recipient[]> {
   const members = await listMembers(orgId);
   const switches = unwrap(
     await platformDb().from("memberships").select("user_id, notify_email").eq("org_id", orgId)

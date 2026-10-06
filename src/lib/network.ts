@@ -103,6 +103,12 @@ export interface NetworkProfile {
    * (phase 2c C2). Copy that would send someone to a faucet reads this, so a mainnet workspace is never sent to one.
    */
   faucet: string | null;
+  /**
+   * How long a transfer may go unconfirmed after it was sent before the workspace's people are told (stuck-transfer
+   * alert D1): Arc confirms in seconds and Circle within a minute, so 15 minutes is far past normal on both networks,
+   * and matches the 15 minutes the cycle waits before it sends again one Circle never answered.
+   */
+  stuckAfterMinutes: number;
 }
 
 export const ARC_TESTNET = {
@@ -174,6 +180,7 @@ export const ARC_TESTNET = {
   usdcIsNative: true,
   goLiveOpen: true,
   faucet: "https://faucet.circle.com",
+  stuckAfterMinutes: 15,
 } as const satisfies NetworkProfile;
 
 export const ARC_MAINNET = {
@@ -213,6 +220,7 @@ export const ARC_MAINNET = {
   usdcIsNative: true,
   goLiveOpen: true,
   faucet: null,
+  stuckAfterMinutes: 15,
 } as const satisfies NetworkProfile;
 
 export const NETWORKS: Record<Network, NetworkProfile> = { "arc-testnet": ARC_TESTNET, "arc-mainnet": ARC_MAINNET };

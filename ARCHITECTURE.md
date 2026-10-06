@@ -170,6 +170,23 @@ organization per UTC day. The cap is enforced inside `begin_cycle_run` (migratio
 opens the `cycle_runs` row under a per-organization lock and counts the day's runs in the same
 transaction, so it holds across serverless instances rather than resetting per cold start.
 
+**The transfer watch** (`POST /api/agent/transfer-watch`, `src/lib/agent/transfer-watch.ts`,
+`docs/superpowers/specs/2026-10-06-stuck-transfer-alert-design.md`) runs every 5 minutes from
+`.github/workflows/transfer-watch.yml` with the same bearer token. It tells a workspace's people about a live payment
+not confirmed after its network's `stuckAfterMinutes` (15):
+- in every workspace, live or not, it reads the live payment intents still in flight by `submitted_at`, which migration
+  0080's trigger stamps whenever a row becomes `submitting`, and those recorded `failed` in the last week that
+  `paymentWasSent` says may have moved (a send whose answer was lost, a transfer whose last read failed);
+- it asks Circle again, read-only (`reconcileTransfer`); one Circle now shows settled is left to the next cycle;
+- it signs a `payment_stuck` entry once per attempt, keyed by the attempt's idempotency key, then posts it to the
+  workspace's Telegram chats and Slack channel at once (their cursors, as the cycle's stages) and emails each deciding
+  member one message listing the payments; the console's toasts and webhooks carry the entry too. A payment whose entry
+  cannot be written is logged and the rest are still told;
+- a run that failed in any workspace answers 500 without naming it, and the workflow logs only the status code, because
+  the repository is public;
+- it runs whatever the pause and the stop switch say, tells from the age alone where Circle cannot be asked, and never
+  sends, retries, settles or holds a payment.
+
 **The FX watch** (`POST /api/agent/fx-watch`, `src/lib/agent/fx-watch.ts`,
 `docs/superpowers/specs/2026-10-05-fx-reevaluation-design.md`) runs every 5 minutes from
 `.github/workflows/fx-watch.yml` with the same bearer token. It decides again, without a person, a EURC payable a

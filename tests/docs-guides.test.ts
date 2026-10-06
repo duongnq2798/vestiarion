@@ -430,6 +430,16 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Screened high risk", APPROVAL_CARD],
     ["The last payment attempt failed:", APPROVAL_CARD],
     ["Approving sends a new transfer.", APPROVAL_CARD],
+    // A payment that has not confirmed (stuck-transfer alert D6–D8).
+    ["payment_stuck", "src/lib/agent/transfer-watch.ts"],
+    ["Circle shows it stuck.", "src/lib/agent-activity.ts"],
+    ["the workspace's people were told.", "src/lib/decision-trail.ts"],
+    ["A payment of 12.50 USDC to Jiren has not confirmed", "src/lib/email/payment-stuck.ts", "A payment of ${first.amount} ${first.currency} to ${first.payeeName} has not confirmed"],
+    [
+      "Payment of 12.50 USDC to Jiren has not confirmed 18 min after it was sent on Arc testnet.",
+      "src/lib/agent-activity.ts",
+      "has not confirmed ${number(entry.detail.minutes) ?? 0} min after it was sent on ${networkProfile(refs.network).label}.",
+    ],
     [
       "The payment is still in flight on Arc testnet. It cannot be rejected or returned until Circle settles it; approving checks it again.",
       APPROVAL_CARD,
