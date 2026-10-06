@@ -99,12 +99,22 @@ describe("the owner's wallet", () => {
     expect(address).toBe("0xb0b0");
   });
 
-  it("sends a transaction the server built: no `to` for a deployment, the value in hex", async () => {
-    const { wallet, requests } = provider(() => `0x${"d1".repeat(32)}`);
+  it("sends a transaction the server built, on its chain: no `to` for a deployment, the value in hex", async () => {
+    const { wallet, requests } = provider((request) => (request.method === "eth_chainId" ? "0x13b2" : `0x${"d1".repeat(32)}`));
     expect(await sendPrepared(wallet, "0xb0b0", { to: null, data: "0x6080", value: "0", chainId: 5042 })).toBe(`0x${"d1".repeat(32)}`);
-    expect(requests[0]).toEqual({ method: "eth_sendTransaction", params: [{ from: "0xb0b0", data: "0x6080", value: "0x0" }] });
+    expect(requests[0]).toEqual({ method: "eth_chainId" });
+    expect(requests[1]).toEqual({ method: "eth_sendTransaction", params: [{ from: "0xb0b0", data: "0x6080", value: "0x0", chainId: "0x13b2" }] });
     await sendPrepared(wallet, "0xb0b0", { to: "0xa9e7", data: "0x", value: "500000000000000000", chainId: 5042 });
-    expect(requests[1]).toEqual({ method: "eth_sendTransaction", params: [{ from: "0xb0b0", to: "0xa9e7", data: "0x", value: "0x6f05b59d3b20000" }] });
+    expect(requests[3]).toEqual({ method: "eth_sendTransaction", params: [{ from: "0xb0b0", to: "0xa9e7", data: "0x", value: "0x6f05b59d3b20000", chainId: "0x13b2" }] });
+  });
+
+  it("sends nothing when the wallet has moved to another chain since it was switched", async () => {
+    // 0.50 of Arc's USDC is 0.5 of another chain's own currency: the same value must never leave there.
+    const { wallet, requests } = provider((request) => (request.method === "eth_chainId" ? "0x1" : `0x${"d1".repeat(32)}`));
+    await expect(sendPrepared(wallet, "0xb0b0", { to: "0xa9e7", data: "0x", value: "500000000000000000", chainId: 5042 })).rejects.toThrow(
+      "Your wallet is on another network now. Choose the step again: it switches to the workspace's network first."
+    );
+    expect(requests.map((request) => request.method)).toEqual(["eth_chainId"]);
   });
 
   it("says plainly when the person declined in their wallet", () => {

@@ -94,11 +94,20 @@ export async function signProof(provider: Eip1193Provider, address: string, mess
   return signature;
 }
 
-/** Sends a transaction the server built, from the owner's wallet; the hash it answers with. */
+/**
+ * Sends a transaction the server built, from the owner's wallet, on the chain it was built for; the hash it answers with.
+ * The wallet is asked its chain again just before, and the transaction names its chain, so a wallet moved to another
+ * network since it was switched sends nothing: the same value there would be another currency.
+ */
 export async function sendPrepared(provider: Eip1193Provider, from: string, tx: { to: string | null; data: string; value: string; chainId: number }): Promise<string> {
+  const chainId = `0x${tx.chainId.toString(16)}`;
+  const current = await provider.request({ method: "eth_chainId" });
+  if (typeof current !== "string" || BigInt(current) !== BigInt(tx.chainId)) {
+    throw new Error("Your wallet is on another network now. Choose the step again: it switches to the workspace's network first.");
+  }
   const hash = await provider.request({
     method: "eth_sendTransaction",
-    params: [{ from, ...(tx.to ? { to: tx.to } : {}), data: tx.data, value: `0x${BigInt(tx.value).toString(16)}` }],
+    params: [{ from, ...(tx.to ? { to: tx.to } : {}), data: tx.data, value: `0x${BigInt(tx.value).toString(16)}`, chainId }],
   });
   if (typeof hash !== "string") throw new Error("The wallet gave no transaction hash.");
   return hash;
