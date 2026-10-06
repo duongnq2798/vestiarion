@@ -1,7 +1,8 @@
 import crypto from "node:crypto";
 import type { VestiarionConfig } from "../config";
 import { decryptSecret, type MasterKey, type SecretEnvelope } from "../secrets";
-import { networkOf, type Network } from "../network";
+import { MAINNET_NOT_CONNECTED, MAINNET_OFF, networkHold } from "../mainnet";
+import { ARC_MAINNET, FeatureOffError, networkOf, type Network } from "../network";
 
 export const FOUNDING_ORG_ID = "00000000-0000-4000-8000-000000000001";
 
@@ -25,9 +26,6 @@ export interface OrgRow {
 
 export const ORG_SECRET_COLUMNS =
   "id, slug, name, mode, ledger_signing_key_enc, circle_api_key_enc, circle_entity_secret_enc, wallet_host, ledger_retired_keys, usyc_live_at, network";
-
-/** Why a workspace on Arc mainnet has no Circle credentials yet (network foundation N3). */
-export const MAINNET_NOT_YET = "this workspace is on Arc mainnet, where Vestiarion does not move money yet";
 
 /** Why a hosted organization has no Circle credentials: this deployment lacks the hosted pair (H1, Review Focus 5). */
 export const HOSTED_NOT_CONFIGURED = "the hosted Circle account is not configured on this deployment";
@@ -175,14 +173,22 @@ export function orgConfig(
     circleEntitySecret = openCircleSecret("circle_entity_secret_enc");
   }
 
-  // A workspace on Arc mainnet pays nothing until mainnet support ships (network foundation N3): it gets no Circle
-  // credentials, and the reason, so its chain provider refuses rather than simulating or paying on testnet constants.
+  // Arc mainnet behind a switch (mainnet go-live M4, M5). Off, a mainnet workspace gets no Circle credentials at all,
+  // as network foundation N3 kept every one; on, its own credentials open, and its hold stands until it is live. It
+  // never takes the platform's hosted testnet pair, and with no Circle account of its own it gets no provider: never
+  // the simulator. A stored credential it could not open stays reported as that.
   const network = networkOf(org.network);
-  if (network !== "arc-testnet") {
-    circleApiKey = undefined;
-    circleEntitySecret = undefined;
-    credentialsUnreadable = MAINNET_NOT_YET;
-    warnings.push(MAINNET_NOT_YET);
+  const hold = networkHold(network, org.mode, base) ?? undefined;
+  if (network === "arc-mainnet") {
+    const withheld = !base.mainnetEnabled ? MAINNET_OFF : walletHost === "hosted" ? new FeatureOffError("A hosted wallet", ARC_MAINNET).message : null;
+    if (withheld) {
+      circleApiKey = undefined;
+      circleEntitySecret = undefined;
+      credentialsUnreadable = withheld;
+      warnings.push(withheld);
+    } else if (!circleApiKey || !circleEntitySecret) {
+      credentialsUnreadable ??= MAINNET_NOT_CONNECTED;
+    }
   }
 
   return {
@@ -199,6 +205,7 @@ export function orgConfig(
         walletHost,
         // A live workspace whose owner turned the real reserve on (USYC live design R1).
         usycLive: org.mode === "live" && Boolean(org.usyc_live_at),
+        networkHold: hold,
       },
       // A sandbox simulates its payments, so it screens against the bundled list, which costs nothing, and does so
       // every cycle; the screening service, metered per call, is for live workspaces, whose payments are real

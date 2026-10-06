@@ -1,4 +1,4 @@
-import { currentOrgId } from "../context";
+import { currentConfig, currentOrgId } from "../context";
 import { db, unwrap } from "../dal";
 import { getChainProvider, type Stablecoin } from "../circle";
 import { confirmCounterpartyAddress, sameAddress } from "../counterparty-address";
@@ -7,7 +7,7 @@ import { listLedgerEntriesForTargets } from "../ledger";
 import { explainPayable, presentReasoning } from "../reasoning-copy";
 import { isTerminalFailure, settleUnknownSend, type UnknownSendAnswer } from "../payments";
 import { MAY_HAVE_BEEN_ACCEPTED } from "../circle/settlement";
-import { PAYMENTS_OFF, paymentsDisabled, PaymentsDisabledError } from "../payments-switch";
+import { PAYMENTS_OFF, PaymentsDisabledError, paymentsHold } from "../payments-switch";
 import { payInvoice, syncOperatingBalance } from "./pay";
 import { invoiceDiscount, type InvoiceDiscount } from "./payment-timing";
 import { chainById, homeChain, paidAcrossChains } from "../payee-chains";
@@ -757,6 +757,11 @@ export async function approveAndPay(
   const payment = { amount: invoice.amount, currency: invoice.currency, address: invoice.address };
 
   // Early refusals, before any claim — none of these contend for the row.
+  // A workspace its network holds moves nothing, and has nothing sent to record (mainnet go-live M4): Arc mainnet
+  // switched off withholds its Circle credentials, and a mainnet workspace not live yet has sent nothing. First, since
+  // such a workspace may have no provider at all.
+  const networkHeld = currentConfig().chain.networkHold;
+  if (networkHeld) throw new ApprovalError("payments_off", networkHeld);
   let soleApprover = false;
   let fewApprovers = false;
   let standing: GivenApproval[] = [];
@@ -806,7 +811,10 @@ export async function approveAndPay(
   const mayExist = alreadySent || transferUnknown(intent);
   // Nothing new is paid while the platform has payments switched off (payment safety S4), but a transfer already sent
   // is still recorded: that only reads Circle, and the provider refuses any send (S8).
-  if (!alreadySent && (await paymentsDisabled())) raise("payments_off");
+  if (!alreadySent) {
+    const hold = await paymentsHold();
+    if (hold) throw new ApprovalError("payments_off", hold);
+  }
 
   // Two approvals (T4): the first is recorded and sends nothing; the second, by another person, pays.
   let approvals: Array<{ by: string; at: string }> = [];
@@ -904,7 +912,7 @@ export async function approveAndPay(
     } catch (error) {
       // Given back as it was before the claim: nothing was paid, so a flagged or awaiting payable stays so (review finding 3).
       await giveBackAfterClaim(invoice, `cash not brought back from the reserve: ${(error as Error).message}`, invoice.status === "processing" ? "held" : invoice.status);
-      if (error instanceof PaymentsDisabledError) raise("payments_off");
+      if (error instanceof PaymentsDisabledError) throw new ApprovalError("payments_off", error.message);
       if (!(error instanceof CashBackError)) throw error;
       if (error.code === "not_confirmed") throw new ApprovalError("insufficient_funds", error.message);
       const fee = route === "cctp" ? (quotes?.cctpFeeUsdc ?? null) : null;

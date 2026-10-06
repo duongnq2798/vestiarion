@@ -81,6 +81,11 @@ export interface ChainConfig {
    * (USYC live design R1).
    */
   usycLive?: boolean;
+  /**
+   * Why the organization cannot move money now because of its network (mainnet go-live M4): set only by `orgConfig`.
+   * The platform's stop switch reads it first, so every gate that switch built refuses with it.
+   */
+  networkHold?: string;
 }
 
 export interface LlmConfig {

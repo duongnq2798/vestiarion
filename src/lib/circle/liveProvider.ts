@@ -188,10 +188,11 @@ export class LiveProvider implements ChainProvider {
    * that consulted `process.env` made impossible.
    */
   /**
-   * The platform's stop switch (payment safety S2, S7): every way of moving money refuses, before an account is read.
-   * `getChainProvider` hands it the switch to read at each call; a test may hand it a fixed answer.
+   * The platform's stop switch (payment safety S2, S7), and the workspace's network hold (mainnet go-live M4): every
+   * way of moving money refuses, with the reason, before an account is read. `getChainProvider` hands it the hold to
+   * read at each call; a test may hand it a fixed answer.
    */
-  private readonly paymentsDisabled: () => Promise<boolean>;
+  private readonly paymentsHold: () => Promise<string | null>;
 
   constructor(
     chain: ChainConfig,
@@ -200,7 +201,8 @@ export class LiveProvider implements ChainProvider {
       client?: LiveProviderClient;
       fetch?: typeof fetch;
       bridgeMintWaitMs?: number;
-      paymentsDisabled?: boolean | (() => Promise<boolean>);
+      /** True, or the reason as words, while payments may not move; a function is read at each call. */
+      paymentsDisabled?: boolean | (() => Promise<boolean | string | null>);
     }
   ) {
     if (!chain.circleApiKey || !chain.circleEntitySecret) {
@@ -216,11 +218,14 @@ export class LiveProvider implements ChainProvider {
     this.fetch = options.fetch;
     this.bridgeMintWaitMs = options.bridgeMintWaitMs ?? BRIDGE_MINT_WAIT_MS;
     const off = options.paymentsDisabled;
-    this.paymentsDisabled = typeof off === "function" ? off : async () => off === true;
+    const reasonOf = (answer: boolean | string | null | undefined): string | null =>
+      typeof answer === "string" ? answer : answer === true ? PAYMENTS_OFF : null;
+    this.paymentsHold = typeof off === "function" ? async () => reasonOf(await off()) : async () => reasonOf(off);
   }
 
   private async refuseWhilePaymentsOff(): Promise<void> {
-    if (await this.paymentsDisabled()) throw new PaymentsDisabledError();
+    const hold = await this.paymentsHold();
+    if (hold) throw new PaymentsDisabledError(hold);
   }
 
   private async account(accountId: string): Promise<AccountRow & { walletId: string }> {
@@ -347,7 +352,8 @@ export class LiveProvider implements ChainProvider {
    */
   async batchTransfer(params: BatchTransferParams): Promise<TransferResult> {
     // Nothing leaves: the batch is undone and each payment sent alone, which `transfer` refuses in turn (R4).
-    if (await this.paymentsDisabled()) throw new BatchNotSentError(PAYMENTS_OFF.replace(/\.$/, ""));
+    const hold = await this.paymentsHold();
+    if (hold) throw new BatchNotSentError(hold.replace(/\.$/, ""));
     const unpaid = params.transfers.find((transfer) => transfer.toAddress.startsWith("sim:"));
     if (unpaid) {
       throw new BatchNotSentError(`Counterparty has no on-chain address (${unpaid.toAddress}). Add this counterparty's Arc address on the Counterparties page`);

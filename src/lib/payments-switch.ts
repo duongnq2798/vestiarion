@@ -16,10 +16,13 @@ import { platformDb } from "./dal";
 /** What every refusal says while payments are off (S4). */
 export const PAYMENTS_OFF = "Payments are switched off for every workspace right now.";
 
-/** Thrown wherever money would move while payments are switched off. */
+/**
+ * Thrown wherever money would move while payments are switched off, or while the workspace's network holds it (mainnet
+ * go-live M4): its message is the reason.
+ */
 export class PaymentsDisabledError extends Error {
-  constructor() {
-    super(PAYMENTS_OFF);
+  constructor(message: string = PAYMENTS_OFF) {
+    super(message);
     this.name = "PaymentsDisabledError";
   }
 }
@@ -60,22 +63,32 @@ async function readSwitch(now: number): Promise<PaymentsSwitchState> {
 }
 
 /**
- * Whether payments are switched off, by either half. A read of the database's switch that fails counts as off: money
- * never moves on "could not tell", as a payment step never treats an unreadable pause as no pause.
+ * Why no money may move now, or null: the scope's workspace's network hold first (mainnet go-live M4: Arc mainnet
+ * switched off, or a mainnet workspace not live yet), then either half of the platform's switch. Outside a workspace's
+ * scope only the platform's switch applies. A read of the database's switch that fails counts as off: money never
+ * moves on "could not tell", as a payment step never treats an unreadable pause as no pause.
  */
-export async function paymentsDisabled(now: number = Date.now()): Promise<boolean> {
-  if (currentConfig().paymentsDisabled === true) return true;
+export async function paymentsHold(now: number = Date.now()): Promise<string | null> {
+  const config = currentConfig();
+  if (config.chain.networkHold) return config.chain.networkHold;
+  if (config.paymentsDisabled === true) return PAYMENTS_OFF;
   try {
-    return (await readSwitch(now)).off;
+    return (await readSwitch(now)).off ? PAYMENTS_OFF : null;
   } catch (error) {
     console.error("payments switch: not read", error instanceof Error ? error.message : String(error));
-    return true;
+    return PAYMENTS_OFF;
   }
 }
 
-/** Refuses, before anything moves, while payments are switched off. */
+/** Whether payments are switched off, or the workspace's network holds them: any reason `paymentsHold` gives. */
+export async function paymentsDisabled(now: number = Date.now()): Promise<boolean> {
+  return (await paymentsHold(now)) !== null;
+}
+
+/** Refuses, before anything moves, while payments are switched off or held, with the reason. */
 export async function assertPaymentsEnabled(): Promise<void> {
-  if (await paymentsDisabled()) throw new PaymentsDisabledError();
+  const hold = await paymentsHold();
+  if (hold) throw new PaymentsDisabledError(hold);
 }
 
 /**

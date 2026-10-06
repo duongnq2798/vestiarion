@@ -1,4 +1,4 @@
-import { currentOrgId } from "../context";
+import { currentConfig, currentOrgId } from "../context";
 import { db } from "../dal";
 import { getChainProvider } from "../circle";
 import { payeeNotReady } from "../counterparty-address";
@@ -22,7 +22,7 @@ import { HELD_FOR_BUDGET } from "./outflow-budget";
 import { payoutAddress, syncOperatingBalance } from "./pay";
 import { HELD_BECAUSE_PAUSED } from "./pause";
 import { isSoleApprover } from "./sole-approver";
-import { PAYMENTS_OFF, paymentsDisabled, PaymentsDisabledError } from "../payments-switch";
+import { PAYMENTS_OFF, PaymentsDisabledError, paymentsHold } from "../payments-switch";
 import { approversBesides, readTwoApprovalsAbove } from "../approval-policy";
 import { needsSecondApprover, TWO_APPROVALS_RULE, type TwoApprovalsFacts } from "../two-approvals";
 import { SECOND_OF_TWO_NOTE } from "./approvals";
@@ -481,6 +481,10 @@ export async function payHeldMilestone(input: {
   provenance?: Provenance;
 }): Promise<{ status: string; txRef: string | null; note: string; fromReserveUsdc?: number }> {
   const orgId = currentOrgId();
+  // A workspace its network holds moves nothing, and has nothing sent to record (mainnet go-live M4). First, since such a
+  // workspace may have no provider at all.
+  const networkHeld = currentConfig().chain.networkHold;
+  if (networkHeld) raise("payments_off", networkHeld);
   const provider = getChainProvider();
   const milestone = await loadMilestone(input.milestoneId, provider.mode === "live");
   const contractorAddress = milestone.facts.contractor.address;
@@ -490,7 +494,10 @@ export async function payHeldMilestone(input: {
   const reason = heldReason(milestone.facts);
   const alreadySent = transferExists(milestone.facts.intent);
   // Nothing new is paid while payments are switched off (payment safety S4); a transfer already sent is still recorded (S8).
-  if (!alreadySent && (await paymentsDisabled())) raise("payments_off");
+  if (!alreadySent) {
+    const hold = await paymentsHold();
+    if (hold) raise("payments_off", hold);
+  }
   // A send Circle never answered is sent again under its key, which may be a new payment (payment safety R3): it is
   // judged as one, by what would hold it if no transfer existed, and only the funds check is skipped.
   const unknown = transferUnknown(milestone.facts.intent);
@@ -604,7 +611,7 @@ export async function payHeldMilestone(input: {
     } catch (error) {
       const released = await db().from("milestones").update(RELEASED).eq("id", milestone.id);
       if (released.error) console.error("milestone decision: claim not released", milestone.id, released.error.message);
-      if (error instanceof PaymentsDisabledError) raise("payments_off");
+      if (error instanceof PaymentsDisabledError) raise("payments_off", error.message);
       if (!(error instanceof CashBackError)) throw error;
       if (error.code === "not_confirmed") raise("insufficient_funds", error.message);
       raise("insufficient_funds", `${error.message} ${cashShortMessage({ operatingUsdc: fromReserve.operatingBalance, reserveUsdc: null, feeUsdc: null, what: "milestone" })}`);

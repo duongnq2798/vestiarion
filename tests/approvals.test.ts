@@ -73,7 +73,7 @@ afterEach(() => {
   else process.env.VESTIARION_MASTER_KEYS = savedMasterKeys;
 });
 
-function orgRow() {
+function orgRow(fields: Record<string, unknown> = {}) {
   return {
     id: ORG,
     slug: "northstar",
@@ -82,6 +82,7 @@ function orgRow() {
     ledger_signing_key_enc: encryptSecret(LEDGER_PEM, { orgId: ORG, column: "ledger_signing_key_enc" }, parseMasterKeys(MASTER_KEYS)),
     circle_api_key_enc: null,
     circle_entity_secret_enc: null,
+    ...fields,
   };
 }
 
@@ -179,11 +180,13 @@ function approvalsFake(options: {
   approvalsPatch?: FakeReply;
   /** The workspace's reserve account, `{ id, balance }` (approval cash R1); none by default. */
   reserve?: Record<string, unknown> | null;
+  /** Columns of the organization's row in place of a testnet sandbox's: its network, say (mainnet go-live M4). */
+  org?: Record<string, unknown>;
 } = {}) {
   const intents = options.intents ?? [];
   const eq = (request: RecordedRequest, column: string) => request.params.get(column)?.match(/^eq\.(.+)$/)?.[1];
   const fake = fakeSupabase((request) => {
-    if (request.path === "/rest/v1/orgs") return { body: orgRow() };
+    if (request.path === "/rest/v1/orgs") return { body: orgRow(options.org) };
     if (request.path === "/rest/v1/counterparties" && request.method === "GET") return { body: options.counterparty ?? null };
     if (request.path === "/rest/v1/counterparties" && request.method === "PATCH") return { body: [{ id: COUNTERPARTY_ID }] };
 
@@ -898,6 +901,28 @@ describe("approveAndPay while payments are switched off (payment safety S4)", ()
 
     expect(result.status).toBe("paid");
     expect(payInvoiceMock.mock.calls[0][1]).toMatchObject({ retryTerminalFailure: false });
+  });
+});
+
+describe("approveAndPay on a workspace Arc mainnet holds (mainnet go-live M4)", () => {
+  it("refuses with the hold's reason before any claim, even with no Circle account connected", async () => {
+    const { fake } = approvalsFake({ org: { network: "arc-mainnet" } });
+
+    const attempt = runWith({ config: { ...config, mainnetEnabled: true }, db: fake.client, fetch: fake.fetch }, () =>
+      withOrg(ORG, () => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))
+    );
+    await expect(attempt).rejects.toMatchObject({ code: "payments_off" });
+    await expect(attempt).rejects.toThrow("This workspace is on Arc mainnet and not live yet. Nothing moves until an owner takes it live.");
+    expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+  });
+
+  it("names the switch while the deployment has Arc mainnet off", async () => {
+    const { fake } = approvalsFake({ org: { network: "arc-mainnet", mode: "live" } });
+
+    const attempt = runWith({ config, db: fake.client, fetch: fake.fetch }, () => withOrg(ORG, () => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID })));
+    await expect(attempt).rejects.toThrow("Arc mainnet is switched off on this deployment.");
+    expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
   });
 });
 

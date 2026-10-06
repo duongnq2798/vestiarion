@@ -3,6 +3,7 @@ import { RECLAIM_AFTER_MS } from "./agent/approvals";
 import { currentOrgId } from "./context";
 import { db, platformDb, unwrap } from "./dal";
 import { appendLedgerEntryBestEffort } from "./ledger-best-effort";
+import { networkOf } from "./network";
 import { homeChain } from "./payee-chains";
 import { workspaceNetwork } from "./workspace-network";
 
@@ -25,7 +26,7 @@ import { workspaceNetwork } from "./workspace-network";
  * and go-live refuses to connect while sample data exists (`hasSampleData`).
  */
 
-export type SampleDataErrorCode = "not_sandbox" | "connected" | "already_loaded" | "not_loaded" | "cycle_running" | "payment_in_flight";
+export type SampleDataErrorCode = "not_sandbox" | "connected" | "already_loaded" | "not_loaded" | "cycle_running" | "payment_in_flight" | "mainnet";
 
 const MESSAGES: Record<SampleDataErrorCode, string> = {
   not_sandbox: "Sample data can only be loaded into a sandbox workspace.",
@@ -34,6 +35,7 @@ const MESSAGES: Record<SampleDataErrorCode, string> = {
   not_loaded: "There is no sample data to remove.",
   cycle_running: "A cycle is running. Try again in a minute, once it has finished.",
   payment_in_flight: "A payment to a sample counterparty is still being sent. Try again in a minute.",
+  mainnet: "Sample data runs on Arc testnet only: a workspace on Arc mainnet never simulates payments.",
 };
 
 export class SampleDataError extends Error {
@@ -170,8 +172,10 @@ export function sampleFixture(now: Date): SampleFixture {
 
 async function requireSimulatedSandbox(orgId: string): Promise<void> {
   const org = unwrap(
-    await platformDb().from("orgs").select("mode, wallet_host, api_key_iv:circle_api_key_enc->>iv").eq("id", orgId).single()
-  ) as { mode: "sandbox" | "live"; wallet_host: "own" | "hosted" | null; api_key_iv: string | null };
+    await platformDb().from("orgs").select("mode, wallet_host, network, api_key_iv:circle_api_key_enc->>iv").eq("id", orgId).single()
+  ) as { mode: "sandbox" | "live"; wallet_host: "own" | "hosted" | null; network?: string | null; api_key_iv: string | null };
+  // Sample data simulates payments, and a workspace on Arc mainnet never does (mainnet go-live M5).
+  if (networkOf(org.network) === "arc-mainnet") throw new SampleDataError("mainnet");
   if (org.mode !== "sandbox") throw new SampleDataError("not_sandbox");
   if (org.wallet_host !== null || org.api_key_iv !== null) throw new SampleDataError("connected");
 }

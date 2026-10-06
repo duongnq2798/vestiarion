@@ -16,8 +16,8 @@ import { SimulateProvider } from "./simulateProvider";
 import { LiveProvider } from "./liveProvider";
 import { currentOrgConfig } from "../context";
 import type { VestiarionConfig } from "../config";
-import { paymentsDisabled } from "../payments-switch";
-import { networkOf, networkProfile, type NetworkProfile } from "../network";
+import { paymentsHold } from "../payments-switch";
+import { FeatureOffError, networkOf, networkProfile, type NetworkProfile } from "../network";
 
 /**
  * Payments settle on Arc testnet through Circle's Developer-Controlled
@@ -92,11 +92,21 @@ class HybridProvider implements ChainProvider {
   }
 
   depositToEarn(params: EarnDepositParams): Promise<EarnResult> {
+    if (this.earnMode !== "live" && !this.network.usyc) return Promise.reject(this.noReserve());
     return this.earnMode === "live" ? this.live.depositToEarn(params) : this.simulated.depositToEarn(params);
   }
 
   withdrawFromEarn(params: EarnDepositParams): Promise<EarnResult> {
+    if (this.earnMode !== "live" && !this.network.usyc) return Promise.reject(this.noReserve());
     return this.earnMode === "live" ? this.live.withdrawFromEarn(params) : this.simulated.withdrawFromEarn(params);
+  }
+
+  /**
+   * Where the network has no USYC, the reserve is not simulated beside real payments (mainnet go-live M5): a sweep of
+   * real money into a reserve that does not exist would only be pretended.
+   */
+  private noReserve(): FeatureOffError {
+    return new FeatureOffError("The USYC reserve", this.network);
   }
 
   /** Only a real reserve has a position on chain to read. */
@@ -139,7 +149,7 @@ export function getChainProvider(): ChainProvider {
   const network = networkProfile(networkOf(config.network));
   const provider: ChainProvider =
     circleApiKey && circleEntitySecret
-      ? new HybridProvider(new LiveProvider(config.chain, { network, paymentsDisabled: () => paymentsDisabled() }), new SimulateProvider(network), config.chain.usycLive === true)
+      ? new HybridProvider(new LiveProvider(config.chain, { network, paymentsDisabled: () => paymentsHold() }), new SimulateProvider(network), config.chain.usycLive === true)
       : new SimulateProvider(network);
 
   providers.set(config, provider);
