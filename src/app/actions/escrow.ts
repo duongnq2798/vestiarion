@@ -8,6 +8,7 @@ import { revalidateOrgPages } from "@/lib/auth/revalidate";
 import { EscrowHoldError, lockMilestone, refundMilestone } from "@/lib/circle/escrow-holds";
 import { EscrowSetupError, setUpEscrow } from "@/lib/circle/escrow-setup";
 import { inOrg } from "@/lib/dal/scope";
+import { FeatureOffError } from "@/lib/network";
 import { PaymentsDisabledError } from "@/lib/payments-switch";
 
 export interface EscrowActionResult {
@@ -38,7 +39,7 @@ export async function setUpEscrowAction(_previous: EscrowActionResult, formData:
       revalidateOrgPages();
       return { ok: true, message: `Escrow is set up at ${escrow.address}. Lock a milestone in it from its card.` };
     } catch (error) {
-      if (error instanceof PaymentsDisabledError) return { ok: false, message: error.message };
+      if (error instanceof PaymentsDisabledError || error instanceof FeatureOffError) return { ok: false, message: error.message };
       if (error instanceof EscrowSetupError) {
         revalidateOrgPages();
         return { ok: false, message: error.message };

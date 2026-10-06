@@ -29,7 +29,8 @@ export async function syncOperatingBalance(accountId: string): Promise<number> {
     carveOut = num(reserve?.balance);
   }
 
-  const spendable = Math.max(0, Number((snapshot.balance - carveOut).toFixed(6)));
+  // An EOA keeps USDC for its own gas (mainnet go-live M6); 0 where gas is sponsored.
+  const spendable = Math.max(0, Number((snapshot.balance - carveOut - provider.network.gasReserveUsdc).toFixed(6)));
   const res = await client.from("accounts").update({ balance: spendable }).eq("id", accountId);
   if (res.error) throw new Error(res.error.message);
   return spendable;

@@ -2,6 +2,8 @@ import crypto from "node:crypto";
 import { currentOrgConfig, currentOrgId } from "../context";
 import { db, unwrap } from "../dal";
 import { withDeadline } from "./settlement";
+import { chainOn } from "../payee-chains";
+import { workspaceNetwork } from "../workspace-network";
 import {
   circleFailureLabel,
   circleHttpStatus,
@@ -158,25 +160,23 @@ export function walletIdempotencyKey(orgId: string, accountId: string): string {
 }
 
 /**
- * One new SCA wallet on `chain`, in the given set. With an `idempotencyKey`
- * Circle returns the wallet an earlier call with that key created; without
- * one the SDK generates a fresh key, so every call mints a wallet.
+ * One new wallet of `accountType` on `chain`, in the given set (mainnet go-live M6). With an `idempotencyKey` Circle
+ * returns the wallet an earlier call with that key created; without one the SDK generates a fresh key, so every call
+ * mints a wallet.
  */
-export async function createScaWallet(
+export async function createWallet(
   client: CircleClient,
-  walletSetId: string,
-  chain: string,
-  idempotencyKey?: string
+  input: { walletSetId: string; chain: string; accountType: "SCA" | "EOA"; idempotencyKey?: string }
 ): Promise<{ id: string; address: string }> {
   const created = await circleCall(
     "createWallets",
     () =>
       client.createWallets({
-        blockchains: [chain as never],
+        blockchains: [input.chain as never],
         count: 1,
-        walletSetId,
-        accountType: "SCA",
-        ...(idempotencyKey ? { idempotencyKey } : {}),
+        walletSetId: input.walletSetId,
+        accountType: input.accountType,
+        ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
       }),
     true
   );
@@ -185,13 +185,20 @@ export async function createScaWallet(
   return { id: wallet.id, address: wallet.address };
 }
 
+/** One new SCA wallet on `chain`: the spending limit's agent wallet is always a smart account. */
+export function createScaWallet(client: CircleClient, walletSetId: string, chain: string, idempotencyKey?: string): Promise<{ id: string; address: string }> {
+  return createWallet(client, { walletSetId, chain, accountType: "SCA", idempotencyKey });
+}
+
 function withoutSimulated(name: string): string {
   return name.endsWith(SIMULATED_SUFFIX) ? name.slice(0, -SIMULATED_SUFFIX.length) : name;
 }
 
 /**
  * Gives every treasury account of the organization in scope a Circle
- * developer-controlled wallet on its chain, minted with the credentials its
+ * developer-controlled wallet on its chain, of its network's account type (a
+ * smart account on Arc testnet, an EOA on Arc mainnet: mainnet go-live M6), and
+ * only on a chain its network pays on; minted with the credentials its
  * scope holds (its own, or for a hosted organization the platform's hosted
  * pair, in a set of its own: `walletSetName`). It drops " (simulated)" from
  * the account's name, and zeroes
@@ -223,6 +230,11 @@ export async function createTreasuryWallets(options: { client?: CircleClientFact
   const result: ProvisionResult = { created: 0, skipped: accounts.length - missing.length };
   if (missing.length === 0) return result;
 
+  // Each wallet on a chain the workspace's network pays on, as the network's account type (mainnet go-live M6): an
+  // account stored on another network's chain is refused before Circle is asked anything, never given a wallet there.
+  const network = workspaceNetwork();
+  const chains = new Map(missing.map((account) => [account.id, chainOn(network.id, account.chain).id]));
+
   const client = (options.client ?? defaultCircleClient)({
     apiKey: chain.circleApiKey,
     entitySecret: chain.circleEntitySecret,
@@ -231,7 +243,12 @@ export async function createTreasuryWallets(options: { client?: CircleClientFact
   const orgId = currentOrgId();
 
   for (const account of missing) {
-    const wallet = await createScaWallet(client, walletSetId, account.chain, walletIdempotencyKey(orgId, account.id));
+    const wallet = await createWallet(client, {
+      walletSetId,
+      chain: chains.get(account.id) as string,
+      accountType: network.walletAccountType,
+      idempotencyKey: walletIdempotencyKey(orgId, account.id),
+    });
     const written = unwrap(
       await orgDb
         .from("accounts")

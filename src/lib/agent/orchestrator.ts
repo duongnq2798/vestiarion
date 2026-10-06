@@ -2315,7 +2315,8 @@ export async function releaseMilestones(
     for (const item of list) out.push(await release(item, deps));
     return out;
   };
-  if (releases.length < 2 || !deps.provider.batchTransfer) return alone(releases, releaseMilestoneIfNotPaused);
+  // A batch needs a smart account (mainnet go-live M6): on a network whose wallets are EOAs each release goes alone.
+  if (releases.length < 2 || !deps.provider.batchTransfer || deps.provider.network.walletAccountType !== "SCA") return alone(releases, releaseMilestoneIfNotPaused);
   const pauseNote = await pausedPaymentNote();
   if (pauseNote) return releases.map(() => heldRelease(pauseNote, true));
 

@@ -101,12 +101,12 @@ const setUp = (db: ReturnType<typeof database>, c: ReturnType<typeof circle>, wa
 beforeEach(() => appendLedgerEntry.mockClear());
 
 describe("setting up escrow", () => {
-  it("asks Circle for the deployer and the contract on the workspace's network's own chain (network threading P4)", async () => {
+  it("refuses on Arc mainnet by name, before asking Circle for anything (mainnet go-live M6)", async () => {
     const db = database(null, OPERATING, { ...config, network: "arc-mainnet" });
     const c = circle();
-    await setUp(db, c);
-    expect(c.calls[0]).toMatchObject({ method: "createWallets", input: { blockchains: ["ARC"] } });
-    expect(c.calls[2]).toMatchObject({ method: "deployContract", input: { blockchain: "ARC" } });
+    await expect(setUp(db, c)).rejects.toThrow("Escrow does not run on Arc mainnet yet");
+    expect(c.calls).toEqual([]);
+    expect(db.fake.requests.filter((request) => request.method !== "GET")).toEqual([]);
   });
 
   it("creates the deployer, gives it gas from the operating wallet, deploys the contract for the operating wallet, and stores its address", async () => {

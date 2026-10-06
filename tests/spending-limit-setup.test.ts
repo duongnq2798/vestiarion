@@ -139,15 +139,6 @@ const enforce = (db: ReturnType<typeof database>, c: ReturnType<typeof circle>) 
 beforeEach(() => appendLedgerEntry.mockClear());
 
 describe("enforcing the spending limit on Arc", () => {
-  it("asks Circle for every wallet and the contract on the workspace's network's own chain (network threading P4)", async () => {
-    const db = database(null, { config: { ...config, network: "arc-mainnet" } });
-    const c = circle();
-    await enforce(db, c);
-    expect(c.calls[0].input).toMatchObject({ blockchains: ["ARC"] });
-    expect(c.calls[2].input).toMatchObject({ blockchains: ["ARC"], accountType: "SCA" });
-    expect(c.calls[3].input).toMatchObject({ blockchain: "ARC" });
-  });
-
   it("creates the deployer and its gas, the agent's wallet, the contract with the figures, and the operating wallet's approval", async () => {
     const db = database();
     const c = circle();
@@ -378,5 +369,14 @@ describe("the spending limit contract while payments are switched off (payment s
 
     expect(await db.run(() => turnOffSpendingLimit({ actorId: USER }, clients(circle())))).toEqual({ contract: LIMIT, txHash: "0xhash-tx-1" });
     expect(db.row()?.enforced).toBe(false);
+  });
+});
+
+describe("the spending limit contract on Arc mainnet (mainnet go-live M6)", () => {
+  it("refuses by name, before reading the workspace or calling Circle", async () => {
+    const db = database(null, { config: { ...config, network: "arc-mainnet" } });
+    const c = circle();
+    await expect(db.run(() => enforceSpendingLimit({ actorId: USER }, clients(c)))).rejects.toThrow("Enforcing the spending limit in a contract does not run on Arc mainnet yet");
+    expect(db.fake.requests).toHaveLength(0);
   });
 });

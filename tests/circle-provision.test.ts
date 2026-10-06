@@ -464,3 +464,31 @@ describe("walletIdempotencyKey", () => {
     expect(walletIdempotencyKey(ORG, "acct-operating")).toBe(expected);
   });
 });
+
+describe("createTreasuryWallets on the workspace's network (mainnet go-live M6)", () => {
+  const MAINNET_OPERATING: AccountRow = { id: "acct-main", name: "Operating", chain: "ARC", circle_wallet_id: null };
+  const mainnet: VestiarionConfig = { ...config, network: "arc-mainnet" };
+
+  it("creates an EOA on ARC for a workspace on Arc mainnet", async () => {
+    const fake = database([MAINNET_OPERATING]);
+    const fakeCircle = circle({ sets: [{ id: "set-treasury", name: TREASURY_WALLET_SET }] });
+    await inOrg(fake, () => createTreasuryWallets({ client: fakeCircle.factory }), mainnet);
+    expect(fakeCircle.createWallets).toHaveBeenCalledTimes(1);
+    expect(fakeCircle.createWallets.mock.calls[0][0]).toMatchObject({ blockchains: ["ARC"], accountType: "EOA" });
+  });
+
+  it("refuses an account on another network's chain before asking Circle for anything", async () => {
+    const fake = database([OPERATING]);
+    const fakeCircle = circle();
+    await expect(inOrg(fake, () => createTreasuryWallets({ client: fakeCircle.factory }), mainnet)).rejects.toThrow("ARC-TESTNET is not a chain this workspace pays on");
+    expect(fakeCircle.factory).not.toHaveBeenCalled();
+    expect(patches(fake)).toEqual([]);
+  });
+
+  it("still creates SCAs on Arc testnet, an account on Base Sepolia included", async () => {
+    const fake = database([{ id: "acct-base", name: "Base", chain: "BASE-SEPOLIA", circle_wallet_id: null }]);
+    const fakeCircle = circle({ sets: [{ id: "set-treasury", name: TREASURY_WALLET_SET }] });
+    await inOrg(fake, () => createTreasuryWallets({ client: fakeCircle.factory }));
+    expect(fakeCircle.createWallets.mock.calls[0][0]).toMatchObject({ blockchains: ["BASE-SEPOLIA"], accountType: "SCA" });
+  });
+});

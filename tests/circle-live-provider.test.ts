@@ -3,7 +3,7 @@ import { LiveProvider, type LiveProviderClient } from "@/lib/circle/liveProvider
 import { BatchNotSentError } from "@/lib/circle/batch";
 import { PaymentsDisabledError } from "@/lib/payments-switch";
 import type { ChainConfig } from "@/lib/config";
-import { ARC_TESTNET } from "@/lib/network";
+import { ARC_MAINNET, ARC_TESTNET } from "@/lib/network";
 
 vi.mock("server-only", () => ({}));
 
@@ -426,5 +426,18 @@ describe("LiveProvider refusals name the fix in the product, not a script", () =
     expect(error.message).toBe("Account account-1 has no Circle wallet. Create the treasury wallets in Settings → Go live.");
     expect(error.message).not.toContain("bootstrap");
     expect(createTransaction).not.toHaveBeenCalled();
+  });
+});
+
+describe("a batch on a network whose wallets are EOAs (mainnet go-live M6)", () => {
+  it("refuses before calling Circle, so each payment goes alone", async () => {
+    const createContractExecutionTransaction = vi.fn();
+    const client = fakeClient({ createContractExecutionTransaction } as unknown as Partial<LiveProviderClient>);
+    const provider = new LiveProvider(CHAIN, { network: ARC_MAINNET, client, paymentsDisabled: false });
+    const batch = provider.batchTransfer({ fromAccountId: "account-1", transfers: [{ toAddress: TRANSFER.toAddress, amount: 1 }, { toAddress: TRANSFER.toAddress, amount: 2 }], idempotencyKey: "batch-1" });
+    await expect(batch).rejects.toBeInstanceOf(BatchNotSentError);
+    await expect(batch).rejects.toThrow("Paying in one batch does not run on Arc mainnet yet");
+    expect(createContractExecutionTransaction).not.toHaveBeenCalled();
+    expect(accountSingle).not.toHaveBeenCalled();
   });
 });

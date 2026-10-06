@@ -16,6 +16,7 @@ vi.mock("@/lib/circle/spending-limit-setup", async (importOriginal) => ({ ...(aw
 
 import { enforceSpendingLimitAction } from "@/app/actions/agent";
 import { PaymentsDisabledError } from "@/lib/payments-switch";
+import { ARC_MAINNET, FeatureOffError } from "@/lib/network";
 
 const access = { ok: true, user: { id: "user-1", email: null }, membership: { orgId: "org-1", slug: "testnet-2", name: "Testnet 2", mode: "live", role: "owner" } };
 const form = () => {
@@ -36,5 +37,11 @@ describe("enforceSpendingLimitAction while payments are switched off (payment sa
     lib.enforceSpendingLimit.mockRejectedValueOnce(new PaymentsDisabledError());
 
     expect(await enforceSpendingLimitAction(empty, form())).toEqual({ ok: false, message: "Payments are switched off for every workspace right now." });
+  });
+
+  it("says the contract does not run on the workspace's network, by name (mainnet go-live M6)", async () => {
+    authorizeMock.mockResolvedValue(access);
+    lib.enforceSpendingLimit.mockRejectedValueOnce(new FeatureOffError("Enforcing the spending limit in a contract", ARC_MAINNET));
+    expect(await enforceSpendingLimitAction(empty, form())).toEqual({ ok: false, message: "Enforcing the spending limit in a contract does not run on Arc mainnet yet" });
   });
 });

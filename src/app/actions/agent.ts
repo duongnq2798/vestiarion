@@ -11,6 +11,7 @@ import { consoleActor } from "@/lib/commands/actor";
 import { pauseWorkspaceAgent, resumeWorkspaceAgent, runWorkspaceCycle } from "@/lib/commands/agent";
 import { inOrg } from "@/lib/dal/scope";
 import { consoleAnswer } from "./command-result";
+import { FeatureOffError } from "@/lib/network";
 import { PaymentsDisabledError } from "@/lib/payments-switch";
 
 export interface AgentActionResult {
@@ -103,7 +104,7 @@ export async function enforceSpendingLimitAction(_previous: AgentActionResult, f
           : "The limit is enforced on Arc. The agent's own payments now go through its contract, which refuses anything past the limit.",
       };
     } catch (error) {
-      if (error instanceof PaymentsDisabledError) return { ok: false, message: error.message };
+      if (error instanceof PaymentsDisabledError || error instanceof FeatureOffError) return { ok: false, message: error.message };
       if (error instanceof SpendingLimitSetupError) {
         revalidateOrgPages();
         return { ok: false, message: error.message };

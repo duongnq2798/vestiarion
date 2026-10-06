@@ -19,6 +19,7 @@ vi.mock("@/lib/circle/escrow-setup", async (importOriginal) => ({ ...(await impo
 
 import { EscrowSetupError } from "@/lib/circle/escrow-setup";
 import { PaymentsDisabledError } from "@/lib/payments-switch";
+import { ARC_MAINNET, FeatureOffError } from "@/lib/network";
 
 const ESCROW = "0xE5c0000000000000000000000000000000000E5c";
 const access = (mode: "live" | "sandbox") => ({ ok: true, user: { id: "user-1", email: null }, membership: { orgId: "org-1", slug: "testnet-2", name: "Testnet 2", mode, role: "owner" } });
@@ -56,6 +57,12 @@ describe("setUpEscrowAction", () => {
     authorizeMock.mockResolvedValue(access("live"));
     lib.setUpEscrow.mockRejectedValueOnce(new PaymentsDisabledError());
     expect(await setUpEscrowAction(empty, form())).toEqual({ ok: false, message: "Payments are switched off for every workspace right now." });
+  });
+
+  it("says escrow does not run on the workspace's network, by name (mainnet go-live M6)", async () => {
+    authorizeMock.mockResolvedValue(access("live"));
+    lib.setUpEscrow.mockRejectedValueOnce(new FeatureOffError("Escrow", ARC_MAINNET));
+    expect(await setUpEscrowAction(empty, form())).toEqual({ ok: false, message: "Escrow does not run on Arc mainnet yet" });
   });
 
   it("says what stopped the setup in its own words, and nothing of an unexpected failure", async () => {

@@ -21,7 +21,7 @@ import type {
 } from "./types";
 import { ARC_FEE_USD } from "./types";
 import { fetchArcFeeUsd, rpcUrlFor } from "./arcFees";
-import type { NetworkProfile } from "../network";
+import { FeatureOffError, type NetworkProfile } from "../network";
 import { awaitSettlement, FAILED_STATES, MAY_HAVE_BEEN_ACCEPTED, withDeadline, type Settlement } from "./settlement";
 import { circleHttpStatus } from "./check";
 import { batchCalls, BatchNotSentError, SCA_EXECUTE_BATCH } from "./batch";
@@ -354,6 +354,8 @@ export class LiveProvider implements ChainProvider {
     // Nothing leaves: the batch is undone and each payment sent alone, which `transfer` refuses in turn (R4).
     const hold = await this.paymentsHold();
     if (hold) throw new BatchNotSentError(hold.replace(/\.$/, ""));
+    // A batch is the smart account's own executeBatch, which an EOA does not have (mainnet go-live M6).
+    if (this.network.walletAccountType !== "SCA") throw new BatchNotSentError(new FeatureOffError("Paying in one batch", this.network).message);
     const unpaid = params.transfers.find((transfer) => transfer.toAddress.startsWith("sim:"));
     if (unpaid) {
       throw new BatchNotSentError(`Counterparty has no on-chain address (${unpaid.toAddress}). Add this counterparty's Arc address on the Counterparties page`);

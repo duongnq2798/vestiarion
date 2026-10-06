@@ -352,3 +352,13 @@ describe("syncOnChainBalances — a real USYC reserve (USYC live design R3)", ()
     expect(sync.failures).toEqual([]);
   });
 });
+
+describe("the gas an EOA keeps (mainnet go-live M6)", () => {
+  it("keeps the gas reserve aside, never below zero, and changes nothing where it is 0", () => {
+    expect(liveOperatingBalance(10, 2, 0.1)).toEqual({ spendable: 7.9, reserve: 2 });
+    expect(liveOperatingBalance(0.05, 0, 0.1)).toEqual({ spendable: 0, reserve: 0 });
+    expect(liveOperatingBalance(2, 5, 0.1)).toEqual({ spendable: 0, reserve: 1.9 });
+    expect(liveOperatingBalance(10, 2)).toEqual({ spendable: 8, reserve: 2 });
+    expect(liveOperatingBalance(10, 2, 0)).toEqual({ spendable: 8, reserve: 2 });
+  });
+});
