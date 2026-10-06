@@ -393,7 +393,13 @@ describe("GoLivePanel's props", () => {
     expectTypeOf<SecretLike<DeepKeys<GoLivePanelProps>>>().toEqualTypeOf<never>();
     // The names the check walks, so an empty walk cannot pass it vacuously.
     expectTypeOf<DeepKeys<GoLivePanelProps>>().toEqualTypeOf<
-      "orgSlug" | "status" | "canAdminister" | "sampleBalance" | keyof GoLiveStatus | keyof GoLiveStatus["wallets"][number]
+      | "orgSlug"
+      | "status"
+      | "canAdminister"
+      | "sampleBalance"
+      | keyof GoLiveStatus
+      | keyof GoLiveStatus["wallets"][number]
+      | keyof NonNullable<GoLiveStatus["walletTreasury"]>
     >();
   });
 });

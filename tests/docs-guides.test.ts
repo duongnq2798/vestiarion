@@ -814,6 +814,8 @@ const GO_LIVE_ERRORS: Record<GoLiveErrorCode, true> = {
   mainnet_not_open: true,
   mainnet_confirmation: true,
   go_live_network: true,
+  external_wallet: true,
+  wallet_treasury_unfinished: true,
 };
 
 /** Copy for real users on Arc testnet names the network plainly; it never hedges it away. */

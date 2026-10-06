@@ -158,7 +158,7 @@ Each step is its own commit and test set. One pull request carries steps 1–3 a
 
 ## 7. Not in scope
 
-- A wallet treasury on Arc testnet (W2).
+- A wallet treasury on Arc testnet (W2). It would also need `choose_hosted_wallet` (0030) to refuse an `external` workspace, which it would otherwise switch to hosted.
 - Smart-contract wallets (Safe) and WalletConnect or mobile wallets.
 - A payee allowlist in the contract.
 - Moving an existing own or hosted workspace to its own wallet.

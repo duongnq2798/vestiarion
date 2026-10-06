@@ -1,4 +1,5 @@
-import type { WalletHost } from "../config";
+import { walletTreasuryAvailable, type WalletHost } from "../config";
+import { walletTreasuryStatus, type WalletTreasuryDeps, type WalletTreasuryStatus } from "../treasury/wallet-treasury";
 import { currentConfig, currentOrgConfig, currentOrgId, NoOrgScopeError } from "../context";
 import { db, platformDb, unwrap } from "../dal";
 import { withOrg } from "../dal/scope";
@@ -64,6 +65,10 @@ export interface GoLiveStatus {
   network?: Network;
   /** A workspace on Arc mainnet while the deployment has it switched off: nothing moves, and no step is offered. */
   mainnetOff?: boolean;
+  /** This deployment offers paying from the owner's own wallet on the workspace's network (wallet treasury W2). */
+  walletTreasuryAvailable?: boolean;
+  /** Where the setup of the owner's own wallet stands; null unless the workspace pays from one (W1). */
+  walletTreasury?: WalletTreasuryStatus | null;
 }
 
 export type GoLiveErrorCode =
@@ -87,7 +92,9 @@ export type GoLiveErrorCode =
   | "hosted_network"
   | "mainnet_not_open"
   | "mainnet_confirmation"
-  | "go_live_network";
+  | "go_live_network"
+  | "external_wallet"
+  | "wallet_treasury_unfinished";
 
 const MESSAGES: Record<GoLiveErrorCode, string> = {
   invalid: "Paste both the API key and the entity secret.",
@@ -111,6 +118,8 @@ const MESSAGES: Record<GoLiveErrorCode, string> = {
   mainnet_not_open: MAINNET_NOT_OPEN,
   mainnet_confirmation: "Type mainnet to confirm that this workspace pays real USDC.",
   go_live_network: "Going live does not run on this workspace's network yet.",
+  external_wallet: "This workspace pays from its owner's own wallet; it takes no Circle account.",
+  wallet_treasury_unfinished: "Finish setting up the wallet first: its contract must be approved and its agent must hold gas.",
 };
 
 /**
@@ -321,6 +330,8 @@ export async function connectCircle(input: {
   if (!validSecret(apiKey) || !validSecret(entitySecret)) throw new GoLiveError("invalid");
   const state = await orgState(input.orgId);
   requireMainnetAccess(state, input.actorEmail);
+  // A workspace paying from its owner's own wallet takes no Circle account of its own (wallet treasury W1).
+  if (state.walletHost === "external") throw new GoLiveError("external_wallet");
   // A sample counterparty has no address: with credentials stored, the agent would try to pay it for real (sample-data S1).
   if (await inScopeOf(input.orgId, input.actorId, hasSampleData)) throw new GoLiveError("sample_data_loaded");
 
@@ -482,6 +493,8 @@ export async function goLive(input: {
   /** What the person typed to confirm: "mainnet", on Arc mainnet (M8). */
   confirmation?: string;
   client?: CircleClientFactory;
+  /** How a wallet treasury's setup is read (wallet treasury W12); the network's RPC unless given. */
+  walletTreasury?: WalletTreasuryDeps;
 }): Promise<void> {
   const state = await orgState(input.orgId);
   requireMainnetAccess(state, input.actorEmail);
@@ -493,6 +506,28 @@ export async function goLive(input: {
   // copy (phase 2c, mainnet copy C13); the check stays for any network added later.
   const profile = networkProfile(network);
   if (!profile.goLiveOpen) throw new GoLiveError("go_live_network", new FeatureOffError("Going live", profile).message);
+
+  // A workspace paying from its owner's own wallet goes live once its contract is approved and its agent holds gas (W10).
+  if (state.walletHost === "external") {
+    await withOrg(
+      input.orgId,
+      async () => {
+        if ((await walletTreasuryStatus(input.orgId, input.walletTreasury)).step !== "ready") throw new GoLiveError("wallet_treasury_unfinished");
+        const written = unwrap(
+          await platformDb().from("orgs").update({ mode: "live" }).eq("id", input.orgId).eq("mode", "sandbox").eq("wallet_host", "external").select("id")
+        ) as Array<{ id: string }>;
+        if (written.length === 0) throw new GoLiveError((await orgState(input.orgId)).mode === "live" ? "already_live" : "credentials_changed");
+        await record(input.orgId, input.actorId, {
+          action: "workspace_went_live",
+          summary: "The workspace went live, paying from its owner's own wallet",
+          detail: { by: input.actorId, network, treasury: "external" },
+        });
+      },
+      { userId: input.actorId }
+    );
+    return;
+  }
+
   const hosted = isHosted(state);
   if (!hosted && !isConnected(state)) throw new GoLiveError("not_connected");
 
@@ -552,7 +587,7 @@ export async function operatingBalance(provider?: Pick<ChainProvider, "mode" | "
 }
 
 /** What the Go live panel shows: the step the workspace is on, and nothing secret. */
-export async function goLiveStatus(orgId: string): Promise<GoLiveStatus> {
+export async function goLiveStatus(orgId: string, deps: { walletTreasury?: WalletTreasuryDeps } = {}): Promise<GoLiveStatus> {
   const state = await orgState(orgId);
   return inScopeOf(orgId, undefined, async () => {
     const accounts = unwrap(
@@ -574,10 +609,16 @@ export async function goLiveStatus(orgId: string): Promise<GoLiveStatus> {
 
     const connected = isConnected(state);
     const operatingReady = provisioned.some((account) => account.kind === "operating");
+    // A workspace paying from its owner's own wallet is on the wallets step until its setup is ready (wallet treasury W1).
+    const walletTreasury = state.walletHost === "external" ? await walletTreasuryStatus(orgId, deps.walletTreasury) : null;
     // Choosing the hosted wallet is a hosted workspace's connect step.
     const step: GoLiveStep =
       state.mode === "live"
         ? "live"
+        : walletTreasury
+          ? walletTreasury.step === "ready"
+            ? "go_live"
+            : "wallets"
         : !connected && !isHosted(state)
           ? "connect"
           : !operatingReady || provisioned.length < accounts.length
@@ -598,6 +639,8 @@ export async function goLiveStatus(orgId: string): Promise<GoLiveStatus> {
       credentialsUnreadable: Boolean(chain.credentialsUnreadable) && !mainnetOff,
       network: workspaceNetwork().id,
       mainnetOff,
+      walletTreasuryAvailable: walletTreasuryAvailable(currentConfig(), workspaceNetwork()),
+      walletTreasury,
     };
   });
 }

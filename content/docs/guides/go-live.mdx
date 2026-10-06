@@ -201,6 +201,8 @@ A failed step shows one of these messages under its button. You can repeat any s
 | This Circle API key is for Arc testnet (TEST_API_KEY). This workspace is on Arc mainnet: paste a live key (LIVE_API_KEY). | A workspace on Arc mainnet takes a live key from your Circle account's production side: it starts with `LIVE_API_KEY`. |
 | Arc mainnet is not open to this account yet. | Arc mainnet is open only to the people the deployment allows, while it is switched on. Use a workspace on Arc testnet, or ask to be added. |
 | Type mainnet to confirm that this workspace pays real USDC. | Type the word `mainnet` in **Type mainnet to confirm**, then choose **Go live** again. |
+| This workspace pays from its owner's own wallet; it takes no Circle account. | The workspace pays from a wallet its owner holds, through its spending limit contract. It never takes a Circle account of its own. To use a Circle account, start a new workspace. |
+| Finish setting up the wallet first: its contract must be approved and its agent must hold gas. | Complete each step of **Your own wallet** above **Go live**: deploy the contract from your wallet, approve it, and send the agent its gas. |
 | Going live does not run on this workspace's network yet. | A network takes workspaces live only once it is opened; Arc testnet and Arc mainnet are. You can still connect Circle, create the wallet and fund it. |
 | This workspace's wallets are hosted by Vestiarion; start a new workspace to use your own Circle account. | The hosted wallets exist, so the choice is fixed. Create a new workspace to use your own account. |
 | Could not read the balance from Circle; try again. | The balance could not be read. Choose **Refresh** again. |
