@@ -43,6 +43,7 @@ describe("the Arc testnet profile", () => {
       escrow: true,
       spendingLimitContract: true,
       usdcIsNative: true,
+      goLiveOpen: true,
     });
   });
 
@@ -81,6 +82,8 @@ describe("the Arc mainnet profile", () => {
       escrow: false,
       spendingLimitContract: false,
       usdcIsNative: true,
+      // Going live waits for mainnet's approval limits (final review I3).
+      goLiveOpen: false,
     });
   });
 });

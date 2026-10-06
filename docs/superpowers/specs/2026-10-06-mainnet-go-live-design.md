@@ -125,6 +125,9 @@ Nothing in this phase moves money on Arc mainnet, and nothing uses real funds. R
     one.
   - **The word.** Go live needs "mainnet" typed, trimmed and in any case: "Type mainnet to confirm that this workspace
     pays real USDC."
+  - **Closed until 2b** (from the final review, I3). The profile's `goLiveOpen` is false on Arc mainnet, so Go live
+    then refuses by name: "Going live does not run on Arc mainnet yet". Phase 2b turns it on with its approval limits.
+    Nothing in this phase moves money on Arc mainnet, by construction.
   - **The record.** `workspace_went_live` records the network.
   - **The panel** speaks the workspace's network:
     - no faucet;

@@ -337,7 +337,9 @@ phase 1b).
   profile's address, and EURC the ERC-20 at its address. This applies to the token a transfer sends, the balance and
   money in. Circle lists both USDC entries for an Arc wallet; its order is kept.
 - **Going live:** each step needs `mayUseMainnet` for the person. A test key is refused on mainnet, naming both
-  networks. Go live needs the word `mainnet` typed. `workspace_went_live` and `org_created` record the network.
+  networks. Go live needs the word `mainnet` typed, and the profile's `goLiveOpen`: false on Arc mainnet until phase
+  2b's approval limits ship ("Going live does not run on Arc mainnet yet"), so nothing moves money there before them.
+  `workspace_went_live` and `org_created` record the network.
 - **Elsewhere:**
   - Chats refuse a mainnet payment ("approved in Vestiarion").
   - The API's `chain` enum is every network's chains, and SDK 0.3.0 types it.

@@ -91,6 +91,11 @@ export interface NetworkProfile {
   spendingLimitContract: boolean;
   /** Whether the chain's native currency is USDC (M7): Arc's is, so Circle's native entry for a wallet is USDC. */
   usdcIsNative: boolean;
+  /**
+   * Whether a workspace on this network may go live (final review I3): Arc mainnet's waits for its approval limits
+   * (phase 2b), so nothing in phase 2a moves money there, by construction rather than by procedure.
+   */
+  goLiveOpen: boolean;
 }
 
 export const ARC_TESTNET = {
@@ -160,6 +165,7 @@ export const ARC_TESTNET = {
   escrow: true,
   spendingLimitContract: true,
   usdcIsNative: true,
+  goLiveOpen: true,
 } as const satisfies NetworkProfile;
 
 export const ARC_MAINNET = {
@@ -194,6 +200,7 @@ export const ARC_MAINNET = {
   escrow: false,
   spendingLimitContract: false,
   usdcIsNative: true,
+  goLiveOpen: false,
 } as const satisfies NetworkProfile;
 
 export const NETWORKS: Record<Network, NetworkProfile> = { "arc-testnet": ARC_TESTNET, "arc-mainnet": ARC_MAINNET };

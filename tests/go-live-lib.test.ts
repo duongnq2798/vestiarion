@@ -1629,7 +1629,7 @@ describe("Arc mainnet (mainnet go-live M8)", () => {
     expect(state.org.mode).toBe("sandbox");
   });
 
-  it("goes live only with the word typed, and records the network", async () => {
+  it("asks for the word typed, then refuses going live by name while Arc mainnet's approval limits are not in (final review I3)", async () => {
     const state = onMainnet(withWallets(connected({ circle_api_key_enc: seal(LIVE_KEY, "circle_api_key_enc") })));
     const { fake, inScope } = database(state, { platform: mainnetPlatform });
     const c = circle(SAME_ENTITY);
@@ -1639,12 +1639,14 @@ describe("Arc mainnet (mainnet go-live M8)", () => {
         message: "Type mainnet to confirm that this workspace pays real USDC.",
       });
     }
+    await expect(refusal(inScope(() => goLive({ orgId: ORG, actorId: ACTOR, actorEmail: OWNER, confirmation: "  Mainnet ", client: c.factory })))).resolves.toMatchObject({
+      code: "go_live_network",
+      message: "Going live does not run on Arc mainnet yet",
+    });
     expect(state.org.mode).toBe("sandbox");
     expect(orgPatches(fake)).toEqual([]);
-
-    await inScope(() => goLive({ orgId: ORG, actorId: ACTOR, actorEmail: OWNER, confirmation: "  Mainnet ", client: c.factory }));
-    expect(state.org.mode).toBe("live");
-    expect(appends(fake).map((entry) => [entry.p_action, entry.p_detail])).toEqual([["workspace_went_live", { by: ACTOR, network: "arc-mainnet" }]]);
+    expect(appends(fake)).toEqual([]);
+    expect(c.getWallet).not.toHaveBeenCalled();
   });
 
   it("does not take the word from someone not on the allowlist", async () => {
