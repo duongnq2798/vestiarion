@@ -37,6 +37,12 @@ describe("the Arc testnet profile", () => {
       hostedWallets: true,
       circleKeyPrefix: "TEST_API_KEY:",
       modularWallets: { chain: "arcTestnet" },
+      // Sponsored smart accounts, and every contract feature (mainnet go-live M6, M7).
+      walletAccountType: "SCA",
+      gasReserveUsdc: 0,
+      escrow: true,
+      spendingLimitContract: true,
+      usdcIsNative: true,
     });
   });
 
@@ -69,6 +75,12 @@ describe("the Arc mainnet profile", () => {
       hostedWallets: false,
       circleKeyPrefix: "LIVE_API_KEY:",
       modularWallets: null,
+      // EOAs that pay their own gas in USDC, and no per-workspace contract yet (mainnet go-live M6, M7).
+      walletAccountType: "EOA",
+      gasReserveUsdc: 0.1,
+      escrow: false,
+      spendingLimitContract: false,
+      usdcIsNative: true,
     });
   });
 });
