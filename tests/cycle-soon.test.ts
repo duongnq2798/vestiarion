@@ -91,6 +91,16 @@ describe("runCycleSoon", () => {
     });
   });
 
+  it("starts a cycle for an event no person raised, such as Circle saying a payment settled (Circle notifications N5)", async () => {
+    runCycleSoon({ orgId: A, sandbox: false, kind: "payment_settled" });
+    await drain();
+    expect(withOrgMock.mock.calls.map((call) => [call[0], call[2]])).toEqual([
+      [A, { userId: undefined }],
+      [A, { userId: undefined }],
+    ]);
+    expect(runAgentCycleMock).toHaveBeenCalledWith({ triggeredBy: undefined, dailyCap: undefined, trigger: { kind: "event", events: ["payment_settled"] } });
+  });
+
   it("gives a burst of events one cycle, naming each kind once, in order", async () => {
     runCycleSoon({ ...live(), kind: "sample_loaded" });
     runCycleSoon({ ...live(), kind: "invoice_added" });

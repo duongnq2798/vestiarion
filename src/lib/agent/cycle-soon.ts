@@ -50,11 +50,14 @@ export type CycleEventKind =
   /** A pull request a milestone waits on was merged (bounties B13). */
   | "pull_request_merged"
   /** A fresh quote cleared what held a EURC payable; started by the FX watch, not by a person (FX re-evaluation F4). */
-  | "fx_changed";
+  | "fx_changed"
+  /** Circle said a transfer in flight settled or failed; started by its notification, not by a person (Circle notifications N4). */
+  | "payment_settled";
 
 export interface CycleEvent {
   orgId: string;
-  userId: string;
+  /** The person whose action raised the event; none for one Circle raised (Circle notifications N5). */
+  userId?: string;
   sandbox: boolean;
   kind: CycleEventKind;
 }
@@ -64,7 +67,7 @@ const RUNNING_POLL_MS = 5_000;
 const RUNNING_WAIT_MS = 90_000;
 
 interface Pending {
-  userId: string;
+  userId?: string;
   sandbox: boolean;
   kinds: Set<CycleEventKind>;
 }

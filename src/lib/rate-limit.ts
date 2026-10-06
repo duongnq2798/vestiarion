@@ -49,6 +49,16 @@ export function takeTransferWatchToken(key: string, now = Date.now()): boolean {
   return take(transferWatchBuckets, key, 2, 60_000, now);
 }
 
+const circleNotificationBuckets = new Map<string, Bucket>();
+
+/**
+ * Three hundred Circle notifications a minute per client (Circle notifications N2): Circle sends one per state change of
+ * every transfer, so the allowance is wide; it bounds what an unsigned flood can make the route read. Single-instance.
+ */
+export function takeCircleNotificationToken(key: string, now = Date.now()): boolean {
+  return take(circleNotificationBuckets, key, 300, 60_000, now);
+}
+
 const documentBuckets = new Map<string, Bucket>();
 
 /**
