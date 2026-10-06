@@ -82,7 +82,7 @@ describe("the Arc mainnet profile", () => {
       escrow: false,
       spendingLimitContract: false,
       usdcIsNative: true,
-      // Going live waits for mainnet's approval limits (final review I3).
+      // Going live waits for the copy that names Arc mainnet, phase 2c (final review I3).
       goLiveOpen: false,
     });
   });

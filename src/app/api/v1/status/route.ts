@@ -23,9 +23,11 @@ export interface StatusPayload {
   businessName: string;
   /**
    * Payments and yield differ and are reported separately, as in the UI.
-   * `unavailable` means the organization's Circle credentials are stored but
-   * could not be read: cycles refuse to pay then rather than simulate (R12),
-   * so neither leg is live or simulated.
+   * `unavailable` means nothing can pay in the workspace now: its Circle
+   * credentials are stored but could not be read (R12), or it is on Arc
+   * mainnet with no Circle account connected yet, or Arc mainnet is switched
+   * off on this deployment (mainnet limits L7). Cycles refuse to pay then
+   * rather than simulate, so neither leg is live or simulated.
    */
   provenance: {
     payments: "live" | "simulate" | "unavailable";

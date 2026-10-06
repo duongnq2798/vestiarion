@@ -93,7 +93,8 @@ export interface NetworkProfile {
   usdcIsNative: boolean;
   /**
    * Whether a workspace on this network may go live (final review I3): Arc mainnet's waits for its approval limits
-   * (phase 2b), so nothing in phase 2a moves money there, by construction rather than by procedure.
+   * (phase 2b, in) and for the copy that still names Arc testnet (phase 2c), so nothing moves money there before then,
+   * by construction rather than by procedure.
    */
   goLiveOpen: boolean;
 }

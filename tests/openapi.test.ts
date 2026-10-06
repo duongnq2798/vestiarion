@@ -158,6 +158,20 @@ describe("the OpenAPI document", () => {
     expect(operationById("list-invoices")?.path).toBe("/api/v1/invoices");
     expect(operationById("nope")).toBeUndefined();
   });
+
+  it("names every reason status answers unavailable, wherever it is described (mainnet limits L7)", () => {
+    const doc = buildOpenApiDocument("https://example.test") as { components: { schemas: Record<string, unknown> } };
+    const described = [
+      operationById("get-status")?.description,
+      JSON.stringify(doc.components.schemas.GetStatusResponse),
+      readFileSync(path.join(process.cwd(), "content/docs/api/get-status.mdx"), "utf8"),
+    ];
+    for (const text of described) {
+      expect(text).toMatch(/credentials are stored but (cannot|could not) be read/);
+      expect(text).toMatch(/Arc mainnet (with|and has) no Circle account connected yet/);
+      expect(text).toMatch(/Arc mainnet (is )?switched off/);
+    }
+  });
 });
 
 describe("GET /api/v1/openapi.json", () => {

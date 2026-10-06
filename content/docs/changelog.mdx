@@ -2,7 +2,7 @@ Changes to the API and webhooks that affect an integration, newest first. Change
 
 ## 2026-10-06: Two approvals from the start on Arc mainnet, and its status said plainly
 
-- `GET /api/v1/status` answers `provenance.payments` and `provenance.yield` as `unavailable` for a workspace on Arc mainnet with no Circle account connected yet, as it does when stored credentials cannot be read. Nothing pays there, so `simulate` would have been wrong.
+- `GET /api/v1/status` answers `provenance.payments` and `provenance.yield` as `unavailable` for a workspace on Arc mainnet with no Circle account connected yet, as it does when stored credentials cannot be read, and while the deployment has Arc mainnet switched off. Nothing pays then, so `simulate` would have been wrong. The reference and the TypeScript SDK 0.3.1 describe all three.
 - An `org_created` entry for a workspace on Arc mainnet carries `detail.startingLimits`: `{ dailyUsdc: 50, weeklyUsdc: 150, twoApprovalsAbove: 100 }`. That workspace starts with two approvals above 100 USDC, and an `approval_policy_changed` entry can never turn them off there.
 - Nothing else changes in `/api/v1`, and no other entry changes shape.
 

@@ -534,7 +534,7 @@ It also starts with two approvals above 100 USDC, which an owner can raise but n
 
 Its three steps take a live Circle key (`LIVE_API_KEY`) and create one EOA wallet on `ARC`. That
 wallet pays its own gas in USDC, so 0.10 USDC is kept aside. Going live needs the word `mainnet`
-typed, and stays closed until the approval limits of the next phase ship (`goLiveOpen` in the
+typed, and stays closed until the copy that still names Arc testnet moves (`goLiveOpen` in the
 network profile). Until a workspace is live, and whenever the deployment switches Arc mainnet off,
 nothing moves: the stop switch's gates refuse with the reason.
 
