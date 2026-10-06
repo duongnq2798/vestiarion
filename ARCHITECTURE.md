@@ -170,6 +170,18 @@ organization per UTC day. The cap is enforced inside `begin_cycle_run` (migratio
 opens the `cycle_runs` row under a per-organization lock and counts the day's runs in the same
 transaction, so it holds across serverless instances rather than resetting per cold start.
 
+**The transfer watch** (`POST /api/agent/transfer-watch`, `src/lib/agent/transfer-watch.ts`,
+`docs/superpowers/specs/2026-10-06-stuck-transfer-alert-design.md`) runs every 5 minutes from
+`.github/workflows/transfer-watch.yml` with the same bearer token. It tells a workspace's people about a live payment
+not confirmed after its network's `stuckAfterMinutes` (15):
+- in every workspace, live or not, it reads the live payment intents still in flight by `submitted_at`, which migration
+  0080's trigger stamps whenever a row becomes `submitting`;
+- it asks Circle again, read-only (`reconcileTransfer`); one Circle now shows settled is left to the next cycle;
+- it signs a `payment_stuck` entry once per attempt, keyed by the attempt's idempotency key. That entry is an activity
+  action, so the console's toasts, Slack, Telegram and webhooks carry it, and the deciding members get an email;
+- it runs whatever the pause and the stop switch say, tells from the age alone where Circle cannot be asked, and never
+  sends, retries, settles or holds a payment.
+
 **The FX watch** (`POST /api/agent/fx-watch`, `src/lib/agent/fx-watch.ts`,
 `docs/superpowers/specs/2026-10-05-fx-reevaluation-design.md`) runs every 5 minutes from
 `.github/workflows/fx-watch.yml` with the same bearer token. It decides again, without a person, a EURC payable a

@@ -626,6 +626,9 @@ click at a time, up to the daily cap above. `.github/workflows/fx-watch.yml` cal
 `POST /api/agent/fx-watch` every 5 minutes with the same secrets: a EURC payable held because
 Circle quoted no rate or no swap, or one above its swap cap or limit, is decided again once a fresh
 quote clears it, with no one pressing anything. A run with nothing to re-check starts no cycle.
+`.github/workflows/transfer-watch.yml` calls `POST /api/agent/transfer-watch` every 5 minutes with the
+same secrets: a live payment not confirmed 15 minutes after it was sent is told to the workspace's
+people, once per attempt, in the console, Slack, Telegram, webhooks and by email. It sends nothing.
 
 For automatic contractor evidence, put a full `https://github.com/<owner>/<repo>/pull/<number>` URL
 in `verification_source` and configure a read-only `GITHUB_TOKEN`. A merged response verifies the
