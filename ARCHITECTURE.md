@@ -341,8 +341,9 @@ phase 1b).
   that named Arc testnet whatever the network in phase 2c (below).
 
 **Arc mainnet behind a switch** (`docs/superpowers/specs/2026-10-06-mainnet-go-live-design.md`, phase 2a).
-- **Two settings:** `MAINNET_ENABLED` (only `1`, `true` or `yes`) and `MAINNET_ALLOWLIST` (email addresses), read
-  into the config. `mayUseMainnet(email)` (`src/lib/mainnet.ts`) is both: on, and listed.
+- **Two settings:** `MAINNET_ENABLED` (only `1`, `true` or `yes`) and `MAINNET_ALLOWLIST` (email addresses, or `*`
+  for everyone), read into the config. `mayUseMainnet(email)` (`src/lib/mainnet.ts`) is both: on, and listed, or `*`
+  listed. `*` is never implied, so a deployment that forgets the allowlist opens Arc mainnet to no one.
 - **Created on mainnet, never moved there.** The onboarding form offers Arc mainnet only to an allowed person, and the
   action checks again. `createWorkspace({ network })` sets the row's network before the first account; 0078's lock
   then refuses any change once an account exists.

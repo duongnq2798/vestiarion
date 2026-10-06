@@ -18,10 +18,15 @@ export const MAINNET_NOT_CONNECTED = "This workspace on Arc mainnet has no Circl
  */
 export const MAINNET_STARTING_TWO_APPROVALS = 100;
 
-/** Arc mainnet is on, and this address is on the allowlist (M1). No address is never allowed. */
+/**
+ * Arc mainnet is on, and open to this address (M1): it is on the allowlist, or the allowlist holds `*`, which opens Arc
+ * mainnet to everyone once a pilot is done. `*` is never implied: an empty allowlist opens it to no one. No address is
+ * never allowed.
+ */
 export function mayUseMainnet(email: string | null | undefined, config: Pick<VestiarionConfig, "mainnetEnabled" | "mainnetAllowlist">): boolean {
   if (!config.mainnetEnabled || !email) return false;
-  return (config.mainnetAllowlist ?? []).includes(email.trim().toLowerCase());
+  const allowlist = config.mainnetAllowlist ?? [];
+  return allowlist.includes("*") || allowlist.includes(email.trim().toLowerCase());
 }
 
 /**

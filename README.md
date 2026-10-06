@@ -526,7 +526,8 @@ workspace's wallets exist, its choice is fixed: to use your own Circle account, 
 workspace.
 
 **Arc mainnet, behind a switch.** A deployment opens Arc mainnet with `MAINNET_ENABLED=1`, and only
-to the email addresses in `MAINNET_ALLOWLIST`. Such a person can create a workspace on Arc mainnet
+to the email addresses in `MAINNET_ALLOWLIST`, or to everyone with `MAINNET_ALLOWLIST=*` once a
+pilot is done; an empty allowlist opens it to no one. Such a person can create a workspace on Arc mainnet
 from the workspaces page. It starts with one empty operating account and an agent spending limit of
 50 USDC a day and 150 USDC in 7 days, and it never simulates.
 

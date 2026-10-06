@@ -34,6 +34,10 @@ describe("MAINNET_ALLOWLIST (M1)", () => {
     ]);
     expect(configFromEnv(env).mainnetAllowlist).toEqual([]);
   });
+
+  it("keeps *, which opens Arc mainnet to everyone, as it is", () => {
+    expect(configFromEnv({ ...env, MAINNET_ALLOWLIST: " * " }).mainnetAllowlist).toEqual(["*"]);
+  });
 });
 
 describe("mayUseMainnet (M1)", () => {
@@ -51,7 +55,22 @@ describe("mayUseMainnet (M1)", () => {
     expect(mayUseMainnet("owner@acme.test", { ...on, mainnetEnabled: false })).toBe(false);
   });
 
+  it("opens Arc mainnet to every address with *, once the deployment has it on", () => {
+    const open = { mainnetEnabled: true, mainnetAllowlist: ["*"] };
+    expect(mayUseMainnet("anyone@else.test", open)).toBe(true);
+    expect(mayUseMainnet("owner@acme.test", { mainnetEnabled: true, mainnetAllowlist: ["owner@acme.test", "*"] })).toBe(true);
+    expect(mayUseMainnet("anyone@else.test", { ...open, mainnetEnabled: false })).toBe(false);
+    // A person always signs in with an address; without one, still no one.
+    expect(mayUseMainnet(null, open)).toBe(false);
+  });
+
+  it("opens nothing to everyone when the allowlist is empty: * is never implied", () => {
+    expect(mayUseMainnet("anyone@else.test", { mainnetEnabled: true, mainnetAllowlist: [] })).toBe(false);
+    expect(mayUseMainnet("anyone@else.test", configFromEnv({ ...env, MAINNET_ENABLED: "1" }))).toBe(false);
+  });
+
   it("reads the deployment's settings as configFromEnv gives them", () => {
+    expect(mayUseMainnet("anyone@else.test", configFromEnv({ ...env, MAINNET_ENABLED: "1", MAINNET_ALLOWLIST: "*" }))).toBe(true);
     const config = configFromEnv({ ...env, MAINNET_ENABLED: "1", MAINNET_ALLOWLIST: "owner@acme.test" });
     expect(runWithConfig(config, () => mayUseMainnet("owner@acme.test", currentConfig()))).toBe(true);
     expect(runWithConfig(configFromEnv(env), () => mayUseMainnet("owner@acme.test", currentConfig()))).toBe(false);
