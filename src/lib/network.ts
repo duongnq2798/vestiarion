@@ -185,6 +185,9 @@ export const ARC_MAINNET = {
       usdc: "0x3600000000000000000000000000000000000000",
       rpcUrl: "https://rpc.mainnet.arc.io",
       explorerTx: "https://explorer.arc.io/tx/",
+      // Arc's native USDC system emitter (EIP-7708), which mainnet has used since genesis (docs.arc.io, USDC system
+      // events): a receipt reads a native transfer from it, as on Arc testnet (mainnet limits L5).
+      nativeUsdc: "0xfffffffffffffffffffffffffffffffffffffffe",
     },
   ],
   cctp: null,

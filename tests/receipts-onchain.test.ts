@@ -132,3 +132,11 @@ describe("readOnChain", () => {
     expect(await readOnChain(facts(), options(vi.fn(async () => { throw new Error("timed out"); })))).toEqual({ state: "unreadable" });
   });
 });
+
+describe("a receipt on Arc mainnet (mainnet limits L5)", () => {
+  it("finds the native USDC transfer its system emitter logs, as on Arc testnet (EIP-7708, since genesis)", () => {
+    const logs = [log("0xffffFFFfFFffffffffffffffFfFFFfffFFFfFFfE", WALLET, PAYEE, BigInt("2000000000000000000"))];
+    expect(matchTransfer(facts({ chain: "ARC" }), receipt(logs))).toEqual({ state: "matches", block: 500 });
+    expect(matchTransfer(facts({ chain: "ARC" }), receipt([log("0x3600000000000000000000000000000000000000", WALLET, PAYEE, BigInt(2_000_000))]))).toEqual({ state: "matches", block: 500 });
+  });
+});

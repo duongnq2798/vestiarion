@@ -25,9 +25,17 @@ describe("each network's payee chains (P3)", () => {
     ]);
   });
 
-  it("lists Arc mainnet's own chain alone, with no CCTP domain until it is verified there", () => {
+  it("lists Arc mainnet's own chain alone, with no CCTP domain until it is verified there, and its native USDC emitter (mainnet limits L5)", () => {
     expect(ARC_MAINNET.payeeChains).toEqual([
-      { id: "ARC", label: "Arc mainnet", domain: null, usdc: "0x3600000000000000000000000000000000000000", rpcUrl: "https://rpc.mainnet.arc.io", explorerTx: "https://explorer.arc.io/tx/" },
+      {
+        id: "ARC",
+        label: "Arc mainnet",
+        domain: null,
+        usdc: "0x3600000000000000000000000000000000000000",
+        rpcUrl: "https://rpc.mainnet.arc.io",
+        explorerTx: "https://explorer.arc.io/tx/",
+        nativeUsdc: "0xfffffffffffffffffffffffffffffffffffffffe",
+      },
     ]);
   });
 

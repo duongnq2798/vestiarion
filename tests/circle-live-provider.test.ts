@@ -458,3 +458,19 @@ describe("a wallet on Base Sepolia in an Arc testnet workspace (final review I1)
     await expect(provider.getBalance("base")).resolves.toMatchObject({ balance: 6200, chain: "BASE-SEPOLIA" });
   });
 });
+
+describe("the platform's USDC token id (mainnet limits L6)", () => {
+  it("is Arc testnet's: a provider on Arc mainnet looks USDC up by contract instead", async () => {
+    accountSingle.mockResolvedValue({ data: { id: "operating", chain: "ARC", token: "USDC", circle_wallet_id: "w-main", address: "0xabc" }, error: null });
+    const getWalletTokenBalance = vi.fn(async () => ({
+      data: { tokenBalances: [{ token: { id: "usdc-main", symbol: "USDC", tokenAddress: "0x3600000000000000000000000000000000000000", isNative: false }, amount: "5" }] },
+    }));
+    const createTransaction = vi.fn(async () => {
+      throw new Error("stop after the request");
+    });
+    const client = fakeClient({ getWalletTokenBalance, createTransaction } as unknown as Partial<LiveProviderClient>);
+    const provider = new LiveProvider({ ...CHAIN, usdcTokenId: "testnet-usdc-token-id" }, { network: ARC_MAINNET, client, paymentsDisabled: false });
+    await expect(provider.transfer(TRANSFER)).rejects.toThrow("stop after the request");
+    expect(createTransaction).toHaveBeenCalledWith(expect.objectContaining({ tokenId: "usdc-main" }));
+  });
+});
