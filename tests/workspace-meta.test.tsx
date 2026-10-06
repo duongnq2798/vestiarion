@@ -26,9 +26,18 @@ describe("workspaceStanding", () => {
 
 describe("WorkspaceMeta", () => {
   it("names the standing, the network from its profile, and the role", () => {
-    expect(text(renderToStaticMarkup(<WorkspaceMeta mode="sandbox" network="arc-testnet" role="owner" />))).toBe("Sandbox · Arc testnet · owner");
-    expect(text(renderToStaticMarkup(<WorkspaceMeta mode="live" network="arc-testnet" role="admin" />))).toBe("Live · Arc testnet · admin");
-    expect(text(renderToStaticMarkup(<WorkspaceMeta mode="sandbox" network="arc-mainnet" role="owner" />))).toBe("Not live yet · Arc mainnet · owner");
+    expect(text(renderToStaticMarkup(<WorkspaceMeta mode="sandbox" network="arc-testnet" role="owner" />))).toBe("Sandbox Arc testnet owner");
+    expect(text(renderToStaticMarkup(<WorkspaceMeta mode="live" network="arc-testnet" role="admin" />))).toBe("Live Arc testnet admin");
+    expect(text(renderToStaticMarkup(<WorkspaceMeta mode="sandbox" network="arc-mainnet" role="owner" />))).toBe("Not live yet Arc mainnet owner");
+  });
+
+  it("draws each separator before its item, clipped at a line's start, so a wrapped line never ends or starts with one", () => {
+    // In the switcher the line wraps: a "·" written as text stayed at the end of the first line.
+    const markup = renderToStaticMarkup(<WorkspaceMeta mode="live" network="arc-testnet" role="owner" />);
+    expect(text(markup)).not.toContain("·");
+    // React escapes the quotes inside the class attribute.
+    expect(markup.match(/before:content-\[(?:'|&#x27;)·(?:'|&#x27;)\]/g)).toHaveLength(3);
+    expect(markup).toMatch(/^<span class="[^"]*overflow-hidden[^"]*"><span class="[^"]*-ml-3[^"]*flex-wrap/);
   });
 
   it("sets Arc mainnet apart in the brand colour, and Arc testnet not", () => {

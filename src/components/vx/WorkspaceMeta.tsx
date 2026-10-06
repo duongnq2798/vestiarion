@@ -20,19 +20,28 @@ const DOT: Record<WorkspaceStanding, string> = {
 };
 
 /**
+ * One item of the line, its separator drawn in its own left padding. The line is shifted left by that padding inside a
+ * box that clips, so the separator of whichever item starts a line, the first included, is cut off: a line that wraps
+ * in the narrow switcher neither ends nor starts with a dot.
+ */
+const ITEM = "relative flex items-center gap-1.5 pl-3 before:absolute before:left-0 before:w-3 before:text-center before:content-['·']";
+
+/**
  * Where a workspace stands, as the workspaces page's cards and the switcher show it: live or not, its network from the
  * profile, and the person's role. Arc mainnet, where the money is real, is set apart in the brand colour.
  */
 export function WorkspaceMeta({ mode, network, role, className }: { mode: "sandbox" | "live"; network: Network; role: OrgRole; className?: string }) {
   const standing = workspaceStanding(mode, network);
   return (
-    <span className={cn("flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs font-normal text-ink-3", className)}>
-      <span aria-hidden className={cn("size-1.5 shrink-0 rounded-full", DOT[standing])} />
-      <span className={cn(standing === "Live" && "text-proof", standing === "Not live yet" && "text-held")}>{standing}</span>
-      <span aria-hidden>·</span>
-      <span className={cn(network === "arc-mainnet" && "font-medium text-agent")}>{networkProfile(network).label}</span>
-      <span aria-hidden>·</span>
-      <span className="capitalize">{role}</span>
+    <span className={cn("block overflow-hidden text-xs font-normal text-ink-3", className)}>
+      <span className="-ml-3 flex flex-wrap items-center gap-y-0.5">
+        <span className={ITEM}>
+          <span aria-hidden className={cn("size-1.5 shrink-0 rounded-full", DOT[standing])} />
+          <span className={cn(standing === "Live" && "text-proof", standing === "Not live yet" && "text-held")}>{standing}</span>
+        </span>
+        <span className={cn(ITEM, network === "arc-mainnet" && "font-medium text-agent")}>{networkProfile(network).label}</span>
+        <span className={cn(ITEM, "capitalize")}>{role}</span>
+      </span>
     </span>
   );
 }
