@@ -510,6 +510,8 @@ describe("GoLivePanel and the owner's own wallet (wallet treasury W1, W5-W10)", 
   it("walks the setup on the wallets step, and asks for no Circle credentials", () => {
     const markup = panel(status({ step: "wallets", network: "arc-mainnet", host: "external", walletTreasuryAvailable: true, walletTreasury: setup() }));
     const words = text(markup);
+    expect(words).toContain("Step 2 of 3");
+    expect(words).toContain("Set up your wallet as the treasury");
     expect(words).toContain("Deploy your contract");
     expect(words).toContain("Deploy from your wallet");
     expect(words).toContain(AGENT);
@@ -526,9 +528,21 @@ describe("GoLivePanel and the owner's own wallet (wallet treasury W1, W5-W10)", 
   it("shows the wallet beside Go live once it is set up, with the typed word", () => {
     const ready = setup({ step: "ready", contract: CONTRACT, dailyUsdc: 20, weeklyUsdc: 60, spendableUsdc: 12.5, agentGasUsdc: 0.5 });
     const words = text(panel(status({ step: "go_live", network: "arc-mainnet", host: "external", walletTreasury: ready })));
+    expect(words).toContain("Step 3 of 3");
+    expect(words).toContain("Check your wallet, then go live");
+    expect(words).not.toContain("operating wallet");
     expect(words).toContain("Your contract");
     expect(words).toContain("20 USDC a day");
     expect(words).toContain("Type mainnet to confirm");
     expect(words).not.toContain("Replace Circle credentials");
+  });
+
+  it("keeps showing the wallet, its contract and its figures once live", () => {
+    const ready = setup({ step: "ready", contract: CONTRACT, dailyUsdc: 20, weeklyUsdc: 60, spendableUsdc: 12.5, agentGasUsdc: 0.5 });
+    const words = text(panel(status({ step: "live", network: "arc-mainnet", host: "external", walletTreasury: ready, liveSince: "2026-10-07T09:12:00Z" })));
+    expect(words).toContain(WALLET);
+    expect(words).toContain(CONTRACT);
+    expect(words).toContain("20 USDC a day, 60 USDC in 7 days");
+    expect(words).toContain("Live since");
   });
 });

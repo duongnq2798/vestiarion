@@ -24,6 +24,7 @@ import { FormMessage } from "@/components/ui/FormMessage";
 import { Input } from "@/components/ui/Input";
 import { connectWallet, discoverWallets, ensureNetwork, sendPrepared, signProof, walletErrorMessage, type DiscoveredWallet, type WalletWindow } from "@/lib/browser-wallet";
 import { networkProfile, type Network } from "@/lib/network";
+import { forgetSent, recordSent, rememberSent, sentHash, type SentStep, type SentStore } from "@/lib/treasury/sent-transaction";
 import type { WalletTreasuryStatus } from "@/lib/treasury/wallet-treasury";
 
 /**
@@ -37,6 +38,18 @@ const POLL_TRIES = 24;
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 type Note = { tone: "neutral" | "error"; text: string } | null;
+
+/** Where a sent transaction is kept until it is recorded; none where the browser refuses storage. */
+function sentStore(): SentStore | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+const notConfirmed = (networkLabel: string) =>
+  `${networkLabel} has not confirmed it yet. Reload this page to check again; if your wallet shows it failed, send it again.`;
 
 /** The figures a person typed: empty is "not set", anything else a number of USDC, or NaN the server refuses. */
 const figure = (value: string): number | null => (value.trim() === "" ? null : Number(value));
@@ -161,7 +174,7 @@ export function WalletTreasurySummary({ status, network }: { status: WalletTreas
   if (status.contract && status.step !== "approve") rows.push(["The agent can move", usdc(status.spendableUsdc)]);
   if (rows.length === 0) return null;
   return (
-    <dl className="grid gap-x-4 gap-y-2 text-sm sm:grid-cols-[auto_1fr]">
+    <dl className="grid items-baseline gap-x-4 gap-y-2 text-sm sm:grid-cols-[auto_1fr]">
       {rows.map(([label, value]) => (
         <div key={label} className="contents">
           <dt className="text-ink-3">{label}</dt>
@@ -172,8 +185,12 @@ export function WalletTreasurySummary({ status, network }: { status: WalletTreas
   );
 }
 
-/** Sends what the server built from the owner's wallet, then records it once the chain shows it. */
+/**
+ * Sends what the server built from the owner's wallet, then records it once the chain shows it. The hash is kept in the
+ * browser until then, so a reload asks about the same transaction rather than send another.
+ */
 async function sendAndRecord(
+  sent: { orgSlug: string; step: SentStep },
   open: () => Promise<{ provider: DiscoveredWallet["provider"]; address: string }>,
   prepare: () => Promise<PreparedActionResult>,
   record: (hash: string) => Promise<RecordActionResult>,
@@ -185,16 +202,15 @@ async function sendAndRecord(
   if (!prepared.ok || !prepared.transaction) throw new Error(prepared.message);
   say("Confirm it in your wallet.");
   const hash = await sendPrepared(provider, address, prepared.transaction);
+  const store = sentStore();
+  rememberSent(store, sent.orgSlug, sent.step, hash);
   say(`Sent. Waiting for ${networkLabel} to confirm it…`);
-  for (let attempt = 0; attempt < POLL_TRIES; attempt += 1) {
-    const recorded = await record(hash);
-    if (!recorded.ok) throw new Error(recorded.message);
-    if (recorded.state === "verified") return "verified";
-    await sleep(POLL_MS);
-  }
-  say(`${networkLabel} has not confirmed it yet. Reload the page in a minute; it is recorded once it confirms.`);
-  return "pending";
+  const outcome = await recordSent({ store, ...sent, hash, record, tries: POLL_TRIES, waitMs: POLL_MS });
+  if (outcome === "pending") say(notConfirmed(networkLabel));
+  return outcome;
 }
+
+const recordStep = (orgSlug: string, step: SentStep) => (hash: string) => (step === "deploy" ? recordDeploymentAction(orgSlug, hash) : recordApprovalAction(orgSlug, hash));
 
 /** The steps after the wallet is proven (W5–W10), one at a time. */
 export default function WalletTreasurySteps({ orgSlug, status, network }: { orgSlug: string; status: WalletTreasuryStatus; network: Network }) {
@@ -206,6 +222,24 @@ export default function WalletTreasurySteps({ orgSlug, status, network }: { orgS
   const [weekly, setWeekly] = useState("");
   const [cap, setCap] = useState("");
   const open = () => wallet.open(status.wallet);
+
+  // A transaction sent for this step before the page was reloaded or closed is asked about again, not sent twice.
+  useEffect(() => {
+    const store = sentStore();
+    for (const kept of ["deploy", "approve"] as const) if (kept !== status.step) forgetSent(store, orgSlug, kept);
+    if (status.step !== "deploy" && status.step !== "approve") return;
+    const step: SentStep = status.step;
+    const hash = sentHash(store, orgSlug, step);
+    if (!hash) return;
+    void run(async (say) => {
+      say("Checking the transaction your wallet sent…");
+      const outcome = await recordSent({ store, orgSlug, step, hash, record: recordStep(orgSlug, step), tries: 1, waitMs: POLL_MS });
+      if (outcome === "verified") router.refresh();
+      else say(notConfirmed(profile.label));
+    });
+    // Once for each step the page opens on: `run`, `router` and the label do not change what is asked.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgSlug, status.step]);
 
   let body: ReactNode = null;
   if (status.step === "agent") {
@@ -258,9 +292,10 @@ export default function WalletTreasurySteps({ orgSlug, status, network }: { orgS
             onClick={() =>
               run(async (say) => {
                 const outcome = await sendAndRecord(
+                  { orgSlug, step: "deploy" },
                   open,
                   () => prepareDeploymentAction(orgSlug, { dailyUsdc: figure(daily), weeklyUsdc: figure(weekly) }),
-                  (hash) => recordDeploymentAction(orgSlug, hash),
+                  recordStep(orgSlug, "deploy"),
                   say,
                   profile.label
                 );
@@ -293,9 +328,10 @@ export default function WalletTreasurySteps({ orgSlug, status, network }: { orgS
             onClick={() =>
               run(async (say) => {
                 const outcome = await sendAndRecord(
+                  { orgSlug, step: "approve" },
                   open,
                   () => prepareApprovalAction(orgSlug, { capUsdc: figure(cap) }),
-                  (hash) => recordApprovalAction(orgSlug, hash),
+                  recordStep(orgSlug, "approve"),
                   say,
                   profile.label
                 );
@@ -347,7 +383,7 @@ export default function WalletTreasurySteps({ orgSlug, status, network }: { orgS
   return (
     <Card className="space-y-4 p-5">
       <div className="space-y-1">
-        <p className="text-xs font-medium text-ink-3">Your own wallet</p>
+        <p className="text-xs font-medium text-ink-3">Step 2 of 3</p>
         <h3 className="text-sm font-semibold text-ink">{status.step === "ready" ? "Your wallet is set up" : "Set up your wallet as the treasury"}</h3>
       </div>
       <WalletTreasurySummary status={status} network={network} />

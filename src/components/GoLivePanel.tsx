@@ -471,7 +471,7 @@ function GoLiveStep({ orgSlug, status, sampleBalance }: { orgSlug: string; statu
   const faucet = networkProfile(networkOf(status.network)).faucet ?? "";
   return (
     <Card className="space-y-5 p-5">
-      <StepHeading n={3}>Fund the operating wallet, then go live</StepHeading>
+      <StepHeading n={3}>{status.host === "external" ? "Check your wallet, then go live" : "Fund the operating wallet, then go live"}</StepHeading>
       {status.walletTreasury && <WalletTreasurySummary status={status.walletTreasury} network={status.network ?? "arc-mainnet"} />}
       {operating && (
         <div className="space-y-2">
@@ -521,6 +521,7 @@ function LiveDetails({ orgSlug, status }: { orgSlug: string; status: GoLiveStatu
   return (
     <div className="space-y-3">
       {status.wallets.length > 0 && <WalletList wallets={status.wallets} />}
+      {status.walletTreasury && <WalletTreasurySummary status={status.walletTreasury} network={status.network ?? "arc-mainnet"} />}
       <div className="space-y-1 text-sm text-ink-2">
         {status.liveSince && <p>Live since {utcMinute(status.liveSince)}</p>}
         <p>

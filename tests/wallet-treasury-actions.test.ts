@@ -93,4 +93,23 @@ describe("the wallet treasury's actions", () => {
     const failed = await recordApprovalAction("own-wallet-co", HASH);
     expect(failed).toEqual({ ok: false, message: "Something went wrong; try again.", state: null });
   });
+
+  it("say when a recording step could not read the chain, so the page asks again rather than give up", async () => {
+    authorizeMock.mockResolvedValue(owner);
+    lib.recordDeployment.mockRejectedValueOnce(new WalletTreasuryError("chain_unreadable"));
+    expect(await recordDeploymentAction("own-wallet-co", HASH)).toEqual({
+      ok: false,
+      message: new WalletTreasuryError("chain_unreadable").message,
+      state: null,
+      chainUnreadable: true,
+    });
+    lib.recordApproval.mockRejectedValueOnce(new WalletTreasuryError("chain_unreadable"));
+    expect(await recordApprovalAction("own-wallet-co", HASH)).toMatchObject({ ok: false, chainUnreadable: true });
+    lib.recordApproval.mockRejectedValueOnce(new WalletTreasuryError("chain_refused", "That approval was not sent from this workspace's wallet."));
+    expect(await recordApprovalAction("own-wallet-co", HASH)).toEqual({
+      ok: false,
+      message: "That approval was not sent from this workspace's wallet.",
+      state: null,
+    });
+  });
 });

@@ -95,6 +95,14 @@ export interface PreparedActionResult extends WalletTreasuryActionResult {
 
 export interface RecordActionResult extends WalletTreasuryActionResult {
   state: "pending" | "verified" | null;
+  /** The chain could not be read just now: the transaction may still be recorded, so the page asks again. */
+  chainUnreadable?: true;
+}
+
+/** A recording step's refusal, saying when it was only a moment the chain could not be read. */
+function recordFailed(action: string, error: unknown): RecordActionResult {
+  const unreadable = error instanceof WalletTreasuryError && error.code === "chain_unreadable";
+  return { ...failed(action, error), state: null, ...(unreadable ? { chainUnreadable: true as const } : {}) };
 }
 
 /** The deployment for the owner's wallet to send (W6). */
@@ -116,7 +124,7 @@ export async function recordDeploymentAction(orgSlug: string, txHash: string): P
       if (state === "verified") revalidateOrgPages();
       return { ok: true, message: "", state };
     } catch (error) {
-      return { ...failed("recordDeploymentAction", error), state: null };
+      return recordFailed("recordDeploymentAction", error);
     }
   });
 }
@@ -140,7 +148,7 @@ export async function recordApprovalAction(orgSlug: string, txHash: string): Pro
       if (state === "verified") revalidateOrgPages();
       return { ok: true, message: "", state };
     } catch (error) {
-      return { ...failed("recordApprovalAction", error), state: null };
+      return recordFailed("recordApprovalAction", error);
     }
   });
 }
