@@ -66,10 +66,11 @@ describe("POST /api/agent/fx-watch", () => {
 });
 
 describe(".github/workflows/fx-watch.yml", () => {
-  it("calls the watch every 5 minutes with the agent's token, one run at a time", async () => {
+  it("runs the watch by hand with the agent's token, one run at a time, and schedules nothing", async () => {
     const { readFileSync } = await import("node:fs");
     const workflow = readFileSync(".github/workflows/fx-watch.yml", "utf8");
-    expect(workflow).toContain('- cron: "*/5 * * * *"');
+    expect(workflow).toContain("workflow_dispatch:");
+    expect(workflow).not.toContain("schedule:");
     expect(workflow).toContain("group: fx-watch");
     expect(workflow).toContain('"${VESTIARION_URL%/}/api/agent/fx-watch"');
     expect(workflow).toContain('--header "Authorization: Bearer $AGENT_API_TOKEN"');

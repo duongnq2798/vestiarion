@@ -14,7 +14,7 @@ import { paymentsDisabled, PaymentsDisabledError } from "../payments-switch";
  * The watcher that decides a EURC payable again when the rate changes what held it, with no one pressing anything
  * (docs/superpowers/specs/2026-10-05-fx-reevaluation-design.md F4).
  *
- * Every few minutes (`POST /api/agent/fx-watch`, from GitHub Actions), in each live workspace whose agent is not paused,
+ * Every 5 minutes (`POST /api/agent/fx-watch`, from Supabase Cron), in each live workspace whose agent is not paused,
  * it finds the payables a decision held for FX that are due a re-check (F1, F5) and asks one fresh quote for each, at
  * most three (F9). Only when a quote clears what held one does it run a cycle, with the event `fx_changed`. That
  * cycle's follow-up stage asks again, reopens the payable, and records the quote before and after (F3, F6).

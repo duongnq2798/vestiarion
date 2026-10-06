@@ -25,7 +25,7 @@ Every delivery is queued in the same transaction that appends its ledger entry, 
 
 - **Right after the request that appended the entry.** Approving a payment, pausing the agent, changing a member or a key: once the response has been sent, a short dispatch (at most 20 seconds) sends what is due. Entries appended within a few seconds of each other can share one dispatch. The person's request never waits on your endpoint.
 - **Right after each scheduled agent tick's cycles**, for the entries they appended. The dispatch gets what is left of the tick's own time budget: at most 30 seconds, and none at all when nothing is left; the queue then waits for the next dispatch of any kind.
-- **On a schedule, every 10 minutes**, for retries and anything still queued. The schedule runs on GitHub Actions, which can start a scheduled run late or skip it under load, so a retry can wait longer than its backoff step; the next append or tick also picks it up.
+- **On a schedule, every 10 minutes**, for retries and anything still queued, so a retry goes out within about 10 minutes of its backoff step, or sooner with the next append or tick.
 
 A dispatch run is bounded by 60 seconds and 500 deliveries, claimed in batches of 25. No batch is claimed, and no request is started, with less than about 12 seconds left (one request's 10-second timeout plus a margin), so nothing is left half-sent when a run ends; a queue larger than one run is finished by the next.
 

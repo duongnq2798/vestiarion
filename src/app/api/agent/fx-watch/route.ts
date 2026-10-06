@@ -12,7 +12,8 @@ function clientIp(request: Request): string {
 
 /**
  * Decides again, without a person, the EURC payables a fresh quote cleared (docs/superpowers/specs/2026-10-05-fx-reevaluation-design.md).
- * Called every 5 minutes by .github/workflows/fx-watch.yml with the agent's bearer token, like the tick.
+ * Called every 5 minutes by Supabase Cron (supabase/cron/watches.sql), and by hand from .github/workflows/fx-watch.yml,
+ * with the agent's bearer token, like the tick.
  */
 export async function POST(request: Request) {
   if (!hasValidAgentBearer(request.headers.get("authorization"), process.env.AGENT_API_TOKEN)) {

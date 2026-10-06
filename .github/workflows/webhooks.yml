@@ -1,8 +1,8 @@
 name: Vestiarion webhooks
 
+# Sends webhook retries and anything still queued. Supabase Cron calls the route every 10 minutes
+# (supabase/cron/watches.sql), as GitHub started this schedule only a few times a day; this workflow is its manual run.
 on:
-  schedule:
-    - cron: "*/10 * * * *"
   workflow_dispatch:
 
 permissions:

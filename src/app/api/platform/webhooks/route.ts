@@ -5,7 +5,8 @@ import { deliverPendingWebhooks } from "@/lib/webhooks/deliver";
 export const maxDuration = 300;
 
 /**
- * Bearer-protected, run every 10 minutes by `.github/workflows/webhooks.yml`
+ * Bearer-protected, run every 10 minutes by Supabase Cron
+ * (`supabase/cron/watches.sql`) and by hand from `.github/workflows/webhooks.yml`
  * (webhooks design W3): one dispatch run, at most 500 deliveries claimed in
  * batches of 25, within 60 seconds (W7).
  */

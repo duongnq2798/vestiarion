@@ -1,5 +1,9 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-06: Webhook retries go out every 10 minutes
+
+- The schedule that sends webhook retries, and anything still queued, now runs every 10 minutes. It ran on GitHub Actions, which started it only a few times a day, so a retry could wait hours past its backoff step. A delivery's body, headers and backoff steps do not change.
+
 ## 2026-10-06: A contractor on another chain is refused without naming a network
 
 - `POST /api/v1/counterparties` refuses a contractor with another chain with "Only a vendor can be paid on another chain; a contractor's milestones are released on the workspace's own chain.", in place of "…released on Arc testnet.", so a workspace on Arc mainnet is not told a testnet. The code, `invalid_request`, does not change.

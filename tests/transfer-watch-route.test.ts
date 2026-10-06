@@ -4,8 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * `POST /api/agent/transfer-watch` (docs/superpowers/specs/2026-10-06-stuck-transfer-alert-design.md D3): the agent's
- * bearer token, its own rate limit, and the watch's per-workspace results; and the workflow that calls it every 5
- * minutes, one run at a time. `watchStuckTransfers` is stubbed; its behaviour is tests/transfer-watch.test.ts's.
+ * bearer token, its own rate limit, and the watch's per-workspace results; and the workflow that runs it by hand, one run
+ * at a time. Supabase Cron calls it every 5 minutes (tests/supabase-cron.test.ts). `watchStuckTransfers` is stubbed; its
+ * behaviour is tests/transfer-watch.test.ts's.
  */
 
 const { watchStuckTransfers } = vi.hoisted(() => ({ watchStuckTransfers: vi.fn() }));
@@ -43,7 +44,7 @@ describe("POST /api/agent/transfer-watch", () => {
     const response = await post();
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ ok: true, organizations: [{ slug: "acme", inFlight: 1, told: 1 }] });
-    expect(maxDuration).toBe(300);
+    expect(maxDuration).toBe(120);
   });
 
   it("refuses anyone without the agent's token, running nothing", async () => {
@@ -83,8 +84,9 @@ describe("POST /api/agent/transfer-watch", () => {
 describe("the transfer watch's workflow", () => {
   const workflow = readFileSync(path.join(process.cwd(), ".github/workflows/transfer-watch.yml"), "utf8");
 
-  it("calls the protected route every 5 minutes with the agent's token, one run at a time", () => {
-    expect(workflow).toContain('- cron: "*/5 * * * *"');
+  it("runs the protected route by hand with the agent's token, one run at a time, and schedules nothing", () => {
+    expect(workflow).toContain("workflow_dispatch:");
+    expect(workflow).not.toContain("schedule:");
     expect(workflow).toContain("group: transfer-watch");
     expect(workflow).toContain("cancel-in-progress: false");
     expect(workflow).toContain('--header "Authorization: Bearer $AGENT_API_TOKEN"');
