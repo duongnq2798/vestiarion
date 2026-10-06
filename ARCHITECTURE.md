@@ -162,7 +162,9 @@ workspace they are the only member of, stopping at the first refusal, and only t
 user through `platformAuth().deleteUser` (the service role's admin API), after which `0023`'s
 foreign keys remove memberships and sent invitations and null `created_by`.
 
-**The cron** (`POST /api/agent/tick`) no longer runs one configured business.
+**The cron** (`POST /api/agent/tick`) no longer runs one configured business. Supabase Cron calls it
+at minute 17 of every sixth hour (`vestiarion-agent-tick` in `supabase/cron/watches.sql`), as GitHub's
+schedule ran it hours late or not at all; `.github/workflows/agent-cycle.yml` is its manual run.
 `runLiveOrganizations` (`src/lib/agent/cron.ts`) lists every organization in `mode = 'live'` and,
 for each, enters its scope with `withOrg` and runs a cycle; one organization's failure is caught,
 recorded as that organization's own result, and does not stop the rest (spec §4.4 — the stage

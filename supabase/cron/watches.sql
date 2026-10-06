@@ -1,7 +1,8 @@
--- The jobs that must run on the minute, scheduled by Supabase Cron (pg_cron and pg_net) in the production database.
--- GitHub Actions started their 5- and 10-minute schedules only a few times a day, so they moved here on 2026-10-06;
--- each one's workflow in .github/workflows stays, for a manual run. The agent's tick (every 6 hours) and the sandbox
--- cleanup (daily) can wait hours, and stay on GitHub's schedule.
+-- The jobs that must run on time, scheduled by Supabase Cron (pg_cron and pg_net) in the production database. GitHub
+-- Actions started their 5- and 10-minute schedules only a few times a day, so they moved here on 2026-10-06; the
+-- agent's six-hourly tick followed the same day (3 cycles a workspace in 24 hours, one more than 5 hours late). Each
+-- one's workflow in .github/workflows stays, for a manual run. Only the sandbox cleanup (daily) can wait hours, and
+-- stays on GitHub's schedule.
 --
 -- This is not a migration: `npm run db:migrate` applies supabase/migrations only, and these call the production
 -- origin. Run it by hand in the SQL editor, after:
@@ -39,6 +40,14 @@ $$);
 select cron.schedule('vestiarion-webhooks', '*/10 * * * *', $$
   select net.http_post(
     url := 'https://www.vestiarion.xyz/api/platform/webhooks',
+    headers := jsonb_build_object('Authorization', 'Bearer ' || (
+      select decrypted_secret from vault.decrypted_secrets
+      where name = 'agent_api_token')),
+    timeout_milliseconds := 330000)
+$$);
+select cron.schedule('vestiarion-agent-tick', '17 */6 * * *', $$
+  select net.http_post(
+    url := 'https://www.vestiarion.xyz/api/agent/tick',
     headers := jsonb_build_object('Authorization', 'Bearer ' || (
       select decrypted_secret from vault.decrypted_secrets
       where name = 'agent_api_token')),

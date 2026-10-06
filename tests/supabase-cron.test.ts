@@ -3,11 +3,12 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
- * The jobs that must run on the minute are scheduled by Supabase Cron in the production database, from
+ * The jobs that must run on time are scheduled by Supabase Cron in the production database, from
  * `supabase/cron/watches.sql`. GitHub Actions started their 5- and 10-minute schedules only a few times a day: on
  * 2026-10-06 the transfer watch had not once run on schedule 2½ hours after it merged, and the FX watch had run 4 times
- * in 26 hours. Their workflows stay, for a manual run. The file is run by hand in the SQL editor, so these pin what it
- * schedules, that it holds no secret, and that it is not a migration.
+ * in 26 hours. The agent's six-hourly tick fared little better: 3 cycles a workspace in the 24 hours to 2026-10-06
+ * 15:50 UTC, one more than 5 hours late. Their workflows stay, for a manual run. The file is run by hand in the SQL
+ * editor, so these pin what it schedules, that it holds no secret, and that it is not a migration.
  */
 
 const read = (file: string) => readFileSync(path.join(process.cwd(), file), "utf8");
@@ -16,9 +17,11 @@ const sql = existsSync(path.join(process.cwd(), SQL_FILE)) ? read(SQL_FILE) : ""
 const statements = sql.replace(/^\s*--.*$/gm, "");
 
 const JOBS = [
-  { name: "vestiarion-transfer-watch", every: 5, route: "/api/agent/transfer-watch", source: "src/app/api/agent/transfer-watch/route.ts", workflow: "transfer-watch.yml" },
-  { name: "vestiarion-fx-watch", every: 5, route: "/api/agent/fx-watch", source: "src/app/api/agent/fx-watch/route.ts", workflow: "fx-watch.yml" },
-  { name: "vestiarion-webhooks", every: 10, route: "/api/platform/webhooks", source: "src/app/api/platform/webhooks/route.ts", workflow: "webhooks.yml" },
+  { name: "vestiarion-transfer-watch", schedule: "*/5 * * * *", route: "/api/agent/transfer-watch", source: "src/app/api/agent/transfer-watch/route.ts", workflow: "transfer-watch.yml" },
+  { name: "vestiarion-fx-watch", schedule: "*/5 * * * *", route: "/api/agent/fx-watch", source: "src/app/api/agent/fx-watch/route.ts", workflow: "fx-watch.yml" },
+  { name: "vestiarion-webhooks", schedule: "*/10 * * * *", route: "/api/platform/webhooks", source: "src/app/api/platform/webhooks/route.ts", workflow: "webhooks.yml" },
+  // Every live workspace's scheduled cycle, at minute 17 of every sixth hour, as the workflow's schedule said.
+  { name: "vestiarion-agent-tick", schedule: "17 */6 * * *", route: "/api/agent/tick", source: "src/app/api/agent/tick/route.ts", workflow: "agent-cycle.yml" },
 ] as const;
 
 /** The schedule and SQL of a job, from its `cron.schedule(name, schedule, $$ … $$)`; undefined when the file has none. */
@@ -30,9 +33,9 @@ function scheduled(name: string): { schedule: string; command: string } | undefi
 const maxDurationOf = (source: string) => Number(/export const maxDuration = (\d+);/.exec(read(source))?.[1]);
 
 describe("supabase/cron/watches.sql", () => {
-  it.each(JOBS)("schedules $name every $every minutes, posting to $route on the production origin", ({ name, every, route }) => {
+  it.each(JOBS)("schedules $name at $schedule, posting to $route on the production origin", ({ name, schedule, route }) => {
     const job = scheduled(name);
-    expect(job?.schedule).toBe(`*/${every} * * * *`);
+    expect(job?.schedule).toBe(schedule);
     expect(job?.command).toContain("select net.http_post(");
     expect(job?.command).toContain(`url := 'https://www.vestiarion.xyz${route}'`);
   });

@@ -1,8 +1,8 @@
 name: Vestiarion agent cycle
 
+# Runs every live workspace's cycle. Supabase Cron calls the route at minute 17 of every sixth hour
+# (supabase/cron/watches.sql), as GitHub started this schedule hours late or not at all; this workflow is its manual run.
 on:
-  schedule:
-    - cron: "17 */6 * * *"
   workflow_dispatch:
 
 permissions:
