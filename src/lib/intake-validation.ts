@@ -107,10 +107,11 @@ export const counterpartyInputSchema = z.object({
   jurisdiction: optionalText(80),
   paymentLimit: z.string().trim(),
 }).superRefine((value, context) => {
-  // A contractor's milestones are released on Arc testnet: only a vendor is
-  // paid on another chain, through CCTP (CCTP payouts, review C1).
+  // A contractor's milestones are released on the workspace's own chain: only
+  // a vendor is paid on another chain, through CCTP (CCTP payouts, review C1).
+  // The message names no network, as it reaches a workspace on either (mainnet polish E4).
   if (paidAcrossChains(value.chain) && value.role !== "vendor") {
-    context.addIssue({ code: "custom", path: ["chain"], message: "Only a vendor can be paid on another chain; a contractor's milestones are released on Arc testnet." });
+    context.addIssue({ code: "custom", path: ["chain"], message: "Only a vendor can be paid on another chain; a contractor's milestones are released on the workspace's own chain." });
   }
   if (value.role === "client" && value.paymentLimit === "") return;
   const parsed = usdcAmountSchema.safeParse(value.paymentLimit);

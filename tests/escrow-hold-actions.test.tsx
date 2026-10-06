@@ -50,6 +50,9 @@ describe("lockMilestoneAction", () => {
   it("refuses a sandbox, a bad milestone or date, and a form without its request id", async () => {
     authorizeMock.mockResolvedValue(access("sandbox"));
     expect((await lockMilestoneAction(empty, form())).message).toBe("Escrow is a contract on Arc testnet, for a live workspace. Take this workspace live first.");
+    // On Arc mainnet, by name: going live would not bring escrow (mainnet polish E5).
+    authorizeMock.mockResolvedValue({ ...access("sandbox"), membership: { ...access("sandbox").membership, network: "arc-mainnet" } });
+    expect((await lockMilestoneAction(empty, form())).message).toBe("Escrow does not run on Arc mainnet yet");
     authorizeMock.mockResolvedValue(access("live"));
     expect((await lockMilestoneAction(empty, form({ milestoneId: "nope" }))).message).toBe("That milestone is not in this workspace.");
     expect((await lockMilestoneAction(empty, form({ refundAfter: "soon" }))).message).toBe("Choose a refund date after today, and within a year.");

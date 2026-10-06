@@ -15,7 +15,7 @@
 - It is on Arc mainnet and not live yet.
 - It is on Arc mainnet, and this deployment has Arc mainnet switched off.
 
-A cycle refuses to pay in each of them rather than fall back to simulation, so status does not report them as `simulate`. Check `provenance.payments` before you treat a `paid` invoice as money that moved.
+A cycle refuses to pay in each of them rather than fall back to simulation, so status does not report them as `live` or `simulate`. Check `provenance.payments` before you treat a `paid` invoice as money that moved.
 
 `yield` is also `unavailable` on a network with no yield reserve to earn in. Arc mainnet has none, so a live workspace there answers `payments: "live"` and `yield: "unavailable"`.
 

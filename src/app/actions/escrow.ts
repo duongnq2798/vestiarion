@@ -8,7 +8,7 @@ import { revalidateOrgPages } from "@/lib/auth/revalidate";
 import { EscrowHoldError, lockMilestone, refundMilestone } from "@/lib/circle/escrow-holds";
 import { EscrowSetupError, setUpEscrow } from "@/lib/circle/escrow-setup";
 import { inOrg } from "@/lib/dal/scope";
-import { FeatureOffError } from "@/lib/network";
+import { FeatureOffError, networkOf, networkProfile } from "@/lib/network";
 import { PaymentsDisabledError } from "@/lib/payments-switch";
 
 export interface EscrowActionResult {
@@ -22,6 +22,12 @@ const idSchema = z.string().uuid();
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const LIVE_ONLY = "Escrow is a contract on Arc testnet, for a live workspace. Take this workspace live first.";
 
+/** Escrow on a network that has none is refused by name, before the mode: going live would not bring it (mainnet polish E5). */
+function escrowOffHere(network: string | null | undefined): string | null {
+  const profile = networkProfile(networkOf(network));
+  return profile.escrow ? null : new FeatureOffError("Escrow", profile).message;
+}
+
 /**
  * Sets up the workspace's milestone escrow (docs/superpowers/specs/2026-10-01-milestone-escrow-design.md E2):
  * an owner's or admin's deliberate act, in a live workspace. Pressed again, it finishes a setup that was
@@ -30,6 +36,8 @@ const LIVE_ONLY = "Escrow is a contract on Arc testnet, for a live workspace. Ta
 export async function setUpEscrowAction(_previous: EscrowActionResult, formData: FormData): Promise<EscrowActionResult> {
   const auth = await authorize(formData.get("orgSlug"), "treasury.manage");
   if (!auth.ok) return { ok: false, message: auth.message };
+  const off = escrowOffHere(auth.membership.network);
+  if (off) return { ok: false, message: off };
   if (auth.membership.mode !== "live") {
     return { ok: false, message: LIVE_ONLY };
   }
@@ -57,6 +65,8 @@ export async function setUpEscrowAction(_previous: EscrowActionResult, formData:
 export async function lockMilestoneAction(_previous: EscrowActionResult, formData: FormData): Promise<EscrowActionResult> {
   const auth = await authorize(formData.get("orgSlug"), "treasury.manage");
   if (!auth.ok) return { ok: false, message: auth.message };
+  const off = escrowOffHere(auth.membership.network);
+  if (off) return { ok: false, message: off };
   if (auth.membership.mode !== "live") return { ok: false, message: LIVE_ONLY };
   const milestoneId = idSchema.safeParse(formData.get("milestoneId"));
   if (!milestoneId.success) return { ok: false, message: "That milestone is not in this workspace." };
@@ -82,6 +92,8 @@ export async function lockMilestoneAction(_previous: EscrowActionResult, formDat
 export async function refundMilestoneAction(_previous: EscrowActionResult, formData: FormData): Promise<EscrowActionResult> {
   const auth = await authorize(formData.get("orgSlug"), "treasury.manage");
   if (!auth.ok) return { ok: false, message: auth.message };
+  const off = escrowOffHere(auth.membership.network);
+  if (off) return { ok: false, message: off };
   if (auth.membership.mode !== "live") return { ok: false, message: LIVE_ONLY };
   const milestoneId = idSchema.safeParse(formData.get("milestoneId"));
   if (!milestoneId.success) return { ok: false, message: "That milestone is not in this workspace." };

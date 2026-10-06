@@ -106,6 +106,12 @@ describe("fundGatewayAction", () => {
     expect(syncWalletBalances).not.toHaveBeenCalled();
   });
 
+  it("refuses Gateway by name on Arc mainnet, where going live would not bring it (mainnet polish E5)", async () => {
+    authorizeMock.mockResolvedValue({ ...access("sandbox"), membership: { ...access("sandbox").membership, network: "arc-mainnet" } });
+    expect(await fundGatewayAction({ ok: false, message: "" }, form("3"))).toEqual({ ok: false, message: "Paying through Gateway does not run on Arc mainnet yet" });
+    expect(fundGateway).not.toHaveBeenCalled();
+  });
+
   it("refuses a sandbox: its payments are simulated, and Gateway is on Arc testnet", async () => {
     authorizeMock.mockResolvedValue(access("sandbox"));
     expect(await fundGatewayAction({ ok: false, message: "" }, form("3"))).toEqual({ ok: false, message: "Gateway is for a live workspace on Arc testnet. Take this workspace live first." });

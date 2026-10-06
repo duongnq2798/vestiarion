@@ -56,7 +56,9 @@ function SafeToSpendBreakdown({ outlook, columns = false }: { outlook: CashOutlo
       </p>
       {outlook.shortOn && (
         <Callout tone="held" title={`The wallet runs short on ${dayLabel(outlook.shortOn)}`} className="mt-4">
-          That is before any receivable arrives, with the USYC reserve brought back. Fund the operating wallet, or the agent holds what it cannot cover.
+          {/* The reserve only when it holds something: a network with none, or an empty one, brings nothing back (mainnet polish E3). */}
+          That is before any receivable arrives{outlook.reserve > 0 ? ", with the USYC reserve brought back" : ""}. Fund the operating wallet, or the agent holds what it
+          cannot cover.
         </Callout>
       )}
     </>

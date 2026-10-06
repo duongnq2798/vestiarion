@@ -82,7 +82,7 @@ export function gettingStarted(input: GettingStartedInput): GettingStarted {
   const profile = networkProfile(input.network);
   const { label } = profile;
   // Where real USDC is sent, the wallet keeps a little aside for its own gas (mainnet go-live M6).
-  const gas = profile.gasReserveUsdc > 0 ? ` The wallet keeps ${profile.gasReserveUsdc} USDC of it aside to pay its own gas.` : "";
+  const gas = profile.gasReserveUsdc > 0 ? ` The wallet keeps ${profile.gasReserveUsdc.toFixed(2)} USDC of it aside to pay its own gas.` : "";
 
   const steps: GettingStartedStep[] = [
     {

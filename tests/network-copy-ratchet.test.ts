@@ -57,7 +57,6 @@ const ALLOWED: Record<string, number> = {
   "src/lib/circle/liveProvider.ts": 6,
   "src/lib/circle/simulateProvider.ts": 1,
   "src/lib/agent/orchestrator.ts": 1,
-  "src/lib/intake-validation.ts": 1,
   "src/lib/spending-limit/onchain.ts": 3,
   "src/lib/fx/errors.ts": 1,
   "src/lib/fx/swap-service.ts": 1,

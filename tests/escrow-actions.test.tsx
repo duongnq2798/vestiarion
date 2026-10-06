@@ -45,6 +45,12 @@ describe("setUpEscrowAction", () => {
     expect(lib.setUpEscrow).toHaveBeenCalledWith({ actorId: "user-1" });
   });
 
+  it("refuses escrow by name on Arc mainnet, where going live would not bring it (mainnet polish E5)", async () => {
+    authorizeMock.mockResolvedValue({ ...access("sandbox"), membership: { ...access("sandbox").membership, network: "arc-mainnet" } });
+    expect(await setUpEscrowAction(empty, form())).toEqual({ ok: false, message: "Escrow does not run on Arc mainnet yet" });
+    expect(lib.setUpEscrow).not.toHaveBeenCalled();
+  });
+
   it("refuses a sandbox, and someone who may not manage treasury", async () => {
     authorizeMock.mockResolvedValue(access("sandbox"));
     expect(await setUpEscrowAction(empty, form())).toEqual({ ok: false, message: "Escrow is a contract on Arc testnet, for a live workspace. Take this workspace live first." });

@@ -1,5 +1,9 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-06: A contractor on another chain is refused without naming a network
+
+- `POST /api/v1/counterparties` refuses a contractor with another chain with "Only a vendor can be paid on another chain; a contractor's milestones are released on the workspace's own chain.", in place of "…released on Arc testnet.", so a workspace on Arc mainnet is not told a testnet. The code, `invalid_request`, does not change, and nothing else in `/api/v1` changes.
+
 ## 2026-10-06: A payment that has not confirmed is told
 
 - A new ledger entry, `payment_stuck`, is written when a live payment has not confirmed 15 minutes after its attempt was sent, once for each attempt. Its actor is `agent`, and its domain `ap` for an invoice or `contractor` for a milestone.
