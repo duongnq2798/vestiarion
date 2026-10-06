@@ -24,7 +24,7 @@ export function DocsShell({ searchIndex, children }: { searchIndex: SearchEntry[
   return (
     <DocsSearchProvider index={searchIndex}>
       <div className="flex min-h-dvh flex-col bg-ground">
-        <SiteHeader section={{ href: "/docs", label: "Docs" }} wide>
+        <SiteHeader section={{ href: "/docs", label: "Docs" }} width="wide">
           <DocsSearchButton />
           <Button asChild variant="ghost" className="hidden md:inline-flex">
             <Link href="/onboarding">Open console</Link>

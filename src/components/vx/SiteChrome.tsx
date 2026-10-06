@@ -43,24 +43,37 @@ function Wordmark() {
   );
 }
 
+/** The one column of a page outside a workspace that is a single column, the workspace chooser: its header lines up with it. */
+export const SITE_COLUMN = "max-w-md";
+
 /**
  * `landing` adds the section links, sign-in and the console call to action; `children` fill the right side otherwise.
- * `section` names the part of the site beside the wordmark ("Docs"); `wide` matches a page wider than the landing column.
+ * `section` names the part of the site beside the wordmark ("Docs"). `width` matches what the header sits over: the
+ * landing column by default, a wider page (`wide`), or a page that is one `SITE_COLUMN` (`column`). For a column the
+ * gutter sits outside it, as on the page's `<main className="px-4">`, so the wordmark starts where the column starts and
+ * the right side ends where it ends.
  */
 export function SiteHeader({
   landing = false,
   section,
-  wide = false,
+  width = "page",
   children,
 }: {
   landing?: boolean;
   section?: { href: string; label: string };
-  wide?: boolean;
+  width?: "page" | "wide" | "column";
   children?: ReactNode;
 }) {
   return (
-    <header className="sticky top-0 z-50 border-b border-line/60 bg-surface/88 backdrop-blur-xl">
-      <div className={cn("mx-auto flex h-16 items-center gap-3 px-4 sm:px-6", wide ? "max-w-[88rem]" : "max-w-6xl")}>
+    <header className={cn("sticky top-0 z-50 border-b border-line/60 bg-surface/88 backdrop-blur-xl", width === "column" && "px-4")}>
+      <div
+        className={cn(
+          "mx-auto flex h-16 items-center gap-3",
+          width === "column" ? cn("w-full", SITE_COLUMN) : "px-4 sm:px-6",
+          width === "wide" && "max-w-[88rem]",
+          width === "page" && "max-w-6xl"
+        )}
+      >
         <Wordmark />
         {section && (
           <Link
