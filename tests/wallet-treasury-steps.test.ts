@@ -128,9 +128,14 @@ describe("deploying the contract from the owner's wallet", () => {
     const { inScope } = database(state);
     const defaults = await inScope(() => prepareDeployment({ orgId: ORG, dailyUsdc: null, weeklyUsdc: null }));
     expect(defaults).toEqual({ to: null, data: deploymentData({ usdc: USDC, treasury: WALLET, agent: AGENT, dailyUnits: 50_000_000n, weeklyUnits: 150_000_000n }), value: "0", chainId: 5042 });
-    const chosenFigures = await inScope(() => prepareDeployment({ orgId: ORG, dailyUsdc: 20, weeklyUsdc: null }));
-    expect(chosenFigures.data).toBe(deploymentData({ usdc: USDC, treasury: WALLET, agent: AGENT, dailyUnits: 20_000_000n, weeklyUnits: 0n }));
-    for (const [dailyUsdc, weeklyUsdc] of [[0, 10], [-1, null], [30, 20]] as const) {
+    // An empty figure is the workspace's own, each on its own: leaving one empty never deploys it as "no limit".
+    const dailyOnly = await inScope(() => prepareDeployment({ orgId: ORG, dailyUsdc: 20, weeklyUsdc: null }));
+    expect(dailyOnly.data).toBe(deploymentData({ usdc: USDC, treasury: WALLET, agent: AGENT, dailyUnits: 20_000_000n, weeklyUnits: 150_000_000n }));
+    const weeklyOnly = await inScope(() => prepareDeployment({ orgId: ORG, dailyUsdc: null, weeklyUsdc: 1000 }));
+    expect(weeklyOnly.data).toBe(deploymentData({ usdc: USDC, treasury: WALLET, agent: AGENT, dailyUnits: 50_000_000n, weeklyUnits: 1_000_000_000n }));
+    // Refused: a figure of 0 or below, the 7-day figure below the daily one (the workspace's 150 below a typed 200), and a
+    // figure too small to be one unit of USDC, which the contract would read as no limit.
+    for (const [dailyUsdc, weeklyUsdc] of [[0, 10], [-1, null], [30, 20], [200, null], [0.0000001, null]] as const) {
       await expect(inScope(() => prepareDeployment({ orgId: ORG, dailyUsdc, weeklyUsdc }))).rejects.toMatchObject({ code: "invalid_figures" });
     }
   });

@@ -344,16 +344,16 @@ export async function createAgentWallet(input: { orgId: string; actorId: string;
   });
 }
 
-/** The figures to deploy with, in units: the owner's, or the workspace's agent spending limit (W6). */
+/**
+ * The figures to deploy with, in units: the owner's, each empty one the workspace's agent spending limit's (W6). Each
+ * defaults on its own, since the contract reads 0 as no limit: leaving one empty never deploys it unbounded.
+ */
 async function deploymentFigures(dailyUsdc: number | null, weeklyUsdc: number | null): Promise<{ daily: bigint; weekly: bigint }> {
-  let daily = dailyUsdc;
-  let weekly = weeklyUsdc;
-  if (daily === null && weekly === null) {
-    const budget = await readOutflowBudget(db());
-    daily = budget?.dailyUsdc ?? null;
-    weekly = budget?.weeklyUsdc ?? null;
-  }
-  const valid = (value: number | null) => value === null || (Number.isFinite(value) && value > 0);
+  const budget = dailyUsdc === null || weeklyUsdc === null ? await readOutflowBudget(db()) : null;
+  const daily = dailyUsdc ?? budget?.dailyUsdc ?? null;
+  const weekly = weeklyUsdc ?? budget?.weeklyUsdc ?? null;
+  // A figure too small to be one unit of USDC would be deployed as 0, no limit.
+  const valid = (value: number | null) => value === null || (Number.isFinite(value) && value > 0 && usdcUnits(value) > 0n);
   if (!valid(daily) || !valid(weekly) || (daily === null && weekly === null) || (daily !== null && weekly !== null && weekly < daily)) {
     throw new WalletTreasuryError("invalid_figures");
   }
