@@ -106,8 +106,9 @@ Once the workspace is live, these points differ from [What changes when you go l
 - **Only USDC on Arc mainnet is paid from it.** A payment in EURC, or to another chain, is refused: "Only USDC on Arc mainnet can be paid from your wallet's contract."
 - **The figures are your contract's.** The console's agent spending limit shows them and offers no way to change them, because only your wallet can.
 - **The console's cash is what the contract can move**: your wallet's USDC, or the approval if that is less.
-- **To stop payments**, pause the agent from the console, as in any workspace. To stop them from your wallet, set its USDC approval for the contract back to 0, and the contract can then move nothing.
+- **To stop payments**, pause the agent from the console, as in any workspace. To stop them from your wallet, set its USDC approval for the contract back to 0, and the contract can then move nothing. Do this too before you delete the workspace.
 - **Keep the agent's gas topped up.** The agent cannot pay without it. Send USDC on Arc mainnet to the agent's wallet, shown in **Go live**, before it runs out.
+- **Money coming in is not read yet.** A client's payment into your wallet reaches you, but Vestiarion does not match it to its receivable yet, so the receivable stays open. Leave payment reminders off for this workspace's receivables until it does.
 
 ## 2. Create the treasury wallets
 
