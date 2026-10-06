@@ -161,6 +161,8 @@ function PaidStep({ status }: { status: PayeeLinkStatus }) {
   const onArc = !paidAcrossChains(status.chain);
   // The link's chain is on one network, whose explorer shows the payment (network threading P1, P6).
   const explorerTx = homeChain(networkOfChain(status.chain)).explorerTx;
+  // The network the payment was sent on, by name (mainnet copy C1).
+  const home = homeChain(networkOfChain(status.chain)).label;
   const latestTx = latest?.txRef?.startsWith("0x") ? latest.txRef : null;
   return (
     <>
@@ -188,7 +190,7 @@ function PaidStep({ status }: { status: PayeeLinkStatus }) {
       {latestTx && (
         <Button asChild className="mt-6 w-full">
           <a href={`${explorerTx}${latestTx}`} target="_blank" rel="noreferrer">
-            View on Arcscan
+            View the transaction
             <ArrowUpRight aria-hidden />
             <span className="sr-only">(opens in a new tab)</span>
           </a>
@@ -197,8 +199,8 @@ function PaidStep({ status }: { status: PayeeLinkStatus }) {
       <Footnote>
         Not in your wallet yet? Check that your wallet shows {chain} and its USDC.{" "}
         {onArc
-          ? "A payment on Arc testnet is final within seconds; the transaction above is the record that it was sent."
-          : `It was sent from Arc testnet and arrives on ${chain} a few minutes later; the transaction above is the record that it was sent.`}
+          ? `A payment on ${home} is final within seconds; the transaction above is the record that it was sent.`
+          : `It was sent from ${home} and arrives on ${chain} a few minutes later; the transaction above is the record that it was sent.`}
         {passkeyWalletOffered(status.chain, passkeyWalletConfig()) && (
           <>
             {" "}

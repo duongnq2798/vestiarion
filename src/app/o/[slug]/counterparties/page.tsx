@@ -20,7 +20,7 @@ import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { sectionTitle } from "@/components/vx/nav";
 import { viewerCan } from "@/lib/auth/authorize";
 import { requireMembership } from "@/lib/auth/membership";
-import { chainModes } from "@/lib/circle";
+import { shellModes } from "@/lib/circle";
 import { screeningMode } from "@/lib/compliance";
 import { counterpartiesRefreshMs } from "@/lib/counterparties-refresh";
 import { addressUnconfirmed } from "@/lib/counterparty-address";
@@ -60,7 +60,7 @@ export default async function CounterpartiesPage({ params }: { params: Promise<{
     });
 
     return (
-      <ProductShell day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()}>
+      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={shellModes()}>
         <PageHead
           title={sectionTitle("counterparties")}
           sub="Add the people and businesses Vestiarion may invoice or pay. Each new record is screened immediately."
@@ -134,6 +134,7 @@ export default async function CounterpartiesPage({ params }: { params: Promise<{
                             {counterparty.notice_email ?? "None"}
                             {canWrite && (
                               <CounterpartyNoticeEmailEdit
+                                network={network}
                                 orgSlug={slug}
                                 counterparty={{ id: counterparty.id, name: counterparty.name, role: counterparty.role, noticeEmail: counterparty.notice_email ?? null }}
                               />

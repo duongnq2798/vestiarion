@@ -15,6 +15,7 @@ import { literal } from "./markdown";
 import { githubAppSettingsFromEnv, type GitHubAppSettings } from "./settings";
 import { readCommentCommand } from "./webhook";
 import { CHECKSUM_MISMATCH } from "../address-checksum";
+import { networkOf, networkProfile, type Network } from "../network";
 import { homeChain } from "../payee-chains";
 import { workspaceNetwork } from "../workspace-network";
 
@@ -91,7 +92,7 @@ const shortAddress = (address: string) => `${address.slice(0, 6)}…${address.sl
 const FOOTER = (origin: string) => `<sub>Posted by [Vestiarion](${origin}). Every payment is a signed entry in the payer's ledger.</sub>`;
 
 export type BountyReply =
-  | { kind: "attached"; amount: string; orgName: string; author: string; merged: boolean; addressOnFile: boolean; origin: string }
+  | { kind: "attached"; amount: string; orgName: string; author: string; merged: boolean; addressOnFile: boolean; origin: string; network: Network }
   | { kind: "exists"; amount: string | number; orgName: string }
   | { kind: "not_allowed" }
   | { kind: "bounty_usage" }
@@ -104,7 +105,7 @@ export type BountyReply =
   | { kind: "not_author"; author: string }
   | { kind: "payto_usage" }
   | { kind: "payto_checksum" }
-  | { kind: "address_received"; author: string; address: string; orgName: string }
+  | { kind: "address_received"; author: string; address: string; orgName: string; network: Network }
   | { kind: "address_on_file"; author: string };
 
 /**
@@ -120,7 +121,7 @@ export function bountyReply(reply: BountyReply): string {
       const where = reply.addressOnFile
         ? `It is paid to the address ${org} has on file for @${reply.author}.`
         : `@${reply.author}, reply with \`/payto\` and your Arc address to say where you are paid, for example \`/payto 0x…\`. ${org} confirms the address before the first payment.`;
-      return [`**Bounty: ${usdc(reply.amount)} on Arc testnet** from ${org}, for this pull request.`, "", `${where} ${when}, under the limits ${org} set.`, "", FOOTER(reply.origin)].join("\n");
+      return [`**Bounty: ${usdc(reply.amount)} on ${networkProfile(reply.network).label}** from ${org}, for this pull request.`, "", `${where} ${when}, under the limits ${org} set.`, "", FOOTER(reply.origin)].join("\n");
     }
     case "exists":
       return `This pull request already has a bounty of ${usdc(reply.amount)} from ${literal(reply.orgName)}. To change it, edit its milestone in Vestiarion.`;
@@ -147,7 +148,7 @@ export function bountyReply(reply: BountyReply): string {
     case "payto_usage":
       return "To say where you are paid, comment `/payto` and your Arc address: 0x followed by 40 hex characters.";
     case "address_received":
-      return `Got it, @${reply.author}: the bounty is to be paid to \`${shortAddress(reply.address)}\` on Arc testnet. ${literal(reply.orgName)} confirms new addresses before paying them.`;
+      return `Got it, @${reply.author}: the bounty is to be paid to \`${shortAddress(reply.address)}\` on ${networkProfile(reply.network).label}. ${literal(reply.orgName)} confirms new addresses before paying them.`;
     case "address_on_file":
       return `That address is already on file for @${reply.author}.`;
   }
@@ -197,7 +198,10 @@ export async function handlePullRequestComment(event: PullRequestComment, option
 
   if (workspaces.length > 1) return reply({ kind: "ambiguous" }, "refused");
   const { org_id: orgId, connected_by: connectedBy } = workspaces[0];
-  const orgName = (unwrap(await platformDb().from("orgs").select("name").eq("id", orgId).single()) as { name: string }).name;
+  // Outside the workspace's scope: its name and its network come from its row (mainnet copy C1).
+  const org = unwrap(await platformDb().from("orgs").select("name, network").eq("id", orgId).single()) as { name: string; network: string | null };
+  const orgName = org.name;
+  const network = networkOf(org.network);
   const repository = `${event.owner}/${event.repo}`.toLowerCase();
 
   if (command.kind === "payto" || command.kind === "payto_invalid") {
@@ -233,7 +237,7 @@ export async function handlePullRequestComment(event: PullRequestComment, option
       console.error("github: address from a pull request comment not saved", orgId, error instanceof Error ? error.message : "unknown error");
       return reply({ kind: "failed" }, "refused");
     }
-    return reply({ kind: "address_received", author: event.comment.author, address: command.address, orgName }, "address");
+    return reply({ kind: "address_received", author: event.comment.author, address: command.address, orgName, network }, "address");
   }
 
   // A comment GitHub delivers again was handled once already (B6).
@@ -295,7 +299,7 @@ export async function handlePullRequestComment(event: PullRequestComment, option
     return reply({ kind: "failed" }, "refused");
   }
   return reply(
-    { kind: "attached", amount: amount.data, orgName, author: event.pull.author, merged: event.pull.merged, addressOnFile: attached.addressOnFile, origin: options.origin ?? siteOrigin() },
+    { kind: "attached", amount: amount.data, orgName, author: event.pull.author, merged: event.pull.merged, addressOnFile: attached.addressOnFile, origin: options.origin ?? siteOrigin(), network },
     "attached"
   );
 }

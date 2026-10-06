@@ -19,7 +19,7 @@ import { sectionTitle } from "@/components/vx/nav";
 import type { Domain } from "@/components/vx/types";
 import { requireMembership } from "@/lib/auth/membership";
 import { orgHref } from "@/lib/auth/org-paths";
-import { chainModes } from "@/lib/circle";
+import { shellModes } from "@/lib/circle";
 import { inOrg } from "@/lib/dal/scope";
 import {
   ledgerEntryCount,
@@ -74,7 +74,7 @@ export default async function AuditPage({ params, searchParams }: AuditPageProps
     const retiredKeys = exportKeys(ledgerVerificationKeyring()).filter((key) => key.status === "retired");
 
     return (
-      <ProductShell day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()}>
+      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={shellModes()}>
         <PageHead
           title={sectionTitle("audit")}
           sub="Every decision is appended here, hash-linked to the one before it and signed with Ed25519. The summary stays readable; raw detail and cryptographic material remain inspectable."

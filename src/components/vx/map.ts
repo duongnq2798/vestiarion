@@ -10,7 +10,7 @@ import type { CounterpartyRow, InvoiceRow, MilestoneRow, TreasuryActionRow } fro
 import type { Decision, Evidence, Guardrail, Outcome } from "./types";
 import { fmt } from "./Primitives";
 import { BRIDGE_FEE_CAP_PERCENT, chainById, homeChain, paidAcrossChains } from "@/lib/payee-chains";
-import type { Network } from "@/lib/network";
+import { networkProfile, type Network } from "@/lib/network";
 import { SWAP_COST_CAP_PERCENT } from "@/lib/fx/swap-limits";
 
 /**
@@ -170,7 +170,9 @@ const shortAddress = (address: string) => (address.length > 12 ? `${address.slic
  * client, and once a transfer settled it, it says who sent it and how the agent matched it, from the signed
  * `ar_received` entry, with the transaction.
  */
-function receivableDecision(invoice: InvoiceRow, entries: LedgerEntry[]): Omit<Decision, "network"> {
+function receivableDecision(invoice: InvoiceRow, entries: LedgerEntry[], network: Network): Omit<Decision, "network"> {
+  // The viewed workspace's network, old entries included: this reasoning is rebuilt on every view (mainnet copy C4).
+  const { label } = networkProfile(network);
   const received = entries.find((entry) => entry.action === "ar_received" && entry.detail.invoiceId === invoice.id);
   const detail = received?.detail;
   const currency = invoice.currency ?? "USDC";
@@ -180,7 +182,7 @@ function receivableDecision(invoice: InvoiceRow, entries: LedgerEntry[]): Omit<D
   const settled = invoice.status === "received" || invoice.status === "paid";
 
   const reasoning = received
-    ? `Received ${fmt(numberValue(detail?.amount) ?? invoice.amount)} ${stringValue(detail?.currency) ?? currency}${from ? ` from ${shortAddress(from)}` : ""} on Arc testnet` +
+    ? `Received ${fmt(numberValue(detail?.amount) ?? invoice.amount)} ${stringValue(detail?.currency) ?? currency}${from ? ` from ${shortAddress(from)}` : ""} on ${label}` +
       `${stringValue(detail?.receivedAt) ? ` on ${utcDay(stringValue(detail?.receivedAt) as string)}` : ""}, and matched it to this invoice: ` +
       (matchedBy === "sender"
         ? `it came from ${invoice.counterparty_name}'s address on file.`
@@ -189,7 +191,7 @@ function receivableDecision(invoice: InvoiceRow, entries: LedgerEntry[]): Omit<D
       ? presentReasoning(invoice.agent_reasoning) || `Marked received.`
       : invoice.status === "rejected"
         ? presentReasoning(invoice.agent_reasoning) || "Rejected."
-        : `Waiting for ${invoice.counterparty_name} to pay. When the exact amount arrives in the operating wallet on Arc testnet, the agent matches it to this invoice.`;
+        : `Waiting for ${invoice.counterparty_name} to pay. When the exact amount arrives in the operating wallet on ${label}, the agent matches it to this invoice.`;
 
   const evidence: Evidence[] = [{ label: "Due", value: new Date(invoice.due_date).toLocaleDateString("en-US"), state: "neutral" }];
   if (from) evidence.push({ label: "Received from", value: shortAddress(from), state: "ok" });
@@ -214,7 +216,7 @@ function receivableDecision(invoice: InvoiceRow, entries: LedgerEntry[]): Omit<D
     auditSeq: received?.seq,
     at: received?.ts ?? invoice.due_date,
     // The agent's reminders and the payment it matched, step by step (collections R8).
-    trail: invoiceTrail(entries, invoice.id),
+    trail: invoiceTrail(entries, invoice.id, network),
   };
 }
 
@@ -238,7 +240,7 @@ function decideInvoice(
   entries: LedgerEntry[],
   options: { network: Network; deciding?: boolean }
 ): Omit<Decision, "network"> {
-  if (invoice.direction === "receivable") return receivableDecision(invoice, entries);
+  if (invoice.direction === "receivable") return receivableDecision(invoice, entries, options.network);
   // A payable not yet decided while a cycle runs is being decided now (decision trail R1).
   const deciding = options.deciding === true && invoice.status === "pending";
   const entry = matchingEntry(entries, "invoiceId", invoice.id);
@@ -318,7 +320,7 @@ function decideInvoice(
     mint,
     auditSeq: entry?.seq,
     at: entry?.ts ?? invoice.due_date,
-    trail: invoiceTrail(entries, invoice.id),
+    trail: invoiceTrail(entries, invoice.id, options.network),
   };
 }
 

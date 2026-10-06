@@ -72,6 +72,8 @@ const comment = (body: string, fields: { author?: string; pull?: Partial<PullReq
 
 interface World {
   installations?: Array<{ org_id: string; connected_by: string | null }>;
+  /** The workspace's network, as its row stores it (mainnet copy C1); none is Arc testnet. */
+  network?: string;
   permission?: string;
   /** Rows the bounty table holds, as PostgREST would answer a select on it. */
   bounties?: Array<Record<string, unknown>>;
@@ -93,7 +95,7 @@ function world(input: World = {}) {
   }) as typeof fetch;
 
   const fake = fakeSupabase((sent: RecordedRequest) => {
-    if (sent.path === "/rest/v1/orgs") return { body: orgs.orgRow(ORG, { name: "Northstar *Labs* @team" }) };
+    if (sent.path === "/rest/v1/orgs") return { body: orgs.orgRow(ORG, { name: "Northstar *Labs* @team", ...(input.network ? { network: input.network } : {}) }) };
     if (sent.path === "/rest/v1/github_installations") return { body: input.installations ?? [{ org_id: ORG, connected_by: MEMBER }] };
     if (sent.path === "/rest/v1/github_bounties" && sent.method === "POST") {
       if (input.claim === "pull_key") return { status: 409, body: { code: "23505", message: 'duplicate key value violates unique constraint "github_bounties_pull_key"' } };
@@ -161,6 +163,16 @@ describe("readPullRequestComment (B1)", () => {
     expect(readPullRequestComment({ ...payload, action: "edited" })).toBeNull();
     expect(readPullRequestComment({ ...payload, installation: undefined })).toBeNull();
     expect(readPullRequestComment(null)).toBeNull();
+  });
+});
+
+describe("handlePullRequestComment: the workspace's network (mainnet copy C1)", () => {
+  it("names Arc mainnet in the bounty's reply for a workspace there, read from its row outside its scope", async () => {
+    const { run, replies } = world({ network: "arc-mainnet" });
+    await run(comment("Great work!\n/bounty 5"));
+    const [reply] = replies();
+    expect(reply).toContain("**Bounty: 5.00 USDC on Arc mainnet**");
+    expect(reply).not.toContain("Arc testnet");
   });
 });
 
@@ -360,7 +372,7 @@ describe("handlePullRequestComment: /payto", () => {
 
 describe("bountyReply (B10)", () => {
   it("escapes the workspace's name, so it cannot link, mention or point at an issue", () => {
-    const text = bountyReply({ kind: "attached", amount: "5", orgName: "Evil [link](https://x.test) @all #1", author: "octocat", merged: false, addressOnFile: false, origin: ORIGIN });
+    const text = bountyReply({ kind: "attached", amount: "5", orgName: "Evil [link](https://x.test) @all #1", author: "octocat", merged: false, addressOnFile: false, origin: ORIGIN, network: "arc-testnet" });
     expect(text).not.toContain("[link](https://x.test)");
     expect(text).toContain("\\@\u2060all");
     expect(text).toContain("\\#\u20601");

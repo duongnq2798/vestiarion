@@ -5,6 +5,7 @@ import { CopyButton } from "@/components/ui/CopyButton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
+import { homeChain, networkOfChain } from "@/lib/payee-chains";
 import { previewPayLink, type PayLinkPreview } from "@/lib/platform/pay-links";
 
 export const dynamic = "force-dynamic";
@@ -74,7 +75,7 @@ export default async function PayPage({ params }: PayPageProps) {
                   </>
                 )}
                 <dt className="text-ink-3">Network</dt>
-                <dd className="text-ink">Arc testnet</dd>
+                <dd className="text-ink">{homeChain(networkOfChain(preview.chain)).label}</dd>
               </dl>
               {preview.payTo ? (
                 <div className="mt-5 grid gap-2">
@@ -86,7 +87,7 @@ export default async function PayPage({ params }: PayPageProps) {
                     </CopyButton>
                   </div>
                   <p className="text-xs leading-5 text-ink-3">
-                    From any wallet on Arc testnet. Send the exact amount: that is how the payment is matched to this invoice.
+                    From any wallet on {homeChain(networkOfChain(preview.chain)).label}. Send the exact amount: that is how the payment is matched to this invoice.
                   </p>
                 </div>
               ) : (
@@ -101,7 +102,7 @@ export default async function PayPage({ params }: PayPageProps) {
           )}
         </div>
       </main>
-      <SiteFooter compact />
+      <SiteFooter compact networkLabel={preview ? homeChain(networkOfChain(preview.chain)).label : undefined} />
     </div>
   );
 }

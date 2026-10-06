@@ -16,7 +16,7 @@ import { sectionTitle } from "@/components/vx/nav";
 import { twoApprovalsStatus } from "@/lib/approval-policy";
 import { requireMembership } from "@/lib/auth/membership";
 import { can } from "@/lib/auth/roles";
-import { chainModes } from "@/lib/circle";
+import { shellModes } from "@/lib/circle";
 import { platformDb, unwrap } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
 import { inboxFor } from "@/lib/email-inbox/inboxes";
@@ -34,6 +34,7 @@ import { slackPanelView } from "@/lib/slack/panel";
 import { slackSettingsFromEnv } from "@/lib/slack/settings";
 import { linkFor as telegramLinkFor } from "@/lib/telegram/links";
 import { telegramSettingsFromEnv } from "@/lib/telegram/settings";
+import { networkProfile } from "@/lib/network";
 
 export const dynamic = "force-dynamic";
 
@@ -68,11 +69,14 @@ export default async function SettingsPage({
       stats(),
       // Only an owner sees the danger zone, so only an owner's page reads what it says.
       canAdminister ? deletionContext(membership.orgId) : null,
-      // Best effort: a reserve status that cannot be read hides its section, nothing else.
-      usycReserveStatus(membership.orgId).catch((error: unknown) => {
-        console.error("settings: USYC reserve status not loaded", error instanceof Error ? error.message : error);
-        return null;
-      }),
+      // Best effort: a reserve status that cannot be read hides its section, nothing else. Only a network with a
+      // reserve has one to show (mainnet copy C3).
+      networkProfile(membership.network).usyc
+        ? usycReserveStatus(membership.orgId).catch((error: unknown) => {
+            console.error("settings: USYC reserve status not loaded", error instanceof Error ? error.message : error);
+            return null;
+          })
+        : null,
       // Only on a deployment where Slack is configured; best effort, like the reserve's.
       slackSettingsFromEnv()
         ? slackPanelView(membership.orgId, access.user.id).catch((error: unknown) => {
@@ -179,6 +183,7 @@ export default async function SettingsPage({
             title: "GitHub",
             content: github ? (
               <GitHubPanel
+                network={membership.network}
                 orgSlug={slug}
                 installations={github}
                 canManage={canManageIntegrations}
@@ -208,7 +213,12 @@ export default async function SettingsPage({
           {
             id: "two-approvals-title",
             title: "Two approvals",
-            content: twoApprovals ? <TwoApprovalsPanel orgSlug={slug} status={twoApprovals} canChange={can(membership.role, "approval.policy")} /> : null,
+            content: twoApprovals ? <TwoApprovalsPanel
+                orgSlug={slug}
+                status={twoApprovals}
+                canChange={can(membership.role, "approval.policy")}
+                keepsFigure={membership.network === "arc-mainnet"}
+              /> : null,
           },
           { id: "ledger-key-title", title: "Ledger signing key", content: <LedgerKeyPanel orgSlug={slug} status={ledgerKey} canAdminister={canAdminister} /> },
         ],
@@ -228,7 +238,7 @@ export default async function SettingsPage({
     ];
 
     return (
-      <ProductShell day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()}>
+      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={shellModes()}>
         <PageHead
           title={sectionTitle("settings")}
           sub="Your own notifications, and how this workspace goes live, connects to other tools, approves payments and signs its ledger. An owner takes it live, sets two approvals, rotates the ledger signing key or deletes it; an owner or admin manages API keys, webhooks and integrations."

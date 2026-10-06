@@ -159,6 +159,12 @@ describe("the OpenAPI document", () => {
     expect(operationById("nope")).toBeUndefined();
   });
 
+  it("describes an invoice's txHash on the workspace's network, not one network (mainnet copy C1)", () => {
+    const doc = JSON.stringify(buildOpenApiDocument("https://example.test"));
+    expect(doc).toContain("An on-chain hash once the payment settled, else null: on the workspace's network");
+    expect(doc).not.toContain("else null: on Arc testnet");
+  });
+
   it("names every reason status answers unavailable, wherever it is described (mainnet limits L7)", () => {
     const doc = buildOpenApiDocument("https://example.test") as { components: { schemas: Record<string, unknown> } };
     const described = [
@@ -170,6 +176,8 @@ describe("the OpenAPI document", () => {
       expect(text).toMatch(/credentials are stored but (cannot|could not) be read/);
       expect(text).toMatch(/Arc mainnet (with|and has) no Circle account connected yet/);
       expect(text).toMatch(/Arc mainnet (is )?switched off/);
+      expect(text).toMatch(/not live yet/);
+      expect(text).toMatch(/no yield reserve/);
     }
   });
 });

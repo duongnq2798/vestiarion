@@ -117,12 +117,18 @@ describe("checkPaymentAction", () => {
     ["wait", true, "Checked just now"],
     ["invalid", false, "no longer works"],
   ])("answers %s", async (outcome, ok, message) => {
-    checkMock.mockResolvedValueOnce(outcome);
+    checkMock.mockResolvedValueOnce({ outcome, network: outcome === "invalid" ? null : "arc-testnet" });
     const result = await checkPaymentAction({ ok: false, message: "" }, form({ token: TOKEN }));
     expect(checkMock).toHaveBeenCalledWith(TOKEN);
     expect(result.ok).toBe(ok);
     expect(result.message).toContain(message);
     expect(result.received).toBe(outcome === "received");
+  });
+
+  it("says a payment received on a link on Arc mainnet is recorded there (mainnet copy C1)", async () => {
+    checkMock.mockResolvedValueOnce({ outcome: "received", network: "arc-mainnet" });
+    const result = await checkPaymentAction({ ok: false, message: "" }, form({ token: TOKEN }));
+    expect(result.message).toBe("Received, thank you. The payment is recorded on Arc mainnet.");
   });
 
   it("answers a failure with a sentence, never a broken page", async () => {
@@ -160,6 +166,14 @@ describe("the pay page", () => {
     for (const secret of ["org-secret-id", "invoice-secret-id", "user-secret-id"]) expect(page).not.toContain(secret);
   });
 
+  it("tells the client to pay on the link's network: Arc mainnet for a link there, footer included (mainnet copy C1, C6)", async () => {
+    previewMock.mockResolvedValueOnce({ ...PREVIEW, chain: "ARC" });
+    const page = await render();
+    expect(page).toContain("From any wallet on Arc mainnet.");
+    expect(page).toContain("Signed decisions on Arc mainnet");
+    expect(page).not.toContain("Arc testnet");
+  });
+
   it("thanks the client once it is received", async () => {
     previewMock.mockResolvedValueOnce({ ...PREVIEW, status: "received" });
     expect(await render()).toContain("Mai Studio received 12.50 USDC. Thank you.");
@@ -176,7 +190,7 @@ describe("PayLinkControl", () => {
   const control = (props: Partial<Parameters<typeof PayLinkControl>[0]> = {}) =>
     renderToStaticMarkup(
       <TooltipProvider>
-        <PayLinkControl orgSlug="mai" invoiceId={INVOICE} dueDate="2026-10-10T12:00:00+00:00" client={CLIENT} {...props} />
+        <PayLinkControl orgSlug="mai" invoiceId={INVOICE} dueDate="2026-10-10T12:00:00+00:00" client={CLIENT} network="arc-testnet" {...props} />
       </TooltipProvider>
     );
   const VIEW = { url: "https://www.vestiarion.xyz/pay/vxr_" + "a".repeat(43), legacy: false, remindersOnAt: null, deferredUntil: null, sent: [] };
@@ -192,6 +206,12 @@ describe("PayLinkControl", () => {
     expect(markup).toContain(`value="${VIEW.url}"`);
     expect(text(markup)).toContain("Copy link");
     expect(text(markup)).toContain("Make a new link");
+  });
+
+  it("tells the person the client pays on the workspace's network: Arc mainnet there (mainnet copy C1)", () => {
+    const markup = text(control({ view: VIEW, network: "arc-mainnet" }));
+    expect(markup).toContain("They pay the exact amount on Arc mainnet");
+    expect(markup).not.toContain("Arc testnet");
   });
 
   it("says a link made before links were kept cannot be shown again", () => {

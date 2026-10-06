@@ -126,7 +126,11 @@ const INBOX_COMMANDS = "src/lib/commands/inbox.ts";
 const INBOX_SETTINGS = "src/lib/email-inbox/settings.ts";
 
 /** Each guide's quoted UI strings, as `[text, the file it must appear in]`. */
-const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
+/**
+ * Each guide's quotes of the app: the text as the guide shows it, the file that says it, and, when that file builds the
+ * text from the workspace's network (mainnet copy C1), the text as the file writes it.
+ */
+const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
   "guides/try-it": [
     ["Safe to spend today", "src/components/vx/CashOutlook.tsx"],
     ["Next 30 days", "src/components/vx/CashOutlook.tsx"],
@@ -396,7 +400,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["Remind the client by email", PAY_LINK_CONTROL],
     ["Add billing email", PAY_LINK_CONTROL],
     ["Turn off reminders", PAY_LINK_CONTROL],
-    ["Pay on Arc testnet", "src/lib/email/receivable-reminder.ts"],
+    ["Pay on Arc testnet", "src/lib/email/receivable-reminder.ts", "Pay on ${label}"],
     ["ar_reminder_sent", "src/lib/agent/collections.ts"],
     ["ar_reminder_deferred", "src/lib/agent/collections.ts"],
     ["ar_reminders_on", "src/lib/platform/pay-links.ts"],
@@ -405,7 +409,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["payment_notice_sent", "src/lib/payment-notices.ts"],
     ["code stopped it:", "src/lib/agent-activity.ts"],
     ["the agent's spending limit has no room today, and the agent pays it once there is", "src/lib/next-step.ts"],
-    ["View on Arcscan", "src/components/AgentActivity.tsx"],
+    ["View the transaction", "src/components/AgentActivity.tsx"],
     ["See them", "src/components/AgentActivity.tsx"],
     ["The agent made", "src/components/AgentActivity.tsx"],
     ["Pay it in Approvals, or raise the limit.", "src/lib/next-step.ts"],
@@ -429,6 +433,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     [
       "The payment is still in flight on Arc testnet. It cannot be rejected or returned until Circle settles it; approving checks it again.",
       APPROVAL_CARD,
+      "The payment is still in flight on {homeChain(networkOfChain(payable.payeeChain)).label}. It cannot be rejected or returned until Circle settles it; approving checks it again.",
     ],
     [
       "Circle did not answer when this payment was sent, so it may have taken the transfer. Approve and pay, Reject and Return look for it on Circle first: Approve and pay records it if Circle has it, and sends it only once Circle shows none.",
@@ -474,7 +479,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["Edit address", PAYEE_FORM],
     ["Address sent", PAYEE_JOURNEY],
     ["Your address is confirmed", PAYEE_JOURNEY],
-    ["View on Arcscan", PAYEE_JOURNEY],
+    ["View the transaction", PAYEE_JOURNEY],
     ["to approve the work", PAYEE_STATES],
     ["Being prepared", PAYEE_STATES],
     ["Scheduled for", PAYEE_STATES],
@@ -572,7 +577,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["telegram_connected", TELEGRAM_LINKS],
     ["telegram_disconnected", TELEGRAM_LINKS],
     ["I only work in a private chat", TELEGRAM_MESSAGES],
-    ["Arc testnet transaction", TELEGRAM_MESSAGES],
+    ["Arc testnet transaction", TELEGRAM_MESSAGES, "${networkProfile(item.network).label} transaction"],
     ["How it decided", AGENT_ACTIVITY],
     ["Decide in Approvals", AGENT_ACTIVITY],
     ["Safe to spend today", TELEGRAM_MESSAGES],
@@ -650,7 +655,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string]>> = {
     ["Connected. Back in Slack, try /vestiarion today.", SLACK_ACTIONS],
     ["slack_member_connected", SLACK_LINKS],
     ["the agent decided", SLACK_BLOCKS],
-    ["Arc testnet transaction", SLACK_BLOCKS],
+    ["Arc testnet transaction", SLACK_BLOCKS, "${networkProfile(item.network).label} transaction"],
     ["How it decided", AGENT_ACTIVITY],
     ["Decide in Approvals", AGENT_ACTIVITY],
     ["/vestiarion today", SLACK_BLOCKS],
@@ -826,16 +831,17 @@ const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/audit-export": 5,
 };
 
-describe.each(Object.entries(QUOTED) as Array<[GuideSlug, Array<readonly [string, string]>]>)("the %s guide", (slug, quoted) => {
+describe.each(Object.entries(QUOTED) as Array<[GuideSlug, Array<readonly [string, string, string?]>]>)("the %s guide", (slug, quoted) => {
   const guide = readSource(slug);
 
   it("quotes some of the app's text", () => {
     expect(quoted.length).toBeGreaterThan(MIN_QUOTED[slug]);
   });
 
-  it.each(quoted)("quotes %j, which %s says", (text, file) => {
+  const triples = quoted.map(([text, file, inSource]): readonly [string, string, string] => [text, file, inSource ?? text]);
+  it.each(triples)("quotes %j, which %s says", (text, file, inSource) => {
     expect(guide, `${slug} should quote ${JSON.stringify(text)}`).toContain(text);
-    expect(sourceFile(file), `${file} should contain ${JSON.stringify(text)}`).toContain(text);
+    expect(sourceFile(file), `${file} should contain ${JSON.stringify(inSource)}`).toContain(inSource);
   });
 
   it("names Arc testnet plainly, without disclaimers", () => {

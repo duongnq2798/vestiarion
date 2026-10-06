@@ -5,7 +5,7 @@ import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { sectionTitle } from "@/components/vx/nav";
 import { requireMembership } from "@/lib/auth/membership";
 import { can, canAssignRole, ORG_ROLES } from "@/lib/auth/roles";
-import { chainModes } from "@/lib/circle";
+import { shellModes } from "@/lib/circle";
 import { inOrg } from "@/lib/dal/scope";
 import { keyNamesForViewer } from "@/lib/member-keys";
 import { activeKeyNamesByCreator } from "@/lib/platform/api-keys";
@@ -32,7 +32,7 @@ export default async function MembersPage({ params }: { params: Promise<{ slug: 
     const assignable = ORG_ROLES.filter((role) => canAssignRole(membership.role, role));
 
     return (
-      <ProductShell day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()}>
+      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={shellModes()}>
         <PageHead
           title={sectionTitle("members")}
           sub="Everyone in this workspace, and the invitations still open. Anyone may leave on their own; an owner or admin invites, changes roles and removes."

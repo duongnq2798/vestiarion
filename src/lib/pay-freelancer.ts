@@ -180,6 +180,7 @@ export async function setUpFreelancerPayment(
       link: url,
       expiresAt: new Date(link.expiresAt),
       origin,
+      network: workspaceNetwork().id,
     });
     try {
       emailed = (await sendEmail({ to: input.email, ...email })).sent;

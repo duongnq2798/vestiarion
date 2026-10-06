@@ -26,7 +26,7 @@ import { decisionEntryOf, heldMilestonesTwoApprovals, heldReason, milestoneInten
 import { isSoleApprover } from "@/lib/agent/sole-approver";
 import { viewerCan } from "@/lib/auth/authorize";
 import { requireMembership } from "@/lib/auth/membership";
-import { chainModes } from "@/lib/circle";
+import { shellModes } from "@/lib/circle";
 import { readEscrowContract } from "@/lib/circle/escrow-setup";
 import { addressUnconfirmed, payeeNotReady } from "@/lib/counterparty-address";
 import { inOrg } from "@/lib/dal/scope";
@@ -37,6 +37,7 @@ import { listMembers } from "@/lib/platform/members";
 import { listCounterparties, listMilestones, stats, type MilestoneRow } from "@/lib/queries";
 import { workspaceNetwork } from "@/lib/workspace-network";
 import { paidAcrossChains } from "@/lib/payee-chains";
+import { networkProfile } from "@/lib/network";
 
 export const dynamic = "force-dynamic";
 
@@ -60,8 +61,9 @@ export default async function ContractorsPage({ params, searchParams }: { params
       viewerCan(slug, "records.write"),
       viewerCan(slug, "treasury.manage"),
       viewerCan(slug, "approval.decide"),
-      // A live workspace's escrow (milestone escrow E2). Best effort: a read that fails shows no panel.
-      live
+      // A live workspace's escrow (milestone escrow E2), on a network that has it (mainnet copy C3). Best effort: a read
+      // that fails shows no panel.
+      live && networkProfile(network).escrow
         ? readEscrowContract().catch((error: unknown) => {
             console.error("contractors: escrow not loaded", error instanceof Error ? error.message : error);
             return undefined;
@@ -231,7 +233,7 @@ export default async function ContractorsPage({ params, searchParams }: { params
     const paidTotal = milestones.filter((milestone) => milestone.status === "paid").reduce((sum, milestone) => sum + Number(milestone.amount), 0);
 
     return (
-      <ProductShell day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()}>
+      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={shellModes()}>
         <PageHead
           title={sectionTitle("contractors")}
           sub="Milestone pay follows verified work instead of a Net-30 calendar. Every release still passes risk and authority guardrails."

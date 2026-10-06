@@ -5,6 +5,8 @@
  * hands it the entries it already read.
  */
 
+import { networkProfile, type Network } from "./network";
+
 /** A ledger entry as the trail reads it. */
 export interface TrailEntry {
   seq: number;
@@ -127,7 +129,9 @@ function agreement(detail: Record<string, unknown>): string {
 }
 
 /** One entry as a step, or null for one the trail does not show (receipts, links). */
-export function trailStep(entry: TrailEntry): TrailStep | null {
+export function trailStep(entry: TrailEntry, network: Network = "arc-testnet"): TrailStep | null {
+  // The viewed workspace's network, old entries included: steps are rebuilt on every view (mainnet copy C4).
+  const { label } = networkProfile(network);
   const detail = entry.detail;
   const base = { seq: entry.seq, at: entry.ts, notes: [] as string[], txHash: null as string | null };
   switch (entry.action) {
@@ -174,14 +178,14 @@ export function trailStep(entry: TrailEntry): TrailStep | null {
         who: "agent",
         tone: stopped ? "stopped" : "done",
         text: `${decider} decided ${VERBS[entry.action](detail)}${policy}.`,
-        notes: [...checksOf(detail, paying), ...code.notes, ...(tx ? ["✓ Sent on Arc testnet"] : [])],
+        notes: [...checksOf(detail, paying), ...code.notes, ...(tx ? [`✓ Sent on ${label}`] : [])],
         txHash: tx,
       };
     }
     case "ap_reconcile": {
       const execution = record(detail.execution);
       const tx = arcTx(execution?.txRef) ?? arcTx(detail.txRef);
-      return { ...base, who: "agent", tone: "done", text: "The agent confirmed the payment on Arc testnet.", txHash: tx };
+      return { ...base, who: "agent", tone: "done", text: `The agent confirmed the payment on ${label}.`, txHash: tx };
     }
     case "approval_paid":
       return {
@@ -196,7 +200,7 @@ export function trailStep(entry: TrailEntry): TrailStep | null {
     case "approval_returned":
       return { ...base, who: "person", tone: "neutral", text: "A person returned it to the agent." };
     case "ar_received":
-      return { ...base, who: "agent", tone: "done", text: "The agent matched the payment received on Arc testnet.", txHash: arcTx(detail.txHash) };
+      return { ...base, who: "agent", tone: "done", text: `The agent matched the payment received on ${label}.`, txHash: arcTx(detail.txHash) };
     case "ar_reminders_on":
       return { ...base, who: "person", tone: "neutral", text: "A person turned on the agent's reminders to the client." };
     case "ar_reminders_off":
@@ -236,10 +240,10 @@ export function trailStep(entry: TrailEntry): TrailStep | null {
  * The trail of one invoice, oldest first, from the entries about it (newest first, as `ledger_entries_for_targets`
  * returns them): the latest `TRAIL_STEPS_SHOWN` steps.
  */
-export function invoiceTrail(entries: readonly TrailEntry[], invoiceId: string): TrailStep[] {
+export function invoiceTrail(entries: readonly TrailEntry[], invoiceId: string, network: Network = "arc-testnet"): TrailStep[] {
   const steps = entries
     .filter((entry) => entry.detail.invoiceId === invoiceId)
-    .map(trailStep)
+    .map((entry) => trailStep(entry, network))
     .filter((step): step is TrailStep => step !== null)
     .sort((a, b) => a.seq - b.seq);
   return steps.slice(-TRAIL_STEPS_SHOWN);

@@ -23,6 +23,7 @@ function item(overrides: Partial<ActivityItem> = {}): ActivityItem {
     path: "/invoices#invoice-1",
     pathLabel: "See it on AP / AR",
     txHash: TX,
+    network: "arc-testnet",
     ...overrides,
   } as ActivityItem;
   return { ...base, txUrl: overrides.txUrl !== undefined ? overrides.txUrl : base.txHash ? `https://explorer.testnet.arc.io/tx/${base.txHash}` : null };
@@ -38,6 +39,12 @@ describe("decisionsMessage", () => {
     expect(message).toContain("A&amp;B &lt;Ltd&gt;");
     expect(message).toContain("Limit &lt;2&gt; &amp; over");
     expect(message).not.toContain("<Ltd>");
+  });
+
+  it("names the network on a transaction's link: Arc mainnet for a workspace there (mainnet copy C1)", () => {
+    const message = decisionsMessage({ name: "Acme", slug: "acme" }, [item({ network: "arc-mainnet", txUrl: `https://explorer.arc.io/tx/${TX}` })], "https://www.vestiarion.xyz");
+    expect(message).toContain(`<a href="https://explorer.arc.io/tx/${TX}">Arc mainnet transaction</a>`);
+    expect(message).not.toContain("Arc testnet");
   });
 
   it("links the transaction on Arc testnet only when there is one, and the page under the workspace", () => {

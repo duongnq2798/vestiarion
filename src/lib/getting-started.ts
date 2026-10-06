@@ -18,6 +18,7 @@
  */
 
 import { addressUnconfirmed } from "./counterparty-address";
+import { networkProfile, type Network } from "./network";
 
 export type GettingStartedStepId = "wallet" | "fund" | "live" | "payee" | "payable" | "payment";
 
@@ -38,6 +39,8 @@ export interface GettingStartedInput {
   onchainPayments: number;
   /** Payables waiting for a person's decision, as the console's Needs you tile counts them. */
   waitingCount: number;
+  /** The workspace's network: the steps name it, and offer only what it has (mainnet copy C1, C2). */
+  network: Network;
 }
 
 export interface GettingStartedStep {
@@ -76,12 +79,18 @@ export function gettingStarted(input: GettingStartedInput): GettingStarted {
   const unconfirmed = payable ? undefined : payees[0];
   const paid = input.onchainPayments > 0;
   const held = input.waitingCount > 0;
+  const profile = networkProfile(input.network);
+  const { label } = profile;
+  // Where real USDC is sent, the wallet keeps a little aside for its own gas (mainnet go-live M6).
+  const gas = profile.gasReserveUsdc > 0 ? ` The wallet keeps ${profile.gasReserveUsdc} USDC of it aside to pay its own gas.` : "";
 
   const steps: GettingStartedStep[] = [
     {
       id: "wallet",
       title: "Add a wallet",
-      body: "Create the workspace's treasury wallets on Arc testnet: a hosted wallet in one click, or your own Circle account.",
+      body: profile.hostedWallets
+        ? `Create the workspace's treasury wallets on ${label}: a hosted wallet in one click, or your own Circle account.`
+        : `Create the workspace's wallet on ${label} with your own Circle account.`,
       path: GO_LIVE,
       done: live || hasWallet,
       ownerOnly: true,
@@ -89,9 +98,13 @@ export function gettingStarted(input: GettingStartedInput): GettingStarted {
     {
       id: "fund",
       title: "Fund it with USDC",
-      body: live
-        ? "The operating wallet holds no USDC, so the agent cannot pay. Send testnet USDC to it from Circle's faucet: Settings lists its address."
-        : "Send testnet USDC to the operating wallet from Circle's faucet. Settings shows the wallet's address, and reads the balance from the chain again when you come back.",
+      body: profile.faucet
+        ? live
+          ? "The operating wallet holds no USDC, so the agent cannot pay. Send testnet USDC to it from Circle's faucet: Settings lists its address."
+          : "Send testnet USDC to the operating wallet from Circle's faucet. Settings shows the wallet's address, and reads the balance from the chain again when you come back."
+        : live
+          ? `The operating wallet holds no USDC, so the agent cannot pay. Send USDC on ${label} to it: Settings lists its address.${gas}`
+          : `Send USDC on ${label} to the operating wallet. Settings shows the wallet's address, and reads the balance from the chain again when you come back.${gas}`,
       path: GO_LIVE,
       done: funded,
       ownerOnly: false,
@@ -109,7 +122,7 @@ export function gettingStarted(input: GettingStartedInput): GettingStarted {
       title: "Add a payee with an Arc address",
       body: unconfirmed
         ? `Confirm the new address of ${unconfirmed.name ?? "your payee"} on its card: the agent holds every payment to an address that is not yet confirmed.`
-        : "A vendor or contractor, with their address on Arc testnet. Don't have it? Ask for address, on their card, sends them a link to enter it.",
+        : `A vendor or contractor, with their address on ${label}. Don't have it? Ask for address, on their card, sends them a link to enter it.`,
       path: "/counterparties",
       done: Boolean(payable),
       ownerOnly: false,
@@ -124,7 +137,7 @@ export function gettingStarted(input: GettingStartedInput): GettingStarted {
     },
     {
       id: "payment",
-      title: "First payment on Arc testnet",
+      title: `First payment on ${label}`,
       body: held
         ? "The agent is holding a payable for a person: decide it on Approvals."
         : "The agent pays the payable on its own, or holds it for you on Approvals. A settled payment links to the Arc explorer.",

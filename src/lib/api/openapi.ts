@@ -150,7 +150,7 @@ export const OPERATIONS: readonly DocOperation[] = [
     path: "/api/v1/status",
     summary: "Get workspace status",
     description:
-      "What this workspace is, and what it can actually do. The first call a client should make: whether payments and yield are live, simulated or unavailable, the workspace clock, running totals, and a description of its configuration. Secrets are never included.\n\n`unavailable` means nothing can pay in this workspace now: its Circle credentials are stored but cannot be read, or it is on Arc mainnet with no Circle account connected yet, or this deployment has Arc mainnet switched off. A cycle refuses to pay then rather than fall back to simulation, so status does not report it as `simulate`.",
+      "What this workspace is, and what it can actually do. The first call a client should make: whether payments and yield are live, simulated or unavailable, the workspace clock, running totals, and a description of its configuration. Secrets are never included.\n\n`unavailable` means nothing can pay in this workspace now: its Circle credentials are stored but cannot be read; or it is on Arc mainnet with no Circle account connected yet, or not live yet; or this deployment has Arc mainnet switched off. A cycle refuses to pay then rather than fall back to simulation, so status does not report it as `simulate`. Yield is also `unavailable` on a network with no yield reserve, such as Arc mainnet.",
     tag: "Workspace",
     scope: "read",
     params: [],

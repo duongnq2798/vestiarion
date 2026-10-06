@@ -18,10 +18,10 @@ The package is [@vestiarion/sdk on npm](https://www.npmjs.com/package/@vestiario
 This site serves the same package, byte for byte, for a lockfile that should not depend on the npm registry:
 
 ```bash
-npm install https://www.vestiarion.xyz/sdk/vestiarion-sdk-0.3.1.tgz
+npm install https://www.vestiarion.xyz/sdk/vestiarion-sdk-0.3.2.tgz
 ```
 
-Each version has its own URL there, and the file behind it never changes, so the integrity hash in your lockfile keeps matching. Version 0.3.1 describes the status's `unavailable` answer for a workspace on Arc mainnet. Version 0.3.0 accepts `ARC`, Arc mainnet's chain, for a counterparty. Version 0.2.0 added milestones and payee links. Every earlier version is still served at its own URL.
+Each version has its own URL there, and the file behind it never changes, so the integrity hash in your lockfile keeps matching. Version 0.3.2 describes a paid invoice's `txHash` on the workspace's network, and when the status answers `unavailable` for a workspace on Arc mainnet that is not live yet. Version 0.3.1 describes the status's `unavailable` answer for a workspace on Arc mainnet. Version 0.3.0 accepts `ARC`, Arc mainnet's chain, for a counterparty. Version 0.2.0 added milestones and payee links. Every earlier version is still served at its own URL.
 
 ## Create a client
 

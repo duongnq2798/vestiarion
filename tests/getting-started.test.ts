@@ -23,6 +23,7 @@ function input(overrides: Partial<GettingStartedInput> = {}): GettingStartedInpu
     payableCount: 0,
     onchainPayments: 0,
     waitingCount: 0,
+    network: "arc-testnet",
     ...overrides,
   };
 }
@@ -118,6 +119,20 @@ describe("gettingStarted", () => {
     const held = gettingStarted({ ...ready, waitingCount: 1 });
     expect(step(held, "payment").path).toBe("/approvals");
     expect(step(held, "payment").body).toContain("Approvals");
+  });
+
+  it("on Arc mainnet, offers no hosted wallet and no faucet, and names the network and its gas (mainnet copy C2)", () => {
+    const result = gettingStarted(input({ network: "arc-mainnet" }));
+    const words = result.steps.map((s) => `${s.title} ${s.body}`).join(" ");
+    expect(words).not.toMatch(/faucet|hosted|Arc testnet/i);
+    expect(step(result, "wallet").body).toContain("Arc mainnet");
+    expect(step(result, "fund").body).toContain("Send USDC on Arc mainnet");
+    expect(step(result, "fund").body).toContain("0.1 USDC");
+    expect(step(result, "payee").body).toContain("their address on Arc mainnet");
+    expect(step(result, "payment").title).toBe("First payment on Arc mainnet");
+    const live = gettingStarted(input({ network: "arc-mainnet", mode: "live", accounts: [{ kind: "operating", circle_wallet_id: "w-1", balance: 0 }] }));
+    expect(step(live, "fund").body).not.toMatch(/faucet|testnet/i);
+    expect(step(live, "fund").body).toContain("Send USDC on Arc mainnet");
   });
 
   it("stays for a live workspace until its first payment on Arc testnet, then hides", () => {

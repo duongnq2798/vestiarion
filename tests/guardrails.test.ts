@@ -262,11 +262,17 @@ describe("a EURC payment the wallet is short of, and the swap that could fund it
     fxAvailable: true,
   };
   type SwapFacts = { requested: boolean; offer: { usdcIn: number; costPercent: number } | null; usdcBalance: number; usdcDueWithin7Days: number };
-  const short = (swap: SwapFacts) => ({ balance: 0, needed: 2, swap });
+  const short = (swap: SwapFacts) => ({ balance: 0, needed: 2, faucet: true, swap });
   const swap = (overrides: Partial<SwapFacts> = {}): SwapFacts => ({ requested: true, offer: OFFER, usdcBalance: 20, usdcDueWithin7Days: 5, ...overrides });
 
   it("lets a payment through that the model chose to fund with the offered swap", () => {
     expect(enforceApGuardrails({ ...base, eurcShort: short(swap()) })).toEqual({ blocked: false, status: null, rule: null, reasoning: base.reasoning });
+  });
+
+  it("sends no one to a faucet on a network that has none (mainnet copy C2)", () => {
+    const result = enforceApGuardrails({ ...base, eurcShort: { ...short(swap({ requested: false })), faucet: false } });
+    expect(result.reasoning).toContain("held for a person; fund EURC first]");
+    expect(result.reasoning).not.toContain("faucet");
   });
 
   it("holds one the model did not choose to fund with a swap, as before", () => {
@@ -294,7 +300,7 @@ describe("a EURC payment the wallet is short of, and the swap that could fund it
   });
 
   it("still holds a payment whose EURC could not be read, swap or not", () => {
-    const result = enforceApGuardrails({ ...base, eurcShort: { balance: null, needed: 2, swap: swap() } });
+    const result = enforceApGuardrails({ ...base, eurcShort: { balance: null, needed: 2, faucet: true, swap: swap() } });
     expect(result).toMatchObject({ blocked: true, rule: "treasury.insufficient_eurc" });
   });
 });
@@ -329,7 +335,7 @@ describe("the agent's spending limit (outflow budget R4)", () => {
   it("names a counterparty's own limit first, and holds before any EURC swap is made", () => {
     expect(enforceApGuardrails({ ...base, amount: 60, outflowBudget: room() }).rule).toBe("counterparty.payment_limit");
     const swap = { requested: true, offer: { usdcIn: 26, costPercent: 0.1 }, usdcBalance: 200, usdcDueWithin7Days: 0 };
-    const result = enforceApGuardrails({ ...base, currency: "EURC", fxAvailable: true, eurcShort: { balance: 0, needed: 22, swap }, outflowBudget: room() });
+    const result = enforceApGuardrails({ ...base, currency: "EURC", fxAvailable: true, eurcShort: { balance: 0, needed: 22, faucet: true, swap }, outflowBudget: room() });
     expect(result.rule).toBe("workspace.outflow_budget");
   });
 });
@@ -449,7 +455,7 @@ describe("AP guardrails — two approvals above the workspace's figure (two appr
     const budget: BudgetRoom = { dailyUsdc: 100, weeklyUsdc: null, spentToday: 90, spentThisWeek: 90, remaining: 10, binding: "day" };
     expect(enforceApGuardrails({ ...base, outflowBudget: budget, twoApprovalsAbove: 100 }).rule).toBe("workspace.two_approvals");
     const swap = { requested: true, offer: { usdcIn: 130, costPercent: 0.1 }, usdcBalance: 500, usdcDueWithin7Days: 0 };
-    const result = enforceApGuardrails({ ...base, currency: "EURC", fxAvailable: true, eurcShort: { balance: 0, needed: 110, swap }, twoApprovalsAbove: 100 });
+    const result = enforceApGuardrails({ ...base, currency: "EURC", fxAvailable: true, eurcShort: { balance: 0, needed: 110, faucet: true, swap }, twoApprovalsAbove: 100 });
     expect(result.rule).toBe("workspace.two_approvals");
   });
 

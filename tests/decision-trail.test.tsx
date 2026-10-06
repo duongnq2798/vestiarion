@@ -59,6 +59,14 @@ describe("the decision trail", () => {
     expect(steps.map((s) => s.who)).toEqual(["person", "agent", "person", "agent", "agent"]);
   });
 
+  it("names the viewed workspace's network in each step that reached the chain: Arc mainnet there (mainnet copy C1, C4)", () => {
+    expect(trailStep(JIREN[4], "arc-mainnet")!.notes).toContain("✓ Sent on Arc mainnet");
+    expect(trailStep(step(1, "02:00:00", "agent", "ap_reconcile", { invoiceId: INVOICE, txRef: TX }), "arc-mainnet")!.text).toBe("The agent confirmed the payment on Arc mainnet.");
+    expect(trailStep(step(2, "02:00:00", "agent", "ar_received", { invoiceId: INVOICE, txHash: TX }), "arc-mainnet")!.text).toBe("The agent matched the payment received on Arc mainnet.");
+    const steps = invoiceTrail([...JIREN].reverse(), INVOICE, "arc-mainnet");
+    expect(JSON.stringify(steps)).not.toContain("Arc testnet");
+  });
+
   it("says what each decision checked, what code said, and what reached Arc", () => {
     const paid = trailStep(JIREN[4])!;
     expect(paid.notes).toEqual([

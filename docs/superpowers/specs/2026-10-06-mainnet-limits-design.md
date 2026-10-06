@@ -66,7 +66,8 @@ phase 2a (#219, Arc mainnet behind a switch). Rulings carry their cost if wrong.
   - `liveOperatingBalance` rounds only when there is a gas reserve, so Arc testnet's figures are byte-identical to
     before 2a.
   - Migration 0079 rewrites the network column's comment.
-- **L9. Going live on Arc mainnet stays closed.** The copy that names Arc testnet (phase 2c) is still to move.
+- **L9. Going live on Arc mainnet stays closed.** The copy that names Arc testnet (phase 2c) is still to move. (Opened
+  by phase 2c: docs/superpowers/specs/2026-10-06-mainnet-copy-design.md C13.)
   - Emails and comments to payees must name Arc mainnet before a real payment.
   - So `goLiveOpen` turns on with 2c, not here.
 

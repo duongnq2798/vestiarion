@@ -170,6 +170,19 @@ export function hasNoProvider(config: VestiarionConfig = currentOrgConfig()): bo
   return networkOf(config.network) === "arc-mainnet" && !(config.chain.circleApiKey && config.chain.circleEntitySecret);
 }
 
+/**
+ * Whether nothing can pay in the organization now (mainnet copy C12): it has no provider, or its network holds it (Arc
+ * mainnet switched off, or not live yet). The status API answers `unavailable` then, and the shell says Held.
+ */
+export function paymentsHeld(config: VestiarionConfig = currentOrgConfig()): boolean {
+  return hasNoProvider(config) || Boolean(config.chain.networkHold);
+}
+
+/** What the shell shows about payments and yield: the page's modes, and whether nothing can pay now (final review I2). */
+export function shellModes(): { mode: "live" | "simulate"; earnMode: "live" | "simulate"; held: boolean } {
+  return { ...chainModes(), held: paymentsHeld() };
+}
+
 /** What a page shows about payments and yield, computed inside the organization's scope. */
 export function chainModes(): { mode: "live" | "simulate"; earnMode: "live" | "simulate" } {
   // getChainProvider() refuses outright when the organization's stored Circle

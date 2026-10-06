@@ -28,7 +28,7 @@ import { CASH_SHORTFALL } from "@/lib/next-step";
 import { requireMembership } from "@/lib/auth/membership";
 import { orgHref } from "@/lib/auth/org-paths";
 import { can } from "@/lib/auth/roles";
-import { chainModes } from "@/lib/circle";
+import { chainModes, paymentsHeld } from "@/lib/circle";
 import { readGatewayState } from "@/lib/circle/gateway-funding";
 import { spendingLimitStatus } from "@/lib/circle/spending-limit-setup";
 import { readServiceBudget } from "@/lib/service-budget";
@@ -40,6 +40,7 @@ import { cashOutlook } from "@/lib/cash-outlook";
 import { latestForecast, listAccounts, listCounterparties, listInvoices, listMilestones, listTreasuryActions, stats } from "@/lib/queries";
 import { offerSampleData } from "@/lib/sample-data-offer";
 import { workspaceNetwork } from "@/lib/workspace-network";
+import { networkProfile } from "@/lib/network";
 
 export const dynamic = "force-dynamic";
 
@@ -105,6 +106,8 @@ export default async function DashboardPage({
       : undefined;
     const sinceValue = typeof query.since === "string" ? Number(query.since) : undefined;
     const since = Number.isFinite(sinceValue) ? sinceValue : undefined;
+    // Gateway, and the service budget it funds, exist only on a network that has it (mainnet copy C3).
+    const gatewayHere = access.membership.mode === "live" && Boolean(networkProfile(access.membership.network).gateway);
     const [invoiceEntries, treasuryEntries, cycleEntries, gateway, serviceBudget] = await Promise.all([
       listLedgerEntriesForTargets({ invoiceIds: invoices.map((invoice) => invoice.id) }),
       // The latest two decisions, read from enough entries that swaps and Gateway steps in between do not crowd them out.
@@ -112,14 +115,14 @@ export default async function DashboardPage({
       since == null ? Promise.resolve([]) : listLedgerEntriesAfter(since),
       // A live workspace's Gateway balance (Gateway payouts G5), read alongside the ledger rather than
       // after it (review M4). Best effort: a read that fails shows no panel.
-      access.membership.mode === "live"
+      gatewayHere
         ? readGatewayState().catch((error: unknown) => {
             console.error("console: Gateway state not loaded", access.membership.orgId, error instanceof Error ? error.message : error);
             return null;
           })
         : Promise.resolve(null),
       // The agent's service budget (x402 payee history R4), once the workspace has a Gateway signer. Best effort.
-      access.membership.mode === "live"
+      gatewayHere
         ? readServiceBudget().catch((error: unknown) => {
             console.error("console: service budget not loaded", access.membership.orgId, error instanceof Error ? error.message : error);
             return null;
@@ -191,6 +194,7 @@ export default async function DashboardPage({
           payableCount: ownPayableCount(invoices, counterparties),
           onchainPayments: dashboardStats.onchainTransfers,
           waitingCount: needsReview,
+          network,
         })
       : null;
     // Sample data (sample-data design §1): offered in an empty simulated sandbox, and called out while it is loaded.
@@ -204,7 +208,7 @@ export default async function DashboardPage({
     const sampleLoaded = counterparties.some((counterparty) => counterparty.sample);
 
     return (
-      <ProductShell day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={modes}>
+      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={{ ...modes, held: paymentsHeld() }}>
         <PageHead
           title={sectionTitle("treasury")}
           sub="What the agent holds, what it decided, and why."

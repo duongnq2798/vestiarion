@@ -470,8 +470,8 @@ export async function goLive(input: {
   const network = networkOf(state.network);
   // Real money is a typed word away, never a click (mainnet go-live M8).
   if (network === "arc-mainnet" && (input.confirmation ?? "").trim().toLowerCase() !== "mainnet") throw new GoLiveError("mainnet_confirmation");
-  // A network not open to going live yet takes no workspace live, by name (final review I3): Arc mainnet waits for its
-  // copy to name it (phase 2c), so nothing moves money there before then.
+  // A network not open to going live takes no workspace live, by name (final review I3). Arc mainnet opened with its
+  // copy (phase 2c, mainnet copy C13); the check stays for any network added later.
   const profile = networkProfile(network);
   if (!profile.goLiveOpen) throw new GoLiveError("go_live_network", new FeatureOffError("Going live", profile).message);
   const hosted = isHosted(state);

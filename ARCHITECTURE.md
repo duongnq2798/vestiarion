@@ -305,10 +305,20 @@ phase 1b).
   - `tests/network-constants-ratchet.test.ts` counts readers of the testnet profile.
   - Both end at the files kept on Arc testnet on purpose, each with its reason: demo data, `/open`, the platform's
     x402 offer and the passkey wallet.
+- **Copy names the workspace's network** (phase 2c, `docs/superpowers/specs/2026-10-06-mainnet-copy-design.md`).
+  - Every message and page that belongs to a workspace, or to a link, record or receipt of one, takes the network's
+    name from its profile's `label`: from `workspaceNetwork()` in scope, from `membership.network` on a page's client
+    parts, from a payment's own `network`, from `provider.network`, or from a public link's chain.
+  - Where Arc mainnet differs in substance, the text branches on the profile: `faucet` (Circle's on Arc testnet, none on
+    Arc mainnet) and `hostedWallets`. A panel for a feature the network lacks (USYC, escrow, Gateway) is not drawn.
+  - Signed ledger text is fixed forward; reasoning rebuilt on every view names the viewed workspace's network.
+  - `tests/network-copy-ratchet.test.ts` counts "Arc testnet", "testnet USDC" and Circle's faucet in code, and allows
+    them only in the files where they are true wherever they show, each with its count and reason: the platform's own
+    pages, demo data, features only Arc testnet has, and branches that run only there.
 - **`tests/network-mainnet-dry-run.test.ts`** builds the modules with Arc mainnet's profile and checks each asks for
   mainnet's facts or refuses by name.
-- **Still Arc testnet:** the copy that says "Arc testnet", which moves in phase 2c. The database's chain check, the
-  two link functions and the API's chain enum moved in phase 2a.
+- **Moved since:** the database's chain check, the two link functions and the API's chain enum in phase 2a; the copy
+  that named Arc testnet whatever the network in phase 2c (below).
 
 **Arc mainnet behind a switch** (`docs/superpowers/specs/2026-10-06-mainnet-go-live-design.md`, phase 2a).
 - **Two settings:** `MAINNET_ENABLED` (only `1`, `true` or `yes`) and `MAINNET_ALLOWLIST` (email addresses), read
@@ -341,9 +351,8 @@ phase 1b).
   USDC entries for an Arc wallet; its order is kept. The platform's `CIRCLE_USDC_TOKEN_ID` is Arc testnet's alone.
 - **Receipts** read a native USDC transfer from Arc's system emitter `0xffff…fffE` (EIP-7708) on both networks.
 - **Going live:** each step needs `mayUseMainnet` for the person. A test key is refused on mainnet, naming both
-  networks. Go live needs the word `mainnet` typed, and the profile's `goLiveOpen`: false on Arc mainnet until the
-  copy that still names Arc testnet moves (phase 2c), so nothing moves money there before then ("Going live does not
-  run on Arc mainnet yet").
+  networks. Go live needs the word `mainnet` typed, and the profile's `goLiveOpen`. Arc mainnet's opened with the copy
+  that names it (phase 2c); the check stays, so a network added later goes live only once it is opened by name.
   `workspace_went_live` and `org_created` record the network.
 - **Elsewhere:**
   - Chats refuse a mainnet payment ("approved in Vestiarion").

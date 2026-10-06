@@ -5,7 +5,7 @@ import { db } from "@/lib/dal";
 import { matchTransfer, recordIncomingTransfers, type OpenReceivable } from "@/lib/agent/receipts";
 import type { ChainProvider, InboundTransfer } from "@/lib/circle/types";
 import { fakeSupabase, orgTestContext, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
-import { ARC_TESTNET } from "@/lib/network";
+import { ARC_MAINNET, ARC_TESTNET } from "@/lib/network";
 
 /**
  * Money in, matched to what was owed (docs/superpowers/specs/2026-10-01-receivables-on-arc-design.md):
@@ -144,6 +144,13 @@ describe("recordIncomingTransfers", () => {
       })
     );
     expect(result).toEqual({ recorded: 1, matched: 1, lines: [{ domain: "ar", message: "Received 12.5 USDC from Acme on Arc testnet (matched by sender)" }] });
+  });
+
+  it("names the network a payment was received on: Arc mainnet for a provider there (mainnet copy C1)", async () => {
+    const mainnet = { mode: "live", network: ARC_MAINNET, listInboundTransfers: vi.fn().mockResolvedValue([transfer()]) } as unknown as ChainProvider;
+    const result = await run(() => recordIncomingTransfers(db(), mainnet, "operating"));
+    expect(ledgerMock).toHaveBeenCalledWith(expect.objectContaining({ action: "ar_received", summary: "Received 12.5 USDC from Acme on Arc mainnet" }));
+    expect(result.lines).toEqual([{ domain: "ar", message: "Received 12.5 USDC from Acme on Arc mainnet (matched by sender)" }]);
   });
 
   it("puts the transfer back when the receivable was settled meanwhile", async () => {

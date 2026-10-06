@@ -64,6 +64,14 @@ describe("createPayLink", () => {
     return { body: [] };
   };
 
+  it("records a link on the workspace's network: Arc mainnet for a workspace there (mainnet copy C1)", async () => {
+    fake = fakeSupabase(workspace({ id: INVOICE, direction: "receivable", status: "pending" }));
+    await runWith(orgTestContext({ config: { ...config, network: "arc-mainnet" }, client: fake.client, orgId: ORG, userId: USER }), () =>
+      createPayLink({ actorId: USER, invoiceId: INVOICE })
+    );
+    expect(ledgerMock).toHaveBeenCalledWith(expect.objectContaining({ summary: "Created a link for a client to pay a receivable on Arc mainnet" }));
+  });
+
   it("stores a new link's hash for an open receivable, replacing any earlier link, and records it", async () => {
     fake = fakeSupabase(workspace({ id: INVOICE, direction: "receivable", status: "pending" }));
     const { token } = await inOrg(() => createPayLink({ actorId: USER, invoiceId: INVOICE }));
@@ -72,6 +80,7 @@ describe("createPayLink", () => {
     expect(post.params.get("on_conflict")).toBe("org_id,invoice_id");
     expect(post.body).toMatchObject({ org_id: ORG, invoice_id: INVOICE, token_hash: payLinkHash(token), created_by: USER, revoked_at: null });
     expect(ledgerMock).toHaveBeenCalledWith(expect.objectContaining({ actor: "human", domain: "ar", action: "pay_link_created", detail: { by: USER, invoiceId: INVOICE, linkId: "link-1" } }));
+    expect(ledgerMock).toHaveBeenCalledWith(expect.objectContaining({ summary: "Created a link for a client to pay a receivable on Arc testnet" }));
   });
 
   it("refuses a payable, a missing invoice, or a receivable already settled", async () => {
@@ -203,7 +212,7 @@ describe("checkPayLink", () => {
       if (r.path === "/rest/v1/accounts") return { body: [{ id: "operating" }] };
       return { body: [] };
     });
-    expect(await platform(() => checkPayLink(TOKEN, 1_000))).toBe("received");
+    expect(await platform(() => checkPayLink(TOKEN, 1_000))).toEqual({ outcome: "received", network: "arc-testnet" });
     expect(withOrgMock).toHaveBeenCalledWith(ORG, expect.any(Function));
     expect(recordMock).toHaveBeenCalledWith(expect.anything(), { mode: "live" }, "operating");
     expect(runSoonMock).toHaveBeenCalledWith({ orgId: ORG, userId: USER, sandbox: false, kind: "payment_received" });
@@ -211,23 +220,23 @@ describe("checkPayLink", () => {
 
   it("says not yet when nothing matched, and starts no cycle", async () => {
     fake = fakeSupabase((r) => (r.path === "/rest/v1/rpc/pay_link_preview" ? { body: PREVIEW } : r.path === "/rest/v1/accounts" ? { body: [{ id: "operating" }] } : { body: [] }));
-    expect(await platform(() => checkPayLink(TOKEN, 100_000))).toBe("not_yet");
+    expect((await platform(() => checkPayLink(TOKEN, 100_000))).outcome).toBe("not_yet");
     expect(runSoonMock).not.toHaveBeenCalled();
   });
 
   it("answers received without looking again, and nothing for an unknown link", async () => {
     fake = fakeSupabase((r) => (r.path === "/rest/v1/rpc/pay_link_preview" ? { body: { ...PREVIEW, status: "received" } } : { body: [] }));
-    expect(await platform(() => checkPayLink(TOKEN, 200_000))).toBe("received");
+    expect((await platform(() => checkPayLink(TOKEN, 200_000))).outcome).toBe("received");
     expect(recordMock).not.toHaveBeenCalled();
     fake = fakeSupabase(() => ({ body: null }));
-    expect(await platform(() => checkPayLink(TOKEN, 300_000))).toBe("invalid");
+    expect(await platform(() => checkPayLink(TOKEN, 300_000))).toEqual({ outcome: "invalid", network: null });
   });
 
   it("asks Circle at most a few times a minute per link", async () => {
     fake = fakeSupabase((r) => (r.path === "/rest/v1/rpc/pay_link_preview" ? { body: PREVIEW } : r.path === "/rest/v1/accounts" ? { body: [{ id: "operating" }] } : { body: [] }));
     const at = 10_000_000;
     const answers = [];
-    for (let i = 0; i < 5; i++) answers.push(await platform(() => checkPayLink(TOKEN, at)));
+    for (let i = 0; i < 5; i++) answers.push((await platform(() => checkPayLink(TOKEN, at))).outcome);
     expect(answers.filter((a) => a === "wait").length).toBeGreaterThan(0);
     expect(recordMock.mock.calls.length).toBeLessThanOrEqual(3);
   });

@@ -31,7 +31,7 @@ function routeText(facts: ReceiptFacts): string {
   const fee = facts.feeUsdc != null ? `, with a ${facts.feeUsdc} USDC fee` : "";
   if (facts.route === "gateway") return `From a Circle Gateway balance${fee}`;
   if (facts.route === "cctp") return `Through CCTP from Arc testnet${fee}`;
-  return "A transfer on Arc testnet";
+  return `A transfer on ${homeChain(networkOfChain(facts.chain)).label}`;
 }
 
 function CheckItem({ title, passed, children }: { title: string; passed: boolean | null; children: ReactNode }) {

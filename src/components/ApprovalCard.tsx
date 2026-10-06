@@ -24,7 +24,7 @@ import { approvalAnchor, orgHref } from "@/lib/auth/org-paths";
 import { agentResumes, CASH_SHORTFALL, counterpartyPath, ruleNextStep } from "@/lib/next-step";
 import { amountToPay } from "@/lib/agent/payment-timing";
 import { utcDay, utcMinute } from "@/lib/copy";
-import { chainById, paidAcrossChains } from "@/lib/payee-chains";
+import { chainById, homeChain, networkOfChain, paidAcrossChains } from "@/lib/payee-chains";
 import { approveFirstDescription, mayApproveNow, onlyApproverOfTwo, SECOND_APPROVAL_PAYS, twoApprovalsLine } from "@/lib/two-approvals";
 
 const INITIAL: ActionResult = { ok: false, message: "" };
@@ -241,7 +241,7 @@ export default function ApprovalCard({
           )}
           {payable.lastAttempt?.state === "in_flight" && (
             <Callout tone="held" className="mt-2">
-              The payment is still in flight on Arc testnet. It cannot be rejected or returned until Circle settles it; approving checks it again.
+              The payment is still in flight on {homeChain(networkOfChain(payable.payeeChain)).label}. It cannot be rejected or returned until Circle settles it; approving checks it again.
             </Callout>
           )}
           {payable.lastAttempt?.state === "unanswered" && (

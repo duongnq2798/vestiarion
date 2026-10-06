@@ -158,7 +158,13 @@ describe("the compact footer", () => {
 
   it("keeps the copyright and the Arc testnet line", () => {
     expect(text(markup)).toContain("© 2026 Vestiarion contributors · MIT License");
-    expect(text(markup)).toContain("Arc testnet");
+    expect(text(markup)).toContain("Signed decisions on Arc testnet");
+  });
+
+  it("names a link's network on its page: Arc mainnet for a link there (mainnet copy C6)", () => {
+    const mainnet = text(renderToStaticMarkup(<SiteFooter compact networkLabel="Arc mainnet" />));
+    expect(mainnet).toContain("Signed decisions on Arc mainnet");
+    expect(mainnet).not.toContain("Arc testnet");
   });
 });
 

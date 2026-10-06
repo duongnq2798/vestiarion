@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/Badge";
 import { screeningMode } from "@/lib/compliance";
 import { screeningSourceLabel } from "@/lib/screening-source";
 import type { CycleClockMode } from "@/lib/clock";
+import { networkProfile, type Network } from "@/lib/network";
 import { ProvenanceBar, type ProvenanceLeg } from "./Provenance";
 import { ScrollToHash } from "./ScrollToHash";
 
@@ -23,19 +24,19 @@ export function ProductShell({
   clockMode,
   lastCycleAt,
   chainModes,
+  network,
   children,
 }: {
   day: number;
   clockMode: CycleClockMode;
   lastCycleAt: string | null;
-  chainModes: { mode: "live" | "simulate"; earnMode: "live" | "simulate" };
+  /** The page's modes, and whether nothing can pay now (`shellModes()`), which the shell says as Held (final review I2). */
+  chainModes: { mode: "live" | "simulate"; earnMode: "live" | "simulate"; held: boolean };
+  /** The workspace's network, which the shell names (mainnet copy C1). */
+  network: Network;
   children: ReactNode;
 }) {
-  const legs: ProvenanceLeg[] = [
-    { label: "Payments", detail: "Arc testnet", live: chainModes.mode === "live" },
-    { label: "Yield", detail: "USYC reserve", live: chainModes.earnMode === "live" },
-    { label: "Screening", detail: screeningSourceLabel(), live: screeningMode() === "live" },
-  ];
+  const legs: ProvenanceLeg[] = [...chainLegs(network, chainModes), { label: "Screening", detail: screeningSourceLabel(), live: screeningMode() === "live" }];
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 pb-10 pt-5 motion-safe:animate-arrive sm:px-6 sm:pt-7 lg:px-8 lg:pt-8">
@@ -53,11 +54,30 @@ export function ProductShell({
       <ScrollToHash />
       <footer className="mt-12 flex justify-center">
         <Badge size="sm" className="bg-surface/80 font-mono font-normal text-ink-3">
-          Hash-chained decisions · Ed25519 signed · Arc testnet
+          {shellFooterLine(network)}
         </Badge>
       </footer>
     </div>
   );
+}
+
+/**
+ * The shell's Payments and Yield legs on the workspace's network (mainnet copy C1, C3): Payments names the network, and
+ * Yield shows only where the network has a reserve to earn in. When nothing can pay now, both say Held rather than Live
+ * or Simulated, as the status API says `unavailable` (final review I2).
+ */
+export function chainLegs(network: Network, modes: { mode: "live" | "simulate"; earnMode: "live" | "simulate"; held: boolean }): ProvenanceLeg[] {
+  const profile = networkProfile(network);
+  const held = modes.held ? { held: true } : {};
+  return [
+    { label: "Payments", detail: profile.label, live: !modes.held && modes.mode === "live", ...held },
+    ...(profile.usyc ? [{ label: "Yield", detail: "USYC reserve", live: !modes.held && modes.earnMode === "live", ...held }] : []),
+  ];
+}
+
+/** The badge under every workspace page, naming its network. */
+export function shellFooterLine(network: Network): string {
+  return `Hash-chained decisions · Ed25519 signed · ${networkProfile(network).label}`;
 }
 
 export function PageHead({ title, sub, right }: { title: string; sub?: ReactNode; right?: ReactNode }) {

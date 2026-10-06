@@ -186,7 +186,7 @@ export async function recordIncomingTransfers(
       actor: "agent",
       domain: "ar",
       action: "ar_received",
-      summary: `Received ${transfer.amount} ${transfer.token} from ${receivable.clientName} on Arc testnet`,
+      summary: `Received ${transfer.amount} ${transfer.token} from ${receivable.clientName} on ${provider.network.label}`,
       detail: {
         invoiceId: receivable.id,
         counterpartyId: receivable.counterpartyId,
@@ -201,7 +201,7 @@ export async function recordIncomingTransfers(
     });
     open = open.filter((candidate) => candidate.id !== receivable.id);
     matched += 1;
-    lines.push({ domain: "ar", message: `Received ${transfer.amount} ${transfer.token} from ${receivable.clientName} on Arc testnet (matched by ${match.matchedBy})` });
+    lines.push({ domain: "ar", message: `Received ${transfer.amount} ${transfer.token} from ${receivable.clientName} on ${provider.network.label} (matched by ${match.matchedBy})` });
   }
   return { recorded: transfers.length, matched, lines };
 }

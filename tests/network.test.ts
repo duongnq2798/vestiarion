@@ -44,6 +44,8 @@ describe("the Arc testnet profile", () => {
       spendingLimitContract: true,
       usdcIsNative: true,
       goLiveOpen: true,
+      // Circle's faucet hands out Arc testnet's tokens (mainnet copy C2).
+      faucet: "https://faucet.circle.com",
     });
   });
 
@@ -82,8 +84,10 @@ describe("the Arc mainnet profile", () => {
       escrow: false,
       spendingLimitContract: false,
       usdcIsNative: true,
-      // Going live waits for the copy that names Arc mainnet, phase 2c (final review I3).
-      goLiveOpen: false,
+      // Going live opened with the copy that names Arc mainnet, phase 2c (mainnet copy C13).
+      goLiveOpen: true,
+      // No faucet hands out real USDC (mainnet copy C2).
+      faucet: null,
     });
   });
 });

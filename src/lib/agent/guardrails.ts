@@ -43,6 +43,8 @@ export interface ApGuardrailInput {
   eurcShort?: {
     balance: number | null;
     needed: number;
+    /** Whether the network has a faucet to fund EURC from (mainnet copy C2): Arc testnet's, none on Arc mainnet. */
+    faucet: boolean;
     /**
      * The swap of USDC for EURC that could fund it (EURC swap spec S5): whether the model chose it
      * (`fundWithSwap`), the offer (null when there was none to make), and the USDC it would leave
@@ -376,7 +378,7 @@ export function enforceApGuardrails(input: ApGuardrailInput): ApGuardrailResult 
           ? `${input.reasoning} [guardrail override: the operating wallet's EURC could not be read, so the ${input.eurcShort.needed} EURC this payment sends cannot be checked — held for a person]`
           : swap?.requested
             ? `${input.reasoning} [guardrail override: the operating wallet holds ${input.eurcShort.balance} EURC, less than the ${input.eurcShort.needed} EURC this payment sends, and no swap was available to fund it — held for a person]`
-            : `${input.reasoning} [guardrail override: the operating wallet holds ${input.eurcShort.balance} EURC, less than the ${input.eurcShort.needed} EURC this payment sends — held for a person; fund EURC from Circle's faucet first]`,
+            : `${input.reasoning} [guardrail override: the operating wallet holds ${input.eurcShort.balance} EURC, less than the ${input.eurcShort.needed} EURC this payment sends — held for a person; ${input.eurcShort.faucet ? "fund EURC from Circle's faucet first" : "fund EURC first"}]`,
     };
   }
   return { blocked: false, status: null, rule: null, reasoning: input.reasoning };

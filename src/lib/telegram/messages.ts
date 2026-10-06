@@ -1,4 +1,5 @@
 import type { ActivityItem } from "../agent-activity";
+import { networkProfile } from "../network";
 import { orgHref } from "../auth/org-paths";
 import { READER_NAMES } from "../invoice-document/chat-draft";
 import type { InvoiceDraftRead } from "../invoice-document/draft";
@@ -68,7 +69,7 @@ export function plainText(html: string): string {
 function decisionBlock(item: ActivityItem, slug: string, origin: string): string {
   const lines = [`${item.tone === "done" ? "✅" : "⏸"} ${escapeHtml(clip(item.text, ITEM_TEXT_MAX))}`];
   if (item.detail) lines.push(`<i>${escapeHtml(clip(item.detail, ITEM_DETAIL_MAX))}</i>`);
-  const links = [...(item.txUrl ? [link(item.txUrl, "Arc testnet transaction")] : []), link(orgUrl(origin, slug, item.path), item.pathLabel)];
+  const links = [...(item.txUrl ? [link(item.txUrl, `${networkProfile(item.network).label} transaction`)] : []), link(orgUrl(origin, slug, item.path), item.pathLabel)];
   lines.push(links.join(" · "));
   return lines.join("\n");
 }

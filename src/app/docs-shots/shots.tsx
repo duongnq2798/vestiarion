@@ -484,6 +484,7 @@ export const DOCS_SHOTS = {
         payableCount: 0,
         onchainPayments: 0,
         waitingCount: 0,
+        network: "arc-testnet",
       });
       return <GettingStarted slug={SLUG} checklist={checklist} isOwner />;
     },
@@ -673,6 +674,7 @@ export const DOCS_SHOTS = {
               date: { label: "Due Oct 10, 2026" },
               footerAction: (
                 <PayLinkControl
+                  network="arc-testnet"
                   orgSlug={SLUG}
                   invoiceId={OWED.id}
                   dueDate={OWED.due_date}

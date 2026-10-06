@@ -11,7 +11,7 @@ export type ApiErrorCode = (typeof API_ERROR_CODES)[number];
 export interface Status {
   /** The workspace's name. */
   businessName: string;
-  /** Payments and yield differ and are reported separately, as in the UI. `unavailable` means nothing can pay in the workspace now: its Circle credentials are stored but could not be read, or it is on Arc mainnet with no Circle account connected yet, or Arc mainnet is switched off on this deployment. Cycles refuse to pay then rather than simulate, so neither leg is live or simulated. */
+  /** Payments and yield differ and are reported separately, as in the UI. `unavailable` means nothing can pay in the workspace now: its Circle credentials are stored but could not be read; or it is on Arc mainnet with no Circle account connected yet, or not live yet; or Arc mainnet is switched off on this deployment. Cycles refuse to pay then rather than simulate, so neither leg is live or simulated. Yield is also `unavailable` on a network with no yield reserve, such as Arc mainnet. */
   provenance: {
     payments: "live" | "simulate" | "unavailable";
     yield: "live" | "simulate" | "unavailable";
@@ -91,7 +91,7 @@ export interface Invoice {
   escalatedAt: string | null;
   /** Why the agent ruled as it did, verbatim from the decision. */
   agentReasoning: string | null;
-  /** An on-chain hash once the payment settled, else null: on Arc testnet, or for a payout from a Gateway balance the mint on the payee's chain. */
+  /** An on-chain hash once the payment settled, else null: on the workspace's network, or for a payout from a Gateway balance the mint on the payee's chain. */
   txHash: string | null;
   /** What actually left once this invoice was paid; null otherwise, even while a submitted transfer already carries an amount. */
   paidAmount: number | null;

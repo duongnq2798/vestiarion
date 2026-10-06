@@ -27,7 +27,7 @@ interface OpenPageProps {
 /** Arc mainnet first, then Arc testnet: each counted on its own, never added to the other (network foundation N7). */
 const NETWORKS: ReadonlyArray<{ section: "mainnet" | "testnet"; profile: NetworkProfile; about: string }> = [
   { section: "mainnet", profile: ARC_MAINNET, about: "Payments with real money, on Arc mainnet." },
-  { section: "testnet", profile: ARC_TESTNET, about: "Payments on Arc testnet, where every workspace runs today." },
+  { section: "testnet", profile: ARC_TESTNET, about: "Payments on Arc testnet." },
 ];
 
 /** One network's numbers, or null when they could not be read: the other network's section still shows. */

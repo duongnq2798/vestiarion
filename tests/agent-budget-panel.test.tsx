@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { AgentBudgetPanel, ON_ARC_COPY, type AgentBudgetView, type OnChainLimitView } from "@/components/AgentBudgetPanel";
+import { AgentBudgetPanel, budgetDialogDescription, ON_ARC_COPY, type AgentBudgetView, type OnChainLimitView } from "@/components/AgentBudgetPanel";
 
 /**
  * The console's spending limit panel with its "On Arc" part (docs/superpowers/specs/2026-10-03-onchain-spending-limit-design.md
@@ -26,9 +26,16 @@ const ENFORCED: OnChainLimitView = {
   reading: { dailyUsdc: 5, weeklyUsdc: 20, spentToday: 1.2, spentThisWeek: 3 },
 };
 
-const render = (props: { view?: AgentBudgetView; canEdit?: boolean; live?: boolean; onChain?: OnChainLimitView | null }) =>
+const render = (props: { view?: AgentBudgetView; canEdit?: boolean; live?: boolean; onChain?: OnChainLimitView | null; network?: "arc-testnet" | "arc-mainnet" }) =>
   renderToStaticMarkup(
-    <AgentBudgetPanel network="arc-testnet" orgSlug="testnet-2" view={props.view ?? VIEW} canEdit={props.canEdit ?? true} live={props.live ?? true} onChain={props.onChain ?? null} />
+    <AgentBudgetPanel
+      network={props.network ?? "arc-testnet"}
+      orgSlug="testnet-2"
+      view={props.view ?? VIEW}
+      canEdit={props.canEdit ?? true}
+      live={props.live ?? true}
+      onChain={props.onChain ?? null}
+    />
   );
 
 describe("the spending limit panel, on Arc", () => {
@@ -73,5 +80,30 @@ describe("the spending limit panel, on Arc", () => {
 
   it("offers to enforce it again once turned off", () => {
     expect(text(render({ onChain: { ...ENFORCED, state: "off" } }))).toContain("Enforce on Arc");
+  });
+});
+
+describe("the spending limit's dialog on each network (mainnet copy C11)", () => {
+  it("lets Arc testnet leave a figure blank, and says Arc mainnet keeps one", () => {
+    const rule = "What the agent may pay on its own, in USDC, counted from 00:00 UTC. A payment past either figure is held for a person in Approvals; one a person approves does not count.";
+    expect(budgetDialogDescription("arc-testnet")).toBe(`${rule} Leave a figure blank for no limit.`);
+    expect(budgetDialogDescription("arc-mainnet")).toBe(`${rule} A workspace on Arc mainnet keeps a daily or 7-day limit.`);
+  });
+});
+
+describe("the spending limit's On Arc section, only where its contract runs (final review I1, mainnet copy C3)", () => {
+  it("offers no contract on Arc mainnet, live or not, and keeps the limit in code", () => {
+    for (const live of [true, false]) {
+      const markup = text(render({ network: "arc-mainnet", live }));
+      expect(markup).not.toContain("Enforce on Arc");
+      expect(markup).not.toContain(ON_ARC_COPY.explain);
+      expect(markup).not.toContain(ON_ARC_COPY.sandbox);
+      expect(markup).toContain("Agent spending limit");
+    }
+  });
+
+  it("offers it on Arc testnet, as before", () => {
+    expect(text(render({ network: "arc-testnet", live: false }))).toContain(ON_ARC_COPY.sandbox);
+    expect(text(render({ network: "arc-testnet" }))).toContain(ON_ARC_COPY.explain);
   });
 });

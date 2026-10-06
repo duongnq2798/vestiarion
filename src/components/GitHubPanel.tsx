@@ -2,6 +2,7 @@
 
 import { GitPullRequest, Unplug } from "lucide-react";
 import { disconnectGitHubAction, type GitHubActionResult } from "@/app/actions/github";
+import { networkProfile, type Network } from "@/lib/network";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { FormMessage } from "@/components/ui/FormMessage";
@@ -53,11 +54,14 @@ export default function GitHubPanel({
   installations,
   canManage,
   notice,
+  network,
 }: {
   orgSlug: string;
   installations: GitHubInstallation[];
   canManage: boolean;
   notice: string | null;
+  /** The workspace's network, whose transaction the comment links (mainnet copy C1). */
+  network: Network;
 }) {
   const told = notice ? GITHUB_NOTICES[notice] : undefined;
   return (
@@ -71,7 +75,7 @@ export default function GitHubPanel({
         )}
         <p className="max-w-prose text-sm text-ink-2">
           Install the Vestiarion app on the repositories your contributors work in. A milestone paid for a pull request there gets a
-          comment on that pull request, with the amount and the Arc testnet transaction, and the agent can verify pull requests in
+          comment on that pull request, with the amount and the {networkProfile(network).label} transaction, and the agent can verify pull requests in
           private repositories too.
         </p>
         {installations.length > 0 && (

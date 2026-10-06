@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LiveProvider, type LiveProviderClient } from "@/lib/circle/liveProvider";
 import type { ChainConfig } from "@/lib/config";
-import { ARC_TESTNET } from "@/lib/network";
+import { ARC_MAINNET, ARC_TESTNET } from "@/lib/network";
 
 /**
  * EURC through the chain providers (EURC invoices spec E5, E7): a transfer
@@ -69,6 +69,14 @@ describe("the live provider", () => {
     await expect(provider.transfer({ ...TRANSFER, token: "EURC" })).rejects.toBe(STOP);
     await expect(provider.transfer({ ...TRANSFER, token: "EURC" })).rejects.toBe(STOP);
     expect(getWalletTokenBalance).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends no one to a faucet on Arc mainnet when the wallet has never held EURC (mainnet copy C2)", async () => {
+    const { fake, createTransaction } = client([WALLET[0]]);
+    const refusal = new LiveProvider(CHAIN, { network: ARC_MAINNET, client: fake }).transfer({ ...TRANSFER, token: "EURC" });
+    await expect(refusal).rejects.toThrow(/Fund it with EURC first\./);
+    await expect(refusal).rejects.not.toThrow(/faucet/);
+    expect(createTransaction).not.toHaveBeenCalled();
   });
 
   it("says to fund EURC first when the wallet has never held any, and sends nothing", async () => {

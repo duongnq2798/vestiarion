@@ -3,6 +3,7 @@ import { CloudOff, Unlink } from "lucide-react";
 import { ReceiptView } from "@/components/receipt/ReceiptView";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
+import { homeChain, networkOfChain } from "@/lib/payee-chains";
 import { readReceipt, type ReceiptView as ReceiptViewData } from "@/lib/platform/receipts";
 
 export const dynamic = "force-dynamic";
@@ -46,7 +47,7 @@ export default async function ReceiptPage({ params }: ReceiptPageProps) {
           )}
         </div>
       </main>
-      <SiteFooter compact />
+      <SiteFooter compact networkLabel={view ? homeChain(networkOfChain(view.facts.chain)).label : undefined} />
     </div>
   );
 }

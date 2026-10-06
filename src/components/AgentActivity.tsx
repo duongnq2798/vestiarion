@@ -146,7 +146,7 @@ export function ActivityToastBody({
         </Button>
         {txUrl && (
           <a href={txUrl} target="_blank" rel="noreferrer" className="text-xs font-medium text-agent underline-offset-2 hover:underline">
-            View on Arcscan
+            View the transaction
           </a>
         )}
       </span>

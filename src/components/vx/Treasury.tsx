@@ -7,6 +7,7 @@ import { Callout } from "@/components/ui/Callout";
 import { Card, CardContent } from "@/components/ui/Card";
 import { cn } from "@/components/ui/cn";
 import { SectionHeader } from "@/components/ui/SectionHeader";
+import { chainById } from "@/lib/payee-chains";
 import { LiveBalanceTile } from "./LiveBalance";
 import { Money, Reasoning } from "./Primitives";
 import { StatTile } from "./StatTile";
@@ -111,6 +112,15 @@ export function BalanceTile({
   );
 }
 
+/** A chain by its name, "Arc testnet", not Circle's id (mainnet copy C8); one no network lists is shown as stored. */
+function chainName(chain: string): string {
+  try {
+    return chainById(chain).label;
+  } catch {
+    return chain;
+  }
+}
+
 export function AccountsList({ accounts }: { accounts: Account[] }) {
   return (
     <Card asChild className="overflow-hidden">
@@ -124,7 +134,7 @@ export function AccountsList({ accounts }: { accounts: Account[] }) {
               <span className="min-w-0 truncate text-sm font-medium text-ink">{account.name}</span>
               <Money value={account.balance} token={account.token} simulated={account.simulated} className="text-right text-[0.9375rem] text-ink" />
               <span className="min-w-0 truncate font-mono text-xs text-ink-3">
-                {account.chain} · {account.token}
+                {chainName(account.chain)} · {account.token}
                 {account.simulated && <span className="ml-2 text-ink-2">simulated</span>}
               </span>
               <span className="text-right font-mono text-xs tabular-nums text-ink-3">{account.apy && account.apy > 0 ? `${(account.apy * 100).toFixed(2)}% APY` : "—"}</span>

@@ -25,11 +25,20 @@ describe("payeeLinkEmail", () => {
     link: LINK,
     expiresAt: new Date("2026-10-08T15:00:00Z"),
     origin: ORIGIN,
+    network: "arc-testnet",
   });
 
   it("says who is paying, how much and for what", () => {
     expect(email.subject).toBe("Mai's <Studio> wants to pay you 12.5 USDC");
     expect(email.text).toContain("Mai's <Studio> wants to pay you 12.5 USDC on Arc testnet for: 10 Canva posts & 2 reels.");
+  });
+
+  it("names the workspace's network: Arc mainnet for a workspace there (mainnet copy C1)", () => {
+    const mainnet = payeeLinkEmail({ orgName: "Acme", payeeName: "Linh", work: "Posts", amount: "12.5", link: LINK, expiresAt: new Date("2026-10-08T15:00:00Z"), origin: ORIGIN, network: "arc-mainnet" });
+    for (const part of [mainnet.text, mainnet.html]) {
+      expect(part).toContain("on Arc mainnet for:");
+      expect(part).not.toContain("Arc testnet");
+    }
   });
 
   it("links the one-time page to add an address, and says when it expires", () => {

@@ -13,6 +13,7 @@ import { useActionForm } from "@/components/ui/useActionForm";
 import { orgHref } from "@/lib/auth/org-paths";
 import { EARLIEST_DAYS_BEFORE_DUE, MAX_REMINDERS, MIN_DAYS_BETWEEN, type SentReminder } from "@/lib/collections";
 import { utcDay } from "@/lib/copy";
+import { networkProfile, type Network } from "@/lib/network";
 import { counterpartyPath } from "@/lib/next-step";
 
 const INITIAL: PayLinkActionResult = { ok: false, message: "" };
@@ -56,12 +57,15 @@ export function PayLinkControl({
   view = null,
   dueDate,
   client,
+  network,
 }: {
   orgSlug: string;
   invoiceId: string;
   view?: PayLinkView | null;
   dueDate: string;
   client: { id: string; name: string; hasEmail: boolean };
+  /** The workspace's network, where the client pays (mainnet copy C1). */
+  network: Network;
 }) {
   const [made, setMade] = useState<string | null>(null);
   const link = useActionForm(createPayLinkAction, INITIAL, { onResult: (result) => setMade(result.ok && result.url ? result.url : null) });
@@ -88,7 +92,8 @@ export function PayLinkControl({
             </CopyButton>
           </div>
           <p className="text-xs text-ink-3">
-            Send it to your client. They pay the exact amount on Arc testnet, and the agent matches it to this invoice. A new link replaces this one.
+            Send it to your client. They pay the exact amount on {networkProfile(network).label}, and the agent matches it to this invoice. A new link replaces
+            this one.
           </p>
         </div>
       ) : view?.legacy ? (

@@ -18,13 +18,18 @@ import { twoApprovalsSentence } from "@/lib/two-approvals";
 /**
  * The "Two approvals" section of Settings (docs/superpowers/specs/2026-10-05-two-approvals-design.md T1, T8): the figure
  * above which a payment needs two people's approval, or Off, and how many people can approve payments. Everyone sees
- * it; an owner (`canChange`) sets the figure, or turns it off behind a confirmation that says what that frees.
+ * it; an owner (`canChange`) sets the figure, or turns it off behind a confirmation that says what that frees. On Arc
+ * mainnet a figure always stays (mainnet limits L2), so the panel offers no Turn off there and says so (mainnet copy C11).
  */
 export interface TwoApprovalsPanelProps {
   orgSlug: string;
   status: { above: number | null; approvers: number };
   canChange: boolean;
+  /** Whether the workspace keeps a figure: one on Arc mainnet does. */
+  keepsFigure: boolean;
 }
+
+const KEEPS_FIGURE = "A workspace on Arc mainnet keeps two approvals above a figure. Raise it to let one person pay more.";
 
 const INITIAL: ActionResult = { ok: false, message: "" };
 const save = withSuccessToast(setTwoApprovalsAction);
@@ -35,7 +40,7 @@ function approversLine(count: number): string {
   return `${count} ${count === 1 ? "person can" : "people can"} approve payments here.`;
 }
 
-function ChangeForms({ orgSlug, above }: { orgSlug: string; above: number | null }) {
+function ChangeForms({ orgSlug, above, keepsFigure }: { orgSlug: string; above: number | null; keepsFigure: boolean }) {
   const setForm = useActionForm(save, INITIAL);
   const offForm = useActionForm(save, INITIAL);
   // Both forms report in one place: whichever was submitted last.
@@ -55,7 +60,7 @@ function ChangeForms({ orgSlug, above }: { orgSlug: string; above: number | null
         </Field>
         <SubmitButton pendingLabel="Saving…">Save</SubmitButton>
       </form>
-      {above !== null && (
+      {above !== null && !keepsFigure && (
         <form id={OFF_FORM_ID} {...offForm.formProps} onSubmit={submitting("off", offForm.formProps.onSubmit)}>
           <input type="hidden" name="orgSlug" value={orgSlug} />
           <input type="hidden" name="above" value="" />
@@ -78,7 +83,7 @@ function ChangeForms({ orgSlug, above }: { orgSlug: string; above: number | null
   );
 }
 
-export default function TwoApprovalsPanel({ orgSlug, status, canChange }: TwoApprovalsPanelProps) {
+export default function TwoApprovalsPanel({ orgSlug, status, canChange, keepsFigure }: TwoApprovalsPanelProps) {
   return (
     <section aria-labelledby="two-approvals-title">
       <SectionHeader id="two-approvals-title" title="Two approvals" />
@@ -90,10 +95,15 @@ export default function TwoApprovalsPanel({ orgSlug, status, canChange }: TwoApp
             approval pays it. As many of the two as can come from people who neither entered the payment nor gave a new payee&apos;s address must;
             those two give the rest only when no one else can.
           </p>
+          {keepsFigure && <p className="text-sm text-ink-2">{KEEPS_FIGURE}</p>}
           <p className="text-xs text-ink-3">{approversLine(status.approvers)}</p>
         </div>
         <div className="border-t border-line pt-4">
-          {canChange ? <ChangeForms orgSlug={orgSlug} above={status.above} /> : <p className="text-sm text-ink-2">An owner of this workspace can change it.</p>}
+          {canChange ? (
+            <ChangeForms orgSlug={orgSlug} above={status.above} keepsFigure={keepsFigure} />
+          ) : (
+            <p className="text-sm text-ink-2">An owner of this workspace can change it.</p>
+          )}
         </div>
       </Card>
     </section>

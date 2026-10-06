@@ -1629,7 +1629,7 @@ describe("Arc mainnet (mainnet go-live M8)", () => {
     expect(state.org.mode).toBe("sandbox");
   });
 
-  it("asks for the word typed, then refuses going live by name while going live on Arc mainnet is not open (final review I3)", async () => {
+  it("asks for the word typed, then takes a connected mainnet workspace live for an allowed person (mainnet copy C13)", async () => {
     const state = onMainnet(withWallets(connected({ circle_api_key_enc: seal(LIVE_KEY, "circle_api_key_enc") })));
     const { fake, inScope } = database(state, { platform: mainnetPlatform });
     const c = circle(SAME_ENTITY);
@@ -1639,14 +1639,21 @@ describe("Arc mainnet (mainnet go-live M8)", () => {
         message: "Type mainnet to confirm that this workspace pays real USDC.",
       });
     }
-    await expect(refusal(inScope(() => goLive({ orgId: ORG, actorId: ACTOR, actorEmail: OWNER, confirmation: "  Mainnet ", client: c.factory })))).resolves.toMatchObject({
-      code: "go_live_network",
-      message: "Going live does not run on Arc mainnet yet",
+    expect(orgPatches(fake)).toEqual([]);
+
+    await inScope(() => goLive({ orgId: ORG, actorId: ACTOR, actorEmail: OWNER, confirmation: "  Mainnet ", client: c.factory }));
+    expect(state.org.mode).toBe("live");
+    expect(appends(fake).map((entry) => [entry.p_action, entry.p_detail])).toEqual([["workspace_went_live", { by: ACTOR, network: "arc-mainnet" }]]);
+  });
+
+  it("still refuses going live while the deployment has Arc mainnet off (mainnet copy C13)", async () => {
+    const state = onMainnet(withWallets(connected({ circle_api_key_enc: seal(LIVE_KEY, "circle_api_key_enc") })));
+    const { fake, inScope } = database(state, { platform: { ...mainnetPlatform, mainnetEnabled: false } });
+    await expect(refusal(inScope(() => goLive({ orgId: ORG, actorId: ACTOR, actorEmail: OWNER, confirmation: "mainnet", client: circle(SAME_ENTITY).factory })))).resolves.toMatchObject({
+      code: "mainnet_not_open",
     });
     expect(state.org.mode).toBe("sandbox");
-    expect(orgPatches(fake)).toEqual([]);
     expect(appends(fake)).toEqual([]);
-    expect(c.getWallet).not.toHaveBeenCalled();
   });
 
   it("does not take the word from someone not on the allowlist", async () => {

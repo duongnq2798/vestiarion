@@ -18,7 +18,7 @@ const TX = `0x${"a".repeat(64)}`;
 const item = (fields: Partial<ActivityItem> = {}): ActivityItem => {
   const base = {
   seq: 100, text: "Paid Centronex 0.30 USDC.", detail: "DeepSeek decided to pay it; checks passed.", tone: "done",
-  path: `/invoices#trail-${INVOICE}`, pathLabel: "How it decided", txHash: TX, ...fields,
+  path: `/invoices#trail-${INVOICE}`, pathLabel: "How it decided", txHash: TX, network: "arc-testnet", ...fields,
   } as ActivityItem;
   return { ...base, txUrl: fields.txUrl !== undefined ? fields.txUrl : base.txHash ? `https://explorer.testnet.arc.io/tx/${base.txHash}` : null };
 };
@@ -117,6 +117,18 @@ describe("a decided card", () => {
     });
     expect(rewritten.find((block) => block.block_id === `why-${INVOICE}`)).toBeUndefined();
     expect(rewritten.length).toBe(original.length - 1);
+  });
+
+  it("names the network on a transaction's button and in each outcome: Arc mainnet for a workspace there (mainnet copy C1)", () => {
+    const blocks = JSON.stringify(decisionsMessage(WORKSPACE, [item({ network: "arc-mainnet", txUrl: `https://explorer.arc.io/tx/${TX}` })], ORIGIN, new Map()));
+    expect(blocks).toContain("Arc mainnet transaction");
+    expect(blocks).not.toContain("Arc testnet");
+    expect(outcomeLine("approve", "U0LINH", { ok: true, message: "Paid.", status: "paid", txRef: TX }, "arc-mainnet")).toBe(
+      `Approved and paid by <@U0LINH>. <https://explorer.arc.io/tx/${TX}|Arc mainnet transaction>`
+    );
+    expect(outcomeLine("approve", "U0LINH", { ok: true, message: "", status: "matched", txRef: null }, "arc-mainnet")).toBe(
+      "Approved by <@U0LINH>. The payment was sent; Arc mainnet is confirming it."
+    );
   });
 
   it("says each outcome, with the transaction when one went out on Arc", () => {

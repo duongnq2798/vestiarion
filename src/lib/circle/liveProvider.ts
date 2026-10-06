@@ -274,7 +274,7 @@ export class LiveProvider implements ChainProvider {
     );
     const eurc = stablecoinEntry(balances.data?.tokenBalances, "EURC", this.network, chain);
     if (!eurc?.token?.id) {
-      throw new Error(`Wallet ${walletId} has never held EURC. Fund it with EURC from Circle's faucet first.`);
+      throw new Error(`Wallet ${walletId} has never held EURC. ${this.network.faucet ? "Fund it with EURC from Circle's faucet first." : "Fund it with EURC first."}`);
     }
     this.eurcTokenIds.set(walletId, eurc.token.id);
     return eurc.token.id;

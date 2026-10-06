@@ -19,7 +19,7 @@ import { sectionTitle } from "@/components/vx/nav";
 import type { RiskTier } from "@/components/vx/types";
 import { requireMembership } from "@/lib/auth/membership";
 import { orgHref } from "@/lib/auth/org-paths";
-import { chainModes } from "@/lib/circle";
+import { shellModes } from "@/lib/circle";
 import { screeningMode } from "@/lib/compliance";
 import { inOrg } from "@/lib/dal/scope";
 import { listLedgerEntries, listLedgerEntriesByDomain } from "@/lib/ledger";
@@ -52,7 +52,7 @@ export default async function CompliancePage({ params }: { params: Promise<{ slu
     const riskChanges = entries.filter((entry) => entry.action === "risk_level_changed").slice(0, 5);
 
     return (
-      <ProductShell day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={chainModes()}>
+      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={shellModes()}>
         <PageHead
           title={sectionTitle("compliance")}
           sub="Continuous screening changes payment authority by tier. A hit reduces a limit; it does not silently turn the counterparty into a yes/no ban."
