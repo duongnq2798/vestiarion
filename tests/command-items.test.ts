@@ -3,8 +3,9 @@ import { DOCS_TARGET, sectionTargets, shortcutLabel, workspaceTargets } from "@/
 import { DOCS_LINK, NAV_ITEMS } from "@/components/vx/nav";
 import type { WorkspaceSummary } from "@/components/vx/workspace";
 
-const acme: WorkspaceSummary = { slug: "acme", name: "Acme", mode: "live", role: "owner" };
-const sandbox: WorkspaceSummary = { slug: "note-one", name: "Note One", mode: "sandbox", role: "admin" };
+const acme: WorkspaceSummary = { slug: "acme", name: "Acme", mode: "live", role: "owner", network: "arc-testnet" };
+const sandbox: WorkspaceSummary = { slug: "note-one", name: "Note One", mode: "sandbox", role: "admin", network: "arc-testnet" };
+const mainnet: WorkspaceSummary = { slug: "acme-main", name: "Acme Main", mode: "sandbox", role: "owner", network: "arc-mainnet" };
 
 describe("sectionTargets — the palette's sections", () => {
   it("offers every section of the workspace, in navigation order", () => {
@@ -36,6 +37,12 @@ describe("workspaceTargets — switching workspace from the palette", () => {
 
   it("offers nothing when the current workspace is the only one", () => {
     expect(workspaceTargets(acme, [acme], "/o/acme/console")).toEqual([]);
+  });
+
+  it("finds a workspace by its network, as the switcher names it", () => {
+    const [main, test] = workspaceTargets(acme, [acme, mainnet, sandbox], "/o/acme/console");
+    expect(main.keywords).toEqual(expect.arrayContaining(["Arc mainnet", "Not live yet"]));
+    expect(test.keywords).toEqual(expect.arrayContaining(["Arc testnet", "Sandbox"]));
   });
 });
 

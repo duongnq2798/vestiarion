@@ -17,12 +17,12 @@ import type { LedgerEntry } from "@/lib/ledger";
 
 export const DESIGN_SLUG = "design-demo";
 
-export const WORKSPACE: WorkspaceSummary = { slug: DESIGN_SLUG, name: "Acme Treasury", mode: "live", role: "owner" };
+export const WORKSPACE: WorkspaceSummary = { slug: DESIGN_SLUG, name: "Acme Treasury", mode: "live", role: "owner", network: "arc-testnet" };
 
 export const WORKSPACES: WorkspaceSummary[] = [
   WORKSPACE,
-  { slug: "design-sandbox", name: "Note One", mode: "sandbox", role: "admin" },
-  { slug: "design-studio", name: "Studio Payables", mode: "sandbox", role: "viewer" },
+  { slug: "design-sandbox", name: "Note One", mode: "sandbox", role: "admin", network: "arc-testnet" },
+  { slug: "design-studio", name: "Studio Payables", mode: "sandbox", role: "viewer", network: "arc-mainnet" },
 ];
 
 export const EMAIL = "ada@example.com";

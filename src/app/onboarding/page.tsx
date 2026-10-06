@@ -8,6 +8,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Card } from "@/components/ui/Card";
 import { AccountMenu } from "@/components/vx/AccountMenu";
 import { SiteFooter, SiteHeader, SiteHeaderLink } from "@/components/vx/SiteChrome";
+import { WorkspaceMeta } from "@/components/vx/WorkspaceMeta";
 import { HOME_PATH } from "@/components/vx/nav";
 import { membershipsOf } from "@/lib/auth/membership";
 import { orgHref } from "@/lib/auth/org-paths";
@@ -99,10 +100,7 @@ export default async function OnboardingPage({ searchParams }: OnboardingPagePro
                         <Avatar name={membership.name} tone="agent" shape="square" size="lg" />
                         <span className="min-w-0 flex-1">
                           <span className="block truncate font-medium">{membership.name}</span>
-                          <span className="block font-mono text-xs capitalize text-ink-3">
-                            {membership.role} · {membership.mode}
-                            {membership.network === "arc-mainnet" && <span className="normal-case"> · Arc mainnet</span>}
-                          </span>
+                          <WorkspaceMeta mode={membership.mode} network={membership.network} role={membership.role} className="mt-0.5" />
                         </span>
                         <ChevronRight aria-hidden className="size-4 shrink-0 text-ink-3 transition-transform duration-150 ease-standard group-hover:translate-x-0.5 group-hover:text-agent" />
                       </Link>

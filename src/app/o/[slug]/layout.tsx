@@ -40,7 +40,7 @@ export async function generateMetadata({ params }: Pick<OrgLayoutProps, "params"
 
 /** What the frame shows of a membership; the organization's id stays on the server. */
 function summary(membership: OrgMembership): WorkspaceSummary {
-  return { slug: membership.slug, name: membership.name, mode: membership.mode, role: membership.role };
+  return { slug: membership.slug, name: membership.name, mode: membership.mode, role: membership.role, network: membership.network };
 }
 
 /**
