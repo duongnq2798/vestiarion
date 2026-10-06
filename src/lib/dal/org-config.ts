@@ -1,8 +1,8 @@
 import crypto from "node:crypto";
-import type { VestiarionConfig } from "../config";
+import { walletTreasuryAvailable, type VestiarionConfig, type WalletHost } from "../config";
 import { decryptSecret, type MasterKey, type SecretEnvelope } from "../secrets";
 import { MAINNET_OFF, networkHold } from "../mainnet";
-import { ARC_MAINNET, FeatureOffError, networkOf, type Network } from "../network";
+import { ARC_MAINNET, FeatureOffError, networkOf, networkProfile, type Network } from "../network";
 
 export const FOUNDING_ORG_ID = "00000000-0000-4000-8000-000000000001";
 
@@ -15,7 +15,7 @@ export interface OrgRow {
   circle_api_key_enc: SecretEnvelope | null;
   circle_entity_secret_enc: SecretEnvelope | null;
   /** Whose Circle account holds the wallets: the workspace's own, the platform's hosted one, or not chosen (0030). */
-  wallet_host: "own" | "hosted" | null;
+  wallet_host: WalletHost | null;
   /** Public halves of this workspace's own retired ledger keys: `{ id, publicKeyPem, retiredAt }[]` (0035). */
   ledger_retired_keys?: unknown;
   /** When an owner or admin turned the real USYC reserve on; null while it is simulated (0054). */
@@ -26,6 +26,12 @@ export interface OrgRow {
 
 export const ORG_SECRET_COLUMNS =
   "id, slug, name, mode, ledger_signing_key_enc, circle_api_key_enc, circle_entity_secret_enc, wallet_host, ledger_retired_keys, usyc_live_at, network";
+
+/**
+ * Why a workspace paying from its owner's own wallet has no Circle credentials: this deployment lacks Vestiarion's agent
+ * account on Arc mainnet, or holds a key that is not a production one (wallet treasury W4).
+ */
+export const WALLET_TREASURY_NOT_CONFIGURED = "Vestiarion's agent account on Arc mainnet is not configured on this deployment";
 
 /** Why a hosted organization has no Circle credentials: this deployment lacks the hosted pair (H1, Review Focus 5). */
 export const HOSTED_NOT_CONFIGURED = "the hosted Circle account is not configured on this deployment";
@@ -151,9 +157,12 @@ export function orgConfig(
   // Ruling R4: the platform pair leaves under no key of its own. A hosted
   // organization receives it as its Circle credentials, below; every other
   // organization never holds it at all, only whether it exists.
-  const { hostedCircleApiKey, hostedCircleEntitySecret, ...platformChain } = base.chain;
+  // The agent account on Arc mainnet leaves the same way (wallet treasury W4): only a workspace whose own row says
+  // `external` pays with it, and every other one holds only whether it exists.
+  const { hostedCircleApiKey, hostedCircleEntitySecret, mainnetAgentCircleApiKey, mainnetAgentCircleEntitySecret, ...platformChain } = base.chain;
   const hostedAvailable = Boolean(hostedCircleApiKey && hostedCircleEntitySecret);
-  const walletHost = org.wallet_host === "hosted" || org.wallet_host === "own" ? org.wallet_host : null;
+  const agentAccountReady = walletTreasuryAvailable(base, ARC_MAINNET);
+  const walletHost = org.wallet_host === "hosted" || org.wallet_host === "own" || org.wallet_host === "external" ? org.wallet_host : null;
 
   let circleApiKey: string | undefined;
   let circleEntitySecret: string | undefined;
@@ -167,6 +176,18 @@ export function orgConfig(
     } else {
       credentialsUnreadable = HOSTED_NOT_CONFIGURED;
       warnings.push(HOSTED_NOT_CONFIGURED);
+    }
+  } else if (walletHost === "external") {
+    // Its treasury is its owner's own wallet; the agent that pays through its contract lives in Vestiarion's agent
+    // account (wallet treasury W4, W5). Its own credential columns are never opened.
+    const profile = networkProfile(networkOf(org.network));
+    const refused = !profile.walletTreasury ? new FeatureOffError("Paying from your own wallet", profile).message : !agentAccountReady ? WALLET_TREASURY_NOT_CONFIGURED : null;
+    if (refused) {
+      credentialsUnreadable = refused;
+      warnings.push(refused);
+    } else {
+      circleApiKey = mainnetAgentCircleApiKey;
+      circleEntitySecret = mainnetAgentCircleEntitySecret;
     }
   } else {
     circleApiKey = openCircleSecret("circle_api_key_enc");
@@ -200,6 +221,7 @@ export function orgConfig(
         circleEntitySecret,
         credentialsUnreadable,
         hostedAvailable,
+        walletTreasuryAvailable: agentAccountReady,
         walletHost,
         // A live workspace whose owner turned the real reserve on (USYC live design R1).
         usycLive: org.mode === "live" && Boolean(org.usyc_live_at),

@@ -1,3 +1,4 @@
+import type { WalletHost } from "./config";
 import { CYCLE_IN_PROGRESS_MS } from "./agent/balances";
 import { RECLAIM_AFTER_MS } from "./agent/approvals";
 import { currentOrgId } from "./context";
@@ -173,7 +174,7 @@ export function sampleFixture(now: Date): SampleFixture {
 async function requireSimulatedSandbox(orgId: string): Promise<void> {
   const org = unwrap(
     await platformDb().from("orgs").select("mode, wallet_host, network, api_key_iv:circle_api_key_enc->>iv").eq("id", orgId).single()
-  ) as { mode: "sandbox" | "live"; wallet_host: "own" | "hosted" | null; network?: string | null; api_key_iv: string | null };
+  ) as { mode: "sandbox" | "live"; wallet_host: WalletHost | null; network?: string | null; api_key_iv: string | null };
   // Sample data simulates payments, and a workspace on Arc mainnet never does (mainnet go-live M5).
   if (networkOf(org.network) === "arc-mainnet") throw new SampleDataError("mainnet");
   if (org.mode !== "sandbox") throw new SampleDataError("not_sandbox");

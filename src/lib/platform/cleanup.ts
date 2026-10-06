@@ -1,3 +1,4 @@
+import type { WalletHost } from "../config";
 import { currentConfig } from "../context";
 import { platformDb, unwrap } from "../dal";
 
@@ -6,7 +7,7 @@ export const SANDBOX_IDLE_DAYS = 60;
 
 interface SandboxRow {
   id: string;
-  wallet_host: "own" | "hosted" | null;
+  wallet_host: WalletHost | null;
 }
 
 /**

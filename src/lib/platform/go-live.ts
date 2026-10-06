@@ -1,3 +1,4 @@
+import type { WalletHost } from "../config";
 import { currentConfig, currentOrgConfig, currentOrgId, NoOrgScopeError } from "../context";
 import { db, platformDb, unwrap } from "../dal";
 import { withOrg } from "../dal/scope";
@@ -50,7 +51,7 @@ export interface GoLiveStatus {
    */
   connected: boolean;
   /** Whose Circle account holds the wallets: the workspace's own, Vestiarion's hosted one, or not chosen yet (0030). */
-  host: "own" | "hosted" | null;
+  host: WalletHost | null;
   /** This deployment has the hosted pair, so the hosted choice can be offered. A boolean only (R4). */
   hostedAvailable: boolean;
   /** The accounts that have a Circle wallet, operating first. */
@@ -151,7 +152,7 @@ interface OrgState {
   /** The stored API key envelope's IV: fresh on every encryption, so it names this one envelope. */
   apiKeyIv: string | null;
   /** `orgs.wallet_host` (0030). */
-  walletHost: "own" | "hosted" | null;
+  walletHost: WalletHost | null;
   /** `orgs.network` (0075): absent on a row read before it, which is Arc testnet. */
   network: string | null;
 }
@@ -173,7 +174,7 @@ async function orgState(orgId: string): Promise<OrgState> {
   const row = result.data as {
     mode: "sandbox" | "live";
     network?: string | null;
-    wallet_host?: "own" | "hosted" | null;
+    wallet_host?: WalletHost | null;
     api_key_stored: string | null;
     entity_secret_stored: string | null;
     api_key_iv: string | null;
@@ -184,7 +185,7 @@ async function orgState(orgId: string): Promise<OrgState> {
     apiKeyStored: row.api_key_stored !== null,
     entitySecretStored: row.entity_secret_stored !== null,
     apiKeyIv: row.api_key_iv,
-    walletHost: row.wallet_host === "hosted" || row.wallet_host === "own" ? row.wallet_host : null,
+    walletHost: row.wallet_host === "hosted" || row.wallet_host === "own" || row.wallet_host === "external" ? row.wallet_host : null,
     network: row.network ?? null,
   };
 }

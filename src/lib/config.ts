@@ -25,6 +25,9 @@
 
 import type { NetworkProfile } from "./network";
 
+/** Whose wallets a workspace pays from (0030, 0082): its own Circle account, Vestiarion's hosted one, or its owner's own wallet. */
+export type WalletHost = "own" | "hosted" | "external";
+
 /** Anything shaped like an environment: process.env, a .env parse, a test fixture. */
 export type EnvLike = Record<string, string | undefined>;
 
@@ -87,7 +90,7 @@ export interface ChainConfig {
    * same row the credentials above were chosen by: provisioning names the
    * wallet set by it (H3), so the set and the entity always agree.
    */
-  walletHost?: "own" | "hosted" | null;
+  walletHost?: WalletHost | null;
   /**
    * Whether the organization's reserve is real USYC on Arc testnet: set only by `orgConfig`, from
    * the row's `usyc_live_at` (0054). Unset or false, the reserve is simulated, as it always was

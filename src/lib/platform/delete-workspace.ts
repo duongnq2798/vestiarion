@@ -1,3 +1,4 @@
+import type { WalletHost } from "../config";
 import { NoOrgScopeError, currentOrgId } from "../context";
 import { db, platformDb, unwrap } from "../dal";
 import { FOUNDING_ORG_ID } from "../dal/org-config";
@@ -60,7 +61,7 @@ interface OrgFacts {
   slug: string;
   mode: "sandbox" | "live";
   agent_paused_at: string | null;
-  wallet_host: "own" | "hosted" | null;
+  wallet_host: WalletHost | null;
 }
 
 async function orgFacts(orgId: string): Promise<OrgFacts | null> {
