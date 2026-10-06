@@ -37,9 +37,17 @@ describe("stablecoinOf (mainnet go-live M7)", () => {
 });
 
 describe("stablecoinEntry (M7)", () => {
-  it("keeps Circle's order among the real entries, so Arc testnet picks what it picked before", () => {
-    expect(stablecoinEntry([NATIVE, ERC20], "USDC", ARC_TESTNET)?.token.id).toBe("usdc-native");
-    expect(stablecoinEntry([ERC20, NATIVE], "USDC", ARC_TESTNET)?.token.id).toBe("usdc-erc20");
+  it("sends USDC as the ERC-20 whichever entry Circle lists first, so a payee that is a contract is paid (mainnet pre-flight)", () => {
+    // Native value sent to a contract is not guaranteed to arrive; the ERC-20's transfer() never calls the recipient.
+    for (const network of [ARC_TESTNET, ARC_MAINNET]) {
+      expect(stablecoinEntry([NATIVE, ERC20], "USDC", network)?.token.id, network.id).toBe("usdc-erc20");
+      expect(stablecoinEntry([ERC20, NATIVE], "USDC", network)?.token.id, network.id).toBe("usdc-erc20");
+    }
+  });
+
+  it("falls back to the native entry when Circle lists no ERC-20", () => {
+    expect(stablecoinEntry([NATIVE], "USDC", ARC_TESTNET)?.token.id).toBe("usdc-native");
+    expect(stablecoinEntry([NATIVE], "USDC", ARC_MAINNET)?.token.id).toBe("usdc-native");
   });
 
   it("passes over a spoof listed first", () => {
@@ -63,7 +71,7 @@ describe("a wallet on another of the network's chains (final review I1)", () => 
   });
 
   it("reads the home chain as before, by default and by name", () => {
-    expect(stablecoinEntry([NATIVE, ERC20], "USDC", ARC_TESTNET, "ARC-TESTNET")?.token.id).toBe("usdc-native");
+    expect(stablecoinEntry([NATIVE, ERC20], "USDC", ARC_TESTNET, "ARC-TESTNET")?.token.id).toBe("usdc-erc20");
     expect(stablecoinOf(BASE_USDC.token, ARC_TESTNET)).toBeNull();
   });
 

@@ -396,7 +396,9 @@ phase 1b).
 - **Stablecoins by contract** (`src/lib/circle/stablecoins.ts`): on the network's own chain, USDC is Arc's native
   token or the ERC-20 at the profile's address, and EURC the ERC-20 at its address. On another payee chain, USDC is
   only that chain's own USDC. This applies to the token a transfer sends, the balance and money in. Circle lists both
-  USDC entries for an Arc wallet; its order is kept. The platform's `CIRCLE_USDC_TOKEN_ID` is Arc testnet's alone.
+  USDC entries for an Arc wallet, with one balance; the ERC-20 is the one sent, whichever comes first, since its
+  `transfer()` never calls the recipient and a payee that is a contract is paid. The platform's
+  `CIRCLE_USDC_TOKEN_ID` is Arc testnet's alone.
 - **Receipts** read a native USDC transfer from Arc's system emitter `0xffff…fffE` (EIP-7708) on both networks.
 - **Going live:** each step needs `mayUseMainnet` for the person. A test key is refused on mainnet, naming both
   networks. Go live needs the word `mainnet` typed, and the profile's `goLiveOpen`. Arc mainnet's opened with the copy
