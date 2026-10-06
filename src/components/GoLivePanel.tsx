@@ -30,7 +30,7 @@ import { fmt } from "@/components/vx/Primitives";
 import { utcMinute } from "@/lib/copy";
 import { FUNDING_WATCH_INTERVAL_MS, shouldReadBalanceAgain } from "@/lib/funding-watch";
 import { MAINNET_OFF } from "@/lib/mainnet";
-import { ARC_TESTNET, networkProfile, type Network } from "@/lib/network";
+import { networkOf, networkProfile, type Network } from "@/lib/network";
 import type { GoLiveStatus } from "@/lib/platform/go-live";
 
 /**
@@ -60,7 +60,6 @@ export interface GoLivePanelProps {
 
 const INITIAL: GoLiveActionResult = { ok: false, message: "" };
 const BALANCE_INITIAL: BalanceActionResult = { ok: false, message: "", balance: null };
-const FAUCET = ARC_TESTNET.faucet ?? "";
 const CIRCLE_CONSOLE = "https://console.circle.com";
 
 /** What confirming Go live changes (spec §2, step 3), on the workspace's network (mainnet go-live M8). */
@@ -428,6 +427,8 @@ function GoLiveStep({ orgSlug, status, sampleBalance }: { orgSlug: string; statu
   const { state, pending, formProps } = useActionForm(goLiveAction, INITIAL, { toastOnSuccess: true });
   const operating = status.wallets.find((wallet) => wallet.kind === "operating");
   const mainnet = onMainnet(status);
+  // Where this network's test tokens come from, if anywhere (mainnet copy C2).
+  const faucet = networkProfile(networkOf(status.network)).faucet ?? "";
   return (
     <Card className="space-y-5 p-5">
       <StepHeading n={3}>Fund the operating wallet, then go live</StepHeading>
@@ -440,7 +441,7 @@ function GoLiveStep({ orgSlug, status, sampleBalance }: { orgSlug: string; statu
               "Send USDC on Arc mainnet to this address. Keep a little more than you plan to pay: the wallet pays its own gas in USDC."
             ) : (
               <>
-                Get testnet USDC at <ExternalLink href={FAUCET}>faucet.circle.com</ExternalLink>: select Arc Testnet, and paste this address.
+                Get testnet USDC at <ExternalLink href={faucet}>faucet.circle.com</ExternalLink>: select Arc Testnet, and paste this address.
               </>
             )}
           </p>
