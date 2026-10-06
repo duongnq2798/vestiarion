@@ -174,7 +174,8 @@ transaction, so it holds across serverless instances rather than resetting per c
 `docs/superpowers/specs/2026-10-06-stuck-transfer-alert-design.md`) runs every 5 minutes from
 `.github/workflows/transfer-watch.yml` with the same bearer token. It tells a workspace's people about a live payment
 not confirmed after its network's `stuckAfterMinutes` (15):
-- in every workspace, live or not, it reads the live payment intents still in flight by `submitted_at`, which migration
+- in every workspace that can hold a live payment (a hosted wallet, or Circle credentials stored), live or not, it
+  reads the live payment intents still in flight by `submitted_at`, which migration
   0080's trigger stamps whenever a row becomes `submitting`, and those recorded `failed` in the last week that
   `paymentWasSent` says may have moved (a send whose answer was lost, a transfer whose last read failed);
 - it asks Circle again, read-only (`reconcileTransfer`); one Circle now shows settled is left to the next cycle;

@@ -90,7 +90,7 @@ function provider(answer: Partial<TransferResult> | Error = { status: "pending",
     if (answer instanceof Error) throw answer;
     return { providerTxId: "circle-tx-1", txHash: TX, txRef: TX, status: "pending", providerMode: "live", ...answer } as TransferResult;
   });
-  return { reconcileTransfer, provider: () => ({ reconcileTransfer }) as unknown as ChainProvider };
+  return { reconcileTransfer, provider: () => ({ mode: "live", reconcileTransfer }) as unknown as ChainProvider };
 }
 
 const run = (fake: ReturnType<typeof fakeSupabase>, deps: Parameters<typeof watchStuckTransfers>[0] = {}) =>
@@ -329,5 +329,26 @@ describe("one message to each person, however many payments (final review M1)", 
     expect(message.subject).toBe("2 payments have not confirmed");
     expect(message.text).toContain(`https://www.vestiarion.xyz/o/acme/invoices#trail-${INVOICE}`);
     expect(message.text).toContain("https://www.vestiarion.xyz/o/acme/contractors");
+  });
+});
+
+describe("visiting less and believing Circle (mainnet polish E6, E7)", () => {
+  it("lists only workspaces that can hold a live payment: a hosted wallet, or Circle credentials stored", async () => {
+    const fake = world({ intents: [] });
+    await run(fake, { provider: provider().provider });
+    const list = fake.requests.find((request) => request.path === "/rest/v1/orgs" && !(request.params.get("id") ?? "").startsWith("eq."))!;
+    expect(list.params.get("or")).toBe("(wallet_host.not.is.null,circle_api_key_enc.not.is.null)");
+  });
+
+  it("records the transaction hash Circle answers with, when the payment's row has none", async () => {
+    await run(world({ intents: [intent({ tx_hash: null })] }), { provider: provider({ status: "pending", providerState: "SENT", txHash: TX }).provider });
+    expect(appended()[0].detail.txHash).toBe(TX);
+  });
+
+  it("does not believe a provider that is not live, and tells from the age alone", async () => {
+    const reconcileTransfer = vi.fn(async () => ({ status: "confirmed", providerState: "COMPLETE" }));
+    await run(world(), { provider: () => ({ mode: "simulate", reconcileTransfer }) as unknown as ChainProvider });
+    expect(reconcileTransfer).not.toHaveBeenCalled();
+    expect(appended()[0].detail).toMatchObject({ circleAsked: false });
   });
 });
