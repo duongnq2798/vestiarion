@@ -25,6 +25,15 @@ export const LANDING_LINKS = [...LANDING_SECTIONS, { href: "/docs", label: "Docs
 
 const HEADER_LINK = "whitespace-nowrap rounded-lg px-3 py-2 text-sm text-ink-2 transition-colors duration-150 ease-standard hover:bg-raised/70 hover:text-ink";
 
+/** A plain text link in a header's right side, as the landing page's section links. */
+export function SiteHeaderLink({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <Link href={href} className={HEADER_LINK}>
+      {children}
+    </Link>
+  );
+}
+
 function Wordmark() {
   return (
     <Link href="/" className="group inline-flex shrink-0 items-center gap-2.5 font-mono text-[0.8125rem] font-semibold uppercase tracking-[0.2em] text-ink">
@@ -50,7 +59,7 @@ export function SiteHeader({
   children?: ReactNode;
 }) {
   return (
-    <header className="sticky top-0 z-50 border-b border-line/80 bg-surface/88 backdrop-blur-xl">
+    <header className="sticky top-0 z-50 border-b border-line/60 bg-surface/88 backdrop-blur-xl">
       <div className={cn("mx-auto flex h-16 items-center gap-3 px-4 sm:px-6", wide ? "max-w-[88rem]" : "max-w-6xl")}>
         <Wordmark />
         {section && (
@@ -80,7 +89,7 @@ export function SiteHeader({
             </ul>
           </nav>
         )}
-        <div className={landing ? "ml-auto flex items-center gap-2 lg:ml-0" : "ml-auto flex items-center gap-2"}>
+        <div className={landing ? "ml-auto flex items-center gap-2 lg:ml-0" : "ml-auto flex items-center gap-1"}>
           {landing ? (
             <>
               <Button asChild variant="ghost" className="hidden md:inline-flex">

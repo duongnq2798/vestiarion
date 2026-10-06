@@ -7,7 +7,7 @@ import { ledgerKeyId } from "../ledger-keys";
 import { encryptSecret, masterKeysFromEnv } from "../secrets";
 import { currentConfig } from "../context";
 import { MAINNET_OFF, MAINNET_STARTING_TWO_APPROVALS } from "../mainnet";
-import type { Network } from "../network";
+import { networkProfile, type Network } from "../network";
 import { homeChain } from "../payee-chains";
 import { workspaceNetwork } from "../workspace-network";
 
@@ -46,10 +46,10 @@ export const MAINNET_STARTING_BUDGET = { dailyUsdc: 50, weeklyUsdc: 150 } as con
  */
 export { MAINNET_STARTING_TWO_APPROVALS };
 
-/** `create_org` refuses a fourth workspace for the same person (migration 0020). */
+/** `create_org` refuses a fourth workspace for the same person on the same network (migrations 0020, 0081). */
 export class WorkspaceLimitError extends Error {
-  constructor() {
-    super("You already have 3 workspaces, the most one person can create.");
+  constructor(network: Network) {
+    super(`You already have 3 workspaces on ${networkProfile(network).label}, the most one person can create there.`);
     this.name = "WorkspaceLimitError";
   }
 }
@@ -124,9 +124,10 @@ export async function createWorkspace(input: {
       p_name: name,
       p_slug: slug,
       p_ledger_key_enc: envelope,
+      p_network: network,
     });
     if (error) {
-      if (error.message.includes("org_limit_reached")) throw new WorkspaceLimitError();
+      if (error.message.includes("org_limit_reached")) throw new WorkspaceLimitError(network);
       if (isSlugClash(error)) continue;
       throw new Error(error.message);
     }
@@ -136,13 +137,8 @@ export async function createWorkspace(input: {
 
   const { orgId, slug, publicKey } = created;
   try {
-    // The network is chosen here, before the first account exists: once one does, it never changes (0078, M3). The
-    // scope below then reads it from the row, as every later scope does.
-    if (network !== "arc-testnet") {
-      const set = await platformDb().from("orgs").update({ network }).eq("id", orgId).select("id");
-      if (set.error) throw new Error(set.error.message);
-      if (!set.data || set.data.length === 0) throw new Error("the new workspace's network was not set");
-    }
+    // create_org wrote the network on insert, before the first account exists: once one does, it never changes (0078,
+    // M3). The scope below reads it from the row, as every later scope does.
     await withOrg(
       orgId,
       async () => {
