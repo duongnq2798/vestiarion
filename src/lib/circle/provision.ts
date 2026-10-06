@@ -122,7 +122,11 @@ export async function circleCall<T>(call: string, work: () => Promise<T>, write:
  * harmless: a wallet works from either, and later runs take the first found.
  */
 export async function treasuryWalletSetId(client: CircleClient): Promise<string> {
-  const name = walletSetName(currentOrgId(), currentOrgConfig().chain.walletHost);
+  return walletSetIdNamed(client, walletSetName(currentOrgId(), currentOrgConfig().chain.walletHost));
+}
+
+/** The id of the entity's wallet set of this name, creating it the first time, read a page at a time as above. */
+export async function walletSetIdNamed(client: CircleClient, name: string): Promise<string> {
   let pageAfter: string | undefined;
   for (let page = 0; page < WALLET_SET_PAGE_LIMIT; page += 1) {
     const after = pageAfter;
