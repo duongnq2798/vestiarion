@@ -11,8 +11,11 @@ import { githubWebhookSecretFromEnv } from "@/lib/github/webhook";
  */
 
 export const dynamic = "force-dynamic";
-/** A permission check, a few writes and a reply fit well inside a minute. */
-export const maxDuration = 60;
+/**
+ * The reply fits well inside a minute, but the work deferred after it may raise an event cycle (a merged pull request),
+ * and `after` is bounded by this route's duration: the cycle's own 300 seconds, as every route that starts one.
+ */
+export const maxDuration = 300;
 
 export async function POST(request: Request): Promise<Response> {
   const settings = githubAppSettingsFromEnv();

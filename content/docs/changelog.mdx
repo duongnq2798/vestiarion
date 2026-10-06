@@ -2,9 +2,9 @@ Changes to the API and webhooks that affect an integration, newest first. Change
 
 ## 2026-10-06: A cycle can start when Circle says a payment settled
 
-- A `cycle_complete` entry's `events` can include `payment_settled`. Circle said a transfer in flight settled or failed, and that cycle recorded which. Circle's notification started it, not a person, so its `by` is absent.
-- A `cycle_complete` entry's `events` can include `payment_received` without a person too, when Circle said money arrived in one of the workspace's wallets. Its `by` is then absent.
-- The `ap_reconcile`, `ar_received` and other entries such a cycle writes are the ones the schedule writes. Nothing else in `/api/v1` changes.
+- A `cycle_complete` entry's `events` can include `payment_settled`. Circle said a transfer in flight settled or failed, and that cycle recorded which. Circle's notification started it, so its `by` is absent, unless a person's event started the same cycle.
+- A `cycle_complete` entry's `events` can include `payment_received` without a person too, when Circle said money arrived in the workspace's operating wallet and it paid a receivable. Its `by` is then absent, unless a person's event started the same cycle.
+- An `ar_received` entry can be written as Circle's notification arrives, before that cycle, as the pay page's check writes it. The other entries are the ones the schedule writes. Nothing else in `/api/v1` changes.
 
 ## 2026-10-06: Webhook retries go out every 10 minutes
 

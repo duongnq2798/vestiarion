@@ -9,7 +9,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const { handleCircleNotification } = vi.hoisted(() => ({ handleCircleNotification: vi.fn() }));
 vi.mock("@/lib/circle/notify", () => ({ handleCircleNotification }));
 
-const { POST } = await import("@/app/api/circle/notifications/route");
+const { POST, maxDuration } = await import("@/app/api/circle/notifications/route");
 
 let ipCounter = 0;
 function post(body: string, headers: Record<string, string> = {}, ip = `10.3.0.${++ipCounter}`): Promise<Response> {
@@ -28,6 +28,15 @@ beforeEach(() => {
 });
 
 describe("POST /api/circle/notifications", () => {
+  it("allows the event cycle it starts its full 300 seconds, since that cycle runs after the answer, in this invocation (final review C1)", async () => {
+    // runCycleSoon's after() is bounded by the route's maxDuration: 2 s of debounce, up to 90 s waiting for a running
+    // cycle, then the cycle. Cut short, the cycle leaves its run row running and blocks the workspace's cycles.
+    expect(maxDuration).toBe(300);
+    // The GitHub App's webhook defers the same event cycles (a merged pull request), so it allows the same.
+    const { readFileSync } = await import("node:fs");
+    expect(readFileSync("src/app/api/github/webhook/route.ts", "utf8")).toContain("export const maxDuration = 300;");
+  });
+
   it("hands the raw body and Circle's two headers to the handler, and answers its status", async () => {
     const raw = '{"notificationType":"transactions.outbound","notification":{"id":"tx-1"}}';
     handleCircleNotification.mockResolvedValueOnce({ status: 200, started: { slug: "acme", kind: "payment_settled" } });

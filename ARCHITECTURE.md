@@ -196,20 +196,26 @@ payment not confirmed after its network's `stuckAfterMinutes` (15):
 
 **Circle notifications** (`POST /api/circle/notifications`, `src/lib/circle/notify.ts`,
 `docs/superpowers/specs/2026-10-06-circle-notifications-design.md`) start a payment's settling within seconds of Circle,
-instead of at the next cycle:
+instead of at the next cycle, on a subscribed account while the agent runs:
 - Circle posts a signed notification when a transfer's state changes. The route answers 401 without a valid ECDSA P-256
   signature (`X-Circle-Signature`, against the key `X-Circle-Key-Id` names), and 503 when that key cannot be fetched, so
-  Circle sends it again.
+  Circle sends it again; 413 over 64 KB, and 429 past 300 a minute from one client. It allows 300 seconds, because the
+  event cycle it starts runs after the answer in the same invocation, bounded by the route's duration.
 - It looks in every workspace that can hold a live payment, as the transfer watch lists them, for a payment intent in
-  flight whose `provider_tx_id` is an outbound transfer now `COMPLETE`, `FAILED`, `DENIED` or `CANCELLED`, or for the
-  account whose `circle_wallet_id` received an inbound transfer now `COMPLETE`. It verifies the signature in that
-  workspace's scope, with the key fetched from its own Circle account (`getNotificationSignature`, cached by key id).
-- It then raises an event cycle, `payment_settled` or `payment_received`, through `runCycleSoon`, with no person behind it.
-  Nothing from the body is recorded: the cycle's reconcile reads Circle back, as on the schedule. A payment confirmed
-  inside its own sending cycle's 45-second wait is no longer in flight, so its notification starts nothing.
+  flight, or recorded failed while it may still move, whose `provider_tx_id` is an outbound transfer now `COMPLETE`,
+  `FAILED`, `DENIED` or `CANCELLED`; or for the operating account whose `circle_wallet_id` received an inbound transfer
+  now `COMPLETE`. It verifies the signature in that workspace's scope, with the key fetched from its own Circle account
+  (`getNotificationSignature`, cached by key id). A workspace that cannot be read is skipped; when none matched, 503.
+- An outbound one raises the event cycle `payment_settled` through `runCycleSoon`, with no person behind it; the cycle's
+  reconcile reads Circle back, as on the schedule. An inbound one reads the workspace's inbound transfers at once
+  (`recordIncomingTransfers`, as the pay page's check does), at most once in 15 seconds per workspace, and raises
+  `payment_received` only when a receivable was paid: dust, a funding transfer and the agent's own moves start no
+  cycle. Nothing from the body is recorded. A payment confirmed inside its own sending cycle's 45-second wait is no
+  longer in flight, so its notification starts nothing.
 - Each Circle account has one subscription to that endpoint, found or made (`ensureNotificationSubscription`). Connect
-  Circle makes it for a workspace's own account, best effort. `npm run circle:subscribe` makes it for the platform's
-  hosted account and for accounts connected before; the operator runs it once per deployment.
+  Circle makes it for a workspace's own account from the production deployment only, best effort, within 10 seconds,
+  logging only a label of a failure. `npm run circle:subscribe` makes it for the platform's hosted account and for
+  accounts connected before; the operator runs it once the deployment is live, as Circle tests the endpoint first.
 
 **The FX watch** (`POST /api/agent/fx-watch`, `src/lib/agent/fx-watch.ts`,
 `docs/superpowers/specs/2026-10-05-fx-reevaluation-design.md`) runs every 5 minutes from Supabase Cron, with the same

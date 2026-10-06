@@ -2,8 +2,11 @@ import { NextResponse } from "next/server";
 import { handleCircleNotification } from "@/lib/circle/notify";
 import { takeCircleNotificationToken } from "@/lib/rate-limit";
 
-/** Matching reads one row per workspace and starts no cycle in the request: the cycle runs after the answer. */
-export const maxDuration = 60;
+/**
+ * Matching reads one row per workspace, but the event cycle it starts runs after the answer, in this invocation: `after`
+ * is bounded by this route's duration, and an event cycle may wait 90 seconds for one running, then run (final review C1).
+ */
+export const maxDuration = 300;
 
 /** Circle's envelopes are a few kilobytes; anything far larger is not one. */
 const MAX_BODY_BYTES = 64 * 1024;
