@@ -24,6 +24,12 @@ vi.mock("@/lib/agent/pay", () => ({
   syncOperatingBalance: syncOperatingBalanceMock,
   payoutAddress: (address: string | null, id: string) => address ?? `sim:${id}`,
 }));
+const { verdictMock } = vi.hoisted(() => ({ verdictMock: vi.fn() }));
+vi.mock("@/lib/spending-limit/onchain", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/spending-limit/onchain")>()),
+  spendingLimitVerdict: verdictMock,
+}));
+
 const { getChainProviderMock } = vi.hoisted(() => ({ getChainProviderMock: vi.fn() }));
 vi.mock("@/lib/circle", () => ({
   getChainProvider: getChainProviderMock,
@@ -254,6 +260,8 @@ function world(options: {
   reserve?: Record<string, unknown> | null;
   /** Columns of the organization's row in place of a testnet sandbox's: its network, say (mainnet go-live M4). */
   org?: Record<string, unknown>;
+  /** The workspace's spending limit contract row (wallet treasury W11); none by default. */
+  spendingLimit?: Record<string, unknown> | null;
 } = {}) {
   let intentRow: Record<string, unknown> | null = options.intent === undefined ? FAILED_INTENT : options.intent;
   const fake = fakeSupabase((request: RecordedRequest) => {
@@ -261,6 +269,7 @@ function world(options: {
     if (request.path === "/rest/v1/payment_intents" && request.params.get("status") === "eq.confirmed") return { body: [] };
     if (request.path === "/rest/v1/ledger_entries" && request.params.has("detail->>counterpartyId")) return { body: options.addressEntries ?? [] };
     if (request.path === "/rest/v1/orgs") return { body: orgRow(options.org) };
+    if (request.path === "/rest/v1/spending_limit_contracts") return { body: options.spendingLimit ?? null };
     if (request.path === "/rest/v1/milestones" && request.method === "GET") return { body: milestoneRow(options.milestone) };
     if (request.path === "/rest/v1/milestones" && request.method === "PATCH") return { body: [{ id: MILESTONE }] };
     if (request.path === "/rest/v1/payment_intents" && request.method === "PATCH") {
@@ -805,5 +814,38 @@ describe("Pay now on a held milestone the operating wallet cannot cover, with th
     );
     expect(releaseHeldMilestoneMock).not.toHaveBeenCalled();
     expect(patch()?.body).toEqual({ decision_claimed_by: null, decision_claimed_at: null });
+  });
+});
+
+describe("Pay now from a workspace paying from its owner's own wallet (wallet treasury W11)", () => {
+  const mainnet = { ...config, mainnetEnabled: true };
+  const CONTRACT = "0x5af3107a4000000000000000000000000000e5c0";
+  const AGENT = "0x5af3107a4000000000000000000000000000a9e7";
+  const external = {
+    org: { network: "arc-mainnet", wallet_host: "external", mode: "live" },
+    spendingLimit: { id: "slc-1", address: CONTRACT, agent_wallet_id: "agent-wallet", agent_address: AGENT, enforced: true },
+  };
+  const pay = (fake: ReturnType<typeof world>["fake"]) =>
+    runWith({ config: mainnet, db: fake.client, fetch: fake.fetch }, () => withOrg(ORG, () => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE })));
+
+  beforeEach(() => verdictMock.mockReset());
+
+  it("releases it through the contract, from the agent's wallet", async () => {
+    verdictMock.mockResolvedValue({ state: "allowed" });
+    releaseHeldMilestoneMock.mockResolvedValue(PAID);
+    const { fake } = world(external);
+    await pay(fake);
+    expect(releaseHeldMilestoneMock).toHaveBeenCalledTimes(1);
+    expect(releaseHeldMilestoneMock.mock.calls[0][0]).toMatchObject({ milestoneId: MILESTONE, spendingLimit: { contract: CONTRACT, agentWalletId: "agent-wallet" } });
+  });
+
+  it("refuses one past the contract's figure by name, and claims nothing", async () => {
+    verdictMock.mockResolvedValue({ state: "refused", error: "OverWeeklyLimit", spent: 149.9, amount: 0.3, limit: 150 });
+    const { fake, claimed } = world(external);
+    const attempt = pay(fake);
+    expect(await refusal(attempt)).toBe("payments_off");
+    await expect(pay(fake)).rejects.toThrow("Paying 0.3 USDC would pass the contract's 7-day limit of 150 USDC: 149.9 USDC paid so far.");
+    expect(claimed()).toBe(false);
+    expect(releaseHeldMilestoneMock).not.toHaveBeenCalled();
   });
 });

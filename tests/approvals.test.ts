@@ -40,6 +40,12 @@ vi.mock("@/lib/agent/pay", () => ({
   syncOperatingBalance: syncOperatingBalanceMock,
 }));
 
+const { verdictMock } = vi.hoisted(() => ({ verdictMock: vi.fn() }));
+vi.mock("@/lib/spending-limit/onchain", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/spending-limit/onchain")>()),
+  spendingLimitVerdict: verdictMock,
+}));
+
 const { getChainProviderMock } = vi.hoisted(() => ({ getChainProviderMock: vi.fn() }));
 vi.mock("@/lib/circle", () => ({
   getChainProvider: getChainProviderMock,
@@ -189,11 +195,16 @@ function approvalsFake(options: {
   reserve?: Record<string, unknown> | null;
   /** Columns of the organization's row in place of a testnet sandbox's: its network, say (mainnet go-live M4). */
   org?: Record<string, unknown>;
+  /** The platform configuration the scope is built from; the testnet one unless given. */
+  platform?: ReturnType<typeof configFromEnv>;
+  /** The workspace's spending limit contract row (wallet treasury W11); none by default. */
+  spendingLimit?: Record<string, unknown> | null;
 } = {}) {
   const intents = options.intents ?? [];
   const eq = (request: RecordedRequest, column: string) => request.params.get(column)?.match(/^eq\.(.+)$/)?.[1];
   const fake = fakeSupabase((request) => {
     if (request.path === "/rest/v1/orgs") return { body: orgRow(options.org) };
+    if (request.path === "/rest/v1/spending_limit_contracts") return { body: options.spendingLimit ?? null };
     if (request.path === "/rest/v1/counterparties" && request.method === "GET") return { body: options.counterparty ?? null };
     if (request.path === "/rest/v1/counterparties" && request.method === "PATCH") return { body: [{ id: COUNTERPARTY_ID }] };
 
@@ -299,7 +310,7 @@ function approvalsFake(options: {
     }
     return { body: [] };
   });
-  return { fake, run: <T>(fn: () => Promise<T>) => runWith({ config, db: fake.client, fetch: fake.fetch }, () => withOrg(ORG, fn)) };
+  return { fake, run: <T>(fn: () => Promise<T>) => runWith({ config: options.platform ?? config, db: fake.client, fetch: fake.fetch }, () => withOrg(ORG, fn)) };
 }
 
 /** What `executePayment` reported, as `payInvoice` hands it back. */
@@ -2658,5 +2669,53 @@ describe("approveAndPay when the operating wallet falls short and the reserve co
     expect(uncovered).not.toHaveProperty("fromReserve");
     const [noReserve] = await short({ invoice: listed(rows.slice(0, 1)), reserve: null }).run(() => listWaitingPayables());
     expect(noReserve).not.toHaveProperty("fromReserve");
+  });
+});
+
+describe("approveAndPay from a workspace paying from its owner's own wallet (wallet treasury W11)", () => {
+  const mainnet = configFromEnv({
+    NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid",
+    SUPABASE_SERVICE_ROLE_KEY: "k",
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: "test-anon-key",
+    SUPABASE_JWT_SECRET: "test-request-token-secret-at-least-32-characters",
+    MAINNET_ENABLED: "1",
+  });
+  const CONTRACT = "0x5af3107a4000000000000000000000000000e5c0";
+  const AGENT = "0x5af3107a4000000000000000000000000000a9e7";
+  const external = {
+    platform: mainnet,
+    org: { network: "arc-mainnet", wallet_host: "external", mode: "live" },
+    spendingLimit: { id: "slc-1", address: CONTRACT, agent_wallet_id: "agent-wallet", agent_address: AGENT, enforced: true },
+    // Under the 100 USDC above which a workspace on Arc mainnet needs two approvals from the start.
+    invoice: (request: RecordedRequest): FakeReply => (request.params.get("id") ? { body: invoiceRow({ amount: "30" }) } : { body: [invoiceRow({ amount: "30" })] }),
+    claim: (): FakeReply => ({ body: { ...invoiceRow({ amount: "30" }), status: "processing" } }),
+  };
+
+  beforeEach(() => verdictMock.mockReset());
+
+  it("pays through the contract, from the agent's wallet, under the invoice's own ref", async () => {
+    verdictMock.mockResolvedValue({ state: "allowed" });
+    payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", operatingBalance: 0 });
+    const { run } = approvalsFake(external);
+    await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }));
+    expect(payInvoiceMock).toHaveBeenCalledTimes(1);
+    expect(payInvoiceMock.mock.calls[0][0]).toMatchObject({ invoiceId: INVOICE_ID, spendingLimit: { contract: CONTRACT, agentWalletId: "agent-wallet" } });
+    expect(verdictMock).toHaveBeenCalledWith(expect.objectContaining({ contract: CONTRACT, agent: AGENT, amount: 30 }));
+  });
+
+  it("refuses a payment past the contract's figure by name, and claims nothing", async () => {
+    verdictMock.mockResolvedValue({ state: "refused", error: "OverDailyLimit", spent: 40, amount: 30, limit: 50 });
+    const { fake, run } = approvalsFake(external);
+    await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).rejects.toThrow(
+      "Paying 30 USDC would pass the contract's daily limit of 50 USDC: 40 USDC paid so far."
+    );
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+    expect(fake.requests.some((request) => request.path === "/rest/v1/rpc/claim_invoice_decision")).toBe(false);
+  });
+
+  it("refuses while the wallet has not approved its contract", async () => {
+    const { run } = approvalsFake({ ...external, spendingLimit: null });
+    await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).rejects.toMatchObject({ code: "payments_off" });
+    expect(payInvoiceMock).not.toHaveBeenCalled();
   });
 });

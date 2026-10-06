@@ -9,7 +9,9 @@ import { isTerminalFailure, settleUnknownSend, type UnknownSendAnswer } from "..
 import { MAY_HAVE_BEEN_ACCEPTED } from "../circle/settlement";
 import { PAYMENTS_OFF, PaymentsDisabledError, paymentsHold } from "../payments-switch";
 import { payInvoice, syncOperatingBalance } from "./pay";
-import { invoiceDiscount, type InvoiceDiscount } from "./payment-timing";
+import { amountToPay, invoiceDiscount, type InvoiceDiscount } from "./payment-timing";
+import { ContractRefusal, personPaymentThroughContract } from "../treasury/person-payment";
+import type { SpendingLimitPayment } from "../circle/types";
 import { chainById, homeChain, paidAcrossChains } from "../payee-chains";
 import { counterpartyChainProblem } from "../intake-validation";
 import { workspaceNetwork } from "../workspace-network";
@@ -899,6 +901,25 @@ export async function approveAndPay(
     }
   }
 
+  // A workspace paying from its owner's own wallet pays a person's approval through its contract too, within its figures
+  // (wallet treasury W11): refused here, by name, before anything is claimed. A payment that may have been sent already
+  // only goes through it again, so the contract is not asked first.
+  let throughContract: SpendingLimitPayment | null = null;
+  try {
+    throughContract = await personPaymentThroughContract({
+      sourceType: "invoice",
+      sourceId: invoice.id,
+      to: invoice.address,
+      amount: amountToPay(invoice.amount, invoice.discount, new Date()).amountPaid,
+      currency: invoice.currency,
+      crossChain: paidAcrossChains(invoice.destinationChain),
+      check: !mayExist,
+    });
+  } catch (error) {
+    if (error instanceof ContractRefusal) throw new ApprovalError("payments_off", error.message);
+    throw error;
+  }
+
   // The route it takes and both routes' fees, so the card can set one against the other.
   const payout = quotes && route ? payoutRecord(invoice.destinationChain as string, route, quotes) : null;
 
@@ -970,6 +991,8 @@ export async function approveAndPay(
         ...(paidAcrossChains(invoice.destinationChain)
           ? { destinationChain: invoice.destinationChain as string, maxBridgeFeeUsdc: invoice.amount, ...(route ? { route } : {}) }
           : {}),
+        // From the owner's own wallet, only through its contract, from the agent's wallet (wallet treasury W11).
+        ...(throughContract ? { spendingLimit: throughContract } : {}),
       },
       // A person's approval is the one caller that may send a payment Circle
       // ended in a terminal failure again, and only when the failure was

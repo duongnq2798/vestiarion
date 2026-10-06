@@ -2476,11 +2476,15 @@ async function escrowReleaseOf(
  * Approvals does), and the one caller that may send again a transfer Circle ended in a terminal failure.
  */
 export async function releaseHeldMilestone(
-  input: { milestoneId: string; destination: string; amount: number },
+  input: { milestoneId: string; destination: string; amount: number; spendingLimit?: SpendingLimitPayment },
   deps: { provider: ChainProvider; operatingAccountId: string }
 ): Promise<PayStepOutcome> {
-  // A person's payment: never through the agent's spending limit contract (onchain spending limit R6).
-  return releaseMilestone({ milestoneId: input.milestoneId, destination: input.destination, amount: input.amount }, { ...deps, retryTerminalFailure: true });
+  // A person's payment goes through the agent's spending limit contract only from a workspace paying from its owner's own
+  // wallet, which can be paid from no other way (wallet treasury W11); never otherwise (onchain spending limit R6).
+  return releaseMilestone(
+    { milestoneId: input.milestoneId, destination: input.destination, amount: input.amount, ...(input.spendingLimit ? { spendingLimit: input.spendingLimit } : {}) },
+    { ...deps, retryTerminalFailure: true }
+  );
 }
 
 async function releaseMilestone(
