@@ -14,6 +14,7 @@ import type {
 } from "./types";
 import { SimulateProvider } from "./simulateProvider";
 import { LiveProvider } from "./liveProvider";
+import { WalletTreasuryProvider } from "./wallet-treasury-provider";
 import { currentOrgConfig } from "../context";
 import type { VestiarionConfig } from "../config";
 import { paymentsHold } from "../payments-switch";
@@ -151,8 +152,11 @@ export function getChainProvider(): ChainProvider {
   // Arc mainnet never simulates (mainnet go-live M5): with no Circle account of its own, a mainnet workspace gets no
   // provider at all, rather than the simulator a testnet sandbox gets.
   if (network.id === "arc-mainnet" && !(circleApiKey && circleEntitySecret)) throw new Error(MAINNET_NOT_CONNECTED);
+  // A workspace paying from its owner's own wallet pays through its contract only, from its agent (wallet treasury W11).
   const provider: ChainProvider =
-    circleApiKey && circleEntitySecret
+    config.chain.walletHost === "external" && circleApiKey && circleEntitySecret
+      ? new WalletTreasuryProvider(new LiveProvider(config.chain, { network, paymentsDisabled: () => paymentsHold() }), network)
+      : circleApiKey && circleEntitySecret
       ? new HybridProvider(new LiveProvider(config.chain, { network, paymentsDisabled: () => paymentsHold() }), new SimulateProvider(network), config.chain.usycLive === true)
       : new SimulateProvider(network);
 

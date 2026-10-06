@@ -21,8 +21,10 @@ export async function syncOperatingBalance(accountId: string): Promise<number> {
   const provider = getChainProvider();
   const snapshot = await provider.getBalance(accountId);
 
+  // The owner's own wallet keeps no gas and no reserve aside: its agent pays the gas (wallet treasury W12).
+  const external = provider.treasury === "external";
   let carveOut = 0;
-  if (provider.mode === "live" && provider.earnMode === "simulate") {
+  if (!external && provider.mode === "live" && provider.earnMode === "simulate") {
     const reserve = (
       await client.from("accounts").select("balance").eq("kind", "reserve").maybeSingle()
     ).data as { balance: string } | null;
@@ -30,7 +32,7 @@ export async function syncOperatingBalance(accountId: string): Promise<number> {
   }
 
   // An EOA keeps USDC for its own gas (mainnet go-live M6); 0 where gas is sponsored.
-  const spendable = Math.max(0, Number((snapshot.balance - carveOut - provider.network.gasReserveUsdc).toFixed(6)));
+  const spendable = Math.max(0, Number((snapshot.balance - carveOut - (external ? 0 : provider.network.gasReserveUsdc)).toFixed(6)));
   const res = await client.from("accounts").update({ balance: spendable }).eq("id", accountId);
   if (res.error) throw new Error(res.error.message);
   return spendable;
