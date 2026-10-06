@@ -441,3 +441,20 @@ describe("a batch on a network whose wallets are EOAs (mainnet go-live M6)", () 
     expect(accountSingle).not.toHaveBeenCalled();
   });
 });
+
+describe("a wallet on Base Sepolia in an Arc testnet workspace (final review I1)", () => {
+  it("reads its USDC by Base's USDC address, never its native ETH", async () => {
+    accountSingle.mockResolvedValue({ data: { id: "base", chain: "BASE-SEPOLIA", token: "USDC", circle_wallet_id: "w-base", address: "0xabc" }, error: null });
+    const getWalletTokenBalance = vi.fn(async () => ({
+      data: {
+        tokenBalances: [
+          { token: { id: "eth", symbol: "ETH-SEPOLIA", tokenAddress: null, isNative: true }, amount: "0.25" },
+          { token: { id: "usdc-base", symbol: "USDC", tokenAddress: "0x036CbD53842c5426634e7929541eC2318f3dCF7e", isNative: false }, amount: "6200" },
+        ],
+      },
+    }));
+    const client = fakeClient({ getWalletTokenBalance } as unknown as Partial<LiveProviderClient>);
+    const provider = new LiveProvider(CHAIN, { network: ARC_TESTNET, client, paymentsDisabled: true });
+    await expect(provider.getBalance("base")).resolves.toMatchObject({ balance: 6200, chain: "BASE-SEPOLIA" });
+  });
+});

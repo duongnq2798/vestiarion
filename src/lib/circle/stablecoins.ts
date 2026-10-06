@@ -18,21 +18,29 @@ export interface CircleToken {
 const sameAddress = (a: string | null | undefined, b: string) => typeof a === "string" && a.toLowerCase() === b.toLowerCase();
 
 /**
- * Which stablecoin a token is on the network, or null: USDC is the native token where the chain's native currency is
- * USDC (Arc's is), or the ERC-20 at the profile's USDC address; EURC is the ERC-20 at the profile's EURC address.
+ * Which stablecoin a token in a wallet on `chain` is, or null. On the network's own chain (the default), USDC is the
+ * native token where its native currency is USDC (Arc's is), or the ERC-20 at the profile's USDC address, and EURC is
+ * the ERC-20 at the profile's EURC address. On another of the network's payee chains (a wallet on Base Sepolia, say),
+ * USDC is only the ERC-20 at that chain's own USDC address: its native token is that chain's gas, never USDC, and EURC
+ * is not read there (final review I1). On a chain the network does not pay on, nothing is a stablecoin.
  */
-export function stablecoinOf(token: CircleToken | undefined, network: NetworkProfile): Stablecoin | null {
+export function stablecoinOf(token: CircleToken | undefined, network: NetworkProfile, chain: string = network.circleBlockchain): Stablecoin | null {
   if (!token) return null;
-  if ((network.usdcIsNative && token.isNative === true) || sameAddress(token.tokenAddress, network.tokens.USDC)) return "USDC";
-  if (sameAddress(token.tokenAddress, network.tokens.EURC)) return "EURC";
-  return null;
+  if (chain === network.circleBlockchain) {
+    if ((network.usdcIsNative && token.isNative === true) || sameAddress(token.tokenAddress, network.tokens.USDC)) return "USDC";
+    if (sameAddress(token.tokenAddress, network.tokens.EURC)) return "EURC";
+    return null;
+  }
+  const other = network.payeeChains.find((entry) => entry.id === chain);
+  return other && sameAddress(token.tokenAddress, other.usdc) ? "USDC" : null;
 }
 
-/** The first of the wallet's entries that is `coin` on the network, in Circle's order. */
+/** The first of the wallet's entries that is `coin` on the network, in Circle's order, for a wallet on `chain`. */
 export function stablecoinEntry<T extends { token?: CircleToken }>(
   balances: readonly T[] | undefined,
   coin: Stablecoin,
-  network: NetworkProfile
+  network: NetworkProfile,
+  chain?: string
 ): T | undefined {
-  return balances?.find((entry) => stablecoinOf(entry.token, network) === coin);
+  return balances?.find((entry) => stablecoinOf(entry.token, network, chain) === coin);
 }

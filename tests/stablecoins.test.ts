@@ -49,3 +49,26 @@ describe("stablecoinEntry (M7)", () => {
     expect(stablecoinEntry(undefined, "USDC", ARC_TESTNET)).toBeUndefined();
   });
 });
+
+describe("a wallet on another of the network's chains (final review I1)", () => {
+  const ETH = { token: { id: "eth", symbol: "ETH-SEPOLIA", tokenAddress: null, isNative: true }, amount: "0.25" };
+  const BASE_USDC = { token: { id: "usdc-base", symbol: "USDC", tokenAddress: "0x036CbD53842c5426634e7929541eC2318f3dCF7e", isNative: false }, amount: "6200" };
+
+  it("knows USDC only at that chain's own USDC address, never its native token", () => {
+    expect(stablecoinOf(ETH.token, ARC_TESTNET, "BASE-SEPOLIA")).toBeNull();
+    expect(stablecoinOf(BASE_USDC.token, ARC_TESTNET, "BASE-SEPOLIA")).toBe("USDC");
+    expect(stablecoinOf(ERC20.token, ARC_TESTNET, "BASE-SEPOLIA")).toBeNull();
+    expect(stablecoinOf(EURC.token, ARC_TESTNET, "BASE-SEPOLIA")).toBeNull();
+    expect(stablecoinEntry([ETH, BASE_USDC], "USDC", ARC_TESTNET, "BASE-SEPOLIA")?.token.id).toBe("usdc-base");
+  });
+
+  it("reads the home chain as before, by default and by name", () => {
+    expect(stablecoinEntry([NATIVE, ERC20], "USDC", ARC_TESTNET, "ARC-TESTNET")?.token.id).toBe("usdc-native");
+    expect(stablecoinOf(BASE_USDC.token, ARC_TESTNET)).toBeNull();
+  });
+
+  it("knows nothing on a chain the network does not pay on", () => {
+    expect(stablecoinOf(NATIVE.token, ARC_MAINNET, "ARC-TESTNET")).toBeNull();
+    expect(stablecoinOf(BASE_USDC.token, ARC_MAINNET, "BASE-SEPOLIA")).toBeNull();
+  });
+});
