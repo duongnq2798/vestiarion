@@ -1,7 +1,7 @@
 # Two people above a figure on Arc mainnet: phase 2b of the mainnet plan
 
-Date: 2026-10-06. Status: designed under the standing autonomy grant, after phase 2a (#219, Arc mainnet behind a
-switch). Rulings carry their cost if wrong.
+Date: 2026-10-06. Status: implemented on `feat/mainnet-limits`. Designed under the standing autonomy grant, after
+phase 2a (#219, Arc mainnet behind a switch). Rulings carry their cost if wrong.
 
 ## 1. Why
 

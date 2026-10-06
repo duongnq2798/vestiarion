@@ -128,6 +128,7 @@ Next, [make your first payment](/docs/guides/first-payment).
 A deployment can open Arc mainnet to the people on its allowlist. Every other workspace stays on Arc testnet, and none moves between the two networks.
 
 - **A workspace on Arc mainnet is chosen when it is created.** On the workspaces page, a person on the allowlist chooses **Arc mainnet** under **Network**. The workspace starts with one empty operating account, and an agent spending limit of 50 USDC a day and 150 USDC in 7 days. On Arc mainnet a daily or 7-day figure always stays.
+- **Two people above 100 USDC.** A workspace on Arc mainnet starts with two approvals above 100 USDC, under **Settings > Security**. An owner can raise the figure but not turn it off there. With only one person who can approve payments, nothing above it is paid until another approver is added.
 - **It never simulates.** It has no sample data and no simulated balance, and nothing moves until an owner takes it live.
 - **Step 1 takes a live key.** Paste a live API key, which starts with `LIVE_API_KEY`, and the entity secret registered for it. They come from your Circle account once it is upgraded to production. A test key is refused there, as a live key is refused on Arc testnet. Hosted wallets do not run on Arc mainnet.
 - **Step 2 creates one wallet.** It is an EOA on Arc mainnet, which pays its own gas in USDC, so the agent keeps 0.10 USDC of it aside for gas.

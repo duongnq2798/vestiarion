@@ -1,5 +1,11 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-06: Two approvals from the start on Arc mainnet, and its status said plainly
+
+- `GET /api/v1/status` answers `provenance.payments` and `provenance.yield` as `unavailable` for a workspace on Arc mainnet with no Circle account connected yet, as it does when stored credentials cannot be read. Nothing pays there, so `simulate` would have been wrong.
+- An `org_created` entry for a workspace on Arc mainnet carries `detail.startingLimits`: `{ dailyUsdc: 50, weeklyUsdc: 150, twoApprovalsAbove: 100 }`. That workspace starts with two approvals above 100 USDC, and an `approval_policy_changed` entry can never turn them off there.
+- Nothing else changes in `/api/v1`, and no other entry changes shape.
+
 ## 2026-10-06: `chain` accepts `ARC`, and two entries name their network
 
 - `POST /api/v1/counterparties` accepts `chain: "ARC"`, Arc mainnet's chain, for a workspace on Arc mainnet. Leaving `chain` out gives the workspace's own chain: `ARC` there, and `ARC-TESTNET` on Arc testnet, as before.
