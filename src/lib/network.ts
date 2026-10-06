@@ -6,8 +6,8 @@
  * record's (docs/superpowers/specs/2026-10-05-network-threading-design.md P1, P2).
  *
  * Arc testnet's values are the ones every module used before this file existed; those modules now read them from here.
- * Arc mainnet's come from docs.arc.io and developers.circle.com as read on 2026-10-04, and are checked again before
- * phase 2 uses them. A feature not verified there is null, and is off there: USYC (institutional only), Gateway, CCTP,
+ * Arc mainnet's come from docs.arc.io and developers.circle.com as read on 2026-10-04; the dry run with a live Circle
+ * key checks them again before any mainnet workspace goes live. A feature not verified there is null, and is off there: USYC (institutional only), Gateway, CCTP,
  * the Stablecoin Service's swap, and hosted wallets. Its wallets are EOAs that pay their own gas, and the per-workspace
  * contracts (escrow, the spending limit) are off there too (docs/superpowers/specs/2026-10-06-mainnet-go-live-design.md
  * M6).

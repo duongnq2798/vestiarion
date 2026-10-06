@@ -16,6 +16,13 @@ import { buildReceipt } from "@/lib/receipts/facts";
 import { readOnChain } from "@/lib/receipts/onchain";
 import { workspaceNetwork } from "@/lib/workspace-network";
 import { fakeSupabase, orgTestContext } from "./support/fake-supabase";
+import { chainModes, getChainProvider } from "@/lib/circle";
+import { BatchNotSentError } from "@/lib/circle/batch";
+import { setUpEscrow } from "@/lib/circle/escrow-setup";
+import { enforceSpendingLimit } from "@/lib/circle/spending-limit-setup";
+import { stablecoinEntry } from "@/lib/circle/stablecoins";
+import { MAINNET_NOT_CONNECTED, MAINNET_NOT_LIVE } from "@/lib/mainnet";
+import { forgetPaymentsSwitch, paymentsHold } from "@/lib/payments-switch";
 
 /**
  * The mainnet dry run (docs/superpowers/specs/2026-10-05-network-threading-design.md P9): the modules built with Arc
@@ -90,5 +97,58 @@ describe("a workspace on Arc mainnet", () => {
     }) as unknown as typeof globalThis.fetch;
     await readOnChain(built.facts, { fetch });
     expect(asked).toEqual(["https://rpc.mainnet.arc.io"]);
+  });
+});
+
+/**
+ * The mainnet path with the switch on (docs/superpowers/specs/2026-10-06-mainnet-go-live-design.md): a workspace on Arc
+ * mainnet is held until it is live, with a provider that refuses every send, EOA wallets that pay their own gas, its
+ * USDC chosen by contract, and what mainnet leaves out refused by name. Circle and the database are faked.
+ */
+describe("a workspace on Arc mainnet with the switch on (mainnet go-live)", () => {
+  const MAINNET = { ...BASE, mainnetEnabled: true, network: "arc-mainnet" as const };
+  const connected = { ...MAINNET.chain, circleApiKey: "LIVE_API_KEY:k", circleEntitySecret: "s" };
+  const scope = <T>(chain: typeof MAINNET.chain, fn: () => Promise<T> | T) => {
+    forgetPaymentsSwitch();
+    const { client } = fakeSupabase(() => ({ body: null }));
+    return runWith(orgTestContext({ config: { ...MAINNET, chain }, client, orgId: "org-main" }), fn);
+  };
+  const TRANSFER = { fromAccountId: "op", toAddress: PAYEE, amount: 1, memo: "m", idempotencyKey: "k" };
+
+  it("is held until live, with a provider on mainnet's profile that refuses every send", async () => {
+    await scope({ ...connected, networkHold: MAINNET_NOT_LIVE }, async () => {
+      expect(await paymentsHold()).toBe(MAINNET_NOT_LIVE);
+      const provider = getChainProvider();
+      expect(provider.network).toBe(ARC_MAINNET);
+      await expect(provider.transfer(TRANSFER)).rejects.toThrow(MAINNET_NOT_LIVE);
+      expect(workspaceNetwork().walletAccountType).toBe("EOA");
+    });
+  });
+
+  it("gets no provider before its Circle account is connected, and its pages still read", async () => {
+    await scope({ ...MAINNET.chain, networkHold: MAINNET_NOT_LIVE }, () => {
+      expect(() => getChainProvider()).toThrow(MAINNET_NOT_CONNECTED);
+      expect(chainModes()).toEqual({ mode: "simulate", earnMode: "simulate" });
+    });
+  });
+
+  it("once live, still refuses what mainnet leaves out, by name, before any request", async () => {
+    await scope(connected, async () => {
+      const provider = getChainProvider();
+      const batch = provider.batchTransfer!({ fromAccountId: "op", transfers: [{ toAddress: PAYEE, amount: 1 }, { toAddress: PAYEE, amount: 2 }], idempotencyKey: "b" });
+      await expect(batch).rejects.toBeInstanceOf(BatchNotSentError);
+      await expect(batch).rejects.toThrow("Paying in one batch does not run on Arc mainnet yet");
+      await expect(provider.depositToEarn({ accountId: "op", amount: 1 })).rejects.toThrow("The USYC reserve does not run on Arc mainnet yet");
+      await expect(setUpEscrow({ actorId: "user-1" })).rejects.toThrow("Escrow does not run on Arc mainnet yet");
+      await expect(enforceSpendingLimit({ actorId: "user-1" })).rejects.toThrow("Enforcing the spending limit in a contract does not run on Arc mainnet yet");
+    });
+  });
+
+  it("knows its USDC by contract: the ERC-20 at 0x3600… or the native token, never a token named USDC", () => {
+    const balances = [
+      { token: { id: "spoof", symbol: "USDC", tokenAddress: "0x1111111111111111111111111111111111111111", isNative: false } },
+      { token: { id: "usdc", symbol: "USDC", tokenAddress: ARC_MAINNET.tokens.USDC, isNative: false } },
+    ];
+    expect(stablecoinEntry(balances, "USDC", ARC_MAINNET)?.token.id).toBe("usdc");
   });
 });

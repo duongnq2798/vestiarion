@@ -517,14 +517,26 @@ the Circle account that holds them; **Go live** checks the stored credentials th
 before switching. To stop a live workspace paying, pause the agent from the console.
 
 **Hosted testnet wallets.** An owner without a Circle account can choose **Use a Vestiarion
-testnet wallet** instead of step 1 (labelled "Hosted by Vestiarion · Arc testnet · no real
-money"). Steps 2 and 3 are unchanged, except that the wallets are created in the platform's own
+testnet wallet** instead of step 1 (labelled "Hosted by Vestiarion · Arc testnet"). Steps 2 and 3 are unchanged, except that the wallets are created in the platform's own
 Circle testnet account, in a wallet set named for the workspace; the owner funds them from the
 faucet as above. The choice is offered only where the deployment sets `HOSTED_CIRCLE_API_KEY` and
 `HOSTED_CIRCLE_ENTITY_SECRET` (ideally a Circle testnet account separate from the founding
 workspace's), and at most `HOSTED_WORKSPACE_LIMIT` workspaces (100 by default) may take it. Once a
 workspace's wallets exist, its choice is fixed: to use your own Circle account, start a new
 workspace.
+
+**Arc mainnet, behind a switch.** A deployment opens Arc mainnet with `MAINNET_ENABLED=1`, and only
+to the email addresses in `MAINNET_ALLOWLIST`. Such a person can create a workspace on Arc mainnet
+from the workspaces page. It starts with one empty operating account and an agent spending limit of
+50 USDC a day and 150 USDC in 7 days, and it never simulates.
+
+Its three steps take a live Circle key (`LIVE_API_KEY`) and create one EOA wallet on `ARC`. That
+wallet pays its own gas in USDC, so 0.10 USDC is kept aside. Going live needs the word `mainnet`
+typed. Until then, and whenever the deployment switches Arc mainnet off, nothing moves: the stop
+switch's gates refuse with the reason.
+
+Stablecoins are chosen by contract, never by symbol, on both networks. Chats cannot approve a
+mainnet payment. See `docs/superpowers/specs/2026-10-06-mainnet-go-live-design.md`.
 
 ### The founding workspace and the demo seed
 

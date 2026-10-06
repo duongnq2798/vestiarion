@@ -1,6 +1,7 @@
 # Arc mainnet behind a switch: phase 2a of the mainnet plan
 
-Date: 2026-10-06. Status: designed under the standing autonomy grant, on the partner's "tiếp đi" after phase 1b (#218).
+Date: 2026-10-06. Status: implemented on `feat/mainnet-go-live`. Designed under the standing autonomy grant, on the
+partner's "tiếp đi" after phase 1b (#218).
 This is phase 2 of the mainnet plan (artifact "Vestiarion Mainnet Plan", version 2, option A). It follows:
 
 - the network foundation (#207, `2026-10-05-network-foundation-design.md`);
@@ -84,8 +85,10 @@ Nothing in this phase moves money on Arc mainnet, and nothing uses real funds. R
   - Reads keep working while the hold stands, such as the balance on the Go live step. So does creating the wallets,
     which moves nothing.
 - **M5. Arc mainnet never simulates.**
-  - A mainnet workspace with no Circle account connected is never given the simulator. It gets no provider at all
-    (`credentialsUnreadable`): "This workspace on Arc mainnet has no Circle account connected yet."
+  - A mainnet workspace with no Circle account connected is never given the simulator. `getChainProvider` refuses it
+    ("This workspace on Arc mainnet has no Circle account connected yet."), and pages read it as they read a
+    workspace whose credentials cannot be read. It is not marked as one, since the Go live panel would then say its
+    credentials cannot be read.
   - Sample data is refused there, since it exists to simulate payments.
   - The hybrid provider's simulated reserve refuses, by name, on a network without USYC.
 - **M6. On Arc mainnet the operating wallet is an EOA.**
