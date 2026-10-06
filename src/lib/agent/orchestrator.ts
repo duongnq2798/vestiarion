@@ -87,7 +87,8 @@ import {
 } from "./payment-timing";
 import { boundTreasuryDecision, keepPersonCashBack, planTreasury, sameTreasuryDecision, treasuryBounds, treasuryUserPrompt, type TreasuryDecision } from "./treasury";
 import { moveTreasuryIfNotPaused } from "./treasury-moves";
-import { bringCashForTodaysPayments, HELD_FOR_CASH, recentPersonCashBack } from "./liquidity";
+import { bringCashForTodaysPayments, HELD_FOR_CASH, recentPersonCashBack, releaseCashShort } from "./liquidity";
+import { transferUnknown } from "./approvals";
 import { plural, utcDay } from "../copy";
 import { REASONING_RULE, REASONING_SHAPE } from "../reasoning-copy";
 
@@ -417,11 +418,15 @@ export async function followUpHeldMilestones(orgDb: OrgDb, budget?: BudgetGate):
       heldForBudget: execution?.heldBecause === HELD_FOR_BUDGET,
       // Held for two approvals: decided again once the figure no longer covers it (two approvals T3).
       heldForTwoApprovals: detail.guardrailRule === TWO_APPROVALS_RULE,
+      // Held for want of cash: what it needed, and the cash it saw (mainnet pre-flight).
+      heldForCash: execution?.heldBecause === HELD_FOR_CASH ? heldForCashFacts(execution) : null,
     });
   }
   // What the limit leaves now, read only when a milestone waits on it.
   const budgetHeld = [...factsByMilestone.values()].some((facts) => facts.heldForBudget);
   const room = budgetHeld ? await (budget ?? budgetGate(orgDb)).room() : undefined;
+  // The cash the operating wallet and the reserve hold now, read only when a milestone waits on it.
+  const cash = [...factsByMilestone.values()].some((facts) => facts.heldForCash) ? await cashNow(orgDb) : undefined;
   // The figure for two approvals now, read only when a milestone waits on it.
   const heldForTwoApprovalsIds = new Set([...factsByMilestone].filter(([, facts]) => facts.heldForTwoApprovals).map(([id]) => id));
   const twoApprovalsNow = held.some((row) => heldForTwoApprovalsIds.has(row.id)) ? await readTwoApprovalsAbove(orgDb) : undefined;
@@ -439,6 +444,7 @@ export async function followUpHeldMilestones(orgDb: OrgDb, budget?: BudgetGate):
         verificationSource: row.verification_source,
         ...(room !== undefined ? { budgetRoom: room === null ? null : room.remaining } : {}),
         ...(twoApprovalsNow !== undefined ? { twoApprovalsAbove: twoApprovalsNow } : {}),
+        ...(cash !== undefined ? { cash } : {}),
       },
       factsByMilestone.get(row.id) ?? null
     );
@@ -663,6 +669,21 @@ export async function existingMilestoneIntents(
   milestones: Array<{ id: string; status: string }>
 ): Promise<Map<string, ExistingPaymentIntent>> {
   return paymentIntentsFor(orgDb, "milestone", milestones, "verified");
+}
+
+/**
+ * The `verified` milestones whose last send Circle never answered (`transferUnknown`): left out of
+ * `existingMilestoneIntents`, they are decided again, and their release goes out under the same key, which finds the
+ * transfer at Circle if it took it. The money may have moved already, so the cash check leaves them to that lookup
+ * rather than holding a payment that happened for want of the cash it spent (mainnet pre-flight review).
+ */
+export async function unansweredMilestoneSends(orgDb: OrgDb, milestones: Array<{ id: string; status: string }>): Promise<Set<string>> {
+  const ids = milestones.filter((milestone) => milestone.status === "verified").map((milestone) => milestone.id);
+  if (ids.length === 0) return new Set();
+  const rows = unwrap(
+    await orgDb.from("payment_intents").select("source_id, provider_tx_id, status, last_error").eq("source_type", "milestone").in("source_id", ids)
+  ) as Array<{ source_id: string; provider_tx_id: string | null; status: string; last_error: string | null }>;
+  return new Set(rows.filter((row) => transferUnknown({ ...row, provider_state: null })).map((row) => row.source_id));
 }
 
 async function paymentIntentsFor(
@@ -3359,6 +3380,12 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
   // A `verified` milestone with a payment intent already has a release in
   // flight: it is reconciled, not decided again (see reconcileMilestone).
   const releasesInFlight = await existingMilestoneIntents(db, milestones);
+  // Those whose last send Circle never answered, which the cash check leaves to the send's own lookup.
+  const unanswered = await unansweredMilestoneSends(db, milestones);
+  /** A release locked in escrow, paid from the escrow rather than the operating wallet. */
+  const escrowedRelease = (milestone: (typeof milestones)[number]) => ["funded", "funding"].includes(String((milestone as { escrow_state?: string | null }).escrow_state ?? ""));
+  // Releases from the wallet still in flight from earlier cycles: not yet mined, they have not left its balance.
+  let inFlightUsdc = 0;
 
   type ContractorGuardrailRule =
     | "counterparty.new_payee"
@@ -3389,15 +3416,21 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     outflowBudget: BudgetRoom | null;
     /** The spending limit on Arc's check of this release, when the workspace enforces it (onchain spending limit R8, R12). */
     onChainLimit: OnChainLimitDecisionCheck | null;
+    /** A release from escrow, paid from the escrow rather than the operating wallet. */
+    fromEscrow?: boolean;
+    /** Held because the operating wallet lacked its cash: what it needed, and what the wallet had left for it (mainnet pre-flight). */
+    heldForCash?: { needed: number; available: number } | null;
   };
   // Releases that passed every check, sent once every milestone is decided (batch payouts §2).
   const planned: Decided[] = [];
 
   /** A milestone's decision and what came of it: its row, the metrics, its signed entry and its line. */
   const writeDecision = async (entry: Decided & { guardrailBlocked: boolean; guardrailRule: ContractorGuardrailRule | null; outcome: PayStepOutcome | null }) => {
-    const { milestone, amount, limit, guardrailBlocked, guardrailRule, outflowBudget, onChainLimit: onChainCheck, outcome } = entry;
+    const { milestone, amount, limit, guardrailBlocked, guardrailRule, outflowBudget, onChainLimit: onChainCheck, heldForCash, outcome } = entry;
     const { value: decision, mode, reference, agreedWithReference } = entry.decided;
     const contractor = milestone.counterparties;
+    // What the operating wallet keeps for its own gas, which its balance leaves out: a cash hold names it (review R3).
+    const gasKeptUsdc = provider.network.gasReserveUsdc;
     const firstRelease = firstReleaseTo(contractor);
     const status = outcome?.status ?? "held";
     const txRef = outcome?.txRef ?? null;
@@ -3467,6 +3500,9 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           // comment there.
           ...heldBecausePausedDetail(heldBecausePaused),
           ...(guardrailRule === "workspace.outflow_budget" ? { heldBecause: HELD_FOR_BUDGET } : {}),
+          // Want of cash is why this held, which the follow-up stage reopens once cash comes in (mainnet pre-flight): what
+          // it needed, and what the operating wallet had left for it after the releases before it, with the reserve.
+          ...(heldForCash ? { heldBecause: HELD_FOR_CASH, cashNeededUsdc: heldForCash.needed, cashSeen: { operating: heldForCash.available, reserve: reserveBalance, ...(gasKeptUsdc > 0 ? { gasKeptUsdc } : {}) } } : {}),
           // Sent together with other milestones in one transaction: how many, under which key (batch payouts §5).
           ...(paymentExecution?.batch ? { batch: paymentExecution.batch } : {}),
         },
@@ -3477,7 +3513,9 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
       domain: "contractor",
       message: heldBecausePaused
         ? `${contractor.name}: not paid, the agent was paused (${amount} USDC)`
-        : `${contractor.name}: ${decision.action} "${milestone.title}"`,
+        : heldForCash
+          ? `${contractor.name}: "${milestone.title}" held, the operating wallet had ${heldForCash.available} USDC for its ${amount} USDC`
+          : `${contractor.name}: ${decision.action} "${milestone.title}"`,
     });
   };
 
@@ -3503,6 +3541,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
         { db, provider, operating: operating ? { id: operating.id } : null, onChainLimit, twoApprovalsAbove }
       );
       if (reconciled.operatingBalance !== null) operatingBalance = reconciled.operatingBalance;
+      if (reconciled.status === "verified" && !escrowedRelease(milestone)) inFlightUsdc += amount;
       metrics.recordMilestone(reconciled.status, false);
       lines.push(reconciled.line);
       continue;
@@ -3585,6 +3624,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     let guardrailRule: ContractorGuardrailRule | null = null;
     let outflowBudget: BudgetRoom | null = null;
     let onChainCheck: OnChainLimitDecisionCheck | null = null;
+    let heldForCash: { needed: number; available: number } | null = null;
 
     if (decision.action === "release") {
       // The first release to an address one party alone stands behind is code's to refuse (new payee check N3).
@@ -3597,7 +3637,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
       outflowBudget = highRisk || unscreened || overLimit || newPayeeHeld || twoApprovalsHeld ? null : await budget.room();
       // The same limit on Arc (onchain spending limit R3, R5, R7): asked for a release not from escrow, whose money
       // left the treasury when a person locked it.
-      const escrowed = ["funded", "funding"].includes(String((milestone as { escrow_state?: string | null }).escrow_state ?? ""));
+      const escrowed = escrowedRelease(milestone);
       onChainCheck =
         highRisk || unscreened || overLimit || newPayeeHeld || twoApprovalsHeld || escrowed ? null : await onChainLimit.check({ sourceType: "milestone", sourceId: milestone.id, to: contractor.address, amount });
       const onChainHold = onChainLimitHold(onChainCheck, reasoning);
@@ -3626,11 +3666,21 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
         guardrailRule = onChainHold.rule;
         reasoning = onChainHold.reasoning;
       } else if (operating) {
-        // Sent once every milestone is decided, together where they can be (batch payouts §2). It counts
-        // against the spending limit now, so the releases of one cycle never pass it together (R5).
-        budget.spend(amount);
-        planned.push({ milestone, amount, limit, decided: { value: decision, mode, reference, agreedWithReference }, reasoning, outflowBudget, onChainLimit: onChainCheck });
-        continue;
+        // A release from the operating wallet needs its cash there, after the releases planned before it this cycle and
+        // those still in flight (mainnet pre-flight): sent anyway, it would only fail at Circle or on chain. Short, it is
+        // held for want of cash, and the follow-up stage reopens it once cash comes in. One from escrow is paid from the
+        // escrow; one Circle never answered goes out under its key, which finds the transfer if the money already moved.
+        const plannedUsdc = inFlightUsdc + planned.reduce((sum, entry) => sum + (entry.fromEscrow ? 0 : entry.amount), 0);
+        heldForCash = escrowed || unanswered.has(milestone.id) ? null : releaseCashShort({ amount, operatingBalance, plannedUsdc });
+        if (heldForCash) {
+          reasoning += ` [not released: the operating wallet had ${heldForCash.available} USDC for it, less than its ${amount} USDC — decided again once cash comes in]`;
+        } else {
+          // Sent once every milestone is decided, together where they can be (batch payouts §2). It counts
+          // against the spending limit now, so the releases of one cycle never pass it together (R5).
+          budget.spend(amount);
+          planned.push({ milestone, amount, limit, decided: { value: decision, mode, reference, agreedWithReference }, reasoning, outflowBudget, fromEscrow: escrowed, onChainLimit: onChainCheck });
+          continue;
+        }
       }
     }
 
@@ -3644,6 +3694,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
       onChainLimit: onChainCheck,
       guardrailBlocked,
       guardrailRule,
+      heldForCash,
       outcome: null,
     });
   }

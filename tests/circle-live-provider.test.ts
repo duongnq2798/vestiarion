@@ -474,3 +474,50 @@ describe("the platform's USDC token id (mainnet limits L6)", () => {
     expect(createTransaction).toHaveBeenCalledWith(expect.objectContaining({ tokenId: "usdc-main" }));
   });
 });
+
+describe("balance reads ask Circle for every token (mainnet pre-flight)", () => {
+  // A Circle account whose monitored tokens leave Arc's USDC out would otherwise read a funded wallet as empty.
+  it("for the balance, the token a transfer sends, and money in", async () => {
+    accountSingle.mockResolvedValue({ data: { id: "operating", chain: "ARC", token: "USDC", circle_wallet_id: "w-main", address: "0xabc" }, error: null });
+    const getWalletTokenBalance = vi.fn(async () => ({
+      data: {
+        tokenBalances: [
+          { token: { id: "usdc-main", symbol: "USDC", tokenAddress: "0x3600000000000000000000000000000000000000", isNative: false }, amount: "5" },
+          { token: { id: "eurc-main", symbol: "EURC", tokenAddress: ARC_MAINNET.tokens.EURC, isNative: false }, amount: "2" },
+        ],
+      },
+    }));
+    const createTransaction = vi.fn(async () => {
+      throw new Error("stop after the request");
+    });
+    const listTransactions = vi.fn(async () => ({ data: { transactions: [] } }));
+    const client = fakeClient({ getWalletTokenBalance, createTransaction, listTransactions } as unknown as Partial<LiveProviderClient>);
+    const provider = new LiveProvider({ ...CHAIN, usdcTokenId: undefined }, { network: ARC_MAINNET, client, paymentsDisabled: false });
+
+    await provider.getBalance("operating");
+    await expect(provider.transfer(TRANSFER)).rejects.toThrow("stop after the request");
+    await expect(provider.transfer({ ...TRANSFER, token: "EURC" })).rejects.toThrow("stop after the request");
+    await provider.listInboundTransfers("operating", null);
+
+    expect(getWalletTokenBalance).toHaveBeenCalledTimes(4);
+    for (const [input] of getWalletTokenBalance.mock.calls as unknown as Array<[Record<string, unknown>]>) {
+      expect(input).toEqual({ id: "w-main", includeAll: true });
+    }
+  });
+
+  it("and so do the lists of its transactions: money in, and a send whose answer was lost (review finding 4)", async () => {
+    accountSingle.mockResolvedValue({ data: { id: "operating", chain: "ARC", token: "USDC", circle_wallet_id: "w-main", address: "0xabc" }, error: null });
+    const getWalletTokenBalance = vi.fn(async () => ({ data: { tokenBalances: [] } }));
+    const listTransactions = vi.fn(async () => ({ data: { transactions: [] } }));
+    const client = fakeClient({ getWalletTokenBalance, listTransactions } as unknown as Partial<LiveProviderClient>);
+    const provider = new LiveProvider({ ...CHAIN, usdcTokenId: undefined }, { network: ARC_MAINNET, client, paymentsDisabled: false });
+
+    await provider.listInboundTransfers("operating", null);
+    await provider.findTransferByRef("operating", "Milestone m-1", { from: "2026-10-06T00:00:00Z", to: "2026-10-06T01:00:00Z" });
+
+    expect(listTransactions).toHaveBeenCalledTimes(2);
+    for (const [input] of listTransactions.mock.calls as unknown as Array<[Record<string, unknown>]>) {
+      expect(input).toMatchObject({ walletIds: ["w-main"], includeAll: true });
+    }
+  });
+});

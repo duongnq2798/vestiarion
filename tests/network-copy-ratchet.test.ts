@@ -27,7 +27,7 @@ const ALLOWED: Record<string, number> = {
   "src/components/landing/LiveProof.tsx": 1,
   "src/components/landing/hero/scenarios.ts": 1,
   "src/components/vx/SiteChrome.tsx": 2,
-  "src/lib/docs/nav.ts": 5,
+  "src/lib/docs/nav.ts": 4,
   "src/components/CreateWorkspaceForm.tsx": 1,
   "src/app/open/page.tsx": 4,
   // Terms and privacy: the partner rewrites them before a deployment switches Arc mainnet on (C5).

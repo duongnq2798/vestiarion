@@ -153,7 +153,7 @@ describe("the docs navigation", () => {
     const section = DOCS_NAV.find((candidate) => candidate.title === "Guides")!;
     expect(section.pages.map((page) => [page.slug, page.title])).toEqual([
       ["guides/try-it", "Try it in 5 minutes"],
-      ["guides/go-live", "Go live on Arc testnet"],
+      ["guides/go-live", "Go live"],
       ["guides/first-payment", "Your first payment"],
       ["guides/pay-a-contractor", "Pay a contractor for delivered work"],
       ["guides/get-paid", "Get paid as a freelancer"],

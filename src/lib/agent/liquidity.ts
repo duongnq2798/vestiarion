@@ -215,6 +215,16 @@ export function amountFromReserve(neededUsdc: number, operatingBalance: number, 
 }
 
 /**
+ * Whether the operating wallet lacks the cash for the agent's release of a milestone from it (mainnet pre-flight): what
+ * it holds, less the releases planned before it in the same cycle, against the release. When it does, what the release
+ * needed and what the wallet had left for it, never below nothing; null when the wallet covers it.
+ */
+export function releaseCashShort(input: { amount: number; operatingBalance: number; plannedUsdc: number }): { needed: number; available: number } | null {
+  const available = Math.max(0, Number((input.operatingBalance - input.plannedUsdc).toFixed(6)));
+  return input.amount > available + 0.0000005 ? { needed: input.amount, available } : null;
+}
+
+/**
  * Why a person's payment from the operating wallet is refused (approval cash R2): what the wallet holds, and what the
  * reserve holds when it holds anything, against the payment and, for a CCTP payout, its fee.
  */

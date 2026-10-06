@@ -149,6 +149,27 @@ describe("what the agent did, in words", () => {
     expect(activityItem(entry("ar_received", { txHash: TX }), refs({ status: "received" }))).toMatchObject({ text: "Received 0.30 USDC from Jiren.", tone: "done", txHash: TX });
   });
 
+  it("says a release that did not go out is held, and one Arc is still confirming is sent (mainnet pre-flight review)", () => {
+    const release = (execution: Record<string, unknown>) => ({ seq: 5, action: "milestone_release", detail: { milestoneId: MILESTONE, guardrailBlocked: false, execution } });
+    expect(activityItem(release({ resultingStatus: "held", heldBecause: "cash_shortfall" }), refs())).toMatchObject({
+      text: "Tried to release 1.00 USDC for Landing page to Puka Hotel; it is held for you.",
+      detail: "The operating wallet did not hold its USDC; the agent decides it again once cash comes in.",
+      tone: "stopped",
+      path: "/contractors",
+      txHash: null,
+    });
+    expect(activityItem(release({ resultingStatus: "held", heldBecause: "agent_paused" }), refs())).toMatchObject({
+      text: "Tried to release 1.00 USDC for Landing page to Puka Hotel; it is held for you.",
+      tone: "stopped",
+    });
+    expect(activityItem(release({ txRef: TX, resultingStatus: "verified" }), refs())).toMatchObject({
+      text: "Sent 1.00 USDC for Landing page to Puka Hotel; Arc testnet is confirming it.",
+      tone: "done",
+      txHash: TX,
+    });
+    expect(activityItem(release({ txRef: TX, resultingStatus: "paid" }), refs())?.text).toBe("Released 1.00 USDC for Landing page to Puka Hotel.");
+  });
+
   it("says a reminder it sent a client, with who decided (collections R8)", () => {
     expect(activityItem(entry("ar_reminder_sent", { tone: "firm", decisionMode: "deepseek", agreedWithReference: true }), refs())).toMatchObject({
       text: "Reminded Jiren by email of 0.30 USDC (firm).",

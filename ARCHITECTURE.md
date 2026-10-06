@@ -342,8 +342,9 @@ phase 1b).
 - **Wallets** (escrow, the spending limit, Gateway funding, a new workspace's accounts) are created on the profile's
   blockchain.
 - **A feature a network lacks** refuses by name (`FeatureOffError`: "… does not run on Arc mainnet yet") and never
-  falls back to testnet values. This covers CCTP, Gateway, the USYC reserve, the EURC swap, x402 buying and hosted
-  wallets, which the Go live panel leaves out there too. Passkey wallets are simply not offered off Arc testnet.
+  falls back to testnet values. This covers CCTP, Gateway, the USYC reserve, the EURC swap and hosted wallets, which
+  the Go live panel leaves out there too. The agent's x402 buying is left out where Gateway does not run, without a
+  line, so a mainnet cycle's log does not repeat it. Passkey wallets are simply not offered off Arc testnet.
 - **Display reads the record's chain; decisions read the workspace's.** A row, a list or a receipt labels a payee by its
   own stored chain and never fails for one off the network. Approve and pay, and a chat's Approve, refuse such a chain
   in plain words before any claim.
@@ -396,7 +397,9 @@ phase 1b).
 - **Stablecoins by contract** (`src/lib/circle/stablecoins.ts`): on the network's own chain, USDC is Arc's native
   token or the ERC-20 at the profile's address, and EURC the ERC-20 at its address. On another payee chain, USDC is
   only that chain's own USDC. This applies to the token a transfer sends, the balance and money in. Circle lists both
-  USDC entries for an Arc wallet; its order is kept. The platform's `CIRCLE_USDC_TOKEN_ID` is Arc testnet's alone.
+  USDC entries for an Arc wallet, with one balance; the ERC-20 is the one sent, whichever comes first, since its
+  `transfer()` never calls the recipient and a payee that is a contract is paid. The platform's
+  `CIRCLE_USDC_TOKEN_ID` is Arc testnet's alone, and where it is set it names the token sent there instead.
 - **Receipts** read a native USDC transfer from Arc's system emitter `0xffff…fffE` (EIP-7708) on both networks.
 - **Going live:** each step needs `mayUseMainnet` for the person. A test key is refused on mainnet, naming both
   networks. Go live needs the word `mainnet` typed, and the profile's `goLiveOpen`. Arc mainnet's opened with the copy

@@ -175,8 +175,17 @@ function itemOf(entry: ActivityEntry, refs: ActivityRefs): Omit<ActivityItem, "t
     if (!milestone) return null;
     const what = `${activityAmount(milestone.amount, "USDC")} for ${milestone.title}`;
     if (entry.action === "milestone_release" && !blocked) {
-      const tx = arcTx(text(record(entry.detail.execution)?.txRef)) ?? arcTx(milestone.txRef);
-      return { seq: entry.seq, text: `Released ${what} to ${milestone.name}.`, detail: deciderLine(entry.detail), tone: "done", path: "/contractors", pathLabel: "Contractors", txHash: tx };
+      const execution = record(entry.detail.execution);
+      // What the release ended as, as the entry recorded it: one that did not go out is held, never "released".
+      const resulting = text(execution?.resultingStatus);
+      if (resulting === "held") {
+        const why = text(execution?.heldBecause) === "cash_shortfall" ? "The operating wallet did not hold its USDC; the agent decides it again once cash comes in." : deciderLine(entry.detail);
+        return { seq: entry.seq, text: `Tried to release ${what} to ${milestone.name}; it is held for you.`, detail: why, tone: "stopped", path: "/contractors", pathLabel: "Decide in Contractors", txHash: null };
+      }
+      const tx = arcTx(text(execution?.txRef)) ?? arcTx(milestone.txRef);
+      const sent =
+        resulting === "verified" ? `Sent ${what} to ${milestone.name}; ${networkProfile(refs.network).label} is confirming it.` : `Released ${what} to ${milestone.name}.`;
+      return { seq: entry.seq, text: sent, detail: deciderLine(entry.detail), tone: "done", path: "/contractors", pathLabel: "Contractors", txHash: tx };
     }
     return {
       seq: entry.seq,

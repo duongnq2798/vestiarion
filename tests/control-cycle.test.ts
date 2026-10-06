@@ -305,11 +305,43 @@ describe("followUpHeldMilestones — a held milestone goes back to the agent whe
     expect(await unlimited.run(() => followUpHeldMilestones(db(), gate(null)))).toHaveLength(1);
   });
 
-  it("does not read the limit when no milestone waits on it", async () => {
-    const { run } = heldFake();
+  it("does not read the limit, or the cash, when no milestone waits on it", async () => {
+    const { fake, run } = heldFake();
     const budget = { room: vi.fn(), spend: vi.fn() };
     await run(() => followUpHeldMilestones(db(), budget));
     expect(budget.room).not.toHaveBeenCalled();
+    expect(fake.requests.some((r) => r.path === "/rest/v1/accounts")).toBe(false);
+  });
+
+  it("reopens a milestone held for want of cash once the cash it needs is there, and leaves it while it is not (mainnet pre-flight)", async () => {
+    const MILESTONE_E = "018f8ce0-1557-7b54-a931-4d777f6bc0e1";
+    const cashHeld = [{ id: MILESTONE_E, title: "Launch", amount: "5", verification_source: "PR #88", counterparties: { risk_level: "clear", payment_limit: "10" } }];
+    const facts = [
+      decision(
+        MILESTONE_E,
+        { riskLevel: "clear", paymentLimit: 10, verificationSource: "PR #88" },
+        { resultingStatus: "held", heldBecause: "cash_shortfall", cashNeededUsdc: 5, cashSeen: { operating: 2, reserve: 0 } }
+      ),
+    ];
+    const cashFake = (operating: string) =>
+      cycleFake((r) => {
+        if (r.path === "/rest/v1/milestones" && r.method === "GET") return { body: cashHeld };
+        if (r.path === "/rest/v1/ledger_entries" && r.params.get("domain") === "eq.contractor") return { body: facts };
+        if (r.path === "/rest/v1/accounts") return { body: [{ kind: "operating", balance: operating }, { kind: "reserve", balance: "0" }] };
+        if (r.path === "/rest/v1/milestones" && r.method === "PATCH") return { body: [{ id: MILESTONE_E }] };
+        return undefined;
+      });
+
+    const still = cashFake("2");
+    expect(await still.run(() => followUpHeldMilestones(db()))).toEqual([]);
+    expect(milestonePatches(still.fake.requests)).toHaveLength(0);
+
+    const funded = cashFake("5");
+    const lines = await funded.run(() => followUpHeldMilestones(db()));
+    expect(milestonePatches(funded.fake.requests).map((p) => p.params.get("id"))).toEqual([`eq.${MILESTONE_E}`]);
+    expect(lines).toEqual([
+      { domain: "contractor", message: 'Reopened 5 USDC milestone "Launch": the cash it needs is there now (5 USDC in the operating wallet and the reserve)' },
+    ]);
   });
 
   it("reads nothing more when no milestone is held", async () => {

@@ -373,6 +373,8 @@ export interface HeldMilestone {
   budgetRoom?: number | null;
   /** The figure above which a payment needs two approvals, now; null with none set; absent when not read (two approvals T3). */
   twoApprovalsAbove?: number | null;
+  /** What the operating wallet and the reserve hold now; absent when not read (mainnet pre-flight). */
+  cash?: { operating: number; reserve: number };
 }
 
 /** What the milestone decision rested on, from its ledger entry's `observed` and `execution`. */
@@ -386,6 +388,11 @@ export interface MilestoneDecisionFacts {
   heldForBudget?: boolean;
   /** Held by code for two approvals (`workspace.two_approvals`). */
   heldForTwoApprovals?: boolean;
+  /**
+   * Held for want of cash (`execution.heldBecause`): the USDC it needed, what the operating wallet had left for it after
+   * the releases before it in its cycle, and the reserve. Null otherwise (mainnet pre-flight).
+   */
+  heldForCash?: { needed: number; operating: number; reserve: number } | null;
 }
 
 export interface MilestoneFollowUpPlan {
@@ -426,6 +433,9 @@ export function planMilestoneFollowUp(milestone: HeldMilestone, atDecision: Mile
   }
   const budgetChange = atDecision.heldForBudget ? budgetRoomChange(milestone.budgetRoom, milestone.amount) : null;
   if (budgetChange) changes.push(budgetChange);
+  // Held for want of cash: decided again once cash came in and covers it, as a payable is (mainnet pre-flight).
+  const cashChange = atDecision.heldForCash ? cashChangeSince(milestone.cash, atDecision.heldForCash) : null;
+  if (cashChange) changes.push(cashChange);
   // Held for two approvals: decided again once the figure no longer covers it (two approvals T3).
   if (atDecision.heldForTwoApprovals && milestone.twoApprovalsAbove !== undefined) {
     if (milestone.twoApprovalsAbove === null) changes.push("two approvals were turned off");

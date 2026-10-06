@@ -4,7 +4,8 @@ import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { db } from "@/lib/dal";
 import { withOrg } from "@/lib/dal/scope";
-import { existingMilestoneIntents, reconcileMilestone } from "@/lib/agent/orchestrator";
+import { existingMilestoneIntents, reconcileMilestone, unansweredMilestoneSends } from "@/lib/agent/orchestrator";
+import { MAY_HAVE_BEEN_ACCEPTED } from "@/lib/circle/settlement";
 import type { ChainProvider } from "@/lib/circle";
 import type { PaymentExecution } from "@/lib/payments";
 import { encryptSecret, parseMasterKeys } from "@/lib/secrets";
@@ -197,6 +198,42 @@ describe("existingMilestoneIntents — which milestones the contractor stage rec
     const intents = await run(() => existingMilestoneIntents(db(), [{ id: "pending-1", status: "pending" }]));
 
     expect(intents.size).toBe(0);
+    expect(fake.requests.some((r) => r.path === "/rest/v1/payment_intents")).toBe(false);
+  });
+});
+
+describe("unansweredMilestoneSends — releases Circle never answered, left to their own lookup rather than the cash check (mainnet pre-flight review)", () => {
+  it("names the verified milestones whose last send Circle never answered, and no other", async () => {
+    const { fake, run } = cycleFake((r) =>
+      r.path === "/rest/v1/payment_intents"
+        ? {
+            body: [
+              { source_id: "unanswered", provider_tx_id: null, status: "failed", last_error: `no answer within 30000 ms; the transfer ${MAY_HAVE_BEEN_ACCEPTED}` },
+              { source_id: "refused", provider_tx_id: null, status: "failed", last_error: "Circle: the wallet's balance is insufficient" },
+              { source_id: "in-flight", provider_tx_id: "circle-tx-1", status: "pending", last_error: null },
+            ],
+          }
+        : undefined
+    );
+
+    const unanswered = await run(() =>
+      unansweredMilestoneSends(db(), [
+        { id: "unanswered", status: "verified" },
+        { id: "refused", status: "verified" },
+        { id: "in-flight", status: "verified" },
+        { id: "held-1", status: "held" },
+      ])
+    );
+
+    expect([...unanswered]).toEqual(["unanswered"]);
+    const [lookup] = fake.requests.filter((r) => r.path === "/rest/v1/payment_intents");
+    expect(lookup.params.get("source_type")).toBe("eq.milestone");
+    expect(lookup.params.get("source_id")).toBe("in.(unanswered,refused,in-flight)");
+  });
+
+  it("asks nothing when no milestone is verified", async () => {
+    const { fake, run } = cycleFake();
+    expect((await run(() => unansweredMilestoneSends(db(), [{ id: "held-1", status: "held" }]))).size).toBe(0);
     expect(fake.requests.some((r) => r.path === "/rest/v1/payment_intents")).toBe(false);
   });
 });

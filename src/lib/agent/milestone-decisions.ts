@@ -26,7 +26,7 @@ import { PAYMENTS_OFF, PaymentsDisabledError, paymentsHold } from "../payments-s
 import { approversBesides, readTwoApprovalsAbove } from "../approval-policy";
 import { needsSecondApprover, TWO_APPROVALS_RULE, type TwoApprovalsFacts } from "../two-approvals";
 import { SECOND_OF_TWO_NOTE } from "./approvals";
-import { bringCashForApproval, CashBackError, cashShortMessage, reserveCover, type ReserveCover } from "./liquidity";
+import { bringCashForApproval, CashBackError, cashShortMessage, HELD_FOR_CASH, reserveCover, type ReserveCover } from "./liquidity";
 import {
   clearApprovals,
   giveApproval,
@@ -130,6 +130,7 @@ export type HeldReasonKind =
   | "transfer_failed"
   | "escrow"
   | "paused"
+  | "cash_shortfall"
   | "outflow_budget"
   | "new_payee"
   | "two_approvals"
@@ -184,6 +185,7 @@ const HINTS: Record<HeldReasonKind, string> = {
   transfer_failed: "Circle did not send it",
   escrow: "Escrow hold to check",
   paused: "Held while the agent was paused",
+  cash_shortfall: "Waiting for cash",
   outflow_budget: "Past the agent's spending limit",
   new_payee: "First payment to a new address",
   two_approvals: "Needs two approvals",
@@ -252,6 +254,27 @@ function reasonOf(facts: HeldFacts): Omit<HeldReason, "hint"> {
   if (waiting === "unconfirmed") return blocked("address_unconfirmed", `${name}'s address changed and no one has confirmed it. Confirm it on Counterparties.`);
   if (waiting === "no_address") return blocked("no_address", `${name} has no address to pay yet. Add it on Counterparties.`);
 
+  const detail = facts.lastEntry?.detail ?? {};
+  const execution = (detail.execution ?? {}) as Record<string, unknown>;
+  // The operating wallet lacked its cash when the agent last released it (mainnet pre-flight): the agent's own choice was
+  // to pay. Newer than any attempt before it, so it is told ahead of one Circle did not send (review finding 6).
+  if (execution.heldBecause === HELD_FOR_CASH) {
+    const seen = (execution.cashSeen ?? {}) as Record<string, unknown>;
+    const gas = typeof seen.gasKeptUsdc === "number" && seen.gasKeptUsdc > 0 ? `, after the ${usdc(seen.gasKeptUsdc)} it keeps for gas` : "";
+    const lacked =
+      typeof seen.operating === "number"
+        ? `When the agent released it, the operating wallet had ${usdc(seen.operating)} for it${gas}, less than its ${usdc(facts.amount)}`
+        : `When the agent released it, the operating wallet did not hold its ${usdc(facts.amount)}`;
+    return {
+      kind: "cash_shortfall",
+      text: `${lacked}, so nothing was sent. The agent decides it again on its own once cash comes in. Pay now pays it once the wallet holds it, or the reserve covers what it lacks.`,
+      link: null,
+      canPay: true,
+      canClose: true,
+      override: false,
+    };
+  }
+
   const attempt = lastAttemptOf(intent);
   if (attempt?.state === "failed") {
     return { kind: "transfer_failed", text: `Circle did not send it: ${attempt.reason}. Nothing moved. Pay now sends it again.`, link: null, canPay: true, canClose: true, override: false };
@@ -264,8 +287,6 @@ function reasonOf(facts: HeldFacts): Omit<HeldReason, "hint"> {
   const escrow = /\[not paid: ([^\]]+)\]\s*$/.exec(facts.agentReasoning ?? "")?.[1];
   if (escrow) return { kind: "escrow", text: `Not paid: ${escrow}.`, link: null, canPay: true, canClose: true, override: false };
 
-  const detail = facts.lastEntry?.detail ?? {};
-  const execution = (detail.execution ?? {}) as Record<string, unknown>;
   if (execution.heldBecause === HELD_BECAUSE_PAUSED) {
     return { kind: "paused", text: "The agent decided to pay it while it was paused, so nothing was sent. Pay now sends it.", link: null, canPay: true, canClose: true, override: false };
   }

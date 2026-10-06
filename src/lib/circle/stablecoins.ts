@@ -35,12 +35,19 @@ export function stablecoinOf(token: CircleToken | undefined, network: NetworkPro
   return other && sameAddress(token.tokenAddress, other.usdc) ? "USDC" : null;
 }
 
-/** The first of the wallet's entries that is `coin` on the network, in Circle's order, for a wallet on `chain`. */
+/**
+ * The wallet's entry that is `coin` on the network, for a wallet on `chain`. Circle lists Arc's USDC twice, as the
+ * native token and as the ERC-20, with one balance: the ERC-20 is the one sent, whichever Circle lists first (mainnet
+ * pre-flight). Its transfer() never calls the recipient, so a payee that is a contract, such as a Safe or an exchange's
+ * deposit address, is paid, where native value sent to a contract is not guaranteed to arrive. The native entry when it
+ * is the only one.
+ */
 export function stablecoinEntry<T extends { token?: CircleToken }>(
   balances: readonly T[] | undefined,
   coin: Stablecoin,
   network: NetworkProfile,
   chain?: string
 ): T | undefined {
-  return balances?.find((entry) => stablecoinOf(entry.token, network, chain) === coin);
+  const entries = balances?.filter((entry) => stablecoinOf(entry.token, network, chain) === coin) ?? [];
+  return entries.find((entry) => entry.token?.isNative !== true) ?? entries[0];
 }
