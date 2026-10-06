@@ -1,6 +1,6 @@
 import { currentConfig, currentOrgId } from "../context";
 import { db } from "../dal";
-import { getChainProvider } from "../circle";
+import { chainModes, getChainProvider } from "../circle";
 import { payeeNotReady } from "../counterparty-address";
 import { firstPaymentCheck, loadNewPayeeFacts } from "../new-payee-facts";
 import { newPayeeCheck } from "../new-payee";
@@ -435,7 +435,8 @@ export async function heldMilestonesTwoApprovals(
   if (held.length === 0) return new Map();
   const above = await readTwoApprovalsAbove(db());
   if (above === null) return new Map();
-  const live = getChainProvider().mode === "live";
+  // The page's modes, never the provider: a mainnet workspace with none still lists its milestones (final review I2).
+  const live = chainModes().mode === "live";
   const newPayeeFacts = live ? await loadNewPayeeFacts(db(), [...new Set(held.map((milestone) => milestone.contractor_id))]) : null;
   return twoApprovalsFacts(
     "milestone",

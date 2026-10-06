@@ -25,7 +25,14 @@ vi.mock("@/lib/agent/pay", () => ({
   payoutAddress: (address: string | null, id: string) => address ?? `sim:${id}`,
 }));
 const { getChainProviderMock } = vi.hoisted(() => ({ getChainProviderMock: vi.fn() }));
-vi.mock("@/lib/circle", () => ({ getChainProvider: getChainProviderMock }));
+vi.mock("@/lib/circle", () => ({
+  getChainProvider: getChainProviderMock,
+  // The page's modes, as the real chainModes reads them from the provider (final review I2).
+  chainModes: () => {
+    const provider = getChainProviderMock() as { mode: "live" | "simulate"; earnMode: "live" | "simulate" };
+    return { mode: provider.mode, earnMode: provider.earnMode };
+  },
+}));
 
 const ORG = "5d0f3a2e-8c1b-4f7a-9e6d-00000000c0de";
 const ACTOR = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000a1";
