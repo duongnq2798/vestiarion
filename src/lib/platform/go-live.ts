@@ -7,6 +7,7 @@ import { encryptSecret, masterKeysFromEnv } from "../secrets";
 import { getChainProvider, type ChainProvider } from "../circle";
 import { hasSampleData } from "../sample-data";
 import { checkCircleApiKey, defaultCircleClient, type CircleClient, type CircleClientFactory } from "../circle/check";
+import { ensureNotificationSubscription } from "../circle/notifications";
 import { MAINNET_NOT_OPEN, MAINNET_OFF, mayUseMainnet } from "../mainnet";
 import { FeatureOffError, NETWORK_IDS, networkOf, networkProfile, type Network, type NetworkProfile } from "../network";
 import { workspaceNetwork } from "../workspace-network";
@@ -371,6 +372,14 @@ export async function connectCircle(input: {
     summary: reconnected ? "Circle credentials were replaced" : "Circle was connected",
     detail: { by: input.actorId },
   });
+
+  // Circle tells Vestiarion when a transfer settles, so a payment is recorded within seconds (Circle notifications N6).
+  // Best effort: the connect stands without it, since the schedule still settles every payment.
+  try {
+    await ensureNotificationSubscription(factory({ apiKey, entitySecret }));
+  } catch (error) {
+    console.warn("Circle notifications not subscribed for", input.orgId, error instanceof Error ? error.message : String(error));
+  }
 }
 
 /**

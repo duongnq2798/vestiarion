@@ -8,7 +8,7 @@ import {
   ServiceUnavailableError,
   UnauthorizedError,
 } from "@circle-fin/developer-controlled-wallets";
-import { checkCircleApiKey, type CircleClient, type CircleClientFactory } from "@/lib/circle/check";
+import { checkCircleApiKey, type CircleClientFactory } from "@/lib/circle/check";
 
 /**
  * The API-key check. The fakes throw the SDK's own error classes, which is
@@ -30,7 +30,7 @@ const logged: string[] = [];
 
 function client(listWalletSets: () => Promise<unknown>): { factory: CircleClientFactory; list: ReturnType<typeof vi.fn> } {
   const list = vi.fn(listWalletSets);
-  const factory = vi.fn(() => ({ listWalletSets: list }) as unknown as CircleClient);
+  const factory = vi.fn(() => ({ listWalletSets: list }) as unknown as ReturnType<CircleClientFactory>);
   return { factory, list };
 }
 

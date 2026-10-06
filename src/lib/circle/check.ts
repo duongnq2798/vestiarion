@@ -14,8 +14,11 @@ export type CircleClient = Pick<
   "listWalletSets" | "createWalletSet" | "createWallets" | "getWallet" | "getWalletSet"
 >;
 
+/** The calls that subscribe a Circle account to transaction notifications once it is connected (Circle notifications N6). */
+export type CircleSubscriptionClient = Pick<CircleDeveloperControlledWalletsClient, "listSubscriptions" | "createSubscription">;
+
 /** Builds a Circle client from one organization's credentials. Tests pass a fake; production uses the SDK's. */
-export type CircleClientFactory = (credentials: { apiKey: string; entitySecret: string }) => CircleClient;
+export type CircleClientFactory = (credentials: { apiKey: string; entitySecret: string }) => CircleClient & CircleSubscriptionClient;
 
 export const defaultCircleClient: CircleClientFactory = (credentials) => initiateDeveloperControlledWalletsClient(credentials);
 

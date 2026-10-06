@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { publicOrigin } from "../public-origin";
+import type { CircleSubscriptionClient } from "./check";
 
 /**
  * Circle's signed transaction notifications (docs/superpowers/specs/2026-10-06-circle-notifications-design.md): what a
@@ -64,6 +65,21 @@ export function verifyCircleSignature(raw: string, signatureB64: string, publicK
   } catch {
     return false;
   }
+}
+
+/**
+ * Subscribes a Circle account to `NOTIFICATION_TYPES` at `endpoint`, unless a subscription there exists already: one
+ * per account, however many times it is connected or however many workspaces share it (N6; Circle allows 20).
+ */
+export async function ensureNotificationSubscription(
+  client: CircleSubscriptionClient,
+  endpoint: string = notificationEndpoint()
+): Promise<"exists" | "created"> {
+  const existing = (await client.listSubscriptions()).data ?? [];
+  if (existing.some((subscription) => subscription.endpoint === endpoint)) return "exists";
+  // The SDK types the input as `endpoint` only and sends it as given; Circle's API takes the types to send as well.
+  await client.createSubscription({ endpoint, notificationTypes: [...NOTIFICATION_TYPES] } as Parameters<CircleSubscriptionClient["createSubscription"]>[0]);
+  return "created";
 }
 
 /** Public keys by Circle's key id, for the life of the instance: Circle says a key id's key never changes. */

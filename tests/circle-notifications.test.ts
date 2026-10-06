@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import {
+  ensureNotificationSubscription,
   NOTIFICATION_TYPES,
   notificationEndpoint,
   notificationPublicKey,
@@ -78,6 +79,34 @@ describe("parseCircleNotification", () => {
     expect(parseCircleNotification("[]")).toBeNull();
     expect(parseCircleNotification(JSON.stringify({ notification: {} }))).toBeNull();
     expect(parseCircleNotification(JSON.stringify({ notificationType: "transactions.outbound", notification: "x" }))).toBeNull();
+  });
+});
+
+describe("ensureNotificationSubscription (N6)", () => {
+  const ENDPOINT = "https://www.vestiarion.xyz/api/circle/notifications";
+  function account(endpoints: string[]) {
+    return {
+      listSubscriptions: vi.fn(async () => ({ data: endpoints.map((endpoint, index) => ({ id: `sub-${index}`, endpoint })) })),
+      createSubscription: vi.fn(async (input: { endpoint: string }) => ({ data: { id: "sub-new", endpoint: input.endpoint } })),
+    };
+  }
+
+  it("subscribes an account that has no subscription to the endpoint, to transfers out and in", async () => {
+    const client = account([]);
+    expect(await ensureNotificationSubscription(client as never, ENDPOINT)).toBe("created");
+    expect(client.createSubscription).toHaveBeenCalledTimes(1);
+    expect(client.createSubscription).toHaveBeenCalledWith({ endpoint: ENDPOINT, notificationTypes: ["transactions.outbound", "transactions.inbound"] });
+  });
+
+  it("leaves an account already subscribed to it, so connecting twice never makes two", async () => {
+    const client = account(["https://example.test/hooks", ENDPOINT]);
+    expect(await ensureNotificationSubscription(client as never, ENDPOINT)).toBe("exists");
+    expect(client.createSubscription).not.toHaveBeenCalled();
+  });
+
+  it("does not count a subscription to another endpoint", async () => {
+    const client = account(["https://example.test/hooks"]);
+    expect(await ensureNotificationSubscription(client as never, ENDPOINT)).toBe("created");
   });
 });
 

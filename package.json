@@ -18,6 +18,7 @@
     "seed": "tsx scripts/seed.ts",
     "bootstrap:circle": "tsx scripts/bootstrap-circle.ts",
     "circle:doctor": "tsx scripts/circle-doctor.ts",
+    "circle:subscribe": "tsx scripts/circle-subscribe.ts",
     "agent:doctor": "tsx scripts/agent-doctor.ts",
     "arc:proof": "tsx scripts/arc-live-proof.ts",
     "status": "tsx scripts/status.ts",
