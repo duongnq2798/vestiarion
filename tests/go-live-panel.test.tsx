@@ -537,6 +537,14 @@ describe("GoLivePanel and the owner's own wallet (wallet treasury W1, W5-W10)", 
     expect(words).not.toContain("Replace Circle credentials");
   });
 
+  it("offers to connect the wallet again when the workspace chose its own wallet but holds no address for it", () => {
+    // A choice half-written (the host saved, the wallet's address not) must not leave a card with nothing to press.
+    const halfway = setup({ step: "wallet", wallet: null, agent: null, walletUsdc: null, agentGasUsdc: null });
+    const words = text(panel(status({ step: "wallets", network: "arc-mainnet", host: "external", walletTreasuryAvailable: true, walletTreasury: halfway })));
+    expect(words).toContain("Step 2 of 3");
+    expect(words).toContain("Connect your wallet");
+  });
+
   it("keeps showing the wallet, its contract and its figures once live", () => {
     const ready = setup({ step: "ready", contract: CONTRACT, dailyUsdc: 20, weeklyUsdc: 60, spendableUsdc: 12.5, agentGasUsdc: 0.5 });
     const words = text(panel(status({ step: "live", network: "arc-mainnet", host: "external", walletTreasury: ready, liveSince: "2026-10-07T09:12:00Z" })));

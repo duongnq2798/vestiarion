@@ -242,7 +242,10 @@ export default function WalletTreasurySteps({ orgSlug, status, network }: { orgS
   }, [orgSlug, status.step]);
 
   let body: ReactNode = null;
-  if (status.step === "agent") {
+  if (status.step === "wallet") {
+    // The workspace chose its own wallet but holds no address for it: the choice is offered again, never a dead end.
+    body = <WalletTreasuryChoice orgSlug={orgSlug} network={network} />;
+  } else if (status.step === "agent") {
     body = (
       <>
         <h3 className="text-sm font-semibold text-ink">Create the agent&apos;s wallet</h3>
@@ -388,7 +391,9 @@ export default function WalletTreasurySteps({ orgSlug, status, network }: { orgS
       </div>
       <WalletTreasurySummary status={status} network={network} />
       {body && <div className="space-y-3 border-t border-line pt-4">{body}</div>}
-      {status.step !== "agent" && status.step !== "ready" && <WalletPicker wallets={wallet.wallets} picked={wallet.picked} onPick={wallet.setPicked} />}
+      {status.step !== "wallet" && status.step !== "agent" && status.step !== "ready" && (
+        <WalletPicker wallets={wallet.wallets} picked={wallet.picked} onPick={wallet.setPicked} />
+      )}
       <FormMessage tone={note?.tone ?? "neutral"}>{note?.text}</FormMessage>
     </Card>
   );
