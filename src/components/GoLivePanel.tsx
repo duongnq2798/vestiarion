@@ -30,7 +30,7 @@ import { fmt } from "@/components/vx/Primitives";
 import { utcMinute } from "@/lib/copy";
 import { FUNDING_WATCH_INTERVAL_MS, shouldReadBalanceAgain } from "@/lib/funding-watch";
 import { MAINNET_OFF } from "@/lib/mainnet";
-import { networkProfile, type Network } from "@/lib/network";
+import { ARC_TESTNET, networkProfile, type Network } from "@/lib/network";
 import type { GoLiveStatus } from "@/lib/platform/go-live";
 
 /**
@@ -60,7 +60,7 @@ export interface GoLivePanelProps {
 
 const INITIAL: GoLiveActionResult = { ok: false, message: "" };
 const BALANCE_INITIAL: BalanceActionResult = { ok: false, message: "", balance: null };
-const FAUCET = "https://faucet.circle.com";
+const FAUCET = ARC_TESTNET.faucet ?? "";
 const CIRCLE_CONSOLE = "https://console.circle.com";
 
 /** What confirming Go live changes (spec §2, step 3), on the workspace's network (mainnet go-live M8). */

@@ -97,6 +97,11 @@ export interface NetworkProfile {
    * by construction rather than by procedure.
    */
   goLiveOpen: boolean;
+  /**
+   * Where people get this network's test tokens: Circle's faucet on Arc testnet, none on Arc mainnet, where USDC is real
+   * (phase 2c C2). Copy that would send someone to a faucet reads this, so a mainnet workspace is never sent to one.
+   */
+  faucet: string | null;
 }
 
 export const ARC_TESTNET = {
@@ -167,6 +172,7 @@ export const ARC_TESTNET = {
   spendingLimitContract: true,
   usdcIsNative: true,
   goLiveOpen: true,
+  faucet: "https://faucet.circle.com",
 } as const satisfies NetworkProfile;
 
 export const ARC_MAINNET = {
@@ -205,6 +211,7 @@ export const ARC_MAINNET = {
   spendingLimitContract: false,
   usdcIsNative: true,
   goLiveOpen: false,
+  faucet: null,
 } as const satisfies NetworkProfile;
 
 export const NETWORKS: Record<Network, NetworkProfile> = { "arc-testnet": ARC_TESTNET, "arc-mainnet": ARC_MAINNET };
