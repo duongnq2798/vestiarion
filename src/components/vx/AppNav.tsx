@@ -27,6 +27,7 @@ import { useCommandPalette, useShortcutLabel } from "./CommandPalette";
 import { DOCS_LINK, NAV_GROUPS, navItemForPathname, sectionPathOf } from "./nav";
 import { NAV_ICONS } from "./nav-icons";
 import type { WorkspaceSummary } from "./workspace";
+import { WorkspaceMeta } from "./WorkspaceMeta";
 
 /**
  * The client half of the workspace frame: what has to know the current URL
@@ -100,18 +101,6 @@ function PendingHint() {
   );
 }
 
-function WorkspaceMeta({ workspace }: { workspace: WorkspaceSummary }) {
-  const live = workspace.mode === "live";
-  return (
-    <span className="flex items-center gap-1.5 text-xs font-normal text-ink-3">
-      <span aria-hidden className={cn("size-1.5 rounded-full", live ? "bg-proof" : "border border-dashed border-ink-3")} />
-      <span className={live ? "text-proof" : undefined}>{live ? "Live" : "Sandbox"}</span>
-      <span aria-hidden>·</span>
-      <span className="capitalize">{workspace.role}</span>
-    </span>
-  );
-}
-
 /**
  * The workspace in view, and a menu to move between workspaces — landing on
  * the same section of the other one — or to create another. Open even with a
@@ -130,7 +119,7 @@ export function WorkspaceSwitcher({ current, workspaces }: { current: WorkspaceS
           <Avatar name={current.name} tone="agent" shape="square" size="lg" />
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-semibold text-ink">{current.name}</span>
-            <WorkspaceMeta workspace={current} />
+            <WorkspaceMeta mode={current.mode} network={current.network} role={current.role} />
           </span>
           <ChevronsUpDown aria-hidden className="text-ink-3" />
           <span className="sr-only">Switch workspace</span>
@@ -146,7 +135,7 @@ export function WorkspaceSwitcher({ current, workspaces }: { current: WorkspaceS
                 <Avatar name={workspace.name} tone="agent" shape="square" size="sm" />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-medium text-ink">{workspace.name}</span>
-                  <WorkspaceMeta workspace={workspace} />
+                  <WorkspaceMeta mode={workspace.mode} network={workspace.network} role={workspace.role} />
                 </span>
                 {isCurrent && (
                   <span aria-hidden className="text-agent">

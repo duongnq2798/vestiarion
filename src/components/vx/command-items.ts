@@ -1,6 +1,8 @@
 import { orgHref } from "@/lib/auth/org-paths";
+import { networkProfile } from "@/lib/network";
 import { DOCS_LINK, NAV_ITEMS, sectionPathOf, type NavKey } from "./nav";
 import type { WorkspaceSummary } from "./workspace";
+import { workspaceStanding } from "./WorkspaceMeta";
 
 /**
  * What the command palette offers, as plain data: pure, so the targets and
@@ -56,7 +58,7 @@ export function workspaceTargets(current: WorkspaceSummary, workspaces: readonly
       id: `workspace:${workspace.slug}`,
       label: workspace.name,
       href: orgHref(workspace.slug, section),
-      keywords: [workspace.slug, workspace.mode, workspace.role],
+      keywords: [workspace.slug, workspace.mode, workspace.role, workspaceStanding(workspace.mode, workspace.network), networkProfile(workspace.network).label],
     }));
 }
 
