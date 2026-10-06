@@ -106,7 +106,14 @@ describe("GoLivePanel, for an owner", () => {
     expect(words).toContain("encrypted");
     expect(words).toContain("never shown again");
     expect(words).not.toContain("Replace Circle credentials");
-    expect(words).not.toContain("Create treasury wallets");
+    // Step 2 is named ahead, but its button is not there yet.
+    expect(markup).not.toMatch(/<button[^>]*>(?:(?!<\/button>).)*Create treasury wallets<\/button>/);
+  });
+
+  it("connect: names the two steps after it, from the network's profile", () => {
+    const words = text(panel("connect"));
+    expect(words).toContain("Step 2, Create treasury wallets: one wallet on Arc testnet for each of this workspace's accounts.");
+    expect(words).toContain("Step 3, Fund and go live: add USDC from the faucet to the operating wallet, then go live.");
   });
 
   it("wallets: a Create treasury wallets button, and the counterparty address note linked to Counterparties", () => {
@@ -401,6 +408,12 @@ describe("GoLivePanel, on a workspace on Arc mainnet (mainnet go-live M8)", () =
     expect(words).toContain("Not live · Arc mainnet");
     expect(words).not.toContain("simulated");
     expect(words).not.toContain("Vestiarion testnet wallet");
+  });
+
+  it("connect: names the two steps after it, so a person sees where the wallet is made before connecting", () => {
+    const words = text(panel(main()));
+    expect(words).toContain("Step 2, Create treasury wallets: one wallet on Arc mainnet, in your own Circle account.");
+    expect(words).toContain("Step 3, Fund and go live: send USDC on Arc mainnet to the operating wallet, keeping 0.10 USDC for its gas, then go live.");
   });
 
   it("wallets: one wallet, an EOA that pays its own gas in USDC", () => {
