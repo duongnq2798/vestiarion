@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import OpenPage, { metadata } from "@/app/open/page";
-import { formatFigure, formatRow, OPEN_ROWS, OUTCOME_ROWS } from "@/components/open/OpenNumbersTable";
+import { DECIDED_BY_AGENT, FIGURE_GROUPS, FIGURE_ROWS, formatFigure, formatRow } from "@/components/open/OpenNumbersTable";
 import { requiresSession } from "@/lib/auth/routes";
 import { readOpenNumbers, type OpenNumbers } from "@/lib/platform/open-numbers";
 
@@ -12,9 +12,11 @@ vi.mock("@/lib/platform/open-numbers", async (importOriginal) => {
 
 /**
  * The public /open page (docs/superpowers/specs/2026-09-30-open-numbers-design.md
- * §2): one table with customers, ours and the total; the payments chart; our
- * own payments with explorer links; and the method. The figures come from
- * readOpenNumbers, faked here; parsePeriod and dailySeries are the real ones.
+ * §2): customers' headline figures with the total beside them, how the agent
+ * performs, the checks between a model and the money, the payments chart, our
+ * own payments with explorer links, every figure in one table with customers,
+ * ours and the total, and the method. The figures come from readOpenNumbers,
+ * faked here; parsePeriod and dailySeries are the real ones.
  */
 
 const text = (markup: string) =>
@@ -38,6 +40,12 @@ const side = (scale: number) => ({
 
 /** A no-break space: a figure's number and unit, or a ratio, stay on one line in a narrow table. */
 const NB = " ";
+
+/** The full figures table: customers, ours and the total, every row. */
+function figureTable(markup: string): string {
+  const from = markup.slice(markup.indexOf('aria-label="Every figure"'));
+  return from.slice(0, from.indexOf("</table>"));
+}
 
 /** The cells of the row whose label is `label`, in column order. */
 function cellsOf(markup: string, label: string): string[] {
@@ -72,11 +80,11 @@ function byNetwork(numbers: { mainnet: OpenNumbers | Error; testnet: OpenNumbers
   });
 }
 
-/** The markup of one network's section. */
+/** The markup of one network's section, up to the next network's or the method. */
 function sectionOf(markup: string, id: "mainnet" | "testnet"): string {
   const start = markup.indexOf(`<section aria-labelledby="${id}"`);
-  const end = id === "mainnet" ? markup.indexOf('<section aria-labelledby="testnet"') : markup.indexOf('<section aria-labelledby="method"');
-  return markup.slice(start, end);
+  const next = markup.slice(start + 1).search(/<section aria-labelledby="(mainnet|testnet|method)"/);
+  return markup.slice(start, next === -1 ? undefined : start + 1 + next);
 }
 
 beforeEach(() => {
@@ -93,18 +101,23 @@ describe("the /open page", () => {
 
   it("shows every row for customers, our workspaces and the total", async () => {
     const markup = await render();
-    const page = text(markup);
-    const table = markup.slice(markup.indexOf("<table"), markup.indexOf("</table>"));
+    const table = figureTable(markup);
     const columns = [...table.matchAll(/<th scope="col"[^>]*>(.*?)<\/th>/g)].map((match) => text(match[1]));
     expect(columns).toEqual(["Figure", "Customers", "Our workspaces", "Total"]);
-    for (const row of OPEN_ROWS) expect(page).toContain(row.label);
-    expect(table.match(/<th scope="row"/g)).toHaveLength(OPEN_ROWS.length);
+    for (const row of FIGURE_ROWS) expect(text(table)).toContain(row.label);
+    expect(table.match(/<th scope="row"/g)).toHaveLength(FIGURE_ROWS.length);
+    // Grouped by what the figures say, each group headed in the table.
+    const groups = [...table.matchAll(/<th scope="rowgroup"[^>]*>(.*?)<\/th>/g)].map((match) => text(match[1]));
+    expect(groups).toEqual(FIGURE_GROUPS.map((group) => group.title));
+    expect(groups).toEqual(["Adoption", "Money moved", "Agent activity", "Outcomes", "Safety and controls"]);
     // Each label says no more than its figure counts: milestones paid by a settled Arc payment; refusals by code,
     // whichever path proposed the decision.
     // Each section names its network, so no row does (network foundation N7).
-    expect(OPEN_ROWS.find((row) => row.key === "milestonesReleased")?.label).toBe("Contractor milestones paid");
-    for (const row of [...OPEN_ROWS, ...OUTCOME_ROWS]) expect(row.label).not.toMatch(/Arc testnet|Arc mainnet/);
-    expect(OPEN_ROWS.find((row) => row.key === "refusedByCode")?.label).toBe("Decisions refused by code");
+    expect(FIGURE_ROWS.find((row) => row.key === "milestonesReleased")?.label).toBe("Contractor milestones paid");
+    for (const row of FIGURE_ROWS) expect(row.label).not.toMatch(/Arc testnet|Arc mainnet/);
+    expect(FIGURE_ROWS.find((row) => row.key === "refusedByCode")?.label).toBe("Decisions refused by code");
+    // A disagreement is measured against the written policy, which the model's choice must still pass in code.
+    expect(FIGURE_ROWS.find((row) => row.key === "policyDepartures")?.label).toBe("Model disagreed with the written policy");
   });
 
   it("shows the first payments and the median time to one, with a dash where there is none", async () => {
@@ -113,12 +126,10 @@ describe("the /open page", () => {
     expect(text(markup)).toContain("Workspaces that made a first payment");
   });
 
-  it("shows how the agent's payment decisions turned out, in a table of their own", async () => {
+  it("shows how the agent's payment decisions turned out in the figures table", async () => {
     const markup = await render();
-    const page = text(markup);
-    expect(page).toContain("Outcomes");
-    for (const row of OUTCOME_ROWS) expect(page).toContain(row.label);
-    expect(markup.match(/<table/g)).toHaveLength(3); // usage, outcomes, and the chart's table view
+    expect(text(markup)).toContain("Outcomes");
+    expect(markup.match(/<table/g)).toHaveLength(2); // every figure, and the chart's table view
     expect(cellsOf(markup, "Payment decisions the agent carried out itself")).toEqual(["3", "6", "9"]);
     expect(cellsOf(markup, "Decided by the agent itself")).toEqual(["75%", "75%", "75%"]);
     expect(cellsOf(markup, "Agent flags a person upheld")).toEqual(["1 of 2", "2 of 4", "3 of 6"]);
@@ -135,13 +146,16 @@ describe("the /open page", () => {
     const sides = { customers: { ...side(1), ...blank }, ours: { ...side(2), ...blank }, total: { ...side(3), ...blank } };
     vi.mocked(readOpenNumbers).mockResolvedValue({ ...NUMBERS, sides });
     const markup = await render();
-    for (const row of OUTCOME_ROWS) expect(cellsOf(markup, row.label)).toEqual(["—", "—", "—"]);
+    const outcomes = ["decisionsCarriedOut", "decisionsEscalated", "escalationsResolved", "flagsUpheld", "invoicesPaidOnTime", "invoicesPaidOnTimeUntouched", "duplicatesCaught"];
+    for (const row of FIGURE_ROWS.filter((row) => outcomes.includes(row.key))) expect(cellsOf(markup, row.label)).toEqual(["—", "—", "—"]);
+    // The agent's cards say there is nothing to measure rather than show a share of nothing.
+    expect(text(markup)).toContain("Nothing to measure yet");
     expect(cellsOf(markup, "Payments settled")).toEqual(["4", "8", "12"]);
   });
 
   it("writes a share as a whole percent and a ratio as x of y, with a dash when there is nothing to measure", () => {
-    const share = OUTCOME_ROWS.find((row) => row.format === "percent")!;
-    const onTime = OUTCOME_ROWS.find((row) => row.label === "Invoices paid on time")!;
+    const share = DECIDED_BY_AGENT;
+    const onTime = FIGURE_ROWS.find((row) => row.label === "Invoices paid on time")!;
     expect(formatRow({ ...side(1), decisionsCarriedOut: 2, decisionsEscalated: 1 }, share)).toBe("67%");
     expect(formatRow({ ...side(1), decisionsCarriedOut: 0, decisionsEscalated: 0 }, share)).toBe("—");
     expect(formatRow({ ...side(1), invoicesPaidOnTime: 0, invoicesPaidOnArc: 0 }, onTime)).toBe("—");
@@ -165,7 +179,7 @@ describe("the /open page", () => {
     const page = text(await render());
     expect(page).toContain("1,234.50");
     expect(page).toContain("3,703.50");
-    const nowRows = OPEN_ROWS.filter((row) => row.kind === "now");
+    const nowRows = FIGURE_ROWS.filter((row) => row.kind === "now");
     expect(nowRows.map((row) => row.key)).toEqual(["liveWorkspaces", "people", "usdcInWallets"]);
     expect(page.match(/\bnow\b/g)?.length).toBeGreaterThanOrEqual(nowRows.length);
   });
@@ -189,6 +203,64 @@ describe("the /open page", () => {
     expect(text(markup)).toContain("counted above and never listed");
   });
 
+  it("lists the newest five of our payments, and folds the rest away", async () => {
+    const payments = Array.from({ length: 8 }, (_, index) => ({
+      at: `2026-09-27T1${index}:00:00+00:00`, amount: index + 1, txHash: `0x${String(index).repeat(16)}`, chain: "ARC-TESTNET",
+    }));
+    vi.mocked(readOpenNumbers).mockResolvedValue({ ...NUMBERS, ourPayments: payments });
+    const markup = await render();
+    const list = markup.slice(markup.indexOf('aria-labelledby="our-payments-arc-testnet"'));
+    const shown = list.slice(0, list.indexOf("<details"));
+    expect(shown.match(/explorer\.testnet\.arc\.io\/tx\//g)).toHaveLength(5);
+    expect(text(list)).toContain("Show 3 more");
+    for (const payment of payments) expect(markup).toContain(`/tx/${payment.txHash}"`);
+  });
+
+  it("leads with customers' figures, each with the total that includes our own workspaces", async () => {
+    const markup = await render();
+    const customers = markup.slice(markup.indexOf('aria-labelledby="customers-arc-testnet"'), markup.indexOf('aria-labelledby="agent-arc-testnet"'));
+    const page = text(customers);
+    expect(page).toContain("Real customer usage");
+    // Customers' 4 payments, with the 12 that include ours beside them; their median, with the total's.
+    expect(page).toMatch(/Payments settled 4 Confirmed by Circle on Arc testnet\. With our workspaces: 12/);
+    // text() folds the no-break spaces inside a duration into spaces.
+    expect(page).toMatch(/Median time to first payment 1 h 35 min From opening a workspace to its first settled payment\. With our workspaces: 4 h 45 min/);
+    expect(page).toContain("1,234.50 USDC");
+    expect(page).toContain("never listed one by one");
+    // The headline comes before the agent's figures, and both before the full table.
+    expect(markup.indexOf("Real customer usage")).toBeLessThan(markup.indexOf("How the agent performs"));
+    expect(markup.indexOf("How the agent performs")).toBeLessThan(markup.indexOf('aria-label="Every figure"'));
+  });
+
+  it("shows the agent's shares across every workspace, with customers' own beneath", async () => {
+    const page = text(await render());
+    // 9 carried out of 12 decided across every workspace; customers' 3 of 4.
+    expect(page).toMatch(/Decided by the agent itself 75% 9 of 12 payment decisions/);
+    expect(page).toContain("Customers: 75% (3 of 4)");
+    expect(page).toMatch(/Invoices paid on time 75% 9 of 12 invoices paid/);
+    expect(page).toMatch(/Agent flags upheld 50% 3 of 6 flags a person decided/);
+  });
+
+  it("counts each check between a model and the money, the uncomfortable ones too", async () => {
+    const markup = await render();
+    const controls = text(markup.slice(markup.indexOf('aria-labelledby="controls-arc-testnet"'), markup.indexOf('aria-labelledby="payments-by-day-arc-testnet"')));
+    expect(controls).toMatch(/A model proposes 27 decisions made by a model In 21 agent cycles, deciding 15 invoices\./);
+    expect(controls).toMatch(/Compared with the written policy 3 times the model disagreed/);
+    expect(controls).toMatch(/Hard limits in code 3 decisions refused by code/);
+    expect(controls).toContain("0 duplicate invoices caught before payment.");
+    expect(controls).toMatch(/A person when it matters 3 decisions escalated to a person 3 resolved by a person so far\./);
+    expect(controls).toMatch(/Settles on Arc testnet 12 payments settled 3 of them paid contractor milestones\./);
+  });
+
+  it("folds the method into groups, every definition still on the page", async () => {
+    const markup = await render();
+    const method = markup.slice(markup.indexOf('<section aria-labelledby="method"'));
+    const groups = [...method.matchAll(/<summary[^>]*>(.*?)<\/summary>/g)].map((match) => text(match[1]));
+    expect(groups).toEqual(["Networks, periods and freshness", "Customers and our workspaces", "Payments and money", "The agent's decisions", "What is never shown"]);
+    expect(method).not.toMatch(/<details[^>]*\sopen/);
+    expect(text(method)).toContain("A decision is refused by code when a hard limit blocked it, whether a model or the written policy proposed it.");
+  });
+
   it("draws the settled payments by day, with a legend and a table view", async () => {
     const markup = await render();
     expect(markup).toContain('role="img"');
@@ -199,7 +271,8 @@ describe("the /open page", () => {
     expect(page).toContain("Sep 28, 2026");
     expect(markup).toContain("<details");
     // A customer's amounts never appear by day, in the tooltip or the table view.
-    const details = markup.slice(markup.indexOf("<details"));
+    const from = markup.slice(markup.indexOf('aria-label="Settled payments by day, as a table"'));
+    const details = from.slice(0, from.indexOf("</table>"));
     const dayColumns = [...details.matchAll(/<th scope="col"[^>]*>(.*?)<\/th>/g)].map((match) => text(match[1]));
     expect(dayColumns).toEqual(["Day", "Customers", "Our workspaces", "USDC"]);
     expect(markup).toContain("<title>Sep 28, 2026: 1 by customers, 2 by our workspaces (3.00 USDC)</title>");
@@ -210,6 +283,7 @@ describe("the /open page", () => {
     const markup = await render();
     expect(markup).not.toContain('role="img"');
     expect(text(markup)).toContain("No payment settled in this period.");
+    expect(text(markup)).not.toContain("Latest payment settled on");
   });
 
   it("still renders, without figures, when the numbers cannot be read", async () => {
@@ -225,11 +299,19 @@ describe("the /open page", () => {
 });
 
 describe("the /open page, one network at a time (network foundation N7)", () => {
-  it("shows Arc mainnet first, then Arc testnet, each in a section of its own", async () => {
+  /** The networks' headings, in page order. */
+  const networkHeadings = (markup: string) => [...markup.matchAll(/<h2 id="(mainnet|testnet)"[^>]*>(.*?)<\/h2>/g)].map((match) => text(match[2]));
+
+  it("leads with a network that has figures, and puts an empty one after it, each in a section of its own", async () => {
     const markup = await render();
-    const headings = [...markup.matchAll(/<h2 id="(mainnet|testnet)"[^>]*>(.*?)<\/h2>/g)].map((match) => text(match[2]));
-    expect(headings).toEqual(["Arc mainnet", "Arc testnet"]);
+    expect(networkHeadings(markup)).toEqual(["Arc testnet", "Arc mainnet"]);
     expect(vi.mocked(readOpenNumbers).mock.calls.map((call) => call[1]).sort()).toEqual(["arc-mainnet", "arc-testnet"]);
+    expect(text(markup)).toContain("Latest payment settled on Sep 28, 2026");
+  });
+
+  it("shows Arc mainnet first once both networks have figures", async () => {
+    byNetwork({ mainnet: NUMBERS, testnet: NUMBERS });
+    expect(networkHeadings(await render())).toEqual(["Arc mainnet", "Arc testnet"]);
   });
 
   it("says no workspace runs on Arc mainnet yet, rather than show a table of zeros", async () => {

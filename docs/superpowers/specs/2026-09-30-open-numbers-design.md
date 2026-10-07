@@ -135,3 +135,30 @@ was overruled when the rule-based path's decisions count too; and customers' per
   - 5 payments settled on Arc testnet, 12.50 USDC, to 2 payee wallets;
   - 5 invoices decided;
   - 44 cycles, with 56 decisions made by a model.
+
+## 9. Redesign (2026-10-07)
+
+The page read as a database report: every figure at the same weight, a screen of Arc mainnet zeros first, and the
+agent's outcomes in a second table. It now answers, top down, who uses Vestiarion, whether money settles, what the
+agent does on its own, what stops it, and how to check it. No figure, query or ruling changed; R6 holds (customers'
+payments are counted, never listed, and never shown as a day's amount).
+
+- **Order.** A network with figures gets the full section, Arc mainnet before Arc testnet when both have some; a network
+  with nothing in it yet, or whose numbers cannot be read, is a compact card after them. A page of zeros never leads.
+- **Heading.** "Vestiarion, in production", a live badge with the time read, and three promises: customers counted apart,
+  one network at a time, checkable on chain.
+- **Real customer usage.** Six headline figures are customers' alone, each with the total that includes our workspaces
+  beneath it, so nobody has to ask how many of them are the team's.
+- **How the agent performs.** Four shares across every workspace (decided by the agent itself, paid on time, on time with
+  no person involved, flags upheld), each with its meter, its counts and customers' own share.
+- **What stands between the model and the money.** The checks a payment decision passes, each with its count: a model
+  proposes; it is compared with the written policy; hard limits in code; a person when it matters; it settles. The row
+  once named "Model departed from the written policy" is now "Model disagreed with the written policy": the same
+  figure, named for what it measures, and the method says the model's choice still passes the same checks in code.
+- **Payments you can check on chain.** The newest five of ours, the rest behind a disclosure.
+- **Every figure.** One table, folded, grouped as adoption, money moved, agent activity, outcomes, and safety and
+  controls; customers' column is the one set in ink.
+- **How the figures are counted.** The method, unchanged, folded into five groups, with the two new definitions
+  (disagreeing with the written policy, refused by code).
+- Not done, because the data does not exist or would break R6: milestone annotations on the chart, a USDC-by-day view
+  for customers, and a "view all payments" page past the latest 20.

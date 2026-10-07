@@ -4,6 +4,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/Table";
 import { utcDay } from "@/lib/copy";
 import type { DailyPayments } from "@/lib/platform/open-numbers";
+import { SectionHead } from "./SectionHead";
 import { formatFigure } from "./OpenNumbersTable";
 import type { NetworkProfile } from "@/lib/network";
 
@@ -49,11 +50,9 @@ export function PaymentsChart({ series, network }: { series: DailyPayments[]; ne
   const id = `payments-by-day-${network.id}`;
 
   return (
-    <section aria-labelledby={id} className="mt-12">
+    <section aria-labelledby={id}>
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <h2 id={id} className="text-xl font-semibold tracking-tight text-ink">
-          Settled payments by day
-        </h2>
+        <SectionHead id={id} eyebrow="Activity" title="Settled payments by day" />
         {series.length > 0 && (
           <ul className="flex flex-wrap gap-4 text-xs text-ink-2" aria-label="Legend">
             {SERIES.map((entry) => (
@@ -66,7 +65,7 @@ export function PaymentsChart({ series, network }: { series: DailyPayments[]; ne
         )}
       </div>
       {series.length === 0 ? (
-        <EmptyState compact className="mt-4" title="No payment settled in this period." body={`Settled ${network.label} payments appear here by day.`} />
+        <EmptyState compact className="mt-5" title="No payment settled in this period." body={`Settled ${network.label} payments appear here by day.`} />
       ) : (
         <Chart series={series} customers={customers} ours={ours} label={network.label} />
       )}
@@ -87,7 +86,7 @@ function Chart({ series, customers, ours, label }: { series: DailyPayments[]; cu
   const summary = `${customers + ours} settled payments from ${fullDay(series[0].day)} to ${fullDay(series[series.length - 1].day)}: ${customers} by customers, ${ours} by our workspaces.`;
 
   return (
-    <figure className="mt-4 rounded-2xl border border-line bg-surface p-4 shadow-surface">
+    <figure className="mt-5 rounded-2xl border border-line bg-surface p-4 shadow-surface">
       <div role="region" aria-label={`Settled payments by day on ${label}, chart`} tabIndex={0} className="overflow-x-auto rounded-lg">
         <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} role="img" aria-label={summary} className="h-auto w-full min-w-[40rem]">
           {ticks.map((tick) => (
