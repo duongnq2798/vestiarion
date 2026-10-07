@@ -10,17 +10,16 @@ public pages is checkable, so a mark may only stand for an integration the code 
 
 ## 2. Rulings
 
-- **M1 — only real integrations.** Arc (payments settle there), Slack and Telegram (the agent asks and reports there),
-  and npm (the SDK is published there). Circle routes the payments too and shows as its name until its official mark is
-  added. **Gmail has no mark:** the invoice inbox is reached by forwarding from any mailbox (Resend inbound), and there
+- **M1 — only real integrations.** Arc (payments settle there), Circle (its wallets carry them), Slack and Telegram (the
+  agent asks and reports there), and npm (the SDK is published there). **Gmail has no mark:** the invoice inbox is reached by forwarding from any mailbox (Resend inbound), and there
   is no Gmail integration to stand for.
 - **M2 — in words, beside a name.** "Built on", "Payments through", "Works with", "SDK on"; never "partners", "trusted
   by", "powered by". A mark is decoration (`aria-hidden`) beside its written name, never instead of it. npm's mark spells
   its name, so there the written name is for screen readers only.
 - **M3 — one ink.** Each mark is drawn with `currentColor` from one inline path (`src/components/vx/BrandMarks.tsx`):
   no brand colour, gradient or image, so it sits quietly in either theme. The shape is the owner's, unaltered. Arc's
-  symbol is traced (potrace) from the PNG logo Arc publishes, since no SVG was at hand; Slack's, Telegram's and npm's
-  paths are their published SVGs'. Official SVGs for Arc and Circle replace these when they arrive.
+  symbol is traced (potrace) from the PNG logo Arc publishes, since no SVG was at hand; Slack's, Telegram's, npm's
+  and Circle's paths are their published SVGs'. An official SVG for Arc replaces the trace when it arrives.
 - **M4 — each with its evidence.** On the landing page every service links to what proves it: `/open` for Arc, the live
   provider's code for Circle, the guides for Slack and Telegram, the SDK page for npm.
 
@@ -33,6 +32,10 @@ public pages is checkable, so a mark may only stand for an integration the code 
 
 ## 4. Tests
 
-`tests/brand-marks.test.tsx`: one colour and hidden from assistive technology; exactly the four brands, no Gmail; no file
+`tests/brand-marks.test.tsx`: one colour and hidden from assistive technology; exactly the five brands, no Gmail; no file
 draws a mark without the brand's name; the landing strip's names, links, and wording. The Slack panel, Telegram card
 and `/open` tests check the mark beside each name.
+
+## 5. Changes
+
+- **2026-10-07.** Circle's mark added, from the monochrome symbol Circle publishes; it was its name alone before.
