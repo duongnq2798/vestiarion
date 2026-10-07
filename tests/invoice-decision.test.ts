@@ -539,6 +539,7 @@ describe("invoiceDecision: a payment held in shadow mode (shadow mode S2)", () =
   const apPay = entry(41, "ap_pay", "agent", {
     invoiceId: "inv-1",
     decision: { action: "pay", reasoning: "Matched and within the limit; paying now.", confidence: 0.9 },
+    observed: { amount: 400, riskLevel: "clear" },
     guardrailBlocked: false,
     guardrailRule: null,
     execution: { resultingStatus: "held", heldBecause: "shadow_verdict" },
@@ -568,7 +569,7 @@ describe("invoiceDecision: a payment held in shadow mode (shadow mode S2)", () =
 describe("invoiceDecision: the verdict a card shows (shadow mode S3)", () => {
   const apPay: LedgerEntry = {
     seq: 41, id: "e41", ts: "2026-10-07T10:00:00.000Z", actor: "agent", domain: "ap", action: "ap_pay", summary: "ap_pay",
-    detail: { invoiceId: "inv-1", decision: { action: "pay" }, guardrailBlocked: false, execution: { resultingStatus: "held", heldBecause: "shadow_verdict" } },
+    detail: { invoiceId: "inv-1", decision: { action: "pay" }, observed: { amount: 400 }, guardrailBlocked: false, execution: { resultingStatus: "held", heldBecause: "shadow_verdict" } },
     bodyHash: "00", signature: "00", prevHash: "00", hash: "00", signingKeyId: null,
   };
 
@@ -577,6 +578,7 @@ describe("invoiceDecision: the verdict a card shows (shadow mode S3)", () => {
     const verdicts = { shadow: { startedAt: "2026-10-07T00:00:00.000Z" }, given: new Map(), canGive: true };
     expect(invoiceDecision(held, undefined, [apPay], { network: "arc-testnet", verdicts }).verdict).toEqual({
       entrySeq: 41, agentAction: "ap_pay", given: null, open: true, heldForVerdict: true,
+      payment: { amountUsdc: 400, payee: "Northwind Supply", address: null },
     });
     expect(invoiceDecision(held, undefined, [apPay], { network: "arc-testnet" }).verdict).toBeUndefined();
   });
@@ -609,5 +611,34 @@ describe("invoiceDecision: a bill in the business's own currency (shadow mode S6
   it("shows no bill for an invoice written in USDC", () => {
     const decision = invoiceDecision(invoice(), undefined, [], { network: "arc-testnet" });
     expect(decision.evidence.some((item) => item.label === "Bill")).toBe(false);
+  });
+});
+
+describe("invoiceDecision: a hold read from the agent's decision, past a newer entry (shadow mode review I1)", () => {
+  const entry = (seq: number, action: string, detail: Record<string, unknown>): LedgerEntry => ({
+    seq, id: `e${seq}`, ts: "2026-10-07T10:00:00.000Z", actor: "agent", domain: "ap", action, summary: action, detail,
+    bodyHash: "00", signature: "00", prevHash: "00", hash: "00", signingKeyId: null,
+  });
+  const decidedWith = (execution: Record<string, unknown>) =>
+    entry(41, "ap_pay", { invoiceId: "inv-1", decision: { action: "pay" }, observed: { amount: 400 }, guardrailBlocked: false, execution });
+  const escalated = entry(50, "invoice_escalated", { invoiceId: "inv-1", followUp: { action: "escalate", reason: "Held for 3 days." } });
+
+  it("still says a payment waits for a person to agree once the follow-up has escalated it", () => {
+    const decision = invoiceDecision(invoice({ status: "held" }), undefined, [escalated, decidedWith({ resultingStatus: "held", heldBecause: "shadow_verdict" })], {
+      network: "arc-testnet",
+      verdicts: { shadow: { startedAt: "2026-10-07T00:00:00.000Z" }, given: new Map(), canGive: true },
+    });
+    expect(decision.heldForVerdict).toBe(true);
+    expect(decision.verdict).toMatchObject({ entrySeq: 41, heldForVerdict: true, open: true });
+  });
+
+  it("still says a payment waits for its cash once the follow-up has escalated it", () => {
+    const decision = invoiceDecision(
+      invoice({ status: "held" }),
+      undefined,
+      [escalated, decidedWith({ resultingStatus: "held", heldBecause: "cash_shortfall", cashNeededUsdc: 400, cashSeen: { operating: 10, reserve: 0 } })],
+      { network: "arc-testnet" }
+    );
+    expect(decision.heldForCash).toBe(true);
   });
 });

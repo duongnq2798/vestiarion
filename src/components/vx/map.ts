@@ -241,7 +241,8 @@ export function invoiceDecision(
 ): Decision {
   const decision: Decision = { ...decideInvoice(invoice, counterparty, entries, options), network: options.network };
   // A person's verdict on the agent's decision, where the page reads the facts for it (shadow mode S3).
-  const verdict = options.verdicts ? verdictView(invoice.id, entries, options.verdicts, decision.heldForVerdict === true) : undefined;
+  const payment = { amountUsdc: invoice.amount, payee: invoice.counterparty_name ?? counterparty?.name ?? "the payee", address: counterparty?.address ?? null };
+  const verdict = options.verdicts ? verdictView(invoice.id, entries, options.verdicts, decision.heldForVerdict === true, payment) : undefined;
   return verdict ? { ...decision, verdict } : decision;
 }
 
@@ -339,9 +340,11 @@ function decideInvoice(
       duplicateEvidence(observed),
     ].filter((item): item is Evidence => item !== null),
     guardrail: guardrailBlocked ? invoiceGuardrail(invoice.amount, currency, usdcValue, limit, risk, rule, entry?.detail) : null,
-    ...(invoice.status === "held" && heldForCash(entry?.detail) ? { heldForCash: true } : {}),
+    // Why the agent's own decision held it, read from that decision: a newer entry, such as the follow-up's escalation,
+    // says nothing of it (shadow mode review I1).
+    ...(invoice.status === "held" && heldForCash(decided?.detail) ? { heldForCash: true } : {}),
     // Held in shadow mode for a person to agree, which no rule did (shadow mode S2).
-    ...(invoice.status === "held" && heldForVerdict(entry?.detail) ? { heldForVerdict: true } : {}),
+    ...(invoice.status === "held" && heldForVerdict(decided?.detail) ? { heldForVerdict: true } : {}),
     decisionMode: stringValue(entry?.detail.decisionMode),
     // A Gateway payout has no Arc transaction of its own: its hash is the mint, linked below on the payee's
     // chain. No mint is ever linked to Arc's explorer (Gateway review I4).

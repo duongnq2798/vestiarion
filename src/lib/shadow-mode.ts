@@ -84,8 +84,10 @@ export async function endShadowMode(input: { actorId: string }): Promise<void> {
   if (!current) throw new ShadowModeError("already_off");
   await refuseWhileCycleRuns();
 
-  const removed = await db().from("shadow_modes").delete().eq("org_id", currentOrgId());
+  // Turned off a moment before, from another tab: that was this change, and it is recorded once (review M5).
+  const removed = await db().from("shadow_modes").delete().eq("org_id", currentOrgId()).select("org_id");
   if (removed.error) throw new Error(removed.error.message);
+  if ((removed.data ?? []).length === 0) throw new ShadowModeError("already_off");
 
   await appendLedgerEntryBestEffort(currentOrgId(), {
     actor: "human",

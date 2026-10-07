@@ -48,7 +48,13 @@ export default async function ApprovalsPage({ params }: { params: Promise<{ slug
     );
     const verdicts = verdictEntries.length > 0 ? await verdictFacts(db(), verdictEntries, canDecide) : null;
     const verdictFor = (payable: (typeof waiting)[number]) =>
-      verdicts ? verdictView(payable.id, verdictEntries.filter((entry) => entry.detail.invoiceId === payable.id), verdicts, payable.heldForVerdict === true) : undefined;
+      verdicts
+        ? verdictView(payable.id, verdictEntries.filter((entry) => entry.detail.invoiceId === payable.id), verdicts, payable.heldForVerdict === true, {
+            amountUsdc: payable.amount,
+            payee: payable.counterpartyName,
+            address: payable.address,
+          })
+        : undefined;
     // Who approved a payment above the figure for two approvals, by email (two approvals T8): read only when someone has.
     const approverIds = new Set(waiting.flatMap((payable) => payable.twoApprovals?.approvals.map((approval) => approval.by) ?? []));
     const memberEmails: Record<string, string> =

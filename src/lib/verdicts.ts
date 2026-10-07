@@ -55,10 +55,11 @@ export interface GivenVerdict {
 /** What follows a verdict once it is recorded: Agree and pay, or Disagree and return or reject. */
 export type AfterVerdict = "pay" | "return" | "reject";
 
-/** What an action after a verdict came to, in the words a person reads. */
+/** What an action after a verdict came to, in the words a person reads; changed when a refusal came after something changed, such as a transfer that failed. */
 export interface ActionOutcome {
   ok: boolean;
   message: string;
+  changed?: boolean;
 }
 
 /**
@@ -66,12 +67,14 @@ export interface ActionOutcome {
  * agreed to passes every check Approve and pay has, and its refusals read the same.
  */
 export interface VerdictActions {
-  approve: (invoiceId: string) => Promise<ActionOutcome>;
+  /** Approve and pay, given the address the card showed, so a changed one is refused as Approve and pay refuses it. */
+  approve: (invoiceId: string, shownAddress?: string) => Promise<ActionOutcome>;
   reject: (invoiceId: string, reason: string | null) => Promise<ActionOutcome>;
   returnToAgent: (invoiceId: string) => Promise<ActionOutcome>;
 }
 
 const NOT_HELD: ActionOutcome = { ok: false, message: "It no longer waits for your verdict, so nothing was paid." };
+const LEFT_AS_IS: ActionOutcome = { ok: false, message: "It no longer waits for your verdict, so it was left as it is." };
 
 type DecisionEntry = { seq: number; ts: string; actor: string; action: string; summary: string; detail: Record<string, unknown> };
 
@@ -111,9 +114,9 @@ async function verdictOn(entrySeq: number): Promise<GivenVerdict | null> {
 }
 
 export async function giveVerdict(
-  input: { actorId: string; entrySeq: number; verdict: Verdict; reason?: string; then?: AfterVerdict },
+  input: { actorId: string; entrySeq: number; verdict: Verdict; reason?: string; then?: AfterVerdict; shownAddress?: string },
   actions: VerdictActions
-): Promise<{ given: GivenVerdict; already: boolean; after?: ActionOutcome }> {
+): Promise<{ given: GivenVerdict; already: boolean; recorded: boolean; after?: ActionOutcome }> {
   const shadow = await readShadowMode(db());
   if (!shadow) throw new VerdictError("not_in_shadow");
   if (input.then === "pay" && input.verdict !== "agree") throw new VerdictError("pay_needs_agreement");
@@ -129,41 +132,56 @@ export async function giveVerdict(
   }
   if (Date.parse(entry.ts) < Date.parse(shadow.startedAt)) throw new VerdictError("before_shadow");
 
-  // The row keeps one verdict per decision: a second, from another tab or another person, answers with the first.
-  const write = await db().from("decision_verdicts").insert({
-    entry_seq: input.entrySeq,
-    subject: "invoice",
-    subject_id: invoiceId,
-    agent_action: entry.action,
-    verdict: input.verdict,
-    reason,
-    decided_by: input.actorId,
-  });
-  if (write.error) {
-    if (write.error.code === "23505") {
-      const first = await verdictOn(input.entrySeq);
-      if (first) return { given: first, already: true };
-    }
-    throw new Error(write.error.message);
-  }
-
-  await appendLedgerEntryBestEffort(currentOrgId(), {
-    actor: "human",
-    domain: "ap",
-    action: "decision_verdict",
-    summary: `${input.verdict === "agree" ? "Agreed" : "Disagreed"} with the agent: ${entry.summary}`,
-    // The payable is its subject, never its invoiceId: the card keeps showing the decision, not the verdict on it.
-    detail: { by: input.actorId, entrySeq: input.entrySeq, subject: "invoice", subjectId: invoiceId, agentAction: entry.action, verdict: input.verdict, reason },
-  });
+  // A verdict given already answers, and nothing else is done: not a payment after someone disagreed.
+  const first = await verdictOn(input.entrySeq);
+  if (first) return { given: first, already: true, recorded: false };
 
   const given = { verdict: input.verdict, reason };
+  /** Keeps the verdict once: a second, from another tab or another person a moment before, answers with the first. */
+  const keep = async (): Promise<GivenVerdict | null> => {
+    const write = await db().from("decision_verdicts").insert({
+      entry_seq: input.entrySeq,
+      subject: "invoice",
+      subject_id: invoiceId,
+      agent_action: entry.action,
+      verdict: input.verdict,
+      reason,
+      decided_by: input.actorId,
+    });
+    if (write.error) {
+      if (write.error.code === "23505") return verdictOn(input.entrySeq);
+      throw new Error(write.error.message);
+    }
+    await appendLedgerEntryBestEffort(currentOrgId(), {
+      actor: "human",
+      domain: "ap",
+      action: "decision_verdict",
+      summary: `${input.verdict === "agree" ? "Agreed" : "Disagreed"} with the agent: ${entry.summary}`,
+      // The payable is its subject, never its invoiceId: the card keeps showing the decision, not the verdict on it.
+      detail: { by: input.actorId, entrySeq: input.entrySeq, subject: "invoice", subjectId: invoiceId, agentAction: entry.action, verdict: input.verdict, reason },
+    });
+    return null;
+  };
+  const kept = async () => {
+    const before = await keep();
+    return before ? { given: before, already: true, recorded: false } : { given, already: false, recorded: true };
+  };
+
+  if (!input.then) return kept();
+  // What follows a verdict acts only on the payable still waiting for this decision's verdict (review I2, M2); the
+  // verdict is kept either way.
+  if (!(await stillHeldFor(entry, invoiceId))) return { ...(await kept()), after: input.then === "pay" ? { ...NOT_HELD } : { ...LEFT_AS_IS } };
   if (input.then === "pay") {
-    if (!(await stillHeldFor(entry, invoiceId))) return { given, already: false, after: { ...NOT_HELD } };
-    return { given, already: false, after: await actions.approve(invoiceId) };
+    // Paid first, through Approve and pay's own command and checks, with the address the card showed (review C1):
+    // an agreement whose payment is refused is not kept, so it can be agreed to and paid again (review I2, M3).
+    const after = await actions.approve(invoiceId, input.shownAddress);
+    // A transfer tried and failed is still the agreement acted on (changed): it is kept, with why it failed.
+    if (!after.ok && !after.changed) return { given, already: false, recorded: false, after };
+    return { ...(await kept()), after };
   }
-  if (input.then === "return") return { given, already: false, after: await actions.returnToAgent(invoiceId) };
-  if (input.then === "reject") return { given, already: false, after: await actions.reject(invoiceId, reason) };
-  return { given, already: false };
+  const result = await kept();
+  if (result.already) return result;
+  return { ...result, after: input.then === "return" ? await actions.returnToAgent(invoiceId) : await actions.reject(invoiceId, reason) };
 }
 
 /** The verdicts given on the decision entries named, by entry. */
