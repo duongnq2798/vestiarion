@@ -45,7 +45,7 @@ import { AuditLedger, DomainFilter } from "@/components/vx/AuditLedger";
 import { CycleReport } from "@/components/vx/CycleReport";
 import { DecisionCard } from "@/components/vx/DecisionCard";
 import { DecisionRows, RowGroupHeading } from "@/components/vx/DecisionRows";
-import { payableSignals } from "@/components/vx/decision-signals";
+import { payableSignals, stoppedWhy } from "@/components/vx/decision-signals";
 import { InsightsCharts } from "@/components/vx/InsightsCharts";
 import { PerformanceHistory } from "@/components/vx/PerformanceHistory";
 import { ProvenanceBar } from "@/components/vx/Provenance";
@@ -505,7 +505,7 @@ export default function DesignPage() {
                 <RowGroupHeading title="Upcoming" count={DECISIONS.length} />
                 <DecisionRows
                   orgSlug={DESIGN_SLUG}
-                  items={DECISIONS.map((decision, index) => ({ decision, date: index === 1 ? { label: "Overdue Sep 30, 2026", tone: "held" as const } : { label: "Due Oct 5, 2026" }, signals: payableSignals(decision) }))}
+                  items={DECISIONS.map((decision, index) => ({ decision, date: index === 1 ? { label: "Overdue Sep 30, 2026", tone: "held" as const } : { label: "Due Oct 5, 2026" }, signals: payableSignals(decision), why: decision.outcome === "refused" || decision.outcome === "held" ? stoppedWhy(decision) : undefined }))}
                 />
               </div>
               {/* As the console lists them: the reasoning folded to its first lines. */}

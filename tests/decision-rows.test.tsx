@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("@/app/actions/recurring", () => ({ createRecurringPayableAction: vi.fn(), stopRecurringPayableAction: vi.fn() }));
 import { readiness } from "@/components/CounterpartyRow";
 import { DecisionRows } from "@/components/vx/DecisionRows";
-import { payableSignals } from "@/components/vx/decision-signals";
+import { payableSignals, stoppedWhy } from "@/components/vx/decision-signals";
 import { RecurringSummary } from "@/components/vx/RecurringSummary";
 import type { Decision } from "@/components/vx/types";
 
@@ -74,6 +74,12 @@ describe("DecisionRows", () => {
     expect(summary).toMatch(/text-held[\s\S]*Not received/);
   });
 
+  it("says under the title why a row waits for a person", () => {
+    const markup = renderToStaticMarkup(<DecisionRows orgSlug="testnet-2" items={[{ decision: DECISION, why: "Code stopped it: the payout fee is above 10% of the invoice." }]} />);
+    const summary = text(markup.slice(markup.indexOf("<summary"), markup.indexOf("</summary>")));
+    expect(summary).toContain("Why · Code stopped it: the payout fee is above 10% of the invoice.");
+  });
+
   it("opens a row from the start when asked, with its card in view", () => {
     const markup = renderToStaticMarkup(<DecisionRows orgSlug="testnet-2" items={[{ decision: DECISION, open: true }]} />);
     expect(markup).toMatch(/<details[^>]*\sopen/);
@@ -105,9 +111,12 @@ describe("the AP / AR page", () => {
     expect(payables).toContain("settled.slice(0, HISTORY_SHOWN)");
   });
 
-  it("opens the rows that need a person while there are few, and shows what the agent checked on what waits and what is coming", () => {
-    expect(page).toContain("const OPEN_WAITING_UP_TO = 3;");
-    expect(page).toContain("open: needsYou.length <= OPEN_WAITING_UP_TO, signals: payableSignals(decision)");
+  it("keeps the rows that need a person closed, each with what the agent checked and why it waits", () => {
+    const needsYou = page.slice(page.indexOf('title="Needs you"'), page.indexOf('title="Upcoming"'));
+    expect(needsYou).not.toMatch(/open: /);
+    expect(needsYou).toContain("{ signals: payableSignals(decision), why: stoppedWhy(decision) }");
+    // A row whose hint says what it needs needs no why line besides.
+    expect(page).toContain("why: hint ? undefined : extra.why");
     expect(page).toContain("row(decision, withVerdict(receiptFor), { signals: payableSignals(decision) })");
   });
 
@@ -209,6 +218,17 @@ describe("what the agent checked on a payable", () => {
       { label: "High risk", state: "missing" },
       { label: "Over its limit", state: "missing" },
     ]);
+  });
+
+  it("says why a payable waits: the rule, when code stopped it, else the agent's own first sentence", () => {
+    const guarded = { ...DECISION, outcome: "refused" as const, guardrail: { rule: "bridge.fee_above_cap", attempted: 0.75 } };
+    expect(stoppedWhy(guarded)).toBe("Code stopped it: the payout fee is above 10% of the invoice.");
+    const held = { ...DECISION, outcome: "held" as const, reasoning: "The three-way match is incomplete: no purchase order is on file. Ask for it before paying." };
+    expect(stoppedWhy(held)).toBe("The three-way match is incomplete: no purchase order is on file.");
+    // A rule with no words of its own gives way to the reasoning.
+    expect(stoppedWhy({ ...held, guardrail: { rule: "some.new_rule", attempted: 1 } })).toBe("The three-way match is incomplete: no purchase order is on file.");
+    expect(stoppedWhy({ ...held, reasoning: `${"a".repeat(200)}.` })?.length).toBe(160);
+    expect(stoppedWhy({ ...held, domain: "ar" })).toBeNull();
   });
 
   it("says nothing for a receivable", () => {

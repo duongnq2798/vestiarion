@@ -517,7 +517,7 @@ describe("the new control screens, as source", () => {
 
   it("Invoices tells a waiting payable's row what it needs, and gives its card what a person can do about it", () => {
     const invoices = read("src/app/o/[slug]/invoices/page.tsx");
-    expect(invoices).toContain("hint: facts ? waitingHint(facts.onFile, facts.added) : undefined");
+    expect(invoices).toContain("const hint = facts ? waitingHint(facts.onFile, facts.added) : undefined;");
     expect(invoices).toContain("needsYou.map((decision) => row(decision, withVerdict(needsYouFor), ");
     expect(invoices).toContain("<WaitingPayableAction");
     // A counterparty paid without purchase orders is never asked for one (three-way match design M2).
