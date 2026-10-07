@@ -79,6 +79,9 @@ const SHOTS = {
     await page.fill({ "passkey-treasury-daily": "50", "passkey-treasury-weekly": "200" });
   },
   "go-live-passkey-recovery": async () => {},
+  "go-live-passkey-phone": async (page) => {
+    await page.waitFor(`document.querySelector("details[open] svg[role=img]")`);
+  },
   "go-live-live": async () => {},
   "go-live-usyc": async () => {},
   "first-payment-counterparty": async (page) => {
@@ -384,9 +387,13 @@ async function main() {
     await page.send("Network.enable");
     await page.send("Network.setBlockedURLs", { urls: ["*googletagmanager.com*", "*google-analytics.com*"] });
     // A wallet that never answers: the pages find one, and nothing a shot does asks it anything. The passkey choice is
-    // shown as a browser with no wallet sees it.
+    // shown as a browser with no wallet sees it. Headless Edge keeps no passkey of its own: the shots say it does, as most
+    // computers do, but the phone handoff's, which shows a computer that keeps none.
     await page.send("Page.addScriptToEvaluateOnNewDocument", {
-      source: 'if (!location.pathname.endsWith("/go-live-passkey-choice")) window.ethereum = { request: () => new Promise(() => {}) };',
+      source: [
+        'if (!location.pathname.endsWith("/go-live-passkey-choice")) window.ethereum = { request: () => new Promise(() => {}) };',
+        'if (window.PublicKeyCredential) window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable = async () => !location.pathname.endsWith("/go-live-passkey-phone");',
+      ].join("\n"),
     });
     await page.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }, { name: "prefers-color-scheme", value: "light" }] });
 

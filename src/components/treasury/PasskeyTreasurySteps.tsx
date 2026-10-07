@@ -13,6 +13,7 @@ import {
   recordRecoveryAction,
   skipRecoveryAction,
 } from "@/app/actions/wallet-treasury";
+import { PhoneHandoff } from "@/components/treasury/PhoneHandoff";
 import { WalletTreasurySummary } from "@/components/treasury/WalletTreasurySteps";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -145,6 +146,7 @@ export function PasskeyWalletCard({ orgSlug, lead }: { orgSlug: string; lead: bo
         </Button>
       </div>
       <FormMessage tone={note?.tone ?? "neutral"}>{note?.text}</FormMessage>
+      <PhoneHandoff kind="create" />
     </div>
   );
 }
@@ -548,7 +550,13 @@ export default function PasskeyTreasurySteps({ orgSlug, status, network }: { org
         <h3 className="text-sm font-semibold text-ink">Set up your passkey wallet as the treasury</h3>
       </div>
       <WalletTreasurySummary status={status} network={network} />
-      {body && <div className="space-y-3 border-t border-line pt-4">{body}</div>}
+      {body && (
+        <div className="space-y-3 border-t border-line pt-4">
+          {body}
+          {/* Where the passkey signs, it can sign on a phone instead (src/lib/passkey-handoff.ts). */}
+          {(view === "setup" || view === "gas" || view === "recovery") && <PhoneHandoff kind="confirm" />}
+        </div>
+      )}
     </Card>
   );
 }
