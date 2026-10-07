@@ -37,6 +37,7 @@ import {
   passkeyTreasuryFailure,
   PasskeyTreasuryError,
   pendingSetup,
+  pollRecord,
   SETUP_MISMATCH,
   settlePasskeySetup,
   type PasskeyTreasury,
@@ -59,7 +60,7 @@ const AGENT_GAS_WEI = parseEther("0.5");
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 type Note = { tone: "neutral" | "error"; text: string } | null;
-type During = "create" | "open" | "setup" | "recovery";
+type During = "create" | "open" | "setup" | "recovery" | "check";
 
 const keepingStore = browserKeepingStore;
 
@@ -262,7 +263,7 @@ function FundStep({ status, label }: { status: WalletTreasuryStatus; label: stri
  */
 function PendingSetupStep({ orgSlug, status, label }: { orgSlug: string; status: WalletTreasuryStatus; label: string }) {
   const router = useRouter();
-  const { busy, note, run } = usePasskeyStep("setup");
+  const { busy, note, run } = usePasskeyStep("check");
   const check = () =>
     run(async (say) => {
       const store = keepingStore();
@@ -447,16 +448,17 @@ function RecoveryStep({ orgSlug, status, label }: { orgSlug: string; status: Wal
         return;
       }
       say(`Sent. Waiting for ${label} to confirm it…`);
-      for (let attempt = 0; attempt < POLL_TRIES; attempt += 1) {
-        const answer = await recordRecoveryAction(orgSlug, { recoveryAddress, txHash: outcome.txHash });
-        if (answer.ok && answer.state === "verified") {
-          setWords(null);
-          router.refresh();
-          return;
-        }
-        if (!answer.ok && !answer.chainUnreadable) throw new PasskeyTreasuryError(answer.message);
-        await sleep(POLL_MS);
+      const polled = await pollRecord({
+        record: () => recordRecoveryAction(orgSlug, { recoveryAddress, txHash: outcome.txHash }),
+        tries: POLL_TRIES,
+        waitMs: POLL_MS,
+      });
+      if (polled.state === "verified") {
+        setWords(null);
+        router.refresh();
+        return;
       }
+      if (polled.state === "refused") throw new PasskeyTreasuryError(polled.message);
       say(`${label} has not confirmed it yet. Reload this page to check again.`);
     });
 

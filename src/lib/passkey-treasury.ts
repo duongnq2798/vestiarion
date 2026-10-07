@@ -312,13 +312,18 @@ export async function openPasskeyTreasury(input: {
 const OWN_REFUSALS = [SETUP_MISMATCH];
 
 /** What a person is told when the passkey route fails (K10). Anything unforeseen goes to the console only. */
-export function passkeyTreasuryFailure(error: unknown, during: "create" | "open" | "setup" | "recovery"): string {
+export function passkeyTreasuryFailure(error: unknown, during: "create" | "open" | "setup" | "recovery" | "check"): string {
   const reason = browserReason(error);
   if (reason === "NotAllowedError") return during === "create" ? "No passkey was created. Nothing changed." : "The passkey was not used. Nothing changed.";
   if (reason === "NotSupportedError") return "This browser cannot use passkeys. Use one that can, such as Chrome or Safari, or connect a wallet instead.";
   if (reason === "SecurityError") return "Passkeys for Vestiarion wallets work only on www.vestiarion.xyz.";
   const message = error instanceof Error ? error.message : String(error);
   if (error instanceof PasskeyTreasuryError || OWN_REFUSALS.includes(message)) return message;
+  // Checking a setup sent before sends nothing, and what was sent stays sent (final review I3).
+  if (during === "check") {
+    console.error("passkey treasury", during, message);
+    return "The setup could not be checked just now; it is kept and not sent twice. Check again in a moment.";
+  }
   if (/AA21|prefund|insufficient funds/i.test(message)) return "The wallet does not hold enough USDC for this. Add a little more, then try again. Nothing was sent.";
   // Estimating a setup the wallet cannot carry out (its 0.50 USDC of gas, past what the fee set aside leaves) reverts.
   if (during === "setup" && /execution reverted|AA[235]\d/i.test(message)) {
@@ -334,6 +339,35 @@ export interface RecordAnswer {
   message: string;
   state: "pending" | "verified" | null;
   chainUnreadable?: true;
+}
+
+/** How asking to record what a passkey sent ended: recorded, refused for good, or not yet read. */
+export type PolledRecord = { state: "verified" } | { state: "refused"; message: string } | { state: "unread" };
+
+/**
+ * Asks the server to record what a passkey sent until it is recorded, refused, or the tries run out (final review I3).
+ * A call that throws (the page offline, the server unreachable) counts as not yet read, as an unread chain does: what
+ * was sent is never said to be nothing.
+ */
+export async function pollRecord(input: {
+  record: () => Promise<RecordAnswer>;
+  tries: number;
+  waitMs: number;
+  sleep?: (ms: number) => Promise<void>;
+}): Promise<PolledRecord> {
+  const sleep = input.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  for (let attempt = 0; attempt < input.tries; attempt += 1) {
+    if (attempt > 0) await sleep(input.waitMs);
+    let answer: RecordAnswer;
+    try {
+      answer = await input.record();
+    } catch {
+      continue;
+    }
+    if (answer.ok && answer.state === "verified") return { state: "verified" };
+    if (!answer.ok && !answer.chainUnreadable) return { state: "refused", message: answer.message };
+  }
+  return { state: "unread" };
 }
 
 /**
@@ -354,7 +388,6 @@ export async function settlePasskeySetup(input: {
   say: (text: string) => void;
 }): Promise<"verified" | "pending"> {
   const { store, orgSlug, outcome, label } = input;
-  const sleep = input.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   const stillChecking = `The setup was sent. ${label} has not confirmed it yet; reload this page in a minute to check it again. It is not sent twice.`;
   if (outcome.kind === "reverted") {
     forgetPendingSetup(store, orgSlug);
@@ -367,17 +400,14 @@ export async function settlePasskeySetup(input: {
   }
   keepPendingSetup(store, orgSlug, { contract: input.contract, txHash: outcome.txHash as Hex });
   input.say(`Sent. Waiting for ${label} to confirm it…`);
-  for (let attempt = 0; attempt < input.tries; attempt += 1) {
-    if (attempt > 0) await sleep(input.waitMs);
-    const answer = await input.record(outcome.txHash);
-    if (answer.ok && answer.state === "verified") {
-      forgetPendingSetup(store, orgSlug);
-      return "verified";
-    }
-    if (!answer.ok && !answer.chainUnreadable) {
-      forgetPendingSetup(store, orgSlug);
-      throw new PasskeyTreasuryError(`The setup was sent, but it could not be recorded: ${answer.message}`);
-    }
+  const polled = await pollRecord({ record: () => input.record(outcome.txHash), tries: input.tries, waitMs: input.waitMs, sleep: input.sleep });
+  if (polled.state === "verified") {
+    forgetPendingSetup(store, orgSlug);
+    return "verified";
+  }
+  if (polled.state === "refused") {
+    forgetPendingSetup(store, orgSlug);
+    throw new PasskeyTreasuryError(`The setup was sent, but it could not be recorded: ${polled.message}`);
   }
   input.say(stillChecking);
   return "pending";

@@ -11,8 +11,10 @@ import {
   passkeyStepView,
   passkeyTreasuryFailure,
   pendingSetup,
+  pollRecord,
   settlePasskeySetup,
   type KeptCredential,
+  type RecordAnswer,
 } from "@/lib/passkey-treasury";
 import type { PasskeySdk } from "@/lib/passkey-wallet";
 
@@ -202,6 +204,16 @@ describe("settlePasskeySetup (K7, K10; final review I3)", () => {
     expect(pendingSetup(kept, "own-wallet-co")).toEqual({ contract: CONTRACT, userOpHash: OP });
   });
 
+  it("keeps a setup whose record call throws, and still says it was sent", async () => {
+    const kept = store();
+    const offline = async (): Promise<never> => {
+      throw new TypeError("Failed to fetch");
+    };
+    expect(await settle(kept, { kind: "sent", txHash: TX }, offline)).toBe("pending");
+    expect(pendingSetup(kept, "own-wallet-co")).toEqual({ contract: CONTRACT, txHash: TX });
+    expect(said.at(-1)).toBe("The setup was sent. Arc mainnet has not confirmed it yet; reload this page in a minute to check it again. It is not sent twice.");
+  });
+
   it("forgets a setup the server will never record, and says it was sent", async () => {
     const kept = store();
     const refused = async () => ({ ok: false, message: "The setup failed on chain; nothing was set up.", state: null });
@@ -219,6 +231,40 @@ describe("settlePasskeySetup (K7, K10; final review I3)", () => {
   });
 });
 
+describe("pollRecord (final review I3)", () => {
+  const poll = (record: () => Promise<RecordAnswer>) => pollRecord({ record, tries: 3, waitMs: 1, sleep: async () => {} });
+
+  it("counts a record call that throws as unread, and asks again", async () => {
+    let calls = 0;
+    const flaky = async () => {
+      calls += 1;
+      if (calls === 1) throw new TypeError("Failed to fetch");
+      return { ok: true, message: "", state: "verified" as const };
+    };
+    expect(await poll(flaky)).toEqual({ state: "verified" });
+    expect(calls).toBe(2);
+  });
+
+  it("ends unread when every call throws or the chain stays unread", async () => {
+    expect(
+      await poll(async () => {
+        throw new Error("An unexpected response was received from the server.");
+      })
+    ).toEqual({ state: "unread" });
+    expect(await poll(async () => ({ ok: false, message: "The chain could not be read just now.", state: null, chainUnreadable: true as const }))).toEqual({ state: "unread" });
+  });
+
+  it("stops at the server's refusal, with its message", async () => {
+    let calls = 0;
+    const refused = async () => {
+      calls += 1;
+      return { ok: false, message: "That registration was not sent from this workspace's wallet.", state: null };
+    };
+    expect(await poll(refused)).toEqual({ state: "refused", message: "That registration was not sent from this workspace's wallet." });
+    expect(calls).toBe(1);
+  });
+});
+
 describe("passkeyStepView (final review I3)", () => {
   it("checks a setup sent before anything else, even where the wallet now holds too little to set up", () => {
     expect(passkeyStepView({ step: "deploy", walletUsdc: 0.1, setupNeedsUsdc: 0.75, pending: true })).toBe("pending");
@@ -231,6 +277,20 @@ describe("passkeyStepView (final review I3)", () => {
   it("follows the status everywhere else", () => {
     for (const step of ["agent", "gas", "recovery"] as const) expect(passkeyStepView({ step, walletUsdc: 5, setupNeedsUsdc: 0.75, pending: true })).toBe(step);
     expect(passkeyStepView({ step: "ready", walletUsdc: 5, setupNeedsUsdc: 0.75, pending: false })).toBe("none");
+  });
+});
+
+describe("checking a setup sent before (final review I3)", () => {
+  const named = (name: string) => Object.assign(new Error("browser"), { name });
+
+  it("never says nothing was sent when the check itself fails", () => {
+    const failed = passkeyTreasuryFailure(new TypeError("Failed to fetch"), "check");
+    expect(failed).toBe("The setup could not be checked just now; it is kept and not sent twice. Check again in a moment.");
+    expect(failed).not.toMatch(/Nothing was sent/);
+  });
+
+  it("still names a passkey that was not used", () => {
+    expect(passkeyTreasuryFailure(named("NotAllowedError"), "check")).toBe("The passkey was not used. Nothing changed.");
   });
 });
 
