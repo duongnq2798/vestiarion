@@ -15,6 +15,8 @@ import { APPROVAL_RECORDED } from "../two-approvals";
  *
  * A decision from any surface but the console answers a card the surface showed (`card`), and passes the chat's rules
  * first (src/lib/commands/chat-decisions.ts, Slack design S10); an approval then pays the address those rules checked.
+ * A payable held in shadow mode for a person's verdict is settled through one (shadow mode S4): the verdict's own
+ * settling passes `forVerdict`, and the approvals library refuses every other before a verdict is given.
  */
 
 /** The chat's rules for a decision from any surface but the console; the console's decisions pass untouched. */
@@ -23,6 +25,9 @@ async function chatRules(actor: Actor, decision: "approve" | "reject" | "return"
   const check = await checkChatDecision(actor, decision, invoiceId, card);
   return check.ok ? { ok: true as const, address: check.address ?? undefined } : check;
 }
+
+/** The verdict's own settling of a payable held for one, passed on only when it is that (shadow mode S4). */
+const verdictSettles = (input: { forVerdict?: boolean }) => (input.forVerdict ? { forVerdict: true } : {});
 
 /** An `ApprovalError` carries a message safe to show; anything else goes to the server log. */
 function approvalRefusal(error: unknown): Refused {
@@ -44,7 +49,7 @@ export function heldMessage(note: string): string {
 
 export async function approvePayable(
   actor: Actor,
-  input: { invoiceId: string; shownAddress?: string; card?: ShownCard }
+  input: { invoiceId: string; shownAddress?: string; card?: ShownCard; forVerdict?: boolean }
 ): Promise<CommandOutcome<{ status: "paid" | "matched" | "approved"; txRef: string | null }>> {
   const refusal = gate(actor, "payable.approve");
   if (refusal) return refusal;
@@ -53,7 +58,7 @@ export async function approvePayable(
     const chat = await chatRules(actor, "approve", input.invoiceId, input.card);
     if (!chat.ok) return chat.refusal;
     const shownAddress = actor.surface.kind === "console" ? input.shownAddress : chat.address;
-    result = await approveAndPay({ actorId: actor.userId, invoiceId: input.invoiceId, shownAddress, ...provenanceOf(actor) });
+    result = await approveAndPay({ actorId: actor.userId, invoiceId: input.invoiceId, shownAddress, ...provenanceOf(actor), ...verdictSettles(input) });
   } catch (error) {
     return approvalRefusal(error);
   }
@@ -69,26 +74,26 @@ export async function approvePayable(
   return done(`${message}${fromReserveNote(result.fromReserveUsdc)}`, { status: result.status, txRef: result.txRef });
 }
 
-export async function rejectPayable(actor: Actor, input: { invoiceId: string; reason: string; card?: ShownCard }): Promise<CommandOutcome> {
+export async function rejectPayable(actor: Actor, input: { invoiceId: string; reason: string; card?: ShownCard; forVerdict?: boolean }): Promise<CommandOutcome> {
   const refusal = gate(actor, "payable.reject");
   if (refusal) return refusal;
   try {
     const chat = await chatRules(actor, "reject", input.invoiceId, input.card);
     if (!chat.ok) return chat.refusal;
-    await rejectInvoice({ actorId: actor.userId, invoiceId: input.invoiceId, reason: input.reason, ...provenanceOf(actor) });
+    await rejectInvoice({ actorId: actor.userId, invoiceId: input.invoiceId, reason: input.reason, ...provenanceOf(actor), ...verdictSettles(input) });
   } catch (error) {
     return approvalRefusal(error);
   }
   return done("Rejected.");
 }
 
-export async function returnPayable(actor: Actor, input: { invoiceId: string; card?: ShownCard }): Promise<CommandOutcome> {
+export async function returnPayable(actor: Actor, input: { invoiceId: string; card?: ShownCard; forVerdict?: boolean }): Promise<CommandOutcome> {
   const refusal = gate(actor, "payable.return");
   if (refusal) return refusal;
   try {
     const chat = await chatRules(actor, "return", input.invoiceId, input.card);
     if (!chat.ok) return chat.refusal;
-    await returnInvoice({ actorId: actor.userId, invoiceId: input.invoiceId, ...provenanceOf(actor) });
+    await returnInvoice({ actorId: actor.userId, invoiceId: input.invoiceId, ...provenanceOf(actor), ...verdictSettles(input) });
   } catch (error) {
     return approvalRefusal(error);
   }

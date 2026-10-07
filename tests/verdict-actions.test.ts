@@ -54,7 +54,8 @@ describe("giveVerdictAction", () => {
     expect(result).toEqual({ ok: true, message: "You agreed with the agent. Paid.", given: { verdict: "agree", reason: null } });
     expect(giveVerdictMock).toHaveBeenCalledWith({ actorId: "u1", entrySeq: 41, verdict: "agree", then: "pay", shownAddress: "0xA11CE" }, expect.any(Object));
     // The address the card showed goes with the payment, as Approve and pay's does (shadow mode review C1).
-    expect(commands.approvePayable).toHaveBeenCalledWith({ userId: "u1", surface: { kind: "console" } }, { invoiceId: "inv-1", shownAddress: "0xA11CE" });
+    // As the verdict settling it, which a payable held for a verdict waits for (shadow mode S4).
+    expect(commands.approvePayable).toHaveBeenCalledWith({ userId: "u1", surface: { kind: "console" } }, { invoiceId: "inv-1", shownAddress: "0xA11CE", forVerdict: true });
   });
 
   it("says nothing was paid or recorded, and why, when the payment is refused", async () => {
@@ -80,11 +81,12 @@ describe("giveVerdictAction", () => {
     commands.rejectPayable.mockResolvedValue({ ok: true, message: "Rejected." });
     giveVerdictMock.mockImplementation(async (_input, actions) => ({ given: { verdict: "disagree", reason: "Wrong bill" }, already: false, recorded: true, after: await actions.reject("inv-1", "Wrong bill") }));
     expect((await giveVerdictAction("northstar", { entrySeq: 41, verdict: "disagree", reason: "Wrong bill", then: "reject" })).message).toBe("You disagreed with the agent. Rejected.");
-    expect(commands.rejectPayable).toHaveBeenCalledWith(expect.anything(), { invoiceId: "inv-1", reason: "Wrong bill" });
+    expect(commands.rejectPayable).toHaveBeenCalledWith(expect.anything(), { invoiceId: "inv-1", reason: "Wrong bill", forVerdict: true });
 
     commands.returnPayable.mockResolvedValue({ ok: true, message: "Returned to the agent." });
     giveVerdictMock.mockImplementation(async (_input, actions) => ({ given: { verdict: "disagree", reason: "Later" }, already: false, recorded: true, after: await actions.returnToAgent("inv-1") }));
     expect((await giveVerdictAction("northstar", { entrySeq: 41, verdict: "disagree", reason: "Later", then: "return" })).message).toBe("You disagreed with the agent. Returned to the agent.");
+    expect(commands.returnPayable).toHaveBeenCalledWith(expect.anything(), { invoiceId: "inv-1", forVerdict: true });
   });
 
   it("says a verdict given before, and a refusal in its own words", async () => {

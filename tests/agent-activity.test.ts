@@ -103,6 +103,23 @@ describe("what the agent did, in words", () => {
     expect(held).toMatchObject({ text: "Tried to pay Jiren 0.30 USDC; it is held for you.", tone: "stopped", path: `/approvals#payable-${INVOICE}`, txHash: null });
   });
 
+  it("says a payment held in shadow mode waits for a verdict, sends the person to give one, and offers a chat no card to settle it", () => {
+    const waiting = activityItem(
+      entry("ap_pay", { decisionMode: "deepseek", agreedWithReference: true, execution: { txRef: null, resultingStatus: "held", heldBecause: "shadow_verdict" } }),
+      refs({ status: "held" })
+    );
+    expect(waiting).toMatchObject({
+      text: "Decided to pay Jiren 0.30 USDC; it waits for your verdict in shadow mode.",
+      detail: "DeepSeek decided, as the written policy would.",
+      tone: "stopped",
+      path: `/approvals#payable-${INVOICE}`,
+      pathLabel: "Give your verdict",
+      txHash: null,
+    });
+    // Approve and pay, Reject and Return wait for a verdict, which is given in Vestiarion (shadow mode S4).
+    expect(waiting?.invoiceId).toBeUndefined();
+  });
+
   it("says a refusal by code, why and the way through, and sends the person to Approvals", () => {
     const refused = activityItem(
       entry("ap_pay", { decisionMode: "deepseek", agreedWithReference: false, guardrailBlocked: true, guardrailRule: "bridge.fee_above_cap" }),

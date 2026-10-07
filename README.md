@@ -1,162 +1,312 @@
+<div align="center">
+
+<img src="src/app/icon.svg" alt="Vestiarion" width="72" height="72">
+
 # Vestiarion
 
-An autonomous treasury agent for a small business, settled in USDC on Arc.
+**An AI treasury agent that pays a business's bills in USDC on Arc, inside limits a contract enforces and a signed ledger proves.**
 
-<a href="https://www.producthunt.com/products/vestiarion?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-vestiarion"><img alt="Vestiarion on Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1269583&theme=light"></a>
+[![Live app](https://img.shields.io/badge/Live_app-vestiarion.xyz-3048c9?style=flat-square)](https://www.vestiarion.xyz)
+[![Open numbers](https://img.shields.io/badge/Open_numbers-live_from_production-13845f?style=flat-square)](https://www.vestiarion.xyz/open)
+[![Docs](https://img.shields.io/badge/Docs-guides_%26_API-1f2937?style=flat-square)](https://www.vestiarion.xyz/docs)
+[![npm](https://img.shields.io/npm/v/%40vestiarion%2Fsdk?style=flat-square&logo=npm&label=%40vestiarion%2Fsdk)](https://www.npmjs.com/package/@vestiarion/sdk)
+[![CI](https://img.shields.io/github/actions/workflow/status/duongnq2798/vestiarion/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/duongnq2798/vestiarion/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-6b7280?style=flat-square)](LICENSE)
 
-## Try it
+[![Arc mainnet](https://img.shields.io/badge/Arc_mainnet-first_payment_settled-111827?style=flat-square)](https://explorer.arc.io/tx/0xcecef38e3f751bc118f8f00cee5bb5344679e84f89123d679b986b47d7f1dee6)
+[![Arc testnet](https://img.shields.io/badge/Arc_testnet-open_to_everyone-4b5563?style=flat-square)](https://www.vestiarion.xyz/docs/guides/try-it)
+[![Circle](https://img.shields.io/badge/Built_with-Circle-3048c9?style=flat-square)](#circle-integrations)
+[![API](https://img.shields.io/badge/REST_API-%2Fapi%2Fv1-1f2937?style=flat-square)](https://www.vestiarion.xyz/docs/api)
+[![Slack](https://img.shields.io/badge/Slack-guide-4A154B?style=flat-square&logo=slack)](https://www.vestiarion.xyz/docs/guides/slack)
+[![Telegram](https://img.shields.io/badge/Telegram-guide-26A5E4?style=flat-square&logo=telegram&logoColor=white)](https://www.vestiarion.xyz/docs/guides/telegram)
 
-- **The app:** [www.vestiarion.xyz](https://www.vestiarion.xyz). The five-minute path, with no wallet and no keys, is in [Try it in 5 minutes](https://www.vestiarion.xyz/docs/guides/try-it):
-  1. sign in;
-  2. load sample data;
-  3. watch the agent decide within a minute;
-  4. approve a payment yourself;
-  5. verify the signed ledger.
-- **Research:** [When the model and the policy disagree](https://www.vestiarion.xyz/docs/research/model-vs-policy). Over three weeks, 336 of the agent's decisions were recorded beside the written policy's answer to the same facts. The model chose the policy's action 305 times (90.8%), and 73 times in 88 on payables. Code refused 11 payments it chose.
-  - In weeks one and two its departures were mostly extra caution, and people overruled all three stops only the model made.
-  - In week three, with the treasury moving real USYC, it once redeemed far more than was due; code now bounds every move.
-  - It also paid or scheduled four invoices with no purchase order, which nothing in code checked. Code now checks that rule too.
-- **Live numbers:** [www.vestiarion.xyz/open](https://www.vestiarion.xyz/open) shows the payments, payees and decisions, read from the production database, with Arc mainnet and Arc testnet counted apart, and our own workspaces counted apart from customers'.
-- **Updates:** [@vestiarionhq](https://x.com/vestiarionhq) on X, where what ships is posted with its receipts.
-- **Real transactions on Arc testnet**, made by the agent in production:
-  - a USDC payable paid 53 seconds after it was added, with no one pressing Run:
-    [`0x81381c50…4e68`](https://explorer.testnet.arc.io/tx/0x81381c50f5d0cadb49d1af77f1abb06c1727c8377aa88cbe1cfbf327f09c4e68);
-  - a EURC invoice, weighed against a USDC limit at a rate quoted by Circle's Stablecoin Service:
-    [`0x2e66257f…8f58`](https://explorer.testnet.arc.io/tx/0x2e66257f2cf478ecd2d0f7e263e1ad78bf9877b0afb93f3679c0601ef7328f58);
-  - a payout to a vendor on Base Sepolia through CCTP. The burn is on Arc,
-    [`0xbc1961bb…d49c`](https://explorer.testnet.arc.io/tx/0xbc1961bbe2896e7e91d452498b595f1a1de8d45f34b7db8b3fd9d873d908d49c),
-    and Circle forwarded the mint of exactly 1 USDC on Base Sepolia,
-    [`0x6c749323…ef9a`](https://sepolia.basescan.org/tx/0x6c749323f9e36efe21fcd5c33df2e55ba5db82040dbd06ff2a8872045c6fef9a);
-  - an invoice read from a PDF by the model, checked by a person, and paid 16 seconds after it was added:
-    [`0x197e979f…64b3`](https://explorer.testnet.arc.io/tx/0x197e979f3b108d759f5e5e5ee0d7bc67e67acb1c520de1b3c7e969ae689c64b3);
-  - idle cash put to work: 60.71 USDC deposited into Circle's USYC through its Teller contract, and 53.28 USYC sent to the reserve wallet:
-    [`0x1cf65900…f42e`](https://explorer.testnet.arc.io/tx/0x1cf659007ce734a73908a705e2537a56065d87fd0f52571d7e67d0654b94f42e);
-  - a payable due today, with too little cash in the operating wallet: the agent redeemed the missing 0.88 USDC from USYC,
-    [`0x4b5186db…c7f2`](https://explorer.testnet.arc.io/tx/0x4b5186db4820df87532869e0a9797df5a79a7e9e3a5feb1e3edb09500160c7f2),
-    then paid the 2 USDC 34 seconds after the invoice was added,
-    [`0x365da374…9d8b`](https://explorer.testnet.arc.io/tx/0x365da374f902fcb995643713962554b41e6114b62bb40695874aa519dd829d8b).
+**[Open the app](https://www.vestiarion.xyz)** · **[Try it in 5 minutes](https://www.vestiarion.xyz/docs/guides/try-it)** · **[Open numbers](https://www.vestiarion.xyz/open)** · **[Docs](https://www.vestiarion.xyz/docs)** · **[@vestiarionhq](https://x.com/vestiarionhq)**
 
-  Each feature's design under `docs/superpowers/specs/` ends with its rollout record: what was run in production, with its ledger entries and transactions.
+</div>
 
-> *Tameion* is ancient Greek for a treasury — literally the room the money was kept in. In
-> Byzantium that room grew into the *vestiarion*, the department that minted the coin, held the
-> stores, and paid the army. Vestiarion is the same idea in software: **one agent that runs a
-> company's entire money cycle** — pays vendors, releases contractor pay, screens counterparties,
-> and puts idle cash to work — instead of five disconnected tools a person stitches together by
-> hand on a Tuesday.
+Vestiarion runs a small business's money cycle with one agent: it screens counterparties, pays vendors, releases
+contractor pay, collects receivables and keeps idle cash working. A model proposes each action; ordinary code decides
+whether it may happen; a person decides what code sends to them; and on Arc mainnet the money itself can only leave
+through a spending-limit contract the owner's own wallet deployed. Every outcome, refusals included, is signed into a
+hash-chained ledger anyone in the workspace can verify.
 
-## What it does
+> *Tameion* is ancient Greek for a treasury, the room the money was kept in. In Byzantium that room grew into the
+> *vestiarion*, the department that minted the coin, held the stores and paid the army.
 
-Vestiarion runs a configured business's treasury through one decision loop, the **agent cycle**.
-Each organization's own name (`orgs.name`) is the identity shown in the product; no customer name
-is hard-coded into the interface:
+## Contents
 
-1. **Compliance** — the whole counterparty book is re-screened every cycle, not checked
-   once at onboarding. A hit tiers the payment limit down instead of a blunt yes/no, and the tier
-   is *reversible*: the limit the business configured lives in its own column, so a counterparty
-   that comes off the watchlist gets its full limit back and one that stays on it does not decay
-   a little further every time it is looked at. The sweep is logged whether or not anything
-   changed, because proving screening happened is the part a one-time gate cannot do.
-2. **AP automation** — each payable invoice gets a three-way match (PO ↔ goods received ↔
-   invoice) plus a risk check, and the agent decides to **pay**, **hold** (over limit), **request
-   info** (no PO match), or **flag as fraud** (high-risk counterparty) — with its reasoning
-   attached to the line item. Code refuses to pay or schedule an invoice whose match is
-   incomplete, whatever the model decides; a counterparty the business marks as paid without
-   purchase orders needs only the goods received. A payable to a client, which pays the
-   business, is never paid by the agent: it waits for a person. The first payment to an
-   address needs two people behind it: the agent never makes one that only the person who
-   gave the address stands behind, and that person cannot approve it either. Above a figure
-   the workspace's owner sets, every payment needs two approvals: the agent holds it, the
-   first approval is recorded, and only a second person's approval pays it. In shadow mode, on Arc testnet, the
-   business keeps paying its bills itself while the agent decides on the same bills: a person agrees or disagrees with
-   each decision, each payment they agree to is made in USDC on Arc testnet, and the console shows how often they agreed.
-3. **Contractor payments** — a GitHub PR URL can be checked for an actual merge before a
-   milestone is released. Human verification remains available and is recorded as a human ledger
-   action. Verified milestones are released the same day instead of waiting for Net-30.
-4. **Treasury** — idle operating cash above a 7-day obligation buffer is swept into Circle's USYC,
-   a tokenized money market fund, on Arc testnet; the agent redeems back out ahead of due dates
-   rather than after. The sweep only happens when it pays for itself: a sweep and the redemption
-   that must follow it are two transactions, so the policy computes the yield the swept cash would
-   earn over the days it would stay, before what falls due calls it back (at most 30), and compares
-   it to the round-trip fee. Idle cash that would earn less
-   than it costs to move stays liquid (`src/lib/agent/treasury.ts`). Code bounds the model's moves:
-   a sweep never takes the operating wallet below its buffer, and a redemption brings back at most
-   what the next 14 days need. Payments come first: before
-   it decides any payment, each cycle redeems what the payables due today need beyond the
-   operating balance, so no payment waits for cash sitting in the reserve, and an owner or admin
-   can bring cash back at any hour with **Bring cash back** (`src/lib/agent/liquidity.ts`). USYC is
-   permissioned: Circle allowlists the two wallets, and an owner turns the reserve on in Settings;
-   until then the reserve is simulated, and labelled so.
-5. **Continuous audit trail** — every decision above is appended to a hash-chained, Ed25519-signed
-   ledger (`/audit`). A reviewer can verify the whole chain in one click and read *why* the agent
-   acted, not just that a balance moved.
-6. **Receivables** — a client pays a receivable through a link on Arc testnet, and the agent matches the
-   transfer that arrives to what was owed. When an owner turns reminders on, the agent decides when to
-   email the client a reminder, with the link, and how firmly, within bounds code sets: from 3 days
-   before the due date, at most every 3 days, at most 4, a final tone only once the invoice is a week
-   late (`src/lib/agent/collections.ts`).
-7. **Human oversight** — a payable the agent held, flagged, or left awaiting information waits in
-   an approvals inbox (`/o/<slug>/approvals`) for a person to decide: **approve and pay** it now,
-   through the very payment step the agent itself uses, so a person's payment and the agent's
-   cannot disagree about what happened; **reject** it, closing the obligation; or **return** it for
-   the agent's next cycle to decide again. No one approves an invoice they created, and no one —
-   however they click — can approve paying a counterparty screened high risk; only Compliance
-   clears that. A claim on the row makes one person's decision exclusive, however many people
-   click; the payment intent's idempotency key, keyed on the invoice, is what keeps an invoice from
-   being paid twice, whether by two people or by a person and the agent's own cycle. A payment
-   still pending is reconciled by the next cycle, never decided again, so the agent cannot undo a
-   person's approval. A payment whose send Circle never answered may exist under its key, so it
-   cannot be rejected or returned: approving asks Circle again under the same key, and nothing is
-   sent twice. Anyone who can approve a payment can also pause the
-   agent for the whole workspace, with a reason shown on every page until someone resumes it, and
-   only an owner or admin may resume it. Pausing stops the agent's own cycles and the money it would
-   move mid-cycle, including reserve sweeps and redemptions; it never stops a person's own decision
-   in the approvals inbox.
-7. **Telegram** — each member can connect their own Telegram chat from **Settings**. The chat gets
-   the agent's decisions within the cycle that makes them, each with its reasons, its Arc testnet
-   transaction and a link to where a person handles it; answers `/today` (safe to spend today),
-   `/waiting` and `/ledger`, or the same questions in plain words, with figures written by code,
-   never by the model; and reads an invoice sent to it, as a PDF or its text, into a payable an
-   owner or admin adds with one tap. The bot never approves or pays: a stopped payment links to
-   Approvals (`src/lib/telegram/`, [guide](https://www.vestiarion.xyz/docs/guides/telegram)).
-8. **Slack** — an owner or admin connects the workspace to a Slack channel from **Settings**. The
-   channel gets the agent's decisions within the cycle that makes them; each member who connects
-   their own Slack account asks `/vestiarion today`, `waiting` or `ledger`, and can pause the agent.
-   When an owner sets a limit, a payment the agent stopped carries **Approve and pay**, **Reject**
-   and **Return to the agent** in its message: a click acts as that member, with their role read
-   again, through the same command and every check as Approvals; Approve and pay only for USDC
-   on Arc within the limit, to the address the message showed, and a payee's changed address is
-   still confirmed in Vestiarion. Each decision's ledger entry says it came from Slack. An owner or
-   admin also adds an invoice from a message, with **Add invoice**: read as **From a
-   document** reads one, and added with one press (`src/lib/slack/`,
-   [guide](https://www.vestiarion.xyz/docs/guides/slack)).
-9. **Invoices by email** — an owner or admin turns on a workspace address in **Settings**; an
-   invoice forwarded there is read as **From a document** reads one, and waits on **AP / AR** for a
-   person to add it with one press, fix it in the invoice form first (**Edit and add**, **Finish and
-   add**), or dismiss it. Nothing that arrives by email is added or paid by itself; the sender's
-   SPF/DKIM/DMARC results are shown, never trusted
-   (`src/lib/email-inbox/`, [guide](https://www.vestiarion.xyz/docs/guides/email-invoices)).
+- [What Vestiarion does](#what-vestiarion-does)
+- [Why it is different](#why-it-is-different)
+- [How payments work](#how-payments-work)
+- [Safety architecture](#safety-architecture)
+- [Arc mainnet and Arc testnet](#arc-mainnet-and-arc-testnet)
+- [Product capabilities](#product-capabilities)
+- [Integrations](#integrations)
+- [Quick start](#quick-start)
+- [Verifiable activity](#verifiable-activity)
+- [Documentation](#documentation)
+- [Development](#development)
+- [License](#license)
 
-Every decision is made by asking an LLM for a structured `{action, reasoning, confidence}` verdict
-under an explicit guardrail policy (never pay a high-risk counterparty, never exceed a payment
-limit, keep a liquidity buffer before sweeping to yield). Anthropic, OpenAI, and DeepSeek are all
-supported, and with no key at all the same decision points fall back to a transparent rule-based
-heuristic — so the app runs end-to-end with zero credentials, and every ledger entry records which
-path produced it.
+## What Vestiarion does
 
-## Contracts on Arc testnet
+A small business pays vendors, contractors and recurring bills through several tools a person stitches together by
+hand, and checks none of it continuously. Vestiarion replaces that with one decision loop, the **agent cycle**, that
+reads the whole book each time it runs:
 
-Vestiarion deploys two contracts of its own, one copy per workspace that uses it, through Circle's
-Smart Contract Platform. Their source is in [`contracts/`](contracts); both were written for
-Vestiarion and are not audited. The copies running in production, in testnet-2, our own test
-workspace:
+| Area | What the agent does |
+| --- | --- |
+| **Payables** | Three-way match (purchase order, goods received, invoice), duplicate and risk checks, then **pay**, **schedule**, **hold**, **request info** or **flag as fraud**, with its reasoning attached |
+| **Contractors** | Releases a milestone once its evidence is verified, such as a merged GitHub pull request; on Arc testnet the milestone's USDC can sit in an escrow contract until then |
+| **Compliance** | Re-screens every counterparty each cycle (OpenSanctions where configured) and tiers its payment limit down on a hit, reversibly |
+| **Receivables** | A client pays through a link; the agent matches the transfer to what was owed and, when turned on, sends reminders within bounds code sets |
+| **Treasury** | On Arc testnet, sweeps idle cash above a 7-day buffer into Circle's USYC only when the yield beats the round-trip fee, and redeems ahead of what falls due |
+| **Audit** | Appends every decision, human action and system event to an Ed25519-signed, hash-chained ledger, exportable and verifiable in one click |
 
-| Contract | What it does | Address |
+The agent cycle: reconcile -> receipts -> compliance -> follow-up -> recurring -> services -> liquidity -> AP ->
+contractors -> treasury -> forecast -> proposals -> collections -> notices -> telegram -> slack, each stage's
+outcome appended to the ledger.
+
+## Why it is different
+
+- **The model argues; it cannot pay.** Anthropic, OpenAI or DeepSeek returns a structured
+  `{action, reasoning, confidence}`. Code re-checks every hard rule after the model decides and before money moves, and
+  with no model key at all a transparent rule-based policy takes the model's place. Every ledger entry records which one
+  decided, and the written policy's answer is recorded beside the model's
+  ([research: when the model and the policy disagree](https://www.vestiarion.xyz/docs/research/model-vs-policy)).
+- **The limit is on the money's path, not only in the code.** On Arc mainnet a workspace can pay from a wallet its
+  owner holds. The agent's wallet can only call `pay` on a contract that wallet deployed, which refuses anything past
+  the daily or 7-day figure, whatever Vestiarion's code decided.
+- **Vestiarion does not hold that treasury's USDC.** On that path the USDC stays in the owner's wallet or passkey
+  smart account; Vestiarion holds no key to it, and the agent's wallet holds only gas. (Other setups differ; see
+  [Custody, by setup](#custody-by-setup).)
+- **People decide what matters.** A first payment to a new address, a payment above the two-approval figure, and
+  anything the agent held all wait for a person, and some for two.
+- **Figures are read, not asserted.** [Open numbers](https://www.vestiarion.xyz/open) is queried from the production
+  database on every load, with Arc mainnet and Arc testnet counted apart and our own workspaces counted apart from
+  customers'.
+
+## How payments work
+
+On Arc mainnet, a workspace whose treasury is its owner's wallet pays like this:
+
+```mermaid
+flowchart TD
+    T["Owner's treasury<br/>passkey smart account or browser wallet<br/>(Circle Modular Wallets)"]
+    C["VestiarionSpendingLimit<br/>deployed and approved by the treasury"]
+    A["Vestiarion agent<br/>proposes pay / hold / flag"]
+    P["Code: deterministic policy and guardrails"]
+    H["Approvals inbox<br/>one or two people"]
+    W["Agent wallet<br/>holds gas only"]
+    V["Vendor address"]
+
+    T -- "approve(contract)" --> C
+    A --> P
+    P -- "held, flagged, new payee,<br/>above two-approval figure" --> H
+    P -- "allowed" --> W
+    H -- "approve and pay" --> W
+    W -- "pay(to, amount, ref)" --> C
+    C -- "transferFrom(treasury, vendor)<br/>within daily and 7-day figures" --> V
+    V -. "settles on Arc in seconds;<br/>Paid event + signed ledger entry" .-> L[("Ledger")]
+```
+
+In words:
+
+1. **The owner's wallet is the treasury.** In **Go live** the owner either connects a browser wallet (MetaMask,
+   Rabby…) or creates a passkey wallet: a Circle smart account on Arc mainnet owned by their passkey, with an optional
+   recovery address. The owner's wallet deploys the workspace's `VestiarionSpendingLimit`, approves it on USDC and
+   sends the agent's wallet its gas; with a passkey that is one confirmation, after the browser checks every call
+   against what it built itself.
+2. **The agent proposes.** Each cycle the model reads the invoice, the counterparty's screening, the match and the cash
+   position, and proposes an action with its reasoning.
+3. **Code decides.** Duplicate, risk, payment-limit, three-way-match, new-payee, spending-limit and liquidity rules run
+   as ordinary code. They can overrule the model; nothing the model writes can overrule them.
+4. **A person decides what code sends them,** in the approvals inbox (or from Slack on Arc testnet). A person's
+   approval goes through the same payment step the agent uses.
+5. **The contract decides last.** The agent's wallet calls `pay(to, amount, ref)`. The contract pulls USDC from the
+   treasury to the vendor only within the daily and 7-day figures, and never twice for the same `ref`. Only the owner's
+   wallet can change the figures (`setLimits`), or stop the agent by setting its approval to 0.
+6. **Arc settles; the ledger records.** Payment status is read back from Circle and the chain, the fee from the
+   receipt (Arc's gas token is USDC, so the receipt is the dollar cost), and the outcome is signed into the ledger.
+
+On Arc testnet the same decision path pays from Circle wallets instead, through the same contract once an owner or admin
+turns on **Enforce on Arc**.
+
+### Custody, by setup
+
+| Setup | Where the USDC sits | Who can move it |
 | --- | --- | --- |
-| `VestiarionEscrow` | Locks a milestone's USDC for a contractor; only the operating wallet can release it to the contractor, or take it back from a refund date | [`0x74af203fec3f121ff1cd3a763092d1211487702b`](https://explorer.testnet.arc.io/address/0x74af203fec3f121ff1cd3a763092d1211487702b) |
-| `VestiarionSpendingLimit` | The agent's payments leave through `pay`, which refuses anything past the daily or 7-day limit | [`0x9da3c47f73ea9399ac566806a189b0bf47b7d4ba`](https://explorer.testnet.arc.io/address/0x9da3c47f73ea9399ac566806a189b0bf47b7d4ba) |
+| **Arc mainnet, your own wallet or passkey** | The owner's wallet | The owner; the agent only through the contract, within its figures |
+| **Your own Circle account** (testnet or mainnet) | Developer-Controlled Wallets in the customer's Circle account | Vestiarion, with the API key and entity secret the owner pasted, stored encrypted |
+| **Hosted testnet wallet** | Wallets in Vestiarion's own Circle testnet account | Vestiarion (Arc testnet only) |
 
-The Circle contracts it calls on Arc testnet:
+## Safety architecture
+
+```mermaid
+flowchart LR
+    M["Model<br/>proposes"] --> R["Rules in code<br/>refuse or hold"] --> P["People<br/>approve"] --> K["Contract<br/>caps the spend"] --> S["Signed ledger<br/>records all of it"]
+```
+
+| Layer | What it guarantees |
+| --- | --- |
+| **Guardrails in code** | Never pay a counterparty screened high risk, above its limit, a duplicate of a settled invoice, or with an incomplete match. A refusal records the model's argument and the rule that overruled it |
+| **New-payee check** | The first payment to an address needs two people behind it: the agent never makes one that only the person who gave the address stands behind, and that person cannot approve it either |
+| **Two approvals** | Above a figure the owner sets, a payment needs two different people. Arc mainnet workspaces start at 100 USDC, and the owner can raise it but not turn it off there |
+| **Maker and checker** | Roles are owner, admin, approver and viewer. No one approves an invoice they created; only Compliance clears a high-risk counterparty |
+| **Agent spending limit** | A daily and a 7-day figure, checked in code and, where enforced, by the contract. Arc mainnet workspaces start at 50 USDC a day and 150 USDC in 7 days |
+| **Exactly once** | A database claim makes one decision exclusive; an idempotency key keyed on the invoice keeps a payment from leaving twice; the contract refuses a repeated `ref` |
+| **Stop switches** | Anyone who can approve can pause the agent for the workspace; an owner's wallet can stop the contract; an operator can stop every payment on every deployment within 10 seconds |
+| **Audit trail** | Every entry is Ed25519-signed and covers the hash of the one before. The verifier names the first entry that breaks; signed webhooks push each entry as it is written |
+| **Shadow mode** | On Arc testnet a business keeps paying its bills itself, a person agrees or disagrees with each agent decision, and only agreed payments are made |
+
+The contract source is in [`contracts/`](contracts). It was written for Vestiarion and has not been audited.
+
+## Arc mainnet and Arc testnet
+
+Each workspace lives on one network, chosen when it is created, and never moves.
+
+| | Arc testnet | Arc mainnet |
+| --- | --- | --- |
+| **Who can use it** | Anyone who signs in | Only people the deployment opens it to (`MAINNET_ALLOWLIST`) |
+| **Money** | Testnet USDC and EURC from Circle's faucet | Real USDC |
+| **Treasury** | Hosted wallet, or your own Circle account | Your own wallet or passkey wallet, or your own Circle account |
+| **Spending-limit contract** | Opt-in, deployed through Circle's Smart Contract Platform | Deployed by the owner's wallet on the own-wallet path |
+| **Also available** | USYC reserve, milestone escrow, EURC swaps, CCTP and Gateway payouts to other chains, x402, shadow mode | USDC on Arc only; features Arc mainnet lacks are not shown |
+
+### Mainnet proof
+
+On **Oct 7, 2026** a workspace we run made its first payment on Arc mainnet, from a passkey wallet, through its
+spending-limit contract:
+
+1. The owner's passkey wallet deployed and approved its contract in one transaction, with figures of 50 USDC a day and
+   150 USDC in 7 days: [`0xe6261540…a9bb`](https://explorer.arc.io/tx/0xe62615407f44383d52a470574a877069e7e0114c2a074cc112149b3ab3efa9bb).
+2. The agent decided to pay a 0.10 USDC invoice. Code held it: a first payment to a new address
+   (`counterparty.new_payee`).
+3. A second member, an admin, approved and paid it. The agent's wallet called the contract, which moved 0.10 USDC
+   from the passkey treasury to the vendor and emitted `Paid`; fee 0.0035 USDC, settled in 3 s:
+   [`0xcecef38e…dee6`](https://explorer.arc.io/tx/0xcecef38e3f751bc118f8f00cee5bb5344679e84f89123d679b986b47d7f1dee6).
+
+Contract: [`0xd90cA89Fc318d0330Bb14eaeF78B72C3CA7E7fB6`](https://explorer.arc.io/address/0xd90cA89Fc318d0330Bb14eaeF78B72C3CA7E7fB6).
+Arc mainnet has no customer workspace yet; [Open numbers](https://www.vestiarion.xyz/open) shows the current count.
+
+### Proof on Arc testnet
+
+Made by the agent in production:
+
+- a USDC payable paid 53 seconds after it was added, with no one pressing Run:
+  [`0x81381c50…4e68`](https://explorer.testnet.arc.io/tx/0x81381c50f5d0cadb49d1af77f1abb06c1727c8377aa88cbe1cfbf327f09c4e68);
+- a payment through the spending-limit contract, within its daily figure:
+  [`0xa79cb982…e71e`](https://explorer.testnet.arc.io/tx/0xa79cb982c488d5c8d40cfc6b6141bf30d95f5615e580d3c3d6b55b779fe6e71e);
+- a EURC invoice, weighed against a USDC limit at a rate quoted by Circle's Stablecoin Service:
+  [`0x2e66257f…8f58`](https://explorer.testnet.arc.io/tx/0x2e66257f2cf478ecd2d0f7e263e1ad78bf9877b0afb93f3679c0601ef7328f58);
+- a payout to Base Sepolia through CCTP: the burn on Arc,
+  [`0xbc1961bb…d49c`](https://explorer.testnet.arc.io/tx/0xbc1961bbe2896e7e91d452498b595f1a1de8d45f34b7db8b3fd9d873d908d49c),
+  and the mint Circle forwarded,
+  [`0x6c749323…ef9a`](https://sepolia.basescan.org/tx/0x6c749323f9e36efe21fcd5c33df2e55ba5db82040dbd06ff2a8872045c6fef9a);
+- an invoice read from a PDF by the model, checked by a person, and paid 16 seconds after it was added:
+  [`0x197e979f…64b3`](https://explorer.testnet.arc.io/tx/0x197e979f3b108d759f5e5e5ee0d7bc67e67acb1c520de1b3c7e969ae689c64b3);
+- idle cash into Circle's USYC through its Teller,
+  [`0x1cf65900…f42e`](https://explorer.testnet.arc.io/tx/0x1cf659007ce734a73908a705e2537a56065d87fd0f52571d7e67d0654b94f42e),
+  then the missing 0.88 USDC redeemed for a bill due today,
+  [`0x4b5186db…c7f2`](https://explorer.testnet.arc.io/tx/0x4b5186db4820df87532869e0a9797df5a79a7e9e3a5feb1e3edb09500160c7f2),
+  and the bill paid 34 seconds after it was added,
+  [`0x365da374…9d8b`](https://explorer.testnet.arc.io/tx/0x365da374f902fcb995643713962554b41e6114b62bb40695874aa519dd829d8b).
+
+Each feature's design under [`docs/superpowers/specs/`](docs/superpowers/specs) ends with its rollout record: what was
+run in production, with its ledger entries and transactions.
+
+## Product capabilities
+
+- **AP automation** — invoices typed in, imported from CSV, read from a PDF, forwarded by email, or sent through the
+  API; recurring payables; early-payment discounts taken when they pay.
+- **Approvals inbox** — approve and pay, reject, or return to the agent; claims keep two people from deciding the
+  same row.
+- **Contractor milestones** — verified by a merged pull request or a person; GitHub bounties with `/bounty` and
+  `/payto`; a pull request comment once paid.
+- **Payee links** — a payee enters and confirms their own address, or creates a passkey wallet to be paid in.
+- **Receivables** — pay links on Arc, matched receipts, reminders the agent times within bounds.
+- **Treasury** — safe-to-spend today, cash outlook, USYC reserve with **Bring cash back** (Arc testnet).
+- **Cross-currency and cross-chain** — EURC invoices and swaps, CCTP and Gateway payouts (Arc testnet).
+- **Shadow mode** — try the agent on real bills, paid in the business's own way, before it pays anything itself.
+- **Workspaces and members** — per-network workspaces, invitations, four roles, per-member notifications.
+- **Audit** — the signed ledger, one-click verification, exports, and signed webhooks.
+
+## Integrations
+
+### Circle integrations
+
+| Circle product | Used for |
+| --- | --- |
+| **Developer-Controlled Wallets** | Treasury and agent wallets, transfers, balances, confirmation |
+| **Modular Wallets** | Passkey smart accounts: the owner's treasury on Arc mainnet, and a payee's wallet |
+| **Smart Contract Platform** | Deploying the escrow and spending-limit contracts on Arc testnet |
+| **Gas Station** | Paying the agent wallet's gas on Arc testnet |
+| **USYC** | The yield-bearing reserve, through its Teller (Arc testnet) |
+| **CCTP V2** and **Gateway** | Paying payees on other chains; Gateway also settles x402 purchases (Arc testnet) |
+| **Stablecoin Service** | EURC quotes and USDC→EURC swaps (Arc testnet) |
+| **Notifications** | Settlement and incoming-transfer webhooks, recorded within seconds |
+
+### Team and developer tools
+
+| Surface | What it does |
+| --- | --- |
+| **[Slack](https://www.vestiarion.xyz/docs/guides/slack)** | Decisions in a channel; `/vestiarion today`, `waiting`, `ledger`; Approve and pay, Reject and Return buttons on Arc testnet within a limit; add an invoice from a message |
+| **[Telegram](https://www.vestiarion.xyz/docs/guides/telegram)** | Each member's own chat: decisions with reasons, `/today`, `/waiting`, `/ledger`, invoices read from a PDF. The bot never approves or pays |
+| **[REST API](https://www.vestiarion.xyz/docs/api)** | `/api/v1` with per-member keys: read everything, and with write access add counterparties, invoices, milestones and payee links. A key never approves or pays |
+| **[TypeScript SDK](https://www.vestiarion.xyz/docs/get-started/sdk)** | [`@vestiarion/sdk`](https://www.npmjs.com/package/@vestiarion/sdk): a typed client for every `/api/v1` operation, plus webhook and ledger verification |
+| **[MCP server](https://www.vestiarion.xyz/docs/ai-integration/mcp)** | `/api/mcp`, whose tools are the `/api/v1` operations, for AI agents |
+| **[Webhooks](https://www.vestiarion.xyz/docs/webhooks)** | Up to 5 HTTPS endpoints per workspace receive every ledger entry, signed, with retries |
+| **[GitHub](https://www.vestiarion.xyz/docs/guides/github)** | Milestone verification from merged pull requests, bounties, and payment comments |
+| **[Email](https://www.vestiarion.xyz/docs/guides/email-invoices)** | A workspace address that reads forwarded invoices into drafts a person adds |
+
+There is no standalone CLI; operators run the repository's scripts (`npm run cycle`, `npm run status`, …), listed in
+[docs/self-hosting.md](docs/self-hosting.md#scripts).
+
+```bash
+npm install @vestiarion/sdk
+```
+
+## Quick start
+
+**Use the hosted app** — no wallet or keys needed to start:
+
+1. Sign in at [www.vestiarion.xyz](https://www.vestiarion.xyz) with your email and open a workspace on Arc testnet.
+2. Load sample data, and watch the agent decide within a minute.
+3. Approve a payment yourself, then verify the signed ledger.
+
+The whole path is in [Try it in 5 minutes](https://www.vestiarion.xyz/docs/guides/try-it). To move testnet USDC,
+follow [Go live](https://www.vestiarion.xyz/docs/guides/go-live) and fund the wallet from
+[Circle's faucet](https://faucet.circle.com).
+
+**Call the API** — create a key under **Settings**, then:
+
+```bash
+curl -H "Authorization: Bearer $VESTIARION_API_KEY" https://www.vestiarion.xyz/api/v1/status
+```
+
+See the [Quickstart](https://www.vestiarion.xyz/docs/get-started/quickstart) and
+[Authentication](https://www.vestiarion.xyz/docs/get-started/authentication).
+
+## Verifiable activity
+
+- **[Open numbers](https://www.vestiarion.xyz/open)** — workspaces, payments, the agent's decisions, what code refused
+  and what people decided, per network, customers apart from us, read from production on every load. Figures change
+  daily, so this README links there instead of copying them.
+- **The ledger** — every workspace's `/audit` verifies its whole chain in one click; exports and webhooks carry the
+  same signed entries.
+- **[Research](https://www.vestiarion.xyz/docs/research/model-vs-policy)** — three weeks of the model's decisions
+  recorded beside the written policy's, including where code had to refuse it.
+
+### Contracts on Arc testnet
+
+Vestiarion's own contracts, the copies in our test workspace:
+
+| Contract | Address |
+| --- | --- |
+| `VestiarionEscrow` | [`0x74af203fec3f121ff1cd3a763092d1211487702b`](https://explorer.testnet.arc.io/address/0x74af203fec3f121ff1cd3a763092d1211487702b) |
+| `VestiarionSpendingLimit` | [`0x9da3c47f73ea9399ac566806a189b0bf47b7d4ba`](https://explorer.testnet.arc.io/address/0x9da3c47f73ea9399ac566806a189b0bf47b7d4ba) |
+
+The Circle contracts it calls:
 
 | Contract | Address |
 | --- | --- |
@@ -169,619 +319,48 @@ The Circle contracts it calls on Arc testnet:
 | Gateway Minter | [`0x0022222ABE238Cc2C7Bb1f21003F0a260052475B`](https://explorer.testnet.arc.io/address/0x0022222ABE238Cc2C7Bb1f21003F0a260052475B) |
 | CCTP TokenMessengerV2 | [`0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA`](https://explorer.testnet.arc.io/address/0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA) |
 
-What each one is used for, the workspace's wallets around the two contracts, and the USDC of the
-chains payees are paid on: [Contracts on Arc testnet](https://www.vestiarion.xyz/docs/contracts).
+What each one is for, the wallets around them, and the USDC of the chains payees are paid on:
+[Contracts](https://www.vestiarion.xyz/docs/contracts).
 
-## Architecture
+## Documentation
 
-The layout below is the short version. [ARCHITECTURE.md](ARCHITECTURE.md) goes further, and
-the [developer docs](https://www.vestiarion.xyz/docs) document the API and webhooks.
+| | |
+| --- | --- |
+| **Start** | [Try it in 5 minutes](https://www.vestiarion.xyz/docs/guides/try-it) · [Go live](https://www.vestiarion.xyz/docs/guides/go-live) · [Your first payment](https://www.vestiarion.xyz/docs/guides/first-payment) · [Shadow mode](https://www.vestiarion.xyz/docs/guides/shadow-mode) |
+| **Guides** | [Pay a contractor](https://www.vestiarion.xyz/docs/guides/pay-a-contractor) · [Get paid](https://www.vestiarion.xyz/docs/guides/get-paid) · [Audit export](https://www.vestiarion.xyz/docs/guides/audit-export) |
+| **Developers** | [Quickstart](https://www.vestiarion.xyz/docs/get-started/quickstart) · [API reference](https://www.vestiarion.xyz/docs/api) · [SDK](https://www.vestiarion.xyz/docs/get-started/sdk) · [Webhooks](https://www.vestiarion.xyz/docs/webhooks) · [MCP](https://www.vestiarion.xyz/docs/ai-integration/mcp) · [Changelog](https://www.vestiarion.xyz/docs/changelog) |
+| **This repository** | [ARCHITECTURE.md](ARCHITECTURE.md) · [Running it yourself](docs/self-hosting.md) · [Feature designs](docs/superpowers/specs) · [Contracts](contracts) · [SDK source](sdk) |
 
-```
-supabase/migrations/      Postgres schema. Money is numeric(20,6), never a
-  0001_init.sql            float; the ledger chain is linked inside an
-                           append_ledger_entry() function under an advisory
-                           lock so concurrent cycles cannot fork it.
-src/lib/config.ts         VestiarionConfig, and the only place the environment
-src/lib/context.ts         is read. A scope carries a config and its clients,
-                           so one process can serve more than one business
-src/lib/dal/               The only module allowed to hold the raw service-role
-                           client; db() scopes every query to the organization in
-                           scope
-src/lib/api/              The v1 read contract: one envelope, coded errors,
-                           opaque cursors
-src/lib/insights.ts       Typed, server-only query boundary for measured
-                           transfer, cycle, balance, and screening history
-src/components/ui/        The design system: Radix-based primitives styled from
-                           the tokens in globals.css — buttons, fields, menus,
-                           dialogs, sheets, tabs, toasts, the command palette.
-                           /design shows every one in development
-src/components/vx/        Vestiarion's domain components — decision cards, the
-                           audit ledger, treasury tiles, provenance, D3 charts —
-                           built only from src/components/ui
-  Brand.tsx                Reusable vector Treasury Seal brand mark
-  nav.ts                   The workspace's sections, in groups: one list feeds
-                             the sidebar, the mobile drawer and page titles
-  AppFrame.tsx             Workspace navigation, drawn by the /o/[slug] layout:
-                             a sidebar from `lg` up, a top bar and drawer below
-  InsightsCharts.tsx       scales/shapes rendered declaratively through React
-src/app/icon.svg          The app icon. `node scripts/build-icons.mjs` renders it
-                           to favicon.ico, apple-icon.png and the web manifest's
-                           icons; re-run it whenever the icon changes
-src/lib/ledger.ts         Hash-chained, Ed25519-signed append-only audit log
-src/lib/compliance.ts     Continuous counterparty screening + risk tiering
-src/lib/circle/           ChainProvider interface, three implementations:
-  simulateProvider.ts       - simulate: needs no credentials, uses Arc's real
-  liveProvider.ts             fee/latency profile
-  index.ts                  - live: Circle Developer-Controlled Wallets
-                            - hybrid (default with credentials): real Arc
-                              payments; the USYC leg is real once the
-                              workspace's USYC reserve is on, simulated and
-                              labelled before
-src/lib/agent/
-  decide.ts                 Provider-agnostic decision helper: Anthropic ->
-                             OpenAI -> DeepSeek -> rule-based heuristic
-  treasury.ts               The sweep/redeem policy as a pure function, so the
-                             LLM and the heuristic reason from one set of
-                             numbers and the whole policy is testable
-  orchestrator.ts            The agent cycle: reconcile -> receipts ->
-                             compliance -> follow-up -> recurring -> services
-                             -> liquidity -> AP -> contractors -> treasury ->
-                             forecast -> proposals -> collections -> notices
-                             -> telegram -> slack, all logged to the ledger
-  liquidity.ts               Redeems from USYC what today's payments need
-                             before AP decides them; a person's Bring cash back
-  cycle-metrics.ts           Counts outcomes, decision sources, and code-level
-                             guardrail overrides at the point they occur
-  pay.ts                    payInvoice: the one payment step a cycle's AP
-                             stage and a person's approval both call
-  approvals.ts               Lets a person approve and pay, reject, or return
-                             a payable the agent held, claimed in the database
-                             first so two deciders cannot race the same row
-  pause.ts                   The per-workspace pause a cycle re-reads before
-                             every payment and every reserve move it makes
-tests/                    Vitest. Every money path that can be tested without
-                           a network: the hash chain and its tamper cases,
-                           risk tiering, the treasury economics, provider
-                           selection and fallback. `npm run verify`
-scripts/                  Tenant scripts require an organization slug
-                           (`-- <org-slug>`); seed, bootstrap:circle, and
-                           three doctors tell you which parts are live
-src/app/                  Evidence-first landing page at `/`; working treasury
-                           console at `/console`, plus AP/AR, Contractors,
-                           Compliance, Audit Log, and database-backed Insights
-src/app/api/v1/           API for bots, MCP servers and anything else
-                           consuming Vestiarion, authenticated with a
-                           workspace API key
-src/lib/platform/api-keys.ts  Key generation and hashing, listing and
-                               revocation; only sha256(secret) is ever stored
-src/lib/telegram/         The Telegram bot: one-time connect codes, the webhook's
-                           update handler, /today /waiting /ledger, invoices
-                           read into payables, and the cycle's stage that
-                           tells each connected chat what the agent did
-src/lib/slack/            The Slack app: request signatures, installing over
-                           OAuth, member links, /vestiarion, the decision
-                           buttons, and the cycle's last stage, which posts
-                           what the agent did to the workspace's channel
-src/lib/commands/         One function per action a person takes, gated the
-                           same way from the console, Telegram, Slack and the
-                           API
-src/lib/webhooks/         Signing, SSRF-safe sending, and the retry/disable
-                           policy for a workspace's own HTTPS endpoints; a
-                           new ledger entry queues a signed delivery to each
-                           active one
-```
+## Development
 
-Each workspace creates and revokes its own API keys on
-`/o/<slug>/settings` (owner or admin only; see
-[Authentication](https://www.vestiarion.xyz/docs/get-started/authentication)). A
-key reads; one given write access can also add counterparties, invoices and
-milestones, which the agent decides like any other, and make payee links. An
-address it adds, or a payee enters through its link, waits for a person to
-confirm it; a milestone waits for GitHub or a person to verify it. A key never
-approves or pays, and it writes only while its creator can still add records. It is shown once, in full,
-right after it is created, and authenticates `/api/v1` requests for that
-workspace alone — there is no shared or platform-wide credential on that
-surface. It stops working when the member who created it leaves the workspace,
-is removed, or deletes their account. The same key connects an AI agent to the
-[MCP server](https://www.vestiarion.xyz/docs/ai-integration/mcp) at `/api/mcp`, whose tools are the `/api/v1` operations.
-
-A typed TypeScript client, `@vestiarion/sdk` (`sdk/`), wraps every `/api/v1` operation and checks webhook signatures and
-ledger entries. Install it with `npm install @vestiarion/sdk` (the site serves the same tarball); see
-[TypeScript SDK](https://www.vestiarion.xyz/docs/get-started/sdk).
-
-The same page lets an owner or admin (`webhooks.manage`) register up to 5
-HTTPS endpoints that receive the workspace's ledger, signed, as it happens —
-pushed rather than polled. See [Webhooks](https://www.vestiarion.xyz/docs/webhooks).
-
-## Running it
+Next.js, TypeScript, Supabase Postgres with row-level security, Vitest, Solidity 0.8.37.
 
 ```bash
 npm install
-cp .env.example .env.local
-```
-
-Create a [Supabase](https://supabase.com) project and put its URL and keys in `.env.local`
-(Project Settings → API, plus the database password and project ref under Database). Also set
-`VESTIARION_MASTER_KEYS` (generate with
-`node -e "console.log('v1:' + require('crypto').randomBytes(32).toString('base64'))"`) —
-required wherever the app or a script runs, because every organization's ledger signing key and
-Circle credentials live encrypted on its own row in `orgs`, decrypted with this key, and the app
-no longer reads `LEDGER_SIGNING_KEY`, `LEDGER_PUBLIC_KEY`, `CIRCLE_API_KEY`, or
-`CIRCLE_ENTITY_SECRET` from the environment directly.
-
-Also set `SUPABASE_JWT_SECRET` — required wherever the app runs, not only in production. Every
-tenant request is signed with it (`src/lib/dal/request-token.ts`) so Postgres can enforce
-row-level security as the `vestiarion_tenant` role; it is as powerful as the service role key, so
-handle it the same way. Find it under Supabase → Project Settings → JWT Keys → Legacy JWT secret.
-On Vercel, set it as a Sensitive variable for both Production and Preview. Then:
-
-```bash
+cp .env.example .env.local   # Supabase URL and keys, VESTIARION_MASTER_KEYS, SUPABASE_JWT_SECRET
 npm run db:migrate
 npm run dev
 ```
 
-Sign in at `/login` with your email. A first sign-in with no workspace lands at `/onboarding`: name
-a business and you get your own **sandbox** workspace on the spot — its own Ed25519 ledger signing
-key, generated and encrypted with no manual step, an `Operating (simulated)` account holding 10,000
-simulated USDC, an empty `Reserve (simulated)` account, and a signed `org_created` entry as the
-first line of its ledger. One person can create up to 3 workspaces this way on each network, Arc
-testnet and Arc mainnet counted apart; a setup that fails partway
-is rolled back rather than left half-built. The workspace switcher at the top of the navigation
-lists the workspaces you belong to and moves between them; its **Create workspace** and **All
-workspaces** links (`/onboarding?new`) let you create another.
-
-Every member of a workspace has one role. **Owner** and **admin** add counterparties, invoices, and
-milestones, can run a cycle by hand, and can invite and manage members; **approver** cannot create
-those records — keeping maker separate from checker from the start — but decides the payables the
-agent would not pay on its own, from the approvals inbox, and can pause the agent; **viewer** reads
-everything — the console, the ledger, past cycles — and changes nothing. A workspace always keeps at
-least one owner: the database itself refuses to remove or demote the last one. Only an owner or
-admin can resume an agent someone paused. A sandbox workspace is capped at 20 agent cycles per UTC
-day, counted in the database so the cap holds however many server instances are running, which
-bounds how much a trial workspace can spend on LLM calls, and a sandbox that sits inactive for 60
-days is deleted by a daily cleanup job, unless an owner has connected Circle to it. An owner takes a
-workspace live from **Settings** — see [Going live on Arc testnet](#going-live-on-arc-testnet).
-
-An **owner** or **admin** invites someone from the workspace's **Members** page
-(`/o/<slug>/members`), by email and role; an owner may grant any role, an admin only **approver** or
-**viewer**. With `RESEND_API_KEY` set, the invitation is emailed; otherwise the page hands back a
-link to share directly — shown once, since only its sha256 hash is stored. The link previews the
-invitation without accepting it; accepting needs signing in with the invited address and expires the
-link after 7 days. Inviting the same address again withdraws the older invitation; withdrawn and
-revoked invitations are kept, marked withdrawn, and a workspace can send at most 50 invitations a
-day. Anyone can leave a workspace they belong to from the same page. Deleting an account keeps the
-workspaces it created and the members it invited; deleting a workspace's only owner is refused.
-
-When a scheduled cycle leaves payables waiting for a decision, everyone who can decide them —
-**owner**, **admin**, **approver** — and has not turned it off gets a digest email: the workspace
-name, up to 10 of the waiting payables (then "and N more"), each with the counterparty, amount,
-status and the first sentence of why the agent held it, and a link to the approvals inbox. A cycle
-run by hand from the console never sends one, since the person running it is already watching it;
-in practice this means only a `live` workspace's unattended cron cycles notify. An invoice already
-told about is not told again unless it was escalated since. Each member has their own switch — "Email
-me when payments need a decision" — in the Notifications section of Settings, on by default; this
-needs `RESEND_API_KEY` too.
-
-Only the **founding organization** — seeded ahead of any sign-in, in `live` mode — skips self-serve
-creation: it exists before anyone signs in, so no self-serve step ever generates it a ledger key.
-Becoming its operator still means granting yourself ownership by hand:
+You need a [Supabase](https://supabase.com) project (Project Settings → API for the URL and keys, the JWT secret
+under JWT Keys). With no Circle or model keys, payments are simulated against Arc's measured fee and latency, and
+decisions come from the rule-based policy, so the app runs end to end with no credentials.
 
 ```bash
-npm run org:grant -- founding <your email> owner
+npm run verify   # typecheck, lint and the full test suite: what CI runs
 ```
 
-On a fresh database the founding organization has no ledger signing key yet, so the first
-ledger-writing action (adding an invoice, running a day) fails with `LedgerSigningKeyError` until a
-key is stored on it. One-time setup:
+The suite needs no Supabase, Circle or model key: it covers the ledger's tamper cases, risk tiering, treasury
+economics, guardrails and provider fallback, and runs every migration on an in-process Postgres (PGlite) to hold the
+database's half of the hash chain to the verifier.
 
-```bash
-node -e 'const c=require("crypto");const{publicKey,privateKey}=c.generateKeyPairSync("ed25519");require("fs").appendFileSync(".env.local","\nLEDGER_SIGNING_KEY=\""+privateKey.export({type:"pkcs8",format:"pem"})+"\"\n");console.log(c.createHash("sha256").update(publicKey.export({type:"spki",format:"der"})).digest("hex").slice(0,16));'
-npm run org:adopt-env -- founding --expect-key-id <id printed above>
-```
-
-The first line generates an Ed25519 key, appends it to `.env.local` as `LEDGER_SIGNING_KEY` on a
-line of its own — even when the file does not end in a newline — without ever printing the
-private key, and prints only its id — the first 16 hex characters of
-SHA-256 over the public key's SPKI DER (`ledgerKeyId` in `src/lib/ledger-keys.ts`). The second
-line encrypts that key onto the founding organization's row (needs `VESTIARION_MASTER_KEYS`,
-above); `--expect-key-id` guards against storing the wrong key, and the command names the id it
-actually found if yours doesn't match. If `.env.local` needs the PEM on one line instead — a
-hosting dashboard's env var field, say — its newlines can be escaped as literal `\n` rather than
-quoted and multi-line; both forms are read the same way (`src/lib/platform/adopt.ts`). This
-one-time setup is only for a new, empty database: production's founding organization already has
-its key stored.
-
-Open your workspace's console — `/o/<slug>/console`, or `/o/founding/console` for the founding
-organization — and add counterparties and invoices through the product. Each **Run day**
-click advances the demo clock and runs the full decision loop. Out of
-the box, payments are simulated against Arc's measured fee and latency profile ($0.0032, 2–5s) and
-decisions come from the rule-based heuristic. Those two figures are not quoted from a docs page:
-they were read back off Arc testnet from the receipts of real transfers this agent executed — see
-[What we measured](#what-we-measured).
-
-`npm run seed -- <org-slug>` is a destructive, opt-in demo command. It clears the named
-organization's current business records and loads the fictional Northstar Studio fixture. The
-ledger is append-only for tenants and is never cleared: the reset appends its own `demo_reset`
-entry naming what it cleared instead. It is not part of normal setup, and there is no seed or
-reset control in the product UI. Use it only against a disposable demo organization.
-
-Two independent upgrades from there, in either order:
-
-| Want | Set | Check with |
-| --- | --- | --- |
-| Real LLM reasoning | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `DEEPSEEK_API_KEY` | `npm run agent:doctor` |
-| Real USDC on Arc | An owner connects Circle under **Settings → Go live** | `npm run circle:doctor -- <org-slug>` |
-
-### Scripts
-
-| Command | Does |
-| --- | --- |
-| `npm run verify` | Typecheck, lint, and the full test suite — what CI runs |
-| `npm run test` / `test:watch` | Vitest, once or on change |
-| `npm run db:migrate` / `-- --through <N>` | Applies `supabase/migrations/*.sql`, optionally only through migration `<N>` |
-| `npm run seed -- <org-slug>` | **Destructive demo only:** replaces that organization's business data with fictional fixtures |
-| `npm run bootstrap:circle -- <org-slug>` | Creates Arc-testnet wallets for that organization's accounts and counterparties |
-| `npm run cycle -- <org-slug>` | Runs one agent cycle headlessly using the configured clock mode |
-| `npm run fixture:guardrail -- <org-slug>` | **Demo only:** adds one no-transfer model-vs-code refusal probe |
-| `npm run status -- <org-slug>` | Balances, wallets, open invoices, ledger height |
-| `npm run circle:doctor -- <org-slug>` / `agent:doctor` | Reports exactly which parts are live |
-| `npm run arc:proof` | Standalone: two wallets, a faucet check, one real transfer |
-| `npm run telegram:setup -- <https origin>` | Registers the Telegram bot's webhook and command menu, once the three `TELEGRAM_*` variables are set (see `.env.example`) |
-| `npm run docs:screenshots` | Rebuilds the user guides’ step screenshots in `public/docs/guides/` with local headless Edge. Run it after changing a screen a guide shows (Go live, the counterparty or invoice form, a decision or approval card, the audit log), then look at each PNG before committing |
-
-Seeded amounts scale down automatically when Circle credentials are present (`SEED_SCALE`),
-because the public faucet grants 20 testnet USDC every two hours and a demo denominated in
-thousands would never settle. The business narrative is the same; the decimal point moves.
-
-One consequence is worth knowing before you demo: **with a few USDC idle, the agent declines to
-sweep into USYC**, and it is right to. Here is the arithmetic, at testnet scale, with 2 USDC idle
-above the buffer and nothing falling due that the buffer cannot pay:
-
-```
-idle above buffer     2.000000 USDC
-expected hold days   30               (nothing calls the swept cash back within a month)
-projected yield       0.005671 USD    (at USYC's 3.45% APY)
-round-trip cost       0.00638  USD    (two transfers, at the measured Arc fee)
-```
-
-It holds, because sweeping would cost more than it earns. That is not a threshold someone
-tuned — it is the arithmetic in `planTreasury`, which is why the same policy flips to sweeping
-the moment the numbers justify it: with 118.59 USDC idle on the same terms, the month earns
-about $0.336, fifty times the cost. Until October 3, 2026 the policy assumed every swept dollar
-came back at the next obligation, so a 0.10 USDC bill due in two days cut that month to under
-two days of yield (#1103 in testnet-2: about $0.018). It now counts how long each dollar would
-actually stay. Run in simulate mode (`SEED_SCALE=1`, no Circle keys) to see
-exactly that: the identical book scaled up 1000x sweeps 13,900 USDC. An agent that sweeps
-regardless of whether sweeping pays is the cron job this project exists to not be. On Arc testnet,
-with 60.71 USDC idle above its buffer, the same arithmetic swept for real on Oct 3, 2026:
-the first transaction under **Real transactions** above.
-
-The round-trip cost in that table used to read `0.02`, because the fee was a hardcoded `$0.01`
-nobody had checked. Measuring it lowered the bar for sweeping by a factor of three — the agent
-had been declining trades that were, in fact, worth making.
-
-## What we measured
-
-Everything on the landing page is queried from the database at request time, and every figure
-below was produced by this agent executing real transfers on Arc testnet. None of it is quoted
-from a documentation page, and simulated rows are excluded from every median the app reports.
-
-| Figure | Measured | Source |
-| --- | --- | --- |
-| Transfer fee | **$0.003186** median, 4 samples | Arc receipt: `gasUsed × effectiveGasPrice` |
-| Settlement time | **2.5 s** median, 4 samples | Circle's create → first-confirm timestamps |
-
-Reading the fee is exact rather than approximate because of something specific to this chain:
-**Arc's native gas token is USDC, at 18 decimals.** So `gasUsed × effectiveGasPrice / 1e18` is
-the cost in dollars directly — no price oracle, no conversion, no question of when the quote was
-taken. `src/lib/circle/arcFees.ts` does that against `rpc.testnet.arc.network`, and the
-reconciliation pass backfills any transfer that settled before its receipt was readable.
-
-This mattered more than a nicer number on a page. Circle's own `networkFeeInUSD` comes back empty
-for Arc testnet — confirmed by re-fetching settled transactions long after confirmation — so the
-app had no chain-reported fee at all and fell back to a hardcoded `$0.01`. That estimate was
-roughly **3× the real cost**, and `planTreasury` prices a sweep-and-redeem round trip at twice the
-fee, so the agent had been holding cash whose yield would comfortably have covered the real cost
-of moving it. The simulator was wrong in the same direction: it generated 320–470 ms settlements
-under a comment claiming it reproduced "Arc's real latency profile", against a measured 2–5 s.
-
-Both constants are now calibrated from observation and carry the readings that set them
-(`src/lib/circle/types.ts`). The lesson is the one the whole project is built around: figures you
-assert about your own system drift, and figures you read do not.
-
-## Going live on Arc testnet
-
-The simulator and the real integration share one interface (`ChainProvider` in
-`src/lib/circle/types.ts`), so switching is additive. A workspace's **owner** does it from the
-**Go live** section of **Settings** (`/o/<slug>/settings`, under **Workspace**), in three steps, each unlocked
-by the one before:
-
-1. **Connect Circle.** Paste an **API key** and the **entity secret** from the
-   [Circle Console](https://console.circle.com). The key must be for the workspace's network: a
-   testnet key (`TEST_API_KEY`) for an Arc testnet workspace, so a mainnet key is refused before
-   anything is stored. The server checks the key with Circle, then encrypts both onto the
-   workspace's row in `orgs`; they are never shown again, logged, or sent back to the browser.
-2. **Create treasury wallets.** One click creates, in your own Circle account, a wallet set and an
-   Arc-testnet wallet for each account that has none, drops "(simulated)" from their names, and
-   starts each new wallet's balance at zero: nothing simulated carries into live mode.
-   Counterparties are paid only at a real address: set each one's address on the Counterparties
-   page, or its payments are held.
-3. **Go live.** Copy the operating wallet's address, fund it at
-   [faucet.circle.com](https://faucet.circle.com) (select **Arc Testnet**; 20 USDC every 2 hours),
-   and watch the on-chain balance in the same step. **Go live** asks for confirmation — real testnet
-   USDC moves when the agent pays, the agent runs every 6 hours, and the workspace is no longer
-   deleted when inactive — and then switches the workspace to `live`.
-
-Every member sees the workspace's status there; only an owner sees the steps. Credentials can be
-replaced later from the same section. Once the operating wallet exists, in any mode (sandbox or
-live), new credentials are accepted only if they reach every one of the workspace's wallets, in
-the Circle account that holds them; **Go live** checks the stored credentials the same way just
-before switching. To stop a live workspace paying, pause the agent from the console.
-
-**Hosted testnet wallets.** An owner without a Circle account can choose **Use a Vestiarion
-testnet wallet** instead of step 1 (labelled "Hosted by Vestiarion · Arc testnet"). Steps 2 and 3 are unchanged, except that the wallets are created in the platform's own
-Circle testnet account, in a wallet set named for the workspace; the owner funds them from the
-faucet as above. The choice is offered only where the deployment sets `HOSTED_CIRCLE_API_KEY` and
-`HOSTED_CIRCLE_ENTITY_SECRET` (ideally a Circle testnet account separate from the founding
-workspace's), and at most `HOSTED_WORKSPACE_LIMIT` workspaces (100 by default) may take it. Once a
-workspace's wallets exist, its choice is fixed: to use your own Circle account, start a new
-workspace.
-
-**Arc mainnet, behind a switch.** A deployment opens Arc mainnet with `MAINNET_ENABLED=1`, and only
-to the email addresses in `MAINNET_ALLOWLIST`, or to everyone with `MAINNET_ALLOWLIST=*` once a
-pilot is done; an empty allowlist opens it to no one. Such a person can create a workspace on Arc mainnet
-from the workspaces page. It starts with one empty operating account and an agent spending limit of
-50 USDC a day and 150 USDC in 7 days, and it never simulates.
-
-It also starts with two approvals above 100 USDC, which an owner can raise but not turn off there.
-
-Its three steps take a live Circle key (`LIVE_API_KEY`) and create one EOA wallet on `ARC`. That
-wallet pays its own gas in USDC, so 0.10 USDC is kept aside. Going live needs the word `mainnet`
-typed. Every page and message of the workspace names Arc mainnet, from the network profile's label,
-and a panel for a feature Arc mainnet lacks is not drawn. Until a workspace is live, and whenever
-the deployment switches Arc mainnet off, nothing moves: the stop switch's gates refuse with the reason.
-
-**Paying from the owner's own wallet.** Where the deployment sets `MAINNET_AGENT_CIRCLE_API_KEY` (a
-production key, `LIVE_API_KEY:…`) and `MAINNET_AGENT_CIRCLE_ENTITY_SECRET`, step 1 of an Arc mainnet
-workspace offers **Your own wallet** first. The owner's browser wallet (MetaMask, Rabby…) signs a proof,
-deploys the workspace's spending limit contract, approves it on USDC, and sends 0.50 USDC of gas to an
-agent wallet Vestiarion creates for the workspace in that Circle account. The agent wallet holds only
-gas: every payment, the agent's and the ones people approve, goes through the contract from it, within
-the figures the owner's wallet set. Vestiarion never holds the customer's USDC, and the customer needs
-no Circle account. Use a Circle production account kept for agent wallets alone, with its Wallets
-product unlocked. `ARC_MAINNET_RPC_URL`, optional, points the server's chain reads at a keyed RPC. See
-`docs/superpowers/specs/2026-10-07-wallet-treasury-design.md` and the Go live guide's path C.
-
-**A passkey wallet as the treasury.** Where the deployment also sets
-`NEXT_PUBLIC_MODULAR_WALLETS_MAINNET_CLIENT_KEY` (a Circle mainnet Client Key bound to the site's
-domain; `NEXT_PUBLIC_MODULAR_WALLETS_MAINNET_CLIENT_URL` is optional), an owner with no browser wallet
-creates one with a passkey: a Circle smart account on Arc mainnet owned by their passkey. Go live leads
-with it when the browser has no wallet. One confirmation deploys the contract through the deterministic
-deployment proxy, approves it and sends the agent its gas, after the browser checks every call against
-what it built itself; a recovery phrase made in the browser is then registered, or skipped knowingly.
-Vestiarion holds no key to the wallet. A client key is public by design, so it is not marked sensitive.
-See `docs/superpowers/specs/2026-10-07-passkey-treasury-design.md`.
-
-Stablecoins are chosen by contract, never by symbol, on both networks. Chats cannot approve a
-mainnet payment. See `docs/superpowers/specs/2026-10-06-mainnet-go-live-design.md`.
-
-### The founding workspace and the demo seed
-
-The founding organization predates this flow, and the demo seed creates counterparty wallets too,
-so both still go live with scripts:
-
-1. Put the Circle **API key** and **Entity Secret** in `.env.local`, alongside a PKCS8 Ed25519
-   `LEDGER_SIGNING_KEY` if the organization does not already have one stored.
-2. `npm run org:adopt-env -- <org-slug> --expect-key-id <key id>` — encrypts the ledger signing
-   key and Circle credentials onto that organization's row. From here the app reads them from
-   `orgs`, never from `.env.local`.
-3. `npm run circle:doctor -- <org-slug>` — confirms the key is accepted and the entity secret is
-   registered.
-4. `npm run seed -- <org-slug> && npm run bootstrap:circle -- <org-slug>` — creates a real
-   Arc-testnet wallet for every treasury account *and* every counterparty, and writes the ids and
-   addresses back to Supabase.
-   Counterparties get wallets so the demo is verifiable: when the agent pays a contractor you can
-   watch the USDC land at a real address. A real deployment stores the address the counterparty
-   gives you instead.
-5. Fund the operating wallet: [faucet.circle.com](https://faucet.circle.com), select **Arc
-   Testnet**, 20 USDC every 2 hours. (The Console faucet API, `requestTestnetTokens`, returns 403
-   on sandbox keys for Arc — the public faucet is the reliable route.)
-6. Run a cycle. The dashboard header now reads *payments: Arc testnet (live)* and paid invoices
-   carry a real transaction hash.
-
-`npm run arc:proof` does steps 4–6 standalone — two wallets, a faucet check, and one real transfer
-— if you want to verify the path without touching the app.
-
-To exercise the red guardrail band without risking a payment,
-`npm run fixture:guardrail -- <org-slug>` creates one explicitly labelled demo invoice for 0.9
-USDC against a medium-risk 0.5 USDC screened limit. It feeds a model-style `pay` verdict through
-the same `enforceApGuardrails` function used by the live orchestrator. Code changes the result to
-held, records `guardrailBlocked: true`, and never calls a transfer provider. The command is
-additive and idempotent; it is not part of normal setup.
-
-### What is genuinely live, and what is not
-
-The dashboard reports payments and yield separately because they differ, and the audit log records
-which produced each entry:
-
-- **Live** — wallet creation, USDC transfers, balances, transaction confirmation, all through
-  Circle Developer-Controlled Wallets on Arc testnet.
-- **Live once turned on** — the USYC reserve. The operating wallet deposits USDC through USYC's
-  Teller contract on Arc testnet, the reserve wallet holds the USYC and redeems it, and the reserve
-  is valued at USYC's latest price every cycle. USYC is permissioned, so Circle allowlists both
-  wallets first, and an owner turns it on in **Settings → USYC reserve**. Until then the reserve is
-  simulated, and labelled so.
-- **Live when configured** — sanctions screening calls an OpenSanctions/yente match endpoint when
-  `OPENSANCTIONS_API_URL` is set. Without it, a sandbox screens against the small bundled
-  watchlist, labelled as simulated, and a live workspace gets no verdict at all: its
-  counterparties stay unscreened, and the agent pays them nothing. Provider errors create an
-  incomplete check and retain the previous verdict; they never silently clear a counterparty.
-
-## Bringing your own business
-
-Everything the agent reasons about lives in five tables (`accounts`, `counterparties`,
-`invoices`, `milestones`, plus the ledger). To point Vestiarion at a real business:
-
-- The workspace name shown in the product is the organization's own, `orgs.name` (the founding
-  organization starts as "Vestiarion workspace"; `BUSINESS_NAME` no longer changes it). Add
-  vendors, contractors, and clients on `/counterparties`. Their configured payment limit is stored
-  separately from the authority derived by screening.
-- Add payables or receivables on `/invoices`, or import up to 200 rows from CSV after inspecting a
-  local preview. Amounts that cannot fit exact six-decimal USDC precision are rejected rather than
-  rounded. Every accepted record is written to the signed ledger as a human action.
-- Insert milestones with a real `verification_source` (a Git PR merge, a Kimai/Frappe timesheet
-  entry, a client sign-off) and flip `verified` when that source confirms the work.
-- Take the workspace live from **Settings → Go live** once real accounts exist, and fund the
-  operating wallet. `POST /api/agent/tick`, called on a schedule (cron, GitHub Action, whatever you
-  have), then runs its cycles instead of a button click.
-
-### Running on a real clock
-
-Production uses wall-clock mode by default; `CYCLE_CLOCK_MODE=simulate` is an explicit demo opt-in
-that advances the numbered day counter. Every page shows the real timestamp of the latest completed
-cycle. Supabase Cron calls the protected endpoint every six hours, at 17 minutes past (see below),
-and one call runs a cycle for every workspace in `live` mode, not only yours — each in its own
-isolated scope, so one workspace's failure is recorded against that workspace and does not stop
-the others. The included `.github/workflows/agent-cycle.yml` stays for a manual run: configure
-repository secrets `VESTIARION_URL` (the deployment origin) and `AGENT_API_TOKEN` (the same server
-secret used by the app). The ledger timestamp, not the nominal cron minute, is the source of truth
-for when a cycle ran.
-Sandbox workspaces are never in this list; their cycles run from the console, one **Run cycle**
-click at a time, up to the daily cap above.
-
-Four jobs must run on time, which GitHub's schedules do not do: they started a 5-minute schedule
-only a few times a day, and the six-hourly tick 2 to 4 times a day at uneven hours. A daily
-recurring payment's invoice is made by the first cycle of its due day, so a skipped tick left it
-waiting. Supabase Cron runs them from the database instead:
-
-- `POST /api/agent/tick`, at 17 minutes past every sixth hour: a cycle for every live workspace.
-- `POST /api/agent/fx-watch`, every 5 minutes: a EURC payable held because Circle quoted no rate or
-  no swap, or one above its swap cap or limit, is decided again once a fresh quote clears it, with no
-  one pressing anything. A run with nothing to re-check starts no cycle.
-- `POST /api/agent/transfer-watch`, every 5 minutes: a live payment not confirmed 15 minutes after it
-  was sent is told to the workspace's people, once per attempt, in the console, Slack, Telegram,
-  webhooks and by email. It sends nothing.
-- `POST /api/platform/webhooks`, every 10 minutes: webhook retries and anything still queued.
-
-To set them up, run `supabase/cron/watches.sql` once in the Supabase SQL editor, with your
-deployment's origin in place of `https://www.vestiarion.xyz`. Its header lists what comes first:
-enable `pg_cron` and `pg_net`, and add `AGENT_API_TOKEN` to Vault as `agent_api_token`. Each job's
-workflow (`agent-cycle.yml`, `fx-watch.yml`, `transfer-watch.yml`, `webhooks.yml`) stays for a manual run.
-
-Circle also tells the deployment when a transfer settles, at `POST /api/circle/notifications`. On a
-subscribed account, while the agent runs, a payment confirmed after the agent stopped waiting for it
-is recorded within seconds rather than at the next cycle; money arriving in an operating wallet is
-read at once, and starts a cycle only when it paid a receivable. On the production deployment
-(`VERCEL_ENV=production`), a workspace that connects its own Circle account subscribes it as it
-connects. Once that deployment is live, run `npm run circle:subscribe` once for the platform's hosted
-Circle account (from `HOSTED_CIRCLE_API_KEY` and `HOSTED_CIRCLE_ENTITY_SECRET`), for the Arc
-mainnet agent account (from `MAINNET_AGENT_CIRCLE_API_KEY` and `MAINNET_AGENT_CIRCLE_ENTITY_SECRET`)
-and for accounts connected before: Circle makes a subscription only after the endpoint answers its test notification.
-It finds or makes one subscription per account and prints each result, never a key.
-
-For automatic contractor evidence, put a full `https://github.com/<owner>/<repo>/pull/<number>` URL
-in `verification_source` and configure a read-only `GITHUB_TOKEN`. A merged response verifies the
-milestone; an unmerged response does not. Missing credentials and API failures are displayed as
-unavailable or failed while retaining the prior verdict. An owner can instead add a manual
-verification note, which is written to the signed ledger with `actor: human`.
-
-With the five `GITHUB_APP_*` variables set (see `.env.example`), a workspace can also connect
-GitHub from Settings by installing the platform's GitHub App on the repositories it chooses.
-A milestone paid for a pull request there then gets a comment on that pull request once the
-payment is confirmed: the amount, the network, the paying workspace and the transaction, never the
-payee. The installation's own token reads its private pull requests, so they verify too. With the
-app's webhook on and `GITHUB_APP_WEBHOOK_SECRET` set, a maintainer attaches a bounty from the pull
-request itself with `/bounty 25`, and its author says where to be paid with `/payto 0x…`; the agent
-pays once the pull request is merged and a member has confirmed the address. See
-[Show payments on GitHub](https://www.vestiarion.xyz/docs/guides/github).
-
-### Measurement provenance
-
-Every newly executed payment intent records its target, transaction reference, chain, provider
-mode, execution timestamp, fee, fee source, and measured settlement time when Circle supplies
-confirmation timestamps. `chain_reported` means Circle returned the fee; `provider_estimate`
-means the configured Arc cost was used because it did not; `simulated_profile` is never presented
-as live performance. A pending reconciliation has no settlement duration until confirmation.
-
-Each completed post-Phase-7 cycle appends one `cycle_runs` row and one immutable
-`cycle_snapshots` row with wall-clock timing, account balances, liquid and reserve positions, open
-AP/AR, obligation horizons, outcome counts, model-versus-heuristic counts, guardrail overrides,
-and provider modes. Existing cycles and transfers were intentionally not backfilled. Immediately
-after instrumentation the configured project therefore reports **0 instrumented cycles, 0
-snapshots, and 0 measured payment intents**. A payment-capable validation run was rejected by the
-execution safety gate, so there is no measurement period or resulting benchmark to claim yet;
-the first permitted agent cycle will populate these tables.
-
-`/insights` reads only those persisted rows through `src/lib/insights.ts`. It does not
-ship a sample series: transfer and cycle charts render an explicit empty receipt until
-the first instrumented run. Screening history is drawn from `compliance_checks`; because
-older checks do not carry a sweep id, the UI transparently groups consecutive checks
-within two minutes as an observed batch rather than claiming a stronger association.
-
-The public `/` landing page queries its statistics through `src/lib/landing.ts`. Instrumented
-cycles and decisions come from `cycle_runs`; settled transfers and median settlement time come
-from confirmed live `payment_intents`; median fee includes only `chain_reported` samples; ledger
-height is an exact count of `ledger_entries`. A missing sample renders as unavailable prose rather
-than a zero achievement. Every claim links to the console route that provides its evidence.
-
-## Tests
-
-```bash
-npm run verify        # typecheck + lint + tests — what CI runs on every push
-npm run test:watch    # while working
-```
-
-The suite covers the paths where being wrong costs money, and nothing else:
-
-- **The ledger** — canonical JSON ordering, and every way a chain can be broken: content edited
-  in place, a payment rewritten and the chain re-linked behind it with a forged key, an entry
-  deleted, entries reordered, a chain that does not start at genesis, a forged link hash. Each
-  must be caught by the *specific* check meant to catch it, so a passing chain cannot be an
-  accident of two errors cancelling.
-- **Risk tiering** — the property continuous re-screening depends on: screening the same
-  counterparty twenty times leaves its limit exactly where one screening left it, and coming off
-  the watchlist restores the full limit rather than leaving a false positive permanent.
-- **Obligation accounting** — held and awaiting-information payables remain inside the 7- and
-  14-day liquidity buffers until they are paid or explicitly rejected.
-- **Execution guardrails** — a model `pay` verdict above a screened-down limit is converted to a
-  refusal before the provider boundary, which is the exact case rendered by the demo probe.
-- **Treasury economics** — that the policy is scale-free. The same book scaled down 1000x flips
-  sweep to hold, and a more expensive chain flips it back, without a tuned constant anywhere.
-- **Provider selection** — that a pinned provider with a missing key raises instead of quietly
-  billing a different vendor, and that a rate-limited model falls back to the heuristic and is
-  *recorded* as the heuristic rather than passed off as the model's judgement.
-
-- **The database's half of the chain** — `append_ledger_entry()` is a Postgres function, so the
-  link between one entry and the next is computed by the database, not by the code the other
-  tests exercise. `tests/ledger-parity.test.ts` runs every migration, unmodified, on a real
-  Postgres inside the test process (PGlite — Postgres compiled to WebAssembly), appends through
-  the real function, and hands the rows it stored to the same `verifyChain()` the app uses. If
-  the SQL and the verifier ever disagree about what a link is, this is the only test that turns
-  red.
-
-Nothing in the suite needs Supabase, Circle, or an LLM key — the Postgres above is in-process and
-needs no server. Everything that does need a live service is exercised by
-`npm run cycle -- <org-slug>` against a real project, which is the honest place for it, not a
-mock that agrees with itself.
-
-## Guardrails
-
-The agent's system prompt (`src/lib/agent/orchestrator.ts`) is the enforced policy, not a
-suggestion — the orchestrator re-checks risk level and payment limit *after* the LLM decides and
-before executing a transfer, so a jailbroken or hallucinated "pay" decision on a flagged
-counterparty is blocked in code, not just discouraged in the prompt (see the
-`[guardrail override]` branch).
-
-Payments can be stopped for every workspace at once: `npm run payments -- off "<reason>"` stops
-them within 10 seconds on every running deployment, and `npm run payments -- on` starts them again.
-`PAYMENTS_DISABLED=1` on the deployment does the same after a redeploy. Nothing then moves money,
-the agent runs no cycle, and every workspace page says so, while reads keep working. A payment whose
-send Circle did not answer is looked for on Circle before anything is sent again, so it is never
-paid twice or closed over. An Arc address typed into the console or sent to the API must match its
-EIP-55 checksum when it mixes capital and small letters
-(`docs/superpowers/specs/2026-10-05-payment-safety-design.md`).
+[docs/self-hosting.md](docs/self-hosting.md) covers the rest: environment variables, the founding workspace, every
+script, going live per path, the scheduled jobs (Supabase Cron), Circle notifications, GitHub, and what is live versus
+simulated.
 
 ## License
 
-MIT
+[MIT](LICENSE). Arc, Circle, Slack, Telegram and npm are trademarks of their respective owners; their names show what
+Vestiarion is built on and connects to, not an endorsement.
+
+<a href="https://www.producthunt.com/products/vestiarion?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-vestiarion"><img alt="Vestiarion on Product Hunt" width="200" height="43" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1269583&theme=light"></a>

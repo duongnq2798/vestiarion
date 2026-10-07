@@ -24,6 +24,7 @@ import { newPayeeCheck } from "../new-payee";
 import { firstPaymentCheck, loadNewPayeeFacts } from "../new-payee-facts";
 import { addedSince, latestDecision, recordedFacts, type AddedDetails } from "../added-details";
 import { heldForCash, heldForVerdict } from "../next-step";
+import { verdictGate } from "../verdicts";
 import type { Provenance } from "../provenance";
 import { amountFromReserve, bringCashForApproval, CashBackError, cashShortMessage, cctpFeeCushion, reserveCover, type ReserveCover } from "./liquidity";
 import { approversBesides, readTwoApprovalsAbove } from "../approval-policy";
@@ -108,7 +109,9 @@ export type ApprovalErrorCode =
   | "invoice_changed"
   | "already_approved"
   | "needs_second_approver"
-  | "chain_off_network";
+  | "chain_off_network"
+  | "verdict_needed"
+  | "verdict_disagreed";
 
 /**
  * Every message except `insufficient_funds` and `needs_second_approver`, whose texts name the balance and the figure,
@@ -130,6 +133,8 @@ const MESSAGES: Record<Exclude<ApprovalErrorCode, "insufficient_funds" | "needs_
   nothing_to_add: "Enter a PO reference or tick Goods or services received.",
   invoice_changed: "This invoice changed a moment ago. Reload the page to see it.",
   already_approved: "You approved this already. Another person who can approve payments must approve it to pay.",
+  verdict_needed: "This decision waits for a verdict in shadow mode. Agree or disagree with it in Approvals first.",
+  verdict_disagreed: "Someone disagreed with this decision in shadow mode, so it is not paid. Return it to the agent or reject it.",
 };
 
 export class ApprovalError extends Error {
@@ -144,6 +149,15 @@ export class ApprovalError extends Error {
 
 function raise(code: Exclude<ApprovalErrorCode, "insufficient_funds" | "needs_second_approver" | "chain_off_network">): never {
   throw new ApprovalError(code, MESSAGES[code]);
+}
+
+/**
+ * A payable held in shadow mode for a person's verdict is settled through one (shadow mode S4): before any is given,
+ * and for a payment after a disagreement, these refuse, before any claim. A verdict settling it passes `forVerdict`.
+ */
+async function refuseUntilVerdict(invoiceId: string, decision: "approve" | "reject" | "return", status?: string): Promise<void> {
+  const gate = await verdictGate(invoiceId, decision, status);
+  if (gate) raise(gate);
 }
 
 /**
@@ -746,7 +760,7 @@ export const SECOND_OF_TWO_NOTE = "(the second of two approvals)";
  * `provenance`, when given, names the surface the person acted from (integrations design R3); the console gives none.
  */
 export async function approveAndPay(
-  input: { actorId: string; invoiceId: string; shownAddress?: string; provenance?: Provenance },
+  input: { actorId: string; invoiceId: string; shownAddress?: string; provenance?: Provenance; forVerdict?: boolean },
   options: {
     bridgeFee?: (chain: string, amount: number) => Promise<BridgeFee>;
     gatewayQuote?: (chain: string, amount: number) => Promise<GatewayQuote | null>;
@@ -754,6 +768,7 @@ export async function approveAndPay(
 ): Promise<{ status: "paid" | "matched" | "held" | "approved"; txRef: string | null; note: string; fromReserveUsdc?: number }> {
   const orgId = currentOrgId();
   const invoice = await loadWaitingPayable(input.invoiceId);
+  if (!input.forVerdict) await refuseUntilVerdict(invoice.id, "approve", invoice.status);
   const intent = await paymentIntentOf(invoice.id);
   // A transfer that already exists is reconciled, never sent again.
   const alreadySent = transferExists(intent);
@@ -1160,8 +1175,9 @@ async function giveBackAfterClaim(invoice: Pick<LoadedInvoice, "id" | "agentReas
 }
 
 /** `provenance`, when given, names the surface the person acted from (integrations design R3); the console gives none. */
-export async function rejectInvoice(input: { actorId: string; invoiceId: string; reason?: string; provenance?: Provenance }): Promise<void> {
+export async function rejectInvoice(input: { actorId: string; invoiceId: string; reason?: string; provenance?: Provenance; forVerdict?: boolean }): Promise<void> {
   const orgId = currentOrgId();
+  if (!input.forVerdict) await refuseUntilVerdict(input.invoiceId, "reject");
   await refuseIfPaymentSent(input.invoiceId);
   const claim = await db()
     .rpc("claim_invoice_decision", { p_invoice_id: input.invoiceId, p_by: input.actorId, p_decision: "reject" })
@@ -1189,8 +1205,9 @@ export async function rejectInvoice(input: { actorId: string; invoiceId: string;
 }
 
 /** `provenance`, when given, names the surface the person acted from (integrations design R3); the console gives none. */
-export async function returnInvoice(input: { actorId: string; invoiceId: string; provenance?: Provenance }): Promise<void> {
+export async function returnInvoice(input: { actorId: string; invoiceId: string; provenance?: Provenance; forVerdict?: boolean }): Promise<void> {
   const orgId = currentOrgId();
+  if (!input.forVerdict) await refuseUntilVerdict(input.invoiceId, "return");
   await refuseIfPaymentSent(input.invoiceId);
   const claim = await db()
     .rpc("claim_invoice_decision", { p_invoice_id: input.invoiceId, p_by: input.actorId, p_decision: "return" })
