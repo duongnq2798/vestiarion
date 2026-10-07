@@ -49,13 +49,24 @@ const OUTCOME_SIDE = {
 };
 const OUTCOMES = { sides: { customers: OUTCOME_SIDE, ours: { ...OUTCOME_SIDE, decisionsCarriedOut: "7" }, total: OUTCOME_SIDE } };
 
+/** What PostgREST returns for open_verdicts (0086): shadow mode verdicts given and agreed, as counts. */
+const VERDICTS = {
+  sides: {
+    customers: { verdictsGiven: 3, verdictsAgreed: 2 },
+    ours: { verdictsGiven: "1", verdictsAgreed: "1" },
+    total: { verdictsGiven: 4, verdictsAgreed: 3 },
+  },
+};
+
 /** Each function's document, by the path it is called at. */
 const reply = (request: RecordedRequest): FakeReply =>
   request.path === "/rest/v1/rpc/open_first_payments"
     ? { body: FIRSTS }
     : request.path === "/rest/v1/rpc/open_outcomes"
       ? { body: OUTCOMES }
-      : { body: DOCUMENT };
+      : request.path === "/rest/v1/rpc/open_verdicts"
+        ? { body: VERDICTS }
+        : { body: DOCUMENT };
 
 describe("parsePeriod", () => {
   it("is all time with no parameters", () => {
@@ -131,13 +142,14 @@ describe("dailySeries", () => {
 describe("readOpenNumbers", () => {
   const since = (date: string) => parsePeriod({ since: date }, NOW);
 
-  it("asks open_numbers, open_first_payments and open_outcomes for the period's start and reads figures sent as strings", async () => {
+  it("asks open_numbers, open_first_payments, open_outcomes and open_verdicts for the period's start and reads figures sent as strings", async () => {
     const { fake, result } = platform(() => readOpenNumbers(since("2026-09-20"), "arc-testnet", NOW.getTime()), reply);
     const numbers = await result;
     expect(fake.requests.map((request) => [request.path, request.body]).sort()).toEqual([
       ["/rest/v1/rpc/open_first_payments", { p_since: "2026-09-20T00:00:00.000Z", p_network: "arc-testnet" }],
       ["/rest/v1/rpc/open_numbers", { p_since: "2026-09-20T00:00:00.000Z", p_network: "arc-testnet" }],
       ["/rest/v1/rpc/open_outcomes", { p_since: "2026-09-20T00:00:00.000Z", p_network: "arc-testnet" }],
+      ["/rest/v1/rpc/open_verdicts", { p_since: "2026-09-20T00:00:00.000Z", p_network: "arc-testnet" }],
     ]);
     expect(numbers.sides.ours.usdcPaid).toBe(3);
     expect(numbers.daily[0]).toEqual({ day: "2026-09-28", customers: 1, ours: 2, oursUsdc: 5 });
@@ -195,11 +207,34 @@ describe("readOpenNumbers", () => {
     logged.mockRestore();
   });
 
+  it("merges the shadow mode verdicts into each side", async () => {
+    const { result } = platform(() => readOpenNumbers(since("2026-09-16"), "arc-testnet", NOW.getTime()), reply);
+    const numbers = await result;
+    expect(numbers.sides.customers).toMatchObject({ payments: 2, verdictsGiven: 3, verdictsAgreed: 2 });
+    expect(numbers.sides.ours).toMatchObject({ verdictsGiven: 1, verdictsAgreed: 1 });
+  });
+
+  it("still reads every other figure when open_verdicts cannot be read, with no verdict figures", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { result } = platform(
+      () => readOpenNumbers(since("2026-09-15"), "arc-testnet", 1_000),
+      (request) =>
+        request.path === "/rest/v1/rpc/open_verdicts" ? { status: 404, body: { message: "function open_verdicts does not exist" } } : reply(request)
+    );
+    const numbers = await result;
+    expect(numbers.sides.customers).toMatchObject({ payments: 2, decisionsCarriedOut: 5 });
+    for (const side of [numbers.sides.customers, numbers.sides.ours, numbers.sides.total]) {
+      expect(side).toMatchObject({ verdictsGiven: null, verdictsAgreed: null });
+    }
+    expect(logged).toHaveBeenCalledWith(expect.stringContaining("open_verdicts"), expect.anything());
+    logged.mockRestore();
+  });
+
   it("sends a null start for all time", async () => {
     const all = parsePeriod({}, NOW);
     const { fake, result } = platform(() => readOpenNumbers(all, "arc-testnet", NOW.getTime() + 10 * 60_000), reply);
     await result;
-    expect(fake.requests.map((request) => request.body)).toEqual([{ p_since: null, p_network: "arc-testnet" }, { p_since: null, p_network: "arc-testnet" }, { p_since: null, p_network: "arc-testnet" }]);
+    expect(fake.requests.map((request) => request.body)).toEqual(Array(4).fill({ p_since: null, p_network: "arc-testnet" }));
   });
 
   it("answers the same period from memory for 60 seconds, then reads again", async () => {
@@ -211,7 +246,7 @@ describe("readOpenNumbers", () => {
     expect(second.fake.requests).toEqual([]);
     const third = platform(() => readOpenNumbers(period, "arc-testnet", 61_001), reply);
     await third.result;
-    expect(third.fake.requests).toHaveLength(3);
+    expect(third.fake.requests).toHaveLength(4);
   });
 
   it("forgets a failed read, so the next request tries again", async () => {
@@ -220,7 +255,7 @@ describe("readOpenNumbers", () => {
     await expect(failing.result).rejects.toThrow(/open_numbers/);
     const retry = platform(() => readOpenNumbers(period, "arc-testnet", 2_000), reply);
     await retry.result;
-    expect(retry.fake.requests).toHaveLength(3);
+    expect(retry.fake.requests).toHaveLength(4);
   });
 
   it("asks for the network it is given, and keeps each network's figures apart in memory (network foundation N7)", async () => {
@@ -231,10 +266,11 @@ describe("readOpenNumbers", () => {
       { p_since: "2026-09-25T00:00:00.000Z", p_network: "arc-mainnet" },
       { p_since: "2026-09-25T00:00:00.000Z", p_network: "arc-mainnet" },
       { p_since: "2026-09-25T00:00:00.000Z", p_network: "arc-mainnet" },
+      { p_since: "2026-09-25T00:00:00.000Z", p_network: "arc-mainnet" },
     ]);
     const testnet = platform(() => readOpenNumbers(period, "arc-testnet", 2_000), reply);
     await testnet.result;
-    expect(testnet.fake.requests).toHaveLength(3);
+    expect(testnet.fake.requests).toHaveLength(4);
   });
 
   it("refuses a document of the wrong shape", async () => {

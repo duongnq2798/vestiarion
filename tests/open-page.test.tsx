@@ -36,6 +36,8 @@ const side = (scale: number) => ({
   decisionsCarriedOut: 3 * scale, decisionsEscalated: 1 * scale, escalationsResolved: 1 * scale, flagsResolved: 2 * scale,
   flagsUpheld: 1 * scale, invoicesPaidOnArc: 4 * scale, invoicesPaidOnTime: 3 * scale, invoicesPaidOnTimeUntouched: 2 * scale,
   duplicatesCaught: 0,
+  verdictsGiven: 0,
+  verdictsAgreed: 0,
 });
 
 /** A no-break space: a figure's number and unit, or a ratio, stay on one line in a narrow table. */
@@ -136,6 +138,25 @@ describe("the /open page", () => {
     expect(cellsOf(markup, "Invoices paid on time")).toEqual(["3 of 4", "6 of 8", "9 of 12"]);
     expect(cellsOf(markup, "Paid on time with no person involved")).toEqual(["2 of 4", "4 of 8", "6 of 12"]);
     expect(cellsOf(markup, "Duplicate invoices caught")).toEqual(["0", "0", "0"]);
+  });
+
+  it("shows how often people agreed with the agent in shadow mode, in the figures and beneath the agent's cards", async () => {
+    const agreed = (given: number, yes: number) => ({ verdictsGiven: given, verdictsAgreed: yes });
+    vi.mocked(readOpenNumbers).mockResolvedValue({
+      ...NUMBERS,
+      sides: { customers: { ...side(1), ...agreed(3, 2) }, ours: { ...side(2), ...agreed(1, 1) }, total: { ...side(3), ...agreed(4, 3) } },
+    });
+    const markup = await render();
+    expect(cellsOf(markup, "Shadow mode decisions a person agreed with")).toEqual(["2 of 3", "1 of 1", "3 of 4"]);
+    expect(text(markup)).toContain(
+      "In shadow mode, a person agrees or disagrees with each of the agent's payment decisions before anything is paid: customers agreed with 2 of 3 (67%)."
+    );
+  });
+
+  it("says nothing of shadow mode beneath the cards until a customer gives a verdict", async () => {
+    const markup = await render();
+    expect(text(markup)).not.toContain("customers agreed with");
+    expect(cellsOf(markup, "Shadow mode decisions a person agreed with")).toEqual(["—", "—", "—"]);
   });
 
   it("shows dashes for the outcomes when they could not be read", async () => {

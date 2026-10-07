@@ -86,6 +86,8 @@ export const FIGURE_GROUPS: ReadonlyArray<FigureGroup> = [
         of: ["invoicesPaidOnArc"],
       },
       { key: "flagsUpheld", label: "Agent flags a person upheld", kind: "period", format: "ratio", of: ["flagsResolved"] },
+      // In shadow mode, a person agrees or disagrees with each payment decision before anything is paid (0086).
+      { key: "verdictsAgreed", label: "Shadow mode decisions a person agreed with", kind: "period", format: "ratio", of: ["verdictsGiven"] },
     ],
   },
   {
