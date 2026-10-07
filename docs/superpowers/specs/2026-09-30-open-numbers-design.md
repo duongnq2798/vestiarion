@@ -147,8 +147,12 @@ payments are counted, never listed, and never shown as a day's amount).
   with nothing in it yet, or whose numbers cannot be read, is a compact card after them. A page of zeros never leads.
 - **Heading.** "Vestiarion, in production", a live badge with the time read, and three promises: customers counted apart,
   one network at a time, checkable on chain.
-- **Real customer usage.** Six headline figures are customers' alone, each with the total that includes our workspaces
-  beneath it, so nobody has to ask how many of them are the team's.
+- **Customers on <network>.** Six headline figures are customers' alone, each with the total that includes our workspaces
+  beneath it, so nobody has to ask how many of them are the team's. (Titled "Real customer usage" until 2026-10-07, when
+  it was named for its network.) A count still at zero reads "Not yet" over all time and "None" within a period, and
+  USDC paid at zero reads "—" with "No customer payment on <network> yet": a step not reached, not a row of zeros. The
+  total beneath each and the figures table still give the number. The headline's customer workspaces and payments
+  follow the same rule.
 - **How the agent performs.** Four shares across every workspace (decided by the agent itself, paid on time, on time with
   no person involved, flags upheld), each with its meter, its counts and customers' own share.
 - **What stands between the model and the money.** The checks a payment decision passes, each with its count: a model
