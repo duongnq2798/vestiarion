@@ -1,8 +1,10 @@
-import { decodeFunctionResult, encodeDeployData, encodeFunctionData, recoverMessageAddress, type Hex } from "viem";
+import { decodeFunctionResult, encodeFunctionData, recoverMessageAddress, type Hex } from "viem";
 import type { NetworkProfile } from "../network";
-import artifact from "../spending-limit/artifact.json";
 import { SPENDING_LIMIT_ABI } from "../spending-limit/onchain";
 import { asAddress, type TreasuryChain } from "./chain";
+import { deploymentData } from "../spending-limit/deployment";
+
+export { deploymentData };
 
 /**
  * What the server checks before it trusts an owner's wallet, their contract and their approval (docs/superpowers/
@@ -55,15 +57,6 @@ export async function verifyWalletProof(input: {
   }
   if (!same(signer, input.address)) return { ok: false, reason: "The message was signed by another wallet." };
   return { ok: true, issuedAt };
-}
-
-/** The deployment an owner's wallet sends (W6): Vestiarion's contract, for this USDC, wallet, agent and figures. */
-export function deploymentData(input: { usdc: string; treasury: string; agent: string; dailyUnits: bigint; weeklyUnits: bigint }): Hex {
-  return encodeDeployData({
-    abi: SPENDING_LIMIT_ABI,
-    bytecode: artifact.bytecode as Hex,
-    args: [asAddress(input.usdc), asAddress(input.treasury), asAddress(input.agent), input.dailyUnits, input.weeklyUnits],
-  });
 }
 
 /** A check that reads the chain: not mined yet, refused with why, or verified with what it found. */

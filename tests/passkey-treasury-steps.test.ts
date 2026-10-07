@@ -1,9 +1,11 @@
-import { getAddress } from "viem";
+import { getAddress, parseEther } from "viem";
 import { describe, expect, it } from "vitest";
 import type { TreasuryChain } from "@/lib/treasury/chain";
-import { choosePasskeyTreasury, chooseWalletTreasury, walletTreasuryStatus } from "@/lib/treasury/wallet-treasury";
+import { passkeySetupCalls, spendingLimitSalt } from "@/lib/passkey-treasury";
+import { choosePasskeyTreasury, chooseWalletTreasury, preparePasskeySetup, walletTreasuryStatus } from "@/lib/treasury/wallet-treasury";
 import {
   ACTOR,
+  AGENT,
   agentRow,
   APPROVE_TX,
   chain,
@@ -14,6 +16,7 @@ import {
   OWNER_EMAIL,
   sealLedgerKeysPerTest,
   signedProof,
+  USDC,
   WALLET,
   world,
   type World,
@@ -96,5 +99,57 @@ describe("walletTreasuryStatus on the passkey route", () => {
   it("leaves the wallet route as it was: no recovery step, nothing more to fund", async () => {
     const wallet = world({ ...passkey, contract: agentRow({ address: CONTRACT, approve_tx_hash: APPROVE_TX, enforced: true }) });
     expect(await status(wallet, fundedAndGassed)).toMatchObject({ step: "ready", signer: "wallet", recovery: null, setupNeedsUsdc: 0 });
+  });
+});
+
+describe("preparing a passkey wallet's setup (K6)", () => {
+  const passkey = { org: { wallet_host: "external" }, operating: { address: WALLET } };
+  const passkeyRow = (extra: Record<string, unknown> = {}) => agentRow({ treasury_signer: "passkey", ...extra });
+  const none = { dailyUsdc: null, weeklyUsdc: null, capUsdc: null };
+  const prepared = (state: World, onChain: TreasuryChain, figures: { dailyUsdc: number | null; weeklyUsdc: number | null; capUsdc: number | null } = none) =>
+    database(state).inScope(() => preparePasskeySetup({ orgId: ORG, ...figures }, { chain: onChain }));
+  const built = (deployed: boolean) =>
+    passkeySetupCalls({
+      usdc: USDC,
+      treasury: WALLET,
+      agent: AGENT,
+      dailyUnits: 50_000_000n,
+      weeklyUnits: 150_000_000n,
+      capUnits: null,
+      salt: spendingLimitSalt(ORG),
+      deployed,
+      gasWei: parseEther("0.5"),
+    });
+
+  it("builds the three calls with the workspace's figures, and says what it built them from", async () => {
+    const expected = built(false);
+    expect(await prepared(world({ ...passkey, contract: passkeyRow() }), chain())).toEqual({
+      contract: expected.contract,
+      salt: spendingLimitSalt(ORG),
+      deployed: false,
+      dailyUnits: "50000000",
+      weeklyUnits: "150000000",
+      capUnits: null,
+      calls: expected.calls.map((call) => ({ ...call, value: call.value.toString() })),
+      chainId: 5042,
+    });
+  });
+
+  it("leaves the deployment out where the contract is at its address already (Review Focus 2)", async () => {
+    const onChain = chain({ code: { [built(false).contract.toLowerCase()]: "0x6080" } });
+    const setup = await prepared(world({ ...passkey, contract: passkeyRow() }), onChain);
+    expect(setup.deployed).toBe(true);
+    expect(setup.calls.map((call) => call.to)).toEqual(built(true).calls.map((call) => call.to));
+  });
+
+  it("is refused on the wallet route, before the agent's wallet, once approved, and for a cap of nothing", async () => {
+    await expect(prepared(world({ ...passkey, contract: agentRow() }), chain())).rejects.toMatchObject({ code: "wrong_step" });
+    await expect(prepared(world({ ...passkey, contract: passkeyRow({ agent_address: null, agent_wallet_id: null }) }), chain())).rejects.toMatchObject({
+      code: "wrong_step",
+    });
+    await expect(
+      prepared(world({ ...passkey, contract: passkeyRow({ address: CONTRACT, approve_tx_hash: APPROVE_TX, enforced: true }) }), chain())
+    ).rejects.toMatchObject({ code: "wrong_step" });
+    await expect(prepared(world({ ...passkey, contract: passkeyRow() }), chain(), { ...none, capUsdc: 0 })).rejects.toMatchObject({ code: "invalid_figures" });
   });
 });

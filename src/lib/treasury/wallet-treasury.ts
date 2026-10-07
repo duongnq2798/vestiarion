@@ -9,6 +9,7 @@ import { MAINNET_NOT_OPEN, mayUseMainnet } from "../mainnet";
 import { networkOf, networkProfile, type NetworkProfile } from "../network";
 import { workspaceNetwork } from "../workspace-network";
 import { readOutflowBudget } from "../agent/outflow-budget";
+import { passkeySetupCalls, spendingLimitSalt } from "../passkey-treasury";
 import { circleFailureLabel, defaultCircleClient, type CircleClientFactory } from "../circle/check";
 import { ensureNotificationSubscription } from "../circle/notifications";
 import { AGENT_WALLET_SET, createWallet, walletIdempotencyKey, walletSetIdNamed } from "../circle/provision";
@@ -546,6 +547,68 @@ export async function recordApproval(input: { orgId: string; actorId: string; tx
       },
     });
     return "verified";
+  });
+}
+
+/** A passkey wallet's setup as the server built it (K6), with what the browser needs to build it again itself. */
+export interface PreparedPasskeySetup {
+  contract: Hex;
+  salt: Hex;
+  /** The contract is at its address already, from a setup whose recording was lost: the deploy call is left out. */
+  deployed: boolean;
+  /** The figures it deploys with, in units: the owner's, or the workspace's spending limit's where left empty. */
+  dailyUnits: string;
+  weeklyUnits: string;
+  /** The approval's cap in units; null approves without one. */
+  capUnits: string | null;
+  calls: Array<{ to: Hex; data: Hex; value: string }>;
+  chainId: number;
+}
+
+/**
+ * The calls a passkey wallet's one confirmation makes (K6): its contract deployed through the deterministic deployment
+ * proxy, approved on USDC, and the agent's gas. Only for a passkey treasury whose agent exists and whose contract is not
+ * approved yet. A contract already at its address (a setup sent before, whose recording was lost) is not deployed again.
+ */
+export async function preparePasskeySetup(
+  input: { orgId: string; dailyUsdc: number | null; weeklyUsdc: number | null; capUsdc: number | null },
+  deps: WalletTreasuryDeps = {}
+): Promise<PreparedPasskeySetup> {
+  return inScopeOf(input.orgId, undefined, async () => {
+    const { wallet, row, network } = await setup({ agent: true });
+    if (row?.treasury_signer !== "passkey") throw new WalletTreasuryError("wrong_step", "This workspace's wallet is not a passkey wallet.");
+    if (row.approve_tx_hash) throw new WalletTreasuryError("wrong_step", "The contract is approved already.");
+    if (input.capUsdc !== null && !(Number.isFinite(input.capUsdc) && input.capUsdc > 0 && usdcUnits(input.capUsdc) > 0n)) {
+      throw new WalletTreasuryError("invalid_figures", "Set a cap above 0 USDC, or none.");
+    }
+    const figures = await deploymentFigures(input.dailyUsdc, input.weeklyUsdc);
+    const capUnits = input.capUsdc === null ? null : usdcUnits(input.capUsdc);
+    const salt = spendingLimitSalt(input.orgId);
+    const base = {
+      usdc: network.tokens.USDC,
+      treasury: wallet,
+      agent: row.agent_address as string,
+      dailyUnits: figures.daily,
+      weeklyUnits: figures.weekly,
+      capUnits,
+      salt,
+      gasWei: parseEther(AGENT_GAS_USDC),
+    };
+    const planned = passkeySetupCalls({ ...base, deployed: false });
+    const chain = deps.chain ?? treasuryChain(network);
+    // CREATE2 ties the address to this code: whatever is there is this contract, and is not deployed twice (Review Focus 2).
+    const deployed = (await readOrRefuse(() => chain.code(planned.contract))) !== "0x";
+    const { contract, calls } = deployed ? passkeySetupCalls({ ...base, deployed: true }) : planned;
+    return {
+      contract,
+      salt,
+      deployed,
+      dailyUnits: figures.daily.toString(),
+      weeklyUnits: figures.weekly.toString(),
+      capUnits: capUnits === null ? null : capUnits.toString(),
+      calls: calls.map((call) => ({ to: call.to, data: call.data, value: call.value.toString() })),
+      chainId: network.chainId,
+    };
   });
 }
 
