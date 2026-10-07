@@ -80,6 +80,24 @@ const outcomesSchema = z.object({
   sides: z.object({ customers: outcomeSideSchema, ours: outcomeSideSchema, total: outcomeSideSchema }),
 });
 
+/**
+ * From open_verdicts (0086): in shadow mode, the verdicts people gave on the agent's decisions and how many agreed
+ * (docs/superpowers/specs/2026-10-07-shadow-mode-design.md S8). Both null when it could not be read, so /open still
+ * shows the rest.
+ */
+const verdictSideSchema = z.object({
+  verdictsGiven: figure.nullable(),
+  verdictsAgreed: figure.nullable(),
+});
+
+type VerdictSide = z.infer<typeof verdictSideSchema>;
+
+const NO_VERDICTS: VerdictSide = { verdictsGiven: null, verdictsAgreed: null };
+
+const verdictsSchema = z.object({
+  sides: z.object({ customers: verdictSideSchema, ours: verdictSideSchema, total: verdictSideSchema }),
+});
+
 /** Payments settled on one UTC day. A customer's amounts never appear by day, only their count (spec R6). */
 const dailySchema = z.object({
   day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -97,7 +115,7 @@ const openNumbersSchema = z.object({
 });
 
 export type SideKey = "customers" | "ours" | "total";
-export type SideNumbers = z.infer<typeof sideSchema> & z.infer<typeof firstSideSchema> & OutcomeSide;
+export type SideNumbers = z.infer<typeof sideSchema> & z.infer<typeof firstSideSchema> & OutcomeSide & VerdictSide;
 export type DailyPayments = z.infer<typeof dailySchema>;
 export type OpenNumbers = Omit<z.infer<typeof openNumbersSchema>, "sides"> & { sides: Record<SideKey, SideNumbers> };
 export type OurPayment = OpenNumbers["ourPayments"][number];
@@ -192,13 +210,14 @@ function readSides<S>(fn: PlatformRpc, params: { p_since: string | null; p_netwo
 
 async function fetchOpenNumbers(period: Period, network: Network): Promise<OpenNumbers> {
   const params = { p_since: period.since ? period.since.toISOString() : null, p_network: network };
-  const [numbers, first, outcomes] = await Promise.all([
+  const [numbers, first, outcomes, verdicts] = await Promise.all([
     platformDb().rpc("open_numbers", params),
     readSides("open_first_payments", params, firstPaymentsSchema, NO_FIRSTS),
     readSides<OutcomeSide>("open_outcomes", params, outcomesSchema, NO_OUTCOMES),
+    readSides<VerdictSide>("open_verdicts", params, verdictsSchema, NO_VERDICTS),
   ]);
   const document = openNumbersSchema.parse(unwrap(numbers));
-  const merge = (side: SideKey): SideNumbers => ({ ...document.sides[side], ...first[side], ...outcomes[side] });
+  const merge = (side: SideKey): SideNumbers => ({ ...document.sides[side], ...first[side], ...outcomes[side], ...verdicts[side] });
   return { ...document, sides: { customers: merge("customers"), ours: merge("ours"), total: merge("total") } };
 }
 

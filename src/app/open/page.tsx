@@ -204,6 +204,11 @@ export default async function OpenPage({ searchParams }: OpenPageProps) {
                   A duplicate is caught when the agent stopped an invoice that repeats one already paid or on its way to being paid, with
                   the same purchase order and amount, and it was never paid since.
                 </li>
+                <li>
+                  In shadow mode, a workspace keeps paying its bills as it does today while the agent decides on the same bills, and a
+                  person agrees or disagrees with each decision before anything is paid. A decision a person agreed with counts as agreed;
+                  bills of sample payees are never counted.
+                </li>
               </Method>
               <Method title="What is never shown">
                 <li>Customers&apos; payments appear only as counts and totals, never one by one or as a day&apos;s amount.</li>

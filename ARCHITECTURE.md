@@ -329,6 +329,9 @@ mainnet plan).
   mainnet first, and the first one's headline figures sit under the page's heading, named as that network's. One with no
   payment yet, or whose numbers cannot be read, is a compact card after them.
   - `open_numbers`, `open_first_payments` and `open_outcomes` take `(p_since, p_network)` and count one network.
+  - `open_verdicts(p_since, p_network)` (0086) counts the shadow mode verdicts given on payables, never a sample payee's,
+    and how many agreed; /open shows customers' share beneath the agent's cards once one is given, and a row in Every
+    figure. Read like `open_outcomes`: until it can be read, its figures are dashes and the rest of /open shows.
   - Their one-argument versions stay for older code.
 
 **Every module on its workspace's network** (`docs/superpowers/specs/2026-10-05-network-threading-design.md`,

@@ -113,6 +113,7 @@ export function NetworkNumbers({ numbers, period, network }: { numbers: OpenNumb
             note="The agent said not to pay, and the person who decided agreed."
           />
         </div>
+        <ShadowAgreement customers={customers} />
       </section>
 
       <section aria-labelledby={`controls-${id}`}>
@@ -334,5 +335,20 @@ export function QuietNetwork({ numbers, period, network }: { numbers: OpenNumber
         </div>
       </Disclosure>
     </div>
+  );
+}
+
+/**
+ * How often customers agreed with the agent in shadow mode (docs/superpowers/specs/2026-10-07-shadow-mode-design.md
+ * S8), beneath the agent's cards; nothing until a customer gives a verdict.
+ */
+function ShadowAgreement({ customers }: { customers: SideNumbers }) {
+  const given = customers.verdictsGiven;
+  const agreed = customers.verdictsAgreed;
+  if (given === null || agreed === null || given === 0) return null;
+  return (
+    <p className="mt-4 max-w-3xl text-sm leading-relaxed text-ink-2">
+      {`In shadow mode, a person agrees or disagrees with each of the agent's payment decisions before anything is paid: customers agreed with ${formatFigure(agreed, "count")} of ${formatFigure(given, "count")} (${formatPercent(agreed, given)}).`}
+    </p>
   );
 }
