@@ -174,6 +174,12 @@ organization per UTC day. The cap is enforced inside `begin_cycle_run` (migratio
 opens the `cycle_runs` row under a per-organization lock and counts the day's runs in the same
 transaction, so it holds across serverless instances rather than resetting per cold start.
 
+Supabase Cron calls the tick at 17 minutes past every sixth hour (`supabase/cron/watches.sql`), with
+the agent's bearer token from Vault, and `.github/workflows/agent-cycle.yml` stays for a manual run.
+GitHub's schedule called it until 2026-10-07, 2 to 4 times a day at uneven hours. A daily recurring
+payment's invoice is made by the first cycle of its due day (`leadDays` is 0 for it), so a skipped
+tick left the day's invoices waiting for the next cycle, or for an event to start one.
+
 **The transfer watch** (`POST /api/agent/transfer-watch`, `src/lib/agent/transfer-watch.ts`,
 `docs/superpowers/specs/2026-10-06-stuck-transfer-alert-design.md`) runs every 5 minutes from Supabase Cron, with the
 same bearer token, and by hand from `.github/workflows/transfer-watch.yml`. It tells a workspace's people about a live

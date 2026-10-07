@@ -30,7 +30,7 @@ Data recovery: creation and CSV import are append operations, and each accepted 
 
 ## Phase 5 — verification and wall clock
 
-Application rollback: disable `.github/workflows/agent-cycle.yml` first so an older deployment is not triggered unexpectedly, then revert the Phase 5 commit. Existing verification provenance columns are backward-compatible and should remain for audit history.
+Application rollback: stop the agent's tick first so an older deployment is not triggered unexpectedly: run `select cron.unschedule('vestiarion-agent-tick');` in the Supabase SQL editor, and leave `.github/workflows/agent-cycle.yml` unrun. Then revert the Phase 5 commit. Existing verification provenance columns are backward-compatible and should remain for audit history.
 
 Operational rollback: unset `GITHUB_TOKEN` to stop remote verification; the app will label checks unavailable and retain previous verdicts. Set `CYCLE_CLOCK_MODE=simulate` only for a disposable demo. Returning a production deployment to the numbered clock does not change real invoice due dates, which always use wall-clock timestamps.
 
