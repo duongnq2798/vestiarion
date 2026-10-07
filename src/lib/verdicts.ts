@@ -2,6 +2,7 @@ import { AGENT_DECISION_ACTIONS } from "./agent/shadow-hold";
 import { currentOrgId } from "./context";
 import { db, unwrap, type OrgDb } from "./dal";
 import { appendLedgerEntryBestEffort } from "./ledger-best-effort";
+import { isReclaimable } from "./agent/claim-age";
 import { heldForVerdict } from "./next-step";
 import { readShadowMode, type ShadowMode } from "./shadow-mode";
 import type { VerdictFacts } from "./verdict-view";
@@ -100,10 +101,15 @@ async function newestDecision(invoiceId: string): Promise<DecisionEntry | null> 
   return rows[0] ?? null;
 }
 
-/** Whether the payable still waits for this verdict: held, with this decision its newest, which held it for one. */
+/**
+ * Whether the payable still waits for this verdict: held, with this decision its newest, which held it for one. An Agree
+ * and pay that did not finish leaves it waiting too, once its claim may be retaken (review minor 3).
+ */
 async function stillHeldFor(entry: DecisionEntry, invoiceId: string): Promise<boolean> {
-  const invoice = (unwrap(await db().from("invoices").select("status").eq("id", invoiceId).limit(1)) as Array<{ status: string }>)[0];
-  if (invoice?.status !== "held") return false;
+  const invoice = (
+    unwrap(await db().from("invoices").select("status, reviewed_at").eq("id", invoiceId).limit(1)) as Array<{ status: string; reviewed_at?: string | null }>
+  )[0];
+  if (!invoice || (invoice.status !== "held" && !isReclaimable(invoice.status, invoice.reviewed_at ?? null, Date.now()))) return false;
   const newest = await newestDecision(invoiceId);
   return newest !== null && Number(newest.seq) === Number(entry.seq) && heldForVerdict(newest.detail);
 }
@@ -129,7 +135,8 @@ export async function verdictGate(
   facts: { status?: string; transferSent?: boolean } = {}
 ): Promise<"verdict_needed" | "verdict_disagreed" | null> {
   const held = facts.status ?? ((unwrap(await db().from("invoices").select("status").eq("id", invoiceId).maybeSingle()) as { status: string } | null)?.status ?? null);
-  if (held !== "held") return null;
+  // A claim in progress, or one that never finished, stays a hold waiting for a verdict (review minor 3).
+  if (held !== "held" && held !== "processing") return null;
   const newest = await newestDecision(invoiceId);
   if (!newest || !heldForVerdict(newest.detail)) return null;
   const shadow = await readShadowMode(db());
@@ -137,6 +144,41 @@ export async function verdictGate(
   const given = await verdictOn(Number(newest.seq));
   if (!given) return "verdict_needed";
   return decision === "approve" && given.verdict === "disagree" && !facts.transferSent ? "verdict_disagreed" : null;
+}
+
+/**
+ * Which of these payables wait for a verdict that can still be given (shadow mode S4): the newest decision on each held
+ * it for one, it came after shadow mode started while shadow mode is on, and no one has given a verdict on it. For the
+ * lists of what waits for a person, which say so and link to give it.
+ */
+export async function awaitingVerdicts(invoiceIds: readonly string[]): Promise<Set<string>> {
+  const waiting = new Set<string>();
+  if (invoiceIds.length === 0) return waiting;
+  const shadow = await readShadowMode(db());
+  if (!shadow) return waiting;
+  const rows = unwrap(
+    await db()
+      .from("ledger_entries")
+      .select("seq, ts, detail")
+      .eq("actor", "agent")
+      .in("action", [...AGENT_DECISION_ACTIONS])
+      .in("detail->>invoiceId", [...invoiceIds])
+      .order("seq", { ascending: false })
+  ) as Array<{ seq: number | string; ts: string; detail: Record<string, unknown> | null }>;
+  const newest = new Map<string, { seq: number; ts: string; detail: Record<string, unknown> | null }>();
+  for (const row of rows) {
+    const id = row.detail?.invoiceId;
+    if (typeof id === "string" && !newest.has(id)) newest.set(id, { seq: Number(row.seq), ts: row.ts, detail: row.detail });
+  }
+  const held = [...newest].filter(([, row]) => heldForVerdict(row.detail) && Date.parse(row.ts) >= Date.parse(shadow.startedAt));
+  if (held.length === 0) return waiting;
+  const given = new Set(
+    (unwrap(await db().from("decision_verdicts").select("entry_seq").in("entry_seq", held.map(([, row]) => row.seq))) as Array<{ entry_seq: number | string }>).map(
+      (row) => Number(row.entry_seq)
+    )
+  );
+  for (const [id, row] of held) if (!given.has(row.seq)) waiting.add(id);
+  return waiting;
 }
 
 export async function giveVerdict(

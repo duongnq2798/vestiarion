@@ -36,7 +36,9 @@ When the agent decides to pay a bill now, nothing is sent: the payment is held f
 
 If you may not pay it yourself, for example because you entered the bill and another person can approve payments, the card offers **Agree** alone and says why. Your agreement is recorded, and another person pays it in Approvals.
 
-In Slack and Telegram, the agent's message about a payment held for your verdict says it waits for your verdict, and **Give your verdict** opens it here. Slack offers no buttons on it: until someone gives a verdict, nothing else settles it, and **Approve and pay** refuses a payment someone disagreed with, unless its transfer had already left: that is recorded.
+In Slack and Telegram, the agent's message about a payment held for your verdict, and the list of what waits for a person, say it waits for your verdict, and **Give your verdict** opens it here. Slack offers no buttons on it: until someone gives a verdict, nothing else settles it, and **Approve and pay** refuses a payment someone disagreed with, unless its transfer had already left: that is recorded.
+
+If an **Agree and pay** stops before it finishes, the card says **Unfinished decision**. After ten minutes it offers **Agree and pay** and **Disagree** again, and nothing else settles the payment until a verdict is given.
 
 Every other decision, such as a payment scheduled for a later day or a bill held for a check, offers **Agree** and **Disagree** on its card in AP / AR. Its own actions stay where they are. When a scheduled payment's day comes, the agent decides again, and that payment is held for your verdict.
 

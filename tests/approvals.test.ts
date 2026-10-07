@@ -1895,6 +1895,26 @@ describe("listWaitingPayables", () => {
     expect(cash?.verdictEntry).toBeUndefined();
   });
 
+  it("still waits for a verdict when an Agree and pay did not finish, but not while someone is paying it (review minor 3)", async () => {
+    const decided = (invoiceId: string, seq: number) => ({
+      seq, id: `e-${invoiceId}`, ts: "2026-10-07T08:00:00Z", actor: "agent", domain: "ap", action: "ap_pay", summary: "",
+      detail: { invoiceId, decision: { action: "pay" }, observed: { riskLevel: "clear" }, guardrailBlocked: false, guardrailRule: null, execution: { resultingStatus: "held", heldBecause: "shadow_verdict" } },
+      body_hash: "00", signature: "00", prev_hash: null, hash: "00", signing_key_id: null,
+    });
+    const rows = [
+      invoiceRow({ id: "unfinished", status: "processing", reviewed_at: "2026-10-07T08:05:00Z" }),
+      invoiceRow({ id: "deciding", status: "processing", reviewed_at: new Date().toISOString() }),
+    ];
+    const { run } = approvalsFake({
+      invoice: (r) => (r.params.get("id") ? undefined : { body: rows }),
+      ledgerTargets: [decided("unfinished", 42), decided("deciding", 43)],
+    });
+
+    const listed = await run(() => listWaitingPayables());
+    expect(listed.find((row) => row.id === "unfinished")).toMatchObject({ heldForVerdict: true, reclaimable: true });
+    expect(listed.find((row) => row.id === "deciding")?.heldForVerdict).toBeUndefined();
+  });
+
   it("carries the rule that refused the agent's payment, and none for a stop the model chose", async () => {
     const decided = (invoiceId: string, detail: Record<string, unknown>) => ({
       seq: 9, id: `e-${invoiceId}`, ts: "2026-10-03T08:00:00Z", actor: "agent", domain: "ap", action: "ap_pay", summary: "",
@@ -2865,6 +2885,18 @@ describe("a payable held for a person's verdict (shadow mode S4)", () => {
         await run(() => settle({ actorId: ACTOR, invoiceId: INVOICE_ID, ...(forVerdict ? { forVerdict: true } : {}) }));
         expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(1);
       }
+    }
+  });
+
+  it("is not paid, rejected or returned when an Agree and pay did not finish, until a verdict is given (review minor 3)", async () => {
+    const unfinished = () => ({ body: invoiceRow({ status: "processing", reviewed_at: "2026-10-07T08:05:00Z" }) });
+    const paying = approvalsFake({ decision: shadowHold, shadow: on, invoice: unfinished });
+    await expect(paying.run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).rejects.toMatchObject({ code: "verdict_needed" });
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+    for (const settle of [rejectInvoice, returnInvoice]) {
+      const { fake, run } = approvalsFake({ decision: shadowHold, shadow: on, invoice: unfinished });
+      await expect(run(() => settle({ actorId: ACTOR, invoiceId: INVOICE_ID }))).rejects.toMatchObject({ code: "verdict_needed" });
+      expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
     }
   });
 

@@ -181,6 +181,20 @@ describe("giveVerdict", () => {
     expect(no.reject).toHaveBeenCalledWith(INVOICE, "The bill is wrong");
   });
 
+  it("pays through an agreement a payment whose earlier Agree and pay did not finish, but not one someone is paying now (review minor 3)", async () => {
+    fake = fakeSupabase(workspace({ invoice: { status: "processing", reviewed_at: "2026-10-07T10:05:00Z" } as { status: string } }));
+    const unfinished = actions();
+    const result = await run(() => giveVerdict({ actorId: PERSON, entrySeq: 41, verdict: "agree", then: "pay" }, unfinished));
+    expect(unfinished.approve).toHaveBeenCalledTimes(1);
+    expect(result.recorded).toBe(true);
+
+    fake = fakeSupabase(workspace({ invoice: { status: "processing", reviewed_at: new Date().toISOString() } as { status: string } }));
+    const deciding = actions();
+    const now = await run(() => giveVerdict({ actorId: PERSON, entrySeq: 41, verdict: "agree", then: "pay" }, deciding));
+    expect(deciding.approve).not.toHaveBeenCalled();
+    expect(now.after).toEqual({ ok: false, message: "It no longer waits for your verdict, so nothing was paid." });
+  });
+
   it("records a disagreement and leaves the payable as it is when it no longer waits for that verdict (shadow mode review M2)", async () => {
     const acts = actions();
     fake = fakeSupabase(workspace({ entries: [decision(41), decision(57)] }));
