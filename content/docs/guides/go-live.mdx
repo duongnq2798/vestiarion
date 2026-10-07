@@ -157,9 +157,16 @@ On either route, once the workspace is live, these points differ from [What chan
 
 - **Every payment goes through your contract.** That includes the agent's own and the ones people approve with **Approve and pay** or **Pay now**. A person's payment the contract would refuse is refused before anything is sent, with the reason, for example "Paying 30 USDC would pass the contract's daily limit of 50 USDC: 40 USDC paid so far."
 - **Only USDC on Arc mainnet is paid from it.** A payment in EURC, or to another chain, is refused: "Only USDC on Arc mainnet can be paid from your wallet's contract."
-- **The figures are your contract's.** The console's agent spending limit shows them and offers no way to change them, because only your wallet can.
+- **The figures are your contract's, and your wallet changes them.** In **Go live**, under **Change what the agent may pay**, enter the **Daily figure (USDC)** and **7-day figure (USDC)**, then choose **Change with your passkey**, or **Change from your wallet** with a wallet in your browser. Your wallet calls the contract's `setLimits` and pays its network fee. Once Arc mainnet shows the new figures, the agent's spending limit follows them, and a payment held under a lower figure is decided again. The console's agent spending limit shows them, with a link here.
 - **The console's cash is what the contract can move**: your wallet's USDC, or the approval if that is less.
-- **To stop payments**, pause the agent from the console, as in any workspace. To stop them from your wallet, set its USDC approval for the contract back to 0, and the contract can then move nothing. Do this too before you delete the workspace.
+- **To stop payments from your wallet**, choose **Stop the agent's payments** in **Go live** and confirm. Your wallet sets its USDC approval for the contract to 0, so the contract can move nothing, and the agent is paused. **Resume payments** approves the contract again, without a cap or up to the **Cap (USDC)** you enter, and lifts that pause. Pausing the agent from the console works as in any workspace.
+
+<Screenshot
+  src="/docs/guides/go-live-wallet-controls.png"
+  alt="The Go live section of a workspace live on Arc mainnet, paying from a passkey wallet: its wallet, the agent's wallet and gas, the contract, its figures of 50 USDC a day and 200 USDC in 7 days, and what the agent can move. Under Change what the agent may pay, the Daily figure (USDC) field holds 50 and the 7-day figure (USDC) field 200, with the button Change with your passkey. Below, the line The contract may move your USDC without a cap, and the button Stop the agent's payments."
+  caption="Once live, the wallet itself changes the figures, or stops the agent."
+/>
+
 - **Keep the agent's gas topped up.** The agent cannot pay without it. Send USDC on Arc mainnet to the agent's wallet, shown in **Go live**, before it runs out.
 - **Money coming in is not read yet.** A client's payment into your wallet reaches you, but Vestiarion does not match it to its receivable yet, so the receivable stays open. Leave payment reminders off for this workspace's receivables until it does.
 
@@ -325,6 +332,11 @@ A failed step shows one of these messages under its button. You can repeat any s
 | Arc mainnet did not carry out the setup; nothing was set up, and only its network fee was spent. | Choose **Set up with your passkey** again. |
 | The setup was sent, but it could not be recorded: … | Read the reason after the colon. The setup reached Arc mainnet; if the reason is a passing one, reload the page to check it again. |
 | Recovery is not available in this browser. | Open Settings in a browser with passkeys, then choose **Create a recovery phrase** again. |
+| Give the cap in USDC, above 0, or leave it empty. | Enter a cap above 0, or leave **Cap (USDC)** empty to resume payments without one. |
+| That transaction failed, or this workspace's wallet did not send it; nothing was recorded. | The change did not come from the treasury's own wallet, or failed on chain. Do it again from **Go live**, with that wallet. |
+| The contract may still move the wallet's USDC; nothing was recorded. | The stop did not set the approval to 0. Choose **Stop the agent's payments** again. |
+| The contract may move none of the wallet's USDC yet; nothing was recorded. | The resume did not approve the contract. Choose **Resume payments** again. |
+| Arc mainnet did not carry it out; only its network fee was spent. | The change failed on chain. Choose it again. |
 | The setup could not be checked just now; it is kept and not sent twice. Check again in a moment. | Arc mainnet or Vestiarion did not answer while the page checked a setup it sent. Choose **Check again** in a moment, or reload the page. |
 | That did not work. Nothing was sent. Try again in a moment. The reason given: … | Something unforeseen stopped the step before anything was sent; what follows "The reason given" is what Circle or the browser said. Choose the step's button again. If it happens again, reload the page or try another browser, and send that reason to support. |
 | The setup Vestiarion sent is not the one this page expected; nothing was signed. | Reload the page and try again. Nothing was signed. |

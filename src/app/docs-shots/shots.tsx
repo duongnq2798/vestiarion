@@ -132,6 +132,7 @@ const OWN_WALLET_DEPLOY: GoLiveStatus = {
     setupNeedsUsdc: 0,
     limitDailyUsdc: 50,
     limitWeeklyUsdc: 150,
+    approval: null,
   },
 };
 
@@ -147,6 +148,7 @@ const OWN_WALLET_READY: GoLiveStatus = {
     weeklyUsdc: 200,
     spendableUsdc: 250,
     agentGasUsdc: 0.5,
+    approval: "unlimited",
   },
 };
 
@@ -173,6 +175,14 @@ const PASSKEY_RECOVERY: GoLiveStatus = {
     walletUsdc: 249.45,
     spendableUsdc: 249.45,
   },
+};
+
+/** Live on Arc mainnet from a passkey wallet: its controls (treasury wallet controls C1). */
+const PASSKEY_LIVE: GoLiveStatus = {
+  ...PASSKEY_RECOVERY,
+  step: "live",
+  liveSince: "2026-10-07T08:30:37Z",
+  walletTreasury: { ...PASSKEY_RECOVERY.walletTreasury!, step: "ready", recovery: "registered", approval: "unlimited" },
 };
 
 /** Set up, with the agent's gas run short before going live: the passkey sends it more (the guide's "only when needed"). */
@@ -586,6 +596,7 @@ export const DOCS_SHOTS = {
   "go-live-passkey-recovery": { guide: "go-live", page: "settings", render: goLive(PASSKEY_RECOVERY) },
   // A computer with no passkey of its own: the script tells the page so, and the phone handoff opens by itself.
   "go-live-passkey-phone": { guide: "go-live", page: "settings", render: goLive(PASSKEY_GAS) },
+  "go-live-wallet-controls": { guide: "go-live", page: "settings", render: goLive(PASSKEY_LIVE) },
   "go-live-live": {
     guide: "go-live",
     page: "settings",

@@ -26,7 +26,7 @@ const MESSAGES: Record<Exclude<AgentBudgetErrorCode, "invalid" | "onchain">, str
   cycle_running: "A cycle is running. Try again in a minute, once it has finished.",
   enforced_needs_figure: "Keep a daily or 7-day figure while the limit is enforced on Arc, or turn that off first.",
   mainnet_needs_figure: "A workspace on Arc mainnet keeps a daily or 7-day limit.",
-  wallet_contract: "This workspace's figures are its wallet's contract's: only that wallet can change them.",
+  wallet_contract: "This workspace's figures are its wallet's contract's: change them with that wallet in Settings, under Go live.",
 };
 
 export class AgentBudgetError extends Error {

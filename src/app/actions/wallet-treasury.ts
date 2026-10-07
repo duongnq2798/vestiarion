@@ -5,6 +5,7 @@ import "server-only";
 import { authorize } from "@/lib/auth/authorize";
 import { revalidateOrgPages } from "@/lib/auth/revalidate";
 import { inOrg } from "@/lib/dal/scope";
+import { raiseCycleEvent } from "@/lib/agent/cycle-soon";
 import {
   choosePasskeyTreasury,
   chooseWalletTreasury,
@@ -19,7 +20,9 @@ import {
   proofMessage,
   recordApproval,
   recordDeployment,
+  recordWalletControl,
   WalletTreasuryError,
+  type WalletControlKind,
   type PreparedPasskeySetup,
   type PreparedTransaction,
 } from "@/lib/treasury/wallet-treasury";
@@ -269,6 +272,32 @@ export async function prepareAgentGasAction(orgSlug: string): Promise<PreparedAc
       return { ok: true, message: "", transaction: await prepareAgentGas({ orgId: auth.membership.orgId }) };
     } catch (error) {
       return { ...failed("prepareAgentGasAction", error), transaction: null };
+    }
+  });
+}
+
+const CONTROL_KINDS: ReadonlySet<string> = new Set<WalletControlKind>(["figures", "stop", "resume"]);
+
+/**
+ * Records a control the treasury's own wallet sent from Go live (docs/superpowers/specs/2026-10-07-treasury-wallet-controls-
+ * design.md C4, C5): owner or admin, from the chain only. A figure loosened or payments resumed starts a cycle, so what the
+ * old state held is decided again.
+ */
+export async function recordWalletControlAction(orgSlug: string, input: { txHash: string; kind: WalletControlKind }): Promise<RecordActionResult> {
+  const auth = await authorize(orgSlug, "org.administer");
+  if (!auth.ok) return { ok: false, message: auth.message, state: null };
+  return inOrg(auth, async () => {
+    if (!CONTROL_KINDS.has(input.kind)) return { ok: false, message: GENERIC, state: null };
+    try {
+      const recorded = await recordWalletControl({ orgId: auth.membership.orgId, actorId: auth.user.id, txHash: input.txHash, kind: input.kind });
+      if (recorded.state === "verified") {
+        revalidateOrgPages();
+        if (recorded.loosened) raiseCycleEvent(auth, "budget_raised");
+        if (recorded.resumed) raiseCycleEvent(auth, "agent_resumed");
+      }
+      return { ok: true, message: "", state: recorded.state };
+    } catch (error) {
+      return recordFailed("recordWalletControlAction", error);
     }
   });
 }

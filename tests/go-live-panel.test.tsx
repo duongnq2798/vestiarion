@@ -505,7 +505,50 @@ describe("GoLivePanel and the owner's own wallet (wallet treasury W1, W5-W10)", 
     setupNeedsUsdc: 0,
     limitDailyUsdc: 50,
     limitWeeklyUsdc: 150,
+    approval: null,
     ...overrides,
+  });
+
+  describe("once live, the treasury's own wallet controls it (treasury wallet controls C1)", () => {
+    const liveTreasury = (overrides: Partial<NonNullable<GoLiveStatus["walletTreasury"]>> = {}) =>
+      status({
+        step: "live",
+        network: "arc-mainnet",
+        host: "external",
+        liveSince: "2026-10-07T08:30:37Z",
+        walletTreasury: setup({ step: "ready", contract: CONTRACT, dailyUsdc: 50, weeklyUsdc: 150, spendableUsdc: 4.33, agentGasUsdc: 0.5, signer: "passkey", approval: "unlimited", ...overrides }),
+      });
+
+    it("lets an owner change the contract's figures, from what it holds now, and stop the agent's payments", () => {
+      const markup = panel(liveTreasury());
+      const words = text(markup);
+      expect(words).toContain("Change what the agent may pay");
+      expect(markup).toMatch(/<input[^>]*id="treasury-controls-daily"[^>]*value="50"|<input[^>]*value="50"[^>]*id="treasury-controls-daily"/);
+      expect(markup).toMatch(/<input[^>]*id="treasury-controls-weekly"[^>]*value="150"|<input[^>]*value="150"[^>]*id="treasury-controls-weekly"/);
+      expect(words).toContain("Change with your passkey");
+      expect(words).toContain("The contract may move your USDC without a cap.");
+      expect(words).toContain("Stop the agent's payments");
+      expect(words).not.toContain("Resume payments");
+    });
+
+    it("asks a browser wallet in its own words, and names a cap", () => {
+      const words = text(panel(liveTreasury({ signer: "wallet", approval: 250 })));
+      expect(words).toContain("Change from your wallet");
+      expect(words).toContain("The contract may move up to 250 USDC of yours.");
+    });
+
+    it("offers to resume payments once stopped, with a cap to set", () => {
+      const markup = panel(liveTreasury({ approval: "stopped" }));
+      const words = text(markup);
+      expect(words).toContain("Stopped: the contract may move none of your USDC, and the agent is paused.");
+      expect(words).toContain("Resume payments");
+      expect(markup).toContain('id="treasury-controls-cap"');
+      expect(words).not.toContain("Stop the agent's payments");
+    });
+
+    it("shows a member who cannot administer the workspace no controls", () => {
+      expect(text(panel(liveTreasury(), false))).not.toContain("Change what the agent may pay");
+    });
   });
 
   it("offers the owner's own wallet first on Arc mainnet, with their own Circle account still behind a disclosure", () => {

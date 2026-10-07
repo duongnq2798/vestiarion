@@ -312,7 +312,7 @@ export async function openPasskeyTreasury(input: {
 const OWN_REFUSALS = [SETUP_MISMATCH];
 
 /** What a person is told when the passkey route fails (K10). Anything unforeseen goes to the console only. */
-export function passkeyTreasuryFailure(error: unknown, during: "create" | "open" | "setup" | "recovery" | "check"): string {
+export function passkeyTreasuryFailure(error: unknown, during: "create" | "open" | "setup" | "recovery" | "check" | "control"): string {
   const reason = browserReason(error);
   if (reason === "NotAllowedError") return during === "create" ? "No passkey was created. Nothing changed." : "The passkey was not used. Nothing changed.";
   if (reason === "NotSupportedError") return "This browser cannot use passkeys. Use one that can, such as Chrome or Safari, or connect a wallet instead.";

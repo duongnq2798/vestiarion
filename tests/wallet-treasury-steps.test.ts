@@ -259,7 +259,16 @@ describe("walletTreasuryStatus", () => {
       setupNeedsUsdc: 0,
       limitDailyUsdc: 50,
       limitWeeklyUsdc: 150,
+      approval: "unlimited",
     });
+  });
+
+  it("reads the contract's approval: unlimited, up to a cap, or stopped by the owner (treasury wallet controls C1)", async () => {
+    const enforced = () => world({ ...chosen, contract: agentRow({ address: CONTRACT, approve_tx_hash: APPROVE_TX, enforced: true }) });
+    const read = (allowance: bigint) => database(enforced()).inScope(() => walletTreasuryStatus(ORG, { chain: chain({ usdc: 12_500_000n, allowance, gas: 500_000_000_000_000_000n }) }));
+    expect((await read(0n)).approval).toBe("stopped");
+    expect((await read(250_000_000n)).approval).toBe(250);
+    expect((await database(world({ ...chosen, contract: agentRow() })).inScope(() => walletTreasuryStatus(ORG, { chain: chain() }))).approval).toBeNull();
   });
 
   it("keeps the step and leaves a figure out when the chain cannot be read", async () => {
