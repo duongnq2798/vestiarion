@@ -165,12 +165,12 @@ describe("passkeyTreasuryFailure (K10)", () => {
     );
   });
 
-  it("passes its own refusals through, and keeps anything else to the console", () => {
+  it("passes its own refusals through, and logs anything else to the console as well as naming its reason", () => {
     const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
     expect(passkeyTreasuryFailure(new Error("The setup Vestiarion sent is not the one this page expected; nothing was signed."), "setup")).toBe(
       "The setup Vestiarion sent is not the one this page expected; nothing was signed."
     );
-    expect(passkeyTreasuryFailure(new Error("socket hang up"), "recovery")).toBe("That did not work. Nothing was sent. Try again in a moment.");
+    expect(passkeyTreasuryFailure(new Error("socket hang up"), "recovery")).toMatch(/^That did not work. Nothing was sent. Try again in a moment./);
     expect(quiet).toHaveBeenCalled();
     quiet.mockRestore();
   });
@@ -277,6 +277,19 @@ describe("passkeyStepView (final review I3)", () => {
   it("follows the status everywhere else", () => {
     for (const step of ["agent", "gas", "recovery"] as const) expect(passkeyStepView({ step, walletUsdc: 5, setupNeedsUsdc: 0.75, pending: true })).toBe(step);
     expect(passkeyStepView({ step: "ready", walletUsdc: 5, setupNeedsUsdc: 0.75, pending: false })).toBe("none");
+  });
+});
+
+describe("a failure nothing else names (2026-10-07)", () => {
+  it("still says nothing was sent, and gives the reason the bundler or browser gave, on one line", () => {
+    const refused = Object.assign(new Error("User operation was rejected.\n\nVersion: viem@2.55.11"), {
+      shortMessage: "User operation was rejected.",
+      details: "maxPriorityFeePerGas must be at least 3000000000\n(request id 7)",
+    });
+    expect(passkeyTreasuryFailure(refused, "setup")).toBe(
+      "That did not work. Nothing was sent. Try again in a moment. The reason given: maxPriorityFeePerGas must be at least 3000000000"
+    );
+    expect(passkeyTreasuryFailure(new Error("socket hang up"), "recovery")).toBe("That did not work. Nothing was sent. Try again in a moment. The reason given: socket hang up");
   });
 });
 

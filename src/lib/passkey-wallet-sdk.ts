@@ -11,6 +11,31 @@ import { PASSKEY_WALLET_NETWORK, type PasskeyBundler, type PasskeyPublicClient, 
  * the types are cast at this one seam.
  */
 
+/** At least this for a user operation's priority, as Arc's own samples floor it. */
+const MIN_PRIORITY_FEE = 1_000_000_000n;
+
+interface GasPriceTier {
+  maxFeePerGas?: string;
+  maxPriorityFeePerGas?: string;
+}
+
+/**
+ * A user operation's fees as Circle's bundler prices them (`circle_getUserOperationGasPrice`, its medium tier), never
+ * from the chain's own priority fee: on 2026-10-07 Arc mainnet's was 4,049 wei while Circle's bundler asked at least
+ * 3 gwei, and the first passkey setup was refused. Arc's samples price user operations from the bundler the same way.
+ */
+export async function circleUserOperationFees(bundler: {
+  request(arguments_: { method: string; params?: unknown[] }): Promise<unknown>;
+}): Promise<{ maxFeePerGas: bigint; maxPriorityFeePerGas: bigint }> {
+  const prices = (await bundler.request({ method: "circle_getUserOperationGasPrice", params: [] })) as Partial<
+    Record<"low" | "medium" | "high", GasPriceTier>
+  > | null;
+  const tier = [prices?.medium, prices?.high, prices?.low].find((each) => each?.maxFeePerGas && each.maxPriorityFeePerGas);
+  if (!tier?.maxFeePerGas || !tier.maxPriorityFeePerGas) throw new Error("Circle gave no gas price for this operation.");
+  const priority = BigInt(tier.maxPriorityFeePerGas);
+  return { maxFeePerGas: BigInt(tier.maxFeePerGas), maxPriorityFeePerGas: priority < MIN_PRIORITY_FEE ? MIN_PRIORITY_FEE : priority };
+}
+
 /** A network's chain as viem describes it, from its profile: USDC is Arc's native token, with 18 decimals there. */
 function chainOf(network: NetworkProfile) {
   return defineChain({
@@ -48,6 +73,7 @@ export function passkeySdk(network: NetworkProfile = PASSKEY_WALLET_NETWORK): Pa
         client: parameters.client as never,
         chain: parameters.chain as never,
         transport: parameters.transport as never,
+        userOperation: { estimateFeesPerGas: ({ bundlerClient }) => circleUserOperationFees(bundlerClient as never) },
       }) as unknown as PasskeyBundler,
     // Circle's recovery: the address is mapped to the wallet with Circle, then added as an owner by a user operation (K8).
     registerRecoveryAddress: (parameters) =>

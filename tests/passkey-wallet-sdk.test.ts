@@ -2,7 +2,7 @@ import { decodeFunctionData, erc20Abi, isAddress } from "viem";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { ARC_TESTNET } from "@/lib/network";
 import { passkeyMark, passkeyName, passkeyWalletAddress, type PasskeySdk } from "@/lib/passkey-wallet";
-import { passkeySdk } from "@/lib/passkey-wallet-sdk";
+import { circleUserOperationFees, passkeySdk } from "@/lib/passkey-wallet-sdk";
 import { openPasskeyWallet } from "@/lib/passkey-wallet-send";
 
 /**
@@ -103,7 +103,14 @@ beforeAll(() => {
       case "eth_maxPriorityFeePerGas":
         return reply("0x3b9aca00");
       case "circle_getUserOperationGasPrice":
-        return reply({ low: {}, medium: {}, high: {}, deployed: "100000", notDeployed: "600000" });
+        // Tiers as Circle's Arc mainnet bundler gave them on 2026-10-07, in decimal: well above the chain's own priority fee.
+        return reply({
+          low: { maxPriorityFeePerGas: "3000005739", maxFeePerGas: "43000005739" },
+          medium: { maxPriorityFeePerGas: "4223405131", maxFeePerGas: "44223405131" },
+          high: { maxPriorityFeePerGas: "5723405526", maxFeePerGas: "45723405526" },
+          deployed: "100000",
+          notDeployed: "600000",
+        });
       case "pm_getPaymasterStubData":
         return reply({ paymaster: `0x${"99".repeat(20)}`, paymasterData: "0x", paymasterVerificationGasLimit: "0x10000", paymasterPostOpGasLimit: "0x10000", isFinal: false });
       case "eth_estimateUserOperationGas":
@@ -202,8 +209,12 @@ describe("the Modular Wallets binding, with the app's viem", () => {
     expect(await wallet.send(to, 1_500_000n)).toEqual({ kind: "sent", txHash: `0x${"cd".repeat(32)}` });
 
     expect(assertions.map((assertion) => assertion.rpId)).toEqual(["vestiarion.xyz"]);
-    const operation = sentOperation as { callData: `0x${string}`; paymaster: string; sender: string };
+    const operation = sentOperation as { callData: `0x${string}`; paymaster: string; sender: string; maxFeePerGas: string; maxPriorityFeePerGas: string };
     expect(operation.sender.toLowerCase()).toBe(circleAddress.toLowerCase());
+    // Priced by Circle's own user operation gas price, not the chain's priority fee (1 gwei here), which Circle's Arc
+    // mainnet bundler refused on 2026-10-07: the first passkey setup failed there.
+    expect(BigInt(operation.maxFeePerGas)).toBe(44_223_405_131n);
+    expect(BigInt(operation.maxPriorityFeePerGas)).toBe(4_223_405_131n);
     expect(operation.paymaster).toBe(`0x${"99".repeat(20)}`);
     // execute(USDC, 0, transfer(to, 1.5 USDC)) on the smart account: the transfer's calldata is inside it.
     const transfer = `0xa9059cbb${to.slice(2).toLowerCase().padStart(64, "0")}${(1_500_000n).toString(16).padStart(64, "0")}`;
@@ -223,6 +234,32 @@ describe("the Modular Wallets binding, with the app's viem", () => {
     receipt = "unreachable";
     expect(await wallet.send("0x840de234Bfc3F66fA380888A0a8204D9487D60d4", 1n)).toEqual({ kind: "unconfirmed", userOpHash: `0x${"ab".repeat(32)}` });
   }, 60_000);
+});
+
+describe("circleUserOperationFees", () => {
+  const bundler = (answer: unknown) => ({ request: async () => answer });
+
+  it("takes Circle's medium tier, given in decimal or in hex", async () => {
+    expect(await circleUserOperationFees(bundler({ medium: { maxFeePerGas: "44223405131", maxPriorityFeePerGas: "4223405131" } }))).toEqual({
+      maxFeePerGas: 44_223_405_131n,
+      maxPriorityFeePerGas: 4_223_405_131n,
+    });
+    expect(await circleUserOperationFees(bundler({ medium: { maxFeePerGas: "0xa4c49b04b", maxPriorityFeePerGas: "0xfbbd3b4b" } }))).toEqual({
+      maxFeePerGas: 0xa4c49b04bn,
+      maxPriorityFeePerGas: 0xfbbd3b4bn,
+    });
+  });
+
+  it("falls back to another tier, and never offers less than 1 gwei for priority", async () => {
+    expect(await circleUserOperationFees(bundler({ high: { maxFeePerGas: "45000000000", maxPriorityFeePerGas: "500" } }))).toEqual({
+      maxFeePerGas: 45_000_000_000n,
+      maxPriorityFeePerGas: 1_000_000_000n,
+    });
+  });
+
+  it("refuses to price an operation Circle gave no price for", async () => {
+    await expect(circleUserOperationFees(bundler({ low: {}, medium: {}, high: {} }))).rejects.toThrow("Circle gave no gas price for this operation.");
+  });
 });
 
 describe("the binding for a passkey treasury (passkey treasury K2, K8)", () => {
