@@ -42,6 +42,7 @@ import { listCounterparties, listInvoices, stats, type InvoiceRow } from "@/lib/
 import { plural, utcDay } from "@/lib/copy";
 import { payLinkStates, type PayLinkState } from "@/lib/platform/pay-links";
 import { listRecurringPayables } from "@/lib/recurring-payables";
+import { billCurrencyOf } from "@/lib/shadow-currency";
 import { verdictFacts } from "@/lib/verdicts";
 import { receiptShareable } from "@/lib/receipts/facts";
 import { sharedReceipts } from "@/lib/receipts/share";
@@ -292,7 +293,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
               </TabsList>
               {/* Both stay mounted, so switching tabs never loses what was typed. */}
               <TabsContent value="manual" forceMount className="data-[state=inactive]:hidden">
-                <InvoiceIntake orgSlug={slug} counterparties={counterparties.map(({ id, name, role }) => ({ id, name, role }))} billCurrency={verdicts.shadow?.currency} />
+                <InvoiceIntake orgSlug={slug} counterparties={counterparties.map(({ id, name, role }) => ({ id, name, role }))} billCurrency={billCurrencyOf(verdicts.shadow)} />
               </TabsContent>
               <TabsContent value="document" forceMount className="data-[state=inactive]:hidden">
                 <InvoiceDocumentIntake orgSlug={slug} counterparties={counterparties.map(({ id, name, role }) => ({ id, name, role }))} />

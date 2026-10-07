@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { db } from "@/lib/dal";
-import { endShadowMode, readShadowMode, ShadowModeError, startShadowMode } from "@/lib/shadow-mode";
+import { billCurrencyOf, shadowModeCurrency } from "@/lib/shadow-currency";
+import { endShadowMode, readShadowMode, SHADOW_CURRENCIES, ShadowModeError, startShadowMode } from "@/lib/shadow-mode";
 import { fakeSupabase, orgTestContext, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 
 /**
@@ -61,7 +62,14 @@ describe("startShadowMode", () => {
     expect(ledgerMock).toHaveBeenCalledWith(ORG, expect.objectContaining({ actor: "human", domain: "system", action: "shadow_mode_started", detail: { by: OWNER, currency: "VND" } }));
   });
 
-  it.each(["", "VN", "VNDX", "USDC", "EURC", "V1D"])("refuses %j as the business's currency", async (currency) => {
+  it("turns it on in USDC, for bills entered in USDC with nothing converted", async () => {
+    fake = fakeSupabase(workspace());
+    const started = await run(() => startShadowMode({ actorId: OWNER, currency: " usdc " }));
+    expect(started).toMatchObject({ currency: "USDC", startedBy: OWNER });
+    expect(writes("POST")[0].body).toMatchObject({ currency: "USDC", started_by: OWNER });
+  });
+
+  it.each(["", "VN", "VNDX", "EURC", "V1D"])("refuses %j as the business's currency", async (currency) => {
     fake = fakeSupabase(workspace());
     await expect(run(() => startShadowMode({ actorId: OWNER, currency }))).rejects.toMatchObject({ code: "invalid_currency" });
     expect(writes("POST")).toHaveLength(0);
@@ -114,5 +122,27 @@ describe("endShadowMode", () => {
 
   it("says each refusal in words a person reads", () => {
     expect(new ShadowModeError("already_off").message).toBe("Shadow mode is already off.");
+    expect(new ShadowModeError("invalid_currency").message).toBe("Choose USDC, or the currency your bills are written in as a three-letter code, such as EUR.");
+  });
+});
+
+describe("the currency shadow mode runs in", () => {
+  it("is offered USDC first, and never VND: crypto is no means of payment in Vietnam", () => {
+    expect(SHADOW_CURRENCIES[0]).toBe("USDC");
+    expect(SHADOW_CURRENCIES).not.toContain("VND");
+  });
+
+  it("is USDC, or a bill's own currency as a three-letter code", () => {
+    expect(shadowModeCurrency(" usdc ")).toBe("USDC");
+    expect(shadowModeCurrency("eur")).toBe("EUR");
+    expect(shadowModeCurrency("EURC")).toBeNull();
+    expect(shadowModeCurrency("US")).toBeNull();
+  });
+
+  it("converts the invoice form's bills only from a currency other than USDC", () => {
+    const since = { startedAt: "2026-10-07T12:00:00Z", startedBy: OWNER };
+    expect(billCurrencyOf({ currency: "USDC", ...since })).toBeUndefined();
+    expect(billCurrencyOf({ currency: "EUR", ...since })).toBe("EUR");
+    expect(billCurrencyOf(null)).toBeUndefined();
   });
 });

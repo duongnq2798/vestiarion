@@ -899,7 +899,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Rates By Exchange Rate API", "src/components/intake/InvoiceIntake.tsx"],
     ["Turn off shadow mode", SHADOW_PANEL],
     ["A payment waiting for a person to agree stays held until a person decides it.", SHADOW_PANEL],
-    ["Choose your currency as a three-letter code, such as VND. USDC and EURC are what the agent pays in, not a bill's currency.", SHADOW_LIBRARY],
+    ["Choose USDC, or the currency your bills are written in as a three-letter code, such as EUR.", SHADOW_LIBRARY],
     ["Shadow mode is already on.", SHADOW_LIBRARY],
     ["Shadow mode is already off.", SHADOW_LIBRARY],
     ["A cycle is running. Try again in a minute, once it has finished.", SHADOW_LIBRARY],

@@ -2,7 +2,7 @@ import { CYCLE_IN_PROGRESS_MS } from "./agent/balances";
 import { currentOrgId } from "./context";
 import { db, unwrap, type OrgDb } from "./dal";
 import { appendLedgerEntryBestEffort } from "./ledger-best-effort";
-import { SHADOW_CURRENCIES, shadowCurrency, type ShadowMode } from "./shadow-currency";
+import { SHADOW_CURRENCIES, shadowCurrency, shadowModeCurrency, type ShadowMode } from "./shadow-currency";
 import { workspaceNetwork } from "./workspace-network";
 
 /**
@@ -19,7 +19,7 @@ export { SHADOW_CURRENCIES, shadowCurrency, type ShadowMode };
 export type ShadowModeErrorCode = "invalid_currency" | "mainnet" | "already_on" | "already_off" | "cycle_running";
 
 const MESSAGES: Record<ShadowModeErrorCode, string> = {
-  invalid_currency: "Choose your currency as a three-letter code, such as VND. USDC and EURC are what the agent pays in, not a bill's currency.",
+  invalid_currency: "Choose USDC, or the currency your bills are written in as a three-letter code, such as EUR.",
   mainnet: "Shadow mode runs on Arc testnet. On Arc mainnet the agent pays your real bills.",
   already_on: "Shadow mode is already on.",
   already_off: "Shadow mode is already off.",
@@ -54,7 +54,7 @@ async function refuseWhileCycleRuns(): Promise<void> {
 }
 
 export async function startShadowMode(input: { actorId: string; currency: string }): Promise<ShadowMode> {
-  const currency = shadowCurrency(input.currency);
+  const currency = shadowModeCurrency(input.currency);
   if (!currency) throw new ShadowModeError("invalid_currency");
   if (workspaceNetwork().id === "arc-mainnet") throw new ShadowModeError("mainnet");
   if (await readShadowMode(db())) throw new ShadowModeError("already_on");
