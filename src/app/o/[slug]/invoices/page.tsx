@@ -284,7 +284,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
               </TabsList>
               {/* Both stay mounted, so switching tabs never loses what was typed. */}
               <TabsContent value="manual" forceMount className="data-[state=inactive]:hidden">
-                <InvoiceIntake orgSlug={slug} counterparties={counterparties.map(({ id, name, role }) => ({ id, name, role }))} />
+                <InvoiceIntake orgSlug={slug} counterparties={counterparties.map(({ id, name, role }) => ({ id, name, role }))} billCurrency={verdicts.shadow?.currency} />
               </TabsContent>
               <TabsContent value="document" forceMount className="data-[state=inactive]:hidden">
                 <InvoiceDocumentIntake orgSlug={slug} counterparties={counterparties.map(({ id, name, role }) => ({ id, name, role }))} />

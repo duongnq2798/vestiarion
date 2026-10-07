@@ -238,7 +238,7 @@ export async function verdictFacts(orgDb: OrgDb, entries: Array<{ seq: number; a
     const decisions = entries.filter((entry) => entry.actor === "agent" && (AGENT_DECISION_ACTIONS as readonly string[]).includes(entry.action)).map((entry) => entry.seq);
     const read = await readVerdicts(orgDb, decisions);
     const given = new Map([...read].map(([seq, verdict]) => [seq, { verdict: verdict.verdict, reason: verdict.reason }] as const));
-    return { shadow: shadow ? { startedAt: shadow.startedAt } : null, given, canGive };
+    return { shadow: shadow ? { startedAt: shadow.startedAt, currency: shadow.currency } : null, given, canGive };
   } catch (error) {
     console.error("verdicts not read", error instanceof Error ? error.message : error);
     return { shadow: null, given: new Map(), canGive: false };

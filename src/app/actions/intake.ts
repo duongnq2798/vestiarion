@@ -20,6 +20,7 @@ import {
   noticeEmailSchema,
   type InvoiceField,
   counterpartyChainProblem,
+  INVOICE_CURRENCIES,
 } from "@/lib/intake-validation";
 import { changeCounterpartyNoticeEmail } from "@/lib/payment-notices";
 import {
@@ -34,6 +35,8 @@ import { createCounterparty } from "@/lib/counterparties/create";
 import { createInvoice } from "@/lib/invoices/create";
 import { appendLedgerEntry } from "@/lib/ledger";
 import { workspaceNetwork } from "@/lib/workspace-network";
+import { FxRateError } from "@/lib/fx/usd-rates";
+import { shadowBill, ShadowBillError, type OriginalBill } from "@/lib/shadow-bills";
 
 export interface IntakeActionResult {
   ok: boolean;
@@ -261,11 +264,27 @@ export async function createInvoiceAction(
   const auth = await authorize(formData.get("orgSlug"), "records.write");
   if (!auth.ok) return { ok: false, message: auth.message };
   return inOrg(auth, async () => {
+    // A bill in the business's own currency, in shadow mode, is taken at its USDC amount at the day's rate, with the
+    // bill's own figure kept beside it (shadow mode S6). Anywhere else, and for USDC or EURC, the form is read as typed.
+    let amount = formString(formData, "amount");
+    let currency = formString(formData, "currency");
+    let original: OriginalBill | undefined;
+    if (currency.trim() !== "" && !(INVOICE_CURRENCIES as readonly string[]).includes(currency.trim().toUpperCase())) {
+      try {
+        const bill = await shadowBill({ currency, amount });
+        ({ original } = bill);
+        amount = String(bill.usdc);
+        currency = "USDC";
+      } catch (error) {
+        if (error instanceof ShadowBillError || error instanceof FxRateError) return { ok: false, message: error.message };
+        throw error;
+      }
+    }
     const parsed = invoiceInputSchema.safeParse({
       direction: formString(formData, "direction"),
       counterpartyId: formString(formData, "counterpartyId"),
-      amount: formString(formData, "amount"),
-      currency: formString(formData, "currency"),
+      amount,
+      currency,
       memo: formString(formData, "memo"),
       poReference: formString(formData, "poReference"),
       goodsReceived: formData.get("goodsReceived") === "on",
@@ -290,7 +309,7 @@ export async function createInvoiceAction(
       });
       // The counterparty is looked up in the organization's scope, so another organization's id is not found
       // rather than linked to this organization's invoice, and is answered exactly like one that does not exist.
-      const created = await createInvoice({ actorId: auth.user.id, invoice: input, document });
+      const created = await createInvoice({ actorId: auth.user.id, invoice: input, document, ...(original ? { original } : {}) });
       if (!created) return { ok: false, message: "Counterparty not found." };
 
       revalidatePath("/");
