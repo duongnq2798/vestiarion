@@ -602,8 +602,10 @@ disagrees with every decision.
   for one (shadow mode on, and the decision made since it started), `approveAndPay`, `rejectInvoice` and
   `returnInvoice` refuse it before any verdict (`verdict_needed`), and a payment after a disagreement is refused
   (`verdict_disagreed`) unless its transfer already left, which is recorded. The verdict's own settling passes
-  `forVerdict`; once a verdict is given, or none can be, they settle it as any hold. Slack and Telegram decision
-  messages word it as waiting for a verdict, and Slack draws no buttons for it.
+  `forVerdict`; once a verdict is given, or none can be, they settle it as any hold. A claim that never finished (a
+  `processing` row past `RECLAIM_AFTER_MS`, `src/lib/agent/claim-age.ts`) still waits for a verdict, and the card
+  offers one again. Slack and Telegram decision messages and waiting lists (`awaitingVerdicts`) word it as waiting
+  for a verdict, and Slack draws no buttons for it.
 - **Mirror addresses** (`src/lib/mirror-address.ts`). A payee with no Arc address gets a wallet Vestiarion makes in
   the workspace's own Circle wallet set, keyed by the payee so a retry finds it, written only where the payee still has
   no address, and recorded as an address change `via: "mirror"`. The new payee check reads that as `MIRROR`: no

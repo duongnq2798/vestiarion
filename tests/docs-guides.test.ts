@@ -892,6 +892,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["A mirror address is for shadow mode. An owner turns it on in Settings.", "src/lib/mirror-address.ts"],
     ["This workspace's Circle credentials are stored but could not be read.", "src/lib/mirror-address.ts"],
     ["Give your verdict", "src/lib/agent-activity.ts"],
+    ["Unfinished decision", "src/components/ApprovalCard.tsx"],
     ["This decision waits for a verdict in shadow mode. Agree or disagree with it in Approvals first.", "src/lib/agent/approvals.ts"],
     ["Someone disagreed with this decision in shadow mode, so it is not paid. Return it to the agent or reject it.", "src/lib/agent/approvals.ts"],
     ["Currency", "src/components/intake/InvoiceIntake.tsx"],

@@ -25,6 +25,7 @@ import { firstPaymentCheck, loadNewPayeeFacts } from "../new-payee-facts";
 import { addedSince, latestDecision, recordedFacts, type AddedDetails } from "../added-details";
 import { heldForCash, heldForVerdict } from "../next-step";
 import { verdictGate } from "../verdicts";
+import { isReclaimable } from "./claim-age";
 import type { Provenance } from "../provenance";
 import { amountFromReserve, bringCashForApproval, CashBackError, cashShortMessage, cctpFeeCushion, reserveCover, type ReserveCover } from "./liquidity";
 import { approversBesides, readTwoApprovalsAbove } from "../approval-policy";
@@ -187,19 +188,7 @@ function trimReason(reason: string | undefined): string | undefined {
 
 const WAITING_STATUSES = ["held", "flagged", "awaiting_info", "processing"] as const;
 
-/** How long a claim holds before anyone may retake it — `claim_invoice_decision`'s interval (migration 0025). */
-export const RECLAIM_AFTER_MS = 10 * 60 * 1000;
-
-/**
- * Whether `claim_invoice_decision` would let a new decision retake this row:
- * a `processing` claim whose `reviewed_at` is over 10 minutes old, or missing.
- */
-function isReclaimable(status: string, reviewedAt: string | null, now: number): boolean {
-  if (status !== "processing") return false;
-  if (reviewedAt === null) return true;
-  const claimedAt = Date.parse(reviewedAt);
-  return Number.isNaN(claimedAt) || claimedAt < now - RECLAIM_AFTER_MS;
-}
+export { RECLAIM_AFTER_MS } from "./claim-age";
 
 /**
  * The columns of a payment intent (`payment_intents`, see `src/lib/payments.ts`) these rules read. A held
@@ -611,7 +600,10 @@ export async function listWaitingPayables(
       guardrailRule: decision?.detail.guardrailBlocked === true && typeof decision.detail.guardrailRule === "string" ? decision.detail.guardrailRule : null,
       ...(row.status === "held" && heldForCash(decision?.detail) ? { heldForCash: true } : {}),
       // Held in shadow mode for a person to agree, and the decision a verdict is about (shadow mode S2, S3).
-      ...(row.status === "held" && decision && heldForVerdict(decision.detail) ? { heldForVerdict: true, verdictEntry: { seq: Number(decision.seq), ts: decision.ts } } : {}),
+      // An Agree and pay that did not finish leaves it still waiting for a verdict, once its claim may be retaken (review minor 3).
+      ...((row.status === "held" || isReclaimable(row.status, row.reviewed_at, now)) && decision && heldForVerdict(decision.detail)
+        ? { heldForVerdict: true, verdictEntry: { seq: Number(decision.seq), ts: decision.ts } }
+        : {}),
       ...(balances && fromReserveUsdc !== null ? { fromReserve: { operatingUsdc: balances.operating, amountUsdc: fromReserveUsdc } } : {}),
       ...(newPayee?.firstPayment ? { firstPaymentAddressBy: newPayee.addressBy } : {}),
       ...(twoApprovals.has(row.id) ? { twoApprovals: twoApprovals.get(row.id) } : {}),

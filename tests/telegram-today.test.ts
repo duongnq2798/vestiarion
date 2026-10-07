@@ -120,6 +120,29 @@ describe("waitingFacts and waitingMessage", () => {
     expect(message).not.toContain("guardrail");
   });
 
+  it("says a payment held in shadow mode waits for a verdict, and links to give it (review minor 7)", async () => {
+    const fake = fakeSupabase((sent: RecordedRequest) => {
+      switch (sent.path) {
+        case "/rest/v1/shadow_modes":
+          return { body: [{ currency: "USDC", started_at: "2026-10-03T00:00:00Z", started_by: null }] };
+        case "/rest/v1/invoices":
+          return { body: [payable("p2", "Jiren", 10, "held", "2026-10-20", { agent_reasoning: "Matched and within the limit. [shadow mode: held for a person to agree; nothing is paid until they do]" })] };
+        case "/rest/v1/ledger_entries":
+          return sent.params.has("detail->>invoiceId")
+            ? { body: [{ seq: 41, ts: "2026-10-03T07:00:00Z", detail: { invoiceId: "p2", execution: { resultingStatus: "held", heldBecause: "shadow_verdict" } } }] }
+            : { body: [] };
+        default:
+          return { body: [] };
+      }
+    });
+    const facts = await runWith(orgTestContext({ config, client: fake.client, orgId: ORG }), () => waitingFacts());
+    expect(facts).toEqual([{ kind: "payable", id: "p2", name: "Jiren", amount: 10, currency: "USDC", status: "held", reason: "Matched and within the limit.", forVerdict: true }]);
+
+    const message = waitingMessage("Acme", facts, ORIGIN, "acme");
+    expect(message).toContain("Jiren 10.00 USDC · waits for your verdict");
+    expect(message).toContain('<a href="https://www.vestiarion.xyz/o/acme/approvals#payable-p2">Give your verdict</a>');
+  });
+
   it("says so when nothing waits", async () => {
     const facts = await workspace([], [])(() => waitingFacts());
     expect(facts).toEqual([]);

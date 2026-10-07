@@ -209,10 +209,14 @@ export function waitingAnswer(workspaceName: string, facts: WaitingFact[], origi
   if (facts.length === 0) return textAnswer(`*${mrkdwn(workspaceName)}* · Nothing waits for a person.`);
   const lines = [`*${mrkdwn(workspaceName)}* · ${facts.length === 1 ? "1 payment waits" : `${facts.length} payments wait`} for a person`];
   for (const fact of facts) {
+    // A payment held for a person's verdict is settled by giving one, in Vestiarion (shadow mode S4).
     const where =
-      fact.kind === "payable" ? link(orgUrl(origin, slug, `/approvals#payable-${fact.id}`), "Decide in Approvals") : link(orgUrl(origin, slug, "/contractors"), "Contractors");
+      fact.kind === "payable"
+        ? link(orgUrl(origin, slug, `/approvals#payable-${fact.id}`), fact.forVerdict ? "Give your verdict" : "Decide in Approvals")
+        : link(orgUrl(origin, slug, "/contractors"), "Contractors");
     const why = fact.reason ? `: ${mrkdwn(clip(fact.reason, 300))}` : "";
-    lines.push(`• ${mrkdwn(fact.name)} ${amountText(fact.amount, fact.currency)} · ${WAITING_STATUS[fact.status] ?? mrkdwn(fact.status)}${why} ${where}`);
+    const state = fact.forVerdict ? "waits for your verdict" : (WAITING_STATUS[fact.status] ?? mrkdwn(fact.status));
+    lines.push(`• ${mrkdwn(fact.name)} ${amountText(fact.amount, fact.currency)} · ${state}${why} ${where}`);
   }
   return textAnswer(lines.join("\n"));
 }

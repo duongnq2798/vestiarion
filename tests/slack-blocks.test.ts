@@ -169,6 +169,18 @@ describe("answers to /vestiarion", () => {
     expect(allText(waitingAnswer("Northstar", [], ORIGIN, "northstar"))).toContain("Nothing waits for a person.");
   });
 
+  it("says a payment held in shadow mode waits for a verdict, given in Vestiarion (review minor 7)", () => {
+    const answer = waitingAnswer(
+      "Northstar",
+      [{ kind: "payable", id: INVOICE, name: "Jiren", amount: 0.5, currency: "USDC", status: "held", reason: "Matched and within the limit.", forVerdict: true }],
+      ORIGIN,
+      "northstar"
+    );
+    expect(allText(answer)).toContain("Jiren 0.50 USDC · waits for your verdict: Matched and within the limit.");
+    expect(allText(answer)).toContain("Give your verdict");
+    expect(allText(answer)).not.toContain("Decide in Approvals");
+  });
+
   it("says whether the ledger verifies", () => {
     expect(allText(ledgerAnswer("Northstar", { valid: true, checkedEntries: 1071 } as never))).toContain("the ledger is intact: 1,071 entries");
     expect(allText(ledgerAnswer("Northstar", { valid: false, checkedEntries: 10, brokenAt: 7, reason: "signature does not verify" } as never))).toContain("does not verify at entry 7");
