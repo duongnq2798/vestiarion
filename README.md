@@ -638,18 +638,22 @@ Everything the agent reasons about lives in five tables (`accounts`, `counterpar
 
 Production uses wall-clock mode by default; `CYCLE_CLOCK_MODE=simulate` is an explicit demo opt-in
 that advances the numbered day counter. Every page shows the real timestamp of the latest completed
-cycle. The included `.github/workflows/agent-cycle.yml` calls the protected endpoint every six
-hours, and one call now runs a cycle for every workspace in `live` mode, not only yours — each in
-its own isolated scope, so one workspace's failure is recorded against that workspace and does not
-stop the others. Configure repository secrets `VESTIARION_URL` (the deployment origin) and
-`AGENT_API_TOKEN` (the same server secret used by the app). GitHub Actions schedules can be delayed,
-so the ledger timestamp—not the nominal cron minute—is the source of truth for when a cycle ran.
+cycle. Supabase Cron calls the protected endpoint every six hours, at 17 minutes past (see below),
+and one call runs a cycle for every workspace in `live` mode, not only yours — each in its own
+isolated scope, so one workspace's failure is recorded against that workspace and does not stop
+the others. The included `.github/workflows/agent-cycle.yml` stays for a manual run: configure
+repository secrets `VESTIARION_URL` (the deployment origin) and `AGENT_API_TOKEN` (the same server
+secret used by the app). The ledger timestamp, not the nominal cron minute, is the source of truth
+for when a cycle ran.
 Sandbox workspaces are never in this list; their cycles run from the console, one **Run cycle**
 click at a time, up to the daily cap above.
 
-Three jobs must run on the minute, which GitHub's schedules do not do: they started a 5-minute
-schedule only a few times a day. Supabase Cron runs them from the database instead:
+Four jobs must run on time, which GitHub's schedules do not do: they started a 5-minute schedule
+only a few times a day, and the six-hourly tick 2 to 4 times a day at uneven hours. A daily
+recurring payment's invoice is made by the first cycle of its due day, so a skipped tick left it
+waiting. Supabase Cron runs them from the database instead:
 
+- `POST /api/agent/tick`, at 17 minutes past every sixth hour: a cycle for every live workspace.
 - `POST /api/agent/fx-watch`, every 5 minutes: a EURC payable held because Circle quoted no rate or
   no swap, or one above its swap cap or limit, is decided again once a fresh quote clears it, with no
   one pressing anything. A run with nothing to re-check starts no cycle.
@@ -661,7 +665,7 @@ schedule only a few times a day. Supabase Cron runs them from the database inste
 To set them up, run `supabase/cron/watches.sql` once in the Supabase SQL editor, with your
 deployment's origin in place of `https://www.vestiarion.xyz`. Its header lists what comes first:
 enable `pg_cron` and `pg_net`, and add `AGENT_API_TOKEN` to Vault as `agent_api_token`. Each job's
-workflow (`fx-watch.yml`, `transfer-watch.yml`, `webhooks.yml`) stays for a manual run.
+workflow (`agent-cycle.yml`, `fx-watch.yml`, `transfer-watch.yml`, `webhooks.yml`) stays for a manual run.
 
 Circle also tells the deployment when a transfer settles, at `POST /api/circle/notifications`. On a
 subscribed account, while the agent runs, a payment confirmed after the agent stopped waiting for it
