@@ -1,7 +1,7 @@
-import { decodeFunctionResult, encodeFunctionData, recoverMessageAddress, type Hex } from "viem";
+import { decodeEventLog, decodeFunctionResult, encodeFunctionData, parseAbiItem, recoverMessageAddress, type Hex } from "viem";
 import type { NetworkProfile } from "../network";
 import { SPENDING_LIMIT_ABI } from "../spending-limit/onchain";
-import { asAddress, type TreasuryChain } from "./chain";
+import { asAddress, type TreasuryChain, type TreasuryReceipt } from "./chain";
 import { deploymentData } from "../spending-limit/deployment";
 
 export { deploymentData };
@@ -57,6 +57,30 @@ export async function verifyWalletProof(input: {
   }
   if (!same(signer, input.address)) return { ok: false, reason: "The message was signed by another wallet." };
   return { ok: true, issuedAt };
+}
+
+/** ERC-4337's EntryPoint v0.7, the same address on every chain, Arc mainnet included (checked 2026-10-07). */
+export const ENTRY_POINT_V07 = "0x0000000071727De22E5E9d8BAf0edAc6f37da032" as const;
+
+const USER_OPERATION_EVENT = parseAbiItem(
+  "event UserOperationEvent(bytes32 indexed userOpHash, address indexed sender, address indexed paymaster, uint256 nonce, bool success, uint256 actualGasCost, uint256 actualGasUsed)"
+);
+
+/**
+ * Whether `receipt` carries a user operation of `sender`'s that succeeded (passkey treasury K7, final review I6). A
+ * bundler's transaction succeeds even when a user operation in it reverts, and any hash could be handed back: only the
+ * EntryPoint's own event says that this wallet's operation ran, and how it ended.
+ */
+export function userOperationSucceeded(receipt: TreasuryReceipt, sender: string): boolean {
+  return (receipt.logs ?? []).some((log) => {
+    if (!same(log.address, ENTRY_POINT_V07)) return false;
+    try {
+      const event = decodeEventLog({ abi: [USER_OPERATION_EVENT], topics: log.topics as [Hex, ...Hex[]], data: log.data });
+      return same(event.args.sender, sender) && event.args.success;
+    } catch {
+      return false;
+    }
+  });
 }
 
 /** A check that reads the chain: not mined yet, refused with why, or verified with what it found. */

@@ -129,6 +129,8 @@ const OWN_WALLET_DEPLOY: GoLiveStatus = {
     signer: "wallet",
     recovery: null,
     setupNeedsUsdc: 0,
+    limitDailyUsdc: 50,
+    limitWeeklyUsdc: 150,
   },
 };
 
@@ -150,7 +152,7 @@ const OWN_WALLET_READY: GoLiveStatus = {
 /** A passkey wallet chosen, with the agent's wallet made with it, before any USDC (passkey treasury K5). */
 const PASSKEY_FUND: GoLiveStatus = {
   ...OWN_WALLET_DEPLOY,
-  walletTreasury: { ...OWN_WALLET_DEPLOY.walletTreasury!, signer: "passkey", setupNeedsUsdc: 0.55, walletUsdc: 0 },
+  walletTreasury: { ...OWN_WALLET_DEPLOY.walletTreasury!, signer: "passkey", setupNeedsUsdc: 0.75, walletUsdc: 0 },
 };
 
 /** The passkey wallet holds its USDC: one confirmation sets it up (K6). */
@@ -166,7 +168,7 @@ const PASSKEY_RECOVERY: GoLiveStatus = {
     ...OWN_WALLET_READY.walletTreasury!,
     step: "recovery",
     signer: "passkey",
-    setupNeedsUsdc: 0.55,
+    setupNeedsUsdc: 0.75,
     walletUsdc: 249.45,
     spendableUsdc: 249.45,
   },

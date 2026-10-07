@@ -498,6 +498,8 @@ describe("GoLivePanel and the owner's own wallet (wallet treasury W1, W5-W10)", 
     signer: "wallet",
     recovery: null,
     setupNeedsUsdc: 0,
+    limitDailyUsdc: 50,
+    limitWeeklyUsdc: 150,
     ...overrides,
   });
 
@@ -517,6 +519,7 @@ describe("GoLivePanel and the owner's own wallet (wallet treasury W1, W5-W10)", 
       const words = text(panel(status({ network: "arc-mainnet", walletTreasuryAvailable: true })));
       expect(words).toContain("Create a wallet with a passkey");
       expect(words).toContain("Create with a passkey");
+      expect(words).not.toContain("seed phrase");
       expect(words).toContain("Connect your wallet");
       expect(words).not.toContain("No wallet was found");
     } finally {
@@ -577,19 +580,24 @@ describe("GoLivePanel and the owner's own wallet (wallet treasury W1, W5-W10)", 
 
   describe("on the passkey route (passkey treasury K5, K6, K8)", () => {
     const passkey = (overrides: Partial<NonNullable<GoLiveStatus["walletTreasury"]>>) =>
-      status({ step: "wallets", network: "arc-mainnet", host: "external", walletTreasury: setup({ signer: "passkey", setupNeedsUsdc: 0.55, ...overrides }) });
+      status({ step: "wallets", network: "arc-mainnet", host: "external", walletTreasury: setup({ signer: "passkey", setupNeedsUsdc: 0.75, ...overrides }) });
 
     it("asks for USDC first, at the wallet's address, saying what setup needs", () => {
       const words = text(panel(passkey({ step: "deploy", walletUsdc: 0.2 })));
       expect(words).toContain("Step 2 of 3");
       expect(words).toContain("Add USDC to your wallet");
       expect(words).toContain(WALLET);
-      expect(words).toContain("Setup needs about 0.55 USDC: 0.50 for the agent's gas and about 0.05 for the network fee.");
+      expect(words).toContain("Setup needs about 0.75 USDC: 0.50 for the agent's gas, and up to 0.25 set aside for the network fee, of which about 0.02 is spent.");
+      // Only the setup until the recovery phrase is saved (final review I5).
+      expect(words).toContain("Add only this for now");
       expect(words).not.toContain("Set up with your passkey");
     });
 
-    it("sets up with one confirmation once the USDC is there, saying what it does", () => {
-      const words = text(panel(passkey({ step: "deploy", walletUsdc: 12.5 })));
+    it("sets up with one confirmation once the USDC is there, saying what it does, from the workspace's own figures (final review I4)", () => {
+      const markup = panel(passkey({ step: "deploy", walletUsdc: 12.5 }));
+      expect(markup).toMatch(/<input[^>]*id="passkey-treasury-daily"[^>]*value="50"|<input[^>]*value="50"[^>]*id="passkey-treasury-daily"/);
+      expect(markup).toMatch(/<input[^>]*id="passkey-treasury-weekly"[^>]*value="150"|<input[^>]*value="150"[^>]*id="passkey-treasury-weekly"/);
+      const words = text(markup);
       expect(words).toContain("Set up with one confirmation");
       expect(words).toContain("deploys your contract");
       expect(words).toContain("approves it to move your USDC");
@@ -603,6 +611,9 @@ describe("GoLivePanel and the owner's own wallet (wallet treasury W1, W5-W10)", 
     it("asks for a recovery phrase after setup, and lets the owner skip it knowingly", () => {
       const words = text(panel(passkey({ step: "recovery", contract: CONTRACT, walletUsdc: 12, agentGasUsdc: 0.5 })));
       expect(words).toContain("Save a recovery phrase");
+      // The words are a full owner of the wallet, said plainly (final review I5).
+      expect(words).toContain("anyone who has them can move every USDC in it");
+      expect(words).toContain("Vestiarion will never ask for them");
       expect(words).toContain("Create a recovery phrase");
       expect(words).toContain("Skip: I understand that losing this passkey loses this wallet");
     });

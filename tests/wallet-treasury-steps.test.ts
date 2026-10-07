@@ -257,6 +257,8 @@ describe("walletTreasuryStatus", () => {
       signer: "wallet",
       recovery: null,
       setupNeedsUsdc: 0,
+      limitDailyUsdc: 50,
+      limitWeeklyUsdc: 150,
     });
   });
 

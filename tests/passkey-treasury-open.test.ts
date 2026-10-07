@@ -8,8 +8,10 @@ import {
   keepPendingSetup,
   keptCredential,
   openPasskeyTreasury,
+  passkeyStepView,
   passkeyTreasuryFailure,
   pendingSetup,
+  settlePasskeySetup,
   type KeptCredential,
 } from "@/lib/passkey-treasury";
 import type { PasskeySdk } from "@/lib/passkey-wallet";
@@ -175,3 +177,67 @@ describe("passkeyTreasuryFailure (K10)", () => {
 // The kept credential's type is the public part only.
 const _typed: KeptCredential = CREDENTIAL;
 void _typed;
+
+describe("settlePasskeySetup (K7, K10; final review I3)", () => {
+  const CONTRACT = getAddress("0x5af3107a4000000000000000000000000000e5c0");
+  const TX = `0x${"5e".repeat(32)}` as Hex;
+  const OP = `0x${"0a".repeat(32)}` as Hex;
+  const said: string[] = [];
+  const settle = (kept: ReturnType<typeof store>, outcome: Parameters<typeof settlePasskeySetup>[0]["outcome"], record: Parameters<typeof settlePasskeySetup>[0]["record"]) =>
+    settlePasskeySetup({ store: kept, orgSlug: "own-wallet-co", contract: CONTRACT, outcome, record, tries: 3, waitMs: 1, sleep: async () => {}, label: "Arc mainnet", say: (text) => said.push(text) });
+
+  it("records a setup the chain shows, and forgets it then", async () => {
+    const kept = store();
+    expect(await settle(kept, { kind: "sent", txHash: TX }, async () => ({ ok: true, message: "", state: "verified" }))).toBe("verified");
+    expect(pendingSetup(kept, "own-wallet-co")).toBeNull();
+  });
+
+  it("keeps a setup sent until it is recorded, and never says nothing was sent", async () => {
+    const kept = store();
+    const unreadable = async () => ({ ok: false, message: "The chain could not be read just now; nothing was recorded. Try again in a moment.", state: null, chainUnreadable: true as const });
+    expect(await settle(kept, { kind: "sent", txHash: TX }, unreadable)).toBe("pending");
+    expect(pendingSetup(kept, "own-wallet-co")).toEqual({ contract: CONTRACT, txHash: TX });
+    expect(said.at(-1)).toBe("The setup was sent. Arc mainnet has not confirmed it yet; reload this page in a minute to check it again. It is not sent twice.");
+    expect(await settle(kept, { kind: "unconfirmed", userOpHash: OP }, unreadable)).toBe("pending");
+    expect(pendingSetup(kept, "own-wallet-co")).toEqual({ contract: CONTRACT, userOpHash: OP });
+  });
+
+  it("forgets a setup the server will never record, and says it was sent", async () => {
+    const kept = store();
+    const refused = async () => ({ ok: false, message: "The setup failed on chain; nothing was set up.", state: null });
+    await expect(settle(kept, { kind: "sent", txHash: TX }, refused)).rejects.toThrow("The setup was sent, but it could not be recorded: The setup failed on chain; nothing was set up.");
+    expect(pendingSetup(kept, "own-wallet-co")).toBeNull();
+  });
+
+  it("says a reverted setup cost its fee, and forgets it", async () => {
+    const kept = store();
+    keepPendingSetup(kept, "own-wallet-co", { contract: CONTRACT, userOpHash: OP });
+    await expect(settle(kept, { kind: "reverted", txHash: TX }, async () => ({ ok: true, message: "", state: "verified" }))).rejects.toThrow(
+      "Arc mainnet did not carry out the setup; nothing was set up, and only its network fee was spent."
+    );
+    expect(pendingSetup(kept, "own-wallet-co")).toBeNull();
+  });
+});
+
+describe("passkeyStepView (final review I3)", () => {
+  it("checks a setup sent before anything else, even where the wallet now holds too little to set up", () => {
+    expect(passkeyStepView({ step: "deploy", walletUsdc: 0.1, setupNeedsUsdc: 0.75, pending: true })).toBe("pending");
+    expect(passkeyStepView({ step: "deploy", walletUsdc: 0.1, setupNeedsUsdc: 0.75, pending: false })).toBe("fund");
+    expect(passkeyStepView({ step: "deploy", walletUsdc: null, setupNeedsUsdc: 0.75, pending: false })).toBe("fund");
+    expect(passkeyStepView({ step: "deploy", walletUsdc: 0.75, setupNeedsUsdc: 0.75, pending: false })).toBe("setup");
+    expect(passkeyStepView({ step: "approve", walletUsdc: 5, setupNeedsUsdc: 0.75, pending: false })).toBe("setup");
+  });
+
+  it("follows the status everywhere else", () => {
+    for (const step of ["agent", "gas", "recovery"] as const) expect(passkeyStepView({ step, walletUsdc: 5, setupNeedsUsdc: 0.75, pending: true })).toBe(step);
+    expect(passkeyStepView({ step: "ready", walletUsdc: 5, setupNeedsUsdc: 0.75, pending: false })).toBe("none");
+  });
+});
+
+describe("a setup the wallet cannot carry out (final review I2)", () => {
+  it("is said to need more USDC, and that nothing was sent", () => {
+    expect(passkeyTreasuryFailure(new Error("Execution reverted for an unknown reason. Details: execution reverted"), "setup")).toBe(
+      "The wallet could not carry out the setup with what it holds. Add a little more USDC, then try again. Nothing was sent."
+    );
+  });
+});

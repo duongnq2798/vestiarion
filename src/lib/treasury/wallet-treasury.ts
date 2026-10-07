@@ -17,7 +17,7 @@ import { withDeadline } from "../circle/settlement";
 import { MAX_ALLOWANCE } from "../circle/spending-limit-setup";
 import { SPENDING_LIMIT_ABI, usdcUnits } from "../spending-limit/onchain";
 import { asAddress, treasuryChain, type TreasuryChain } from "./chain";
-import { deploymentData, verifyApproval, verifyDeployedAt, verifyDeployment, verifyWalletProof, walletProofMessage } from "./verify";
+import { deploymentData, userOperationSucceeded, verifyApproval, verifyDeployedAt, verifyDeployment, verifyWalletProof, walletProofMessage } from "./verify";
 
 /**
  * The setup of a workspace that pays from its owner's own wallet (docs/superpowers/specs/2026-10-07-wallet-treasury-
@@ -32,8 +32,12 @@ export type WalletTreasuryStep = "wallet" | "agent" | "deploy" | "approve" | "ga
 /** Which kind of wallet signs for the treasury: a browser wallet such as MetaMask, or a passkey (passkey treasury K3). */
 export type TreasurySigner = "wallet" | "passkey";
 
-/** What a passkey wallet needs before its setup: 0.50 USDC for the agent's gas, and its network fee, about 0.05 (K5). */
-export const PASSKEY_SETUP_USDC = 0.55;
+/**
+ * What a passkey wallet needs before its setup (K5): 0.50 USDC for the agent's gas, and 0.25 for the first user
+ * operation's fee. EntryPoint v0.7 sets the whole fee aside before the calls run, about 0.11 USDC at Arc's fees on
+ * 2026-10-07 for a wallet not yet deployed; about 0.02 is spent and the rest stays the wallet's (final review I2).
+ */
+export const PASSKEY_SETUP_USDC = 0.75;
 
 /** What the Go live panel shows of the setup: nothing secret, and no Circle wallet id. */
 export interface WalletTreasuryStatus {
@@ -56,6 +60,9 @@ export interface WalletTreasuryStatus {
   recovery: "registered" | "skipped" | null;
   /** The USDC the wallet must hold before its setup can be sent: the passkey route's, 0 on the wallet route (K5). */
   setupNeedsUsdc: number;
+  /** The workspace's agent spending limit, which a setup's figures start from (final review I4); null for one not set. */
+  limitDailyUsdc: number | null;
+  limitWeeklyUsdc: number | null;
 }
 
 export type WalletTreasuryErrorCode =
@@ -235,7 +242,14 @@ export async function walletTreasuryStatus(orgId: string, deps: WalletTreasuryDe
       signer: row?.treasury_signer === "passkey" ? "passkey" : "wallet",
       recovery: null,
       setupNeedsUsdc: 0,
+      limitDailyUsdc: null,
+      limitWeeklyUsdc: null,
     };
+    if (external) {
+      const limit = await readOutflowBudget(db());
+      status.limitDailyUsdc = limit?.dailyUsdc ?? null;
+      status.limitWeeklyUsdc = limit?.weeklyUsdc ?? null;
+    }
     if (status.signer === "passkey") {
       status.recovery = row?.recovery_address ? "registered" : row?.recovery_skipped_at ? "skipped" : null;
       status.setupNeedsUsdc = PASSKEY_SETUP_USDC;
@@ -532,7 +546,9 @@ export async function recordPasskeySetup(
     const chain = deps.chain ?? treasuryChain(network);
     const receipt = await readOrRefuse(() => chain.receipt(hash));
     if (!receipt) return "pending";
-    if (receipt.status !== "success") throw new WalletTreasuryError("chain_refused", "The setup failed on chain; nothing was set up.");
+    if (receipt.status !== "success" || !userOperationSucceeded(receipt, wallet)) {
+      throw new WalletTreasuryError("chain_refused", "The setup failed on chain; nothing was set up.");
+    }
     const check = await readOrRefuse(() => verifyDeployedAt(chain, { contract, usdc: network.tokens.USDC, treasury: wallet, agent: row.agent_address as string }));
     if (check.state === "pending") return "pending";
     if (check.state === "refused") throw new WalletTreasuryError("chain_refused", check.reason);
@@ -602,7 +618,10 @@ export async function recordRecovery(
     const chain = deps.chain ?? treasuryChain(workspaceNetwork());
     const receipt = await readOrRefuse(() => chain.receipt(hash));
     if (!receipt) return "pending";
-    if (receipt.status !== "success") throw new WalletTreasuryError("chain_refused", "The recovery's registration failed on chain; nothing was recorded.");
+    const { wallet } = await setup({ agent: true, contract: true });
+    if (receipt.status !== "success" || !userOperationSucceeded(receipt, wallet)) {
+      throw new WalletTreasuryError("chain_refused", "The recovery's registration failed on chain; nothing was recorded.");
+    }
     const written = unwrap(
       await db().from("spending_limit_contracts").update({ recovery_address: recoveryAddress }).eq("id", row.id).is("recovery_address", null).select("id")
     ) as Array<{ id: string }>;
@@ -709,6 +728,8 @@ export interface PreparedPasskeySetup {
   salt: Hex;
   /** The contract is at its address already, from a setup whose recording was lost: the deploy call is left out. */
   deployed: boolean;
+  /** The agent holds its gas minimum already: the gas call is left out, so a second setup never pays it twice. */
+  agentFunded: boolean;
   /** The figures it deploys with, in units: the owner's, or the workspace's spending limit's where left empty. */
   dailyUnits: string;
   weeklyUnits: string;
@@ -747,15 +768,18 @@ export async function preparePasskeySetup(
       salt,
       gasWei: parseEther(AGENT_GAS_USDC),
     };
-    const planned = passkeySetupCalls({ ...base, deployed: false });
     const chain = deps.chain ?? treasuryChain(network);
+    const planned = passkeySetupCalls({ ...base, deployed: false, agentFunded: false });
     // CREATE2 ties the address to this code: whatever is there is this contract, and is not deployed twice (Review Focus 2).
     const deployed = (await readOrRefuse(() => chain.code(planned.contract))) !== "0x";
-    const { contract, calls } = deployed ? passkeySetupCalls({ ...base, deployed: true }) : planned;
+    const agentGas = nativeUsdcOf(await readOrRefuse(() => chain.nativeBalance(asAddress(row.agent_address as string))));
+    const agentFunded = network.gasReserveUsdc <= 0 || (agentGas !== null && agentGas >= network.gasReserveUsdc);
+    const { contract, calls } = passkeySetupCalls({ ...base, deployed, agentFunded });
     return {
       contract,
       salt,
       deployed,
+      agentFunded,
       dailyUnits: figures.daily.toString(),
       weeklyUnits: figures.weekly.toString(),
       capUnits: capUnits === null ? null : capUnits.toString(),

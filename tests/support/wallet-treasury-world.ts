@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { afterEach, beforeEach, vi } from "vitest";
-import { decodeFunctionData, encodeAbiParameters, getAddress, keccak256, type Hex } from "viem";
+import { decodeFunctionData, encodeAbiParameters, getAddress, keccak256, type Hex, encodeEventTopics, parseAbiItem } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
@@ -229,3 +229,13 @@ export const agentRow = (extra: Row = {}): Row => ({
   ...extra,
 });
 export const chosen = { org: { wallet_host: "external" }, operating: { address: WALLET } };
+
+/** EntryPoint v0.7's `UserOperationEvent` for `sender`, as a bundler's `handleOps` receipt carries it (passkey treasury K7). */
+export function userOperationLog(sender: string, success = true) {
+  const event = parseAbiItem("event UserOperationEvent(bytes32 indexed userOpHash, address indexed sender, address indexed paymaster, uint256 nonce, bool success, uint256 actualGasCost, uint256 actualGasUsed)");
+  return {
+    address: getAddress("0x0000000071727de22e5e9d8baf0edac6f37da032"),
+    topics: encodeEventTopics({ abi: [event], eventName: "UserOperationEvent", args: { userOpHash: `0x${"ab".repeat(32)}`, sender: sender as Hex, paymaster: "0x0000000000000000000000000000000000000000" } }) as Hex[],
+    data: encodeAbiParameters([{ type: "uint256" }, { type: "bool" }, { type: "uint256" }, { type: "uint256" }], [0n, success, 20_000_000_000_000_000n, 500_000n]),
+  };
+}

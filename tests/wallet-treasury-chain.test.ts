@@ -48,9 +48,26 @@ describe("treasuryChain", () => {
       return { result: params[0] === UNMINED ? null : receipt({ status: "0x1", from: WALLET.toLowerCase(), to: null, contractAddress: CONTRACT.toLowerCase() }) };
     });
     const chain = treasuryChain(ARC_MAINNET, { rpcUrl: "https://rpc.example", fetch: fetchFn });
-    expect(await chain.receipt(HASH)).toEqual({ status: "success", from: WALLET.toLowerCase(), to: null, contractAddress: CONTRACT.toLowerCase() });
+    expect(await chain.receipt(HASH)).toEqual({ status: "success", from: WALLET.toLowerCase(), to: null, contractAddress: CONTRACT.toLowerCase(), logs: [] });
     expect(await chain.receipt(UNMINED)).toBeNull();
     expect(calls.every((entry) => new URL(entry.url).host === "rpc.example")).toBe(true);
+  });
+
+  it("reads a receipt's logs, which say how each user operation in a bundler's transaction ended (passkey treasury K7)", async () => {
+    const LOG = {
+      address: CONTRACT.toLowerCase(),
+      topics: [`0x${"11".repeat(32)}`],
+      data: "0x01",
+      blockNumber: "0x10",
+      transactionHash: HASH,
+      transactionIndex: "0x0",
+      blockHash: `0x${"11".repeat(32)}`,
+      logIndex: "0x0",
+      removed: false,
+    };
+    const { fetchFn } = fakeRpc(() => ({ result: receipt({ status: "0x1", from: WALLET.toLowerCase(), to: CONTRACT.toLowerCase(), contractAddress: null, logs: [LOG] }) }));
+    const chain = treasuryChain(ARC_MAINNET, { rpcUrl: "https://rpc.example", fetch: fetchFn });
+    expect((await chain.receipt(HASH))?.logs).toEqual([{ address: CONTRACT.toLowerCase(), topics: [`0x${"11".repeat(32)}`], data: "0x01" }]);
   });
 
   it("reads code, and none as 0x", async () => {

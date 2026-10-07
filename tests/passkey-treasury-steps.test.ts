@@ -28,6 +28,7 @@ import {
   sealLedgerKeysPerTest,
   signedProof,
   USDC,
+  userOperationLog,
   WALLET,
   world,
   type World,
@@ -96,9 +97,11 @@ describe("walletTreasuryStatus on the passkey route", () => {
   const enforced = (extra: Record<string, unknown> = {}) =>
     world({ ...passkey, contract: agentRow({ treasury_signer: "passkey", address: CONTRACT, approve_tx_hash: APPROVE_TX, enforced: true, ...extra }) });
 
-  it("says a passkey signs, and what setup needs: 0.50 USDC of gas and an estimated 0.05 USDC fee", async () => {
+  it("says a passkey signs, what setup needs, and the figures the form starts from (final review I2, I4)", async () => {
     const deploying = await status(world({ ...passkey, contract: agentRow({ treasury_signer: "passkey" }) }), chain({ usdc: 200_000n }));
-    expect(deploying).toMatchObject({ step: "deploy", signer: "passkey", recovery: null, setupNeedsUsdc: 0.55, walletUsdc: 0.2 });
+    // 0.50 for the agent's gas, and up to 0.25 the first user operation sets aside for its fee before it runs.
+    expect(deploying).toMatchObject({ step: "deploy", signer: "passkey", recovery: null, setupNeedsUsdc: 0.75, walletUsdc: 0.2 });
+    expect(deploying).toMatchObject({ limitDailyUsdc: 50, limitWeeklyUsdc: 150 });
   });
 
   it("asks for the recovery after setup, and is ready once it is registered or skipped (Review Focus 4)", async () => {
@@ -119,7 +122,7 @@ describe("preparing a passkey wallet's setup (K6)", () => {
   const none = { dailyUsdc: null, weeklyUsdc: null, capUsdc: null };
   const prepared = (state: World, onChain: TreasuryChain, figures: { dailyUsdc: number | null; weeklyUsdc: number | null; capUsdc: number | null } = none) =>
     database(state).inScope(() => preparePasskeySetup({ orgId: ORG, ...figures }, { chain: onChain }));
-  const built = (deployed: boolean) =>
+  const built = (deployed: boolean, agentFunded = false) =>
     passkeySetupCalls({
       usdc: USDC,
       treasury: WALLET,
@@ -129,6 +132,7 @@ describe("preparing a passkey wallet's setup (K6)", () => {
       capUnits: null,
       salt: spendingLimitSalt(ORG),
       deployed,
+      agentFunded,
       gasWei: parseEther("0.5"),
     });
 
@@ -138,6 +142,7 @@ describe("preparing a passkey wallet's setup (K6)", () => {
       contract: expected.contract,
       salt: spendingLimitSalt(ORG),
       deployed: false,
+      agentFunded: false,
       dailyUnits: "50000000",
       weeklyUnits: "150000000",
       capUnits: null,
@@ -151,6 +156,12 @@ describe("preparing a passkey wallet's setup (K6)", () => {
     const setup = await prepared(world({ ...passkey, contract: passkeyRow() }), onChain);
     expect(setup.deployed).toBe(true);
     expect(setup.calls.map((call) => call.to)).toEqual(built(true).calls.map((call) => call.to));
+  });
+
+  it("leaves the agent's gas out where the agent holds it already, so a second setup never pays it twice (final review I3)", async () => {
+    const setup = await prepared(world({ ...passkey, contract: passkeyRow() }), chain({ gas: 500_000_000_000_000_000n }));
+    expect(setup.agentFunded).toBe(true);
+    expect(setup.calls.map((call) => call.to)).toEqual(built(false, true).calls.map((call) => call.to));
   });
 
   it("is refused on the wallet route, before the agent's wallet, once approved, and for a cap of nothing", async () => {
@@ -170,7 +181,7 @@ describe("recording a passkey wallet's setup from the chain (K7)", () => {
   const SETUP_TX = `0x${"5e".repeat(32)}` as const;
   const ENTRYPOINT = getAddress("0x0000000071727de22e5e9d8baf0edac6f37da032");
   const BUNDLER = getAddress("0x00000000000000000000000000000000000b0d1e");
-  const bundled = { status: "success" as const, from: BUNDLER, to: ENTRYPOINT, contractAddress: null };
+  const bundled = { status: "success" as const, from: BUNDLER, to: ENTRYPOINT, contractAddress: null, logs: [userOperationLog(WALLET)] };
   const setUp = (extra: Partial<Parameters<typeof chain>[0]> = {}) =>
     chain({ receipts: { [SETUP_TX]: bundled }, code: { [CONTRACT.toLowerCase()]: ourCode }, allowance: 2n ** 256n - 1n, gas: 500_000_000_000_000_000n, ...extra });
   const recordIt = (state: World, onChain: TreasuryChain, txHash: string = SETUP_TX) =>
@@ -219,13 +230,23 @@ describe("recording a passkey wallet's setup from the chain (K7)", () => {
   it("is refused on the wallet route", async () => {
     await expect(recordIt(world({ ...passkey, contract: agentRow() }), setUp())).rejects.toMatchObject({ code: "wrong_step" });
   });
+
+  it("takes only a transaction in which this wallet's own user operation succeeded (final review I6)", async () => {
+    // A bundler's transaction succeeds even when the user operation in it reverts, and any hash could be handed back.
+    const other = getAddress("0x5af3107a4000000000000000000000000000beef");
+    for (const logs of [[], [userOperationLog(other)], [userOperationLog(WALLET, false)]]) {
+      const state = fresh();
+      await expect(recordIt(state, setUp({ receipts: { [SETUP_TX]: { ...bundled, logs } } }))).rejects.toMatchObject({ code: "chain_refused" });
+      expect(state.contract?.enforced).toBe(false);
+    }
+  });
 });
 
 describe("a passkey wallet's recovery (K8)", () => {
   const passkey = { org: { wallet_host: "external" }, operating: { address: WALLET } };
   const RECOVERY = getAddress("0x5af3107a4000000000000000000000000000c0de");
   const RECOVERY_TX = `0x${"7e".repeat(32)}` as const;
-  const done = { status: "success" as const, from: getAddress("0x00000000000000000000000000000000000b0d1e"), to: null, contractAddress: null };
+  const done = { status: "success" as const, from: getAddress("0x00000000000000000000000000000000000b0d1e"), to: null, contractAddress: null, logs: [userOperationLog(WALLET)] };
   const setUpRow = (extra: Record<string, unknown> = {}) =>
     agentRow({ treasury_signer: "passkey", address: CONTRACT, approve_tx_hash: APPROVE_TX, enforced: true, ...extra });
   const register = (state: World, onChain: TreasuryChain = chain({ receipts: { [RECOVERY_TX]: done } })) =>
@@ -241,9 +262,14 @@ describe("a passkey wallet's recovery (K8)", () => {
     expect(state.ledger).toEqual([{ action: "treasury_recovery_registered", detail: { by: ACTOR, recoveryAddress: RECOVERY, txHash: RECOVERY_TX } }]);
   });
 
-  it("refuses a registration that failed on chain", async () => {
+  it("refuses a registration that failed on chain, or whose user operation was not this wallet's or did not succeed (final review I6)", async () => {
     const failed = chain({ receipts: { [RECOVERY_TX]: { ...done, status: "reverted" } } });
     await expect(register(world({ ...passkey, contract: setUpRow() }), failed)).rejects.toMatchObject({ code: "chain_refused" });
+    for (const logs of [[], [userOperationLog(RECOVERY)], [userOperationLog(WALLET, false)]]) {
+      const state = world({ ...passkey, contract: setUpRow() });
+      await expect(register(state, chain({ receipts: { [RECOVERY_TX]: { ...done, logs } } }))).rejects.toMatchObject({ code: "chain_refused" });
+      expect(state.contract?.recovery_address).toBeNull();
+    }
   });
 
   it("records a skip once, and not after a recovery is registered", async () => {

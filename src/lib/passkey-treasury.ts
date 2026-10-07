@@ -2,7 +2,8 @@ import { concat, encodeFunctionData, erc20Abi, getAddress, getContractAddress, k
 import { ARC_MAINNET } from "./network";
 import { browserReason, passkeySmartAccount, type PasskeySdk, type PasskeyWalletConfig } from "./passkey-wallet";
 import type { SendOutcome } from "./passkey-wallet-send";
-import { deploymentData } from "./spending-limit/deployment";
+import type { WalletTreasuryStep } from "./treasury/wallet-treasury";
+import { deploymentData, setLimitsData } from "./spending-limit/deployment";
 
 /**
  * A passkey wallet as a workspace's treasury on Arc mainnet (docs/superpowers/specs/2026-10-07-passkey-treasury-
@@ -50,9 +51,17 @@ export interface SetupCall {
 const checksummed = (address: string) => getAddress(address.toLowerCase());
 
 /**
+ * The figures the contract is deployed with: its address then depends on the wallet and the agent alone, never on the
+ * figures, so a second setup reuses it rather than deploying another (final review I3). The owner's own figures are set
+ * by `setLimits` in the same user operation.
+ */
+const DEPLOYED_FIGURE_UNITS = 1n;
+
+/**
  * A passkey wallet's setup as one user operation (K6): the contract deployed through the proxy (left out when it is at
- * its address already), its approval on USDC (unlimited, or the cap), and the agent's gas in Arc's native USDC. The
- * server builds it, and the browser builds it again from what it shows the owner before the passkey signs.
+ * its address already), its figures set, its approval on USDC (unlimited, or the cap), and the agent's gas in Arc's
+ * native USDC (left out when the agent holds its own already). The server builds it, and the browser builds it again
+ * from what it shows the owner before the passkey signs.
  */
 export function passkeySetupCalls(input: {
   usdc: string;
@@ -63,18 +72,26 @@ export function passkeySetupCalls(input: {
   capUnits: bigint | null;
   salt: Hex;
   deployed: boolean;
+  agentFunded: boolean;
   gasWei: bigint;
 }): { contract: Hex; calls: SetupCall[] } {
-  const bytecode = deploymentData({ usdc: input.usdc, treasury: input.treasury, agent: input.agent, dailyUnits: input.dailyUnits, weeklyUnits: input.weeklyUnits });
+  const bytecode = deploymentData({
+    usdc: input.usdc,
+    treasury: input.treasury,
+    agent: input.agent,
+    dailyUnits: DEPLOYED_FIGURE_UNITS,
+    weeklyUnits: DEPLOYED_FIGURE_UNITS,
+  });
   const contract = getContractAddress({ opcode: "CREATE2", from: DEPLOYMENT_PROXY, salt: input.salt, bytecode });
   const calls: SetupCall[] = [];
   if (!input.deployed) calls.push({ to: DEPLOYMENT_PROXY, data: concat([input.salt, bytecode]), value: 0n });
+  calls.push({ to: contract, data: setLimitsData(input.dailyUnits, input.weeklyUnits), value: 0n });
   calls.push({
     to: checksummed(input.usdc),
     data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [contract, input.capUnits ?? maxUint256] }),
     value: 0n,
   });
-  calls.push({ to: checksummed(input.agent), data: "0x", value: input.gasWei });
+  if (!input.agentFunded) calls.push({ to: checksummed(input.agent), data: "0x", value: input.gasWei });
   return { contract, calls };
 }
 
@@ -303,6 +320,77 @@ export function passkeyTreasuryFailure(error: unknown, during: "create" | "open"
   const message = error instanceof Error ? error.message : String(error);
   if (error instanceof PasskeyTreasuryError || OWN_REFUSALS.includes(message)) return message;
   if (/AA21|prefund|insufficient funds/i.test(message)) return "The wallet does not hold enough USDC for this. Add a little more, then try again. Nothing was sent.";
+  // Estimating a setup the wallet cannot carry out (its 0.50 USDC of gas, past what the fee set aside leaves) reverts.
+  if (during === "setup" && /execution reverted|AA[235]\d/i.test(message)) {
+    return "The wallet could not carry out the setup with what it holds. Add a little more USDC, then try again. Nothing was sent.";
+  }
   console.error("passkey treasury", during, message);
   return "That did not work. Nothing was sent. Try again in a moment.";
+}
+
+/** What a recording action answers (`RecordActionResult`). */
+export interface RecordAnswer {
+  ok: boolean;
+  message: string;
+  state: "pending" | "verified" | null;
+  chainUnreadable?: true;
+}
+
+/**
+ * Ends a setup the passkey sent (K7, K10; final review I3): recorded once the chain shows it, kept until then so a
+ * reload asks about it, and never said to have sent nothing once it went. A server refusal is final: the setup is
+ * forgotten and said to have been sent; a reverted one cost only its fee.
+ */
+export async function settlePasskeySetup(input: {
+  store: KeepingStore | null;
+  orgSlug: string;
+  contract: Hex;
+  outcome: SendOutcome;
+  record: (txHash: string) => Promise<RecordAnswer>;
+  tries: number;
+  waitMs: number;
+  sleep?: (ms: number) => Promise<void>;
+  label: string;
+  say: (text: string) => void;
+}): Promise<"verified" | "pending"> {
+  const { store, orgSlug, outcome, label } = input;
+  const sleep = input.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const stillChecking = `The setup was sent. ${label} has not confirmed it yet; reload this page in a minute to check it again. It is not sent twice.`;
+  if (outcome.kind === "reverted") {
+    forgetPendingSetup(store, orgSlug);
+    throw new PasskeyTreasuryError(`${label} did not carry out the setup; nothing was set up, and only its network fee was spent.`);
+  }
+  if (outcome.kind === "unconfirmed") {
+    keepPendingSetup(store, orgSlug, { contract: input.contract, userOpHash: outcome.userOpHash as Hex });
+    input.say(stillChecking);
+    return "pending";
+  }
+  keepPendingSetup(store, orgSlug, { contract: input.contract, txHash: outcome.txHash as Hex });
+  input.say(`Sent. Waiting for ${label} to confirm it…`);
+  for (let attempt = 0; attempt < input.tries; attempt += 1) {
+    if (attempt > 0) await sleep(input.waitMs);
+    const answer = await input.record(outcome.txHash);
+    if (answer.ok && answer.state === "verified") {
+      forgetPendingSetup(store, orgSlug);
+      return "verified";
+    }
+    if (!answer.ok && !answer.chainUnreadable) {
+      forgetPendingSetup(store, orgSlug);
+      throw new PasskeyTreasuryError(`The setup was sent, but it could not be recorded: ${answer.message}`);
+    }
+  }
+  input.say(stillChecking);
+  return "pending";
+}
+
+/** What the passkey route shows at a step (final review I3): a setup sent before is checked before anything else. */
+export type PasskeyStepView = "agent" | "pending" | "fund" | "setup" | "gas" | "recovery" | "none";
+
+export function passkeyStepView(input: { step: WalletTreasuryStep; walletUsdc: number | null; setupNeedsUsdc: number; pending: boolean }): PasskeyStepView {
+  if (input.step === "agent" || input.step === "gas" || input.step === "recovery") return input.step;
+  if (input.step === "deploy" || input.step === "approve") {
+    if (input.pending) return "pending";
+    return (input.walletUsdc ?? 0) < input.setupNeedsUsdc ? "fund" : "setup";
+  }
+  return "none";
 }
