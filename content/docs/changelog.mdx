@@ -1,5 +1,13 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-07: A live treasury's own wallet changes its figures, or stops the agent
+
+- Once a workspace that pays from its owner's own wallet is live on Arc mainnet, the owner or an admin can change the contract's figures, stop the agent's payments, and resume them from **Go live**. The treasury's own wallet sends each change. Each is recorded once per transaction, from the chain only, when the transaction's own logs show that change. Three ledger entries record them, each with actor `human` and domain `system`:
+  - **`agent_budget_changed`** `{ by, from, to, txHash, onChain: { contract, txHash, signer } }` when the wallet changed the figures. `to` is what that transaction set, `null` for a figure not set, and `signer` is `wallet` or `passkey`. The workspace's spending limit then follows what the contract holds. The entry now carries `txHash` at the top of `detail` as well.
+  - **`spending_limit_stopped`** `{ by, contract, txHash, signer }`, a new entry: the wallet set its approval for the contract to 0. Unless the agent was paused already, or a later approval undid the stop, the agent is paused first, with an `agent_paused` entry whose reason is "The owner stopped the agent's payments on Arc".
+  - **`spending_limit_resumed`** `{ by, contract, txHash, signer, allowanceUsdc }`, a new entry: the wallet approved the contract again. `allowanceUsdc` is the cap it approved, `null` when it has none. The pause a stop set is lifted first, with an `agent_resumed` entry, while the approval still stands; any other pause stays.
+- All of these reach webhook endpoints as `ledger.appended`, and `GET /api/v1/ledger` lists them. Nothing else in `/api/v1` changes.
+
 ## 2026-10-07: A passkey wallet can be the treasury
 
 - On Arc mainnet, an owner can make the treasury a passkey wallet: a smart account owned by their passkey, set up in Go live with one confirmation. Its setup writes the same entries as a wallet in the owner's browser, with these differences:

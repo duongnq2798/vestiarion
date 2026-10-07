@@ -83,6 +83,44 @@ export function userOperationSucceeded(receipt: TreasuryReceipt, sender: string)
   });
 }
 
+const LIMITS_SET_EVENT = parseAbiItem("event LimitsSet(uint256 dailyLimit, uint256 weeklyLimit)");
+const APPROVAL_EVENT = parseAbiItem("event Approval(address indexed owner, address indexed spender, uint256 value)");
+
+/** Each of `receipt`'s logs that `address` emitted as `event`, decoded; any other log is passed over. */
+function eventsIn<T>(receipt: TreasuryReceipt, address: string, decode: (log: { topics: [Hex, ...Hex[]]; data: Hex }) => T): T[] {
+  const found: T[] = [];
+  for (const log of receipt.logs ?? []) {
+    if (!same(log.address, address)) continue;
+    try {
+      found.push(decode({ topics: log.topics as [Hex, ...Hex[]], data: log.data }));
+    } catch {
+      // Another event of the same address.
+    }
+  }
+  return found;
+}
+
+/**
+ * The figures `contract` set in this transaction, from its own `LimitsSet` (treasury wallet controls, review I3): the
+ * last one when there are several; null when it set none, whatever else the transaction did.
+ */
+export function limitsSetIn(receipt: TreasuryReceipt, contract: string): { daily: bigint; weekly: bigint } | null {
+  const set = eventsIn(receipt, contract, (log) => decodeEventLog({ abi: [LIMITS_SET_EVENT], ...log }).args);
+  const last = set.at(-1);
+  return last ? { daily: last.dailyLimit, weekly: last.weeklyLimit } : null;
+}
+
+/**
+ * What `owner` approved `spender` to move of `token` in this transaction, from the token's own `Approval` (review I3):
+ * the last when there are several; null when it approved nothing of the kind.
+ */
+export function approvalIn(receipt: TreasuryReceipt, input: { token: string; owner: string; spender: string }): bigint | null {
+  const approvals = eventsIn(receipt, input.token, (log) => decodeEventLog({ abi: [APPROVAL_EVENT], ...log }).args).filter(
+    (approval) => same(approval.owner, input.owner) && same(approval.spender, input.spender)
+  );
+  return approvals.at(-1)?.value ?? null;
+}
+
 /** A check that reads the chain: not mined yet, refused with why, or verified with what it found. */
 export type ChainCheck<T> = { state: "pending" } | { state: "refused"; reason: string } | ({ state: "verified" } & T);
 

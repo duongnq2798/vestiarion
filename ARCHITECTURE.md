@@ -564,9 +564,14 @@ with no browser wallet:
 - **The controls, once live** (`docs/superpowers/specs/2026-10-07-treasury-wallet-controls-design.md`). Go live
   lets an owner or admin change the contract's figures (`setLimits`), stop the agent's payments (`approve(contract,
   0)`) and resume them, each built in the browser from what the panel shows (`src/lib/treasury/wallet-controls.ts`) and
-  sent by the treasury's own signer. `recordWalletControl` records each from the chain once, by its transaction: the
-  contract's figures become `agent_budgets`; a stop pauses the agent and a resume lifts only that pause; a loosened
-  figure or a resume starts a cycle.
+  sent by the treasury's own signer. `recordWalletControl` records each from the chain once, by its transaction, whatever
+  it is asked as, and only when the receipt's own logs show that change (`LimitsSet` from the contract, or USDC's
+  `Approval` of it); it reads the state it acts on at a block at or after the receipt's, so a node behind it answers
+  `pending`. The contract's figures become `agent_budgets`; a stop the approval still shows pauses the agent and a
+  resume lifts only that pause, each before the entry is written; a loosened figure or a resume starts a cycle. The
+  browser keeps a sent control until it is recorded (`src/lib/treasury/pending-control.ts`) and sends no other until
+  then. Figures are read like every typed USDC figure (`src/lib/usdc-figure.ts`): never 0, and an empty field never
+  removes one the contract holds.
 - **The recovery.** A recovery phrase made in the browser is registered as a recovery owner with
   Circle's `registerRecoveryAddress` (`treasury_recovery_registered`), or skipped knowingly
   (`treasury_recovery_skipped`). `goLive` refuses until one is recorded (`wallet_recovery_undecided`).

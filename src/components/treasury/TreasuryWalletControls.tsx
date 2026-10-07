@@ -1,8 +1,8 @@
 "use client";
 
-import { Ban, KeyRound, Play, Wallet } from "lucide-react";
+import { Ban, KeyRound, Play, RefreshCw, Wallet } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import type { Hex } from "viem";
 import { recordWalletControlAction } from "@/app/actions/wallet-treasury";
 import { openTreasury } from "@/components/treasury/PasskeyTreasurySteps";
@@ -14,7 +14,9 @@ import { FormMessage } from "@/components/ui/FormMessage";
 import { Input } from "@/components/ui/Input";
 import { sendPrepared, walletErrorMessage } from "@/lib/browser-wallet";
 import { networkProfile, type Network } from "@/lib/network";
-import { PasskeyTreasuryError, passkeyTreasuryFailure, pollRecord } from "@/lib/passkey-treasury";
+import { browserKeepingStore, keptCredential, PasskeyTreasuryError, passkeyTreasuryFailure } from "@/lib/passkey-treasury";
+import type { SendOutcome } from "@/lib/passkey-wallet-send";
+import { asPendingControl, pendingControl, settleControl, storedControl, subscribePendingControl } from "@/lib/treasury/pending-control";
 import { figuresCall, resumeCall, stopCall, WalletControlError, type ControlCall } from "@/lib/treasury/wallet-controls";
 import type { WalletControlKind, WalletTreasuryStatus } from "@/lib/treasury/wallet-treasury";
 
@@ -22,13 +24,15 @@ import type { WalletControlKind, WalletTreasuryStatus } from "@/lib/treasury/wal
  * A live treasury's own wallet controls its contract (docs/superpowers/specs/2026-10-07-treasury-wallet-controls-design.md
  * C1–C4): the figures, prefilled from what the contract holds, and stopping or resuming the agent's payments. The call is
  * built here from what the panel shows, the treasury's own signer sends it (a passkey's user operation, or the browser
- * wallet's transaction), and it is recorded once the chain shows it.
+ * wallet's transaction), and it is recorded once the chain shows it. A control sent is kept in this browser until it is
+ * recorded, and nothing else is sent until then (review I1); figures the chain did not answer for are not changed (C1).
  */
 
 const POLL_TRIES = 12;
 const POLL_MS = 5_000;
 
 type Note = { tone: "neutral" | "error"; text: string } | null;
+type Busy = WalletControlKind | "check";
 
 const DONE: Record<WalletControlKind, string> = {
   figures: "The contract holds the new figures, and the agent's spending limit follows them.",
@@ -52,45 +56,49 @@ export default function TreasuryWalletControls({ orgSlug, status, network }: { o
   const [daily, setDaily] = useState(typedFigure(status.dailyUsdc));
   const [weekly, setWeekly] = useState(typedFigure(status.weeklyUsdc));
   const [cap, setCap] = useState("");
-  const [busy, setBusy] = useState<WalletControlKind | null>(null);
+  const [busy, setBusy] = useState<Busy | null>(null);
   const [note, setNote] = useState<Note>(null);
-  if (!status.wallet || !status.contract) return null;
-  const wallet = status.wallet as Hex;
-  const contract = status.contract as Hex;
+  // Read in the browser only: the server renders as if nothing is kept, and the browser then shows a control it sent.
+  const pending = asPendingControl(useSyncExternalStore(subscribePendingControl, () => storedControl(browserKeepingStore(), orgSlug), () => null));
+  const wallet = (status.wallet ?? "") as Hex;
+  const contract = (status.contract ?? "") as Hex;
   const usdc = profile.tokens.USDC as Hex;
   const passkey = status.signer === "passkey";
+  const say = (text: string) => setNote({ tone: "neutral", text });
+
+  const settle = async (kind: WalletControlKind, outcome: SendOutcome) => {
+    const settled = await settleControl({
+      store: browserKeepingStore(),
+      orgSlug,
+      kind,
+      outcome,
+      record: (txHash) => recordWalletControlAction(orgSlug, { txHash, kind }),
+      tries: POLL_TRIES,
+      waitMs: POLL_MS,
+      label: profile.label,
+      say,
+    });
+    if (settled === "verified") {
+      setNote({ tone: "neutral", text: DONE[kind] });
+      router.refresh();
+    }
+  };
 
   const run = async (kind: WalletControlKind, build: () => ControlCall) => {
     setBusy(kind);
     setNote(null);
-    const say = (text: string) => setNote({ tone: "neutral", text });
     try {
       const call = build();
-      let hash: string;
       if (passkey) {
         const treasury = await openTreasury(orgSlug, wallet, say);
         say("Confirm with your passkey.");
-        const outcome = await treasury.send([{ to: call.to, data: call.data, value: call.value }]);
-        if (outcome.kind === "reverted") throw new PasskeyTreasuryError(`${profile.label} did not carry it out; only its network fee was spent.`);
-        if (outcome.kind === "unconfirmed") {
-          say(`Sent. ${profile.label} has not confirmed it yet; reload this page in a minute.`);
-          return;
-        }
-        hash = outcome.txHash;
+        await settle(kind, await treasury.send([{ to: call.to, data: call.data, value: call.value }]));
       } else {
         const { provider, address } = await owner.open(wallet);
         say("Confirm in your wallet.");
-        hash = await sendPrepared(provider, address, { to: call.to, data: call.data, value: "0", chainId: profile.chainId });
+        const txHash = await sendPrepared(provider, address, { to: call.to, data: call.data, value: "0", chainId: profile.chainId });
+        await settle(kind, { kind: "sent", txHash });
       }
-      say(`Sent. Waiting for ${profile.label} to confirm it…`);
-      const polled = await pollRecord({ record: () => recordWalletControlAction(orgSlug, { txHash: hash, kind }), tries: POLL_TRIES, waitMs: POLL_MS });
-      if (polled.state === "refused") throw new PasskeyTreasuryError(polled.message);
-      if (polled.state === "unread") {
-        say(`Sent. ${profile.label} has not confirmed it yet; reload this page in a minute.`);
-        return;
-      }
-      setNote({ tone: "neutral", text: DONE[kind] });
-      router.refresh();
     } catch (error) {
       setNote({ tone: "error", text: failure(error, passkey) });
     } finally {
@@ -98,6 +106,41 @@ export default function TreasuryWalletControls({ orgSlug, status, network }: { o
     }
   };
 
+  /** A control sent before: asked about again, never sent again. A kept passkey reads its user operation without a prompt. */
+  const check = async () => {
+    const store = browserKeepingStore();
+    const kept = pendingControl(store, orgSlug);
+    if (!kept || !status.wallet) return;
+    setBusy("check");
+    setNote(null);
+    try {
+      say("Checking the change your wallet sent…");
+      if (kept.txHash) {
+        await settle(kept.kind, { kind: "sent", txHash: kept.txHash });
+      } else if (kept.userOpHash && passkey && keptCredential(store, orgSlug)) {
+        await settle(kept.kind, await (await openTreasury(orgSlug, wallet, say)).receipt(kept.userOpHash));
+      } else {
+        say(`Your change was sent from this browser and ${profile.label} has not confirmed it yet. Check again in a minute; it is not sent twice.`);
+      }
+    } catch (error) {
+      setNote({ tone: "error", text: failure(error, passkey) });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  useEffect(() => {
+    // Once for the panel the page opens on, after it has painted: `check` reads what is kept as it runs.
+    const soon = setTimeout(() => {
+      if (pendingControl(browserKeepingStore(), orgSlug)) void check();
+    }, 0);
+    return () => clearTimeout(soon);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgSlug]);
+
+  if (!status.wallet || !status.contract) return null;
+  const holds = { dailyUsdc: status.dailyUsdc, weeklyUsdc: status.weeklyUsdc };
+  const locked = busy !== null || pending !== null;
   const approval =
     status.approval === "unlimited"
       ? "The contract may move your USDC without a cap."
@@ -107,12 +150,26 @@ export default function TreasuryWalletControls({ orgSlug, status, network }: { o
 
   return (
     <div className="space-y-4 border-t border-line pt-4">
+      {pending && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-ink">Your change was sent</h3>
+          <p className="text-sm leading-relaxed text-ink-2">
+            Your wallet sent a change from this browser. It is recorded once {profile.label} confirms it, and nothing else is sent until then.
+          </p>
+          <div>
+            <Button type="button" variant="secondary" size="sm" icon={<RefreshCw />} loading={busy === "check"} disabled={busy !== null} onClick={() => void check()}>
+              Check again
+            </Button>
+          </div>
+        </div>
+      )}
       <div className="space-y-3">
         <h3 className="text-sm font-semibold text-ink">Change what the agent may pay</h3>
         <p className="text-sm leading-relaxed text-ink-2">
           Your wallet sets these figures on its contract, and the agent&apos;s spending limit follows them. The network fee is paid from your
           wallet&apos;s USDC.
         </p>
+        {!status.figuresRead && <p className="text-sm leading-relaxed text-ink-2">{`${profile.label} did not answer for the contract's figures; reload this page to change them.`}</p>}
         {!passkey && <WalletPicker wallets={owner.wallets} picked={owner.picked} onPick={owner.setPicked} />}
         <div className="grid gap-3 sm:grid-cols-2">
           <Field id="treasury-controls-daily" label="Daily figure (USDC)">
@@ -127,8 +184,8 @@ export default function TreasuryWalletControls({ orgSlug, status, network }: { o
             type="button"
             icon={passkey ? <KeyRound /> : <Wallet />}
             loading={busy === "figures"}
-            disabled={busy !== null}
-            onClick={() => run("figures", () => figuresCall({ contract, daily, weekly }))}
+            disabled={locked || !status.figuresRead}
+            onClick={() => run("figures", () => figuresCall({ contract, daily, weekly, holds }))}
           >
             {passkey ? "Change with your passkey" : "Change from your wallet"}
           </Button>
@@ -142,7 +199,7 @@ export default function TreasuryWalletControls({ orgSlug, status, network }: { o
               <Input id="treasury-controls-cap" inputMode="decimal" value={cap} onChange={(event) => setCap(event.target.value)} />
             </Field>
             <div>
-              <Button type="button" icon={<Play />} loading={busy === "resume"} disabled={busy !== null} onClick={() => run("resume", () => resumeCall({ usdc, contract, cap }))}>
+              <Button type="button" icon={<Play />} loading={busy === "resume"} disabled={locked} onClick={() => run("resume", () => resumeCall({ usdc, contract, cap }))}>
                 Resume payments
               </Button>
             </div>
@@ -153,7 +210,7 @@ export default function TreasuryWalletControls({ orgSlug, status, network }: { o
             <div>
               <ConfirmDialog
                 trigger={
-                  <Button type="button" variant="secondary" icon={<Ban />} loading={busy === "stop"} disabled={busy !== null}>
+                  <Button type="button" variant="secondary" icon={<Ban />} loading={busy === "stop"} disabled={locked}>
                     Stop the agent&apos;s payments
                   </Button>
                 }

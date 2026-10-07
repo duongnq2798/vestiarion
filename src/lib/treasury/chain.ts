@@ -1,4 +1,4 @@
-import { createPublicClient, decodeFunctionResult, encodeFunctionData, erc20Abi, getAddress, http, TransactionReceiptNotFoundError, type Hex } from "viem";
+import { createPublicClient, decodeFunctionResult, encodeFunctionData, erc20Abi, getAddress, http, numberToHex, TransactionReceiptNotFoundError, type Hex } from "viem";
 import { networkRpcUrl } from "../circle/arcFees";
 import type { NetworkProfile } from "../network";
 
@@ -18,6 +18,8 @@ export interface TreasuryReceipt {
   contractAddress: Hex | null;
   /** Its logs: a bundler's transaction says in them whether each user operation in it succeeded (passkey treasury K7). */
   logs?: Array<{ address: Hex; topics: Hex[]; data: Hex }>;
+  /** The block it was mined in: what a read must reach to see its effect (treasury wallet controls, review I3). */
+  blockNumber?: bigint;
 }
 
 export interface TreasuryChain {
@@ -27,12 +29,14 @@ export interface TreasuryChain {
   code(address: Hex): Promise<Hex>;
   /** A deployment simulated (`eth_call` with no `to`): the runtime code it would leave (W8). */
   simulateDeploy(input: { from: Hex; data: Hex }): Promise<Hex>;
-  /** An `eth_call` at the latest block; throws on a revert. */
-  read(to: Hex, data: Hex): Promise<Hex>;
+  /** The latest block the node has. */
+  blockNumber(): Promise<bigint>;
+  /** An `eth_call` at `block`, or the latest block; throws on a revert, or where the node does not have that block. */
+  read(to: Hex, data: Hex, block?: bigint): Promise<Hex>;
   /** The owner's USDC, in the token's 6-decimal units. */
   usdcBalance(owner: Hex): Promise<bigint>;
-  /** What the owner lets `spender` move of their USDC, in 6-decimal units. */
-  allowance(owner: Hex, spender: Hex): Promise<bigint>;
+  /** What the owner lets `spender` move of their USDC, in 6-decimal units, at `block` or the latest block. */
+  allowance(owner: Hex, spender: Hex, block?: bigint): Promise<bigint>;
   /** The native balance, which on Arc is USDC in 18 decimals: what an agent wallet pays its gas from (W10). */
   nativeBalance(address: Hex): Promise<bigint>;
 }
@@ -49,7 +53,8 @@ export function treasuryChain(network: NetworkProfile, options: { rpcUrl?: strin
     transport: http(options.rpcUrl ?? networkRpcUrl(network), { timeout: RPC_TIMEOUT_MS, retryCount: 0, ...(options.fetch ? { fetchFn: options.fetch } : {}) }),
   });
   const usdc = asAddress(network.tokens.USDC);
-  const ethCall = (call: { from?: Hex; to?: Hex; data: Hex }) => client.request({ method: "eth_call", params: [call, "latest"] }) as Promise<Hex>;
+  const ethCall = (call: { from?: Hex; to?: Hex; data: Hex }, block?: bigint) =>
+    client.request({ method: "eth_call", params: [call, block === undefined ? "latest" : numberToHex(block)] }) as Promise<Hex>;
 
   return {
     async receipt(hash) {
@@ -61,6 +66,7 @@ export function treasuryChain(network: NetworkProfile, options: { rpcUrl?: strin
           to: found.to ?? null,
           contractAddress: found.contractAddress ?? null,
           logs: found.logs.map((log) => ({ address: log.address, topics: log.topics as Hex[], data: log.data })),
+          blockNumber: found.blockNumber,
         };
       } catch (error) {
         if (error instanceof TransactionReceiptNotFoundError) return null;
@@ -73,15 +79,18 @@ export function treasuryChain(network: NetworkProfile, options: { rpcUrl?: strin
     simulateDeploy({ from, data }) {
       return ethCall({ from: asAddress(from), data });
     },
-    read(to, data) {
-      return ethCall({ to: asAddress(to), data });
+    blockNumber() {
+      return client.getBlockNumber({ cacheTime: 0 });
+    },
+    read(to, data, block) {
+      return ethCall({ to: asAddress(to), data }, block);
     },
     async usdcBalance(owner) {
       const data = await ethCall({ to: usdc, data: encodeFunctionData({ abi: erc20Abi, functionName: "balanceOf", args: [asAddress(owner)] }) });
       return decodeFunctionResult({ abi: erc20Abi, functionName: "balanceOf", data });
     },
-    async allowance(owner, spender) {
-      const data = await ethCall({ to: usdc, data: encodeFunctionData({ abi: erc20Abi, functionName: "allowance", args: [asAddress(owner), asAddress(spender)] }) });
+    async allowance(owner, spender, block) {
+      const data = await ethCall({ to: usdc, data: encodeFunctionData({ abi: erc20Abi, functionName: "allowance", args: [asAddress(owner), asAddress(spender)] }) }, block);
       return decodeFunctionResult({ abi: erc20Abi, functionName: "allowance", data });
     },
     nativeBalance(address) {

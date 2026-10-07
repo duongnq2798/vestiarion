@@ -1,4 +1,5 @@
 import { unwrap, type OrgDb } from "../dal";
+import { parseFigure } from "../usdc-figure";
 
 /**
  * The agent's spending limit (docs/superpowers/specs/2026-10-02-outflow-budget-design.md): what it
@@ -157,17 +158,6 @@ export function budgetGate(orgDb: OrgDb, now: () => Date = () => new Date()): Bu
       if (usdc > 0) spentThisCycle = round6(spentThisCycle + usdc);
     },
   };
-}
-
-/** A figure as a person typed it: blank is none; otherwise positive USDC with at most 6 decimals. */
-function parseFigure(raw: string, name: string): { ok: true; value: number | null } | { ok: false; message: string } {
-  const text = raw.trim().replace(/,/g, "");
-  if (text === "") return { ok: true, value: null };
-  if (!/^-?\d+(\.\d+)?$/.test(text)) return { ok: false, message: `The ${name} must be a number of USDC.` };
-  if ((text.split(".")[1] ?? "").length > 6) return { ok: false, message: `The ${name} can have at most 6 decimal places.` };
-  const value = Number(text);
-  if (!(value > 0)) return { ok: false, message: `The ${name} must be more than 0 USDC.` };
-  return { ok: true, value };
 }
 
 /** The settings form (R7): each figure optional, the 7-day one no lower than the daily one. */

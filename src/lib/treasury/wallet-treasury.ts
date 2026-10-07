@@ -10,7 +10,7 @@ import { networkOf, networkProfile, type NetworkProfile } from "../network";
 import { workspaceNetwork } from "../workspace-network";
 import { readOutflowBudget, type OutflowBudget } from "../agent/outflow-budget";
 import { budgetLoosened } from "../agent-budget";
-import { pauseAgent, pauseStateOf, resumeAgent } from "../platform/pause";
+import { PauseError, pauseAgent, pauseStateOf, resumeAgent, type PauseErrorCode } from "../platform/pause";
 import { passkeySetupCalls, spendingLimitSalt } from "../passkey-treasury";
 import { circleFailureLabel, defaultCircleClient, type CircleClientFactory } from "../circle/check";
 import { ensureNotificationSubscription } from "../circle/notifications";
@@ -19,7 +19,17 @@ import { withDeadline } from "../circle/settlement";
 import { MAX_ALLOWANCE } from "../circle/spending-limit-setup";
 import { SPENDING_LIMIT_ABI, usdcUnits } from "../spending-limit/onchain";
 import { asAddress, treasuryChain, type TreasuryChain } from "./chain";
-import { deploymentData, userOperationSucceeded, verifyApproval, verifyDeployedAt, verifyDeployment, verifyWalletProof, walletProofMessage } from "./verify";
+import {
+  approvalIn,
+  deploymentData,
+  limitsSetIn,
+  userOperationSucceeded,
+  verifyApproval,
+  verifyDeployedAt,
+  verifyDeployment,
+  verifyWalletProof,
+  walletProofMessage,
+} from "./verify";
 
 /**
  * The setup of a workspace that pays from its owner's own wallet (docs/superpowers/specs/2026-10-07-wallet-treasury-
@@ -67,6 +77,11 @@ export interface WalletTreasuryStatus {
   limitWeeklyUsdc: number | null;
   /** What the contract may move of the wallet's USDC, once deployed: without a cap, up to one, or nothing since the owner stopped it (treasury wallet controls C1); null before, or when unread. */
   approval: "unlimited" | "stopped" | number | null;
+  /**
+   * Whether the chain answered for both of the contract's figures, so a null figure above is one it does not hold
+   * (review C1). False before the contract, or when the node did not answer: the figures can then not be changed here.
+   */
+  figuresRead: boolean;
 }
 
 export type WalletTreasuryErrorCode =
@@ -260,6 +275,7 @@ export async function walletTreasuryStatus(orgId: string, deps: WalletTreasuryDe
       limitDailyUsdc: null,
       limitWeeklyUsdc: null,
       approval: null,
+      figuresRead: false,
     };
     if (external) {
       const limit = await readOutflowBudget(db());
@@ -284,6 +300,7 @@ export async function walletTreasuryStatus(orgId: string, deps: WalletTreasuryDe
     const [daily, weekly, allowance] = await Promise.all([figure("dailyLimit"), figure("weeklyLimit"), tolerant(() => chain.allowance(wallet, contract))]);
     status.dailyUsdc = daily ? usdcOf(daily) : null;
     status.weeklyUsdc = weekly ? usdcOf(weekly) : null;
+    status.figuresRead = daily !== null && weekly !== null;
     status.spendableUsdc = balance === null || allowance === null ? null : usdcOf(balance < allowance ? balance : allowance);
     status.approval = allowance === null ? null : allowance === 0n ? "stopped" : allowance >= UNLIMITED ? "unlimited" : Number(allowance) / 1_000_000;
     if (!row?.enforced) return { ...status, step: "approve" };
@@ -827,18 +844,38 @@ const CONTROL_ACTIONS: Record<WalletControlKind, string> = {
   resume: "spending_limit_resumed",
 };
 
-/** Whether this control's transaction is recorded already: the same transaction again changes nothing. */
-async function controlRecorded(kind: WalletControlKind, hash: Hex): Promise<boolean> {
-  const found = unwrap(await db().from("ledger_entries").select("seq").eq("action", CONTROL_ACTIONS[kind]).eq("detail->>txHash", hash).limit(1)) as Array<{ seq: number }>;
-  return found.length > 0;
+const NOT_THIS_CHANGE = "That transaction is not this change on the contract; nothing was recorded.";
+const RECORDED_AS_ANOTHER = "That transaction is recorded already as another change; nothing was recorded.";
+
+/** The action this transaction is recorded under already, whatever it was recorded as; null when it is not. */
+async function recordedAs(hash: Hex): Promise<string | null> {
+  const found = unwrap(await db().from("ledger_entries").select("action").eq("detail->>txHash", hash).limit(1)) as Array<{ action: string }>;
+  return found[0]?.action ?? null;
+}
+
+const figuresInUsdc = (daily: bigint, weekly: bigint): OutflowBudget => ({
+  dailyUsdc: daily === 0n ? null : Number(daily) / 1_000_000,
+  weeklyUsdc: weekly === 0n ? null : Number(weekly) / 1_000_000,
+});
+
+/** Pauses or resumes the agent where another hand did the same a moment before: that is this one done, not a failure. */
+async function settled(change: () => Promise<void>, done: PauseErrorCode): Promise<void> {
+  try {
+    await change();
+  } catch (error) {
+    if (!(error instanceof PauseError && error.code === done)) throw error;
+  }
 }
 
 /**
  * Records a control a live treasury's own wallet sent (docs/superpowers/specs/2026-10-07-treasury-wallet-controls-design.md
- * C4), from the chain only and once per transaction: its receipt succeeded and came from this wallet (for a passkey, its
- * user operation); then the contract's figures become the agent's spending limit, or its approval reads as stopped or
- * resumed. A stop pauses the agent; a resume lifts only the pause a stop set. `loosened` and `resumed` say a cycle
- * should decide again what the old state held.
+ * C4), from the chain only and once per transaction, whatever it is asked as (review I3): its receipt succeeded, came from
+ * this wallet (for a passkey, its user operation), and its own logs show this change: the contract's `LimitsSet`, or
+ * USDC's `Approval` of the contract, of nothing to stop and of something to resume. What it acts on is read at a block at
+ * or after the change's, so a node behind it answers later rather than with the old state: the contract's figures become
+ * the agent's spending limit; a stop the approval still shows pauses the agent, and a resume it still shows lifts only the
+ * pause a stop set. The pause or resume comes before the entry, so a failed one is tried again (review I2). `loosened`
+ * and `resumed` say a cycle should decide again what the old state held.
  */
 export async function recordWalletControl(
   input: { orgId: string; actorId: string; txHash: string; kind: WalletControlKind },
@@ -851,7 +888,12 @@ export async function recordWalletControl(
     if (!row?.enforced || !row.address) throw new WalletTreasuryError("wrong_step", "Set up the wallet first.");
     const contract = asAddress(row.address);
     const signer: TreasurySigner = row.treasury_signer === "passkey" ? "passkey" : "wallet";
-    if (await controlRecorded(input.kind, hash)) return { state: "verified" };
+    const setupHashes = [row.deploy_tx_hash, row.approve_tx_hash].filter((value): value is string => typeof value === "string").map((value) => value.toLowerCase());
+    if (setupHashes.includes(hash.toLowerCase())) throw new WalletTreasuryError("chain_refused", RECORDED_AS_ANOTHER);
+    const recorded = await recordedAs(hash);
+    if (recorded === CONTROL_ACTIONS[input.kind]) return { state: "verified" };
+    if (recorded !== null) throw new WalletTreasuryError("chain_refused", RECORDED_AS_ANOTHER);
+
     const chain = deps.chain ?? treasuryChain(network);
     const receipt = await readOrRefuse(() => chain.receipt(hash));
     if (!receipt) return { state: "pending" };
@@ -859,49 +901,57 @@ export async function recordWalletControl(
     if (receipt.status !== "success" || !fromWallet) {
       throw new WalletTreasuryError("chain_refused", "That transaction failed, or this workspace's wallet did not send it; nothing was recorded.");
     }
+    const usdc = asAddress(network.tokens.USDC);
+    const set = input.kind === "figures" ? limitsSetIn(receipt, contract) : null;
+    const approved = input.kind === "figures" ? null : approvalIn(receipt, { token: usdc, owner: wallet, spender: contract });
+    const isThisChange = input.kind === "figures" ? set !== null : input.kind === "stop" ? approved === 0n : approved !== null && approved > 0n;
+    if (!isThisChange) throw new WalletTreasuryError("chain_refused", NOT_THIS_CHANGE);
 
-    if (input.kind === "figures") {
-      const figure = async (functionName: "dailyLimit" | "weeklyLimit") => {
-        const units = (await readOrRefuse(async () =>
-          decodeFunctionResult({ abi: SPENDING_LIMIT_ABI, functionName, data: await chain.read(contract, encodeFunctionData({ abi: SPENDING_LIMIT_ABI, functionName })) })
+    const head = await readOrRefuse(() => chain.blockNumber());
+    if (receipt.blockNumber !== undefined && head < receipt.blockNumber) return { state: "pending" };
+
+    if (set) {
+      const figure = async (functionName: "dailyLimit" | "weeklyLimit") =>
+        (await readOrRefuse(async () =>
+          decodeFunctionResult({ abi: SPENDING_LIMIT_ABI, functionName, data: await chain.read(contract, encodeFunctionData({ abi: SPENDING_LIMIT_ABI, functionName }), head) })
         )) as bigint;
-        return units === 0n ? null : Number(units) / 1_000_000;
-      };
-      const to: OutflowBudget = { dailyUsdc: await figure("dailyLimit"), weeklyUsdc: await figure("weeklyLimit") };
+      const held = figuresInUsdc(await figure("dailyLimit"), await figure("weeklyLimit"));
       const from: OutflowBudget = (await readOutflowBudget(db())) ?? { dailyUsdc: null, weeklyUsdc: null };
       const budget = await db()
         .from("agent_budgets")
-        .upsert({ daily_usdc: to.dailyUsdc, weekly_usdc: to.weeklyUsdc, updated_by: input.actorId, updated_at: new Date().toISOString() }, { onConflict: "org_id" });
+        .upsert({ daily_usdc: held.dailyUsdc, weekly_usdc: held.weeklyUsdc, updated_by: input.actorId, updated_at: new Date().toISOString() }, { onConflict: "org_id" });
       if (budget.error) throw new Error(budget.error.message);
       await record(input.orgId, input.actorId, {
         action: "agent_budget_changed",
         summary: "The owner's wallet changed the figures on its spending limit contract, and the agent's spending limit follows them",
-        detail: { by: input.actorId, from, to, txHash: hash, onChain: { contract, txHash: hash, signer } },
+        detail: { by: input.actorId, from, to: figuresInUsdc(set.daily, set.weekly), txHash: hash, onChain: { contract, txHash: hash, signer } },
       });
-      return { state: "verified", loosened: budgetLoosened(from, to) };
+      return { state: "verified", loosened: budgetLoosened(from, held) };
     }
 
-    const allowance = await readOrRefuse(() => chain.allowance(wallet, contract));
+    const allowance = await readOrRefuse(() => chain.allowance(wallet, contract, head));
     if (input.kind === "stop") {
-      if (allowance !== 0n) throw new WalletTreasuryError("chain_refused", "The contract may still move the wallet's USDC; nothing was recorded.");
+      // So the agent tries nothing the contract would refuse, unless a later approval undid the stop; an agent paused
+      // already keeps its own reason.
+      if (allowance === 0n && !(await agentPause.state(input.orgId))) {
+        await settled(() => agentPause.pause({ orgId: input.orgId, actorId: input.actorId, reason: OWNER_STOPPED }), "already_paused");
+      }
       await record(input.orgId, input.actorId, {
         action: "spending_limit_stopped",
         summary: "The owner's wallet stopped the agent's payments: its spending limit contract may move none of its USDC",
         detail: { by: input.actorId, contract, txHash: hash, signer },
       });
-      // So the agent tries nothing the contract would refuse; an agent paused already keeps its own reason.
-      if (!(await agentPause.state(input.orgId))) await agentPause.pause({ orgId: input.orgId, actorId: input.actorId, reason: OWNER_STOPPED });
       return { state: "verified" };
     }
 
-    if (allowance === 0n) throw new WalletTreasuryError("chain_refused", "The contract may move none of the wallet's USDC yet; nothing was recorded.");
+    if (allowance > 0n && (await agentPause.state(input.orgId))?.reason === OWNER_STOPPED) {
+      await settled(() => agentPause.resume({ orgId: input.orgId, actorId: input.actorId }), "not_paused");
+    }
     await record(input.orgId, input.actorId, {
       action: "spending_limit_resumed",
       summary: "The owner's wallet resumed the agent's payments through its spending limit contract",
-      detail: { by: input.actorId, contract, txHash: hash, signer, allowanceUsdc: allowance >= UNLIMITED ? null : Number(allowance) / 1_000_000 },
+      detail: { by: input.actorId, contract, txHash: hash, signer, allowanceUsdc: (approved as bigint) >= UNLIMITED ? null : Number(approved) / 1_000_000 },
     });
-    const paused = await agentPause.state(input.orgId);
-    if (paused?.reason === OWNER_STOPPED) await agentPause.resume({ orgId: input.orgId, actorId: input.actorId });
-    return { state: "verified", resumed: true };
+    return allowance > 0n ? { state: "verified", resumed: true } : { state: "verified" };
   });
 }

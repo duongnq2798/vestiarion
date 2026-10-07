@@ -62,6 +62,7 @@ function fakeChain(input: { receipts: Record<string, TreasuryReceipt | null>; de
     receipt: async (hash) => input.receipts[hash.toLowerCase()] ?? null,
     code: async (address) => (address.toLowerCase() === CONTRACT.toLowerCase() && input.deployedWith ? keccak256(input.deployedWith) : "0x"),
     simulateDeploy: async ({ data }) => keccak256(data),
+    blockNumber: async () => 1_000n,
     read: async (_to, data) => {
       const { functionName } = decodeFunctionData({ abi: SPENDING_LIMIT_ABI, data });
       return encodeAbiParameters([{ type: "uint256" }], [functionName === "dailyLimit" ? 50_000_000n : 150_000_000n]);

@@ -194,19 +194,64 @@ export function circle() {
   return { factory, createWallets };
 }
 
-/** A chain whose wallet is an EOA, whose deployments leave a code naming their arguments, and whose reads are given. */
-export function chain(input: { receipts?: Record<string, TreasuryReceipt>; code?: Record<string, Hex>; usdc?: bigint; allowance?: bigint; gas?: bigint } = {}): TreasuryChain {
+/**
+ * A chain whose wallet is an EOA, whose deployments leave a code naming their arguments, and whose reads are given: the
+ * contract holds 20 USDC a day and 60 in 7 days unless `figures` says otherwise, and its head is block 1000. `blocks`
+ * collects the block each contract or allowance read asked for (undefined for the latest).
+ */
+export function chain(
+  input: {
+    receipts?: Record<string, TreasuryReceipt>;
+    code?: Record<string, Hex>;
+    usdc?: bigint;
+    allowance?: bigint;
+    gas?: bigint;
+    head?: bigint;
+    figures?: { daily: bigint; weekly: bigint } | "unreadable";
+  } = {}
+): TreasuryChain & { blocks: Array<bigint | undefined> } {
+  const blocks: Array<bigint | undefined> = [];
+  const figures = input.figures ?? { daily: 20_000_000n, weekly: 60_000_000n };
   return {
+    blocks,
     receipt: async (hash) => input.receipts?.[hash.toLowerCase()] ?? null,
     code: async (address) => input.code?.[address.toLowerCase()] ?? "0x",
     simulateDeploy: async ({ data }) => keccak256(data),
-    read: async (_to, data) => {
+    blockNumber: async () => input.head ?? 1_000n,
+    read: async (_to, data, block) => {
+      blocks.push(block);
+      if (figures === "unreadable") throw new Error("the node did not answer");
       const { functionName } = decodeFunctionData({ abi: SPENDING_LIMIT_ABI, data });
-      return encodeAbiParameters([{ type: "uint256" }], [functionName === "dailyLimit" ? 20_000_000n : 60_000_000n]);
+      return encodeAbiParameters([{ type: "uint256" }], [functionName === "dailyLimit" ? figures.daily : figures.weekly]);
     },
     usdcBalance: async () => input.usdc ?? 0n,
-    allowance: async () => input.allowance ?? 0n,
+    allowance: async (_owner, _spender, block) => {
+      blocks.push(block);
+      return input.allowance ?? 0n;
+    },
     nativeBalance: async () => input.gas ?? 0n,
+  };
+}
+
+/** The contract's `LimitsSet`, as a receipt that set its figures carries it (treasury wallet controls, review I3). */
+export function limitsSetLog(contract: string, daily: bigint, weekly: bigint) {
+  return {
+    address: getAddress(contract),
+    topics: encodeEventTopics({ abi: [parseAbiItem("event LimitsSet(uint256 dailyLimit, uint256 weeklyLimit)")], eventName: "LimitsSet" }) as Hex[],
+    data: encodeAbiParameters([{ type: "uint256" }, { type: "uint256" }], [daily, weekly]),
+  };
+}
+
+/** USDC's `Approval`, as a receipt that approved (or stopped) the contract carries it. */
+export function approvalLog(owner: string, spender: string, value: bigint, token: string = USDC) {
+  return {
+    address: getAddress(token),
+    topics: encodeEventTopics({
+      abi: [parseAbiItem("event Approval(address indexed owner, address indexed spender, uint256 value)")],
+      eventName: "Approval",
+      args: { owner: owner as Hex, spender: spender as Hex },
+    }) as Hex[],
+    data: encodeAbiParameters([{ type: "uint256" }], [value]),
   };
 }
 
