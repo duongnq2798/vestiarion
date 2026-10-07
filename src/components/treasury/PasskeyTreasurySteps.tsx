@@ -14,7 +14,7 @@ import {
   recordRecoveryAction,
   skipRecoveryAction,
 } from "@/app/actions/wallet-treasury";
-import { WalletAddress, WalletTreasurySummary } from "@/components/treasury/WalletTreasurySteps";
+import { WalletTreasurySummary } from "@/components/treasury/WalletTreasurySteps";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -257,10 +257,9 @@ function FundStep({ status, label }: { status: WalletTreasuryStatus; label: stri
     <>
       <h3 className="text-sm font-semibold text-ink">Add USDC to your wallet</h3>
       <p className="text-sm leading-relaxed text-ink-2">
-        Send USDC on {label} to your wallet&apos;s address, from an exchange or another wallet. Setup needs about {status.setupNeedsUsdc.toFixed(2)} USDC: 0.50 for the
+        Send USDC on {label} to your wallet&apos;s address above, from an exchange or another wallet. Setup needs about {status.setupNeedsUsdc.toFixed(2)} USDC: 0.50 for the
         agent&apos;s gas and about 0.05 for the network fee. Add what the workspace will pay on top.
       </p>
-      {status.wallet && <WalletAddress value={status.wallet} label="Copy your wallet's address" />}
       <p className="text-xs text-ink-3">This page checks for it every 10 seconds.</p>
       <div>
         <Button type="button" variant="secondary" size="sm" onClick={() => router.refresh()}>

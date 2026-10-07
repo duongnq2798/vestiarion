@@ -25,7 +25,9 @@ export function WalletTreasuryChoice({ orgSlug, network }: { orgSlug: string; ne
   const passkeys = usePasskeysAvailable();
   const found = wallet.wallets === null ? null : wallet.wallets.length;
   const lead = choiceLead({ wallets: found, passkeys });
-  const name = found === 1 ? wallet.wallets?.[0]?.name : undefined;
+  // A wallet that announced itself (EIP-6963) is named; one seen only as window.ethereum is not ("injected").
+  const named = found === 1 ? wallet.wallets?.[0] : undefined;
+  const name = named && named.id !== "injected" ? named.name : undefined;
 
   const prove = () =>
     run(async (say) => {

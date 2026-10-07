@@ -31,6 +31,7 @@ const PANEL = "src/components/GoLivePanel.tsx";
 const WALLET_STEPS = "src/components/treasury/WalletTreasurySteps.tsx";
 const WALLET_CHOICE = "src/components/treasury/WalletTreasuryChoice.tsx";
 const PASSKEY_STEPS = "src/components/treasury/PasskeyTreasurySteps.tsx";
+const PASSKEY_LIB = "src/lib/passkey-treasury.ts";
 const WALLET_ACTIONS = "src/app/actions/wallet-treasury.ts";
 const WALLET_TREASURY = "src/lib/treasury/wallet-treasury.ts";
 const WALLET_VERIFY = "src/lib/treasury/verify.ts";
@@ -255,6 +256,30 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["That deployment was not sent from this workspace's wallet.", WALLET_VERIFY],
     ["The chain could not be read just now; nothing was recorded. Try again in a moment.", WALLET_TREASURY],
     ["Circle did not create the agent's wallet; nothing was recorded. Try again in a moment.", WALLET_TREASURY],
+    // Path C with a passkey (passkey treasury K1-K10).
+    ["Create a wallet with a passkey", PASSKEY_STEPS],
+    ["Create with a passkey", PASSKEY_STEPS],
+    ["Use a passkey you made before", PASSKEY_STEPS],
+    ["Your passkey wallet is this workspace's treasury.", WALLET_ACTIONS],
+    ["Set up your passkey wallet as the treasury", PASSKEY_STEPS],
+    ["Add USDC to your wallet", PASSKEY_STEPS],
+    ["Set up with one confirmation", PASSKEY_STEPS],
+    ["Set up with your passkey", PASSKEY_STEPS],
+    ["Create a recovery phrase", PASSKEY_STEPS],
+    ["I saved these twelve words somewhere safe, away from this device.", PASSKEY_STEPS],
+    ["Register with your passkey", PASSKEY_STEPS],
+    ["Skip: I understand that losing this passkey loses this wallet", PASSKEY_STEPS],
+    ["Passkey wallets are not set up on this deployment.", PASSKEY_STEPS],
+    ["The setup Vestiarion sent is not the one this page expected; nothing was signed.", PASSKEY_LIB],
+    ["Use the passkey you made for it.", PASSKEY_LIB],
+    ["No passkey was created. Nothing changed.", PASSKEY_LIB],
+    ["The passkey was not used. Nothing changed.", PASSKEY_LIB],
+    ["This browser cannot use passkeys. Use one that can, such as Chrome or Safari, or connect a wallet instead.", PASSKEY_LIB],
+    ["Passkeys for Vestiarion wallets work only on www.vestiarion.xyz.", PASSKEY_LIB],
+    ["The wallet does not hold enough USDC for this. Add a little more, then try again. Nothing was sent.", PASSKEY_LIB],
+    ["The setup failed on chain; nothing was set up.", WALLET_TREASURY],
+    ["The wallet has not approved its contract; nothing was recorded.", WALLET_TREASURY],
+    ["Save a recovery phrase for the passkey wallet, or skip it, first.", GO_LIVE_LIBRARY],
   ],
   "guides/first-payment": [
     ["Money you owe", "src/components/intake/InvoiceIntake.tsx"],

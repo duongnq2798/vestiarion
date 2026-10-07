@@ -551,6 +551,16 @@ no Circle account. Use a Circle production account kept for agent wallets alone,
 product unlocked. `ARC_MAINNET_RPC_URL`, optional, points the server's chain reads at a keyed RPC. See
 `docs/superpowers/specs/2026-10-07-wallet-treasury-design.md` and the Go live guide's path C.
 
+**A passkey wallet as the treasury.** Where the deployment also sets
+`NEXT_PUBLIC_MODULAR_WALLETS_MAINNET_CLIENT_KEY` (a Circle mainnet Client Key bound to the site's
+domain; `NEXT_PUBLIC_MODULAR_WALLETS_MAINNET_CLIENT_URL` is optional), an owner with no browser wallet
+creates one with a passkey: a Circle smart account on Arc mainnet owned by their passkey. Go live leads
+with it when the browser has no wallet. One confirmation deploys the contract through the deterministic
+deployment proxy, approves it and sends the agent its gas, after the browser checks every call against
+what it built itself; a recovery phrase made in the browser is then registered, or skipped knowingly.
+Vestiarion holds no key to the wallet. A client key is public by design, so it is not marked sensitive.
+See `docs/superpowers/specs/2026-10-07-passkey-treasury-design.md`.
+
 Stablecoins are chosen by contract, never by symbol, on both networks. Chats cannot approve a
 mainnet payment. See `docs/superpowers/specs/2026-10-06-mainnet-go-live-design.md`.
 

@@ -1,5 +1,14 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-07: A passkey wallet can be the treasury
+
+- On Arc mainnet, an owner can make the treasury a passkey wallet: a smart account owned by their passkey, set up in Go live with one confirmation. Its setup writes the same entries as a wallet in the owner's browser, with these differences:
+  - **`treasury_wallet_chosen`**, a new entry with actor `human` and domain `system`, records the choice in place of `treasury_wallet_proven`. Its `detail` is `{ by, address, signer: "passkey", network }`. A passkey wallet signs no message: its own approval of the contract, on chain, proves it is the owner's.
+  - **`spending_limit_enforced`** gains `signer: "passkey"`. Its `deployTxHash` and `approveTxHash` are the same transaction, which deployed and approved the contract in one user operation.
+  - **`treasury_recovery_registered`** `{ by, recoveryAddress, txHash }` records the address of the recovery phrase the owner registered as a recovery owner of the wallet. **`treasury_recovery_skipped`** `{ by }` records that they chose to go without one. A passkey wallet's workspace goes live only after one or the other.
+- On both routes, choosing the wallet now creates the agent's wallet in the same step, so `agent_wallet_created` follows `treasury_wallet_proven` or `treasury_wallet_chosen` at once.
+- All of these reach webhook endpoints as `ledger.appended`, and `GET /api/v1/ledger` lists them. Nothing else in `/api/v1` changes.
+
 ## 2026-10-07: A workspace on Arc mainnet can pay from its owner's own wallet
 
 - A workspace on Arc mainnet can keep its treasury in a wallet its owner holds. It pays from that wallet only through its spending limit contract, from an agent wallet Vestiarion creates for it. Its setup writes three new ledger entries, each with actor `human` and domain `system`, and each sent to webhook endpoints as `ledger.appended`:
