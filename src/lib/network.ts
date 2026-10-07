@@ -73,8 +73,8 @@ export interface NetworkProfile {
   /** The prefix of a Circle API key for this network (N5). */
   circleKeyPrefix: string;
   /**
-   * Circle Modular Wallets' path for this chain, for a payee's passkey wallet (payee passkey wallet P1); null where they
-   * do not run.
+   * Circle Modular Wallets' path for this chain, where passkey smart accounts run: a payee's passkey wallet on Arc testnet
+   * (payee passkey wallet P1), a passkey treasury on Arc mainnet (passkey treasury K2); null where they do not run.
    */
   modularWallets: { chain: string } | null;
   /**
@@ -218,7 +218,8 @@ export const ARC_MAINNET = {
   swapAdapter: null,
   hostedWallets: false,
   circleKeyPrefix: "LIVE_API_KEY:",
-  modularWallets: null,
+  // Circle's bundler answered chain `arc` with 0x13b2 and EntryPoint v0.7 on 2026-10-07 (passkey treasury K2).
+  modularWallets: { chain: "arc" },
   walletAccountType: "EOA",
   gasReserveUsdc: 0.1,
   escrow: false,

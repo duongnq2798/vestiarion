@@ -55,9 +55,11 @@ describe("when a passkey wallet is offered (P1, P6)", () => {
     expect(passkeyWalletOffered(ARC_TESTNET.circleBlockchain, null)).toBe(false);
   });
 
-  it("knows Modular Wallets run on Arc testnet and not yet on Arc mainnet", () => {
+  it("knows Modular Wallets run on both Arc networks, and keeps a payee's passkey wallet on Arc testnet", () => {
     expect(ARC_TESTNET.modularWallets).toEqual({ chain: "arcTestnet" });
-    expect(ARC_MAINNET.modularWallets).toBeNull();
+    // Circle's bundler answered chain `arc` with 0x13b2 on 2026-10-07 (passkey treasury K2, K11).
+    expect(ARC_MAINNET.modularWallets).toEqual({ chain: "arc" });
+    expect(passkeyWalletOffered(ARC_MAINNET.circleBlockchain, CONFIG)).toBe(false);
   });
 
   it("keeps viem out of what the payee link loads: only its types are imported (review finding 6)", () => {
