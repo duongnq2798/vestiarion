@@ -8,6 +8,7 @@ import { FormMessage } from "@/components/ui/FormMessage";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
+import { DocsLink } from "@/components/DocsLink";
 
 const INITIAL: InboxActionResult = { ok: false, message: "" };
 
@@ -49,7 +50,7 @@ function ActionButton({
 export default function EmailInboxPanel({ orgSlug, view, canManage }: { orgSlug: string; view: EmailInboxView; canManage: boolean }) {
   return (
     <section aria-labelledby="email-inbox-settings-title" id="invoices-by-email">
-      <SectionHeader id="email-inbox-settings-title" title="Invoices by email" />
+      <SectionHeader id="email-inbox-settings-title" title="Invoices by email" action={<DocsLink href="/docs/guides/email-invoices" topic="invoices by email" />} />
       <Card className="max-w-none space-y-4 p-5">
         <p className="max-w-prose text-sm text-ink-2">
           Forward invoices from your suppliers to this workspace&apos;s address. Vestiarion reads each one the way From a document does,

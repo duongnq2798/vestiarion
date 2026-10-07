@@ -38,6 +38,7 @@ import { listCounterparties, listMilestones, stats, type MilestoneRow } from "@/
 import { workspaceNetwork } from "@/lib/workspace-network";
 import { paidAcrossChains } from "@/lib/payee-chains";
 import { networkProfile } from "@/lib/network";
+import { DocsLink } from "@/components/DocsLink";
 
 export const dynamic = "force-dynamic";
 
@@ -312,7 +313,11 @@ export default async function ContractorsPage({ params, searchParams }: { params
           />
         ) : (
           <section>
-            <SectionHeader title="Milestones" meta={`${decisions.length} · open one for the agent's reasoning, its verification and its escrow`} />
+            <SectionHeader
+              title="Milestones"
+              meta={`${decisions.length} · open one for the agent's reasoning, its verification and its escrow`}
+              action={<DocsLink href="/docs/guides/pay-a-contractor" topic="paying contractors" />}
+            />
             {needsYou.length > 0 && (
               <>
                 <RowGroupHeading title="Needs you" count={needsYou.length} />

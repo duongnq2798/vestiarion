@@ -10,6 +10,7 @@ import { SectionHeader } from "@/components/ui/SectionHeader";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
 import type { GitHubInstallation } from "@/lib/github/installs";
+import { DocsLink } from "@/components/DocsLink";
 
 const INITIAL: GitHubActionResult = { ok: false, message: "" };
 
@@ -66,7 +67,7 @@ export default function GitHubPanel({
   const told = notice ? GITHUB_NOTICES[notice] : undefined;
   return (
     <section aria-labelledby="github-title" id="github">
-      <SectionHeader id="github-title" title="GitHub" />
+      <SectionHeader id="github-title" title="GitHub" action={<DocsLink href="/docs/guides/github" topic="GitHub" />} />
       <Card className="space-y-4 p-5">
         {told && (
           <p role="status" className={told.tone === "success" ? "text-sm text-ink" : "text-sm text-refused"}>

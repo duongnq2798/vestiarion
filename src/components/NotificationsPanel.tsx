@@ -8,6 +8,7 @@ import { Checkbox } from "@/components/ui/Checkbox";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { useActionForm } from "@/components/ui/useActionForm";
 import { TelegramCard } from "@/components/TelegramCard";
+import { DocsLink } from "@/components/DocsLink";
 
 const INITIAL: NotifyEmailActionResult = { ok: false, message: "" };
 
@@ -66,7 +67,11 @@ export default function NotificationsPanel({
   if (!canDecide && !telegram) return null;
   return (
     <section aria-labelledby="notifications-title" id="notifications">
-      <SectionHeader id="notifications-title" title="Notifications" />
+      <SectionHeader
+        id="notifications-title"
+        title="Notifications"
+        action={telegram ? <DocsLink href="/docs/guides/telegram" topic="Telegram notifications" /> : undefined}
+      />
       <div className="space-y-4">
         {canDecide && <NotifyEmailSwitch orgSlug={orgSlug} initial={notifyEmail} />}
         {telegram && <TelegramCard orgSlug={orgSlug} link={telegram.link} />}

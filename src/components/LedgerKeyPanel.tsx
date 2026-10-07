@@ -10,6 +10,7 @@ import { SectionHeader } from "@/components/ui/SectionHeader";
 import { useActionForm } from "@/components/ui/useActionForm";
 import { LEDGER_KEY_MESSAGES, utcMinute } from "@/lib/copy";
 import type { ledgerKeyStatus } from "@/lib/platform/ledger-key";
+import { DocsLink } from "@/components/DocsLink";
 
 /**
  * The "Ledger signing key" section of Settings
@@ -72,7 +73,7 @@ function RotateForm({ orgSlug }: { orgSlug: string }) {
 export default function LedgerKeyPanel({ orgSlug, status, canAdminister }: LedgerKeyPanelProps) {
   return (
     <section aria-labelledby="ledger-key-title">
-      <SectionHeader id="ledger-key-title" title="Ledger signing key" />
+      <SectionHeader id="ledger-key-title" title="Ledger signing key" action={<DocsLink href="/docs/guides/audit-export#5-after-a-key-rotation" topic="the ledger signing key" />} />
       <Card className="space-y-4 p-5">
         <div className="space-y-1">
           <p className="text-sm font-medium text-ink">Current key</p>

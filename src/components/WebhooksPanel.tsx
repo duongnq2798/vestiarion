@@ -1,8 +1,7 @@
 "use client";
 
 import { AnimatePresence, m } from "motion/react";
-import { BookOpen, Plus, Send, Trash2, Webhook } from "lucide-react";
-import Link from "next/link";
+import { Plus, Send, Trash2, Webhook } from "lucide-react";
 import { useState } from "react";
 import { createWebhookEndpointAction, removeWebhookEndpointAction, sendTestWebhookAction, type WebhookActionResult } from "@/app/actions/webhooks";
 import { Badge } from "@/components/ui/Badge";
@@ -21,6 +20,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { MOTION } from "@/components/ui/tokens";
 import { useActionForm } from "@/components/ui/useActionForm";
 import type { WebhookEndpointView } from "@/lib/platform/webhooks";
+import { DocsLink } from "@/components/DocsLink";
 
 const INITIAL: WebhookActionResult = { ok: false, message: "" };
 const EXIT = { duration: MOTION.duration.exit, ease: MOTION.ease.exit };
@@ -170,12 +170,7 @@ export default function WebhooksPanel({ orgSlug, endpoints, canManage }: { orgSl
           meta={`${endpoints.length} in this workspace`}
           action={
             <div className="flex items-center gap-3">
-              <Button asChild variant="link">
-                <Link href="/docs/webhooks" aria-label="Docs: webhooks">
-                  <BookOpen aria-hidden />
-                  Docs
-                </Link>
-              </Button>
+              <DocsLink href="/docs/webhooks" topic="webhooks" />
               {canManage && <AddEndpointDialog orgSlug={orgSlug} />}
             </div>
           }

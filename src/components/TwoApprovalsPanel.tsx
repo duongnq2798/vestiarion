@@ -14,6 +14,7 @@ import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm, type ActionResult } from "@/components/ui/useActionForm";
 import { withSuccessToast } from "@/components/withSuccessToast";
 import { twoApprovalsSentence } from "@/lib/two-approvals";
+import { DocsLink } from "@/components/DocsLink";
 
 /**
  * The "Two approvals" section of Settings (docs/superpowers/specs/2026-10-05-two-approvals-design.md T1, T8): the figure
@@ -86,7 +87,7 @@ function ChangeForms({ orgSlug, above, keepsFigure }: { orgSlug: string; above: 
 export default function TwoApprovalsPanel({ orgSlug, status, canChange, keepsFigure }: TwoApprovalsPanelProps) {
   return (
     <section aria-labelledby="two-approvals-title">
-      <SectionHeader id="two-approvals-title" title="Two approvals" />
+      <SectionHeader id="two-approvals-title" title="Two approvals" action={<DocsLink href="/docs/guides/first-payment#two-approvals-above-a-figure" topic="two approvals" />} />
       <Card className="space-y-4 p-5">
         <div className="space-y-1">
           <p className="text-sm font-medium text-ink">{status.above === null ? "Off: one approval pays any payment." : twoApprovalsSentence(status.above)}</p>

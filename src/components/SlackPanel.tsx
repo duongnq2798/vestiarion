@@ -15,6 +15,7 @@ import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
 import { BrandMark } from "@/components/vx/BrandMarks";
 import type { SlackPanelView } from "@/lib/slack/panel";
+import { DocsLink } from "@/components/DocsLink";
 
 const INITIAL: SlackActionResult = { ok: false, message: "" };
 
@@ -127,6 +128,7 @@ export default function SlackPanel({
             Slack
           </span>
         }
+        action={<DocsLink href="/docs/guides/slack" topic="Slack" />}
       />
       <Card className="space-y-4 p-5">
         {told && (

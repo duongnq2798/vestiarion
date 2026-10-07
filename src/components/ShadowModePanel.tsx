@@ -16,6 +16,7 @@ import { withSuccessToast } from "@/components/withSuccessToast";
 import { utcMinute } from "@/lib/copy";
 import type { Network } from "@/lib/network";
 import { SHADOW_CURRENCIES, type ShadowMode } from "@/lib/shadow-currency";
+import { DocsLink } from "@/components/DocsLink";
 
 /**
  * The "Shadow mode" section of Settings (docs/superpowers/specs/2026-10-07-shadow-mode-design.md S1): whether the
@@ -90,7 +91,7 @@ export default function ShadowModePanel({ orgSlug, mode, network, canChange }: S
   const mainnet = network === "arc-mainnet";
   return (
     <section aria-labelledby="shadow-mode-title">
-      <SectionHeader id="shadow-mode-title" title="Shadow mode" />
+      <SectionHeader id="shadow-mode-title" title="Shadow mode" action={<DocsLink href="/docs/guides/shadow-mode" topic="shadow mode" />} />
       <Card className="space-y-4 p-5">
         <div className="space-y-1">
           <p className="text-sm font-medium text-ink">
