@@ -33,7 +33,8 @@ import { MAINNET_OFF } from "@/lib/mainnet";
 import { networkOf, networkProfile, type Network } from "@/lib/network";
 import type { GoLiveStatus } from "@/lib/platform/go-live";
 import PasskeyTreasurySteps from "@/components/treasury/PasskeyTreasurySteps";
-import WalletTreasurySteps, { WalletTreasuryChoice, WalletTreasurySummary } from "@/components/treasury/WalletTreasurySteps";
+import { WalletTreasuryChoice } from "@/components/treasury/WalletTreasuryChoice";
+import WalletTreasurySteps, { WalletTreasurySummary } from "@/components/treasury/WalletTreasurySteps";
 
 /**
  * The Go live section of Settings (docs/superpowers/specs/2026-09-29-go-live-design.md §2).
@@ -574,12 +575,23 @@ export default function GoLivePanel({ orgSlug, status, canAdminister, sampleBala
     );
   } else if (status.host === "external" && status.walletTreasury && status.step === "wallets") {
     // The owner's own wallet, set up step by step (wallet treasury W5-W10); a passkey wallet's own route (passkey treasury K5-K8).
-    body =
-      status.walletTreasury.signer === "passkey" && status.walletTreasury.step !== "wallet" ? (
-        <PasskeyTreasurySteps orgSlug={orgSlug} status={status.walletTreasury} network={status.network ?? "arc-mainnet"} />
-      ) : (
-        <WalletTreasurySteps orgSlug={orgSlug} status={status.walletTreasury} network={status.network ?? "arc-mainnet"} />
+    const treasuryNetwork = status.network ?? "arc-mainnet";
+    if (status.walletTreasury.step === "wallet") {
+      // The workspace chose its own wallet but holds no address for it: the choice is offered again, never a dead end.
+      body = (
+        <Card className="space-y-4 p-5">
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-ink-3">Step 2 of 3</p>
+            <h3 className="text-sm font-semibold text-ink">Set up your wallet as the treasury</h3>
+          </div>
+          <WalletTreasuryChoice orgSlug={orgSlug} network={treasuryNetwork} />
+        </Card>
       );
+    } else if (status.walletTreasury.signer === "passkey") {
+      body = <PasskeyTreasurySteps orgSlug={orgSlug} status={status.walletTreasury} network={treasuryNetwork} />;
+    } else {
+      body = <WalletTreasurySteps orgSlug={orgSlug} status={status.walletTreasury} network={treasuryNetwork} />;
+    }
   } else if (status.step === "connect") {
     body = (
       <ConnectStep

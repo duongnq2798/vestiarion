@@ -4,25 +4,22 @@ import { ShieldCheck, Wallet } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import {
-  chooseWalletTreasuryAction,
   createAgentWalletAction,
   prepareAgentGasAction,
   prepareApprovalAction,
   prepareDeploymentAction,
-  proofMessageAction,
   recordApprovalAction,
   recordDeploymentAction,
   type PreparedActionResult,
   type RecordActionResult,
 } from "@/app/actions/wallet-treasury";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Field } from "@/components/ui/Field";
 import { FormMessage } from "@/components/ui/FormMessage";
 import { Input } from "@/components/ui/Input";
-import { connectWallet, discoverWallets, ensureNetwork, sendPrepared, signProof, walletErrorMessage, type DiscoveredWallet, type WalletWindow } from "@/lib/browser-wallet";
+import { connectWallet, discoverWallets, ensureNetwork, sendPrepared, walletErrorMessage, type DiscoveredWallet, type WalletWindow } from "@/lib/browser-wallet";
 import { networkProfile, type Network } from "@/lib/network";
 import { forgetSent, recordSent, rememberSent, sentHash, type SentStep, type SentStore } from "@/lib/treasury/sent-transaction";
 import type { WalletTreasuryStatus } from "@/lib/treasury/wallet-treasury";
@@ -65,7 +62,7 @@ export function WalletAddress({ value, label }: { value: string; label: string }
 }
 
 /** The wallet in this browser, the one the person picked when there are several, on the workspace's network. */
-function useOwnerWallet(network: Network) {
+export function useOwnerWallet(network: Network) {
   const [wallets, setWallets] = useState<DiscoveredWallet[] | null>(null);
   const [picked, setPicked] = useState(0);
   useEffect(() => {
@@ -86,7 +83,7 @@ function useOwnerWallet(network: Network) {
   return { wallets, picked, setPicked, open };
 }
 
-function WalletPicker({ wallets, picked, onPick }: { wallets: DiscoveredWallet[] | null; picked: number; onPick: (index: number) => void }) {
+export function WalletPicker({ wallets, picked, onPick }: { wallets: DiscoveredWallet[] | null; picked: number; onPick: (index: number) => void }) {
   if (!wallets || wallets.length < 2) return null;
   return (
     <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Choose a wallet">
@@ -100,7 +97,7 @@ function WalletPicker({ wallets, picked, onPick }: { wallets: DiscoveredWallet[]
 }
 
 /** Runs a step, keeping its outcome in words; a wallet's refusal is said plainly. */
-function useStep() {
+export function useStep() {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<Note>(null);
   const run = async (work: (say: (text: string) => void) => Promise<void>) => {
@@ -116,48 +113,6 @@ function useStep() {
     }
   };
   return { busy, note, run };
-}
-
-/** The connect step's choice (W1): the owner's own wallet, offered where the deployment has an agent account. */
-export function WalletTreasuryChoice({ orgSlug, network }: { orgSlug: string; network: Network }) {
-  const router = useRouter();
-  const wallet = useOwnerWallet(network);
-  const { busy, note, run } = useStep();
-  const prove = () =>
-    run(async (say) => {
-      const { provider, address } = await wallet.open(null);
-      const asked = await proofMessageAction(orgSlug, address);
-      if (!asked.ok || !asked.text) throw new Error(asked.message);
-      say("Sign the message in your wallet. It only proves the wallet is yours; nothing is sent.");
-      const signature = await signProof(provider, address, asked.text);
-      const chosen = await chooseWalletTreasuryAction(orgSlug, { address, message: asked.text, signature });
-      if (!chosen.ok) throw new Error(chosen.message);
-      say(chosen.message);
-      router.refresh();
-    });
-  return (
-    <div className="space-y-3 rounded-xl border border-agent-line bg-agent-soft/40 p-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <h4 className="text-sm font-semibold text-ink">Your own wallet</h4>
-        <Badge tone="agent" size="sm">
-          Recommended
-        </Badge>
-      </div>
-      <p className="text-sm leading-relaxed text-ink-2">
-        The treasury stays in a wallet you hold, such as MetaMask or Rabby. You sign once to prove it is yours, deploy a contract that lets this
-        workspace&apos;s agent pay from it within the daily and 7-day figures you set, and approve it. Vestiarion never holds your USDC, and you can stop
-        it from your wallet at any time. No Circle account is needed.
-      </p>
-      <WalletPicker wallets={wallet.wallets} picked={wallet.picked} onPick={wallet.setPicked} />
-      <div>
-        <Button type="button" icon={<Wallet />} loading={busy} onClick={prove} disabled={wallet.wallets === null}>
-          Connect your wallet
-        </Button>
-      </div>
-      {wallet.wallets?.length === 0 && <p className="text-xs text-ink-3">No wallet was found in this browser. Install one, such as MetaMask or Rabby, then reload.</p>}
-      <FormMessage tone={note?.tone ?? "neutral"}>{note?.text}</FormMessage>
-    </div>
-  );
 }
 
 const usdc = (value: number | null) => (value === null ? "not read" : `${value} USDC`);
@@ -243,10 +198,7 @@ export default function WalletTreasurySteps({ orgSlug, status, network }: { orgS
   }, [orgSlug, status.step]);
 
   let body: ReactNode = null;
-  if (status.step === "wallet") {
-    // The workspace chose its own wallet but holds no address for it: the choice is offered again, never a dead end.
-    body = <WalletTreasuryChoice orgSlug={orgSlug} network={network} />;
-  } else if (status.step === "agent") {
+  if (status.step === "agent") {
     body = (
       <>
         <h3 className="text-sm font-semibold text-ink">Create the agent&apos;s wallet</h3>

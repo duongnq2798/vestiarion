@@ -2,10 +2,11 @@
 
 import { KeyRound, ShieldCheck, Wallet } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { parseEther, type Hex } from "viem";
 import { english, generateMnemonic, mnemonicToAccount } from "viem/accounts";
 import {
+  choosePasskeyTreasuryAction,
   createAgentWalletAction,
   prepareAgentGasAction,
   preparePasskeySetupAction,
@@ -14,6 +15,7 @@ import {
   skipRecoveryAction,
 } from "@/app/actions/wallet-treasury";
 import { WalletAddress, WalletTreasurySummary } from "@/components/treasury/WalletTreasurySteps";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Checkbox } from "@/components/ui/Checkbox";
@@ -22,8 +24,10 @@ import { CopyButton } from "@/components/ui/CopyButton";
 import { Field } from "@/components/ui/Field";
 import { FormMessage } from "@/components/ui/FormMessage";
 import { Input } from "@/components/ui/Input";
+import { cn } from "@/components/ui/cn";
 import { ARC_MAINNET, networkProfile, type Network } from "@/lib/network";
 import {
+  browserKeepingStore,
   checkPasskeySetup,
   forgetCredential,
   forgetPendingSetup,
@@ -37,9 +41,9 @@ import {
   PasskeyTreasuryError,
   pendingSetup,
   SETUP_MISMATCH,
-  type KeepingStore,
   type PasskeyTreasury,
 } from "@/lib/passkey-treasury";
+import { passkeyMark, passkeyName } from "@/lib/passkey-wallet";
 import type { SendOutcome } from "@/lib/passkey-wallet-send";
 import { recordSent } from "@/lib/treasury/sent-transaction";
 import type { WalletTreasuryStatus } from "@/lib/treasury/wallet-treasury";
@@ -59,13 +63,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 type Note = { tone: "neutral" | "error"; text: string } | null;
 type During = "create" | "open" | "setup" | "recovery";
 
-function keepingStore(): KeepingStore | null {
-  try {
-    return window.localStorage;
-  } catch {
-    return null;
-  }
-}
+const keepingStore = browserKeepingStore;
 
 /** What a person typed as USDC: empty is "not set". */
 const typed = (value: string): number | null => (value.trim() === "" ? null : Number(value));
@@ -77,18 +75,79 @@ const figureText = (units: string) => (units === "0" ? "no limit" : `${Number(un
 function usePasskeyStep(during: During) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<Note>(null);
-  const run = async (work: (say: (text: string) => void) => Promise<void>) => {
+  const run = async (work: (say: (text: string) => void) => Promise<void>, as: During = during) => {
     setBusy(true);
     setNote(null);
     try {
       await work((text) => setNote({ tone: "neutral", text }));
     } catch (error) {
-      setNote({ tone: "error", text: passkeyTreasuryFailure(error, during) });
+      setNote({ tone: "error", text: passkeyTreasuryFailure(error, as) });
     } finally {
       setBusy(false);
     }
   };
   return { busy, note, run };
+}
+
+const neverChanges = () => () => {};
+
+/** Whether a passkey wallet can work here (K1): the browser has WebAuthn, and the deployment the mainnet client key. */
+export function usePasskeysAvailable(): boolean {
+  const webauthn = useSyncExternalStore(neverChanges, () => typeof window.PublicKeyCredential !== "undefined", () => true);
+  return webauthn && passkeyTreasuryConfig() !== null;
+}
+
+/**
+ * Go live's passkey card (K1, K3): a new passkey and the wallet it owns, or one made before; either becomes the
+ * treasury by its address, and the agent's wallet is made with it.
+ */
+export function PasskeyWalletCard({ orgSlug, lead }: { orgSlug: string; lead: boolean }) {
+  const router = useRouter();
+  const { busy, note, run } = usePasskeyStep("create");
+  const choose = (mode: "Register" | "Login") =>
+    run(
+      async (say) => {
+        const config = passkeyTreasuryConfig();
+        if (!config) throw new PasskeyTreasuryError("Passkey wallets are not set up on this deployment.");
+        const { passkeySdk } = await import("@/lib/passkey-wallet-sdk");
+        say(mode === "Register" ? "Create the passkey when your browser asks." : "Choose the passkey you made for this workspace.");
+        const treasury = await openPasskeyTreasury({
+          config,
+          sdk: passkeySdk(ARC_MAINNET),
+          mode,
+          ...(mode === "Register" ? { username: passkeyName(orgSlug, passkeyMark()) } : {}),
+        });
+        keepCredential(keepingStore(), orgSlug, treasury.credential);
+        const chosen = await choosePasskeyTreasuryAction(orgSlug, treasury.address);
+        if (!chosen.ok) throw new PasskeyTreasuryError(chosen.message);
+        say(chosen.message);
+        router.refresh();
+      },
+      mode === "Register" ? "create" : "open"
+    );
+  return (
+    <div className={cn("space-y-3 rounded-xl border p-4", lead ? "border-agent-line bg-agent-soft/40" : "border-line")}>
+      <div className="flex flex-wrap items-center gap-2">
+        <h4 className="text-sm font-semibold text-ink">Create a wallet with a passkey</h4>
+        <Badge tone={lead ? "agent" : "neutral"} size="sm">
+          {lead ? "Recommended" : "No app needed"}
+        </Badge>
+      </div>
+      <p className="text-sm leading-relaxed text-ink-2">
+        Your face, fingerprint or device PIN signs for the wallet: Face ID, Touch ID, Windows Hello, or your phone. No extension to install and no seed
+        phrase to type. The treasury stays yours: Vestiarion never holds your USDC, and one confirmation sets it all up.
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="button" icon={<KeyRound />} variant={lead ? "primary" : "secondary"} loading={busy} onClick={() => choose("Register")}>
+          Create with a passkey
+        </Button>
+        <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => choose("Login")}>
+          Use a passkey you made before
+        </Button>
+      </div>
+      <FormMessage tone={note?.tone ?? "neutral"}>{note?.text}</FormMessage>
+    </div>
+  );
 }
 
 /**

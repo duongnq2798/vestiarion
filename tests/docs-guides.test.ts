@@ -29,6 +29,8 @@ type GuideSlug =
 
 const PANEL = "src/components/GoLivePanel.tsx";
 const WALLET_STEPS = "src/components/treasury/WalletTreasurySteps.tsx";
+const WALLET_CHOICE = "src/components/treasury/WalletTreasuryChoice.tsx";
+const PASSKEY_STEPS = "src/components/treasury/PasskeyTreasurySteps.tsx";
 const WALLET_ACTIONS = "src/app/actions/wallet-treasury.ts";
 const WALLET_TREASURY = "src/lib/treasury/wallet-treasury.ts";
 const WALLET_VERIFY = "src/lib/treasury/verify.ts";
@@ -222,8 +224,8 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Something went wrong; try again.", GO_LIVE_ACTIONS],
     // Path C, the owner's own wallet (wallet treasury W1, W3, W5-W11).
     ["Choose where the treasury lives", PANEL],
-    ["Your own wallet", WALLET_STEPS],
-    ["Connect your wallet", WALLET_STEPS],
+    ["Your own wallet", WALLET_CHOICE],
+    ["Connect your wallet", WALLET_CHOICE],
     ["Your wallet is this workspace's treasury.", WALLET_ACTIONS],
     ["The agent's wallet was not created yet; create it below.", WALLET_ACTIONS],
     ["Set up your wallet as the treasury", WALLET_STEPS],

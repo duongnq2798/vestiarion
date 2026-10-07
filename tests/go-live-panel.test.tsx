@@ -511,6 +511,28 @@ describe("GoLivePanel and the owner's own wallet (wallet treasury W1, W5-W10)", 
     expect(words.indexOf("Your own wallet")).toBeLessThan(words.indexOf("Connect your own Circle account"));
   });
 
+  it("offers a passkey wallet beside a browser wallet where the deployment has the mainnet client key, never saying a wallet is missing (passkey treasury K1)", () => {
+    vi.stubEnv("NEXT_PUBLIC_MODULAR_WALLETS_MAINNET_CLIENT_KEY", "LIVE_CLIENT_KEY:abc");
+    try {
+      const words = text(panel(status({ network: "arc-mainnet", walletTreasuryAvailable: true })));
+      expect(words).toContain("Create a wallet with a passkey");
+      expect(words).toContain("Create with a passkey");
+      expect(words).toContain("Connect your wallet");
+      expect(words).not.toContain("No wallet was found");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("offers no passkey wallet without the mainnet client key", () => {
+    vi.stubEnv("NEXT_PUBLIC_MODULAR_WALLETS_MAINNET_CLIENT_KEY", "");
+    try {
+      expect(text(panel(status({ network: "arc-mainnet", walletTreasuryAvailable: true })))).not.toContain("Create a wallet with a passkey");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("does not offer it where the deployment has no agent account", () => {
     expect(text(panel(status({ network: "arc-mainnet", walletTreasuryAvailable: false })))).not.toContain("Connect your wallet");
   });

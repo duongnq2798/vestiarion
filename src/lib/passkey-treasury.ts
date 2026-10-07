@@ -110,6 +110,25 @@ export interface KeptCredential {
 /** The parts of `localStorage` used here, so a test can stand in for it; null where the browser has none. */
 export type KeepingStore = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
+/** The browser's own store; none on the server, or where the browser refuses storage. */
+export function browserKeepingStore(): KeepingStore | null {
+  try {
+    return typeof window === "undefined" ? null : window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Which card leads Go live's choice (K1): a passkey where the browser has no wallet, the wallet where it has one, and
+ * both, the wallet first, while the browser is still being asked. Where passkeys cannot work, the wallet.
+ */
+export function choiceLead(input: { wallets: number | null; passkeys: boolean }): "wallet" | "passkey" | "both-pending" {
+  if (!input.passkeys) return "wallet";
+  if (input.wallets === null) return "both-pending";
+  return input.wallets === 0 ? "passkey" : "wallet";
+}
+
 const credentialKey = (orgSlug: string) => `vestiarion.passkey-treasury.${orgSlug}`;
 const pendingKey = (orgSlug: string) => `vestiarion.passkey-setup.${orgSlug}`;
 

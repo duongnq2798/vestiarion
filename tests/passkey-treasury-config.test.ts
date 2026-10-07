@@ -23,3 +23,23 @@ describe("passkeyTreasuryConfig", () => {
     expect(passkeyTreasuryConfig({ key: "  ", url: undefined })).toBeNull();
   });
 });
+
+describe("choiceLead (passkey treasury K1)", () => {
+  it("leads with a passkey where the browser has no wallet, and with the wallet where it has one", async () => {
+    const { choiceLead } = await import("@/lib/passkey-treasury");
+    expect(choiceLead({ wallets: 0, passkeys: true })).toBe("passkey");
+    expect(choiceLead({ wallets: 1, passkeys: true })).toBe("wallet");
+    expect(choiceLead({ wallets: 3, passkeys: true })).toBe("wallet");
+  });
+
+  it("shows both, the wallet first, while the browser is still being asked", async () => {
+    const { choiceLead } = await import("@/lib/passkey-treasury");
+    expect(choiceLead({ wallets: null, passkeys: true })).toBe("both-pending");
+  });
+
+  it("leads with the wallet wherever passkeys cannot work", async () => {
+    const { choiceLead } = await import("@/lib/passkey-treasury");
+    expect(choiceLead({ wallets: 0, passkeys: false })).toBe("wallet");
+    expect(choiceLead({ wallets: null, passkeys: false })).toBe("wallet");
+  });
+});
