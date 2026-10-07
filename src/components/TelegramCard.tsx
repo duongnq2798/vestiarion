@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
+import { BrandMark } from "@/components/vx/BrandMarks";
 
 const INITIAL: TelegramActionResult = { ok: false, message: "" };
 
@@ -40,7 +41,10 @@ export function TelegramCard({ orgSlug, link }: { orgSlug: string; link: { usern
         <form {...leave.formProps} className="flex flex-wrap items-center justify-between gap-3">
           <input type="hidden" name="orgSlug" value={orgSlug} />
           <div className="min-w-0 max-w-prose space-y-1">
-            <p className="text-sm font-semibold text-ink">Telegram</p>
+            <p className="inline-flex items-center gap-2 text-sm font-semibold text-ink">
+              <BrandMark brand="telegram" className="size-4 text-ink-2" />
+              Telegram
+            </p>
             <p className="text-sm text-ink-2">
               Connected{link.username ? ` as @${link.username}` : ""} since {connectedOn(link.linkedAt)}. The agent&apos;s decisions in this
               workspace are sent there, and invoices you send the bot can be added as payables.
@@ -61,7 +65,10 @@ export function TelegramCard({ orgSlug, link }: { orgSlug: string; link: { usern
       <form {...connect.formProps} className="flex flex-col gap-3">
         <input type="hidden" name="orgSlug" value={orgSlug} />
         <div className="max-w-prose space-y-1">
-          <p className="text-sm font-semibold text-ink">Telegram</p>
+          <p className="inline-flex items-center gap-2 text-sm font-semibold text-ink">
+            <BrandMark brand="telegram" className="size-4 text-ink-2" />
+            Telegram
+          </p>
           <p className="text-sm text-ink-2">
             Get the agent&apos;s decisions in your own Telegram chat, ask what is waiting or safe to spend, and send it invoices to add. The bot
             never approves or pays: that stays here.

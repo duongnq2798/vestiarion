@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Claims } from "@/components/landing/Claims";
+import { BuiltWith } from "@/components/landing/BuiltWith";
 import { Credentials } from "@/components/landing/Credentials";
 import { FinalCta } from "@/components/landing/FinalCta";
 import { Hero } from "@/components/landing/Hero";
@@ -80,6 +81,7 @@ export default async function LandingPage() {
       <main id="main">
         <Hero provenance={provenance} head={head} hostedAvailable={hostedAvailable} />
         <Credentials screeningMode={currentScreeningMode} />
+        <BuiltWith />
         <LiveProof metrics={metrics} />
         <HowItWorks />
         <Claims />
