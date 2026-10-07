@@ -11,7 +11,7 @@ import { currentOrgConfig } from "./context";
  * to trigger a treasury sweep.
  *
  * Replace these rows with real ones and nothing about the agent changes —
- * see "Bringing your own business" in README.md.
+ * see "Bringing your own business" in docs/self-hosting.md.
  */
 
 function daysFromNow(n: number) {
