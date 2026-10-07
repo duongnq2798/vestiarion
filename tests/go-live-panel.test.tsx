@@ -28,6 +28,11 @@ vi.mock("@/app/actions/wallet-treasury", () => ({
   skipRecoveryAction: vi.fn(),
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+// The handoff reads the device in the browser only; here it marks where the panel places it.
+vi.mock("@/components/treasury/PhoneHandoff", async () => {
+  const { createElement } = await import("react");
+  return { PhoneHandoff: ({ kind }: { kind: string }) => createElement("i", { "data-phone-handoff": kind }) };
+});
 
 vi.mock("@/app/actions/go-live", () => ({
   chooseHostedWalletAction: vi.fn(),
@@ -527,6 +532,15 @@ describe("GoLivePanel and the owner's own wallet (wallet treasury W1, W5-W10)", 
     }
   });
 
+  it("offers to make the passkey on a phone instead, under the passkey card (2026-10-07)", () => {
+    vi.stubEnv("NEXT_PUBLIC_MODULAR_WALLETS_MAINNET_CLIENT_KEY", "LIVE_CLIENT_KEY:abc");
+    try {
+      expect(panel(status({ network: "arc-mainnet", walletTreasuryAvailable: true }))).toContain('data-phone-handoff="create"');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("offers no passkey wallet without the mainnet client key", () => {
     vi.stubEnv("NEXT_PUBLIC_MODULAR_WALLETS_MAINNET_CLIENT_KEY", "");
     try {
@@ -612,6 +626,12 @@ describe("GoLivePanel and the owner's own wallet (wallet treasury W1, W5-W10)", 
       expect(words).toContain("Set up with your passkey");
       expect(words).toContain("The network fee is paid from your wallet's USDC: about 0.07 USDC.");
       expect(words).not.toContain("Deploy from your wallet");
+    });
+
+    it("offers to confirm on a phone wherever the passkey signs, and nowhere it does not (2026-10-07)", () => {
+      expect(panel(passkey({ step: "deploy", walletUsdc: 12.5 }))).toContain('data-phone-handoff="confirm"');
+      expect(panel(passkey({ step: "recovery", contract: CONTRACT, walletUsdc: 12, agentGasUsdc: 0.5 }))).toContain('data-phone-handoff="confirm"');
+      expect(panel(passkey({ step: "deploy", walletUsdc: 0.2 }))).not.toContain("data-phone-handoff");
     });
 
     it("asks for a recovery phrase after setup, and lets the owner skip it knowingly", () => {

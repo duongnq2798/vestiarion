@@ -23,6 +23,7 @@ import InvoiceDocumentIntake, { DocumentDraft } from "@/components/intake/Invoic
 import InvoiceIntake from "@/components/intake/InvoiceIntake";
 import PayFreelancerForm, { PaymentLinkReady } from "@/components/intake/PayFreelancerForm";
 import { PayeeJourney } from "@/components/payee/PayeeJourney";
+import { PhoneHandoffUrl } from "@/components/treasury/PhoneHandoff";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { CopyButton } from "@/components/ui/CopyButton";
@@ -174,9 +175,20 @@ const PASSKEY_RECOVERY: GoLiveStatus = {
   },
 };
 
+/** Set up, with the agent's gas run short before going live: the passkey sends it more (the guide's "only when needed"). */
+const PASSKEY_GAS: GoLiveStatus = {
+  ...PASSKEY_RECOVERY,
+  walletTreasury: { ...PASSKEY_RECOVERY.walletTreasury!, step: "gas", agentGasUsdc: 0.04 },
+};
+
 function goLive(status: GoLiveStatus, sampleBalance?: number): () => ReactNode {
   return function GoLiveShot() {
-    return <GoLivePanel orgSlug={SLUG} status={status} canAdminister sampleBalance={sampleBalance} />;
+    // The phone handoff's code shows the workspace's own Settings, not the screenshot's address.
+    return (
+      <PhoneHandoffUrl url={`https://www.vestiarion.xyz/o/${SLUG}/settings`}>
+        <GoLivePanel orgSlug={SLUG} status={status} canAdminister sampleBalance={sampleBalance} />
+      </PhoneHandoffUrl>
+    );
   };
 }
 
@@ -572,6 +584,8 @@ export const DOCS_SHOTS = {
   "go-live-passkey-fund": { guide: "go-live", page: "settings", render: goLive(PASSKEY_FUND) },
   "go-live-passkey-setup": { guide: "go-live", page: "settings", render: goLive(PASSKEY_SETUP) },
   "go-live-passkey-recovery": { guide: "go-live", page: "settings", render: goLive(PASSKEY_RECOVERY) },
+  // A computer with no passkey of its own: the script tells the page so, and the phone handoff opens by itself.
+  "go-live-passkey-phone": { guide: "go-live", page: "settings", render: goLive(PASSKEY_GAS) },
   "go-live-live": {
     guide: "go-live",
     page: "settings",

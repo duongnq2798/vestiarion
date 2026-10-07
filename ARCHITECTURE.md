@@ -554,6 +554,11 @@ with no browser wallet:
     at least 1 gwei of priority (`circleUserOperationFees` in `src/lib/passkey-wallet-sdk.ts`). On 2026-10-07 Arc
     mainnet's own priority fee was 4,049 wei, Circle's bundler asked at least 3 gwei, and it refused the first setup
     priced the chain's way. A failure nothing else names shows the reason the bundler or browser gave.
+  - Under the passkey card and each step the passkey signs, **Use your phone instead** shows a QR code of the page
+    (`src/components/treasury/PhoneHandoff.tsx`, `src/lib/passkey-handoff.ts`, drawn with `uqr`): folded on a computer,
+    open where `isUserVerifyingPlatformAuthenticatorAvailable` says the device keeps no passkey, absent on a phone. A
+    computer reaching a phone's passkey goes over the browser's Bluetooth link, which stayed on "Connecting to your
+    device" on the partner's Windows PC on 2026-10-07.
 - **The recovery.** A recovery phrase made in the browser is registered as a recovery owner with
   Circle's `registerRecoveryAddress` (`treasury_recovery_registered`), or skipped knowingly
   (`treasury_recovery_skipped`). `goLive` refuses until one is recorded (`wallet_recovery_undecided`).

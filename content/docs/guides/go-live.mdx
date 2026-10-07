@@ -83,7 +83,7 @@ Step 1 offers two kinds of wallet, and leads with the one your browser suits:
 
 <Screenshot
   src="/docs/guides/go-live-passkey-choice.png"
-  alt="The same step 1 in a browser with no wallet. The box Create a wallet with a passkey, marked Recommended, comes first with the button Create with a passkey. Below it, the box Your own wallet says no browser wallet was found here, so the passkey comes first, and that MetaMask or Rabby can be installed, then the page reloaded."
+  alt="The same step 1 in a browser with no wallet. The box Create a wallet with a passkey, marked Recommended, comes first with the button Create with a passkey. Below it, the box Your own wallet says no browser wallet was found here, so the passkey comes first, and that MetaMask or Rabby can be installed, then the page reloaded. Inside the passkey box, below its buttons, is the folded row Use your phone instead."
   caption="Step 1 in a browser with no wallet: the passkey first, and no error."
 />
 
@@ -133,14 +133,22 @@ You need USDC on Arc mainnet to send to the new wallet: about 0.75 USDC for its 
 
 <Screenshot
   src="/docs/guides/go-live-passkey-setup.png"
-  alt="Step 2 once the passkey wallet holds 250 USDC, with the agent's gas at 0 USDC. Under Set up with one confirmation, the page lists what the passkey confirms: the wallet deploys its contract, which lets the agent pay from it never past the figures below, approves it to move its USDC, and sends 0.50 USDC to the agent's wallet for its gas. The Daily figure (USDC) field holds 50 and the 7-day figure (USDC) field 200, each noted as coming from the agent's spending limit, and the Cap (USDC) field is empty. A line says the network fee, about 0.07 USDC, is paid from the wallet's USDC, above the button Set up with your passkey."
+  alt="Step 2 once the passkey wallet holds 250 USDC, with the agent's gas at 0 USDC. Under Set up with one confirmation, the page lists what the passkey confirms: the wallet deploys its contract, which lets the agent pay from it never past the figures below, approves it to move its USDC, and sends 0.50 USDC to the agent's wallet for its gas. The Daily figure (USDC) field holds 50 and the 7-day figure (USDC) field 200, each noted as coming from the agent's spending limit, and the Cap (USDC) field is empty. A line says the network fee, about 0.07 USDC, is paid from the wallet's USDC, above the button Set up with your passkey. Below the button is the folded row Use your phone instead."
   caption="One confirmation deploys the contract, approves it and sends the agent its gas."
 />
 
 <Screenshot
   src="/docs/guides/go-live-passkey-recovery.png"
-  alt="Step 2 after setup: the wallet with 249.45 USDC, the agent's gas of 0.5 USDC, the contract, its figures of 50 USDC a day and 200 USDC in 7 days, and what the agent can move. Under Save a recovery phrase, the page explains that twelve words can sign for this wallet on their own, so anyone who has them can move every USDC in it; that they belong on paper, offline, and Vestiarion will never ask for them; and that they let you add a new passkey if this one is lost. Below are the button Create a recovery phrase and the choice Skip: I understand that losing this passkey loses this wallet."
+  alt="Step 2 after setup: the wallet with 249.45 USDC, the agent's gas of 0.5 USDC, the contract, its figures of 50 USDC a day and 200 USDC in 7 days, and what the agent can move. Under Save a recovery phrase, the page explains that twelve words can sign for this wallet on their own, so anyone who has them can move every USDC in it; that they belong on paper, offline, and Vestiarion will never ask for them; and that they let you add a new passkey if this one is lost. Below are the button Create a recovery phrase and the choice Skip: I understand that losing this passkey loses this wallet. Last is the folded row Use your phone instead."
   caption="A recovery phrase before going live, or a deliberate skip."
+/>
+
+**Use your phone instead.** On a computer, the passkey card and each step your passkey confirms have **Use your phone instead** under their button. It shows a code that opens the same page on your phone, so the passkey is made or used on the phone itself. It opens by itself on a computer with no passkey of its own, such as a Windows PC without Windows Hello. There the browser would ask your phone over Bluetooth, and can stay on "Connecting to your device". A passkey made on your phone confirms on that phone; from a computer, every confirmation goes through the same Bluetooth link, so scan the code and confirm on the phone.
+
+<Screenshot
+  src="/docs/guides/go-live-passkey-phone.png"
+  alt="Step 2 at Give the agent its gas, on a computer with no passkey of its own: the agent's gas reads 0.04 USDC, below the 0.10 going live needs. Under the Send 0.50 USDC for gas button, Use your phone instead is open: a QR code, the line that scanning it with the phone that holds the passkey opens this page there to confirm on the phone, and the page's address."
+  caption="On a computer with no passkey of its own, each passkey step shows the code to finish on your phone, already open."
 />
 
 If you reload or close the page while the setup is confirming, the page says "Your setup was sent" and checks the same setup when you come back, before anything else. If it was never recorded and you set it up again, perhaps from another browser, the same contract is used and the agent's gas is not sent twice: only one more network fee is spent. Your device or password manager keeps the passkey, and this browser keeps only its public part, so the next step signs without asking you to pick it first. In another browser the page asks you to choose the passkey, and refuses one that owns another wallet: "Use the passkey you made for it."
