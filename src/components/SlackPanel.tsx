@@ -122,8 +122,10 @@ export default function SlackPanel({
     <section aria-labelledby="slack-title" id="slack">
       <SectionHeader
         id="slack-title"
+        // The logo has no text baseline: the title is a flex row, centred, so Docs sits level with it.
+        className="items-center"
         title={
-          <span className="inline-flex items-center gap-2">
+          <span className="flex items-center gap-2">
             <BrandMark brand="slack" />
             Slack
           </span>
