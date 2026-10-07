@@ -1,5 +1,10 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-07: A bill in the business's own currency, in shadow mode
+
+- In shadow mode, a bill typed into the invoice form in the business's own currency is added at its USDC amount, worked out at the day's rate from ExchangeRate-API (a US dollar is one USDC). Its `create_invoice` entry carries `bill` `{ currency, amount, perUsd, source, at }`: the bill as written, how many of its currency made one dollar, where the rate came from, and when it was published. `amount` and `currency` stay the USDC figure the agent pays.
+- Nothing else in `/api/v1` changes: the API still takes invoices in USDC or EURC.
+
 ## 2026-10-07: Shadow mode: a person agrees with each payment
 
 - A workspace on Arc testnet can run in shadow mode. The business keeps paying its bills as it does today, and the agent pays nothing until a person agrees. Its ledger gains these entries, each sent to webhook endpoints as `ledger.appended`:

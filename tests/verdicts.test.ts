@@ -209,7 +209,7 @@ describe("verdictFacts", () => {
   it("reads shadow mode and the verdicts on the agent's decisions shown, for the cards", async () => {
     fake = fakeSupabase(workspace({ verdicts: [{ entry_seq: 41, verdict: "agree", reason: null, decided_by: PERSON, decided_at: "2026-10-07T11:00:00Z" }] }));
     const facts = await run(() => verdictFacts(db(), [ledgerEntry(44, "human", "approval_paid"), ledgerEntry(41, "agent", "ap_pay")], true));
-    expect(facts.shadow).toEqual({ startedAt: "2026-10-07T00:00:00Z" });
+    expect(facts.shadow).toEqual({ startedAt: "2026-10-07T00:00:00Z", currency: "VND" });
     expect(facts.given.get(41)).toEqual({ verdict: "agree", reason: null });
     expect(facts.canGive).toBe(true);
     const asked = fake.requests.find((r) => r.path === "/rest/v1/decision_verdicts" && r.method === "GET");

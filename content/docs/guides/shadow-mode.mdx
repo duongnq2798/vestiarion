@@ -13,7 +13,9 @@ Open **Settings**. Under **Workspace**, the **Shadow mode** section says it is o
 
 ## 2. Add your bills as you do today
 
-Add each bill as a payable, in any of the usual ways: in AP / AR, from a document, by email, or through the API. For now a bill is entered in USDC: enter its amount converted at the day's rate.
+Add each bill as a payable in AP / AR. In shadow mode the invoice form's **Currency** starts at your currency: type the **Amount** as it is written on the bill, such as 2.500.000 for a bill in VND. The bill is paid in USDC at the day's rate, which comes from ExchangeRate-API (**Rates By Exchange Rate API**), and a US dollar is one USDC. The bill's card shows it as written, with the rate and the day of the rate, beside the USDC it is paid in. Outside shadow mode, the form takes only USDC and EURC.
+
+A bill read from a document, an email or a chat, or sent through the API, is still added in USDC or EURC for now: type its amount in your currency into the form instead.
 
 The agent decides on each bill in its next cycle, as in any workspace. It may pay it now, schedule it for a later day, hold it, flag it, or ask for what is missing. If a supplier sends you no purchase orders, turn purchase orders off on its row in Counterparties, so its bills are not held for one.
 

@@ -581,3 +581,33 @@ describe("invoiceDecision: the verdict a card shows (shadow mode S3)", () => {
     expect(invoiceDecision(held, undefined, [apPay], { network: "arc-testnet" }).verdict).toBeUndefined();
   });
 });
+
+describe("invoiceDecision: a bill in the business's own currency (shadow mode S6)", () => {
+  const bill = (currency: string, amount: number, rate: number, source: string) => ({
+    original_currency: currency,
+    original_amount: amount,
+    fx_rate: rate,
+    fx_source: source,
+    fx_at: "2026-10-07T00:02:32.000Z",
+  });
+
+  it("shows the bill as it was written, and the rate it was paid at, linked to whose rate it is", () => {
+    const decision = invoiceDecision(invoice({ amount: 96.39, ...bill("VND", 2_500_000, 25_935.897512, "ExchangeRate-API") }), undefined, [], { network: "arc-testnet" });
+    expect(decision.evidence).toContainEqual({
+      label: "Bill",
+      value: "2,500,000 VND, at 25,935.90 VND to the US dollar (ExchangeRate-API, Oct 7, 2026)",
+      href: "https://www.exchangerate-api.com",
+      state: "neutral",
+    });
+  });
+
+  it("shows a bill in dollars at one USDC to the dollar", () => {
+    const decision = invoiceDecision(invoice({ amount: 1234.56, ...bill("USD", 1234.56, 1, "USD = USDC") }), undefined, [], { network: "arc-testnet" });
+    expect(decision.evidence).toContainEqual({ label: "Bill", value: "1,234.56 USD, at 1 USD = 1 USDC", state: "neutral" });
+  });
+
+  it("shows no bill for an invoice written in USDC", () => {
+    const decision = invoiceDecision(invoice(), undefined, [], { network: "arc-testnet" });
+    expect(decision.evidence.some((item) => item.label === "Bill")).toBe(false);
+  });
+});

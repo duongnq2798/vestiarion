@@ -19,8 +19,8 @@ export interface VerdictView {
 }
 
 export interface VerdictFacts {
-  /** The workspace's shadow mode, null when it is off. */
-  shadow: { startedAt: string } | null;
+  /** The workspace's shadow mode, null when it is off: since when, and the currency its bills are written in. */
+  shadow: { startedAt: string; currency?: string } | null;
   /** The verdicts given, by decision entry. */
   given: Map<number, { verdict: "agree" | "disagree"; reason: string | null }>;
   /** Whether the viewer may decide payments (`approval.decide`). */
