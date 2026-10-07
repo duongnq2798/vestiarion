@@ -136,6 +136,7 @@ Two independent upgrades from there, in either order:
 | `npm run cycle -- <org-slug>` | Runs one agent cycle headlessly using the configured clock mode |
 | `npm run fixture:guardrail -- <org-slug>` | **Demo only:** adds one no-transfer model-vs-code refusal probe |
 | `npm run status -- <org-slug>` | Balances, wallets, open invoices, ledger height |
+| `npm run traction-digest -- <org-slug> --since YYYY-MM-DD` | That workspace's shadow mode decisions since the day: each verdict, what it paid with its Arc testnet transaction, and the agreement rate, in ASCII with no blank line for a traction post. `--hide-payees` names each supplier by a letter |
 | `npm run circle:doctor -- <org-slug>` / `agent:doctor` | Reports exactly which parts are live |
 | `npm run arc:proof` | Standalone: two wallets, a faucet check, one real transfer |
 | `npm run telegram:setup -- <https origin>` | Registers the Telegram bot's webhook and command menu, once the three `TELEGRAM_*` variables are set (see `.env.example`) |

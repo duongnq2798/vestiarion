@@ -77,7 +77,9 @@ USDC.
 - The rate comes from ExchangeRate-API's open endpoint (`open.er-api.com/v6/latest/USD`, 166 currencies, VND among them,
   daily, no key; attribution "Rates By Exchange Rate API"). A USD bill reads 1:1 ("USD = USDC").
 - Only a workspace in shadow mode takes a bill in another currency. Elsewhere a foreign bill is refused as it is today.
-- The reader learns VND: "₫", "đ", "VND" and "dong", and grouping such as 25.000.000.
+- The reader takes bills in USDC or EURC only for now; a bill in another currency is typed into the form.
+- Changed on 2026-10-07 at the partner's word: VND is not offered, since crypto is no means of payment in Vietnam.
+  Settings offers USDC first (0085), and a workspace in USDC converts nothing.
 
 **S7. A mirror address for a supplier with none (SM1c).**
 - In shadow mode, a supplier with no Arc address gets one that Vestiarion creates for it: a wallet in the workspace's own
@@ -87,7 +89,7 @@ USDC.
 - Its USDC stays in the wallet. Returning it to the operating wallet is left for later.
 
 **S8. Proof out (SM2).**
-- `npm run traction-digest -- --since YYYY-MM-DD` prints, per outside workspace in shadow mode:
+- `npm run traction-digest -- <org-slug> --since YYYY-MM-DD` prints, for the outside business's workspace:
   - each decision's reasoning in one line;
   - the person's verdict and reason;
   - the bill's own amount and the USDC paid;

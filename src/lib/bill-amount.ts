@@ -29,6 +29,11 @@ function decimalAmount(text: string): number | null {
   return null;
 }
 
+/** How many decimals a currency writes: none for one without minor units, such as the yen; two otherwise. */
+export function billDigits(currency: string): 0 | 2 {
+  return ZERO_DECIMAL.has(currency.trim().toUpperCase()) ? 0 : 2;
+}
+
 /** The amount, or null when the text is not one a bill writes, or is not above zero. */
 export function billAmount(typed: string, currency: string): number | null {
   const text = typed.trim();
