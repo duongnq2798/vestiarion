@@ -587,7 +587,12 @@ describe("GoLivePanel and the owner's own wallet (wallet treasury W1, W5-W10)", 
       expect(words).toContain("Step 2 of 3");
       expect(words).toContain("Add USDC to your wallet");
       expect(words).toContain(WALLET);
-      expect(words).toContain("Setup needs about 0.75 USDC: 0.50 for the agent's gas, and up to 0.25 set aside for the network fee, of which about 0.02 is spent.");
+      // Named, and not the agent's: the partner asked which of the two addresses to send to (2026-10-07).
+      expect(words).toContain("Send USDC on Arc mainnet to Your wallet");
+      expect(words).toContain("the first address above, from an exchange or another wallet.");
+      expect(words).toContain("Not to the agent's wallet: setup pays the agent's gas from yours.");
+      // The first live setup spent 0.071 USDC of the 0.146 set aside (2026-10-07).
+      expect(words).toContain("Setup needs about 0.75 USDC: 0.50 for the agent's gas, and up to 0.25 set aside for the network fee, of which about 0.07 is spent.");
       // Only the setup until the recovery phrase is saved (final review I5).
       expect(words).toContain("Add only this for now");
       expect(words).not.toContain("Set up with your passkey");
@@ -605,6 +610,7 @@ describe("GoLivePanel and the owner's own wallet (wallet treasury W1, W5-W10)", 
       expect(words).toContain("Daily figure (USDC)");
       expect(words).toContain("Cap (USDC)");
       expect(words).toContain("Set up with your passkey");
+      expect(words).toContain("The network fee is paid from your wallet's USDC: about 0.07 USDC.");
       expect(words).not.toContain("Deploy from your wallet");
     });
 

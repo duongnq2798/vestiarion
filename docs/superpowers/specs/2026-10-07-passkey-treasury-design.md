@@ -73,7 +73,7 @@ The passkey route:
 - **K5. Setup waits for the wallet's USDC.**
   - Below what setup needs, the passkey route shows the address (with a copy button), the wallet's USDC, and what
     setup needs: 0.75 USDC, 0.50 for the agent's gas and up to 0.25 for the first user operation's fee, which EntryPoint
-    v0.7 sets aside before the calls run (about 0.11 at Arc's fees on 2026-10-07; about 0.02 is spent). Only this is
+    v0.7 sets aside before the calls run (the first live setup, on 2026-10-07, set aside 0.146 and spent 0.071). Only this is
     asked for until the recovery phrase is saved.
   - The page reads the balance again every 10 seconds while open, and when the tab is shown again.
   - The owner's own payments come on top: the page says so.

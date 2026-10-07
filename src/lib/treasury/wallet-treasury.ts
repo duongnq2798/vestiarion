@@ -34,8 +34,8 @@ export type TreasurySigner = "wallet" | "passkey";
 
 /**
  * What a passkey wallet needs before its setup (K5): 0.50 USDC for the agent's gas, and 0.25 for the first user
- * operation's fee. EntryPoint v0.7 sets the whole fee aside before the calls run, about 0.11 USDC at Arc's fees on
- * 2026-10-07 for a wallet not yet deployed; about 0.02 is spent and the rest stays the wallet's (final review I2).
+ * operation's fee. EntryPoint v0.7 sets the whole fee aside before the calls run: the first live setup, on 2026-10-07,
+ * set aside 0.146 USDC and spent 0.071 of it, and the rest stays the wallet's for its next operations (final review I2).
  */
 export const PASSKEY_SETUP_USDC = 0.75;
 
