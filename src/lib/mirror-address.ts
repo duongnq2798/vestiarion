@@ -3,6 +3,7 @@ import { createWallet, treasuryWalletSetId, walletIdempotencyKey } from "./circl
 import { currentOrgConfig, currentOrgId } from "./context";
 import { db, unwrap } from "./dal";
 import { appendLedgerEntry } from "./ledger";
+import { addressProvenance, MIRROR } from "./new-payee";
 import { readShadowMode } from "./shadow-mode";
 import { workspaceNetwork } from "./workspace-network";
 
@@ -12,8 +13,10 @@ import { workspaceNetwork } from "./workspace-network";
  * testnet, and needs somewhere to go. So Vestiarion makes a wallet in the workspace's own Circle wallet set and gives it
  * to the payee as its address: its `mirror_wallet_id` says so. No person typed it, so the new payee check reads it as
  * two parties (`MIRROR` in ./new-payee). Made once per payee (its key is the payee's), written only where the payee
- * still has no address, and recorded as an address change `via: "mirror"`. Runs inside an organization scope; who may
- * ask for it (`records.write`) is the caller's check.
+ * still has no address, and recorded as an address change `via: "mirror"`. Never a mirror the ledger does not record:
+ * when the entry cannot be written the payee goes back as it was, and a mirror found without its entry (a request that
+ * died between the two) is recorded when asked again. Runs inside an organization scope; who may ask for it
+ * (`records.write`) is the caller's check.
  */
 
 export type MirrorAddressErrorCode = "not_in_shadow" | "not_found" | "client" | "has_address" | "no_circle" | "credentials_unreadable";
@@ -34,25 +37,72 @@ export class MirrorAddressError extends Error {
   }
 }
 
-type Payee = { id: string; name: string; role: string; address: string | null; mirror_wallet_id: string | null };
+type Payee = {
+  id: string;
+  name: string;
+  role: string;
+  address: string | null;
+  chain: string | null;
+  mirror_wallet_id: string | null;
+  address_changed_at: string | null;
+  address_confirmed_at: string | null;
+};
 
 async function payee(counterpartyId: string): Promise<Payee | null> {
-  const rows = unwrap(await db().from("counterparties").select("id, name, role, address, mirror_wallet_id").eq("id", counterpartyId).limit(1)) as Payee[];
+  const rows = unwrap(
+    await db()
+      .from("counterparties")
+      .select("id, name, role, address, chain, mirror_wallet_id, address_changed_at, address_confirmed_at")
+      .eq("id", counterpartyId)
+      .limit(1)
+  ) as Payee[];
   return rows[0] ?? null;
 }
 
+type Mirror = { address: string; walletId: string };
+
+/** The entry that makes the mirror the payee's address, as the new payee check reads it. */
+function recordMirror(row: Payee, actorId: string, mirror: Mirror): Promise<unknown> {
+  return appendLedgerEntry({
+    actor: "human",
+    domain: "compliance",
+    action: "counterparty_address_changed",
+    summary: `Gave ${row.name} a mirror address on Arc testnet: a wallet Vestiarion made for it in shadow mode`,
+    detail: { by: actorId, counterpartyId: row.id, via: "mirror", from: null, to: mirror.address, walletId: mirror.walletId },
+  });
+}
+
+/** Whether the ledger gives the payee this mirror: its newest entry setting an address is the mirror's (./new-payee). */
+async function mirrorRecorded(counterpartyId: string, address: string): Promise<boolean> {
+  const entries = unwrap(
+    await db()
+      .from("ledger_entries")
+      .select("action, detail")
+      .eq("domain", "compliance")
+      .in("action", ["create_counterparty", "counterparty_address_changed"])
+      .eq("detail->>counterpartyId", counterpartyId)
+      .order("seq", { ascending: false })
+      .limit(1)
+  ) as Array<{ action: string; detail: Record<string, unknown> }>;
+  return addressProvenance(address, entries).addressBy === MIRROR;
+}
+
 /** The mirror a payee has, when its address is the wallet Vestiarion made for it. */
-const mirrorOf = (row: Payee | null) => (row?.address && row.mirror_wallet_id ? { address: row.address, walletId: row.mirror_wallet_id } : null);
+const mirrorOf = (row: Payee | null): Mirror | null => (row?.address && row.mirror_wallet_id ? { address: row.address, walletId: row.mirror_wallet_id } : null);
 
 export async function giveMirrorAddress(
   input: { actorId: string; counterpartyId: string },
   deps: { circle?: CircleClientFactory } = {}
-): Promise<{ address: string; walletId: string }> {
+): Promise<Mirror> {
   if (!(await readShadowMode(db()))) throw new MirrorAddressError("not_in_shadow");
   const row = await payee(input.counterpartyId);
   if (!row) throw new MirrorAddressError("not_found");
   const made = mirrorOf(row);
-  if (made) return made;
+  if (made) {
+    // Until it is recorded, the new payee check cannot tell who gave the address (review finding 1).
+    if (!(await mirrorRecorded(row.id, made.address))) await recordMirror(row, input.actorId, made);
+    return made;
+  }
   if (row.role === "client") throw new MirrorAddressError("client");
   if (row.address) throw new MirrorAddressError("has_address");
 
@@ -72,7 +122,8 @@ export async function giveMirrorAddress(
   const written = unwrap(
     await db()
       .from("counterparties")
-      .update({ address: wallet.address, chain: network.circleBlockchain, mirror_wallet_id: wallet.id })
+      // No person typed it, so it waits for no one to confirm it, even where an earlier address was cleared.
+      .update({ address: wallet.address, chain: network.circleBlockchain, mirror_wallet_id: wallet.id, address_changed_at: null, address_confirmed_at: null })
       .eq("id", row.id)
       .is("address", null)
       .select("id")
@@ -84,12 +135,23 @@ export async function giveMirrorAddress(
     throw new MirrorAddressError("has_address");
   }
 
-  await appendLedgerEntry({
-    actor: "human",
-    domain: "compliance",
-    action: "counterparty_address_changed",
-    summary: `Gave ${row.name} a mirror address on Arc testnet: a wallet Vestiarion made for it in shadow mode`,
-    detail: { by: input.actorId, counterpartyId: row.id, via: "mirror", from: null, to: wallet.address, walletId: wallet.id },
-  });
-  return { address: wallet.address, walletId: wallet.id };
+  const mirror = { address: wallet.address, walletId: wallet.id };
+  try {
+    await recordMirror(row, input.actorId, mirror);
+  } catch (error) {
+    // The payee goes back as it was, only from this mirror, so asking again makes it whole.
+    const back = await db()
+      .from("counterparties")
+      .update({ address: null, chain: row.chain, mirror_wallet_id: null, address_changed_at: row.address_changed_at, address_confirmed_at: row.address_confirmed_at })
+      .eq("id", row.id)
+      .eq("address", wallet.address)
+      .eq("mirror_wallet_id", wallet.id)
+      .then(
+        (result) => result.error?.message ?? null,
+        (failure: unknown) => (failure instanceof Error ? failure.message : "unknown error")
+      );
+    if (back) console.error("mirror address: not put back after its entry failed", row.id, back);
+    throw error;
+  }
+  return mirror;
 }

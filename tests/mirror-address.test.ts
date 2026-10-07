@@ -32,7 +32,12 @@ function circle() {
   return { factory, createWallets };
 }
 
-function workspace(over: { shadow?: boolean; payee?: Record<string, unknown> | null; patched?: FakeReply; afterRace?: Record<string, unknown> } = {}) {
+/** The ledger's entry giving the payee its mirror, as the new payee check reads it. */
+const MIRROR_ENTRY = { action: "counterparty_address_changed", detail: { counterpartyId: PAYEE, via: "mirror", from: null, to: MIRROR_ADDRESS } };
+
+function workspace(
+  over: { shadow?: boolean; payee?: Record<string, unknown> | null; patched?: FakeReply; afterRace?: Record<string, unknown>; entries?: Array<Record<string, unknown>> } = {}
+) {
   let reads = 0;
   return (r: RecordedRequest): FakeReply => {
     if (r.path === "/rest/v1/shadow_modes") return { body: over.shadow === false ? [] : [{ currency: "VND", started_at: "2026-10-07T00:00:00Z", started_by: MEMBER }] };
@@ -42,6 +47,7 @@ function workspace(over: { shadow?: boolean; payee?: Record<string, unknown> | n
       return { body: row ? [row] : [] };
     }
     if (r.path === "/rest/v1/counterparties" && r.method === "PATCH") return over.patched ?? { body: [{ id: PAYEE }] };
+    if (r.path === "/rest/v1/ledger_entries" && r.method === "GET") return { body: over.entries ?? [] };
     return { body: [] };
   };
 }
@@ -64,7 +70,8 @@ describe("giveMirrorAddress", () => {
       expect.objectContaining({ blockchains: ["ARC-TESTNET"], count: 1, walletSetId: "set-1", idempotencyKey: walletIdempotencyKey(ORG, `mirror:${PAYEE}`) })
     );
     const [patch] = patches();
-    expect(patch.body).toEqual({ address: MIRROR_ADDRESS, chain: "ARC-TESTNET", mirror_wallet_id: "mirror-wallet-1" });
+    // No person typed it, so it waits for no one to confirm it, even where an earlier address was cleared (review finding 2).
+    expect(patch.body).toEqual({ address: MIRROR_ADDRESS, chain: "ARC-TESTNET", mirror_wallet_id: "mirror-wallet-1", address_changed_at: null, address_confirmed_at: null });
     // Written only where the payee still has no address.
     expect(patch.params.get("address")).toBe("is.null");
     expect(ledgerMock).toHaveBeenCalledWith(
@@ -98,13 +105,44 @@ describe("giveMirrorAddress", () => {
   it("answers with the mirror it has, made before or by another tab a moment before, and signs nothing twice", async () => {
     const { factory, createWallets } = circle();
     const mirrored = { id: PAYEE, name: "Dien luc", role: "vendor", address: MIRROR_ADDRESS, mirror_wallet_id: "mirror-wallet-1" };
-    fake = fakeSupabase(workspace({ payee: mirrored }));
+    fake = fakeSupabase(workspace({ payee: mirrored, entries: [MIRROR_ENTRY] }));
     expect(await run(() => giveMirrorAddress({ actorId: MEMBER, counterpartyId: PAYEE }, { circle: factory }))).toEqual({ address: MIRROR_ADDRESS, walletId: "mirror-wallet-1" });
     expect(createWallets).not.toHaveBeenCalled();
 
     fake = fakeSupabase(workspace({ patched: { body: [] }, afterRace: mirrored }));
     expect(await run(() => giveMirrorAddress({ actorId: MEMBER, counterpartyId: PAYEE }, { circle: factory }))).toEqual({ address: MIRROR_ADDRESS, walletId: "mirror-wallet-1" });
     expect(ledgerMock).not.toHaveBeenCalled();
+  });
+
+  it("records a mirror the ledger does not have, when asked again after a request died having written it (review finding 1)", async () => {
+    const { factory, createWallets } = circle();
+    const mirrored = { id: PAYEE, name: "Dien luc", role: "vendor", address: MIRROR_ADDRESS, mirror_wallet_id: "mirror-wallet-1" };
+    fake = fakeSupabase(workspace({ payee: mirrored, entries: [{ action: "create_counterparty", detail: { counterpartyId: PAYEE, address: null } }] }));
+
+    expect(await run(() => giveMirrorAddress({ actorId: MEMBER, counterpartyId: PAYEE }, { circle: factory }))).toEqual({ address: MIRROR_ADDRESS, walletId: "mirror-wallet-1" });
+    expect(createWallets).not.toHaveBeenCalled();
+    expect(patches()).toHaveLength(0);
+    expect(ledgerMock).toHaveBeenCalledTimes(1);
+    expect(ledgerMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "counterparty_address_changed",
+        detail: { by: MEMBER, counterpartyId: PAYEE, via: "mirror", from: null, to: MIRROR_ADDRESS, walletId: "mirror-wallet-1" },
+      })
+    );
+  });
+
+  it("puts the payee back as it was when the mirror cannot be signed, so asking again makes it whole (review finding 1)", async () => {
+    const { factory } = circle();
+    const cleared = { id: PAYEE, name: "Dien luc", role: "vendor", address: null, chain: null, mirror_wallet_id: null, address_changed_at: "2026-10-06T10:00:00Z", address_confirmed_at: null };
+    fake = fakeSupabase(workspace({ payee: cleared }));
+    ledgerMock.mockRejectedValueOnce(new Error("ledger unavailable"));
+
+    await expect(run(() => giveMirrorAddress({ actorId: MEMBER, counterpartyId: PAYEE }, { circle: factory }))).rejects.toThrow("ledger unavailable");
+    const [, back] = patches();
+    expect(back.body).toEqual({ address: null, chain: null, mirror_wallet_id: null, address_changed_at: "2026-10-06T10:00:00Z", address_confirmed_at: null });
+    // Only the mirror this request wrote: not an address someone gave meanwhile.
+    expect(back.params.get("address")).toBe(`eq.${MIRROR_ADDRESS}`);
+    expect(back.params.get("mirror_wallet_id")).toBe("eq.mirror-wallet-1");
   });
 
   it("needs the workspace's Circle wallets, which going live on Arc testnet gives it", async () => {

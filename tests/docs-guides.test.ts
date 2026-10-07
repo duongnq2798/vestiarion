@@ -889,6 +889,8 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Mirror address: a wallet Vestiarion made for this payee on Arc testnet, in shadow mode.", "src/app/o/[slug]/counterparties/page.tsx"],
     ["This payee has an address already. A mirror address is for a payee with none.", "src/lib/mirror-address.ts"],
     ["Go live on Arc testnet first: a mirror address is a wallet in this workspace's Circle wallets.", "src/lib/mirror-address.ts"],
+    ["A mirror address is for shadow mode. An owner turns it on in Settings.", "src/lib/mirror-address.ts"],
+    ["This workspace's Circle credentials are stored but could not be read.", "src/lib/mirror-address.ts"],
     ["Give your verdict", "src/lib/agent-activity.ts"],
     ["This decision waits for a verdict in shadow mode. Agree or disagree with it in Approvals first.", "src/lib/agent/approvals.ts"],
     ["Someone disagreed with this decision in shadow mode, so it is not paid. Return it to the agent or reject it.", "src/lib/agent/approvals.ts"],
