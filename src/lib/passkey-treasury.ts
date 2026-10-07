@@ -34,7 +34,7 @@ export function passkeyTreasuryConfig(
  * The deterministic deployment proxy, at the same address on Arc mainnet as on most EVM chains (checked 2026-10-07): a
  * call of `salt ++ creation code` deploys the code with CREATE2, so the contract's address follows from the two (K6).
  */
-export const DEPLOYMENT_PROXY = "0x4e59b44847b379578588920cA78FbF26c0b4956C" as const;
+export const DEPLOYMENT_PROXY = "0x4e59b44847b379578588920cA78FbF26c0B4956C" as const;
 
 /** The workspace's own salt for its contract: one workspace, one address for given figures (K6). */
 export function spendingLimitSalt(orgId: string): Hex {

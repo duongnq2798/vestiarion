@@ -582,7 +582,7 @@ export default function DesignPage() {
               <MilestoneVerification orgSlug={DESIGN_SLUG} milestoneId="00000000-0000-4000-8000-00000000000a" verified={false} />
             </Card>
             <EscrowPanel network="arc-testnet" orgSlug={DESIGN_SLUG} address={null} deploying={false} canSetUp />
-            <EscrowPanel network="arc-testnet" orgSlug={DESIGN_SLUG} address="0xE5c0000000000000000000000000000000000E5c" deploying={false} canSetUp />
+            <EscrowPanel network="arc-testnet" orgSlug={DESIGN_SLUG} address="0xe5c0000000000000000000000000000000000e5C" deploying={false} canSetUp />
             <Card className="space-y-3 p-4 sm:p-5">
               <Eyebrow>Milestone escrow, under a milestone&apos;s card</Eyebrow>
               <MilestoneEscrow network="arc-testnet"

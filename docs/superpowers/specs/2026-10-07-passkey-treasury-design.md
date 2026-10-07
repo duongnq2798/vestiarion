@@ -16,7 +16,7 @@ otherwise. Each decision states its reason.
   - EntryPoint v0.7 and v0.8;
   - Circle's smart account factory `0x0000000DF7E6c9Dc387cAFc5eCBfa6c3a6179AdD`, its implementation and its WebAuthn
     multisig plugin, the same bytes as on Arc testnet;
-  - the deterministic deployment proxy `0x4e59b44847b379578588920cA78FbF26c0b4956C`, and CreateX.
+  - the deterministic deployment proxy `0x4e59b44847b379578588920cA78FbF26c0B4956C`, and CreateX.
 - **A passkey wallet stays the owner's.** It is a smart account owned by a passkey on the owner's device, which Circle's
   passkey service only stores the public part of. Vestiarion holds no key to it, as W1 requires of the treasury.
 - **It can be simpler than an injected wallet.** A smart account sends several calls in one user operation, so the

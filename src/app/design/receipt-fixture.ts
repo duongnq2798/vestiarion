@@ -21,7 +21,7 @@ export function designReceipt(): ReceiptView {
     amount: 2,
     token: "USDC" as const,
     paidAt: "2026-10-01T08:28:26.857Z",
-    payee: "0x221b5bD2f0B8E4a8C7a1E5B3c9D0e6F7a8B91bc3",
+    payee: "0x221B5BD2F0B8e4a8c7a1e5B3c9d0E6f7A8b91BC3",
     chain: "ARB-SEPOLIA",
     txHash: "0x207f716e0e3200304c0b86047d7e8a01384aa336733436e9b796e25d820997a9",
     route: "gateway" as const,
